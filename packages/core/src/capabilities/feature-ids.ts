@@ -56,6 +56,7 @@ export const FEATURE_IDS = [
   "matrix_node",
   "fit_node",
   "named_coordinates",
+  "calc_coordinates",
   "graph_operation",
   "plot_operation",
   "to_operation",
@@ -89,6 +90,31 @@ export const FEATURE_IDS = [
   "svg_path",
   "svg_circle",
   "svg_text",
+  "text_includegraphics",
+  "text_tabular", // Source-backed LaTeX tabular and booktabs alignments.
+  "text_math_fonts", // Literal mathcodes, genuine math alphabets, scoped bold math and class font substitutions.
+  "text_dirac_notation", // Fixed braket delimiters and scalable Bra/Ket with source-owned math.
+  "beamer_scientific_notation", // Default decimal/scientific quantities and named units.
+  "beamer_preformatted", // Bounded listings and alltt blocks.
+  "text_transform_boxes", // Source-backed graphicx transforms of text/math and paragraph boxes.
+  "beamer_document_scan",
+  "beamer_frame_shrink", // Stock shrink/squeeze arithmetic and body paint transforms.
+  "beamer_frame_flow", // Measured headings, metadata chrome, stock contents, fixed overlay areas and vertical composition.
+  "beamer_titlepages", // Measured stock and modern titlepage templates and metadata.
+  "beamer_theme_colors", // Ordered preamble and scoped frame-local block color roles and aliases.
+  "beamer_tcolorbox", // Ordinary unbroken standard-skin package boxes.
+  "beamer_slide_manager", // Authored frame insertion, dependency-aware reorder with concrete effect checks, duplication, clipboard paste and deletion.
+  "beamer_direct_resize", // Source-backed columns, image corners, and explicit vertical spacing.
+  "beamer_builds", // Overlay inventory, canvas rule creation/removal, numeric timing, and boundary edits.
+  "beamer_source_placeholders", // Bounded opaque content in frame, column, block and theorem flow.
+  "beamer_hyperlinks",
+  // Manual entries and stock Beamer templates, verified against LuaLaTeX.
+  "beamer_manual_bibliography",
+  "beamer_footnotes",
+  "beamer_speaker_notes", // Presenter-only notes stay excluded at frame/column flow boundaries too.
+  "beamer_float_captions",
+  "beamer_frame_continuations",
+  "beamer_overlay_pictures", // TikZ `overlay` pictures: empty boxes in the text, drawn over the page.
   "render_pipeline"
 ] as const;
 

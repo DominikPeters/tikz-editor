@@ -19,28 +19,19 @@ export type GeneralSettings = {
   canvasInvert: boolean;
 };
 
+export type CanvasTextEditPlacement = "popup" | "bar";
+
 export type CanvasSettings = {
   gridSize: GridSize;
   handleSizePx: number;
   zoomSpeed: number;
   snapHapticsEnabled: boolean;
-};
-
-export type MathJaxFont =
-  | "mathjax-newcm"
-  | "mathjax-asana"
-  | "mathjax-bonum"
-  | "mathjax-dejavu"
-  | "mathjax-fira"
-  | "mathjax-modern"
-  | "mathjax-pagella"
-  | "mathjax-schola"
-  | "mathjax-stix2"
-  | "mathjax-termes"
-  | "mathjax-tex";
-
-export type RenderingSettings = {
-  mathJaxFont: MathJaxFont;
+  /**
+   * Where canvas text editing shows its source surface: a floating popup
+   * near the edited content or a bar docked to the canvas bottom edge.
+   * Large scope buffers always fall back to the bar.
+   */
+  textEditPlacement: CanvasTextEditPlacement;
 };
 
 export type AppSettings = {
@@ -50,7 +41,6 @@ export type AppSettings = {
   colorPicker: {
     accuracy: ColorPickerAccuracy;
   };
-  rendering: RenderingSettings;
 };
 
 export const GRID_SIZE_MINOR_TARGET_PX: Record<GridSize, number> = {
@@ -65,6 +55,19 @@ export const EDITOR_FONT_SIZE_OPTIONS = Array.from(
   { length: EDITOR_FONT_SIZE_MAX_PX - EDITOR_FONT_SIZE_MIN_PX + 1 },
   (_, index) => EDITOR_FONT_SIZE_MIN_PX + index
 );
+
+export const UI_FONT_SIZE_MIN_PX = 10;
+export const UI_FONT_SIZE_MAX_PX = 14;
+export const UI_FONT_SIZE_OPTIONS = Array.from(
+  { length: UI_FONT_SIZE_MAX_PX - UI_FONT_SIZE_MIN_PX + 1 },
+  (_, index) => UI_FONT_SIZE_MIN_PX + index
+);
+export const CANVAS_HANDLE_SIZE_OPTIONS = [7, 9, 11] as const;
+export const CANVAS_ZOOM_SPEED_MIN = 0.0015;
+export const CANVAS_ZOOM_SPEED_MAX = 0.009;
+export const CANVAS_ZOOM_SPEED_STEP = 0.0005;
+export const MIN_FORMATTER_MAX_LINE_LENGTH = 40;
+export const MAX_FORMATTER_MAX_LINE_LENGTH = 240;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   general: {
@@ -84,12 +87,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
     gridSize: "standard",
     handleSizePx: 9,
     zoomSpeed: 0.0045,
-    snapHapticsEnabled: true
+    snapHapticsEnabled: true,
+    textEditPlacement: "popup"
   },
   colorPicker: {
     accuracy: "approximate"
-  },
-  rendering: {
-    mathJaxFont: "mathjax-newcm"
   }
 };

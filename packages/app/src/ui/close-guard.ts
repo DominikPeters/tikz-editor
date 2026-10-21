@@ -1,4 +1,4 @@
-import type { DocumentSession } from "../store/types";
+import type { DocumentSessions } from "../store/types";
 
 export type CloseIntent =
   | { kind: "close-document"; documentId: string }
@@ -9,7 +9,7 @@ export type SaveStatus = "saved" | "cancelled" | "failed";
 
 export function collectDirtyDocumentIdsForIntent(
   intent: CloseIntent,
-  documents: Record<string, DocumentSession>,
+  documents: DocumentSessions,
   tabOrder: string[]
 ): string[] {
   if (intent.kind === "close-document") {

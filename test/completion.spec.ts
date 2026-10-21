@@ -33,8 +33,6 @@ describe("collectSymbols", () => {
     /pgf/nshelper/.prefix style={line width=1pt},
     plain={not a style}
   }
-  \pgfkeys{\broken without close
-  \tikzstyle broken
   \node[draw] (standalone) at (0,0) {S};
   \node (bad name) at (1,0) {Bad};
 \end{tikzpicture}`;
@@ -48,7 +46,7 @@ describe("collectSymbols", () => {
     expect(symbols.styleNames).not.toContain("plain");
   });
 
-  it("ignores malformed standalone node and style declarations while continuing to scan", () => {
+  it("uses recovered parser output for malformed node and style declarations", () => {
     const source = String.raw`\begin{tikzpicture}
   \tikzset{/.style={draw}, later/.style={blue}}
   \pgfkeys{plain={not a style}}
@@ -58,18 +56,53 @@ describe("collectSymbols", () => {
   \node[draw] (afterOptions) {A};
   \node (invalid name) {B};
 \end{tikzpicture}`;
-    const parseResult = {
-      source,
-      figure: { body: [] }
-    };
+    const parseResult = parseTikz(source, { recover: true });
 
-    const symbols = collectSymbols({ parseResult: parseResult as never });
+    const symbols = collectSymbols({ parseResult });
 
     expect(symbols.nodeNames).toContain("afterOptions");
-    expect(symbols.nodeNames).not.toContain("invalid name");
+    expect(symbols.nodeNames).toContain("invalid name");
     expect(symbols.styleNames).toEqual(expect.arrayContaining(["later", "legacy spaced"]));
     expect(symbols.styleNames).not.toContain("");
     expect(symbols.styleNames).not.toContain("plain");
+  });
+
+  it("keeps symbols after an unterminated brace group swallows the parse tail", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \pgfkeys{\broken without close
+  \node[draw] (standalone) at (0,0) {S};
+\end{tikzpicture}`;
+    const parseResult = parseTikz(source, { recover: true });
+
+    const symbols = collectSymbols({ parseResult });
+
+    expect(symbols.nodeNames).toContain("standalone");
+  });
+
+  it("keeps symbols below a style key being typed", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \tikzset{typing/.sty
+  \node (n1) at (0,0) {A};
+\end{tikzpicture}`;
+    const parseResult = parseTikz(source, { recover: true });
+
+    const symbols = collectSymbols({ parseResult });
+
+    expect(symbols.nodeNames).toContain("n1");
+  });
+
+  it("keeps later styles and nodes after an unclosed brace in node text", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node (first) at (0,0) {open {brace};
+  \tikzset{later/.style={draw}}
+  \node (second) at (1,0) {B};
+\end{tikzpicture}`;
+    const parseResult = parseTikz(source, { recover: true });
+
+    const symbols = collectSymbols({ parseResult });
+
+    expect(symbols.nodeNames).toEqual(expect.arrayContaining(["first", "second"]));
+    expect(symbols.styleNames).toContain("later");
   });
 
   it("collects node names from to/edge operation node payloads", () => {

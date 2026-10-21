@@ -1,0 +1,105 @@
+% Original example-first seminar. Categories assumed locally small when hom-sets are used.
+\documentclass[10pt,aspectratio=43]{beamer}
+\usetheme{Pittsburgh}
+\usefonttheme{professionalfonts}
+\usepackage{amsmath,amssymb,tikz-cd}
+\setbeamercolor{structure}{fg=violet!70!black}
+\setbeamertemplate{navigation symbols}{}
+\title{Products are interfaces}
+\subtitle{Learn a universal property from the arrows it permits}
+\author{Category theory seminar}
+\date{Construction 08}
+\DeclareMathOperator{\Hom}{Hom}
+\begin{document}
+\begin{frame}{You already know one implementation}
+A pair $(a,b)\in A\times B$ supports two queries:
+\[
+ \pi_A(a,b)=a,\qquad\pi_B(a,b)=b.
+\]
+\begin{block}{Change the question}
+Can we characterize a product without mentioning elements or ordered pairs?
+\end{block}
+\small Today: example $\to$ interface $\to$ uniqueness $\to$ a different category.
+\end{frame}
+\begin{frame}[plain]\titlepage\end{frame}
+\section{Specify}
+\begin{frame}[fragile]{A cone asks for compatible output arrows}
+\begin{center}
+\begin{tikzcd}[column sep=large,row sep=large]
+ & X\arrow[dl,"f"']\arrow[dr,"g"] & \\
+ A & & B
+\end{tikzcd}
+\end{center}
+\medskip
+A candidate product must accept every such pair of arrows from a common domain.
+\end{frame}
+\begin{frame}[fragile]{The product property supplies one unique mediator}
+\begin{definition}
+A product of $A$ and $B$ is an object $P$ with projections such that each $f:X\to A$, $g:X\to B$ admits a unique $u:X\to P$ satisfying $\pi_Au=f$ and $\pi_Bu=g$.
+\end{definition}
+\begin{center}
+\begin{tikzcd}[column sep=large,row sep=large]
+ & X\arrow[ddl,bend right=15,"f"']\arrow[ddr,bend left=15,"g"]\arrow[d,dashed,"{\exists!u}"] & \\
+ & P\arrow[dl,"\pi_A"]\arrow[dr,"\pi_B"'] & \\
+ A & & B
+\end{tikzcd}
+\end{center}
+\end{frame}
+\section{Use}
+\begin{frame}{Existence and uniqueness are separate obligations}
+\begin{exampleblock}{In sets}
+Define $u(x)=(f(x),g(x))$. Its projections give the required equations.
+\end{exampleblock}
+\pause
+If $v$ has the same projections, then both components of $v(x)$ equal those of $u(x)$, so $v=u$.
+\begin{alertblock}{What has been proved?}
+A particular object implements the interface. The property was not merely a suggestive diagram.
+\end{alertblock}
+\end{frame}
+\begin{frame}{Two implementations are uniquely isomorphic}
+\begin{theorem}
+If $P$ and $Q$ are products of the same pair of objects, there is a unique isomorphism respecting the projections.
+\end{theorem}
+\begin{proof}
+The property gives $u:P\to Q$ and $v:Q\to P$. Both $vu$ and $1_P$ have the projections of $P$, so uniqueness gives $vu=1_P$. Likewise $uv=1_Q$.
+\end{proof}
+\end{frame}
+\begin{frame}{Now move to groups without changing the interface}
+For groups $G,H$, use componentwise multiplication:
+\[
+ (g,h)(g',h')=(gg',hh').
+\]
+\begin{itemize}
+\item Projections must now be group homomorphisms.
+\item The mediator $x\mapsto(f(x),g(x))$ is a homomorphism when $f$ and $g$ are.
+\item The same uniqueness argument still applies.
+\end{itemize}
+\end{frame}
+\section{Generalize}
+\begin{frame}{A hom-set formulation makes the interface concise}
+In a locally small category, a product gives bijections
+\[
+ \Hom(X,A\times B)\cong\Hom(X,A)\times\Hom(X,B).
+\]
+\begin{block}{Naturality check}
+Precomposing a mediator by $k:Y\to X$ must agree with precomposing both of its projected arrows by $k$.
+\end{block}
+This is more structure than one accidental bijection of sets.
+\end{frame}
+\begin{frame}[fragile]{A square that explains the word natural}
+\begin{center}
+\begin{tikzcd}[column sep=small,row sep=large]
+\Hom(X,A\times B)\arrow[r]\arrow[d,"{-\circ k}"'] & \Hom(X,A)\times\Hom(X,B)\arrow[d,"{(-\circ k,-\circ k)}"]\\
+\Hom(Y,A\times B)\arrow[r] & \Hom(Y,A)\times\Hom(Y,B)
+\end{tikzcd}
+\end{center}
+\medskip
+\textbf{Exercise:} reverse the arrows in the definition and identify the new construction. Do not assume its implementation in sets is still a Cartesian product.
+\end{frame}
+\begin{frame}{Reading path}
+\small
+\href{https://math.mit.edu/~larsh/teaching/S2005/l12/}{MIT Algebraic Topology, Lecture 12: adjunctions} supplies a next step beyond this original product example.
+\medskip
+Before reading: explain what each direction of the hom-set bijection does, then say what it means for that bijection to respect precomposition.
+\end{frame}
+\end{document}

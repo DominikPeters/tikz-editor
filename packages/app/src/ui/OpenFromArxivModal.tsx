@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import type { RenderTikzToSvgResult } from "tikz-editor/render/index";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { RenderTikzToSvgResult } from "@tikz-editor/core/render/index";
 import {
   extractArxivTikzCandidates,
   type ArxivPaperSession,
@@ -74,6 +74,8 @@ export function OpenFromArxivModal({
   const [error, setError] = useState<string | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(session.selectedCandidateId);
   const [previews, setPreviews] = useState<CandidatePreviewMap>({});
+  const mountedRef = useRef(false);
+  const loadRequestRef = useRef<symbol | null>(null);
   const candidates = useMemo(
     () => session.paper ? extractArxivTikzCandidates(session.paper) : [],
     [session.paper]
@@ -87,6 +89,20 @@ export function OpenFromArxivModal({
   const canOpen = selectedCandidate != null && !loading;
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      loadRequestRef.current = null;
+    };
+  }, []);
+
+  function closeModal(): void {
+    mountedRef.current = false;
+    loadRequestRef.current = null;
+    onClose();
+  }
+
+  useEffect(() => {
     if (candidates.length === 0) {
       setPreviews({});
       return;
@@ -96,13 +112,14 @@ export function OpenFromArxivModal({
     setPreviews(Object.fromEntries(candidates.map((candidate) => [candidate.id, { status: "loading" }])));
 
     void (async () => {
-      const { renderTikzToSvgAsync } = await import("tikz-editor/render/index");
+      const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
+      const { withTexGlyphOutlines } = await import("@tikz-editor/core/text/tex/fonts/glyph-outlines");
       await Promise.all(candidates.map(async (candidate) => {
         try {
-          const result = await renderTikzToSvgAsync(candidate.contextualSource, {
+          const result = await withTexGlyphOutlines(() => renderTikzToSvgAsync(candidate.contextualSource, {
             parse: { recover: true, includeContextDefinitions: true },
             svg: { padding: 18 }
-          });
+          }));
           if (cancelled) {
             return;
           }
@@ -137,25 +154,32 @@ export function OpenFromArxivModal({
   }, [candidates]);
 
   async function loadPaper(): Promise<void> {
-    if (!canLoad || !fetchArxivSource) {
+    if (!mountedRef.current || !canLoad) {
       return;
     }
     const nextInput = input.trim();
+    const request = Symbol("arXiv load request");
+    loadRequestRef.current = request;
+    const isCurrent = () => mountedRef.current && loadRequestRef.current === request;
     setLoading(true);
     setError(null);
     try {
       const paper = await fetchArxivSource(nextInput);
+      if (!isCurrent()) return;
       const nextSession: ArxivPaperSession = {
         input: nextInput,
         paper,
         selectedCandidateId: null
       };
       onSessionChange(nextSession);
-      setSelectedCandidateId(null);
+      if (isCurrent()) setSelectedCandidateId(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
+      if (isCurrent()) setError(loadError instanceof Error ? loadError.message : String(loadError));
     } finally {
-      setLoading(false);
+      if (isCurrent()) {
+        loadRequestRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
@@ -178,17 +202,17 @@ export function OpenFromArxivModal({
 
   return (
     <Modal
-      onClose={onClose}
+      onClose={closeModal}
       size="xl"
       labelledBy="open-from-arxiv-title"
       dataTestId="open-from-arxiv-modal"
-      className={css.dialog}
+      className={css.dialog ?? ""}
     >
       <Modal.Header
         title="Open from arXiv"
         titleId="open-from-arxiv-title"
         showCloseButton
-        onClose={onClose}
+        onClose={closeModal}
         closeAriaLabel="Close arXiv dialog"
       />
       <Modal.Body padding="none">
@@ -211,7 +235,7 @@ export function OpenFromArxivModal({
               aria-label="arXiv URL or ID"
             />
             <Modal.PrimaryButton
-              className={css.loadButton}
+              className={css.loadButton ?? ""}
               disabled={!canLoad}
               onClick={() => { void loadPaper(); }}
             >
@@ -297,7 +321,7 @@ export function OpenFromArxivModal({
         </div>
       </Modal.Body>
       <Modal.Footer>
-        <Modal.SecondaryButton onClick={onClose}>Cancel</Modal.SecondaryButton>
+        <Modal.SecondaryButton onClick={closeModal}>Cancel</Modal.SecondaryButton>
         <Modal.PrimaryButton onClick={openSelectedCandidate} disabled={!canOpen}>
           Open Picture
         </Modal.PrimaryButton>

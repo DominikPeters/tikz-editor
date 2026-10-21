@@ -1,7 +1,11 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { getActiveEditorPlatform } from "../platform/current";
 import type { DocumentFileRef, ExternalChangeStatus, FileRevision } from "./types";
-import { WORKSPACE_VERSION, type WorkspaceSeed } from "./workspace-state";
+import { normalizeWorkspaceTabOrder, WORKSPACE_VERSION, type WorkspaceSeed } from "./workspace-state";
 import type { IJsonModel } from "flexlayout-react";
+import { isDockLayoutJson } from "../ui/dock-layout-validation";
+import type { DocumentKind } from "@tikz-editor/core/document/kind";
+import { isRecord } from "../validation";
 
 const WORKSPACE_STORAGE_KEY = "tikz-editor:workspace";
 const DOCK_LAYOUT_STORAGE_KEY = "tikz-editor:dock-layout";
@@ -24,12 +28,15 @@ type PersistedWorkspace = {
     id: string;
     title: string;
     source: string;
+    activeRootId?: string | null;
+    /** Pre-v4 name of `activeRootId`; read for migration, never written. */
     activeFigureId?: string | null;
     savedSource?: string;
     fileRef?: DocumentFileRef | null;
     diskRevision?: FileRevision | null;
     lastKnownDiskSource?: string | null;
     externalChangeStatus?: ExternalChangeStatus;
+    assistantSessionGeneration?: number;
     assistantThreadId?: string | null;
     assistantWorkspacePath?: string | null;
     assistantFigurePath?: string | null;
@@ -40,15 +47,13 @@ type PersistedWorkspace = {
   recentDocumentIds: string[];
 };
 
-type PersistedWorkspaceDocument = PersistedWorkspace["documents"][number];
-
 export function loadWorkspaceSeed(): WorkspaceSeed | null {
   try {
     const raw = getActiveEditorPlatform().persistence.load(WORKSPACE_STORAGE_KEY);
     if (!raw) {
       return null;
     }
-    const parsed = JSON.parse(raw) as Partial<PersistedWorkspace>;
+    const parsed: unknown = JSON.parse(raw);
     const migrated = migrateWorkspace(parsed);
     if (!migrated) {
       return null;
@@ -61,10 +66,10 @@ export function loadWorkspaceSeed(): WorkspaceSeed | null {
 }
 
 function normalizeFileRef(raw: unknown): DocumentFileRef | null {
-  if (!raw || typeof raw !== "object") {
+  if (!isRecord(raw)) {
     return null;
   }
-  const candidate = raw as Partial<DocumentFileRef>;
+  const candidate = raw;
   if (typeof candidate.name !== "string" || candidate.name.trim().length === 0) {
     return null;
   }
@@ -77,30 +82,29 @@ function normalizeFileRef(raw: unknown): DocumentFileRef | null {
   return {
     kind,
     name: candidate.name,
-    handleId: typeof candidate.handleId === "string" ? candidate.handleId : undefined,
-    path: typeof candidate.path === "string" ? candidate.path : undefined,
-    provider:
-      candidate.provider === "browser-fsa" ||
-      candidate.provider === "download" ||
-      candidate.provider === "desktop-fs" ||
-      candidate.provider === "ios-files"
-        ? candidate.provider
-        : undefined
+    ...(typeof candidate.handleId === "string" ? { handleId: candidate.handleId } : {}),
+    ...(typeof candidate.path === "string" ? { path: candidate.path } : {}),
+    ...(candidate.provider === "browser-fsa" ||
+    candidate.provider === "download" ||
+    candidate.provider === "desktop-fs" ||
+    candidate.provider === "ios-files"
+      ? { provider: candidate.provider }
+      : {})
   };
 }
 
 function normalizeFileRevision(raw: unknown): FileRevision | null {
-  if (!raw || typeof raw !== "object") {
+  if (!isRecord(raw)) {
     return null;
   }
-  const candidate = raw as Partial<FileRevision>;
+  const candidate = raw;
   if (typeof candidate.hash !== "string" || candidate.hash.length === 0) {
     return null;
   }
   return {
     hash: candidate.hash,
-    mtimeMs: typeof candidate.mtimeMs === "number" ? candidate.mtimeMs : undefined,
-    size: typeof candidate.size === "number" ? candidate.size : undefined
+    ...(typeof candidate.mtimeMs === "number" ? { mtimeMs: candidate.mtimeMs } : {}),
+    ...(typeof candidate.size === "number" ? { size: candidate.size } : {})
   };
 }
 
@@ -110,25 +114,34 @@ function normalizeExternalChangeStatus(raw: unknown): ExternalChangeStatus {
     : "none";
 }
 
-function migrateWorkspace(parsed: Partial<PersistedWorkspace>): WorkspaceSeed | null {
+function migrateWorkspace(parsed: unknown): WorkspaceSeed | null {
+  if (!isRecord(parsed)) return null;
   const version = typeof parsed.workspaceVersion === "number" ? parsed.workspaceVersion : 1;
-  if (version !== 1 && version !== WORKSPACE_VERSION) {
+  // Version 4 renamed the per-document activeFigureId to activeRootId; the
+  // stored values are unchanged, so version 3 payloads migrate by field read.
+  if (version !== 1 && version !== 3 && version !== WORKSPACE_VERSION) {
     return null;
   }
-  const rawDocuments = Array.isArray(parsed.documents) ? parsed.documents as unknown[] : [];
+  const rawDocuments: unknown[] = Array.isArray(parsed.documents) ? parsed.documents : [];
   const docs = rawDocuments
-        .filter((doc): doc is PersistedWorkspaceDocument =>
-          Boolean(doc && typeof doc === "object" && typeof (doc as Partial<PersistedWorkspaceDocument>).id === "string" && typeof (doc as Partial<PersistedWorkspaceDocument>).source === "string"))
+        .filter((doc): doc is Record<string, unknown> & { id: string; source: string } =>
+          isRecord(doc) && typeof doc.id === "string" && typeof doc.source === "string")
         .map((doc) => ({
           id: doc.id,
           title: typeof doc.title === "string" && doc.title.trim().length > 0 ? doc.title : "Untitled",
           source: doc.source,
-          activeFigureId: typeof doc.activeFigureId === "string" ? doc.activeFigureId : null,
+          activeRootId:
+            typeof doc.activeRootId === "string"
+              ? doc.activeRootId
+              : typeof doc.activeFigureId === "string"
+                ? doc.activeFigureId
+                : null,
           savedSource: typeof doc.savedSource === "string" ? doc.savedSource : doc.source,
           fileRef: normalizeFileRef(doc.fileRef),
           diskRevision: normalizeFileRevision(doc.diskRevision),
           lastKnownDiskSource: typeof doc.lastKnownDiskSource === "string" ? doc.lastKnownDiskSource : null,
           externalChangeStatus: normalizeExternalChangeStatus(doc.externalChangeStatus),
+          assistantSessionGeneration: typeof doc.assistantSessionGeneration === "number" && Number.isSafeInteger(doc.assistantSessionGeneration) && doc.assistantSessionGeneration >= 0 ? doc.assistantSessionGeneration : 0,
           assistantThreadId: typeof doc.assistantThreadId === "string" ? doc.assistantThreadId : null,
           assistantWorkspacePath: typeof doc.assistantWorkspacePath === "string" ? doc.assistantWorkspacePath : null,
           assistantFigurePath: typeof doc.assistantFigurePath === "string" ? doc.assistantFigurePath : null,
@@ -137,22 +150,22 @@ function migrateWorkspace(parsed: Partial<PersistedWorkspace>): WorkspaceSeed | 
   if (docs.length === 0) {
     return null;
   }
-  const tabOrderRaw = Array.isArray(parsed.tabOrder) ? parsed.tabOrder.filter((id): id is string => typeof id === "string") : [];
+  const tabOrderRaw = Array.isArray(parsed.tabOrder) ? parsed.tabOrder.filter((id: unknown): id is string => typeof id === "string") : [];
   const docIds = new Set(docs.map((doc) => doc.id));
-  const tabOrder = tabOrderRaw.filter((id) => docIds.has(id));
+  const tabOrder = normalizeWorkspaceTabOrder(tabOrderRaw, docIds);
   const activeDocumentId =
     typeof parsed.activeDocumentId === "string" && docIds.has(parsed.activeDocumentId)
       ? parsed.activeDocumentId
-      : tabOrder.at(0) ?? docs[0].id;
+      : tabOrder.at(0) ?? requireArrayValue(docs, 0).id;
   if (!Array.isArray(parsed.recentDocumentIds)) {
     return null;
   }
-  const recentDocumentIds = parsed.recentDocumentIds.filter((id): id is string => typeof id === "string" && docIds.has(id));
+  const recentDocumentIds = [...new Set(parsed.recentDocumentIds.filter((id: unknown): id is string => typeof id === "string" && docIds.has(id)))];
 
   return {
     workspaceVersion: WORKSPACE_VERSION,
     documents: docs,
-    tabOrder: tabOrder.length > 0 ? tabOrder : docs.map((doc) => doc.id),
+    tabOrder,
     activeDocumentId,
     recentDocumentIds
   };
@@ -160,48 +173,55 @@ function migrateWorkspace(parsed: Partial<PersistedWorkspace>): WorkspaceSeed | 
 
 export function saveWorkspace(state: {
   workspaceVersion: number;
-  documents: Record<string, {
+  documents: Partial<Record<string, {
     id: string;
     title: string;
     source: string;
-    activeFigureId: string | null;
+    activeRootId: string | null;
     savedSource: string;
     fileRef: DocumentFileRef | null;
     diskRevision?: FileRevision | null;
     lastKnownDiskSource?: string | null;
     externalChangeStatus?: ExternalChangeStatus;
+    assistantSessionGeneration?: number;
     assistantThreadId: string | null;
     assistantWorkspacePath: string | null;
     assistantFigurePath: string | null;
     assistantPreviewPath: string | null;
-  }>;
+  }>>;
   tabOrder: string[];
   activeDocumentId: string;
   recentDocumentIds: string[];
 }): void {
+  const documentIds = Object.keys(state.documents).filter((id) => state.documents[id] !== undefined);
+  const tabOrder = normalizeWorkspaceTabOrder(state.tabOrder, documentIds);
+  const validIds = new Set(tabOrder);
+  const activeDocumentId = validIds.has(state.activeDocumentId) ? state.activeDocumentId : tabOrder[0] ?? state.activeDocumentId;
+  const recentDocumentIds = [...new Set(state.recentDocumentIds.filter((id) => validIds.has(id)))];
   const payload: PersistedWorkspace = {
     workspaceVersion: WORKSPACE_VERSION,
-    documents: state.tabOrder
+    documents: tabOrder
       .map((id) => state.documents[id])
       .filter((doc): doc is NonNullable<typeof state.documents[string]> => Boolean(doc))
       .map((doc) => ({
         id: doc.id,
         title: doc.title,
         source: doc.source,
-        activeFigureId: doc.activeFigureId,
+        activeRootId: doc.activeRootId,
         savedSource: doc.savedSource,
         fileRef: doc.fileRef,
         diskRevision: doc.diskRevision ?? null,
         lastKnownDiskSource: doc.lastKnownDiskSource ?? null,
         externalChangeStatus: doc.externalChangeStatus ?? "none",
+        assistantSessionGeneration: doc.assistantSessionGeneration ?? 0,
         assistantThreadId: doc.assistantThreadId,
         assistantWorkspacePath: doc.assistantWorkspacePath,
         assistantFigurePath: doc.assistantFigurePath,
         assistantPreviewPath: doc.assistantPreviewPath
       })),
-    tabOrder: [...state.tabOrder],
-    activeDocumentId: state.activeDocumentId,
-    recentDocumentIds: [...state.recentDocumentIds]
+    tabOrder,
+    activeDocumentId,
+    recentDocumentIds: recentDocumentIds.length > 0 ? recentDocumentIds : [activeDocumentId]
   };
   try {
     getActiveEditorPlatform().persistence.save(WORKSPACE_STORAGE_KEY, JSON.stringify(payload));
@@ -212,23 +232,26 @@ export function saveWorkspace(state: {
 
 // ── Dock layout persistence ───────────────────────────────────────────────────
 
-export function loadDockLayout(): IJsonModel | null {
+function dockLayoutKey(kind: DocumentKind): string {
+  // Preserve existing diagram layouts without migrating or overwriting them.
+  return kind === "tikz" ? DOCK_LAYOUT_STORAGE_KEY : `${DOCK_LAYOUT_STORAGE_KEY}:beamer`;
+}
+
+export function loadDockLayout(kind: DocumentKind = "tikz"): IJsonModel | null {
   try {
-    const raw = getActiveEditorPlatform().persistence.load(DOCK_LAYOUT_STORAGE_KEY);
+    const raw = getActiveEditorPlatform().persistence.load(dockLayoutKey(kind));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
-    // Basic sanity check
-    if (!parsed || typeof parsed !== "object" || !("layout" in parsed)) return null;
-    return parsed as IJsonModel;
+    return isDockLayoutJson(parsed) ? parsed : null;
   } catch (error) {
     logStorageDebug("Failed to load persisted dock layout.", error);
     return null;
   }
 }
 
-export function saveDockLayout(json: IJsonModel): void {
+export function saveDockLayout(json: IJsonModel, kind: DocumentKind = "tikz"): void {
   try {
-    getActiveEditorPlatform().persistence.save(DOCK_LAYOUT_STORAGE_KEY, JSON.stringify(json));
+    getActiveEditorPlatform().persistence.save(dockLayoutKey(kind), JSON.stringify(json));
   } catch (error) {
     logStorageDebug("Failed to save dock layout.", error);
   }
@@ -253,21 +276,15 @@ export function loadUserWorkspaces(): UserWorkspace[] {
     const raw = getActiveEditorPlatform().persistence.load(USER_WORKSPACES_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return [];
-    const candidate = parsed as Partial<PersistedUserWorkspacesV1>;
-    if (candidate.version !== 1 || !Array.isArray(candidate.items)) return [];
-    const rawItems = candidate.items as unknown[];
+    if (!isRecord(parsed) || parsed.version !== 1 || !Array.isArray(parsed.items)) return [];
+    const rawItems: unknown[] = parsed.items;
     return rawItems
       .filter((item): item is UserWorkspace =>
-        Boolean(
-          item &&
-            typeof item === "object" &&
-            typeof (item as Partial<UserWorkspace>).id === "string" &&
-            typeof (item as Partial<UserWorkspace>).name === "string" &&
-            (item as Partial<UserWorkspace>).json &&
-            typeof (item as Partial<UserWorkspace>).json === "object" &&
-            typeof (item as Partial<UserWorkspace>).createdAt === "number"
-        )
+        isRecord(item) &&
+          typeof item.id === "string" &&
+          typeof item.name === "string" &&
+          isDockLayoutJson(item.json) &&
+          typeof item.createdAt === "number"
       );
   } catch (error) {
     logStorageDebug("Failed to load user workspaces.", error);

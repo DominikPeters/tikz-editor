@@ -1,0 +1,121 @@
+\documentclass[aspectratio=169]{beamer}
+\usepackage{amsmath,booktabs}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[plain,t]
+\begin{tabular}{lcr}
+Alpha & Middle & 100\\
+Beta & $x^2$ & 2\\
+\textbf{Gamma} & $\frac12$ & 35
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{@{}lr@{}}
+Alpha & 1\\ Beta & 22
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{l@{ : }r}
+Alpha & 1\\ Beta & 22
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{*{2}{lr}}
+Alpha & 1 & Beta & 22\\ Gamma & 333 & Delta & 4
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{lcr}
+\multicolumn{2}{c}{A longer heading} & 100\\
+Alpha & Middle & 1\\ Beta & X & 22
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{|l|r|}
+\hline Alpha & 1\\ \hline Beta & 22\\ \cline{2-2} Gamma & 3\\ \hline
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{@{}lr@{}}
+\toprule Alpha & Value\\ \midrule Beta & 2\\ Gamma & 3\\ \bottomrule
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{lcr}
+\toprule Alpha & Beta & Gamma\\
+\cmidrule(lr){1-2}\cmidrule(l{2pt}r{3pt}){3-3}
+One & Two & Three\\ \bottomrule
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{lr}
+\toprule Alpha & 1\\ \addlinespace Beta & 22\\ \addlinespace[2pt] Gamma & 3\\ \bottomrule
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{lr}
+\toprule[1pt] Alpha & 1\\ \midrule[.2pt] Beta & 22\\ \specialrule{.5pt}{1pt}{2pt} Gamma & 3\\ \bottomrule[1pt]
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{p{35pt}r}
+Alpha Beta Gamma Delta & 1\\ Epsilon & 22
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+Before \begin{tabular}[t]{lr} Alpha & 1\\ Beta & 22\end{tabular} after.
+
+Before \begin{tabular}[c]{lr} Alpha & 1\\ Beta & 22\end{tabular} after.
+
+Before \begin{tabular}[b]{lr} Alpha & 1\\ Beta & 22\end{tabular} after.
+\end{frame}
+\begin{frame}[plain,t]
+\noindent{\small\renewcommand{\arraystretch}{1.3}\setlength{\tabcolsep}{3pt}\begin{tabular}{lr}
+\toprule Alpha & 1\\[2pt] Beta & 22\\[-1pt] Gamma & 3\\ \bottomrule
+\end{tabular}}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{columns}[T,totalwidth=\textwidth]
+\begin{column}{.47\textwidth}
+\begin{table}
+\begin{tabular}{lr}\toprule Alpha & Value\\ \midrule Beta & 2\\ Gamma & 3\\ \bottomrule\end{tabular}
+\end{table}
+\end{column}
+\begin{column}{.47\textwidth}Other column.\end{column}
+\end{columns}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{block}{Result}
+\begin{tabular}{lr}\toprule Alpha & Value\\ \midrule Beta & 2\\ Gamma & 3\\ \bottomrule\end{tabular}
+\end{block}
+After the block.
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{|l|c|r|}
+\hline
+\multicolumn{2}{|c|}{Long heading} & 100\\
+\hline Alpha & Middle & 1\\ Beta & X & 22\\ \hline
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{lr}
+\begin{tabular}{c}Alpha\\Beta\end{tabular} & 1\\ Gamma & 22
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{@{}l@{}cr@{}}
+\toprule Alpha & Beta & Gamma\\
+\cmidrule(lr){1-1}\cmidrule(lr){2-3}
+One & Two & Three\\ \bottomrule
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+Reference \begin{tabular}[t]{lr}\toprule Alpha&1\\Beta&22\\\bottomrule\end{tabular} tail.
+
+Reference \begin{tabular}[b]{lr}\toprule Alpha&1\\Beta&22\\\bottomrule\end{tabular} tail.
+
+Reference \begin{tabular}[t]{lr}\hline Alpha&1\\Beta&22\\\hline\end{tabular} tail.
+
+Reference \begin{tabular}[b]{lr}\hline Alpha&1\\Beta&22\\\hline\end{tabular} tail.
+\end{frame}
+\end{document}

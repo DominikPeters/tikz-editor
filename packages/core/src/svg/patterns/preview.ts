@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { worldBounds, worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
@@ -34,7 +35,7 @@ export function renderFillPatternPreviewSvg(pattern: PreviewPatternPreset): stri
     id: `preview:pattern:${pattern}`,
     runtimeId: `preview:pattern:${pattern}`,
     layer: MAIN_SCENE_LAYER,
-    sourceRef: { sourceId: `preview:pattern:${pattern}`, sourceSpan: PREVIEW_SOURCE_SPAN, sourceFingerprint: "" },
+    sourceRef: { sourceId: `preview:pattern:${pattern}`, sourceSpan: PREVIEW_SOURCE_SPAN },
     style,
     styleChain: [],
     commands: [
@@ -138,7 +139,7 @@ function namespaceSvgIds(svg: string, suffix: string): string {
   const idMatches = [...svg.matchAll(/\bid="([^"]+)"/g)];
   const idMap = new Map<string, string>();
   let index = 1;
-  const sourceIds = new Set(idMatches.map((match) => match[1]));
+  const sourceIds = new Set(idMatches.map((match) => requireArrayValue(match, 1)));
   for (const sourceId of sourceIds) {
     idMap.set(sourceId, `${sourceId}-${suffix}-${index}`);
     index += 1;

@@ -1,9 +1,8 @@
-import { Fragment, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
-import type { EditHandle, NodeAnchorTarget } from "tikz-editor/semantic/types";
+import { memo, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
+import type { EditHandle, NodeAnchorTarget } from "@tikz-editor/core/semantic/types";
 import type { WorldPoint } from "../coords/types";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import type { SnapLine } from "tikz-editor/edit/snapping";
-import type { SvgViewBox } from "tikz-editor/svg/types";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { ToolMode } from "../../store/types";
 import type { HitRegion } from "./hit-regions";
 import type { CurveControlLine } from "./curve-controls";
@@ -18,7 +17,6 @@ import type {
 import { fmt, worldToSvgPoint } from "./geometry";
 import css from "./CanvasPanel.module.css";
 
-const SNAP_GAP_ARROW_MARKER_ID = "snap-gap-arrow-marker";
 const TOOL_PREVIEW_NODE_RADIUS_PX = 12;
 const ROTATE_GLYPH_PATH_1 = "M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z";
 const ROTATE_GLYPH_PATH_2 = "M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466";
@@ -52,268 +50,7 @@ export type ToolPreview =
   | { kind: "circle"; cx: number; cy: number; r: number }
   | { kind: "path"; d: string };
 
-const PT_PER_CM = 28.4527559055;
-const SNAP_GAP_LABEL_FONT_PX = 9;
-const SNAP_GAP_LABEL_HEIGHT_PX = 13;
-const SNAP_GAP_LABEL_CHAR_PX = 5.4;
-const SNAP_GAP_LABEL_PADDING_PX = 6;
-
-function formatGapDistanceCm(distancePt: number): string {
-  return Number((distancePt / PT_PER_CM).toFixed(2)).toString();
-}
-
-function SnapLabelPill({
-  x,
-  y,
-  text,
-  worldPerPx
-}: {
-  x: number;
-  y: number;
-  text: string;
-  worldPerPx: number;
-}) {
-  const width = (text.length * SNAP_GAP_LABEL_CHAR_PX + SNAP_GAP_LABEL_PADDING_PX) * worldPerPx;
-  const height = SNAP_GAP_LABEL_HEIGHT_PX * worldPerPx;
-  return (
-    <g>
-      <rect
-        x={x - width / 2}
-        y={y - height / 2}
-        width={width}
-        height={height}
-        rx={2 * worldPerPx}
-        className={css.snapGapLabelRect}
-      />
-      <text
-        x={x}
-        y={y}
-        className={css.snapGapLabelText}
-        fontSize={SNAP_GAP_LABEL_FONT_PX * worldPerPx}
-        textAnchor="middle"
-        dominantBaseline="central"
-      >
-        {text}
-      </text>
-    </g>
-  );
-}
-
-function snapNameLabel(
-  sourceIds: readonly string[] | undefined,
-  sourceNames: ReadonlyMap<string, string> | undefined,
-  role?: "corner" | "center"
-): string | null {
-  if (sourceIds?.length !== 1 || !sourceNames) {
-    return null;
-  }
-  const name = sourceNames.get(sourceIds[0]);
-  if (!name) {
-    return null;
-  }
-  if (!role) {
-    return name;
-  }
-  return `${role === "center" ? "center" : "edge"} · ${name}`;
-}
-
-export function SnapOverlay({
-  snapLines,
-  sourceNames,
-  viewBox,
-  scale,
-  snapStrokeWidth,
-  snapCrossSize
-}: {
-  snapLines: readonly SnapLine[];
-  sourceNames?: ReadonlyMap<string, string>;
-  viewBox: SvgViewBox;
-  scale: number;
-  snapStrokeWidth: number;
-  snapCrossSize: number;
-}) {
-  if (snapLines.length === 0) {
-    return null;
-  }
-
-  const worldPerPx = 1 / Math.max(scale, 1e-3);
-
-  return (
-    <g className={css.snapOverlay}>
-      <defs>
-        <marker
-          id={SNAP_GAP_ARROW_MARKER_ID}
-          markerWidth={6}
-          markerHeight={6}
-          refX={10}
-          refY={5}
-          orient="auto-start-reverse"
-          viewBox="0 0 10 10"
-        >
-          <path d="M 0 0 L 10 5 L 0 10 z" className={css.snapGapArrowHead} />
-        </marker>
-      </defs>
-      {snapLines.map((line, index) => {
-        if (line.type === "points") {
-          const points = line.points.map((point) => worldToSvgPoint(point, viewBox));
-          const first = points[0];
-          const last = points[points.length - 1];
-          const lineClass =
-            line.role === "center" ? `${css.snapLine} ${css.snapCenterLine}` : css.snapLine;
-          const label = snapNameLabel(line.sourceIds, sourceNames, line.role);
-          let labelPosition: { x: number; y: number } | null = null;
-          if (label && first && last) {
-            const dx = last.x - first.x;
-            const dy = last.y - first.y;
-            const length = Math.hypot(dx, dy);
-            const ux = length > 1e-6 ? dx / length : 1;
-            const uy = length > 1e-6 ? dy / length : 0;
-            const labelWidth = (label.length * SNAP_GAP_LABEL_CHAR_PX + SNAP_GAP_LABEL_PADDING_PX) * worldPerPx;
-            const halfAlong =
-              Math.abs(ux) > Math.abs(uy) ? labelWidth / 2 : (SNAP_GAP_LABEL_HEIGHT_PX * worldPerPx) / 2;
-            const offset = 10 * worldPerPx + halfAlong;
-            labelPosition = { x: last.x + ux * offset, y: last.y + uy * offset };
-          }
-          return (
-            <g key={`snap-points-${index}`}>
-              {first && last && points.length > 1 && (
-                <line
-                  x1={first.x}
-                  y1={first.y}
-                  x2={last.x}
-                  y2={last.y}
-                  className={lineClass}
-                  strokeWidth={snapStrokeWidth}
-                />
-              )}
-              {label && labelPosition && (
-                <SnapLabelPill
-                  x={labelPosition.x}
-                  y={labelPosition.y}
-                  text={label}
-                  worldPerPx={worldPerPx}
-                />
-              )}
-              {points.map((point, pointIndex) => (
-                <g key={`snap-point-${index}-${pointIndex}`}>
-                  <line
-                    x1={point.x - snapCrossSize}
-                    y1={point.y - snapCrossSize}
-                    x2={point.x + snapCrossSize}
-                    y2={point.y + snapCrossSize}
-                    className={css.snapLine}
-                    strokeWidth={snapStrokeWidth}
-                  />
-                  <line
-                    x1={point.x - snapCrossSize}
-                    y1={point.y + snapCrossSize}
-                    x2={point.x + snapCrossSize}
-                    y2={point.y - snapCrossSize}
-                    className={css.snapLine}
-                    strokeWidth={snapStrokeWidth}
-                  />
-                </g>
-              ))}
-            </g>
-          );
-        }
-
-        if (line.type === "pointer") {
-          const from = worldToSvgPoint(line.from, viewBox);
-          const to = worldToSvgPoint(line.to, viewBox);
-          const label = snapNameLabel(line.sourceIds, sourceNames);
-          let labelPosition: { x: number; y: number } | null = null;
-          if (label) {
-            const dx = from.x - to.x;
-            const dy = from.y - to.y;
-            const length = Math.hypot(dx, dy);
-            const ux = length > 1e-6 ? dx / length : 1;
-            const uy = length > 1e-6 ? dy / length : 0;
-            const labelWidth = (label.length * SNAP_GAP_LABEL_CHAR_PX + SNAP_GAP_LABEL_PADDING_PX) * worldPerPx;
-            const halfAlong =
-              Math.abs(ux) > Math.abs(uy) ? labelWidth / 2 : (SNAP_GAP_LABEL_HEIGHT_PX * worldPerPx) / 2;
-            const offset = 10 * worldPerPx + halfAlong;
-            labelPosition = { x: from.x + ux * offset, y: from.y + uy * offset };
-          }
-          return (
-            <g key={`snap-pointer-${index}`}>
-              <line
-                x1={from.x}
-                y1={from.y}
-                x2={to.x}
-                y2={to.y}
-                className={css.snapLine}
-                strokeWidth={snapStrokeWidth}
-              />
-              {label && labelPosition && (
-                <SnapLabelPill
-                  x={labelPosition.x}
-                  y={labelPosition.y}
-                  text={label}
-                  worldPerPx={worldPerPx}
-                />
-              )}
-              <line
-                x1={from.x - snapCrossSize}
-                y1={from.y - snapCrossSize}
-                x2={from.x + snapCrossSize}
-                y2={from.y + snapCrossSize}
-                className={css.snapLine}
-                strokeWidth={snapStrokeWidth}
-              />
-              <line
-                x1={from.x - snapCrossSize}
-                y1={from.y + snapCrossSize}
-                x2={from.x + snapCrossSize}
-                y2={from.y - snapCrossSize}
-                className={css.snapLine}
-                strokeWidth={snapStrokeWidth}
-              />
-            </g>
-          );
-        }
-
-        return (
-          <g key={`snap-gap-${index}`}>
-            {line.segments.map((segment, segmentIndex) => {
-              const a = worldToSvgPoint(segment[0], viewBox);
-              const b = worldToSvgPoint(segment[1], viewBox);
-              const isEqualGap = line.gapKind === "equal";
-              const distancePt =
-                line.direction === "horizontal"
-                  ? Math.abs(segment[1].x - segment[0].x)
-                  : Math.abs(segment[1].y - segment[0].y);
-              const label = formatGapDistanceCm(distancePt);
-              const labelWidth =
-                (label.length * SNAP_GAP_LABEL_CHAR_PX + SNAP_GAP_LABEL_PADDING_PX) * worldPerPx;
-              const segmentLength = Math.hypot(b.x - a.x, b.y - a.y);
-              const showLabel = segmentLength > labelWidth * 1.3;
-              const midX = (a.x + b.x) / 2;
-              const midY = (a.y + b.y) / 2;
-              return (
-                <g key={`snap-gap-segment-${index}-${segmentIndex}`}>
-                  <line
-                    x1={a.x}
-                    y1={a.y}
-                    x2={b.x}
-                    y2={b.y}
-                    className={`${css.snapLine} ${css.snapGapLine}`}
-                    strokeWidth={snapStrokeWidth}
-                    markerStart={isEqualGap ? `url(#${SNAP_GAP_ARROW_MARKER_ID})` : undefined}
-                    markerEnd={isEqualGap ? `url(#${SNAP_GAP_ARROW_MARKER_ID})` : undefined}
-                  />
-                  {showLabel && (
-                    <SnapLabelPill x={midX} y={midY} text={label} worldPerPx={worldPerPx} />
-                  )}
-                </g>
-              );
-            })}
-          </g>
-        );
-      })}
-    </g>
-  );
-}
+export { SnapOverlay } from "./snap-overlay";
 
 export function ToolPreviewOverlay({
   toolPreview,
@@ -422,6 +159,7 @@ export function ToolPreviewOverlay({
             strokeWidth={handleStrokeWidth}
           />
           <path
+            data-testid="canvas-tool-preview-bezier"
             d={`M ${fmt(toolPreview.x1)},${fmt(toolPreview.y1)} C ${fmt(toolPreview.c1x)},${fmt(toolPreview.c1y)} ${fmt(toolPreview.c2x)},${fmt(toolPreview.c2y)} ${fmt(toolPreview.x2)},${fmt(toolPreview.y2)}`}
             className={css.toolPreviewStroke}
             strokeWidth={handleStrokeWidth}
@@ -429,7 +167,7 @@ export function ToolPreviewOverlay({
         </g>
       )}
       {toolPreview.kind === "complex-path" && (
-        <g>
+        <g data-testid="canvas-tool-preview-complex-path">
           {toolPreview.segments.map((segment, index) =>
             segment.kind === "line" ? (
               <line
@@ -643,6 +381,31 @@ export function NodePositionLinkOverlay({
   );
 }
 
+type HitRegionLayerProps = {
+  hitRegions: readonly HitRegion[];
+  hoveredElementId: string | null;
+  toolMode: ToolMode;
+  editableTextRegionKeys: ReadonlySet<string>;
+  draggableSourceIds: ReadonlySet<string>;
+  onElementPointerDown: (event: ReactPointerEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
+  onElementContextMenu: (event: ReactMouseEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
+  onElementDoubleClick: (event: ReactMouseEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
+  onHoverChange: (targetId: string | null) => void;
+  cursorByTargetId?: ReadonlyMap<string, string>;
+};
+
+type HitRegionHandlers = {
+  readonly pointerDown: (event: ReactPointerEvent<SVGElement>, region: HitRegion) => void;
+  readonly contextMenu: (event: ReactMouseEvent<SVGElement>, region: HitRegion) => void;
+  readonly doubleClick: (event: ReactMouseEvent<SVGElement>, region: HitRegion) => void;
+  readonly hover: (targetId: string | null) => void;
+};
+
+/**
+ * A large picture has thousands of regions. Each is a memoized element with
+ * stable handlers, so panning, hovering or a parent render only touches the
+ * regions whose own props change.
+ */
 export function HitRegionLayer({
   hitRegions,
   hoveredElementId,
@@ -654,53 +417,43 @@ export function HitRegionLayer({
   onElementDoubleClick,
   onHoverChange,
   cursorByTargetId
-}: {
-  hitRegions: readonly HitRegion[];
-  hoveredElementId: string | null;
-  toolMode: ToolMode;
-  editableTextRegionKeys: ReadonlySet<string>;
-  draggableSourceIds: ReadonlySet<string>;
-  onElementPointerDown: (event: ReactPointerEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
-  onElementContextMenu: (event: ReactMouseEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
-  onElementDoubleClick: (event: ReactMouseEvent<SVGElement>, targetId: string, region?: HitRegion) => void;
-  onHoverChange: (targetId: string | null) => void;
-  cursorByTargetId?: ReadonlyMap<string, string>;
-}) {
-  const clipSvgIdBySceneId = new Map<string, string>();
-  const clipDefs: Array<{ sceneId: string; svgId: string; d: string; fillRule: "nonzero" | "evenodd" }> = [];
-  for (const region of hitRegions) {
-    for (const clipPath of region.clipChain ?? []) {
-      if (clipSvgIdBySceneId.has(clipPath.id)) {
-        continue;
+}: HitRegionLayerProps) {
+  const callbacks = useRef({ onElementPointerDown, onElementContextMenu, onElementDoubleClick, onHoverChange });
+  useLayoutEffect(() => {
+    callbacks.current = { onElementPointerDown, onElementContextMenu, onElementDoubleClick, onHoverChange };
+  });
+  const handlers = useMemo<HitRegionHandlers>(() => ({
+    pointerDown: (event, region) => { callbacks.current.onElementPointerDown(event, region.targetId, region); },
+    contextMenu: (event, region) => { callbacks.current.onElementContextMenu(event, region.targetId, region); },
+    doubleClick: (event, region) => { callbacks.current.onElementDoubleClick(event, region.targetId, region); },
+    hover: (targetId) => { callbacks.current.onHoverChange(targetId); }
+  }), []);
+  const clips = useMemo(() => {
+    const svgIdBySceneId = new Map<string, string>();
+    const defs: Array<{ sceneId: string; svgId: string; d: string; fillRule: "nonzero" | "evenodd" }> = [];
+    for (const region of hitRegions) {
+      for (const clipPath of region.clipChain ?? []) {
+        if (svgIdBySceneId.has(clipPath.id)) {
+          continue;
+        }
+        const svgId = `canvas-hit-clip-${defs.length + 1}`;
+        svgIdBySceneId.set(clipPath.id, svgId);
+        defs.push({
+          sceneId: clipPath.id,
+          svgId,
+          d: clipPath.d,
+          fillRule: clipPath.fillRule
+        });
       }
-      const svgId = `canvas-hit-clip-${clipDefs.length + 1}`;
-      clipSvgIdBySceneId.set(clipPath.id, svgId);
-      clipDefs.push({
-        sceneId: clipPath.id,
-        svgId,
-        d: clipPath.d,
-        fillRule: clipPath.fillRule
-      });
     }
-  }
-
-  const wrapWithClipChain = (region: HitRegion, content: ReactElement): ReactElement => {
-    let wrapped = content;
-    for (const clipPath of region.clipChain ?? []) {
-      const svgId = clipSvgIdBySceneId.get(clipPath.id);
-      if (!svgId) {
-        continue;
-      }
-      wrapped = <g clipPath={`url(#${svgId})`}>{wrapped}</g>;
-    }
-    return wrapped;
-  };
+    return { svgIdBySceneId, defs };
+  }, [hitRegions]);
 
   return (
     <g className={css.hitRegions}>
-      {clipDefs.length > 0 ? (
+      {clips.defs.length > 0 ? (
         <defs>
-          {clipDefs.map((clipPath) => (
+          {clips.defs.map((clipPath) => (
             <clipPath key={clipPath.sceneId} id={clipPath.svgId} clipPathUnits="userSpaceOnUse">
               <path d={clipPath.d} clipRule={clipPath.fillRule === "evenodd" ? "evenodd" : undefined} />
             </clipPath>
@@ -728,7 +481,6 @@ export function HitRegionLayer({
                 ? "copy"
                 : undefined
             : undefined;
-        const className = [css.hitRegion, isHovered ? css.hitRegionHovered : ""].filter(Boolean).join(" ");
         const bucketUsesFillHitArea = toolMode === "addBucket" && shouldUseBucketFillHitArea(region);
         const pointerEvents =
           toolMode === "select"
@@ -748,147 +500,117 @@ export function HitRegionLayer({
                   ? "all"
                   : "fill"
               : "none";
-
-        const onEnter = () => {
-          if (toolMode === "select") {
-            onHoverChange(region.targetId);
-            return;
-          }
-          if (toolMode === "addBucket") {
-            onHoverChange(isBucketPreviewRegion(region) ? region.sourceId : null);
-          }
-        };
-        const onLeave = () => {
-          if (toolMode === "select" || toolMode === "addBucket") onHoverChange(null);
-        };
-
-        if (region.shape === "path") {
-          const transform = region.transform
-            ? `matrix(${fmt(region.transform.a)} ${fmt(region.transform.b)} ${fmt(region.transform.c)} ${fmt(region.transform.d)} ${fmt(region.transform.e)} ${fmt(region.transform.f)})`
-            : undefined;
-          return (
-            <Fragment key={region.key}>
-              {wrapWithClipChain(region, (
-            <path
-              className={className}
-              d={region.d}
-              transform={transform}
-              fill={bucketUsesFillHitArea || region.pointerMode === "fill" ? "transparent" : "none"}
-              stroke={region.pointerMode === "stroke" ? "transparent" : "none"}
-              strokeWidth={region.pointerMode === "stroke" ? region.strokeWidth : undefined}
-              style={cursor ? { cursor } : undefined}
-              pointerEvents={pointerEvents}
-              onPointerDown={(event) => { onElementPointerDown(event, region.targetId, region); }}
-              onContextMenu={(event) => { onElementContextMenu(event, region.targetId, region); }}
-              onDoubleClick={(event) => { onElementDoubleClick(event, region.targetId, region); }}
-              onPointerEnter={onEnter}
-              onPointerLeave={onLeave}
-              data-hit-region-target-id={region.targetId}
-              data-hit-region-key={region.key}
-            />
-              ))}
-            </Fragment>
-          );
-        }
-
-        if (region.shape === "circle") {
-          return (
-            <Fragment key={region.key}>
-              {wrapWithClipChain(region, (
-            <circle
-              className={className}
-              cx={region.cx}
-              cy={region.cy}
-              r={region.r}
-              fill={bucketUsesFillHitArea || region.pointerMode === "fill" ? "transparent" : "none"}
-              stroke={region.pointerMode === "stroke" ? "transparent" : "none"}
-              strokeWidth={region.pointerMode === "stroke" ? region.strokeWidth : undefined}
-              style={cursor ? { cursor } : undefined}
-              pointerEvents={pointerEvents}
-              onPointerDown={(event) => { onElementPointerDown(event, region.targetId, region); }}
-              onContextMenu={(event) => { onElementContextMenu(event, region.targetId, region); }}
-              onDoubleClick={(event) => { onElementDoubleClick(event, region.targetId, region); }}
-              onPointerEnter={onEnter}
-              onPointerLeave={onLeave}
-              data-hit-region-target-id={region.targetId}
-              data-hit-region-key={region.key}
-            />
-              ))}
-            </Fragment>
-          );
-        }
-
-        if (region.shape === "ellipse") {
-          const transform =
-            Math.abs(region.rotation) > 1e-6
-              ? `rotate(${fmt(-region.rotation)} ${fmt(region.cx)} ${fmt(region.cy)})`
-              : undefined;
-          return (
-            <Fragment key={region.key}>
-              {wrapWithClipChain(region, (
-            <ellipse
-              className={className}
-              cx={region.cx}
-              cy={region.cy}
-              rx={region.rx}
-              ry={region.ry}
-              transform={transform}
-              fill={bucketUsesFillHitArea || region.pointerMode === "fill" ? "transparent" : "none"}
-              stroke={region.pointerMode === "stroke" ? "transparent" : "none"}
-              strokeWidth={region.pointerMode === "stroke" ? region.strokeWidth : undefined}
-              style={cursor ? { cursor } : undefined}
-              pointerEvents={pointerEvents}
-              onPointerDown={(event) => { onElementPointerDown(event, region.targetId, region); }}
-              onContextMenu={(event) => { onElementContextMenu(event, region.targetId, region); }}
-              onDoubleClick={(event) => { onElementDoubleClick(event, region.targetId, region); }}
-              onPointerEnter={onEnter}
-              onPointerLeave={onLeave}
-              data-hit-region-target-id={region.targetId}
-              data-hit-region-key={region.key}
-            />
-              ))}
-            </Fragment>
-          );
-        }
-
-        const rectTransform = region.transform
-          ? `matrix(${fmt(region.transform.a)} ${fmt(region.transform.b)} ${fmt(region.transform.c)} ${fmt(region.transform.d)} ${fmt(region.transform.e)} ${fmt(region.transform.f)})`
-          : Math.abs(region.rotation) > 1e-6
-            ? `rotate(${fmt(-region.rotation)} ${fmt(region.cx)} ${fmt(region.cy)})`
-            : undefined;
+        const clipIds = (region.clipChain ?? [])
+          .map((clipPath) => clips.svgIdBySceneId.get(clipPath.id))
+          .filter((svgId): svgId is string => svgId != null)
+          .join(" ");
         return (
-          <Fragment key={region.key}>
-            {wrapWithClipChain(region, (
-              <rect
-                className={className}
-                x={region.x}
-                y={region.y}
-                width={region.width}
-                height={region.height}
-                transform={rectTransform}
-                fill={region.pointerMode === "stroke" ? "none" : "transparent"}
-                stroke={region.pointerMode === "stroke" ? "transparent" : "none"}
-                strokeWidth={region.pointerMode === "stroke" ? region.strokeWidth : undefined}
-                style={cursor ? { cursor } : undefined}
-                pointerEvents={pointerEvents}
-                onPointerDown={(event) => { onElementPointerDown(event, region.targetId, region); }}
-                onContextMenu={(event) => { onElementContextMenu(event, region.targetId, region); }}
-                onDoubleClick={(event) => { onElementDoubleClick(event, region.targetId, region); }}
-                onPointerEnter={onEnter}
-                onPointerLeave={onLeave}
-                data-hit-region-target-id={region.targetId}
-                data-hit-region-key={region.key}
-                data-hit-region-interaction-mode={region.interactionMode}
-                data-hit-region-matrix-edge-kind={region.matrixEdgeSelection?.kind}
-                data-hit-region-matrix-source-id={region.matrixEdgeSelection?.matrixSourceId}
-              />
-            ))}
-          </Fragment>
+          <HitRegionShape
+            key={region.key}
+            region={region}
+            hovered={isHovered}
+            cursor={cursor}
+            pointerEvents={pointerEvents}
+            bucketFill={bucketUsesFillHitArea}
+            toolMode={toolMode}
+            clipIds={clipIds}
+            handlers={handlers}
+          />
         );
       })}
     </g>
   );
 }
+
+const HitRegionShape = memo(function HitRegionShape({
+  region,
+  hovered,
+  cursor,
+  pointerEvents,
+  bucketFill,
+  toolMode,
+  clipIds,
+  handlers
+}: {
+  region: HitRegion;
+  hovered: boolean;
+  cursor: string | undefined;
+  pointerEvents: "stroke" | "fill" | "all" | "none";
+  bucketFill: boolean;
+  toolMode: ToolMode;
+  /** Space-separated ids of the clip paths around the region, innermost first. */
+  clipIds: string;
+  handlers: HitRegionHandlers;
+}) {
+  const className = hovered ? `${css.hitRegion} ${css.hitRegionHovered}` : css.hitRegion;
+  const common = {
+    ...(className !== undefined ? { className: className } : {}),
+    stroke: region.pointerMode === "stroke" ? "transparent" : "none",
+    strokeWidth: region.pointerMode === "stroke" ? region.strokeWidth : undefined,
+    style: cursor ? { cursor } : undefined,
+    pointerEvents,
+    onPointerDown: (event: ReactPointerEvent<SVGElement>) => { handlers.pointerDown(event, region); },
+    onContextMenu: (event: ReactMouseEvent<SVGElement>) => { handlers.contextMenu(event, region); },
+    onDoubleClick: (event: ReactMouseEvent<SVGElement>) => { handlers.doubleClick(event, region); },
+    onPointerEnter: () => {
+      if (toolMode === "select") {
+        handlers.hover(region.targetId);
+      } else if (toolMode === "addBucket") {
+        handlers.hover(isBucketPreviewRegion(region) ? region.sourceId : null);
+      }
+    },
+    onPointerLeave: () => {
+      if (toolMode === "select" || toolMode === "addBucket") handlers.hover(null);
+    },
+    "data-hit-region-target-id": region.targetId,
+    "data-hit-region-key": region.key
+  };
+  const shapeFill = bucketFill || region.pointerMode === "fill" ? "transparent" : "none";
+
+  let shape: ReactElement;
+  if (region.shape === "path") {
+    const transform = region.transform
+      ? `matrix(${fmt(region.transform.a)} ${fmt(region.transform.b)} ${fmt(region.transform.c)} ${fmt(region.transform.d)} ${fmt(region.transform.e)} ${fmt(region.transform.f)})`
+      : undefined;
+    shape = <path {...common} d={region.d} transform={transform} fill={shapeFill} />;
+  } else if (region.shape === "circle") {
+    shape = <circle {...common} cx={region.cx} cy={region.cy} r={region.r} fill={shapeFill} />;
+  } else if (region.shape === "ellipse") {
+    const transform =
+      Math.abs(region.rotation) > 1e-6
+        ? `rotate(${fmt(-region.rotation)} ${fmt(region.cx)} ${fmt(region.cy)})`
+        : undefined;
+    shape = <ellipse {...common} cx={region.cx} cy={region.cy} rx={region.rx} ry={region.ry} transform={transform} fill={shapeFill} />;
+  } else {
+    const rectTransform = region.transform
+      ? `matrix(${fmt(region.transform.a)} ${fmt(region.transform.b)} ${fmt(region.transform.c)} ${fmt(region.transform.d)} ${fmt(region.transform.e)} ${fmt(region.transform.f)})`
+      : Math.abs(region.rotation) > 1e-6
+        ? `rotate(${fmt(-region.rotation)} ${fmt(region.cx)} ${fmt(region.cy)})`
+        : undefined;
+    shape = (
+      <rect
+        {...common}
+        x={region.x}
+        y={region.y}
+        width={region.width}
+        height={region.height}
+        transform={rectTransform}
+        fill={region.pointerMode === "stroke" ? "none" : "transparent"}
+        data-hit-region-interaction-mode={region.interactionMode}
+        data-hit-region-deck-object-id={region.deckObjectId}
+        data-hit-region-matrix-edge-kind={region.matrixEdgeSelection?.kind}
+        data-hit-region-matrix-source-id={region.matrixEdgeSelection?.matrixSourceId}
+      />
+    );
+  }
+  for (const svgId of clipIds ? clipIds.split(" ") : []) {
+    shape = <g clipPath={`url(#${svgId})`}>{shape}</g>;
+  }
+  if (region.offset) {
+    shape = <g transform={`translate(${fmt(region.offset.x)} ${fmt(region.offset.y)})`}>{shape}</g>;
+  }
+  return shape;
+});
 
 function isBucketPreviewRegion(region: HitRegion): boolean {
   return region.shape !== "rect";
@@ -1226,7 +948,7 @@ export function NodeAnchorOverlay({
         const radiusScale = anchorOverlay.radiusScale ?? 1;
         const snapped =
           anchorOverlay.snappedAnchor?.nodeName === anchor.nodeName &&
-          anchorOverlay.snappedAnchor?.nodeSourceId === anchor.nodeSourceId &&
+          anchorOverlay.snappedAnchor.nodeSourceId === anchor.nodeSourceId &&
           anchorOverlay.snappedAnchor.anchor === anchor.anchor;
         return (
           <circle

@@ -3,16 +3,11 @@ import {
   createEditAnalysisSession,
   type EditAnalysisSession,
   type EditAnalysisView
-} from "tikz-editor/edit/analysis";
-
-export type EditAnalysisKey = {
-  documentId: string;
-  sourceRevision: number;
-  activeFigureId: string | null;
-};
+} from "@tikz-editor/core/edit/analysis";
+import { rootKey } from "./root-key";
 
 type CachedEntry = {
-  key: EditAnalysisKey;
+  rootKey: string;
   session: EditAnalysisSession;
   primedSnapshotRevision: number | null;
 };
@@ -23,44 +18,42 @@ export function getSharedEditAnalysisView(params: {
   documentId: string;
   sourceRevision: number;
   source: string;
-  activeFigureId: string | null;
+  activeRootId: string | null | undefined;
   snapshot: SessionSnapshot;
 }): EditAnalysisView {
   const analysisSource = params.snapshot.source === params.source
     ? params.source
     : params.snapshot.source;
-  const key: EditAnalysisKey = {
-    documentId: params.documentId,
-    sourceRevision: params.sourceRevision,
-    activeFigureId: params.activeFigureId
-  };
+  const key = rootKey(params.documentId, params.snapshot.overlayLayer?.rootId ?? params.activeRootId);
 
-  if (
-    cachedEntry?.key.documentId !== key.documentId ||
-    cachedEntry.key.activeFigureId !== key.activeFigureId
-  ) {
+  if (cachedEntry?.rootKey !== key) {
     cachedEntry = {
-      key,
+      rootKey: key,
       session: createEditAnalysisSession(),
       primedSnapshotRevision: null
     };
-  } else {
-    cachedEntry.key = key;
   }
 
   const session = cachedEntry.session;
+  const snapshotParseResult = params.snapshot.parseResult;
   if (
-    params.snapshot.parseResult?.activeFigureId === params.activeFigureId &&
+    snapshotParseResult != null &&
+    snapshotParseResult.activeFigureId === params.activeRootId &&
     cachedEntry.primedSnapshotRevision !== params.snapshot.revision
   ) {
-    session.primeFromParse(params.snapshot.parseResult, params.snapshot.source, {
-      activeFigureId: params.activeFigureId ?? params.snapshot.parseResult.activeFigureId
+    // A layer's AST has absolute spans but was parsed from a masked document.
+    // Inspector queries use the complete source; retain that scoped AST under
+    // the complete source rather than parsing Beamer as an ordinary figure.
+    const parse = params.snapshot.overlayLayer
+      ? { ...snapshotParseResult, source: params.snapshot.source } : snapshotParseResult;
+    session.primeFromParse(parse, params.snapshot.source, {
+      activeFigureId: params.activeRootId ?? snapshotParseResult.activeFigureId
     });
     cachedEntry.primedSnapshotRevision = params.snapshot.revision;
   }
 
   return session.ensure(analysisSource, {
-    activeFigureId: params.activeFigureId
+    ...((params.activeRootId) === undefined ? {} : { activeFigureId: params.activeRootId })
   });
 }
 

@@ -1095,6 +1095,7 @@ function trapeziumBorderPolygon(polygon: WorldPoint[], outerSep: number): WorldP
     return polygon;
   }
   const [lowerLeft, upperLeft, upperRight, lowerRight] = polygon;
+  if (!lowerLeft || !upperLeft || !upperRight || !lowerRight) return polygon;
   return [
     worldPoint(pt(lowerLeft.x - trapeziumMiterX(lowerLeft, lowerRight, upperLeft, outerSep)), pt(lowerLeft.y - outerSep)),
     worldPoint(pt(upperLeft.x - trapeziumMiterX(upperLeft, lowerLeft, upperRight, outerSep)), pt(upperLeft.y + outerSep)),
@@ -1643,7 +1644,7 @@ export function registerNamedNodeAnchors(
     context,
     name,
     {
-      sourceId: producerSourceId,
+      ...(producerSourceId === undefined ? {} : { sourceId: producerSourceId }),
       shape,
       center: transformedCenter,
       anchorTransform: worldTransform(nodeTransform.a, nodeTransform.b, nodeTransform.c, nodeTransform.d, 0, 0),
@@ -1656,7 +1657,7 @@ export function registerNamedNodeAnchors(
       shapeBorderRotate: shapeGeometry.shapeBorderRotate,
       trapeziumStretches: shapeGeometry.trapeziumStretches,
       trapeziumStretchesBody: shapeGeometry.trapeziumStretchesBody,
-      anchorPolygon
+      ...(anchorPolygon === undefined ? {} : { anchorPolygon: anchorPolygon })
     },
     producerSourceId
   );

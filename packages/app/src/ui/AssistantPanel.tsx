@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { RiAddLine, RiSendPlane2Line, RiStopMiniLine } from "@remixicon/react";
@@ -18,7 +19,9 @@ import type {
   AssistantPendingApproval,
   CodexStatus
 } from "../platform/types";
+import { afterNextPaint } from "./frame-scheduling";
 import css from "./AssistantPanel.module.css";
+import { isRecord } from "../validation";
 
 type AssistantPanelProps = {
   onSubmitPrompt: (
@@ -119,7 +122,8 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
     if (!metaRequested) {
       return;
     }
-    let disposed = false;
+    const lifecycle = { disposed: false };
+    const isDisposed = () => lifecycle.disposed;
     async function loadAssistantMeta(): Promise<void> {
       setMetaLoading(true);
       try {
@@ -128,7 +132,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
           assistantApi?.listModels?.() ?? Promise.resolve([]),
           assistantApi?.readAccount?.() ?? Promise.resolve(null)
         ]);
-        if (disposed) {
+        if (isDisposed()) {
           return;
         }
         setModelOptions(models);
@@ -138,12 +142,12 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
 
         // Then, fetch rate limits in the background (slow)
         const rateLimits = await (assistantApi?.readRateLimits?.() ?? Promise.resolve(null));
-        if (disposed) {
+        if (isDisposed()) {
           return;
         }
         setAccountSnapshot((prev) => ({ ...prev, account: prev?.account ?? null, rateLimits }));
       } catch (error) {
-        if (disposed) {
+        if (isDisposed()) {
           return;
         }
         setMetaError(error instanceof Error ? error.message : String(error));
@@ -152,7 +156,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
     }
     void loadAssistantMeta();
     return () => {
-      disposed = true;
+      lifecycle.disposed = true;
     };
   }, [assistantApi, metaRequested]);
 
@@ -180,24 +184,25 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   }, [groupedItems.length, assistantState.assistantPendingApprovals.length]);
 
   useEffect(() => {
-    if (!assistantAvailable || !assistantApi?.checkCodexStatus) {
+    if (!assistantAvailable || !assistantApi.checkCodexStatus) {
       setCodexStatusChecked(true);
       return;
     }
-    let disposed = false;
+    const lifecycle = { disposed: false };
+    const isDisposed = () => lifecycle.disposed;
     void assistantApi.checkCodexStatus().then((status) => {
-      if (!disposed) {
+      if (!isDisposed()) {
         setCodexStatus(status);
         setCodexStatusError(null);
         setCodexStatusChecked(true);
       }
-    }).catch((error) => {
-      if (!disposed) {
+    }).catch((error: unknown) => {
+      if (!isDisposed()) {
         setCodexStatusError(error instanceof Error ? error.message : String(error));
         setCodexStatusChecked(true);
       }
     });
-    return () => { disposed = true; };
+    return () => { lifecycle.disposed = true; };
   }, [assistantAvailable, assistantApi]);
 
   // Pre-warm the codex process and fetch account info once we know it's installed
@@ -205,20 +210,21 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
     if (!codexStatusChecked || !codexStatus?.installed || !assistantApi?.warmUp) {
       return;
     }
-    let disposed = false;
+    const lifecycle = { disposed: false };
+    const isDisposed = () => lifecycle.disposed;
     void (async () => {
       try {
         await assistantApi.warmUp?.();
-        if (disposed) return;
+        if (isDisposed()) return;
         const account = await assistantApi.readAccount?.();
-        if (disposed) return;
+        if (isDisposed()) return;
         setAccountSnapshot((prev) => ({ ...prev, account, rateLimits: prev?.rateLimits ?? null }));
       } catch (error) {
         // Ignore warmup/account errors - will be handled when user interacts
         logAssistantDebug("Assistant warmup/account preload failed.", error);
       }
     })();
-    return () => { disposed = true; };
+    return () => { lifecycle.disposed = true; };
   }, [codexStatusChecked, codexStatus?.installed, assistantApi]);
 
   // Listen for account and rate limit updates
@@ -274,8 +280,8 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
       setInstallError(null);
       setInstallOutput(null);
       try {
-        const output = await assistantApi?.installCodex?.(method);
-        const status = await assistantApi?.checkCodexStatus?.();
+        const output = await assistantApi.installCodex?.(method);
+        const status = await assistantApi.checkCodexStatus?.();
         if (status?.installed) {
           setCodexStatus(status);
           setInstallOutput("Codex CLI installed successfully.");
@@ -304,12 +310,12 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
                 type="button"
                 className={css.installButton}
                 disabled={installingMethod !== null}
-                onClick={() => void handleInstall(methods[0].method)}
+                onClick={() => void handleInstall(requireArrayValue(methods, 0).method)}
               >
-                {installingMethod === methods[0].method ? (
+                {installingMethod === requireArrayValue(methods, 0).method ? (
                   <><div className={css.spinnerInline} /> Installing...</>
                 ) : (
-                  `Install via ${methods[0].label}`
+                  `Install via ${requireArrayValue(methods, 0).label}`
                 )}
               </button>
             ) : (
@@ -432,8 +438,10 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
     requestId: string,
     decision: string
   ): Promise<void> {
+    const sessionGeneration = useEditorStore.getState().documents[activeDocumentId]?.assistantSessionGeneration;
     await getActiveEditorPlatform().assistant?.respondToApproval?.({
       documentId: activeDocumentId,
+      ...(sessionGeneration === undefined ? {} : { sessionGeneration }),
       requestId,
       decision
     });
@@ -442,11 +450,11 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   // Show login prompt if auth is required but user is not logged in
   if (authState.requiresAuth && !authState.isLoggedIn) {
     return (
-      <SidePanel className={css.panel} data-testid="assistant-panel">
-        <SidePanel.Header className={css.header}>
+      <SidePanel className={css.panel ?? ""} data-testid="assistant-panel">
+        <SidePanel.Header className={css.header ?? ""}>
           <div className={css.title}>Assistant</div>
         </SidePanel.Header>
-        <SidePanel.Content className={css.authRequired}>
+        <SidePanel.Content className={css.authRequired ?? ""}>
           <div className={css.authRequiredContent}>
             <p data-select="text">Sign in to use the assistant.</p>
             <button
@@ -468,8 +476,8 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   }
 
   return (
-    <SidePanel className={css.panel} data-testid="assistant-panel">
-      <SidePanel.Header className={css.header}>
+    <SidePanel className={css.panel ?? ""} data-testid="assistant-panel">
+      <SidePanel.Header className={css.header ?? ""}>
         <div>
           <div className={css.title}>Assistant</div>
         </div>
@@ -488,7 +496,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
       {assistantState.assistantError ? <div className={css.error} data-select="text">{assistantState.assistantError}</div> : null}
 
       <SidePanel.Content
-        className={css.timeline}
+        className={css.timeline ?? ""}
         data-testid="assistant-timeline"
         ref={timelineRef}
         onScroll={(event) => {
@@ -606,11 +614,9 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
                 onOpen={() => {
                   if (!metaRequested) {
                     setMetaLoading(true);
-                    // Defer metaRequested to ensure the dropdown has a chance to paint 
-                    // the spinner before the potentially blocking listModels call.
-                    setTimeout(() => {
-                      setMetaRequested(true);
-                    }, 100);
+                    // The dropdown paints its spinner before the potentially
+                    // blocking listModels call.
+                    afterNextPaint(() => { setMetaRequested(true); });
                   }
                 }}
                 disabled={submitting || running}
@@ -645,10 +651,10 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
                     ) : null}
                   </div>
                 )}
-                triggerClassName={css.modelTrigger}
-                menuClassName={css.modelMenu}
-                optionClassName={css.modelOption}
-                optionSelectedClassName={css.modelOptionSelected}
+                triggerClassName={css.modelTrigger ?? ""}
+                menuClassName={css.modelMenu ?? ""}
+                optionClassName={css.modelOption ?? ""}
+                optionSelectedClassName={css.modelOptionSelected ?? ""}
               />
             </div>
             <button
@@ -991,10 +997,7 @@ function formatRateWindow(
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
+  return isRecord(value) ? value : null;
 }
 
 function asNumber(value: unknown): number | null {
@@ -1075,7 +1078,7 @@ function formatAvailableDecisions(choices: unknown[] | undefined): string | null
         return null;
       }
       const keys = Object.keys(record);
-      return keys.length > 0 ? keys[0] : null;
+      return keys[0] ?? null;
     })
     .filter((value): value is string => value !== null && value.trim().length > 0);
   return labels.length > 0 ? labels.join(", ") : null;
@@ -1164,7 +1167,7 @@ function approvalActions(approval: AssistantPendingApproval): Array<{ value: str
           return null;
         }
         const keys = Object.keys(record);
-        return keys.length > 0 ? keys[0] : null;
+        return keys[0] ?? null;
       })
       .filter((value): value is string => value !== null && value.trim().length > 0)
     : [];

@@ -31,8 +31,8 @@ export function IpadPopover({
     }
 
     function onPointerDown(event: PointerEvent): void {
-      const target = event.target as Node | null;
-      if (!target || hostRef.current?.contains(target)) {
+      const target = event.target;
+      if (!(target instanceof Node) || hostRef.current?.contains(target)) {
         return;
       }
       onClose();

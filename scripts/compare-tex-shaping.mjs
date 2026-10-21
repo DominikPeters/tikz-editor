@@ -1,0 +1,147 @@
+#!/usr/bin/env node
+
+import { readTexFontData } from "./lib/tex-font-data.mjs";
+import { escapeTexText, runTexOracleDocument } from "./lib/tex-oracle.mjs";
+
+const fontId = "cmr10";
+// Oracle/regeneration helper for generated TFM ligature/kern tables. Run via
+// `npm run compare:tex-shaping`.
+const fixtures = process.argv.slice(2).length > 0
+  ? process.argv.slice(2)
+  : ["office", "fluff", "AV", "To", "--", "---", "``", "''"];
+function loadGeneratedFonts() {
+  return readTexFontData();
+}
+
+function ruleKey(left, right) {
+  return `${left}:${right}`;
+}
+
+function shapeWithGeneratedFont(text, font) {
+  const rules = new Map();
+  for (const rule of font.ligKerns) {
+    const key = ruleKey(rule[1], rule[2]);
+    if (!rules.has(key)) {
+      rules.set(key, rule);
+    }
+  }
+  const nodes = [];
+  let current = null;
+  const emit = () => {
+    if (!current) {
+      return;
+    }
+    const metric = font.chars[String(current.code)];
+    if (!metric) {
+      throw new Error(`Missing metric for ${current.code}`);
+    }
+    nodes.push({ kind: "glyph", code: current.code, width: metric.width * font.designSize });
+    current = null;
+  };
+  for (const char of text) {
+    const next = { code: char.codePointAt(0) };
+    if (!current) {
+      current = next;
+      continue;
+    }
+    const rule = rules.get(ruleKey(current.code, next.code));
+    if (rule?.[0] === "lig") {
+      current = { code: rule[3] };
+      continue;
+    }
+    emit();
+    if (rule?.[0] === "kern") {
+      nodes.push({ kind: "kern", width: rule[3] * font.designSize });
+    }
+    current = next;
+  }
+  emit();
+  return nodes;
+}
+
+function texEscapeHboxText(text) {
+  return escapeTexText(text);
+}
+
+function shapeWithLuaTeX(text) {
+  const texSource = String.raw`\font\test=${fontId} at 10pt
+\test\language=-1
+\setbox0=\hbox{${texEscapeHboxText(text)}}
+\directlua{
+  for n in node.traverse(tex.box[0].list) do
+    local kind = node.type(n.id)
+    if kind == "glyph" then
+      texio.write_nl("term", "TIKZ_SHAPE glyph " .. n.char .. " " .. (n.width / 65536))
+    elseif kind == "kern" then
+      texio.write_nl("term", "TIKZ_SHAPE kern " .. (n["kern"] / 65536))
+    end
+  end
+}
+\bye
+`;
+  const output = runTexOracleDocument({
+    engine: "luatex",
+    source: texSource,
+    filename: "shape.tex",
+    tempPrefix: "tikz-tex-shape-",
+  });
+  return output
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("TIKZ_SHAPE "))
+    .map((line) => {
+      const parts = line.split(/\s+/);
+      if (parts[1] === "glyph") {
+        return { kind: "glyph", code: Number(parts[2]), width: Number(parts[3]) };
+      }
+      return { kind: "kern", width: Number(parts[2]) };
+    });
+}
+
+function compareNodes(text, actual, expected) {
+  const errors = [];
+  if (actual.length !== expected.length) {
+    errors.push(`node count ${actual.length} != ${expected.length}`);
+  }
+  const count = Math.min(actual.length, expected.length);
+  for (let index = 0; index < count; index++) {
+    const left = actual[index];
+    const right = expected[index];
+    if (left.kind !== right.kind) {
+      errors.push(`${text}[${index}] kind ${left.kind} != ${right.kind}`);
+      continue;
+    }
+    if (left.kind === "glyph" && left.code !== right.code) {
+      errors.push(`${text}[${index}] glyph ${left.code} != ${right.code}`);
+    }
+    if (Math.abs(left.width - right.width) > 0.00008) {
+      errors.push(`${text}[${index}] width ${left.width.toFixed(8)} != ${right.width.toFixed(8)}`);
+    }
+  }
+  return errors;
+}
+
+const fonts = loadGeneratedFonts();
+const font = fonts[fontId];
+if (!font) {
+  throw new Error(`Generated font table does not include ${fontId}`);
+}
+
+let failures = 0;
+for (const fixture of fixtures) {
+  const actual = shapeWithGeneratedFont(fixture, font);
+  const expected = shapeWithLuaTeX(fixture);
+  const errors = compareNodes(fixture, actual, expected);
+  if (errors.length > 0) {
+    failures += 1;
+    console.error(`FAIL ${JSON.stringify(fixture)}`);
+    for (const error of errors) {
+      console.error(`  ${error}`);
+    }
+  } else {
+    console.log(`ok ${JSON.stringify(fixture)} ${actual.length} nodes`);
+  }
+}
+
+if (failures > 0) {
+  process.exitCode = 1;
+}

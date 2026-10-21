@@ -1,5 +1,7 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 import { englishDefaults } from '../languages/en.js';
 import type { ParagraphModel } from './items.js';
+import type { DiscretionaryMeasurement } from './measure.js';
 import type { BreakDecision, GreedyLine, TextRun } from './types.js';
 
 export interface DpResult {
@@ -22,16 +24,26 @@ export interface DpOptions {
   rightskipWidth?: number;
   rightskipStretch?: number;
   rightskipShrink?: number;
+  emergencyStretch?: number;
+  firstLineIndentWidth?: number;
+  forcedBreakIndentWidth?: number;
+  forcedBreakUsesParfill?: boolean;
+  forcedBreakTerminalDemerits?: boolean;
   parfillskipWidth?: number;
   parfillskipStretch?: number;
   parfillskipShrink?: number;
   preventOverflow?: boolean;
   allowInfeasible?: boolean;
+  allowLastResortOverfull?: boolean;
 }
 
 interface Cursor {
   runIndex: number;
   textOffset: number;
+  pendingText?: string;
+  pendingSourceStart?: number;
+  pendingSourceEnd?: number;
+  pendingWidth?: number;
 }
 
 interface SpacePenalty {
@@ -42,6 +54,7 @@ interface SpacePenalty {
 interface ForcedPenalty {
   penalty: number;
   sourceOffset: number;
+  lineLeading?: string;
 }
 
 interface GlueMetrics {
@@ -57,6 +70,7 @@ interface TextPenalty {
   width: number;
   flagged: boolean;
   hyphenSource?: 'automatic' | 'explicit';
+  discretionary?: DiscretionaryMeasurement;
 }
 
 interface BreakCandidate {
@@ -83,6 +97,7 @@ interface CandidateScore {
   spaceDeltaPerGap: number;
   xOffset: number;
   constraintViolation: boolean;
+  artificial?: boolean;
 }
 
 interface ActiveChoice {
@@ -92,13 +107,33 @@ interface ActiveChoice {
 }
 
 interface ActiveState {
-  key: string;
+  id: number;
   cursor: Cursor;
+  lineNumber: number;
   previousFitnessClass: FitnessClass | null;
   previousFlagged: boolean;
   cost: number;
-  previousStateKey: string | null;
+  previousStateId: number | null;
   incomingChoice: ActiveChoice | null;
+}
+
+interface Breakpoint {
+  key: string;
+  runIndex: number;
+  textOffset: number;
+  kind: 'space' | 'hyphen' | 'forced' | 'final';
+}
+
+interface BreakpointBest {
+  cost: number;
+  fromState: ActiveState;
+  choice: ActiveChoice;
+}
+
+interface CandidateStream {
+  iterator: Generator<BreakCandidate, void>;
+  current: BreakCandidate | null;
+  exhausted: boolean;
 }
 
 type FitnessClass = 0 | 1 | 2 | 3; // very loose, loose, decent, tight
@@ -107,22 +142,62 @@ const MAX_RUNS_FOR_DP = 3000;
 const MAX_BREAKPOINTS_FOR_DP = 1200;
 const MAX_ESTIMATED_EDGES = 2_000_000;
 const MAX_DP_STATES = 20000;
+const INITIAL_FITNESS_CLASS: FitnessClass = 2; // TeX's root active node is decent_fit.
+const FITNESS_CLASSES: readonly FitnessClass[] = [0, 1, 2, 3];
+const SP_PER_PT = 65536;
+const TEX_INF_BAD = 10000;
+const DIMEN_EPSILON_PT = 2 / SP_PER_PT;
 
-function badnessFromRatio(ratio: number): number {
-  const abs = Math.abs(ratio);
-  if (!Number.isFinite(abs)) {
-    return 10000;
-  }
-
-  const badness = Math.floor(100 * abs * abs * abs + 0.5);
-  return Math.min(10000, badness);
+function toScaledPoint(value: number): number {
+  return Math.max(0, Math.round(Math.abs(value) * SP_PER_PT));
 }
 
-function fitnessClassForRatio(ratio: number): FitnessClass {
-  if (ratio > 1) return 0;
-  if (ratio > 0.5) return 1;
-  if (ratio >= -0.5) return 2;
-  return 3;
+function texBadness(delta: number, glue: number): number {
+  const t = toScaledPoint(delta);
+  const s = toScaledPoint(glue);
+  if (t === 0) {
+    return 0;
+  }
+  if (s <= 0) {
+    return TEX_INF_BAD;
+  }
+
+  let r: number;
+  if (t <= 7230584) {
+    r = Math.floor((t * 297) / s);
+  } else if (s >= 1663497) {
+    r = Math.floor(t / Math.floor(s / 297));
+  } else {
+    r = t;
+  }
+
+  if (r > 1290) {
+    return TEX_INF_BAD;
+  }
+  return Math.floor((r * r * r + 0o400000) / 0o1000000);
+}
+
+function badnessFromRatio(ratio: number): number {
+  if (!Number.isFinite(ratio)) {
+    return TEX_INF_BAD;
+  }
+  return texBadness(Math.abs(ratio), 1);
+}
+
+function fitnessClassForBadness(
+  badness: number,
+  adjustment: 'stretch' | 'shrink' | 'none'
+): FitnessClass {
+  if (adjustment === 'stretch') {
+    if (badness > 12) {
+      return badness > 99 ? 0 : 1;
+    }
+    return 2;
+  }
+  if (adjustment === 'shrink') {
+    return badness > 12 ? 3 : 2;
+  }
+  return 2;
 }
 
 function incompatibleFitness(a: FitnessClass, b: FitnessClass): boolean {
@@ -139,12 +214,23 @@ function normalizeCursor(
   forcedPenalties: Map<number, ForcedPenalty>
 ): Cursor {
   let { runIndex, textOffset } = cursor;
+  const pending = cursor.pendingText
+    ? {
+        pendingText: cursor.pendingText,
+        ...(cursor.pendingSourceStart !== undefined ? { pendingSourceStart: cursor.pendingSourceStart } : {}),
+        ...(cursor.pendingSourceEnd !== undefined ? { pendingSourceEnd: cursor.pendingSourceEnd } : {}),
+        ...(cursor.pendingWidth !== undefined ? { pendingWidth: cursor.pendingWidth } : {}),
+      }
+    : {};
 
   while (runIndex < model.runs.length) {
-    const run = model.runs[runIndex];
+    const run = requireArrayValue(model.runs, runIndex);
     if (run.kind === 'space') {
       if (forcedPenalties.has(runIndex)) {
         return { runIndex, textOffset: 0 };
+      }
+      if (run.texGlue?.preserveAtLineStart === true) {
+        return { runIndex, textOffset: 0, ...pending };
       }
       runIndex += 1;
       textOffset = 0;
@@ -157,13 +243,13 @@ function normalizeCursor(
         textOffset = 0;
         continue;
       }
-      return { runIndex, textOffset };
+      return { runIndex, textOffset, ...pending };
     }
 
-    return { runIndex, textOffset: 0 };
+    return { runIndex, textOffset: 0, ...pending };
   }
 
-  return { runIndex: model.runs.length, textOffset: 0 };
+  return { runIndex: model.runs.length, textOffset: 0, ...pending };
 }
 
 function collectSpacePenalties(model: ParagraphModel): Map<number, SpacePenalty> {
@@ -199,6 +285,7 @@ function collectForcedPenalties(model: ParagraphModel): Map<number, ForcedPenalt
     map.set(runIndex, {
       penalty: item.penalty,
       sourceOffset: item.payload.sourceOffset,
+      ...(item.payload.breakRef?.kind === 'mspace' ? { lineLeading: item.payload.breakRef.lineLeading } : {}),
     });
   }
 
@@ -237,7 +324,8 @@ function collectTextPenalties(model: ParagraphModel): Map<number, TextPenalty[]>
       visibleHyphen: item.payload.visibleHyphen,
       width: item.width,
       flagged: !!item.flagged,
-      hyphenSource: item.payload.hyphenSource,
+      ...(item.payload.hyphenSource !== undefined ? { hyphenSource: item.payload.hyphenSource } : {}),
+      ...(item.payload.discretionary !== undefined ? { discretionary: item.payload.discretionary } : {}),
     });
     map.set(runIndex, list);
   }
@@ -268,24 +356,26 @@ function textSliceWidth(
   end: number
 ): number {
   if (end <= start) return 0;
+  if (model.measurement.measureSlice) {
+    return model.measurement.measureSlice(run.text, start, end, run.wrapper);
+  }
   const endWidth = model.measurement.measurePrefix(run.text, end, run.wrapper);
   const startWidth = model.measurement.measurePrefix(run.text, start, run.wrapper);
   return endWidth - startWidth;
 }
 
-function generateCandidates(
+function* generateCandidates(
   model: ParagraphModel,
   startCursor: Cursor,
   forcedPenalties: Map<number, ForcedPenalty>,
   spacePenalties: Map<number, SpacePenalty>,
   glueMetrics: Map<number, GlueMetrics>,
   textPenalties: Map<number, TextPenalty[]>
-): BreakCandidate[] {
-  const candidates: BreakCandidate[] = [];
+): Generator<BreakCandidate, void> {
   const cursor = normalizeCursor(model, startCursor, forcedPenalties);
 
   if (cursor.runIndex >= model.runs.length) {
-    return candidates;
+    return;
   }
 
   let naturalWidth = 0;
@@ -302,8 +392,14 @@ function generateCandidates(
   let lastNonSpaceRun = -1;
   let stoppedAtForcedBoundary = false;
 
+  if (cursor.pendingText) {
+    naturalWidth = cursor.pendingWidth ?? model.measurement.measureText(cursor.pendingText, null);
+    naturalWidthWithoutTrailingSpaces = naturalWidth;
+    lastNonSpaceRun = cursor.runIndex;
+  }
+
   for (let runIndex = cursor.runIndex; runIndex < model.runs.length; runIndex++) {
-    const run = model.runs[runIndex];
+    const run = requireArrayValue(model.runs, runIndex);
 
     if (run.kind === 'text') {
       const offset = runIndex === cursor.runIndex ? cursor.textOffset : 0;
@@ -314,11 +410,21 @@ function generateCandidates(
           continue;
         }
 
-        const prefixWidth = textSliceWidth(model, run, offset, textPenalty.splitOffset);
-        candidates.push({
+        const replaceStart = textPenalty.discretionary?.replaceStart ?? textPenalty.splitOffset;
+        if (replaceStart < offset) {
+          continue;
+        }
+        const prefixWidth = textSliceWidth(model, run, offset, replaceStart);
+        const preBreakWidth = textPenalty.discretionary?.preBreakWidth ?? textPenalty.width;
+        const discretionary = textPenalty.discretionary;
+        const nextTextOffset = discretionary?.postBreakText
+          ? discretionary.replaceEnd
+          : textPenalty.splitOffset;
+        const pendingText = discretionary?.postBreakText ?? undefined;
+        yield {
           endRun: runIndex,
           endTextOffset: textPenalty.splitOffset,
-          naturalWidth: naturalWidth + prefixWidth + textPenalty.width,
+          naturalWidth: naturalWidth + prefixWidth + preBreakWidth,
           spaceCount,
           spaceWidth,
           stretch,
@@ -329,16 +435,22 @@ function generateCandidates(
             sourceOffset: textPenalty.sourceOffset,
             visibleHyphen: textPenalty.visibleHyphen,
             splitOffset: textPenalty.splitOffset,
-            hyphenSource: textPenalty.hyphenSource,
+            ...(textPenalty.hyphenSource !== undefined ? { hyphenSource: textPenalty.hyphenSource } : {}),
             flagged: textPenalty.flagged,
+            width: textPenalty.width,
+            ...(textPenalty.discretionary !== undefined ? { discretionary: textPenalty.discretionary } : {}),
           },
           breakPenalty: textPenalty.penalty,
           flagged: textPenalty.flagged,
           nextCursor: normalizeCursor(model, {
             runIndex,
-            textOffset: textPenalty.splitOffset,
+            textOffset: nextTextOffset,
+            ...(pendingText !== undefined ? { pendingText: pendingText } : {}),
+            ...(pendingText ? { pendingSourceStart: run.sourceStart + textPenalty.splitOffset } : {}),
+            ...(pendingText ? { pendingSourceEnd: run.sourceStart + (discretionary?.replaceEnd ?? textPenalty.splitOffset) } : {}),
+            ...(pendingText ? { pendingWidth: model.measurement.measureText(pendingText, run.wrapper) } : {}),
           }, forcedPenalties),
-        });
+        };
       }
 
       const remaining = textSliceWidth(model, run, offset, run.text.length);
@@ -357,7 +469,7 @@ function generateCandidates(
       if (forcedPenalty) {
         const isEmptyLine = runIndex === cursor.runIndex && lastNonSpaceRun < cursor.runIndex;
         const forcedWidth = isEmptyLine ? runWidth(model, runIndex) : 0;
-        candidates.push({
+        yield {
           endRun: isEmptyLine ? runIndex : Math.max(cursor.runIndex, runIndex - 1),
           endTextOffset: null,
           naturalWidth: isEmptyLine ? forcedWidth : naturalWidthWithoutTrailingSpaces,
@@ -371,6 +483,7 @@ function generateCandidates(
             sourceOffset: forcedPenalty.sourceOffset,
             visibleHyphen: false,
             flagged: false,
+            ...(forcedPenalty.lineLeading !== undefined ? { lineLeading: forcedPenalty.lineLeading } : {}),
           },
           breakPenalty: forcedPenalty.penalty,
           flagged: false,
@@ -378,7 +491,7 @@ function generateCandidates(
             runIndex: runIndex + 1,
             textOffset: 0,
           }, forcedPenalties),
-        });
+        };
         stoppedAtForcedBoundary = true;
         break;
       }
@@ -386,7 +499,7 @@ function generateCandidates(
       const spacePenalty = spacePenalties.get(runIndex);
       const previousRun = runIndex > 0 ? model.runs[runIndex - 1] : null;
       if (spacePenalty && previousRun && previousRun.kind !== 'space') {
-        candidates.push({
+        yield {
           endRun: runIndex - 1,
           endTextOffset: null,
           naturalWidth,
@@ -407,7 +520,7 @@ function generateCandidates(
             runIndex: runIndex + 1,
             textOffset: 0,
           }, forcedPenalties),
-        });
+        };
       }
 
       const width = runWidth(model, runIndex);
@@ -417,10 +530,50 @@ function generateCandidates(
       const glue = glueMetrics.get(runIndex);
       stretch += glue?.stretch ?? 0;
       shrink += glue?.shrink ?? 0;
+      if (run.texGlue?.preserveAtLineEnd === true) {
+        naturalWidthWithoutTrailingSpaces = naturalWidth;
+        spaceCountWithoutTrailingSpaces = spaceCount;
+        spaceWidthWithoutTrailingSpaces = spaceWidth;
+        stretchWithoutTrailingSpaces = stretch;
+        shrinkWithoutTrailingSpaces = shrink;
+        lastNonSpaceRun = runIndex;
+      }
+      continue;
+    }
+
+    if (run.kind === 'penalty') {
+      const spacePenalty = spacePenalties.get(runIndex);
+      const previousRun = runIndex > 0 ? model.runs[runIndex - 1] : null;
+      if (spacePenalty && previousRun && previousRun.kind !== 'space') {
+        yield {
+          endRun: Math.max(cursor.runIndex, runIndex - 1),
+          endTextOffset: null,
+          naturalWidth,
+          spaceCount,
+          spaceWidth,
+          stretch,
+          shrink,
+          break: {
+            kind: 'space',
+            runIndex,
+            sourceOffset: spacePenalty.sourceOffset,
+            visibleHyphen: false,
+            flagged: false,
+          },
+          breakPenalty: spacePenalty.penalty,
+          flagged: false,
+          nextCursor: normalizeCursor(model, {
+            runIndex: runIndex + 1,
+            textOffset: 0,
+          }, forcedPenalties),
+        };
+      }
       continue;
     }
 
     naturalWidth += runWidth(model, runIndex);
+    stretch += run.texGlue?.stretch ?? 0;
+    shrink += run.texGlue?.shrink ?? 0;
     naturalWidthWithoutTrailingSpaces = naturalWidth;
     spaceCountWithoutTrailingSpaces = spaceCount;
     spaceWidthWithoutTrailingSpaces = spaceWidth;
@@ -430,7 +583,7 @@ function generateCandidates(
   }
 
   if (!stoppedAtForcedBoundary && lastNonSpaceRun >= cursor.runIndex) {
-    candidates.push({
+    yield {
       endRun: lastNonSpaceRun,
       endTextOffset: null,
       naturalWidth: naturalWidthWithoutTrailingSpaces,
@@ -442,10 +595,21 @@ function generateCandidates(
       breakPenalty: -10_000,
       flagged: false,
       nextCursor: { runIndex: model.runs.length, textOffset: 0 },
-    });
+    };
   }
 
-  return candidates;
+  return;
+}
+
+function lineIndentWidth(
+  options: Pick<DpOptions, 'firstLineIndentWidth' | 'forcedBreakIndentWidth'>,
+  isFirstLine: boolean,
+  followsForcedBreak: boolean
+): number {
+  if (isFirstLine) {
+    return options.firstLineIndentWidth ?? 0;
+  }
+  return followsForcedBreak ? options.forcedBreakIndentWidth ?? 0 : 0;
 }
 
 function scoreCandidate(
@@ -462,6 +626,10 @@ function scoreCandidate(
       | 'rightskipWidth'
       | 'rightskipStretch'
       | 'rightskipShrink'
+      | 'emergencyStretch'
+      | 'firstLineIndentWidth'
+      | 'forcedBreakIndentWidth'
+      | 'forcedBreakUsesParfill'
       | 'parfillskipWidth'
       | 'parfillskipStretch'
       | 'parfillskipShrink'
@@ -469,33 +637,47 @@ function scoreCandidate(
       | 'allowInfeasible'
     >
   >,
+  isFirstLine: boolean,
+  followsForcedBreak: boolean,
   isLastLine: boolean
 ): CandidateScore | null {
   const isForcedBreak = candidate.break?.kind === 'forced';
+  const usesParfill = isLastLine || (isForcedBreak && options.forcedBreakUsesParfill);
+  const indentWidth = lineIndentWidth(options, isFirstLine, followsForcedBreak);
   const lineNaturalWidth =
     candidate.naturalWidth +
     options.leftskipWidth +
     options.rightskipWidth +
-    (isLastLine ? options.parfillskipWidth : 0);
+    indentWidth +
+    (usesParfill ? options.parfillskipWidth : 0);
 
   const totalStretch =
     candidate.stretch +
     options.leftskipStretch +
     options.rightskipStretch +
-    (isLastLine ? options.parfillskipStretch : 0);
+    options.emergencyStretch +
+    (usesParfill ? options.parfillskipStretch : 0);
+  const outputStretch =
+    candidate.stretch +
+    options.leftskipStretch +
+    options.rightskipStretch +
+    (usesParfill ? options.parfillskipStretch : 0);
   const totalShrink =
     candidate.shrink +
     options.leftskipShrink +
     options.rightskipShrink +
-    (isLastLine ? options.parfillskipShrink : 0);
+    (usesParfill ? options.parfillskipShrink : 0);
 
-  const delta = width - lineNaturalWidth;
+  const rawDelta = width - lineNaturalWidth;
+  const delta = Math.abs(rawDelta) <= DIMEN_EPSILON_PT ? 0 : rawDelta;
   let ratio = 0;
   let badness = 0;
   let feasible = true;
   let constraintViolation = false;
+  let adjustment: 'stretch' | 'shrink' | 'none' = 'none';
 
   if (delta > 0) {
+    adjustment = 'stretch';
     if (!Number.isFinite(totalStretch)) {
       ratio = 0;
       badness = 0;
@@ -510,25 +692,29 @@ function scoreCandidate(
       }
     } else {
       ratio = delta / totalStretch;
-      badness = badnessFromRatio(ratio);
+      badness = texBadness(delta, totalStretch);
     }
   } else if (delta < 0) {
-    if (!Number.isFinite(totalShrink) || totalShrink <= 0) {
+    adjustment = 'shrink';
+    const overflow = -delta;
+    if (!Number.isFinite(totalShrink) || totalShrink <= 0 || overflow > totalShrink) {
       feasible = false;
       if (options.allowInfeasible) {
         ratio = delta / Math.max(width, 1);
         badness = badnessFromRatio(ratio);
       } else {
         ratio = Number.NEGATIVE_INFINITY;
-        badness = 10_000;
+        badness = TEX_INF_BAD + 1;
       }
     } else {
       ratio = delta / totalShrink;
-      badness = badnessFromRatio(ratio);
+      badness = texBadness(overflow, totalShrink);
     }
   }
 
-  if (!feasible && !options.allowInfeasible) {
+  const forcedLooseBreak = isForcedBreak && delta >= 0;
+
+  if (!feasible && !options.allowInfeasible && !forcedLooseBreak) {
     return null;
   }
 
@@ -536,7 +722,7 @@ function scoreCandidate(
     return null;
   }
 
-  if (badness > tolerance && !options.allowInfeasible) {
+  if (badness > tolerance && !options.allowInfeasible && !forcedLooseBreak) {
     return null;
   }
 
@@ -578,7 +764,7 @@ function scoreCandidate(
     }
   }
 
-  const fitnessClass = fitnessClassForRatio(ratio);
+  const fitnessClass = fitnessClassForBadness(badness, adjustment);
   const linePenalty = options.linepenalty + badness;
   const penalty = isLastLine || isForcedBreak ? -10_000 : candidate.breakPenalty;
 
@@ -586,7 +772,22 @@ function scoreCandidate(
     return null;
   }
 
-  const base = linePenalty * linePenalty;
+  const outputRatio =
+    delta > 0
+      ? !Number.isFinite(outputStretch)
+        ? 0
+        : outputStretch > 0
+          ? delta / outputStretch
+          : ratio
+      : delta < 0
+        ? !Number.isFinite(totalShrink)
+          ? 0
+          : totalShrink > 0
+            ? delta / totalShrink
+            : ratio
+        : 0;
+
+  const base = Math.abs(linePenalty) >= 10_000 ? 100_000_000 : linePenalty * linePenalty;
   let demerits = base;
 
   if (penalty >= 0) {
@@ -595,29 +796,49 @@ function scoreCandidate(
     demerits -= penalty * penalty;
   }
 
-  let xOffset = options.leftskipWidth;
-  if (ratio > 0 && Number.isFinite(options.leftskipStretch)) {
-    xOffset += ratio * options.leftskipStretch;
-  } else if (ratio < 0 && Number.isFinite(options.leftskipShrink)) {
-    xOffset += ratio * options.leftskipShrink;
+  let xOffset = options.leftskipWidth + indentWidth;
+  if (delta > 0 && !Number.isFinite(outputStretch)) {
+    const infiniteLeftskip = !Number.isFinite(options.leftskipStretch) ? 1 : 0;
+    const infiniteRightskip = !Number.isFinite(options.rightskipStretch) ? 1 : 0;
+    const infiniteParfill =
+      usesParfill && !Number.isFinite(options.parfillskipStretch) ? 1 : 0;
+    const infiniteStretch =
+      infiniteLeftskip + infiniteRightskip + infiniteParfill;
+    if (infiniteStretch > 0 && infiniteLeftskip > 0) {
+      xOffset += delta / infiniteStretch;
+    }
+  } else if (
+    outputRatio > 0 &&
+    Number.isFinite(outputRatio) &&
+    Number.isFinite(options.leftskipStretch) &&
+    options.leftskipStretch !== 0
+  ) {
+    xOffset += outputRatio * options.leftskipStretch;
+  } else if (
+    outputRatio < 0 &&
+    Number.isFinite(outputRatio) &&
+    Number.isFinite(options.leftskipShrink) &&
+    options.leftskipShrink !== 0
+  ) {
+    xOffset += outputRatio * options.leftskipShrink;
   }
 
   return {
     badness,
     fitnessClass,
     demerits,
-    ratio,
+    ratio: outputRatio,
     delta,
     lineNaturalWidth,
     spaceDeltaPerGap:
       candidate.spaceCount > 0
-        ? ratio > 0
+        ? outputRatio > 0
           ? Number.isFinite(candidate.stretch)
-            ? (ratio * candidate.stretch) / candidate.spaceCount
+            ? (outputRatio * candidate.stretch) / candidate.spaceCount
             : 0
-          : ratio < 0
+          : outputRatio < 0
             ? Number.isFinite(candidate.shrink)
-              ? (ratio * candidate.shrink) / candidate.spaceCount
+              ? (outputRatio * candidate.shrink) / candidate.spaceCount
               : 0
             : 0
         : 0,
@@ -626,14 +847,238 @@ function scoreCandidate(
   };
 }
 
-function cursorKey(
-  cursor: Cursor,
-  previousFitnessClass: FitnessClass | null,
-  previousFlagged: boolean
-): string {
-  return `${cursor.runIndex}:${cursor.textOffset}:${previousFitnessClass ?? -1}:${
-    previousFlagged ? 1 : 0
-  }`;
+function breakpointKeyForCandidate(candidate: BreakCandidate): string {
+  if (!candidate.break) {
+    return 'final';
+  }
+  if (candidate.break.kind === 'hyphen') {
+    return `hyphen:${candidate.break.runIndex}:${candidate.break.splitOffset ?? -1}`;
+  }
+  return `${candidate.break.kind}:${candidate.break.runIndex}`;
+}
+
+function candidateAtBreakpoint(
+  stream: CandidateStream,
+  breakpointIndex: number,
+  breakpointIndices: ReadonlyMap<string, number>
+): BreakCandidate | null {
+  // Both the global breakpoints and each state's candidates advance in source
+  // order. Keep only the next candidate instead of rebuilding the full suffix
+  // for every breakpoint (and repeatedly measuring the same text slices).
+  while (!stream.exhausted) {
+    if (stream.current === null) {
+      const next = stream.iterator.next();
+      if (next.done) {
+        stream.exhausted = true;
+        return null;
+      }
+      stream.current = next.value;
+    }
+    const candidateIndex = breakpointIndices.get(breakpointKeyForCandidate(stream.current));
+    if (candidateIndex === breakpointIndex) {
+      return stream.current;
+    }
+    if (candidateIndex !== undefined && candidateIndex > breakpointIndex) {
+      return null;
+    }
+    stream.current = null;
+  }
+  return null;
+}
+
+function collectBreakpoints(params: {
+  model: ParagraphModel;
+  forcedPenalties: Map<number, ForcedPenalty>;
+  spacePenalties: Map<number, SpacePenalty>;
+  textPenalties: Map<number, TextPenalty[]>;
+}): Breakpoint[] {
+  const breakpoints = new Map<string, Breakpoint>();
+  for (const runIndex of params.spacePenalties.keys()) {
+    const key = `space:${runIndex}`;
+    breakpoints.set(key, { key, runIndex, textOffset: 0, kind: 'space' });
+  }
+  for (const runIndex of params.forcedPenalties.keys()) {
+    const key = `forced:${runIndex}`;
+    breakpoints.set(key, { key, runIndex, textOffset: 0, kind: 'forced' });
+  }
+  for (const [runIndex, penalties] of params.textPenalties) {
+    for (const penalty of penalties) {
+      const key = `hyphen:${runIndex}:${penalty.splitOffset}`;
+      breakpoints.set(key, {
+        key,
+        runIndex,
+        textOffset: penalty.splitOffset,
+        kind: 'hyphen',
+      });
+    }
+  }
+  breakpoints.set('final', {
+    key: 'final',
+    runIndex: params.model.runs.length,
+    textOffset: 0,
+    kind: 'final',
+  });
+
+  return [...breakpoints.values()].sort((a, b) => {
+    if (a.runIndex !== b.runIndex) {
+      return a.runIndex - b.runIndex;
+    }
+    if (a.textOffset !== b.textOffset) {
+      return a.textOffset - b.textOffset;
+    }
+    return a.key.localeCompare(b.key);
+  });
+}
+
+function totalCostForTransition(
+  state: ActiveState,
+  candidate: BreakCandidate,
+  score: CandidateScore,
+  options: Required<
+    Pick<
+      DpOptions,
+      | 'adjdemerits'
+      | 'doublehyphendemerits'
+      | 'finalhyphendemerits'
+      | 'forcedBreakTerminalDemerits'
+    >
+  >,
+  isLastLine: boolean
+): number {
+  if (score.artificial) {
+    return state.cost;
+  }
+  let totalCost = state.cost + score.demerits;
+  if (
+    state.previousFitnessClass !== null &&
+    incompatibleFitness(state.previousFitnessClass, score.fitnessClass)
+  ) {
+    totalCost += options.adjdemerits;
+  }
+  if (state.previousFlagged) {
+    if (
+      isLastLine ||
+      (options.forcedBreakTerminalDemerits && candidate.break?.kind === 'forced')
+    ) {
+      totalCost += options.finalhyphendemerits;
+    } else if (candidate.flagged) {
+      totalCost += options.doublehyphendemerits;
+    }
+  }
+  return totalCost;
+}
+
+function candidateIsTooTightForFuture(
+  candidate: BreakCandidate,
+  width: number,
+  options: Required<
+    Pick<
+      DpOptions,
+      | 'leftskipWidth'
+      | 'leftskipShrink'
+      | 'rightskipWidth'
+      | 'rightskipShrink'
+      | 'firstLineIndentWidth'
+      | 'forcedBreakIndentWidth'
+      | 'forcedBreakUsesParfill'
+      | 'parfillskipWidth'
+      | 'parfillskipShrink'
+      | 'preventOverflow'
+      | 'allowInfeasible'
+    >
+  >,
+  isFirstLine: boolean,
+  followsForcedBreak: boolean,
+  isLastLine: boolean
+): boolean {
+  if (options.allowInfeasible) {
+    return false;
+  }
+  const isForcedBreak = candidate.break?.kind === 'forced';
+  const usesParfill = isLastLine || (isForcedBreak && options.forcedBreakUsesParfill);
+  const indentWidth = lineIndentWidth(options, isFirstLine, followsForcedBreak);
+  const lineNaturalWidth =
+    candidate.naturalWidth +
+    options.leftskipWidth +
+    options.rightskipWidth +
+    indentWidth +
+    (usesParfill ? options.parfillskipWidth : 0);
+  const totalShrink =
+    candidate.shrink +
+    options.leftskipShrink +
+    options.rightskipShrink +
+    (usesParfill ? options.parfillskipShrink : 0);
+  return lineNaturalWidth > width + totalShrink + DIMEN_EPSILON_PT;
+}
+
+function artificialOverfullScore(
+  candidate: BreakCandidate,
+  width: number,
+  options: Required<
+    Pick<
+      DpOptions,
+      | 'leftskipWidth'
+      | 'leftskipStretch'
+      | 'leftskipShrink'
+      | 'rightskipWidth'
+      | 'rightskipStretch'
+      | 'rightskipShrink'
+      | 'firstLineIndentWidth'
+      | 'forcedBreakIndentWidth'
+      | 'forcedBreakUsesParfill'
+      | 'parfillskipWidth'
+      | 'parfillskipStretch'
+      | 'parfillskipShrink'
+    >
+  >,
+  isFirstLine: boolean,
+  followsForcedBreak: boolean,
+  isLastLine: boolean
+): CandidateScore {
+  const isForcedBreak = candidate.break?.kind === 'forced';
+  const usesParfill = isLastLine || (isForcedBreak && options.forcedBreakUsesParfill);
+  const indentWidth = lineIndentWidth(options, isFirstLine, followsForcedBreak);
+  const lineNaturalWidth =
+    candidate.naturalWidth +
+    options.leftskipWidth +
+    options.rightskipWidth +
+    indentWidth +
+    (usesParfill ? options.parfillskipWidth : 0);
+  const totalShrink =
+    candidate.shrink +
+    options.leftskipShrink +
+    options.rightskipShrink +
+    (usesParfill ? options.parfillskipShrink : 0);
+  const rawDelta = width - lineNaturalWidth;
+  const delta = Math.abs(rawDelta) <= DIMEN_EPSILON_PT ? 0 : rawDelta;
+  const ratio = totalShrink > 0 && Number.isFinite(totalShrink)
+    ? delta / totalShrink
+    : Number.NEGATIVE_INFINITY;
+  let xOffset = options.leftskipWidth + indentWidth;
+  if (
+    ratio < 0 &&
+    Number.isFinite(ratio) &&
+    Number.isFinite(options.leftskipShrink) &&
+    options.leftskipShrink !== 0
+  ) {
+    xOffset += ratio * options.leftskipShrink;
+  }
+
+  return {
+    badness: TEX_INF_BAD + 1,
+    fitnessClass: 3,
+    demerits: 0,
+    ratio,
+    delta,
+    lineNaturalWidth,
+    spaceDeltaPerGap:
+      candidate.spaceCount > 0 && Number.isFinite(ratio) && Number.isFinite(candidate.shrink)
+        ? (ratio * candidate.shrink) / candidate.spaceCount
+        : 0,
+    xOffset: Number.isFinite(xOffset) ? xOffset : 0,
+    constraintViolation: true,
+    artificial: true,
+  };
 }
 
 export function breakWithDp(
@@ -730,75 +1175,141 @@ export function breakWithDp(
     rightskipWidth: options.rightskipWidth ?? 0,
     rightskipStretch: options.rightskipStretch ?? width,
     rightskipShrink: options.rightskipShrink ?? 0,
+    emergencyStretch: options.emergencyStretch ?? 0,
+    firstLineIndentWidth: options.firstLineIndentWidth ?? 0,
+    forcedBreakIndentWidth: options.forcedBreakIndentWidth ?? 0,
+    forcedBreakUsesParfill: options.forcedBreakUsesParfill ?? false,
+    forcedBreakTerminalDemerits: options.forcedBreakTerminalDemerits ?? false,
     parfillskipWidth: options.parfillskipWidth ?? 0,
     parfillskipStretch: options.parfillskipStretch ?? Number.POSITIVE_INFINITY,
     parfillskipShrink: options.parfillskipShrink ?? 0,
     preventOverflow: options.preventOverflow ?? false,
     allowInfeasible: options.allowInfeasible ?? false,
+    allowLastResortOverfull: options.allowLastResortOverfull ?? false,
   };
 
-  const states = new Map<string, ActiveState>();
-  const queue: string[] = [];
-  let stateCount = 1;
-  const firstKey = cursorKey(firstCursor, null, false);
-  states.set(firstKey, {
-    key: firstKey,
+  const breakpoints = collectBreakpoints({
+    model,
+    forcedPenalties,
+    spacePenalties,
+    textPenalties,
+  });
+  const states = new Map<number, ActiveState>();
+  const candidateStreams = new Map<number, CandidateStream>();
+  const breakpointIndices = new Map(breakpoints.map((breakpoint, index) => [breakpoint.key, index]));
+  let activeStates: ActiveState[] = [];
+  let nextStateId = 1;
+  const rootState: ActiveState = {
+    id: 0,
     cursor: firstCursor,
-    previousFitnessClass: null,
+    lineNumber: 1,
+    previousFitnessClass: INITIAL_FITNESS_CLASS,
     previousFlagged: false,
     cost: 0,
-    previousStateKey: null,
+    previousStateId: null,
     incomingChoice: null,
-  });
-  queue.push(firstKey);
+  };
+  states.set(0, rootState);
+  activeStates.push(rootState);
   let bestFinal:
     | {
         cost: number;
-        fromStateKey: string;
+        fromStateId: number;
         choice: ActiveChoice;
       }
     | null = null;
 
-  while (queue.length > 0) {
-    const stateKey = queue.shift()!;
-    const state = states.get(stateKey);
-    if (!state) {
-      continue;
+  for (const [breakpointIndex, breakpoint] of breakpoints.entries()) {
+    if (activeStates.length === 0) {
+      break;
     }
 
-    const candidates = generateCandidates(
-      model,
-      state.cursor,
-      forcedPenalties,
-      spacePenalties,
-      glueMetrics,
-      textPenalties
-    );
+    const newStates: ActiveState[] = [];
+    const deactivatedStateIds = new Set<number>();
 
-    for (const candidate of candidates) {
-      const isLastLine = candidate.break === null;
+    const bestByFitness = new Map<FitnessClass, BreakpointBest>();
+    let minimumDemerits = Infinity;
+
+    for (let stateIndex = 0; stateIndex < activeStates.length; stateIndex++) {
+      const state = requireArrayValue(activeStates, stateIndex);
+      let stream = candidateStreams.get(state.id);
+      if (!stream) {
+        stream = {
+          iterator: generateCandidates(
+            model, state.cursor, forcedPenalties, spacePenalties, glueMetrics, textPenalties
+          ),
+          current: null,
+          exhausted: false,
+        };
+        candidateStreams.set(state.id, stream);
+      }
+      const candidate = candidateAtBreakpoint(stream, breakpointIndex, breakpointIndices);
+      if (!candidate) {
+        continue;
+      }
+
+      const isLastLine = breakpoint.kind === 'final';
+      const isFirstLine = state.lineNumber === 1;
+      const followsForcedBreak = state.incomingChoice?.candidate.break?.kind === 'forced';
       const score = scoreCandidate(
         candidate,
         width,
         resolvedOptions.tolerance,
         resolvedOptions,
+        isFirstLine,
+        followsForcedBreak,
         isLastLine
       );
       if (!score) {
+        const tooTight = candidateIsTooTightForFuture(
+          candidate,
+          width,
+          resolvedOptions,
+          isFirstLine,
+          followsForcedBreak,
+          isLastLine
+        );
+        if (tooTight) {
+          deactivatedStateIds.add(state.id);
+        }
+        if (
+          resolvedOptions.allowLastResortOverfull &&
+          tooTight &&
+          !Number.isFinite(minimumDemerits) &&
+          stateIndex === activeStates.length - 1 &&
+          activeStates
+            .slice(0, stateIndex)
+            .every((previousState) => deactivatedStateIds.has(previousState.id))
+        ) {
+          const artificialScore = artificialOverfullScore(
+            candidate,
+            width,
+            resolvedOptions,
+            isFirstLine,
+            followsForcedBreak,
+            isLastLine
+          );
+          const choice: ActiveChoice = {
+            candidate,
+            fitnessClass: artificialScore.fitnessClass,
+            score: artificialScore,
+          };
+          if (isLastLine) {
+            bestFinal = {
+              cost: state.cost,
+              fromStateId: state.id,
+              choice,
+            };
+            continue;
+          }
+          bestByFitness.set(artificialScore.fitnessClass, {
+            cost: state.cost,
+            fromState: state,
+            choice,
+          });
+          minimumDemerits = state.cost;
+        }
         continue;
-      }
-
-      let totalCost = state.cost + score.demerits;
-
-      if (
-        state.previousFitnessClass !== null &&
-        incompatibleFitness(state.previousFitnessClass, score.fitnessClass)
-      ) {
-        totalCost += resolvedOptions.adjdemerits;
-      }
-
-      if (state.previousFlagged && candidate.flagged) {
-        totalCost += resolvedOptions.doublehyphendemerits;
       }
 
       const choice: ActiveChoice = {
@@ -806,42 +1317,82 @@ export function breakWithDp(
         fitnessClass: score.fitnessClass,
         score,
       };
-
-      if (isLastLine) {
-        if (state.previousFlagged) {
-          totalCost += resolvedOptions.finalhyphendemerits;
-        }
-        if (bestFinal === null || totalCost < bestFinal.cost) {
+      const totalCost = totalCostForTransition(
+        state,
+        candidate,
+        score,
+        resolvedOptions,
+        isLastLine
+      );
+      const candidateNextCursor = normalizeCursor(
+        model,
+        candidate.nextCursor,
+        forcedPenalties
+      );
+      const isTerminalForcedBreak =
+        breakpoint.kind === 'forced' &&
+        candidateNextCursor.runIndex >= model.runs.length;
+      if (isLastLine || isTerminalForcedBreak) {
+        if (
+          bestFinal === null ||
+          totalCost < bestFinal.cost ||
+          totalCost === bestFinal.cost
+        ) {
           bestFinal = {
             cost: totalCost,
-            fromStateKey: stateKey,
+            fromStateId: state.id,
             choice,
           };
         }
         continue;
       }
 
-      const nextCursor = normalizeCursor(model, candidate.nextCursor, forcedPenalties);
-      const nextKey = cursorKey(nextCursor, score.fitnessClass, candidate.flagged);
-      const existing = states.get(nextKey);
-      if (existing && totalCost >= existing.cost) {
-        continue;
+      const existing = bestByFitness.get(score.fitnessClass);
+      if (
+        !existing ||
+        totalCost < existing.cost ||
+        totalCost === existing.cost
+      ) {
+        bestByFitness.set(score.fitnessClass, {
+          cost: totalCost,
+          fromState: state,
+          choice,
+        });
       }
+      if (totalCost < minimumDemerits) {
+        minimumDemerits = totalCost;
+      }
+    }
 
-      const nextState: ActiveState = {
-        key: nextKey,
-        cursor: nextCursor,
-        previousFitnessClass: score.fitnessClass,
-        previousFlagged: candidate.flagged,
-        cost: totalCost,
-        previousStateKey: stateKey,
-        incomingChoice: choice,
-      };
-      states.set(nextKey, nextState);
-      queue.push(nextKey);
-      if (!existing) {
-        stateCount += 1;
-        if (stateCount > MAX_DP_STATES) {
+    if (Number.isFinite(minimumDemerits)) {
+      const activeThreshold = minimumDemerits + Math.abs(resolvedOptions.adjdemerits);
+      for (const fitnessClass of FITNESS_CLASSES) {
+        const best = bestByFitness.get(fitnessClass);
+        if (!best) {
+          continue;
+        }
+        if (best.cost > activeThreshold) {
+          continue;
+        }
+        const nextCursor = normalizeCursor(
+          model,
+          best.choice.candidate.nextCursor,
+          forcedPenalties
+        );
+        const allocatedStateId = nextStateId++;
+        const nextState: ActiveState = {
+          id: allocatedStateId,
+          cursor: nextCursor,
+          lineNumber: best.fromState.lineNumber + 1,
+          previousFitnessClass: fitnessClass,
+          previousFlagged: best.choice.candidate.flagged,
+          cost: best.cost,
+          previousStateId: best.fromState.id,
+          incomingChoice: best.choice,
+        };
+        states.set(allocatedStateId, nextState);
+        newStates.push(nextState);
+        if (states.size > MAX_DP_STATES) {
           return {
             lines: [],
             errors: [`DP state limit exceeded (${MAX_DP_STATES}).`],
@@ -851,6 +1402,19 @@ export function breakWithDp(
           };
         }
       }
+    }
+
+    if (breakpoint.kind === 'forced') {
+      candidateStreams.clear();
+      activeStates = newStates;
+    } else {
+      for (const stateId of deactivatedStateIds) {
+        candidateStreams.delete(stateId);
+      }
+      activeStates = [
+        ...activeStates.filter((state) => !deactivatedStateIds.has(state.id)),
+        ...newStates,
+      ];
     }
   }
 
@@ -868,10 +1432,10 @@ export function breakWithDp(
   }
 
   const reversedChoices: ActiveChoice[] = [bestFinal.choice];
-  let stateKey: string | null = bestFinal.fromStateKey;
-  const seen = new Set<string>();
-  while (stateKey) {
-    if (seen.has(stateKey)) {
+  let stateId: number | null = bestFinal.fromStateId;
+  const seen = new Set<number>();
+  while (stateId !== null) {
+    if (seen.has(stateId)) {
       return {
         lines: [],
         errors: ['DP reconstruction loop detected.'],
@@ -880,12 +1444,12 @@ export function breakWithDp(
         mode: resolvedOptions.allowInfeasible ? 'overfull' : 'feasible',
       };
     }
-    seen.add(stateKey);
-    const state = states.get(stateKey);
+    seen.add(stateId);
+    const state = states.get(stateId);
     if (!state) {
       return {
         lines: [],
-        errors: [`DP reconstruction failed at state ${stateKey}.`],
+        errors: [`DP reconstruction failed at state ${stateId}.`],
         canProceed: false,
         totalCost: Infinity,
         mode: resolvedOptions.allowInfeasible ? 'overfull' : 'feasible',
@@ -894,7 +1458,7 @@ export function breakWithDp(
     if (state.incomingChoice) {
       reversedChoices.push(state.incomingChoice);
     }
-    stateKey = state.previousStateKey;
+    stateId = state.previousStateId;
   }
 
   const choices = reversedChoices.reverse();
@@ -902,14 +1466,16 @@ export function breakWithDp(
   let currentCursor = firstCursor;
   let usedConstraintViolation = false;
 
-  for (let lineIndex = 0; lineIndex < choices.length; lineIndex++) {
+  for (const [lineIndex, { candidate, score }] of choices.entries()) {
     const normalizedCursor = normalizeCursor(model, currentCursor, forcedPenalties);
-    const { candidate, score } = choices[lineIndex];
     usedConstraintViolation ||= score.constraintViolation;
     lines.push({
       lineIndex,
       startRun: normalizedCursor.runIndex,
       startTextOffset: normalizedCursor.textOffset,
+      ...(normalizedCursor.pendingText !== undefined ? { startPendingText: normalizedCursor.pendingText } : {}),
+      ...(normalizedCursor.pendingSourceStart !== undefined ? { startPendingSourceStart: normalizedCursor.pendingSourceStart } : {}),
+      ...(normalizedCursor.pendingSourceEnd !== undefined ? { startPendingSourceEnd: normalizedCursor.pendingSourceEnd } : {}),
       endRun: candidate.endRun,
       endTextOffset: candidate.endTextOffset,
       width: candidate.naturalWidth,

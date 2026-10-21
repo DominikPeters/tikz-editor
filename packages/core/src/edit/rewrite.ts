@@ -11,7 +11,8 @@ import type { WorldPoint } from "../coords/points.js";
 import { ptToCm } from "../coords/source.js";
 import { worldToLocal, worldDeltaToLocalDelta, localToSourceUnits } from "./coords.js";
 import { CM_PER_PT, formatNumber, type NumberFormatOptions } from "./format.js";
-import { formatCoordinate, formatPolarCoordinate } from "./style.js";
+import { formatCanvasCoordinate, formatCoordinate, formatPolarCoordinate } from "./style.js";
+import { rewriteCalcCoordinate } from "./rewrite-calc.js";
 
 /**
  * Compute a replacement source string for moving a handle to a new world position.
@@ -20,10 +21,15 @@ import { formatCoordinate, formatPolarCoordinate } from "./style.js";
 export function rewriteCoordinate(
   newWorld: WorldPoint,
   handle: EditHandle,
-  source: string
+  source: string,
+  bypassSnapping = false
 ): string | null {
+  if (handle.rewriteMode === "calc") {
+    return rewriteCalcCoordinate(newWorld, handle, source);
+  }
+
   if (handle.rewriteMode === "positioning") {
-    return rewritePositioning(newWorld, handle);
+    return rewritePositioning(newWorld, handle, bypassSnapping);
   }
 
   if (handle.rewriteMode === "unsupported") {
@@ -39,9 +45,10 @@ export function rewriteCoordinate(
       return rewriteCartesian(newWorld, handle, source);
     case "polar":
       return rewritePolar(newWorld, handle, source);
+    case "explicit":
+      return rewriteCanvas(newWorld, handle, source);
     case "xyz":
     case "calc":
-    case "explicit":
     case "named":
     case "unknown":
       return null;
@@ -76,6 +83,14 @@ function rewriteUnsupportedCoordinate(
     return null;
   }
 
+  if (handle.rewriteMode === "unsupported" && handle.detachFrame) {
+    const local = worldToLocal(newWorld, handle.detachFrame);
+    if (!local) return null;
+    const sourcePoint = localToSourceUnits(local);
+    const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
+    return formatCoordinate(oldRaw, formatNumber(sourcePoint.x), formatNumber(sourcePoint.y));
+  }
+
   const cmPoint = {
     x: ptToCm(newWorld.x),
     y: ptToCm(newWorld.y)
@@ -98,8 +113,16 @@ function rewriteCartesian(
   }
   const cm = localToSourceUnits(local);
   const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
-  const coordinate = formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y));
+  const coordinate = formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits);
   return applyInsertionSyntax(source, handle, coordinate);
+}
+
+function rewriteCanvas(newWorld: WorldPoint, handle: EditHandle, source: string): string | null {
+  if (!isFrameLocalCoordinateEditHandle(handle)) return null;
+  const local = worldToLocal(newWorld, handle.frame);
+  if (!local) return null;
+  const cm = localToSourceUnits(local);
+  return formatCanvasCoordinate(source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to), formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits);
 }
 
 function rewritePolar(
@@ -117,7 +140,7 @@ function rewritePolar(
   const cm = localToSourceUnits(local);
   const { angleDeg, radius } = toPolar(cm);
   const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
-  const coordinate = formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius));
+  const coordinate = formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius), handle.sourceUnits);
   return applyInsertionSyntax(source, handle, coordinate);
 }
 
@@ -130,9 +153,6 @@ function rewriteDelta(
     return null;
   }
   const base = handle.relativeBase;
-  if (!base) {
-    return null;
-  }
   const delta = worldVector(pt(newWorld.x - base.x), pt(newWorld.y - base.y));
   const localDelta = worldDeltaToLocalDelta(delta, handle.frame);
   if (!localDelta) {
@@ -142,13 +162,17 @@ function rewriteDelta(
   const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
   if (handle.coordinateForm === "polar") {
     const { angleDeg, radius } = toPolar(cm);
-    const coordinate = formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius));
+    const coordinate = formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius), handle.sourceUnits);
     return applyInsertionSyntax(source, handle, coordinate);
+  }
+  if (handle.coordinateForm === "explicit") {
+    const coordinate = formatCanvasCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits);
+    return coordinate ? applyInsertionSyntax(source, handle, coordinate) : null;
   }
   if (handle.coordinateForm === "xyz") {
     return null;
   }
-  const coordinate = formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y));
+  const coordinate = formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits);
   return applyInsertionSyntax(source, handle, coordinate);
 }
 
@@ -157,16 +181,12 @@ function applyInsertionSyntax(source: string, handle: EditHandle, coordinate: st
     return coordinate;
   }
 
-  if (handle.insertion.kind === "node-inline-at") {
-    const offset = handle.sourceRef.sourceSpan.from;
-    const previousChar = offset > 0 ? source[offset - 1] : "";
-    const nextChar = offset < source.length ? source[offset] : "";
-    const leading = previousChar.length > 0 && !/\s/.test(previousChar) ? " " : "";
-    const trailing = nextChar.length > 0 && !/\s/.test(nextChar) && nextChar !== ";" ? " " : "";
-    return `${leading}at ${coordinate}${trailing}`;
-  }
-
-  return coordinate;
+  const offset = handle.sourceRef.sourceSpan.from;
+  const previousChar = source.charAt(offset - 1);
+  const nextChar = source.charAt(offset);
+  const leading = previousChar.length > 0 && !/\s/.test(previousChar) ? " " : "";
+  const trailing = nextChar.length > 0 && !/\s/.test(nextChar) && nextChar !== ";" ? " " : "";
+  return `${leading}at ${coordinate}${trailing}`;
 }
 
 function toPolar(point: { x: number; y: number }): { angleDeg: number; radius: number } {
@@ -224,6 +244,10 @@ function anchorOffsetsForDirection(
     targetAnchor: wp(m.tx * targetHW, m.ty * targetHH),
     currentAnchor: wp(m.cx * currentHW, m.cy * currentHH)
   };
+}
+
+function directionSign(value: number): -1 | 0 | 1 {
+  return value < 0 ? -1 : value > 0 ? 1 : 0;
 }
 
 function cardinalDirectionFromSigns(signs: { x: -1 | 0 | 1; y: -1 | 0 | 1 }): string | null {
@@ -289,19 +313,22 @@ function signedPairForDirection(
 
 function rewritePositioning(
   newWorld: WorldPoint,
-  handle: EditHandle
+  handle: EditHandle,
+  bypassSnapping: boolean
 ): string | null {
   if (handle.handleType !== "node-positioning") {
     return null;
   }
-  return rewritePositioningFromContext(newWorld, handle.positioningContext);
+  return rewritePositioningFromContext(newWorld, handle.positioningContext, undefined, bypassSnapping);
 }
 
 export function rewritePositioningFromContext(
   newWorld: WorldPoint,
   ctx: EditHandlePositioningContext,
-  formatOptions?: NumberFormatOptions
+  formatOptions?: NumberFormatOptions,
+  bypassSnapping = false
 ): string | null {
+  const cardinalSnapRatio = bypassSnapping ? 0 : CARDINAL_SNAP_RATIO;
   const centerDeltaWorld = wp(newWorld.x - ctx.targetCenter.x, newWorld.y - ctx.targetCenter.y);
   const c2cXcm = centerDeltaWorld.x * CM_PER_PT;
   const c2cYcm = centerDeltaWorld.y * CM_PER_PT;
@@ -324,11 +351,11 @@ export function rewritePositioningFromContext(
 
   if (maxComp >= 1e-6) {
     const resolvedSigns = {
-      x: (absCx < 1e-6 ? currentSigns.x : Math.sign(c2cXcm)) as -1 | 0 | 1,
-      y: (absCy < 1e-6 ? currentSigns.y : Math.sign(c2cYcm)) as -1 | 0 | 1
+      x: absCx < 1e-6 ? currentSigns.x : directionSign(c2cXcm),
+      y: absCy < 1e-6 ? currentSigns.y : directionSign(c2cYcm)
     };
-    const horizontalDominant = absCy <= Math.max(absCx * CARDINAL_SNAP_RATIO, 1e-6);
-    const verticalDominant = absCx <= Math.max(absCy * CARDINAL_SNAP_RATIO, 1e-6);
+    const horizontalDominant = absCy <= Math.max(absCx * cardinalSnapRatio, 1e-6);
+    const verticalDominant = absCx <= Math.max(absCy * cardinalSnapRatio, 1e-6);
     const candidateDirections: string[] = [];
 
     if (horizontalDominant) {
@@ -364,11 +391,12 @@ export function rewritePositioningFromContext(
       const absShiftXcm = Math.abs(shiftXcm);
       const absShiftYcm = Math.abs(shiftYcm);
       const expected = POSITIONING_DIRECTION_SIGNS[candidateDirection];
+      if (expected === undefined) throw new RangeError(`Unknown positioning direction ${candidateDirection}`);
 
       if (expected.x === 0 || expected.y === 0) {
         const axial = Math.max(absShiftXcm, absShiftYcm);
         const orthogonal = expected.x === 0 ? absShiftXcm : absShiftYcm;
-        const maxOrthogonal = Math.max(axial * CARDINAL_SNAP_RATIO, 1e-6);
+        const maxOrthogonal = Math.max(axial * cardinalSnapRatio, 1e-6);
         if (orthogonal > maxOrthogonal) {
           continue;
         }

@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { nextEditHandleId } from "../edit-handles.js";
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldPoint } from "../../coords/points.js";
@@ -180,7 +182,7 @@ function applyToLikeOperation(
     return { activePath, segment: null, behindNodeElements, frontNodeElements };
   }
 
-  const targetSpan = target.kind === "coordinate" ? (target.span ?? item.span) : item.span;
+  const targetSpan = target.span ?? item.span;
   const handle = createEditHandle(evaluated, targetSpan, statement.id, "path-point", context);
   if (handle) {
     context.editHandles.push(handle);
@@ -246,7 +248,7 @@ function applyToLikeOperation(
   }
 
   const start = effectiveStartPoint;
-  if (start && path && alignPathToStart(path.commands, start)) {
+  if (start && alignPathToStart(path.commands, start)) {
     context.pathStartPoint = start;
   }
   let segment: PlacementSegment | null;
@@ -322,8 +324,8 @@ function parseToTarget(
   const prefix = match[2] === "++" ? "++" : match[2] === "+" ? "+" : undefined;
   return {
     kind: "coordinate",
-    raw: match[3],
-    relativePrefix: prefix
+    raw: requireArrayValue(match, 3),
+    ...(prefix === undefined ? {} : { relativePrefix: prefix })
   };
 }
 
@@ -750,8 +752,8 @@ function pushSyntheticCurveHandle(args: {
 }): void {
   const syntheticSpan = makeSyntheticHandleSpan(args.context);
   args.context.editHandles.push({
-    id: `handle:${args.statementId}:${args.kind}:${args.context.editHandles.length}`,
-    runtimeId: `handle:${args.statementId}:${args.kind}:${args.context.editHandles.length}`,
+    id: nextEditHandleId(args.context, args.statementId, args.kind),
+    runtimeId: nextEditHandleId(args.context, args.statementId, args.kind),
     sourceRef: {
       sourceId: args.statementId,
       sourceSpan: syntheticSpan,

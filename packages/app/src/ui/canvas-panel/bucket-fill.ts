@@ -1,10 +1,11 @@
-import { applyEditAction, type EditAction, type EditActionResult } from "tikz-editor/edit/actions";
+import { applyEditAction, type EditAction, type EditActionResult } from "@tikz-editor/core/edit/actions";
 import {
   getInspectorDescriptor,
   type InspectorProperty,
   type InspectorSnapshot
-} from "tikz-editor/edit/inspector";
-import type { SceneElement } from "tikz-editor/semantic/types";
+} from "@tikz-editor/core/edit/inspector";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
+import { parseWindowRootId } from "../../root-inventory";
 
 export type BucketFillEditResolution =
   | {
@@ -24,7 +25,7 @@ export function resolveBucketFillEdit(args: {
   source: string;
   elements: readonly SceneElement[];
   editHandles: InspectorSnapshot["editHandles"];
-  activeFigureId: string | null;
+  activeRootId: string | null;
   figureCount: number;
   propertyWriteMode?: "commit" | "preview";
 }): BucketFillEditResolution {
@@ -34,7 +35,7 @@ export function resolveBucketFillEdit(args: {
     source,
     elements,
     editHandles,
-    activeFigureId,
+    activeRootId,
     figureCount,
     propertyWriteMode = "commit"
   } = args;
@@ -44,41 +45,39 @@ export function resolveBucketFillEdit(args: {
     return { kind: "noop" };
   }
 
+  const activeFigureId = parseWindowRootId(activeRootId, figureCount);
   const descriptor = getInspectorDescriptor(element, {
     source,
-    editHandles,
+    ...(editHandles !== undefined ? { editHandles: editHandles } : {}),
     parseOptions: {
-      activeFigureId:
-        activeFigureId ?? (figureCount > 1 ? null : undefined)
+      ...(activeFigureId !== undefined ? { activeFigureId } : {})
     }
   });
   const fillProperty = findFillColorProperty(descriptor.sections.flatMap((section) => section.properties));
   if (!fillProperty || !fillProperty.write.writable || fillProperty.write.elementId.length === 0) {
-    return { kind: "noop", reason: fillProperty?.write.reason };
+    return { kind: "noop", ...(fillProperty?.write.reason !== undefined ? { reason: fillProperty.write.reason } : {}) };
   }
 
+  const clearKeys = colorClearKeys(fillProperty.syntaxValue);
   const action: Extract<EditAction, { kind: "setProperty" }> = {
     kind: "setProperty",
     elementId: fillProperty.write.elementId,
     level: fillProperty.write.level,
     key: fillProperty.write.key,
     value: colorToken,
-    propertyId: fillProperty.write.propertyId,
-    clearKeys: colorClearKeys(fillProperty.syntaxValue)
+    ...(fillProperty.write.propertyId !== undefined ? { propertyId: fillProperty.write.propertyId } : {}),
+    ...(clearKeys !== undefined ? { clearKeys } : {})
   };
   const result = applyEditAction(source, editHandles ?? [], action, {
     parseOptions: {
-      activeFigureId:
-        activeFigureId ?? (figureCount > 1 ? null : undefined),
+      ...(activeFigureId !== undefined ? { activeFigureId } : {}),
       propertyWriteMode
     }
   });
 
   if ((result.kind !== "success" && result.kind !== "partial") || result.newSource === source) {
-    return {
-      kind: "noop",
-      reason: result.kind === "unsupported" ? result.reason : result.kind === "error" ? result.message : undefined
-    };
+    const reason = result.kind === "unsupported" ? result.reason : result.kind === "error" ? result.message : undefined;
+    return { kind: "noop", ...(reason !== undefined ? { reason } : {}) };
   }
 
   return {

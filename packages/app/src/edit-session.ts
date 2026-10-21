@@ -1,0 +1,77 @@
+import { getActiveDocument } from "./store/document-sessions";
+import type { EditorAction, EditorState } from "./store/types";
+import type { EditActionResult } from "@tikz-editor/core/edit/actions";
+import { composeSourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
+import type { SourcePatch } from "@tikz-editor/core/edit/types";
+
+type SessionState = Pick<EditorState, "documents" | "activeDocumentId">;
+export type DocumentEditSession = {
+  documentId: string;
+  activeRootId: string | null;
+  drawingLayerRootId?: string | null;
+  /** Whether the document had chosen its root (on its first render) when the edit began. */
+  rootChosen: boolean;
+  baseSource: string;
+  latestSource: string;
+  latestRevision: number;
+  changedSourceIds: string[] | null;
+  patches: SourcePatch[] | null;
+};
+
+export function beginDocumentEdit(state: SessionState, changedSourceIds: string[] | null = null): DocumentEditSession {
+  const doc = getActiveDocument(state);
+  return { documentId: doc.id, activeRootId: doc.activeRootId, ...((doc.drawingLayerRootId) === undefined ? {} : { drawingLayerRootId: doc.drawingLayerRootId }), rootChosen: doc.hasInitializedRootSelection, baseSource: doc.source,
+    latestSource: doc.source, latestRevision: doc.sourceRevision, changedSourceIds, patches: [] };
+}
+
+export function ownsDocumentEdit(session: DocumentEditSession, state: SessionState): boolean {
+  const doc = state.documents[session.documentId];
+  return !!doc && doc.source === session.latestSource && doc.sourceRevision === session.latestRevision;
+}
+
+export function canContinueDocumentEdit(session: DocumentEditSession, state: SessionState): boolean {
+  // A document picks its root when its first render lands. An edit begun
+  // before then (a paste right after opening) is about that same picture.
+  const doc = state.documents[session.documentId];
+  const sameRoot = doc?.activeRootId === session.activeRootId || (session.activeRootId === null && !session.rootChosen);
+  return state.activeDocumentId === session.documentId && sameRoot && (doc?.drawingLayerRootId ?? null) === (session.drawingLayerRootId ?? null) && ownsDocumentEdit(session, state);
+}
+
+/** Called only around synchronous edits after checking ownership. */
+export function trackDocumentEdit(session: DocumentEditSession, state: SessionState): void {
+  const doc = state.documents[session.documentId];
+  if (doc) {
+    if (doc.source !== session.latestSource) {
+      session.patches = session.patches != null && doc.lastEditPatchBaseRevision === session.latestRevision &&
+        doc.lastEditPatches && patchesMatchSourceTransition(session.latestSource, doc.source, doc.lastEditPatches)
+        ? composeSourcePatches(session.baseSource, [session.patches, doc.lastEditPatches]) : null;
+    }
+    session.latestSource = doc.source;
+    session.latestRevision = doc.sourceRevision;
+  }
+}
+
+/** Cancelling a preview may restore its inactive tab, but never an intervening edit. */
+export function restoreDocumentEdit(
+  session: DocumentEditSession, getState: () => SessionState, dispatch: (action: EditorAction) => void,
+  preview?: Pick<Extract<EditActionResult, { kind: "success" | "partial" }>, "newSource" | "patches" | "identityMoves">
+): boolean {
+  if (!ownsDocumentEdit(session, getState())) return false;
+  if (preview && (preview.newSource !== session.latestSource ||
+    !patchesMatchSourceTransition(session.baseSource, session.latestSource, preview.patches))) return false;
+  // Reuse the owned edit patches when undoing a preview. Inferring a fresh text
+  // diff can lose object identity when options move around preserved color flags.
+  const trackedPatches = session.patches && patchesMatchSourceTransition(session.baseSource, session.latestSource, session.patches)
+    ? session.patches : undefined;
+  const patches = preview?.patches ?? trackedPatches;
+  const inversePatches = patches?.map(patch => ({ oldSpan: patch.newSpan, newSpan: patch.oldSpan,
+    replacement: session.baseSource.slice(patch.oldSpan.from, patch.oldSpan.to) }));
+  const inverseIdentityMoves = preview?.identityMoves?.map(move => ({ oldSpan: move.newSpan, newSpan: move.oldSpan }));
+  dispatch({ type: "SET_SOURCE_TRANSIENT", documentId: session.documentId,
+    source: session.baseSource, expectedSource: session.latestSource, expectedSourceRevision: session.latestRevision,
+    changedSourceIds: session.changedSourceIds,
+    ...(inversePatches === undefined ? {} : { patches: inversePatches }),
+    ...(inverseIdentityMoves === undefined ? {} : { identityMoves: inverseIdentityMoves }) });
+  trackDocumentEdit(session, getState());
+  return session.latestSource === session.baseSource;
+}

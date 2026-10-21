@@ -1,14 +1,13 @@
-import type { EditAction } from "tikz-editor/edit/actions";
-import type { SnapLine } from "tikz-editor/edit/snapping";
-import type { EditHandle, NodeAnchorTarget, SceneElement } from "tikz-editor/semantic/types";
-import type { SvgViewBox } from "tikz-editor/svg/index";
+import type { ApplyActionWithFeedbackFn } from "./types";
+import type { SnapLine } from "@tikz-editor/core/edit/snapping";
+import type { EditHandle, NodeAnchorTarget, SceneElement } from "@tikz-editor/core/semantic/types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/index";
 
 import type { ScopeOverlayIndex } from "./scope-overlay";
 import type { MatrixCellAnchorHint } from "./endpoint-anchor-snap";
 import type { ResizeFrame } from "./resize-frames";
 import type { PathToolGestureSegment } from "./path-tool";
 import type {
-  ApplyActionFeedback,
   DragState,
   DragTooltipState,
   GridResizeSnapConfig,
@@ -22,7 +21,7 @@ import type { WorldPoint } from "../coords/types";
 import type { EditorAction } from "../../store/types";
 
 export type UseCanvasDragControllerParams = {
-  applyActionWithFeedback: (action: EditAction, mergeKey?: string, sourceOverride?: string) => ApplyActionFeedback;
+  applyActionWithFeedback: ApplyActionWithFeedbackFn;
   dispatch: (action: EditorAction) => void;
   dispatchCanvasTransform: (transform: { translateX: number; translateY: number; scale: number }) => void;
   logSnapDebug: (input: SnapDebugLogInput) => void;
@@ -36,6 +35,8 @@ export type UseCanvasDragControllerParams = {
   svgResult: { viewBox: SvgViewBox } | null;
   dragRef: { current: DragState | null };
   suppressNextBackgroundClickRef: { current: boolean };
+  /** A press and release on nothing (a marquee that did not move), after the selection is cleared. */
+  onEmptyClick?: (additive: boolean) => void;
   svgResultRef: { current: { viewBox: SvgViewBox } | null };
   interactionSvgRef: { current: SVGSVGElement | null };
   liveResizeFramesRef: { current: ReadonlyMap<string, ResizeFrame | null> };
@@ -48,6 +49,7 @@ export type UseCanvasDragControllerParams = {
   setToolDraft: (draft: Extract<DragState, { kind: "tool-create" }> | null) => void;
   setBezierBendDraft: (draft: Extract<DragState, { kind: "tool-bezier-bend" }> | null) => void;
   setPathSegmentDraft: (draft: Extract<DragState, { kind: "tool-path-segment" }> | null) => void;
+  setFreehandDraft?: (draft: null) => void;
   commitPathToolSegment: (segment: PathToolGestureSegment) => void;
   appendFreehandSamplePoint: (point: WorldPoint) => WorldPoint[] | null;
   finalizeFreehandDraft: (overridePoints?: WorldPoint[]) => void;

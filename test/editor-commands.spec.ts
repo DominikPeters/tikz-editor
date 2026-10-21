@@ -20,6 +20,7 @@ import {
 } from "../packages/app/src/ui/editor-commands.js";
 import { PT_PER_CM } from "../packages/core/src/edit/format.js";
 import { applyEditAction } from "../packages/core/src/edit/actions.js";
+import { isDeckEditAction } from "../packages/core/src/beamer/index.js";
 import {
   SVG_CLIPBOARD_MIME,
   PLAIN_TEXT_CLIPBOARD_MIME,
@@ -28,11 +29,23 @@ import {
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 import type { EditorAction } from "../packages/app/src/store/types.js";
 import { setActiveEditorPlatform } from "../packages/app/src/platform/current.js";
+import { makeEmptySnapshot } from "../packages/app/src/compute.js";
+import { editorReducer, makeInitialState } from "../packages/app/src/store/reducer.js";
 
 const SOURCE = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);
   \draw (0,1) -- (1,1);
 \end{tikzpicture}`;
+
+function commandState(source: string, rendered: ReturnType<typeof renderTikzToSvg>) {
+  let state = editorReducer(makeInitialState(), { type: "CODE_EDITED", source });
+  state = editorReducer(state, { type: "COMPUTE_REQUESTED", requestId: "clipboard-ready" });
+  return editorReducer(state, { type: "SNAPSHOT_READY", requestId: "clipboard-ready", snapshot: {
+    ...makeEmptySnapshot(source), parseResult: rendered.parse, semanticResult: rendered.semantic,
+    activeRootId: rendered.parse.activeFigureId, figures: rendered.parse.figures,
+    scene: rendered.semantic.scene, editHandles: rendered.semantic.editHandles, svg: rendered.svg
+  } });
+}
 
 function uniqueMatrixCellIds(
   rendered: ReturnType<typeof renderTikzToSvg>,
@@ -321,10 +334,10 @@ describe("editor-commands", () => {
       action: expect.objectContaining({
         kind: "pasteStatements",
         snippets: ["\\draw (0,0) -- (1,0);"],
-        anchorElementId: undefined,
         delta: { x: 0, y: 0 }
       })
     }));
+    expect(dispatch.mock.calls[0]?.[0]).not.toHaveProperty("action.anchorElementId");
   });
 
   it("pasteSelectionFromClipboardData increases offset based on payload pasteCount", async () => {
@@ -406,6 +419,7 @@ describe("editor-commands", () => {
   it("pasteSelectionFromSystemClipboard reads custom MIME payloads", async () => {
     const dispatch = vi.fn<(action: EditorAction) => void>();
     const rendered = renderTikzToSvg(SOURCE);
+    const state = commandState(SOURCE, rendered);
     const payload = {
       version: 1,
       snippets: ["\\draw (4,4) -- (5,5);"],
@@ -425,6 +439,7 @@ describe("editor-commands", () => {
     });
 
     const didPaste = await pasteSelectionFromSystemClipboard({
+      getState: () => state,
       source: SOURCE,
       snapshotSource: SOURCE,
       scene: rendered.semantic.scene,
@@ -589,8 +604,10 @@ describe("editor-commands", () => {
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     const dispatch = vi.fn<(action: EditorAction) => void>();
     const rendered = renderTikzToSvg(SOURCE);
+    const state = commandState(SOURCE, rendered);
 
     const didCut = await cutSelection({
+      getState: () => state,
       source: SOURCE,
       snapshotSource: SOURCE,
       scene: rendered.semantic.scene,
@@ -602,6 +619,9 @@ describe("editor-commands", () => {
     expect(didCut).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: "APPLY_EDIT_ACTION",
+      documentId: state.activeDocumentId,
+      precomputedSource: SOURCE,
+      expectedDocumentRevision: { documentId: state.activeDocumentId, sourceRevision: state.sourceRevision },
       action: {
         kind: "deleteElement",
         elementId: "path:0"
@@ -700,36 +720,15 @@ describe("editor-commands", () => {
     }, "left");
 
     expect(didRotate).toBe(true);
-    expect(dispatch).toHaveBeenCalledTimes(2);
-    const first = dispatch.mock.calls[0]?.[0];
-    const second = dispatch.mock.calls[1]?.[0];
-    expect(first).toMatchObject({
-      type: "APPLY_EDIT_ACTION",
-      action: {
-        kind: "setProperty",
-        elementId: "path:0",
-        level: "command",
-        key: "rotate",
-        value: "180",
-        clearKeys: ["/tikz/rotate", "rotate around", "/tikz/rotate around"]
-      }
+    expect(dispatch).toHaveBeenCalledOnce();
+    expect(dispatch.mock.calls[0]?.[0]).toMatchObject({
+      type: "APPLY_EDIT_ACTION", action: { kind: "setProperties", actions: [
+        { kind: "setProperty", elementId: "path:0", level: "command", key: "rotate", value: "180",
+          clearKeys: ["/tikz/rotate", "rotate around", "/tikz/rotate around"] },
+        { kind: "setProperty", elementId: "path:1", level: "command", key: "rotate", value: "90",
+          clearKeys: ["/tikz/rotate", "rotate around", "/tikz/rotate around"] }
+      ] }
     });
-    expect(second).toMatchObject({
-      type: "APPLY_EDIT_ACTION",
-      action: {
-        kind: "setProperty",
-        elementId: "path:1",
-        level: "command",
-        key: "rotate",
-        value: "90",
-        clearKeys: ["/tikz/rotate", "rotate around", "/tikz/rotate around"]
-      }
-    });
-    expect(first?.type).toBe("APPLY_EDIT_ACTION");
-    expect(second?.type).toBe("APPLY_EDIT_ACTION");
-    if (first?.type === "APPLY_EDIT_ACTION" && second?.type === "APPLY_EDIT_ACTION") {
-      expect(first.historyMergeKey).toBe(second.historyMergeKey);
-    }
   });
 
   it("flipSelection negates xscale while preserving existing yscale", () => {
@@ -752,14 +751,14 @@ describe("editor-commands", () => {
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(dispatch).toHaveBeenNthCalledWith(1, expect.objectContaining({
       type: "APPLY_EDIT_ACTION",
-      action: expect.objectContaining({
+      action: expect.objectContaining({ kind: "setProperties", actions: [expect.objectContaining({
         kind: "setProperty",
         elementId: "path:0",
         level: "command",
         key: "xscale",
         value: "-2",
         clearKeys: expect.arrayContaining(["scale", "/tikz/scale", "/tikz/xscale"])
-      })
+      })] })
     }));
   });
 
@@ -783,13 +782,13 @@ describe("editor-commands", () => {
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
       type: "APPLY_EDIT_ACTION",
-      action: expect.objectContaining({
+      action: expect.objectContaining({ kind: "setProperties", actions: [expect.objectContaining({
         kind: "setProperty",
         elementId: "path:0",
         level: "command",
         key: "yscale",
         value: "-1"
-      })
+      })] })
     }));
   });
 
@@ -844,13 +843,13 @@ describe("editor-commands", () => {
     expect(dispatch).toHaveBeenCalled();
     expect(dispatch).toHaveBeenNthCalledWith(1, expect.objectContaining({
       type: "APPLY_EDIT_ACTION",
-      action: expect.objectContaining({
+      action: expect.objectContaining({ kind: "setProperties", actions: [expect.objectContaining({
         kind: "setProperty",
         elementId: "scope:0",
         level: "command",
         key: "rotate",
         value: "90"
-      })
+      })] })
     }));
   });
 
@@ -875,18 +874,18 @@ describe("editor-commands", () => {
       .map((call) => call[0])
       .filter((action): action is Extract<EditorAction, { type: "APPLY_EDIT_ACTION" }> => action?.type === "APPLY_EDIT_ACTION");
     expect(actions).toHaveLength(1);
-    expect(actions[0]?.action).toMatchObject({
-      kind: "setProperty",
-      key: "rotate",
-      value: "-90"
-    });
-    expect(actions[0]?.action.kind).toBe("setProperty");
-    if (actions[0]?.action.kind === "setProperty") {
-      expect(actions[0].action.elementId).toMatch(/^node:/);
+    expect(actions[0]?.action).toMatchObject({ kind: "setProperties", actions: [{
+      kind: "setProperty", key: "rotate", value: "-90"
+    }] });
+    if (actions[0]?.action.kind === "setProperties") {
+      expect(actions[0].action.actions[0].elementId).toMatch(/^node:/);
     }
 
     let updated = source;
     for (const action of actions) {
+      if (isDeckEditAction(action.action)) {
+        throw new Error("Expected a tikz edit action");
+      }
       const result = applyEditAction(updated, rendered.semantic.editHandles, action.action);
       expect(result.kind).toBe("success");
       if (result.kind !== "success") {
@@ -900,11 +899,15 @@ describe("editor-commands", () => {
   });
 
   it("detects CodeMirror targets so keyboard commands can bail out", () => {
-    const target = {
+    const target = Object.assign(new EventTarget(), {
       closest: vi.fn((selector: string) => (selector === ".cm-editor" ? {} : null))
-    };
+    });
 
-    expect(isCodeMirrorEventTarget(target as unknown as EventTarget)).toBe(true);
+    expect(isCodeMirrorEventTarget(target)).toBe(true);
+    expect(target.closest.mock.contexts[0]).toBe(target);
     expect(isCodeMirrorEventTarget(null)).toBe(false);
+    expect(isCodeMirrorEventTarget(new EventTarget())).toBe(false);
+    expect(isCodeMirrorEventTarget(Object.assign(new EventTarget(), { closest: 42 }))).toBe(false);
+    expect(isCodeMirrorEventTarget(Object.assign(new EventTarget(), { closest: () => null }))).toBe(false);
   });
 });

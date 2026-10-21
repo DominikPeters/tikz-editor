@@ -1,0 +1,1140 @@
+#!/usr/bin/env node
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
+import { readTexFontData, TEX_FONT_DATA_PATH, writeTexFontData } from "./lib/tex-font-data.mjs";
+
+const DEFAULT_FONTS = [
+  "cmr10",
+  "cmr7",
+  "cmr5",
+  "cmbx10",
+  "cmbx7",
+  "cmbx5",
+  "cmti10",
+  "cmti7",
+  "cmbxti10",
+  "cmtt10",
+  "cmtt8",
+  "cmss10",
+  "cmss8",
+  "cmssi10",
+  "cmssbx10",
+  "cmcsc10",
+  "tcrm1000",
+  "cmmi10",
+  "cmmi7",
+  "cmmi5",
+  "cmsy10",
+  "cmsy7",
+  "cmsy5",
+  "cmex10",
+  "cmex9",
+  "cmex8",
+  "cmex7",
+  "msam10",
+  "msam7",
+  "msam5",
+  "msbm10",
+  "msbm7",
+  "msbm5",
+  "eufm10",
+  "eufm7",
+  "eufm5",
+  "eufb10",
+  "eufb7",
+  "eufb5",
+  "cmmib10",
+  "cmmib7",
+  "cmmib5",
+  "cmbsy10",
+  "cmbsy7",
+  "cmbsy5",
+  "rsfs10",
+  "rsfs7",
+  "rsfs5",
+  // Additional NFSS optical sizes. Keep these deferred at the end so adding
+  // them does not reorder the established text and math font table.
+  "cmr12",
+  "cmr17",
+  "cmr9",
+  "cmr8",
+  "cmr6",
+  "cmmi12",
+  "cmmi9",
+  "cmmi8",
+  "cmmi6",
+  "cmsy9",
+  "cmsy8",
+  "cmsy6",
+  "cmss9",
+  "cmss12",
+  "cmss17",
+];
+const DEFERRED_FONT_NAMES = new Set(DEFAULT_FONTS.slice(-15));
+const DEFERRED_OTF_FONT_NAMES = new Set(["lmromandemi10-regular", "firasans-light", "firasans-lightitalic", "firasans-regular", "firasans-italic"]);
+// Keep the generated Latin Modern tables compact while covering the characters
+// people routinely type in prose.  U+0080..U+009F are controls, so deliberately
+// leave that hole between ASCII and Latin-1 Supplement.
+const LATIN_TEXT_CODE_RANGES = [
+  [0x20, 0x7e],
+];
+const COMMON_PROSE_CODES = [
+  ...Array.from({ length: 0x40 }, (_, index) => 0xc0 + index),
+  // Latin Extended-A is the practical next tier for European prose. Each
+  // face still emits only its cmap intersection (see generateOtfGlyphFont).
+  ...Array.from({ length: 0x80 }, (_, index) => 0x0100 + index),
+  // Frequently cited UTF-8 examples just beyond Extended-A: E/e with tilde.
+  0x1ebc, 0x1ebd,
+  0x2013, 0x2014, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2026,
+];
+const DEFAULT_OTF_GLYPHS = [
+  ...["Light", "LightItalic", "Regular", "Italic"].map(face => ({
+    fontName: `firasans-${face.toLowerCase()}`,
+    ligKernEncoding: "unicode",
+    fileName: `FiraSans-${face}.otf`,
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb01, 0xfb02],
+    ligKerns: [["lig", 0x66, 0x69, 0xfb01], ["lig", 0x66, 0x6c, 0xfb02]],
+  })),
+  {
+    fontName: "lmroman10-regular",
+    fileName: "lmroman10-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013, 0x2022],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmroman10-bold",
+    fileName: "lmroman10-bold.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmroman10-italic",
+    fileName: "lmroman10-italic.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmroman10-bolditalic",
+    fileName: "lmroman10-bolditalic.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmroman7-regular",
+    fileName: "lmroman7-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013, 0x2022],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmroman7-bold",
+    fileName: "lmroman7-bold.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmroman7-italic",
+    fileName: "lmroman7-italic.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmroman5-regular",
+    fileName: "lmroman5-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013, 0x2022],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmroman5-bold",
+    fileName: "lmroman5-bold.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0x2013],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmromanslant10-regular",
+    fileName: "lmromanslant10-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmromanslant10-bold",
+    fileName: "lmromanslant10-bold.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmromanslant8-regular",
+    fileName: "lmromanslant8-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmromancaps10-regular",
+    fileName: "lmromancaps10-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+  {
+    fontName: "lmmono10-regular",
+    fileName: "lmmono10-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+  {
+    fontName: "lmmono10-italic",
+    fileName: "lmmono10-italic.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+  {
+    fontName: "lmmono8-regular",
+    fileName: "lmmono8-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+  {
+    fontName: "lmmono9-regular",
+    fileName: "lmmono9-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+  {
+    fontName: "lmmono12-regular",
+    fileName: "lmmono12-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+  {
+    fontName: "lmmonoslant10-regular",
+    fileName: "lmmonoslant10-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+  {
+    fontName: "lmmonocaps10-regular",
+    fileName: "lmmonocaps10-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+  {
+    fontName: "lmmonolt10-bold",
+    fileName: "lmmonolt10-bold.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+  {
+    fontName: "lmmonolt10-boldoblique",
+    fileName: "lmmonolt10-boldoblique.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+  {
+    fontName: "lmsans10-regular",
+    fileName: "lmsans10-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans12-regular",
+    fileName: "lmsans12-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans17-regular",
+    fileName: "lmsans17-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans10-bold",
+    fileName: "lmsans10-bold.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans10-oblique",
+    fileName: "lmsans10-oblique.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans12-oblique",
+    fileName: "lmsans12-oblique.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans17-oblique",
+    fileName: "lmsans17-oblique.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans10-boldoblique",
+    fileName: "lmsans10-boldoblique.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans8-regular",
+    fileName: "lmsans8-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans8-oblique",
+    fileName: "lmsans8-oblique.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans9-regular",
+    fileName: "lmsans9-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmsans9-oblique",
+    fileName: "lmsans9-oblique.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04],
+    ligKerns: [
+      ["lig", 0x66, 0x66, 0xfb00],
+      ["lig", 0x66, 0x69, 0xfb01],
+      ["lig", 0x66, 0x6c, 0xfb02],
+      ["lig", 0xfb00, 0x69, 0xfb03],
+      ["lig", 0xfb00, 0x6c, 0xfb04],
+    ],
+  },
+  {
+    fontName: "lmromandemi10-regular",
+    fileName: "lmromandemi10-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+];
+// Optional targeted regeneration avoids rewriting unrelated vendored faces.
+// Remaining TU/lmr optical sizes used by Beamer's serif font theme.
+for (const [shape, sizes] of [["regular", [6, 8, 9, 12, 17]], ["bold", [6, 8, 9, 12]], ["italic", [8, 9, 12]], ["slant", [9, 12, 17]]]) {
+  const baseName = shape === "slant" ? "lmromanslant10-regular" : `lmroman10-${shape}`;
+  const base = DEFAULT_OTF_GLYPHS.find(font => font.fontName === baseName);
+  for (const size of sizes) {
+    const fontName = shape === "slant" ? `lmromanslant${size}-regular` : `lmroman${size}-${shape}`;
+    DEFAULT_OTF_GLYPHS.push({ ...base, fontName, fileName: `${fontName}.otf` });
+    DEFERRED_OTF_FONT_NAMES.add(fontName);
+  }
+}
+
+const selectedFonts = process.argv.find((arg) => arg.startsWith("--fonts="))?.slice(8).split(",");
+const fontToolsOutlines = process.argv.includes("--fonttools-outlines");
+
+const atomPattern = /^(?<kind>[CODH])\s+(?<value>.+)$/;
+const charStartPattern = /^\s*\(CHARACTER\s+(?<atom>.+)$/;
+const plAtomSource = String.raw`(?:C\s+.|O\s+[0-7]+|D\s+\d+|H\s+[0-9A-Fa-f]+)`;
+const metricPattern = /^\s*\((?<kind>CHARWD|CHARHT|CHARDP|CHARIC)\s+R\s+(?<value>[+-]?(?:\d+(?:\.\d*)?|\.\d+))\)/;
+const nextLargerPattern = new RegExp(String.raw`^\s*\(NEXTLARGER\s+(?<atom>${plAtomSource})\)`);
+const varcharStartPattern = /^\s*\(VARCHAR\b/;
+const varcharPartPattern = new RegExp(String.raw`^\s*\((?<part>TOP|MID|BOT|REP)\s+(?<atom>${plAtomSource})\)`);
+const fontdimenPattern = /^\s*\((?<name>[A-Z0-9]+)\s+R\s+(?<value>[+-]?(?:\d+(?:\.\d*)?|\.\d+))\)/;
+const labelPattern = /^\s*\(LABEL\s+(?<atom>.+)\)/;
+const ligPattern = new RegExp(
+  String.raw`^\s*\(LIG\s+(?<right>${plAtomSource})\s+(?<out>${plAtomSource})\)`
+);
+const kernPattern = new RegExp(
+  String.raw`^\s*\(KRN\s+(?<right>${plAtomSource})\s+R\s+(?<value>[+-]?(?:\d+(?:\.\d*)?|\.\d+))\)`
+);
+const designSizePattern = /^\(DESIGNSIZE\s+R\s+(?<value>[+-]?(?:\d+(?:\.\d*)?|\.\d+))\)/;
+const checksumPattern = /^\(CHECKSUM\s+O\s+(?<value>[0-7]+)\)/;
+const codingSchemePattern = /^\(CODINGSCHEME\s+(?<value>.+)\)/;
+const familyPattern = /^\(FAMILY\s+(?<value>.+)\)/;
+
+function run(command, args) {
+  return execFileSync(command, args, { encoding: "utf8" }).trim();
+}
+
+function parseAtom(raw) {
+  const normalized = raw.trim().replace(/\)+$/, "");
+  const match = atomPattern.exec(normalized);
+  if (!match?.groups) {
+    throw new Error(`Unsupported PL atom: ${raw}`);
+  }
+  const value = match.groups.value;
+  switch (match.groups.kind) {
+    case "C":
+      return value.codePointAt(0) ?? 0;
+    case "O":
+      return Number.parseInt(value, 8);
+    case "D":
+      return Number.parseInt(value, 10);
+    case "H":
+      return Number.parseInt(value, 16);
+    default:
+      throw new Error(`Unsupported PL atom kind: ${match.groups.kind}`);
+  }
+}
+
+function roundMetric(value) {
+  return Number(value.toFixed(6));
+}
+
+function parsePl(pl) {
+  const font = {
+    family: "",
+    codingScheme: "",
+    checksum: "",
+    designSize: 10,
+    source: {
+      kind: "tfm",
+      name: "",
+    },
+    fontdimen: {},
+    chars: {},
+    ligKerns: [],
+  };
+  let currentChar = null;
+  let inFontdimen = false;
+  let currentLabels = [];
+
+  for (const line of pl.split(/\r?\n/)) {
+    const family = familyPattern.exec(line);
+    if (family?.groups) {
+      font.family = family.groups.value;
+      continue;
+    }
+    const codingScheme = codingSchemePattern.exec(line);
+    if (codingScheme?.groups) {
+      font.codingScheme = codingScheme.groups.value;
+      continue;
+    }
+    const designSize = designSizePattern.exec(line);
+    if (designSize?.groups) {
+      font.designSize = Number(designSize.groups.value);
+      continue;
+    }
+    const checksum = checksumPattern.exec(line);
+    if (checksum?.groups) {
+      font.checksum = checksum.groups.value;
+      continue;
+    }
+
+    if (line.trim().startsWith("(FONTDIMEN")) {
+      inFontdimen = true;
+      continue;
+    }
+    if (inFontdimen) {
+      if (line.trim() === ")") {
+        inFontdimen = false;
+        continue;
+      }
+      const metric = fontdimenPattern.exec(line);
+      if (metric?.groups) {
+        font.fontdimen[metric.groups.name.toLowerCase()] = roundMetric(Number(metric.groups.value));
+      }
+      continue;
+    }
+
+    const charStart = charStartPattern.exec(line);
+    if (charStart?.groups) {
+      const code = parseAtom(charStart.groups.atom);
+      currentChar = { code };
+      font.chars[code] = currentChar;
+      continue;
+    }
+    if (currentChar) {
+      const metric = metricPattern.exec(line);
+      if (metric?.groups) {
+        const key = {
+          CHARWD: "width",
+          CHARHT: "height",
+          CHARDP: "depth",
+          CHARIC: "italicCorrection",
+        }[metric.groups.kind];
+        currentChar[key] = roundMetric(Number(metric.groups.value));
+        continue;
+      }
+      const nextLarger = nextLargerPattern.exec(line);
+      if (nextLarger?.groups) {
+        currentChar.nextLarger = parseAtom(nextLarger.groups.atom);
+        continue;
+      }
+      if (varcharStartPattern.test(line)) {
+        currentChar.varchar = {};
+        continue;
+      }
+      const varcharPart = varcharPartPattern.exec(line);
+      if (varcharPart?.groups && currentChar.varchar) {
+        currentChar.varchar[varcharPart.groups.part.toLowerCase()] = parseAtom(varcharPart.groups.atom);
+        continue;
+      }
+      if (line.trim() === ")") {
+        currentChar = null;
+        continue;
+      }
+    }
+
+    const label = labelPattern.exec(line);
+    if (label?.groups) {
+      currentLabels.push(parseAtom(label.groups.atom));
+      continue;
+    }
+    if (line.trim() === "(STOP)") {
+      currentLabels = [];
+      continue;
+    }
+    if (currentLabels.length > 0) {
+      const lig = ligPattern.exec(line);
+      if (lig?.groups) {
+        const right = parseAtom(lig.groups.right);
+        const out = parseAtom(lig.groups.out);
+        for (const left of currentLabels) {
+          font.ligKerns.push(["lig", left, right, out]);
+        }
+        continue;
+      }
+      const kern = kernPattern.exec(line);
+      if (kern?.groups) {
+        const right = parseAtom(kern.groups.right);
+        const value = roundMetric(Number(kern.groups.value));
+        for (const left of currentLabels) {
+          font.ligKerns.push(["kern", left, right, value]);
+        }
+      }
+    }
+  }
+
+  return font;
+}
+
+function generateTfmFont(fontName) {
+  const tfmPath = run("kpsewhich", [`${fontName}.tfm`]);
+  if (!tfmPath) {
+    throw new Error(`Could not resolve ${fontName}.tfm through kpsewhich`);
+  }
+  const pl = execFileSync("tftopl", [tfmPath], { encoding: "utf8" });
+  const font = parsePl(pl);
+  font.source = {
+    kind: "tfm",
+    name: fontName,
+  };
+  font.glyphs = extractSvgGlyphPaths(fontName, Object.keys(font.chars).map(Number));
+  return font;
+}
+
+function generate(fontNames) {
+  const fonts = {};
+  const deferredFontNames = fontNames.filter((fontName) =>
+    DEFERRED_FONT_NAMES.has(fontName)
+    || ["eufm", "eufb", "cmmib", "cmbsy", "rsfs"].some((prefix) => fontName.startsWith(prefix))
+  );
+  for (const fontName of fontNames.filter((fontName) => !deferredFontNames.includes(fontName))) {
+    fonts[fontName] = generateTfmFont(fontName);
+  }
+  for (const font of DEFAULT_OTF_GLYPHS.filter((entry) => !DEFERRED_OTF_FONT_NAMES.has(entry.fontName))) {
+    fonts[font.fontName] = generateOtfGlyphFont(font);
+  }
+  // Newly added math-only fonts follow the established text-font table so
+  // regenerating them does not rewrite every vendored OpenType entry.
+  for (const fontName of deferredFontNames) {
+    fonts[fontName] = generateTfmFont(fontName);
+  }
+  for (const font of DEFAULT_OTF_GLYPHS.filter((entry) => DEFERRED_OTF_FONT_NAMES.has(entry.fontName))) {
+    fonts[font.fontName] = generateOtfGlyphFont(font);
+  }
+  return fonts;
+}
+
+function otfCodesForFont(font) {
+  const codes = new Set([...COMMON_PROSE_CODES, ...(font.codes ?? [])]);
+  for (const [start, end] of font.codeRanges ?? []) {
+    for (let code = start; code <= end; code += 1) {
+      codes.add(code);
+    }
+  }
+  return [...codes].sort((a, b) => a - b);
+}
+
+function parseOtfCmap(fontPath) {
+  const cmap = execFileSync("ttx", ["-q", "-t", "cmap", "-o", "-", fontPath], { encoding: "utf8" });
+  const entries = new Map();
+  const mapPattern = /<map code="0x(?<code>[0-9a-fA-F]+)" name="(?<name>[^"]+)"\/>/g;
+  let match = mapPattern.exec(cmap);
+  while (match?.groups) {
+    entries.set(Number.parseInt(match.groups.code, 16), match.groups.name);
+    match = mapPattern.exec(cmap);
+  }
+  return entries;
+}
+
+function extractOtfFontDimen(fontPath) {
+  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-otf-fontdimen-"));
+  try {
+    const fontDir = `${dirname(fontPath)}/`;
+    const fontFile = basename(fontPath);
+    const texSource = `\\documentclass{article}
+\\usepackage{fontspec}
+\\setmainfont{${escapeTexPath(fontFile)}}[Path=${escapeTexPath(fontDir)}]
+\\begin{document}
+X
+\\directlua{
+  local f = font.getfont(font.current())
+  for k,v in pairs(f.parameters or {}) do
+    texio.write_nl("TIKZ_FONT_PARAM " .. tostring(k) .. "=" .. tostring(v))
+  end
+}
+\\end{document}
+`;
+    writeFileSync(join(tempDir, "fontdimen.tex"), texSource, "utf8");
+    execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "fontdimen.tex"], {
+      cwd: tempDir,
+      env: {
+        ...process.env,
+        TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
+        TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
+      },
+      stdio: "pipe",
+    });
+    const log = readFileSync(join(tempDir, "fontdimen.log"), "utf8");
+    const params = {};
+    for (const line of log.split(/\r?\n/)) {
+      const match = /TIKZ_FONT_PARAM (?<name>[^=]+)=(?<value>[+-]?(?:\d+(?:\.\d*)?|\.\d+))/.exec(line);
+      if (match?.groups) {
+        params[match.groups.name] = Number(match.groups.value);
+      }
+    }
+    const size = params.size;
+    if (!size) {
+      throw new Error(`Could not resolve font parameter size for ${fontPath}`);
+    }
+    return {
+      slant: roundMetric((params.slant ?? 0) / size),
+      space: roundMetric((params.space ?? 0) / size),
+      stretch: roundMetric((params.space_stretch ?? 0) / size),
+      shrink: roundMetric((params.space_shrink ?? 0) / size),
+      xheight: roundMetric((params.x_height ?? 0) / size),
+      quad: roundMetric((params.quad ?? 0) / size),
+      extraspace: roundMetric((params.extra_space ?? 0) / size),
+    };
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function extractOtfCharMetrics(fontPath, codes, namedGlyphs = []) {
+  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-otf-metrics-"));
+  try {
+    const fontDir = `${dirname(fontPath)}/`;
+    const fontFile = basename(fontPath);
+    const sortedCodes = codes
+      .filter((code) => Number.isInteger(code) && code >= 0)
+      .sort((a, b) => a - b);
+    const luaCodes = sortedCodes.join(",");
+    const texSource = `\\documentclass{article}
+\\usepackage{fontspec}
+\\setmainfont{${escapeTexPath(fontFile)}}[Path=${escapeTexPath(fontDir)},Ligatures=NoCommon]
+\\begin{document}
+X
+\\directlua{
+  local f = font.getfont(font.current())
+  local size = f.size or 1
+  local codes = {${luaCodes}}
+  for _, name in ipairs({${namedGlyphs.map(name => JSON.stringify(name)).join(",")}}) do
+    local code = (f.resources.unicodes or {})[name]
+    if type(code) == "table" then code = code[1] end
+    if code then
+      texio.write_nl("TIKZ_GLYPH_NAME " .. name .. "=" .. tostring(code))
+      codes[rawlen(codes) + 1] = code
+    end
+  end
+  for _, code in ipairs(codes) do
+    local c = (f.characters or {})[code]
+    if c then
+      texio.write_nl(
+        "TIKZ_CHAR_METRIC " .. tostring(code) ..
+        " width=" .. tostring((c.width or 0) / size) ..
+        " height=" .. tostring((c.height or 0) / size) ..
+        " depth=" .. tostring((c.depth or 0) / size) ..
+        " italic=" .. tostring((c.italic or 0) / size)
+      )
+    end
+  end
+}
+\\end{document}
+`;
+    writeFileSync(join(tempDir, "metrics.tex"), texSource, "utf8");
+    execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "metrics.tex"], {
+      cwd: tempDir,
+      env: {
+        ...process.env,
+        TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
+        TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
+      },
+      stdio: "pipe",
+    });
+    const log = readFileSync(join(tempDir, "metrics.log"), "utf8");
+    const metrics = new Map();
+    for (const line of log.split(/\r?\n/)) {
+      const match = /TIKZ_CHAR_METRIC (?<code>\d+) width=(?<width>[+-]?(?:\d+(?:\.\d*)?|\.\d+)) height=(?<height>[+-]?(?:\d+(?:\.\d*)?|\.\d+)) depth=(?<depth>[+-]?(?:\d+(?:\.\d*)?|\.\d+)) italic=(?<italic>[+-]?(?:\d+(?:\.\d*)?|\.\d+))/.exec(line);
+      if (!match?.groups) {
+        continue;
+      }
+      const metric = {
+        code: Number(match.groups.code),
+        width: roundMetric(Number(match.groups.width)),
+        height: roundMetric(Number(match.groups.height)),
+        depth: roundMetric(Number(match.groups.depth)),
+        italicCorrection: roundMetric(Number(match.groups.italic)),
+      };
+      metrics.set(metric.code, metric);
+    }
+    const namedCodes = new Map([...log.matchAll(/TIKZ_GLYPH_NAME ([a-z_]+)=(\d+)/gu)].map(match => [match[1], Number(match[2])]));
+    return { metrics, namedCodes };
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function extractOtfKernPairs(fontPath, codes) {
+  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-otf-kerns-"));
+  try {
+    const fontDir = `${dirname(fontPath)}/`;
+    const fontFile = basename(fontPath);
+    const sortedCodes = codes
+      .filter((code) => code !== 0x20 && Number.isInteger(code) && code >= 0)
+      .sort((a, b) => a - b);
+    const pairProbes = [];
+    for (const left of sortedCodes) {
+      for (const right of sortedCodes) {
+        pairProbes.push(
+          `\\setbox\\pairbox=\\hbox{\\char"${left.toString(16).toUpperCase()}\\char"${right.toString(16).toUpperCase()}}%\n` +
+          `\\directlua{inspect_pair(${left}, ${right}, tex.box.pairbox)}`
+        );
+      }
+    }
+    const texSource = `\\documentclass{article}
+\\usepackage{fontspec}
+\\setmainfont{${escapeTexPath(fontFile)}}[Path=${escapeTexPath(fontDir)},Ligatures=TeX]
+\\newbox\\pairbox
+\\begin{document}
+\\directlua{
+  local kern_id = node.id("kern")
+  local function sp(value)
+    return (value or 0) / 65536
+  end
+  function inspect_pair(left, right, box)
+    local kern = 0
+    for n in node.traverse(box.list) do
+      if n.id == kern_id then
+        kern = kern + sp(n.kern or n.width)
+      end
+    end
+    if math.abs(kern) > 0.0000001 then
+      texio.write_nl("TIKZ_KERN " .. tostring(left) .. " " .. tostring(right) .. " " .. tostring(kern))
+    end
+  end
+}
+${pairProbes.join("\n")}
+\\end{document}
+`;
+    writeFileSync(join(tempDir, "kerns.tex"), texSource, "utf8");
+    execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "kerns.tex"], {
+      cwd: tempDir,
+      env: {
+        ...process.env,
+        TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
+        TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
+      },
+      stdio: "pipe",
+      maxBuffer: 50 * 1024 * 1024,
+    });
+    const log = readFileSync(join(tempDir, "kerns.log"), "utf8");
+    const kerns = [];
+    for (const line of log.split(/\r?\n/)) {
+      const match = /TIKZ_KERN (?<left>\d+) (?<right>\d+) (?<width>[+-]?(?:\d+(?:\.\d*)?|\.\d+))/.exec(line);
+      if (!match?.groups) {
+        continue;
+      }
+      kerns.push([
+        "kern",
+        Number(match.groups.left),
+        Number(match.groups.right),
+        roundMetric(Number(match.groups.width) / 10),
+      ]);
+    }
+    return kerns;
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function generateOtfGlyphFont(font) {
+  const fontPath = run("kpsewhich", [font.fileName]);
+  if (!fontPath) {
+    throw new Error(`Could not resolve ${font.fileName} through kpsewhich`);
+  }
+  const cmap = parseOtfCmap(fontPath);
+  // Font variants do not all expose exactly the same extended-Latin cmap.
+  // Generate the useful intersection instead of making a broad prose range
+  // require every code point in every face.
+  const codes = otfCodesForFont(font).filter((code) => cmap.has(code));
+  // Fira's common ff/ffi/ffl/fj ligatures are GSUB glyphs without Unicode
+  // cmap entries. Retain Luaotfload's actual private codes and original paths.
+  const { metrics, namedCodes } = extractOtfCharMetrics(fontPath, codes,
+    font.fontName.startsWith("firasans-") ? ["f_f", "f_f_i", "f_f_l", "f_j", "f_f_j"] : []);
+  for (const [name, code] of namedCodes) { codes.push(code); cmap.set(code, name); }
+  const chars = {};
+  const glyphs = {};
+  for (const code of codes) {
+    const glyphName = cmap.get(code);
+    if (!glyphName) continue;
+    const metric = metrics.get(code);
+    if (!metric) {
+      throw new Error(`Could not resolve LuaTeX character metric for ${glyphName} (U+${code.toString(16).toUpperCase()}) in ${font.fileName}`);
+    }
+    chars[code] = metric;
+    if (code !== 0x20) {
+      glyphs[code] = "";
+    }
+  }
+  const extractedGlyphs = extractOtfSvgGlyphPaths(fontPath, Object.keys(glyphs).map(Number), Object.fromEntries([...namedCodes].map(([name, code]) => [code, name])));
+  for (const code of Object.keys(glyphs).map(Number)) {
+    const path = extractedGlyphs[code];
+    if (path) {
+      glyphs[code] = path;
+    } else {
+      delete glyphs[code];
+      delete chars[code];
+    }
+  }
+  const extraLigatures = [];
+  const ff = namedCodes.get("f_f");
+  if (ff != null) extraLigatures.push(["lig", 102, 102, ff]);
+  for (const [left, right, name] of [[ff, 105, "f_f_i"], [ff, 108, "f_f_l"], [ff, 106, "f_f_j"], [102, 106, "f_j"]]) {
+    const code = namedCodes.get(name);
+    if (left != null && code != null) extraLigatures.push(["lig", left, right, code]);
+  }
+  const ligKerns = [
+    ...font.ligKerns ?? [],
+    ...extraLigatures,
+    ...extractOtfKernPairs(fontPath, [
+      // Keep the generated table tractable: the shaping engine still applies
+      // the established ASCII kerning program, while extended prose glyphs
+      // use their OpenType advances without materializing an O(n²) pair table.
+      ...codes.filter((code) => (code >= 0x20 && code <= 0x7e) || (font.fontName.startsWith("firasans-") && [0x2018, 0x2019, 0x201c, 0x201d, 0x2013, 0x2014].includes(code))),
+      ...extraLigatures.map(rule => rule[3]),
+      ...((font.ligKerns ?? [])
+        .filter((rule) => rule[0] === "lig")
+        .map((rule) => rule[3])),
+    ]),
+  ];
+  return {
+    family: font.fontName,
+    codingScheme: "Unicode OpenType",
+    ...(font.ligKernEncoding ? { ligKernEncoding: font.ligKernEncoding } : {}),
+    checksum: "",
+    designSize: 10,
+    source: {
+      kind: "opentype",
+      name: font.fileName,
+    },
+    fontdimen: extractOtfFontDimen(fontPath),
+    chars,
+    ligKerns,
+    glyphs,
+  };
+}
+
+function texCharList(codes) {
+  return codes
+    .filter((code) => Number.isInteger(code) && code >= 0 && code <= 255)
+    .sort((a, b) => a - b)
+    .map((code) => `\\char${code}`)
+    .join("");
+}
+
+function extractSvgGlyphPaths(fontName, codes) {
+  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-glyphs-"));
+  try {
+    const texSource = `\\nopagenumbers\\font\\f=${fontName} at 10pt\\f ${texCharList(codes)}\\bye\n`;
+    writeFileSync(join(tempDir, "glyphs.tex"), texSource, "utf8");
+    execFileSync("tex", ["-interaction=nonstopmode", "glyphs.tex"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    const output = execFileSync(
+      "dvisvgm",
+      ["--no-fonts", "--exact-bbox", "--stdout", "glyphs.dvi"],
+      { cwd: tempDir, encoding: "utf8" }
+    );
+    const xmlStart = output.indexOf("<?xml");
+    const svg = xmlStart >= 0 ? output.slice(xmlStart) : output;
+    const glyphs = {};
+    const pathPattern = /<path\s+id='g0-(\d+)'\s+d='([^']*)'\/>/g;
+    let match = pathPattern.exec(svg);
+    while (match) {
+      glyphs[match[1]] = match[2];
+      match = pathPattern.exec(svg);
+    }
+    return glyphs;
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function escapeTexPath(value) {
+  return value.replace(/\\/g, "\\textbackslash{}").replace(/([{}%#&_$])/g, "\\$1");
+}
+
+function extractOtfSvgGlyphPaths(fontPath, codes, namedGlyphs = {}) {
+  if (fontToolsOutlines) {
+    // ttx (used above) and these pens come from the same FontTools install.
+    // Read the original OpenType outlines when dvisvgm cannot open PDFs.
+    const script = `
+import json, sys
+from fontTools.ttLib import TTFont
+from fontTools.pens.svgPathPen import SVGPathPen
+from fontTools.pens.transformPen import TransformPen
+font = TTFont(sys.argv[1])
+glyphs = font.getGlyphSet()
+cmap = font.getBestCmap()
+cmap.update({int(code): name for code, name in json.loads(sys.argv[3]).items()})
+scale = 10 / font["head"].unitsPerEm
+result = {}
+for code in json.loads(sys.argv[2]):
+    name = cmap.get(code)
+    if not name or code == 32: continue
+    pen = SVGPathPen(glyphs, ntos=lambda n: format(round(n, 6), ".6f").rstrip("0").rstrip(".") or "0")
+    glyphs[name].draw(TransformPen(pen, (scale, 0, 0, -scale, 0, 0)))
+    result[code] = pen.getCommands()
+print(json.dumps(result))
+`;
+    return JSON.parse(execFileSync("python3", ["-c", script, fontPath, JSON.stringify(codes), JSON.stringify(namedGlyphs)], { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 }));
+  }
+  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-otf-glyph-"));
+  try {
+    const fontDir = `${dirname(fontPath)}/`;
+    const fontFile = basename(fontPath);
+    const sortedCodes = codes
+      .filter((code) => code !== 0x20)
+      .sort((a, b) => a - b);
+    const text = sortedCodes
+      .map((code) => `{\\char"${code.toString(16).toUpperCase()}}`)
+      .join("\\hskip1pt ");
+    const texSource = `\\documentclass{article}
+\\usepackage{fontspec}
+\\pagestyle{empty}
+\\setmainfont{${escapeTexPath(fontFile)}}[Path=${escapeTexPath(fontDir)},Ligatures=NoCommon]
+\\begin{document}
+${text}
+\\end{document}
+`;
+    writeFileSync(join(tempDir, "glyph.tex"), texSource, "utf8");
+    execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "glyph.tex"], {
+      cwd: tempDir,
+      env: {
+        ...process.env,
+        TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
+        TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
+      },
+      stdio: "pipe",
+    });
+    const output = execFileSync(
+      "dvisvgm",
+      ["--pdf", "--no-fonts", "--exact-bbox", "--stdout", "glyph.pdf"],
+      { cwd: tempDir, encoding: "utf8", maxBuffer: 20 * 1024 * 1024 }
+    );
+    const pathsById = new Map();
+    const pathPattern = /<path\s+id='(?<id>g0-\d+)'\s+d='(?<path>[^']*)'\/>/g;
+    let pathMatch = pathPattern.exec(output);
+    while (pathMatch?.groups) {
+      pathsById.set(pathMatch.groups.id, pathMatch.groups.path);
+      pathMatch = pathPattern.exec(output);
+    }
+    const usePattern = /<use\b[^>]*(?:xlink:href|href)='#(?<id>g0-\d+)'[^>]*>/g;
+    const useIds = [];
+    let useMatch = usePattern.exec(output);
+    while (useMatch?.groups) {
+      useIds.push(useMatch.groups.id);
+      useMatch = usePattern.exec(output);
+    }
+    const glyphs = {};
+    for (const [index, code] of sortedCodes.entries()) {
+      const pathId = useIds[index];
+      const path = pathId ? pathsById.get(pathId) : undefined;
+      if (path) glyphs[code] = path;
+    }
+    return glyphs;
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function main() {
+  let fonts;
+  if (selectedFonts) {
+    fonts = readTexFontData();
+    for (const name of selectedFonts) {
+      const font = DEFAULT_OTF_GLYPHS.find((entry) => entry.fontName === name);
+      if (font) fonts[name] = generateOtfGlyphFont(font);
+      else if (DEFAULT_FONTS.includes(name)) fonts[name] = generateTfmFont(name);
+      else throw new Error(`Unknown TeX font face: ${name}`);
+    }
+  } else fonts = generate(DEFAULT_FONTS);
+  mkdirSync(dirname(TEX_FONT_DATA_PATH), { recursive: true });
+  writeTexFontData(fonts);
+  console.log(`Wrote ${TEX_FONT_DATA_PATH}`);
+}
+
+main();

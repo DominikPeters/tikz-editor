@@ -1,0 +1,1615 @@
+#!/usr/bin/env node
+
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  createTexDerivedInlineMathBoxProvider,
+  layoutSimpleTexParagraph,
+} from "../packages/core/dist/text/tex/index.js";
+import { texOracleEnv } from "./lib/tex-oracle.mjs";
+import { loadTexFuzzModules } from "./lib/tex-fuzz-loader.mjs";
+
+const { generateTexMathFuzzCase } = await loadTexFuzzModules();
+
+const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
+const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
+
+const args = readArgs();
+const generatedDocumentMathFuzzCases = args.documentMathFuzzCases > 0
+  ? generateDocumentMathFuzzCases(args.documentMathFuzzCases, args.seed)
+  : [];
+const generatedMixedVListFuzzCases = args.mixedVListFuzzCases > 0
+  ? generateMixedVListFuzzCases(args.mixedVListFuzzCases, args.seed)
+  : [];
+const generatedDisplayFuzzCases = args.displayFuzzCases > 0
+  ? generateDisplayFuzzCases(args.displayFuzzCases, args.seed)
+  : [];
+const cases = args.cases.length > 0
+  ? args.cases
+  : generatedDocumentMathFuzzCases.length > 0
+    ? generatedDocumentMathFuzzCases
+  : generatedMixedVListFuzzCases.length > 0
+    ? generatedMixedVListFuzzCases
+  : generatedDisplayFuzzCases.length > 0
+    ? generatedDisplayFuzzCases
+  : [
+      {
+        id: "short-display-skip",
+        source: String.raw`Alpha \[\sum_i^n\] Beta`,
+        width: 120,
+      },
+      {
+        id: "normal-display-skip",
+        source: String.raw`Alpha Beta Gamma \[\sum_i^n\] Delta`,
+        width: 120,
+      },
+      {
+        id: "equation-star-display",
+        source: String.raw`Alpha \begin{equation*}\sum_i^n\end{equation*} Beta`,
+        width: 120,
+      },
+      {
+        id: "styled-fraction-display",
+        source: String.raw`Alpha \[\dfrac{1}{2}+\tfrac{x}{y}\] Beta`,
+        width: 160,
+      },
+      {
+        id: "ellipsis-display",
+        source: String.raw`Alpha \[x_1,\ldots,x_n+\cdots\] Beta`,
+        width: 160,
+      },
+      {
+        id: "align-star-display",
+        source: String.raw`Alpha \begin{align*}a&=b\\c&=d\end{align*} Beta`,
+        width: 120,
+      },
+      {
+        id: "align-numbered-display",
+        source: String.raw`Alpha \begin{align}a&=b\\c&=d\notag\\e&=f\tag{A}\\g&=h\end{align} Beta`,
+        width: 180,
+      },
+      {
+        id: "gather-star-display",
+        source: String.raw`Alpha \begin{gather*}a=b\\c+d=e\end{gather*} Beta`,
+        width: 140,
+      },
+      {
+        id: "gather-numbered-display",
+        source: String.raw`Alpha \begin{gather}a=b\\c=d\notag\\e=f\tag{A}\\g=h\end{gather} Beta`,
+        width: 180,
+      },
+      {
+        id: "multline-star-display",
+        source: String.raw`Alpha \begin{multline*}a=b\\c+d=e\\f=g\end{multline*} Beta`,
+        width: 140,
+      },
+      {
+        id: "multline-numbered-display",
+        source: String.raw`Alpha \begin{multline}a\\b\end{multline} Beta \begin{multline}c\\d\notag\end{multline} Gamma \begin{multline}e\\f\tag{A}\end{multline} Delta`,
+        width: 180,
+      },
+    ];
+
+const results = cases.map((caseSpec) => compareCase(caseSpec, args));
+const failed = results.filter((result) => !result.ok);
+if (args.summaryOnly) {
+  console.log(JSON.stringify({
+    tolerance: args.tolerance,
+    passed: results.length - failed.length,
+    failed: failed.length,
+    failures: failed.map((result) => ({
+      id: result.id,
+      width: result.width,
+      mismatches: result.mismatches,
+      source: result.source,
+    })),
+    ...(generatedDocumentMathFuzzCases.length > 0 ? {
+      seed: args.seed,
+      mode: "document-math-fuzz",
+    } : generatedMixedVListFuzzCases.length > 0 ? {
+      seed: args.seed,
+      mode: "mixed-vlist-fuzz",
+    } : generatedDisplayFuzzCases.length > 0 ? {
+      seed: args.seed,
+      mode: "display-fuzz",
+    } : {}),
+  }, null, 2));
+} else {
+  console.log(JSON.stringify({ tolerance: args.tolerance, results }, null, 2));
+}
+if (failed.length > 0) {
+  process.exitCode = 1;
+}
+
+function compareCase(caseSpec, args) {
+  const tolerance = args.tolerance;
+  const ours = ourTrace(caseSpec);
+  let tex;
+  try {
+    tex = texTrace(caseSpec, args);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ...caseSpec,
+      ok: false,
+      mismatches: [`TeX oracle failed: ${message}`],
+      ours,
+      tex: { topLevel: [], glyphs: [] },
+    };
+  }
+  const mismatches = [];
+  if (!ours.supported) {
+    mismatches.push(`our layout unsupported: ${ours.errors.join("; ")}`);
+    return { ...caseSpec, ok: false, mismatches, ours, tex };
+  }
+  for (const integrityError of ours.integrityErrors ?? []) {
+    mismatches.push(integrityError);
+  }
+  if (caseSpec.compareMode === "math-glyphs" || caseSpec.compareMode === "document-math-glyphs") {
+    compareGlyphLists(
+      mismatches,
+      "math glyph",
+      ours.glyphs.filter(isTeXMathGlyph),
+      tex.glyphs.filter(isTeXMathGlyph),
+      tolerance
+    );
+  } else {
+    compareTopLevelItems(mismatches, ours.topLevel, tex.topLevel, tolerance);
+    compareDisplayMathGlyphs(mismatches, ours.topLevel, ours.glyphs, tex.topLevel, tex.glyphs, tolerance);
+  }
+  return {
+    ...caseSpec,
+    ok: mismatches.length === 0,
+    mismatches,
+    ours,
+    tex,
+  };
+}
+
+function isTeXMathGlyph(glyph) {
+  return typeof glyph.fontId === "string" && /^cm/u.test(glyph.fontId);
+}
+
+function compareTopLevelItems(mismatches, ours, tex, tolerance) {
+  const ourHlists = comparableOurTopLevelHlists(ours);
+  const texHlists = tex.filter((item) => item.kind === "hlist");
+  compareItemLists(
+    mismatches,
+    "hlist",
+    ourHlists.map(semanticHlistItem),
+    texHlists,
+    tolerance
+  );
+
+  const ourVerticalGlues = ours.filter(isVisibleVerticalGlue);
+  const texVerticalGlues = tex.filter(isVisibleVerticalGlue);
+  compareItemLists(mismatches, "vertical glue", ourVerticalGlues, texVerticalGlues, tolerance);
+}
+
+function isVisibleVerticalGlue(item) {
+  return item.kind === "glue" && (item.size ?? 0) > 0;
+}
+
+function compareItemLists(mismatches, label, ours, tex, tolerance) {
+  if (ours.length !== tex.length) {
+    mismatches.push(`${label} count differs: ours=${ours.length} tex=${tex.length}`);
+  }
+  const count = Math.min(ours.length, tex.length);
+  for (let index = 0; index < count; index++) {
+    const left = ours[index];
+    const right = tex[index];
+    if (!left || !right) {
+      continue;
+    }
+    if (left.kind !== right.kind) {
+      mismatches.push(`${label} ${index} kind differs: ours=${left.kind} tex=${right.kind}`);
+      continue;
+    }
+    compareNumber(mismatches, `${label} ${index} y`, left.y, right.y, tolerance);
+    compareNumber(mismatches, `${label} ${index} width`, left.width, right.width, tolerance);
+    compareNumber(mismatches, `${label} ${index} height`, left.height, right.height, tolerance);
+    compareNumber(mismatches, `${label} ${index} depth`, left.depth, right.depth, tolerance);
+    if (left.kind === "glue" && right.kind === "glue") {
+      compareNumber(mismatches, `${label} ${index} size`, left.size, right.size, tolerance);
+    }
+    compareNumber(mismatches, `${label} ${index} x`, left.x, right.x, tolerance);
+  }
+}
+
+function semanticHlistItem(item) {
+  return {
+    ...item,
+    kind: "hlist",
+    role: item.kind,
+  };
+}
+
+function comparableOurTopLevelHlists(items) {
+  return items.filter((item) =>
+    (item.kind === "paragraph" && !isSyntheticIntertextParagraph(item)) ||
+    item.kind === "display-math" ||
+    item.hboxRole?.kind === "display-align-row"
+  );
+}
+
+function isSyntheticIntertextParagraph(item) {
+  return item.kind === "paragraph" && Number(item.blockIndex) <= -1_000_000;
+}
+
+function ourTrace(caseSpec) {
+  const documentMathMode = caseSpec.compareMode === "document-math-glyphs";
+  const result = layoutSimpleTexParagraph(caseSpec.source, {
+    paragraphId: `tex-display-math:${caseSpec.id}`,
+    width: caseSpec.width,
+    ...(documentMathMode ? {
+      alignment: "ragged-right",
+      rightskipStretch: caseSpec.width,
+      spaceGlueProfile: "font",
+      tikzTextWidthNode: true,
+      hyphenator: { hyphenate: () => [] },
+    } : {}),
+    parindent: 0,
+    mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+  });
+  if (!result.supported || !result.vlistLayout) {
+    return {
+      supported: false,
+      errors: result.errors ?? [result.fallbackReason ?? "unknown failure"],
+      topLevel: [],
+      glyphs: [],
+      integrityErrors: [],
+    };
+  }
+  const glyphTrace = ourGlyphTraceFromVListLayout(result.vlistLayout);
+  return {
+    supported: true,
+    errors: result.errors,
+    topLevel: result.vlistLayout.boxReport.tree.map((item) => ({
+      kind: item.itemKind,
+      x: round(item.x),
+      y: round(item.y),
+      width: round(item.width),
+      height: round(item.height),
+      depth: round(item.depth),
+      size: item.glue ? round(item.glue.size) : undefined,
+      glue: item.glue,
+      displayMath: item.displayMath,
+      hboxRole: item.hboxRole,
+      blockIndex: item.blockIndex,
+      sourceSpan: item.sourceSpan,
+    })),
+    glyphs: glyphTrace.glyphs,
+    integrityErrors: glyphTrace.integrityErrors,
+  };
+}
+
+function ourGlyphTraceFromVListLayout(layout) {
+  const paragraphGlyphContext = paragraphGlyphTraceContext(layout);
+  const glyphs = [];
+  const integrityErrors = [];
+  collectOurGlyphTraceFromVListItems(glyphs, integrityErrors, layout.items, paragraphGlyphContext);
+  return { glyphs, integrityErrors };
+}
+
+function collectOurGlyphTraceFromVListItems(glyphs, integrityErrors, items, paragraphGlyphContext) {
+  for (const item of items) {
+    if (item.item?.kind === "paragraph") {
+      const trace = inlineGlyphsFromParagraphItem(item, paragraphGlyphContext);
+      glyphs.push(...trace.glyphs);
+      integrityErrors.push(...trace.integrityErrors);
+    } else if (item.item?.kind === "display-math") {
+      const trace = glyphsFromMathSvgBody(
+        item.item.box.svgBody,
+        item.x,
+        item.y + item.metrics.height,
+        item.item.kind,
+        item.item.sourceSpan
+      );
+      glyphs.push(...trace.glyphs);
+      integrityErrors.push(...trace.integrityErrors);
+    } else if (item.item?.kind === "hbox") {
+      for (const renderItem of item.item.box.renderItems ?? []) {
+        if (renderItem.kind !== "tex-math-svg") {
+          continue;
+        }
+        const trace = glyphsFromMathSvgBody(
+          renderItem.svgBody,
+          item.x + renderItem.x,
+          item.y + renderItem.baseline,
+          item.item.role?.kind ?? item.item.kind,
+          item.item.sourceSpan
+        );
+        glyphs.push(...trace.glyphs);
+        integrityErrors.push(...trace.integrityErrors);
+      }
+    }
+    if (item.children?.length) {
+      collectOurGlyphTraceFromVListItems(glyphs, integrityErrors, item.children, paragraphGlyphContext);
+    }
+  }
+}
+
+function paragraphGlyphTraceContext(layout) {
+  const lineByIndex = new Map();
+  for (const report of layout.reports ?? []) {
+    if (!Array.isArray(report?.lines)) {
+      continue;
+    }
+    for (const line of report.lines) {
+      lineByIndex.set(line.lineIndex, line);
+    }
+  }
+  return {
+    lineByIndex,
+    linePlacementByIndex: new Map(layout.linePlacements.map((placement) => [placement.lineIndex, placement])),
+    paragraphPlacementByBlockIndex: new Map(layout.paragraphPlacements.map((placement) => [placement.blockIndex, placement])),
+  };
+}
+
+function inlineGlyphsFromParagraphItem(item, context) {
+  const blockIndex = item.item.blockIndex;
+  const placement = context.paragraphPlacementByBlockIndex.get(blockIndex);
+  if (!placement) {
+    return { glyphs: [], integrityErrors: [] };
+  }
+  const firstLine = context.lineByIndex.get(placement.lineIndices[0]);
+  const paragraphBaselineOffset = firstLine?.ascent ?? 0;
+  const glyphs = [];
+  const integrityErrors = [];
+  for (const lineIndex of placement.lineIndices) {
+    const line = context.lineByIndex.get(lineIndex);
+    const linePlacement = context.linePlacementByIndex.get(lineIndex);
+    if (!line || !linePlacement) {
+      continue;
+    }
+    const baselineY = linePlacement.y + paragraphBaselineOffset;
+    const lineXOffset = paragraphLineXOffset(linePlacement, line);
+    for (const segment of line.segments ?? []) {
+      if (segment.kind !== "math" || !segment.mathSvgBody) {
+        continue;
+      }
+      const trace = glyphsFromMathSvgBody(
+        segment.mathSvgBody,
+        lineXOffset + segment.x,
+        baselineY,
+        item.item.kind,
+        sourceSpanFromSegment(segment)
+      );
+      glyphs.push(...trace.glyphs);
+      integrityErrors.push(...trace.integrityErrors);
+    }
+  }
+  return { glyphs, integrityErrors };
+}
+
+function paragraphLineXOffset(linePlacement, line) {
+  if (line.segments?.some((segment) => segment.role === "list-label")) {
+    return 0;
+  }
+  const lineLeft = Number.isFinite(line.xStart) ? line.xStart : 0;
+  return Math.max(0, linePlacement.x - lineLeft);
+}
+
+function sourceSpanFromSegment(segment) {
+  const start = Number(segment.sourceStartRaw);
+  const end = Number(segment.sourceEndRaw);
+  return Number.isFinite(start) && Number.isFinite(end)
+    ? { start, end }
+    : null;
+}
+
+function glyphsFromMathSvgBody(svgBody, originX, baselineY, role, sourceSpan = null) {
+  const fragmentViewBox = readFragmentViewBox(svgBody);
+  const fragmentBoundaryTolerance = 1e-5;
+  const glyphs = [];
+  const integrityErrors = [];
+  const pathPattern = /<path\b[^>]*>/g;
+  for (const match of svgBody.matchAll(pathPattern)) {
+    const tag = match[0];
+    const fontId = readSvgAttribute(tag, "data-tex-font");
+    const code = Number(readSvgAttribute(tag, "data-tex-glyph"));
+    const sourceStart = Number(readSvgAttribute(tag, "data-source-start"));
+    const sourceEnd = Number(readSvgAttribute(tag, "data-source-end"));
+    const transform = readSvgAttribute(tag, "transform") ?? "";
+    const translate = /translate\(([-0-9.]+)\s+([-0-9.]+)\)/.exec(transform);
+    if (!fontId || !Number.isFinite(code) || !translate) {
+      continue;
+    }
+    if (
+      sourceSpan &&
+      Number.isFinite(sourceStart) &&
+      Number.isFinite(sourceEnd) &&
+      (sourceStart < sourceSpan.start || sourceEnd > sourceSpan.end)
+    ) {
+      integrityErrors.push(
+        `math SVG glyph source span escapes owner: role=${role}` +
+        ` ownerSource=${sourceSpan.start}:${sourceSpan.end} glyph=${code} glyphSource=${sourceStart}:${sourceEnd}`
+      );
+    }
+    const rawX = Number(translate[1]) / 100;
+    if (
+      fragmentViewBox &&
+      (
+        rawX < fragmentViewBox.xStart - fragmentBoundaryTolerance ||
+        rawX >= fragmentViewBox.xEnd - fragmentBoundaryTolerance
+      )
+    ) {
+      continue;
+    }
+    glyphs.push({
+      kind: "glyph",
+      role,
+      x: round(originX + rawX - (fragmentViewBox?.xStart ?? 0)),
+      y: round(baselineY + Number(translate[2]) / 100),
+      fontId,
+      code,
+      sourceStart,
+      sourceEnd,
+    });
+  }
+  return { glyphs, integrityErrors };
+}
+
+function readFragmentViewBox(svgBody) {
+  const fragment = /<svg\b[^>]*\bdata-tex-math-fragment="true"[^>]*>/u.exec(svgBody)?.[0];
+  if (!fragment) {
+    return null;
+  }
+  const viewBox = readSvgAttribute(fragment, "viewBox");
+  if (!viewBox) {
+    return null;
+  }
+  const [rawX, , rawWidth] = viewBox.trim().split(/\s+/u).map((value) => Number(value));
+  if (!Number.isFinite(rawX) || !Number.isFinite(rawWidth)) {
+    return null;
+  }
+  const xStart = rawX / 100;
+  return {
+    xStart,
+    xEnd: xStart + rawWidth / 100,
+  };
+}
+
+function readSvgAttribute(tag, name) {
+  const pattern = new RegExp(`${name}="([^"]*)"`);
+  return pattern.exec(tag)?.[1];
+}
+
+function texTrace(caseSpec, args) {
+  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-display-math-compare-"));
+  try {
+    writeFileSync(join(tempDir, "trace.lua"), traceLuaSource(), "utf8");
+    writeFileSync(join(tempDir, "case.tex"), texSource(caseSpec), "utf8");
+    execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "case.tex"], {
+      cwd: tempDir,
+      env: texOracleEnv(),
+      stdio: "pipe",
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    const tracePath = join(tempDir, "trace.jsonl");
+    const trace = parseTexTrace(readFileSync(tracePath, "utf8"));
+    if (args.keepTemp) {
+      trace.tempDir = tempDir;
+      trace.logPath = join(tempDir, "case.log");
+      trace.tracePath = tracePath;
+      return trace;
+    }
+    return trace;
+  } finally {
+    if (!args.keepTemp) {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+}
+
+function parseTexTrace(log) {
+  const topLevel = [];
+  const glyphs = [];
+  for (const line of log.split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+    const entry = JSON.parse(line);
+    if (entry.scope === "top" && entry.kind === "hlist") {
+      topLevel.push({
+        kind: "hlist",
+        index: entry.index,
+        x: round(entry.x),
+        y: round(entry.y),
+        width: round(entry.width),
+        height: round(entry.height),
+        depth: round(entry.depth),
+      });
+      continue;
+    }
+    if (entry.scope === "top" && entry.kind === "glue") {
+      const size = round(entry.size);
+      topLevel.push({
+        kind: "glue",
+        index: entry.index,
+        x: 0,
+        y: round(entry.y),
+        width: 0,
+        height: Math.max(0, size),
+        depth: 0,
+        size,
+      });
+      continue;
+    }
+    if (entry.kind === "glyph") {
+      glyphs.push({
+        kind: "glyph",
+        topIndex: entry.topIndex,
+        x: round(entry.x),
+        y: round(entry.y),
+        fontId: entry.font,
+        code: entry.char,
+        width: round(entry.width),
+      });
+    }
+  }
+  return { topLevel, glyphs };
+}
+
+function compareDisplayMathGlyphs(mismatches, oursTopLevel, oursGlyphs, texTopLevel, texGlyphs, tolerance) {
+  const texDisplayHlistIndices = matchedTexDisplayHlistIndices(oursTopLevel, texTopLevel);
+  const displayOurGlyphs = oursGlyphs.filter((glyph) =>
+    glyph.role === "display-math" || glyph.role === "display-align-row"
+  );
+  const displayTexGlyphs = texGlyphs.filter((glyph) =>
+    texDisplayHlistIndices.has(glyph.topIndex)
+  );
+  compareGlyphLists(mismatches, "display math glyph", displayOurGlyphs, displayTexGlyphs, tolerance);
+}
+
+function matchedTexDisplayHlistIndices(oursTopLevel, texTopLevel) {
+  const indices = new Set();
+  const ourHlists = comparableOurTopLevelHlists(oursTopLevel);
+  const texHlists = texTopLevel.filter((item) => item.kind === "hlist");
+  const count = Math.min(ourHlists.length, texHlists.length);
+  for (let index = 0; index < count; index++) {
+    const ours = ourHlists[index];
+    const tex = texHlists[index];
+    if (
+      (ours.kind === "display-math" || ours.hboxRole?.kind === "display-align-row") &&
+      tex?.index !== undefined
+    ) {
+      indices.add(tex.index);
+    }
+  }
+  return indices;
+}
+
+function compareGlyphLists(mismatches, label, ours, tex, tolerance) {
+  if (ours.length !== tex.length) {
+    mismatches.push(`${label} count differs: ours=${ours.length} tex=${tex.length}`);
+  }
+  const count = Math.min(ours.length, tex.length);
+  for (let index = 0; index < count; index++) {
+    const left = ours[index];
+    const right = tex[index];
+    if (!left || !right) {
+      continue;
+    }
+    if (left.code !== right.code) {
+      mismatches.push(`${label} ${index} code differs: ours=${left.code} tex=${right.code}`);
+    }
+    if (left.fontId !== right.fontId) {
+      mismatches.push(`${label} ${index} font differs: ours=${left.fontId} tex=${right.fontId}`);
+    }
+    compareNumber(mismatches, `${label} ${index} x`, left.x, right.x, tolerance);
+    compareNumber(mismatches, `${label} ${index} y`, left.y, right.y, tolerance);
+  }
+}
+
+function texSource(caseSpec) {
+  const amsmathPreamble = requiresAmsmath(caseSpec.source)
+    ? String.raw`\usepackage{amsmath}` + "\n"
+    : "";
+  const amssymbPreamble = requiresAmssymb(caseSpec.source)
+    ? String.raw`\usepackage{amssymb}` + "\n"
+    : "";
+  if (caseSpec.compareMode === "document-math-glyphs") {
+    return String.raw`\documentclass{article}
+` + amsmathPreamble + amssymbPreamble + String.raw`
+\newbox\tikzdisplaybox
+\begin{document}
+\setbox\tikzdisplaybox=\vbox{\fontencoding{TU}\fontfamily{lmr}\selectfont \language=-1 \hsize=` + caseSpec.width + String.raw`pt \linewidth=\hsize \columnwidth=\hsize \pretolerance=100 \tolerance=200 \parindent=0pt \rightskip=0pt plus ` + caseSpec.width + String.raw`pt ` + caseSpec.source + String.raw`\par}
+\directlua{dofile('trace.lua')}
+\end{document}
+`;
+  }
+  return String.raw`\documentclass{article}
+` + amsmathPreamble + amssymbPreamble + String.raw`
+\newbox\tikzdisplaybox
+\begin{document}
+\setbox\tikzdisplaybox=\vbox{\hsize=` + caseSpec.width + String.raw`pt \linewidth=\hsize \columnwidth=\hsize \noindent ` + caseSpec.source + String.raw`\par}
+\directlua{dofile('trace.lua')}
+\end{document}
+`;
+}
+
+function requiresAmssymb(source) {
+  return source.includes(String.raw`\mathbb`) || source.includes(String.raw`\mathfrak`);
+}
+
+function requiresAmsmath(source) {
+  return source.includes(String.raw`\begin{equation*}`) ||
+    source.includes(String.raw`\begin{equation}`) ||
+    source.includes(String.raw`\begin{align}`) ||
+    source.includes(String.raw`\begin{align*}`) ||
+    source.includes(String.raw`\begin{gather}`) ||
+    source.includes(String.raw`\begin{gather*}`) ||
+    source.includes(String.raw`\begin{multline}`) ||
+    source.includes(String.raw`\begin{multline*}`) ||
+    source.includes(String.raw`\begin{aligned}`) ||
+    source.includes(String.raw`\begin{alignedat}`) ||
+    hasMatrixEnvironment(source) ||
+    hasCasesEnvironment(source) ||
+    hasSmallMatrixEnvironment(source) ||
+    hasOperatorNameCommand(source) ||
+    hasBinomialCommand(source) ||
+    hasStyledFractionCommand(source) ||
+    hasSubstackCommand(source) ||
+    hasEllipsisCommand(source) ||
+    source.includes(String.raw`\text`);
+}
+
+function traceLuaSource() {
+  return String.raw`local out=assert(io.open('trace.jsonl','w'))
+local function emit(fields)
+  out:write("{")
+  local first=true
+  for key,value in pairs(fields) do
+    if not first then out:write(",") end
+    first=false
+    out:write(string.format("%q:", key))
+    if type(value)=="number" then
+      out:write(string.format("%.6f", value))
+    else
+      out:write(string.format("%q", tostring(value)))
+    end
+  end
+  out:write("}\n")
+end
+local glyph_id=node.id('glyph')
+local glue_id=node.id('glue')
+local kern_id=node.id('kern')
+local hlist_id=node.id('hlist')
+local vlist_id=node.id('vlist')
+local rule_id=node.id('rule')
+local penalty_id=node.id('penalty')
+local disc_id=node.id('disc')
+local whatsit_id=node.id('whatsit')
+local function sp(v) return (v or 0)/65536 end
+local function font_name(font_id)
+  local registered=font.fonts and font.fonts[font_id]
+  if registered and registered.name then return normalize_font_name(tostring(registered.name)) end
+  local ok, tex_name=pcall(function() return tex.fontname(font_id) end)
+  if ok and tex_name then return normalize_font_name(tostring(tex_name)) end
+  local f=font.getfont(font_id)
+  return normalize_font_name(tostring(f and (f.name or f.fontname or f.fullname or f.psname or f.filename)))
+end
+function normalize_font_name(name)
+  local bracketed=string.match(name, '^%[([^%]]+)%]')
+  if bracketed then return bracketed end
+  return name
+end
+local function node_width(n) return sp(n.width or 0) end
+local function node_height(n) return sp(n.height or 0) end
+local function node_depth(n) return sp(n.depth or 0) end
+local function glue_field(n, field)
+  return sp(n[field] or (n.spec and n.spec[field]) or 0)
+end
+local function glue_order(n, field)
+  return n[field] or (n.spec and n.spec[field]) or 0
+end
+local function glue_width(n, parent)
+  local width=glue_field(n, 'width')
+  if parent then
+    local sign=parent.glue_sign or 0
+    local set=parent.glue_set or 0
+    local order=parent.glue_order or 0
+    if sign==1 and glue_order(n, 'stretch_order')==order then
+      width=width + glue_field(n, 'stretch') * set
+    elseif sign==2 and glue_order(n, 'shrink_order')==order then
+      width=width - glue_field(n, 'shrink') * set
+    end
+  end
+  return width
+end
+local function kern_width(n) return sp(n.kern or n.width or 0) end
+local function walk_hlist(list, origin_x, baseline_y, top_index, parent)
+  if not list then return origin_x end
+  local x=origin_x
+  for n in node.traverse(list) do
+    if n.id==glyph_id then
+      emit({kind='glyph', topIndex=top_index, x=x, y=baseline_y, font=font_name(n.font), char=n.char, width=node_width(n)})
+      x=x+node_width(n)
+    elseif n.id==glue_id then
+      x=x+glue_width(n, parent)
+    elseif n.id==kern_id then
+      x=x+kern_width(n)
+    elseif n.id==hlist_id then
+      walk_hlist(n.list, x, baseline_y + sp(n.shift or 0), top_index, n)
+      x=x+node_width(n)
+    elseif n.id==vlist_id then
+      walk_vlist(n.list, x, baseline_y + sp(n.shift or 0) - node_height(n), node_height(n), 1, top_index, n)
+      x=x+node_width(n)
+    elseif n.id==disc_id then
+      x=walk_hlist(n.replace, x, baseline_y, top_index, parent)
+    elseif n.id~=whatsit_id then
+      x=x+node_width(n)
+    end
+  end
+  return x
+end
+function walk_vlist(list, origin_x, top_y, height, level, parent_top_index, parent)
+  local y=top_y
+  local index=0
+  for n in node.traverse(list) do
+    if n.id==glue_id then
+      local size=glue_width(n, parent)
+      if level==0 then emit({scope='top', kind='glue', index=index, y=y, size=size}) end
+      y=y+size
+    elseif n.id==kern_id then
+      y=y+kern_width(n)
+    elseif n.id==hlist_id then
+      local child_y=y
+      local baseline=child_y+node_height(n)
+      if level==0 then emit({scope='top', kind='hlist', index=index, x=origin_x + sp(n.shift or 0), y=child_y, width=node_width(n), height=node_height(n), depth=node_depth(n)}) end
+      local top_index = parent_top_index
+      if level==0 then top_index=index end
+      walk_hlist(n.list, origin_x + sp(n.shift or 0), baseline, top_index, n)
+      y=y+node_height(n)+node_depth(n)
+    elseif n.id==vlist_id then
+      walk_vlist(n.list, origin_x + sp(n.shift or 0), y, node_height(n), level+1, parent_top_index, n)
+      y=y+node_height(n)+node_depth(n)
+    elseif n.id==rule_id then
+      y=y+node_height(n)+node_depth(n)
+    elseif n.id~=penalty_id and n.id~=whatsit_id then
+      y=y+node_height(n)+node_depth(n)
+    end
+    index=index+1
+  end
+end
+walk_vlist(tex.box.tikzdisplaybox.list, 0, 0, node_height(tex.box.tikzdisplaybox), 0, nil, tex.box.tikzdisplaybox)
+out:close()
+`;
+}
+
+function compareNumber(mismatches, label, left, right, tolerance) {
+  if (Math.abs(left - right) > tolerance) {
+    mismatches.push(`${label} differs: ours=${left} tex=${right}`);
+  }
+}
+
+function readArgs() {
+  const cases = [];
+  let keepTemp = false;
+  let summaryOnly = false;
+  let tolerance = 0.05;
+  let documentMathFuzzCases = 0;
+  let displayFuzzCases = 0;
+  let mixedVListFuzzCases = 0;
+  let seed = 20260615;
+  for (let index = 2; index < process.argv.length; index++) {
+    const arg = process.argv[index] ?? "";
+    if (arg === "--case") {
+      cases.push(parseCaseArg(process.argv[++index] ?? ""));
+    } else if (arg.startsWith("--case=")) {
+      cases.push(parseCaseArg(arg.slice("--case=".length)));
+    } else if (arg === "--source") {
+      const source = process.argv[++index] ?? "";
+      cases.push({ id: `case-${cases.length + 1}`, source, width: 120 });
+    } else if (arg.startsWith("--source=")) {
+      cases.push({ id: `case-${cases.length + 1}`, source: arg.slice("--source=".length), width: 120 });
+    } else if (arg === "--source-file") {
+      const sourceFile = process.argv[++index] ?? "";
+      cases.push({ id: `case-${cases.length + 1}`, source: readFileSync(sourceFile, "utf8"), width: 120 });
+    } else if (arg.startsWith("--source-file=")) {
+      cases.push({ id: `case-${cases.length + 1}`, source: readFileSync(arg.slice("--source-file=".length), "utf8"), width: 120 });
+    } else if (arg === "--width") {
+      const width = Number(process.argv[++index] ?? 120);
+      if (cases.length > 0) {
+        cases[cases.length - 1].width = width;
+      }
+    } else if (arg.startsWith("--width=")) {
+      const width = Number(arg.slice("--width=".length));
+      if (cases.length > 0) {
+        cases[cases.length - 1].width = width;
+      }
+    } else if (arg === "--tolerance") {
+      tolerance = Number(process.argv[++index] ?? tolerance);
+    } else if (arg.startsWith("--tolerance=")) {
+      tolerance = Number(arg.slice("--tolerance=".length));
+    } else if (arg === "--keep-temp") {
+      keepTemp = true;
+    } else if (arg === "--summary-only") {
+      summaryOnly = true;
+    } else if (arg === "--align-matrix") {
+      cases.push(...alignMatrixCases());
+    } else if (arg === "--construct-matrix") {
+      cases.push(...constructMatrixCases());
+    } else if (arg === "--document-math-matrix") {
+      cases.push(...documentMathMatrixCases());
+    } else if (arg === "--document-math-fuzz") {
+      documentMathFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--document-math-fuzz");
+    } else if (arg.startsWith("--document-math-fuzz=")) {
+      documentMathFuzzCases = readNonNegativeInteger(arg.slice("--document-math-fuzz=".length), "--document-math-fuzz");
+    } else if (arg === "--mixed-vlist-matrix") {
+      cases.push(...mixedVListCases());
+    } else if (arg === "--mixed-vlist-fuzz") {
+      mixedVListFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--mixed-vlist-fuzz");
+    } else if (arg.startsWith("--mixed-vlist-fuzz=")) {
+      mixedVListFuzzCases = readNonNegativeInteger(arg.slice("--mixed-vlist-fuzz=".length), "--mixed-vlist-fuzz");
+    } else if (arg === "--display-fuzz") {
+      displayFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--display-fuzz");
+    } else if (arg.startsWith("--display-fuzz=")) {
+      displayFuzzCases = readNonNegativeInteger(arg.slice("--display-fuzz=".length), "--display-fuzz");
+    } else if (arg === "--seed") {
+      seed = readNonNegativeInteger(process.argv[++index] ?? "", "--seed");
+    } else if (arg.startsWith("--seed=")) {
+      seed = readNonNegativeInteger(arg.slice("--seed=".length), "--seed");
+    }
+  }
+  return {
+    cases,
+    displayFuzzCases,
+    documentMathFuzzCases,
+    keepTemp,
+    mixedVListFuzzCases,
+    seed,
+    summaryOnly,
+    tolerance,
+  };
+}
+
+function readNonNegativeInteger(raw, label) {
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`Expected ${label} to be a non-negative integer.`);
+  }
+  return value;
+}
+
+function mixedVListCases() {
+  return [
+    {
+      id: "quote-display",
+      width: 160,
+      compareMode: "math-glyphs",
+      source: String.raw`Alpha \begin{quote}Quoted \[x^2+1\] done.\end{quote} Beta`,
+    },
+    {
+      id: "itemize-display",
+      width: 180,
+      compareMode: "math-glyphs",
+      source: String.raw`Alpha \begin{itemize}\item Item \[x^2+1\] done.\end{itemize} Beta`,
+    },
+  ];
+}
+
+function documentMathMatrixCases() {
+  return [
+    {
+      id: "inline-display-inline",
+      width: 160,
+      source: String.raw`Alpha $x+y$ before \[\frac{1}{2}+z\] after \(m-n\) Beta`,
+    },
+    {
+      id: "paragraph-display-tail-inline",
+      width: 170,
+      source: String.raw`Alpha $x^2$ first. Second \[\sqrt{y+1}\] tail \(z_1\).`,
+    },
+    {
+      id: "explicit-par-before-display",
+      width: 170,
+      source: String.raw`Alpha $x^2$ first. \par \noindent Second \[\sqrt{y+1}\] tail \(z_1\).`,
+    },
+    {
+      id: "inline-and-align",
+      width: 170,
+      source: String.raw`Alpha \(x_i^2\) \begin{align*}a&=b\\c&=d\end{align*} Beta $y^n$`,
+    },
+    {
+      id: "quote-inline-display",
+      width: 180,
+      source: String.raw`Alpha \begin{quote}Quoted $x+y$ before \[\binom{n}{k}\] after \(z\).\end{quote} Beta`,
+    },
+    {
+      id: "list-inline-align",
+      width: 190,
+      source: String.raw`Alpha \begin{itemize}\item Item $x$ \begin{align*}a&=b\\c&=d\end{align*} done \(y\).\end{itemize} Beta`,
+    },
+    {
+      id: "nested-vlist-inline-display",
+      width: 210,
+      source: String.raw`Alpha \begin{quote}\begin{itemize}\item Nested \(x-y\) \[\sum_i^n\] done.\end{itemize}\end{quote} Beta`,
+    },
+  ].map((caseSpec) => ({
+    ...caseSpec,
+    compareMode: "document-math-glyphs",
+  }));
+}
+
+function generateDocumentMathFuzzCases(count, seed) {
+  const rng = makeRng(seed);
+  const contexts = [
+    {
+      id: "paragraph",
+      width: 150,
+      source: (before, inlineA, display, after, inlineB) =>
+        `${before} \\(${inlineA}\\) before ${display} ${after} $${inlineB}$ tail.`,
+    },
+    {
+      id: "explicit-par",
+      width: 170,
+      source: (before, inlineA, display, after, inlineB) =>
+        `${before} $${inlineA}$ first. \\par \\noindent ${after} ${display} closing \\(${inlineB}\\).`,
+    },
+    {
+      id: "quote",
+      width: 180,
+      source: (before, inlineA, display, after, inlineB) =>
+        `Alpha \\begin{quote}${before} \\(${inlineA}\\) ${display} ${after} $${inlineB}$.\\end{quote} Beta`,
+    },
+    {
+      id: "itemize",
+      width: 190,
+      source: (before, inlineA, display, after, inlineB) =>
+        `Alpha \\begin{itemize}\\item ${before} $${inlineA}$ ${display} ${after} \\(${inlineB}\\).\\end{itemize} Beta`,
+    },
+    {
+      id: "description",
+      width: 190,
+      source: (before, inlineA, display, after, inlineB) =>
+        `Alpha \\begin{description}\\item[Term] ${before} \\(${inlineA}\\) ${display} ${after} $${inlineB}$.\\end{description} Beta`,
+    },
+    {
+      id: "nested",
+      width: 210,
+      source: (before, inlineA, display, after, inlineB) =>
+        `Alpha \\begin{quote}\\begin{itemize}\\item ${before} $${inlineA}$ ${display} ${after} \\(${inlineB}\\).\\end{itemize}\\end{quote} Beta`,
+    },
+  ];
+  return Array.from({ length: count }, (_, index) => {
+    const context = contexts[index % contexts.length] ?? contexts[0];
+    const display = randomDocumentDisplaySource(rng, index);
+    return {
+      id: `document-math-fuzz-${index + 1}-${context.id}`,
+      width: context.width,
+      compareMode: "document-math-glyphs",
+      source: context.source(
+        choice(rng, ["Alpha", "Measured", "Compact", "Nested", "Aligned"]),
+        randomDocumentInlineFormula(rng),
+        display,
+        choice(rng, ["after", "tail", "closing", "result", "done"]),
+        randomDocumentInlineFormula(rng)
+      ),
+    };
+  });
+}
+
+function sharedMathFormula(rng, depth = 4) {
+  return generateTexMathFuzzCase(randomInt(rng, 0x100000000), { depth }).source;
+}
+
+function randomDocumentInlineFormula(rng) {
+  return sharedMathFormula(rng, 3);
+}
+
+function randomDocumentDisplayFormula(rng) {
+  return sharedMathFormula(rng);
+}
+
+function randomDocumentDisplaySource(rng, index) {
+  if (index % 4 === 3) {
+    return randomDocumentAlignStarSource(rng, index % 3);
+  }
+  return `\\[${randomDocumentDisplayFormula(rng)}\\]`;
+}
+
+function randomDocumentAlignStarSource(rng, tagMode = 0) {
+  const rowCount = 1 + randomInt(rng, 3);
+  const pairCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cells = [];
+    for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+      cells.push(randomDocumentAlignmentCell(rng));
+      cells.push(`=${randomDocumentAlignmentCell(rng)}`);
+    }
+    rows.push(alignRowWithGeneratedTag(cells.join("&"), rowIndex, rowCount, tagMode));
+  }
+  return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
+}
+
+function randomDocumentAlignmentCell(rng) {
+  return sharedMathFormula(rng, 3);
+}
+
+function alignMatrixCases() {
+  return [
+    {
+      id: "align-numbered-three-rows",
+      width: 180,
+      source: String.raw`Alpha \begin{align}a&=b\\c&=d\notag\\e&=f\tag{A}\\g&=h\end{align} Beta`,
+    },
+    {
+      id: "gather-numbered-three-rows",
+      width: 180,
+      source: String.raw`Alpha \begin{gather}a=b\\c=d\notag\\e=f\tag{A}\\g=h\end{gather} Beta`,
+    },
+    {
+      id: "multline-numbered-three-rows",
+      width: 180,
+      source: String.raw`Alpha \begin{multline}a\\b\end{multline} Beta \begin{multline}c\\d\notag\end{multline} Gamma \begin{multline}e\\f\tag{A}\end{multline} Delta`,
+    },
+    {
+      id: "align-three-rows",
+      width: 120,
+      source: String.raw`Alpha \begin{align*}a&=b\\c&=d\\e&=f\end{align*} Beta`,
+    },
+    {
+      id: "align-wide-width",
+      width: 160,
+      source: String.raw`Alpha \begin{align*}a&=b\\c&=d\end{align*} Beta`,
+    },
+    {
+      id: "align-narrow-width",
+      width: 90,
+      source: String.raw`Alpha \begin{align*}a&=b\\c&=d\end{align*} Beta`,
+    },
+    {
+      id: "align-two-pairs",
+      width: 160,
+      source: String.raw`Alpha \begin{align*}a&=b&c&=d\\e&=f&g&=h\end{align*} Beta`,
+    },
+    {
+      id: "align-single-row",
+      width: 120,
+      source: String.raw`Alpha \begin{align*}a&=b\end{align*} Beta`,
+    },
+  ];
+}
+
+function constructMatrixCases() {
+  return [
+    {
+      id: "display-script-combined",
+      width: 140,
+      source: String.raw`Alpha \[x_i^2+y^n\] Beta`,
+    },
+    {
+      id: "display-fraction",
+      width: 140,
+      source: String.raw`Alpha \[\frac{1}{2}+x\] Beta`,
+    },
+    {
+      id: "display-dfrac-tfrac",
+      width: 160,
+      source: String.raw`Alpha \[\dfrac{1}{2}+\tfrac{x}{y}\] Beta`,
+    },
+    {
+      id: "display-binom",
+      width: 140,
+      source: String.raw`Alpha \[\binom{n}{k}+x\] Beta`,
+    },
+    {
+      id: "display-dbinom-tbinom",
+      width: 160,
+      source: String.raw`Alpha \[\dbinom{n}{k}+\tbinom{n}{k}\] Beta`,
+    },
+    {
+      id: "display-radical",
+      width: 140,
+      source: String.raw`Alpha \[\sqrt{x+1}\] Beta`,
+    },
+    {
+      id: "display-overline-underline",
+      width: 140,
+      source: String.raw`Alpha \[\overline{x}+\underline{y}\] Beta`,
+    },
+    {
+      id: "display-tall-radical",
+      width: 160,
+      source: String.raw`Alpha \[\sqrt{\frac{1}{2}}\] Beta`,
+    },
+    {
+      id: "display-left-right-fraction",
+      width: 160,
+      source: String.raw`Alpha \[\left(\frac{1}{2}\right)\] Beta`,
+    },
+    {
+      id: "display-matrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{matrix}a&b\\c&d\end{matrix}\] Beta`,
+    },
+    {
+      id: "display-array",
+      width: 160,
+      source: String.raw`Alpha \[\begin{array}{lc}a&b\\x&y\end{array}\] Beta`,
+    },
+    {
+      id: "display-cases",
+      width: 160,
+      source: String.raw`Alpha \[\begin{cases}a&b\\x&y\end{cases}\] Beta`,
+    },
+    {
+      id: "display-smallmatrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{smallmatrix}a&b\\x&y\end{smallmatrix}\] Beta`,
+    },
+    {
+      id: "display-operatorname",
+      width: 160,
+      source: String.raw`Alpha \[\operatorname*{arg\,max}_{x}\] Beta`,
+    },
+    {
+      id: "display-aligned",
+      width: 120,
+      source: String.raw`Alpha \[\begin{aligned}a&=b\\c&=d\end{aligned}\] Beta`,
+    },
+    {
+      id: "display-aligned-constructs",
+      width: 160,
+      source: String.raw`Alpha \[\begin{aligned}\frac{1}{2}&=x\\\sqrt{y+1}&=z\end{aligned}\] Beta`,
+    },
+    {
+      id: "display-alignedat",
+      width: 180,
+      source: String.raw`Alpha \[\begin{alignedat}{2}a&=b&c&=d\\e&=f&g&=h\end{alignedat}\] Beta`,
+    },
+    {
+      id: "display-pmatrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\] Beta`,
+    },
+    {
+      id: "display-bmatrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{bmatrix}a&b\\c&d\end{bmatrix}\] Beta`,
+    },
+    {
+      id: "display-Bmatrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{Bmatrix}a&b\\c&d\end{Bmatrix}\] Beta`,
+    },
+    {
+      id: "display-vmatrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{vmatrix}a&b\\c&d\end{vmatrix}\] Beta`,
+    },
+    {
+      id: "display-Vmatrix",
+      width: 160,
+      source: String.raw`Alpha \[\begin{Vmatrix}a&b\\c&d\end{Vmatrix}\] Beta`,
+    },
+    {
+      id: "display-substack",
+      width: 160,
+      source: String.raw`Alpha \[\sum_{\substack{i=1\\j=2}}^n\] Beta`,
+    },
+    {
+      id: "display-large-operator-limits",
+      width: 160,
+      source: String.raw`Alpha \[\prod_i^n+\sum_j^m\] Beta`,
+    },
+    {
+      id: "display-text",
+      width: 140,
+      source: String.raw`Alpha \[x+\text{if}\] Beta`,
+    },
+    {
+      id: "display-text-inline-math",
+      width: 180,
+      source: String.raw`Alpha \[\text{if $Ax \ge b$,}\] Beta`,
+    },
+    {
+      id: "display-big-delimiters",
+      width: 180,
+      source: String.raw`Alpha \[\big( x+1 \big)\] Beta`,
+    },
+    {
+      id: "align-script-cells",
+      width: 160,
+      source: String.raw`Alpha \begin{align*}x_i^2&=y^n\\a&=b\end{align*} Beta`,
+    },
+    {
+      id: "align-fraction-radical-cells",
+      width: 180,
+      source: String.raw`Alpha \begin{align*}\frac{1}{2}&=x\\\sqrt{y+1}&=z\end{align*} Beta`,
+    },
+    {
+      id: "align-text-cells",
+      width: 160,
+      source: String.raw`Alpha \begin{align*}\text{if}&=x\\y&=\text{off}\end{align*} Beta`,
+    },
+    {
+      id: "align-tagged-row",
+      width: 180,
+      source: String.raw`Alpha \begin{align*}a&=b \tag{A}\\c&=d\end{align*} Beta`,
+    },
+    {
+      id: "align-displaybreak",
+      width: 180,
+      source: String.raw`Alpha \begin{align*}a&=b\displaybreak[2]\\c&=d\end{align*} Beta`,
+    },
+    {
+      id: "align-intertext",
+      width: 180,
+      source: String.raw`Alpha \begin{align*}a&=b\\\intertext{words}c&=d\end{align*} Beta`,
+    },
+    {
+      id: "align-intertext-inline-math",
+      width: 220,
+      source: String.raw`Alpha \begin{align*}a&=b\\\intertext{where $x_i=y^2$ holds}c&=d\end{align*} Beta`,
+    },
+    {
+      id: "align-intertext-wrapped",
+      width: 90,
+      source: String.raw`Alpha \begin{align*}a&=b\\\intertext{first second third fourth fifth}c&=d\end{align*} Beta`,
+    },
+    {
+      id: "align-tag-collision",
+      width: 300,
+      source: String.raw`Alpha \begin{align*}a&=b+c+d+e+f+g+h+i+j+k+l+m+n+o \tag{Long tag}\end{align*} Beta`,
+    },
+  ];
+}
+
+function generateDisplayFuzzCases(count, seed) {
+  const rng = makeRng(seed);
+  return Array.from({ length: count }, (_, index) => {
+    const width = choice(rng, [100, 120, 140, 160, 180, 220]);
+    const displayKind = index % 8;
+    return {
+      id: `display-fuzz-${index + 1}`,
+      width,
+      source: `Alpha ${randomGeneratedDisplaySource(rng, displayKind, index)} Beta`,
+    };
+  });
+}
+
+function randomGeneratedDisplaySource(rng, displayKind, index) {
+  if (displayKind === 1) {
+    return randomAlignStarSource(rng, index % 3);
+  }
+  if (displayKind === 2) {
+    return `\\[${randomNestedAlignedFormula(rng)}\\]`;
+  }
+  if (displayKind === 3) {
+    return `\\[${randomNestedAlignedatFormula(rng)}\\]`;
+  }
+  if (displayKind === 4) {
+    return randomNumberedAlignSource(rng, index % 3);
+  }
+  if (displayKind === 5) {
+    return randomNumberedGatherSource(rng, index % 3);
+  }
+  if (displayKind === 6) {
+    return randomNumberedMultlineSource(rng, index % 3);
+  }
+  if (displayKind === 7) {
+    return randomAlignStarIntertextSource(rng);
+  }
+  return `\\[${randomDisplayFormula(rng)}\\]`;
+}
+
+function generateMixedVListFuzzCases(count, seed) {
+  const rng = makeRng(seed);
+  const contexts = [
+    {
+      id: "quote",
+      width: 160,
+      source: (before, display, after) =>
+        `Alpha \\begin{quote}${before} ${display} ${after}.\\end{quote} Beta`,
+    },
+    {
+      id: "itemize",
+      width: 180,
+      source: (before, display, after) =>
+        `Alpha \\begin{itemize}\\item ${before} ${display} ${after}.\\end{itemize} Beta`,
+    },
+    {
+      id: "enumerate",
+      width: 180,
+      source: (before, display, after) =>
+        `Alpha \\begin{enumerate}\\item ${before} ${display} ${after}.\\end{enumerate} Beta`,
+    },
+    {
+      id: "description",
+      width: 190,
+      source: (before, display, after) =>
+        `Alpha \\begin{description}\\item[Term] ${before} ${display} ${after}.\\end{description} Beta`,
+    },
+    {
+      id: "quote-itemize",
+      width: 200,
+      source: (before, display, after) =>
+        `Alpha \\begin{quote}\\begin{itemize}\\item ${before} ${display} ${after}.\\end{itemize}\\end{quote} Beta`,
+    },
+    {
+      id: "two-item-list",
+      width: 190,
+      source: (before, display, after) =>
+        `Alpha \\begin{itemize}\\item First item.\\item ${before} ${display} ${after}.\\end{itemize} Beta`,
+    },
+  ];
+  return Array.from({ length: count }, (_, index) => {
+    const context = contexts[index % contexts.length] ?? contexts[0];
+    const before = choice(rng, ["Quoted", "Compact", "Measured", "Nested", "Aligned"]);
+    const after = choice(rng, ["done", "tail", "after", "closing", "result"]);
+    const displayKind = index % 6;
+    return {
+      id: `mixed-vlist-fuzz-${index + 1}-${context.id}`,
+      width: context.width,
+      compareMode: "math-glyphs",
+      source: context.source(
+        before,
+        randomMixedVListDisplaySource(rng, displayKind, index),
+        after
+      ),
+    };
+  });
+}
+
+function randomMixedVListDisplaySource(rng, displayKind, index) {
+  if (displayKind === 3) {
+    return randomMixedVListAlignStarSource(rng, index % 3);
+  }
+  if (displayKind === 5) {
+    return randomAlignStarIntertextSource(rng);
+  }
+  if (displayKind === 1) {
+    return `\\[${randomNestedAlignedFormula(rng)}\\]`;
+  }
+  if (displayKind === 2) {
+    return `\\[${randomNestedAlignedatFormula(rng)}\\]`;
+  }
+  return `\\[${randomMixedVListDisplayFormula(rng)}\\]`;
+}
+
+function randomMixedVListDisplayFormula(rng) {
+  return sharedMathFormula(rng);
+}
+
+function randomMixedVListAlignStarSource(rng, tagMode = 0) {
+  const rowCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    rows.push(alignRowWithGeneratedTag(
+      `${randomMixedVListAlignCell(rng)}&=${randomMixedVListAlignCell(rng)}`,
+      rowIndex,
+      rowCount,
+      tagMode
+    ));
+  }
+  return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
+}
+
+function randomMixedVListAlignCell(rng) {
+  return sharedMathFormula(rng, 3);
+}
+
+function randomAlignStarSource(rng, tagMode = 0) {
+  const rowCount = 1 + randomInt(rng, 3);
+  const pairCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cells = [];
+    for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+      cells.push(randomAlignmentLeftCell(rng));
+      cells.push(`=${randomAlignmentRightCell(rng)}`);
+    }
+    rows.push(alignRowWithGeneratedTag(cells.join("&"), rowIndex, rowCount, tagMode));
+  }
+  return String.raw`\begin{align*}` + rows.join(String.raw`\\`) + String.raw`\end{align*}`;
+}
+
+function randomAlignStarIntertextSource(rng) {
+  const before = `${randomAlignmentLeftCell(rng)}&=${randomAlignmentRightCell(rng)}`;
+  const after = `${randomAlignmentLeftCell(rng)}&=${randomAlignmentRightCell(rng)}`;
+  return String.raw`\begin{align*}` +
+    before +
+    String.raw`\\\intertext{` +
+    randomIntertextContent(rng) +
+    `}` +
+    after +
+    String.raw`\end{align*}`;
+}
+
+function randomIntertextContent(rng) {
+  const words = [
+    "where",
+    "first",
+    "second",
+    "stable",
+    "compact",
+    "measured",
+    "condition",
+    "holds",
+  ];
+  const variant = randomInt(rng, 3);
+  if (variant === 0) {
+    return `${choice(rng, words)} ${choice(rng, words)} ${choice(rng, words)}`;
+  }
+  if (variant === 1) {
+    return `${choice(rng, words)} $${randomIntertextInlineFormula(rng)}$ ${choice(rng, words)}`;
+  }
+  return `${choice(rng, words)} ${choice(rng, words)} ${choice(rng, words)} ${choice(rng, words)} ${choice(rng, words)}`;
+}
+
+function randomIntertextInlineFormula(rng) {
+  return randomDocumentInlineFormula(rng);
+}
+
+function randomNumberedAlignSource(rng, tagMode = 0) {
+  const rowCount = 2 + randomInt(rng, 3);
+  const pairCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cells = [];
+    for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+      cells.push(randomAlignmentLeftCell(rng));
+      cells.push(`=${randomAlignmentRightCell(rng)}`);
+    }
+    rows.push(numberedRowWithGeneratedMetadata(cells.join("&"), rowIndex, tagMode));
+  }
+  return String.raw`\begin{align}` + rows.join(String.raw`\\`) + String.raw`\end{align}`;
+}
+
+function randomNumberedGatherSource(rng, tagMode = 0) {
+  const rowCount = 2 + randomInt(rng, 3);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const row = sharedMathFormula(rng);
+    rows.push(numberedRowWithGeneratedMetadata(row, rowIndex, tagMode));
+  }
+  return String.raw`\begin{gather}` + rows.join(String.raw`\\`) + String.raw`\end{gather}`;
+}
+
+function randomNumberedMultlineSource(rng, tagMode = 0) {
+  const rowCount = 2 + randomInt(rng, 3);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const row = sharedMathFormula(rng);
+    rows.push(numberedRowWithGeneratedMetadata(row, rowIndex, tagMode));
+  }
+  return String.raw`\begin{multline}` + rows.join(String.raw`\\`) + String.raw`\end{multline}`;
+}
+
+function alignRowWithGeneratedTag(row, rowIndex, rowCount, tagMode) {
+  if (rowIndex !== 0) {
+    return row;
+  }
+  if (tagMode === 1) {
+    return `${row} \\tag{A}`;
+  }
+  if (tagMode === 2 && rowCount === 1) {
+    return `${row}+a+b+c+d+e+f+g+h+i+j+k+l+m+n \\tag{Long tag}`;
+  }
+  return row;
+}
+
+function numberedRowWithGeneratedMetadata(row, rowIndex, tagMode) {
+  if (rowIndex === 0 && tagMode === 1) {
+    return `${row} \\tag{A}`;
+  }
+  if (rowIndex === 1 && tagMode === 2) {
+    return `${row} \\notag`;
+  }
+  return row;
+}
+
+function randomDisplayFormula(rng) {
+  return sharedMathFormula(rng);
+}
+
+function randomNestedAlignedFormula(rng) {
+  return randomNestedAlignmentEnvironment(rng, "aligned");
+}
+
+function randomNestedAlignedatFormula(rng) {
+  return randomNestedAlignmentEnvironment(rng, "alignedat");
+}
+
+function randomNestedAlignmentEnvironment(rng, environment) {
+  const rowCount = 1 + randomInt(rng, 3);
+  const pairCount = 1 + randomInt(rng, 2);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const cells = [];
+    for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+      cells.push(randomConstructHeavyAlignmentCell(rng));
+      cells.push(`=${randomConstructHeavyAlignmentCell(rng)}`);
+    }
+    rows.push(cells.join("&"));
+  }
+  const preamble = environment === "alignedat" ? `{${pairCount}}` : "";
+  return String.raw`\begin{` + environment + "}" + preamble +
+    rows.join(String.raw`\\`) +
+    String.raw`\end{` + environment + "}";
+}
+
+function randomConstructHeavyAlignmentCell(rng) {
+  return sharedMathFormula(rng, 3);
+}
+
+function randomAlignmentLeftCell(rng) {
+  return sharedMathFormula(rng, 3);
+}
+
+function randomAlignmentRightCell(rng) {
+  return sharedMathFormula(rng, 3);
+}
+
+function hasMatrixEnvironment(source) {
+  return matrixEnvironments.some((environment) =>
+    source.includes(String.raw`\begin{` + environment + "}")
+  );
+}
+
+function hasCasesEnvironment(source) {
+  return source.includes(String.raw`\begin{cases}`);
+}
+
+function hasSmallMatrixEnvironment(source) {
+  return source.includes(String.raw`\begin{smallmatrix}`);
+}
+
+function hasOperatorNameCommand(source) {
+  return source.includes(String.raw`\operatorname`);
+}
+
+function hasBinomialCommand(source) {
+  return binomialCommands.some((command) => source.includes(command));
+}
+
+function hasStyledFractionCommand(source) {
+  return source.includes(String.raw`\dfrac`) || source.includes(String.raw`\tfrac`);
+}
+
+function hasSubstackCommand(source) {
+  return source.includes(String.raw`\substack`);
+}
+
+function hasEllipsisCommand(source) {
+  return source.includes(String.raw`\dots`) ||
+    source.includes(String.raw`\ldots`) ||
+    source.includes(String.raw`\cdots`);
+}
+
+function choice(rng, values) {
+  return values[randomInt(rng, values.length)] ?? values[0];
+}
+
+function randomInt(rng, upperExclusive) {
+  return Math.floor(rng() * upperExclusive);
+}
+
+function makeRng(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+function parseCaseArg(value) {
+  const parts = value.split("::");
+  if (parts.length === 3) {
+    return { id: parts[0], width: Number(parts[1]), source: parts[2] };
+  }
+  if (parts.length === 2) {
+    return { id: parts[0], width: 120, source: parts[1] };
+  }
+  return { id: `case-${Date.now()}`, width: 120, source: value };
+}
+
+function round(value) {
+  return Number(value.toFixed(6));
+}

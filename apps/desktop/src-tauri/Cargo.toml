@@ -1,12 +1,12 @@
 [package]
 name = "tikz-editor"
-version = "0.5.0"
+version = "0.6.0"
 description = "A WYSIWYG editor foundation for TikZ"
 authors = ["Dominik Peters"]
 license = "MIT"
 repository = ""
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.90"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -15,13 +15,13 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.6.2", features = [] }
+tauri-build = { version = "2.7.3", features = [] }
 
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.11.2", features = ["macos-private-api"] }
+tauri = { version = "2.12.4", features = ["macos-private-api"] }
 tauri-plugin-log = "2.8.0"
 tauri-plugin-clipboard-x = "2.0.2"
 tauri-plugin-shell = "2.3.5"
@@ -33,7 +33,7 @@ rfd = { version = "0.15", features = ["common-controls-v6"] }
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 url = "2.5"
 tempfile = "3"
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["time", "sync"] }
 notify = "8.2"
 flate2 = "1.1"
 tar = "0.4"
@@ -45,6 +45,9 @@ block2 = "0.6.2"
 objc2-app-kit = { version = "0.3.2", features = ["NSApplication", "NSAttributedString", "NSImage", "NSText"] }
 objc2-foundation = { version = "0.3.2", features = ["NSData", "NSDictionary", "NSObject", "NSNotification", "NSOperation", "NSRange", "NSString", "NSURL", "NSAttributedString"] }
 tauri-macos-haptics = "2.0.1"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winreg = "0.55"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2.10.1"

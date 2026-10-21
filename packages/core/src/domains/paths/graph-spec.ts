@@ -197,7 +197,7 @@ function splitTopLevel(raw: string, separators: string[], from: number): Array<{
   let inQuote = false;
 
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\" && index + 1 < raw.length) {
       index += 1;
       continue;
@@ -281,7 +281,7 @@ function findNextConnector(raw: string, start: number): { operator: GraphConnect
   let inQuote = false;
 
   for (let index = start; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\" && index + 1 < raw.length) {
       index += 1;
       continue;
@@ -354,7 +354,7 @@ function readBalancedSegment(
   let depth = 0;
   let inQuote = false;
   for (let index = start; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\" && index + 1 < raw.length) {
       index += 1;
       continue;
@@ -397,7 +397,7 @@ function readBalancedSegment(
 function skipWhitespace(raw: string, cursor: number): number {
   let index = cursor;
   while (index < raw.length) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (/\s/.test(char)) {
       index += 1;
       continue;
@@ -426,10 +426,10 @@ function isCommentStart(raw: string, index: number): boolean {
 function trimSlice(raw: string, from: number): { raw: string; from: number; to: number } | null {
   let left = 0;
   let right = raw.length;
-  while (left < right && /\s/.test(raw[left])) {
+  while (left < right && /\s/.test(raw.charAt(left))) {
     left += 1;
   }
-  while (right > left && /\s/.test(raw[right - 1])) {
+  while (right > left && /\s/.test(raw.charAt(right - 1))) {
     right -= 1;
   }
   if (left >= right) {

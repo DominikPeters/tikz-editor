@@ -1,0 +1,99 @@
+{
+  "source": "examples/mathjax-src/testsuite/tests/input/tex",
+  "description": "Stable MathJax TeX testcase slices for staged TeX math renderer development. Counts are documented in design/mathjax-tex-corpus-slices.md.",
+  "slices": {
+    "core-baseline": {
+      "description": "Base LaTeX math constructs from MathJax Base, Ams, and Mathtools tests. This is the broad first-pass development corpus.",
+      "files": [
+        "Base.test.ts",
+        "Ams.test.ts",
+        "Mathtools.test.ts"
+      ]
+    },
+    "latex-oracle-candidates": {
+      "description": "All extracted snippets that the classifier currently considers clean LuaLaTeX oracle candidates.",
+      "suggestedUses": [
+        "lualatex-oracle-fixture"
+      ]
+    },
+    "extra-oracle-candidates": {
+      "description": "LuaLaTeX-oracle candidates outside Base/Ams/Mathtools, useful once the core-baseline slice is stable.",
+      "files": [
+        "Tag.test.ts",
+        "Unicode.test.ts",
+        "SetOptions.test.ts",
+        "Tex.test.ts",
+        "TagFormat.test.ts",
+        "Boldsymbol.test.ts",
+        "Autoload.test.ts",
+        "Centernot.test.ts"
+      ],
+      "suggestedUses": [
+        "lualatex-oracle-fixture"
+      ]
+    },
+    "display-environments": {
+      "description": "Display math environments, tagging, cases, proofs, and package-backed display constructs.",
+      "files": [
+        "Tag.test.ts",
+        "TagFormat.test.ts",
+        "Empheq.test.ts",
+        "Amscd.test.ts",
+        "Cases.test.ts",
+        "Bussproofs.test.ts",
+        "Colortbl.test.ts"
+      ]
+    },
+    "font-symbol-text": {
+      "description": "Font alphabets, text-in-math, Unicode, and symbol-table coverage.",
+      "files": [
+        "Textmacros.test.ts",
+        "Textcomp.test.ts",
+        "Unicode.test.ts",
+        "Upgreek.test.ts",
+        "Boldsymbol.test.ts",
+        "Bbm.test.ts",
+        "Bboldx.test.ts",
+        "Dsfont.test.ts",
+        "Gensymb.test.ts"
+      ]
+    },
+    "macro-diagnostics": {
+      "description": "Macro expansion, package configuration, grouping, and noerrors/noundefined diagnostic policy.",
+      "files": [
+        "Newcommand.test.ts",
+        "Begingroup.test.ts",
+        "Noerrors.test.ts",
+        "Noundefined.test.ts",
+        "Require.test.ts",
+        "SetOptions.test.ts",
+        "Autoload.test.ts",
+        "Tex.test.ts"
+      ]
+    },
+    "extension-inventory": {
+      "description": "Large package-extension inventory. These are useful for feature discovery, not as an immediate exact-LaTeX target.",
+      "files": [
+        "Physics.test.ts",
+        "Mhchem.test.ts",
+        "Braket.test.ts",
+        "Cancel.test.ts",
+        "Extpfeil.test.ts",
+        "Units.test.ts",
+        "Verb.test.ts"
+      ]
+    },
+    "html-color-action": {
+      "description": "HTML, color, action, bbox, and enclosure commands. Mostly explicit non-LaTeX or low-priority extension behavior.",
+      "files": [
+        "Color.test.ts",
+        "Colorv2.test.ts",
+        "Html.test.ts",
+        "TexHtml.test.ts",
+        "Bbox.test.ts",
+        "Enclose.test.ts",
+        "Action.test.ts"
+      ]
+    }
+  }
+}

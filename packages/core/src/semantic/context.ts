@@ -1,5 +1,9 @@
 import type { WorldTransform } from "../coords/transforms.js";
-import type { WorldPoint, WorldBounds } from "../coords/points.js";
+import { worldBounds, type WorldPoint, type WorldBounds } from "../coords/points.js";
+import { pt } from "../coords/scalars.js";
+import { defaultAxisBasis, type AxisBasis } from "./coords/axis-basis.js";
+import { PT_PER_CM } from "../coords/source.js";
+import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type { OptionListAst } from "../options/types.js";
 import type { NodeTextEngine } from "../text/types.js";
 import type { MacroBinding, MacroExpansionTraceEvent } from "../macros/index.js";
@@ -7,9 +11,9 @@ import { parseLength } from "./coords/parse-length.js";
 import type { EditHandle, ResolvedStyle, SceneClipPath, SceneElement, SceneLayer } from "./types.js";
 import { BACKGROUND_SCENE_LAYER, MAIN_SCENE_LAYER } from "./types.js";
 import type { CustomStyleRegistry } from "./style/custom-styles.js";
-import { createDefaultCustomStyleRegistry } from "./style/custom-styles.js";
+import { cloneCustomStyleRegistry, createDefaultCustomStyleRegistry } from "./style/custom-styles.js";
 import type { PicDefinitionRegistry } from "./pics/registry.js";
-import { createDefaultPicDefinitionRegistry } from "./pics/registry.js";
+import { clonePicDefinitionRegistry, createDefaultPicDefinitionRegistry } from "./pics/registry.js";
 import { computeSourceFingerprint } from "../utils/source-fingerprint.js";
 import type { StyleChainEntry, StyleSourceRef } from "./style-chain.js";
 import { cloneResolvedStyle } from "./style-chain.js";
@@ -121,13 +125,15 @@ export type SemanticContextFrame = {
   style: ResolvedStyle;
   styleChain: StyleChainEntry[];
   transform: WorldTransform;
+  axisBasis: AxisBasis;
   layer: string;
-  clipChain: SceneClipPath[];
+  /** Immutable by convention so child frames can share it until a clip operation replaces it. */
+  clipChain: readonly SceneClipPath[];
   pictureSizeRelevant: boolean;
   customStyles: CustomStyleRegistry;
   picDefinitions: PicDefinitionRegistry;
-  colorAliases: Map<string, string>;
-  macroBindings: Map<string, MacroBinding>;
+  colorAliases: PersistentMap<string, string>;
+  macroBindings: PersistentMap<string, MacroBinding>;
   namePrefix: string;
   nameSuffix: string;
   nodeLayerMode: NodeLayerMode;
@@ -140,28 +146,12 @@ export type SemanticContextFrame = {
   pinDistancePt: number;
   pinEdgeRaw: string | null;
   transformShape: boolean;
+  everyPathStyles: ProvenanceOptionList[];
   everyNodeStyles: ProvenanceOptionList[];
   everyTextNodePartStyles: ProvenanceOptionList[];
   everyFitStyles: ProvenanceOptionList[];
   everyPicStyles: ProvenanceOptionList[];
-  everyRectangleNodeStyles: ProvenanceOptionList[];
-  everyCircleNodeStyles: ProvenanceOptionList[];
-  everyDiamondNodeStyles: ProvenanceOptionList[];
-  everyTrapeziumNodeStyles: ProvenanceOptionList[];
-  everyIsoscelesTriangleNodeStyles: ProvenanceOptionList[];
-  everyKiteNodeStyles: ProvenanceOptionList[];
-  everyDartNodeStyles: ProvenanceOptionList[];
-  everyCircularSectorNodeStyles: ProvenanceOptionList[];
-  everyCylinderNodeStyles: ProvenanceOptionList[];
-  everyCloudNodeStyles: ProvenanceOptionList[];
-  everyStarburstNodeStyles: ProvenanceOptionList[];
-  everySignalNodeStyles: ProvenanceOptionList[];
-  everyTapeNodeStyles: ProvenanceOptionList[];
-  everyRectangleCalloutNodeStyles: ProvenanceOptionList[];
-  everyEllipseCalloutNodeStyles: ProvenanceOptionList[];
-  everyCloudCalloutNodeStyles: ProvenanceOptionList[];
-  everySingleArrowNodeStyles: ProvenanceOptionList[];
-  everyDoubleArrowNodeStyles: ProvenanceOptionList[];
+  everyShapeNodeStyles: Map<string, ProvenanceOptionList[]>;
   treeLevel: number;
   treeLevelDistancePt: number;
   treeSiblingDistancePt: number;
@@ -196,6 +186,7 @@ export type SemanticContext = {
   currentPoint: WorldPoint | null;
   pathStartPoint: WorldPoint | null;
   textEngine: NodeTextEngine | null;
+  graphicsResolver?: DocumentGraphicsResolver;
   macroTraceCollector: MacroExpansionTraceEvent[] | null;
   picEvaluationStack: string[];
   editHandles: EditHandle[];
@@ -236,6 +227,8 @@ export type SemanticStatementSuffixSkipKind =
   | "unsafe";
 
 export type SemanticStatementEffectSummary = {
+  exitsScope?: boolean;
+  entersScope?: boolean;
   producesNamedCoordinates: Array<{ key: string; point: WorldPoint }>;
   producesNamedNodeGeometries: Array<{ key: string; geometry: NamedNodeGeometry }>;
   producesNamedPaths: string[];
@@ -245,6 +238,14 @@ export type SemanticStatementEffectSummary = {
   mutatesPathStartPoint: boolean;
   nextPathStartPoint: WorldPoint | null;
   requiresSequentialContext: boolean;
+  /** What the statement added to the picture's bounds, for statements a replay reuses. */
+  extendsPictureBounds: WorldBounds | null;
+  /** Elements the statement appended to named paths (`name path`). */
+  appendsNamedPaths: Array<{ key: string; elements: SceneElement[] }>;
+  /** Node names the statement added to named node sets. */
+  addsNamedNodeSetMembers: Array<{ key: string; members: string[] }>;
+  /** Handles that edit the statement's named coordinates where they are referenced. */
+  producesNamedCoordinateRewriteHandles: Array<{ key: string; handleId: string }>;
   suffixSkipKind: SemanticStatementSuffixSkipKind;
   opaque: boolean;
   opaqueReasons: SemanticDependencyOpaqueReason[];
@@ -284,6 +285,10 @@ type SemanticStatementEffectTracker = {
   producedNamedPaths: Set<string>;
   consumedNamedResources: Map<string, SemanticStatementConsumedResource>;
   opaqueReasons: Set<SemanticDependencyOpaqueReason>;
+  pictureBounds: WorldBounds | null;
+  appendedNamedPaths: Map<string, SceneElement[]>;
+  addedNamedNodeSetMembers: Map<string, Set<string>>;
+  namedCoordinateRewriteHandles: Map<string, string>;
 };
 
 export function createSemanticContext(
@@ -291,9 +296,10 @@ export function createSemanticContext(
   initialTransform: WorldTransform,
   textEngine: NodeTextEngine | null = null,
   source = "",
-  sourceFingerprint = computeSourceFingerprint(source)
+  sourceFingerprint = computeSourceFingerprint(source),
+  graphicsResolver?: DocumentGraphicsResolver
 ): SemanticContext {
-  const defaultNodeDistance = 28.4527559055;
+  const defaultNodeDistance = PT_PER_CM;
   const defaultTreeDistance = 15 * 2.84527559055;
   const clonedStyle = cloneResolvedStyle(initialStyle);
   const defaultBackgroundState = createDefaultSemanticBackgroundState();
@@ -317,13 +323,14 @@ export function createSemanticContext(
           }
         ],
         transform: initialTransform,
+        axisBasis: defaultAxisBasis(),
         layer: MAIN_SCENE_LAYER,
         clipChain: [],
         pictureSizeRelevant: true,
         customStyles: createDefaultCustomStyleRegistry(),
         picDefinitions: createDefaultPicDefinitionRegistry(),
-        colorAliases: new Map(),
-        macroBindings: new Map(),
+        colorAliases: new PersistentMap(),
+        macroBindings: new PersistentMap(),
         namePrefix: "",
         nameSuffix: "",
         nodeLayerMode: "front",
@@ -340,28 +347,12 @@ export function createSemanticContext(
         pinDistancePt: 12.9,
         pinEdgeRaw: null,
         transformShape: false,
+        everyPathStyles: [],
         everyNodeStyles: [],
         everyTextNodePartStyles: [],
         everyFitStyles: [],
         everyPicStyles: [],
-        everyRectangleNodeStyles: [],
-        everyCircleNodeStyles: [],
-        everyDiamondNodeStyles: [],
-        everyTrapeziumNodeStyles: [],
-        everyIsoscelesTriangleNodeStyles: [],
-        everyKiteNodeStyles: [],
-        everyDartNodeStyles: [],
-        everyCircularSectorNodeStyles: [],
-        everyCylinderNodeStyles: [],
-        everyCloudNodeStyles: [],
-        everyStarburstNodeStyles: [],
-        everySignalNodeStyles: [],
-        everyTapeNodeStyles: [],
-        everyRectangleCalloutNodeStyles: [],
-        everyEllipseCalloutNodeStyles: [],
-        everyCloudCalloutNodeStyles: [],
-        everySingleArrowNodeStyles: [],
-        everyDoubleArrowNodeStyles: [],
+        everyShapeNodeStyles: new Map(),
         treeLevel: 0,
         treeLevelDistancePt: defaultTreeDistance,
         treeSiblingDistancePt: defaultTreeDistance,
@@ -394,6 +385,7 @@ export function createSemanticContext(
     currentPoint: null,
     pathStartPoint: null,
     textEngine,
+    ...(graphicsResolver === undefined ? {} : { graphicsResolver: graphicsResolver }),
     macroTraceCollector: null,
     picEvaluationStack: [],
     editHandles: [],
@@ -437,7 +429,9 @@ export function listContextSceneLayers(context: SemanticContext): SceneLayer[] {
 }
 
 export function currentFrame(context: SemanticContext): SemanticContextFrame {
-  return context.stack[context.stack.length - 1];
+  const frame = context.stack[context.stack.length - 1];
+  if (!frame) throw new Error("Semantic context requires a root frame");
+  return frame;
 }
 
 export function pushFrame(context: SemanticContext, frame: SemanticContextFrame): void {
@@ -452,13 +446,27 @@ export function popFrame(context: SemanticContext): void {
   }
 }
 
+function forkSemanticContextFrame(frame: SemanticContextFrame): SemanticContextFrame {
+  // The four registries must be excluded from structuredClone: it would strip
+  // their class prototypes (PersistentMap and the copy-on-write registries)
+  // and silently break layered lookups. They fork through their own APIs.
+  const { customStyles, picDefinitions, colorAliases, macroBindings, ...cloneable } = frame;
+  return {
+    ...structuredClone(cloneable),
+    customStyles: cloneCustomStyleRegistry(customStyles),
+    picDefinitions: clonePicDefinitionRegistry(picDefinitions),
+    colorAliases: colorAliases.fork(),
+    macroBindings: macroBindings.fork()
+  };
+}
+
 export function snapshotSemanticContext(
   context: SemanticContext,
   options: SnapshotSemanticContextOptions = {}
 ): SemanticContextSnapshot {
   const editHandlesMode = options.editHandlesMode ?? "clone";
   return {
-    stack: structuredClone(context.stack),
+    stack: context.stack.map(forkSemanticContextFrame),
     layers: listContextSceneLayers(context),
     backgroundState: structuredClone(context.backgroundState),
     pictureBounds: context.pictureBounds ? { ...context.pictureBounds } : null,
@@ -484,7 +492,7 @@ export function restoreSemanticContext(
   snapshot: SemanticContextSnapshot,
   options: RestoreSemanticContextOptions = {}
 ): void {
-  context.stack = structuredClone(snapshot.stack);
+  context.stack = snapshot.stack.map(forkSemanticContextFrame);
   context.layers = new Map(snapshot.layers.map((layer) => [layer.name, { ...layer }]));
   context.backgroundState = structuredClone(snapshot.backgroundState);
   context.pictureBounds = snapshot.pictureBounds ? { ...snapshot.pictureBounds } : null;
@@ -515,9 +523,8 @@ export function retargetEditHandlesSourceFingerprint(
   handles: EditHandle[],
   sourceFingerprint: string
 ): void {
-  for (let index = 0; index < handles.length; index += 1) {
-    const handle = handles[index];
-    if (!handle || handle.sourceRef.sourceFingerprint === sourceFingerprint) {
+  for (const [index, handle] of handles.entries()) {
+    if (handle.sourceRef.sourceFingerprint === sourceFingerprint) {
       continue;
     }
     handles[index] = {
@@ -678,7 +685,7 @@ export function resolveContextColorAliasValue(
   }
 
   const seen = new Set<string>([initialKey]);
-  while (true) {
+  for (;;) {
     const nextKey = normalizeColorAliasKey(resolved);
     if (!nextKey || seen.has(nextKey)) {
       break;
@@ -770,6 +777,28 @@ export function writeNamedCoordinate(
   recordDependencyProducer(context, "named-coordinate", name, explicitSourceId);
 }
 
+/** Records that edits to `name`'s references should rewrite the handle that defined it. */
+export function writeNamedCoordinateRewriteHandle(context: SemanticContext, name: string, handleId: string): void {
+  context.namedCoordinateRewriteHandles.set(name, handleId);
+  context.statementEffectTracker?.namedCoordinateRewriteHandles.set(name, handleId);
+}
+
+/** Adds nodes to a named node set (`node set=`... membership), keeping earlier members. */
+export function addNamedNodeSetMembers(context: SemanticContext, setName: string, nodeNames: readonly string[]): void {
+  const existingMembers = context.namedNodeSets.get(setName);
+  const members = existingMembers ? new Set(existingMembers) : new Set<string>();
+  const added = nodeNames.filter((nodeName) => !members.has(nodeName));
+  if (existingMembers && added.length === 0) return;
+  for (const nodeName of added) members.add(nodeName);
+  context.namedNodeSets.set(setName, members);
+  const tracker = context.statementEffectTracker;
+  if (tracker) {
+    const recorded = tracker.addedNamedNodeSetMembers.get(setName) ?? new Set<string>();
+    for (const nodeName of nodeNames) recorded.add(nodeName);
+    tracker.addedNamedNodeSetMembers.set(setName, recorded);
+  }
+}
+
 export function readNamedCoordinate(
   context: SemanticContext,
   name: string,
@@ -819,6 +848,7 @@ export function appendNamedPathElements(
   const tracker = context.statementEffectTracker;
   if (tracker) {
     tracker.producedNamedPaths.add(name);
+    tracker.appendedNamedPaths.set(name, [...(tracker.appendedNamedPaths.get(name) ?? []), ...elements]);
   }
   for (const sourceId of producerSourceIds) {
     context.dependencyBuilder.addProducer(sourceId, "named-path", name);
@@ -843,8 +873,29 @@ export function beginStatementEffectTracking(context: SemanticContext): void {
     producedNamedNodeGeometries: new Map<string, NamedNodeGeometry>(),
     producedNamedPaths: new Set<string>(),
     consumedNamedResources: new Map<string, SemanticStatementConsumedResource>(),
-    opaqueReasons: new Set<SemanticDependencyOpaqueReason>()
+    opaqueReasons: new Set<SemanticDependencyOpaqueReason>(),
+    pictureBounds: null,
+    appendedNamedPaths: new Map<string, SceneElement[]>(),
+    addedNamedNodeSetMembers: new Map<string, Set<string>>(),
+    namedCoordinateRewriteHandles: new Map<string, string>()
   };
+}
+
+function unionBounds(left: WorldBounds | null, right: WorldBounds): WorldBounds {
+  return left
+    ? worldBounds(pt(Math.min(left.minX, right.minX)), pt(Math.min(left.minY, right.minY)), pt(Math.max(left.maxX, right.maxX)), pt(Math.max(left.maxY, right.maxY)))
+    : worldBounds(right.minX, right.minY, right.maxX, right.maxY);
+}
+
+/** Grows the picture's bounds, and records the growth for the statement being evaluated. */
+export function extendPictureBounds(context: SemanticContext, bounds: WorldBounds | undefined | null): void {
+  if (!bounds) {
+    return;
+  }
+  context.pictureBounds = unionBounds(context.pictureBounds, bounds);
+  if (context.statementEffectTracker) {
+    context.statementEffectTracker.pictureBounds = unionBounds(context.statementEffectTracker.pictureBounds, bounds);
+  }
 }
 
 export function endStatementEffectTracking(
@@ -868,6 +919,10 @@ export function endStatementEffectTracking(
       mutatesPathStartPoint: pointsDiffer(options.beforePathStartPoint, context.pathStartPoint),
       nextPathStartPoint: context.pathStartPoint ? { ...context.pathStartPoint } : null,
       requiresSequentialContext: options.requiresSequentialContext,
+      extendsPictureBounds: null,
+      appendsNamedPaths: [],
+      addsNamedNodeSetMembers: [],
+      producesNamedCoordinateRewriteHandles: [],
       suffixSkipKind: "unsafe",
       opaque: false,
       opaqueReasons: []
@@ -893,6 +948,10 @@ export function endStatementEffectTracking(
     mutatesPathStartPoint: pointsDiffer(options.beforePathStartPoint, context.pathStartPoint),
     nextPathStartPoint: context.pathStartPoint ? { ...context.pathStartPoint } : null,
     requiresSequentialContext: options.requiresSequentialContext,
+    extendsPictureBounds: tracker.pictureBounds ? { ...tracker.pictureBounds } : null,
+    appendsNamedPaths: [...tracker.appendedNamedPaths].map(([key, elements]) => ({ key, elements: [...elements] })),
+    addsNamedNodeSetMembers: [...tracker.addedNamedNodeSetMembers].map(([key, members]) => ({ key, members: [...members] })),
+    producesNamedCoordinateRewriteHandles: [...tracker.namedCoordinateRewriteHandles].map(([key, handleId]) => ({ key, handleId })),
     suffixSkipKind: "unsafe",
     opaque: tracker.opaqueReasons.size > 0,
     opaqueReasons: [...tracker.opaqueReasons].sort()
@@ -902,12 +961,17 @@ export function endStatementEffectTracking(
 export function applyStatementEffectSummary(
   context: SemanticContext,
   summary: SemanticStatementEffectSummary,
-  options: { sourceId?: string } = {}
+  /**
+   * `sourceId` is the evaluated statement (a foreach iteration has its own);
+   * `elementSourceId` is the source its elements name, which carries opacity.
+   */
+  options: { sourceId?: string; elementSourceId?: string } = {}
 ): void {
   const sourceId = options.sourceId;
   if (sourceId) {
     context.dependencyBuilder.ensureSourceNode(sourceId);
   }
+  if (summary.exitsScope) { popFrame(context); return; }
   for (const produced of summary.producesNamedCoordinates) {
     context.namedCoordinates.set(produced.key, { ...produced.point });
     recordDependencyProducer(context, "named-coordinate", produced.key, sourceId);
@@ -919,14 +983,25 @@ export function applyStatementEffectSummary(
   for (const producedPath of summary.producesNamedPaths) {
     recordDependencyProducer(context, "named-path", producedPath, sourceId);
   }
+  for (const appended of summary.appendsNamedPaths) {
+    context.namedPaths.set(appended.key, [...(context.namedPaths.get(appended.key) ?? []), ...appended.elements]);
+  }
+  for (const added of summary.addsNamedNodeSetMembers) {
+    addNamedNodeSetMembers(context, added.key, added.members);
+  }
+  for (const produced of summary.producesNamedCoordinateRewriteHandles) {
+    writeNamedCoordinateRewriteHandle(context, produced.key, produced.handleId);
+  }
   for (const consumed of summary.consumesNamedResources) {
     recordDependencyConsumer(context, consumed.kind, consumed.key, sourceId);
   }
-  if (sourceId) {
+  const opaqueSourceId = options.elementSourceId ?? sourceId;
+  if (opaqueSourceId) {
     for (const reason of summary.opaqueReasons) {
-      markDependencyOpaque(context, sourceId, reason);
+      markDependencyOpaque(context, opaqueSourceId, reason);
     }
   }
+  extendPictureBounds(context, summary.extendsPictureBounds);
   context.currentPoint = summary.nextCurrentPoint ? { ...summary.nextCurrentPoint } : null;
   context.pathStartPoint = summary.nextPathStartPoint ? { ...summary.nextPathStartPoint } : null;
 }

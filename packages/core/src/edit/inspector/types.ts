@@ -70,7 +70,7 @@ export type ArrowTipWriteTarget = SetPropertyWriteTarget & {
   arrowContext: ArrowTipWriteContext;
 };
 
-export type InspectorProperty =
+type InspectorPropertyValue =
   | {
       kind: "text";
       id: string;
@@ -311,6 +311,8 @@ export type InspectorProperty =
       context: ShadowMutationContext;
       write: SetPropertyWriteTarget;
     };
+
+export type InspectorProperty = InspectorPropertyValue & { readOnlyReason?: string };
 
 export type InspectorSection = {
   id: string;

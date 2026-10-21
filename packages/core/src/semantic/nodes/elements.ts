@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { PathOptionItem } from "../../ast/types.js";
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -53,6 +54,7 @@ function translatePoint(center: WorldPoint, point: WorldPoint): WorldPoint {
 
 export function makeCircleElement(
   sourceId: string,
+  itemId: string,
   center: WorldPoint,
   radius: number,
   style: ResolvedStyle,
@@ -62,11 +64,11 @@ export function makeCircleElement(
 ): SceneCircle {
   return {
     kind: "Circle",
-    id: `scene-circle:${sourceId}:${span.from}`,
-    runtimeId: `scene-circle:${sourceId}:${span.from}`,
+    id: `scene-circle:${sourceId}:${itemId}`,
+    runtimeId: `scene-circle:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
-    sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
-    adornment,
+    sourceRef: { sourceId, sourceSpan: span },
+    ...(adornment === undefined ? {} : { adornment: adornment }),
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
     clipChain: [],
@@ -91,28 +93,30 @@ export function makeTextElement(
   styleChain: StyleChainEntry[] = [],
   textSourceSpan?: { from: number; to: number },
   textHasFixedWidth?: boolean,
-  adornment?: SceneAdornment
+  adornment?: SceneAdornment,
+  nodeVisualCenter?: WorldPoint
 ): SceneText {
   return {
     kind: "Text",
     id: `scene-text:${sourceId}:${itemId}`,
     runtimeId: `scene-text:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
-    sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
-    adornment,
-    textSourceSpan,
-    textHasFixedWidth,
+    sourceRef: { sourceId, sourceSpan: span },
+    ...(adornment === undefined ? {} : { adornment: adornment }),
+    ...(textSourceSpan === undefined ? {} : { textSourceSpan: textSourceSpan }),
+    ...(textHasFixedWidth === undefined ? {} : { textHasFixedWidth: textHasFixedWidth }),
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
     clipChain: [],
     position,
     text,
-    textBlockWidth,
-    textBlockHeight,
-    nodeVisualWidth,
-    nodeVisualHeight,
-    textRenderInfo,
-    rotation
+    ...(textBlockWidth === undefined ? {} : { textBlockWidth: textBlockWidth }),
+    ...(textBlockHeight === undefined ? {} : { textBlockHeight: textBlockHeight }),
+    ...(nodeVisualWidth === undefined ? {} : { nodeVisualWidth: nodeVisualWidth }),
+    ...(nodeVisualHeight === undefined ? {} : { nodeVisualHeight: nodeVisualHeight }),
+    ...(nodeVisualCenter ? { nodeVisualCenter } : {}),
+    ...(textRenderInfo === undefined ? {} : { textRenderInfo: textRenderInfo }),
+    ...(rotation === undefined ? {} : { rotation: rotation })
   };
 }
 
@@ -242,8 +246,8 @@ export function makeNodeBoxElement(
     id: `scene-node-box:${sourceId}:${itemId}`,
     runtimeId: `scene-node-box:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
-    sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
-    adornment,
+    sourceRef: { sourceId, sourceSpan: span },
+    ...(adornment === undefined ? {} : { adornment: adornment }),
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
     clipChain: [],
@@ -267,8 +271,8 @@ export function makeNodeEllipseElement(
     id: `scene-node-ellipse:${sourceId}:${itemId}`,
     runtimeId: `scene-node-ellipse:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
-    sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
-    adornment,
+    sourceRef: { sourceId, sourceSpan: span },
+    ...(adornment === undefined ? {} : { adornment: adornment }),
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
     clipChain: [],
@@ -423,7 +427,7 @@ export function makeNodeLineElement(
     id: `scene-node-line:${sourceId}:${itemId}`,
     runtimeId: `scene-node-line:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
-    sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
+    sourceRef: { sourceId, sourceSpan: span },
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
     clipChain: [],
@@ -1050,7 +1054,7 @@ function makeNodePolygonElement(
   }
   const commands: ScenePathCommand[] = [{ kind: "M", to: first }];
   for (let index = 1; index < corners.length; index += 1) {
-    commands.push({ kind: "L", to: corners[index] });
+    commands.push({ kind: "L", to: requireArrayValue(corners, index) });
   }
   commands.push({ kind: "Z" });
   return {
@@ -1058,7 +1062,7 @@ function makeNodePolygonElement(
     id: `scene-node-box:${sourceId}:${itemId}`,
     runtimeId: `scene-node-box:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
-    sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
+    sourceRef: { sourceId, sourceSpan: span },
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
     commands
@@ -1106,7 +1110,7 @@ function appendPolygonSubpaths(commands: ScenePathCommand[], polygons: WorldPoin
     }
     commands.push({ kind: "M", to: first });
     for (let index = 1; index < polygon.length; index += 1) {
-      commands.push({ kind: "L", to: polygon[index] });
+      commands.push({ kind: "L", to: requireArrayValue(polygon, index) });
     }
     commands.push({ kind: "Z" });
   }
@@ -1125,7 +1129,7 @@ function makeNodePathElement(
     id: `scene-node-box:${sourceId}:${itemId}`,
     runtimeId: `scene-node-box:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
-    sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
+    sourceRef: { sourceId, sourceSpan: span },
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
     commands

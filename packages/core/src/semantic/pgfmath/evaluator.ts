@@ -1,5 +1,6 @@
 import { getCurrentPgfMathRuntime } from "./runtime.js";
 import type { PgfRandom } from "./rng.js";
+import { PT_PER_CM } from "../../coords/source.js";
 
 export type PgfMathQuantity = {
   kind: "scalar" | "length";
@@ -33,7 +34,7 @@ const UNIT_FACTORS: Record<string, number> = {
   pt: 1,
   bp: 72.27 / 72,
   px: 72.27 / 72,
-  cm: 28.4527559055,
+  cm: PT_PER_CM,
   mm: 2.84527559055,
   in: 72.27,
   ex: 4.3,
@@ -42,6 +43,12 @@ const UNIT_FACTORS: Record<string, number> = {
 
 export type EvaluatePgfMathOptions = {
   rng?: PgfRandom;
+  /**
+   * Context-dependent TeX units, expressed in pt. In TeX, `em` and `ex`
+   * depend on the current font, so callers that know that font should
+   * override the process-wide fallback values here.
+   */
+  unitFactors?: Readonly<Partial<Record<"em" | "ex", number>>>;
 };
 
 export function evaluatePgfMathExpression(input: string, options: EvaluatePgfMathOptions = {}): PgfMathEvalResult {
@@ -64,7 +71,11 @@ export function evaluatePgfMathExpression(input: string, options: EvaluatePgfMat
   }
 
   const runtime = options.rng ? { rng: options.rng } : getCurrentPgfMathRuntime();
-  const parser = new Parser(tokenized.tokens, runtime ? runtime.rng : undefined);
+  const parser = new Parser(
+    tokenized.tokens,
+    runtime ? runtime.rng : undefined,
+    options.unitFactors
+  );
   return parser.parse();
 }
 
@@ -100,7 +111,8 @@ class Parser {
 
   constructor(
     private readonly tokens: Token[],
-    private readonly rng?: PgfRandom
+    private readonly rng?: PgfRandom,
+    private readonly unitFactors?: EvaluatePgfMathOptions["unitFactors"]
   ) {}
 
   parse(): PgfMathEvalResult {
@@ -176,7 +188,7 @@ class Parser {
       return left;
     }
 
-    while (true) {
+    for (;;) {
       const operator = this.peekOp(["==", "!=", "<", "<=", ">", ">="]);
       if (operator == null) {
         return left;
@@ -201,7 +213,7 @@ class Parser {
       return left;
     }
 
-    while (true) {
+    for (;;) {
       const operator = this.peekOp(["+", "-"]);
       if (operator == null) {
         return left;
@@ -232,7 +244,7 @@ class Parser {
       return left;
     }
 
-    while (true) {
+    for (;;) {
       const operator = this.peekOp(["*", "/"]);
       if (operator == null) {
         return left;
@@ -342,7 +354,7 @@ class Parser {
       return current;
     }
 
-    while (true) {
+    for (;;) {
       if (this.matchOp("!")) {
         if (current.quantity.kind !== "scalar") {
           return this.error("invalid-operation", "Factorial requires a scalar argument.");
@@ -385,7 +397,11 @@ class Parser {
       if (unit === "r") {
         return this.scalar((token.value * 180) / Math.PI);
       }
-      const factor = UNIT_FACTORS[unit];
+      const factor =
+        (unit === "em" || unit === "ex"
+          ? this.unitFactors?.[unit]
+          : undefined) ??
+        UNIT_FACTORS[unit];
       if (factor == null) {
         return this.error("invalid-domain", `Unsupported unit '${token.unit}'.`);
       }
@@ -449,7 +465,7 @@ class Parser {
       if (this.matchOp("(")) {
         const args: PgfMathQuantity[] = [];
         if (this.matchOp(")") === false) {
-          while (true) {
+          for (;;) {
             const argument = this.parseTernary();
             if (argument.ok === false) {
               return argument;
@@ -593,10 +609,11 @@ class Parser {
     if (key === "deg") return unary((value) => (value * 180) / Math.PI);
     if (key === "rad") return unary((value) => (value * Math.PI) / 180);
     if (key === "scalar") {
-      if (args.length !== 1) {
+      const argument = args[0];
+      if (args.length !== 1 || !argument) {
         return this.error("invalid-arity", "scalar() expects exactly one argument.");
       }
-      return this.scalar(args[0].value);
+      return this.scalar(argument.value);
     }
 
     if (key === "pow") return binary((left, right) => Math.pow(left, right));
@@ -619,7 +636,10 @@ class Parser {
     return this.error("unknown-function", `Unsupported function '${name}'.`);
   }
 
-  private requireScalar(quantity: PgfMathQuantity, functionName: string): { ok: true; value: number } | PgfMathEvalFailure {
+  private requireScalar(quantity: PgfMathQuantity | undefined, functionName: string): { ok: true; value: number } | PgfMathEvalFailure {
+    if (!quantity) {
+      return this.error("invalid-arity", `${functionName}() is missing an argument.`);
+    }
     if (quantity.kind !== "scalar") {
       return this.error("invalid-operation", `${functionName}() expects scalar arguments.`);
     }
@@ -696,7 +716,7 @@ function tokenize(input: string): { ok: true; tokens: Token[] } | PgfMathEvalFai
   let index = 0;
 
   while (index < input.length) {
-    const char = input[index];
+    const char = input.charAt(index);
 
     if (/\s/.test(char)) {
       index += 1;
@@ -727,32 +747,32 @@ function tokenize(input: string): { ok: true; tokens: Token[] } | PgfMathEvalFai
       if (char === ".") {
         index += 1;
         const digitsStart = index;
-        while (index < input.length && isDigit(input[index])) {
+        while (index < input.length && isDigit(input.charAt(index))) {
           index += 1;
         }
         if (digitsStart === index) {
           return { ok: false, code: "token", message: "Invalid decimal number." };
         }
       } else {
-        while (index < input.length && isDigit(input[index])) {
+        while (index < input.length && isDigit(input.charAt(index))) {
           index += 1;
         }
-        if (index < input.length && input[index] === ".") {
+        if (index < input.length && input.charAt(index) === ".") {
           index += 1;
-          while (index < input.length && isDigit(input[index])) {
+          while (index < input.length && isDigit(input.charAt(index))) {
             index += 1;
           }
         }
       }
 
-      if (index < input.length && (input[index] === "e" || input[index] === "E")) {
+      if (index < input.length && (input.charAt(index) === "e" || input.charAt(index) === "E")) {
         const exponentStart = index;
         index += 1;
-        if (index < input.length && (input[index] === "+" || input[index] === "-")) {
+        if (index < input.length && (input.charAt(index) === "+" || input.charAt(index) === "-")) {
           index += 1;
         }
         const exponentDigitsStart = index;
-        while (index < input.length && isDigit(input[index])) {
+        while (index < input.length && isDigit(input.charAt(index))) {
           index += 1;
         }
         if (exponentDigitsStart === index) {
@@ -766,11 +786,11 @@ function tokenize(input: string): { ok: true; tokens: Token[] } | PgfMathEvalFai
       }
 
       let unitCursor = index;
-      while (unitCursor < input.length && /\s/.test(input[unitCursor])) {
+      while (unitCursor < input.length && /\s/.test(input.charAt(unitCursor))) {
         unitCursor += 1;
       }
       const unitStart = unitCursor;
-      while (unitCursor < input.length && /[A-Za-z]/.test(input[unitCursor])) {
+      while (unitCursor < input.length && /[A-Za-z]/.test(input.charAt(unitCursor))) {
         unitCursor += 1;
       }
       const unit = input.slice(unitStart, unitCursor);
@@ -778,13 +798,13 @@ function tokenize(input: string): { ok: true; tokens: Token[] } | PgfMathEvalFai
         index = unitCursor;
       }
 
-      tokens.push({ kind: "number", value, unit: unit.length > 0 ? unit : undefined });
+      tokens.push({ kind: "number", value, ...(unit.length > 0 ? { unit } : {}) });
       continue;
     }
 
     if (/[A-Za-z]/.test(char)) {
       const identStart = index;
-      while (index < input.length && /[A-Za-z0-9_]/.test(input[index])) {
+      while (index < input.length && /[A-Za-z0-9_]/.test(input.charAt(index))) {
         index += 1;
       }
       tokens.push({ kind: "ident", value: input.slice(identStart, index) });
@@ -816,7 +836,7 @@ function unwrapSingleOuterBracePair(raw: string): string | null {
 
   let depth = 0;
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\") {
       index += 1;
       continue;

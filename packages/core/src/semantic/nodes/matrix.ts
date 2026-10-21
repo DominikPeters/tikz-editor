@@ -1,7 +1,11 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { currentFrame } from "../context.js";
 import type { NodeItem, PathStatement, Span } from "../../ast/types.js";
-import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings } from "../../macros/index.js";
+import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings, expandMacroBindingsMapped } from "../../macros/index.js";
 import { parseOptionListRaw, splitTopLevel } from "../../options/parse.js";
 import type { OptionListAst } from "../../options/types.js";
+import { mapTransformedTextWithFallback } from "../../text/source-map.js";
+import { analyzeSimpleTexResources } from "../../text/tex/index.js";
 import { parseLength } from "../coords/parse-length.js";
 import type { SemanticContext } from "../context.js";
 import type { NodePositioningResolution } from "../path/node-positioning.js";
@@ -13,6 +17,7 @@ import { pt } from "../../coords/scalars.js";
 import type { WorldPoint } from "../../coords/points.js";
 import type { MatrixCellInfo, ResolvedStyle, SceneElement } from "../types.js";
 import { parseBooleanishNormalized } from "../../utils/booleanish.js";
+import { readTexControlSequence, skipTexComment } from "../../parser/tex-lexical.js";
 import { placeNodeCenter, registerNamedNodeAnchors } from "./anchors.js";
 import {
   applyNodeBoxPaintMode,
@@ -46,7 +51,7 @@ import {
 } from "./elements.js";
 import { resolveNodeLayout } from "./layout.js";
 import { collectScopedNodeNames } from "./named-coordinates.js";
-import { normalizeEscapedTextSpaces, normalizeNodeTextFontSize } from "./normalize-text.js";
+import { normalizeNodeTextFontSize } from "./normalize-text.js";
 import {
   resolveNodeLayer,
   resolveNodeOptionScale,
@@ -93,6 +98,8 @@ export type MatrixParsedRowsForEdit = {
 
 type MatrixParsedCell = {
   raw: string;
+  structure: string;
+  trimText: string;
   span: Span;
 };
 
@@ -148,14 +155,14 @@ function wp(x: number, y: number): WorldPoint {
 export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): MatrixNodeEvaluation {
   params.markFeature("matrix_node", "supported");
 
-  const parsed = parseMatrixRows(params.item.text, params.matrixMode.cellSeparator, params.item.textSpan.from);
+  const parsed = parseMatrixRows(params.item.text, params.matrixMode.cellSeparator, params.item.textSpan.from, params.item.structuralText);
   const rowCount = Math.max(1, parsed.rows.length);
   const colCount = Math.max(1, parsed.rows.reduce((max, row) => Math.max(max, row.cells.length), 0));
 
   const columnGapOverrides = Array.from<number>({ length: Math.max(0, colCount - 1) }).fill(0);
   for (const row of parsed.rows) {
     for (let column = 0; column < Math.min(row.columnGapOverrides.length, columnGapOverrides.length); column += 1) {
-      columnGapOverrides[column] = Math.max(columnGapOverrides[column], row.columnGapOverrides[column] ?? 0);
+      columnGapOverrides[column] = Math.max(requireArrayValue(columnGapOverrides, column), row.columnGapOverrides[column] ?? 0);
     }
   }
 
@@ -174,6 +181,8 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
     for (let column = 0; column < colCount; column += 1) {
       const rawCell = rawRow.cells[column] ?? {
         raw: "",
+        structure: "",
+        trimText: "",
         span: { from: params.item.textSpan.from, to: params.item.textSpan.from }
       };
       const parsedCell = parseMatrixCell(rawCell, params.matrixMode);
@@ -187,16 +196,26 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
       const cellOptionScale = resolveNodeOptionScale(combinedCellOptions, params.style, params.context);
       const cellTransformScale = params.inheritedTransformScale * cellOptionScale;
       const cellStyle = resolveNodeStyle(combinedCellOptions, params.style, params.context, cellTransformScale);
-      const expandedCellText = expandMacroBindings(
+      const optionalTrace1 = params.context.macroTraceCollector ?? undefined;
+      const expandedCellText = expandMacroBindingsMapped(
         parsedCell.text,
-        params.context.stack[params.context.stack.length - 1].macroBindings,
+        currentFrame(params.context).macroBindings,
         {
           maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-          trace: params.context.macroTraceCollector ?? undefined
+          ...(optionalTrace1 === undefined ? {} : { trace: optionalTrace1 }),
+          sourceOffset: parsedCell.textSpan.from
         }
       );
-      const resolvedCellText = normalizeEscapedTextSpaces(expandedCellText);
-      const normalizedCellText = normalizeNodeTextFontSize(resolvedCellText, cellStyle.fontSize);
+      const resolvedCellText = expandedCellText;
+      const normalizedCellText = normalizeNodeTextFontSize(resolvedCellText.text, cellStyle.fontSize);
+      const normalizedMappedCellText = mapTransformedTextWithFallback(
+        resolvedCellText,
+        normalizedCellText.text,
+        "node font size normalization"
+      );
+      if (containsIncludeGraphicsCommand(normalizedCellText.text)) {
+        params.markFeature("text_includegraphics", "supported");
+      }
       const cellTextStyle = normalizedCellText.fontSizePt === cellStyle.fontSize
         ? cellStyle
         : { ...cellStyle, fontSize: normalizedCellText.fontSizePt };
@@ -206,26 +225,28 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
         cellTextStyle,
         cellTransformScale,
         params.context.textEngine,
-        params.matrixMode.textMode
+        params.matrixMode.textMode,
+        normalizedMappedCellText.sourceMap,
+        params.context.graphicsResolver
       );
 
-      cellGrid[row][column] = {
+      requireArrayValue(cellGrid, row)[column] = {
         cell: parsedCell,
-        options: combinedCellOptions,
+        ...(combinedCellOptions === undefined ? {} : { options: combinedCellOptions }),
         cellSpan: rawCell.span
       };
-      colWidths[column] = Math.max(colWidths[column], cellLayout.visualWidth);
-      rowHeights[row] = Math.max(rowHeights[row], cellLayout.visualHeight);
+      colWidths[column] = Math.max(requireArrayValue(colWidths, column), cellLayout.visualWidth);
+      rowHeights[row] = Math.max(requireArrayValue(rowHeights, row), cellLayout.visualHeight);
     }
   }
 
   for (let column = 0; column < colCount; column += 1) {
-    if (colWidths[column] <= 0) {
+    if (requireArrayValue(colWidths, column) <= 0) {
       colWidths[column] = 1;
     }
   }
   for (let row = 0; row < rowCount; row += 1) {
-    if (rowHeights[row] <= 0) {
+    if (requireArrayValue(rowHeights, row) <= 0) {
       rowHeights[row] = 1;
     }
   }
@@ -366,7 +387,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
       params.markFeature("svg_path", "supported");
     } else if (params.nodeShape === "magnifying glass") {
       pushMatrixNodeElement(
-        makeCircleElement(params.statement.id, matrixCenter, matrixLayout.visualRadius, matrixBoxStyle, params.item.span)
+        makeCircleElement(params.statement.id, params.item.id, matrixCenter, matrixLayout.visualRadius, matrixBoxStyle, params.item.span)
       );
       pushMatrixNodeElement(
         makeNodeMagnifyingHandleElement(
@@ -385,7 +406,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
       params.markFeature("svg_path", "supported");
     } else if (params.nodeShape === "circle split" || params.nodeShape === "circle solidus") {
       pushMatrixNodeElement(
-        makeCircleElement(params.statement.id, matrixCenter, matrixLayout.visualRadius, matrixBoxStyle, params.item.span)
+        makeCircleElement(params.statement.id, params.item.id, matrixCenter, matrixLayout.visualRadius, matrixBoxStyle, params.item.span)
       );
       const radius = matrixLayout.visualRadius;
       if (params.nodeShape === "circle split") {
@@ -512,7 +533,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
       params.markFeature("shape_rectangle_split", "supported");
       params.markFeature("svg_path", "supported");
     } else if (params.nodeShape === "circle") {
-      pushMatrixNodeElement(makeCircleElement(params.statement.id, matrixCenter, matrixLayout.visualRadius, matrixBoxStyle, params.item.span));
+      pushMatrixNodeElement(makeCircleElement(params.statement.id, params.item.id, matrixCenter, matrixLayout.visualRadius, matrixBoxStyle, params.item.span));
       params.markFeature("shape_circle", "supported");
       params.markFeature("svg_circle", "supported");
     } else if (params.nodeShape === "ellipse") {
@@ -923,7 +944,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
   const frontCellElements: SceneElement[] = [];
   for (let row = 0; row < rowCount; row += 1) {
     for (let column = 0; column < colCount; column += 1) {
-      const resolvedCell = cellGrid[row][column];
+      const resolvedCell = requireArrayValue(cellGrid, row)[column];
       if (!resolvedCell) {
         continue;
       }
@@ -931,31 +952,30 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
       const generatedCellNames = scopedMatrixNames.map((matrixName) => `${matrixName}-${row + 1}-${column + 1}`);
       const namedCell = resolveMatrixCellNames(resolvedCell.cell, generatedCellNames);
       const position = wp(
-        matrixCenter.x + xCenters[column] - contentCenter.x,
-        matrixCenter.y + yCenters[row] - contentCenter.y
+        matrixCenter.x + requireArrayValue(xCenters, column) - contentCenter.x,
+        matrixCenter.y + requireArrayValue(yCenters, row) - contentCenter.y
       );
 
+      const optionalTrace2 = params.context.macroTraceCollector ?? undefined;
       const cellItem: NodeItem = {
         kind: "Node",
         id: `${params.item.id}:matrix-cell:${row + 1}:${column + 1}`,
         span: params.item.span,
         raw: resolvedCell.cell.raw,
         templateRaw: resolvedCell.cell.raw,
-        name: namedCell.name,
-        aliases: namedCell.aliases,
-        optionsSpan: resolvedCell.options?.span,
-        options: resolvedCell.options,
+        ...(namedCell.name === undefined ? {} : { name: namedCell.name }),
+        ...(namedCell.aliases === undefined ? {} : { aliases: namedCell.aliases }),
+        ...(resolvedCell.options?.span === undefined ? {} : { optionsSpan: resolvedCell.options.span }),
+        ...(resolvedCell.options === undefined ? {} : { options: resolvedCell.options }),
         textSource: "group",
         textSpan: resolvedCell.cell.textSpan,
-        text: normalizeEscapedTextSpaces(
-          expandMacroBindings(
-            resolvedCell.cell.text,
-            params.context.stack[params.context.stack.length - 1].macroBindings,
-            {
-              maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-              trace: params.context.macroTraceCollector ?? undefined
-            }
-          )
+        text: expandMacroBindings(
+          resolvedCell.cell.text,
+          currentFrame(params.context).macroBindings,
+          {
+            maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
+            ...(optionalTrace2 === undefined ? {} : { trace: optionalTrace2 })
+          }
         )
       };
       const evaluatedCell = params.evaluateNestedNode(cellItem, position);
@@ -1002,13 +1022,14 @@ export function resolveMatrixCellEditTarget(
   matrixTextSpan: Span,
   mode: MatrixMode,
   row: number,
-  column: number
+  column: number,
+  structuralText?: string
 ): MatrixCellEditTarget | null {
   if (!Number.isInteger(row) || !Number.isInteger(column) || row <= 0 || column <= 0) {
     return null;
   }
 
-  const parsed = parseMatrixRows(matrixText, mode.cellSeparator, matrixTextSpan.from);
+  const parsed = parseMatrixRows(matrixText, mode.cellSeparator, matrixTextSpan.from, structuralText);
   const parsedRow = parsed.rows[row - 1];
   const rawCell = parsedRow?.cells[column - 1];
   if (!rawCell) {
@@ -1020,13 +1041,14 @@ export function resolveMatrixCellEditTarget(
     return null;
   }
 
+  const optionalOptionSpan3 = resolveLeadingMatrixCellOptionSpan(rawCell.raw, rawCell.span.from, rawCell.structure, rawCell.trimText);
   return {
     row,
     column,
     textMode: mode.textMode,
     cellSpan: rawCell.span,
     textSpan: parsedCell.textSpan,
-    optionSpan: resolveLeadingMatrixCellOptionSpan(rawCell.raw, rawCell.span.from)
+    ...(optionalOptionSpan3 === undefined ? {} : { optionSpan: optionalOptionSpan3 })
   };
 }
 
@@ -1035,7 +1057,7 @@ function stampMatrixCellElements(elements: SceneElement[], matrixCell: MatrixCel
     element.matrixCell = matrixCell;
     element.sourceRef.sourceId = matrixCell.cellSourceId;
     element.sourceRef.sourceSpan = matrixCell.cellSpan;
-    if (element.kind === "Text" && element.textRenderInfo?.mode === "mathjax") {
+    if (element.kind === "Text" && element.textRenderInfo?.mode === "tex") {
       element.textRenderInfo = {
         ...element.textRenderInfo,
         layoutKind: "matrix-cell"
@@ -1056,6 +1078,7 @@ export function resolveMatrixMode(options: OptionListAst | undefined): MatrixMod
   const nodesOptionLists: OptionListAst[] = [];
 
   if (!options) {
+    const optionalNodesOption4 = mergeOptionLists(nodesOptionLists);
     return {
       enabled,
       matrixOfNodes,
@@ -1065,8 +1088,8 @@ export function resolveMatrixMode(options: OptionListAst | undefined): MatrixMod
       cellSeparator,
       rowSep,
       columnSep,
-      nodesOption: mergeOptionLists(nodesOptionLists),
-      matrixAnchor
+      ...(optionalNodesOption4 === undefined ? {} : { nodesOption: optionalNodesOption4 }),
+      ...(matrixAnchor === undefined ? {} : { matrixAnchor: matrixAnchor })
     };
   }
 
@@ -1147,6 +1170,7 @@ export function resolveMatrixMode(options: OptionListAst | undefined): MatrixMod
     enabled = true;
   }
 
+  const optionalNodesOption5 = mergeOptionLists(nodesOptionLists);
   return {
     enabled,
     matrixOfNodes,
@@ -1156,12 +1180,40 @@ export function resolveMatrixMode(options: OptionListAst | undefined): MatrixMod
     cellSeparator,
     rowSep,
     columnSep,
-    nodesOption: mergeOptionLists(nodesOptionLists),
-    matrixAnchor
+    ...(optionalNodesOption5 === undefined ? {} : { nodesOption: optionalNodesOption5 }),
+    ...(matrixAnchor === undefined ? {} : { matrixAnchor: matrixAnchor })
   };
 }
 
-function parseMatrixRows(input: string, cellSeparator: string, baseOffset: number): MatrixParsedRows {
+// Locate comments in the structural text so a protected cell edit containing
+// '%' cannot hide real separators. Keep offsets and unmasked cell text intact.
+function maskMatrixComments(input: string, structure: string): { structure: string; trimText: string } {
+  const structureParts: string[] = [];
+  const textParts: string[] = [];
+  let start = 0;
+  for (let cursor = 0; cursor < structure.length;) {
+    const command = readTexControlSequence(structure, cursor);
+    if (command) {
+      cursor = command.to;
+    } else if (structure.charAt(cursor) === "%") {
+      const end = skipTexComment(structure, cursor);
+      const comment = structure.slice(cursor, end).replace(/[^\r\n]/g, " ");
+      structureParts.push(structure.slice(start, cursor), comment);
+      textParts.push(input.slice(start, cursor), comment);
+      start = cursor = end;
+    } else {
+      cursor += 1;
+    }
+  }
+  structureParts.push(structure.slice(start));
+  textParts.push(input.slice(start));
+  return { structure: structureParts.join(""), trimText: textParts.join("") };
+}
+
+// Trim actual cell text with only comments masked; structural edit masks must
+// not turn temporarily unfinished, nonempty cells into empty cells.
+function parseMatrixRows(input: string, cellSeparator: string, baseOffset: number, structuralText = input): MatrixParsedRows {
+  const { structure, trimText } = maskMatrixComments(input, structuralText);
   const rows: Array<{ cells: MatrixParsedCell[]; columnGapOverrides: number[] }> = [];
   const rowGapOverrides: number[] = [];
   let start = 0;
@@ -1171,20 +1223,20 @@ function parseMatrixRows(input: string, cellSeparator: string, baseOffset: numbe
   let parenDepth = 0;
 
   while (cursor < input.length) {
-    const char = input[cursor];
+    const char = structure.charAt(cursor);
     if (char === "\\") {
-      if (braceDepth === 0 && bracketDepth === 0 && parenDepth === 0 && input.startsWith("\\\\", cursor)) {
+      if (braceDepth === 0 && bracketDepth === 0 && parenDepth === 0 && structure.startsWith("\\\\", cursor)) {
         const rowRaw = input.slice(start, cursor);
-        const split = splitMatrixRowCells(rowRaw, cellSeparator, baseOffset + start);
+        const split = splitMatrixRowCells(rowRaw, cellSeparator, baseOffset + start, structure.slice(start, cursor), trimText.slice(start, cursor));
         rows.push(split);
 
         cursor += 2;
-        while (cursor < input.length && /\s/u.test(input[cursor] ?? "")) {
+        while (cursor < input.length && /\s/u.test(trimText.charAt(cursor))) {
           cursor += 1;
         }
         let rowGap = 0;
-        if (input[cursor] === "[") {
-          const block = readBalancedBlock(input, cursor, "[", "]");
+        if (structure.charAt(cursor) === "[") {
+          const block = readBalancedBlock(structure, cursor, "[", "]");
           if (block) {
             rowGap = parseMatrixSpacing(block.content).gap;
             cursor = block.nextIndex;
@@ -1195,7 +1247,7 @@ function parseMatrixRows(input: string, cellSeparator: string, baseOffset: numbe
         continue;
       }
 
-      cursor += input[cursor + 1] != null ? 2 : 1;
+      cursor += cursor + 1 < structure.length ? 2 : 1;
       continue;
     }
 
@@ -1216,10 +1268,11 @@ function parseMatrixRows(input: string, cellSeparator: string, baseOffset: numbe
     cursor += 1;
   }
 
-  rows.push(splitMatrixRowCells(input.slice(start), cellSeparator, baseOffset + start));
-  while (rows.length > 1 && rows[rows.length - 1]?.cells.every((cell) => cell.raw.trim().length === 0)) {
-    rows.pop();
-    rowGapOverrides.pop();
+  const tail = splitMatrixRowCells(input.slice(start), cellSeparator, baseOffset + start, structure.slice(start), trimText.slice(start));
+  // A final row separator leaves an uncommitted whitespace tail. Rows already
+  // terminated by a separator remain real rows even when every cell is empty.
+  if (rows.length === 0 || tail.cells.length > 1 || tail.cells.some(cell => cell.trimText.trim().length > 0)) {
+    rows.push(tail);
   }
 
   return { rows, rowGapOverrides };
@@ -1240,7 +1293,9 @@ export function parseMatrixRowsForEdit(input: string, cellSeparator: string, bas
 function splitMatrixRowCells(
   rowRaw: string,
   cellSeparator: string,
-  rowOffset: number
+  rowOffset: number,
+  structure = rowRaw,
+  trimText = rowRaw
 ): { cells: MatrixParsedCell[]; columnGapOverrides: number[] } {
   const cells: MatrixParsedCell[] = [];
   const columnGapOverrides: number[] = [];
@@ -1252,22 +1307,24 @@ function splitMatrixRowCells(
 
   while (cursor < rowRaw.length) {
     const separatorLength =
-      braceDepth === 0 && bracketDepth === 0 && parenDepth === 0 ? matchMatrixCellSeparator(rowRaw, cursor, cellSeparator) : 0;
+      braceDepth === 0 && bracketDepth === 0 && parenDepth === 0 ? matchMatrixCellSeparator(structure, cursor, cellSeparator) : 0;
     if (separatorLength > 0) {
       cells.push({
         raw: rowRaw.slice(start, cursor),
+        structure: structure.slice(start, cursor),
+        trimText: trimText.slice(start, cursor),
         span: {
           from: rowOffset + start,
           to: rowOffset + cursor
         }
       });
       cursor += separatorLength;
-      while (cursor < rowRaw.length && /\s/u.test(rowRaw[cursor] ?? "")) {
+      while (cursor < rowRaw.length && /\s/u.test(trimText.charAt(cursor))) {
         cursor += 1;
       }
       let columnGap = 0;
-      if (rowRaw[cursor] === "[") {
-        const block = readBalancedBlock(rowRaw, cursor, "[", "]");
+      if (structure.charAt(cursor) === "[") {
+        const block = readBalancedBlock(structure, cursor, "[", "]");
         if (block) {
           columnGap = parseMatrixSpacing(block.content).gap;
           cursor = block.nextIndex;
@@ -1278,9 +1335,9 @@ function splitMatrixRowCells(
       continue;
     }
 
-    const char = rowRaw[cursor];
+    const char = structure.charAt(cursor);
     if (char === "\\") {
-      cursor += rowRaw[cursor + 1] != null ? 2 : 1;
+      cursor += cursor + 1 < structure.length ? 2 : 1;
       continue;
     }
 
@@ -1302,6 +1359,8 @@ function splitMatrixRowCells(
 
   cells.push({
     raw: rowRaw.slice(start),
+    structure: structure.slice(start),
+    trimText: trimText.slice(start),
     span: {
       from: rowOffset + start,
       to: rowOffset + rowRaw.length
@@ -1311,8 +1370,10 @@ function splitMatrixRowCells(
 }
 
 function parseMatrixCell(rawCell: MatrixParsedCell, mode: MatrixMode): MatrixCell | null {
-  const outer = trimOuterWhitespaceWorldBounds(rawCell.raw, 0, rawCell.raw.length);
+  const outer = trimOuterWhitespaceWorldBounds(rawCell.trimText, 0, rawCell.raw.length);
   let working = rawCell.raw.slice(outer.from, outer.to);
+  let structure = rawCell.structure.slice(outer.from, outer.to);
+  let trimText = rawCell.trimText.slice(outer.from, outer.to);
   let workingOffset = rawCell.span.from + outer.from;
   if (working.length === 0 && !mode.includeEmptyCells) {
     return null;
@@ -1320,8 +1381,8 @@ function parseMatrixCell(rawCell: MatrixParsedCell, mode: MatrixMode): MatrixCel
 
   const prefixOptions: OptionListAst[] = [];
   let prefixName: string | undefined;
-  while (working.startsWith("|")) {
-    const closing = findMatrixPipeClosing(working);
+  while (structure.startsWith("|")) {
+    const closing = findMatrixPipeClosing(structure);
     if (closing <= 0) {
       break;
     }
@@ -1336,34 +1397,37 @@ function parseMatrixCell(rawCell: MatrixParsedCell, mode: MatrixMode): MatrixCel
     }
     workingOffset += closing + 1;
     const nextWorking = working.slice(closing + 1);
-    const trimmedLeading = trimLeadingWhitespace(nextWorking);
+    const trimmedLeading = trimLeadingWhitespace(trimText.slice(closing + 1));
     workingOffset += trimmedLeading.consumed;
-    working = trimmedLeading.text;
+    working = nextWorking.slice(trimmedLeading.consumed);
+    structure = structure.slice(closing + 1 + trimmedLeading.consumed);
+    trimText = trimText.slice(closing + 1 + trimmedLeading.consumed);
   }
 
-  const explicitNode = parseExplicitMatrixNode(working, workingOffset);
+  const explicitNode = parseExplicitMatrixNode(working, workingOffset, structure, trimText);
   if (explicitNode) {
     const options = mergeOptionLists([mergeOptionLists(prefixOptions), explicitNode.options]);
     const explicitAliases = explicitNode.aliases ?? [];
     const optionAliases = extractNodeAliasesFromOptions(options);
     const aliases = dedupeNames([...explicitAliases, ...optionAliases]);
     const name = explicitNode.name ?? prefixName ?? extractNodeNameFromOptions(options);
+    const optionalAliases6 = aliases.length > 0 ? aliases : undefined;
     return {
       raw: working,
       text: explicitNode.text,
       textSpan: explicitNode.textSpan,
-      name,
-      aliases: aliases.length > 0 ? aliases : undefined,
-      options
+      ...(name === undefined ? {} : { name: name }),
+      ...(optionalAliases6 === undefined ? {} : { aliases: optionalAliases6 }),
+      ...(options === undefined ? {} : { options: options })
     };
   }
 
-  let textEnd = trimRightWhitespaceBoundary(working, working.length);
-  if (textEnd > 0 && working[textEnd - 1] === ";") {
+  let textEnd = trimRightWhitespaceBoundary(trimText, working.length);
+  if (textEnd > 0 && structure.charAt(textEnd - 1) === ";") {
     textEnd -= 1;
-    textEnd = trimRightWhitespaceBoundary(working, textEnd);
+    textEnd = trimRightWhitespaceBoundary(trimText, textEnd);
   }
-  const textStart = trimLeftWhitespaceBoundary(working, 0, textEnd);
+  const textStart = trimLeftWhitespaceBoundary(trimText, 0, textEnd);
   const text = working.slice(textStart, textEnd);
   if (text.length === 0 && !mode.includeEmptyCells) {
     return null;
@@ -1375,6 +1439,7 @@ function parseMatrixCell(rawCell: MatrixParsedCell, mode: MatrixMode): MatrixCel
   const options = mergeOptionLists(prefixOptions);
   const optionAliases = extractNodeAliasesFromOptions(options);
   const name = prefixName ?? extractNodeNameFromOptions(options);
+  const optionalAliases7 = optionAliases.length > 0 ? optionAliases : undefined;
   return {
     raw: working,
     text,
@@ -1382,18 +1447,20 @@ function parseMatrixCell(rawCell: MatrixParsedCell, mode: MatrixMode): MatrixCel
       from: workingOffset + textStart,
       to: workingOffset + textEnd
     },
-    name,
-    aliases: optionAliases.length > 0 ? optionAliases : undefined,
-    options
+    ...(name === undefined ? {} : { name: name }),
+    ...(optionalAliases7 === undefined ? {} : { aliases: optionalAliases7 }),
+    ...(options === undefined ? {} : { options: options })
   };
 }
 
 function parseExplicitMatrixNode(
   raw: string,
-  baseOffset: number
+  baseOffset: number,
+  structure = raw,
+  trimText = raw
 ): { text: string; textSpan: Span; name?: string; aliases?: string[]; options?: OptionListAst } | null {
-  let cursor = skipWhitespace(raw, 0);
-  if (!raw.startsWith("\\node", cursor)) {
+  let cursor = skipWhitespace(trimText, 0);
+  if (!structure.startsWith("\\node", cursor)) {
     return null;
   }
 
@@ -1402,10 +1469,10 @@ function parseExplicitMatrixNode(
   let explicitName: string | undefined;
 
   while (cursor < raw.length) {
-    cursor = skipWhitespace(raw, cursor);
-    const char = raw[cursor];
+    cursor = skipWhitespace(trimText, cursor);
+    const char = raw.charAt(cursor);
     if (char === "[") {
-      const block = readBalancedBlock(raw, cursor, "[", "]");
+      const block = readBalancedBlock(structure, cursor, "[", "]");
       if (!block) {
         return null;
       }
@@ -1415,7 +1482,7 @@ function parseExplicitMatrixNode(
     }
 
     if (char === "(") {
-      const block = readBalancedBlock(raw, cursor, "(", ")");
+      const block = readBalancedBlock(structure, cursor, "(", ")");
       if (!block) {
         return null;
       }
@@ -1427,11 +1494,11 @@ function parseExplicitMatrixNode(
       continue;
     }
 
-    if (raw.slice(cursor, cursor + 2) === "at" && /[\s(]/u.test(raw[cursor + 2] ?? "")) {
+    if (raw.slice(cursor, cursor + 2) === "at" && /[\s(]/u.test(raw.charAt(cursor + 2))) {
       cursor += 2;
-      cursor = skipWhitespace(raw, cursor);
-      if (raw[cursor] === "(") {
-        const block = readBalancedBlock(raw, cursor, "(", ")");
+      cursor = skipWhitespace(trimText, cursor);
+      if (raw.charAt(cursor) === "(") {
+        const block = readBalancedBlock(structure, cursor, "(", ")");
         if (!block) {
           return null;
         }
@@ -1443,11 +1510,11 @@ function parseExplicitMatrixNode(
     break;
   }
 
-  cursor = skipWhitespace(raw, cursor);
-  if (raw[cursor] !== "{") {
+  cursor = skipWhitespace(trimText, cursor);
+  if (raw.charAt(cursor) !== "{") {
     return null;
   }
-  const textBlock = readBalancedBlock(raw, cursor, "{", "}");
+  const textBlock = readBalancedBlock(structure, cursor, "{", "}");
   if (!textBlock) {
     return null;
   }
@@ -1455,15 +1522,17 @@ function parseExplicitMatrixNode(
   const options = mergeOptionLists(optionLists);
   const optionName = extractNodeNameFromOptions(options);
   const aliases = extractNodeAliasesFromOptions(options);
+  const optionalName8 = explicitName ?? optionName;
+  const optionalAliases9 = aliases.length > 0 ? aliases : undefined;
   return {
-    text: textBlock.content,
+    text: raw.slice(cursor + 1, textBlock.nextIndex - 1),
     textSpan: {
       from: baseOffset + cursor + 1,
       to: baseOffset + textBlock.nextIndex - 1
     },
-    name: explicitName ?? optionName,
-    aliases: aliases.length > 0 ? aliases : undefined,
-    options
+    ...(optionalName8 === undefined ? {} : { name: optionalName8 }),
+    ...(optionalAliases9 === undefined ? {} : { aliases: optionalAliases9 }),
+    ...(options === undefined ? {} : { options: options })
   };
 }
 
@@ -1472,24 +1541,28 @@ function resolveMatrixCellNames(cell: MatrixCell, generatedNames: string[]): { n
   const explicitAliases = dedupeNames(cell.aliases ?? []);
   if (explicitName && explicitName.length > 0) {
     const aliases = dedupeNames([...explicitAliases, ...generatedNames]).filter((entry) => entry !== explicitName);
+    const optionalAliases10 = aliases.length > 0 ? aliases : undefined;
     return {
       name: explicitName,
-      aliases: aliases.length > 0 ? aliases : undefined
+      ...(optionalAliases10 === undefined ? {} : { aliases: optionalAliases10 })
     };
   }
 
   if (generatedNames.length > 0) {
     const name = generatedNames[0];
     const aliases = dedupeNames([...generatedNames.slice(1), ...explicitAliases]).filter((entry) => entry !== name);
+    const optionalAliases11 = aliases.length > 0 ? aliases : undefined;
     return {
-      name,
-      aliases: aliases.length > 0 ? aliases : undefined
+      ...(name === undefined ? {} : { name: name }),
+      ...(optionalAliases11 === undefined ? {} : { aliases: optionalAliases11 })
     };
   }
 
+  const optionalName12 = explicitName && explicitName.length > 0 ? explicitName : undefined;
+  const optionalAliases13 = explicitAliases.length > 0 ? explicitAliases : undefined;
   return {
-    name: explicitName && explicitName.length > 0 ? explicitName : undefined,
-    aliases: explicitAliases.length > 0 ? explicitAliases : undefined
+    ...(optionalName12 === undefined ? {} : { name: optionalName12 }),
+    ...(optionalAliases13 === undefined ? {} : { aliases: optionalAliases13 })
   };
 }
 
@@ -1632,17 +1705,17 @@ function computeAxisCenters(sizes: number[], gaps: number[], betweenOrigins: boo
 
   const centers = Array.from<number>({ length: sizes.length }).fill(0);
   if (!betweenOrigins) {
-    centers[0] = direction * (sizes[0] / 2);
+    centers[0] = direction * (requireArrayValue(sizes, 0) / 2);
   }
 
   for (let index = 1; index < sizes.length; index += 1) {
     if (betweenOrigins) {
-      centers[index] = centers[index - 1] + direction * (gaps[index - 1] ?? 0);
+      centers[index] = requireArrayValue(centers, index - 1) + direction * (gaps[index - 1] ?? 0);
       continue;
     }
     centers[index] =
-      centers[index - 1] +
-      direction * (sizes[index - 1] / 2 + (gaps[index - 1] ?? 0) + sizes[index] / 2);
+      requireArrayValue(centers, index - 1) +
+      direction * (requireArrayValue(sizes, index - 1) / 2 + (gaps[index - 1] ?? 0) + requireArrayValue(sizes, index) / 2);
   }
 
   return centers;
@@ -1657,8 +1730,8 @@ function computeWorldBoundsFromCenters(centers: number[], sizes: number[]): { mi
   let max = Number.NEGATIVE_INFINITY;
   for (let index = 0; index < centers.length; index += 1) {
     const half = (sizes[index] ?? 0) / 2;
-    min = Math.min(min, centers[index] - half);
-    max = Math.max(max, centers[index] + half);
+    min = Math.min(min, requireArrayValue(centers, index) - half);
+    max = Math.max(max, requireArrayValue(centers, index) + half);
   }
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
     return { min: 0, max: 1 };
@@ -1716,7 +1789,7 @@ function matchMatrixCellSeparator(input: string, cursor: number, separator: stri
   }
 
   if (separator === "&") {
-    if (input[cursor] === "&" && input[cursor - 1] !== "\\") {
+    if (input.charAt(cursor) === "&" && input.charAt(cursor - 1) !== "\\") {
       return 1;
     }
     return 0;
@@ -1727,42 +1800,40 @@ function matchMatrixCellSeparator(input: string, cursor: number, separator: stri
 
 function findMatrixPipeClosing(input: string): number {
   for (let index = 1; index < input.length; index += 1) {
-    if (input[index] === "|" && input[index - 1] !== "\\") {
+    if (input.charAt(index) === "|" && input.charAt(index - 1) !== "\\") {
       return index;
     }
   }
   return -1;
 }
 
-function resolveLeadingMatrixCellOptionSpan(rawCell: string, baseOffset: number): Span | undefined {
-  const trimmed = trimOuterWhitespaceWorldBounds(rawCell, 0, rawCell.length);
-  if (trimmed.from >= trimmed.to || rawCell[trimmed.from] !== "|") {
+function resolveLeadingMatrixCellOptionSpan(rawCell: string, baseOffset: number, structure = rawCell, trimText = rawCell): Span | undefined {
+  const trimmed = trimOuterWhitespaceWorldBounds(trimText, 0, rawCell.length);
+  if (trimmed.from >= trimmed.to || structure.charAt(trimmed.from) !== "|") {
     return undefined;
   }
 
-  const firstPipeClose = findMatrixPipeClosing(rawCell.slice(trimmed.from));
+  const firstPipeClose = findMatrixPipeClosing(structure.slice(trimmed.from));
   if (firstPipeClose <= 0) {
     return undefined;
   }
 
   const absoluteClose = trimmed.from + firstPipeClose;
   const payloadRaw = rawCell.slice(trimmed.from + 1, absoluteClose);
-  const payloadTrimStart = trimLeftWhitespaceBoundary(payloadRaw, 0, payloadRaw.length);
-  const payloadTrimEnd = trimRightWhitespaceBoundary(payloadRaw, payloadRaw.length, payloadTrimStart);
+  const payloadTrimText = trimText.slice(trimmed.from + 1, absoluteClose);
+  const payloadTrimStart = trimLeftWhitespaceBoundary(payloadTrimText, 0, payloadRaw.length);
+  const payloadTrimEnd = trimRightWhitespaceBoundary(payloadTrimText, payloadRaw.length, payloadTrimStart);
   const trimmedPayload = payloadRaw.slice(payloadTrimStart, payloadTrimEnd);
   if (!trimmedPayload.startsWith("[") || !trimmedPayload.endsWith("]")) {
     return undefined;
   }
 
-  const optionBlock = readBalancedBlock(trimmedPayload, 0, "[", "]");
+  const optionBlock = readBalancedBlock(structure.slice(trimmed.from + 1 + payloadTrimStart, trimmed.from + 1 + payloadTrimEnd), 0, "[", "]");
   if (optionBlock?.nextIndex !== trimmedPayload.length) {
     return undefined;
   }
 
-  const openBracketOffset = rawCell.indexOf("[", trimmed.from + 1);
-  if (openBracketOffset < 0 || openBracketOffset > absoluteClose) {
-    return undefined;
-  }
+  const openBracketOffset = trimmed.from + 1 + payloadTrimStart;
 
   return {
     from: baseOffset + openBracketOffset,
@@ -1781,7 +1852,7 @@ function trimOuterWhitespaceWorldBounds(input: string, from: number, to: number)
 
 function trimLeadingWhitespace(input: string): { text: string; consumed: number } {
   let consumed = 0;
-  while (consumed < input.length && /\s/u.test(input[consumed] ?? "")) {
+  while (consumed < input.length && /\s/u.test(input.charAt(consumed))) {
     consumed += 1;
   }
   return {
@@ -1790,9 +1861,13 @@ function trimLeadingWhitespace(input: string): { text: string; consumed: number 
   };
 }
 
+function containsIncludeGraphicsCommand(text: string): boolean {
+  return analyzeSimpleTexResources(text).graphics.length > 0;
+}
+
 function trimLeftWhitespaceBoundary(input: string, from: number, to: number): number {
   let cursor = from;
-  while (cursor < to && /\s/u.test(input[cursor] ?? "")) {
+  while (cursor < to && /\s/u.test(input.charAt(cursor))) {
     cursor += 1;
   }
   return cursor;
@@ -1800,7 +1875,7 @@ function trimLeftWhitespaceBoundary(input: string, from: number, to: number): nu
 
 function trimRightWhitespaceBoundary(input: string, to: number, min = 0): number {
   let cursor = to;
-  while (cursor > min && /\s/u.test(input[cursor - 1] ?? "")) {
+  while (cursor > min && /\s/u.test(input.charAt(cursor - 1))) {
     cursor -= 1;
   }
   return cursor;
@@ -1808,7 +1883,7 @@ function trimRightWhitespaceBoundary(input: string, to: number, min = 0): number
 
 function skipWhitespace(input: string, start: number): number {
   let cursor = start;
-  while (cursor < input.length && /\s/u.test(input[cursor] ?? "")) {
+  while (cursor < input.length && /\s/u.test(input.charAt(cursor))) {
     cursor += 1;
   }
   return cursor;

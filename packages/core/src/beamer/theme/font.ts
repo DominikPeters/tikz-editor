@@ -1,0 +1,224 @@
+import {
+  computerModernTexMetricProvider,
+  luaLatexAmsMathFontProfile,
+  luaLatexDefaultTextFontProfile,
+  texLength,
+  type SimpleTexFontState,
+  type TexMathFontProfile,
+  type TexTextFontProfile,
+} from "../../text/tex/index.js";
+import type { BeamerThemeFont } from "./types.js";
+import { TexWeightedLruCache } from "../../text/tex/cache.js";
+import type { DefaultComputerModernTextFont } from "../../text/tex/fonts/computer-modern.js";
+
+const mathProfiles = new TexWeightedLruCache<string, TexMathFontProfile>(64, 64 * 4096);
+
+/**
+ * Adapt a resolved Beamer font role to the generic LuaLaTeX text frontend.
+ *
+ * In Beamer, `normal` family means the role's inherited family (normally
+ * sans), whereas the generic text profile's normal family is Roman.
+ */
+export function createBeamerTexTextFontProfile(
+  role: BeamerThemeFont
+): TexTextFontProfile {
+  // The resolver closes over an owned snapshot, not the mutable theme role.
+  role = { ...role };
+  const normalize = (state: SimpleTexFontState): SimpleTexFontState => {
+    if (state.family !== "normal") {
+      return state;
+    }
+    return {
+      ...state,
+      family:
+        role.family === "serif"
+          ? "roman"
+          : role.family === "monospace"
+            ? "typewriter"
+            : "sans",
+      series:
+        state.series === "medium" && role.series === "bold"
+          ? "bold"
+          : state.series,
+      shape:
+        state.shape === "upright" && role.shape !== "upright"
+          ? role.shape
+          : state.shape,
+    };
+  };
+  // TU/lmr optical ranges from tulmr.fd. The generic profile retains its
+  // historical compact selection; Beamer roles include tiny and Large text.
+  const romanFontId = (state: SimpleTexFontState, atPt: number): DefaultComputerModernTextFont | null => {
+    if (state.family !== "roman") return null;
+    const size = atPt < 5.5 ? 5 : atPt < 6.5 ? 6 : atPt < 7.5 ? 7 : atPt < 8.5 ? 8 : atPt < 9.5 ? 9 : atPt < 11 ? 10 : atPt < 15 ? 12 : 17;
+    if (state.series === "bold") return state.shape === "upright" ? `lmroman${size === 17 ? 12 : size}-bold` : null;
+    if (state.shape === "upright") return `lmroman${size}-regular`;
+    if (state.shape === "italic") return `lmroman${atPt < 7.5 ? 7 : atPt < 8.5 ? 8 : atPt < 9.5 ? 9 : atPt < 11 ? 10 : 12}-italic`;
+    if (state.shape === "slanted") return `lmromanslant${atPt < 8.5 ? 8 : atPt < 9.5 ? 9 : atPt < 11 ? 10 : atPt < 15 ? 12 : 17}-regular`;
+    return null;
+  };
+  return {
+    ...luaLatexDefaultTextFontProfile,
+    defaultFontState: { ...luaLatexDefaultTextFontProfile.defaultFontState, emphasisStyle: "beamer" },
+    id: `lualatex-beamer-${role.typeface ?? "lm"}-${role.family}-${role.series}-${role.shape}`,
+    label: `LuaLaTeX Beamer ${role.family}`,
+    resolveTextFontId(state, atPt) {
+      const normalized = normalize(state);
+      const roman = romanFontId(normalized, state.sizePt ?? atPt ?? role.sizePt);
+      if (roman) return roman;
+      if (role.typeface === "fira" && normalized.family === "sans") {
+        const italic = normalized.shape === "italic" || normalized.shape === "slanted";
+        return `firasans-${normalized.series === "bold" ? italic ? "italic" : "regular" : italic ? "lightitalic" : "light"}`;
+      }
+      return luaLatexDefaultTextFontProfile.resolveTextFontId(
+        normalize(state),
+        atPt
+      );
+    },
+    resolveTextFont(state, atPt, metricProvider) {
+      const normalized = normalize(state);
+      atPt = state.sizePt ?? atPt;
+      const roman = romanFontId(normalized, atPt);
+      if (roman) return {
+        ...(metricProvider ?? computerModernTexMetricProvider).resolveFont({ fontId: roman, atPt }),
+        ...(state.color ? { color: state.color } : {}),
+      };
+      if (role.typeface === "fira" && normalized.family === "sans") {
+        const italic = normalized.shape === "italic" || normalized.shape === "slanted";
+        const face = normalized.series === "bold" ? italic ? "italic" : "regular" : italic ? "lightitalic" : "light";
+        return {
+          ...(metricProvider ?? computerModernTexMetricProvider).resolveFont({ fontId: `firasans-${face}`, atPt }),
+          ...(state.color ? { color: state.color } : {}),
+        };
+      }
+      return luaLatexDefaultTextFontProfile.resolveTextFont(
+        normalize(state),
+        atPt,
+        metricProvider
+      );
+    },
+  };
+}
+
+/**
+ * Reproduce Beamer's default sans-math substitutions.
+ *
+ * `beamerbasefont.sty` replaces the operators symbol font with `cmss`, then
+ * declares literal digits and Latin letters through the active sans text
+ * family. It deliberately leaves Greek letters, symbols, large operators,
+ * and AMS symbols in their ordinary Computer Modern math families.
+ */
+export function createBeamerTexMathFontProfile(
+  role: BeamerThemeFont
+): TexMathFontProfile {
+  const key = Number.isFinite(role.lineHeightPt) && !Object.is(role.lineHeightPt, -0)
+    ? JSON.stringify([role.typeface, role.family, role.series, role.shape, role.lineHeightPt, role.suppressMathReplacements, role.mathFamily])
+    : null;
+  if (key !== null) {
+    const cached = mathProfiles.get(key);
+    if (cached) return cached;
+  }
+  role = { ...role };
+  const base = luaLatexAmsMathFontProfile;
+  const textFontProfile = createBeamerTexTextFontProfile(role);
+  const mathLettersProfile = role.mathFamily ? createBeamerTexTextFontProfile({ ...role, family: role.mathFamily }) : textFontProfile;
+  const profile: TexMathFontProfile = {
+    ...base,
+    id: `${base.id}-beamer-${role.family}-${role.series}-${role.shape}${role.suppressMathReplacements ? "-professional" : ""}-${role.mathFamily ?? "default"}`,
+    label: `${base.label} with Beamer font substitutions`,
+    textFontProfile,
+    layoutParameters: {
+      arrayStrutHeight: texLength(role.lineHeightPt * 0.7),
+      arrayStrutDepth: texLength(role.lineHeightPt * 0.3),
+      alignedBaselineSkip: texLength(role.lineHeightPt),
+      alignedLineSkip: base.layoutParameters.alignedLineSkip,
+      alignedLineSkipLimit: base.layoutParameters.alignedLineSkipLimit,
+      alignedJot: base.layoutParameters.alignedJot,
+    },
+    resolveMathFont(request) {
+      if (role.suppressMathReplacements) return base.resolveMathFont(request);
+      const baseAtPt = texLength(request.baseAtPt ?? 10);
+      const atPt = base.resolveMathStyleAtPt(request.style, baseAtPt);
+      if (/^[A-Za-z]$/.test(request.symbolText ?? "")) {
+        return mathLettersProfile.resolveTextFont(
+          {
+            ...textFontProfile.defaultFontState,
+            family: "normal",
+            series: "medium",
+            shape: "italic",
+          },
+          atPt,
+          computerModernTexMetricProvider
+        );
+      }
+      if (/^[0-9]$/.test(request.symbolText ?? "")) {
+        return mathLettersProfile.resolveTextFont(
+          {
+            ...textFontProfile.defaultFontState,
+            family: "normal",
+            series: "medium",
+            shape: "upright",
+          },
+          atPt,
+          computerModernTexMetricProvider
+        );
+      }
+      if (request.family === "operators") {
+        if (role.mathFamily === "serif") return base.resolveMathFont(request);
+        return computerModernTexMetricProvider.resolveFont({
+          // beamerbasefont.sty installs these NFSS optical sizes for cmss.
+          fontId: atPt <= 8 ? "cmss8" : atPt <= 9 ? "cmss9" :
+            atPt < 12 ? "cmss10" : atPt < 17.28 ? "cmss12" : "cmss17",
+          atPt,
+        });
+      }
+      return base.resolveMathFont(request);
+    },
+    resolveBoldMathFont(request) {
+      if (role.suppressMathReplacements || role.mathFamily === "serif") return base.resolveBoldMathFont?.(request) ?? null;
+      // Bold pureletters/numbers are selected below through the alphabet
+      // resolver. Greek and symbol families retain their genuine CM faces.
+      if (request.family !== "operators") return null;
+      return computerModernTexMetricProvider.resolveFont({
+        fontId: "cmssbx10",
+        atPt: base.resolveMathStyleAtPt(request.style, texLength(request.baseAtPt ?? 10)),
+      });
+    },
+    resolveMathAlphabetFont(request) {
+      if (role.suppressMathReplacements) return base.resolveMathAlphabetFont?.(request) ?? null;
+      if (request.alphabet === "boldmathrm" && /^[A-Za-z0-9]$/.test(request.text)) {
+        // Beamer declares the bold Roman math alphabet with bfdefault=b;
+        // TU Latin Modern therefore uses the demi face, rather than bx text.
+        return computerModernTexMetricProvider.resolveFont({
+          fontId: "lmromandemi10-regular",
+          atPt: base.resolveMathStyleAtPt(request.style, request.baseAtPt),
+        });
+      }
+      if (
+        (request.alphabet !== "mathbf" && request.alphabet !== "mathrm" && request.alphabet !== "boldsymbol" && request.alphabet !== "bm") ||
+        !/^[A-Za-z0-9]$/.test(request.text)
+      ) {
+        return base.resolveMathAlphabetFont?.(request) ?? null;
+      }
+      return mathLettersProfile.resolveTextFont(
+        {
+          ...textFontProfile.defaultFontState,
+          // beamerbasefont.sty resets \mathrm to the current Roman text
+          // family; its \mathbf declaration uses the active math family.
+          family: request.alphabet === "mathrm" ? "roman" : "normal",
+          series: request.alphabet === "mathrm" ? "medium" : "bold",
+          shape: (request.alphabet === "boldsymbol" || request.alphabet === "bm") && /^[A-Za-z]$/.test(request.text) ? "italic" : "upright",
+        },
+        base.resolveMathStyleAtPt(request.style, request.baseAtPt),
+        computerModernTexMetricProvider
+      );
+    },
+  };
+  if (key !== null) {
+    Object.freeze(textFontProfile);
+    Object.freeze(profile.layoutParameters);
+    Object.freeze(profile);
+    mathProfiles.set(key, profile, 4096);
+  }
+  return profile;
+}

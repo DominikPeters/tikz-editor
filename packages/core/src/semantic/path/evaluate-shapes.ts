@@ -126,7 +126,7 @@ export function emitCircleOrEllipse(params: {
       return nextPath;
     }
     markFeature("svg_circle", "supported");
-    geometryElements.push(makeCircleElement(statementId, center, geometry.radius, style, styleChain, span));
+    geometryElements.push(makeCircleElement(statementId, itemId, center, geometry.radius, style, styleChain, span));
     return activePath;
   }
 
@@ -138,6 +138,6 @@ export function emitCircleOrEllipse(params: {
     markFeature("svg_path", "supported");
     return nextPath;
   }
-  geometryElements.push(makeEllipseElement(statementId, center, geometry.rx, geometry.ry, style, styleChain, span, geometry.rotation));
+  geometryElements.push(makeEllipseElement(statementId, itemId, center, geometry.rx, geometry.ry, style, styleChain, span, geometry.rotation));
   return activePath;
 }

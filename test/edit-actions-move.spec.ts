@@ -3,9 +3,10 @@ import type { WorldPoint } from "../packages/core/src/coords/points.js";
 import { frameToWorldTransform } from "../packages/core/src/coords/transforms.js";
 import { scaleMatrix } from "../packages/core/src/semantic/transform.js";
 import { applyEditAction, preflightPositionNodeRelativeToAction } from "../packages/core/src/edit/actions.js";
+import { createEditAnalysisSession } from "../packages/core/src/edit/analysis.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
-import { createMathJaxNodeTextEngine } from "../packages/core/src/text/mathjax-engine.js";
+import { createTexNodeTextEngine } from "../packages/core/src/text/tex-node-text-engine.js";
 import { wp } from "./coords-helpers.js";
 import { cm, expectPatchesReconstructSource, makeHandle } from "./edit-actions-helpers.js";
 
@@ -429,6 +430,28 @@ describe("applyEditAction – moveElement", () => {
     expect(result.newSource).not.toContain("at={");
   });
 
+  it("preserves matrix option comments while moving option-based placement inline", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \matrix[matrix of nodes, % keep matrix layout
+    row sep=2mm, at={(0,0)}] {
+    A & B \\
+  };
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "moveElement",
+      elementId: "path:0",
+      delta: wp(cm(1), cm(2))
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep matrix layout");
+    expect(result.newSource).toContain("    row sep=2mm");
+    expect(result.newSource).toContain(" at (1,2) {");
+    expect(result.newSource).not.toContain("at={(0,0)}");
+  });
+
   it("moves matrix statements without placement by inserting inline at (...)", () => {
     const source = String.raw`\begin{tikzpicture}
   \matrix[matrix of nodes] {
@@ -446,6 +469,32 @@ describe("applyEditAction – moveElement", () => {
     if (result.kind !== "success") return;
     expect(result.newSource).toContain("\\matrix[matrix of nodes] at (1,2) {");
     expect(result.newSource).not.toContain("at=(");
+  });
+
+  it("rejects a matrix target whose cached body opening is missing", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \matrix[matrix of nodes] {
+    A & B \\
+  };
+\end{tikzpicture}`;
+    const analysisView = createEditAnalysisSession().ensure(source);
+    const target = analysisView.resolvePropertyTarget("path:0");
+    expect(target.kind).toBe("found");
+    if (target.kind !== "found") return;
+    delete target.target.matrixBodyOpenOffset;
+
+    const result = applyEditAction(source, [], {
+      kind: "moveElement",
+      elementId: "path:0",
+      delta: wp(cm(1), cm(2))
+    }, {
+      parseOptions: { analysisView }
+    });
+
+    expect(result).toEqual({
+      kind: "unsupported",
+      reason: "Could not resolve matrix body opening for path:0"
+    });
   });
 
   it("moves matrix statements with ampersand replacement using inline placement syntax", () => {
@@ -653,7 +702,7 @@ describe("applyEditAction – moveElement", () => {
     expectPatchesReconstructSource(source, result);
   });
 
-  it("falls back to absolute scope shifts for nonnumeric scale prefixes", () => {
+  it("preserves an ignored nonnumeric scale while moving in the evaluated frame", () => {
     const scaleSource = String.raw`\begin{tikzpicture}
   \begin{scope}[scale=\s, shift={(2pt,3pt)}]
     \draw (0,0) -- (1,0);
@@ -668,9 +717,7 @@ describe("applyEditAction – moveElement", () => {
     expect(scale.kind).toBe("success");
     if (scale.kind !== "success") return;
     expect(scale.newSource).toContain("scale=\\s");
-    expect(scale.newSource).not.toContain("shift={");
-    expect(scale.newSource).toContain("xshift=2pt");
-    expect(scale.newSource).toContain("yshift=-3pt");
+    expect(scale.newSource).toContain("shift=(6pt,-3pt)");
     expectPatchesReconstructSource(scaleSource, scale);
 
     const xscaleSource = String.raw`\begin{tikzpicture}
@@ -687,9 +734,7 @@ describe("applyEditAction – moveElement", () => {
     expect(xscale.kind).toBe("success");
     if (xscale.kind !== "success") return;
     expect(xscale.newSource).toContain("xscale=\\sx");
-    expect(xscale.newSource).not.toContain("shift={");
-    expect(xscale.newSource).toContain("xshift=2pt");
-    expect(xscale.newSource).toContain("yshift=-3pt");
+    expect(xscale.newSource).toContain("shift=(6pt,-3pt)");
     expectPatchesReconstructSource(xscaleSource, xscale);
 
     const yscaleSource = String.raw`\begin{tikzpicture}
@@ -833,7 +878,7 @@ describe("applyEditAction – moveElement", () => {
     }
   });
 
-  it("falls back to xshift and yshift when a scope shift prefix is not invertible", () => {
+  it("rejects world movement when a scope shift prefix is not invertible", () => {
     const source = String.raw`\begin{tikzpicture}
   \begin{scope}[scale=0, shift=(2pt,3pt)]
     \draw (0,0) -- (1,0);
@@ -846,16 +891,11 @@ describe("applyEditAction – moveElement", () => {
       delta: wp(4, 6)
     });
 
-    expect(result.kind).toBe("success");
-    if (result.kind !== "success") return;
-    expect(result.newSource).toContain("scale=0");
-    expect(result.newSource).not.toContain("shift=(");
-    expect(result.newSource).toContain("xshift=2pt");
-    expect(result.newSource).toContain("yshift=9pt");
-    expectPatchesReconstructSource(source, result);
+    expect(result.kind).toBe("unsupported");
+    if (result.kind === "unsupported") expect(result.reason).toContain("authored coordinate frame");
   });
 
-  it("falls back to xshift and yshift when scope transform prefixes are not invertible", () => {
+  it("rejects world movement when scope transform prefixes are not invertible", () => {
     const source = String.raw`\begin{tikzpicture}
   \begin{scope}[scale=0, xshift=2pt]
     \draw (0,0) -- (1,0);
@@ -868,11 +908,8 @@ describe("applyEditAction – moveElement", () => {
       delta: wp(4, 6)
     });
 
-    expect(result.kind).toBe("success");
-    if (result.kind !== "success") return;
-    expect(result.newSource).toContain("xshift=6pt");
-    expect(result.newSource).toContain("yshift=6pt");
-    expectPatchesReconstructSource(source, result);
+    expect(result.kind).toBe("unsupported");
+    if (result.kind === "unsupported") expect(result.reason).toContain("authored coordinate frame");
   });
 
   it("moves scopes without options by inserting xshift and yshift", () => {
@@ -1029,6 +1066,23 @@ describe("applyEditAction – moveElement", () => {
     if (noOp.kind === "unsupported") {
       expect(noOp.reason).toContain("already matches");
     }
+  });
+
+  it("rejects child-operation paths that have no tree root node", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \path (0,0) child { node {Leaf} };
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "moveElement",
+      elementId: "path:0",
+      delta: wp(cm(1), cm(1))
+    });
+
+    expect(result).toEqual({
+      kind: "unsupported",
+      reason: "Tree root path:0 has no root node to move"
+    });
   });
 
   it("prefers rewriting inline at when both inline and option placement are present", () => {
@@ -1308,6 +1362,73 @@ describe("applyEditAction – node relative positioning conversions", () => {
     expectPatchesReconstructSource(source, result);
   });
 
+  it("preserves comments and multiline layout when converting to absolute positioning", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node (A) at (0,0) {A};
+\node[draw=red, % keep node styling
+    below=of A, thick] (B) {B};
+\end{tikzpicture}`;
+    const [, nodeId] = pathStatementIds(source);
+
+    const result = applyEditAction(source, [], {
+      kind: "convertNodePositionToAbsolute",
+      nodeId: nodeId
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep node styling");
+    expect(result.newSource).toContain("draw=red, % keep node styling\n    thick]");
+    expect(result.newSource).toContain(" at (");
+    expect(result.newSource).not.toContain("below=of A");
+    expectPatchesReconstructSource(source, result);
+  });
+
+  it("preserves comments when converting to relative positioning", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw, % styled
+  thick] (B) at (2,0) {B};
+\end{tikzpicture}`;
+    const [targetId, nodeId] = pathStatementIds(source);
+
+    const result = applyEditAction(source, [], {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId,
+      targetNodeName: "A",
+      targetNodeSourceId: targetId
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% styled");
+    expect(result.newSource).toContain("of A");
+    expectPatchesReconstructSource(source, result);
+  });
+
+  it("keeps an explicit anchor after the inserted placement option", () => {
+    const source = String.raw`\begin{tikzpicture}
+\node[draw] (A) at (0,0) {A};
+\node[draw, anchor=west] (B) at (2,0) {B};
+\end{tikzpicture}`;
+    const [targetId, nodeId] = pathStatementIds(source);
+
+    const result = applyEditAction(source, [], {
+      kind: "positionNodeRelativeTo",
+      nodeId: nodeId,
+      targetNodeName: "A",
+      targetNodeSourceId: targetId
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    const placementIndex = result.newSource.indexOf("of A");
+    const anchorIndex = result.newSource.indexOf("anchor=west");
+    expect(placementIndex).toBeGreaterThan(-1);
+    expect(anchorIndex).toBeGreaterThan(placementIndex);
+    expectPatchesReconstructSource(source, result);
+  });
+
   it("round trips cardinal absolute positioning through relative positioning", () => {
     expectAbsoluteRelativeAbsoluteRoundTrip(String.raw`\begin{tikzpicture}
 \node[draw] (A) at (0,0) {A};
@@ -1330,7 +1451,7 @@ describe("applyEditAction – node relative positioning conversions", () => {
   });
 
   it("round trips text nodes with different inner sep through diagonal relative positioning", async () => {
-    const textEngine = await createMathJaxNodeTextEngine();
+    const textEngine = await createTexNodeTextEngine();
     expectAbsoluteRelativeAbsoluteRoundTrip(String.raw`\begin{tikzpicture}
   \node[draw, inner sep=4pt] (a) at (-0.2,2.66) {node a};
   \node[draw, inner sep=1pt] (b) at (1.35,1.8) {node b};

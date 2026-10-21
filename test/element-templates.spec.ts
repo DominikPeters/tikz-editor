@@ -8,6 +8,7 @@ import {
   reverseComplexPathSegments
 } from "../packages/core/src/edit/element-templates.js";
 import { PT_PER_CM } from "../packages/core/src/edit/format.js";
+import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 import { wp } from "./coords-helpers.js";
 
 const cm = (value: number) => value * PT_PER_CM;
@@ -58,6 +59,21 @@ describe("element templates", () => {
         wp(cm(0), cm(0))
       )
     ).toBe("\\node[draw=red, fill=blue, shape=rectangle, minimum width=2.2cm, minimum height=1.4cm] at (0,0) {};");
+  });
+
+  it("creates an empty double arrow with horizontal proportions and separated heads", () => {
+    const snippet = generateElementSource({ kind: "node", shape: "double arrow", text: "" }, wp(0, 0));
+    const rendered = renderTikzToSvg(String.raw`\begin{tikzpicture}${snippet}\end{tikzpicture}`);
+    const path = rendered.semantic.scene.elements.find(element => element.kind === "Path");
+    if (!path || path.kind !== "Path") throw new Error("Expected double-arrow outline");
+    const points = path.commands.flatMap(command => command.kind === "M" || command.kind === "L" ? [command.to] : []);
+    const width = Math.max(...points.map(point => point.x)) - Math.min(...points.map(point => point.x));
+    const height = Math.max(...points.map(point => point.y)) - Math.min(...points.map(point => point.y));
+
+    expect(width).toBeCloseTo(cm(2.2), 3);
+    expect(height).toBeCloseTo(cm(1.4), 3);
+    expect(points[1].x).toBeGreaterThan(0);
+    expect(points[4].x).toBeLessThan(0);
   });
 
   it("generates a shaped node snippet with explicit dragged minimum dimensions", () => {

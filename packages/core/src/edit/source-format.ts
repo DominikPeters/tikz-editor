@@ -12,8 +12,8 @@ const MIN_MAX_LINE_LENGTH = 40;
 const MAX_MAX_LINE_LENGTH = 240;
 
 const PATH_COMMAND_START_PATTERN = /^\\(?:path|draw|filldraw|fill|shadedraw|shade|clip|pattern|useasboundingbox|graph|node|coordinate|matrix)\b/;
-const BEGIN_ENV_PATTERN = /\\begin\{(?:tikzpicture|scope)\}/g;
-const END_ENV_PATTERN = /\\end\{(?:tikzpicture|scope)\}/g;
+const BEGIN_ENV_PATTERN = /\\begin\{(?:tikzpicture|tikzlayer|scope)\}/g;
+const END_ENV_PATTERN = /\\end\{(?:tikzpicture|tikzlayer|scope)\}/g;
 
 export function formatTikzSource(source: string, options: FormatTikzSourceOptions = {}): string {
   const indentUnit = options.indentUnit ?? DEFAULT_INDENT_UNIT;
@@ -195,7 +195,8 @@ function splitTopLevelByComma(input: string): string[] {
   let bracketDepth = 0;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
+
     if (char === "\\") {
       index += 1;
       continue;
@@ -253,7 +254,8 @@ function findTopLevelEquals(input: string): number {
   let bracketDepth = 0;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
+
     if (char === "\\") {
       index += 1;
       continue;
@@ -391,7 +393,7 @@ function resolveLeadingCloserInfo(trimmedCode: string): {
   return {
     hasLeadingOptionClose: leadingClosers.includes("]"),
     hasLeadingBraceClose: leadingClosers.includes("}"),
-    hasLeadingEnvClose: /^\\end\{(?:tikzpicture|scope)\}/.test(afterLeadingClosers)
+    hasLeadingEnvClose: /^\\end\{(?:tikzpicture|tikzlayer|scope)\}/.test(afterLeadingClosers)
   };
 }
 

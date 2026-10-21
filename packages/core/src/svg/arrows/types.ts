@@ -13,6 +13,7 @@ export type ArrowLocalPathCommand =
   | { kind: "Z" };
 
 export type NormalizedArrowTip = ArrowTip & {
+  contextLineWidth: number;
   length: number;
   width: number;
   sep: number;
@@ -55,6 +56,7 @@ export type RenderedArrowTipPath = {
   strokeWidth: number;
   lineCap: "butt" | "round" | "square";
   lineJoin: "miter" | "round" | "bevel";
+  miterLimit: number;
 };
 
 export type RenderedArrowPath = {

@@ -1,4 +1,5 @@
 import { createSourceRenderOffsetMap } from "./text-offset-map";
+import { clampFinite as clamp } from "./geometry";
 
 export type LogicalLineRange = {
   start: number;
@@ -23,12 +24,12 @@ export type VisualTextAlign =
   | "none"
   | undefined;
 
-type VisualTextSyntax = "mathjax" | "plain";
+type VisualTextSyntax = "tex" | "plain";
 type MathMode = "none" | "dollar" | "paren";
 
-const PLAIN_TEXT_SERIF_FONT_STACK = "MJX-NCM, CMU Serif, Latin Modern Roman, Times New Roman, serif";
-const PLAIN_TEXT_SANS_FONT_STACK = "MJX-NCM-Sans, CMU Sans Serif, Latin Modern Sans, Helvetica, Arial, sans-serif";
-const PLAIN_TEXT_MONO_FONT_STACK = "MJX-NCM-Monospace, Latin Modern Mono, CMU Typewriter Text, Courier New, monospace";
+const PLAIN_TEXT_SERIF_FONT_STACK = "Latin Modern Roman, CMU Serif, Times New Roman, serif";
+const PLAIN_TEXT_SANS_FONT_STACK = "Latin Modern Sans, CMU Sans Serif, Helvetica, Arial, sans-serif";
+const PLAIN_TEXT_MONO_FONT_STACK = "Latin Modern Mono, CMU Typewriter Text, Courier New, monospace";
 
 const STRUCTURAL_MATH_COMMANDS = new Set([
   "left",
@@ -42,13 +43,6 @@ const STRUCTURAL_MATH_COMMANDS = new Set([
   "scriptstyle",
   "scriptscriptstyle"
 ]);
-
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) {
-    return min;
-  }
-  return Math.min(max, Math.max(min, value));
-}
 
 function isEscapedCharacter(text: string, index: number): boolean {
   let slashCount = 0;
@@ -166,7 +160,7 @@ export function applyTextMeasureFont(ctx: CanvasRenderingContext2D | null, style
 export function buildRenderLinePrefixWidths(
   lineText: string,
   measureTextWidth: (text: string) => number,
-  syntax: VisualTextSyntax = "mathjax"
+  syntax: VisualTextSyntax = "tex"
 ): number[] {
   const prefix = Array.from({ length: lineText.length + 1 }, () => 0);
   prefix[0] = 0;
@@ -178,7 +172,7 @@ export function buildRenderLinePrefixWidths(
   while (cursor < lineText.length) {
     const char = lineText[cursor] ?? "";
 
-    if (syntax === "mathjax" && char === "$" && !isEscapedCharacter(lineText, cursor)) {
+    if (syntax === "tex" && char === "$" && !isEscapedCharacter(lineText, cursor)) {
       if (mathMode === "dollar") {
         mathMode = "none";
         prefix[cursor + 1] = width;
@@ -195,14 +189,14 @@ export function buildRenderLinePrefixWidths(
 
     if (char === "\\" && !isEscapedCharacter(lineText, cursor)) {
       const nextChar = lineText[cursor + 1] ?? "";
-      if (syntax === "mathjax" && nextChar === "(") {
+      if (syntax === "tex" && nextChar === "(") {
         mathMode = "paren";
         prefix[cursor + 1] = width;
         prefix[cursor + 2] = width;
         cursor += 2;
         continue;
       }
-      if (syntax === "mathjax" && nextChar === ")") {
+      if (syntax === "tex" && nextChar === ")") {
         mathMode = "none";
         prefix[cursor + 1] = width;
         prefix[cursor + 2] = width;
@@ -226,7 +220,7 @@ export function buildRenderLinePrefixWidths(
         continue;
       }
 
-      if (syntax === "mathjax" && /[A-Za-z]/.test(nextChar)) {
+      if (/[A-Za-z]/.test(nextChar)) {
         const commandEnd = findControlWordEnd(lineText, cursor);
         const command = lineText.slice(cursor + 1, commandEnd);
         const commandWidth =
@@ -249,7 +243,7 @@ export function buildRenderLinePrefixWidths(
       continue;
     }
 
-    if (syntax === "mathjax" && mathMode !== "none" && (char === "{" || char === "}" || char === "^" || char === "_" || char === "&")) {
+    if (syntax === "tex" && mathMode !== "none" && (char === "{" || char === "}" || char === "^" || char === "_" || char === "&")) {
       prefix[cursor + 1] = width;
       cursor += 1;
       continue;
@@ -341,8 +335,7 @@ function resolveLineIndexForOffset(ranges: LogicalLineRange[], textLength: numbe
     return 0;
   }
   const pivot = textLength === 0 ? 0 : Math.min(Math.max(0, offset), textLength - 1);
-  for (let index = 0; index < ranges.length; index += 1) {
-    const range = ranges[index];
+  for (const [index, range] of ranges.entries()) {
     if (pivot >= range.start && pivot < range.end) {
       return index;
     }
@@ -364,7 +357,7 @@ export function createVisualTextLayout(
   measureTextWidth: (text: string) => number,
   options: { syntax?: VisualTextSyntax } = {}
 ) {
-  const syntax = options.syntax ?? "mathjax";
+  const syntax = options.syntax ?? "tex";
   const offsetMap = createSourceRenderOffsetMap(sourceText, renderText);
   const sourceRanges = collectLogicalLineRanges(sourceText);
   const renderRanges = collectLogicalLineRanges(renderText);

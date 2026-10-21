@@ -1,9 +1,12 @@
+import { requireArrayValue } from "../utils/collections.js";
+import { currentFrame } from "./context.js";
 import type { Span } from "../ast/types.js";
 import type { SemanticContext } from "./context.js";
 import type { EvaluatedCoordinate } from "./coords/evaluate.js";
 import type { EditHandle } from "./types.js";
 import { identityMatrix } from "./transform.js";
-import { worldTransform } from "../coords/transforms.js";
+import { frameTransform, worldTransform } from "../coords/transforms.js";
+import { coordinateTransform } from "./coords/axis-basis.js";
 
 export function createEditHandle(
   evaluated: EvaluatedCoordinate,
@@ -22,8 +25,8 @@ export function createEditHandle(
   const base = {
     // Keep IDs stable across coordinate text rewrites by avoiding source-span offsets.
     // This allows ongoing drags to continue after recompute snapshots.
-    id: `handle:${sourceId}:${kind}:${context.editHandles.length}`,
-    runtimeId: `handle:${sourceId}:${kind}:${context.editHandles.length}`,
+    id: nextEditHandleId(context, sourceId, kind),
+    runtimeId: nextEditHandleId(context, sourceId, kind),
     sourceRef: {
       sourceId,
       sourceSpan,
@@ -32,10 +35,24 @@ export function createEditHandle(
     kind,
     world: evaluated.world,
     sourceText,
+    axisBasis: currentFrame(context).axisBasis,
+    ...(evaluated.sourceUnits === undefined ? {} : { sourceUnits: evaluated.sourceUnits }),
     coordinateForm: evaluated.coordinateForm,
-    relativePrefix: evaluated.relativePrefix,
-    rewriteTargetHandleId: opts.rewriteTargetHandleId
+    ...(evaluated.relativePrefix === undefined ? {} : { relativePrefix: evaluated.relativePrefix }),
+    ...(opts.rewriteTargetHandleId === undefined ? {} : { rewriteTargetHandleId: opts.rewriteTargetHandleId })
   } as const;
+
+  if (evaluated.coordinateForm === "calc" && evaluated.frame && !evaluated.relativePrefix) {
+    return {
+      ...base,
+      coordinateForm: "calc",
+      transform: worldTransform(evaluated.frame.a, evaluated.frame.b, evaluated.frame.c, evaluated.frame.d, evaluated.frame.e, evaluated.frame.f),
+      handleType: "coordinate",
+      coordinateSpace: "world-only",
+      frame: evaluated.frame,
+      rewriteMode: "calc"
+    };
+  }
 
   if (evaluated.kind === "transformed") {
     const frame = evaluated.frame;
@@ -44,7 +61,7 @@ export function createEditHandle(
       return null;
     }
     if (rewriteMode === "delta") {
-      const relativeBase = context.currentPoint;
+      const relativeBase = evaluated.relativeBase ?? context.currentPoint;
       if (!relativeBase) {
         return null;
       }
@@ -71,20 +88,43 @@ export function createEditHandle(
     };
   }
 
+  const activeFrame = currentFrame(context);
+  const numericFrame = coordinateTransform(activeFrame.transform, activeFrame.axisBasis);
   return {
     ...base,
     transform: identityMatrix(),
     handleType: "coordinate",
     coordinateSpace: "world-only",
+    ...(evaluated.coordinateForm === "named" ? {
+      detachFrame: frameTransform(numericFrame.a, numericFrame.b, numericFrame.c, numericFrame.d, numericFrame.e, numericFrame.f)
+    } : {}),
     rewriteMode: "unsupported"
   };
 }
 
 function determineRewriteMode(evaluated: EvaluatedCoordinate): "direct" | "delta" | "unsupported" {
+  if (evaluated.origin === "turn") return "delta";
   if (evaluated.relativePrefix) return "delta";
   if (evaluated.kind === "transformed" && evaluated.coordinateForm === "explicit") return "direct";
   const form = evaluated.coordinateForm;
   if (form === "cartesian" || form === "polar" || form === "xyz") return "direct";
   // named, calc, explicit world-only (perpendicular/intersection), unknown
   return "unsupported";
+}
+
+// Counters follow the handle array, so restoring a compact checkpoint rebuilds
+// them from that prefix. Appending handles for another object cannot renumber us.
+const handleCounters = new WeakMap<SemanticContext, { handles: EditHandle[]; count: number; byOwner: Map<string, number> }>();
+export function nextEditHandleId(context: SemanticContext, sourceId: string, kind: string): string {
+  let state = handleCounters.get(context);
+  if (state?.handles !== context.editHandles || state.count > context.editHandles.length) {
+    state = { handles: context.editHandles, count: 0, byOwner: new Map() };
+    handleCounters.set(context, state);
+  }
+  for (; state.count < context.editHandles.length; state.count++) {
+    const handle = requireArrayValue(context.editHandles, state.count);
+    const key = `${handle.sourceRef.sourceId}:${handle.kind}`;
+    state.byOwner.set(key, (state.byOwner.get(key) ?? 0) + 1);
+  }
+  return `handle:${sourceId}:${kind}:${state.byOwner.get(`${sourceId}:${kind}`) ?? 0}`;
 }

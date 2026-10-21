@@ -1,10 +1,23 @@
 import { RiArrowDownSLine, RiAspectRatioLine, RiGridLine } from "@remixicon/react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useEditorStore } from "../store/store";
+import { launchPresentation } from "../presentation/launch";
+import { presentationService } from "../presentation/service";
 import type { CanvasDragKind, ToolMode } from "../store/types";
 import { getModifierKeyLabels, type ModifierKeyLabels } from "./key-labels";
 import { useFrameTimingStats } from "./useFrameTimingStats";
 import { RenderedTooltip } from "./RenderedTooltip";
+import {
+  dismissUiNotification,
+  getUiNotificationSnapshot,
+  subscribeUiNotifications
+} from "./ui-notifications";
 import css from "./StatusBar.module.css";
+import {
+  getCanvasTextContextSnapshot,
+  subscribeCanvasTextContext
+} from "./canvas-panel/canvas-text-context";
+import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
 
 const TEX_PT_PER_IN = 72.27;
 const CSS_SCREEN_DPI = 96;
@@ -16,7 +29,9 @@ const MAX_ZOOM_PERCENT = 400;
 
 export function StatusBar() {
   const snapshot = useEditorStore((s) => s.snapshot);
-  const activeFigureId = useEditorStore((s) => s.activeFigureId);
+  const documentKind = useEditorStore((s) => s.documentKind);
+  const presentation = useSyncExternalStore(presentationService.subscribe, presentationService.getState);
+  const activeRootId = useEditorStore((s) => s.activeRootId);
   const currentDocument = useEditorStore((s) => s.documents[s.activeDocumentId] ?? null);
   const canvasTransform = useEditorStore((s) => s.canvasTransform);
   const canvasFitToContentScale = useEditorStore((s) => s.canvasFitToContentScale);
@@ -29,6 +44,28 @@ export function StatusBar() {
   const activeSourceScrubSourceId = useEditorStore((s) => s.activeSourceScrubSourceId);
   const canvasStatusHint = useEditorStore((s) => s.canvasStatusHint);
   const dispatch = useEditorStore((s) => s.dispatch);
+  const textContext = useSyncExternalStore(
+    subscribeCanvasTextContext,
+    getCanvasTextContextSnapshot,
+    getCanvasTextContextSnapshot
+  );
+  const uiNotification = useSyncExternalStore(
+    subscribeUiNotifications,
+    getUiNotificationSnapshot,
+    getUiNotificationSnapshot
+  );
+
+  useEffect(() => {
+    if (!uiNotification) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      dismissUiNotification(uiNotification.id);
+    }, 8_000);
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [uiNotification]);
 
   const showPerf = import.meta.env.DEV;
   const perfStats = useFrameTimingStats(activeCanvasDragKind, showPerf);
@@ -45,9 +82,9 @@ export function StatusBar() {
 
   const elementCount = snapshot.scene?.elements.length ?? 0;
   const selectedCount = selectedIds.size;
-  const figures = snapshot.figures;
-  const activeFigureIndex = activeFigureId ? figures.findIndex((figure) => figure.id === activeFigureId) : -1;
-  const showFigureContext = figures.length > 1 && activeFigureIndex >= 0;
+  const figures = snapshotRoots(snapshot);
+  const activeFigureIndex = activeRootId ? figures.findIndex((figure) => figure.id === activeRootId) : -1;
+  const showFigureContext = hasMultipleRoots(figures.length) && activeFigureIndex >= 0;
   const zoomPercent = Math.round((canvasTransform.scale / ACTUAL_SIZE_SCALE) * 100);
   const fitToContentDoubleZoomPercent = canvasFitToContentScale == null
     ? MAX_ZOOM_PERCENT
@@ -120,9 +157,23 @@ export function StatusBar() {
   return (
     <div className={css.bar} data-testid="status-bar" data-select="chrome">
       <div className={css.group}>
+        {uiNotification && (
+          <div className={css.cell} role="alert">
+            <span className={css.error}>{uiNotification.message}</span>
+            <button
+              type="button"
+              className={css.dismissButton}
+              aria-label="Dismiss error"
+              onClick={() => { dismissUiNotification(uiNotification.id); }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {showFigureContext && (
           <div className={css.cell}>
-            <span>Figure {activeFigureIndex + 1} of {figures.length}</span>
+            <span>{snapshot.deck ? "Slide" : "Figure"} {activeFigureIndex + 1} of {figures.length}</span>
           </div>
         )}
 
@@ -152,6 +203,33 @@ export function StatusBar() {
             <span className={incrementalFallbackClass}>
               fallback ({incrementalFallbackReason})
             </span>
+          </div>
+        )}
+
+        {textContext && textContext.crumbs.length > 0 && (
+          <div className={css.cell} data-testid="canvas-text-breadcrumb" aria-label="Caret context" data-keeps-text-session>
+            {textContext.crumbs.map((crumb, index) => (
+              <span key={index} className={css.crumbItem}>
+                {index > 0 && <span className={css.crumbSeparator}>›</span>}
+                <button
+                  type="button"
+                  className={css.crumb}
+                  title={`Select ${crumb}`}
+                  // Keep keyboard focus in the editing session.
+                  onPointerDown={(event) => { event.preventDefault(); }}
+                  onMouseDown={(event) => { event.preventDefault(); }}
+                  onClick={() => { textContext.select(index); }}
+                >
+                  {crumb}
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {textContext?.hint && (
+          <div className={css.cell} data-testid="canvas-text-hint">
+            <span className={css.hint}>{textContext.hint}</span>
           </div>
         )}
 
@@ -234,6 +312,25 @@ export function StatusBar() {
           </button>
         </RenderedTooltip>
 
+        {documentKind === "beamer" ? (
+          <RenderedTooltip content={presentation.snapshot ? "Show Presenter View" : "Present from Current Slide"}>
+            <button
+              type="button"
+              className={css.iconButton}
+              data-testid="status-present-button"
+              aria-label={presentation.snapshot ? "Show Presenter View" : "Present from Current Slide"}
+              onClick={() => {
+                if (presentation.snapshot) presentationService.command({ type: "show-presenter" });
+                else launchPresentation("current");
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M2 3h16M3.5 3v9.5a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V3M10 14.5V18M6.5 18h7" />
+              </svg>
+            </button>
+          </RenderedTooltip>
+        ) : null}
+
         <input
           className={css.zoomSlider}
           type="range"
@@ -256,7 +353,7 @@ export function StatusBar() {
               <option key={level} value={level}>{level}%</option>
             ))}
           </select>
-          <RiArrowDownSLine className={css.zoomSelectCaret} size={14} aria-hidden="true" />
+          <RiArrowDownSLine className={css.zoomSelectCaret ?? ""} size={14} aria-hidden="true" />
         </span>
       </div>
     </div>

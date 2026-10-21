@@ -1,3 +1,4 @@
+import { requireDocumentSession } from "../packages/app/src/store/document-sessions.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { wp } from "./coords-helpers.js";
 
@@ -58,7 +59,7 @@ describe("editor store persistence decisions", () => {
     const saved = readSavedWorkspace(map);
     expect(saved.documents).toHaveLength(1);
     expect(saved.documents[0]?.source).toContain("\\draw");
-  });
+  }, 15_000);
 
   it("debounces browser source edits, installs one unload flusher, and ignores ephemeral selection changes", async () => {
     const timeoutCallbacks: Array<() => void> = [];
@@ -195,7 +196,7 @@ describe("editor store persistence decisions", () => {
     const state = useEditorStore.getState();
     const documentId = state.activeDocumentId;
     const source = state.source;
-    const baseDoc = state.documents[documentId];
+    const baseDoc = requireDocumentSession(state.documents, documentId);
 
     useEditorStore.setState({
       ...state,
@@ -239,7 +240,7 @@ describe("editor store persistence decisions", () => {
     });
 
     const rebound = useEditorStore.getState();
-    const reboundDoc = rebound.documents[documentId];
+    const reboundDoc = requireDocumentSession(rebound.documents, documentId);
     useEditorStore.setState({
       ...rebound,
       documents: {

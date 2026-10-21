@@ -41,11 +41,11 @@ type PanelProps = CommonModalProps & {
 type ModalProps = SheetProps | PanelProps;
 
 const SHEET_SIZE_CLASS: Record<SheetSize, string> = {
-  sm: css.sizeSm,
-  md: css.sizeMd,
-  lg: css.sizeLg,
-  xl: css.sizeXl,
-  auto: css.sizeAuto
+  sm: css.sizeSm ?? "",
+  md: css.sizeMd ?? "",
+  lg: css.sizeLg ?? "",
+  xl: css.sizeXl ?? "",
+  auto: css.sizeAuto ?? ""
 };
 
 export function Modal(props: ModalProps) {
@@ -204,8 +204,8 @@ function ModalPanel({
     if (!draggable) {
       return;
     }
-    const target = event.target as HTMLElement | null;
-    if (!target?.closest?.("[data-modal-drag-handle='true']")) {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target?.closest("[data-modal-drag-handle='true']")) {
       return;
     }
     if (target.closest("button, input, textarea, [contenteditable='true']")) {
@@ -216,7 +216,8 @@ function ModalPanel({
       startX: event.clientX,
       startY: event.clientY
     };
-    panelRef.current?.setPointerCapture?.(event.pointerId);
+    const pointerCapture: Partial<Pick<HTMLDivElement, "setPointerCapture">> | null = panelRef.current;
+    pointerCapture?.setPointerCapture?.(event.pointerId);
   }
 
   const style = useMemo<CSSProperties>(() => {
@@ -357,11 +358,11 @@ type ModalButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const PrimaryButton = forwardRef<HTMLButtonElement, ModalButtonProps>(function PrimaryButton(
-  { className, ...rest },
+  { className, type = "button", ...rest },
   ref
 ) {
   const classes = [css.btn, css.btnPrimary, className].filter(Boolean).join(" ");
-  return <button ref={ref} className={classes} {...rest} type="button" />;
+  return <button ref={ref} className={classes} {...rest} type={type} />;
 });
 
 const SecondaryButton = forwardRef<HTMLButtonElement, ModalButtonProps>(function SecondaryButton(

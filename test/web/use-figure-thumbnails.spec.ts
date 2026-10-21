@@ -21,6 +21,7 @@ type Deferred<T> = {
 type FigureEntry = {
   id: string;
   span: { from: number; to: number };
+  deckFrameIndex?: number;
 };
 
 function createDeferred<T>(): Deferred<T> {
@@ -34,14 +35,19 @@ function createDeferred<T>(): Deferred<T> {
 function Harness(props: {
   source: string;
   figures: readonly FigureEntry[];
+  documentKey?: string;
+  graphicsPreviewBundleKey?: string | null;
   priorityFigureIds?: readonly string[];
   maxToRender?: number;
+  externalThumbnail?: { figureId: string; deckFrameIndex?: number; url: string | null };
   onUpdate: (value: ReadonlyMap<string, string>) => void;
 }) {
-  const thumbnails = useFigureThumbnails(props.source, props.figures as any, {
+  const thumbnails = useFigureThumbnails(props.source, props.figures, {
+    documentKey: props.documentKey,
+    graphicsPreviewBundleKey: props.graphicsPreviewBundleKey,
     priorityFigureIds: props.priorityFigureIds,
     maxToRender: props.maxToRender ?? 4,
-    refreshDelayMs: 0
+    externalThumbnail: props.externalThumbnail
   });
 
   useEffect(() => {
@@ -72,6 +78,102 @@ describe("useFigureThumbnails", () => {
     container.remove();
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it("mirrors an existing render without requesting the active frame or restarting other work", async () => {
+    const pending = createDeferred<any>();
+    vi.mocked(requestThumbnail).mockReturnValue(pending.promise);
+    const figures = [
+      { id: "active", span: { from: 0, to: 1 }, deckFrameIndex: 0 },
+      { id: "other", span: { from: 1, to: 2 }, deckFrameIndex: 1 }
+    ];
+    let latest: ReadonlyMap<string, string> = new Map();
+    const props = { source: "ab", figures, onUpdate: (value: ReadonlyMap<string, string>) => { latest = value; } };
+    await act(async () => {
+      root.render(createElement(Harness, { ...props,
+        externalThumbnail: { figureId: "active", deckFrameIndex: 0, url: null } }));
+    });
+    expect(requestThumbnail).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(requestThumbnail).mock.calls[0]?.[0].deckFrameIndex).toBe(1);
+    const cancellations = vi.mocked(cancelGroup).mock.calls.length;
+    for (const url of ["data:main-step-1", "data:main-step-2", "data:main-edited"]) {
+      await act(async () => {
+        root.render(createElement(Harness, { ...props,
+          externalThumbnail: { figureId: "active", deckFrameIndex: 0, url } }));
+      });
+      expect(latest.get("active")).toBe(url);
+    }
+    expect(requestThumbnail).toHaveBeenCalledTimes(1);
+    expect(cancelGroup).toHaveBeenCalledTimes(cancellations);
+  });
+
+  it("keeps mirroring the main render across edited frame thumbnail IDs", async () => {
+    vi.mocked(requestThumbnail).mockReturnValue(new Promise(() => {}));
+    let latest: ReadonlyMap<string, string> = new Map();
+    const onUpdate = (value: ReadonlyMap<string, string>) => { latest = value; };
+    for (const [id, source, url] of [["old", "a", "data:main-old"], ["new", "b", "data:main-old"], ["new", "b", "data:main-new"]]) {
+      await act(async () => {
+        root.render(createElement(Harness, { source,
+          figures: [{ id, span: { from: 0, to: 1 }, deckFrameIndex: 0 }],
+          externalThumbnail: { figureId: id, deckFrameIndex: 0, url }, onUpdate }));
+        vi.runOnlyPendingTimers(); await flushMicrotasks();
+      });
+      expect(latest.get(id)).toBe(url);
+    }
+    expect(requestThumbnail).not.toHaveBeenCalled();
+  });
+
+  it("retains a mirrored image until the inactive frame's final-overlay thumbnail arrives", async () => {
+    const pending = createDeferred<any>();
+    vi.mocked(requestThumbnail).mockReturnValue(pending.promise);
+    const figures = [{ id: "frame", span: { from: 0, to: 1 }, deckFrameIndex: 0 }];
+    let latest: ReadonlyMap<string, string> = new Map();
+    const props = { source: "a", figures, onUpdate: (value: ReadonlyMap<string, string>) => { latest = value; } };
+    await act(async () => {
+      root.render(createElement(Harness, { ...props,
+        externalThumbnail: { figureId: "frame", deckFrameIndex: 0, url: "data:main-step-1" } }));
+    });
+    expect(requestThumbnail).not.toHaveBeenCalled();
+    await act(async () => { root.render(createElement(Harness, props)); });
+    expect(requestThumbnail).toHaveBeenCalledTimes(1);
+    expect(latest.get("frame")).toBe("data:main-step-1");
+    await act(async () => { pending.resolve({ ok: true, svg: "<svg>final-overlay</svg>" }); await flushMicrotasks(); });
+    await waitForCondition(() => latest.get("frame")?.includes("final-overlay") === true);
+  });
+
+  it("ignores an in-flight thumbnail after its frame starts mirroring the main render", async () => {
+    const stale = createDeferred<any>();
+    const final = createDeferred<any>();
+    vi.mocked(requestThumbnail).mockReturnValueOnce(stale.promise).mockReturnValueOnce(final.promise);
+    const figures = [{ id: "frame", span: { from: 0, to: 1 }, deckFrameIndex: 0 }];
+    let latest: ReadonlyMap<string, string> = new Map();
+    const props = { source: "a", figures, onUpdate: (value: ReadonlyMap<string, string>) => { latest = value; } };
+    await act(async () => { root.render(createElement(Harness, props)); });
+    await act(async () => {
+      root.render(createElement(Harness, { ...props,
+        externalThumbnail: { figureId: "frame", deckFrameIndex: 0, url: "data:main" } }));
+    });
+    await act(async () => { stale.resolve({ ok: true, svg: "<svg>stale</svg>" }); await flushMicrotasks(); });
+    expect(latest.get("frame")).toBe("data:main");
+    await act(async () => { root.render(createElement(Harness, props)); });
+    expect(requestThumbnail).toHaveBeenCalledTimes(2);
+    expect(latest.get("frame")).toBe("data:main");
+  });
+
+  it("does not mirror the previous document while another document's main render is pending", async () => {
+    const figures = [{ id: "frame", span: { from: 0, to: 1 }, deckFrameIndex: 0 }];
+    let latest: ReadonlyMap<string, string> = new Map();
+    const props = { source: "a", figures, onUpdate: (value: ReadonlyMap<string, string>) => { latest = value; } };
+    await act(async () => {
+      root.render(createElement(Harness, { ...props, documentKey: "first",
+        externalThumbnail: { figureId: "frame", deckFrameIndex: 0, url: "data:first-document" } }));
+    });
+    await act(async () => {
+      root.render(createElement(Harness, { ...props, documentKey: "second",
+        externalThumbnail: { figureId: "frame", deckFrameIndex: 0, url: null } }));
+    });
+    expect(latest.has("frame")).toBe(false);
+    expect(requestThumbnail).not.toHaveBeenCalled();
   });
 
   it("cancels stale groups and ignores stale results after source changes", async () => {
@@ -145,6 +247,31 @@ describe("useFigureThumbnails", () => {
     });
 
     expect(latest.get("figure:0")).toContain("%3Csvg%3Enew%3C%2Fsvg%3E");
+  });
+
+  it("keeps a thumbnail still wanted in flight across renders, and restarts one it canceled", async () => {
+    const pending = createDeferred<any>();
+    vi.mocked(requestThumbnail).mockReturnValueOnce(pending.promise).mockImplementation(async request => ({
+      type: "result", ok: true, requestId: request.requestId, groupId: request.groupId,
+      figureId: request.figureId, figureSignature: request.figureSignature, svg: "<svg>fresh</svg>"
+    }));
+    const figures = [{ id: "figure:0", span: { from: 0, to: 1 } }];
+    let latest: ReadonlyMap<string, string> = new Map();
+    const props = { source: "x", figures, onUpdate: (value: ReadonlyMap<string, string>) => { latest = value; } };
+    await act(async () => { root.render(createElement(Harness, { ...props, priorityFigureIds: [] })); });
+    expect(requestThumbnail).toHaveBeenCalledTimes(1);
+    await act(async () => { root.render(createElement(Harness, { ...props, priorityFigureIds: ["figure:0"] })); });
+    expect(requestThumbnail).toHaveBeenCalledTimes(1);
+    expect(cancelGroup).not.toHaveBeenCalled();
+    await act(async () => { root.render(createElement(Harness, { ...props, maxToRender: 0 })); });
+    expect(cancelGroup).toHaveBeenCalledTimes(1);
+    await act(async () => { root.render(createElement(Harness, props)); });
+    await waitForCondition(() => latest.has("figure:0"));
+    expect(requestThumbnail).toHaveBeenCalledTimes(2);
+    expect(latest.get("figure:0")).toContain("fresh");
+    pending.resolve({ ok: true, svg: "<svg>stale</svg>" });
+    await act(flushMicrotasks);
+    expect(latest.get("figure:0")).toContain("fresh");
   });
 
   it("keeps last thumbnail visible while next render is pending", async () => {
@@ -300,6 +427,196 @@ describe("useFigureThumbnails", () => {
     });
 
     expect(latest.get("figure:3")).toContain("%3Csvg%3Ethree%3C%2Fsvg%3E");
+  });
+
+  it("invalidates deck thumbnails when document-level source changes", async () => {
+    vi.mocked(requestThumbnail).mockImplementation(async (request) => ({
+      type: "result",
+      ok: true,
+      requestId: request.requestId,
+      groupId: request.groupId,
+      figureId: request.figureId,
+      figureSignature: request.figureSignature,
+      svg: `<svg>${request.figureSignature}</svg>`
+    }));
+
+    const frame = "\\begin{frame}Hello\\end{frame}";
+    const sourceA = `\\documentclass{beamer}\\usetheme{Madrid}${frame}`;
+    const sourceB = `\\documentclass{beamer}\\usetheme{Bergen}${frame}`;
+    const spanFrom = sourceA.indexOf(frame);
+    const figures = [
+      {
+        id: "frame:0",
+        span: { from: spanFrom, to: spanFrom + frame.length },
+        deckFrameIndex: 0
+      }
+    ] as const;
+
+    await act(async () => {
+      root.render(createElement(Harness, {
+        source: sourceA,
+        figures,
+        documentKey: "deck-document",
+        onUpdate: () => undefined
+      }));
+      vi.runOnlyPendingTimers();
+      await flushMicrotasks();
+    });
+    await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 1);
+    const firstSignature =
+      vi.mocked(requestThumbnail).mock.calls[0]?.[0].figureSignature;
+
+    await act(async () => {
+      root.render(createElement(Harness, {
+        source: sourceB,
+        figures,
+        documentKey: "deck-document",
+        onUpdate: () => undefined
+      }));
+      vi.runOnlyPendingTimers();
+      await flushMicrotasks();
+    });
+    await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 2);
+
+    expect(vi.mocked(requestThumbnail)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(requestThumbnail).mock.calls[1]?.[0].figureSignature)
+      .not.toBe(firstSignature);
+  });
+
+  it("re-renders an edited frame at once, and the other frames when text outside frames changes or the edit leaves the frame", async () => {
+    vi.mocked(requestThumbnail).mockImplementation(async (request) => ({
+      type: "result", ok: true, requestId: request.requestId, groupId: request.groupId,
+      figureId: request.figureId, figureSignature: request.figureSignature, svg: "<svg/>"
+    }));
+    const deck = (preamble: string, first: string) => {
+      const frames = [`\\begin{frame}${first}\\end{frame}`, "\\begin{frame}Two\\end{frame}", "\\begin{frame}Three\\end{frame}"];
+      let from = preamble.length;
+      const figures = frames.map((frame, index) => {
+        const span = { from, to: from + frame.length };
+        from = span.to;
+        return { id: `frame:${index}`, span, deckFrameIndex: index };
+      });
+      return { source: preamble + frames.join(""), figures };
+    };
+    const renderDeck = async (preamble: string, first: string, activeIndex: number) => {
+      await act(async () => {
+        root.render(createElement(Harness, { ...deck(preamble, first), documentKey: "deck", maxToRender: 8,
+          externalThumbnail: { figureId: `frame:${activeIndex}`, deckFrameIndex: activeIndex, url: "data:main" },
+          onUpdate: () => undefined }));
+        await flushMicrotasks();
+      });
+    };
+    const requestedFrames = () => vi.mocked(requestThumbnail).mock.calls.map(([request]) => request.figureId);
+    const settle = async (count: number) => { await waitForCondition(() => requestedFrames().length >= count, 10); };
+
+    await renderDeck("\\documentclass{beamer}", "One", 1);
+    await settle(2);
+    expect(requestedFrames()).toEqual(["frame:0", "frame:2"]);
+
+    // Typing in the first frame, from the source editor while the second is shown.
+    await renderDeck("\\documentclass{beamer}", "One edited", 1);
+    await renderDeck("\\documentclass{beamer}", "One edited again", 1);
+    await settle(4);
+    expect(requestedFrames()).toEqual(["frame:0", "frame:2", "frame:0", "frame:0"]);
+
+    // Leaving the second frame gives the others the edited document's numbering.
+    await renderDeck("\\documentclass{beamer}", "One edited again", 0);
+    await settle(6);
+    expect(requestedFrames().slice(4)).toEqual(["frame:1", "frame:2"]);
+
+    // The preamble reaches every frame at once.
+    await renderDeck("\\documentclass[t]{beamer}", "One edited again", 0);
+    await settle(8);
+    expect(requestedFrames().slice(6)).toEqual(["frame:1", "frame:2"]);
+    expect(requestedFrames()).toHaveLength(8);
+  });
+
+  it("isolates thumbnail cache entries by document", async () => {
+    vi.mocked(requestThumbnail).mockImplementation(async (request) => ({
+      type: "result",
+      ok: true,
+      requestId: request.requestId,
+      groupId: request.groupId,
+      figureId: request.figureId,
+      figureSignature: request.figureSignature,
+      svg: "<svg />"
+    }));
+    const source = "\\begin{tikzpicture}\\end{tikzpicture}";
+    const figures = [
+      { id: "figure:0", span: { from: 0, to: source.length } }
+    ] as const;
+
+    await act(async () => {
+      root.render(createElement(Harness, {
+        source,
+        figures,
+        documentKey: "document-a",
+        onUpdate: () => undefined
+      }));
+      vi.runOnlyPendingTimers();
+      await flushMicrotasks();
+    });
+    await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 1);
+
+    await act(async () => {
+      root.render(createElement(Harness, {
+        source,
+        figures,
+        documentKey: "document-b",
+        onUpdate: () => undefined
+      }));
+      vi.runOnlyPendingTimers();
+      await flushMicrotasks();
+    });
+    await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 2);
+
+    expect(vi.mocked(requestThumbnail)).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates thumbnails and forwards the graphics preview bundle key", async () => {
+    vi.mocked(requestThumbnail).mockImplementation(async (request) => ({
+      type: "result",
+      ok: true,
+      requestId: request.requestId,
+      groupId: request.groupId,
+      figureId: request.figureId,
+      figureSignature: request.figureSignature,
+      svg: "<svg />"
+    }));
+    const source = String.raw`\begin{tikzpicture}\node {\includegraphics{fig.png}};\end{tikzpicture}`;
+    const figures = [
+      { id: "figure:0", span: { from: 0, to: source.length } }
+    ] as const;
+
+    await act(async () => {
+      root.render(createElement(Harness, {
+        source,
+        figures,
+        documentKey: "document-images",
+        graphicsPreviewBundleKey: "graphics:r1",
+        onUpdate: () => undefined
+      }));
+      vi.runOnlyPendingTimers();
+      await flushMicrotasks();
+    });
+    await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 1);
+    expect(vi.mocked(requestThumbnail).mock.calls[0]?.[0])
+      .toMatchObject({ graphicsPreviewBundleKey: "graphics:r1" });
+
+    await act(async () => {
+      root.render(createElement(Harness, {
+        source,
+        figures,
+        documentKey: "document-images",
+        graphicsPreviewBundleKey: "graphics:r2",
+        onUpdate: () => undefined
+      }));
+      vi.runOnlyPendingTimers();
+      await flushMicrotasks();
+    });
+    await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 2);
+    expect(vi.mocked(requestThumbnail).mock.calls[1]?.[0])
+      .toMatchObject({ graphicsPreviewBundleKey: "graphics:r2" });
   });
 });
 

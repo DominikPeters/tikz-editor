@@ -1,8 +1,15 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { parseOptionListRaw } from "../../options/parse.js";
-import { applyOptionMutationsToTarget, normalizeOptionKey, rewriteOptionListMutations, type OptionMutation } from "../option-mutations.js";
+import {
+  applyOptionMutationsToTarget,
+  normalizeOptionKey,
+  rewriteOptionListMutations,
+  rewriteSourceBackedOptionListMutations,
+  type OptionMutation
+} from "../option-mutations.js";
 import { TREE_CHILD_LAYOUT_WRITABLE_KEYS } from "../tree-editing.js";
-import { resolvePropertyTarget } from "../property-target.js";
+import { changedSourceIdsForPropertyTarget, resolvePropertyTarget } from "../property-target.js";
 import type { PropertyTarget, PropertyTargetOptionsFormat } from "../property-target.js";
 import { replaceSpan } from "../patch.js";
 import type { Span } from "../../ast/types.js";
@@ -130,7 +137,7 @@ function applySetPropertyCommentToggle(
   const format = target.optionsFormat ?? "bracketed";
   const parsedItems = parseCommentToggleItems(rawSite, format);
   const primaryKey = normalizeOptionKey(action.key);
-  const commentMode = action.commentMode!;
+  const commentMode = requireDefined(action.commentMode, "Missing required action.commentMode");
   if (primaryKey.length === 0) {
     return { kind: "error", message: "Cannot toggle an empty option key" };
   }
@@ -145,7 +152,8 @@ function applySetPropertyCommentToggle(
     if (index !== matchingIndex) {
       return item;
     }
-    const toggleItem = item as Extract<CommentToggleItem, { kind: "entry" | "disabled-entry" }>;
+    if (item.kind !== "entry" && item.kind !== "disabled-entry") return item;
+    const toggleItem = item;
     if (commentMode === "disable") {
       return { kind: "disabled-entry", text: toggleItem.text, normalizedKey: toggleItem.normalizedKey };
     }
@@ -226,7 +234,8 @@ function splitTopLevelOptionSegments(input: string): string[] {
   let inComment = false;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
+
     if (inComment) {
       if (char === "\n" || char === "\r") {
         inComment = false;
@@ -415,7 +424,7 @@ function resolveCommentToggleSerializationContext(
       continue;
     }
     const indentMatch = line.match(/^[\t ]*/u);
-    return { lineIndent: indentMatch![0], hadNewline: true };
+    return { lineIndent: requireDefined(indentMatch, "Missing required indentMatch")[0], hadNewline: true };
   }
   return { lineIndent: preferredIndent, hadNewline: true };
 }
@@ -434,8 +443,8 @@ function serializeCommentToggleItems(
     .map((entry) => entry.index);
   const lastEntryIndex = entryIndexes.length > 0 ? entryIndexes[entryIndexes.length - 1] : -1;
 
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
+  for (const [index, item] of items.entries()) {
+
     if (item.kind === "comment") {
       lines.push(withIndent(normalizeCommentLine(item.text)));
       continue;
@@ -488,16 +497,16 @@ function applyTreeChildSetProperty(
   if (childOptionSite) {
     const result = applyOptionMutationsAtSite(source, mutations, removePrimaryKey, {
       options: target.treeChildOptions,
-      optionsSpan: target.treeChildOptionsSpan,
-      insertOffset: target.treeChildInsertOffset
+      ...(target.treeChildOptionsSpan === undefined ? {} : { optionsSpan: target.treeChildOptionsSpan }),
+      ...(target.treeChildInsertOffset === undefined ? {} : { insertOffset: target.treeChildInsertOffset })
     });
     return addTreeChildFallbackWarningIfNeeded(withChangedSourceIdsForTarget(result, target), target);
   }
 
   const result = applyOptionMutationsAtSite(source, mutations, removePrimaryKey, {
     options: target.treeNodeOptions,
-    optionsSpan: target.treeNodeOptionsSpan,
-    insertOffset: target.treeNodeInsertOffset
+    ...(target.treeNodeOptionsSpan === undefined ? {} : { optionsSpan: target.treeNodeOptionsSpan }),
+    ...(target.treeNodeInsertOffset === undefined ? {} : { insertOffset: target.treeNodeInsertOffset })
   });
   return addTreeChildFallbackWarningIfNeeded(withChangedSourceIdsForTarget(result, target), target);
 }
@@ -515,7 +524,7 @@ function addTreeChildFallbackWarningIfNeeded(
     patches: result.patches,
     skippedHandles: [],
     reason: "Tree child edit applied using a source-span fallback. Verify the updated source.",
-    changedSourceIds: result.changedSourceIds
+    ...(result.changedSourceIds === undefined ? {} : { changedSourceIds: result.changedSourceIds })
   };
 }
 
@@ -535,13 +544,19 @@ function applyMatrixCellSetProperty(
 
   const mutations = createOptionMutationsFromSetProperty(action, key);
 
-  const cellSpan = target.cellSpan!;
-  const textSpan = target.textSpan!;
+  const cellSpan = requireDefined(target.cellSpan, "Missing required target.cellSpan");
+  const textSpan = requireDefined(target.textSpan, "Missing required target.textSpan");
 
   if (target.optionSpan) {
     const optionSpan = target.optionSpan;
     const currentOptions = parseOptionListRaw(source.slice(optionSpan.from, optionSpan.to), optionSpan.from);
-    const replacement = rewriteOptionListMutations(currentOptions, mutations, undefined, "bracketed");
+    const replacement = rewriteSourceBackedOptionListMutations(
+      source,
+      optionSpan,
+      currentOptions,
+      mutations,
+      "bracketed"
+    );
     if (replacement.length > 0) {
       if (source.slice(optionSpan.from, optionSpan.to) === replacement) {
         return { kind: "unsupported", reason: "setProperty would not change the source." };
@@ -575,6 +590,8 @@ function applyMatrixCellSetProperty(
     return { kind: "unsupported", reason: "setProperty would not change the source." };
   }
 
+  // This list is synthesized for a new matrix-cell prefix, so normalized
+  // serialization cannot disturb authored trivia.
   const seedOptions = parseOptionListRaw("[]", textSpan.from);
   const serializedOptions = rewriteOptionListMutations(seedOptions, setMutations, undefined, "bracketed");
   const insertion = `|${serializedOptions}| `;
@@ -602,16 +619,6 @@ function withChangedSourceIdsForTarget(
     ...result,
     changedSourceIds: changedSourceIdsForPropertyTarget(target)
   };
-}
-
-function changedSourceIdsForPropertyTarget(target: PropertyTarget): string[] {
-  const sourceId =
-    target.ownerSourceId ??
-    target.matrixSourceId ??
-    target.treeRootSourceId ??
-    target.id;
-  const normalized = sourceId.trim();
-  return normalized.length > 0 ? [normalized] : [];
 }
 
 function createOptionMutationsFromSetProperty(
@@ -652,7 +659,13 @@ function applyOptionMutationsAtSite(
   const { options, optionsSpan, insertOffset } = site;
   if (optionsSpan) {
     const parsedOptions = options ?? parseOptionListRaw(source.slice(optionsSpan.from, optionsSpan.to), optionsSpan.from);
-    const replacement = rewriteOptionListMutations(parsedOptions, mutations, undefined, "bracketed");
+    const replacement = rewriteSourceBackedOptionListMutations(
+      source,
+      optionsSpan,
+      parsedOptions,
+      mutations,
+      "bracketed"
+    );
     if (source.slice(optionsSpan.from, optionsSpan.to) === replacement) {
       return { kind: "unsupported", reason: "setProperty would not change the source." };
     }
@@ -679,6 +692,8 @@ function applyOptionMutationsAtSite(
     }
   }
 
+  // No source-backed list exists at this insertion site; serialize the new
+  // option fragment canonically before inserting it.
   const seedOptions = parseOptionListRaw("[]", insertOffset);
   const serializedOptions = rewriteOptionListMutations(seedOptions, setMutations, undefined, "bracketed");
   const updated = replaceSpan(source, { from: insertOffset, to: insertOffset }, serializedOptions);

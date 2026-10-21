@@ -11,6 +11,8 @@ export const APP_MENU_DEFINITION = [
         label: "New",
         accelerator: "CmdOrCtrl+N"
       },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.NEW_BEAMER_DOCUMENT, label: "New Beamer Presentation" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.NEW_TIKZ_DOCUMENT, label: "New TikZ Drawing" },
       {
         kind: "command",
         commandId: APP_MENU_COMMAND_IDS.OPEN_DOCUMENT,
@@ -114,6 +116,13 @@ export const APP_MENU_DEFINITION = [
         commandId: APP_MENU_COMMAND_IDS.SHOW_COMPILED_PICTURE,
         label: "Show Compiled Picture..."
       },
+      {
+        kind: "command",
+        commandId: APP_MENU_COMMAND_IDS.SHOW_COMPILED_SLIDE,
+        label: "Show Compiled Slide...",
+        // Compiles the deck with the TeX installation.
+        platforms: ["desktop"]
+      },
       { kind: "separator" },
       {
         kind: "command",
@@ -127,7 +136,7 @@ export const APP_MENU_DEFINITION = [
         commandId: APP_MENU_COMMAND_IDS.QUIT_APP,
         label: "Quit",
         accelerator: "CmdOrCtrl+Q",
-        platforms: ["desktop-windows", "desktop-linux"]
+        platforms: ["desktop"]
       }
     ]
   },
@@ -560,6 +569,8 @@ export const APP_MENU_DEFINITION = [
         commandId: APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL,
         label: "Styles Panel"
       },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.TOGGLE_BUILDS_PANEL, label: "Overlays Panel" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.TOGGLE_NOTES_PANEL, label: "Notes Panel" },
       {
         kind: "command",
         commandId: APP_MENU_COMMAND_IDS.TOGGLE_FIGURES_PANEL,
@@ -597,6 +608,27 @@ export const APP_MENU_DEFINITION = [
         label: "Developer Panel",
         accelerator: "CmdOrCtrl+Shift+D"
       }
+    ]
+  },
+  {
+    id: "present",
+    label: "Present",
+    items: [
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_CURRENT, label: "From Current Slide", accelerator: "CmdOrCtrl+Enter" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_BEGINNING, label: "From Beginning", accelerator: "CmdOrCtrl+Shift+Enter" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_WINDOW, label: "Present in a Window" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_REHEARSE, label: "Rehearse" },
+      { kind: "separator" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_OPTIONS, label: "Presentation Options…" },
+      { kind: "separator" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_SHOW_PRESENTER, label: "Show Presenter View" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_RESTORE_OUTPUT, label: "Show Audience Window" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_SWAP_DISPLAYS, label: "Swap Displays", platforms: ["desktop"] },
+      { kind: "separator" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_BLACK, label: "Black Screen" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_WHITE, label: "White Screen" },
+      { kind: "separator" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_END, label: "End Presentation" },
     ]
   },
   {

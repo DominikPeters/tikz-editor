@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { WorldTransform } from "../../coords/transforms.js";
 import { pt } from "../../coords/scalars.js";
 import { worldPoint as makeWorldPoint, type WorldPoint } from "../../coords/points.js";
@@ -101,7 +102,7 @@ export function parseSvgPathOperation(args: {
   };
 
   while (cursor < tokens.length) {
-    const token = tokens[cursor];
+    const token = requireArrayValue(tokens, cursor);
     if (token.kind === "command") {
       activeCommand = token.value;
       cursor += 1;
@@ -111,15 +112,12 @@ export function parseSvgPathOperation(args: {
       continue;
     }
 
-    if (activeCommand == null) {
-      continue;
-    }
 
     const lower = activeCommand.toLowerCase();
     const relative = activeCommand === lower;
 
     if (lower === "z") {
-      if (subpathStartLocal) {
+      {
         const fromWorld = localToWorld(currentLocal);
         const toWorldPoint = localToWorld(subpathStartLocal);
         commands.push({ kind: "Z" });
@@ -358,7 +356,7 @@ export function parseSvgPathOperation(args: {
   return {
     commands,
     endPoint,
-    subpathStartPoint: subpathStartLocal ? localToWorld(subpathStartLocal) : null,
+    subpathStartPoint: localToWorld(subpathStartLocal),
     lastSegment,
     diagnostics
   };
@@ -387,10 +385,7 @@ function tokenizeSvgPathData(input: string): { tokens: SvgToken[]; diagnostics: 
   let index = 0;
 
   while (index < input.length) {
-    const char = input[index];
-    if (char == null) {
-      break;
-    }
+    const char = input.charAt(index);
 
     if (isSvgSeparator(char)) {
       index += 1;

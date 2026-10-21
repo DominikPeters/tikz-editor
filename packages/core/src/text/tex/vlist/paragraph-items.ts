@@ -1,0 +1,81 @@
+import type { TexListLayoutProfile } from "../layout-options.js";
+import type { TexTabularLayoutProfile } from "../tabular/types.js";
+import type { ResolvedTexFont, TexMetricProvider } from "../fonts/types.js";
+import type { TexTextFontProfile } from "../fonts/text-profile.js";
+import type { DocumentGraphicsResolver } from "../../../graphics/types.js";
+import {
+  simpleTexSegmentToLayoutItems,
+  type TexMathBoxProvider,
+  type TexLayoutInlineItem,
+} from "../layout-inline-items.js";
+import type { TexLayoutParagraphPlan } from "./paragraph-plans.js";
+import type { TexLength } from "../coordinates.js";
+import type { TexDimensionContext } from "../dimensions.js";
+
+export function texLayoutItemsForParagraphPlan(
+  plan: TexLayoutParagraphPlan,
+  params: {
+    readonly atPt: TexLength;
+    readonly metricProvider: TexMetricProvider;
+    readonly mathBoxProvider?: TexMathBoxProvider;
+    readonly graphicsResolver?: DocumentGraphicsResolver;
+    readonly textFontProfile?: TexTextFontProfile;
+    readonly dimensionContext?: TexDimensionContext;
+    readonly tabularProfile?: TexTabularLayoutProfile;
+    readonly listProfile?: TexListLayoutProfile;
+  }
+): readonly TexLayoutInlineItem[] {
+  const contentItems = simpleTexSegmentToLayoutItems(
+    plan.segment,
+    plan.fontSizePt ?? params.atPt,
+    params.metricProvider,
+    plan.spaceGlueProfile,
+    params.mathBoxProvider,
+    plan.inheritedFontState ? { ...params.textFontProfile?.defaultFontState, ...plan.inheritedFontState } : params.textFontProfile?.defaultFontState,
+    params.textFontProfile,
+    params.graphicsResolver,
+    params.dimensionContext,
+    params.tabularProfile,
+    params.listProfile
+  );
+  if (plan.preserveTrailingInterwordSpace) {
+    const trailingSourceSpace = plan.segment.nodes.at(-1);
+    let trailingFont: ResolvedTexFont | undefined;
+    const trailingContentItem = contentItems.at(-1);
+    const trailingSpaceFactor =
+      trailingContentItem?.kind === "text"
+        ? trailingContentItem.spaceFactorAfter
+        : 1000;
+    for (let index = contentItems.length - 1; index >= 0; index -= 1) {
+      const item = contentItems[index];
+      if (!item) {
+        continue;
+      }
+      if (trailingFont === undefined && "font" in item) {
+        trailingFont = item.font;
+      }
+      if (trailingFont !== undefined) {
+        break;
+      }
+    }
+    if (trailingSourceSpace?.kind === "space") {
+      contentItems.push({
+        kind: "space",
+        text: " ",
+        sourceStart: trailingSourceSpace.sourceStart,
+        sourceEnd: trailingSourceSpace.sourceEnd,
+        font: trailingFont ??
+          params.textFontProfile?.resolveTextFont(
+            params.textFontProfile.defaultFontState,
+            params.atPt,
+            params.metricProvider
+          ) ??
+          params.metricProvider.resolveFont({ atPt: params.atPt }),
+        spaceFactor: trailingSpaceFactor,
+        spaceGlueProfile: plan.spaceGlueProfile,
+        preserveAtLineEnd: true,
+      });
+    }
+  }
+  return [...plan.inlinePrefixItems, ...contentItems];
+}

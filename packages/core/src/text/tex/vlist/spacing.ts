@@ -1,0 +1,2241 @@
+import type { ResolvedTexFont } from "../fonts/types.js";
+import { roundTexPt } from "../fonts/units.js";
+import {
+  texHBoxX,
+  texHBoxY,
+  texLength,
+  texVListY,
+  type TexLength,
+} from "../coordinates.js";
+import {
+  parseSimpleTexInlineNodes,
+  type SimpleTexInlineNode,
+  type SimpleTexListContext,
+} from "../ir.js";
+import type { TexMathTextPart } from "../math/ir.js";
+import type {
+  TexDisplayMathLayoutProfile,
+  TexListLayoutProfile,
+} from "../layout-options.js";
+import { layoutTexVListItems } from "./layout.js";
+import { createMeasuredParagraphVListMeasurer } from "./paragraph-measurement.js";
+import { texVListPathKey } from "./paths.js";
+import { texVBoxRolePathForParagraph } from "./scope-roles.js";
+import type {
+  TexDisplayMathSkipVariant,
+  TexDisplayAlignmentItem,
+  TexDisplayMathItem,
+  TexGlueItem,
+  TexHBoxItem,
+  TexParagraphItem,
+  TexBoxMetrics,
+  TexVBoxRole,
+  TexVBoxItem,
+  TexVListDocument,
+  TexVListItem,
+  TexVListParagraphBoxMeasurement,
+} from "./types.js";
+
+const articleQuoteSpacingEm = {
+  topsep: 0.8,
+  partopsep: 0.2,
+  parsep: 0.4,
+} as const;
+
+const articleListSpacingEm = {
+  topsep: 0.8,
+  partopsep: 0.2,
+  initialItemBaselineAdjustment: 0.3,
+  nestedTopsepByDepth: [0.8, 0.4, 0.2],
+  itemsepByDepth: [0.4, 0.2, 0.2],
+  parsepByDepth: [0.4, 0.2, 0],
+} as const;
+
+const latexArticleDisplaySkipsPt: TexDisplayMathLayoutProfile = {
+  above: {
+    normal: {
+      sizePt: 10,
+      stretchPt: 2,
+      shrinkPt: 5,
+    },
+    short: {
+      sizePt: 0,
+      stretchPt: 3,
+      shrinkPt: 0,
+    },
+  },
+  below: {
+    normal: {
+      sizePt: 10,
+      stretchPt: 2,
+      shrinkPt: 5,
+    },
+    short: {
+      sizePt: 6,
+      stretchPt: 3,
+      shrinkPt: 3,
+    },
+  },
+} as const;
+
+const latexNormalLineSkipPt = texLength(1);
+const latexAmsmathAlignTopCorrectionPt = texLength(-3);
+
+type DisplayAlignmentGluePurpose =
+  | "align-top-correction"
+  | "align-row-baseline"
+  | "align-structural";
+
+export interface SimpleTexParagraphVerticalSkip {
+  readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
+  readonly segmentIndex: number;
+  readonly size: TexLength;
+  readonly quoteSize: TexLength;
+  readonly listSize: TexLength;
+  readonly listStretch?: TexLength;
+  readonly listShrink?: TexLength;
+  readonly trivlistSize?: TexLength;
+}
+
+export function planSimpleTexParagraphVerticalSkips(
+  items: readonly TexVListItem[],
+  font: ResolvedTexFont,
+  listProfile?: TexListLayoutProfile
+): readonly SimpleTexParagraphVerticalSkip[] {
+  const skips: SimpleTexParagraphVerticalSkip[] = [];
+  planSimpleTexParagraphVerticalSkipsInto(
+    items,
+    font,
+    listProfile,
+    createInitialSimpleTexParagraphVerticalSkipState(),
+    skips,
+    [],
+    []
+  );
+
+  return skips;
+}
+
+interface SimpleTexParagraphVerticalSkipState {
+  previousEmittedQuoteDepth: number;
+  previousEmittedQuotationDepth: number;
+  previousEmittedTrivlistScopes: readonly TexTrivlistScopeRole[];
+  previousEmittedListContext: SimpleTexListContext | undefined;
+  previousEmittedContentKind: "paragraph" | "display" | undefined;
+  readonly quotePartopsepByDepth: Map<number, boolean>;
+  readonly trivlistPartopsepByScope: Map<TexTrivlistScopeRole, boolean>;
+  readonly listPartopsepByDepth: Map<number, boolean>;
+  readonly emittedListItemKeys: Set<string>;
+  emittedParagraphCount: number;
+  hasInterveningPenalty: boolean;
+}
+
+type TexTrivlistScopeRole = Extract<TexVBoxRole, { readonly kind: "trivlist" }>;
+
+function planSimpleTexParagraphVerticalSkipsInto(
+  items: readonly TexVListItem[],
+  font: ResolvedTexFont,
+  listProfile: TexListLayoutProfile | undefined,
+  state: SimpleTexParagraphVerticalSkipState,
+  skips: SimpleTexParagraphVerticalSkip[],
+  ancestors: readonly TexVBoxRole[],
+  pathPrefix: readonly number[]
+): void {
+  for (const [index, item] of items.entries()) {
+    const path = [...pathPrefix, index];
+    if (item.kind === "vbox") {
+      if (isMaterialTexVBoxItem(item)) {
+        // A parbox/minipage is one physical box in the surrounding flow.
+        // Account for entering/leaving its outer list/center scope there;
+        // its descendant paragraphs start a separate vertical list.
+        const blockIndex = -2_000_000 - (item.sourceSpan?.start ?? 0);
+        const boundaryParagraph: TexParagraphItem = {
+          kind: "paragraph", sourceSpan: item.sourceSpan ?? { start: 0, end: 0 }, blockIndex,
+          paragraph: { blockIndex, text: "", sourceSpan: item.sourceSpan ?? { start: 0, end: 0 }, nodes: [], noIndent: true, startsAfterExplicitPar: true, ...(item.scopePath !== undefined ? { scopePath: item.scopePath } : {}), quoteDepth: ancestors.filter(role => role.kind === "quote").length },
+        };
+        planSimpleTexParagraphVerticalSkipsInto([boundaryParagraph], font, listProfile, state, skips, ancestors, pathPrefix);
+        const boundarySkip = skips.at(-1);
+        if (boundarySkip) skips[skips.length - 1] = { ...boundarySkip, vlistPath: path };
+        planSimpleTexParagraphVerticalSkipsInto(
+          item.items,
+          font,
+          listProfile,
+          createInitialSimpleTexParagraphVerticalSkipState(),
+          skips,
+          item.role ? [item.role] : [],
+          path
+        );
+        continue;
+      }
+      planSimpleTexParagraphVerticalSkipsInto(
+        item.items,
+        font,
+        listProfile,
+        state,
+        skips,
+        item.role ? [...ancestors, item.role] : ancestors,
+        path
+      );
+      continue;
+    }
+    if (item.kind === "penalty") {
+      state.hasInterveningPenalty = true;
+      continue;
+    }
+    if (item.kind === "display-math" || item.kind === "display-alignment") {
+      state.previousEmittedContentKind = "display";
+      continue;
+    }
+    if (isDisplayEmptyLineHBox(item)) {
+      const quoteDepth = ancestors.filter((role) => role.kind === "quote").length;
+      const trivlistScopes = ancestors.filter(
+        (role): role is TexTrivlistScopeRole => role.kind === "trivlist"
+      );
+      const listRole = lastVListAncestorRole(ancestors, "list");
+      const listItemRole = lastVListAncestorRole(ancestors, "list-item");
+      state.previousEmittedQuoteDepth = quoteDepth;
+      state.previousEmittedQuotationDepth = 0;
+      state.previousEmittedTrivlistScopes = trivlistScopes;
+      state.previousEmittedListContext = listRole
+        ? {
+            kind: listRole.listKind,
+            depth: listRole.depth,
+            labelDepth: listRole.labelDepth,
+            itemIndex: listItemRole?.itemIndex ?? 0,
+            ownLeftMarginEm: listRole.ownLeftMarginEm,
+            totalLeftMarginEm: listRole.totalLeftMarginEm,
+            showLabel: false,
+          }
+        : undefined;
+      state.previousEmittedContentKind = "paragraph";
+      state.emittedParagraphCount += 1;
+      continue;
+    }
+    if (item.kind !== "paragraph") {
+      continue;
+    }
+
+    const paragraph = item.paragraph;
+    const scope = paragraphScopeFromVListAncestors(item, ancestors, state);
+    const resolvedListProfile = listProfileForContext(
+      listProfileForContext(listProfile, state.previousEmittedListContext),
+      scope.listContext
+    );
+    const hasPreviousEmittedParagraph = state.emittedParagraphCount > 0;
+    const startsAfterExplicitPar = item.paragraph.startsAfterExplicitPar === true;
+    const startsListInVerticalMode = startsAfterExplicitPar ||
+      (!hasPreviousEmittedParagraph && item.paragraph.tikzTextWidthNode !== true);
+    const followsDisplay = state.previousEmittedContentKind === "display";
+    const exitsTrivlistScope =
+      state.previousEmittedTrivlistScopes.length > scope.trivlistScopes.length;
+    const suppressInitialTopsep = !hasPreviousEmittedParagraph && listProfile?.suppressInitialTopsep === true;
+    let listVerticalSkipBefore = followsDisplay || suppressInitialTopsep
+      ? texLength(0)
+      : texArticleListVerticalSkipBefore(
+          state,
+          state.previousEmittedListContext,
+          scope.listContext,
+          hasPreviousEmittedParagraph,
+          startsListInVerticalMode,
+          exitsTrivlistScope,
+          font,
+          resolvedListProfile
+        );
+    if (hasPreviousEmittedParagraph && !state.previousEmittedListContext && !scope.listContext && !followsDisplay) {
+      listVerticalSkipBefore = texLength(listVerticalSkipBefore + (listProfile?.paragraphSkipPt ?? 0));
+    }
+    const listFlex = followsDisplay || suppressInitialTopsep
+      ? { stretch: texLength(0), shrink: texLength(0) }
+      : texProfileListVerticalGlueFlex(
+          state.previousEmittedListContext,
+          scope.listContext,
+          hasPreviousEmittedParagraph,
+          exitsTrivlistScope,
+          resolvedListProfile
+        );
+    const quoteVerticalSkipBefore = followsDisplay
+      ? texLength(0)
+      : texArticleQuoteVerticalSkipBefore(
+          state,
+          state.previousEmittedQuoteDepth,
+          state.previousEmittedQuotationDepth,
+          scope.quoteDepth,
+          scope.quotationDepth,
+          startsListInVerticalMode,
+          state.previousEmittedListContext !== undefined || scope.listContext !== undefined,
+          font
+        );
+    const trivlistVerticalSkipBefore = followsDisplay
+      ? texLength(0)
+      : texArticleTrivlistVerticalSkipBefore(
+          state,
+          state.previousEmittedTrivlistScopes,
+          scope.trivlistScopes,
+          startsListInVerticalMode,
+          font,
+          listProfile
+        );
+
+    skips.push({
+      blockIndex: paragraph.blockIndex,
+      vlistPath: path,
+      segmentIndex: 0,
+      quoteSize: quoteVerticalSkipBefore,
+      listSize: listVerticalSkipBefore,
+      ...(listFlex.stretch > 0
+        ? { listStretch: listFlex.stretch }
+        : {}),
+      ...(listFlex.shrink > 0
+        ? { listShrink: listFlex.shrink }
+        : {}),
+      ...(trivlistVerticalSkipBefore > 0
+        ? { trivlistSize: trivlistVerticalSkipBefore }
+        : {}),
+      size: texLength(
+        quoteVerticalSkipBefore + listVerticalSkipBefore + trivlistVerticalSkipBefore
+      ),
+    });
+
+    state.previousEmittedQuoteDepth = scope.quoteDepth;
+    state.previousEmittedQuotationDepth = scope.quotationDepth;
+    state.previousEmittedTrivlistScopes = scope.trivlistScopes;
+    state.previousEmittedListContext = scope.listContext;
+    if (scope.listItemKey) {
+      state.emittedListItemKeys.add(scope.listItemKey);
+    }
+    state.emittedParagraphCount += 1;
+    state.previousEmittedContentKind = "paragraph";
+    state.hasInterveningPenalty = false;
+  }
+}
+
+function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphVerticalSkipState {
+  return {
+    previousEmittedQuoteDepth: 0,
+    previousEmittedQuotationDepth: 0,
+    previousEmittedTrivlistScopes: [],
+    previousEmittedListContext: undefined,
+    previousEmittedContentKind: undefined,
+    quotePartopsepByDepth: new Map(),
+    trivlistPartopsepByScope: new Map(),
+    listPartopsepByDepth: new Map(),
+    emittedListItemKeys: new Set(),
+    emittedParagraphCount: 0,
+    hasInterveningPenalty: false,
+  };
+}
+
+function paragraphScopeFromVListAncestors(
+  item: TexParagraphItem,
+  ancestors: readonly TexVBoxRole[],
+  state: SimpleTexParagraphVerticalSkipState
+): {
+  readonly quoteDepth: number;
+  readonly quotationDepth: number;
+  readonly trivlistScopes: readonly TexTrivlistScopeRole[];
+  readonly listContext: SimpleTexListContext | undefined;
+  readonly listItemKey?: string;
+} {
+  const scopeRoles = ancestors.length > 0
+    ? ancestors
+    : item.paragraph.scopePath ?? [];
+  const quoteDepthFromAncestors = scopeRoles.filter((role) => role.kind === "quote").length;
+  const trivlistScopes = scopeRoles.filter(
+    (role): role is TexTrivlistScopeRole => role.kind === "trivlist"
+  );
+  const listRole = lastVListAncestorRole(scopeRoles, "list");
+  const listItemRole = lastVListAncestorRole(scopeRoles, "list-item");
+  if (listRole && listItemRole) {
+    const listItemKey = texListItemScopeKey(listItemRole);
+    return {
+      quoteDepth: quoteDepthFromAncestors,
+      quotationDepth: item.paragraph.quotationDepth ?? 0,
+      trivlistScopes,
+      listItemKey,
+      listContext: {
+        kind: listRole.listKind,
+        depth: listRole.depth,
+        labelDepth: listRole.labelDepth,
+        itemIndex: listItemRole.itemIndex,
+        ownLeftMarginEm: listRole.ownLeftMarginEm,
+        totalLeftMarginEm: listRole.totalLeftMarginEm,
+        showLabel: item.paragraph.listContext?.showLabel ??
+          !state.emittedListItemKeys.has(listItemKey),
+        ...(item.paragraph.listContext?.label !== undefined ? { label: item.paragraph.listContext.label } : {}),
+        ...(item.paragraph.listContext?.fontSizePt !== undefined ? { fontSizePt: item.paragraph.listContext.fontSizePt } : {}),
+        ...(item.paragraph.listContext?.spacing !== undefined ? { spacing: item.paragraph.listContext.spacing } : {}),
+        ...(item.paragraph.listContext?.listStart !== undefined ? { listStart: item.paragraph.listContext.listStart } : {}),
+      },
+    };
+  }
+  return {
+    quoteDepth: quoteDepthFromAncestors > 0 ? quoteDepthFromAncestors : item.paragraph.quoteDepth,
+    quotationDepth: item.paragraph.quotationDepth ?? 0,
+    trivlistScopes,
+    listContext: item.paragraph.listContext,
+  };
+}
+
+function texListItemScopeKey(role: Extract<TexVBoxRole, { kind: "list-item" }>): string {
+  return [
+    role.listKind,
+    role.depth,
+    role.labelDepth,
+    role.itemIndex,
+  ].join(":");
+}
+
+function lastVListAncestorRole<K extends TexVBoxRole["kind"]>(
+  ancestors: readonly TexVBoxRole[],
+  kind: K
+): Extract<TexVBoxRole, { kind: K }> | undefined {
+  for (let index = ancestors.length - 1; index >= 0; index -= 1) {
+    const role = ancestors[index];
+    if (role && roleHasKind(role, kind)) return role;
+  }
+  return undefined;
+}
+
+export function addParagraphVerticalGlueToVList(
+  vlist: TexVListDocument,
+  skips: readonly SimpleTexParagraphVerticalSkip[]
+): TexVListDocument {
+  const verticalSkipByPath = new Map<string, SimpleTexParagraphVerticalSkip>();
+  for (const skip of skips) {
+    if (skip.segmentIndex === 0 && (skip.size > 0 || (skip.listStretch ?? 0) !== 0 || (skip.listShrink ?? 0) !== 0)) {
+      verticalSkipByPath.set(texVListPathKey(skip.vlistPath), skip);
+    }
+  }
+
+  const items = addParagraphVerticalGlueToItems(vlist.items, verticalSkipByPath, []);
+
+  return {
+    ...vlist,
+    items,
+  };
+}
+
+function addParagraphVerticalGlueToItems(
+  sourceItems: readonly TexVListItem[],
+  verticalSkipByPath: ReadonlyMap<string, SimpleTexParagraphVerticalSkip>,
+  pathPrefix: readonly number[]
+): readonly TexVListItem[] {
+  const items: TexVListItem[] = [];
+  for (const [index, item] of sourceItems.entries()) {
+    const path = [...pathPrefix, index];
+    if (item.kind === "vbox") {
+      const skip = verticalSkipByPath.get(texVListPathKey(path));
+      if (skip) items.push(...paragraphBoundaryGlueItems(item, skip));
+      items.push({
+        ...item,
+        items: addParagraphVerticalGlueToItems(item.items, verticalSkipByPath, path),
+      });
+      continue;
+    }
+    if (item.kind === "paragraph") {
+      const skip = verticalSkipByPath.get(texVListPathKey(path));
+      if (skip) {
+        items.push(...paragraphBoundaryGlueItems(item, skip));
+      }
+    }
+    items.push(item);
+  }
+  return items;
+}
+
+function paragraphBoundaryGlueItems(
+  item: TexParagraphItem | TexVBoxItem,
+  skip: SimpleTexParagraphVerticalSkip
+): TexGlueItem[] {
+  const scopePath = item.kind === "paragraph" ? texVBoxRolePathForParagraph(item.paragraph) : item.scopePath ?? [];
+  const shared = {
+    ...(item.sourceSpan !== undefined ? { sourceSpan: item.sourceSpan } : {}),
+    ...(scopePath.length > 0 ? { scopePath } : {}),
+    stretchOrder: "normal" as const,
+    shrinkOrder: "normal" as const,
+  };
+  const glues: TexGlueItem[] = [];
+  if (skip.quoteSize > 0) {
+    glues.push({
+      kind: "glue",
+      ...shared,
+      origin: {
+        kind: "quote-boundary",
+        beforeBlockIndex: skip.blockIndex,
+      },
+      size: skip.quoteSize,
+    });
+  }
+  if (skip.listSize > 0 || (skip.listStretch ?? 0) !== 0 || (skip.listShrink ?? 0) !== 0) {
+    glues.push({
+      kind: "glue",
+      ...shared,
+      origin: {
+        kind: "list-boundary",
+        beforeBlockIndex: skip.blockIndex,
+      },
+      size: skip.listSize,
+      ...(skip.listStretch != null ? { stretch: skip.listStretch } : {}),
+      ...(skip.listShrink != null ? { shrink: skip.listShrink } : {}),
+    });
+  }
+  if ((skip.trivlistSize ?? texLength(0)) > 0) {
+    glues.push({
+      kind: "glue",
+      ...shared,
+      origin: {
+        kind: "trivlist-boundary",
+        beforeBlockIndex: skip.blockIndex,
+      },
+      size: skip.trivlistSize ?? texLength(0),
+    });
+  }
+  return glues;
+}
+
+export function materializeParagraphVerticalGlueInVList(
+  vlist: TexVListDocument,
+  font: ResolvedTexFont,
+  listProfile?: TexListLayoutProfile
+): TexVListDocument {
+  return addParagraphVerticalGlueToVList(
+    vlist,
+    planSimpleTexParagraphVerticalSkips(vlist.items, font, listProfile)
+  );
+}
+
+export function materializeDisplayMathVerticalGlueInVList(
+  vlist: TexVListDocument,
+  profile: TexDisplayMathLayoutProfile = latexArticleDisplaySkipsPt
+): TexVListDocument {
+  return {
+    ...vlist,
+    items: materializeDisplayMathVerticalGlueInItems(vlist.items, profile),
+  };
+}
+
+function materializeDisplayMathVerticalGlueInItems(
+  sourceItems: readonly TexVListItem[],
+  profile: TexDisplayMathLayoutProfile
+): readonly TexVListItem[] {
+  const items: TexVListItem[] = [];
+  for (const [index, item] of sourceItems.entries()) {
+    if (item.kind === "vbox") {
+      items.push({
+        ...item,
+        items: materializeDisplayMathVerticalGlueInItems(item.items, profile),
+      });
+      continue;
+    }
+    if (item.kind === "display-math") {
+      if (index === 0 && profile.leadingDisplay) {
+        items.push(leadingDisplayEmptyLineGlue(item, profile));
+        items.push(displayEmptyLineHBox(item, "before-display"));
+      }
+      items.push(displayMathBoundaryGlueItem(
+        item,
+        "above",
+        profile,
+        index === 0 && profile.leadingDisplay ? "short" : undefined
+      ));
+      items.push(item);
+      items.push(displayMathBoundaryGlueItem(item, "below", profile));
+      continue;
+    }
+    if (item.kind === "display-alignment") {
+      if (index === 0 && profile.leadingDisplay) {
+        items.push(leadingDisplayEmptyLineGlue(item, profile));
+        items.push(displayEmptyLineHBox(item, "before-display"));
+      }
+      items.push(displayMathBoundaryGlueItem(
+        item,
+        "above",
+        profile,
+        index === 0 && profile.leadingDisplay ? "short" : undefined
+      ));
+      items.push(...displayAlignmentMaterialItems(item, displayMathProfileForItem(item, profile)));
+      items.push(displayMathBoundaryGlueItem(item, "below", profile));
+      continue;
+    }
+    items.push(item);
+  }
+  return items;
+}
+
+function displayMathProfileForItem(
+  item: TexDisplayMathItem | TexDisplayAlignmentItem,
+  profile: TexDisplayMathLayoutProfile
+): TexDisplayMathLayoutProfile {
+  if (!item.displaySkipCommand) return profile;
+  const override = profile.sizeOverrides?.[item.displaySkipCommand];
+  if (override) return { ...profile, ...override };
+  // size10/11/12.clo assign these registers only in normalsize, small and
+  // footnotesize. Other size declarations and explicit fontsize inherit them.
+  const classIndex = item.normalFontSizePt === 12 ? 2 :
+    item.normalFontSizePt !== undefined && Math.abs(item.normalFontSizePt - 10.95) < .01 ? 1 : 0;
+  const registers = ({
+    normalsize: [[10, 2, 5, 3, 6, 3, 3], [11, 3, 6, 3, 6.5, 3.5, 3], [12, 3, 7, 3, 6.5, 3.5, 3]],
+    small: [[8.5, 3, 4, 2, 4, 2, 2], [10, 2, 5, 3, 6, 3, 3], [11, 3, 6, 3, 6.5, 3.5, 3]],
+    footnotesize: [[6, 2, 4, 1, 3, 1, 2], [8, 2, 4, 1, 4, 2, 2], [10, 2, 5, 3, 6, 3, 3]],
+  } as const)[item.displaySkipCommand][classIndex];
+  const [sizePt, stretchPt, shrinkPt, aboveShortStretch, belowShort, belowShortStretch, belowShortShrink] = registers;
+  const normal = { sizePt, stretchPt, shrinkPt };
+  return { ...profile,
+    above: { normal, short: { sizePt: 0, stretchPt: aboveShortStretch, shrinkPt: 0 } },
+    below: { normal, short: { sizePt: belowShort, stretchPt: belowShortStretch, shrinkPt: belowShortShrink } },
+  };
+}
+
+function displayMathBoundaryGlueItem(
+  item: TexDisplayMathItem | TexDisplayAlignmentItem,
+  side: "above" | "below",
+  profile: TexDisplayMathLayoutProfile,
+  variant?: TexDisplayMathSkipVariant
+): TexGlueItem {
+  profile = displayMathProfileForItem(item, profile);
+  if (item.kind === "display-alignment" || item.box.fullDisplayWidth) variant = "normal";
+  const skip = profile[side][variant ?? "normal"];
+  const materialWidth = item.kind === "display-math"
+    ? item.box.displayContentWidth ?? item.box.width
+    : item.alignment.width;
+  const displayLeftEdge = texLength(roundTexPt(
+    Math.max(0, (item.targetWidth - materialWidth) / 2)
+  ));
+  return {
+    kind: "glue",
+    sourceSpan: item.sourceSpan,
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "display-math-boundary",
+      side,
+      ...(item.displaySkipCommand ? { profile } : {}),
+      ...(item.baselineSkip !== undefined ? { baselineSkip: item.baselineSkip } : {}),
+      ...(variant ? { variant } : {}),
+      ...(side === "above" ? { displayLeftEdge } : {}),
+    },
+    size: texLength(skip.sizePt),
+    stretch: texLength(skip.stretchPt),
+    shrink: texLength(skip.shrinkPt),
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function leadingDisplayEmptyLineGlue(
+  item: TexDisplayMathItem | TexDisplayAlignmentItem,
+  profile: TexDisplayMathLayoutProfile
+): TexGlueItem {
+  return {
+    kind: "glue",
+    sourceSpan: item.sourceSpan,
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "display-math-interline",
+      side: "above",
+    },
+    // A containing environment may already ship the leading line and request
+    // zero additional baseline (for example Beamer column[T]'s colheadskip).
+    size: texLength(profile.leadingDisplay?.emptyLineBaselineSkipPt === 0
+      ? 0 : item.baselineSkip ?? profile.leadingDisplay?.emptyLineBaselineSkipPt ?? 0),
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function displayEmptyLineHBox(
+  item: TexDisplayMathItem | TexDisplayAlignmentItem,
+  position: "before-display" | "after-display-vspace"
+): TexHBoxItem {
+  return {
+    kind: "hbox",
+    sourceSpan: item.sourceSpan,
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    role: {
+      kind: "display-empty-line",
+      position,
+    },
+    box: {
+      metrics: {
+        width: texLength(0),
+        height: texLength(0),
+        depth: texLength(0),
+      },
+      renderItems: [],
+    },
+  };
+}
+
+export function resolveDisplayMathVerticalGlueInVList(
+  vlist: TexVListDocument,
+  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>,
+  options: {
+    readonly lineHeight: TexLength;
+    readonly initialPreviousDepth?: TexLength;
+    readonly displayMathProfile?: TexDisplayMathLayoutProfile;
+  }
+): TexVListDocument {
+  const initialMaterialMetrics = options.initialPreviousDepth === undefined
+    ? undefined
+    : {
+        width: texLength(0),
+        height: texLength(0),
+        depth: options.initialPreviousDepth,
+      };
+  const resolved = resolveDisplayMathVerticalGlueInItems(
+    vlist.items,
+    paragraphMeasurements,
+    options,
+    [],
+    {
+      ...(initialMaterialMetrics !== undefined ? { previousDisplayMaterialMetrics: initialMaterialMetrics } : {}),
+    }
+  );
+  return {
+    ...vlist,
+    items: resolved.items,
+  };
+}
+
+function resolveDisplayMathVerticalGlueInItems(
+  sourceItems: readonly TexVListItem[],
+  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>,
+  options: {
+    readonly lineHeight: TexLength;
+    readonly initialPreviousDepth?: TexLength;
+    readonly displayMathProfile?: TexDisplayMathLayoutProfile;
+  },
+  pathPrefix: readonly number[],
+  state: {
+    readonly previousParagraphMeasurement?: TexVListParagraphBoxMeasurement;
+    readonly previousDisplaySkipVariant?: TexDisplayMathSkipVariant;
+    readonly previousDisplayMaterialMetrics?: TexBoxMetrics;
+    readonly previousDepthSuppressed?: boolean;
+  } = {}
+): {
+  readonly items: readonly TexVListItem[];
+  readonly previousParagraphMeasurement?: TexVListParagraphBoxMeasurement;
+  readonly previousDisplaySkipVariant: TexDisplayMathSkipVariant;
+  readonly previousDisplayMaterialMetrics?: TexBoxMetrics;
+  readonly previousDepthSuppressed: boolean;
+} {
+  const items: TexVListItem[] = [];
+  let previousParagraphMeasurement = state.previousParagraphMeasurement;
+  let previousDisplaySkipVariant: TexDisplayMathSkipVariant =
+    state.previousDisplaySkipVariant ?? "normal";
+  let previousDisplayMaterialMetrics = state.previousDisplayMaterialMetrics;
+  let previousDepthSuppressed = state.previousDepthSuppressed ?? false;
+  let plainParagraphInterlinePending =
+    !previousDepthSuppressed && (previousParagraphMeasurement !== undefined ||
+    previousDisplayMaterialMetrics !== undefined);
+  let paragraphBoundaryInterlineAlreadyInserted = false;
+  for (const [index, item] of sourceItems.entries()) {
+    const path = [...pathPrefix, index];
+    if (item.kind === "glue" && item.origin?.kind === "explicit-command" && item.origin.command === "nointerlineskip") {
+      // \nointerlineskip sets \prevdepth=-1000pt. Glue and penalties do not
+      // restore it; the next physical box is appended without baseline glue.
+      items.push(item);
+      previousDepthSuppressed = true;
+      plainParagraphInterlinePending = false;
+      paragraphBoundaryInterlineAlreadyInserted = false;
+      continue;
+    }
+    if (item.kind === "vbox") {
+      if (isMaterialTexVBoxItem(item)) {
+        const nested = resolveDisplayMathVerticalGlueInItems(
+          item.items,
+          paragraphMeasurements,
+          options,
+          path
+        );
+        const materialItem = {
+          ...item,
+          items: nested.items,
+        };
+        const materialMetrics = materialVBoxMetrics(
+          materialItem,
+          paragraphMeasurements
+        );
+        if (
+          materialMetrics &&
+          plainParagraphInterlinePending &&
+          !paragraphBoundaryInterlineAlreadyInserted
+        ) {
+          const previousDepth = previousParagraphMeasurement
+            ? texMaterialBoundaryPreviousDepth(
+                previousParagraphMeasurement,
+                options.lineHeight
+              )
+            : previousDisplayMaterialMetrics?.depth;
+          if (previousDepth !== undefined) {
+            items.push(plainParagraphBoundaryInterlineGlueItem(
+              item,
+              texInterlineGlueSize(
+                previousDepth,
+                materialMetrics.height,
+                options.lineHeight
+              )
+            ));
+          }
+        }
+        items.push(materialItem);
+        previousParagraphMeasurement = undefined;
+        previousDisplayMaterialMetrics = materialMetrics;
+        previousDepthSuppressed = false;
+        plainParagraphInterlinePending = materialMetrics !== undefined;
+        paragraphBoundaryInterlineAlreadyInserted = false;
+        continue;
+      }
+      const nested = resolveDisplayMathVerticalGlueInItems(
+        item.items,
+        paragraphMeasurements,
+        options,
+        path,
+        {
+          ...(previousParagraphMeasurement !== undefined ? { previousParagraphMeasurement: previousParagraphMeasurement } : {}),
+          previousDisplaySkipVariant,
+          ...(previousDisplayMaterialMetrics !== undefined ? { previousDisplayMaterialMetrics: previousDisplayMaterialMetrics } : {}),
+          previousDepthSuppressed,
+        }
+      );
+      items.push({
+        ...item,
+        items: nested.items,
+      });
+      previousParagraphMeasurement = nested.previousParagraphMeasurement;
+      previousDisplaySkipVariant = nested.previousDisplaySkipVariant;
+      previousDisplayMaterialMetrics = nested.previousDisplayMaterialMetrics;
+      previousDepthSuppressed = nested.previousDepthSuppressed;
+      if (previousDepthSuppressed) plainParagraphInterlinePending = false;
+      continue;
+    }
+    if (item.kind === "paragraph") {
+      const paragraphMeasurement = paragraphMeasurements.get(texVListPathKey(path));
+      const previousDepth = previousParagraphMeasurement
+        ? texParagraphLastLineDepth(previousParagraphMeasurement)
+        : previousDisplayMaterialMetrics?.depth;
+      if (
+        previousDepth !== undefined &&
+        paragraphMeasurement &&
+        plainParagraphInterlinePending &&
+        !paragraphBoundaryInterlineAlreadyInserted
+      ) {
+        const interlineGlue = plainParagraphBoundaryInterlineGlueItem(
+          item,
+          texInterlineGlueSize(
+            previousDepth,
+            paragraphMeasurement.ruleLeadingMetrics.height,
+            paragraphMeasurement.baselineSkip ?? options.lineHeight
+          )
+        );
+        // A list-label hbox rides directly before its paragraph — an
+        // adjacency the measurer enforces, and the label's y derives from
+        // the cursor at the pair. Interline glue belongs above the pair,
+        // never between the label and its paragraph.
+        const attachedLabel = items.at(-1);
+        if (
+          attachedLabel?.kind === "hbox" &&
+          attachedLabel.verticalPlacement?.kind === "paragraph-first-line-baseline"
+        ) {
+          items.splice(items.length - 1, 0, interlineGlue);
+        } else {
+          items.push(interlineGlue);
+        }
+      }
+      previousParagraphMeasurement = paragraphMeasurement;
+      previousDisplayMaterialMetrics = undefined;
+      previousDepthSuppressed = false;
+      plainParagraphInterlinePending = true;
+      paragraphBoundaryInterlineAlreadyInserted = false;
+      items.push(item);
+      continue;
+    }
+    if (
+      item.kind === "glue" &&
+      item.origin?.kind === "display-math-boundary"
+    ) {
+      const displayItem = item.origin.side === "above"
+        ? nextDisplayMathItem(sourceItems, index)
+        : undefined;
+      const variant: TexDisplayMathSkipVariant =
+        item.origin.variant ??
+        (item.origin.displayLeftEdge !== undefined
+          ? displayMathSkipVariant(
+              item.origin.displayLeftEdge,
+              previousParagraphMeasurement
+            )
+          : previousDisplaySkipVariant);
+      if (item.origin.side === "above") {
+        previousDisplaySkipVariant = variant;
+      }
+      plainParagraphInterlinePending = false;
+      items.push(resolveDisplayMathBoundaryGlueItem(
+        item,
+        variant,
+        options.displayMathProfile
+      ));
+      if (
+        item.origin.side === "above" &&
+        !previousDepthSuppressed &&
+        displayItem &&
+        (previousParagraphMeasurement || previousDisplayMaterialMetrics)
+      ) {
+        const previousDepth = previousParagraphMeasurement
+          ? texParagraphLastLineDepth(previousParagraphMeasurement)
+          : previousDisplayMaterialMetrics?.depth ?? texLength(0);
+        items.push(displayMathInterlineGlueItem(
+          item,
+          "above",
+          texInterlineGlueSize(
+            previousDepth,
+            displayItem.box.height,
+            item.origin.baselineSkip ?? options.lineHeight
+          )
+        ));
+      } else if (item.origin.side === "below" && previousDisplayMaterialMetrics && !nointerlineskipFollows(sourceItems, index)) {
+        const nextParagraph = nextParagraphMeasurement(
+          sourceItems,
+          index,
+          pathPrefix,
+          paragraphMeasurements
+        );
+        const nextEmptyLine = nextPostDisplayEmptyLineHBox(sourceItems, index);
+        const nextHeight =
+          nextParagraph?.ruleLeadingMetrics.height ??
+          nextEmptyLine?.box.metrics.height;
+        if (nextHeight !== undefined) {
+          items.push(displayMathInterlineGlueItem(
+            item,
+            "below",
+            texInterlineGlueSize(
+              previousDisplayMaterialMetrics.depth,
+              nextHeight,
+              nextParagraph ? nextParagraph.baselineSkip ?? options.lineHeight : item.origin.baselineSkip ?? options.lineHeight
+            )
+          ));
+        }
+      }
+      continue;
+    }
+    if (
+      item.kind === "glue" &&
+      isParagraphBoundaryGlueOrigin(item.origin)
+    ) {
+      items.push(item);
+      plainParagraphInterlinePending = false;
+      if (!previousDepthSuppressed && shouldInsertParagraphBoundaryInterlineGlue(sourceItems, index)) {
+        const nextParagraph = nextParagraphMeasurement(
+          sourceItems,
+          index,
+          pathPrefix,
+          paragraphMeasurements
+        );
+        if (previousParagraphMeasurement && nextParagraph) {
+          items.push(paragraphBoundaryInterlineGlueItem(
+            item,
+            texInterlineGlueSize(
+              texParagraphLastLineDepth(previousParagraphMeasurement),
+              nextParagraph.ruleLeadingMetrics.height,
+              nextParagraph.baselineSkip ?? options.lineHeight
+            )
+          ));
+          paragraphBoundaryInterlineAlreadyInserted = true;
+        } else if (previousDisplayMaterialMetrics && nextParagraph) {
+          items.push(paragraphBoundaryInterlineGlueItem(
+            item,
+            texInterlineGlueSize(
+              previousDisplayMaterialMetrics.depth,
+              nextParagraph.ruleLeadingMetrics.height,
+              nextParagraph.baselineSkip ?? options.lineHeight
+            )
+          ));
+          paragraphBoundaryInterlineAlreadyInserted = true;
+        }
+      }
+      continue;
+    }
+    if (
+      item.kind === "glue" &&
+      item.origin?.kind === "display-math-interline" &&
+      item.origin.purpose === "align-row-baseline"
+    ) {
+      const nextRow = nextDisplayAlignmentRowHBox(sourceItems, index);
+      if (nextRow) {
+        const previousDepth = previousParagraphMeasurement
+          ? displayAlignmentPreviousDepth(previousParagraphMeasurement)
+          : previousDisplayMaterialMetrics?.depth ??
+          texLength(0);
+        items.push({
+          ...item,
+          size: previousDepthSuppressed ? texLength(0) : texOpenedInterlineGlueSize(
+            previousDepth,
+            nextRow.box.metrics.height,
+            item.origin.openedInterline
+          ),
+        });
+        continue;
+      }
+    }
+    if (
+      item.kind === "glue" &&
+      item.origin?.kind === "explicit-command"
+    ) {
+      items.push(item);
+      plainParagraphInterlinePending = false;
+      if (!previousDepthSuppressed && shouldInsertExplicitVerticalInterlineGlue(sourceItems, index)) {
+        const nextParagraph = nextParagraphMeasurement(
+          sourceItems,
+          index,
+          pathPrefix,
+          paragraphMeasurements
+        );
+        const previousDepth = explicitVerticalPreviousDepth(
+          previousParagraphMeasurement,
+          previousDisplayMaterialMetrics
+        );
+        if (previousDepth !== undefined && nextParagraph) {
+          items.push(plainVerticalInterlineGlueItem(
+            item,
+            texInterlineGlueSize(
+              previousDepth,
+              nextParagraph.ruleLeadingMetrics.height,
+              nextParagraph.baselineSkip ?? options.lineHeight
+            )
+          ));
+          paragraphBoundaryInterlineAlreadyInserted = true;
+        }
+      }
+      continue;
+    }
+    if (item.kind === "rule") {
+      items.push(item);
+      plainParagraphInterlinePending = false;
+      previousParagraphMeasurement = undefined;
+      previousDisplayMaterialMetrics = undefined;
+      continue;
+    }
+    if (
+      item.kind === "glue" &&
+      item.origin?.kind === "display-alignment-intertext-leading"
+    ) {
+      const nextParagraph = nextParagraphMeasurement(
+        sourceItems,
+        index,
+        pathPrefix,
+        paragraphMeasurements
+      );
+      items.push({
+        ...item,
+        size: displayAlignmentIntertextLeadingSize(
+          previousDisplayMaterialMetrics?.depth ?? texLength(0),
+          nextParagraph,
+          item.origin.openedInterline
+        ),
+      });
+      continue;
+    }
+    if (item.kind === "display-math") {
+      previousParagraphMeasurement = undefined;
+      plainParagraphInterlinePending = false;
+      previousDisplayMaterialMetrics = {
+        width: item.box.width,
+        height: item.box.height,
+        depth: item.box.depth,
+      };
+      previousDepthSuppressed = false;
+    } else if (isDisplayAlignmentRowHBox(item)) {
+      previousParagraphMeasurement = undefined;
+      plainParagraphInterlinePending = false;
+      previousDisplayMaterialMetrics = item.box.metrics;
+      previousDepthSuppressed = false;
+    } else if (isDisplayEmptyLineHBox(item)) {
+      previousParagraphMeasurement = undefined;
+      plainParagraphInterlinePending = true;
+      previousDisplayMaterialMetrics = item.box.metrics;
+      previousDepthSuppressed = false;
+    } else if (item.kind !== "penalty" && !isBoundaryTransparentHBox(item)) {
+      plainParagraphInterlinePending = false;
+    }
+    items.push(item);
+  }
+  return {
+    items,
+    ...(previousParagraphMeasurement !== undefined ? { previousParagraphMeasurement: previousParagraphMeasurement } : {}),
+    previousDisplaySkipVariant,
+    ...(previousDisplayMaterialMetrics !== undefined ? { previousDisplayMaterialMetrics: previousDisplayMaterialMetrics } : {}),
+    previousDepthSuppressed,
+  };
+}
+
+function shouldInsertParagraphBoundaryInterlineGlue(
+  items: readonly TexVListItem[],
+  index: number
+): boolean {
+  for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+    const item = items[nextIndex];
+    if (!item) continue;
+    if (item.kind === "penalty" || isBoundaryTransparentHBox(item)) {
+      continue;
+    }
+    if (
+      item.kind === "glue" &&
+      isParagraphBoundaryGlueOrigin(item.origin)
+    ) {
+      return false;
+    }
+    return item.kind === "paragraph";
+  }
+  return false;
+}
+
+/** Whether a \nointerlineskip comes before the next box: no baseline glue then. */
+function nointerlineskipFollows(items: readonly TexVListItem[], index: number): boolean {
+  for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+    const item = items[nextIndex];
+    if (!item) continue;
+    if (item.kind === "glue" && item.origin?.kind === "explicit-command" && item.origin.command === "nointerlineskip") return true;
+    if (item.kind !== "glue" && item.kind !== "penalty" && !isBoundaryTransparentHBox(item)) return false;
+  }
+  return false;
+}
+
+function isParagraphBoundaryGlueOrigin(origin: TexGlueItem["origin"]): boolean {
+  return origin?.kind === "quote-boundary" ||
+    origin?.kind === "list-boundary" ||
+    origin?.kind === "trivlist-boundary";
+}
+
+function materialVBoxMetrics(
+  item: TexVBoxItem,
+  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>
+): TexBoxMetrics | undefined {
+  if (!isMaterialTexVBoxItem(item)) {
+    return undefined;
+  }
+  const laidOut = layoutTexVListItems(
+    [item],
+    createMeasuredParagraphVListMeasurer(paragraphMeasurements),
+    null,
+    texVListY(0)
+  );
+  return laidOut.positioned[0]?.metrics;
+}
+
+function isMaterialTexVBoxItem(item: TexVBoxItem): boolean {
+  return item.material !== undefined;
+}
+
+function shouldInsertExplicitVerticalInterlineGlue(
+  items: readonly TexVListItem[],
+  index: number
+): boolean {
+  for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+    const item = items[nextIndex];
+    if (!item) continue;
+    if (item.kind === "penalty" || isBoundaryTransparentHBox(item)) {
+      continue;
+    }
+    if (isExplicitVerticalSeparator(item)) {
+      return false;
+    }
+    return item.kind === "paragraph";
+  }
+  return false;
+}
+
+function isExplicitVerticalSeparator(item: TexVListItem): boolean {
+  return item.kind === "rule" ||
+    (item.kind === "glue" && item.origin?.kind === "explicit-command");
+}
+
+function explicitVerticalPreviousDepth(
+  previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined,
+  previousDisplayMaterialMetrics: TexBoxMetrics | undefined
+): TexLength | undefined {
+  return previousParagraphMeasurement
+    ? texParagraphLastLineDepth(previousParagraphMeasurement)
+    : previousDisplayMaterialMetrics?.depth;
+}
+
+function displayAlignmentMaterialItems(
+  item: TexDisplayAlignmentItem,
+  profile: TexDisplayMathLayoutProfile
+): readonly TexVListItem[] {
+  const rows: TexVListItem[] = [];
+  rows.push(displayAlignmentGlueItem(item, displayAlignmentTopCorrection(item), "align-top-correction"));
+  rows.push(displayAlignmentGlueItem(item, texLength(0), "align-structural"));
+  rows.push(displayAlignmentGlueItem(item, texLength(0), "align-row-baseline"));
+  for (const row of item.alignment.rows) {
+    if (row.rowIndex > 0) {
+      rows.push(displayAlignmentGlueItem(item, texLength(0), "align-structural"));
+      rows.push(displayAlignmentGlueItem(item, texLength(0), "align-row-baseline"));
+    }
+    for (const intertext of item.alignment.intertexts?.filter((candidate) => candidate.beforeRowIndex === row.rowIndex) ?? []) {
+      rows.push(displayAlignmentIntertextSkipItem(
+        item,
+        intertext,
+        "below",
+        profile
+      ));
+      rows.push(displayAlignmentIntertextLeadingItem(item, intertext));
+      rows.push(displayAlignmentIntertextParagraph(item, intertext));
+      rows.push(displayAlignmentIntertextSkipItem(
+        item,
+        intertext,
+        "above",
+        profile
+      ));
+      rows.push(displayAlignmentGlueItem(item, texLength(0), "align-structural"));
+      rows.push(displayAlignmentGlueItem(item, texLength(0), "align-row-baseline"));
+    }
+    rows.push(displayAlignmentRowHBox(item, row));
+  }
+  rows.push(displayAlignmentGlueItem(item, texLength(0), "align-structural"));
+  return rows;
+}
+
+function displayAlignmentIntertextLeadingItem(
+  item: TexDisplayAlignmentItem,
+  intertext: NonNullable<TexDisplayAlignmentItem["alignment"]["intertexts"]>[number]
+): TexGlueItem {
+  return {
+    kind: "glue",
+    sourceSpan: {
+      start: intertext.sourceStart,
+      end: intertext.sourceEnd,
+    },
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "display-alignment-intertext-leading",
+      openedInterline: item.alignment.openedInterline,
+    },
+    size: texLength(0),
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function displayAlignmentIntertextSkipItem(
+  item: TexDisplayAlignmentItem,
+  intertext: NonNullable<TexDisplayAlignmentItem["alignment"]["intertexts"]>[number],
+  side: "above" | "below",
+  profile: TexDisplayMathLayoutProfile
+): TexGlueItem {
+  const skip = profile[side].normal;
+  return {
+    kind: "glue",
+    sourceSpan: {
+      start: intertext.sourceStart,
+      end: intertext.sourceEnd,
+    },
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "display-alignment-intertext-skip",
+      side,
+    },
+    size: texLength(skip.sizePt),
+    stretch: texLength(skip.stretchPt),
+    shrink: texLength(skip.shrinkPt),
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function displayAlignmentIntertextParagraph(
+  item: TexDisplayAlignmentItem,
+  intertext: NonNullable<TexDisplayAlignmentItem["alignment"]["intertexts"]>[number]
+): TexParagraphItem {
+  const blockIndex = displayAlignmentIntertextBlockIndex(intertext.sourceStart);
+  const parsed = displayAlignmentIntertextNodes(intertext.parts);
+  const rawText = displayAlignmentIntertextRawText(intertext.parts);
+  const nodes = parsed.unsupported
+    ? displayAlignmentPlainTextNodes(intertext, rawText)
+    : parsed.nodes;
+  const sourceSpan = {
+    start: intertext.contentStart,
+    end: intertext.contentEnd,
+  };
+  const scope = displayAlignmentIntertextScope(item.scopePath);
+  return {
+    kind: "paragraph",
+    sourceSpan,
+    blockIndex,
+    paragraph: {
+      text: rawText,
+      sourceSpan,
+      ...(item.fontSizePt !== undefined ? { fontSizePt: item.fontSizePt } : {}),
+      ...(item.baselineSkip !== undefined ? { baselineSkip: item.baselineSkip } : {}),
+      nodes,
+      noIndent: true,
+      alignment: "justified",
+      spaceGlueProfile: "font",
+      sourceHitPolicy: "source-range",
+      overfullSingleLineFallback: true,
+      quoteDepth: scope.quoteDepth,
+      ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+      ...(scope.listContext ? { listContext: scope.listContext } : {}),
+      ...(scope.quoteDepth > 0 || scope.listContext ? { useScopedLineWidth: true } : {}),
+      ...(scope.listContext ? {} : { ignoreAncestorBreakMargins: true }),
+      blockIndex,
+    },
+  };
+}
+
+function displayAlignmentIntertextScope(
+  scopePath: readonly TexVBoxRole[] | undefined
+): {
+  readonly quoteDepth: number;
+  readonly listContext?: SimpleTexListContext;
+} {
+  const quoteDepth = scopePath?.filter((role) => role.kind === "quote").length ?? 0;
+  const listRole = lastRoleOfKind(scopePath, "list");
+  if (!listRole) {
+    return { quoteDepth };
+  }
+  const itemRole = lastRoleOfKind(scopePath, "list-item");
+  return {
+    quoteDepth,
+    listContext: {
+      kind: listRole.listKind,
+      depth: listRole.depth,
+      labelDepth: listRole.labelDepth,
+      itemIndex: itemRole?.itemIndex ?? 0,
+      ownLeftMarginEm: listRole.ownLeftMarginEm,
+      totalLeftMarginEm: listRole.totalLeftMarginEm,
+      showLabel: false,
+    },
+  };
+}
+
+function lastRoleOfKind<K extends TexVBoxRole["kind"]>(
+  scopePath: readonly TexVBoxRole[] | undefined,
+  kind: K
+): Extract<TexVBoxRole, { kind: K }> | undefined {
+  if (!scopePath) {
+    return undefined;
+  }
+  for (let index = scopePath.length - 1; index >= 0; index -= 1) {
+    const role = scopePath[index];
+    if (role && roleHasKind(role, kind)) return role;
+  }
+  return undefined;
+}
+
+function displayAlignmentIntertextBlockIndex(sourceStart: number): number {
+  return -1_000_000 - Math.max(0, sourceStart);
+}
+
+function displayAlignmentIntertextLeadingSize(
+  previousDepth: TexLength,
+  paragraph: TexVListParagraphBoxMeasurement | undefined,
+  openedInterline: TexDisplayAlignmentItem["alignment"]["openedInterline"]
+): TexLength {
+  if (!paragraph) {
+    return texLength(0);
+  }
+  const vboxHeight = paragraph.lineIndices.length > 1
+    ? paragraph.ruleLeadingAdvance
+    : paragraph.ruleLeadingMetrics.height;
+  return texOpenedInterlineGlueSize(
+    previousDepth,
+    vboxHeight,
+    openedInterline
+  );
+}
+
+function displayAlignmentPreviousDepth(
+  paragraph: TexVListParagraphBoxMeasurement
+): TexLength {
+  return texParagraphLastLineDepth(paragraph);
+}
+
+function texParagraphLastLineDepth(
+  paragraph: TexVListParagraphBoxMeasurement
+): TexLength {
+  if (paragraph.lastLineMetrics) {
+    return paragraph.lastLineMetrics.depth;
+  }
+  const lastLine = paragraph.lineOffsets.at(-1);
+  if (lastLine?.metrics) {
+    return lastLine.metrics.depth;
+  }
+  if (lastLine?.y === undefined) {
+    return paragraph.ruleLeadingMetrics.depth;
+  }
+  return texLength(Math.max(0, roundTexPt(
+    paragraph.ruleLeadingAdvance - lastLine.y - paragraph.ruleLeadingMetrics.height
+  )));
+}
+
+function texMaterialBoundaryPreviousDepth(
+  paragraph: TexVListParagraphBoxMeasurement,
+  lineHeight: TexLength
+): TexLength {
+  return texLength(Math.max(
+    texParagraphLastLineDepth(paragraph),
+    lineHeight / 3
+  ));
+}
+
+function displayAlignmentPlainTextNodes(
+  intertext: NonNullable<TexDisplayAlignmentItem["alignment"]["intertexts"]>[number],
+  text: string
+): readonly SimpleTexInlineNode[] {
+  return text.length > 0
+    ? [{
+        kind: "text",
+        text,
+        sourceStart: intertext.contentStart,
+        sourceEnd: intertext.contentEnd,
+      }]
+    : [];
+}
+
+function displayAlignmentIntertextNodes(
+  parts: readonly TexMathTextPart[]
+): { readonly nodes: readonly SimpleTexInlineNode[]; readonly unsupported: boolean } {
+  const nodes: SimpleTexInlineNode[] = [];
+  let unsupported = false;
+  for (const part of parts) {
+    if (part.kind === "text") {
+      const parsed = parseSimpleTexInlineNodes(part.text, part.sourceSpan.start);
+      nodes.push(...parsed.nodes);
+      unsupported ||= parsed.unsupportedCommand;
+      continue;
+    }
+    nodes.push({
+      kind: "math",
+      text: `$${part.content}$`,
+      delimiter: "dollar",
+      content: part.content,
+      contentStart: part.contentSourceSpan.start,
+      contentEnd: part.contentSourceSpan.end,
+      sourceStart: part.sourceSpan.start,
+      sourceEnd: part.sourceSpan.end,
+    });
+  }
+  return { nodes, unsupported };
+}
+
+function displayAlignmentIntertextRawText(parts: readonly TexMathTextPart[]): string {
+  return parts.map((part) =>
+    part.kind === "text" ? part.text : `$${part.content}$`
+  ).join("");
+}
+
+function displayAlignmentTopCorrection(item: TexDisplayAlignmentItem): TexLength {
+  return item.delimiter === "multline" || item.delimiter === "multline-star"
+    ? texLength(0)
+    : latexAmsmathAlignTopCorrectionPt;
+}
+
+function displayAlignmentGlueItem(
+  item: TexDisplayAlignmentItem,
+  size: TexLength,
+  purpose: DisplayAlignmentGluePurpose
+): TexGlueItem {
+  return {
+    kind: "glue",
+    sourceSpan: item.sourceSpan,
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "display-math-interline",
+      side: "above",
+      purpose,
+      openedInterline: item.alignment.openedInterline,
+    },
+    size,
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function displayAlignmentRowHBox(
+  item: TexDisplayAlignmentItem,
+  row: TexDisplayAlignmentItem["alignment"]["rows"][number]
+): TexHBoxItem {
+  return {
+    kind: "hbox",
+    sourceSpan: {
+      start: row.sourceStart,
+      end: row.sourceEnd,
+    },
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    role: {
+      kind: "display-align-row",
+      delimiter: item.delimiter,
+      rowIndex: row.rowIndex,
+    },
+    x: row.x,
+    box: {
+      metrics: {
+        width: row.width,
+        height: row.height,
+        depth: row.depth,
+      },
+      hitMap: {
+        kind: "tex-math",
+        sourceStart: row.sourceStart,
+        sourceEnd: row.sourceEnd,
+        contentStart: row.contentStart,
+        contentEnd: row.contentEnd,
+        width: row.width,
+        height: row.height,
+        depth: row.depth,
+        ...(row.caretMap ? { caretMap: row.caretMap } : {}),
+        ...(row.caretStops ? { caretStops: row.caretStops } : {}),
+        ...(row.constructRanges ? { constructRanges: row.constructRanges } : {}),
+        ...(row.breakpoints ? { breakpoints: row.breakpoints } : {}),
+      },
+      renderItems: row.svgBody
+        ? [{
+            kind: "tex-math-svg",
+            svgBody: row.svgBody,
+            x: texHBoxX(0),
+            baseline: texHBoxY(row.height),
+          }]
+        : [],
+    },
+  };
+}
+
+function isDisplayAlignmentRowHBox(
+  item: TexVListItem
+): item is TexHBoxItem & {
+  readonly role: Extract<
+    NonNullable<TexHBoxItem["role"]>,
+    { readonly kind: "display-align-row" }
+  >;
+} {
+  return item.kind === "hbox" && item.role?.kind === "display-align-row";
+}
+
+function isDisplayEmptyLineHBox(
+  item: TexVListItem
+): item is TexHBoxItem & {
+  readonly role: Extract<
+    NonNullable<TexHBoxItem["role"]>,
+    { readonly kind: "display-empty-line" }
+  >;
+} {
+  return item.kind === "hbox" && item.role?.kind === "display-empty-line";
+}
+
+function nextPostDisplayEmptyLineHBox(
+  items: readonly TexVListItem[],
+  index: number
+): TexHBoxItem | undefined {
+  for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+    const item = items[nextIndex];
+    if (!item) continue;
+    if (item.kind === "glue" || item.kind === "penalty") {
+      continue;
+    }
+    return isDisplayEmptyLineHBox(item) &&
+        item.role.position === "after-display-vspace"
+      ? item
+      : undefined;
+  }
+  return undefined;
+}
+
+function nextDisplayAlignmentRowHBox(
+  items: readonly TexVListItem[],
+  index: number
+): TexHBoxItem | undefined {
+  for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+    const item = items[nextIndex];
+    if (!item) continue;
+    if (item.kind === "glue" || item.kind === "penalty") {
+      continue;
+    }
+    return isDisplayAlignmentRowHBox(item) ? item : undefined;
+  }
+  return undefined;
+}
+
+function nextDisplayMathItem(
+  items: readonly TexVListItem[],
+  index: number
+): TexDisplayMathItem | undefined {
+  const item = items[index + 1];
+  return item?.kind === "display-math" ? item : undefined;
+}
+
+function displayMathSkipVariant(
+  displayLeftEdge: TexLength,
+  previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined
+): TexDisplayMathSkipVariant {
+  // A display that starts a vertical list has no finite preceding-line width;
+  // TeX consequently takes the normal display skips.
+  if (!previousParagraphMeasurement) {
+    return "normal";
+  }
+  const preDisplaySize = previousParagraphMeasurement.lastLinePreDisplaySize ??
+    texLength(Number.NEGATIVE_INFINITY);
+  // TeX.web chooses the normal skips when the centered display overlaps the
+  // preceding line's pre-display size; otherwise it uses the short skips.
+  return displayLeftEdge <= preDisplaySize ? "normal" : "short";
+}
+
+function resolveDisplayMathBoundaryGlueItem(
+  item: TexGlueItem,
+  variant: TexDisplayMathSkipVariant,
+  profile: TexDisplayMathLayoutProfile = latexArticleDisplaySkipsPt
+): TexGlueItem {
+  if (item.origin?.kind !== "display-math-boundary") {
+    return item;
+  }
+  const skip = (item.origin.profile ?? profile)[item.origin.side][variant];
+  const { profile: resolvedProfile, baselineSkip: resolvedBaseline, ...origin } = item.origin;
+  void resolvedProfile;
+  void resolvedBaseline;
+  return {
+    ...item,
+    origin: { ...origin, variant },
+    size: texLength(skip.sizePt),
+    stretch: texLength(skip.stretchPt),
+    shrink: texLength(skip.shrinkPt),
+  };
+}
+
+function displayMathInterlineGlueItem(
+  item: TexGlueItem,
+  side: "above" | "below",
+  size: TexLength
+): TexGlueItem {
+  return {
+    kind: "glue",
+    ...(item.sourceSpan !== undefined ? { sourceSpan: item.sourceSpan } : {}),
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "display-math-interline",
+      side,
+    },
+    size,
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function paragraphBoundaryInterlineGlueItem(
+  item: TexGlueItem,
+  size: TexLength
+): TexGlueItem {
+  return {
+    kind: "glue",
+    ...(item.sourceSpan !== undefined ? { sourceSpan: item.sourceSpan } : {}),
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "paragraph-boundary-interline",
+      boundary: paragraphBoundaryInterlineKind(item.origin),
+    },
+    size,
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function paragraphBoundaryInterlineKind(
+  origin: TexGlueItem["origin"]
+): "quote" | "list" | "trivlist" {
+  if (origin?.kind === "quote-boundary") {
+    return "quote";
+  }
+  if (origin?.kind === "trivlist-boundary") {
+    return "trivlist";
+  }
+  return "list";
+}
+
+function plainParagraphBoundaryInterlineGlueItem(
+  item: TexParagraphItem | TexVBoxItem,
+  size: TexLength
+): TexGlueItem {
+  const scopePath = item.kind === "paragraph"
+    ? texVBoxRolePathForParagraph(item.paragraph)
+    : item.scopePath ?? [];
+  return {
+    kind: "glue",
+    ...(item.sourceSpan !== undefined ? { sourceSpan: item.sourceSpan } : {}),
+    ...(scopePath.length > 0 ? { scopePath } : {}),
+    origin: {
+      kind: "paragraph-boundary-interline",
+      boundary: "plain",
+    },
+    size,
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function plainVerticalInterlineGlueItem(
+  item: TexGlueItem,
+  size: TexLength
+): TexGlueItem {
+  return {
+    kind: "glue",
+    ...(item.sourceSpan !== undefined ? { sourceSpan: item.sourceSpan } : {}),
+    ...(item.scopePath ? { scopePath: item.scopePath } : {}),
+    origin: {
+      kind: "paragraph-boundary-interline",
+      boundary: "plain",
+    },
+    size,
+    stretchOrder: "normal",
+    shrinkOrder: "normal",
+  };
+}
+
+function nextParagraphMeasurement(
+  items: readonly TexVListItem[],
+  index: number,
+  pathPrefix: readonly number[],
+  paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>
+): TexVListParagraphBoxMeasurement | undefined {
+  for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+    const item = items[nextIndex];
+    if (!item) continue;
+    if (item.kind === "glue" || item.kind === "penalty" || isBoundaryTransparentHBox(item)) {
+      continue;
+    }
+    if (item.kind === "paragraph") {
+      return paragraphMeasurements.get(texVListPathKey([...pathPrefix, nextIndex]));
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+function isBoundaryTransparentHBox(item: TexVListItem): boolean {
+  return item.kind === "hbox" && item.affectsVBoxBaseline === false;
+}
+
+function texInterlineGlueSize(
+  previousDepth: TexLength,
+  nextHeight: TexLength,
+  lineHeight: TexLength
+): TexLength {
+  const baselineGlue = texLength(roundTexPt(lineHeight - previousDepth - nextHeight));
+  return baselineGlue < 0 ? latexNormalLineSkipPt : baselineGlue;
+}
+
+function texOpenedInterlineGlueSize(
+  previousDepth: TexLength,
+  nextHeight: TexLength,
+  openedInterline: TexDisplayAlignmentItem["alignment"]["openedInterline"]
+): TexLength {
+  const baselineGlue = texLength(roundTexPt(
+    openedInterline.baselineSkip - previousDepth - nextHeight
+  ));
+  return baselineGlue < openedInterline.lineSkipLimit
+    ? openedInterline.lineSkip
+    : baselineGlue;
+}
+
+function texArticleQuoteVerticalSkipBefore(
+  state: SimpleTexParagraphVerticalSkipState,
+  previousQuoteDepth: number,
+  previousQuotationDepth: number,
+  quoteDepth: number,
+  quotationDepth: number,
+  startsListInVerticalMode: boolean,
+  listTransitionActive = false,
+  font: ResolvedTexFont
+): TexLength {
+  if (listTransitionActive) {
+    return texLength(0);
+  }
+  if (previousQuoteDepth === quoteDepth) {
+    if (quoteDepth <= 0) {
+      return texLength(0);
+    }
+    return previousQuotationDepth > 0 && quotationDepth > 0
+      ? texLength(0)
+      : texEmSkip(articleQuoteSpacingEm.parsep, font);
+  }
+  if (quoteDepth > previousQuoteDepth) {
+    const usesPartopsep = previousQuoteDepth === 0 && startsListInVerticalMode;
+    state.quotePartopsepByDepth.set(quoteDepth, usesPartopsep);
+    return texEmSkip(
+      articleQuoteSpacingEm.topsep +
+        (previousQuoteDepth === 0 && usesPartopsep
+          ? articleQuoteSpacingEm.partopsep
+          : 0),
+      font
+    );
+  }
+  if (previousQuoteDepth > quoteDepth) {
+    const usesPartopsep = state.quotePartopsepByDepth.get(previousQuoteDepth) ?? false;
+    state.quotePartopsepByDepth.delete(previousQuoteDepth);
+    return texEmSkip(
+      articleQuoteSpacingEm.topsep +
+        (usesPartopsep
+          ? articleQuoteSpacingEm.partopsep
+          : 0),
+      font
+    );
+  }
+  return texLength(0);
+}
+
+function texArticleTrivlistVerticalSkipBefore(
+  state: SimpleTexParagraphVerticalSkipState,
+  previousScopes: readonly TexTrivlistScopeRole[],
+  currentScopes: readonly TexTrivlistScopeRole[],
+  startsListInVerticalMode: boolean,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  const commonPrefixLength = commonTrivlistScopePrefixLength(
+    previousScopes,
+    currentScopes
+  );
+  if (
+    commonPrefixLength === previousScopes.length &&
+    commonPrefixLength === currentScopes.length
+  ) {
+    return texLength(0);
+  }
+  const exitSize = texArticleTrivlistExitBoundarySkip(
+    state,
+    previousScopes,
+    commonPrefixLength,
+    font,
+    profile
+  );
+  let entrySize = texLength(0);
+  for (let index = commonPrefixLength; index < currentScopes.length; index += 1) {
+    const scope = currentScopes[index];
+    if (!scope) {
+      continue;
+    }
+    const usesPartopsep =
+      index === 0 && commonPrefixLength === 0 && startsListInVerticalMode;
+    state.trivlistPartopsepByScope.set(scope, usesPartopsep);
+    entrySize = texLength(Math.max(
+      entrySize,
+      texTrivlistBoundarySkip(font, usesPartopsep, profile)
+    ));
+  }
+  // An authored penalty separates the closing and opening glue, preventing
+  // LaTeX \addvspace from collapsing them across adjacent environments.
+  return texLength(state.hasInterveningPenalty ? exitSize + entrySize : Math.max(exitSize, entrySize));
+}
+
+function listProfileForContext(profile: TexListLayoutProfile | undefined, context: SimpleTexListContext | undefined): TexListLayoutProfile | undefined {
+  if (!profile || !context) return profile;
+  const size = context.depth === 1 ? profile.sizeOverrides?.find(item => Math.abs(item.fontSizePt - Number(context.fontSizePt)) < .001) : undefined;
+  const index = context.depth - 1;
+  function replace(values: readonly number[], value: number | undefined): readonly number[];
+  function replace(values: readonly number[] | undefined, value: number | undefined): readonly number[] | undefined;
+  function replace(values: readonly number[] | undefined, value: number | undefined): readonly number[] | undefined {
+    if (value === undefined) return values;
+    const copy = [...values ?? []];
+    while (copy.length <= index) copy.push(0);
+    copy[index] = value;
+    return copy;
+  }
+  const authored = context.spacing;
+  const topsepStretchPtByDepth = replace(profile.topsepStretchPtByDepth, authored?.topsep?.stretchPt ?? size?.topsepStretchPt);
+  const topsepShrinkPtByDepth = replace(profile.topsepShrinkPtByDepth, authored?.topsep?.shrinkPt ?? size?.topsepShrinkPt);
+  const itemsepStretchPtByDepth = replace(profile.itemsepStretchPtByDepth, authored?.itemsep?.stretchPt ?? size?.itemsepStretchPt);
+  const itemsepShrinkPtByDepth = replace(profile.itemsepShrinkPtByDepth, authored?.itemsep?.shrinkPt ?? size?.itemsepShrinkPt);
+  const parsepStretchPtByDepth = replace(profile.parsepStretchPtByDepth, authored?.parskip?.stretchPt ?? size?.parsepStretchPt);
+  const parsepShrinkPtByDepth = replace(profile.parsepShrinkPtByDepth, authored?.parskip?.shrinkPt ?? size?.parsepShrinkPt);
+  return { ...profile,
+    topsepPtByDepth: replace(profile.topsepPtByDepth, authored?.topsep?.sizePt ?? size?.topsepPt),
+    ...(topsepStretchPtByDepth !== undefined ? { topsepStretchPtByDepth } : {}),
+    ...(topsepShrinkPtByDepth !== undefined ? { topsepShrinkPtByDepth } : {}),
+    partopsepPtByDepth: replace(profile.partopsepPtByDepth, authored?.partopsep?.sizePt),
+    itemsepPtByDepth: replace(profile.itemsepPtByDepth, authored?.itemsep?.sizePt ?? size?.itemsepPt),
+    ...(itemsepStretchPtByDepth !== undefined ? { itemsepStretchPtByDepth } : {}),
+    ...(itemsepShrinkPtByDepth !== undefined ? { itemsepShrinkPtByDepth } : {}),
+    // \list copies \parsep into \parskip on entry. A later assignment to
+    // \parsep alone does not change the active paragraph glue.
+    parsepPtByDepth: replace(profile.parsepPtByDepth, authored?.parskip?.sizePt ?? size?.parsepPt),
+    ...(parsepStretchPtByDepth !== undefined ? { parsepStretchPtByDepth } : {}),
+    ...(parsepShrinkPtByDepth !== undefined ? { parsepShrinkPtByDepth } : {}),
+  };
+}
+
+function texArticleListVerticalSkipBefore(
+  state: SimpleTexParagraphVerticalSkipState,
+  previous: SimpleTexListContext | undefined,
+  current: SimpleTexListContext | undefined,
+  hasPreviousEmittedParagraph: boolean,
+  startsListInVerticalMode: boolean,
+  exitsTrivlistScope: boolean,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  if (!previous && !current) {
+    return texLength(0);
+  }
+  // Beamer zeros topsep, partopsep and itemsep, retaining the size-selected
+  // parsep (zero at normalsize, 3pt at small, 2pt at footnotesize).
+  if ((current ?? previous)?.kind === "bibliography") {
+    if (previous && previous.kind !== "bibliography") return texArticleListExitBoundarySkip(state, previous.depth, 0, font, profile);
+    return texLength(previous?.kind === "bibliography" && current?.kind === "bibliography" ? profile?.bibliographyParsepPt ?? 0 : 0);
+  }
+  if (!hasPreviousEmittedParagraph && current) {
+    state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
+    return texArticleInitialListSkip(
+      current.depth,
+      startsListInVerticalMode,
+      font,
+      profile
+    );
+  }
+  if (!previous && current) {
+    state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
+    return texArticleOutsideListBoundarySkip(
+      startsListInVerticalMode,
+      font,
+      profile,
+      current.depth
+    );
+  }
+  if (previous && !current) {
+    return texArticleListExitBoundarySkip(
+      state,
+      previous.depth,
+      0,
+      font,
+      profile
+    );
+  }
+  if (!previous || !current) {
+    return texLength(0);
+  }
+  if (previous.depth === current.depth && previous.listStart !== undefined && current.listStart !== undefined && previous.listStart !== current.listStart) {
+    // The closed list's trailing skip and the next list's initial skip are
+    // separate boundaries; \@endparenv closes the first paragraph scope.
+    return texLength(
+      texArticleOutsideListBoundarySkip(false, font, listProfileForContext(profile, previous), previous.depth) +
+      texArticleOutsideListBoundarySkip(startsListInVerticalMode, font, profile, current.depth)
+    );
+  }
+  if (current.depth > previous.depth) {
+    state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
+    return texArticleNestedListBoundarySkip(
+      previous.depth,
+      current.depth,
+      font,
+      profile
+    );
+  }
+  if (current.depth < previous.depth) {
+    const exitSkip = texArticleListExitBoundarySkip(
+      state,
+      previous.depth,
+      current.depth,
+      font,
+      profile
+    );
+    // A new outer item follows \endlist with \addvspace{\itemsep};
+    // the larger of that skip and the inner list's closing topsep survives.
+    return current.showLabel
+      ? texLength(Math.max(exitSkip, texArticleListItemBoundarySkip(current.depth, font, profile)))
+      : exitSkip;
+  }
+  if (
+    current.kind === previous.kind &&
+    current.labelDepth === previous.labelDepth &&
+    current.itemIndex === previous.itemIndex
+  ) {
+    return current.showLabel
+      ? texLength(0)
+      : texArticleListParagraphSkip(current.depth, font, profile);
+  }
+  if (exitsTrivlistScope && current.depth === previous.depth) {
+    return texArticleListItemSepSkip(current.depth, font, profile);
+  }
+  return texArticleListItemBoundarySkip(current.depth, font, profile);
+}
+
+function texArticleTrivlistExitBoundarySkip(
+  state: SimpleTexParagraphVerticalSkipState,
+  previousScopes: readonly TexTrivlistScopeRole[],
+  commonPrefixLength: number,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  let size = texLength(0);
+  for (let index = previousScopes.length - 1; index >= commonPrefixLength; index -= 1) {
+    const scope = previousScopes[index];
+    if (!scope) {
+      continue;
+    }
+    const usesPartopsep = state.trivlistPartopsepByScope.get(scope) ?? false;
+    state.trivlistPartopsepByScope.delete(scope);
+    const depthSize = texTrivlistBoundarySkip(font, usesPartopsep, profile);
+    size = texLength(Math.max(size, depthSize));
+  }
+  return size;
+}
+
+function texTrivlistBoundarySkip(font: ResolvedTexFont, usesPartopsep: boolean, profile?: TexListLayoutProfile): TexLength {
+  return texLength((profile?.trivlistTopsepPt ?? texEmSkip(articleListSpacingEm.topsep, font)) +
+    (usesPartopsep ? profile?.trivlistPartopsepPt ?? texEmSkip(articleListSpacingEm.partopsep, font) : 0));
+}
+
+function commonTrivlistScopePrefixLength(
+  previousScopes: readonly TexTrivlistScopeRole[],
+  currentScopes: readonly TexTrivlistScopeRole[]
+): number {
+  const max = Math.min(previousScopes.length, currentScopes.length);
+  for (let index = 0; index < max; index += 1) {
+    if (previousScopes[index] !== currentScopes[index]) {
+      return index;
+    }
+  }
+  return max;
+}
+
+function texArticleInitialListSkip(
+  depth: number,
+  startsListInVerticalMode: boolean,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  if (profile) {
+    return texLength(
+      texProfileDepthValue(profile.topsepPtByDepth, depth) +
+        (startsListInVerticalMode
+          ? texProfileDepthValue(profile.partopsepPtByDepth, depth)
+          : 0) +
+        profile.initialItemBaselineAdjustmentPt
+    );
+  }
+  return texEmSkip(
+    articleListSpacingEm.topsep +
+      (startsListInVerticalMode ? articleListSpacingEm.partopsep : 0) +
+      articleListSpacingEm.initialItemBaselineAdjustment,
+    font
+  );
+}
+
+function texArticleOutsideListBoundarySkip(
+  usesPartopsep: boolean,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile,
+  depth = 1
+): TexLength {
+  if (profile) {
+    return texLength(
+      texProfileDepthValue(profile.topsepPtByDepth, depth) +
+        (usesPartopsep
+          ? texProfileDepthValue(profile.partopsepPtByDepth, depth)
+          : 0)
+    );
+  }
+  return texEmSkip(
+    articleListSpacingEm.topsep +
+      (usesPartopsep
+        ? articleListSpacingEm.partopsep
+        : 0),
+    font
+  );
+}
+
+function texArticleListExitBoundarySkip(
+  state: SimpleTexParagraphVerticalSkipState,
+  previousDepth: number,
+  currentDepth: number,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  if (currentDepth <= 0) {
+    let size = texLength(0);
+    for (let depth = previousDepth; depth > 0; depth -= 1) {
+      const usesPartopsep = state.listPartopsepByDepth.get(depth) ?? false;
+      state.listPartopsepByDepth.delete(depth);
+      size = texLength(Math.max(
+        size,
+        texArticleOutsideListBoundarySkip(
+          usesPartopsep,
+          font,
+          profile,
+          depth
+        )
+      ));
+    }
+    return size;
+  }
+
+  let size = texLength(0);
+  for (let depth = previousDepth; depth > currentDepth; depth -= 1) {
+    const usesPartopsep = state.listPartopsepByDepth.get(depth) ?? false;
+    state.listPartopsepByDepth.delete(depth);
+    const depthSize = depth <= 1
+      ? texArticleOutsideListBoundarySkip(
+          usesPartopsep,
+          font,
+          profile,
+          depth
+        )
+      : texArticleNestedListBoundarySkip(
+          depth,
+          depth - 1,
+          font,
+          profile
+        );
+    size = texLength(Math.max(size, depthSize));
+  }
+  return size;
+}
+
+function texArticleNestedListBoundarySkip(
+  previousDepth: number,
+  currentDepth: number,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  if (profile) {
+    return texLength(texProfileDepthValue(
+      profile.topsepPtByDepth,
+      Math.max(previousDepth, currentDepth)
+    ) + texProfileDepthValue(profile.parsepPtByDepth, Math.min(previousDepth, currentDepth)));
+  }
+  return texEmSkip(
+    texDepthIndexedEm(
+      articleListSpacingEm.nestedTopsepByDepth,
+      Math.min(previousDepth, currentDepth)
+    ),
+    font
+  );
+}
+
+function texArticleListItemBoundarySkip(
+  depth: number,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  if (profile) {
+    return texLength(
+      texProfileDepthValue(profile.itemsepPtByDepth, depth) +
+        texProfileDepthValue(profile.parsepPtByDepth, depth)
+    );
+  }
+  return texEmSkip(
+    texDepthIndexedEm(articleListSpacingEm.itemsepByDepth, depth) +
+      texDepthIndexedEm(articleListSpacingEm.parsepByDepth, depth),
+    font
+  );
+}
+
+function texArticleListItemSepSkip(
+  depth: number,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  if (profile) {
+    return texLength(texProfileDepthValue(profile.itemsepPtByDepth, depth));
+  }
+  return texEmSkip(texDepthIndexedEm(articleListSpacingEm.itemsepByDepth, depth), font);
+}
+
+function texArticleListParagraphSkip(
+  depth: number,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  if (profile) {
+    return texLength(texProfileDepthValue(profile.parsepPtByDepth, depth));
+  }
+  return texEmSkip(texDepthIndexedEm(articleListSpacingEm.parsepByDepth, depth), font);
+}
+
+function texProfileDepthValue(values: readonly number[], depth: number): number {
+  return values[Math.max(0, Math.min(depth - 1, values.length - 1))] ?? 0;
+}
+
+function texProfileListVerticalGlueFlex(
+  previous: SimpleTexListContext | undefined,
+  current: SimpleTexListContext | undefined,
+  hasPreviousEmittedParagraph: boolean,
+  exitsTrivlistScope: boolean,
+  profile?: TexListLayoutProfile
+): { stretch: TexLength; shrink: TexLength } {
+  if (!profile || (!previous && !current) || (current ?? previous)?.kind === "bibliography") {
+    return { stretch: texLength(0), shrink: texLength(0) };
+  }
+  let depth = current?.depth ?? previous?.depth ?? 1;
+  let stretchValues = profile.topsepStretchPtByDepth;
+  let shrinkValues = profile.topsepShrinkPtByDepth;
+  if (current?.depth !== undefined && previous?.depth === current.depth) {
+    if (current.listStart !== undefined && previous.listStart !== undefined && current.listStart !== previous.listStart) {
+      return { stretch: texLength(texProfileOptionalDepthValue(profile.topsepStretchPtByDepth, depth)), shrink: texLength(texProfileOptionalDepthValue(profile.topsepShrinkPtByDepth, depth)) };
+    }
+    depth = current.depth;
+    const sameItem =
+      current.kind === previous.kind &&
+      current.labelDepth === previous.labelDepth &&
+      current.itemIndex === previous.itemIndex;
+    if (sameItem && !current.showLabel) {
+      stretchValues = profile.parsepStretchPtByDepth;
+      shrinkValues = profile.parsepShrinkPtByDepth;
+    } else if (exitsTrivlistScope) {
+      stretchValues = profile.itemsepStretchPtByDepth;
+      shrinkValues = profile.itemsepShrinkPtByDepth;
+    } else {
+      return {
+        stretch: texLength(
+          texProfileOptionalDepthValue(
+            profile.itemsepStretchPtByDepth,
+            depth
+          ) +
+          texProfileOptionalDepthValue(profile.parsepStretchPtByDepth, depth)
+        ),
+        shrink: texLength(
+          texProfileOptionalDepthValue(profile.itemsepShrinkPtByDepth, depth) +
+          texProfileOptionalDepthValue(profile.parsepShrinkPtByDepth, depth)
+        ),
+      };
+    }
+  } else if (!hasPreviousEmittedParagraph && current) {
+    depth = current.depth;
+  } else if (previous && current) {
+    if (current.depth > previous.depth) {
+      // The first paragraph in the new list also ships its parsep; even a
+      // zero-natural parsep can stretch in Beamer's finite autobreak glue.
+      return {
+        stretch: texLength(texProfileOptionalDepthValue(profile.topsepStretchPtByDepth, current.depth) + texProfileOptionalDepthValue(profile.parsepStretchPtByDepth, current.depth)),
+        shrink: texLength(texProfileOptionalDepthValue(profile.topsepShrinkPtByDepth, current.depth) + texProfileOptionalDepthValue(profile.parsepShrinkPtByDepth, current.depth)),
+      };
+    }
+    if (current.showLabel && current.depth < previous.depth) {
+      // endlist cancels its own topsep when the parent's next item follows;
+      // the remaining boundary is the outer itemsep and parsep.
+      return {
+        stretch: texLength(texProfileOptionalDepthValue(profile.itemsepStretchPtByDepth, current.depth) + texProfileOptionalDepthValue(profile.parsepStretchPtByDepth, current.depth)),
+        shrink: texLength(texProfileOptionalDepthValue(profile.itemsepShrinkPtByDepth, current.depth) + texProfileOptionalDepthValue(profile.parsepShrinkPtByDepth, current.depth)),
+      };
+    }
+    depth = Math.max(previous.depth, current.depth);
+  }
+  return {
+    stretch: texLength(texProfileOptionalDepthValue(stretchValues, depth)),
+    shrink: texLength(texProfileOptionalDepthValue(shrinkValues, depth)),
+  };
+}
+
+function texProfileOptionalDepthValue(
+  values: readonly number[] | undefined,
+  depth: number
+): number {
+  return values ? texProfileDepthValue(values, depth) : 0;
+}
+
+function texDepthIndexedEm(values: readonly number[], depth: number): number {
+  return values[Math.max(0, Math.min(depth - 1, values.length - 1))] ?? 0;
+}
+
+function texEmSkip(value: number, font: ResolvedTexFont): TexLength {
+  return texLength(roundTexPt(value * font.atPt));
+}
+
+function roleHasKind<K extends TexVBoxRole["kind"]>(role: TexVBoxRole, kind: K): role is Extract<TexVBoxRole, { kind: K }> {
+  return role.kind === kind;
+}

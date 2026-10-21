@@ -1,7 +1,11 @@
+import type { Language } from "@codemirror/language";
 import { highlightTree, tagHighlighter, tags as t } from "@lezer/highlight";
 import { describe, expect, it } from "vitest";
 
-import { tikzLanguage } from "@tikz-editor/lang-tikz";
+import {
+  beamerLanguage,
+  tikzLanguage,
+} from "@tikz-editor/lang-tikz";
 
 type HighlightRange = {
   from: number;
@@ -13,11 +17,18 @@ const testHighlighter = tagHighlighter([
   { tag: t.keyword, class: "keyword" },
   { tag: t.typeName, class: "typeName" },
   { tag: t.className, class: "className" },
-  { tag: t.labelName, class: "labelName" }
+  { tag: t.labelName, class: "labelName" },
+  { tag: t.meta, class: "meta" },
+  { tag: t.string, class: "string" },
+  { tag: t.variableName, class: "variableName" },
+  { tag: t.operator, class: "operator" },
 ]);
 
-function collectHighlights(source: string): HighlightRange[] {
-  const tree = tikzLanguage.parser.parse(source);
+function collectHighlights(
+  source: string,
+  language: Pick<Language, "parser"> = tikzLanguage
+): HighlightRange[] {
+  const tree = language.parser.parse(source);
   const ranges: HighlightRange[] = [];
   highlightTree(tree, testHighlighter, (from, to, classes) => {
     ranges.push({ from, to, classes });
@@ -78,5 +89,72 @@ describe("@tikz-editor/lang-tikz highlighting", () => {
     expect(hasClassAt(ranges, unbracedAndFrom, unbracedAndFrom + "and".length, "keyword")).toBe(true);
     expect(hasClassAt(ranges, officeFrom, officeFrom + "office".length, "keyword")).toBe(false);
     expect(hasClassAt(ranges, offsetFrom, offsetFrom + "offset".length, "keyword")).toBe(false);
+  });
+
+  it("mounts the shared TeX fragment language inside TikZ node text", () => {
+    const source = String.raw`\node {Hello \textbf{world} and $x_1+\lambda$};`;
+    const ranges = collectHighlights(source);
+    const tree = tikzLanguage.parser.parse(source);
+    const textbfFrom = source.indexOf(String.raw`\textbf`);
+    const worldFrom = source.indexOf("world");
+    const xFrom = source.indexOf("x_1");
+    const lambdaFrom = source.indexOf(String.raw`\lambda`);
+
+    expect(tree.resolveInner(worldFrom + 1, 1).name).toBe("WordToken");
+    expect(tree.resolveInner(xFrom, 1).name).toBe("WordToken");
+    expect(hasClassAt(ranges, textbfFrom, textbfFrom + String.raw`\textbf`.length, "meta")).toBe(true);
+    expect(hasClassAt(ranges, worldFrom, worldFrom + "world".length, "string")).toBe(true);
+    expect(hasClassAt(ranges, xFrom, xFrom + 1, "variableName")).toBe(true);
+    expect(hasClassAt(ranges, lambdaFrom, lambdaFrom + String.raw`\lambda`.length, "meta")).toBe(true);
+  });
+
+  it("keeps document prose uncoloured but tags environment names and overlay specifications", () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Title}
+  Some prose \item<2-> more.
+  $x$
+\end{frame}
+\end{document}`;
+    const ranges = collectHighlights(source, beamerLanguage);
+    const proseFrom = source.indexOf("Some");
+    const frameFrom = source.indexOf("frame}");
+    const overlayFrom = source.indexOf("<2->");
+    const mathFrom = source.indexOf("$x$") + 1;
+
+    expect(ranges.some((range) => range.from <= proseFrom && range.to > proseFrom && range.classes.includes("string"))).toBe(false);
+    expect(hasClassAt(ranges, frameFrom, frameFrom + "frame".length, "typeName")).toBe(true);
+    expect(ranges.filter((range) => range.from >= overlayFrom && range.to <= overlayFrom + "<2->".length)
+      .every((range) => range.classes.includes("labelName"))).toBe(true);
+    expect(ranges.some((range) => range.from <= overlayFrom + 1 && range.to > overlayFrom + 1 && range.classes.includes("labelName"))).toBe(true);
+    expect(hasClassAt(ranges, mathFrom, mathFrom + 1, "variableName")).toBe(true);
+  });
+
+  it("nests TikZ and then TeX inside a Beamer document", () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\section{Demo}
+\begin{frame}
+\begin{tikzpicture}
+\node at (0,0) {Hello $x_1$};
+\end{tikzpicture}
+\end{frame}
+\end{document}`;
+    const ranges = collectHighlights(source, beamerLanguage);
+    const tree = beamerLanguage.parser.parse(source);
+    const sectionFrom = source.indexOf(String.raw`\section`);
+    const nodeFrom = source.indexOf(String.raw`\node`);
+    const coordinateFrom = source.indexOf("0,0");
+    const helloFrom = source.indexOf("Hello");
+    const xFrom = source.indexOf("x_1");
+
+    expect(tree.resolveInner(nodeFrom + 1, 1).name).toBe("NodeCmd");
+    expect(tree.resolveInner(coordinateFrom, 1).name).toBe("Number");
+    expect(tree.resolveInner(helloFrom + 1, 1).name).toBe("WordToken");
+    expect(tree.resolveInner(xFrom, 1).name).toBe("WordToken");
+    expect(hasClassAt(ranges, sectionFrom, sectionFrom + String.raw`\section`.length, "keyword")).toBe(true);
+    expect(hasClassAt(ranges, nodeFrom, nodeFrom + String.raw`\node`.length, "keyword")).toBe(true);
+    expect(hasClassAt(ranges, helloFrom, helloFrom + "Hello".length, "string")).toBe(true);
+    expect(hasClassAt(ranges, xFrom, xFrom + 1, "variableName")).toBe(true);
   });
 });

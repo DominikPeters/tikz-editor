@@ -1,3 +1,19 @@
+.dialog {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.footer {
+  flex-wrap: wrap;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .summary {
   display: grid;
   gap: 8px;
@@ -124,6 +140,7 @@
 }
 
 .warning,
+.instructions,
 .error {
   margin: 0;
   font-size: calc(var(--app-ui-scale, 1) * 12px);

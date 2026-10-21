@@ -1,0 +1,247 @@
+{
+  "formatVersion": 1,
+  "title": "Beamer fidelity campaign: interaction probes",
+  "description": "Original TeX comparisons crossing theme structure, wrapping, class sizes, scoped block declarations and requested Fira typography. Mismatches remain red; offline snapshots come only from passing independent TeX runs.",
+  "fidelity": [
+    {
+      "id": "default-wrapped-heading",
+      "file": "default-wrapped-heading.tex",
+      "frame": 1,
+      "family": "wrapped-headings",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "madrid-wrapped-heading",
+      "file": "madrid-wrapped-heading.tex",
+      "frame": 1,
+      "family": "wrapped-headings",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "berlin-wrapped-heading",
+      "file": "berlin-wrapped-heading.tex",
+      "frame": 1,
+      "family": "wrapped-headings",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "berkeley-wrapped-heading",
+      "file": "berkeley-wrapped-heading.tex",
+      "frame": 1,
+      "family": "wrapped-headings",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "warsaw-wrapped-heading",
+      "file": "warsaw-wrapped-heading.tex",
+      "frame": 1,
+      "family": "wrapped-headings",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ],
+      "paintProbes": [
+        {
+          "id": "second-line-background",
+          "x": 420,
+          "y": 27
+        }
+      ]
+    },
+    {
+      "id": "rochester-wrapped-heading",
+      "file": "rochester-wrapped-heading.tex",
+      "frame": 1,
+      "family": "wrapped-headings",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "moloch-wrapped-heading",
+      "file": "moloch-wrapped-heading.tex",
+      "frame": 1,
+      "family": "wrapped-headings",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "metropolis-lm-wrapped-heading",
+      "file": "metropolis-lm-wrapped-heading.tex",
+      "frame": 1,
+      "family": "wrapped-headings",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "metropolis-requested-font",
+      "file": "metropolis-requested-font.tex",
+      "frame": 1,
+      "family": "font-selection",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "default-14pt-list",
+      "file": "default-14pt-list.tex",
+      "frame": 1,
+      "family": "class-size-composition",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "default-10pt-math-block",
+      "file": "default-10pt-math-block.tex",
+      "frame": 1,
+      "family": "class-size-composition",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "madrid-14pt-list",
+      "file": "madrid-14pt-list.tex",
+      "frame": 1,
+      "family": "class-size-composition",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "madrid-10pt-math-block",
+      "file": "madrid-10pt-math-block.tex",
+      "frame": 1,
+      "family": "class-size-composition",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "moloch-14pt-list",
+      "file": "moloch-14pt-list.tex",
+      "frame": 1,
+      "family": "class-size-composition",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "moloch-10pt-math-block",
+      "file": "moloch-10pt-math-block.tex",
+      "frame": 1,
+      "family": "class-size-composition",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "grouped-text-color",
+      "file": "grouped-text-color.tex",
+      "frame": 1,
+      "family": "scoped-declarations",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "body-local-beamer-font",
+      "file": "body-local-beamer-font.tex",
+      "frame": 1,
+      "family": "scoped-declarations",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "body-local-beamer-color",
+      "file": "body-local-beamer-color.tex",
+      "frame": 1,
+      "family": "scoped-declarations",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ],
+      "paintProbes": [
+        {
+          "id": "local-red-title-background",
+          "x": 400,
+          "y": 116
+        },
+        {
+          "id": "body-remains-uncolored",
+          "x": 400,
+          "y": 137
+        }
+      ]
+    },
+    {
+      "id": "metropolis-fira-styles",
+      "file": "metropolis-fira-styles.tex",
+      "frame": 1,
+      "family": "font-selection-holdout",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "metropolis-fira-titlepage",
+      "file": "metropolis-fira-titlepage.tex",
+      "frame": 1,
+      "family": "font-selection-holdout",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    }
+  ],
+  "recognition": []
+}

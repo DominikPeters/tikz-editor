@@ -231,7 +231,8 @@ describe("styles cascade model", () => {
       sourceText: "unknown custom key"
     });
     expect(toggleActions).toHaveLength(1);
-    expect(toggleActions[0]).toMatchObject({ elementId: "shape-1", propertyId: undefined });
+    expect(toggleActions[0]).toMatchObject({ elementId: "shape-1" });
+    expect(toggleActions[0]).not.toHaveProperty("propertyId");
   });
 
   it("merges partial shared cascade models with missing section write targets", () => {
@@ -755,6 +756,9 @@ describe("styles cascade model", () => {
         [property]
       );
       expect(model.sections[0]?.declarations[0]?.cssValue).toBe(expected);
+      if (property.kind === "lineCap" && expected === "rect") {
+        expect(model.sections[0]?.declarations[0]?.property).toMatchObject({ kind: "lineCap", value: "custom" });
+      }
     }
   });
 

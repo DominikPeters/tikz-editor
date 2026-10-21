@@ -13,7 +13,7 @@ import {
 import { TREE_ROOT_LAYOUT_KEYS } from "../tree-editing.js";
 import { colorOptionsForValue } from "./color-syntax.js";
 import { findPathStatementInSource } from "./grid-state.js";
-import { createInspectorTargetResolver, type InspectorTargetResolver } from "./target-resolver.js";
+import type { InspectorTargetResolver } from "./target-resolver.js";
 import type { InspectorDescriptor, InspectorSnapshot } from "./types.js";
 
 export type TreeNodeDescriptorResolver = (
@@ -95,8 +95,8 @@ function resolveTreeGrowOption(options: OptionListAst | undefined): string {
 export function buildMatrixInspectorDescriptor(
   source: string,
   matrixId: string,
-  parseOptions: EditParseOptions = {},
-  resolveTarget: InspectorTargetResolver = createInspectorTargetResolver(source, parseOptions)
+  parseOptions: EditParseOptions,
+  resolveTarget: InspectorTargetResolver
 ): InspectorDescriptor | null {
   const resolved = resolveTarget(matrixId);
   if (resolved.kind === "not-found" || resolved.target.kind !== "matrix-statement") {
@@ -104,7 +104,6 @@ export function buildMatrixInspectorDescriptor(
   }
 
   const writable = true;
-  const readOnlyReason = undefined;
   const transformContext = resolveTransformInspectorMutationContext(source, matrixId, parseOptions, resolveTarget);
   const transformValues = transformContext.values;
   const rowSepPt = resolveMatrixSpacingPt(resolved.target.options, "row sep");
@@ -116,7 +115,6 @@ export function buildMatrixInspectorDescriptor(
     elementKind: "path",
     elementId: matrixId,
     writeTargetId: matrixId,
-    readOnlyReason,
     sections: [
       {
         id: "transform",
@@ -139,10 +137,9 @@ export function buildMatrixInspectorDescriptor(
               transformContext: {
                 key: "xshift",
                 values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
+                ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              reason: readOnlyReason
+              writable
             }
           },
           {
@@ -161,10 +158,9 @@ export function buildMatrixInspectorDescriptor(
               transformContext: {
                 key: "yshift",
                 values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
+                ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              reason: readOnlyReason
+              writable
             }
           },
           {
@@ -182,10 +178,9 @@ export function buildMatrixInspectorDescriptor(
               transformContext: {
                 key: "xscale",
                 values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
+                ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              reason: readOnlyReason
+              writable
             }
           },
           {
@@ -203,10 +198,9 @@ export function buildMatrixInspectorDescriptor(
               transformContext: {
                 key: "yscale",
                 values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
+                ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              reason: readOnlyReason
+              writable
             }
           },
           {
@@ -225,10 +219,9 @@ export function buildMatrixInspectorDescriptor(
               transformContext: {
                 key: "rotate",
                 values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
+                ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              reason: readOnlyReason
+              writable
             }
           }
         ]
@@ -245,7 +238,7 @@ export function buildMatrixInspectorDescriptor(
             value: rowSepPt,
             step: 0.1,
             unit: "pt",
-            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "row sep", writable, reason: readOnlyReason }
+            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "row sep", writable }
           },
           {
             kind: "length",
@@ -254,7 +247,7 @@ export function buildMatrixInspectorDescriptor(
             value: columnSepPt,
             step: 0.1,
             unit: "pt",
-            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "column sep", writable, reason: readOnlyReason }
+            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "column sep", writable }
           },
           {
             kind: "color",
@@ -263,7 +256,7 @@ export function buildMatrixInspectorDescriptor(
             value: drawColor,
             syntaxValue: drawColor,
             options: colorOptionsForValue(drawColor),
-            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "draw", writable, reason: readOnlyReason }
+            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "draw", writable }
           },
           {
             kind: "color",
@@ -272,7 +265,7 @@ export function buildMatrixInspectorDescriptor(
             value: fillColor,
             syntaxValue: fillColor,
             options: colorOptionsForValue(fillColor),
-            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "fill", writable, reason: readOnlyReason }
+            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "fill", writable }
           }
         ]
       }
@@ -291,8 +284,8 @@ export function buildTreeInspectorDescriptor(
   source: string,
   sourceId: string,
   element: SceneElement | null,
-  parseOptions: EditParseOptions = {},
-  resolveTarget: InspectorTargetResolver = createInspectorTargetResolver(source, parseOptions),
+  parseOptions: EditParseOptions,
+  resolveTarget: InspectorTargetResolver,
   resolveNodeDescriptor?: TreeNodeDescriptorResolver
 ): InspectorDescriptor | null {
   const resolvedRootTarget = resolveTarget(sourceId);
@@ -338,7 +331,6 @@ export function buildTreeInspectorDescriptor(
     : [];
 
   const writable = true;
-  const readOnlyReason = undefined;
   const transformContext = resolveTransformInspectorMutationContext(source, sourceId, parseOptions, resolveTarget);
   const transformValues = transformContext.values;
 
@@ -371,7 +363,6 @@ export function buildTreeInspectorDescriptor(
     elementKind: "path",
     elementId: sourceId,
     writeTargetId: sourceId,
-    readOnlyReason,
     sections: [
       {
         id: "transform",
@@ -394,10 +385,9 @@ export function buildTreeInspectorDescriptor(
               transformContext: {
                 key: "xshift",
                 values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
+                ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              reason: readOnlyReason
+              writable
             }
           },
           {
@@ -416,10 +406,9 @@ export function buildTreeInspectorDescriptor(
               transformContext: {
                 key: "yshift",
                 values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
+                ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              reason: readOnlyReason
+              writable
             }
           },
           {
@@ -437,10 +426,9 @@ export function buildTreeInspectorDescriptor(
               transformContext: {
                 key: "xscale",
                 values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
+                ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              reason: readOnlyReason
+              writable
             }
           },
           {
@@ -458,10 +446,9 @@ export function buildTreeInspectorDescriptor(
               transformContext: {
                 key: "yscale",
                 values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
+                ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              reason: readOnlyReason
+              writable
             }
           },
           {
@@ -480,10 +467,9 @@ export function buildTreeInspectorDescriptor(
               transformContext: {
                 key: "rotate",
                 values: cloneTransformInspectorValues(transformContext.values),
-                presence: transformContext.presence ? { ...transformContext.presence } : undefined
+                ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              reason: readOnlyReason
+              writable
             }
           }
         ]
@@ -504,8 +490,7 @@ export function buildTreeInspectorDescriptor(
               elementId: resolveRootLayoutWriteTargetId("grow"),
               level: "command",
               key: "grow",
-              writable,
-              reason: readOnlyReason
+              writable
             }
           },
           {
@@ -520,8 +505,7 @@ export function buildTreeInspectorDescriptor(
               elementId: resolveRootLayoutWriteTargetId("level distance"),
               level: "command",
               key: "level distance",
-              writable,
-              reason: readOnlyReason
+              writable
             }
           },
           {
@@ -536,8 +520,7 @@ export function buildTreeInspectorDescriptor(
               elementId: resolveRootLayoutWriteTargetId("sibling distance"),
               level: "command",
               key: "sibling distance",
-              writable,
-              reason: readOnlyReason
+              writable
             }
           }
         ]

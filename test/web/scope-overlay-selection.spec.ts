@@ -8,9 +8,10 @@ import {
   resolveScopeAwareMarqueeSelection,
   resolveScopeAwareContextMenuTarget,
   resolveScopeAwarePointerDownTarget,
-  resolveScopeAwarePointerUpDrillTarget
+  resolveScopeAwarePointerUpDrillTarget,
+  scopeWorldBounds
 } from "../../packages/app/src/ui/canvas-panel/scope-overlay.js";
-import { sb, sp } from "../coords-helpers.js";
+import { sb, sp, wb } from "../coords-helpers.js";
 
 describe("scope overlay selection resolver", () => {
   const source = String.raw`\begin{tikzpicture}
@@ -29,6 +30,17 @@ describe("scope overlay selection resolver", () => {
     ["path:2", sb(0, 1, 1, 1)],
     ["path:4", sb(0, 2, 1, 2)]
   ]));
+
+  it("bounds a scope by its members, including nested scopes", () => {
+    const world = new Map([
+      ["path:0", wb(0, 0, 1, 0)],
+      ["path:2", wb(0, 1, 1, 1)],
+      ["path:4", wb(-1, 2, 1, 3)]
+    ]);
+    expect(scopeWorldBounds(overlay, "scope:1", world)).toMatchObject({ minX: -1, minY: 1, maxX: 1, maxY: 3 });
+    expect(scopeWorldBounds(overlay, "scope:3", world)).toMatchObject({ minX: -1, minY: 2, maxX: 1, maxY: 3 });
+    expect(scopeWorldBounds(overlay, "path:0", world)).toBeNull();
+  });
 
   it("selects the outermost enclosing scope on first pointer-down", () => {
     const resolved = resolveScopeAwarePointerDownTarget({

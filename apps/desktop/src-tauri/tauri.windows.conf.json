@@ -14,6 +14,13 @@
     ]
   },
   "bundle": {
+    "fileAssociations": [
+      {
+        "name": "TikZ Source",
+        "description": "TikZ source document",
+        "ext": ["tikz"]
+      }
+    ],
     "windows": {
       "allowDowngrades": false,
       "webviewInstallMode": {
@@ -21,7 +28,13 @@
         "silent": true
       },
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "template": "windows/installer.nsi",
+        "installerHooks": "windows/update-checks.nsh"
+      },
+      "wix": {
+        "fragmentPaths": ["windows/update-checks.wxs", "windows/file-associations.wxs"],
+        "componentRefs": ["AutomaticUpdateChecksPreference", "TeXOpenWith"]
       }
     }
   }

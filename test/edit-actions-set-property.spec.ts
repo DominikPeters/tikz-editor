@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEditAction, PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "../packages/core/src/edit/actions.js";
+import { applyEditAction } from "../packages/core/src/edit/actions.js";
 import { makeStyleSourceTargetId, TIKZPICTURE_GLOBAL_TARGET_ID } from "../packages/core/src/edit/property-target.js";
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
@@ -50,10 +50,52 @@ describe("applyEditAction – setProperty", () => {
     }
   });
 
+  it("preserves unrelated inline option spacing when inserting a property", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[red,     thick] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: "path:0",
+      level: "command",
+      key: "line width",
+      value: "2pt"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected inline option insertion to succeed");
+    }
+    expect(result.newSource).toBe(String.raw`\begin{tikzpicture}
+  \draw[red,     thick, line width=2pt] (0,0) -- (1,0);
+\end{tikzpicture}`);
+  });
+
+  it("updates the first duplicate property and removes later duplicates without reflowing siblings", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \draw[red,  line width=.4pt,     dashed, line width=.8pt] (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: "path:0",
+      level: "command",
+      key: "line width",
+      value: "2pt"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected duplicate option update to succeed");
+    }
+    expect(result.newSource).toBe(String.raw`\begin{tikzpicture}
+  \draw[red,  line width=2pt,     dashed] (0,0) -- (1,0);
+\end{tikzpicture}`);
+  });
+
   it("preserves comments and multiline formatting when updating command options", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw[
-    red, % main color
+    red,     % main color
     thick
   ] (0,0) -- (1,0);
 \end{tikzpicture}`;
@@ -71,7 +113,7 @@ describe("applyEditAction – setProperty", () => {
     }
     expect(result.newSource).toBe(String.raw`\begin{tikzpicture}
   \draw[
-    red, % main color
+    red,     % main color
     thick,
     line width=2pt
   ] (0,0) -- (1,0);
@@ -680,118 +722,23 @@ describe("applyEditAction – setProperty", () => {
     }
   });
 
-  it("cleans existing conservative paint writes on drag-end cleanup", () => {
+  it("cleans paint commands inside scopes", () => {
     const source = String.raw`\begin{tikzpicture}
-  \draw[draw=none, fill=red] (0,0) rectangle (1,1);
-\end{tikzpicture}`;
-    const result = applyEditAction(source, [], {
-      kind: "cleanupPropertyWrites"
-    });
-
-    expect(result.kind).toBe("success");
-    if (result.kind === "success") {
-      expect(result.newSource).toContain("\\fill[red] (0,0) rectangle (1,1);");
-      expect(result.newSource).not.toContain("draw=none");
-    }
-  });
-
-  it("limits targeted paint cleanup to requested element ids", () => {
-    const source = String.raw`\begin{tikzpicture}
-  \draw[draw=none, fill=red] (0,0) rectangle (1,1);
-  \draw[draw=none, fill=blue] (2,0) rectangle (3,1);
-\end{tikzpicture}`;
-    const result = applyEditAction(source, [], {
-      kind: "cleanupPropertyWrites",
-      elementIds: ["path:0"]
-    });
-
-    expect(result.kind).toBe("success");
-    if (result.kind === "success") {
-      expect(result.newSource).toContain("\\fill[red] (0,0) rectangle (1,1);");
-      expect(result.newSource).toContain("\\draw[draw=none, fill=blue] (2,0) rectangle (3,1);");
-    }
-  });
-
-  it("reports no-op cleanup for empty targets and already idiomatic paint", () => {
-    const source = String.raw`\begin{tikzpicture}
-  \fill[red] (0,0) rectangle (1,1);
-\end{tikzpicture}`;
-
-    expect(applyEditAction(source, [], {
-      kind: "cleanupPropertyWrites",
-      elementIds: ["  "]
-    })).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-    expect(applyEditAction(source, [], {
-      kind: "cleanupPropertyWrites"
-    })).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-  });
-
-  it("cleans paint commands inside scopes and disabled filldraw combinations", () => {
-    const nestedSource = String.raw`\begin{tikzpicture}
   \begin{scope}
-    \draw[draw=none, fill=red] (0,0) rectangle (1,1);
+    \draw[fill=red] (0,0) rectangle (1,1);
   \end{scope}
 \end{tikzpicture}`;
-    const nested = applyEditAction(nestedSource, [], {
-      kind: "cleanupPropertyWrites"
-    });
-    expect(nested.kind).toBe("success");
-    if (nested.kind !== "success") {
-      throw new Error("Expected nested cleanup to succeed");
-    }
-    expect(nested.newSource).toContain("\\fill[red] (0,0) rectangle (1,1);");
-
-    const bothDisabled = applyEditAction(String.raw`\begin{tikzpicture}
-  \filldraw[draw=false, fill=false] (0,0) rectangle (1,1);
-\end{tikzpicture}`, [], {
-      kind: "cleanupPropertyWrites"
-    });
-    expect(bothDisabled).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-
-    const fillOnlyFilldraw = applyEditAction(String.raw`\begin{tikzpicture}
-  \filldraw[draw=false, fill=red] (0,0) rectangle (1,1);
-\end{tikzpicture}`, [], {
-      kind: "cleanupPropertyWrites"
-    });
-    expect(fillOnlyFilldraw).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-
-    const drawOnlyFilldraw = applyEditAction(String.raw`\begin{tikzpicture}
-  \filldraw[draw=blue, fill=false] (0,0) rectangle (1,1);
-\end{tikzpicture}`, [], {
-      kind: "cleanupPropertyWrites"
-    });
-    expect(drawOnlyFilldraw).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-  });
-
-  it("skips cosmetic drag-end paint cleanup for large sources without conservative paint tokens", () => {
-    const source = String.raw`\begin{tikzpicture}
-  \filldraw[fill=blue!20] (0,0) rectangle (1,1);
-${Array.from({ length: 5000 }, (_, index) => `  % large document filler ${index}`).join("\n")}
-\end{tikzpicture}`;
     const result = applyEditAction(source, [], {
-      kind: "cleanupPropertyWrites",
-      elementIds: ["path:0"]
+      kind: "setProperty",
+      elementId: "path:1",
+      level: "command",
+      key: "draw",
+      value: "none"
     });
-
-    expect(result).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
+    expect(result.kind).toBe("success");
+    if (result.kind === "success") {
+      expect(result.newSource).toContain("\\fill[red] (0,0) rectangle (1,1);");
+    }
   });
 
   it("omits local default-equivalent properties when certified", () => {
@@ -977,6 +924,29 @@ ${Array.from({ length: 5000 }, (_, index) => `  % large document filler ${index}
       throw new Error("Expected matrix-cell option rewrite to succeed");
     }
     expect(result.newSource).toContain("|[draw=red, fill=yellow]| B");
+  });
+
+  it("preserves comments and layout in existing matrix-cell option prefixes", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \matrix[matrix of nodes] {
+    A & |[draw=red, % keep cell styling
+      thick]| B \\
+  };
+\end{tikzpicture}`;
+
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: "node:0:0:matrix-cell:1:2",
+      level: "command",
+      key: "fill",
+      value: "yellow"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep cell styling");
+    expect(result.newSource).toContain("      thick");
+    expect(result.newSource).toContain("fill=yellow");
   });
 
   it("normalizes matrix-cell clearKeys while setting a new primary option", () => {
@@ -1560,6 +1530,35 @@ ${Array.from({ length: 5000 }, (_, index) => `  % large document filler ${index}
     expect(result.newSource).toContain("node[draw] {leaf}");
   });
 
+  it("preserves unrelated tree-child option trivia", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \path node {root}
+    child[level distance=2mm, % keep child layout
+      sibling distance=3mm] { node[draw] {leaf} };
+\end{tikzpicture}`;
+    const rendered = renderTikzToSvg(source);
+    const leafText = rendered.semantic.scene.elements.find(
+      (entry) => entry.kind === "Text" && entry.text === "leaf"
+    );
+    if (!leafText || leafText.kind !== "Text" || !leafText.treeChild) {
+      throw new Error("Expected tree child text element");
+    }
+
+    const result = applyEditAction(source, [], {
+      kind: "setProperty",
+      elementId: leafText.treeChild.childSourceId,
+      level: "command",
+      key: "level distance",
+      value: "5mm"
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("% keep child layout");
+    expect(result.newSource).toContain("      sibling distance=3mm");
+    expect(result.newSource).toContain("level distance=5mm");
+  });
+
   it("clears existing tree-child layout options", () => {
     const source = String.raw`\begin{tikzpicture}
   \path node {root}
@@ -1905,5 +1904,20 @@ ${Array.from({ length: 5000 }, (_, index) => `  % large document filler ${index}
       value: "red"
     });
     expect(result.kind).toBe("unsupported");
+  });
+
+  it.each([
+    [String.raw`\node[fill=blue, draw] at (1,1) {A};`, String.raw`\node[fill=red!20, draw] at (1,1) {A};`],
+    [String.raw`\node (a) [fill=blue] at (1,1) {A};`, String.raw`\node (a) [fill=red!20] at (1,1) {A};`],
+    [String.raw`\node at (1,1) {A};`, String.raw`\node[fill=red!20] at (1,1) {A};`],
+    [String.raw`\pic[red] at (1,1) {angle};`, String.raw`\pic[red, fill=red!20] at (1,1) {angle};`],
+    [String.raw`\pic at (1,1) {angle};`, String.raw`\pic[fill=red!20] at (1,1) {angle};`]
+  ])("writes a node or pic statement's keys into its own option list: %s", (line, expected) => {
+    const source = `\\begin{tikzpicture}\n  ${line}\n\\end{tikzpicture}`;
+    const result = applyEditAction(source, [], { kind: "setProperty", elementId: "path:0", level: "command", key: "fill", value: "red!20" });
+    expect(result.kind).toBe("success");
+    if (result.kind === "success") {
+      expect(result.newSource.split("\n")[1]).toBe(`  ${expected}`);
+    }
   });
 });

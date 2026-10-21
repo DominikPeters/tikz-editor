@@ -1,0 +1,52 @@
+.issues {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.issue p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.excerpt {
+  display: block;
+  width: 100%;
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-header);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.excerpt:hover {
+  background: var(--btn-hover-bg);
+}
+.excerpt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font: 11px var(--font-ui);
+}
+.excerpt code {
+  display: block;
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12px/1.5 var(--font-mono);
+}
+
+.caption > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}

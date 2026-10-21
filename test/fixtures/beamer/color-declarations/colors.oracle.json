@@ -1,0 +1,310 @@
+{
+  "engine": "lualatex",
+  "environment": {
+    "engineBanner": "This is LuaHBTeX, Version 1.21.0 (TeX Live 2025) ",
+    "beamerClass": "Document Class: beamer 2025/02/04 v3.72 A class for typesetting presentations"
+  },
+  "sourceSha256": "9fed233897dd1d2fd681bf5a30bc37e3e0c4ccb91fd97fe90258a4daf9a320ac",
+  "cases": [
+    {
+      "id": "normal-background",
+      "colors": {
+        "normal text": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.9,0.9,1"
+          }
+        },
+        "background canvas": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.9,0.9,1"
+          }
+        },
+        "background": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.9,0.9,1"
+          }
+        }
+      }
+    },
+    {
+      "id": "parent-order-empty-field",
+      "colors": {
+        "ordered": {
+          "fg": {
+            "model": "rgb",
+            "specification": "0,1,0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0,0,1"
+          }
+        },
+        "empty": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0,0,1"
+          }
+        }
+      }
+    },
+    {
+      "id": "star-and-unstar",
+      "colors": {
+        "kept": {
+          "fg": {
+            "model": "rgb",
+            "specification": "0,0,1"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.9,0.9,1"
+          }
+        },
+        "reset": {
+          "fg": {
+            "model": "rgb",
+            "specification": "0,0,1"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.9,0.9,1"
+          }
+        }
+      }
+    },
+    {
+      "id": "theme-declaration-order",
+      "colors": {
+        "palette primary": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.84,0.84,0.94"
+          }
+        },
+        "palette secondary": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "1,0,0"
+          }
+        }
+      }
+    },
+    {
+      "id": "default-madrid-seahorse",
+      "colors": {
+        "palette primary": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.84,0.84,0.94"
+          }
+        },
+        "palette secondary": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.8,0.8,0.925"
+          }
+        },
+        "title in head/foot": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.8,0.8,0.925"
+          }
+        }
+      }
+    },
+    {
+      "id": "late-structure-whale",
+      "colors": {
+        "palette primary": {
+          "fg": {
+            "model": "gray",
+            "specification": "1"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "1,0,0"
+          }
+        },
+        "palette secondary": {
+          "fg": {
+            "model": "gray",
+            "specification": "1"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.75,0,0"
+          }
+        },
+        "palette tertiary": {
+          "fg": {
+            "model": "gray",
+            "specification": "1"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.5,0,0"
+          }
+        },
+        "palette sidebar tertiary": {
+          "fg": {
+            "model": "rgb",
+            "specification": "1,0.5,0.5"
+          },
+          "bg": {
+            "model": "gray",
+            "specification": "1"
+          }
+        }
+      }
+    },
+    {
+      "id": "late-structure-seahorse",
+      "colors": {
+        "palette primary": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "1,0.8,0.8"
+          }
+        },
+        "palette secondary": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "1,0.75,0.75"
+          }
+        },
+        "palette tertiary": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "1,0.7,0.7"
+          }
+        },
+        "palette quaternary": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "1,0.65,0.65"
+          }
+        }
+      }
+    },
+    {
+      "id": "alias-definition-order",
+      "colors": {
+        "normal text": {
+          "fg": {
+            "model": "rgb",
+            "specification": "0.30588,0.35294,0.48235"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.80942,0.82666,0.84392"
+          }
+        },
+        "background canvas": {
+          "fg": {
+            "model": "rgb",
+            "specification": "0.30588,0.35294,0.48235"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.80942,0.82666,0.84392"
+          }
+        }
+      }
+    },
+    {
+      "id": "starred-use-alias-snapshot",
+      "colors": {
+        "normal text": {
+          "fg": {
+            "model": "gray",
+            "specification": "0"
+          },
+          "bg": {
+            "model": "gray",
+            "specification": "1"
+          }
+        }
+      }
+    },
+    {
+      "id": "fractional-alias-mixes",
+      "colors": {
+        "normal text": {
+          "fg": {
+            "model": "rgb",
+            "specification": "0.29999,0.29999,0.42499"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.59999,0.59999,0.84999"
+          }
+        },
+        "derived": {
+          "fg": {
+            "model": "rgb",
+            "specification": "0.29999,0.29999,0.42499"
+          },
+          "bg": {
+            "model": "rgb",
+            "specification": "0.79999,0.79999,0.92499"
+          }
+        }
+      }
+    }
+  ]
+}

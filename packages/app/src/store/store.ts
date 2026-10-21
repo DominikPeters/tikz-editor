@@ -1,8 +1,11 @@
+import { getActiveDocument } from "./document-sessions";
 import { create } from "zustand";
 import { editorReducer, makeInitialState } from "./reducer";
-import type { DocumentFileRef, DocumentSession, EditorAction, EditorState, WorkspacePersistedState } from "./types";
+import type { DocumentFileRef, DocumentSession, DocumentSessions, EditorAction, EditorState, WorkspacePersistedState } from "./types";
 import { loadWorkspaceSeed, saveWorkspace } from "./workspace-storage";
 import { workspaceStateFromEditorState } from "./workspace-state";
+import { claimCachedDeckSnapshot, cancelDeckPrewarm } from "../compute";
+import { deckStepRootKey } from "../root-key";
 
 const HIGH_FREQUENCY_WORKSPACE_SAVE_DELAY_MS = 1000;
 
@@ -13,10 +16,35 @@ export type EditorStore = EditorState & {
 export const useEditorStore = create<EditorStore>((set) => ({
   ...makeInitialState(loadWorkspaceSeed() ?? undefined),
   dispatch: (action: EditorAction) => { set((state) => {
-    const next = editorReducer(state, action);
+    let next = editorReducer(state, action);
+    if (next.source !== state.source || next.activeDocumentId !== state.activeDocumentId ||
+      next.activeRootId !== state.activeRootId || next.deckStepByRootKey !== state.deckStepByRootKey ||
+      next.activeCanvasDragKind != null || next.activeSourceScrubSourceId != null ||
+      next.activeCanvasTextEditSourceId != null || next.activeInspectorEditDocumentId != null) cancelDeckPrewarm();
+    const navigated = next.activeDocumentId !== state.activeDocumentId || next.activeRootId !== state.activeRootId ||
+      (next.deckStepByRootKey[deckStepRootKey(next.activeDocumentId, next.activeRootId)] ?? 1) !==
+      (state.deckStepByRootKey[deckStepRootKey(state.activeDocumentId, state.activeRootId)] ?? 1);
+    if ((action.type === "SET_ACTIVE_ROOT" || action.type === "SELECT_DECK_SLIDES" || action.type === "SET_DECK_STEP" ||
+      action.type === "SWITCH_DOCUMENT") && navigated && next.documentKind === "beamer" &&
+      next.activeCanvasDragKind == null && next.activeSourceScrubSourceId == null &&
+      next.activeCanvasTextEditSourceId == null && next.activeInspectorEditDocumentId == null) {
+      const requestId = crypto.randomUUID();
+      const doc = getActiveDocument(next);
+      const snapshot = claimCachedDeckSnapshot({ id: requestId, documentId: doc.id, source: doc.source,
+        sourceRevision: doc.sourceRevision, documentFileRef: doc.fileRef, activeRootId: doc.activeRootId,
+        ...(doc.drawingLayerRootId !== undefined ? { drawingLayerRootId: doc.drawingLayerRootId } : {}), includeDrawingLayer: true,
+        deckStep: next.deckStepByRootKey[deckStepRootKey(doc.id, doc.activeRootId)] ?? 1,
+        schedulingTrigger: action.type === "SET_DECK_STEP" ? "overlay-step" : action.type === "SWITCH_DOCUMENT" ? "document-switch" : "root-switch" });
+      if (snapshot) {
+        // These reducers run within one Zustand update: no observer can see
+        // the new root paired with the old frame's SVG or editing geometry.
+        next = editorReducer(next, { type: "COMPUTE_REQUESTED", requestId, documentId: doc.id });
+        next = editorReducer(next, { type: "SNAPSHOT_READY", requestId, documentId: doc.id, snapshot });
+      }
+    }
     if (shouldSaveWorkspace(state, next)) {
       const workspaceState = workspaceStateFromEditorState(next);
-      if (shouldDebounceWorkspaceSave(action, state, next)) {
+      if (shouldDebounceWorkspaceSave(action)) {
         scheduleWorkspaceSave(workspaceState);
       } else {
         persistWorkspaceNow(workspaceState);
@@ -36,26 +64,17 @@ function shouldSaveWorkspace(previous: EditorState, next: EditorState): boolean 
   );
 }
 
-function shouldDebounceWorkspaceSave(action: EditorAction, previous: EditorState, next: EditorState): boolean {
-  if (action.type === "CODE_EDITED" || action.type === "SET_SOURCE_TRANSIENT") {
-    return true;
-  }
-  if (action.type === "APPLY_EDIT_ACTION") {
-    return (
-      action.parseOptions?.propertyWriteMode === "drag-frame" ||
-      action.parseOptions?.propertyWriteMode === "drag-end" ||
-      previous.activeCanvasDragKind != null ||
-      next.activeCanvasDragKind != null ||
-      previous.activeSourceScrubSourceId != null ||
-      next.activeSourceScrubSourceId != null
-    );
-  }
-  return false;
+// Source edits save after a pause: the workspace payload holds every tab's
+// source (several copies each), and a commit can follow another within a
+// second. Unload flushes a pending save; tab and document changes save at once.
+function shouldDebounceWorkspaceSave(action: EditorAction): boolean {
+  return action.type === "CODE_EDITED" || action.type === "SET_SOURCE_TRANSIENT" ||
+    action.type === "APPLY_EDIT_ACTION" || action.type === "UNDO" || action.type === "REDO";
 }
 
 function persistedDocumentsChanged(
-  previous: Record<string, DocumentSession>,
-  next: Record<string, DocumentSession>
+  previous: DocumentSessions,
+  next: DocumentSessions
 ): boolean {
   const previousIds = Object.keys(previous);
   const nextIds = Object.keys(next);
@@ -63,8 +82,8 @@ function persistedDocumentsChanged(
     return true;
   }
   for (const id of nextIds) {
-    const previousDoc = (previous as Partial<Record<string, DocumentSession>>)[id];
-    const nextDoc = (next as Partial<Record<string, DocumentSession>>)[id];
+    const previousDoc = previous[id];
+    const nextDoc = next[id];
     if (!previousDoc || !nextDoc || persistedDocumentChanged(previousDoc, nextDoc)) {
       return true;
     }
@@ -77,7 +96,7 @@ function persistedDocumentChanged(previous: DocumentSession, next: DocumentSessi
     previous.id !== next.id ||
     previous.title !== next.title ||
     previous.source !== next.source ||
-    previous.activeFigureId !== next.activeFigureId ||
+    previous.activeRootId !== next.activeRootId ||
     previous.savedSource !== next.savedSource ||
     fileRefChanged(previous.fileRef, next.fileRef) ||
     fileRevisionChanged(previous.diskRevision, next.diskRevision) ||
@@ -140,7 +159,7 @@ function scheduleWorkspaceSave(state: WorkspacePersistedState): void {
   pendingWorkspaceSaveTimer = window.setTimeout(flushPendingWorkspaceSave, HIGH_FREQUENCY_WORKSPACE_SAVE_DELAY_MS);
 }
 
-function flushPendingWorkspaceSave(): void {
+export function flushPendingWorkspaceSave(): void {
   const state = pendingWorkspaceSaveState;
   clearPendingWorkspaceSaveTimer();
   pendingWorkspaceSaveState = null;

@@ -1,17 +1,20 @@
 import { useMemo } from "react";
-import { svgBounds, svgPoint, worldBounds, worldPoint, worldVector, pt } from "tikz-editor/coords/index";
-import type { NodeItem, PathItem, PathStatement, Statement } from "tikz-editor/ast/types";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "tikz-editor/edit/fit";
-import { resolvePropertyTargetFromParseResult } from "tikz-editor/edit/property-target";
-import { resolveTransformInspectorMutationContextFromOptionEntries } from "tikz-editor/edit/property-write-builders";
-import { collectSourceWorldBounds } from "tikz-editor/edit/snapping";
-import { parseCoordinateLike, parseLength } from "tikz-editor/semantic/coords/parse-length";
-import type { EditHandle, NodeAnchorTarget, SceneElement, ScenePath, SceneText } from "tikz-editor/semantic/types";
+import { svgBounds, svgPoint, worldBounds, worldPoint, worldVector, worldTransform, pt } from "@tikz-editor/core/coords/index";
+import type { NodeItem, PathItem, PathStatement, Statement } from "@tikz-editor/core/ast/types";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "@tikz-editor/core/edit/fit";
+import { resolvePropertyTargetFromParseResult } from "@tikz-editor/core/edit/property-target";
+import { resolveTransformInspectorMutationContextFromOptionEntries } from "@tikz-editor/core/edit/property-write-builders";
+import { collectSourceWorldBounds } from "@tikz-editor/core/edit/snapping";
+import { createEditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
+import { inverseMatrix } from "@tikz-editor/core/semantic/transform";
+import { parseCoordinateLike, parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
+import type { EditHandle, EvaluateOptions, NodeAnchorTarget, SceneElement, ScenePath, SceneText } from "@tikz-editor/core/semantic/types";
 import type { SvgBounds, SvgPoint, WorldBounds, WorldPoint } from "../coords/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import {
   computeVisibleRanges,
+  distanceSquared,
   resizeCursorForVector,
   vectorLengthSquared,
   worldToSvgPoint,
@@ -22,10 +25,10 @@ import { computeDragCapability } from "./drag-capability";
 import { deriveCurveControlLines } from "./curve-controls";
 import { buildHitRegions, type HitRegion } from "./hit-regions";
 import { resolveResizeFrameForSource } from "./resize-frames";
-import { resolveResizeFrameFromBounds } from "./resize-frames";
+import { resolveResizeFrameInFrame } from "./resize-frames";
 import { RESIZE_FRAME_CORNER_ROLES } from "./resize-frames";
 import { resolveRotateHandlePosition } from "./rotate-handle";
-import { augmentScopeOverlayWithMatrices, buildScopeOverlayIndex } from "./scope-overlay";
+import { augmentScopeOverlayWithMatrices, buildScopeOverlayIndex, scopeWorldBounds } from "./scope-overlay";
 import type { MatrixCellAnchorHint } from "./endpoint-anchor-snap";
 import type {
   AdornmentConnectorDisplay,
@@ -44,6 +47,7 @@ import {
   getHandleCursor,
   preferredNodeBoundsForSource,
   isTextOnlyNodeSource,
+  itemsForSource,
   resolveAdornmentOwnerBoundaryPoint,
   resolveBoundsEdgePointToward,
   resolveScenePathShapeHint,
@@ -52,7 +56,7 @@ import {
 } from "./panel-helpers";
 
 export type UseCanvasSelectionDerivedStateArgs = {
-  snapshot: Pick<CanvasSnapshot, "source" | "editHandles" | "scene" | "parseResult" | "semanticResult">;
+  snapshot: Pick<CanvasSnapshot, "source" | "editHandles" | "scene" | "parseResult" | "semanticResult" | "overlayLayer">;
   selectedElementIds: ReadonlySet<string>;
   collapsedDensePathSourceIds: ReadonlySet<string>;
   svgResult: CanvasSnapshot["svg"];
@@ -61,6 +65,7 @@ export type UseCanvasSelectionDerivedStateArgs = {
   toolMode: ToolMode;
   viewportSize: { width: number; height: number };
   ROTATE_HANDLE_OFFSET_PX: number;
+  textEngine?: EvaluateOptions["textEngine"];
 };
 
 const SIDE_RESIZE_HANDLE_MIN_DIMENSION_PX = 96;
@@ -320,10 +325,10 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     return [...selectedElementIds]
       .filter((sourceId) => movableScopeSourceIds.has(sourceId) && scopeOverlay.scopesById.has(sourceId))
       .flatMap((sourceId) => {
-        const bounds = sourceBoundsWorld.get(sourceId);
+        const bounds = scopeWorldBounds(scopeOverlay, sourceId, sourceBoundsWorld);
         return bounds ? [{ scopeId: sourceId, bounds }] : [];
       });
-  }, [movableScopeSourceIds, scopeOverlay.scopesById, selectedElementIds, sourceBoundsWorld]);
+  }, [movableScopeSourceIds, scopeOverlay, selectedElementIds, sourceBoundsWorld]);
 
   const selectionBoundsBySource = useMemo<ReadonlyMap<string, SvgBounds>>(() => {
     const bySource = new Map<string, SvgBounds>();
@@ -341,6 +346,17 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     return bySource;
   }, [scopeOverlay.boundsByScopeId, sourceBoundsSvg]);
 
+  const editableSelectedSourceIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!snapshot.parseResult) return ids;
+    for (const sourceId of selectedElementIds) {
+      if (resolvePropertyTargetFromParseResult(snapshot.source, snapshot.parseResult, sourceId).kind === "found") {
+        ids.add(sourceId);
+      }
+    }
+    return ids;
+  }, [selectedElementIds, snapshot.parseResult, snapshot.source]);
+
   const resizablePathShapeSourceIds = useMemo(() => {
     if (!snapshot.scene) {
       return new Set<string>();
@@ -349,6 +365,9 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     const result = new Set<string>();
     const statements = snapshot.parseResult?.figure.body;
     for (const sourceId of selectionBoundsBySource.keys()) {
+      if (!editableSelectedSourceIds.has(sourceId)) {
+        continue;
+      }
       if (matrixSourceIds.has(sourceId)) {
         continue;
       }
@@ -363,13 +382,14 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
       }
     }
     return result;
-  }, [matrixCellSourceIds, matrixSourceIds, selectionBoundsBySource, snapshot.editHandles, snapshot.parseResult, snapshot.scene, treeChildSourceIds]);
+  }, [editableSelectedSourceIds, matrixCellSourceIds, matrixSourceIds, selectionBoundsBySource, snapshot.editHandles, snapshot.parseResult, snapshot.scene, treeChildSourceIds]);
 
   const nodeResizeSourceIds = useMemo(() => {
     const sourceIds = new Set<string>();
     for (const handle of selectedHandles) {
       if (
         handle.kind === "node-position"
+        && editableSelectedSourceIds.has(handle.sourceRef.sourceId)
         && !matrixSourceIds.has(handle.sourceRef.sourceId)
         && !matrixCellSourceIds.has(handle.sourceRef.sourceId)
         && !fitNodeSourceIds.has(handle.sourceRef.sourceId)
@@ -383,7 +403,7 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
       }
     }
     return sourceIds;
-  }, [fitNodeSourceIds, matrixCellSourceIds, matrixSourceIds, pathAttachedNodeSourceIds, selectedElementIds, selectedHandles]);
+  }, [editableSelectedSourceIds, fitNodeSourceIds, matrixCellSourceIds, matrixSourceIds, pathAttachedNodeSourceIds, selectedElementIds, selectedHandles]);
 
   const scopeResizeSourceIds = useMemo(() => {
     const sourceIds = new Set<string>();
@@ -453,11 +473,16 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
 
   const selectionFrameSourceIds = useMemo(() => {
     const ids = new Set<string>(resizeFrameSourceIds);
+    for (const sourceId of selectedNodeSourceIds) {
+      if (!editableSelectedSourceIds.has(sourceId)) {
+        ids.add(sourceId);
+      }
+    }
     for (const sourceId of matrixSelectionSourceIds) {
       ids.add(sourceId);
     }
     return ids;
-  }, [matrixSelectionSourceIds, resizeFrameSourceIds]);
+  }, [editableSelectedSourceIds, matrixSelectionSourceIds, resizeFrameSourceIds, selectedNodeSourceIds]);
 
   const scopeSelectionSourceIds = useMemo(() => {
     const ids = new Set<string>();
@@ -483,20 +508,31 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
       return frames;
     }
     const statements = snapshot.parseResult?.figure.body;
+    const geometry = snapshot.parseResult && snapshot.semanticResult && scopeResizeSourceIds.size > 0
+      ? createEditGeometrySession({ source: snapshot.parseResult.source, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, { ...(args.textEngine !== undefined ? { textEngine: args.textEngine } : {}), ...snapshot.overlayLayer?.evaluate })
+      : null;
     for (const sourceId of resizeFrameSourceIds) {
       if (scopeResizeSourceIds.has(sourceId)) {
-        const scopeBounds = scopeOverlay.boundsByScopeId.get(sourceId);
-        const frame = scopeBounds
-          ? resolveResizeFrameFromBounds(sourceId, scopeBounds, svgResult.viewBox)
-          : null;
+        const parent = geometry?.parentFrame(sourceId);
+        const inverse = parent ? inverseMatrix(worldTransform(parent.a, parent.b, parent.c, parent.d, parent.e, parent.f)) : null;
+        const elements = snapshot.scene.elements.filter(element =>
+          scopeOverlay.ancestorScopeIdsBySourceId.get(element.sourceRef.sourceId)?.includes(sourceId));
+        const bounds = inverse ? [...collectSourceWorldBounds(elements, inverse).values()] : [];
+        const scopeBounds = bounds.length > 0 ? worldBounds(
+          pt(Math.min(...bounds.map(value => value.minX))), pt(Math.min(...bounds.map(value => value.minY))),
+          pt(Math.max(...bounds.map(value => value.maxX))), pt(Math.max(...bounds.map(value => value.maxY)))
+        ) : null;
+        const frame = scopeBounds && parent ? resolveResizeFrameInFrame(sourceId, scopeBounds, parent, svgResult.viewBox) : null;
         frames.set(sourceId, frame);
         continue;
       }
-      const path = snapshot.scene.elements.find((element): element is ScenePath => element.sourceRef.sourceId === sourceId && element.kind === "Path");
+      // Per-source lists: a large selection must not scan the scene per element.
+      const sourceElements = itemsForSource(snapshot.scene.elements, sourceId);
+      const path = sourceElements.find((element): element is ScenePath => element.kind === "Path");
       const pathShapeHint = path ? resolveScenePathShapeHint(path, statements, sourceId) : undefined;
       const frame = resolveResizeFrameForSource(
-        snapshot.scene.elements,
-        snapshot.editHandles,
+        sourceElements,
+        itemsForSource(snapshot.editHandles, sourceId),
         sourceId,
         svgResult.viewBox,
         pathShapeHint
@@ -504,7 +540,7 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
       frames.set(sourceId, frame);
     }
     return frames;
-  }, [resizeFrameSourceIds, scopeOverlay.boundsByScopeId, scopeResizeSourceIds, snapshot.editHandles, snapshot.parseResult, snapshot.scene, svgResult]);
+  }, [args.textEngine, resizeFrameSourceIds, scopeOverlay.ancestorScopeIdsBySourceId, scopeResizeSourceIds, snapshot.editHandles, snapshot.parseResult, snapshot.semanticResult, snapshot.scene, snapshot.overlayLayer?.evaluate, svgResult]);
 
   const selectionBoxes = useMemo<SelectionBoxDisplay[]>(() => {
     const textOnlyNodeSelectionSourceIds = new Set<string>();
@@ -829,13 +865,17 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     return displays;
   }, [ROTATE_HANDLE_OFFSET_PX, canvasTransform.scale, collapsedDensePathEndpointsBySource, collapsedDensePathSourceIds, dragCapability.draggableHandleIds, draggableSourceIds, fitNodeSourceIds, matrixCellSourceIds, matrixSourceIds, resizablePathShapeSourceIds, resizeFrameSourceIds, resizeFramesBySource, scopeResizeSourceIds, selectedElementIds, selectedHandles, selectionBoundsBySource, snapshot.editHandles, snapshot.parseResult, snapshot.scene, snapshot.source, svgResult, toolMode, treeChildSourceIds]);
 
+  // Hit tolerances are in screen pixels, so regions depend on the zoom. A
+  // quarter-octave step (tolerance within 9%) keeps them, and every element
+  // drawn from them, unchanged across most zoom ticks.
+  const hitRegionScale = 2 ** (Math.round(Math.log2(Math.max(canvasTransform.scale, 1e-3)) * 4) / 4);
   const hitRegions = useMemo(() => {
     if (!snapshot.scene || !svgResult) return [];
-    const matrixEdgeRegions = buildMatrixEdgeHitRegions(snapshot.scene.elements, sourceBoundsSvg, canvasTransform.scale);
-    const regions = buildHitRegions(snapshot.scene.elements, svgResult.viewBox, canvasTransform.scale, selectedScopeHitBounds);
+    const matrixEdgeRegions = buildMatrixEdgeHitRegions(snapshot.scene.elements, sourceBoundsSvg, hitRegionScale);
+    const regions = buildHitRegions(snapshot.scene.elements, svgResult.viewBox, hitRegionScale, selectedScopeHitBounds);
     // Matrix edge selectors must stay behind regular hit regions so nearby elements keep precedence.
     return [...matrixEdgeRegions, ...regions];
-  }, [canvasTransform.scale, selectedScopeHitBounds, snapshot.scene, sourceBoundsSvg, svgResult]);
+  }, [hitRegionScale, selectedScopeHitBounds, snapshot.scene, sourceBoundsSvg, svgResult]);
 
   const visibleRanges = useMemo<VisibleRanges | null>(() => {
     if (!svgResult || viewportSize.width <= 0 || viewportSize.height <= 0) return null;
@@ -986,12 +1026,6 @@ function nodeItemSourceId(
     isSyntheticTreeChildStatement
     ? statement.id
     : item.id;
-}
-
-function distanceSquared(a: WorldPoint, b: WorldPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
 }
 
 function collectPathAttachedNodeSourceIds(statements: readonly Statement[]): Set<string> {

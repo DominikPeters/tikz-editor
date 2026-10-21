@@ -9,5 +9,5 @@ export function expandPathMacroBindings(
     return raw;
   }
 
-  return expandMacroBindings(raw, macroBindings, { trace: macroTraceCollector });
+  return expandMacroBindings(raw, macroBindings, { ...(macroTraceCollector === undefined ? {} : { trace: macroTraceCollector }) });
 }

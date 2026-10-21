@@ -1,0 +1,969 @@
+#!/usr/bin/env node
+
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import {
+  layoutTexMathList,
+  luaLatexAmsMathFontProfile,
+  luaLatexDefaultMathFontProfile,
+  parseTexMath,
+  texMathSymbolCommandNames,
+} from "../packages/core/dist/text/tex/math/index.js";
+import { loadTexFuzzModules } from "./lib/tex-fuzz-loader.mjs";
+import { texOracleEnv } from "./lib/tex-oracle.mjs";
+
+let generateTexMathFuzzCase;
+
+const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
+const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
+const amsMathCommands = [
+  String.raw`\boldsymbol`,
+  String.raw`\boxed`,
+  String.raw`\dddot`,
+  String.raw`\ddddot`,
+  String.raw`\injlim`,
+  String.raw`\implies`,
+  String.raw`\impliedby`,
+  String.raw`\overunderset`,
+  String.raw`\overset`,
+  String.raw`\projlim`,
+  String.raw`\underset`,
+  String.raw`\varinjlim`,
+  String.raw`\varliminf`,
+  String.raw`\varlimsup`,
+  String.raw`\varprojlim`,
+  String.raw`\xleftarrow`,
+  String.raw`\xrightarrow`,
+  ...texMathSymbolCommandNames({ requiredLatexPackage: "amsmath" }),
+];
+const amsMathDelimiterCommands = [
+  String.raw`\lvert`,
+  String.raw`\rvert`,
+  String.raw`\lVert`,
+  String.raw`\rVert`,
+];
+const amsSymbolCommands = [
+  String.raw`\approxeq`,
+  String.raw`\Bbbk`,
+  String.raw`\blacksquare`,
+  String.raw`\boxdot`,
+  String.raw`\circleddash`,
+  String.raw`\dasharrow`,
+  String.raw`\dashleftarrow`,
+  String.raw`\dashrightarrow`,
+  String.raw`\digamma`,
+  String.raw`\dotplus`,
+  String.raw`\geqslant`,
+  String.raw`\gtrsim`,
+  String.raw`\Join`,
+  String.raw`\leqslant`,
+  String.raw`\lesssim`,
+  String.raw`\mathbb`,
+  String.raw`\mathfrak`,
+  String.raw`\llcorner`,
+  String.raw`\lrcorner`,
+  String.raw`\ngeqslant`,
+  String.raw`\nleqslant`,
+  String.raw`\nVdash`,
+  String.raw`\square`,
+  String.raw`\Subset`,
+  String.raw`\Supset`,
+  String.raw`\thickapprox`,
+  String.raw`\thicksim`,
+  String.raw`\ulcorner`,
+  String.raw`\urcorner`,
+  String.raw`\varnothing`,
+  String.raw`\Vdash`,
+  ...texMathSymbolCommandNames({ requiredLatexPackage: "amssymb" }),
+];
+const mathtoolsColonRelationCommands = [
+  String.raw`\dblcolon`,
+  String.raw`\coloneq`,
+  String.raw`\coloneqq`,
+  String.raw`\Coloneq`,
+  String.raw`\Coloneqq`,
+  String.raw`\eqcolon`,
+  String.raw`\eqqcolon`,
+  String.raw`\Eqcolon`,
+  String.raw`\Eqqcolon`,
+  String.raw`\colonapprox`,
+  String.raw`\Colonapprox`,
+  String.raw`\approxcolon`,
+  String.raw`\Approxcolon`,
+  String.raw`\colonsim`,
+  String.raw`\Colonsim`,
+  String.raw`\simcolon`,
+  String.raw`\Simcolon`,
+  String.raw`\colondash`,
+  String.raw`\Colondash`,
+  String.raw`\dashcolon`,
+  String.raw`\Dashcolon`,
+];
+
+async function runComparisons() {
+  ({ generateTexMathFuzzCase } = await loadTexFuzzModules());
+  const args = readArgs();
+  const generatedAlignedFormulas = args.alignedFuzzCases > 0
+    ? generateAlignedFuzzFormulas(args.alignedFuzzCases, args.seed)
+    : [];
+  const generatedMathFormulas = args.mathFuzzCases > 0
+    ? generateMathFuzzFormulas(args.mathFuzzCases, args.seed)
+    : [];
+  const formulas = args.formulas.length > 0
+    ? args.formulas
+    : generatedMathFormulas.length > 0
+      ? generatedMathFormulas
+    : generatedAlignedFormulas.length > 0
+      ? generatedAlignedFormulas
+    : [
+        "a+1",
+        "x-y",
+        "xy",
+        "a=b",
+        "(z)",
+        "a{b}",
+        "a\\mathinner{b}",
+        "\\frac{1}{2}",
+        "\\frac{x+y}{2}",
+        "\\dfrac{1}{2}",
+        "\\tfrac{1}{2}",
+        "x+\\dfrac{n}{k}+\\tfrac{n}{k}",
+        "\\binom{n}{k}",
+        "\\dbinom{n}{k}",
+        "\\tbinom{n}{k}",
+        "x+\\binom{n}{k}",
+        "x_\\frac{1}{2}",
+        "\\sqrt{x}",
+        "\\sqrt{x+y}",
+        "\\sqrt{\\frac{1}{2}}",
+        "\\sqrt{\\sqrt{\\frac{1}{2}}}",
+        "\\sqrt{\\sqrt{\\sqrt{\\sqrt{\\frac{1}{2}}}}}",
+        "\\overline{x}",
+        "\\underline{x}",
+        "\\overline{x+y}",
+        "\\underline{\\frac{1}{2}}",
+        "a^{\\overline{x}}",
+        "a^{\\underline{x}}",
+        "\\overline{x}^2",
+        "\\left(x\\right)",
+        "\\left(\\frac{1}{2}\\right)",
+        "\\left.\\frac{1}{2}\\right]",
+        "\\left[\\sqrt{\\sqrt{\\sqrt{\\sqrt{\\frac{1}{2}}}}}\\right]",
+        "\\left|x\\right|",
+        "\\left\\Vert x\\right\\Vert",
+        "\\left\\langle x\\right\\rangle",
+        "\\left\\lbrace x\\right\\rbrace",
+        "\\left\\backslash x\\right/",
+        "\\left\\langle\\frac{1}{2}\\right\\rangle",
+        "\\left\\lfloor\\sqrt{\\sqrt{\\sqrt{\\sqrt{\\frac{1}{2}}}}}\\right\\rfloor",
+        "\\hat{x}",
+        "\\bar{x}",
+        "\\vec{x}",
+        "\\tilde{x}",
+        "\\dot{x}",
+        "\\ddot{x}",
+        "\\hat{y}",
+        "\\hat{xy}",
+        "\\hat{\\frac{1}{2}}",
+        "\\text{if}",
+        "x+\\text{if}",
+        "\\text{office}",
+        "\\textrm{if}",
+        "\\textsf{if}",
+        "\\texttt{if}",
+        "\\textnormal{if}",
+        "\\textbf{if}",
+        "\\textbf{\\textmd{if}}",
+        "\\textit{if}",
+        "\\textit{\\textup{if}}",
+        "\\textsl{if}",
+        "\\textsc{if}",
+        "\\emph{if}",
+        "\\mbox{\\textbf{Bold} text}",
+        "\\mbox{\\texttt{if}}",
+        "\\makebox{if}",
+        "\\makebox[20pt][l]{if}",
+        "\\makebox[20pt][c]{if}",
+        "\\makebox[20pt][r]{if}",
+        "\\makebox[24pt][s]{a b}",
+        "\\llap{if}",
+        "\\rlap{if}",
+        "\\fbox{if}",
+        "\\framebox{if}",
+        "\\framebox[24pt][r]{if}",
+        "\\phantom{x}+y",
+        "\\hphantom{x}+y",
+        "\\vphantom{\\frac{1}{2}}+y",
+        "\\mbox{a\\phantom{b}c}",
+        "\\mbox{a\\smash{g}c}",
+        "x_{\\text{if}}",
+        "x_{y_{\\textbf{if}}}",
+        "x_{\\mbox{$y$}}",
+        "x_{\\text{$y$}}",
+        "\\mathrm{ABC123}",
+        "\\mathit{ABC123}",
+        "\\mathbf{ABC123}",
+        "\\mathsf{ABC123}",
+        "\\mathtt{ABC123}",
+        "\\mathcal{ABC}",
+        "\\mathit{a+b}",
+        "\\mathtt{a+b}",
+        "\\mathcal{A+B}",
+        "x_{\\mathbf{i}}",
+        "x_{y_{\\mathsf{i}}}",
+        "x_{\\mathtt{i}}",
+        "x_{y_{\\mathcal{A}}}",
+        "\\alpha+\\beta=\\gamma",
+        "\\Gamma+\\Delta+\\Omega",
+        "x\\leq y\\neq z",
+        "a\\times b\\cdot c",
+        "\\infty\\in A\\subset B",
+        "\\pm x\\mp y",
+        "A\\to B\\leftarrow C",
+        "A\\Rightarrow B\\Leftrightarrow C",
+        "x\\mapsto y",
+        "p\\wedge q\\vee r",
+        "\\forall x\\exists y\\in A",
+        "A\\cup B\\cap C\\setminus D",
+        "A\\supset B\\subseteq C\\supseteq D",
+        "x\\notin A",
+        "x\\not= y",
+        "x\\not\\in A",
+        "x\\not\\leq y",
+        "\\ldots",
+        "\\cdots",
+        "\\dots",
+        "a\\ldots b",
+        "a+\\cdots+b",
+        "x_1,\\ldots,x_n",
+        "\\sum",
+        "\\sum_i^n",
+        "\\begin{aligned}a&=b\\\\c&=d\\end{aligned}",
+        "\\begin{aligned}x_i&=y^2\\\\\\frac{1}{2}&=z\\end{aligned}",
+        "\\begin{aligned}a&=b&c&=d\\\\e&=f&g&=h\\end{aligned}",
+        "\\begin{aligned}\\sum_i^n&=x\\\\\\sqrt{x}&=y\\end{aligned}",
+        "\\begin{matrix}a&b\\\\c&d\\end{matrix}",
+        "\\begin{array}{cc}a&b\\\\c&d\\end{array}",
+        "\\begin{array}{lr}a&b\\\\x&y\\end{array}",
+        "\\begin{cases}a&b\\\\x&y\\end{cases}",
+        "\\begin{smallmatrix}a&b\\\\x&y\\end{smallmatrix}",
+        "\\operatorname{rank}",
+        "\\operatorname*{arg\\,max}_{x}",
+        "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
+        "\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}",
+        "\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}",
+        "\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}",
+        "\\begin{Vmatrix}a&b\\\\c&d\\end{Vmatrix}",
+        "\\substack{i\\\\j}",
+        "x_{\\substack{i\\\\j}}",
+        "\\sum_{\\substack{i=1\\\\j=2}}^n",
+        "\\begin{subarray}{c}i\\\\j\\end{subarray}",
+        "\\begin{subarray}{l}i\\\\j\\end{subarray}",
+        "\\prod_i^n",
+        "\\coprod_i^n",
+        "\\bigcup_i^n",
+        "\\bigcap_i^n",
+        "\\int",
+        "\\int_0^1",
+        "\\oint_0^1",
+        "\\lim_{x}",
+        "x^2",
+        "x_i",
+        "x_i^2",
+        "y^2",
+        "y_i",
+        "y_i^2",
+        "{x+y}",
+        "{x+y}^2",
+        "x^{y_i}",
+      ];
+  const tolerance = args.tolerance;
+  const results = formulas.map((formula) => compareFormula(formula, tolerance));
+  const failed = results.filter((result) => !result.ok);
+  if (args.summaryOnly) {
+    console.log(JSON.stringify({
+      tolerance,
+      cases: formulas.length,
+      failed: failed.length,
+      seed: args.seed,
+      mode: generatedMathFormulas.length > 0
+        ? "math-fuzz"
+        : generatedAlignedFormulas.length > 0
+          ? "aligned-fuzz"
+          : "fixed",
+      failures: failed,
+    }, null, 2));
+  } else {
+    console.log(JSON.stringify({ tolerance, results }, null, 2));
+  }
+  if (failed.length > 0) {
+    process.exitCode = 1;
+  }
+
+}
+
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) await runComparisons();
+
+export function compareFormula(formula, tolerance = 0.01, options = {}) {
+  const ours = ourTrace(formula);
+  let tex;
+  try {
+    tex = texTrace(formula, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      formula,
+      ok: false,
+      mismatches: [`TeX oracle failed: ${message}`],
+      ours,
+      tex: { items: [], width: 0 },
+    };
+  }
+  const mismatches = [];
+  if (!ours.supported) {
+    mismatches.push(`our layout unsupported: ${ours.errors.map((error) => error.message).join("; ")}`);
+    return { formula, ok: false, mismatches, ours, tex };
+  }
+  const compareItems = comparisonItemsForFormula(formula, ours.items, tex.items);
+  if (compareItems.ours.length !== compareItems.tex.length) {
+    mismatches.push(`item count differs: ours=${compareItems.ours.length} tex=${compareItems.tex.length}`);
+  }
+  const count = Math.min(compareItems.ours.length, compareItems.tex.length);
+  for (let index = 0; index < count; index++) {
+    const left = compareItems.ours[index];
+    const right = compareItems.tex[index];
+    if (left.kind !== right.kind) {
+      mismatches.push(`item ${index} kind differs: ours=${left.kind} tex=${right.kind}`);
+      continue;
+    }
+    if (left.kind === "glyph" && right.kind === "glyph") {
+      if (left.fontId !== right.fontId || left.code !== right.code) {
+        mismatches.push(`glyph ${index} differs: ours=${left.fontId}/${left.code} tex=${right.fontId}/${right.code}`);
+      }
+      compareNumber(mismatches, `glyph ${index} x`, left.x, right.x, tolerance);
+      compareNumber(mismatches, `glyph ${index} y`, left.y, right.y, tolerance);
+      compareNumber(mismatches, `glyph ${index} width`, left.width, right.width, tolerance);
+    } else if (left.kind === "glue" && right.kind === "glue") {
+      compareNumber(mismatches, `glue ${index} x`, left.x, right.x, tolerance);
+      compareNumber(mismatches, `glue ${index} y`, left.y, right.y, tolerance);
+      compareNumber(mismatches, `glue ${index} width`, left.width, right.width, tolerance);
+    } else if (left.kind === "kern" && right.kind === "kern") {
+      compareNumber(mismatches, `kern ${index} x`, left.x, right.x, tolerance);
+      compareNumber(mismatches, `kern ${index} y`, left.y, right.y, tolerance);
+      compareNumber(mismatches, `kern ${index} width`, left.width, right.width, tolerance);
+    } else if (left.kind === "rule" && right.kind === "rule") {
+      compareNumber(mismatches, `rule ${index} x`, left.x, right.x, tolerance);
+      compareNumber(mismatches, `rule ${index} width`, left.width, right.width, tolerance);
+      if (!isIndefiniteVerticalRuleTrace(right)) {
+        compareNumber(mismatches, `rule ${index} y`, left.y, right.y, tolerance);
+        compareNumber(mismatches, `rule ${index} height`, left.height, right.height, tolerance);
+      }
+    }
+  }
+  compareNumber(mismatches, "total width", ours.width, tex.width, tolerance);
+  compareNumber(mismatches, "total height", ours.height, tex.height, tolerance);
+  compareNumber(mismatches, "total depth", ours.depth, tex.depth, tolerance);
+  return {
+    formula,
+    ok: mismatches.length === 0,
+    mismatches,
+    ours,
+    tex,
+  };
+}
+
+function comparisonItemsForFormula(formula, ours, tex) {
+  if (/\\(?:overbrace|underbrace)\b/.test(formula)) {
+    // Vbox traversal paints brace rows before their bodies; SVG may emit the
+    // body first. Compare the same glyph/rule multiset at exact paint positions.
+    const order = (a, b) => a.kind.localeCompare(b.kind) || (a.fontId ?? "").localeCompare(b.fontId ?? "") ||
+      (a.code ?? 0) - (b.code ?? 0) || a.x - b.x || a.y - b.y || a.width - b.width;
+    return { ours: visibleMathItems(ours).sort(order), tex: visibleMathItems(tex).sort(order) };
+  }
+  if (
+    formula.includes(String.raw`\begin{aligned}`) ||
+    hasArrayEnvironment(formula) ||
+    hasCasesEnvironment(formula) ||
+    hasSmallMatrixEnvironment(formula) ||
+    hasMatrixEnvironment(formula) ||
+    hasOperatorNameCommand(formula) ||
+    hasBinomialCommand(formula) ||
+    hasStyledFractionCommand(formula)
+    || hasSubstackCommand(formula)
+    || hasSubarrayEnvironment(formula)
+    || hasSidesetCommand(formula)
+    || hasAmsMathCommand(formula)
+    || hasAmsMathDelimiterCommand(formula)
+    || /\\sqrt\[/.test(formula)
+    || hasMathtoolsColonRelationCommand(formula)
+  ) {
+    return {
+      ours: visibleMathItems(ours),
+      tex: visibleMathItems(tex),
+    };
+  }
+  return { ours, tex };
+}
+
+function visibleMathItems(items) {
+  return items.filter((item) =>
+    item.kind === "glyph" ||
+    (item.kind === "rule" && item.width !== 0)
+  );
+}
+
+function isIndefiniteVerticalRuleTrace(item) {
+  return item.kind === "rule" && item.height < 0;
+}
+
+function ourTrace(formula) {
+  const parsed = parseTexMath(formula);
+  // Compare under the same package/font context on both sides. Package
+  // inference in the native renderer is separate from this layout oracle.
+  const fontProfile = /\{(?:amsmath|amssymb|mathtools)\}/.test(mathPackagePreamble(formula))
+    ? luaLatexAmsMathFontProfile
+    : luaLatexDefaultMathFontProfile;
+  const result = layoutTexMathList(parsed.list, { fontProfile });
+  if (!result.supported) {
+    return {
+      supported: false,
+      errors: result.errors,
+      items: [],
+      width: 0,
+    };
+  }
+  return {
+    supported: true,
+    items: flattenOurItems(result.hlist.items, 0, 0),
+    width: result.hlist.width,
+    height: result.hlist.height,
+    depth: result.hlist.depth,
+  };
+}
+
+function flattenOurItems(items, originX, originY) {
+  const traceItems = [];
+  for (const item of items) {
+    if (item.kind === "hlist") {
+      traceItems.push(...flattenOurItems(item.items, originX + item.x, originY + item.y));
+      continue;
+    }
+    if (item.kind === "glyph") {
+      traceItems.push({
+        kind: "glyph",
+        fontId: item.fontId,
+        code: item.code,
+        x: round(originX + item.x),
+        y: round(originY + item.y),
+        width: item.width,
+      });
+      continue;
+    }
+    if (item.kind === "rule") {
+      traceItems.push({
+        kind: "rule",
+        x: round(originX + item.x),
+        y: round(originY + item.y),
+        width: item.width,
+        height: item.height,
+      });
+      continue;
+    }
+    if (item.kind === "glue") {
+      traceItems.push({
+        kind: "glue",
+        x: round(originX + item.x),
+        y: round(originY),
+        width: item.width,
+      });
+      continue;
+    }
+    traceItems.push({
+      kind: "kern",
+      x: round(originX + item.x),
+      y: round(originY),
+      width: item.width,
+    });
+  }
+  return traceItems;
+}
+
+function texTrace(formula, options) {
+  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-math-compare-"));
+  try {
+    writeFileSync(join(tempDir, "trace.lua"), traceLuaSource(), "utf8");
+    writeFileSync(join(tempDir, "case.tex"), texSource(formula), "utf8");
+    try {
+      execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "case.tex"], {
+        cwd: tempDir,
+        env: texOracleEnv(),
+        stdio: "pipe",
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: options.timeoutMs ?? 20_000,
+      });
+    } catch (error) {
+      const output = error.stdout?.toString() ?? "";
+      throw new Error(`${error.message}\n${output.slice(-3000)}`, { cause: error });
+    }
+    const log = readFileSync(join(tempDir, "case.log"), "utf8");
+    const items = [];
+    let width = 0;
+    let height = 0;
+    let depth = 0;
+    for (const line of log.split(/\r?\n/)) {
+      const glyph = /^TMT g x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) f=(?<font>\S+) c=(?<char>\d+) w=(?<width>[-.\d]+)/.exec(line);
+      if (glyph?.groups) {
+        items.push({
+          kind: "glyph",
+          x: round(Number(glyph.groups.x)),
+          y: round(Number(glyph.groups.y)),
+          fontId: glyph.groups.font,
+          code: Number(glyph.groups.char),
+          width: round(Number(glyph.groups.width)),
+        });
+        continue;
+      }
+      const glue = /^TMT glue x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) w=(?<width>[-.\d]+)/.exec(line);
+      if (glue?.groups) {
+        items.push({
+          kind: "glue",
+          x: round(Number(glue.groups.x)),
+          y: round(Number(glue.groups.y)),
+          width: round(Number(glue.groups.width)),
+        });
+        continue;
+      }
+      const kern = /^TMT kern x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) w=(?<width>[-.\d]+)/.exec(line);
+      if (kern?.groups) {
+        items.push({
+          kind: "kern",
+          x: round(Number(kern.groups.x)),
+          y: round(Number(kern.groups.y)),
+          width: round(Number(kern.groups.width)),
+        });
+        continue;
+      }
+      const rule = /^TMT rule x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) w=(?<width>[-.\d]+) h=(?<height>[-.\d]+)/.exec(line);
+      if (rule?.groups) {
+        items.push({
+          kind: "rule",
+          x: round(Number(rule.groups.x)),
+          y: round(Number(rule.groups.y)),
+          width: round(Number(rule.groups.width)),
+          height: round(Number(rule.groups.height)),
+        });
+        continue;
+      }
+      const total = /^TMT width=(?<width>[-.\d]+) height=(?<height>[-.\d]+) depth=(?<depth>[-.\d]+)/.exec(line);
+      if (total?.groups) {
+        width = round(Number(total.groups.width));
+        height = round(Number(total.groups.height));
+        depth = round(Number(total.groups.depth));
+      }
+    }
+    return { items, width, height, depth };
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function mathPackagePreamble(formula) {
+  const amsmathPreamble = formula.includes(String.raw`\begin{aligned}`) ||
+    hasMatrixEnvironment(formula) ||
+    hasCasesEnvironment(formula) ||
+    hasSmallMatrixEnvironment(formula) ||
+    hasOperatorNameCommand(formula) ||
+    hasBinomialCommand(formula) ||
+    hasStyledFractionCommand(formula) ||
+    hasSubstackCommand(formula) ||
+    hasSubarrayEnvironment(formula) ||
+    hasSidesetCommand(formula) ||
+    hasEllipsisCommand(formula) ||
+    hasAmsMathCommand(formula) ||
+    hasAmsMathDelimiterCommand(formula) ||
+    hasAmsTextCommand(formula)
+    ? String.raw`\usepackage{amsmath}` + "\n"
+    : "";
+  const arrayPreamble = hasArrayPackagePreambleExtension(formula)
+    ? String.raw`\usepackage{array}` + "\n"
+    : "";
+  const amssymbPreamble = hasAmsSymbolCommand(formula)
+    ? String.raw`\usepackage{amssymb}` + "\n"
+    : "";
+  const mathtoolsPreamble = hasMathtoolsColonRelationCommand(formula)
+    ? String.raw`\usepackage{mathtools}` + "\n"
+    : "";
+  return amsmathPreamble + amssymbPreamble + mathtoolsPreamble + arrayPreamble;
+}
+
+function texSource(formula) {
+  return String.raw`\documentclass{article}
+` + mathPackagePreamble(formula) + String.raw`
+\newbox\m
+\begin{document}
+\setbox\m=\hbox{$` + formula + String.raw`$}
+\directlua{dofile('trace.lua')}
+\end{document}
+`;
+}
+
+function traceLuaSource() {
+  return String.raw`local glyph_id=node.id('glyph')
+local glue_id=node.id('glue')
+local kern_id=node.id('kern')
+local rule_id=node.id('rule')
+local hlist_id=node.id('hlist')
+local vlist_id=node.id('vlist')
+local disc_id=node.id('disc')
+local whatsit_id=node.id('whatsit')
+local function sp(v) return (v or 0)/65536 end
+local function font_name(font_id)
+  local registered=font.fonts and font.fonts[font_id]
+  if registered and registered.name then return normalize_font_name(tostring(registered.name)) end
+  local ok, tex_name=pcall(function() return tex.fontname(font_id) end)
+  if ok and tex_name then return normalize_font_name(tostring(tex_name)) end
+  local f=font.getfont(font_id)
+  return normalize_font_name(tostring(f and (f.name or f.fontname or f.fullname or f.psname or f.filename)))
+end
+function normalize_font_name(name)
+  local bracketed=string.match(name, '^%[([^%]]+)%]')
+  if bracketed then return bracketed end
+  return name
+end
+
+local walk_vlist
+local function node_width(n)
+  return sp(n.width or 0)
+end
+local function node_height(n)
+  return sp(n.height or 0)
+end
+local function node_depth(n)
+  return sp(n.depth or 0)
+end
+local function glue_order(n, stretch)
+  if stretch then
+    return n.stretch_order or (n.spec and n.spec.stretch_order) or 0
+  end
+  return n.shrink_order or (n.spec and n.spec.shrink_order) or 0
+end
+local function glue_natural_width(n)
+  return sp(n.width or (n.spec and n.spec.width) or 0)
+end
+local function glue_width(n, box)
+  local w = n.width or (n.spec and n.spec.width) or 0
+  if box and (box.glue_sign or 0) ~= 0 then
+    local target_order = box.glue_order or 0
+    if box.glue_sign == 1 and glue_order(n, true) == target_order then
+      w = w + ((n.stretch or (n.spec and n.spec.stretch) or 0) * (box.glue_set or 0))
+    elseif box.glue_sign == 2 and glue_order(n, false) == target_order then
+      w = w - ((n.shrink or (n.spec and n.spec.shrink) or 0) * (box.glue_set or 0))
+    end
+  end
+  return sp(w)
+end
+local function kern_width(n)
+  return sp(n.kern or n.width or 0)
+end
+
+local function walk_hlist(list, origin_x, baseline_y, box)
+  if not list then return origin_x end
+  local x = origin_x
+  for n in node.traverse(list) do
+    if n.id==glyph_id then
+      texio.write_nl(string.format('TMT g x=%.6f y=%.6f f=%s c=%d w=%.6f', x, baseline_y, font_name(n.font), n.char, node_width(n)))
+      x=x+node_width(n)
+    elseif n.id==glue_id then
+      local w=glue_width(n, box)
+      -- Leaders are paint, not just glue advance: arrows use centered hboxes,
+      -- while stock over/underbraces use aligned rule leaders.
+      if n.leader then
+        local leader=n.leader
+        if leader.id==rule_id then
+          if w >= 0 then
+            texio.write_nl(string.format('TMT rule x=%.6f y=%.6f w=%.6f h=%.6f',
+              x, baseline_y-node_height(leader), w, node_height(leader)+node_depth(leader)))
+          end
+        else
+          if n.subtype ~= 100 and n.subtype ~= 101 then error('Unsupported math trace leader subtype '..n.subtype) end
+          local unit=leader.width or 0
+          local available=math.floor(w*65536+0.5)
+          if unit > 0 then
+            local count=math.max(0, math.floor(available/unit))
+            local start=x+sp(math.floor((available-count*unit)/2))
+            if n.subtype==100 then
+              start=origin_x+sp(math.ceil((x-origin_x)*65536/unit)*unit)
+              count=math.max(0, math.floor(((x+w)-start)*65536/unit+0.00001))
+            end
+            for i=0,count-1 do
+              local leader_x=start+sp(i*unit)
+              if leader.id==hlist_id then
+                walk_hlist(leader.list, leader_x, baseline_y+sp(leader.shift), leader)
+              elseif leader.id==vlist_id then
+                walk_vlist(leader.list, leader_x, baseline_y+sp(leader.shift), node_height(leader), node_width(leader))
+              else error('Unsupported math trace leader node '..leader.id) end
+            end
+          end
+        end
+      end
+      if glue_natural_width(n) ~= 0 then
+        texio.write_nl(string.format('TMT glue x=%.6f y=%.6f w=%.6f', x, baseline_y, w))
+      end
+      x=x+w
+    elseif n.id==kern_id then
+      local w=kern_width(n)
+      texio.write_nl(string.format('TMT kern x=%.6f y=%.6f w=%.6f', x, baseline_y, w))
+      x=x+w
+    elseif n.id==rule_id then
+      texio.write_nl(string.format('TMT rule x=%.6f y=%.6f w=%.6f h=%.6f', x, baseline_y-node_height(n), node_width(n), node_height(n)+node_depth(n)))
+      x=x+node_width(n)
+    elseif n.id==hlist_id then
+      walk_hlist(n.list, x, baseline_y + sp(n.shift or 0), n)
+      x=x+node_width(n)
+    elseif n.id==vlist_id then
+      walk_vlist(n.list, x, baseline_y + sp(n.shift or 0), node_height(n), node_width(n))
+      x=x+node_width(n)
+    elseif n.id==disc_id then
+      x=walk_hlist(n.replace, x, baseline_y, box)
+    elseif n.id~=whatsit_id then
+      x=x+node_width(n)
+    end
+  end
+  return x
+end
+
+function walk_vlist(list, origin_x, baseline_y, height, width)
+  local y = baseline_y - height
+  for n in node.traverse(list) do
+    if n.id==kern_id then
+      y=y+kern_width(n)
+    elseif n.id==glue_id then
+      y=y+glue_width(n, nil)
+    elseif n.id==hlist_id then
+      local child_baseline = y + node_height(n)
+      walk_hlist(n.list, origin_x + sp(n.shift or 0), child_baseline, n)
+      y=y+node_height(n)+node_depth(n)
+    elseif n.id==vlist_id then
+      local child_baseline = y + node_height(n)
+      walk_vlist(n.list, origin_x + sp(n.shift or 0), child_baseline, node_height(n), node_width(n))
+      y=y+node_height(n)+node_depth(n)
+    elseif n.id==rule_id then
+      local rule_width = node_width(n)
+      if rule_width < 0 then rule_width = width end
+      texio.write_nl(string.format('TMT rule x=%.6f y=%.6f w=%.6f h=%.6f', origin_x, y, rule_width, node_height(n)+node_depth(n)))
+      y=y+node_height(n)+node_depth(n)
+    else
+      y=y+node_height(n)+node_depth(n)
+    end
+  end
+end
+walk_hlist(tex.box.m.list, 0, 0, tex.box.m)
+texio.write_nl(string.format('TMT width=%.6f height=%.6f depth=%.6f', node_width(tex.box.m), node_height(tex.box.m), node_depth(tex.box.m)))
+`;
+}
+
+function compareNumber(mismatches, label, left, right, tolerance) {
+  if (Math.abs(left - right) > tolerance) {
+    mismatches.push(`${label} differs: ours=${left} tex=${right}`);
+  }
+}
+
+function readArgs() {
+  const formulas = [];
+  let tolerance = 0.01;
+  let alignedFuzzCases = 0;
+  let mathFuzzCases = 0;
+  let seed = 20260615;
+  let summaryOnly = false;
+  for (let index = 2; index < process.argv.length; index++) {
+    const arg = process.argv[index] ?? "";
+    if (arg === "--formula") {
+      formulas.push(process.argv[++index] ?? "");
+    } else if (arg.startsWith("--formula=")) {
+      formulas.push(arg.slice("--formula=".length));
+    } else if (arg === "--tolerance") {
+      tolerance = Number(process.argv[++index] ?? tolerance);
+    } else if (arg.startsWith("--tolerance=")) {
+      tolerance = Number(arg.slice("--tolerance=".length));
+    } else if (arg === "--aligned-fuzz") {
+      alignedFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--aligned-fuzz");
+    } else if (arg.startsWith("--aligned-fuzz=")) {
+      alignedFuzzCases = readNonNegativeInteger(arg.slice("--aligned-fuzz=".length), "--aligned-fuzz");
+    } else if (arg === "--math-fuzz") {
+      mathFuzzCases = readNonNegativeInteger(process.argv[++index] ?? "", "--math-fuzz");
+    } else if (arg.startsWith("--math-fuzz=")) {
+      mathFuzzCases = readNonNegativeInteger(arg.slice("--math-fuzz=".length), "--math-fuzz");
+    } else if (arg === "--seed") {
+      seed = readNonNegativeInteger(process.argv[++index] ?? "", "--seed");
+    } else if (arg.startsWith("--seed=")) {
+      seed = readNonNegativeInteger(arg.slice("--seed=".length), "--seed");
+    } else if (arg === "--summary-only") {
+      summaryOnly = true;
+    }
+  }
+  return { formulas, tolerance, alignedFuzzCases, mathFuzzCases, seed, summaryOnly };
+}
+
+function readNonNegativeInteger(raw, label) {
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`Expected ${label} to be a non-negative integer.`);
+  }
+  return value;
+}
+
+function generateAlignedFuzzFormulas(cases, seed) {
+  // `aligned` carries a relation-oriented ampersand model that the shared
+  // math AST does not express yet, so this focused generator remains local.
+  const rng = makeRng(seed);
+  const formulas = [];
+  for (let index = 0; index < cases; index++) {
+    const rowCount = 1 + randomInt(rng, 3);
+    const pairCount = 1 + randomInt(rng, 2);
+    const rows = [];
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+      const cells = [];
+      for (let pairIndex = 0; pairIndex < pairCount; pairIndex++) {
+        cells.push(randomLeftAlignedCell(rng));
+        cells.push(`=${randomRightAlignedCell(rng)}`);
+      }
+      rows.push(cells.join("&"));
+    }
+    formulas.push(String.raw`\begin{aligned}` + rows.join(String.raw`\\`) + String.raw`\end{aligned}`);
+  }
+  return formulas;
+}
+
+function generateMathFuzzFormulas(cases, seed) {
+  const formulas = [];
+  for (let index = 0; index < cases; index++) {
+    formulas.push(generateTexMathFuzzCase(caseSeed(seed, index), {
+      depth: 3,
+      malformed: false,
+    }).source);
+  }
+  return formulas;
+}
+
+function caseSeed(seed, index) {
+  return (seed + Math.imul(index, 0x9e3779b1)) >>> 0;
+}
+
+function hasMatrixEnvironment(source) {
+  return matrixEnvironments.some((environment) =>
+    source.includes(String.raw`\begin{` + environment + "}")
+  );
+}
+
+function hasArrayEnvironment(source) {
+  return source.includes(String.raw`\begin{array}`);
+}
+
+function hasArrayPackagePreambleExtension(source) {
+  return source.includes(String.raw`\begin{array}`) && /[!<>]\s*\{/u.test(source);
+}
+
+function hasCasesEnvironment(source) {
+  return source.includes(String.raw`\begin{cases}`);
+}
+
+function hasSmallMatrixEnvironment(source) {
+  return source.includes(String.raw`\begin{smallmatrix}`);
+}
+
+function hasOperatorNameCommand(source) {
+  return source.includes(String.raw`\operatorname`);
+}
+
+function hasBinomialCommand(source) {
+  return binomialCommands.some((command) => source.includes(command));
+}
+
+function hasStyledFractionCommand(source) {
+  return source.includes(String.raw`\dfrac`) || source.includes(String.raw`\tfrac`);
+}
+
+function hasSubstackCommand(source) {
+  return source.includes(String.raw`\substack`);
+}
+
+function hasSubarrayEnvironment(source) {
+  return source.includes(String.raw`\begin{subarray}`);
+}
+
+function hasSidesetCommand(source) {
+  return source.includes(String.raw`\sideset`);
+}
+
+function hasEllipsisCommand(source) {
+  return source.includes(String.raw`\dots`) ||
+    source.includes(String.raw`\ldots`) ||
+    source.includes(String.raw`\cdots`);
+}
+
+function hasAmsMathCommand(source) {
+  return amsMathCommands.some((command) => source.includes(command));
+}
+
+function hasAmsMathDelimiterCommand(source) {
+  return amsMathDelimiterCommands.some((command) => source.includes(command));
+}
+
+function hasAmsTextCommand(source) {
+  return /\\text(?![A-Za-z])/.test(source);
+}
+
+function hasAmsSymbolCommand(source) {
+  return amsSymbolCommands.some((command) => source.includes(command));
+}
+
+function hasMathtoolsColonRelationCommand(source) {
+  return mathtoolsColonRelationCommands.some((command) => source.includes(command));
+}
+
+function randomLeftAlignedCell(rng) {
+  const cells = [
+    "a",
+    "b",
+    "x_i",
+    "y^2",
+    String.raw`\frac{1}{2}`,
+    String.raw`\sqrt{x}`,
+    String.raw`\sum_i^n`,
+  ];
+  return cells[randomInt(rng, cells.length)] ?? "a";
+}
+
+function randomRightAlignedCell(rng) {
+  const cells = [
+    "a",
+    "b",
+    "x",
+    "y",
+    "z",
+    "x_i",
+    "y^2",
+    String.raw`\frac{1}{2}`,
+    String.raw`\sqrt{x}`,
+  ];
+  return cells[randomInt(rng, cells.length)] ?? "x";
+}
+
+function randomInt(rng, upperExclusive) {
+  return Math.floor(rng() * upperExclusive);
+}
+
+function makeRng(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+function round(value) {
+  return Number(value.toFixed(6));
+}

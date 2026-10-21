@@ -1,0 +1,17 @@
+{
+  "identifier": "presentation",
+  "description": "Local presentation windows and their controller",
+  "windows": ["main", "presentation-audience-*", "presentation-presenter-*", "presentation-identifier-*"],
+  "permissions": [
+    "core:event:default",
+    "core:webview:allow-set-webview-focus",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-destroy",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-set-decorations",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-set-simple-fullscreen"
+  ]
+}

@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildMatrixInspectorDescriptor,
   buildTreeInspectorDescriptor,
+  createInspectorTargetResolver,
   TIKZPICTURE_GLOBAL_TARGET_ID,
   type InspectorDescriptor,
   type InspectorSection,
   type SetPropertyWriteTarget,
-  type InspectorSnapshot
-} from "tikz-editor/edit/inspector";
+  type InspectorSnapshot,
+  type InspectorTargetResolver
+} from "@tikz-editor/core/edit/inspector";
 import {
   DEFAULT_TRANSFORM_INSPECTOR_VALUES,
   resolveTransformInspectorMutationContextFromOptionEntries,
@@ -15,12 +17,12 @@ import {
   transformRotateInspectorLabel,
   type TransformInspectorKey,
   type TransformInspectorMutationContext
-} from "tikz-editor/edit/property-write-builders";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import { buildStylesCascadeModel } from "tikz-editor/edit/styles-cascade";
-import { resolveFigureBoundsState } from "tikz-editor/edit/figure-bounds";
-import type { SceneElement } from "tikz-editor/semantic/types";
-import { getSharedEditAnalysisView, getSharedEditAnalysisSession } from "../../edit-analysis-manager";
+} from "@tikz-editor/core/edit/property-write-builders";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import { buildStylesCascadeModel } from "@tikz-editor/core/edit/styles-cascade";
+import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
+import { buildEditParseOptions } from "../../edit-parse-options";
 import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
 import type { EditorAction } from "../../store/types";
 import { useEditorStore } from "../../store/store";
@@ -70,10 +72,10 @@ function buildScopeTransformWriteTarget(
     transformContext: {
       key,
       values: { ...context.values },
-      presence: context.presence ? { ...context.presence } : undefined
+      ...(context.presence ? { presence: { ...context.presence } } : {})
     },
     writable,
-    reason
+    ...(reason === undefined ? {} : { reason })
   };
 }
 
@@ -151,7 +153,7 @@ function buildScopeInspectorDescriptor(
     elementKind: "scope",
     elementId: scopeId,
     writeTargetId: writable ? scopeId : null,
-    readOnlyReason,
+    ...(readOnlyReason === undefined ? {} : { readOnlyReason }),
     sections
   };
 }
@@ -174,36 +176,38 @@ type FrozenPropertyProvenanceView = {
 export function useInspectorModel(args: {
   selectedIds: ReadonlySet<string>;
   dispatch: (action: EditorAction) => void;
-  getInspectorDescriptor: (element: SceneElement, context: InspectorSnapshot) => InspectorDescriptor;
+  getInspectorDescriptor: (
+    element: SceneElement,
+    context: InspectorSnapshot,
+    resolveTarget: InspectorTargetResolver
+  ) => InspectorDescriptor;
 }) {
   const { selectedIds, dispatch, getInspectorDescriptor } = args;
   const [{ source, snapshot }, setSourceSnapshot] = useState(() => {
     const s = useEditorStore.getState();
     return { source: s.source, snapshot: s.snapshot };
   });
-  const [{ activeDocumentId, activeFigureId, sourceRevision }, setAnalysisInputs] = useState(() => {
+  const [{ activeDocumentId, activeRootId, sourceRevision }, setAnalysisInputs] = useState(() => {
     const s = useEditorStore.getState();
     return {
       activeDocumentId: s.activeDocumentId,
-      activeFigureId: s.activeFigureId,
+      activeRootId: s.activeRootId,
       sourceRevision: s.sourceRevision
     };
   });
 
   useEffect(() => {
-    return useEditorStore.subscribe((s, prev) => {
+    return useEditorStore.subscribe((s) => {
       const k = s.activeCanvasDragKind;
       if (k === "element" || k === "resize" || k === "rotate" || k === "handle") return;
-      if (s.source !== prev.source || s.snapshot !== prev.snapshot) {
+      if (s.source === s.snapshot.source) {
         // When the source has changed but the snapshot hasn't caught up yet
         // (snapshot.source !== source), skip the update. The expensive inspector
         // useMemo hooks (descriptors, provenance) would use mismatched sources,
         // causing cache misses and redundant full parses. Wait for SNAPSHOT_READY
         // to bring both into sync, then update in one shot.
-        if (s.source !== s.snapshot.source) {
-          return;
-        }
-        setSourceSnapshot({ source: s.source, snapshot: s.snapshot });
+        setSourceSnapshot(current => current.source === s.source && current.snapshot === s.snapshot
+          ? current : { source: s.source, snapshot: s.snapshot });
       }
     });
   }, []);
@@ -220,14 +224,14 @@ export function useInspectorModel(args: {
       setAnalysisInputs((current) => {
         if (
           current.activeDocumentId === s.activeDocumentId &&
-          current.activeFigureId === s.activeFigureId &&
+          current.activeRootId === s.activeRootId &&
           current.sourceRevision === s.sourceRevision
         ) {
           return current;
         }
         return {
           activeDocumentId: s.activeDocumentId,
-          activeFigureId: s.activeFigureId,
+          activeRootId: s.activeRootId,
           sourceRevision: s.sourceRevision
         };
       });
@@ -245,25 +249,20 @@ export function useInspectorModel(args: {
     activeCanvasDragKind === "rotate" ||
     activeCanvasDragKind === "handle";
   const frozenPropertyProvenanceRef = useRef<FrozenPropertyProvenanceView | null>(null);
-  const editAnalysisView = useMemo(
+  const parseOptions = useMemo(
     () =>
-      getSharedEditAnalysisView({
+      buildEditParseOptions({
         documentId: activeDocumentId,
         sourceRevision,
         source,
-        activeFigureId,
-        snapshot
+        activeRootId,
+        snapshot,
+        analysis: "shared",
+        overrides: {
+          colorAliases: snapshot.semanticResult?.colorAliases ?? null
+        }
       }),
-    [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
-  );
-  const parseOptions = useMemo(
-    () => ({
-      activeFigureId,
-      analysisView: editAnalysisView,
-      analysisSession: getSharedEditAnalysisSession(),
-      colorAliases: snapshot.semanticResult?.colorAliases ?? null
-    }),
-    [activeFigureId, editAnalysisView, snapshot.semanticResult]
+    [activeDocumentId, activeRootId, snapshot, source, sourceRevision]
   );
   const globalTransformValues = useMemo(
     () => resolveTransformInspectorValues(source, TIKZPICTURE_GLOBAL_TARGET_ID, parseOptions),
@@ -301,14 +300,21 @@ export function useInspectorModel(args: {
   }, [selectedElementBySourceId, selectedSourceIds]);
 
   const descriptorEntries = useMemo(() => {
+    const resolveTarget = createInspectorTargetResolver(snapshot.source, parseOptions);
     return selectedSourceIds.map((sourceId) => {
-      const matrixDescriptor = buildMatrixInspectorDescriptor(snapshot.source, sourceId, parseOptions);
+      const matrixDescriptor = buildMatrixInspectorDescriptor(snapshot.source, sourceId, parseOptions, resolveTarget);
       if (matrixDescriptor) {
         return matrixDescriptor;
       }
 
       const selectedElement = selectedElementBySourceId.get(sourceId) ?? null;
-      const treeDescriptor = buildTreeInspectorDescriptor(snapshot.source, sourceId, selectedElement, parseOptions);
+      const treeDescriptor = buildTreeInspectorDescriptor(
+        snapshot.source,
+        sourceId,
+        selectedElement,
+        parseOptions,
+        resolveTarget
+      );
       if (treeDescriptor) {
         return treeDescriptor;
       }
@@ -322,11 +328,15 @@ export function useInspectorModel(args: {
         return null;
       }
 
-      return getInspectorDescriptor(element, {
-        source: snapshot.source,
-        editHandles: snapshot.editHandles,
-        parseOptions
-      });
+      return getInspectorDescriptor(
+        element,
+        {
+          source: snapshot.source,
+          editHandles: snapshot.editHandles,
+          parseOptions
+        },
+        resolveTarget
+      );
     });
   }, [getInspectorDescriptor, parseOptions, selectedElementBySourceId, selectedSourceIds, snapshot.editHandles, snapshot.source]);
 
@@ -443,7 +453,7 @@ export function useInspectorModel(args: {
   const commandContext = useMemo(
     () => ({
       source,
-      activeFigureId,
+      activeRootId,
       parseOptions,
       snapshotSource: snapshot.source,
       scene: snapshot.scene,
@@ -451,7 +461,7 @@ export function useInspectorModel(args: {
       selectedElementIds: selectedSourceIdSet,
       dispatch
     }),
-    [activeFigureId, dispatch, parseOptions, selectedSourceIdSet, snapshot.editHandles, snapshot.scene, snapshot.source, source]
+    [activeRootId, dispatch, parseOptions, selectedSourceIdSet, snapshot.editHandles, snapshot.scene, snapshot.source, source]
   );
   const arrangeAvailability = useMemo(
     () => actionAvailability(commandContext),

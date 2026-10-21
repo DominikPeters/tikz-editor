@@ -1,4 +1,7 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 import { englishDefaults } from '../languages/en.js';
+import { EN_US_EXCEPTIONS } from '../languages/data/hyph-en-us.exceptions.js';
+import { EN_US_PATTERNS } from '../languages/data/hyph-en-us.patterns.js';
 
 export interface Hyphenator {
   hyphenate(word: string): number[];
@@ -124,23 +127,12 @@ function applyMinima(
   );
 }
 
-let cachedTrie: TrieNode | null = null;
-let cachedExceptions: Map<string, number[]> | null = null;
-let preloadPromise: Promise<void> | null = null;
+const cachedTrie = buildPatternTrie(EN_US_PATTERNS);
+const cachedExceptions = buildExceptionMap(EN_US_EXCEPTIONS);
 const hyphenatorCache = new Map<string, EnglishHyphenator>();
 
 export function preloadEnglishHyphenator(): Promise<void> {
-  if (cachedTrie && cachedExceptions) {
-    return Promise.resolve();
-  }
-  preloadPromise ??= Promise.all([
-      import('../languages/data/hyph-en-us.patterns.js'),
-      import('../languages/data/hyph-en-us.exceptions.js'),
-    ]).then(([patternsModule, exceptionsModule]) => {
-      cachedTrie = buildPatternTrie(patternsModule.EN_US_PATTERNS);
-      cachedExceptions = buildExceptionMap(exceptionsModule.EN_US_EXCEPTIONS);
-    });
-  return preloadPromise;
+  return Promise.resolve();
 }
 
 export class EnglishHyphenator implements Hyphenator {
@@ -187,15 +179,15 @@ export class EnglishHyphenator implements Hyphenator {
       let node: TrieNode | undefined = this.trie;
 
       for (let j = i; j < wrapped.length; j++) {
-        node = node.children.get(wrapped[j]);
+        node = node.children.get(wrapped.charAt(j));
         if (!node) break;
 
         if (node.values) {
           const values = node.values;
-          for (let k = 0; k < values.length; k++) {
+          for (const [k, value] of values.entries()) {
             const index = i + k;
             if (index < scores.length) {
-              scores[index] = Math.max(scores[index], values[k]);
+              scores[index] = Math.max(requireArrayValue(scores, index), value);
             }
           }
         }
@@ -204,7 +196,7 @@ export class EnglishHyphenator implements Hyphenator {
 
     const splits: number[] = [];
     for (let boundary = 1; boundary <= lowerWord.length; boundary++) {
-      if (scores[boundary + 1] % 2 === 1) {
+      if (requireArrayValue(scores, boundary + 1) % 2 === 1) {
         splits.push(boundary);
       }
     }
@@ -223,9 +215,6 @@ export class EnglishHyphenator implements Hyphenator {
 export function createEnglishHyphenator(
   options: HyphenatorOptions = {}
 ): Hyphenator {
-  if (!cachedTrie || !cachedExceptions) {
-    return new NoopHyphenator();
-  }
   const leftMin = options.leftMin ?? englishDefaults.lefthyphenmin;
   const rightMin = options.rightMin ?? englishDefaults.righthyphenmin;
   const key = `${leftMin}:${rightMin}`;

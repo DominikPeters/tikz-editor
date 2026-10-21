@@ -1,5 +1,5 @@
 import type { ParseTikzResult } from "../parser/index.js";
-import type { CoordinateItem, NodeItem, PathItem, Statement } from "../ast/types.js";
+import type { PathItem, Statement } from "../ast/types.js";
 import type { EditHandle } from "../semantic/types.js";
 import type { WorldPoint } from "../coords/points.js";
 import type { ApplyEditResult, EditIntent, EditIntentResult, TikzEdit } from "./types.js";
@@ -67,22 +67,23 @@ function findPathItem(statements: Statement[], targetId: string): PathItem | nul
   return null;
 }
 
+const SUPPORTED_EDIT_INTENT_KINDS: ReadonlySet<string> = new Set(["move"]);
+
 export function applyEditIntent(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   intent: EditIntent,
   parseOptions: EditParseOptions = {}
 ): EditIntentResult {
-  if (intent.kind === "move") {
-    return applyMoveIntent(source, editHandles, intent, parseOptions);
+  if (!SUPPORTED_EDIT_INTENT_KINDS.has(intent.kind)) {
+    return { kind: "error", message: `Unknown intent kind: ${intent.kind}` };
   }
-
-  return { kind: "error", message: `Unknown intent kind: ${(intent as { kind: string }).kind}` };
+  return applyMoveIntent(source, editHandles, intent, parseOptions);
 }
 
 function applyMoveIntent(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   intent: Extract<EditIntent, { kind: "move" }>,
   parseOptions: EditParseOptions = {}
 ): EditIntentResult {
@@ -144,7 +145,7 @@ function applyMoveIntent(
     return { kind: "error", message: "Handle span content mismatch (stale handle)." };
   }
 
-  const replacement = rewriteCoordinate(intent.newWorld, rewriteHandle, source);
+  const replacement = rewriteCoordinate(intent.newWorld, rewriteHandle, source, parseOptions.bypassSnapping);
   if (replacement === null) {
     return {
       kind: "unsupported",
@@ -306,7 +307,7 @@ function normalizeSignedDegrees(value: number): number {
 
 function resolveRewriteHandle(
   handle: EditHandle,
-  editHandles: EditHandle[]
+  editHandles: readonly EditHandle[]
 ): EditHandle | null {
   if (!handle.rewriteTargetHandleId) {
     return handle;
@@ -318,7 +319,7 @@ function resolveRewriteHandle(
 function isConflictingRewriteTarget(
   candidate: EditHandle,
   rewriteHandle: EditHandle,
-  editHandles: EditHandle[]
+  editHandles: readonly EditHandle[]
 ): boolean {
   const candidateRewriteHandle = resolveRewriteHandle(candidate, editHandles);
   if (!candidateRewriteHandle) {
@@ -331,12 +332,4 @@ function isConflictingRewriteTarget(
     candidateRewriteHandle.sourceRef.sourceSpan.from === rewriteHandle.sourceRef.sourceSpan.from &&
     candidateRewriteHandle.sourceRef.sourceSpan.to === rewriteHandle.sourceRef.sourceSpan.to
   );
-}
-
-export function isCoordinateItem(item: PathItem): item is CoordinateItem {
-  return item.kind === "Coordinate";
-}
-
-export function isNodeItem(item: PathItem): item is NodeItem {
-  return item.kind === "Node";
 }

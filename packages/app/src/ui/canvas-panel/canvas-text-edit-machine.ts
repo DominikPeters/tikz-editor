@@ -1,5 +1,20 @@
-import type { Span } from "tikz-editor/ast/types";
-import { replaceSpan } from "tikz-editor/edit/patch";
+import type { Span } from "@tikz-editor/core/ast/types";
+import { computeMinimalReplacementPatch, replaceSpan } from "@tikz-editor/core/edit/patch";
+import {
+  EMPTY_UNDO_HISTORY,
+  applyTransaction,
+  breakTypingRun,
+  recordTransaction,
+  redoStep,
+  undoStep,
+  type AppliedTransaction,
+  type HistorySnapshot,
+  type Transaction,
+  type UndoHistory,
+  type VerticalGoal
+} from "@tikz-editor/core/editing/transaction/index";
+import type { SelectionEnds } from "@tikz-editor/core/editing/position/index";
+import { NO_INTERACTION, type InteractionState } from "@tikz-editor/core/editing/input/index";
 
 import type { EditableTextTarget, TextEditingSession, TextSelectionOverlay } from "./types";
 import { clamp } from "./geometry";
@@ -22,52 +37,75 @@ export type CanvasTextSelectionDragState = {
   anchorLineRange: CanvasTextLineRange | null;
 };
 
+/**
+ * Which surface interprets the keyboard during a session. Both surfaces
+ * share one buffer and identical typing; they differ in navigation and
+ * structure keys. Scope (deck) sessions default to canvas focus on entry
+ * (click slide text → canvas); non-scope sessions are bar-only.
+ */
+export type CanvasTextEditFocusSurface = "bar" | "canvas";
+
 export type CanvasTextEditState = {
   session: TextEditingSession | null;
   selectionOverlay: TextSelectionOverlay | null;
   dragSelection: CanvasTextSelectionDragState | null;
   compositionRange: CanvasTextLineRange | null;
-  undoStack: CanvasTextEditHistoryEntry[];
-  redoStack: CanvasTextEditHistoryEntry[];
+  focusSurface: CanvasTextEditFocusSurface;
+  /** Session-local undo with explicit grouping (typing runs, steps). */
+  history: UndoHistory;
+  /** Sticky goal for consecutive ↑/↓ under canvas focus. */
+  verticalGoal: VerticalGoal | null;
+  /**
+   * The raw selection ends as edit-tree positions, from the last
+   * transaction that knew them. Valid only while the buffer and selection
+   * are still the ones it recorded (see selectionPositions).
+   */
+  treeSelection: CanvasTreeSelection | null;
+  /** Buffer revision: advances with every buffer edit. */
   inputRevision: number;
   asyncRequestRevision: number;
   sourceRevision: number;
 };
 
-export type CanvasTextEditHistoryEntry = {
-  text: string;
-  selectionStart: number;
-  selectionEnd: number;
+export type CanvasTreeSelection = {
+  readonly text: string;
+  readonly anchor: number;
+  readonly focus: number;
+  readonly ends: SelectionEnds | null;
+  readonly interaction: InteractionState;
 };
 
-const SUPPORTED_CANVAS_TEXT_INPUT_TYPES = [
-  "insertText",
-  "insertReplacementText",
-  "insertLineBreak",
-  "insertParagraph",
-  "insertCompositionText",
-  "insertFromComposition",
-  "insertFromPaste",
-  "insertFromDrop",
-  "deleteContentBackward",
-  "deleteContentForward",
-  "deleteWordBackward",
-  "deleteWordForward",
-  "deleteSoftLineBackward",
-  "deleteSoftLineForward",
-  "deleteHardLineBackward",
-  "deleteHardLineForward",
-  "deleteByCut",
-  "historyUndo",
-  "historyRedo"
-] as const;
+/** The transaction's record, when it leaves positions or interaction state to keep. */
+function treeSelectionAfter(transaction: Transaction, applied: AppliedTransaction): CanvasTreeSelection | null {
+  const ends = transaction.selection.kind === "absolute" ? transaction.selection.positions ?? null : null;
+  const interaction = transaction.interaction ?? NO_INTERACTION;
+  if (!ends && interaction === NO_INTERACTION) {
+    return null;
+  }
+  return { text: applied.text, anchor: applied.anchor, focus: applied.focus, ends, interaction };
+}
 
-export type CanvasTextInputIntentType = (typeof SUPPORTED_CANVAS_TEXT_INPUT_TYPES)[number];
+/** The record, while buffer and selection are still the ones it was made for. */
+function currentTreeSelection(state: CanvasTextEditState, anchor: number, focus: number): CanvasTreeSelection | null {
+  const recorded = state.treeSelection;
+  if (!recorded || recorded.text !== state.session?.text) {
+    return null;
+  }
+  return recorded.anchor === anchor && recorded.focus === focus ? recorded : null;
+}
 
-const IS_FAIL_FAST_UNSUPPORTED_INPUT_TYPE = import.meta.env.DEV || import.meta.env.MODE === "test";
+/**
+ * The raw selection ends for the current buffer and selection, or null
+ * when anything changed them since the transaction that recorded them
+ * (typing, a click, undo): the caller then resolves positions from offsets.
+ */
+export function selectionPositions(state: CanvasTextEditState, anchor: number, focus: number): SelectionEnds | null {
+  return currentTreeSelection(state, anchor, focus)?.ends ?? null;
+}
 
-export function isCanvasTextInputIntentType(value: string): value is CanvasTextInputIntentType {
-  return (SUPPORTED_CANVAS_TEXT_INPUT_TYPES as readonly string[]).includes(value);
+/** The interaction state the last transaction left, or none once buffer or selection changed otherwise. */
+export function interactionState(state: CanvasTextEditState, anchor: number, focus: number): InteractionState {
+  return currentTreeSelection(state, anchor, focus)?.interaction ?? NO_INTERACTION;
 }
 
 export type CanvasTextEditAction =
@@ -113,13 +151,6 @@ export type CanvasTextEditAction =
       selectionEnd: number;
     }
   | {
-      type: "textarea_input_intent";
-      inputType: string;
-      data: string | null;
-      selectionStart: number;
-      selectionEnd: number;
-    }
-  | {
       type: "textarea_selection";
       selectionStart: number;
       selectionEnd: number;
@@ -129,6 +160,24 @@ export type CanvasTextEditAction =
       source: string;
       sourceRevision: number;
       target: EditableTextTarget | null;
+    }
+  | {
+      type: "focus_surface";
+      surface: CanvasTextEditFocusSurface;
+    }
+  | {
+      /**
+       * An edit computed by the intent resolver: disjoint patches against
+       * the buffer at `transaction.baseRevision`, the selection afterwards
+       * and its undo grouping. `time` (ms) drives typing-run pauses.
+       */
+      type: "apply_transaction";
+      transaction: Transaction;
+      time: number;
+    }
+  | {
+      type: "history";
+      direction: "undo" | "redo";
     }
   | {
       type: "session_close";
@@ -148,9 +197,21 @@ export type CanvasTextEditEffect =
       sourceId: string;
       historyMergeKey: string;
       nextText: string;
+      /** Minimal changed range in pre-edit document coordinates. */
       previousSpan: Span;
+      /** Minimal changed range in post-edit document coordinates. */
       changedSpan: Span;
+      /** Replacement for `previousSpan` only, not the whole session buffer. */
       replacement: string;
+      /** The session's full buffer span after the edit. */
+      sessionSpan: Span;
+      /**
+       * Structural mask for this edit in post-edit document coordinates:
+       * the whole buffer when it is structure-free, else the structure-free
+       * range containing the edit, or null when the edit crosses range
+       * boundaries and no mask is safe.
+       */
+      maskSpan: Span | null;
       nextSource: string;
     };
 
@@ -159,8 +220,10 @@ export const INITIAL_CANVAS_TEXT_EDIT_STATE: CanvasTextEditState = {
   selectionOverlay: null,
   dragSelection: null,
   compositionRange: null,
-  undoStack: [],
-  redoStack: [],
+  focusSurface: "bar",
+  history: EMPTY_UNDO_HISTORY,
+  verticalGoal: null,
+  treeSelection: null,
   inputRevision: 0,
   asyncRequestRevision: 0,
   sourceRevision: 0
@@ -247,8 +310,9 @@ function closeState(state: CanvasTextEditState): CanvasTextEditState {
     !state.selectionOverlay &&
     !state.dragSelection &&
     !state.compositionRange &&
-    state.undoStack.length === 0 &&
-    state.redoStack.length === 0
+    state.focusSurface === "bar" &&
+    state.history === EMPTY_UNDO_HISTORY &&
+    state.verticalGoal == null
   ) {
     return state;
   }
@@ -258,190 +322,20 @@ function closeState(state: CanvasTextEditState): CanvasTextEditState {
     selectionOverlay: null,
     dragSelection: null,
     compositionRange: null,
-    undoStack: [],
-    redoStack: [],
+    focusSurface: "bar",
+    history: EMPTY_UNDO_HISTORY,
+    verticalGoal: null,
     asyncRequestRevision: state.asyncRequestRevision + 1
   };
 }
 
-function snapshotSession(session: TextEditingSession): CanvasTextEditHistoryEntry {
+const IS_FAIL_FAST = import.meta.env.DEV || import.meta.env.MODE === "test";
+
+function sessionSnapshot(session: TextEditingSession): HistorySnapshot {
   return {
     text: session.text,
-    selectionStart: session.selectionStart,
-    selectionEnd: session.selectionEnd
-  };
-}
-
-function withUndoCheckpoint(state: CanvasTextEditState, session: TextEditingSession): CanvasTextEditState {
-  return {
-    ...state,
-    undoStack: [...state.undoStack, snapshotSession(session)],
-    redoStack: []
-  };
-}
-
-function applyInsertIntent(
-  text: string,
-  selectionStart: number,
-  selectionEnd: number,
-  insertedText: string
-): { nextText: string; nextSelectionStart: number; nextSelectionEnd: number } {
-  const nextText = `${text.slice(0, selectionStart)}${insertedText}${text.slice(selectionEnd)}`;
-  const caret = selectionStart + insertedText.length;
-  return {
-    nextText,
-    nextSelectionStart: caret,
-    nextSelectionEnd: caret
-  };
-}
-
-function applyDeleteIntent(
-  text: string,
-  selectionStart: number,
-  selectionEnd: number,
-  mode: "backward" | "forward" | "cut"
-): { nextText: string; nextSelectionStart: number; nextSelectionEnd: number } | null {
-  if (selectionStart !== selectionEnd) {
-    return {
-      nextText: `${text.slice(0, selectionStart)}${text.slice(selectionEnd)}`,
-      nextSelectionStart: selectionStart,
-      nextSelectionEnd: selectionStart
-    };
-  }
-  if (mode === "cut") {
-    return null;
-  }
-  if (mode === "backward") {
-    if (selectionStart === 0) {
-      return null;
-    }
-    return {
-      nextText: `${text.slice(0, selectionStart - 1)}${text.slice(selectionStart)}`,
-      nextSelectionStart: selectionStart - 1,
-      nextSelectionEnd: selectionStart - 1
-    };
-  }
-  if (selectionStart >= text.length) {
-    return null;
-  }
-  return {
-    nextText: `${text.slice(0, selectionStart)}${text.slice(selectionStart + 1)}`,
-    nextSelectionStart: selectionStart,
-    nextSelectionEnd: selectionStart
-  };
-}
-
-function findPreviousWordBoundary(text: string, offset: number): number {
-  let index = clamp(offset, 0, text.length);
-  while (index > 0 && /\s/.test(text[index - 1] ?? "")) {
-    index -= 1;
-  }
-  while (index > 0 && !/\s/.test(text[index - 1] ?? "")) {
-    index -= 1;
-  }
-  return index;
-}
-
-function findNextWordBoundary(text: string, offset: number): number {
-  let index = clamp(offset, 0, text.length);
-  while (index < text.length && /\s/.test(text[index] ?? "")) {
-    index += 1;
-  }
-  while (index < text.length && !/\s/.test(text[index] ?? "")) {
-    index += 1;
-  }
-  return index;
-}
-
-function collectLogicalLineRanges(text: string): CanvasTextLineRange[] {
-  if (text.length === 0) {
-    return [{ start: 0, end: 0 }];
-  }
-  const ranges: CanvasTextLineRange[] = [];
-  let start = 0;
-  let cursor = 0;
-  while (cursor < text.length) {
-    if (text[cursor] === "\r") {
-      const next = text[cursor + 1] === "\n" ? cursor + 2 : cursor + 1;
-      ranges.push({ start, end: cursor });
-      start = next;
-      cursor = next;
-      continue;
-    }
-    if (text[cursor] === "\n") {
-      ranges.push({ start, end: cursor });
-      start = cursor + 1;
-      cursor += 1;
-      continue;
-    }
-    if (text[cursor] === "\\" && text[cursor + 1] === "\\") {
-      let next = cursor + 2;
-      if (text[next] === "*") {
-        next += 1;
-      }
-      while (next < text.length && /\s/.test(text[next] ?? "")) {
-        next += 1;
-      }
-      if (text[next] === "[") {
-        let bracketCursor = next + 1;
-        while (bracketCursor < text.length && text[bracketCursor] !== "]") {
-          bracketCursor += 1;
-        }
-        if (bracketCursor < text.length) {
-          next = bracketCursor + 1;
-        }
-      }
-      ranges.push({ start, end: cursor });
-      start = next;
-      cursor = next;
-      continue;
-    }
-    cursor += 1;
-  }
-  ranges.push({ start, end: text.length });
-  return ranges;
-}
-
-function resolveLogicalLineRangeForOffset(text: string, offset: number): CanvasTextLineRange {
-  const boundedOffset = clamp(offset, 0, text.length);
-  const ranges = collectLogicalLineRanges(text);
-  const pivot = text.length === 0 ? 0 : Math.min(Math.max(0, boundedOffset), text.length - 1);
-  for (const range of ranges) {
-    if (pivot >= range.start && pivot < range.end) {
-      return range;
-    }
-  }
-  return ranges[ranges.length - 1] ?? { start: 0, end: text.length };
-}
-
-function findLineBoundary(text: string, offset: number, direction: "backward" | "forward"): number {
-  const lineRange = resolveLogicalLineRangeForOffset(text, offset);
-  return direction === "backward" ? lineRange.start : lineRange.end;
-}
-
-function applyRangeDeleteIntent(
-  text: string,
-  selectionStart: number,
-  selectionEnd: number,
-  rangeStart: number,
-  rangeEnd: number
-): { nextText: string; nextSelectionStart: number; nextSelectionEnd: number } | null {
-  if (selectionStart !== selectionEnd) {
-    return {
-      nextText: `${text.slice(0, selectionStart)}${text.slice(selectionEnd)}`,
-      nextSelectionStart: selectionStart,
-      nextSelectionEnd: selectionStart
-    };
-  }
-  const start = clamp(Math.min(rangeStart, rangeEnd), 0, text.length);
-  const end = clamp(Math.max(rangeStart, rangeEnd), 0, text.length);
-  if (end <= start) {
-    return null;
-  }
-  return {
-    nextText: `${text.slice(0, start)}${text.slice(end)}`,
-    nextSelectionStart: start,
-    nextSelectionEnd: start
+    anchor: session.selectionStart,
+    focus: session.selectionEnd
   };
 }
 
@@ -451,63 +345,6 @@ function normalizeRange(textLength: number, range: CanvasTextLineRange): CanvasT
     start: normalized.start,
     end: normalized.end
   };
-}
-
-function resolveCompositionSelection(
-  textLength: number,
-  compositionRange: CanvasTextLineRange | null,
-  selection: { start: number; end: number }
-): { start: number; end: number } {
-  if (!compositionRange) {
-    return selection;
-  }
-  return normalizeSelection(textLength, compositionRange.start, compositionRange.end);
-}
-
-function reduceUnsupportedInputIntent(
-  state: CanvasTextEditState,
-  inputType: string
-): { state: CanvasTextEditState; effects: CanvasTextEditEffect[] } {
-  if (IS_FAIL_FAST_UNSUPPORTED_INPUT_TYPE) {
-    throw new Error(
-      `[canvas-text-edit] unsupported inputType "${inputType}". Supported: ${SUPPORTED_CANVAS_TEXT_INPUT_TYPES.join(", ")}`
-    );
-  }
-  console.warn("[canvas-text-edit][unsupported-input-type]", { inputType });
-  return { state, effects: [] };
-}
-
-function hasUnstableTrailingEscape(text: string): boolean {
-  let trailingBackslashes = 0;
-  for (let index = text.length - 1; index >= 0; index -= 1) {
-    if (text[index] !== "\\") {
-      break;
-    }
-    trailingBackslashes += 1;
-  }
-  return trailingBackslashes % 2 === 1;
-}
-
-function shouldReuseCurrentSpanForDeferredEscape(
-  sourceSlice: string,
-  expectedText: string
-): boolean {
-  if (sourceSlice === expectedText) {
-    return true;
-  }
-  if (!sourceSlice.startsWith(expectedText)) {
-    return false;
-  }
-  const suffix = sourceSlice.slice(expectedText.length);
-  if (suffix.length === 0) {
-    return false;
-  }
-  for (const character of suffix) {
-    if (character !== "\\") {
-      return false;
-    }
-  }
-  return true;
 }
 
 function resolveSourceSpanForSessionText(source: string, text: string, suggestedSpan: Span): Span {
@@ -536,10 +373,49 @@ function resolveReconciledSessionSourceSpan(
   session: TextEditingSession,
   targetSpan: Span
 ): Span {
-  if (hasUnstableTrailingEscape(session.text)) {
+  // The session's own span stays authoritative while it still slices to the
+  // session text: string-based re-anchoring against the target span can
+  // latch onto ambiguous needles (a transient lone `\` matches every
+  // command prefix). Re-anchor only when a foreign edit invalidated it.
+  if (source.slice(session.sourceSpan.from, session.sourceSpan.to) === session.text) {
     return session.sourceSpan;
   }
   return resolveSourceSpanForSessionText(source, session.text, targetSpan);
+}
+
+/**
+ * Maps a structure-free span through an edit. Spans strictly before the
+ * edit are unchanged, spans after shift by the length delta, the span
+ * containing the edit grows or shrinks with it, and spans partially
+ * overlapped by the edit are dropped (no longer provably structure-free).
+ */
+function adjustMaskRangeForEdit(range: Span, oldSpan: Span, delta: number): Span | null {
+  if (range.from <= oldSpan.from && oldSpan.to <= range.to) {
+    return { from: range.from, to: range.to + delta };
+  }
+  if (range.to <= oldSpan.from) {
+    return range;
+  }
+  if (range.from >= oldSpan.to) {
+    return { from: range.from + delta, to: range.to + delta };
+  }
+  return null;
+}
+
+function sameMaskRanges(
+  left: readonly Span[] | null,
+  right: readonly Span[] | null
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || left.length !== right?.length) {
+    return false;
+  }
+  return left.every((span, index) => {
+    const other = right[index];
+    return other !== undefined && sameSpan(span, other);
+  });
 }
 
 function applySessionTextUpdate(
@@ -553,32 +429,43 @@ function applySessionTextUpdate(
     return { state, effects: [] };
   }
   const selection = normalizeSelection(nextText.length, selectionStart, selectionEnd);
-  const currentTextHasUnstableTrailingEscape = hasUnstableTrailingEscape(current.text);
-  const nextTextHasUnstableTrailingEscape = hasUnstableTrailingEscape(nextText);
-  if (nextTextHasUnstableTrailingEscape) {
-    return {
-      state: {
-        ...state,
-        session: {
-          ...current,
-          text: nextText,
-          selectionStart: selection.start,
-          selectionEnd: selection.end
-        },
-        inputRevision: state.inputRevision + 1,
-        asyncRequestRevision: state.asyncRequestRevision + 1
-      },
-      effects: []
-    };
-  }
+  // Every keystroke writes through, including a trailing backslash: the
+  // structural parse mask keeps the document stable while the span content
+  // is momentarily invalid TeX (e.g. a pending `\}` escape).
   const currentSlice = current.workingSource.slice(current.sourceSpan.from, current.sourceSpan.to);
-  const isStabilizingDeferredEscape = currentTextHasUnstableTrailingEscape && !nextTextHasUnstableTrailingEscape;
-  const currentSpan = isStabilizingDeferredEscape
+  const currentSpan = currentSlice === current.text
     ? current.sourceSpan
-    : shouldReuseCurrentSpanForDeferredEscape(currentSlice, current.text)
-      ? current.sourceSpan
-      : resolveCurrentTextSpan(current.workingSource, current.text, current.sourceSpan);
+    : resolveCurrentTextSpan(current.workingSource, current.text, current.sourceSpan);
   const updated = replaceSpan(current.workingSource, currentSpan, nextText);
+  // The dispatched patch covers only the changed characters inside the
+  // buffer, so a keystroke in a scope-sized session stays a keystroke-sized
+  // source change for incremental parsing and history.
+  const bufferDiff = computeMinimalReplacementPatch(current.text, nextText);
+  const editOldSpan: Span = {
+    from: currentSpan.from + bufferDiff.oldSpan.from,
+    to: currentSpan.from + bufferDiff.oldSpan.to
+  };
+  const editDelta = bufferDiff.replacement.length - (editOldSpan.to - editOldSpan.from);
+  let maskSpan: Span | null;
+  let nextMaskRanges: readonly Span[] | null;
+  if (current.maskRanges == null) {
+    maskSpan = updated.changedSpan;
+    nextMaskRanges = null;
+  } else {
+    maskSpan = null;
+    const adjusted: Span[] = [];
+    for (const range of current.maskRanges) {
+      const containsEdit = range.from <= editOldSpan.from && editOldSpan.to <= range.to;
+      const next = adjustMaskRangeForEdit(range, editOldSpan, editDelta);
+      if (next) {
+        adjusted.push(next);
+        if (containsEdit) {
+          maskSpan = next;
+        }
+      }
+    }
+    nextMaskRanges = adjusted;
+  }
   return {
     state: {
       ...state,
@@ -586,6 +473,7 @@ function applySessionTextUpdate(
         ...current,
         sourceSpan: updated.changedSpan,
         workingSource: updated.source,
+        maskRanges: nextMaskRanges,
         text: nextText,
         selectionStart: selection.start,
         selectionEnd: selection.end
@@ -599,9 +487,14 @@ function applySessionTextUpdate(
         sourceId: current.sourceId,
         historyMergeKey: current.historyMergeKey,
         nextText,
-        previousSpan: currentSpan,
-        changedSpan: updated.changedSpan,
-        replacement: nextText,
+        previousSpan: editOldSpan,
+        changedSpan: {
+          from: currentSpan.from + bufferDiff.newSpan.from,
+          to: currentSpan.from + bufferDiff.newSpan.to
+        },
+        replacement: bufferDiff.replacement,
+        sessionSpan: updated.changedSpan,
+        maskSpan,
         nextSource: updated.source
       }
     ]
@@ -628,23 +521,27 @@ export function reduceCanvasTextEdit(
             sceneTextId: action.target.sceneTextId,
             sourceSpan,
             workingSource: action.source,
+            maskRanges: action.target.structuralMaskRanges ?? null,
             text: action.target.text,
             selectionStart: selection.start,
             selectionEnd: selection.end,
             historyMergeKey: action.historyMergeKey,
-            usesMathJax: action.target.usesMathJax,
+            usesTex: action.target.usesTex,
             paragraphId: action.target.paragraphId,
             renderSourceText: action.target.renderSourceText,
             layoutKind: action.target.layoutKind,
             region: action.target.region,
-            popupAnchorBox: action.target.popupAnchorBox,
-            isForeachTemplateEdit: action.target.isForeachTemplateEdit === true
+            ...(action.target.popupAnchorBox !== undefined ? { popupAnchorBox: action.target.popupAnchorBox } : {}),
+            isForeachTemplateEdit: action.target.isForeachTemplateEdit === true,
+            editMode: action.target.editMode ?? "default",
+            isScopeSession: action.target.scopeParagraphs != null
           },
           selectionOverlay: null,
           dragSelection: null,
           compositionRange: null,
-          undoStack: [],
-          redoStack: [],
+          focusSurface: action.target.scopeParagraphs != null ? "canvas" : "bar",
+          history: EMPTY_UNDO_HISTORY,
+          verticalGoal: null,
           asyncRequestRevision: state.asyncRequestRevision + 1
         },
         effects: []
@@ -666,17 +563,20 @@ export function reduceCanvasTextEdit(
             sceneTextId: action.target.sceneTextId,
             sourceSpan,
             workingSource: action.source,
+            maskRanges: action.target.structuralMaskRanges ?? null,
             text: action.target.text,
             selectionStart: selection.start,
             selectionEnd: selection.end,
             historyMergeKey: action.historyMergeKey,
-            usesMathJax: action.target.usesMathJax,
+            usesTex: action.target.usesTex,
             paragraphId: action.target.paragraphId,
             renderSourceText: action.target.renderSourceText,
             layoutKind: action.target.layoutKind,
             region: action.target.region,
-            popupAnchorBox: action.target.popupAnchorBox,
-            isForeachTemplateEdit: action.target.isForeachTemplateEdit === true
+            ...(action.target.popupAnchorBox !== undefined ? { popupAnchorBox: action.target.popupAnchorBox } : {}),
+            isForeachTemplateEdit: action.target.isForeachTemplateEdit === true,
+            editMode: action.target.editMode ?? "default",
+            isScopeSession: action.target.scopeParagraphs != null
           },
           selectionOverlay: null,
           dragSelection: {
@@ -690,8 +590,11 @@ export function reduceCanvasTextEdit(
             anchorLineRange: action.anchorLineRange
           },
           compositionRange: null,
-          undoStack: [],
-          redoStack: [],
+          // Clicking slide text always claims canvas focus, including when
+          // the bar held it a moment ago.
+          focusSurface: action.target.scopeParagraphs != null ? "canvas" : "bar",
+          history: EMPTY_UNDO_HISTORY,
+          verticalGoal: null,
           asyncRequestRevision: state.asyncRequestRevision + 1
         },
         effects: []
@@ -723,6 +626,7 @@ export function reduceCanvasTextEdit(
                 selectionEnd: selection.end
               }
             : session,
+          history: breakTypingRun(state.history),
           compositionRange: null,
           dragSelection:
             state.dragSelection?.pointerId === action.pointerId &&
@@ -756,169 +660,89 @@ export function reduceCanvasTextEdit(
             selectionStart: selection.start,
             selectionEnd: selection.end
           },
+          history: breakTypingRun(state.history),
           compositionRange: null
         },
         effects: []
       };
     }
 
-    case "textarea_input_intent": {
+    case "apply_transaction": {
       const session = state.session;
       if (!session) {
         return { state, effects: [] };
       }
-      const selection = normalizeSelection(session.text.length, action.selectionStart, action.selectionEnd);
-      if (!isCanvasTextInputIntentType(action.inputType)) {
-        return reduceUnsupportedInputIntent(state, action.inputType);
-      }
-
-      if (action.inputType === "historyUndo") {
-        const previous = state.undoStack[state.undoStack.length - 1];
-        if (!previous) {
-          return { state, effects: [] };
+      const { transaction } = action;
+      if (transaction.baseRevision !== state.inputRevision) {
+        // Intents resolve synchronously against the current buffer, so a
+        // stale transaction is a bug in the caller, not a race to absorb.
+        const message =
+          `[canvas-text-edit] transaction for revision ${transaction.baseRevision} ` +
+          `applied at revision ${state.inputRevision}`;
+        if (IS_FAIL_FAST) {
+          throw new Error(message);
         }
-        const reduced = applySessionTextUpdate(state, previous.text, previous.selectionStart, previous.selectionEnd);
-        return {
-          state: {
-            ...reduced.state,
-            compositionRange: null,
-            undoStack: state.undoStack.slice(0, -1),
-            redoStack: [...state.redoStack, snapshotSession(session)]
-          },
-          effects: reduced.effects
-        };
-      }
-
-      if (action.inputType === "historyRedo") {
-        const next = state.redoStack[state.redoStack.length - 1];
-        if (!next) {
-          return { state, effects: [] };
-        }
-        const reduced = applySessionTextUpdate(state, next.text, next.selectionStart, next.selectionEnd);
-        return {
-          state: {
-            ...reduced.state,
-            compositionRange: null,
-            undoStack: [...state.undoStack, snapshotSession(session)],
-            redoStack: state.redoStack.slice(0, -1)
-          },
-          effects: reduced.effects
-        };
-      }
-
-      const activeCompositionSelection = resolveCompositionSelection(
-        session.text.length,
-        state.compositionRange,
-        selection
-      );
-      let nextIntent:
-        | { nextText: string; nextSelectionStart: number; nextSelectionEnd: number }
-        | null;
-      let nextCompositionRange: CanvasTextLineRange | null = null;
-      let shouldCreateUndoCheckpoint = true;
-
-      switch (action.inputType) {
-        case "insertText":
-        case "insertReplacementText":
-          nextIntent = applyInsertIntent(session.text, selection.start, selection.end, action.data ?? "");
-          break;
-        case "insertParagraph":
-          nextIntent = applyInsertIntent(session.text, selection.start, selection.end, "\n");
-          break;
-        case "insertCompositionText":
-          nextIntent = applyInsertIntent(
-            session.text,
-            activeCompositionSelection.start,
-            activeCompositionSelection.end,
-            action.data ?? ""
-          );
-          nextCompositionRange = {
-            start: activeCompositionSelection.start,
-            end: activeCompositionSelection.start + (action.data ?? "").length
-          };
-          shouldCreateUndoCheckpoint = state.compositionRange == null;
-          break;
-        case "insertFromComposition":
-          nextIntent = applyInsertIntent(
-            session.text,
-            activeCompositionSelection.start,
-            activeCompositionSelection.end,
-            action.data ?? ""
-          );
-          shouldCreateUndoCheckpoint = state.compositionRange == null;
-          break;
-        case "insertLineBreak":
-          nextIntent = applyInsertIntent(session.text, selection.start, selection.end, "\n");
-          break;
-        case "insertFromPaste":
-        case "insertFromDrop":
-          nextIntent = applyInsertIntent(session.text, selection.start, selection.end, action.data ?? "");
-          break;
-        case "deleteContentBackward":
-          nextIntent = applyDeleteIntent(session.text, selection.start, selection.end, "backward");
-          break;
-        case "deleteContentForward":
-          nextIntent = applyDeleteIntent(session.text, selection.start, selection.end, "forward");
-          break;
-        case "deleteWordBackward":
-          nextIntent = applyRangeDeleteIntent(
-            session.text,
-            selection.start,
-            selection.end,
-            findPreviousWordBoundary(session.text, selection.start),
-            selection.start
-          );
-          break;
-        case "deleteWordForward":
-          nextIntent = applyRangeDeleteIntent(
-            session.text,
-            selection.start,
-            selection.end,
-            selection.start,
-            findNextWordBoundary(session.text, selection.start)
-          );
-          break;
-        case "deleteSoftLineBackward":
-        case "deleteHardLineBackward":
-          nextIntent = applyRangeDeleteIntent(
-            session.text,
-            selection.start,
-            selection.end,
-            findLineBoundary(session.text, selection.start, "backward"),
-            selection.start
-          );
-          break;
-        case "deleteSoftLineForward":
-        case "deleteHardLineForward":
-          nextIntent = applyRangeDeleteIntent(
-            session.text,
-            selection.start,
-            selection.end,
-            selection.start,
-            findLineBoundary(session.text, selection.start, "forward")
-          );
-          break;
-        case "deleteByCut":
-          nextIntent = applyDeleteIntent(session.text, selection.start, selection.end, "cut");
-          break;
-        default:
-          return { state, effects: [] };
-      }
-
-      if (!nextIntent) {
+        console.warn(message);
         return { state, effects: [] };
       }
-      const checkpointState = shouldCreateUndoCheckpoint ? withUndoCheckpoint(state, session) : state;
-      const reduced = applySessionTextUpdate(
-        checkpointState,
-        nextIntent.nextText,
-        nextIntent.nextSelectionStart,
-        nextIntent.nextSelectionEnd
-      );
+      const applied = applyTransaction(session.text, transaction);
+      const compositionRange = transaction.composition
+        ? { start: transaction.composition.from, end: transaction.composition.to }
+        : null;
+      const verticalGoal = transaction.verticalGoal ?? null;
+      const treeSelection = treeSelectionAfter(transaction, applied);
+      if (applied.text === session.text) {
+        const selection = normalizeSelection(session.text.length, applied.anchor, applied.focus);
+        return {
+          state: {
+            ...state,
+            session: {
+              ...session,
+              selectionStart: selection.start,
+              selectionEnd: selection.end
+            },
+            history: breakTypingRun(state.history),
+            compositionRange,
+            verticalGoal,
+            treeSelection
+          },
+          effects: []
+        };
+      }
+      const reduced = applySessionTextUpdate(state, applied.text, applied.anchor, applied.focus);
       return {
         state: {
           ...reduced.state,
-          compositionRange: nextCompositionRange
+          history: recordTransaction(state.history, sessionSnapshot(session), transaction, action.time),
+          compositionRange,
+          verticalGoal,
+          treeSelection
+        },
+        effects: reduced.effects
+      };
+    }
+
+    case "history": {
+      const session = state.session;
+      if (!session) {
+        return { state, effects: [] };
+      }
+      const step = action.direction === "undo"
+        ? undoStep(state.history, sessionSnapshot(session))
+        : redoStep(state.history, sessionSnapshot(session));
+      if (!step) {
+        // Nothing to undo still ends any editing state (O7).
+        return { state: state.treeSelection ? { ...state, treeSelection: null } : state, effects: [] };
+      }
+      const reduced = applySessionTextUpdate(state, step.restore.text, step.restore.anchor, step.restore.focus);
+      return {
+        state: {
+          ...reduced.state,
+          history: step.history,
+          compositionRange: null,
+          verticalGoal: null,
+          // O7: undo and redo restore source and selection, never editing state.
+          treeSelection: null
         },
         effects: reduced.effects
       };
@@ -946,6 +770,8 @@ export function reduceCanvasTextEdit(
             selectionStart: selection.start,
             selectionEnd: selection.end
           },
+          // A selection change outside the composition overlay ends a typing run.
+          history: preservedCompositionRange ? state.history : breakTypingRun(state.history),
           compositionRange: preservedCompositionRange
         },
         effects: []
@@ -967,6 +793,22 @@ export function reduceCanvasTextEdit(
         };
       }
       if (action.target?.sourceId !== session.sourceId) {
+        if (session.editMode === "inline-typo") {
+          return {
+            state: {
+              ...state,
+              sourceRevision: action.sourceRevision,
+              session: null,
+              selectionOverlay: null,
+              dragSelection: null,
+              compositionRange: null,
+              history: EMPTY_UNDO_HISTORY,
+              verticalGoal: null,
+              asyncRequestRevision: state.asyncRequestRevision + 1
+            },
+            effects: []
+          };
+        }
         if (state.sourceRevision === action.sourceRevision && session.workingSource === action.source) {
           return { state, effects: [] };
         }
@@ -974,7 +816,9 @@ export function reduceCanvasTextEdit(
           state: {
             ...state,
             sourceRevision: action.sourceRevision,
-            compositionRange: null,
+            // An input echo may arrive before rendering finds the edited
+            // target again. It must not end the native composition.
+            compositionRange: session.workingSource === action.source ? state.compositionRange : null,
             session: {
               ...session,
               workingSource: action.source
@@ -990,21 +834,26 @@ export function reduceCanvasTextEdit(
         action.target.sourceSpan
       );
       const nextSceneTextId = targetMatchesSessionText ? action.target.sceneTextId : session.sceneTextId;
-      const nextUsesMathJax = targetMatchesSessionText ? action.target.usesMathJax : session.usesMathJax;
+      const nextUsesTex = targetMatchesSessionText ? action.target.usesTex : session.usesTex;
       const nextParagraphId = targetMatchesSessionText ? action.target.paragraphId : session.paragraphId;
       const nextRenderSourceText = targetMatchesSessionText ? action.target.renderSourceText : session.renderSourceText;
       const nextLayoutKind = targetMatchesSessionText ? action.target.layoutKind : session.layoutKind;
       const nextRegion = targetMatchesSessionText ? action.target.region : session.region;
       const nextPopupAnchorBox = targetMatchesSessionText ? action.target.popupAnchorBox : session.popupAnchorBox;
+      const { popupAnchorBox: _popupAnchorBox, ...reconciledSession } = session;
       const nextIsForeachTemplateEdit = targetMatchesSessionText
         ? action.target.isForeachTemplateEdit === true
         : session.isForeachTemplateEdit;
+      const nextMaskRanges = targetMatchesSessionText
+        ? action.target.structuralMaskRanges ?? null
+        : session.maskRanges;
       if (
         state.sourceRevision === action.sourceRevision &&
         session.workingSource === action.source &&
         session.sceneTextId === nextSceneTextId &&
-        session.usesMathJax === nextUsesMathJax &&
+        session.usesTex === nextUsesTex &&
         sameSpan(session.sourceSpan, reconciledSourceSpan) &&
+        sameMaskRanges(session.maskRanges, nextMaskRanges) &&
         session.paragraphId === nextParagraphId &&
         session.renderSourceText === nextRenderSourceText &&
         session.layoutKind === nextLayoutKind &&
@@ -1028,16 +877,17 @@ export function reduceCanvasTextEdit(
               ? normalizeRange(session.text.length, state.compositionRange)
               : null,
           session: {
-            ...session,
+            ...reconciledSession,
             sceneTextId: nextSceneTextId,
             sourceSpan: reconciledSourceSpan,
             workingSource: action.source,
-            usesMathJax: nextUsesMathJax,
+            maskRanges: nextMaskRanges,
+            usesTex: nextUsesTex,
             paragraphId: nextParagraphId,
             renderSourceText: nextRenderSourceText,
             layoutKind: nextLayoutKind,
             region: nextRegion,
-            popupAnchorBox: nextPopupAnchorBox,
+            ...(nextPopupAnchorBox !== undefined ? { popupAnchorBox: nextPopupAnchorBox } : {}),
             isForeachTemplateEdit: nextIsForeachTemplateEdit
           }
         },
@@ -1064,6 +914,26 @@ export function reduceCanvasTextEdit(
         state: {
           ...state,
           selectionOverlay: nextOverlay
+        },
+        effects: []
+      };
+    }
+
+    case "focus_surface": {
+      const session = state.session;
+      if (!session) {
+        return { state, effects: [] };
+      }
+      // Canvas focus only exists for scope (deck) sessions; node sessions
+      // stay bar-focused regardless of what is requested.
+      const surface = session.isScopeSession ? action.surface : "bar";
+      if (state.focusSurface === surface) {
+        return { state, effects: [] };
+      }
+      return {
+        state: {
+          ...state,
+          focusSurface: surface
         },
         effects: []
       };

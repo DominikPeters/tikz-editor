@@ -25,9 +25,9 @@ function describeParseError(errorNode: SyntaxNode, source: string): string {
   const parentName = parent?.type.name ?? "";
 
   // Error inside a path statement → likely missing semicolon
-  if (parentName === "PathStatement") {
+  if (parent?.type.name === "PathStatement") {
     // Find the path command for context
-    let cmdChild = parent!.firstChild;
+    let cmdChild = parent.firstChild;
     while (cmdChild && !cmdChild.type.name.startsWith("PathCommand")) {
       cmdChild = cmdChild.nextSibling;
     }

@@ -1,16 +1,22 @@
+import { nextEditHandleId } from "../edit-handles.js";
 import type { NodeItem, PathStatement } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import { worldPoint } from "../../coords/points.js";
 import { worldTransform } from "../../coords/transforms.js";
-import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings } from "../../macros/index.js";
+import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindingsMapped } from "../../macros/index.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
+import { mapTransformedTextWithFallback, type MappedText } from "../../text/source-map.js";
+import { analyzeSimpleTexResources } from "../../text/tex/index.js";
+import type { NodeTextColorResolver } from "../../text/types.js";
 import {
+  addNamedNodeSetMembers,
+  currentFrame,
   readNamedNodeGeometry,
   resolveContextColorAliasValue,
   type ProvenanceOptionList,
   type SemanticContext
 } from "../context.js";
-import { evaluateRawCoordinate } from "../coords/evaluate.js";
+import { evaluateTransformCoordinate, evaluateRawCoordinate } from "../coords/evaluate.js";
 import {
   currentAnchorForDirection,
   resolveNodePositioningTarget,
@@ -20,7 +26,8 @@ import {
 import {
   resolvePathAttachedNodeRegime,
   resolvePathAttachedNodeSloped,
-  resolvePathPositionFraction
+  resolvePathPositionFraction,
+  tangentAtPlacementSegment
 } from "../path/path-attached.js";
 import type { DiagnosticPushFn, FeatureMarkFn, PlacementSegment } from "../path/types.js";
 import type { WorldPoint } from "../../coords/points.js";
@@ -39,38 +46,7 @@ import {
   type StyleTraceLayerInput
 } from "../style-chain.js";
 import { nodeAnchorOffset, placeNodeCenter, registerNamedNodeAnchors } from "./anchors.js";
-import {
-  applyNodeBoxPaintMode,
-  makeCircleElement,
-  makeNodeBoxElement,
-  makeNodeCircularSectorElement,
-  makeNodeChamferedRectangleElement,
-  makeNodeCloudCalloutElement,
-  makeNodeCloudElement,
-  makeNodeLineElement,
-  makeNodeMagnifyingHandleElement,
-  makeNodeCylinderElement,
-  makeNodeDartElement,
-  makeNodeDiamondSplitElement,
-  makeNodeDiamondSizingElement,
-  makeNodeEllipseCalloutElement,
-  makeNodeEllipseElement,
-  makeNodeRoundedRectangleElement,
-  makeNodeIsoscelesTriangleElement,
-  makeNodeKiteElement,
-  makeNodeRectangleCalloutElement,
-  makeNodeRegularPolygonElement,
-  makeNodeSemicircleElement,
-  makeNodeSignalElement,
-  makeNodeSingleArrowElement,
-  makeNodeStarElement,
-  makeNodeStarburstElement,
-  makeNodeTapeElement,
-  makeNodeTrapeziumElement,
-  makeNodeDoubleArrowElement,
-  makeTextElement,
-  resolveNodeBoxPaintMode
-} from "./elements.js";
+import { makeTextElement } from "./elements.js";
 import { adjustNodeLayoutForShape, resolveNodeLayout } from "./layout.js";
 import { evaluateMatrixNodeItem, resolveMatrixMode } from "./matrix.js";
 import { collectScopedNodeNames } from "./named-coordinates.js";
@@ -80,11 +56,12 @@ import {
   resolveNodeAnchor,
   resolveNodeLayer,
   resolveNodeOptionTransform,
+  resolveNodeTransformShape,
   resolveNodeStyle,
   resolveNodeShape,
   withDefaultNodePosition
 } from "./options.js";
-import { resolveCalloutPointerOffset, resolveNodeShapeGeometryParams } from "./shape-geometry.js";
+import { resolveNodeShapeGeometryParams } from "./shape-geometry.js";
 import {
   isMultipartShape,
   parseNodeParts,
@@ -95,7 +72,7 @@ import {
 } from "./multipart.js";
 import type { NodeShape } from "./types.js";
 import { resolveNodeTargetPoint } from "./placement.js";
-import { normalizeEscapedTextSpaces, normalizeNodeTextFontSize } from "./normalize-text.js";
+import { normalizeNodeTextFontSize } from "./normalize-text.js";
 import { normalizeOptionValue } from "./utils.js";
 import { resolveFitOverrides } from "./fit.js";
 import { applyNodeDecorations } from "./node-decorations.js";
@@ -103,15 +80,13 @@ import {
   mergeOptionLists,
   resolveCircleSolidusHorizontalTextOffset,
   resolveCircleSolidusVerticalTextOffset,
-  resolveRectangleSplitDrawSplits,
   resolveRectangleSplitLayoutGeometry,
-  resolveRectangleSplitPartFills,
   resolveRectangleSplitPartTextPosition,
-  resolveRectangleSplitUseCustomFill,
   resolveTwoPartShapeSizing,
   resolveTwoPartShapeVisual,
   resolveTwoPartSplitTextPosition
 } from "./multipart-layout.js";
+import { emitNodeShape } from "./shape-emission.js";
 import { splitTopLevelCommas } from "./raw-list.js";
 import { applyMatrixToVector, identityMatrix, multiplyMatrix, rotationMatrix } from "../transform.js";
 
@@ -198,54 +173,20 @@ export function measureNodeAnchorExtents(
   style: ResolvedStyle,
   defaultPositionFraction?: number
 ): NodeAnchorExtents {
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const everyNodeStyles = item.adornment ? [] : frame.everyNodeStyles;
   const nodeOptions = withDefaultNodePosition(item.options, defaultPositionFraction);
   const effectiveNodeOptions = resolveEffectiveNodeOptions({
     statementOptions: statement.options,
     nodeOptions,
     everyNodeStyles,
-    everyRectangleNodeStyles: frame.everyRectangleNodeStyles,
-    everyCircleNodeStyles: frame.everyCircleNodeStyles,
-    everyDiamondNodeStyles: frame.everyDiamondNodeStyles,
-    everyTrapeziumNodeStyles: frame.everyTrapeziumNodeStyles,
-    everyIsoscelesTriangleNodeStyles: frame.everyIsoscelesTriangleNodeStyles,
-    everyKiteNodeStyles: frame.everyKiteNodeStyles,
-    everyDartNodeStyles: frame.everyDartNodeStyles,
-    everyCircularSectorNodeStyles: frame.everyCircularSectorNodeStyles,
-    everyCylinderNodeStyles: frame.everyCylinderNodeStyles,
-    everyCloudNodeStyles: frame.everyCloudNodeStyles,
-    everyStarburstNodeStyles: frame.everyStarburstNodeStyles,
-    everySignalNodeStyles: frame.everySignalNodeStyles,
-    everyTapeNodeStyles: frame.everyTapeNodeStyles,
-    everyRectangleCalloutNodeStyles: frame.everyRectangleCalloutNodeStyles,
-    everyEllipseCalloutNodeStyles: frame.everyEllipseCalloutNodeStyles,
-    everyCloudCalloutNodeStyles: frame.everyCloudCalloutNodeStyles,
-    everySingleArrowNodeStyles: frame.everySingleArrowNodeStyles,
-    everyDoubleArrowNodeStyles: frame.everyDoubleArrowNodeStyles
+    everyShapeNodeStyles: frame.everyShapeNodeStyles
   });
   const effectiveNodeLocalOptions = resolveEffectiveNodeOptions({
     statementOptions: undefined,
     nodeOptions,
     everyNodeStyles,
-    everyRectangleNodeStyles: frame.everyRectangleNodeStyles,
-    everyCircleNodeStyles: frame.everyCircleNodeStyles,
-    everyDiamondNodeStyles: frame.everyDiamondNodeStyles,
-    everyTrapeziumNodeStyles: frame.everyTrapeziumNodeStyles,
-    everyIsoscelesTriangleNodeStyles: frame.everyIsoscelesTriangleNodeStyles,
-    everyKiteNodeStyles: frame.everyKiteNodeStyles,
-    everyDartNodeStyles: frame.everyDartNodeStyles,
-    everyCircularSectorNodeStyles: frame.everyCircularSectorNodeStyles,
-    everyCylinderNodeStyles: frame.everyCylinderNodeStyles,
-    everyCloudNodeStyles: frame.everyCloudNodeStyles,
-    everyStarburstNodeStyles: frame.everyStarburstNodeStyles,
-    everySignalNodeStyles: frame.everySignalNodeStyles,
-    everyTapeNodeStyles: frame.everyTapeNodeStyles,
-    everyRectangleCalloutNodeStyles: frame.everyRectangleCalloutNodeStyles,
-    everyEllipseCalloutNodeStyles: frame.everyEllipseCalloutNodeStyles,
-    everyCloudCalloutNodeStyles: frame.everyCloudCalloutNodeStyles,
-    everySingleArrowNodeStyles: frame.everySingleArrowNodeStyles,
-    everyDoubleArrowNodeStyles: frame.everyDoubleArrowNodeStyles
+    everyShapeNodeStyles: frame.everyShapeNodeStyles
   });
 
   const expandedNodeOptions = expandNodePlacementOptions(effectiveNodeOptions, context);
@@ -263,12 +204,19 @@ export function measureNodeAnchorExtents(
   };
   const nodeLocalStyle = resolveNodeStyle(expandedNodeLocalOptions, nodeDecorationBaseStyle, context, 1);
   const nodeShape = resolveNodeShape(expandedNodeOptions);
-  const expandedNodeText = expandMacroBindings(item.text, frame.macroBindings, {
+  const optionalTrace1 = context.macroTraceCollector ?? undefined;
+  const expandedNodeText = expandMacroBindingsMapped(item.text, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined
+    ...(optionalTrace1 === undefined ? {} : { trace: optionalTrace1 }),
+    sourceOffset: item.textSpan.from
   });
-  const resolvedNodeText = normalizeEscapedTextSpaces(resolveTextColorAliases(expandedNodeText, context, statement.id));
-  const normalizedText = normalizeNodeTextFontSize(resolvedNodeText, nodeLocalStyle.fontSize);
+  const resolvedNodeText = expandedNodeText;
+  const normalizedText = normalizeNodeTextFontSize(resolvedNodeText.text, nodeLocalStyle.fontSize);
+  const normalizedMappedText = mapTransformedTextWithFallback(
+    resolvedNodeText,
+    normalizedText.text,
+    "node font size normalization"
+  );
   const nodeTextStyle = normalizedText.fontSizePt === nodeLocalStyle.fontSize
     ? nodeLocalStyle
     : { ...nodeLocalStyle, fontSize: normalizedText.fontSizePt };
@@ -278,7 +226,10 @@ export function measureNodeAnchorExtents(
     nodeTextStyle,
     1,
     context.textEngine,
-    "text"
+    "text",
+    normalizedMappedText.sourceMap,
+    context.graphicsResolver,
+    createNodeTextColorResolver(context, statement.id)
   );
   const nodeLayout = adjustNodeLayoutForShape(baseNodeLayout, nodeShape);
   const anchor = resolveNodeAnchor(expandedNodeOptions);
@@ -329,7 +280,7 @@ export function evaluateNodeItem(
   behindElements: SceneElement[];
   frontElements: SceneElement[];
 } {
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const effectiveBaseStyleChain = baseStyleChain ?? frame.styleChain;
   const everyNodeStyles = item.adornment ? [] : frame.everyNodeStyles;
   const everyFitStyles = item.adornment ? [] : frame.everyFitStyles;
@@ -339,48 +290,14 @@ export function evaluateNodeItem(
     nodeOptions,
     everyNodeStyles,
     everyFitStyles,
-    everyRectangleNodeStyles: frame.everyRectangleNodeStyles,
-    everyCircleNodeStyles: frame.everyCircleNodeStyles,
-    everyDiamondNodeStyles: frame.everyDiamondNodeStyles,
-    everyTrapeziumNodeStyles: frame.everyTrapeziumNodeStyles,
-    everyIsoscelesTriangleNodeStyles: frame.everyIsoscelesTriangleNodeStyles,
-    everyKiteNodeStyles: frame.everyKiteNodeStyles,
-    everyDartNodeStyles: frame.everyDartNodeStyles,
-    everyCircularSectorNodeStyles: frame.everyCircularSectorNodeStyles,
-    everyCylinderNodeStyles: frame.everyCylinderNodeStyles,
-    everyCloudNodeStyles: frame.everyCloudNodeStyles,
-    everyStarburstNodeStyles: frame.everyStarburstNodeStyles,
-    everySignalNodeStyles: frame.everySignalNodeStyles,
-    everyTapeNodeStyles: frame.everyTapeNodeStyles,
-    everyRectangleCalloutNodeStyles: frame.everyRectangleCalloutNodeStyles,
-    everyEllipseCalloutNodeStyles: frame.everyEllipseCalloutNodeStyles,
-    everyCloudCalloutNodeStyles: frame.everyCloudCalloutNodeStyles,
-    everySingleArrowNodeStyles: frame.everySingleArrowNodeStyles,
-    everyDoubleArrowNodeStyles: frame.everyDoubleArrowNodeStyles
+    everyShapeNodeStyles: frame.everyShapeNodeStyles
   });
   let effectiveNodeLocalOptions = resolveEffectiveNodeOptions({
     statementOptions: undefined,
     nodeOptions,
     everyNodeStyles,
     everyFitStyles,
-    everyRectangleNodeStyles: frame.everyRectangleNodeStyles,
-    everyCircleNodeStyles: frame.everyCircleNodeStyles,
-    everyDiamondNodeStyles: frame.everyDiamondNodeStyles,
-    everyTrapeziumNodeStyles: frame.everyTrapeziumNodeStyles,
-    everyIsoscelesTriangleNodeStyles: frame.everyIsoscelesTriangleNodeStyles,
-    everyKiteNodeStyles: frame.everyKiteNodeStyles,
-    everyDartNodeStyles: frame.everyDartNodeStyles,
-    everyCircularSectorNodeStyles: frame.everyCircularSectorNodeStyles,
-    everyCylinderNodeStyles: frame.everyCylinderNodeStyles,
-    everyCloudNodeStyles: frame.everyCloudNodeStyles,
-    everyStarburstNodeStyles: frame.everyStarburstNodeStyles,
-    everySignalNodeStyles: frame.everySignalNodeStyles,
-    everyTapeNodeStyles: frame.everyTapeNodeStyles,
-    everyRectangleCalloutNodeStyles: frame.everyRectangleCalloutNodeStyles,
-    everyEllipseCalloutNodeStyles: frame.everyEllipseCalloutNodeStyles,
-    everyCloudCalloutNodeStyles: frame.everyCloudCalloutNodeStyles,
-    everySingleArrowNodeStyles: frame.everySingleArrowNodeStyles,
-    everyDoubleArrowNodeStyles: frame.everyDoubleArrowNodeStyles
+    everyShapeNodeStyles: frame.everyShapeNodeStyles
   });
   let expandedNodeOptions = expandNodePlacementOptions(effectiveNodeOptions, context);
   let expandedNodeLocalOptions = expandNodePlacementOptions(effectiveNodeLocalOptions, context);
@@ -400,24 +317,7 @@ export function evaluateNodeItem(
       everyFitStyles,
       applyEveryFitStyles: true,
       syntheticOptions: fitSyntheticOptions,
-      everyRectangleNodeStyles: frame.everyRectangleNodeStyles,
-      everyCircleNodeStyles: frame.everyCircleNodeStyles,
-      everyDiamondNodeStyles: frame.everyDiamondNodeStyles,
-      everyTrapeziumNodeStyles: frame.everyTrapeziumNodeStyles,
-      everyIsoscelesTriangleNodeStyles: frame.everyIsoscelesTriangleNodeStyles,
-      everyKiteNodeStyles: frame.everyKiteNodeStyles,
-      everyDartNodeStyles: frame.everyDartNodeStyles,
-      everyCircularSectorNodeStyles: frame.everyCircularSectorNodeStyles,
-      everyCylinderNodeStyles: frame.everyCylinderNodeStyles,
-      everyCloudNodeStyles: frame.everyCloudNodeStyles,
-      everyStarburstNodeStyles: frame.everyStarburstNodeStyles,
-      everySignalNodeStyles: frame.everySignalNodeStyles,
-      everyTapeNodeStyles: frame.everyTapeNodeStyles,
-      everyRectangleCalloutNodeStyles: frame.everyRectangleCalloutNodeStyles,
-      everyEllipseCalloutNodeStyles: frame.everyEllipseCalloutNodeStyles,
-      everyCloudCalloutNodeStyles: frame.everyCloudCalloutNodeStyles,
-      everySingleArrowNodeStyles: frame.everySingleArrowNodeStyles,
-      everyDoubleArrowNodeStyles: frame.everyDoubleArrowNodeStyles
+      everyShapeNodeStyles: frame.everyShapeNodeStyles
     });
     effectiveNodeLocalOptions = resolveEffectiveNodeOptions({
       statementOptions: undefined,
@@ -426,24 +326,7 @@ export function evaluateNodeItem(
       everyFitStyles,
       applyEveryFitStyles: true,
       syntheticOptions: fitSyntheticOptions,
-      everyRectangleNodeStyles: frame.everyRectangleNodeStyles,
-      everyCircleNodeStyles: frame.everyCircleNodeStyles,
-      everyDiamondNodeStyles: frame.everyDiamondNodeStyles,
-      everyTrapeziumNodeStyles: frame.everyTrapeziumNodeStyles,
-      everyIsoscelesTriangleNodeStyles: frame.everyIsoscelesTriangleNodeStyles,
-      everyKiteNodeStyles: frame.everyKiteNodeStyles,
-      everyDartNodeStyles: frame.everyDartNodeStyles,
-      everyCircularSectorNodeStyles: frame.everyCircularSectorNodeStyles,
-      everyCylinderNodeStyles: frame.everyCylinderNodeStyles,
-      everyCloudNodeStyles: frame.everyCloudNodeStyles,
-      everyStarburstNodeStyles: frame.everyStarburstNodeStyles,
-      everySignalNodeStyles: frame.everySignalNodeStyles,
-      everyTapeNodeStyles: frame.everyTapeNodeStyles,
-      everyRectangleCalloutNodeStyles: frame.everyRectangleCalloutNodeStyles,
-      everyEllipseCalloutNodeStyles: frame.everyEllipseCalloutNodeStyles,
-      everyCloudCalloutNodeStyles: frame.everyCloudCalloutNodeStyles,
-      everySingleArrowNodeStyles: frame.everySingleArrowNodeStyles,
-      everyDoubleArrowNodeStyles: frame.everyDoubleArrowNodeStyles
+      everyShapeNodeStyles: frame.everyShapeNodeStyles
     });
 
     expandedNodeOptions = expandNodePlacementOptions(effectiveNodeOptions, context);
@@ -475,24 +358,7 @@ export function evaluateNodeItem(
         everyNodeStyles: [],
         everyFitStyles: [],
         syntheticOptions: [fitOverrides.overrideOptions],
-        everyRectangleNodeStyles: [],
-        everyCircleNodeStyles: [],
-        everyDiamondNodeStyles: [],
-        everyTrapeziumNodeStyles: [],
-        everyIsoscelesTriangleNodeStyles: [],
-        everyKiteNodeStyles: [],
-        everyDartNodeStyles: [],
-        everyCircularSectorNodeStyles: [],
-        everyCylinderNodeStyles: [],
-        everyCloudNodeStyles: [],
-        everyStarburstNodeStyles: [],
-        everySignalNodeStyles: [],
-        everyTapeNodeStyles: [],
-        everyRectangleCalloutNodeStyles: [],
-        everyEllipseCalloutNodeStyles: [],
-        everyCloudCalloutNodeStyles: [],
-        everySingleArrowNodeStyles: [],
-        everyDoubleArrowNodeStyles: []
+        everyShapeNodeStyles: new Map()
       })
     : nodeOptions;
 
@@ -539,28 +405,41 @@ export function evaluateNodeItem(
     pushDiagnostic(code, `Node positioning issue: ${code}`, item.span.from, item.span.to);
   }
 
-  const expandedNodeText = expandMacroBindings(item.text, frame.macroBindings, {
+  const optionalTrace2 = context.macroTraceCollector ?? undefined;
+  const expandedNodeText = expandMacroBindingsMapped(item.text, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined
+    ...(optionalTrace2 === undefined ? {} : { trace: optionalTrace2 }),
+    sourceOffset: item.textSpan.from
   });
-  const resolvedNodeText = normalizeEscapedTextSpaces(resolveTextColorAliases(expandedNodeText, context, statement.id));
-  const rawNodeParts = isMultipartShape(nodeShape) ? parseNodeParts(resolvedNodeText) : [{ name: "text", text: resolvedNodeText }];
+  const resolvedNodeText = expandedNodeText;
+  const rawNodeParts = isMultipartShape(nodeShape) ? parseNodeParts(resolvedNodeText.text) : [{ name: "text", text: resolvedNodeText.text }];
   const mainNodeText = rawNodeParts.find((part) => part.name === "text")?.text ?? "";
+  const mainNodeMappedText = rawNodeParts.length === 1 && mainNodeText === resolvedNodeText.text
+    ? resolvedNodeText
+    : mapTransformedTextWithFallback(resolvedNodeText, mainNodeText, "node part extraction");
   const normalizedNodeText = normalizeNodeTextFontSize(mainNodeText, nodeStyle.fontSize);
-  let layoutNodeText = normalizedNodeText.text;
+  let layoutNodeMappedText: MappedText = mapTransformedTextWithFallback(
+    mainNodeMappedText,
+    normalizedNodeText.text,
+    "node font size normalization"
+  );
+  let layoutNodeText = layoutNodeMappedText.text;
   if (nodeShape === "circle split" || nodeShape === "ellipse split" || nodeShape === "diamond split") {
     const lower = rawNodeParts.find((part) => part.name === "lower") ?? rawNodeParts.find((part) => part.name !== "text");
     if (lower && lower.text.length > 0) {
       const normalizedLower = normalizeNodeTextFontSize(lower.text, nodeStyle.fontSize);
       layoutNodeText = `${normalizedNodeText.text}\\\\${normalizedLower.text}`;
+      layoutNodeMappedText = mapTransformedTextWithFallback(resolvedNodeText, layoutNodeText, "multipart node layout synthesis");
     }
   } else if (nodeShape === "circle solidus") {
     const lower = rawNodeParts.find((part) => part.name === "lower") ?? rawNodeParts.find((part) => part.name !== "text");
     if (lower && lower.text.length > 0) {
       const normalizedLower = normalizeNodeTextFontSize(lower.text, nodeStyle.fontSize);
       layoutNodeText = `${normalizedNodeText.text}\\\\${normalizedLower.text}`;
+      layoutNodeMappedText = mapTransformedTextWithFallback(resolvedNodeText, layoutNodeText, "multipart node layout synthesis");
     } else {
       layoutNodeText = normalizedNodeText.text;
+      layoutNodeMappedText = mapTransformedTextWithFallback(mainNodeMappedText, layoutNodeText, "node font size normalization");
     }
   } else if (nodeShape === "rectangle split") {
     const partCount = Math.max(1, resolveRectangleSplitParts(rectangleSplitOptions));
@@ -571,6 +450,10 @@ export function evaluateNodeItem(
       (partText) => normalizeNodeTextFontSize(partText, nodeStyle.fontSize).text
     );
     layoutNodeText = partTexts.join(horizontal ? " " : "\\\\");
+    layoutNodeMappedText = mapTransformedTextWithFallback(resolvedNodeText, layoutNodeText, "multipart node layout synthesis");
+  }
+  if (containsIncludeGraphicsCommand(layoutNodeText)) {
+    markFeature("text_includegraphics", "supported");
   }
   const nodeTextStyle = normalizedNodeText.fontSizePt === nodeStyle.fontSize
     ? nodeStyle
@@ -585,7 +468,7 @@ export function evaluateNodeItem(
       style,
       markFeature,
       pushDiagnostic,
-      forcedName,
+      ...(forcedName === undefined ? {} : { forcedName: forcedName }),
       matrixMode,
       nodeShape,
       nodeStyle,
@@ -619,7 +502,10 @@ export function evaluateNodeItem(
     nodeTextStyle,
     1,
     context.textEngine,
-    placementOptions.textMode ?? "text"
+    placementOptions.textMode ?? "text",
+    layoutNodeMappedText.sourceMap,
+    context.graphicsResolver,
+    createNodeTextColorResolver(context, statement.id)
   );
   const adjustedNodeLayout = adjustNodeLayoutForShape(baseNodeLayout, nodeShape);
   const shapeGeometry = resolveNodeShapeGeometryParams(expandedNodeOptions, () => context.mathRandom.nextRaw());
@@ -671,11 +557,11 @@ export function evaluateNodeItem(
             twoPartVisual.width / 2 + adjustedNodeLayout.outerXSep,
             twoPartVisual.height / 2 + adjustedNodeLayout.outerYSep
           ),
-          twoPartShapeSizing: twoPartShapeSizing ?? undefined
+          ...(twoPartShapeSizing == null ? {} : { twoPartShapeSizing })
         }
     : adjustedNodeLayout;
   const slopedRotation = resolveSlopedNodeRotation(expandedNodeOptions, segment, effectiveBaseStyleChain);
-  const inheritedNodeTransform: WorldTransform = frame.transformShape
+  const inheritedNodeTransform: WorldTransform = resolveNodeTransformShape(expandedNodeLocalOptions, frame.transformShape)
     ? worldTransform(frame.transform.a, frame.transform.b, frame.transform.c, frame.transform.d, 0, 0)
     : identityMatrix();
   const nodeOptionTransform = resolveNodeOptionTransform(expandedNodeLocalOptions, style, context);
@@ -711,8 +597,8 @@ export function evaluateNodeItem(
 
       const sourceText = context.source.slice(rp.span.from, rp.span.to);
       context.editHandles.push({
-        id: `handle:${nodeHandleSourceId}:node-position:${context.editHandles.length}`,
-        runtimeId: `handle:${nodeHandleSourceId}:node-position:${context.editHandles.length}`,
+        id: nextEditHandleId(context, nodeHandleSourceId, "node-position"),
+        runtimeId: nextEditHandleId(context, nodeHandleSourceId, "node-position"),
         sourceRef: {
           sourceId: nodeHandleSourceId,
           sourceSpan: rp.span,
@@ -721,7 +607,7 @@ export function evaluateNodeItem(
         handleType: "node-positioning",
         kind: "node-position",
         world: center,
-        transform: frame?.transform ?? { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
+        transform: frame.transform,
         sourceText,
         coordinateForm: "cartesian",
         rewriteMode: "positioning",
@@ -759,9 +645,6 @@ export function evaluateNodeItem(
     !expandedNodeOptions?.entries.some((entry) => entry.kind === "kv" && entry.key === "at")
       ? (() => {
           const regime = resolvePathAttachedNodeRegime(expandedNodeOptions, effectiveBaseStyleChain);
-          if (!regime) {
-            return null;
-          }
           const pos = resolvePathPositionFraction(expandedNodeOptions) ?? 0.5;
           return {
             hostPathSourceId: statement.id,
@@ -776,9 +659,9 @@ export function evaluateNodeItem(
 
   if (pathAttachmentMetadata) {
     const sourceText = context.source.slice(item.span.from, item.span.to);
-      context.editHandles.push({
-        id: `handle:${nodeHandleSourceId}:node-position:${context.editHandles.length}`,
-        runtimeId: `handle:${nodeHandleSourceId}:node-position:${context.editHandles.length}`,
+    context.editHandles.push({
+      id: nextEditHandleId(context, nodeHandleSourceId, "node-position"),
+      runtimeId: nextEditHandleId(context, nodeHandleSourceId, "node-position"),
       sourceRef: {
         sourceId: nodeHandleSourceId,
         sourceSpan: item.optionsSpan ?? item.span,
@@ -787,7 +670,7 @@ export function evaluateNodeItem(
         handleType: "path-attachment",
         kind: "node-position",
         world: center,
-        transform: frame?.transform ?? { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
+        transform: frame.transform,
       sourceText,
       coordinateForm: "cartesian",
       rewriteMode: "positioning",
@@ -817,700 +700,32 @@ export function evaluateNodeItem(
   const pushNodeElement = (element: SceneElement): void => {
     const rotatedElement = rotateNodeElementGeometry(element, center, 0);
     rotatedElement.styleChain = cloneStyleChain(nodeStyleChain);
-    rotatedElement.transform = nodeElementTransform;
+    if (nodeElementTransform === undefined) delete rotatedElement.transform;
+    else rotatedElement.transform = nodeElementTransform;
     nodeElements.push(rotatedElement);
   };
-  const explicitPaintMode = resolveNodeBoxPaintMode(expandedNodeLocalOptions);
-  const resolvedPaintMode = {
-    draw:
-      explicitPaintMode.draw ||
-      (!style.drawExplicit && nodeStyle.drawExplicit && nodeStyle.stroke != null && nodeStyle.stroke !== "none"),
-    fill:
-      explicitPaintMode.fill ||
-      ((style.fill == null || style.fill === "none") && nodeStyle.fill != null && nodeStyle.fill !== "none")
-  };
-  if (resolvedPaintMode.draw || resolvedPaintMode.fill || nodeStyle.shadowLayers.length > 0) {
-    const nodeBoxStyle = applyNodeBoxPaintMode(nodeStyle, resolvedPaintMode);
-    const nodeDividerStyle: ResolvedStyle = {
-      ...nodeBoxStyle,
-      fill: null,
-      fillPattern: null,
-      doubleStroke: false,
-      doubleDistance: 0
-    };
-    const calloutWorldPointerOffset = resolveCalloutPointerOffset(shapeGeometry, context, center);
-    if (nodeShape === "rounded rectangle") {
-      pushNodeElement(
-        makeNodeRoundedRectangleElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          nodeLayout.textBlockWidth,
-          nodeLayout.textBlockHeight,
-          Math.max(0, (nodeLayout.naturalWidth - nodeLayout.textBlockWidth) / 2),
-          Math.max(0, (nodeLayout.naturalHeight - nodeLayout.textBlockHeight) / 2),
-          shapeGeometry.roundedRectangleArcLength,
-          shapeGeometry.roundedRectangleWestArc,
-          shapeGeometry.roundedRectangleEastArc,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_rounded_rectangle", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "chamfered rectangle") {
-      pushNodeElement(
-        makeNodeChamferedRectangleElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.chamferedRectangleXSepPt,
-          shapeGeometry.chamferedRectangleYSepPt,
-          shapeGeometry.chamferedRectangleAngle,
-          shapeGeometry.chamferedRectangleCorners,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_chamfered_rectangle", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "cross out") {
-      const halfWidth = nodeLayout.visualWidth / 2;
-      const halfHeight = nodeLayout.visualHeight / 2;
-      pushNodeElement(
-        makeNodeLineElement(
-          nodeSourceId,
-          `${item.id}:cross-a`,
-          wp(center.x - halfWidth, center.y - halfHeight),
-          wp(center.x + halfWidth, center.y + halfHeight),
-          nodeDividerStyle,
-          item.span
-        )
-      );
-      pushNodeElement(
-        makeNodeLineElement(
-          nodeSourceId,
-          `${item.id}:cross-b`,
-          wp(center.x - halfWidth, center.y + halfHeight),
-          wp(center.x + halfWidth, center.y - halfHeight),
-          nodeDividerStyle,
-          item.span
-        )
-      );
-      markFeature("shape_cross_out", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "strike out") {
-      const halfWidth = nodeLayout.visualWidth / 2;
-      const halfHeight = nodeLayout.visualHeight / 2;
-      pushNodeElement(
-        makeNodeLineElement(
-          nodeSourceId,
-          `${item.id}:strike`,
-          wp(center.x - halfWidth, center.y - halfHeight),
-          wp(center.x + halfWidth, center.y + halfHeight),
-          nodeDividerStyle,
-          item.span
-        )
-      );
-      markFeature("shape_strike_out", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "magnifying glass") {
-      pushNodeElement(makeCircleElement(nodeSourceId, center, nodeLayout.visualRadius, nodeBoxStyle, item.span));
-      pushNodeElement(
-        makeNodeMagnifyingHandleElement(
-          nodeSourceId,
-          `${item.id}:handle`,
-          center,
-          nodeLayout.visualRadius,
-          shapeGeometry.magnifyingGlassHandleAngle,
-          shapeGeometry.magnifyingGlassHandleAspect,
-          { ...nodeBoxStyle, fill: null },
-          item.span
-        )
-      );
-      markFeature("shape_magnifying_glass", "supported");
-      markFeature("svg_circle", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "circle split" || nodeShape === "circle solidus") {
-      pushNodeElement(makeCircleElement(nodeSourceId, center, nodeLayout.visualRadius, nodeBoxStyle, item.span));
-      const r = nodeLayout.visualRadius;
-      if (nodeShape === "circle split") {
-        pushNodeElement(
-          makeNodeLineElement(
-            nodeSourceId,
-            `${item.id}:split`,
-            wp(center.x - r, center.y),
-            wp(center.x + r, center.y),
-            nodeDividerStyle,
-            item.span
-          )
-        );
-        markFeature("shape_circle_split", "supported");
-      } else {
-        pushNodeElement(
-          makeNodeLineElement(
-            nodeSourceId,
-            `${item.id}:solidus`,
-            wp(center.x - r * 0.437, center.y - r * 0.437),
-            wp(center.x + r * 0.437, center.y + r * 0.437),
-            nodeDividerStyle,
-            item.span
-          )
-        );
-        markFeature("shape_circle_solidus", "supported");
-      }
-      markFeature("svg_circle", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "ellipse split") {
-      pushNodeElement(makeNodeEllipseElement(nodeSourceId, item.id, center, nodeLayout.visualWidth, nodeLayout.visualHeight, nodeBoxStyle, item.span));
-      pushNodeElement(
-          makeNodeLineElement(
-            nodeSourceId,
-            `${item.id}:split`,
-            wp(center.x - nodeLayout.visualWidth / 2, center.y),
-            wp(center.x + nodeLayout.visualWidth / 2, center.y),
-            nodeDividerStyle,
-            item.span
-          )
-        );
-      markFeature("shape_ellipse_split", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "diamond split") {
-      if (twoPartShapeSizing) {
-        pushNodeElement(
-          makeNodeDiamondSplitElement(
-            nodeSourceId,
-            item.id,
-            center,
-            twoPartShapeSizing,
-            shapeGeometry.diamondAspect,
-            nodeBoxStyle,
-            item.span
-          )
-        );
-      } else {
-        pushNodeElement(
-          makeNodeDiamondSizingElement(
-            nodeSourceId,
-            item.id,
-            center,
-            nodeLayout.naturalWidth,
-            nodeLayout.naturalHeight,
-            nodeLayout.minimumWidth,
-            nodeLayout.minimumHeight,
-            shapeGeometry.diamondAspect,
-            nodeBoxStyle,
-            item.span
-          )
-        );
-      }
-      pushNodeElement(
-          makeNodeLineElement(
-            nodeSourceId,
-            `${item.id}:split`,
-            wp(center.x - nodeLayout.visualWidth / 2, center.y),
-            wp(center.x + nodeLayout.visualWidth / 2, center.y),
-            nodeDividerStyle,
-            item.span
-          )
-        );
-      markFeature("shape_diamond_split", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "rectangle split") {
-      const parts = Math.max(1, resolveRectangleSplitParts(rectangleSplitOptions));
-      const horizontal = resolveRectangleSplitHorizontal(rectangleSplitOptions);
-      const splitLayout = rectangleSplitLayout ?? resolveRectangleSplitLayoutGeometry({
-        rawNodeParts,
-        options: rectangleSplitOptions,
-        style: nodeTextStyle,
-        textMode: placementOptions.textMode ?? "text",
-        context,
-        baseLayout: nodeLayout
-      });
-      const effectiveSplitWidth = splitLayout.width;
-      const effectiveSplitHeight = splitLayout.height;
-      const useCustomFill = resolveRectangleSplitUseCustomFill(expandedNodeOptions);
-      const drawSplits = resolveRectangleSplitDrawSplits(expandedNodeOptions);
-      const partFills = resolveRectangleSplitPartFills(expandedNodeOptions, context, statement.id, nodeTextStyle.textColor ?? "#000000");
-      const segments = splitLayout.segments.map((segment) => ({
-        ...segment,
-        center: wp(center.x + segment.center.x, center.y + segment.center.y),
-        minX: center.x + segment.minX,
-        maxX: center.x + segment.maxX,
-        minY: center.y + segment.minY,
-        maxY: center.y + segment.maxY
-      }));
-      if (useCustomFill && partFills.length > 0) {
-        for (let index = 0; index < segments.length; index += 1) {
-          const segment = segments[index];
-          const fill = partFills[Math.min(index, partFills.length - 1)] ?? null;
-          if (!fill || fill === "none") {
-            continue;
-          }
-          pushNodeElement(
-            makeNodeBoxElement(
-              nodeSourceId,
-              `${item.id}:part-fill-${index + 1}`,
-              segment.center,
-              segment.width,
-              segment.height,
-              {
-                ...nodeBoxStyle,
-                stroke: null,
-                drawExplicit: false,
-                fill,
-                fillPattern: null,
-                doubleStroke: false,
-                doubleDistance: 0
-              },
-              item.span
-            )
-          );
-        }
-        pushNodeElement(
-          makeNodeBoxElement(
-            nodeSourceId,
-            `${item.id}:border`,
-            center,
-            effectiveSplitWidth,
-            effectiveSplitHeight,
-            { ...nodeDividerStyle, fill: null, fillPattern: null, drawExplicit: true },
-            item.span
-          )
-        );
-      } else {
-        pushNodeElement(makeNodeBoxElement(nodeSourceId, item.id, center, effectiveSplitWidth, effectiveSplitHeight, nodeBoxStyle, item.span));
-      }
-      if (parts > 1) {
-        for (let index = 1; index < segments.length; index += 1) {
-          if (drawSplits) {
-            const previous = segments[index - 1];
-            const current = segments[index];
-            if (horizontal) {
-              const x = (previous.maxX + current.minX) / 2;
-              pushNodeElement(
-                makeNodeLineElement(
-                  nodeSourceId,
-                  `${item.id}:split-${index}`,
-                  wp(x, center.y - effectiveSplitHeight / 2),
-                  wp(x, center.y + effectiveSplitHeight / 2),
-                  nodeDividerStyle,
-                  item.span
-                )
-              );
-            } else {
-              const y = (previous.minY + current.maxY) / 2;
-              pushNodeElement(
-                makeNodeLineElement(
-                  nodeSourceId,
-                  `${item.id}:split-${index}`,
-                  wp(center.x - effectiveSplitWidth / 2, y),
-                  wp(center.x + effectiveSplitWidth / 2, y),
-                  nodeDividerStyle,
-                  item.span
-                )
-              );
-            }
-          }
-        }
-      }
-      markFeature("shape_rectangle_split", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "circle") {
-      pushNodeElement(makeCircleElement(nodeSourceId, center, nodeLayout.visualRadius, nodeBoxStyle, item.span));
-      markFeature("shape_circle", "supported");
-      markFeature("svg_circle", "supported");
-    } else if (nodeShape === "ellipse") {
-      pushNodeElement(makeNodeEllipseElement(nodeSourceId, item.id, center, nodeLayout.visualWidth, nodeLayout.visualHeight, nodeBoxStyle, item.span));
-      markFeature("shape_ellipse", "supported");
-    } else if (nodeShape === "diamond") {
-      pushNodeElement(
-        makeNodeDiamondSizingElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.diamondAspect,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_diamond", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "trapezium") {
-      pushNodeElement(
-        makeNodeTrapeziumElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.trapeziumLeftAngle,
-          shapeGeometry.trapeziumRightAngle,
-          shapeGeometry.shapeBorderRotate,
-          shapeGeometry.trapeziumStretches,
-          shapeGeometry.trapeziumStretchesBody,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_trapezium", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "semicircle") {
-      pushNodeElement(
-        makeNodeSemicircleElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.shapeBorderRotate,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_semicircle", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "isosceles triangle") {
-      pushNodeElement(
-        makeNodeIsoscelesTriangleElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.isoscelesTriangleApexAngle,
-          shapeGeometry.shapeBorderRotate,
-          shapeGeometry.isoscelesTriangleStretches,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_isosceles_triangle", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "kite") {
-      pushNodeElement(
-        makeNodeKiteElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.kiteUpperVertexAngle,
-          shapeGeometry.kiteLowerVertexAngle,
-          shapeGeometry.shapeBorderRotate,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_kite", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "dart") {
-      pushNodeElement(
-        makeNodeDartElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.dartTipAngle,
-          shapeGeometry.dartTailAngle,
-          shapeGeometry.shapeBorderRotate,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_dart", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "circular sector") {
-      pushNodeElement(
-        makeNodeCircularSectorElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.circularSectorAngle,
-          shapeGeometry.shapeBorderRotate,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_circular_sector", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "cylinder") {
-      pushNodeElement(
-        makeNodeCylinderElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          Math.max(0, (nodeLayout.naturalHeight - nodeLayout.textBlockHeight) / 2),
-          shapeGeometry.cylinderAspect,
-          shapeGeometry.shapeBorderRotate,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_cylinder", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "regular polygon") {
-      pushNodeElement(
-        makeNodeRegularPolygonElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.regularPolygonSides,
-          shapeGeometry.shapeBorderRotate,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_regular_polygon", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "star") {
-      pushNodeElement(
-        makeNodeStarElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.starPoints,
-          shapeGeometry.starPointRatio,
-          shapeGeometry.starPointHeightPt,
-          shapeGeometry.starUsesPointRatio,
-          shapeGeometry.shapeBorderRotate,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_star", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "cloud") {
-      pushNodeElement(
-        makeNodeCloudElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.cloudPuffs,
-          shapeGeometry.cloudPuffArc,
-          shapeGeometry.diamondAspect,
-          shapeGeometry.cloudIgnoresAspect,
-          shapeGeometry.shapeBorderRotate,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_cloud", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "starburst") {
-      pushNodeElement(
-        makeNodeStarburstElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.starburstPoints,
-          shapeGeometry.starburstPointHeightPt,
-          shapeGeometry.randomStarburstSeed,
-          shapeGeometry.shapeBorderRotate,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_starburst", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "signal") {
-      pushNodeElement(
-        makeNodeSignalElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.signalPointerAngle,
-          shapeGeometry.signalToSides,
-          shapeGeometry.signalFromSides,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_signal", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "tape") {
-      pushNodeElement(
-        makeNodeTapeElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.tapeBendTop,
-          shapeGeometry.tapeBendBottom,
-          shapeGeometry.tapeBendHeightPt,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_tape", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "rectangle callout") {
-      pushNodeElement(
-        makeNodeRectangleCalloutElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          calloutWorldPointerOffset,
-          shapeGeometry.calloutPointerWidthPt,
-          shapeGeometry.calloutPointerIsAbsolute,
-          shapeGeometry.calloutPointerShortenPt,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_rectangle_callout", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "ellipse callout") {
-      pushNodeElement(
-        makeNodeEllipseCalloutElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.visualWidth,
-          nodeLayout.visualHeight,
-          0,
-          0,
-          calloutWorldPointerOffset,
-          shapeGeometry.calloutPointerArc,
-          shapeGeometry.calloutPointerIsAbsolute,
-          shapeGeometry.calloutPointerShortenPt,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_ellipse_callout", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "cloud callout") {
-      pushNodeElement(
-        makeNodeCloudCalloutElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.cloudPuffs,
-          shapeGeometry.cloudPuffArc,
-          shapeGeometry.diamondAspect,
-          shapeGeometry.cloudIgnoresAspect,
-          shapeGeometry.shapeBorderRotate,
-          calloutWorldPointerOffset,
-          shapeGeometry.calloutPointerStartSizeRaw,
-          shapeGeometry.calloutPointerEndSizeRaw,
-          shapeGeometry.calloutPointerSegments,
-          shapeGeometry.calloutPointerIsAbsolute,
-          shapeGeometry.calloutPointerShortenPt,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_cloud_callout", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "single arrow") {
-      pushNodeElement(
-        makeNodeSingleArrowElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.singleArrowTipAngle,
-          shapeGeometry.singleArrowHeadExtendPt,
-          shapeGeometry.singleArrowHeadIndentPt,
-          shapeGeometry.shapeBorderRotate,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_single_arrow", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "double arrow") {
-      pushNodeElement(
-        makeNodeDoubleArrowElement(
-          nodeSourceId,
-          item.id,
-          center,
-          nodeLayout.naturalWidth,
-          nodeLayout.naturalHeight,
-          nodeLayout.minimumWidth,
-          nodeLayout.minimumHeight,
-          shapeGeometry.doubleArrowTipAngle,
-          shapeGeometry.doubleArrowHeadExtendPt,
-          shapeGeometry.doubleArrowHeadIndentPt,
-          shapeGeometry.shapeBorderRotate,
-          nodeBoxStyle,
-          item.span
-        )
-      );
-      markFeature("shape_double_arrow", "supported");
-      markFeature("svg_path", "supported");
-    } else if (nodeShape === "rectangle") {
-      pushNodeElement(makeNodeBoxElement(nodeSourceId, item.id, center, nodeLayout.visualWidth, nodeLayout.visualHeight, nodeBoxStyle, item.span));
-      markFeature("shape_rectangle", "supported");
-      markFeature("svg_path", "supported");
-    }
-  }
+  emitNodeShape({
+    item,
+    statementSourceId: statement.id,
+    semanticContext: context,
+    inheritedStyle: style,
+    markFeature,
+    center,
+    nodeShape,
+    nodeLayout,
+    shapeGeometry,
+    twoPartShapeSizing,
+    rectangleSplitOptions,
+    rectangleSplitLayout,
+    rawNodeParts,
+    nodeTextStyle,
+    expandedNodeOptions,
+    expandedNodeLocalOptions,
+    textMode: placementOptions.textMode ?? "text",
+    nodeStyle,
+    nodeSourceId,
+    pushNodeElement
+  });
 
   const renderedNodeText = nodeLayout.textLines.join("\n");
   const isTwoPartSplitShape =
@@ -1552,7 +767,10 @@ export function evaluateNodeItem(
             splitTextStyle,
             1,
             context.textEngine,
-            placementOptions.textMode ?? "text"
+            placementOptions.textMode ?? "text",
+            undefined,
+            context.graphicsResolver,
+            createNodeTextColorResolver(context, statement.id)
           );
           pushNodeElement(
             makeTextElement(
@@ -1578,7 +796,9 @@ export function evaluateNodeItem(
               undefined,
               undefined,
               item.textSpan,
-              hasTextWidthOption(expandedNodeOptions)
+              hasTextWidthOption(expandedNodeOptions),
+              undefined,
+              center
             )
           );
         }
@@ -1590,7 +810,10 @@ export function evaluateNodeItem(
             splitTextStyle,
             1,
             context.textEngine,
-            placementOptions.textMode ?? "text"
+            placementOptions.textMode ?? "text",
+            undefined,
+            context.graphicsResolver,
+            createNodeTextColorResolver(context, statement.id)
           );
           pushNodeElement(
             makeTextElement(
@@ -1616,7 +839,9 @@ export function evaluateNodeItem(
               undefined,
               undefined,
               item.textSpan,
-              hasTextWidthOption(expandedNodeOptions)
+              hasTextWidthOption(expandedNodeOptions),
+              undefined,
+              center
             )
           );
         }
@@ -1629,7 +854,10 @@ export function evaluateNodeItem(
             solidusTextStyle,
             1,
             context.textEngine,
-            placementOptions.textMode ?? "text"
+            placementOptions.textMode ?? "text",
+            undefined,
+            context.graphicsResolver,
+            createNodeTextColorResolver(context, statement.id)
           );
           pushNodeElement(
             makeTextElement(
@@ -1650,7 +878,9 @@ export function evaluateNodeItem(
               undefined,
               undefined,
               item.textSpan,
-              hasTextWidthOption(expandedNodeOptions)
+              hasTextWidthOption(expandedNodeOptions),
+              undefined,
+              center
             )
           );
         }
@@ -1662,7 +892,10 @@ export function evaluateNodeItem(
             solidusTextStyle,
             1,
             context.textEngine,
-            placementOptions.textMode ?? "text"
+            placementOptions.textMode ?? "text",
+            undefined,
+            context.graphicsResolver,
+            createNodeTextColorResolver(context, statement.id)
           );
           pushNodeElement(
             makeTextElement(
@@ -1683,7 +916,9 @@ export function evaluateNodeItem(
               undefined,
               undefined,
               item.textSpan,
-              hasTextWidthOption(expandedNodeOptions)
+              hasTextWidthOption(expandedNodeOptions),
+              undefined,
+              center
             )
           );
         }
@@ -1698,8 +933,7 @@ export function evaluateNodeItem(
         });
         const effectiveSplitWidth = splitLayout.width;
         const effectiveSplitHeight = splitLayout.height;
-        for (let index = 0; index < splitLayout.parts.length; index += 1) {
-          const part = splitLayout.parts[index];
+        for (const [index, part] of splitLayout.parts.entries()) {
           const partText = part.text;
           if (partText.length === 0) {
             continue;
@@ -1726,7 +960,9 @@ export function evaluateNodeItem(
               undefined,
               undefined,
               item.textSpan,
-              hasTextWidthOption(expandedNodeOptions)
+              hasTextWidthOption(expandedNodeOptions),
+              undefined,
+              center
             )
           );
         }
@@ -1770,12 +1006,12 @@ function attachAdornmentMetadata(
     valueSpan: adornment.valueSpan,
     textSpan: adornment.textSpan,
     angleRaw: adornment.angleRaw,
-    angleSpan: adornment.angleSpan,
+    ...(adornment.angleSpan === undefined ? {} : { angleSpan: adornment.angleSpan }),
     distancePt: adornment.distancePt,
     defaultDistancePt: adornment.defaultDistancePt,
     distanceExplicit: adornment.distanceExplicit,
     ownerPoint,
-    ownerGeometry: adornment.ownerGeometry
+    ...(adornment.ownerGeometry === undefined ? {} : { ownerGeometry: adornment.ownerGeometry })
   };
 
   return {
@@ -1805,7 +1041,7 @@ function resolveNodeStyleTrace(params: {
   applyEveryFitStyles?: boolean;
   transformScale: number;
 }): { style: ResolvedStyle; chain: StyleChainEntry[] } {
-  const frame = params.context.stack[params.context.stack.length - 1];
+  const frame = currentFrame(params.context);
   const macroTrace = params.context.macroTraceCollector ?? undefined;
   const everyNodeLayers = expandProvenanceOptionLayers(frame.everyNodeStyles, frame, macroTrace);
   const everyFitLayers =
@@ -1864,9 +1100,10 @@ function resolveNodeStyleTrace(params: {
     frame.transform,
     layers,
     cloneCustomStyleRegistry(frame.customStyles),
-    (raw) => evaluateRawCoordinate(raw, params.context).world,
+    (raw, basis) => evaluateTransformCoordinate(raw, params.context, basis),
     params.baseStyleChain,
-    (raw) => resolveContextColorAliasValue(params.context, raw)
+    (raw) => resolveContextColorAliasValue(params.context, raw),
+    frame.axisBasis
   );
 
   const scaledStyle = applyNodeTransformScale(resolved.style, params.transformScale);
@@ -1937,7 +1174,7 @@ function expandProvenanceOptionLayers(
 }
 
 function resolveEveryShapeNodeStyleLayers(frame: SemanticContext["stack"][number], nodeShape: NodeShape): ProvenanceOptionList[] {
-  return resolveEveryShapeNodeStyleLists(nodeShape, frame);
+  return [...resolveEveryShapeNodeStyleLists(nodeShape, frame.everyShapeNodeStyles)];
 }
 
 function resolveAutoNodeAnchor(
@@ -2064,7 +1301,7 @@ function resolveAutoNodeAnchor(
   }
 
   if (sloped) {
-    const tangent = segmentTangent(segment);
+    const tangent = segmentTangent(segment, options);
     if (!tangent) {
       return null;
     }
@@ -2086,7 +1323,7 @@ function resolveAutoNodeAnchor(
     return dot >= 0 ? "south" : "north";
   }
 
-  const tangent = segmentTangent(segment);
+  const tangent = segmentTangent(segment, options);
   if (!tangent) {
     return null;
   }
@@ -2116,7 +1353,7 @@ function resolveSlopedNodeRotation(
     return null;
   }
 
-  const tangent = segmentTangent(segment);
+  const tangent = segmentTangent(segment, options, "local");
   if (!tangent) {
     return null;
   }
@@ -2193,7 +1430,7 @@ function expandNodePlacementOptions(options: OptionListAst | undefined, context:
     return undefined;
   }
 
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const expandedLists = expandOptionListMacros([options], frame.macroBindings, context.macroTraceCollector ?? undefined);
   const expandedEntries: OptionEntry[] = [];
   const diagnostics: string[] = [];
@@ -2216,7 +1453,11 @@ function expandNodePlacementOptions(options: OptionListAst | undefined, context:
   };
 }
 
-function segmentTangent(segment: PlacementSegment): WorldPoint | null {
+function segmentTangent(
+  segment: PlacementSegment,
+  options: NodeItem["options"],
+  arcFrame: "local" | "world" = "world"
+): WorldPoint | null {
   let tangent: WorldPoint;
   if (segment.kind === "line") {
     tangent = wp(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
@@ -2228,7 +1469,16 @@ function segmentTangent(segment: PlacementSegment): WorldPoint | null {
       tangent = wp(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
     }
   } else {
-    tangent = wp(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
+    // Glyph rotation uses PGF's local timer axes, while auto placement uses
+    // world directions. The node transform supplies any retained CTM.
+    const arcSegment: PlacementSegment = arcFrame === "local"
+      ? { kind: "arc", from: segment.from, to: segment.to, params: segment.params, ...(segment.localBasis === undefined ? {} : { basis: segment.localBasis }) }
+      : segment;
+    const arcTangent = tangentAtPlacementSegment(
+      arcSegment,
+      resolvePathPositionFraction(options) ?? 1
+    );
+    tangent = wp(arcTangent.x, arcTangent.y);
   }
 
   const len = Math.hypot(tangent.x, tangent.y);
@@ -2266,31 +1516,15 @@ function directionToAnchor(direction: WorldPoint): string {
   return "south west";
 }
 
-function resolveTextColorAliases(text: string, context: SemanticContext, consumerStatementId: string): string {
-  if (text.length === 0) {
-    return text;
-  }
-
-  let resolved = replaceColorCommandAliases(text, "\\textcolor", context, consumerStatementId);
-  resolved = replaceColorCommandAliases(resolved, "\\color", context, consumerStatementId);
-  return resolved;
-}
-
-function replaceColorCommandAliases(
-  text: string,
-  command: "\\textcolor" | "\\color",
+function createNodeTextColorResolver(
   context: SemanticContext,
   consumerStatementId: string
-): string {
-  const escapedCommand = command.replace("\\", "\\\\");
-  const pattern = new RegExp(`${escapedCommand}(\\s*\\[[^\\]]*\\])?\\s*\\{([^{}]+)\\}`, "g");
-  return text.replace(pattern, (fullMatch: string, modelPart = "", rawColorName: string = "") => {
-    const resolved = resolveContextColorAliasValue(context, String(rawColorName), consumerStatementId);
-    if (!resolved) {
-      return fullMatch;
-    }
-    return `${command}${modelPart}{${resolved}}`;
-  });
+): NodeTextColorResolver {
+  const aliases = [...currentFrame(context).colorAliases.entries()];
+  return {
+    cacheKey: `xcolor:${JSON.stringify(aliases)}`,
+    resolve: (name) => resolveContextColorAliasValue(context, name, consumerStatementId),
+  };
 }
 
 function resolveNodeElementTransform(center: WorldPoint, nodeTransform: WorldTransform): WorldTransform | undefined {
@@ -2329,10 +1563,12 @@ function rotateNodeElementGeometry(element: SceneElement, center: WorldPoint, ro
   }
 
   const rotated = normalizeRotationDegrees((element.rotation ?? 0) + rotation);
+  const rotatedElement = { ...element };
+  delete rotatedElement.rotation;
   return {
-    ...element,
+    ...rotatedElement,
     center: rotateWorldPointAround(element.center, center, rotation),
-    rotation: Math.abs(rotated) > 1e-6 ? rotated : undefined
+    ...(Math.abs(rotated) > 1e-6 ? { rotation: rotated } : {})
   };
 }
 
@@ -2393,24 +1629,11 @@ function normalizeRotationDegrees(degrees: number): number {
 }
 
 function registerNodeSetMembership(nodeNames: string[], setNames: string[], context: SemanticContext): void {
-  if (nodeNames.length === 0 || setNames.length === 0) {
+  if (nodeNames.length === 0) {
     return;
   }
-
   for (const setName of setNames) {
-    const existingMembers = context.namedNodeSets.get(setName);
-    const members = existingMembers ? new Set(existingMembers) : new Set<string>();
-    let changed = !existingMembers;
-    for (const nodeName of nodeNames) {
-      if (members.has(nodeName)) {
-        continue;
-      }
-      members.add(nodeName);
-      changed = true;
-    }
-    if (changed) {
-      context.namedNodeSets.set(setName, members);
-    }
+    addNamedNodeSetMembers(context, setName, nodeNames);
   }
 }
 
@@ -2432,6 +1655,10 @@ function collectSetNames(options: OptionListAst | undefined): string[] {
     }
   }
   return Array.from(new Set(names));
+}
+
+function containsIncludeGraphicsCommand(text: string): boolean {
+  return analyzeSimpleTexResources(text).graphics.length > 0;
 }
 
 function hasTextWidthOption(options: OptionListAst | undefined): boolean {

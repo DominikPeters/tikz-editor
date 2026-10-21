@@ -9,8 +9,8 @@ import {
   type RefObject,
   type SetStateAction
 } from "react";
-import { px, viewportPoint } from "tikz-editor/coords/index";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
+import { px, viewportPoint } from "@tikz-editor/core/coords/index";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
 
 import { APP_MENU_COMMAND_IDS } from "../../app-menu";
 import type { CommandBindings } from "../editor-command-runtime";
@@ -138,16 +138,16 @@ export function useCanvasContextMenuController({
       } = {}
     ) => {
       const definition = buildCanvasContextMenuDefinition({
-        includeEditEquationForSingleNode: options.includeEditEquationForSingleNode,
-        nodePositioningAction: options.nodePositioningAction,
-        includePathSubmenuForSingleSelection: options.includePathSubmenuForSingleSelection,
-        includeFlattenForeach: options.includeFlattenForeach,
-        includeMatrixMultiRemoveRow: options.includeMatrixMultiRemoveRow,
-        includeMatrixMultiRemoveColumn: options.includeMatrixMultiRemoveColumn,
-        includeMatrixMultiInsertRowAbove: options.includeMatrixMultiInsertRowAbove,
-        includeMatrixMultiInsertRowBelow: options.includeMatrixMultiInsertRowBelow,
-        includeMatrixMultiInsertColumnLeft: options.includeMatrixMultiInsertColumnLeft,
-        includeMatrixMultiInsertColumnRight: options.includeMatrixMultiInsertColumnRight
+        ...(options.includeEditEquationForSingleNode !== undefined ? { includeEditEquationForSingleNode: options.includeEditEquationForSingleNode } : {}),
+        ...(options.nodePositioningAction !== undefined ? { nodePositioningAction: options.nodePositioningAction } : {}),
+        ...(options.includePathSubmenuForSingleSelection !== undefined ? { includePathSubmenuForSingleSelection: options.includePathSubmenuForSingleSelection } : {}),
+        ...(options.includeFlattenForeach !== undefined ? { includeFlattenForeach: options.includeFlattenForeach } : {}),
+        ...(options.includeMatrixMultiRemoveRow !== undefined ? { includeMatrixMultiRemoveRow: options.includeMatrixMultiRemoveRow } : {}),
+        ...(options.includeMatrixMultiRemoveColumn !== undefined ? { includeMatrixMultiRemoveColumn: options.includeMatrixMultiRemoveColumn } : {}),
+        ...(options.includeMatrixMultiInsertRowAbove !== undefined ? { includeMatrixMultiInsertRowAbove: options.includeMatrixMultiInsertRowAbove } : {}),
+        ...(options.includeMatrixMultiInsertRowBelow !== undefined ? { includeMatrixMultiInsertRowBelow: options.includeMatrixMultiInsertRowBelow } : {}),
+        ...(options.includeMatrixMultiInsertColumnLeft !== undefined ? { includeMatrixMultiInsertColumnLeft: options.includeMatrixMultiInsertColumnLeft } : {}),
+        ...(options.includeMatrixMultiInsertColumnRight !== undefined ? { includeMatrixMultiInsertColumnRight: options.includeMatrixMultiInsertColumnRight } : {})
       });
       void platform.menu?.showNativeContextMenu?.({
         items: definition[target],
@@ -315,7 +315,7 @@ export function useCanvasContextMenuController({
       nativeEffectiveTarget,
       pendingNativeContextMenuRequest.clickedSourceId
     );
-    const includeFlattenForeach = commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH].enabled;
+    const includeFlattenForeach = (commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH]?.enabled ?? false);
     const matrixMultiOptions = resolveMatrixMultiContextMenuOptions(nativeEffectiveTarget, selectedElementIds);
 
     pendingNativeContextMenuTimeoutRef.current = setTimeout(() => {
@@ -433,7 +433,7 @@ export function useCanvasContextMenuController({
       const includeEditEquationForSingleNode = resolveIncludeEditEquationForSingleNode(effectiveTarget, equationSourceId);
       const nodePositioningAction = resolveNodePositioningAction(effectiveTarget, equationSourceId);
       const includePathSubmenuForSingleSelection = resolveIncludePathSubmenuForSingleSelection(effectiveTarget, equationSourceId);
-      const includeFlattenForeach = commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH].enabled;
+      const includeFlattenForeach = (commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH]?.enabled ?? false);
       const matrixMultiOptions = resolveMatrixMultiContextMenuOptions(effectiveTarget, selectedElementIds);
 
       const nextContextMenuState: CanvasContextMenuState = {

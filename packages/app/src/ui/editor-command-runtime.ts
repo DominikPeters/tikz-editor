@@ -1,17 +1,21 @@
-import { useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { launchPresentation, NEW_BEAMER_SOURCE } from "../presentation/launch";
+import { presentationService } from "../presentation/service";
+import { documentKindForSource } from "../store/workspace-state";
+import type { DocumentKind } from "@tikz-editor/core/document/kind";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../app-menu";
 import { getDockLayoutHandle } from "./DockLayout";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import type { EditAnalysisView } from "tikz-editor/edit/analysis";
-import type { EmitSvgResult } from "tikz-editor/svg/index";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
 import type { SessionSnapshot } from "../compute";
-import { getSharedEditAnalysisView } from "../edit-analysis-manager";
+import { buildEditParseOptions } from "../edit-parse-options";
 import { getActiveEditorPlatform } from "../platform/current";
+import { isMacLikePlatform } from "./key-labels";
 import type { AppSettings } from "../settings/types";
 import { useSettingsStore } from "../settings/useSettingsStore";
-import { buildSnapshotEditSourceFingerprint } from "../source-identity";
 import { useEditorStore } from "../store/store";
-import type { DocumentFileRef, EditorAction, SnapModes, ToolMode } from "../store/types";
+import type { DocumentFileRef, EditorAction, EditorState, SnapModes, ToolMode } from "../store/types";
 import { getToolCapabilityStatus } from "./capabilities";
 import { resolveEquationNodeTargetFromSelection, type EquationNodeTarget } from "./equation-utils";
 import {
@@ -79,15 +83,17 @@ export type CommandBinding = {
   run: (origin: CommandOrigin) => void | Promise<void>;
 };
 
-export type CommandBindings = Record<AppMenuCommandId, CommandBinding>;
+export type CommandBindings = Partial<Record<AppMenuCommandId, CommandBinding>>;
 
 type Dispatch = (action: EditorAction) => void;
 
 type RuntimeInput = {
+  documentKind?: DocumentKind;
+  presentation?: { active: boolean; presenterVisible: boolean; blank: "none" | "black" | "white"; focus: "editor" | "audience" | "presenter" };
+  onPresentationOptions?: () => void;
   source: string;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   sourceRevision?: number;
-  editAnalysisView: EditAnalysisView | null;
   snapshot: SessionSnapshot;
   toolMode: ToolMode;
   selectedElementIds: ReadonlySet<string>;
@@ -111,13 +117,16 @@ type RuntimeInput = {
   showObjectsPanel: boolean;
   showStylesPanel: boolean;
   showFiguresPanel: boolean;
+  showBuildsPanel?: boolean;
+  showNotesPanel?: boolean;
   showAssistantPanel: boolean;
-  rightSidebarTab: "inspector" | "objects" | "styles" | "assistant";
+  rightSidebarTab: "inspector" | "objects" | "styles" | "assistant" | "builds";
   assistantAvailable: boolean;
   showDevPanel: boolean;
   indentSize?: 2 | 4;
   updateCanvasSettings: (patch: Partial<AppSettings["canvas"]>) => void;
   dispatch: Dispatch;
+  getState?: () => Pick<EditorState, "documents" | "activeDocumentId">;
   onOpenExample?: () => void;
   onOpenFromArxiv?: () => void;
   onOpenSvgExport?: (svgResult: EmitSvgResult) => void;
@@ -130,6 +139,7 @@ type RuntimeInput = {
   onPositionNodeRelativeTo?: () => void;
   onConvertNodePositionToAbsolute?: () => void;
   onShowCompiledPicture?: () => void;
+  onShowCompiledSlide?: () => void;
   onOpenSettings?: () => void;
   onFocusAssistant?: () => void;
   onOpenInsertEquation?: () => void;
@@ -143,7 +153,7 @@ type RuntimeInput = {
 };
 
 export type EditorCommandRuntime = {
-  bindings: CommandBindings;
+  bindings: Record<AppMenuCommandId, CommandBinding>;
   runCommand: (commandId: AppMenuCommandId, origin: CommandOrigin) => boolean;
 };
 
@@ -154,9 +164,8 @@ const GITHUB_ISSUES_URL = "https://github.com/DominikPeters/tikz-editor/issues";
 export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRuntime {
   const {
     source,
-    activeFigureId,
+    activeRootId,
     sourceRevision,
-    editAnalysisView,
     snapshot,
     toolMode,
     selectedElementIds,
@@ -180,6 +189,8 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     showObjectsPanel,
     showStylesPanel,
     showFiguresPanel,
+    showBuildsPanel = false,
+    showNotesPanel = false,
     showAssistantPanel,
     rightSidebarTab,
     assistantAvailable,
@@ -199,6 +210,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     onPositionNodeRelativeTo,
     onConvertNodePositionToAbsolute,
     onShowCompiledPicture,
+    onShowCompiledSlide,
     onOpenSettings,
     onFocusAssistant,
     onOpenInsertEquation,
@@ -210,29 +222,32 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     onShowAbout,
     updateCheckBusy
   } = input;
-  const parseOptions = {
-    activeFigureId,
-    analysisView: editAnalysisView,
-    indentSize: indentSize ?? 2,
-    sourceFingerprint: buildSnapshotEditSourceFingerprint({
-      documentId: activeDocumentId,
-      sourceRevision,
-      sourceLength: source.length,
-      sourceRefs: snapshot.editHandles.map((handle) => handle.sourceRef)
-    })
-  };
-
-  const commandContext = {
+  const parseOptions = buildEditParseOptions({
+    documentId: activeDocumentId,
+    ...(sourceRevision === undefined ? {} : { sourceRevision }),
     source,
-    activeFigureId,
+    activeRootId,
+    snapshot,
+    analysis: "shared",
+    overrides: {
+      indentSize: indentSize ?? 2
+    }
+  });
+
+  const commandContext: Parameters<typeof deleteSelection>[0] = {
+    source,
+    documentId: activeDocumentId,
+    ...(input.sourceRevision === undefined ? {} : { sourceRevision: input.sourceRevision }),
+    activeRootId,
     parseOptions,
-    figureCount: snapshot.figures?.length ?? 0,
+    figureCount: snapshot.figures.length,
     snapshotSource: snapshot.source,
     scene: snapshot.scene,
     editHandles: snapshot.editHandles,
     selectedElementIds,
     activeHandleId,
-    dispatch
+    dispatch,
+    getState: input.getState ?? useEditorStore.getState
   };
 
   const availability = actionAvailability(commandContext);
@@ -256,8 +271,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     typeof getActiveEditorPlatform().updates?.relaunch === "function";
   const isMacDesktop =
     getActiveEditorPlatform().id.startsWith("desktop") &&
-    typeof navigator !== "undefined" &&
-    /(mac|iphone|ipad)/i.test(navigator.platform);
+    isMacLikePlatform();
 
   const insertBinding = (mode: ToolMode): CommandBinding => {
     const capability = getToolCapabilityStatus(mode);
@@ -276,17 +290,15 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
   };
 
   const runSvgCopy = () => {
-    if (!snapshot.svg) {
-      return;
-    }
-    void import("./export-commands").then((mod) => mod.copySvgMarkup(snapshot.svg!));
+    const svg = snapshot.svg;
+    if (!svg) return;
+    void import("./export-commands").then((mod) => mod.copySvgMarkup(svg));
   };
 
   const runPdfDownload = () => {
-    if (!snapshot.svg) {
-      return;
-    }
-    void import("./export-commands").then((mod) => mod.exportPdfDownload(snapshot.svg!, { fileName: "tikz-export.pdf" }));
+    const svg = snapshot.svg;
+    if (!svg) return;
+    void import("./export-commands").then((mod) => mod.exportPdfDownload(svg, { fileName: "tikz-export.pdf" }));
   };
 
   const runPngExport = () => {
@@ -300,7 +312,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     if (!snapshot.semanticResult) {
       return;
     }
-    void import("./export-commands").then((mod) => mod.exportStandaloneLatexDownload(source, activeFigureId, {
+    void import("./export-commands").then((mod) => mod.exportStandaloneLatexDownload(source, activeRootId, {
       fileName: "tikz-export.tex"
     }));
   };
@@ -315,8 +327,8 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
         return;
       }
       const resolved = await resolveOpenedFileForDocument(opened, {
-        requireSvg: options.requireSvg,
-        requireIpe: options.requireIpe
+        ...(options.requireSvg === undefined ? {} : { requireSvg: options.requireSvg }),
+        ...(options.requireIpe === undefined ? {} : { requireIpe: options.requireIpe })
       });
       if (resolved.kind === "failure") {
         const alertFn = (globalThis as { alert?: (message?: string) => void }).alert;
@@ -391,7 +403,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
       stylesVisible: boolean;
       figuresVisible: boolean;
       assistantVisible: boolean;
-      activeRightTab: "inspector" | "objects" | "styles" | "assistant";
+      activeRightTab: "inspector" | "objects" | "styles" | "assistant" | "builds";
     }>
   ) => {
     dispatch({
@@ -406,10 +418,30 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     });
   };
 
-  const bindings: CommandBindings = {
+  const bindings: Record<AppMenuCommandId, CommandBinding> = {
+    [APP_MENU_COMMAND_IDS.PRESENT_CURRENT]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current"); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_BEGINNING]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("beginning"); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_WINDOW]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current", "window"); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_REHEARSE]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current", "rehearse"); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_OPTIONS]: { enabled: !!input.onPresentationOptions && ((input.documentKind ?? documentKindForSource(source)) === "beamer" || !!input.presentation?.active), run: () => { input.onPresentationOptions?.(); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_SHOW_PRESENTER]: { enabled: !!input.presentation?.active, run: () => { presentationService.command({ type: "show-presenter" }); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_RESTORE_OUTPUT]: { enabled: !!input.presentation?.active, run: () => { presentationService.command({ type: "recover-output" }); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_SWAP_DISPLAYS]: { enabled: !!input.presentation?.active && !!input.presentation.presenterVisible && getActiveEditorPlatform().id.startsWith("desktop"), run: () => { presentationService.command({ type: "swap-displays" }); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_BLACK]: { enabled: !!input.presentation?.active, checked: input.presentation?.blank === "black", run: () => { presentationService.command({ type: "blank", value: input.presentation?.blank === "black" ? "none" : "black" }); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_WHITE]: { enabled: !!input.presentation?.active, checked: input.presentation?.blank === "white", run: () => { presentationService.command({ type: "blank", value: input.presentation?.blank === "white" ? "none" : "white" }); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_END]: { enabled: !!input.presentation?.active, run: () => { presentationService.command({ type: "stop" }); } },
+    [APP_MENU_COMMAND_IDS.NEW_BEAMER_DOCUMENT]: { enabled: true, run: () => { dispatch({ type: "NEW_DOCUMENT", source: NEW_BEAMER_SOURCE }); } },
+    [APP_MENU_COMMAND_IDS.NEW_TIKZ_DOCUMENT]: { enabled: true, run: () => { dispatch({ type: "NEW_DOCUMENT" }); } },
+    // Canvas overlay commands bind to the source object captured when its menu opens.
+    [APP_MENU_COMMAND_IDS.OVERLAY_NEXT]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_FROM]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_ONLY]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_THROUGH]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_EDIT]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_REMOVE]: { enabled: false, run: () => {} },
     [APP_MENU_COMMAND_IDS.NEW_DOCUMENT]: {
       enabled: true,
-      run: () => { dispatch({ type: "NEW_DOCUMENT" }); }
+      run: () => { dispatch((input.documentKind ?? documentKindForSource(source)) === "beamer" ? { type: "NEW_DOCUMENT", source: NEW_BEAMER_SOURCE } : { type: "NEW_DOCUMENT" }); }
     },
     [APP_MENU_COMMAND_IDS.OPEN_DOCUMENT]: {
       enabled: canOpen,
@@ -459,6 +491,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
           dispatch({
             type: "MARK_DOCUMENT_SAVED",
             documentId: activeDocumentId,
+            savedSource: source,
             fileRef: result.fileRef
           });
         });
@@ -486,6 +519,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
           dispatch({
             type: "MARK_DOCUMENT_SAVED",
             documentId: activeDocumentId,
+            savedSource: source,
             fileRef: result.fileRef
           });
         });
@@ -528,6 +562,10 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     [APP_MENU_COMMAND_IDS.SHOW_COMPILED_PICTURE]: {
       enabled: onShowCompiledPicture != null,
       run: () => onShowCompiledPicture?.()
+    },
+    [APP_MENU_COMMAND_IDS.SHOW_COMPILED_SLIDE]: {
+      enabled: onShowCompiledSlide != null && (input.documentKind ?? documentKindForSource(source)) === "beamer",
+      run: () => onShowCompiledSlide?.()
     },
     [APP_MENU_COMMAND_IDS.EXPORT_SVG_DOWNLOAD]: {
       enabled: canExport && onOpenSvgExport != null,
@@ -999,6 +1037,16 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
         });
       }
     },
+    [APP_MENU_COMMAND_IDS.TOGGLE_BUILDS_PANEL]: {
+      enabled: documentKindForSource(source) === "beamer" && parseDocumentRootId(activeRootId ?? "")?.kind !== "beamer-frame-tikz",
+      checked: showBuildsPanel,
+      run: () => { getDockLayoutHandle()?.togglePanel("builds"); }
+    },
+    [APP_MENU_COMMAND_IDS.TOGGLE_NOTES_PANEL]: {
+      enabled: documentKindForSource(source) === "beamer",
+      checked: showNotesPanel,
+      run: () => { getDockLayoutHandle()?.togglePanel("notes"); }
+    },
     [APP_MENU_COMMAND_IDS.TOGGLE_FIGURES_PANEL]: {
       enabled: true,
       checked: showFiguresPanel,
@@ -1072,11 +1120,18 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     }
   };
 
+  if (getActiveEditorPlatform().menu?.usesNativeMenuBar && input.presentation?.focus && input.presentation.focus !== "editor") {
+    for (const [id, binding] of Object.entries(bindings)) {
+      if (!id.startsWith("present.") && !id.startsWith("help.") && id !== APP_MENU_COMMAND_IDS.QUIT_APP && id !== APP_MENU_COMMAND_IDS.OPEN_SETTINGS) binding.enabled = false;
+    }
+    const role = input.presentation.focus;
+    bindings[APP_MENU_COMMAND_IDS.CLOSE_DOCUMENT] = { enabled: input.presentation.active, run: () => { presentationService.command({ type: "close-view", role }); } };
+  }
   return {
     bindings,
     runCommand: (commandId, origin) => {
       const binding = bindings[commandId];
-      if (!binding?.enabled) {
+      if (!binding.enabled) {
         return false;
       }
       void binding.run(origin);
@@ -1087,6 +1142,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
 
 export function useEditorCommandRuntime(
   options: {
+    onPresentationOptions?: () => void;
     onOpenExample?: () => void;
     onOpenFromArxiv?: () => void;
     onOpenSvgExport?: (svgResult: EmitSvgResult) => void;
@@ -1099,6 +1155,7 @@ export function useEditorCommandRuntime(
     onPositionNodeRelativeTo?: () => void;
     onConvertNodePositionToAbsolute?: () => void;
     onShowCompiledPicture?: () => void;
+    onShowCompiledSlide?: () => void;
     onOpenSettings?: () => void;
     onFocusAssistant?: () => void;
     onOpenInsertEquation?: () => void;
@@ -1112,8 +1169,10 @@ export function useEditorCommandRuntime(
     activeHandleIdOverride?: string | null;
   } = {}
 ): EditorCommandRuntime {
+  const presentation = useSyncExternalStore(presentationService.subscribe, presentationService.getState);
   const source = useEditorStore((s) => s.source);
-  const activeFigureId = useEditorStore((s) => s.activeFigureId);
+  const documentKind = useEditorStore(s => s.documentKind);
+  const activeRootId = useEditorStore((s) => s.activeRootId);
   const sourceRevision = useEditorStore((s) => s.sourceRevision);
   const snapshot = useEditorStore((s) => s.snapshot);
   const toolMode = useEditorStore((s) => s.toolMode);
@@ -1138,6 +1197,8 @@ export function useEditorCommandRuntime(
   const showInspectorPanel = useEditorStore((s) => s.showInspectorPanel);
   const showObjectsPanel = useEditorStore((s) => s.showObjectsPanel);
   const showStylesPanel = useEditorStore((s) => s.showStylesPanel);
+  const showBuildsPanel = useEditorStore((s) => s.showBuildsPanel);
+  const showNotesPanel = useEditorStore((s) => s.showNotesPanel);
   const showFiguresPanel = useEditorStore((s) => s.showFiguresPanel);
   const showAssistantPanel = useEditorStore((s) => s.showAssistantPanel);
   const rightSidebarTab = useEditorStore((s) => s.rightSidebarTab);
@@ -1152,47 +1213,33 @@ export function useEditorCommandRuntime(
   const liveCommandInputs = useMemo(
     () => ({
       source,
-      activeFigureId,
+      activeRootId,
       sourceRevision,
       snapshot,
       selectedElementIds,
       activeHandleId: effectiveActiveHandleId
     }),
-    [activeFigureId, effectiveActiveHandleId, selectedElementIds, snapshot, source, sourceRevision]
+    [activeRootId, effectiveActiveHandleId, selectedElementIds, snapshot, source, sourceRevision]
   );
   const frozenCommandInputsRef = useRef(liveCommandInputs);
   const snapshotMatchesSource = snapshot.source === source;
-  if (!activeCanvasDragKind && snapshotMatchesSource) {
-    frozenCommandInputsRef.current = liveCommandInputs;
-  }
   const effectiveCommandInputs = activeCanvasDragKind || !snapshotMatchesSource
     ? frozenCommandInputsRef.current
     : liveCommandInputs;
-  const editAnalysisView = useMemo(
-    () =>
-      getSharedEditAnalysisView({
-        documentId: activeDocumentId,
-        sourceRevision: effectiveCommandInputs.sourceRevision,
-        source: effectiveCommandInputs.source,
-        activeFigureId: effectiveCommandInputs.activeFigureId,
-        snapshot: effectiveCommandInputs.snapshot
-      }),
-    [
-      activeDocumentId,
-      effectiveCommandInputs.activeFigureId,
-      effectiveCommandInputs.snapshot,
-      effectiveCommandInputs.source,
-      effectiveCommandInputs.sourceRevision
-    ]
-  );
-
+  useLayoutEffect(() => {
+    if (!activeCanvasDragKind && snapshotMatchesSource) {
+      frozenCommandInputsRef.current = liveCommandInputs;
+    }
+  }, [activeCanvasDragKind, liveCommandInputs, snapshotMatchesSource]);
   return useMemo(
     () =>
       createEditorCommandRuntime({
+        documentKind,
+        presentation: { active: !!presentation.snapshot, presenterVisible: presentation.snapshot?.presenterVisible ?? false, blank: presentation.snapshot?.blank ?? "none", focus: presentation.focus },
+        ...(options.onPresentationOptions === undefined ? {} : { onPresentationOptions: options.onPresentationOptions }),
         source: effectiveCommandInputs.source,
-        activeFigureId: effectiveCommandInputs.activeFigureId,
+        activeRootId: effectiveCommandInputs.activeRootId,
         sourceRevision: effectiveCommandInputs.sourceRevision,
-        editAnalysisView,
         snapshot: effectiveCommandInputs.snapshot,
         toolMode,
         selectedElementIds: effectiveCommandInputs.selectedElementIds,
@@ -1216,6 +1263,8 @@ export function useEditorCommandRuntime(
         showObjectsPanel,
         showStylesPanel,
         showFiguresPanel,
+        showBuildsPanel,
+        showNotesPanel,
         showAssistantPanel,
         rightSidebarTab,
         assistantAvailable,
@@ -1223,31 +1272,34 @@ export function useEditorCommandRuntime(
         indentSize,
         updateCanvasSettings,
         dispatch,
-        onOpenExample: options.onOpenExample,
-        onOpenFromArxiv: options.onOpenFromArxiv,
-        onOpenSvgExport: options.onOpenSvgExport,
-        onOpenPngExport: options.onOpenPngExport,
-        onRequestCloseDocument: options.onRequestCloseDocument,
-        onRequestCloseAllDocuments: options.onRequestCloseAllDocuments,
-        onRequestQuitApp: options.onRequestQuitApp,
-        onRequestSaveDocument: options.onRequestSaveDocument,
-        onAddNodeAdornment: options.onAddNodeAdornment,
-        onPositionNodeRelativeTo: options.onPositionNodeRelativeTo,
-        onConvertNodePositionToAbsolute: options.onConvertNodePositionToAbsolute,
-        onShowCompiledPicture: options.onShowCompiledPicture,
-        onOpenSettings: options.onOpenSettings,
-        onCheckForUpdates: options.onCheckForUpdates,
-        onShowAbout: options.onShowAbout,
-        updateCheckBusy: options.updateCheckBusy,
-        onFocusAssistant: options.onFocusAssistant,
-        onOpenInsertEquation: options.onOpenInsertEquation,
-        onOpenEditEquation: options.onOpenEditEquation,
-        onOpenRepeat: options.onOpenRepeat,
-        onOpenSaveWorkspace: options.onOpenSaveWorkspace,
-        onOpenManageWorkspaces: options.onOpenManageWorkspaces
+        ...(options.onOpenExample === undefined ? {} : { onOpenExample: options.onOpenExample }),
+        ...(options.onOpenFromArxiv === undefined ? {} : { onOpenFromArxiv: options.onOpenFromArxiv }),
+        ...(options.onOpenSvgExport === undefined ? {} : { onOpenSvgExport: options.onOpenSvgExport }),
+        ...(options.onOpenPngExport === undefined ? {} : { onOpenPngExport: options.onOpenPngExport }),
+        ...(options.onRequestCloseDocument === undefined ? {} : { onRequestCloseDocument: options.onRequestCloseDocument }),
+        ...(options.onRequestCloseAllDocuments === undefined ? {} : { onRequestCloseAllDocuments: options.onRequestCloseAllDocuments }),
+        ...(options.onRequestQuitApp === undefined ? {} : { onRequestQuitApp: options.onRequestQuitApp }),
+        ...(options.onRequestSaveDocument === undefined ? {} : { onRequestSaveDocument: options.onRequestSaveDocument }),
+        ...(options.onAddNodeAdornment === undefined ? {} : { onAddNodeAdornment: options.onAddNodeAdornment }),
+        ...(options.onPositionNodeRelativeTo === undefined ? {} : { onPositionNodeRelativeTo: options.onPositionNodeRelativeTo }),
+        ...(options.onConvertNodePositionToAbsolute === undefined ? {} : { onConvertNodePositionToAbsolute: options.onConvertNodePositionToAbsolute }),
+        ...(options.onShowCompiledPicture === undefined ? {} : { onShowCompiledPicture: options.onShowCompiledPicture }),
+        ...(options.onShowCompiledSlide === undefined ? {} : { onShowCompiledSlide: options.onShowCompiledSlide }),
+        ...(options.onOpenSettings === undefined ? {} : { onOpenSettings: options.onOpenSettings }),
+        ...(options.onCheckForUpdates === undefined ? {} : { onCheckForUpdates: options.onCheckForUpdates }),
+        ...(options.onShowAbout === undefined ? {} : { onShowAbout: options.onShowAbout }),
+        ...(options.updateCheckBusy === undefined ? {} : { updateCheckBusy: options.updateCheckBusy }),
+        ...(options.onFocusAssistant === undefined ? {} : { onFocusAssistant: options.onFocusAssistant }),
+        ...(options.onOpenInsertEquation === undefined ? {} : { onOpenInsertEquation: options.onOpenInsertEquation }),
+        ...(options.onOpenEditEquation === undefined ? {} : { onOpenEditEquation: options.onOpenEditEquation }),
+        ...(options.onOpenRepeat === undefined ? {} : { onOpenRepeat: options.onOpenRepeat }),
+        ...(options.onOpenSaveWorkspace === undefined ? {} : { onOpenSaveWorkspace: options.onOpenSaveWorkspace }),
+        ...(options.onOpenManageWorkspaces === undefined ? {} : { onOpenManageWorkspaces: options.onOpenManageWorkspaces })
       }),
     [
-      editAnalysisView,
+      documentKind,
+      presentation,
+      options.onPresentationOptions,
       effectiveCommandInputs,
       toolMode,
       historyIndex,
@@ -1269,6 +1321,8 @@ export function useEditorCommandRuntime(
       showObjectsPanel,
       showStylesPanel,
       showFiguresPanel,
+      showBuildsPanel,
+      showNotesPanel,
       showAssistantPanel,
       rightSidebarTab,
       assistantAvailable,
@@ -1288,6 +1342,7 @@ export function useEditorCommandRuntime(
       options.onPositionNodeRelativeTo,
       options.onConvertNodePositionToAbsolute,
       options.onShowCompiledPicture,
+      options.onShowCompiledSlide,
       options.onOpenSettings,
       options.onCheckForUpdates,
       options.onShowAbout,

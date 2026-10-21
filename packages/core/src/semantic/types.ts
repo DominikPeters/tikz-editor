@@ -1,4 +1,7 @@
+import type { AxisBasis } from "./coords/axis-basis.js";
+import { isObjectRecord } from "../utils/records.js";
 import type { AdornmentOwnerGeometry, CoordinateForm, Span } from "../ast/types.js";
+import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type { OptionListAst } from "../options/types.js";
 import type { NodeTextEngine, NodeTextRenderInfo } from "../text/types.js";
 import type { MacroOriginFrame } from "../macros/index.js";
@@ -89,6 +92,8 @@ export type SceneFigure = {
   elements: SceneElement[];
   bounds?: WorldBounds;
   hasStatefulGraphicsState?: boolean;
+  /** What the picture's own options do to its coordinates (`shift`, `scale`, …): its statements' world. Absent when nothing. */
+  rootTransform?: WorldTransform;
 };
 
 export type SceneLayer = {
@@ -142,9 +147,17 @@ export type ScenePathAttachment = {
 
 export type SceneElement = ScenePath | SceneCircle | SceneEllipse | SceneText;
 
+/**
+ * Where a scene element comes from. It names no source revision: a reused
+ * element whose source did not move stays as it is.
+ */
 export type SourceRef = {
   sourceId: string;
   sourceSpan: Span;
+};
+
+/** An edit handle's source, with the source revision an edit through it must find. */
+export type EditHandleSourceRef = SourceRef & {
   sourceFingerprint: string;
 };
 
@@ -211,6 +224,10 @@ export type ScenePath = {
   origin?: SceneElementOrigin;
   shapeHint?: ScenePathShapeHint | null;
   undecoratedCommands?: ScenePathCommand[];
+  /** A closed subpath in the authored path suppresses arrows on every emitted piece. */
+  arrowTipsSuppressed?: boolean;
+  /** Mirrors the semantic frame's permission to enlarge automatic picture bounds. */
+  pictureSizeRelevant?: boolean;
   style: ResolvedStyle;
   styleChain: StyleChainEntry[];
   clipChain?: SceneClipPath[];
@@ -283,6 +300,8 @@ export type SceneText = {
   textBlockHeight?: number;
   nodeVisualWidth?: number;
   nodeVisualHeight?: number;
+  /** Center of the node shape whose box contributes to the PGF picture bounds. */
+  nodeVisualCenter?: WorldPoint;
   textRenderInfo?: NodeTextRenderInfo;
   rotation?: number;
   transform?: WorldTransform;
@@ -436,6 +455,8 @@ export type ResolvedStyle = {
   fillRule: "nonzero" | "evenodd";
   clip: boolean;
   useAsBoundingBox: boolean;
+  /** `overlay`: what is drawn does not count towards the picture's size. */
+  overlay: boolean;
   textColor: string | null;
   textOpacity: number;
   fontSize: number;
@@ -450,6 +471,9 @@ export type ResolvedStyle = {
   // Whether draw mode was explicitly enabled via options (for example `draw`).
   drawExplicit: boolean;
   radius: number | null;
+  radiusUsesBasis?: boolean;
+  xRadiusUsesBasis?: boolean;
+  yRadiusUsesBasis?: boolean;
   xRadius: number | null;
   yRadius: number | null;
   roundedCorners: number | null;
@@ -501,6 +525,18 @@ export type EvaluateOptions = {
   maxForeachExpansions?: number;
   sourceFingerprint?: string;
   textEngine?: NodeTextEngine | null;
+  graphicsResolver?: DocumentGraphicsResolver;
+  /**
+   * The page, in this picture's coordinates (pt), for a picture whose place
+   * on a page is known: PGF's `current page` node.
+   */
+  currentPage?: { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number };
+  /** The font the picture's surroundings set (a `font=` value), before its own options. */
+  initialFont?: string;
+  /** Options the picture's environment implies, applied before its own (a `tikzlayer`'s). */
+  pictureOptions?: string;
+  /** Placement of the picture's origin in an enclosing scene. */
+  initialTransform?: WorldTransform;
 };
 
 export type { CoordinateForm };
@@ -536,9 +572,11 @@ export type EditHandlePathAttachmentContext = {
 };
 
 type EditHandleBase = {
+  /** Document-session identity, assigned by the editor after reconciliation. */
+  editingId?: string;
   id: string;
   runtimeId: string;
-  sourceRef: SourceRef;
+  sourceRef: EditHandleSourceRef;
   identityRef?: IdentitySourceRef;
   world: WorldPoint;
   transform: WorldTransform;
@@ -563,7 +601,11 @@ export type EditHandlePositioningContext = {
   currentAnchorHH: number;
 };
 
+export type CoordinateSourceUnits = { x?: string; y?: string; radius?: string };
+
 type CoordinateEditHandleBase = EditHandleBase & {
+  axisBasis?: AxisBasis;
+  sourceUnits?: CoordinateSourceUnits;
   handleType: "coordinate";
   kind: "node-position" | "path-point" | "path-control";
   insertion?: EditHandleInsertion;
@@ -591,15 +633,28 @@ export type RelativeCoordinateEditHandle = CoordinateEditHandleBase & {
 export type WorldCoordinateEditHandle = CoordinateEditHandleBase & {
   coordinateSpace: "world-only";
   rewriteMode: "unsupported";
+  /** Frame for a numeric replacement; the named reference itself remains world-valued. */
+  detachFrame?: FrameTransform;
   local?: never;
   frame?: never;
+  relativeBase?: never;
+};
+
+/** Calc results are world points; their additive offsets use the active frame. */
+export type CalcCoordinateEditHandle = CoordinateEditHandleBase & {
+  coordinateForm: "calc";
+  coordinateSpace: "world-only";
+  rewriteMode: "calc";
+  frame: FrameTransform;
+  local?: never;
   relativeBase?: never;
 };
 
 export type CoordinateEditHandle =
   | FrameLocalCoordinateEditHandle
   | RelativeCoordinateEditHandle
-  | WorldCoordinateEditHandle;
+  | WorldCoordinateEditHandle
+  | CalcCoordinateEditHandle;
 
 export type CurveControlEditHandle = EditHandleBase & {
   handleType: "curve-control";
@@ -657,5 +712,7 @@ export function isFrameLocalCoordinateEditHandle(
 }
 
 export function isRelativeCoordinateEditHandle(handle: EditHandle): handle is RelativeCoordinateEditHandle {
-  return handle.handleType === "coordinate" && handle.rewriteMode === "delta";
+  if (handle.handleType !== "coordinate" || handle.rewriteMode !== "delta") return false;
+  const base: unknown = handle.relativeBase;
+  return isObjectRecord(base) && typeof base.x === "number" && typeof base.y === "number";
 }

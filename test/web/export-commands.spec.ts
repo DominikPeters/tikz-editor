@@ -15,11 +15,17 @@ import {
   canExportSvg,
   copySvgMarkup,
   copySvgText,
+  downloadSvgMarkup,
   exportPdfDownload,
+  exportStandaloneLatexDownload,
   exportSvgDownload,
   validateSvgMarkup
 } from "../../packages/app/src/ui/export-commands.js";
 import { getActiveEditorPlatform, setActiveEditorPlatform } from "../../packages/app/src/platform/current.js";
+import {
+  dismissUiNotification,
+  getUiNotificationSnapshot
+} from "../../packages/app/src/ui/ui-notifications.js";
 
 const SOURCE = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);
@@ -33,6 +39,7 @@ describe("export commands", () => {
   });
 
   afterEach(() => {
+    dismissUiNotification();
     setActiveEditorPlatform(previousPlatform);
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -87,6 +94,26 @@ describe("export commands", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:tikz-export");
   });
 
+  it.each(["create", "click", "remove"] as const)("releases browser download resources when %s fails", async (phase) => {
+    setActiveEditorPlatform({ ...previousPlatform, files: undefined });
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const failure = () => { throw new Error("download failed"); };
+    const anchor = { href: "", download: "", style: { display: "" },
+      click: vi.fn(phase === "click" ? failure : () => undefined),
+      remove: vi.fn(phase === "remove" ? failure : () => undefined) };
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL: () => "blob:failed-export", revokeObjectURL });
+    vi.stubGlobal("document", {
+      body: { appendChild: vi.fn() },
+      createElement: phase === "create" ? failure : () => anchor
+    });
+
+    await expect(downloadSvgMarkup('<svg xmlns="http://www.w3.org/2000/svg"/>')).resolves.toBe(false);
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith("blob:failed-export");
+    expect(anchor.remove).toHaveBeenCalledTimes(phase === "create" ? 0 : 1);
+    expect(getUiNotificationSnapshot()).toMatchObject({ kind: "error", message: "Failed to export SVG." });
+  });
+
   it("routes pdf export through the platform file api before browser download", async () => {
     const rendered = renderTikzToSvg(SOURCE);
     const exportFile = vi.fn(async (..._args: [BlobPart[], { fileName: string; mimeType: string }]) => true);
@@ -108,7 +135,12 @@ describe("export commands", () => {
         return {
           documentElement: {
             nodeName: "svg",
-            setAttribute: vi.fn()
+            localName: "svg",
+            namespaceURI: "http://www.w3.org/2000/svg",
+            setAttribute: vi.fn(),
+            querySelector: () => null,
+            querySelectorAll: () => [],
+            matches: () => false
           }
         };
       }
@@ -161,6 +193,51 @@ describe("export commands", () => {
 
     await expect(copySvgMarkup(rendered.svg)).resolves.toBe(false);
     expect(warn).toHaveBeenCalledTimes(1);
+    expect(getUiNotificationSnapshot()).toMatchObject({
+      kind: "error",
+      message: "Clipboard access is unavailable; SVG was not copied."
+    });
+  });
+
+  it("reports standalone latex export failures from the platform file api", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const exportFile = vi.fn(async () => {
+      throw new Error("disk full");
+    });
+    setActiveEditorPlatform({
+      ...previousPlatform,
+      files: {
+        ...previousPlatform.files,
+        exportFile
+      }
+    });
+
+    await expect(exportStandaloneLatexDownload(SOURCE, null, { fileName: "figure.tex" })).resolves.toBe(false);
+    expect(warn).toHaveBeenCalled();
+    expect(getUiNotificationSnapshot()).toMatchObject({
+      kind: "error",
+      message: "Failed to export standalone LaTeX file."
+    });
+  });
+
+  it("reports svg download failures from the platform file api", async () => {
+    const exportFile = vi.fn(async () => {
+      throw new Error("disk full");
+    });
+    setActiveEditorPlatform({
+      ...previousPlatform,
+      files: {
+        ...previousPlatform.files,
+        exportFile
+      }
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(downloadSvgMarkup("<svg xmlns=\"http://www.w3.org/2000/svg\" />")).resolves.toBe(false);
+    expect(getUiNotificationSnapshot()).toMatchObject({
+      kind: "error",
+      message: "Failed to export SVG."
+    });
   });
 
   it("validates edited svg markup", () => {

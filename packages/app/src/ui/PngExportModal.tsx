@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { EmitSvgResult } from "tikz-editor/svg/index";
+import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
 import {
   exportPngDownload,
   normalizePngExportDpi,
@@ -104,7 +104,7 @@ export function PngExportModal({ svgResult, onClose }: PngExportModalProps) {
           dpi: result.dpi
         });
       },
-      (error) => {
+      (error: unknown) => {
         if (!active) {
           return;
         }
@@ -182,7 +182,7 @@ export function PngExportModal({ svgResult, onClose }: PngExportModalProps) {
       size="lg"
       labelledBy="png-export-title"
       dataTestId="png-export-modal"
-      className={css.dialog}
+      className={css.dialog ?? ""}
     >
       <Modal.Header
         title="Export PNG"

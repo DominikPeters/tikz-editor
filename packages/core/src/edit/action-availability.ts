@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { WorldBounds } from "../coords/points.js";
 import type { EditHandle, SceneFigure } from "../semantic/types.js";
 import { collectSourceWorldBounds } from "./snapping/index.js";
@@ -184,7 +185,7 @@ export function getEditActionAvailability(
   const facts = deriveFacts(input);
   const requested = actionIds ? new Set(actionIds) : null;
 
-  const availability = {} as EditActionAvailability;
+  const availability: Partial<EditActionAvailability> = {};
   for (const actionId of EDIT_ACTION_IDS) {
     if (requested && !requested.has(actionId)) {
       // Keep the interface unified by returning all actions even when the caller
@@ -195,7 +196,12 @@ export function getEditActionAvailability(
     availability[actionId] = evaluateRule(actionId, facts);
   }
 
+  if (!hasAllActionAvailability(availability)) throw new Error("Incomplete edit action availability");
   return availability;
+}
+
+function hasAllActionAvailability(value: Partial<EditActionAvailability>): value is EditActionAvailability {
+  return EDIT_ACTION_IDS.every(actionId => value[actionId] !== undefined);
 }
 
 function evaluateRule(actionId: EditActionId, facts: AvailabilityFacts): ActionAvailability {
@@ -377,8 +383,8 @@ function makePathRule(
       if (facts.selectedSourceIds.length !== 2) {
         return "Select exactly two open paths to join.";
       }
-      const first = resolveExplicitPathEligibility(facts, facts.selectedSourceIds[0]);
-      const second = resolveExplicitPathEligibility(facts, facts.selectedSourceIds[1]);
+      const first = resolveExplicitPathEligibility(facts, requireArrayValue(facts.selectedSourceIds, 0));
+      const second = resolveExplicitPathEligibility(facts, requireArrayValue(facts.selectedSourceIds, 1));
       if (first.kind !== "eligible") return first.reason;
       if (second.kind !== "eligible") return second.reason;
       if (first.analysis.closed || second.analysis.closed) {
@@ -390,7 +396,7 @@ function makePathRule(
     if (facts.selectedSourceIds.length !== 1) {
       return "Select a single editable path.";
     }
-    const selectedId = facts.selectedSourceIds[0];
+    const selectedId = requireArrayValue(facts.selectedSourceIds, 0);
     const eligible = resolveExplicitPathEligibility(facts, selectedId);
     if (eligible.kind !== "eligible") {
       return eligible.reason;
@@ -460,14 +466,14 @@ function collectAnchorSegmentKinds(analysis: ExplicitPathAnalysis, anchorIndex: 
     if (segment.startAnchorIndex === anchorIndex) {
       if (segment.kind === "line") {
         summary.hasNextLine = true;
-      } else if (segment.kind === "cubic") {
+      } else {
         summary.hasNextCubic = true;
       }
     }
     if (segment.endAnchorIndex === anchorIndex) {
       if (segment.kind === "line") {
         summary.hasPreviousLine = true;
-      } else if (segment.kind === "cubic") {
+      } else {
         summary.hasPreviousCubic = true;
       }
     }
@@ -531,7 +537,7 @@ function makeRepeatRule(): AvailabilityRule {
       return "Wait for recompute to finish before repeating the selection.";
     }
     if (facts.selectedSourceIds.length === 1) {
-      const selectedId = facts.selectedSourceIds[0];
+      const selectedId = requireArrayValue(facts.selectedSourceIds, 0);
       if (!selectedId.startsWith("foreach:")) {
         return null;
       }
@@ -554,7 +560,7 @@ function makeUngroupRule(): AvailabilityRule {
       return "Select exactly one scope to ungroup.";
     }
 
-    const selectedId = facts.selectedSourceIds[0];
+    const selectedId = requireArrayValue(facts.selectedSourceIds, 0);
     const parsedTarget = parseEditableTargetId(selectedId);
     if (parsedTarget.kind !== "statement" || !parsedTarget.id.startsWith("scope:")) {
       return "Ungroup currently supports scope selections only.";

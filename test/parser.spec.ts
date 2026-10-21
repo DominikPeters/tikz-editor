@@ -35,6 +35,40 @@ function collectAstNodeTexts(value: unknown, texts: string[] = []): string[] {
 }
 
 describe("parseTikz", () => {
+  it.each([
+    String.raw`\newcommand{\plain}[1]{#1}
+\newcommand{\withdefault}[1][]{#1}
+\begin{tikzpicture}
+  \node {plain};
+  \node[name=n,alias=a] at +(0,0) {};
+  \draw (0,0) to (1,1);
+  \draw plot coordinates {(0,0) (1,1)};
+  \graph {a -> b};
+  \pic {code={}};
+  \foreach \x in {1,2} {\node {\x};}
+\end{tikzpicture}`,
+    String.raw`\begin{tikzpicture}\draw (0,0) to; \node {unfinished`,
+    String.raw`\tikz \node {};`
+  ])("omits absent optional fields from parsed ASTs (case %#)", (source) => {
+    const result = parseTikz(source, { includeContextDefinitions: true });
+    JSON.stringify(result.figure, (key, value: unknown) => {
+      expect(value, `AST field ${key}`).not.toBeUndefined();
+      return value;
+    });
+  });
+
+  it("distinguishes absent macro defaults from authored empty defaults", () => {
+    const result = parseTikz(String.raw`\begin{tikzpicture}
+      \newcommand{\plain}[1]{#1}
+      \newcommand{\withdefault}[1][]{#1}
+    \end{tikzpicture}`);
+    const definitions = result.figure.body.filter((statement) => statement.kind === "MacroCommandDefinition");
+
+    expect(definitions).toHaveLength(2);
+    expect(definitions[0]).not.toHaveProperty("optionalDefaultRaw");
+    expect(definitions[1]).toHaveProperty("optionalDefaultRaw", "");
+  });
+
   it("parses minimal tikzpicture into a non-empty IR", () => {
     const source = loadFixture("minimal.tex");
     const result = parseTikz(source);
@@ -116,7 +150,7 @@ describe("parseTikz", () => {
 
   it("keeps a recovered node text span from swallowing the path semicolon", () => {
     const source = String.raw`\begin{tikzpicture}
-  \node at (0,0) {I'm testing the Mathjax \\ rendering \textit{d;
+  \node at (0,0) {I'm testing the TeX \\ rendering \textit{d;
 \end{tikzpicture}`;
     const result = parseTikz(source);
 
@@ -129,14 +163,14 @@ describe("parseTikz", () => {
     const node = statement.items.find((item) => item.kind === "Node");
     expect(node?.kind).toBe("Node");
     if (node?.kind === "Node") {
-      expect(node.text).toBe(String.raw`I'm testing the Mathjax \\ rendering \textit{d`);
+      expect(node.text).toBe(String.raw`I'm testing the TeX \\ rendering \textit{d`);
       expect(source.slice(node.textSpan.from, node.textSpan.to)).toBe(node.text);
     }
   });
 
   it("does not reuse the structural node close brace as recovered node text", () => {
     const source = String.raw`\begin{tikzpicture}
-  \node at (0,0) {I'm testing the Mathjax \\ rendering \textit{d};
+  \node at (0,0) {I'm testing the TeX \\ rendering \textit{d};
 \end{tikzpicture}`;
     const result = parseTikz(source);
 
@@ -149,7 +183,7 @@ describe("parseTikz", () => {
     const node = statement.items.find((item) => item.kind === "Node");
     expect(node?.kind).toBe("Node");
     if (node?.kind === "Node") {
-      expect(node.text).toBe(String.raw`I'm testing the Mathjax \\ rendering \textit{d`);
+      expect(node.text).toBe(String.raw`I'm testing the TeX \\ rendering \textit{d`);
       expect(source.slice(node.textSpan.from, node.textSpan.to)).toBe(node.text);
     }
   });

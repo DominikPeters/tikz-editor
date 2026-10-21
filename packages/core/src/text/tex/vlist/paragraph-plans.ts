@@ -1,0 +1,502 @@
+import type { KnuthPlassLayoutMode } from "../../knuth-plass/index.js";
+import type { ResolvedTexFont, TexMetricProvider } from "../fonts/types.js";
+import { defaultTexTextFontProfile } from "../fonts/text-profile.js";
+import { simpleTexInlineNodesToLayoutItems } from "../layout-inline-items.js";
+import type {
+  TexLayoutInlineItem,
+  TexLayoutLabel,
+} from "../layout-inline-items.js";
+import type { TexLayoutIrOptions } from "../layout-options.js";
+import type { TexDimensionContext } from "../dimensions.js";
+import {
+  texHBoxX,
+  texLength,
+  texVListX,
+  type TexLength,
+} from "../coordinates.js";
+import {
+  TexParagraphLayoutState,
+} from "../layout-state.js";
+import type {
+  TexParagraphBreakScopePolicy,
+  TexParagraphRightskipStretchMode,
+} from "../paragraph-break.js";
+import {
+  splitSimpleTexParagraphSegments,
+  type SimpleTexParagraphSegment,
+  type SimpleTexFontState,
+  type TexAlignmentProfile,
+  type TexParagraphAlignment,
+  type TexSpaceGlueProfile,
+} from "../ir.js";
+import { attachTexHBoxesBeforeVListParagraphs } from "./attachments.js";
+import type {
+  TexHBoxBeforeParagraphAttachment,
+  TexVListPathRemap,
+} from "./attachments.js";
+import {
+  texListItemParagraphAttachments,
+} from "./list-attachments.js";
+import {
+  texParagraphScopeContext,
+} from "./paragraph-scope.js";
+import { texVListPathKey } from "./paths.js";
+import {
+  texVListParagraphEntries,
+} from "./traversal.js";
+import type {
+  TexParagraphItem,
+  TexVListDocument,
+  TexVBoxItem,
+} from "./types.js";
+
+export interface TexLayoutParagraphPreparation {
+  readonly vlist: TexVListDocument;
+  readonly layoutMode: KnuthPlassLayoutMode;
+  readonly paragraphPlans: readonly TexLayoutParagraphPlan[];
+}
+
+export interface TexLayoutParagraphPlan {
+  readonly inheritedFontState?: Pick<SimpleTexFontState, "family" | "series" | "shape">;
+  readonly fontSizePt?: TexLength;
+  readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
+  readonly segmentIndex: number;
+  readonly segment: SimpleTexParagraphSegment;
+  readonly alignment: TexParagraphAlignment;
+  readonly alignmentProfile?: TexAlignmentProfile;
+  readonly inheritedAlignment: TexParagraphAlignment;
+  readonly inheritedAlignmentProfile?: TexAlignmentProfile;
+  readonly spaceGlueProfile: TexSpaceGlueProfile;
+  readonly inlinePrefixItems: readonly TexLayoutInlineItem[];
+  readonly preserveTrailingInterwordSpace?: boolean;
+  readonly breakContext: TexLayoutParagraphBreakContext;
+  readonly dimensionContext?: TexDimensionContext;
+  readonly overfullSingleLineFallback?: boolean;
+  readonly lineLabel?: TexLayoutParagraphLineLabel;
+}
+
+export interface TexLayoutParagraphBreakContext {
+  readonly blockIndex: number;
+  readonly segmentIndex: number;
+  readonly width?: TexLength;
+  readonly firstLineIndentWidth?: TexLength;
+  readonly forcedBreakIndentWidth?: TexLength;
+  readonly scopePolicy: TexParagraphBreakScopePolicy;
+}
+
+export interface TexLayoutParagraphLineLabel {
+  readonly blockIndex: number;
+  readonly segmentIndex: number;
+  readonly label: TexLayoutLabel;
+}
+
+export interface TexLayoutParagraphPreparationParams {
+  readonly vlist: TexVListDocument;
+  readonly defaultAlignment: TexParagraphAlignment;
+  readonly font: ResolvedTexFont;
+  readonly metricProvider: TexMetricProvider;
+  readonly options: TexLayoutIrOptions;
+}
+
+export function prepareTexLayoutParagraphsFromVList(
+  params: TexLayoutParagraphPreparationParams
+): TexLayoutParagraphPreparation {
+  const paragraphPlans: TexLayoutParagraphPlan[] = [];
+  const paragraphEntries = texVListParagraphEntries(params.vlist.items);
+  const paragraphItems = paragraphEntries.map((entry) => entry.item);
+  const marginLabelHBoxAttachments: TexHBoxBeforeParagraphAttachment[] = [];
+  const paragraphState = new TexParagraphLayoutState(
+    params.defaultAlignment,
+    params.options
+  );
+  const finalParagraphBlockIndex = finalVListParagraphBlockIndex(paragraphItems);
+  // Material boxes execute paragraph declarations in their own TeX group.
+  // Their centering/raggedness must not leak to surrounding frame prose.
+  const materialParagraphStates = new Map<TexVBoxItem, TexParagraphLayoutState>();
+  let layoutMode: KnuthPlassLayoutMode = "wrap";
+
+  for (const entry of paragraphEntries) {
+    const paragraph = entry.item.paragraph;
+    const textFontProfile = params.options.textFontProfile ?? defaultTexTextFontProfile;
+    const paragraphFont = paragraph.inheritedFontState
+      ? textFontProfile.resolveTextFont({ ...textFontProfile.defaultFontState, ...paragraph.inheritedFontState }, paragraph.fontSizePt ?? params.font.atPt, params.metricProvider)
+      : paragraph.fontSizePt != null ? { ...params.font, atPt: paragraph.fontSizePt } : params.font;
+    const scopeContext = texParagraphScopeContext(entry.ancestors);
+    const suppressAncestorBreakMargins =
+      paragraph.ignoreAncestorBreakMargins === true ||
+      paragraph.useScopedLineWidth === true;
+    const scopedLineWidth = texParagraphScopedLineWidth(
+      scopeContext,
+      params.options.width,
+      paragraph.useScopedLineWidth === true
+    );
+    const scopedBreakWidth = paragraph.useScopedLineWidth === true
+      ? scopedLineWidth
+      : scopeContext.layout.scopedWidth;
+    const breakScopeContext = suppressAncestorBreakMargins
+      ? texParagraphScopeContextWithoutBreakMargins(scopeContext)
+      : scopedBreakWidth !== undefined && scopeContext.layout.scopedWidth !== undefined
+        ? texParagraphScopeContextWithBreakMargins(
+            scopeContext,
+            scopeContext.layout.scopedLeftMarginWidth ?? texLength(0),
+            scopeContext.layout.scopedRightMarginWidth ?? texLength(0)
+          )
+      : scopeContext;
+    const blockIndex = paragraph.blockIndex;
+    const materialAncestors = entry.ancestors.filter(ancestor => ancestor.material !== undefined);
+    const materialAncestor = materialAncestors.at(-1);
+    let currentParagraphState = paragraphState;
+    if (materialAncestor) {
+      const outerMaterialAncestor = materialAncestors.at(-2);
+      const outerMaterialState = outerMaterialAncestor ? materialParagraphStates.get(outerMaterialAncestor) : undefined;
+      currentParagraphState = materialParagraphStates.get(materialAncestor) ?? (outerMaterialState ?? paragraphState).forkMaterialContext();
+      materialParagraphStates.set(materialAncestor, currentParagraphState);
+    }
+    const paragraphStateResult = currentParagraphState.resolveParagraph({
+      paragraph,
+      scopePolicy: scopeContext.policy,
+      // A source-owned parbox/minipage is an independent TeX paragraph
+      // context. TikZ's outer final-paragraph alignment reset does not apply
+      // to its final line.
+      finalParagraphInNode: !scopeContext.materialContextActive && blockIndex === finalParagraphBlockIndex,
+    });
+    const segments = splitSimpleTexParagraphSegments(
+      paragraph,
+      params.options,
+      paragraphStateResult.alignment,
+      blockIndex
+    );
+    if (segments.length === 0) {
+      // A discarded blank/forced-break segment still owns a paragraph in the
+      // vlist. Preserve its identity so the breaker can measure an empty box.
+      segments.push({ text: "", nodes: [], noIndent: paragraph.noIndent,
+        sourceStart: paragraph.sourceSpan.start, sourceEnd: paragraph.sourceSpan.end });
+    }
+    const spaceGlueProfile = paragraph.spaceGlueProfile ?? paragraphStateResult.spaceGlueProfile;
+    if (segments.some((segment) => segment.forcedBreakAfter)) {
+      layoutMode = "wrapped-explicit";
+    }
+
+    for (const [segmentIndex, segment] of segments.entries()) {
+      const listAttachments = texListItemParagraphAttachments({
+        blockIndex,
+        segmentIndex,
+        ...(!suppressAncestorBreakMargins && paragraph.listContext !== undefined ? { listContext: paragraph.listContext } : {}),
+        ...(!suppressAncestorBreakMargins && scopeContext.listItemLayout !== undefined ? { listItemLayout: scopeContext.listItemLayout } : {}),
+        font: scopeContext.listItemLayout?.label?.content.kind === "marker" ? params.font : paragraphFont,
+        metricProvider: params.metricProvider,
+        spaceGlueProfile,
+        inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
+        ...(params.options.graphicsResolver !== undefined ? { graphicsResolver: params.options.graphicsResolver } : {}),
+        ...(params.options.mathBoxProvider !== undefined ? { mathBoxProvider: params.options.mathBoxProvider } : {}),
+        ...(params.options.textFontProfile !== undefined ? { textFontProfile: params.options.textFontProfile } : {}),
+        paragraphOriginX: texVListX(scopeContext.layout.leftMarginWidth),
+      });
+      if (listAttachments.marginLabelHBox) {
+        marginLabelHBoxAttachments.push({
+          vlistPath: entry.path,
+          hbox: listAttachments.marginLabelHBox,
+        });
+      }
+      const quotationPrefix = texQuotationFirstLinePrefix({
+        segment,
+        font: params.font,
+      });
+      const leadingInterwordSpace =
+        segment.leadingInterwordSpace === true
+          ? {
+              kind: "space" as const,
+              text: " " as const,
+              sourceStart: segment.sourceStart,
+              sourceEnd: segment.sourceStart,
+              font: params.font,
+              spaceFactor: 1000,
+              spaceGlueProfile,
+              // The resumed horizontal-mode space is real glue, but cannot
+              // become a line break before the first text token.
+              nonBreaking: true,
+              preserveAtLineStart: true,
+            }
+          : undefined;
+      const trailingNode = segment.nodes.at(-1);
+      const firstAdjustment = paragraph.verticalAdjustments?.[0];
+      const preserveTrailingInterwordSpace =
+        segmentIndex === segments.length - 1 &&
+        trailingNode?.kind === "space" &&
+        firstAdjustment?.sourceSpan !== undefined &&
+        trailingNode.sourceEnd <= firstAdjustment.sourceSpan.start;
+      const firstLineIndentWidth = listAttachments.firstLineIndentWidth ?? quotationPrefix.firstLineIndentWidth;
+      paragraphPlans.push({
+        ...(paragraph.fontSizePt !== undefined ? { fontSizePt: paragraph.fontSizePt } : {}),
+        ...(paragraph.inheritedFontState ? { inheritedFontState: paragraph.inheritedFontState } : {}),
+        blockIndex,
+        vlistPath: entry.path,
+        segmentIndex,
+        segment,
+        alignment: paragraphStateResult.alignment,
+        ...(paragraphStateResult.alignmentProfile !== undefined ? { alignmentProfile: paragraphStateResult.alignmentProfile } : {}),
+        inheritedAlignment: paragraphStateResult.inheritedAlignment,
+        ...(paragraphStateResult.inheritedAlignmentProfile !== undefined ? { inheritedAlignmentProfile: paragraphStateResult.inheritedAlignmentProfile } : {}),
+        spaceGlueProfile,
+        inlinePrefixItems: [
+          ...listAttachments.inlineLabelItems,
+          ...texEmptyListItemLinePrefix({
+            segment,
+            hasMarginLabel: listAttachments.marginLabel !== undefined,
+          }),
+          ...quotationPrefix.inlinePrefixItems,
+          ...(leadingInterwordSpace ? [leadingInterwordSpace] : []),
+        ],
+        ...(preserveTrailingInterwordSpace
+          ? { preserveTrailingInterwordSpace: true }
+          : {}),
+        ...(paragraph.overfullSingleLineFallback === true
+          ? { overfullSingleLineFallback: true }
+          : {}),
+        breakContext: {
+          blockIndex,
+          segmentIndex,
+          ...(scopedBreakWidth !== undefined ? { width: scopedBreakWidth } : {}),
+          ...(firstLineIndentWidth !== undefined ? { firstLineIndentWidth } : {}),
+          ...(quotationPrefix.forcedBreakIndentWidth !== undefined
+            ? { forcedBreakIndentWidth: quotationPrefix.forcedBreakIndentWidth }
+            : {}),
+          scopePolicy: texParagraphBreakScopePolicy(
+            breakScopeContext,
+            paragraphStateResult.finalHyphenDemerits
+          ),
+        },
+        ...(paragraph.dimensionContext
+          ? { dimensionContext: paragraph.dimensionContext }
+          : {}),
+        ...(listAttachments.marginLabel
+          ? {
+              lineLabel: {
+                blockIndex,
+                segmentIndex,
+                label: listAttachments.marginLabel,
+              },
+            }
+          : {}),
+      });
+    }
+  }
+
+  const attachmentResult = attachTexHBoxesBeforeVListParagraphs(
+    params.vlist,
+    marginLabelHBoxAttachments
+  );
+
+  return {
+    vlist: attachmentResult.vlist,
+    layoutMode,
+    paragraphPlans: remapParagraphPlanPaths(
+      paragraphPlans,
+      attachmentResult.paragraphPathRemaps
+    ),
+  };
+}
+
+function texEmptyListItemLinePrefix(params: {
+  readonly segment: SimpleTexParagraphSegment;
+  readonly hasMarginLabel: boolean;
+}): readonly TexLayoutInlineItem[] {
+  if (
+    !params.hasMarginLabel ||
+    params.segment.text.length > 0 ||
+    params.segment.nodes.length > 0
+  ) {
+    return [];
+  }
+  const sourceStart = params.segment.sourceStart;
+  return [{
+    kind: "math",
+    role: "list-label",
+    text: "",
+    content: "",
+    delimiter: "dollar",
+    sourceStart,
+    sourceEnd: sourceStart,
+    contentStart: sourceStart,
+    contentEnd: sourceStart,
+    box: {
+      source: "",
+      content: "",
+      sourceStart,
+      sourceEnd: sourceStart,
+      contentStart: sourceStart,
+      contentEnd: sourceStart,
+      width: texLength(0),
+      height: texLength(0),
+      depth: texLength(0),
+      caretStops: [texHBoxX(0)],
+    },
+  }];
+}
+
+function texParagraphScopedLineWidth(
+  scopeContext: ReturnType<typeof texParagraphScopeContext>,
+  rootWidth: TexLength | undefined,
+  useScopedLineWidth: boolean
+): TexLength | undefined {
+  if (useScopedLineWidth) {
+    return rootWidth === undefined
+      ? undefined
+      : texLength(Math.max(
+          0,
+          rootWidth -
+            scopeContext.layout.leftMarginWidth -
+            scopeContext.layout.rightMarginWidth
+        ));
+  }
+  return scopeContext.layout.scopedLineWidth;
+}
+
+function texQuotationFirstLinePrefix(params: {
+  readonly segment: SimpleTexParagraphSegment;
+  readonly font: ResolvedTexFont;
+}): {
+  readonly inlinePrefixItems: readonly TexLayoutInlineItem[];
+  readonly firstLineIndentWidth?: TexLength;
+  readonly forcedBreakIndentWidth?: TexLength;
+} {
+  const indentWidth = params.segment.firstLineIndentEm === undefined
+    ? undefined
+    : texLength(params.segment.firstLineIndentEm * params.font.atPt);
+  if (indentWidth === undefined) {
+    return { inlinePrefixItems: [] };
+  }
+  if (params.segment.quotationItemFirstParagraph === true) {
+    const sourceStart = params.segment.sourceStart;
+    return {
+      inlinePrefixItems: [
+        {
+          kind: "math",
+          role: "list-label",
+          text: "",
+          content: "",
+          delimiter: "dollar",
+          sourceStart,
+          sourceEnd: sourceStart,
+          contentStart: sourceStart,
+          contentEnd: sourceStart,
+          box: {
+            source: "",
+            content: "",
+            sourceStart,
+            sourceEnd: sourceStart,
+            contentStart: sourceStart,
+            contentEnd: sourceStart,
+            width: indentWidth,
+            height: texLength(0),
+            depth: texLength(0),
+            caretStops: [texHBoxX(0), texHBoxX(indentWidth)],
+          },
+        },
+        {
+          kind: "penalty",
+          role: "list-label",
+          sourceStart,
+          sourceEnd: sourceStart,
+          penalty: 0,
+        },
+      ],
+      forcedBreakIndentWidth: indentWidth,
+    };
+  }
+  return {
+    inlinePrefixItems: [],
+    firstLineIndentWidth: indentWidth,
+  };
+}
+
+function texParagraphScopeContextWithoutBreakMargins(
+  scopeContext: ReturnType<typeof texParagraphScopeContext>
+): ReturnType<typeof texParagraphScopeContext> {
+  const { listItemLayout: _listItemLayout, ...unscopedContext } = scopeContext;
+  return {
+    ...unscopedContext,
+    layout: {
+      leftMarginWidth: texLength(0),
+      rightMarginWidth: texLength(0),
+    },
+    quoteContextActive: false,
+    listContextActive: false,
+  };
+}
+
+function texParagraphScopeContextWithBreakMargins(
+  scopeContext: ReturnType<typeof texParagraphScopeContext>,
+  leftMarginWidth: TexLength,
+  rightMarginWidth: TexLength
+): ReturnType<typeof texParagraphScopeContext> {
+  return {
+    ...scopeContext,
+    layout: {
+      leftMarginWidth,
+      rightMarginWidth,
+    },
+  };
+}
+
+function remapParagraphPlanPaths(
+  plans: readonly TexLayoutParagraphPlan[],
+  paragraphPathRemaps: readonly TexVListPathRemap[]
+): readonly TexLayoutParagraphPlan[] {
+  const pathRemapByOriginalPath = new Map<string, readonly number[]>();
+  for (const remap of paragraphPathRemaps) {
+    const key = texVListPathKey(remap.from);
+    if (pathRemapByOriginalPath.has(key)) {
+      throw new Error(
+        `TeX paragraph preparation found duplicate paragraph path ${key}.`
+      );
+    }
+    pathRemapByOriginalPath.set(key, remap.to);
+  }
+  return plans.map((plan) => {
+    const key = texVListPathKey(plan.vlistPath);
+    const vlistPath = pathRemapByOriginalPath.get(key);
+    if (!vlistPath) {
+      throw new Error(
+        `TeX paragraph preparation lost paragraph path ${key}.`
+      );
+    }
+    return {
+      ...plan,
+      vlistPath,
+    };
+  });
+}
+
+function texParagraphBreakScopePolicy(
+  scopeContext: ReturnType<typeof texParagraphScopeContext>,
+  finalHyphenDemerits?: number
+): TexParagraphBreakScopePolicy {
+  const inList = scopeContext.listContextActive;
+  const inQuote = scopeContext.quoteContextActive;
+  const rightskipStretchMode: TexParagraphRightskipStretchMode = inQuote
+    ? "ragged-right-infinite-otherwise-zero"
+    : inList
+      ? scopeContext.materialContextActive
+        ? "default"
+        : "ragged-right-infinite-center-zero"
+      : "default";
+
+  return {
+    leftMarginWidth: scopeContext.layout.leftMarginWidth,
+    rightMarginWidth: scopeContext.layout.rightMarginWidth,
+    ...(finalHyphenDemerits !== undefined ? { finalHyphenDemerits: finalHyphenDemerits } : {}),
+    allowParagraphIndent: scopeContext.policy.allowParagraphIndent !== false && !inList,
+    allowForcedBreakIndent: scopeContext.policy.allowForcedBreakIndent !== false && !inList,
+    forceParfillStretch: inQuote || inList,
+    suppressRaggedLeftCenterLeftskipStretch: inQuote || inList,
+    rightskipStretchMode,
+  };
+}
+
+function finalVListParagraphBlockIndex(
+  items: readonly TexParagraphItem[]
+): number | undefined {
+  return items.at(-1)?.paragraph.blockIndex;
+}

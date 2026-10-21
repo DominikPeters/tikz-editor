@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   SemanticDependencyGraphBuilder,
   collectGeometryInvalidation,
+  replaceSourceDependencies,
   resourceNodeId,
   type SemanticDependencyGraph,
   type SemanticDependencyResourceKind
@@ -11,6 +12,35 @@ import { collectGeometryInvalidation as collectGeometryInvalidationFromRoot } fr
 import { evaluateSemantic } from "./helpers.js";
 
 describe("semantic dependencies / graph + invalidation query", () => {
+  it("retains an unchanged graph and replaces only changed source contributions", () => {
+    const initial = new SemanticDependencyGraphBuilder();
+    initial.addProducer("a", "named-coordinate", "A");
+    initial.addConsumer("b", "named-coordinate", "A");
+    initial.addProducer("b", "named-path", "old");
+    initial.addProducer("c", "named-coordinate", "C");
+    const graph = initial.build();
+    const saved = JSON.stringify(graph);
+    const changed = new Set(["b"]);
+    expect(replaceSourceDependencies(graph, initial.buildForSources(changed), changed)).toBe(graph);
+
+    const rebuilt = new SemanticDependencyGraphBuilder();
+    rebuilt.addConsumer("b", "named-coordinate", "C");
+    rebuilt.addProducer("b", "named-path", "new");
+    const next = replaceSourceDependencies(graph, rebuilt.buildForSources(changed), changed);
+    expect(next.nodes.some(node => node.id === resourceNodeId("named-path", "old"))).toBe(false);
+    expect(collectGeometryInvalidation(next, { changedSourceIds: ["a"] }).affectedSourceIds).toEqual(["a"]);
+    expect(collectGeometryInvalidation(next, { changedSourceIds: ["c"] }).affectedSourceIds).toEqual(["b", "c"]);
+    expect(collectGeometryInvalidation(graph, { changedSourceIds: ["a"] }).affectedSourceIds).toEqual(["a", "b"]);
+    expect(JSON.stringify(graph)).toBe(saved);
+
+    const canonical = new SemanticDependencyGraphBuilder();
+    canonical.addProducer("a", "named-coordinate", "A");
+    canonical.addConsumer("b", "named-coordinate", "C");
+    canonical.addProducer("b", "named-path", "new");
+    canonical.addProducer("c", "named-coordinate", "C");
+    expect(next).toEqual(canonical.build());
+  });
+
   it("tracks direct producer/consumer dependencies through a named coordinate", () => {
     const builder = new SemanticDependencyGraphBuilder();
     builder.addProducer("source-a", "named-coordinate", "A");

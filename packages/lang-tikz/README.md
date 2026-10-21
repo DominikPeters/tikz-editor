@@ -1,5 +1,13 @@
 # @tikz-editor/lang-tikz
 
+CodeMirror language support for TeX documents containing TikZ and for direct
+TikZ sources.
+
+The configured parsers compose the generated grammars recursively:
+
+- Beamer/TeX documents mount the TikZ parser on `tikzpicture` environments.
+- TikZ node-text groups mount the shared TeX fragment parser.
+
 CodeMirror 6 language support for TikZ source code.
 
 ```ts

@@ -20,7 +20,8 @@ describe("identity invariants", () => {
       expect(element.runtimeId.length).toBeGreaterThan(0);
       expect(element.sourceRef.sourceId.length).toBeGreaterThan(0);
       expect(element.sourceRef.sourceSpan.to).toBeGreaterThanOrEqual(element.sourceRef.sourceSpan.from);
-      expect(element.sourceRef.sourceFingerprint.length).toBeGreaterThan(0);
+      // A reused element whose source did not move must not name an old revision.
+      expect("sourceFingerprint" in element.sourceRef).toBe(false);
     }
 
     for (const handle of editHandles) {
@@ -51,8 +52,5 @@ describe("identity invariants", () => {
 
     expect(rendered.semantic.editHandles.length).toBeGreaterThan(0);
     expect(rendered.semantic.editHandles.every((handle) => handle.sourceRef.sourceFingerprint === sourceFingerprint)).toBe(true);
-    expect(
-      rendered.semantic.scene.elements.every((element) => element.sourceRef.sourceFingerprint === sourceFingerprint)
-    ).toBe(true);
   });
 });

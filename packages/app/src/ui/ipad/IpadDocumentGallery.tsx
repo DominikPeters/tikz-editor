@@ -40,7 +40,7 @@ export function IpadDocumentGallery({
         title: doc.title,
         dirty: doc.dirty,
         source: doc.source,
-        activeFigureId: doc.activeFigureId,
+        activeRootId: doc.activeRootId,
         snapshotSvg: doc.snapshot.svg?.svg ?? null,
         snapshotSource: doc.snapshot.source
       });
@@ -63,7 +63,7 @@ export function IpadDocumentGallery({
   }, [commandRuntime, onClose]);
 
   const commandEnabled = useCallback((commandId: AppMenuCommandId): boolean => {
-    return commandRuntime.bindings[commandId]?.enabled === true;
+    return commandRuntime.bindings[commandId].enabled === true;
   }, [commandRuntime]);
 
   useEffect(() => {

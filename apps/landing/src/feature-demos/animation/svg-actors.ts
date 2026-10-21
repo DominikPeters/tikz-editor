@@ -34,18 +34,6 @@ export function toTranslate(
   timeline.to(target, { x, y, duration, ease }, position);
 }
 
-export function toSvgRotation(
-  timeline: gsap.core.Timeline,
-  target: Element,
-  rotation: number,
-  svgOrigin: string,
-  duration: number,
-  position?: gsap.Position,
-  ease = "power1.inOut"
-): void {
-  timeline.to(target, { rotation, svgOrigin, duration, ease }, position);
-}
-
 export function prepareTransformDrivenLinePath(target: Element): void {
   setSvgAttrs(target, {
     d: "M 0 0 L 1 0",

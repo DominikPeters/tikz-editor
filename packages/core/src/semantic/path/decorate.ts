@@ -68,10 +68,9 @@ function toDecoratablePathElement(element: SceneElement): ScenePath | null {
       layer: element.layer,
       sourceRef: {
         sourceId: element.sourceRef.sourceId,
-        sourceSpan: element.sourceRef.sourceSpan,
-        sourceFingerprint: element.sourceRef.sourceFingerprint
+        sourceSpan: element.sourceRef.sourceSpan
       },
-      origin: element.origin,
+      ...(element.origin === undefined ? {} : { origin: element.origin }),
       style: cloneStyleForDecoration(element.style),
       styleChain: element.styleChain.map((entry) => ({ ...entry })),
       commands
@@ -88,10 +87,9 @@ function toDecoratablePathElement(element: SceneElement): ScenePath | null {
       layer: element.layer,
       sourceRef: {
         sourceId: element.sourceRef.sourceId,
-        sourceSpan: element.sourceRef.sourceSpan,
-        sourceFingerprint: element.sourceRef.sourceFingerprint
+        sourceSpan: element.sourceRef.sourceSpan
       },
-      origin: element.origin,
+      ...(element.origin === undefined ? {} : { origin: element.origin }),
       style: cloneStyleForDecoration(element.style),
       styleChain: element.styleChain.map((entry) => ({ ...entry })),
       commands

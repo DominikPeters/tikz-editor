@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import { worldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
 import type { WorldPoint } from "../coords/points.js";
@@ -57,8 +58,12 @@ export function generateElementSource(template: ElementTemplate, at: WorldPoint)
             optionParts.push(`minimum height=${formatNumber(template.minimumHeightPt * CM_PER_PT)}cm`);
           }
         } else {
-          optionParts.push(`minimum width=${SHAPE_TOOL_DEFAULT_MINIMUM_WIDTH_CM}cm`);
-          optionParts.push(`minimum height=${SHAPE_TOOL_DEFAULT_MINIMUM_HEIGHT_CM}cm`);
+          // PGF double arrows measure head span with width and arrow length with height.
+          const swapDimensions = template.shape === "double arrow";
+          const minimumWidth = swapDimensions ? SHAPE_TOOL_DEFAULT_MINIMUM_HEIGHT_CM : SHAPE_TOOL_DEFAULT_MINIMUM_WIDTH_CM;
+          const minimumHeight = swapDimensions ? SHAPE_TOOL_DEFAULT_MINIMUM_WIDTH_CM : SHAPE_TOOL_DEFAULT_MINIMUM_HEIGHT_CM;
+          optionParts.push(`minimum width=${minimumWidth}cm`);
+          optionParts.push(`minimum height=${minimumHeight}cm`);
         }
         return `\\node[${optionParts.join(", ")}]${namePart} at ${atCoord} {${text}};`;
       }
@@ -175,7 +180,7 @@ function resolveTikzpictureEndToken(source: string, figureSpan: Span | undefined
   const from = Math.max(0, Math.min(source.length, figureSpan.from));
   const to = Math.max(from, Math.min(source.length, figureSpan.to));
   const figureSource = source.slice(from, to);
-  const endPattern = /\\end\{tikzpicture\*?\}/gu;
+  const endPattern = /\\end\{(?:tikzpicture\*?|tikzlayer)\}/gu;
   let lastMatch: RegExpExecArray | null = null;
   for (const match of figureSource.matchAll(endPattern)) {
     lastMatch = match;
@@ -251,7 +256,7 @@ export function reverseComplexPathSegments(
   fromAnchor?: AnchorReference
 ): { startWorld: WorldPoint; startAnchor?: AnchorReference; segments: ComplexPathSegment[] } {
   if (segments.length === 0) {
-    return { startWorld: fromWorld, startAnchor: fromAnchor, segments: [] };
+    return { startWorld: fromWorld, ...(fromAnchor === undefined ? {} : { startAnchor: fromAnchor }), segments: [] };
   }
   const reversed: ComplexPathSegment[] = [];
   // Walk backwards. For each segment, the new "to" is the previous segment's start.
@@ -264,11 +269,11 @@ export function reverseComplexPathSegments(
   // segFromPoints: [from, seg0.to, seg1.to, ...]
   // reversed[i] corresponds to segments[n-1-i]
   for (let i = segments.length - 1; i >= 0; i--) {
-    const seg = segments[i];
-    const segStart = segFromPoints[i];
+    const seg = requireArrayValue(segments, i);
+    const segStart = requireArrayValue(segFromPoints, i);
     const segStartAnchor = segFromAnchors[i];
     if (seg.kind === "line") {
-      reversed.push({ kind: "line", to: segStart, toAnchor: segStartAnchor });
+      reversed.push({ kind: "line", to: segStart, ...(segStartAnchor === undefined ? {} : { toAnchor: segStartAnchor }) });
     } else {
       // swap control1 and control2
       reversed.push({
@@ -276,13 +281,13 @@ export function reverseComplexPathSegments(
         to: segStart,
         control1: seg.control2,
         control2: seg.control1,
-        toAnchor: segStartAnchor
+        ...(segStartAnchor === undefined ? {} : { toAnchor: segStartAnchor })
       });
     }
   }
-  const newStart = segFromPoints[segFromPoints.length - 1];
+  const newStart = requireArrayValue(segFromPoints, segFromPoints.length - 1);
   const newStartAnchor = segFromAnchors[segFromAnchors.length - 1];
-  return { startWorld: newStart, startAnchor: newStartAnchor, segments: reversed };
+  return { startWorld: newStart, ...(newStartAnchor === undefined ? {} : { startAnchor: newStartAnchor }), segments: reversed };
 }
 
 /**
@@ -304,7 +309,7 @@ export function generateComplexPathPrependSource(
 
   // All segments except the last: include full operator + target
   for (let i = 0; i < segments.length - 1; i++) {
-    const seg = segments[i];
+    const seg = requireArrayValue(segments, i);
     if (seg.kind === "line") {
       parts.push(`-- ${formatPathEndpoint(seg.toAnchor, seg.to)}`);
     } else {
@@ -313,7 +318,7 @@ export function generateComplexPathPrependSource(
   }
 
   // Last segment: operator only, no target (existing body provides it)
-  const last = segments[segments.length - 1];
+  const last = requireArrayValue(segments, segments.length - 1);
   if (last.kind === "line") {
     parts.push("--");
   } else {

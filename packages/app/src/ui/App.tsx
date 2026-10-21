@@ -1,33 +1,44 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { isRecord } from "../validation";
+import { isAppMenuCommandId } from "../app-menu";
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import { listDocumentSessions } from "../store/document-sessions";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   APP_MENU_COMMAND_IDS,
   APP_MENU_DEFINITION,
   filterAppMenuDefinitionForTarget,
+  appMenuForDocument,
   type AppMenuPlatformTarget
 } from "../app-menu";
-import { useEditorStore } from "../store/store";
+import { flushPendingWorkspaceSave, useEditorStore } from "../store/store";
+import { deckStepRootKey } from "../root-key";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
-import { computeSnapshot, makeEmptySnapshot, setMathJaxFont, type ComputeRequest, type ComputeResponse } from "../compute";
-import { applyEditAction } from "tikz-editor/edit/actions";
-import { getRepeatSelectionEligibility } from "tikz-editor/edit/actions/repeat";
-import { collectSourceWorldBounds } from "tikz-editor/edit/snapping";
-import { PT_PER_CM } from "tikz-editor/edit/format";
-import { pt, worldPoint } from "tikz-editor/coords";
-import { emitSvgModel, type SvgRenderModel } from "tikz-editor/svg";
-import type { SceneFigure } from "tikz-editor/semantic/types";
-import { createMinimalTikzSourceArtifact } from "tikz-editor/export/index";
+import { computeSnapshot, makeEmptySnapshot, deckPageCacheStats, type ComputeRequest, type ComputeResponse } from "../compute";
+import { invalidateImageAssetPath } from "../image-asset-cache";
+import { useActiveDocumentAssetWatches } from "./useActiveDocumentAssetWatches";
+import { applyEditAction } from "@tikz-editor/core/edit/actions";
+import { getRepeatSelectionEligibility } from "@tikz-editor/core/edit/actions/repeat";
+import { collectSourceWorldBounds } from "@tikz-editor/core/edit/snapping";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
+import { pt, worldPoint } from "@tikz-editor/core/coords";
+import { emitSvgModel, type SvgRenderModel } from "@tikz-editor/core/svg";
+import type { SceneFigure } from "@tikz-editor/core/semantic/types";
+import { createMinimalTikzSourceArtifact } from "@tikz-editor/core/export/index";
 import { installAppProfilingRecorder, readAppProfilingSnapshot, resetAppProfilingSession } from "../profiling";
 import { AppMenuBar } from "./AppMenuBar";
 import { Toolbar } from "./Toolbar";
 import { DockLayout } from "./DockLayout";
 import { IpadEditorShell } from "./IpadEditorShell";
 import { StatusBar } from "./StatusBar";
+import { Modal } from "./Modal";
+import { isMacLikePlatform, isWindowsLikePlatform } from "./key-labels";
 import { isCodeMirrorEventTarget } from "./editor-commands";
 import { useEditorCommandRuntime } from "./editor-command-runtime";
 import { toolModeFromShortcut } from "./tool-config";
 import { createSingleFlightScheduler } from "./compute-scheduler";
-import { computeTrigger } from "./compute-trigger";
+import { yieldToBrowser } from "../yield-to-browser";
+import { computeTrigger, isInteractiveEdit } from "./compute-trigger";
 import { buildRepeatPreviewScene } from "./repeat-preview";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { getActiveEditorPlatform } from "../platform/current";
@@ -35,19 +46,30 @@ import css from "./App.module.css";
 import "./variables.css";
 import { TabStrip } from "./TabStrip";
 import type { UnsavedChangesDecision } from "./UnsavedChangesModal";
-import type { FileConflictDecision } from "./FileConflictModal";
 import { collectDirtyDocumentIdsForIntent, type CloseIntent } from "./close-guard";
 import { OPEN_EXAMPLE_CATALOG, type TikzOpenExample } from "./examples/open-example-catalog";
-import type { EmitSvgResult } from "tikz-editor/svg/index";
+import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
 import type { AssistantEvent, UpdateInfo, UpdateInstallProgress } from "../platform/types";
 import { resolveOpenedFileForDocument, dataTransferHasFilePayload } from "./svg-import";
 import type { AssistantComposerImageAttachment } from "./assistant-image-attachments";
 import { formatEquationText, type EquationNodeTarget } from "./equation-utils";
-import { useDebouncedEffect } from "./hooks/useDebouncedEffect";
-import { decideLinkedFileRefresh, isLinkedFileRef, type LinkedTextWriteResult } from "../linked-file-sync";
-import type { DocumentFileRef, DocumentSession, FileRevision } from "../store/types";
+import { useScheduledCompute } from "./hooks/useScheduledCompute";
+import { useDeckNeighborPrewarm } from "./hooks/useDeckNeighborPrewarm";
+import type { ComputeSchedulingInput } from "./compute-scheduling";
+import { useDocumentFileOperations } from "./useDocumentFileOperations";
+import type { DocumentFileRef } from "../store/types";
 import { createArxivVirtualFileName, type ArxivPaperSession, type ArxivTikzCandidate } from "../arxiv-source";
 import "./selection.css";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { PresentationWindow, PresentationDisplayIdentifier } from "../presentation/PresentationWindow";
+import { PresentationOptionsModal } from "../presentation/PresentationOptionsModal";
+import { presentationService } from "../presentation/service";
+import { bindPresentationFocus } from "../presentation/focus";
+import presentationCss from "../presentation/PresentationControls.module.css";
+
+/** How long typing must pause before a deck with syntax errors is parsed afresh. */
+const EXACT_PARSE_IDLE_MS = 500;
+const SKIPPED_UPDATE_VERSION_KEY = "tikz-editor:skipped-update-version";
 
 const DevPanel = lazy(async () => {
   const mod = await import("./DevPanel");
@@ -84,6 +106,10 @@ const TikzJaxModal = lazy(async () => {
   return { default: mod.TikzJaxModal };
 });
 
+const CompiledSlideModal = lazy(async () => {
+  const mod = await import("./CompiledSlideModal");
+  return { default: mod.CompiledSlideModal };
+});
 const UnsavedChangesModal = lazy(async () => {
   const mod = await import("./UnsavedChangesModal");
   return { default: mod.UnsavedChangesModal };
@@ -128,13 +154,11 @@ let startupUpdateCheckStarted = false;
 
 function menuTargetFromPlatformId(platformId: string): AppMenuPlatformTarget {
   if (platformId.startsWith("desktop")) {
-    if (typeof navigator !== "undefined") {
-      if (/(mac|iphone|ipad)/i.test(navigator.platform)) {
-        return "desktop-macos";
-      }
-      if (/win/i.test(navigator.platform)) {
-        return "desktop-windows";
-      }
+    if (isMacLikePlatform()) {
+      return "desktop-macos";
+    }
+    if (isWindowsLikePlatform()) {
+      return "desktop-windows";
     }
     return "desktop-linux";
   }
@@ -145,13 +169,10 @@ function desktopOsFromPlatformId(platformId: string): "windows" | "macos" | "oth
   if (!platformId.startsWith("desktop")) {
     return null;
   }
-  if (typeof navigator === "undefined") {
-    return "other";
-  }
-  if (/(mac|iphone|ipad)/i.test(navigator.platform)) {
+  if (isMacLikePlatform()) {
     return "macos";
   }
-  if (/win/i.test(navigator.platform)) {
+  if (isWindowsLikePlatform()) {
     return "windows";
   }
   return "other";
@@ -193,7 +214,7 @@ function selectAllInEditableTarget(target: HTMLElement): boolean {
 type RepeatModalState = {
   documentId: string;
   source: string;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   selectedSourceIds: string[];
   selectionWidthPt: number;
   selectionHeightPt: number;
@@ -208,14 +229,6 @@ type UpdateModalPhase =
   | { status: "installing"; downloadedBytes: number; contentLength?: number }
   | { status: "failed"; message: string };
 
-type PendingFileConflict = {
-  documentId: string;
-  title: string;
-  remoteSource: string;
-  remoteRevision: FileRevision;
-  remoteFileRef: DocumentFileRef;
-  resolve: (decision: FileConflictDecision) => void;
-};
 
 function linkedFilePathKey(fileRef: DocumentFileRef | null | undefined): string | null {
   return (fileRef?.provider === "desktop-fs" || fileRef?.provider === "ios-files") &&
@@ -226,48 +239,90 @@ function linkedFilePathKey(fileRef: DocumentFileRef | null | undefined): string 
 }
 
 export function App() {
+  const query = new URLSearchParams(window.location.search);
+  const role = query.get("presentation"), sessionId = query.get("session");
+  const identifier = query.get("identify-display");
+  if (identifier && /^[1-9]\d{0,2}$/u.test(identifier)) return <PresentationDisplayIdentifier number={identifier} name={query.get("display-name") ?? "Display"} />;
+  if ((role === "audience" || role === "presenter") && sessionId) return <PresentationWindow role={role} sessionId={sessionId} />;
+  return <EditorApp />;
+}
+
+function EditorApp() {
+  const presentation = useSyncExternalStore(presentationService.subscribe, presentationService.getState);
+  const [showPresentationOptions, setShowPresentationOptions] = useState(false);
+  const handlePresentationOptions = useCallback(() => { setShowPresentationOptions(true); }, []);
+  const presentationDocument = useEditorStore(s => presentation.snapshot ? s.documents[presentation.snapshot.documentId] : null);
+  const presentationAssets = useMemo(() => presentationDocument ? [{ source: presentationDocument.source, documentFileRef: presentationDocument.fileRef }] : [], [presentationDocument]);
   const {
     source,
     sourceRevision,
     snapshot,
-    activeFigureId,
+    activeRootId,
+    drawingLayerRootId,
     selectedElementIds,
     activeDocumentId,
-    documents,
-    tabOrder,
+    activeDocumentFileRef,
+    linkedFileWatchSignature,
     toolMode,
     lastEditChangedSourceIds,
     lastEditPatches,
     lastEditPatchBaseRevision,
     activeCanvasDragKind,
     activeSourceScrubSourceId,
+    activeInspectorEditDocumentId,
+    activeDeckStep,
+    textEditMaskSpan,
+    sourceChangeOrigin,
+    canvasTextEditActive,
     dispatch
   } = useEditorStore(useShallow((s) => ({
     source: s.source,
     sourceRevision: s.sourceRevision,
+    sourceChangeOrigin: s.documents[s.activeDocumentId]?.lastSourceChangeOrigin ?? "edit-command",
+    canvasTextEditActive: s.activeCanvasTextEditSourceId != null,
     snapshot: s.snapshot,
-    activeFigureId: s.activeFigureId,
+    activeRootId: s.activeRootId,
+    drawingLayerRootId: s.documents[s.activeDocumentId]?.drawingLayerRootId ?? null,
+    activeDeckStep:
+      s.documentKind === "beamer"
+        ? s.deckStepByRootKey[deckStepRootKey(s.activeDocumentId, s.activeRootId)] ?? null
+        : null,
     selectedElementIds: s.selectedElementIds,
     activeDocumentId: s.activeDocumentId,
-    documents: s.documents,
-    tabOrder: s.tabOrder,
+    activeDocumentFileRef: s.documents[s.activeDocumentId]?.fileRef ?? null,
+    linkedFileWatchSignature: listDocumentSessions(s.documents)
+      .map((doc) => linkedFilePathKey(doc.fileRef))
+      .filter((path): path is string => path != null)
+      .sort()
+      .join("\n"),
     toolMode: s.toolMode,
     lastEditChangedSourceIds: s.lastEditChangedSourceIds,
     lastEditPatches: s.lastEditPatches,
     lastEditPatchBaseRevision: s.lastEditPatchBaseRevision,
     activeCanvasDragKind: s.activeCanvasDragKind,
     activeSourceScrubSourceId: s.activeSourceScrubSourceId,
+    activeInspectorEditDocumentId: s.activeInspectorEditDocumentId,
+    textEditMaskSpan:
+      s.canvasTextEditMask?.documentId === s.activeDocumentId &&
+      s.canvasTextEditMask.sourceRevision === s.sourceRevision
+        ? s.canvasTextEditMask.span
+        : null,
     dispatch: s.dispatch
   })));
-  const { uiFontSizePx, colorScheme, canvasInvert, mathJaxFont } = useSettingsStore(useShallow((s) => ({
+  const { uiFontSizePx, colorScheme, canvasInvert } = useSettingsStore(useShallow((s) => ({
     uiFontSizePx: s.settings.general.uiFontSizePx,
     colorScheme: s.settings.general.colorScheme,
-    canvasInvert: s.settings.general.canvasInvert,
-    mathJaxFont: s.settings.rendering.mathJaxFont
+    canvasInvert: s.settings.general.canvasInvert
   })));
   const platform = getActiveEditorPlatform();
   const menuTarget = menuTargetFromPlatformId(platform.id);
-  const menuDefinition = useMemo(() => filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget), [menuTarget]);
+  const documentKind = useEditorStore(s => s.documentKind);
+  const nestedDrawing = parseDocumentRootId(activeRootId ?? "")?.kind === "beamer-frame-tikz" || snapshot.overlayLayer != null;
+  const presenting = !!presentation.snapshot;
+  const menuFocus = platform.menu?.usesNativeMenuBar ? presentation.focus : "editor";
+  const menuDefinition = useMemo(() => appMenuForDocument(filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget), {
+    kind: documentKind, nestedDrawing, presenting, focus: menuFocus
+  }), [menuTarget, documentKind, nestedDrawing, presenting, menuFocus]);
   const [showOpenExampleModal, setShowOpenExampleModal] = useState(false);
   const [showOpenFromArxivModal, setShowOpenFromArxivModal] = useState(false);
   const [openFromArxivSession, setOpenFromArxivSession] = useState<ArxivPaperSession>({
@@ -282,6 +337,13 @@ export function App() {
   const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [updateDismissedForSession, setUpdateDismissedForSession] = useState(false);
+  const [skippedUpdateVersion, setSkippedUpdateVersion] = useState<string | null>(() => {
+    try {
+      return platform.persistence.load(SKIPPED_UPDATE_VERSION_KEY);
+    } catch {
+      return null;
+    }
+  });
   const [updateCheckBusy, setUpdateCheckBusy] = useState(false);
   const [updateModalPhase, setUpdateModalPhase] = useState<UpdateModalPhase>({ status: "idle" });
   const userWorkspaces = useWorkspaceListStore((s) => s.userWorkspaces);
@@ -298,32 +360,34 @@ export function App() {
   const [insertEquationDraft, setInsertEquationDraft] = useState("");
   const [compiledPictureSource, setCompiledPictureSource] = useState<{
     source: string;
-    activeFigureId: string | null;
+    activeRootId: string | null;
+    fileRef: DocumentFileRef | null;
+  } | null>(null);
+  const [compiledSlide, setCompiledSlide] = useState<{
+    source: string;
+    frameIndex: number | null;
+    step: number;
+    fileRef: DocumentFileRef | null;
+    buildKey: string;
   } | null>(null);
   const [svgExportSvgResult, setSvgExportSvgResult] = useState<EmitSvgResult | null>(null);
   const [pngExportSvgResult, setPngExportSvgResult] = useState<EmitSvgResult | null>(null);
   const [pendingAutoFit, setPendingAutoFit] = useState(false);
-  const [pendingClose, setPendingClose] = useState<{ intent: CloseIntent; dirtyDocumentIds: string[] } | null>(null);
-  const [pendingFileConflict, setPendingFileConflict] = useState<PendingFileConflict | null>(null);
+  const [pendingClose, setPendingClose] = useState<{
+    intent: CloseIntent;
+    dirtyDocumentIds: string[];
+    documentTitles: string[];
+  } | null>(null);
+  const [dragRenderViewBox, setDragRenderViewBox] = useState<ComputeRequest["renderViewBox"]>(null);
   const requestCloseIntentRef = useRef<(intent: CloseIntent) => void>(() => {});
   const computeSchedulerRef = useRef<ReturnType<typeof createSingleFlightScheduler<ComputeRequest, ComputeResponse>> | null>(null);
-  const dragRenderViewBoxRef = useRef<ComputeRequest["renderViewBox"]>(null);
+  const [imageAssetRefreshToken, setImageAssetRefreshToken] = useState(0);
   const updateCheckPromiseRef = useRef<Promise<UpdateInfo | null> | null>(null);
   const sourceRef = useRef(source);
   const snapshotRef = useRef(snapshot);
   const activeDocumentIdRef = useRef(activeDocumentId);
-  const documentsRef = useRef(documents);
   const linkedWatchTimersRef = useRef<Map<string, number>>(new Map());
   const pendingBackgroundLinkedPathsRef = useRef<Set<string>>(new Set());
-  const linkedFileWatchSignature = useMemo(
-    () =>
-      Object.values(documents)
-        .map((doc) => linkedFilePathKey(doc.fileRef))
-        .filter((path): path is string => path != null)
-        .sort()
-        .join("\n"),
-    [documents]
-  );
 
   function executeCloseIntent(intent: CloseIntent): void {
     if (intent.kind === "close-document") {
@@ -334,18 +398,20 @@ export function App() {
       dispatch({ type: "CLOSE_ALL_DOCUMENTS" });
       return;
     }
+    flushPendingWorkspaceSave();
     void getActiveEditorPlatform().window?.close?.();
   }
 
   function requestCloseIntent(intent: CloseIntent): void {
+    const { documents, tabOrder } = useEditorStore.getState();
     const dirtyDocumentIds = collectDirtyDocumentIdsForIntent(intent, documents, tabOrder);
     if (dirtyDocumentIds.length === 0) {
       executeCloseIntent(intent);
       return;
     }
+    const titles = dirtyDocumentIds.map((id) => documents[id]?.title ?? "Untitled");
     const confirmNative = getActiveEditorPlatform().window?.confirmUnsavedChanges;
     if (confirmNative) {
-      const titles = dirtyDocumentIds.map((id) => documents[id]?.title ?? "Untitled");
       const message =
         titles.length === 1
           ? `The document "${titles[0]}" has unsaved changes.`
@@ -355,10 +421,12 @@ export function App() {
       });
       return;
     }
-    setPendingClose({ intent, dirtyDocumentIds });
+    setPendingClose({ intent, dirtyDocumentIds, documentTitles: titles });
   }
 
-  requestCloseIntentRef.current = requestCloseIntent;
+  useLayoutEffect(() => {
+    requestCloseIntentRef.current = requestCloseIntent;
+  });
 
   const showNativeMessage = useCallback(async (
     title: string,
@@ -376,175 +444,9 @@ export function App() {
     }
   }, []);
 
-  const applyLinkedReadDecision = useCallback((doc: DocumentSession, reason: "restore" | "focus" | "tab" | "save") => {
-    const readLinkedText = getActiveEditorPlatform().files?.readLinkedText;
-    if (!doc.fileRef || !isLinkedFileRef(doc.fileRef) || typeof readLinkedText !== "function") {
-      return;
-    }
-    void readLinkedText(doc.fileRef).then((result) => {
-      const currentDoc = documentsRef.current[doc.id];
-      if (!currentDoc) {
-        return;
-      }
-      const decision = decideLinkedFileRefresh(currentDoc, result);
-      if (decision.kind === "reload") {
-        dispatch({
-          type: "REPLACE_DOCUMENT_SOURCE_FROM_DISK",
-          documentId: doc.id,
-          source: decision.source,
-          fileRef: decision.fileRef,
-          diskRevision: decision.revision
-        });
-        return;
-      }
-      if (decision.kind === "mark-status") {
-        dispatch({
-          type: "SET_DOCUMENT_LINKED_FILE_STATUS",
-          documentId: doc.id,
-          externalChangeStatus: decision.externalChangeStatus,
-          diskRevision: decision.externalChangeStatus === "changed" ? undefined : decision.revision,
-          lastKnownDiskSource: decision.externalChangeStatus === "changed" ? undefined : decision.source
-        });
-      }
-    }).catch((error: unknown) => {
-      console.info(`[tikz-editor] Linked file ${reason} check failed.`, error);
-      dispatch({
-        type: "SET_DOCUMENT_LINKED_FILE_STATUS",
-        documentId: doc.id,
-        externalChangeStatus: "error"
-      });
-    });
-  }, [dispatch]);
-
-  const initializeLinkedBaseline = useCallback(async (
-    documentId: string,
-    sourceForDocument: string,
-    fileRef: DocumentFileRef | null
-  ): Promise<void> => {
-    const readLinkedText = getActiveEditorPlatform().files?.readLinkedText;
-    if (!fileRef || !isLinkedFileRef(fileRef) || typeof readLinkedText !== "function") {
-      return;
-    }
-    const result = await readLinkedText(fileRef);
-    if (result.status !== "ok") {
-      dispatch({
-        type: "SET_DOCUMENT_LINKED_FILE_STATUS",
-        documentId,
-        externalChangeStatus:
-          result.status === "missing" || result.status === "permission-needed" ? result.status : "error"
-      });
-      return;
-    }
-    dispatch({
-      type: "MARK_DOCUMENT_SAVED",
-      documentId,
-      fileRef: result.fileRef,
-      diskRevision: result.revision,
-      lastKnownDiskSource: result.source ?? sourceForDocument
-    });
-  }, [dispatch]);
-
-  const requestFileConflictDecision = useCallback((
-    doc: DocumentSession,
-    conflict: Extract<LinkedTextWriteResult, { status: "changed-on-disk" }>
-  ): Promise<FileConflictDecision> => {
-    return new Promise((resolve) => {
-      setPendingFileConflict({
-        documentId: doc.id,
-        title: doc.title,
-        remoteSource: conflict.source,
-        remoteRevision: conflict.revision,
-        remoteFileRef: conflict.fileRef,
-        resolve
-      });
-    });
-  }, []);
-
-  const saveDocument = useCallback(async (
-    documentId: string,
-    mode: "save" | "save-as",
-    options: { forceOverwrite?: boolean } = {}
-  ): Promise<boolean> => {
-    const doc = documentsRef.current[documentId];
-    if (!doc) {
-      return false;
-    }
-    const files = getActiveEditorPlatform().files;
-    if (!files?.saveText) {
-      return false;
-    }
-
-    if (
-      mode === "save" &&
-      doc.fileRef &&
-      isLinkedFileRef(doc.fileRef) &&
-      typeof files.writeLinkedText === "function"
-    ) {
-      const result = await files.writeLinkedText(
-        doc.fileRef,
-        doc.source,
-        options.forceOverwrite ? null : doc.diskRevision
-      );
-      if (result.status === "saved") {
-        dispatch({
-          type: "MARK_DOCUMENT_SAVED",
-          documentId,
-          fileRef: result.fileRef,
-          diskRevision: result.revision,
-          lastKnownDiskSource: doc.source
-        });
-        return true;
-      }
-      if (result.status === "changed-on-disk") {
-        dispatch({
-          type: "SET_DOCUMENT_LINKED_FILE_STATUS",
-          documentId,
-          externalChangeStatus: "changed"
-        });
-        const decision = await requestFileConflictDecision(doc, result);
-        setPendingFileConflict(null);
-        if (decision === "reload") {
-          dispatch({
-            type: "REPLACE_DOCUMENT_SOURCE_FROM_DISK",
-            documentId,
-            source: result.source,
-            fileRef: result.fileRef,
-            diskRevision: result.revision
-          });
-          return false;
-        }
-        if (decision === "save-anyway") {
-          return await saveDocument(documentId, "save", { forceOverwrite: true });
-        }
-        if (decision === "save-as") {
-          return await saveDocument(documentId, "save-as");
-        }
-        return false;
-      }
-      const status =
-        result.status === "missing" || result.status === "permission-needed" ? result.status : "error";
-      dispatch({ type: "SET_DOCUMENT_LINKED_FILE_STATUS", documentId, externalChangeStatus: status });
-      if (result.status === "failed") {
-        await showNativeMessage("Save Failed", result.reason ?? "Could not save the linked file.", "error");
-      }
-      return false;
-    }
-
-    const result = await files.saveText(doc.source, {
-      mode,
-      fileRef: doc.fileRef,
-      suggestedName: doc.fileRef?.name ?? "tikz-document.tex"
-    });
-    if (result.status === "saved") {
-      dispatch({ type: "MARK_DOCUMENT_SAVED", documentId, fileRef: result.fileRef });
-      await initializeLinkedBaseline(documentId, doc.source, result.fileRef);
-      return true;
-    }
-    if (result.status === "failed") {
-      await showNativeMessage("Save Failed", result.reason ?? "Save failed.", "error");
-    }
-    return false;
-  }, [dispatch, initializeLinkedBaseline, requestFileConflictDecision, showNativeMessage]);
+  const { applyLinkedReadDecision, saveDocument, pendingFileConflict } = useDocumentFileOperations({
+    dispatch, showMessage: showNativeMessage
+  });
 
   const runUpdateCheck = useCallback(async (): Promise<UpdateInfo | null> => {
     const updates = getActiveEditorPlatform().updates;
@@ -603,9 +505,20 @@ export function App() {
   const handleShowCompiledPictureCommand = useCallback(() => {
     setCompiledPictureSource({
       source,
-      activeFigureId
+      activeRootId,
+      fileRef: activeDocumentFileRef
     });
-  }, [activeFigureId, source]);
+  }, [activeDocumentFileRef, activeRootId, source]);
+  const handleShowCompiledSlideCommand = useCallback(() => {
+    const root = parseDocumentRootId(activeRootId ?? "");
+    setCompiledSlide({
+      source,
+      frameIndex: root?.kind === "beamer-frame" ? root.index : root?.kind === "beamer-frame-tikz" ? root.frameIndex : null,
+      step: activeDeckStep ?? 1,
+      fileRef: activeDocumentFileRef,
+      buildKey: activeDocumentFileRef?.provider === "desktop-fs" && activeDocumentFileRef.path ? activeDocumentFileRef.path : activeDocumentId
+    });
+  }, [activeDeckStep, activeDocumentFileRef, activeDocumentId, activeRootId, source]);
   const handleOpenSettingsCommand = useCallback(() => {
     setShowSettingsModal(true);
   }, []);
@@ -621,7 +534,7 @@ export function App() {
   const handleOpenRepeatCommand = useCallback(() => {
     const nextState = resolveRepeatModalState({
       source,
-      activeFigureId,
+      activeRootId,
       selectedElementIds,
       scene: snapshot.scene,
       documentId: activeDocumentId
@@ -629,7 +542,7 @@ export function App() {
     if (nextState) {
       setRepeatModalState(nextState);
     }
-  }, [activeDocumentId, activeFigureId, selectedElementIds, snapshot.scene, source]);
+  }, [activeDocumentId, activeRootId, selectedElementIds, snapshot.scene, source]);
   const handleFocusAssistantCommand = useCallback(() => {
     dispatch({ type: "SET_RIGHT_SIDEBAR_TAB", tab: "assistant" });
   }, [dispatch]);
@@ -656,11 +569,13 @@ export function App() {
   }, []);
 
   const commandRuntime = useEditorCommandRuntime({
+    onPresentationOptions: handlePresentationOptions,
     onOpenExample: handleOpenExampleCommand,
     onOpenFromArxiv: handleOpenFromArxivCommand,
     onOpenSvgExport: handleOpenSvgExportCommand,
     onOpenPngExport: handleOpenPngExportCommand,
     onShowCompiledPicture: handleShowCompiledPictureCommand,
+    ...(platform.latex?.compileToPdf ? { onShowCompiledSlide: handleShowCompiledSlideCommand } : {}),
     onOpenSettings: handleOpenSettingsCommand,
     onCheckForUpdates: handleCheckForUpdatesCommand,
     updateCheckBusy: updateCheckBusy || updateModalPhase.status === "installing",
@@ -678,8 +593,10 @@ export function App() {
   });
   const commandRuntimeRef = useRef(commandRuntime);
   const toolModeRef = useRef(toolMode);
-  commandRuntimeRef.current = commandRuntime;
-  toolModeRef.current = toolMode;
+  useLayoutEffect(() => {
+    commandRuntimeRef.current = commandRuntime;
+    toolModeRef.current = toolMode;
+  }, [commandRuntime, toolMode]);
 
   useEffect(() => {
     const apply = (dark: boolean) => {
@@ -707,7 +624,11 @@ export function App() {
       return;
     }
     startupUpdateCheckStarted = true;
-    void runUpdateCheck().catch((error: unknown) => {
+    const updates = platform.updates;
+    void (async () => {
+      const enabled = await updates.getAutomaticUpdateChecks?.() ?? true;
+      if (enabled) await runUpdateCheck();
+    })().catch((error: unknown) => {
       if (typeof console !== "undefined" && typeof console.info === "function") {
         console.info("[tikz-editor] Startup update check failed.", error);
       }
@@ -727,18 +648,17 @@ export function App() {
     sourceRef.current = source;
     snapshotRef.current = snapshot;
     activeDocumentIdRef.current = activeDocumentId;
-    documentsRef.current = documents;
-  }, [activeDocumentId, documents, snapshot, source]);
+  }, [activeDocumentId, snapshot, source]);
 
   useEffect(() => {
-    for (const doc of Object.values(documentsRef.current)) {
+    for (const doc of listDocumentSessions(useEditorStore.getState().documents)) {
       applyLinkedReadDecision(doc, "restore");
     }
   }, [applyLinkedReadDecision]);
 
   useEffect(() => {
     const checkActiveDocument = () => {
-      const doc = documentsRef.current[activeDocumentIdRef.current];
+      const doc = useEditorStore.getState().documents[activeDocumentIdRef.current];
       if (doc) {
         applyLinkedReadDecision(doc, "focus");
       }
@@ -757,7 +677,7 @@ export function App() {
   }, [applyLinkedReadDecision]);
 
   useEffect(() => {
-    const doc = documentsRef.current[activeDocumentId];
+    const doc = useEditorStore.getState().documents[activeDocumentId];
     const pathKey = linkedFilePathKey(doc?.fileRef);
     if (pathKey) {
       pendingBackgroundLinkedPathsRef.current.delete(pathKey);
@@ -772,7 +692,7 @@ export function App() {
     if (typeof sync !== "function") {
       return;
     }
-    const fileRefs = Object.values(documentsRef.current)
+    const fileRefs = listDocumentSessions(useEditorStore.getState().documents)
       .map((doc) => doc.fileRef)
       .filter((fileRef): fileRef is DocumentFileRef => Boolean(fileRef && linkedFilePathKey(fileRef)));
     void sync(fileRefs);
@@ -799,7 +719,9 @@ export function App() {
       }
       const timer = window.setTimeout(() => {
         timers.delete(pathKey);
-        const docsForPath = Object.values(documentsRef.current).filter((doc) => linkedFilePathKey(doc.fileRef) === pathKey);
+        const docsForPath = listDocumentSessions(useEditorStore.getState().documents).filter(
+          (doc) => linkedFilePathKey(doc.fileRef) === pathKey
+        );
         const activeDoc = docsForPath.find((doc) => doc.id === activeDocumentIdRef.current);
         if (activeDoc) {
           applyLinkedReadDecision(activeDoc, "focus");
@@ -822,6 +744,48 @@ export function App() {
       }
     };
   }, [applyLinkedReadDecision]);
+
+  useActiveDocumentAssetWatches({ files: platform.files, source, documentFileRef: activeDocumentFileRef, additionalDocuments: presentationAssets });
+  useEffect(() => { presentationService.refresh(); }, [imageAssetRefreshToken]);
+  useEffect(() => {
+    const unbindFocus = bindPresentationFocus(platform.presentation, presentationService.focusEditor);
+    const close = () => { void presentationService.stop(); };
+    window.addEventListener("pagehide", close);
+    return () => { unbindFocus(); window.removeEventListener("pagehide", close); };
+  }, [platform.presentation]);
+
+  useEffect(() => {
+    const bind = getActiveEditorPlatform().files?.bindLocalAssetChange;
+    if (typeof bind !== "function") {
+      return;
+    }
+    const timers = new Map<string, number>();
+    const unbind = bind((path) => {
+      const key = path.trim();
+      if (!key) {
+        return;
+      }
+      const existing = timers.get(key);
+      if (existing != null) {
+        window.clearTimeout(existing);
+      }
+      const timer = window.setTimeout(() => {
+        timers.delete(key);
+        invalidateImageAssetPath(key);
+        setImageAssetRefreshToken((value) => value + 1);
+      }, 120);
+      timers.set(key, timer);
+    });
+    return () => {
+      for (const timer of timers.values()) {
+        window.clearTimeout(timer);
+      }
+      timers.clear();
+      if (typeof unbind === "function") {
+        unbind();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!repeatModalState) {
@@ -853,7 +817,7 @@ export function App() {
       verticalStep: repeatModalState.verticalStepPt
     };
     const result = applyEditAction(repeatModalState.source, [], action, {
-      parseOptions: repeatModalState.activeFigureId == null ? {} : { activeFigureId: repeatModalState.activeFigureId }
+      parseOptions: repeatModalState.activeRootId == null ? {} : { activeFigureId: repeatModalState.activeRootId }
     });
     if (result.kind !== "success" && result.kind !== "partial") {
       setRepeatPreviewModel(null);
@@ -865,11 +829,13 @@ export function App() {
       return;
     }
 
+    const previewSvg = snapshot.svg;
     let cancelled = false;
     void computeSnapshot({
       id: crypto.randomUUID(),
       source: result.newSource,
-      activeFigureId: repeatModalState.activeFigureId
+      documentFileRef: activeDocumentFileRef,
+      activeRootId: repeatModalState.activeRootId
     }).then((response) => {
       if (cancelled) {
         return;
@@ -882,7 +848,7 @@ export function App() {
       setRepeatPreviewModel(
         emitSvgModel(previewScene, {
           padding: 18,
-          viewBox: snapshot.svg!.viewBox
+          viewBox: previewSvg.viewBox
         })
       );
     }).catch(() => {
@@ -894,16 +860,16 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [repeatModalState, snapshot.svg]);
+  }, [activeDocumentFileRef, repeatModalState, snapshot.svg]);
 
   useEffect(() => {
     const scheduler = createSingleFlightScheduler<ComputeRequest, ComputeResponse>({
-      run: (request) => computeSnapshot(request),
+      run: (request, signal) => computeSnapshot(request, { signal, yieldControl: yieldToBrowser }),
       onStart: (request) => {
         if ((request.kind ?? "render") === "prewarm") {
           return;
         }
-        dispatch({ type: "COMPUTE_REQUESTED", requestId: request.id, documentId: request.documentId });
+        dispatch({ type: "COMPUTE_REQUESTED", requestId: request.id, ...(request.documentId === undefined ? {} : { documentId: request.documentId }) });
       },
       onSuccess: (_request, response) => {
         if ((_request.kind ?? "render") === "prewarm") {
@@ -913,7 +879,7 @@ export function App() {
           type: "SNAPSHOT_READY",
           requestId: response.id,
           snapshot: response.snapshot,
-          documentId: response.documentId
+          ...(response.documentId === undefined ? {} : { documentId: response.documentId })
         });
       },
       onError: (request) => {
@@ -924,7 +890,7 @@ export function App() {
           type: "SNAPSHOT_READY",
           requestId: request.id,
           snapshot: makeEmptySnapshot(request.source),
-          documentId: request.documentId
+          ...(request.documentId === undefined ? {} : { documentId: request.documentId })
         });
       }
     });
@@ -942,57 +908,62 @@ export function App() {
     [activeSourceScrubSourceId, lastEditChangedSourceIds]
   );
   const trigger = computeTrigger(activeCanvasDragKind, activeSourceScrubSourceId);
-  const isDragComputeTrigger = trigger === "drag-element" || trigger === "drag-handle";
-  if (isDragComputeTrigger && !dragRenderViewBoxRef.current && snapshot.svg?.viewBox) {
-    dragRenderViewBoxRef.current = snapshot.svg.viewBox;
-  } else if (!isDragComputeTrigger) {
-    dragRenderViewBoxRef.current = null;
-  }
-  const renderViewBox = isDragComputeTrigger ? dragRenderViewBoxRef.current ?? null : null;
-  const typingComputeDelay = trigger === "other" && changedSourceIds == null
-    ? (source.length > 80_000 ? 220 : 120)
-    : null;
-
-  useEffect(() => {
-    const scheduler = computeSchedulerRef.current;
-    if (!scheduler || typingComputeDelay != null) {
+  const interactiveEdit = isInteractiveEdit({ activeCanvasDragKind, activeSourceScrubSourceId, activeInspectorEditDocumentId, activeDocumentId });
+  useLayoutEffect(() => {
+    if (!interactiveEdit) {
+      setDragRenderViewBox(null);
       return;
     }
-    setMathJaxFont(mathJaxFont);
-    scheduler.schedule({
-      id: crypto.randomUUID(),
+    setDragRenderViewBox((current) => current ?? snapshot.svg?.viewBox ?? null);
+  }, [interactiveEdit, snapshot.svg?.viewBox]);
+  const renderViewBox = interactiveEdit ? dragRenderViewBox ?? snapshot.svg?.viewBox ?? null : null;
+  const publishedDeckSnapshot = snapshot.deck ? snapshot : null;
+  // Typing reparses a deck from its previous tree, which, while the text has
+  // errors, can recover from them unlike a fresh parse. Once typing pauses,
+  // the shown revision is parsed afresh.
+  const [exactParseRevision, setExactParseRevision] = useState<{ documentId: string; sourceRevision: number } | null>(null);
+  const deckParseInexact = snapshot.deck?.exactParse === false && snapshot.source === source;
+  useEffect(() => {
+    if (!deckParseInexact || interactiveEdit) return;
+    const timer = window.setTimeout(() => {
+      setExactParseRevision({ documentId: activeDocumentId, sourceRevision });
+    }, EXACT_PARSE_IDLE_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activeDocumentId, deckParseInexact, interactiveEdit, sourceRevision]);
+  const exactParse = exactParseRevision?.documentId === activeDocumentId && exactParseRevision.sourceRevision === sourceRevision;
+  const computeInput = useMemo<ComputeSchedulingInput>(() => ({
+    request: {
       documentId: activeDocumentId,
       kind: "render",
       source,
       sourceRevision,
-      activeFigureId,
+      documentFileRef: activeDocumentFileRef,
+      activeRootId,
+      deckStep: activeDeckStep,
+      drawingLayerRootId,
+      includeDrawingLayer: true,
       changedSourceIds,
       patches: lastEditPatches ? [...lastEditPatches] : null,
       patchBaseRevision: lastEditPatchBaseRevision,
       trigger,
-      renderViewBox
-    });
-  }, [activeDocumentId, activeFigureId, changedSourceIds, dispatch, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
-
-  useDebouncedEffect(() => {
-    const scheduler = computeSchedulerRef.current;
-    if (!scheduler || typingComputeDelay == null) {
-      return;
-    }
-    setMathJaxFont(mathJaxFont);
-    scheduler.schedule({
-      id: crypto.randomUUID(),
-      documentId: activeDocumentId,
-      kind: "render",
-      source,
-      sourceRevision,
-      activeFigureId,
-      changedSourceIds,
-      patches: lastEditPatches ? [...lastEditPatches] : null,
-      patchBaseRevision: lastEditPatchBaseRevision,
-      trigger
-    });
-  }, typingComputeDelay, [activeDocumentId, activeFigureId, changedSourceIds, dispatch, lastEditPatchBaseRevision, lastEditPatches, mathJaxFont, source, sourceRevision, trigger, typingComputeDelay]);
+      renderViewBox,
+      textEditMaskSpan,
+      exactParse
+    },
+    sourceChangeOrigin,
+    dragKind: activeCanvasDragKind,
+    sourceScrubActive: activeSourceScrubSourceId != null,
+    inspectorEditActive: activeInspectorEditDocumentId === activeDocumentId,
+    canvasTextEditActive,
+    assetRefreshToken: imageAssetRefreshToken,
+    publishedDeckSnapshot
+  }), [activeCanvasDragKind, activeDeckStep, activeDocumentFileRef, activeDocumentId, activeInspectorEditDocumentId,
+    activeRootId, drawingLayerRootId, activeSourceScrubSourceId, canvasTextEditActive, changedSourceIds, exactParse, imageAssetRefreshToken,
+    lastEditPatchBaseRevision, lastEditPatches, renderViewBox, source, sourceChangeOrigin, sourceRevision, textEditMaskSpan, trigger, publishedDeckSnapshot]);
+  useScheduledCompute(computeSchedulerRef, computeInput);
+  useDeckNeighborPrewarm();
 
   useEffect(() => {
     let prewarmTimer: number | null = null;
@@ -1008,6 +979,7 @@ export function App() {
     const isPrewarmable = (state: ReturnType<typeof useEditorStore.getState>, hoveredElementId: string | null): hoveredElementId is string => (
       state.activeCanvasDragKind == null &&
       state.activeSourceScrubSourceId == null &&
+      state.snapshot.deck == null &&
       state.pendingRequestId == null &&
       hoveredElementId != null &&
       state.snapshot.source === state.source
@@ -1034,7 +1006,8 @@ export function App() {
           documentId: latest.activeDocumentId,
           kind: "prewarm",
           source: latest.source,
-          activeFigureId: latest.activeFigureId,
+          documentFileRef: latest.documents[latest.activeDocumentId]?.fileRef ?? null,
+          activeRootId: latest.activeRootId,
           changedSourceIds: [hoveredElementId],
           trigger: "drag-element"
         });
@@ -1054,22 +1027,25 @@ export function App() {
       return;
     }
     const assistantApi = platform.assistant;
-    const bindAssistantEvents = assistantApi.bindEvents!;
+    const bindAssistantEvents = assistantApi.bindEvents;
+    if (!bindAssistantEvents) return;
 
     async function respondToDynamicTool(event: Extract<AssistantEvent, { type: "dynamic-tool-call" }>): Promise<void> {
-      const doc = documentsRef.current[event.documentId];
+      const doc = useEditorStore.getState().documents[event.documentId];
       if (!doc) {
         return;
       }
       const sourceForDoc = event.documentId === activeDocumentIdRef.current ? sourceRef.current : doc.source;
       const snapshotForDoc = event.documentId === activeDocumentIdRef.current ? snapshotRef.current : doc.snapshot;
-      const args = (event.arguments ?? {}) as Record<string, unknown>;
+      const args = isRecord(event.arguments) ? event.arguments : {};
 
       const respond = async (success: boolean, text: string, imageUrl?: string) => {
+        if (useEditorStore.getState().documents[event.documentId]?.assistantSessionGeneration !== (event.sessionGeneration ?? 0)) return;
         const contentItems: unknown[] = [{ type: "inputText", text }];
         if (imageUrl) contentItems.push({ type: "inputImage", imageUrl });
         await assistantApi.respondToDynamicToolCall?.({
           documentId: event.documentId,
+          sessionGeneration: event.sessionGeneration ?? 0,
           requestId: event.requestId,
           result: { success, contentItems }
         });
@@ -1079,22 +1055,23 @@ export function App() {
       // figure_index is 1-indexed; omit or 0 to use the active figure.
       const figureIndexArg = typeof args.figure_index === "number" ? args.figure_index : 0;
       let targetSnapshot = snapshotForDoc;
-      let targetFigureId = snapshotForDoc.activeFigureId;
+      let targetFigureId = snapshotForDoc.activeRootId;
       if (figureIndexArg > 0 && snapshotForDoc.figures.length > 1) {
         const idx = figureIndexArg - 1;
         if (idx < 0 || idx >= snapshotForDoc.figures.length) {
           await respond(false, `Invalid figure_index ${figureIndexArg}. Document has ${snapshotForDoc.figures.length} figure(s).`);
           return;
         }
-        const requestedFigId = snapshotForDoc.figures[idx].id;
-        if (requestedFigId !== snapshotForDoc.activeFigureId) {
+        const requestedFigId = requireArrayValue(snapshotForDoc.figures, idx).id;
+        if (requestedFigId !== snapshotForDoc.activeRootId) {
           try {
             const result = await computeSnapshot({
               id: crypto.randomUUID(),
               documentId: event.documentId,
               kind: "render",
               source: sourceForDoc,
-              activeFigureId: requestedFigId,
+              documentFileRef: doc.fileRef,
+              activeRootId: requestedFigId,
               changedSourceIds: null,
               patches: null,
               trigger: "other"
@@ -1139,9 +1116,26 @@ export function App() {
       }
 
       // ── get_latest_preview_png ────────────────────────────────────────
-      const hasOverlayCode = typeof args.overlay_code === "string" && args.overlay_code.length > 0;
-      const hasGrid = args.show_grid != null;
-      const hasZoom = args.zoom_region != null;
+      const overlayCode = typeof args.overlay_code === "string" ? args.overlay_code : "";
+      const hasOverlayCode = overlayCode.length > 0;
+      let showGrid: { spacing?: number; color?: string } | undefined;
+      if (args.show_grid != null) {
+        const grid = args.show_grid;
+        if (!isRecord(grid) || (grid.spacing !== undefined && (typeof grid.spacing !== "number" || !Number.isFinite(grid.spacing) || grid.spacing <= 0)) || (grid.color !== undefined && typeof grid.color !== "string")) {
+          await respond(false, "Invalid coordinate grid options.");
+          return;
+        }
+        showGrid = { ...(typeof grid.spacing === "number" ? { spacing: grid.spacing } : {}), ...(typeof grid.color === "string" ? { color: grid.color } : {}) };
+      }
+      let zoomRegion: { min_x: number; min_y: number; max_x: number; max_y: number } | undefined;
+      if (args.zoom_region != null) {
+        const zoom = args.zoom_region;
+        if (!isRecord(zoom) || typeof zoom.min_x !== "number" || typeof zoom.min_y !== "number" || typeof zoom.max_x !== "number" || typeof zoom.max_y !== "number" || ![zoom.min_x, zoom.min_y, zoom.max_x, zoom.max_y].every(Number.isFinite) || zoom.min_x >= zoom.max_x || zoom.min_y >= zoom.max_y) {
+          await respond(false, "Invalid preview zoom region.");
+          return;
+        }
+        zoomRegion = { min_x: zoom.min_x, min_y: zoom.min_y, max_x: zoom.max_x, max_y: zoom.max_y };
+      }
 
       let svgToRender = targetSnapshot.svg;
       let sourceMatches = targetSnapshot.source === sourceForDoc;
@@ -1151,13 +1145,14 @@ export function App() {
         try {
           const { injectOverlayCode } = await import("./assistant-tool-handlers");
           const targetFig = targetSnapshot.figures.find((f) => f.id === targetFigureId);
-          const modifiedSource = injectOverlayCode(sourceForDoc, args.overlay_code as string, targetFig?.span);
+          const modifiedSource = injectOverlayCode(sourceForDoc, overlayCode, targetFig?.span);
           const result = await computeSnapshot({
             id: crypto.randomUUID(),
             documentId: event.documentId,
             kind: "render",
             source: modifiedSource,
-            activeFigureId: targetFigureId,
+            documentFileRef: doc.fileRef,
+            activeRootId: targetFigureId,
             changedSourceIds: null,
             patches: null,
             trigger: "other"
@@ -1180,10 +1175,10 @@ export function App() {
         const { renderPngExport } = await import("./export-commands");
 
         let enhancedSvg = svgToRender;
-        if (hasGrid || hasZoom) {
+        if (showGrid || zoomRegion) {
           enhancedSvg = applyPreviewEnhancements(svgToRender, {
-            showGrid: hasGrid ? (args.show_grid as { spacing?: number; color?: string }) : undefined,
-            zoomRegion: hasZoom ? (args.zoom_region as { min_x: number; min_y: number; max_x: number; max_y: number }) : undefined
+            ...(showGrid ? { showGrid } : {}),
+            ...(zoomRegion ? { zoomRegion } : {})
           });
         }
 
@@ -1193,9 +1188,9 @@ export function App() {
 
         let description = "Rendered an updated PNG preview";
         if (hasOverlayCode) description += " with overlay code";
-        if (hasGrid) description += " with coordinate grid";
-        if (hasZoom) {
-          const z = args.zoom_region as { min_x: number; min_y: number; max_x: number; max_y: number };
+        if (showGrid) description += " with coordinate grid";
+        if (zoomRegion) {
+          const z = zoomRegion;
           description += ` zoomed to (${z.min_x},${z.min_y})–(${z.max_x},${z.max_y})`;
         }
         description += ".";
@@ -1207,11 +1202,12 @@ export function App() {
     }
 
     const unbind = bindAssistantEvents((event) => {
+      if ("documentId" in event && event.documentId && useEditorStore.getState().documents[event.documentId]?.assistantSessionGeneration !== (event.sessionGeneration ?? 0)) return;
       switch (event.type) {
         case "thread-ready":
           dispatch({
             type: "ASSISTANT_THREAD_READY",
-            documentId: event.documentId,
+            documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0,
             threadId: event.thread.threadId,
             workspacePath: event.thread.workspacePath,
             figurePath: event.thread.figurePath,
@@ -1223,45 +1219,45 @@ export function App() {
         case "rate-limits-updated":
           break;
         case "thread-state":
-          dispatch({ type: "ASSISTANT_THREAD_LOADED", documentId: event.documentId, state: event.state });
+          dispatch({ type: "ASSISTANT_THREAD_LOADED", documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0, state: event.state });
           break;
         case "turn-status":
           dispatch({
             type: "ASSISTANT_TURN_STATUS",
-            documentId: event.documentId,
+            documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0,
             status: event.status,
             turnId: event.turnId ?? null,
             error: event.error ?? null
           });
           break;
         case "item-started":
-          dispatch({ type: "ASSISTANT_ITEM_STARTED", documentId: event.documentId, item: event.item });
+          dispatch({ type: "ASSISTANT_ITEM_STARTED", documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0, item: event.item });
           break;
         case "item-updated":
-          dispatch({ type: "ASSISTANT_ITEM_UPDATED", documentId: event.documentId, item: event.item });
+          dispatch({ type: "ASSISTANT_ITEM_UPDATED", documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0, item: event.item });
           break;
         case "item-completed":
-          dispatch({ type: "ASSISTANT_ITEM_COMPLETED", documentId: event.documentId, item: event.item });
+          dispatch({ type: "ASSISTANT_ITEM_COMPLETED", documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0, item: event.item });
           break;
         case "item-delta":
           dispatch({
             type: "ASSISTANT_ITEM_DELTA",
-            documentId: event.documentId,
+            documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0,
             itemId: event.itemId,
             deltaType: event.deltaType,
             delta: event.delta
           });
           break;
         case "approval-requested":
-          dispatch({ type: "ASSISTANT_APPROVAL_REQUESTED", documentId: event.documentId, approval: event.approval });
+          dispatch({ type: "ASSISTANT_APPROVAL_REQUESTED", documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0, approval: event.approval });
           break;
         case "approval-cleared":
-          dispatch({ type: "ASSISTANT_APPROVAL_CLEARED", documentId: event.documentId, requestId: event.requestId });
+          dispatch({ type: "ASSISTANT_APPROVAL_CLEARED", documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0, requestId: event.requestId });
           break;
         case "source-updated":
           dispatch({
             type: "ASSISTANT_SOURCE_UPDATED",
-            documentId: event.documentId,
+            documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0,
             source: event.source,
             revisionToken: event.revisionToken,
             historyMergeKey: `assistant-turn:${event.documentId}`
@@ -1270,9 +1266,11 @@ export function App() {
         case "dynamic-tool-call":
           void respondToDynamicTool(event);
           break;
-        case "error":
-          dispatch({ type: "ASSISTANT_SET_ERROR", documentId: event.documentId, message: event.message });
+        case "error": {
+          const sessionGeneration = event.documentId ? event.sessionGeneration ?? 0 : useEditorStore.getState().documents[activeDocumentIdRef.current]?.assistantSessionGeneration;
+          dispatch({ type: "ASSISTANT_SET_ERROR", ...(event.documentId === undefined ? {} : { documentId: event.documentId }), ...(sessionGeneration === undefined ? {} : { sessionGeneration }), message: event.message });
           break;
+        }
       }
     });
 
@@ -1297,7 +1295,9 @@ export function App() {
     attachments: AssistantComposerImageAttachment[]
   ): Promise<void> => {
     const documentId = activeDocumentIdRef.current;
-    const currentDocument = documentsRef.current[documentId];
+    const currentDocument = useEditorStore.getState().documents[documentId];
+    const sessionGeneration = currentDocument?.assistantSessionGeneration ?? 0;
+    const ownsSession = () => useEditorStore.getState().documents[documentId]?.assistantSessionGeneration === sessionGeneration;
     const currentSource = currentDocument?.source ?? sourceRef.current;
     const currentSnapshot = currentDocument?.snapshot ?? snapshotRef.current;
     const { buildFigureContext: buildFigCtx, buildDiagnosticsText: buildDiag } = await import("./assistant-tool-handlers");
@@ -1310,6 +1310,7 @@ export function App() {
         fileName: attachment.fileName
       }))
     );
+    if (!ownsSession()) return;
     const optimisticImageContent = pastedImages.map((image) => ({
       type: "image" as const,
       url: `data:${image.mimeType};base64,${image.base64}`
@@ -1318,11 +1319,12 @@ export function App() {
     const isSteeringActiveTurn =
       currentDocument?.assistantTurnStatus === "starting" || currentDocument?.assistantTurnStatus === "inProgress";
     if (!isSteeringActiveTurn) {
-      dispatch({ type: "ASSISTANT_TURN_STATUS", documentId, status: "starting", turnId: null });
+      dispatch({ type: "ASSISTANT_TURN_STATUS", documentId, sessionGeneration, status: "starting", turnId: null });
     }
     dispatch({
       type: "ASSISTANT_ITEM_STARTED",
       documentId,
+      sessionGeneration,
       item: {
         type: "userMessage",
         id: `optimistic-user-message:${documentId}:${Date.now()}`,
@@ -1337,23 +1339,27 @@ export function App() {
       if (isSteeringActiveTurn) {
         await assistant?.steerTurn?.({
           documentId,
+          sessionGeneration,
           prompt,
-          pastedImages: pastedImages.length > 0 ? pastedImages : undefined
+          ...(pastedImages.length > 0 ? { pastedImages } : {})
         });
         return;
       }
       const thread = await assistant?.ensureDocumentThread?.({
         documentId,
+        sessionGeneration,
         source: currentSource,
         threadId: currentDocument?.assistantThreadId ?? null,
         workspacePath: currentDocument?.assistantWorkspacePath ?? null,
         figurePath: currentDocument?.assistantFigurePath ?? null,
         previewPath: currentDocument?.assistantPreviewPath ?? null
       });
+      if (!ownsSession()) return;
       if (thread) {
         dispatch({
           type: "ASSISTANT_THREAD_READY",
           documentId,
+          sessionGeneration,
           threadId: thread.threadId,
           workspacePath: thread.workspacePath,
           figurePath: thread.figurePath,
@@ -1361,12 +1367,14 @@ export function App() {
         });
       }
       const pngBase64 = await buildCurrentPreviewBase64(currentSource, currentSnapshot);
+      if (!ownsSession()) return;
       await assistant?.startTurn?.({
         documentId,
+        sessionGeneration,
         prompt,
         source: currentSource,
         pngBase64,
-        pastedImages: pastedImages.length > 0 ? pastedImages : undefined,
+        ...(pastedImages.length > 0 ? { pastedImages } : {}),
         threadId: thread?.threadId ?? currentDocument?.assistantThreadId ?? null,
         workspacePath: thread?.workspacePath ?? currentDocument?.assistantWorkspacePath ?? null,
         figurePath: thread?.figurePath ?? currentDocument?.assistantFigurePath ?? null,
@@ -1376,10 +1384,12 @@ export function App() {
         diagnosticsText
       });
     } catch (error) {
+      if (!ownsSession()) return;
       if (!isSteeringActiveTurn) {
         dispatch({
           type: "ASSISTANT_TURN_STATUS",
           documentId,
+          sessionGeneration,
           status: "failed",
           turnId: null,
           error: error instanceof Error ? error.message : String(error)
@@ -1388,6 +1398,7 @@ export function App() {
       dispatch({
         type: "ASSISTANT_SET_ERROR",
         documentId,
+        sessionGeneration,
         message: error instanceof Error ? error.message : String(error)
       });
     }
@@ -1395,19 +1406,26 @@ export function App() {
 
   const handleInterruptAssistantTurn = useCallback(async (): Promise<void> => {
     const documentId = activeDocumentIdRef.current;
+    const sessionGeneration = useEditorStore.getState().documents[documentId]?.assistantSessionGeneration ?? 0;
     try {
-      await getActiveEditorPlatform().assistant?.interruptTurn?.({ documentId });
+      await getActiveEditorPlatform().assistant?.interruptTurn?.({ documentId, sessionGeneration });
     } catch (error) {
       dispatch({
         type: "ASSISTANT_SET_ERROR",
         documentId,
+        sessionGeneration,
         message: error instanceof Error ? error.message : String(error)
       });
     }
   }, [dispatch]);
 
   const handleAssistantNewChat = useCallback((): void => {
-    dispatch({ type: "ASSISTANT_NEW_CHAT", documentId: activeDocumentIdRef.current });
+    const documentId = activeDocumentIdRef.current;
+    dispatch({ type: "ASSISTANT_NEW_CHAT", documentId });
+    const sessionGeneration = useEditorStore.getState().documents[documentId]?.assistantSessionGeneration ?? 0;
+    void getActiveEditorPlatform().assistant?.resetDocumentThread?.({ documentId, sessionGeneration }).catch((error: unknown) => {
+      dispatch({ type: "ASSISTANT_SET_ERROR", documentId, sessionGeneration, message: error instanceof Error ? error.message : String(error) });
+    });
   }, [dispatch]);
 
   useEffect(() => {
@@ -1446,12 +1464,14 @@ export function App() {
           sourceId: string;
           sceneTextId: string;
           text: string;
+          sourceStart: number;
           renderSourceText: string | null;
           paragraphId: string | null;
           layoutKind: string | null;
         }>;
         resetProfilingSession: (label?: string | null) => void;
         getProfilingSnapshot: () => ReturnType<typeof readAppProfilingSnapshot>;
+        getDeckCacheStats: () => ReturnType<typeof deckPageCacheStats>;
       };
     };
     globalLike.__TIKZ_EDITOR_APP_TEST_API__ = {
@@ -1474,18 +1494,18 @@ export function App() {
         return menuDefinition;
       },
       getCommandState: (commandId) => {
-        const binding = commandRuntimeRef.current.bindings[commandId as keyof typeof commandRuntimeRef.current.bindings];
+        const binding = isAppMenuCommandId(commandId) ? commandRuntimeRef.current.bindings[commandId] : undefined;
         return {
           enabled: binding?.enabled ?? false,
           known: binding != null
         };
       },
       runCommand: (commandId) => {
-        return commandRuntimeRef.current.runCommand(commandId as keyof typeof commandRuntimeRef.current.bindings, "platform");
+        return isAppMenuCommandId(commandId) && commandRuntimeRef.current.runCommand(commandId, "platform");
       },
       selectFirstFigure: () => {
         const firstFigureId = snapshotRef.current.figures[0]?.id ?? null;
-        dispatch({ type: "SET_ACTIVE_FIGURE", figureId: firstFigureId });
+        dispatch({ type: "SET_ACTIVE_ROOT", rootId: firstFigureId });
       },
       selectAllElements: () => {
         const ids = Array.from(
@@ -1521,7 +1541,7 @@ export function App() {
         return [...sourceIds];
       },
       getActiveFigureId: () => {
-        return useEditorStore.getState().activeFigureId;
+        return useEditorStore.getState().activeRootId;
       },
       getFigureCount: () => {
         return useEditorStore.getState().snapshot.figures.length;
@@ -1551,9 +1571,10 @@ export function App() {
             sourceId: element.sourceRef.sourceId,
             sceneTextId: element.id,
             text: element.text,
-            renderSourceText: element.textRenderInfo?.mode === "mathjax" ? element.textRenderInfo.renderSourceText : null,
-            paragraphId: element.textRenderInfo?.mode === "mathjax" ? element.textRenderInfo.paragraphId : null,
-            layoutKind: element.textRenderInfo?.mode === "mathjax" ? element.textRenderInfo.layoutKind : null
+            sourceStart: element.textSourceSpan?.from ?? element.sourceRef.sourceSpan.from,
+            renderSourceText: element.textRenderInfo?.mode === "tex" ? element.textRenderInfo.renderSourceText : null,
+            paragraphId: element.textRenderInfo?.mode === "tex" ? element.textRenderInfo.paragraphId : null,
+            layoutKind: element.textRenderInfo?.mode === "tex" ? element.textRenderInfo.layoutKind : null
           }));
       },
       resetProfilingSession: (label) => {
@@ -1561,7 +1582,8 @@ export function App() {
       },
       getProfilingSnapshot: () => {
         return readAppProfilingSnapshot();
-      }
+      },
+      getDeckCacheStats: deckPageCacheStats
     };
     return () => {
       delete globalLike.__TIKZ_EDITOR_APP_TEST_API__;
@@ -1621,7 +1643,7 @@ export function App() {
       return [commandId, state] as const;
     });
     return {
-      commandStates: Object.fromEntries(entries) as Record<keyof typeof commandRuntime.bindings, { enabled: boolean; checked?: boolean }>,
+      commandStates: Object.fromEntries(entries),
       signature: entries.map(([commandId, state]) =>
         `${commandId}:${state.enabled ? "1" : "0"}:${state.checked === true ? "1" : "0"}`
       ).join("|")
@@ -1658,6 +1680,10 @@ export function App() {
       const runtime = commandRuntimeRef.current;
       const currentToolMode = toolModeRef.current;
       const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && key === "enter") {
+        if (runtime.runCommand(e.shiftKey ? APP_MENU_COMMAND_IDS.PRESENT_BEGINNING : APP_MENU_COMMAND_IDS.PRESENT_CURRENT, "shortcut")) e.preventDefault();
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && key === "f") {
         if (runtime.runCommand(APP_MENU_COMMAND_IDS.FORMAT_TIKZ, "shortcut")) {
           e.preventDefault();
@@ -1851,6 +1877,7 @@ export function App() {
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         const shortcutMode = toolModeFromShortcut(key);
         if (shortcutMode) {
+          // On a slide, a drawing tool opens the slide's drawing layer (the reducer's SET_TOOL_MODE).
           dispatch({ type: "SET_TOOL_MODE", mode: shortcutMode });
           e.preventDefault();
           return;
@@ -1872,10 +1899,10 @@ export function App() {
     return () => { window.removeEventListener("keydown", onKeyDown); };
   }, [dispatch]);
 
-  const appStyle = {
+  const appStyle: CSSProperties & { [key: `--${string}`]: string | number } = {
     "--app-ui-font-size": `${uiFontSizePx}px`,
     "--app-ui-scale": `${uiFontSizePx / 11}`
-  } as CSSProperties;
+  };
 
   const loadExampleIntoEditor = (example: TikzOpenExample) => {
     dispatch({ type: "NEW_DOCUMENT", source: example.source, title: example.title });
@@ -1921,7 +1948,7 @@ export function App() {
     }
 
     for (const documentId of closeCtx.dirtyDocumentIds) {
-      const doc = documents[documentId];
+      const doc = useEditorStore.getState().documents[documentId];
       if (!doc?.dirty) {
         continue;
       }
@@ -1933,6 +1960,10 @@ export function App() {
       return;
     }
     setPendingClose(null);
+    const { documents, tabOrder } = useEditorStore.getState();
+    if (collectDirtyDocumentIdsForIntent(closeCtx.intent, documents, tabOrder).length > 0) {
+      return;
+    }
     executeCloseIntent(closeCtx.intent);
   }
 
@@ -1940,6 +1971,22 @@ export function App() {
     setShowUpdateModal(false);
     setUpdateDismissedForSession(true);
     setUpdateModalPhase({ status: "idle" });
+  }
+
+  function handleSkipUpdate(): void {
+    if (!availableUpdate) return;
+    try {
+      getActiveEditorPlatform().persistence.save(SKIPPED_UPDATE_VERSION_KEY, availableUpdate.version);
+    } catch (error) {
+      void showNativeMessage(
+        "Could Not Skip Update",
+        error instanceof Error ? error.message : String(error),
+        "error"
+      );
+      return;
+    }
+    setSkippedUpdateVersion(availableUpdate.version);
+    handleUpdateLater();
   }
 
   function handleUpdateModalClose(): void {
@@ -1952,6 +1999,17 @@ export function App() {
     if (!updates || !availableUpdate) {
       return;
     }
+    if (availableUpdate.downloadUrl) {
+      try {
+        const open = getActiveEditorPlatform().window?.openExternalUrl;
+        if (!open) throw new Error("Could not open the update download.");
+        if (!await open(availableUpdate.downloadUrl)) throw new Error("Could not open the update download.");
+        handleUpdateLater();
+      } catch (error) {
+        setUpdateModalPhase({ status: "failed", message: error instanceof Error ? error.message : String(error) });
+      }
+      return;
+    }
     setUpdateModalPhase({ status: "installing", downloadedBytes: 0 });
     let downloadedBytes = 0;
     try {
@@ -1961,7 +2019,7 @@ export function App() {
           setUpdateModalPhase({
             status: "installing",
             downloadedBytes,
-            contentLength: progress.contentLength
+            ...(progress.contentLength === undefined ? {} : { contentLength: progress.contentLength })
           });
           return;
         }
@@ -1970,14 +2028,14 @@ export function App() {
           setUpdateModalPhase((current) => ({
             status: "installing",
             downloadedBytes,
-            contentLength: current.status === "installing" ? current.contentLength : undefined
+            ...(current.status === "installing" && current.contentLength !== undefined ? { contentLength: current.contentLength } : {})
           }));
           return;
         }
         setUpdateModalPhase((current) => ({
           status: "installing",
           downloadedBytes,
-          contentLength: current.status === "installing" ? current.contentLength : undefined
+          ...(current.status === "installing" && current.contentLength !== undefined ? { contentLength: current.contentLength } : {})
         }));
       });
       await updates.relaunch();
@@ -2007,7 +2065,7 @@ export function App() {
 
   function onAppDragLeave(e: React.DragEvent<HTMLDivElement>) {
     // Only clear when leaving the app root entirely
-    if (e.currentTarget.contains(e.relatedTarget as Node | null)) {
+    if (e.currentTarget.contains(e.relatedTarget instanceof Node ? e.relatedTarget : null)) {
       return;
     }
     setIsDragOver(false);
@@ -2031,7 +2089,7 @@ export function App() {
   }
 
   const updateChip =
-    availableUpdate && !showUpdateModal && !updateDismissedForSession
+    availableUpdate && availableUpdate.version !== skippedUpdateVersion && !showUpdateModal && !updateDismissedForSession
       ? {
           version: availableUpdate.version,
           onClick: () => {
@@ -2045,6 +2103,7 @@ export function App() {
     <div
       className={css.app}
       style={appStyle}
+      onPointerDownCapture={presentationService.focusEditor}
       onDragOver={onAppDragOver}
       onDragLeave={onAppDragLeave}
       onDrop={(e) => { void onAppDrop(e); }}
@@ -2066,12 +2125,17 @@ export function App() {
               bindings={commandRuntime.bindings}
             />
           )}
-          <Toolbar updateChip={updateChip} />
+          <Toolbar
+            onPresentationOptions={handlePresentationOptions}
+            updateChip={updateChip}
+          />
           <TabStrip
             onRequestCloseDocument={(documentId) => {
               requestCloseIntent({ kind: "close-document", documentId });
             }}
           />
+          {presentation.error ? <div className={presentationCss.feedback} role="alert"><span>{presentation.error}</span><Modal.SecondaryButton onClick={handlePresentationOptions}>Presentation Options…</Modal.SecondaryButton><Modal.SecondaryButton onClick={presentationService.clearError}>Dismiss</Modal.SecondaryButton></div> : null}
+          {presentation.snapshot && !presentation.snapshot.outputAvailable ? <div className={presentationCss.feedback} role="status"><span>Audience output is closed.</span><Modal.SecondaryButton onClick={handlePresentationOptions}>Choose Audience Output…</Modal.SecondaryButton></div> : null}
           <div className={css.body}>
             <DockLayout
               repeatPreviewModel={repeatPreviewModel}
@@ -2083,6 +2147,7 @@ export function App() {
           <StatusBar />
         </>
       )}
+      {showPresentationOptions ? <PresentationOptionsModal active={presenting} onClose={() => { setShowPresentationOptions(false); }} /> : null}
       <Suspense fallback={null}>
         <DevPanel />
       </Suspense>
@@ -2109,11 +2174,26 @@ export function App() {
         <Suspense fallback={null}>
           <TikzJaxModal
             source={compiledPictureSource.source}
-            activeFigureId={compiledPictureSource.activeFigureId}
+            activeRootId={compiledPictureSource.activeRootId}
+            documentFileRef={compiledPictureSource.fileRef}
             onClose={() => { setCompiledPictureSource(null); }}
-            latex={platform.latex}
+            {...(platform.latex === undefined ? {} : { latex: platform.latex })}
             showOpenInNewTab={!platform.id.startsWith("desktop")}
             showLogToggle={platform.id.startsWith("desktop")}
+          />
+        </Suspense>
+      ) : null}
+      {compiledSlide !== null && platform.latex ? (
+        <Suspense fallback={null}>
+          <CompiledSlideModal
+            source={compiledSlide.source}
+            frameIndex={compiledSlide.frameIndex}
+            step={compiledSlide.step}
+            documentFileRef={compiledSlide.fileRef}
+            buildKey={compiledSlide.buildKey}
+            latex={platform.latex}
+            {...(platform.files?.exportFile ? { exportFile: platform.files.exportFile } : {})}
+            onClose={() => { setCompiledSlide(null); }}
           />
         </Suspense>
       ) : null}
@@ -2214,7 +2294,7 @@ export function App() {
                 verticalStep: repeatModalState.verticalStepPt
               };
               const precomputedResult = applyEditAction(repeatModalState.source, [], action, {
-                parseOptions: repeatModalState.activeFigureId == null ? {} : { activeFigureId: repeatModalState.activeFigureId }
+                parseOptions: repeatModalState.activeRootId == null ? {} : { activeFigureId: repeatModalState.activeRootId }
               });
               if (precomputedResult.kind !== "success" && precomputedResult.kind !== "partial") {
                 return;
@@ -2249,7 +2329,7 @@ export function App() {
       {pendingClose ? (
         <Suspense fallback={null}>
           <UnsavedChangesModal
-            documentTitles={pendingClose.dirtyDocumentIds.map((id) => documents[id]?.title ?? "Untitled")}
+            documentTitles={pendingClose.documentTitles}
             onChoose={(decision) => {
               void handleUnsavedDecision(decision);
             }}
@@ -2292,6 +2372,7 @@ export function App() {
             }}
             onClose={handleUpdateModalClose}
             onLater={handleUpdateLater}
+            onSkip={handleSkipUpdate}
           />
         </Suspense>
       ) : null}
@@ -2304,7 +2385,7 @@ export function App() {
 
 function resolveRepeatModalState(input: {
   source: string;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   selectedElementIds: ReadonlySet<string>;
   scene: SceneFigure | null;
   documentId: string;
@@ -2316,7 +2397,7 @@ function resolveRepeatModalState(input: {
   const eligibility = getRepeatSelectionEligibility(
     input.source,
     selectedSourceIds,
-    input.activeFigureId == null ? {} : { activeFigureId: input.activeFigureId }
+    input.activeRootId == null ? {} : { activeFigureId: input.activeRootId }
   );
   if (eligibility.kind !== "eligible") {
     return null;
@@ -2347,7 +2428,7 @@ function resolveRepeatModalState(input: {
   return {
     documentId: input.documentId,
     source: input.source,
-    activeFigureId: input.activeFigureId,
+    activeRootId: input.activeRootId,
     selectedSourceIds: eligibility.refs.map((ref) => ref.id),
     selectionWidthPt,
     selectionHeightPt,
@@ -2376,8 +2457,8 @@ async function blobToBase64(blob: Blob): Promise<string> {
   const arrayBuffer = await blob.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
   let binary = "";
-  for (let index = 0; index < bytes.length; index += 1) {
-    binary += String.fromCharCode(bytes[index]);
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
   }
   return btoa(binary);
 }

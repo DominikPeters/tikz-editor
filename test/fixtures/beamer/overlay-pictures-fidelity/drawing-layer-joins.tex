@@ -1,0 +1,21 @@
+\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}{After a list}
+\begin{itemize}
+\item First
+\item Second
+\end{itemize}
+\nointerlineskip
+\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}]
+\node at (2,3) {Added};
+\end{tikzpicture}
+\end{frame}
+\begin{frame}{After text}
+Some text here.
+%
+\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}]
+\node at (2,3) {Added};
+\end{tikzpicture}
+\end{frame}
+\end{document}

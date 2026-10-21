@@ -9,9 +9,10 @@ import {
 } from "react";
 import { RiArrowRightSLine } from "@remixicon/react";
 import { useShallow } from "zustand/react/shallow";
-import { NODE_SHAPE_OPTIONS, type NodeShapePresetId } from "tikz-editor/edit/inspector";
+import { NODE_SHAPE_OPTIONS } from "@tikz-editor/core/edit/inspector";
 import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
 import { useEditorStore } from "../../store/store";
+import { isRecord } from "../../validation";
 import type { ToolMode } from "../../store/types";
 import { ColorPicker } from "../ColorPicker";
 import { GENERATED_NODE_SHAPE_PREVIEWS } from "../generated-node-shape-previews";
@@ -20,15 +21,16 @@ import { TOOL_BUTTONS, TOOL_COLOR_OPTIONS, type ToolButtonDef } from "../tool-co
 import { readSafeAreaBottom } from "./ipad-safe-area";
 import css from "./IpadToolPalette.module.css";
 
-export type PaletteEdge = "top" | "bottom" | "left" | "right";
-export type PaletteCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+const PALETTE_EDGES = ["top", "bottom", "left", "right"] as const;
+const PALETTE_CORNERS = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
+export type PaletteEdge = (typeof PALETTE_EDGES)[number];
+export type PaletteCorner = (typeof PALETTE_CORNERS)[number];
 export type PaletteDock =
   | { kind: "edge"; edge: PaletteEdge }
   | { kind: "corner"; corner: PaletteCorner };
 
 type PalettePopup = "shape" | "more" | null;
 type MoreExpandSection = "matrix" | "bucket" | null;
-type AddShapePresetId = Exclude<NodeShapePresetId, "custom">;
 
 const HIDDEN_TOOL_MODES: ReadonlySet<ToolMode> = new Set(["magnify", "addMatrix", "addBezier", "addGrid", "addBucket"]);
 const VISIBLE_TOOLS: readonly ToolButtonDef[] = TOOL_BUTTONS.filter((tool) => !HIDDEN_TOOL_MODES.has(tool.mode));
@@ -83,12 +85,17 @@ function readStoredDock(): PaletteDock {
     if (!stored) {
       return fallback;
     }
-    const parsed = JSON.parse(stored) as PaletteDock;
-    if (parsed.kind === "edge" && ["top", "bottom", "left", "right"].includes(parsed.edge)) {
-      return parsed;
+    const parsed: unknown = JSON.parse(stored);
+    if (!isRecord(parsed)) {
+      return fallback;
     }
-    if (parsed.kind === "corner" && ["top-left", "top-right", "bottom-left", "bottom-right"].includes(parsed.corner)) {
-      return parsed;
+    const edge = PALETTE_EDGES.find((candidate) => candidate === parsed.edge);
+    if (parsed.kind === "edge" && edge) {
+      return { kind: "edge", edge };
+    }
+    const corner = PALETTE_CORNERS.find((candidate) => candidate === parsed.corner);
+    if (parsed.kind === "corner" && corner) {
+      return { kind: "corner", corner };
     }
     return fallback;
   } catch {
@@ -160,8 +167,8 @@ function dockForProjectedPoint(
     { edge: "left", distance: x },
     { edge: "right", distance: parentWidth - x }
   ];
-  edgeDistances.sort((a, b) => a.distance - b.distance);
-  return { kind: "edge", edge: edgeDistances[0].edge };
+  const nearest = edgeDistances.reduce((best, candidate) => (candidate.distance < best.distance ? candidate : best));
+  return { kind: "edge", edge: nearest.edge };
 }
 
 function expandedDockFromCorner(corner: PaletteCorner): PaletteDock {
@@ -244,8 +251,8 @@ export function IpadToolPalette({
     }
 
     function onPointerDown(event: PointerEvent): void {
-      const target = event.target as Node | null;
-      if (!target || paletteRef.current?.contains(target)) {
+      const target = event.target;
+      if (!(target instanceof Node) || paletteRef.current?.contains(target)) {
         return;
       }
       setOpenPopup(null);
@@ -308,7 +315,7 @@ export function IpadToolPalette({
     }
     const now = performance.now();
     drag.samples.push({ t: now, x: pointerX, y: pointerY });
-    while (drag.samples.length > 2 && now - drag.samples[0].t > 120) {
+    while (drag.samples.length > 2 && now - (drag.samples[0]?.t ?? now) > 120) {
       drag.samples.shift();
     }
     setDragPosition({ x: pointerX - PUCK_SIZE / 2, y: pointerY - PUCK_SIZE / 2 });
@@ -338,6 +345,9 @@ export function IpadToolPalette({
     const parentRect = parent.getBoundingClientRect();
     const last = drag.samples[drag.samples.length - 1];
     const first = drag.samples[0];
+    if (!last || !first) {
+      return;
+    }
     const dt = Math.max(last.t - first.t, 1) / 1000;
     const velocityX = (last.x - first.x) / dt;
     const velocityY = (last.y - first.y) / dt;
@@ -408,7 +418,9 @@ export function IpadToolPalette({
   }, [dispatch, selectTool, toolMode]);
 
   const selectShapePreset = useCallback((id: string) => {
-    dispatch({ type: "SET_ADD_SHAPE_PRESET", value: id as AddShapePresetId });
+    const shape = NODE_SHAPE_OPTIONS.find((option) => option.value === id);
+    if (!shape) return;
+    dispatch({ type: "SET_ADD_SHAPE_PRESET", value: shape.value });
     dispatch({ type: "SET_TOOL_MODE", mode: "addShape" });
     setOpenPopup(null);
   }, [dispatch]);
@@ -422,7 +434,7 @@ export function IpadToolPalette({
 
   const activeOverflowTool = OVERFLOW_TOOLS.find((tool) => tool.mode === toolMode) ?? null;
   const MoreFaceIcon = activeOverflowTool?.icon ?? null;
-  const ActiveToolIcon = (TOOL_BUTTONS.find((tool) => tool.mode === toolMode) ?? TOOL_BUTTONS[0]).icon;
+  const ActiveToolIcon = (TOOL_BUTTONS.find((tool) => tool.mode === toolMode) ?? TOOL_BUTTONS[0])?.icon ?? null;
 
   const matrixPreviewRows = matrixDragSize?.rows ?? selectedAddMatrixRows;
   const matrixPreviewColumns = matrixDragSize?.columns ?? selectedAddMatrixColumns;
@@ -681,7 +693,7 @@ export function IpadToolPalette({
       </div>
 
       <div className={css.puckFace} aria-hidden>
-        <ActiveToolIcon size={26} />
+        {ActiveToolIcon ? <ActiveToolIcon size={26} /> : null}
       </div>
     </nav>
   );

@@ -1,3 +1,6 @@
+import { requireDefined } from "../utils/invariants.js";
+import { requireArrayValue } from "../utils/collections.js";
+import { finishWork, runCooperatively, type CooperativeWorkOptions } from "./cooperative-work.js";
 import type {
   ColorletStatement,
   DefineColorStatement,
@@ -17,8 +20,8 @@ import type {
 } from "../ast/types.js";
 import { pt } from "../coords/scalars.js";
 import type { Diagnostic } from "../diagnostics/types.js";
-import { FEATURE_IDS } from "../capabilities/feature-ids.js";
-import type { FeatureId } from "../capabilities/feature-ids.js";
+import { initializeFeatureUsage, markFeatureUsage as markFeature, mergeFeatureUsage } from "./feature-usage.js";
+export { initializeFeatureUsage } from "./feature-usage.js";
 import { expandForeachFigure } from "../foreach/index.js";
 import {
   DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
@@ -62,6 +65,8 @@ import {
   withDependencySource,
   writeContextColorAlias,
   writeContextMacroBinding,
+  snapshotSemanticContext,
+  type SemanticContextSnapshot,
   type SemanticContext,
   type SemanticStatementEffectSummary,
   type SemanticStatementSuffixSkipKind,
@@ -76,14 +81,16 @@ import {
   makeEveryOnBackgroundLayerOptionLayer
 } from "./backgrounds.js";
 import type { SemanticDependencyGraph } from "./dependencies.js";
-import { evaluateRawCoordinate } from "./coords/evaluate.js";
+import { evaluateTransformCoordinate } from "./coords/evaluate.js";
 import { parseLength } from "./coords/parse-length.js";
 import { evaluatePathStatement } from "./path/evaluate.js";
 import type { PlacementSegment } from "./path/types.js";
 import { tangentAtPlacementSegment, resolvePathAttachedNodeSloped } from "./path/path-attached.js";
 import { applyNameIntersectionsDirective, collectPathIntersectionDirectives, registerNamedPath } from "./path/intersections.js";
 import { parseNodeDistance } from "./path/node-positioning.js";
+import { parseFontStyle } from "./style/option-utils.js";
 import { DEFAULT_TEXT_FONT_SIZE, defaultStyle, commandDefaultStyle, parseStyleValueAsOptionList, resolveContextDelta } from "./style/resolve.js";
+import { normalizeOptionValue } from "./style/option-utils.js";
 import { styleDiagnosticCode, styleDiagnosticSpan, type StyleDiagnostic } from "./style/diagnostics.js";
 import { applyCustomStyleDefinition, cloneCustomStyleRegistry } from "./style/custom-styles.js";
 import {
@@ -106,6 +113,7 @@ import { withPgfMathRuntime } from "./pgfmath/runtime.js";
 import { worldPoint, worldBounds } from "../coords/points.js";
 import type { WorldBounds, WorldPoint } from "../coords/points.js";
 import { resolveNodePositionFraction } from "./nodes/placement.js";
+import { normalizeEveryShapeNodeStyleName } from "./nodes/options.js";
 import type {
   EditHandle,
   EvaluateOptions,
@@ -146,6 +154,8 @@ export type SemanticStatementEvaluationRecord = {
   diagnosticsStart: number;
   diagnosticsEnd: number;
   effectSummary: SemanticStatementEffectSummary;
+  /** Sparse usage emitted by this statement, independent of prior providers. */
+  featureUsage: FeatureUsage;
 };
 
 export type SemanticEvaluationRun = {
@@ -163,7 +173,12 @@ export type SemanticEvaluationRun = {
   statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>;
   templateLocalIdByExpandedId: Map<string, string>;
   rootFramePushed: boolean;
+  /** The transform the picture's own options set, when not the identity. */
+  rootTransform?: WorldTransform;
   baseDiagnosticsCount: number;
+  scopeSteps: WeakMap<Statement, "enter" | "leave">;
+  geometryCheckpoints: Map<number, SemanticContextSnapshot>;
+  captureGeometryCheckpoints: boolean;
 };
 
 function pushStyleDiagnostics(
@@ -184,13 +199,44 @@ function pushStyleDiagnostics(
 }
 
 export function evaluateTikzFigure(figure: TikzFigure, source: string, opts: EvaluateOptions = {}): EvaluateTikzResult {
+  return finishWork(evaluateFigureSteps(figure, source, opts));
+}
+
+export function evaluateTikzFigureAsync(figure: TikzFigure, source: string, opts: EvaluateOptions, work: CooperativeWorkOptions): Promise<EvaluateTikzResult> {
+  return runCooperatively(evaluateFigureSteps(figure, source, opts), work);
+}
+
+function* evaluateFigureSteps(figure: TikzFigure, source: string, opts: EvaluateOptions): Generator<void, EvaluateTikzResult, void> {
   const run = createSemanticEvaluationRun(figure, source, opts);
   const elementsByStatement: SceneElement[][] = [];
   for (let statementIndex = 0; statementIndex < run.expandedFigureBody.length; statementIndex += 1) {
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
     elementsByStatement.push(evaluated.elements);
+    yield;
   }
   return finalizeSemanticEvaluationRun(run, elementsByStatement);
+}
+
+/** PGF's `current page`: a rectangle node spanning the page, without a source. */
+function defineCurrentPage(context: SemanticContext, page: NonNullable<EvaluateOptions["currentPage"]>): void {
+  const midX = (page.minX + page.maxX) / 2;
+  const midY = (page.minY + page.maxY) / 2;
+  context.namedNodeGeometries.set("current page", {
+    shape: "rectangle",
+    center: worldPoint(pt(midX), pt(midY)),
+    anchorHalfWidth: (page.maxX - page.minX) / 2,
+    anchorHalfHeight: (page.maxY - page.minY) / 2,
+    anchorRadius: 0,
+  });
+  const anchors: Record<string, [number, number]> = {
+    center: [midX, midY], north: [midX, page.maxY], south: [midX, page.minY], east: [page.maxX, midY], west: [page.minX, midY],
+    "north east": [page.maxX, page.maxY], "north west": [page.minX, page.maxY],
+    "south east": [page.maxX, page.minY], "south west": [page.minX, page.minY],
+  };
+  context.namedCoordinates.set("current page", worldPoint(pt(midX), pt(midY)));
+  for (const [anchor, [x, y]] of Object.entries(anchors)) {
+    context.namedCoordinates.set(`current page.${anchor}`, worldPoint(pt(x), pt(y)));
+  }
 }
 
 export function createSemanticEvaluationRun(
@@ -201,13 +247,18 @@ export function createSemanticEvaluationRun(
   const diagnostics: Diagnostic[] = [];
   const featureUsage = initializeFeatureUsage();
   markForeachFeaturesFromFigure(figure, featureUsage);
+  const initialFont = opts.initialFont ? parseFontStyle(opts.initialFont) : null;
   const context = createSemanticContext(
-    defaultStyle(),
-    identityMatrix(),
+    initialFont ? { ...defaultStyle(), ...initialFont } : defaultStyle(),
+    opts.initialTransform ?? identityMatrix(),
     opts.textEngine ?? null,
     source,
-    opts.sourceFingerprint
+    opts.sourceFingerprint,
+    opts.graphicsResolver
   );
+  if (opts.currentPage) {
+    defineCurrentPage(context, opts.currentPage);
+  }
   const expanded = withPgfMathRuntime(
     { rng: context.mathRandom },
     () => expandForeachFigure(figure, source, opts.maxForeachExpansions ?? 10_000)
@@ -239,12 +290,14 @@ export function createSemanticEvaluationRun(
   const parent = currentFrame(context);
   const rootCustomStyles = cloneCustomStyleRegistry(parent.customStyles);
   const figureSourceRef: StyleSourceRef = {
-    sourceId: `figure:${figure.span.from}:${figure.span.to}`,
+    // One picture per evaluation, so a fixed id: an id made of its offsets
+    // would go stale in style chains an incremental render reuses.
+    sourceId: "figure-options",
     sourceSpan: figure.options?.span ?? figure.span,
     sourceKind: "figure-options",
     label: "figure"
   };
-  const rootOptionLayers = buildRootPictureOptionLayers(figure, parent, context, figureSourceRef);
+  const rootOptionLayers = buildRootPictureOptionLayers(figure, parent, context, figureSourceRef, opts.pictureOptions);
   const rootFramePushed = rootOptionLayers.length > 0;
   if (rootFramePushed) {
     markFeature(featureUsage, "options_structured", "supported");
@@ -259,9 +312,10 @@ export function createSemanticEvaluationRun(
       parent.transform,
       rootOptionLayers,
       rootCustomStyles,
-      (raw) => evaluateRawCoordinate(raw, context).world,
+      (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
       parent.styleChain,
-      (raw) => resolveContextColorAliasValue(context, raw)
+      (raw) => resolveContextColorAliasValue(context, raw),
+      parent.axisBasis
     );
     if (containsCmOption(rootDelta.expandedOptionLists)) {
       markFeature(featureUsage, "transform_cm", "supported");
@@ -274,13 +328,14 @@ export function createSemanticEvaluationRun(
       style: rootDelta.style,
       styleChain: rootDelta.chain,
       transform: rootDelta.transform,
+      axisBasis: rootDelta.axisBasis,
       layer: parent.layer,
-      clipChain: [...parent.clipChain],
+      clipChain: parent.clipChain,
       pictureSizeRelevant: parent.pictureSizeRelevant,
       customStyles: rootCustomStyles,
       picDefinitions: rootPicDefinitions,
-      colorAliases: new Map(parent.colorAliases),
-      macroBindings: new Map(parent.macroBindings),
+      colorAliases: parent.colorAliases.fork(),
+      macroBindings: parent.macroBindings.fork(),
       namePrefix: rootMeta.namePrefix,
       nameSuffix: rootMeta.nameSuffix,
       nodeLayerMode: rootMeta.nodeLayerMode,
@@ -318,13 +373,18 @@ export function createSemanticEvaluationRun(
     pushStyleDiagnostics(diagnostics, rootDelta.diagnostics, "Figure option issue", figureSourceRef.sourceSpan ?? figure.span);
   }
 
+  const scopeSteps = new WeakMap<Statement, "enter" | "leave">();
+  const evaluationBody = splitScopeSteps(activeExpandedFigureBody, scopeSteps, expanded.statementAttribution, expanded.statementSourceMaps);
   return {
     figure,
     source,
     context,
+    scopeSteps,
+    geometryCheckpoints: new Map(),
+    captureGeometryCheckpoints: true,
     diagnostics,
     featureUsage,
-    expandedFigureBody: activeExpandedFigureBody,
+    expandedFigureBody: evaluationBody,
     sourceStatementSpanById: buildSourceStatementSpanById(figure.body),
     statementAttribution: expanded.statementAttribution,
     statementSourceMaps: expanded.statementSourceMaps,
@@ -333,8 +393,14 @@ export function createSemanticEvaluationRun(
     statementMacroAttribution: expanded.statementMacroAttribution,
     templateLocalIdByExpandedId: expanded.templateLocalIdByExpandedId,
     rootFramePushed,
+    ...(rootFramePushed && !isIdentityTransform(currentFrame(context).transform) ? { rootTransform: currentFrame(context).transform } : {}),
     baseDiagnosticsCount: diagnostics.length
   };
+}
+
+function isIdentityTransform(transform: WorldTransform): boolean {
+  return transform.a === 1 && transform.b === 0 && transform.c === 0 && transform.d === 1 &&
+    Number(transform.e) === 0 && Number(transform.f) === 0;
 }
 
 export function evaluateSemanticStatementByIndex(
@@ -345,17 +411,29 @@ export function evaluateSemanticStatementByIndex(
   if (!statement) {
     throw new Error(`Statement index ${statementIndex} is out of bounds`);
   }
+  // Sparse checkpoints are retained with this revision, never with later source.
+  // Cap their count for very large generated figures.
+  const interval = Math.max(8, Math.ceil(run.expandedFigureBody.length / 128));
+  if (run.captureGeometryCheckpoints && statementIndex % interval === 0) {
+    run.geometryCheckpoints.set(statementIndex, snapshotSemanticContext(run.context, { editHandlesMode: "length" }));
+  }
+  const scopeStep = run.scopeSteps.get(statement);
   const handleStart = run.context.editHandles.length;
   const diagnosticsStart = run.diagnostics.length;
   const beforeCurrentPoint = run.context.currentPoint ? { ...run.context.currentPoint } : null;
   const beforePathStartPoint = run.context.pathStartPoint ? { ...run.context.pathStartPoint } : null;
+  const featureUsage: FeatureUsage = {};
   beginStatementEffectTracking(run.context);
   const statementElements = withDependencySource(run.context, statement.id, () =>
     withPgfMathRuntime(
       { rng: run.context.mathRandom },
-      () => evaluateStatement(statement, run.context, run.diagnostics, run.featureUsage, run.statementMacroAttribution)
+      () => {
+        if (scopeStep === "leave") { popFrame(run.context); return []; }
+        return evaluateStatement(statement, run.context, run.diagnostics, featureUsage, run.statementMacroAttribution, scopeStep === "enter");
+      }
     )
   );
+  mergeFeatureUsage(run.featureUsage, featureUsage);
   const sourceId = run.statementAttribution.get(statement)?.sourceId ?? statement.id;
   const statementSourceMap = run.statementSourceMaps.get(statement);
   const sourceSpan = statementSourceMap
@@ -370,9 +448,9 @@ export function evaluateSemanticStatementByIndex(
       pathItemForeachStack: run.pathItemForeachStack,
       pathItemSourceMaps: run.pathItemSourceMaps,
       statementMacroAttribution: run.statementMacroAttribution,
-      templateLocalIdByExpandedId: run.templateLocalIdByExpandedId
-    }),
-    run.context.sourceFingerprint
+      templateLocalIdByExpandedId: run.templateLocalIdByExpandedId,
+      authoredSourceIds: run.sourceStatementSpanById
+    })
   );
   finalizeExpandedStatementHandles({
     statement,
@@ -389,7 +467,7 @@ export function evaluateSemanticStatementByIndex(
     run.context.source
   );
   for (let index = 0; index < editHandles.length; index += 1) {
-    run.context.editHandles[handleStart + index] = editHandles[index];
+    run.context.editHandles[handleStart + index] = requireArrayValue(editHandles, index);
   }
   remapDiagnostics(run.diagnostics, diagnosticsStart, statementSourceMap, {
     statement,
@@ -413,7 +491,9 @@ export function evaluateSemanticStatementByIndex(
     effectSummary.opaque = true;
     effectSummary.opaqueReasons = opaqueReasons;
   }
-  effectSummary.suffixSkipKind = classifyStatementSuffixSkipKind(statement, opaqueReasons);
+  effectSummary.suffixSkipKind = scopeStep === "leave" ? "safe" : classifyStatementSuffixSkipKind(statement, opaqueReasons);
+  if (scopeStep === "enter") effectSummary.entersScope = true;
+  if (scopeStep === "leave") effectSummary.exitsScope = true;
   return {
     statementId: statement.id,
     sourceId,
@@ -425,6 +505,7 @@ export function evaluateSemanticStatementByIndex(
     handleEnd: run.context.editHandles.length,
     diagnosticsStart,
     diagnosticsEnd: run.diagnostics.length,
+    featureUsage,
     effectSummary
   };
 }
@@ -440,11 +521,7 @@ export function finalizeSemanticEvaluationRun(
 
   const colorAliases = new Map(currentFrame(run.context).colorAliases);
   const contentBounds = run.context.pictureBounds ?? computeBounds(elements) ?? null;
-  const generatedBackground = generateBackgroundHookElements(
-    run.context,
-    contentBounds,
-    run.context.sourceFingerprint
-  );
+  const generatedBackground = generateBackgroundHookElements(run.context, contentBounds);
   if (generatedBackground.elements.length > 0) {
     elements.push(...generatedBackground.elements);
   }
@@ -456,27 +533,18 @@ export function finalizeSemanticEvaluationRun(
     popFrame(run.context);
   }
 
-  for (let index = 0; index < elements.length; index += 1) {
-    const element = elements[index];
+  for (const [index, element] of elements.entries()) {
     elements[index] = {
       ...element,
       layer: element.layer || MAIN_SCENE_LAYER,
-      runtimeId: element.runtimeId ?? element.id,
-      sourceRef: {
-        ...element.sourceRef,
-        sourceFingerprint: run.context.sourceFingerprint
-      }
+      runtimeId: element.runtimeId
     };
   }
 
-  for (let index = 0; index < run.context.editHandles.length; index += 1) {
-    const handle = run.context.editHandles[index];
-    if (!handle) {
-      continue;
-    }
+  for (const [index, handle] of run.context.editHandles.entries()) {
     run.context.editHandles[index] = {
       ...handle,
-      runtimeId: handle.runtimeId ?? handle.id
+      runtimeId: handle.runtimeId
     };
   }
 
@@ -492,22 +560,23 @@ export function finalizeSemanticEvaluationRun(
   }
   const requiredTikzLibraries = listContextRequiredLibraries(run.context);
 
-  return {
+  const optionalBounds1 = generatedBackground.elements.length > 0
+          ? computeBounds(orderedElements) ?? run.context.pictureBounds ?? undefined
+          : run.context.pictureBounds ?? computeBounds(orderedElements);
+  const result: EvaluateTikzResult = {
     scene: {
       kind: "SceneFigure",
       span: run.figure.span,
       requiredTikzLibraries,
       layers,
       elements: orderedElements,
-      bounds:
-        generatedBackground.elements.length > 0
-          ? computeBounds(orderedElements) ?? run.context.pictureBounds ?? undefined
-          : run.context.pictureBounds ?? computeBounds(orderedElements),
+      ...(optionalBounds1 === undefined ? {} : { bounds: optionalBounds1 }),
       hasStatefulGraphicsState:
         run.featureUsage.path_clipping === "used-supported" ||
         run.featureUsage.use_as_bounding_box === "used-supported" ||
         run.featureUsage.backgrounds_library === "used-supported" ||
-        run.context.backgroundState.used
+        run.context.backgroundState.used,
+      ...(run.rootTransform ? { rootTransform: run.rootTransform } : {})
     },
     diagnostics: run.diagnostics,
     featureUsage: run.featureUsage,
@@ -519,12 +588,13 @@ export function finalizeSemanticEvaluationRun(
     symbolDependencyEdges: listContextSymbolDependencyEdges(run.context),
     unresolvedSymbols: listContextUnresolvedSymbols(run.context)
   };
+  rememberGeometryCheckpoints(result, run.geometryCheckpoints);
+  return result;
 }
 
 function buildSourceStatementFirstIndexBySourceId(run: SemanticEvaluationRun): Record<string, number> {
   const bySourceId = new Map<string, number>();
-  for (let index = 0; index < run.expandedFigureBody.length; index += 1) {
-    const statement = run.expandedFigureBody[index];
+  for (const [index, statement] of run.expandedFigureBody.entries()) {
     const attributed = run.statementAttribution.get(statement);
     const sourceId = attributed?.sourceId ?? statement.id;
     const previous = bySourceId.get(sourceId);
@@ -539,7 +609,8 @@ function buildRootPictureOptionLayers(
   figure: TikzFigure,
   parent: ReturnType<typeof currentFrame>,
   context: SemanticContext,
-  figureSourceRef: StyleSourceRef
+  figureSourceRef: StyleSourceRef,
+  pictureOptions: string | undefined
 ): StyleTraceLayerInput[] {
   const layers: StyleTraceLayerInput[] = [];
   if (parent.customStyles.has("every picture")) {
@@ -556,6 +627,16 @@ function buildRootPictureOptionLayers(
         rawOptions: [everyPictureOptions]
       });
     }
+  }
+
+  // Options the picture's environment implies (a tikzlayer's), before its own.
+  const implied = pictureOptions ? parseStyleValueAsOptionList(pictureOptions) : null;
+  if (implied) {
+    layers.push({
+      kind: "scope",
+      sourceRef: { sourceId: figureSourceRef.sourceId, sourceSpan: figure.span, sourceKind: "figure-options", label: "environment" },
+      rawOptions: [implied]
+    });
   }
 
   if (figure.options) {
@@ -601,6 +682,8 @@ function remapPrePictureContextStatement(
   if (!sourceMap) {
     return statement;
   }
+  // This AST-only walker preserves statement discriminants and fields, replacing only numeric span coordinates.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
   return remapSpansDeepWithExpansionSourceMap(statement, sourceMap) as Statement;
 }
 
@@ -612,7 +695,7 @@ function remapSpansDeepWithExpansionSourceMap(value: unknown, sourceMap: Expansi
     return value;
   }
 
-  const record = value as Record<string, unknown>;
+  const record = value;
   let nextRecord: Record<string, unknown> | null = null;
   if (isSpanLikeRecord(record)) {
     const mapped = sourceMap.mapSpan({ from: record.from, to: record.to }) ?? sourceMap.sourceSpan;
@@ -635,8 +718,8 @@ function remapSpansDeepWithExpansionSourceMap(value: unknown, sourceMap: Expansi
   return nextRecord ?? value;
 }
 
-function isSpanLikeRecord(record: Record<string, unknown>): record is Record<string, unknown> & Span {
-  return typeof record.from === "number" && typeof record.to === "number";
+function isSpanLikeRecord(record: object): record is object & Span {
+  return "from" in record && typeof record.from === "number" && "to" in record && typeof record.to === "number";
 }
 
 function buildSourceStatementSpanById(
@@ -657,18 +740,11 @@ function buildSourceStatementSpanById(
   return spans;
 }
 
-function finalizeStatementElements(
-  elements: SceneElement[],
-  sourceFingerprint: string
-): SceneElement[] {
+function finalizeStatementElements(elements: SceneElement[]): SceneElement[] {
   return elements.map((element) => ({
     ...element,
     layer: element.layer || MAIN_SCENE_LAYER,
-    runtimeId: element.runtimeId ?? element.id,
-    sourceRef: {
-      ...element.sourceRef,
-      sourceFingerprint
-    }
+    runtimeId: element.runtimeId
   }));
 }
 
@@ -704,7 +780,7 @@ function finalizeStatementEditHandles(
 ): EditHandle[] {
   return handles.map((handle) => ({
     ...handle,
-    runtimeId: handle.runtimeId ?? handle.id,
+    runtimeId: handle.runtimeId,
     sourceText: source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to),
     sourceRef: {
       ...handle.sourceRef,
@@ -818,7 +894,7 @@ export function collectNodeAnchorTargets(context: SemanticContext): NodeAnchorTa
       seen.add(key);
       targets.push({
         nodeName,
-        nodeSourceId: geometry.sourceId,
+        ...(geometry.sourceId === undefined ? {} : { nodeSourceId: geometry.sourceId }),
         anchor: normalizedAnchor,
         world: worldPoint(pt(world.x), pt(world.y)),
         tier: BASIC_ANCHORS.has(normalizedAnchor) ? "basic" : "special"
@@ -838,8 +914,8 @@ export function collectNodeAnchorTargets(context: SemanticContext): NodeAnchorTa
   return targets;
 }
 
-function markOpaqueDependencySources(
-  elements: SceneElement[],
+export function markOpaqueDependencySources(
+  elements: readonly SceneElement[],
   context: ReturnType<typeof createSemanticContext>
 ): void {
   const reasonsBySource = new Map<string, Set<"foreach-origin" | "macro-origin">>();
@@ -871,12 +947,48 @@ function markOpaqueDependencySources(
   }
 }
 
+export function resolvePathBoundary(
+  parent: ReturnType<typeof currentFrame>,
+  context: ReturnType<typeof createSemanticContext>,
+  command: Parameters<typeof commandDefaultStyle>[0],
+  sourceRef: StyleSourceRef,
+  explicitLayers: StyleTraceLayerInput[] = []
+) {
+  const before = cloneResolvedStyle(parent.style);
+  const baseStyle = { ...parent.style, ...commandDefaultStyle(command, parent.style) };
+  const baseChain = [...cloneStyleChain(parent.styleChain), {
+    kind: "global" as const,
+    sourceRef: { ...sourceRef, sourceKind: "command-default", label: command },
+    rawOptions: [],
+    before,
+    after: cloneResolvedStyle(baseStyle),
+    resolvedContributions: diffResolvedStyle(before, baseStyle)
+  }];
+  const customStyles = cloneCustomStyleRegistry(parent.customStyles);
+  const resolved = resolveContextDelta(
+    baseStyle, parent.transform,
+    [
+      ...parent.everyPathStyles.map((layer): StyleTraceLayerInput => ({
+        kind: "scope", sourceRef: layer.sourceRef,
+        rawOptions: expandOptionListMacros([layer.options], parent.macroBindings, context.macroTraceCollector ?? undefined)
+      })),
+      ...explicitLayers
+    ],
+    customStyles,
+    (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
+    baseChain,
+    (raw) => resolveContextColorAliasValue(context, raw), parent.axisBasis
+  );
+  return { resolved, customStyles };
+}
+
 function evaluateStatement(
   statement: Statement,
   context: ReturnType<typeof createSemanticContext>,
   diagnostics: Diagnostic[],
   featureUsage: FeatureUsage,
-  statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>
+  statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>,
+  enterScopeOnly = false
 ): SceneElement[] {
   if (statement.kind === "Path") {
     markFeature(featureUsage, "path_statement", "supported");
@@ -887,22 +999,6 @@ function evaluateStatement(
       sourceKind: "path-statement",
       label: statement.command
     };
-    const commandStyleBefore = cloneResolvedStyle(parent.style);
-    const baseStyle = { ...parent.style, ...commandDefaultStyle(statement.command, parent.style) };
-    const commandDefaultEntry = {
-      kind: "global" as const,
-      sourceRef: {
-        sourceId: statement.id,
-        sourceSpan: statement.span,
-        sourceKind: "command-default",
-        label: statement.command
-      },
-      rawOptions: [],
-      before: commandStyleBefore,
-      after: cloneResolvedStyle(baseStyle),
-      resolvedContributions: diffResolvedStyle(commandStyleBefore, baseStyle)
-    };
-    const baseChain = [...cloneStyleChain(parent.styleChain), commandDefaultEntry];
     const optionLists = statement.options ? [statement.options] : [];
     const expandedOptionLists = expandOptionListMacros(
       optionLists,
@@ -915,23 +1011,17 @@ function evaluateStatement(
         markFeature(featureUsage, "transform_cm", "supported");
       }
     }
-    const scopedCustomStyles = cloneCustomStyleRegistry(parent.customStyles);
     const scopedPicDefinitions = clonePicDefinitionRegistry(parent.picDefinitions);
     applyPicDefinitionsFromOptionLists(scopedPicDefinitions, expandedOptionLists, commandSourceRef);
-    const resolved = resolveContextDelta(
-      baseStyle,
-      parent.transform,
+    const { resolved, customStyles: scopedCustomStyles } = resolvePathBoundary(
+      parent, context, statement.command, commandSourceRef,
       [
         {
           kind: "command",
           sourceRef: commandSourceRef,
           rawOptions: expandedOptionLists
         }
-      ],
-      scopedCustomStyles,
-      (raw) => evaluateRawCoordinate(raw, context).world,
-      baseChain,
-      (raw) => resolveContextColorAliasValue(context, raw)
+      ]
     );
     const frameMeta = resolveFrameMeta(parent, resolved.expandedOptionLists, commandSourceRef);
 
@@ -969,13 +1059,14 @@ function evaluateStatement(
       style: resolved.style,
       styleChain: resolved.chain,
       transform: resolved.transform,
+      axisBasis: resolved.axisBasis,
       layer: parent.layer,
-      clipChain: [...parent.clipChain],
+      clipChain: parent.clipChain,
       pictureSizeRelevant: parent.pictureSizeRelevant,
       customStyles: scopedCustomStyles,
       picDefinitions: scopedPicDefinitions,
-      colorAliases: new Map(parent.colorAliases),
-      macroBindings: new Map(parent.macroBindings),
+      colorAliases: parent.colorAliases.fork(),
+      macroBindings: parent.macroBindings.fork(),
       namePrefix: frameMeta.namePrefix,
       nameSuffix: frameMeta.nameSuffix,
       nodeLayerMode: frameMeta.nodeLayerMode,
@@ -1108,9 +1199,10 @@ function evaluateStatement(
         }
       ],
       scopedCustomStyles,
-      (raw) => evaluateRawCoordinate(raw, context).world,
+      (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
       parent.styleChain,
-      (raw) => resolveContextColorAliasValue(context, raw)
+      (raw) => resolveContextColorAliasValue(context, raw),
+      parent.axisBasis
     );
     let scopeResolved = resolved;
     let frameMeta = resolveFrameMeta(parent, resolved.expandedOptionLists, scopeSourceRef);
@@ -1131,9 +1223,10 @@ function evaluateStatement(
           rawOptions: layer.rawOptions
         })),
         scopedCustomStyles,
-        (raw) => evaluateRawCoordinate(raw, context).world,
+        (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
         resolved.chain,
-        (raw) => resolveContextColorAliasValue(context, raw)
+        (raw) => resolveContextColorAliasValue(context, raw),
+        resolved.axisBasis
       );
       frameMeta = resolveFrameMeta(frameMeta, scopeResolved.expandedOptionLists, scopeSourceRef);
       backgroundDiagnostics.push(...scopeResolved.diagnostics);
@@ -1142,13 +1235,14 @@ function evaluateStatement(
       style: scopeResolved.style,
       styleChain: scopeResolved.chain,
       transform: scopeResolved.transform,
+      axisBasis: scopeResolved.axisBasis,
       layer: scopeLayer,
-      clipChain: [...parent.clipChain],
+      clipChain: parent.clipChain,
       pictureSizeRelevant: parent.pictureSizeRelevant,
       customStyles: scopedCustomStyles,
       picDefinitions: scopedPicDefinitions,
-      colorAliases: new Map(parent.colorAliases),
-      macroBindings: new Map(parent.macroBindings),
+      colorAliases: parent.colorAliases.fork(),
+      macroBindings: parent.macroBindings.fork(),
       namePrefix: frameMeta.namePrefix,
       nameSuffix: frameMeta.nameSuffix,
       nodeLayerMode: frameMeta.nodeLayerMode,
@@ -1185,6 +1279,7 @@ function evaluateStatement(
     });
     pushStyleDiagnostics(diagnostics, resolved.diagnostics, "Scope option issue", statement.span);
     pushStyleDiagnostics(diagnostics, backgroundDiagnostics, "Scope background option issue", statement.span);
+    if (enterScopeOnly) return [];
     const nested = statement.body.flatMap((entry) =>
       evaluateStatement(entry, context, diagnostics, featureUsage, statementMacroAttribution)
     );
@@ -1257,8 +1352,7 @@ function evaluateStatement(
   }
 
   if (
-    statement.kind === "UnknownStatement"
-    && applyStandaloneCommandStatement(statement.raw, context, diagnostics, statement.span, featureUsage)
+    applyStandaloneCommandStatement(statement.raw, context, diagnostics, statement.span, featureUsage)
   ) {
     markFeature(featureUsage, "unknown_statement", "supported");
     return [];
@@ -1283,8 +1377,31 @@ function evaluatePicOperationInStatement(
   featureUsage: FeatureUsage,
   statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>
 ): { behindElements: SceneElement[]; frontElements: SceneElement[] } {
+  const result: { behindElements: SceneElement[]; frontElements: SceneElement[] } = { behindElements: [], frontElements: [] };
+  let elementIndexOffset = 0;
+  for (const code of resolvePicCode(item, currentFrame(context).picDefinitions)) {
+    const parts = evaluatePicCodeBody(
+      item, placement, segment, context, diagnostics, featureUsage, statementMacroAttribution, code, elementIndexOffset
+    );
+    result.behindElements.push(...parts.behindElements);
+    result.frontElements.push(...parts.frontElements);
+    elementIndexOffset += parts.behindElements.length + parts.frontElements.length;
+  }
+  return result;
+}
+
+function evaluatePicCodeBody(
+  item: PicOperationItem,
+  placement: WorldPoint,
+  segment: PlacementSegment | null,
+  context: ReturnType<typeof createSemanticContext>,
+  diagnostics: Diagnostic[],
+  featureUsage: FeatureUsage,
+  statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>,
+  resolvedCode: ResolvedPicCode,
+  elementIndexOffset: number
+): { behindElements: SceneElement[]; frontElements: SceneElement[] } {
   const parent = currentFrame(context);
-  const resolvedCode = resolvePicCode(item, parent.picDefinitions);
   if (resolvedCode.kind === "not-found") {
     markFeature(featureUsage, "pic_operation", "unsupported");
     diagnostics.push({
@@ -1328,12 +1445,17 @@ function evaluatePicOperationInStatement(
   const expandedItemOptions = item.options
     ? expandOptionListMacros([item.options], parent.macroBindings, context.macroTraceCollector ?? undefined)
     : [];
-  const picStyleLayers: StyleTraceLayerInput[] = [
-    ...parent.everyPicStyles.map((layer): StyleTraceLayerInput => ({
+  const picScopeStyleName = resolvedCode.codeLayer === "foreground" ? "every front pic" : "every behind pic";
+  const picScopeLayers: StyleTraceLayerInput[] = resolvedCode.codeLayer === "normal"
+    ? parent.everyPicStyles.map((layer): StyleTraceLayerInput => ({
       kind: "scope",
       sourceRef: layer.sourceRef,
       rawOptions: expandOptionListMacros([layer.options], parent.macroBindings, context.macroTraceCollector ?? undefined)
-    })),
+    }))
+    : parent.customStyles.has(picScopeStyleName)
+      ? [{ kind: "scope", sourceRef: picSourceRef, rawOptions: [requireDefined(parseStyleValueAsOptionList(picScopeStyleName), "Expected an internal evaluate value")] }]
+      : [];
+  const picStyleLayers: StyleTraceLayerInput[] = [
     ...(expandedItemOptions.length > 0
       ? [
           {
@@ -1342,7 +1464,8 @@ function evaluatePicOperationInStatement(
             rawOptions: expandedItemOptions
           }
         ]
-      : [])
+      : []),
+    ...picScopeLayers
   ];
 
   const noParentShapeTransform = resolvePicPlacementTransform(
@@ -1363,9 +1486,9 @@ function evaluatePicOperationInStatement(
     noParentShapeTransform,
     picStyleLayers,
     picCustomStyles,
-    (raw) => evaluateRawCoordinate(raw, context).world,
+    (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
     parent.styleChain,
-    (raw) => resolveContextColorAliasValue(context, raw)
+    (raw) => resolveContextColorAliasValue(context, raw), parent.axisBasis
   );
   let frameMeta = resolveFrameMeta(parent, resolvedPicStyle.expandedOptionLists, picSourceRef);
 
@@ -1380,9 +1503,9 @@ function evaluatePicOperationInStatement(
       ),
       picStyleLayers,
       picCustomStyles,
-      (raw) => evaluateRawCoordinate(raw, context).world,
+      (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
       parent.styleChain,
-      (raw) => resolveContextColorAliasValue(context, raw)
+      (raw) => resolveContextColorAliasValue(context, raw), parent.axisBasis
     );
     frameMeta = resolveFrameMeta(parent, resolvedPicStyle.expandedOptionLists, picSourceRef);
   }
@@ -1426,11 +1549,12 @@ function evaluatePicOperationInStatement(
     style: resolvedPicStyle.style,
     styleChain: resolvedPicStyle.chain,
     transform: resolvedPicStyle.transform,
-    clipChain: [...parent.clipChain],
+    axisBasis: resolvedPicStyle.axisBasis,
+    clipChain: parent.clipChain,
     customStyles: picCustomStyles,
     picDefinitions,
-    colorAliases: new Map(parent.colorAliases),
-    macroBindings: new Map(parent.macroBindings),
+    colorAliases: parent.colorAliases.fork(),
+    macroBindings: parent.macroBindings.fork(),
     namePrefix: item.name ? `${frameMeta.namePrefix}${item.name}` : frameMeta.namePrefix,
     nameSuffix: frameMeta.nameSuffix,
     treeLevelStyleLayers: frameMeta.treeLevelStyleLayers.map((entry) => ({
@@ -1468,9 +1592,9 @@ function evaluatePicOperationInStatement(
   }
 
   const stamped = elements.map((element, index) =>
-    stampPicElement(element, index, item, picOrigin, parsed.sourceMapper, resolvedCode.codeSpan)
+    stampPicElement(element, index + elementIndexOffset, item, picOrigin, parsed.sourceMapper, resolvedCode.codeSpan)
   );
-  if (frameMeta.nodeLayerMode === "behind" || resolvedCode.codeLayer === "background") {
+  if (resolvedCode.codeLayer === "background" || (resolvedCode.codeLayer === "normal" && frameMeta.nodeLayerMode === "behind")) {
     return { behindElements: stamped, frontElements: [] };
   }
   void segment;
@@ -1518,11 +1642,12 @@ function makePicRecursionKey(item: PicOperationItem, resolvedCode: ResolvedPicCo
 }
 
 function makePicOriginFrame(item: PicOperationItem, resolvedCode: ResolvedPicCode & { kind: "found" }): PicOriginFrame {
+  const optionalCodeSpan2 = resolvedCode.codeSpan ? { ...resolvedCode.codeSpan } : undefined;
   return {
     invocationId: item.id,
     invocationSpan: { ...item.span },
     picType: item.typeRaw.trim(),
-    codeSpan: resolvedCode.codeSpan ? { ...resolvedCode.codeSpan } : undefined,
+    ...(optionalCodeSpan2 === undefined ? {} : { codeSpan: optionalCodeSpan2 }),
     codeSource: resolvedCode.source,
     parameterized: resolvedCode.parameterized
   };
@@ -1546,15 +1671,15 @@ function stampPicElement(
   };
   const origin = {
     foreachStack: element.origin?.foreachStack ?? [],
-    foreachTemplateLocalTargetId: element.origin?.foreachTemplateLocalTargetId,
+    ...(element.origin?.foreachTemplateLocalTargetId === undefined ? {} : { foreachTemplateLocalTargetId: element.origin.foreachTemplateLocalTargetId }),
     picStack: [...(element.origin?.picStack ?? []), picOrigin],
     picTemplateLocalTargetId: localTargetId,
-    macroStack: element.origin?.macroStack
+    ...(element.origin?.macroStack === undefined ? {} : { macroStack: element.origin.macroStack })
   };
   const base = {
     ...element,
     id: `scene-pic:${item.id}:${index}:${element.id}`,
-    runtimeId: `scene-pic:${item.id}:${index}:${element.runtimeId ?? element.id}`,
+    runtimeId: `scene-pic:${item.id}:${index}:${element.runtimeId}`,
     sourceRef,
     identityRef: {
       sourceId: localTargetId,
@@ -1586,9 +1711,10 @@ function applyPgfMathStatement(
     markFeature(featureUsage, "pgfmath_seed_commands", "supported");
     const expressionRaw = statement.argsRaw[0] ?? "";
     const expressionSpan = statement.argsSpan[0] ?? statement.span;
+    const optionalTrace3 = context.macroTraceCollector ?? undefined;
     const expanded = expandMacroBindings(expressionRaw, frame.macroBindings, {
       maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-      trace: context.macroTraceCollector ?? undefined
+      ...(optionalTrace3 === undefined ? {} : { trace: optionalTrace3 })
     });
     if (containsPgfMathRandomToken(expanded)) {
       markFeature(featureUsage, "pgfmath_random_functions", "supported");
@@ -1610,9 +1736,10 @@ function applyPgfMathStatement(
   if (statement.commandRaw === "\\pgfmathparse") {
     const expressionRaw = statement.argsRaw[0] ?? "";
     const expressionSpan = statement.argsSpan[0] ?? statement.span;
+    const optionalTrace4 = context.macroTraceCollector ?? undefined;
     const expanded = expandMacroBindings(expressionRaw, frame.macroBindings, {
       maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-      trace: context.macroTraceCollector ?? undefined
+      ...(optionalTrace4 === undefined ? {} : { trace: optionalTrace4 })
     });
     if (containsPgfMathRandomToken(expanded)) {
       markFeature(featureUsage, "pgfmath_random_functions", "supported");
@@ -1650,9 +1777,10 @@ function applyPgfMathStatement(
 
   const expressionRaw = statement.argsRaw[1] ?? "";
   const expressionSpan = statement.argsSpan[1] ?? statement.span;
+  const optionalTrace5 = context.macroTraceCollector ?? undefined;
   const expanded = expandMacroBindings(expressionRaw, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined
+    ...(optionalTrace5 === undefined ? {} : { trace: optionalTrace5 })
   });
   if (containsPgfMathRandomToken(expanded)) {
     markFeature(featureUsage, "pgfmath_random_functions", "supported");
@@ -1750,7 +1878,8 @@ function applyTikzStyleStatement(
   });
 
   const legacyBucket = LEGACY_TIKZSTYLE_BUCKET_BY_NAME[styleName];
-  if (legacyBucket) {
+  const legacyShapeStyleName = parseLegacyEveryShapeNodeStyleName(styleName);
+  if (legacyBucket || legacyShapeStyleName) {
     const parsedLayer = parseProvenanceStyleLayer(
       {
         kind: "kv",
@@ -1769,10 +1898,18 @@ function applyTikzStyleStatement(
       }
     );
     if (parsedLayer) {
-      if (statement.definitionKind === "append") {
-        frame[legacyBucket] = [...frame[legacyBucket], parsedLayer];
-      } else {
-        frame[legacyBucket] = [parsedLayer];
+      if (legacyBucket) {
+        if (statement.definitionKind === "append") {
+          frame[legacyBucket] = [...frame[legacyBucket], parsedLayer];
+        } else {
+          frame[legacyBucket] = [parsedLayer];
+        }
+      } else if (legacyShapeStyleName) {
+        const existing = frame.everyShapeNodeStyles.get(legacyShapeStyleName) ?? [];
+        frame.everyShapeNodeStyles.set(
+          legacyShapeStyleName,
+          statement.definitionKind === "append" ? [...existing, parsedLayer] : [parsedLayer]
+        );
       }
     }
   }
@@ -1839,9 +1976,10 @@ function applyColorletStatement(
   }
 
   const frame = currentFrame(context);
+  const optionalTrace6 = context.macroTraceCollector ?? undefined;
   const expandedValue = expandMacroBindings(rawValue, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined
+    ...(optionalTrace6 === undefined ? {} : { trace: optionalTrace6 })
   });
   writeContextColorAlias(context, name, expandedValue, {
     statementId: statement.id,
@@ -1887,13 +2025,15 @@ function applyDefineColorStatement(
   }
 
   const frame = currentFrame(context);
+  const optionalTrace7 = context.macroTraceCollector ?? undefined;
   const expandedModel = expandMacroBindings(modelRaw, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined
+    ...(optionalTrace7 === undefined ? {} : { trace: optionalTrace7 })
   });
+  const optionalTrace8 = context.macroTraceCollector ?? undefined;
   const expandedSpecification = expandMacroBindings(specificationRaw, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined
+    ...(optionalTrace8 === undefined ? {} : { trace: optionalTrace8 })
   });
   const resolvedValue = resolveDefineColorModel(expandedModel, expandedSpecification);
   if (!resolvedValue) {
@@ -1949,13 +2089,15 @@ function applyOptionListsToCurrentFrame(
       }
     ],
     frame.customStyles,
-    (raw) => evaluateRawCoordinate(raw, context).world,
+    (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
     frame.styleChain,
-    (raw) => resolveContextColorAliasValue(context, raw)
+    (raw) => resolveContextColorAliasValue(context, raw),
+    frame.axisBasis
   );
   frame.style = resolved.style;
   frame.styleChain = resolved.chain;
   frame.transform = resolved.transform;
+  frame.axisBasis = resolved.axisBasis;
   applyPicDefinitionsFromOptionLists(frame.picDefinitions, expandedOptionLists, sourceRef);
   if (featureUsage && collectBackgroundOptionEffects(context, resolved.expandedOptionLists, sourceRef)) {
     markFeature(featureUsage, "backgrounds_library", "supported");
@@ -2083,7 +2225,7 @@ function applyMacroCommandDefinitionStatement(
       : {
           kind: "callable",
           parameterCount,
-          optionalFirstArgDefault,
+          ...(optionalFirstArgDefault === undefined ? {} : { optionalFirstArgDefault }),
           body: statement.bodyRaw,
           provenance: [origin]
         };
@@ -2119,7 +2261,7 @@ function cloneMacroBinding(binding: MacroBinding): MacroBinding {
   return {
     kind: "callable",
     parameterCount: binding.parameterCount,
-    optionalFirstArgDefault: binding.optionalFirstArgDefault,
+    ...(binding.optionalFirstArgDefault === undefined ? {} : { optionalFirstArgDefault: binding.optionalFirstArgDefault }),
     body: binding.body,
     provenance: cloneMacroOriginStack(binding.provenance)
   };
@@ -2323,15 +2465,22 @@ export function computeBounds(elements: SceneElement[]): WorldBounds | undefined
   const points: WorldPoint[] = [];
 
   for (const element of elements) {
+    const elementPoints: WorldPoint[] = [];
     if (element.kind === "Path") {
-      points.push(...pathBoundsPoints(element.commands).map((point) => applyOptionalTransform(point, element.transform)));
+      elementPoints.push(
+        ...pathBoundsPoints(element.commands).map((point) =>
+          applyOptionalTransform(point, element.transform)
+        )
+      );
+      pushElementPointsWithStrokeBounds(points, elementPoints, element);
       continue;
     }
 
     if (element.kind === "Circle") {
       const min = worldPoint(pt(element.center.x - element.radius), pt(element.center.y - element.radius));
       const max = worldPoint(pt(element.center.x + element.radius), pt(element.center.y + element.radius));
-      pushRectCorners(points, min, max, element.transform);
+      pushRectCorners(elementPoints, min, max, element.transform);
+      pushElementPointsWithStrokeBounds(points, elementPoints, element);
       continue;
     }
 
@@ -2343,30 +2492,36 @@ export function computeBounds(elements: SceneElement[]): WorldBounds | undefined
       const extentY = Math.sqrt(element.rx * element.rx * sin * sin + element.ry * element.ry * cos * cos);
       const min = worldPoint(pt(element.center.x - extentX), pt(element.center.y - extentY));
       const max = worldPoint(pt(element.center.x + extentX), pt(element.center.y + extentY));
-      pushRectCorners(points, min, max, element.transform);
+      pushRectCorners(elementPoints, min, max, element.transform);
+      pushElementPointsWithStrokeBounds(points, elementPoints, element);
       continue;
     }
 
     const lineCount = Math.max(1, element.text.split("\n").length);
     const textHeight = element.textBlockHeight ?? lineCount * element.style.fontSize * 1.15;
     const textWidth = element.textBlockWidth ?? estimateTextWidth(element.text, element.style.fontSize);
-    const halfWidth = textWidth / 2;
-    const halfHeight = textHeight / 2;
-    const rotation = (element.rotation ?? 0) * (Math.PI / 180);
-    const cos = Math.cos(rotation);
-    const sin = Math.sin(rotation);
-    const corners = [
-      worldPoint(pt(-halfWidth), pt(-halfHeight)),
-      worldPoint(pt(halfWidth), pt(-halfHeight)),
-      worldPoint(pt(halfWidth), pt(halfHeight)),
-      worldPoint(pt(-halfWidth), pt(halfHeight))
-    ];
-    for (const corner of corners) {
-      const rotatedCorner = worldPoint(
-        pt(element.position.x + corner.x * cos - corner.y * sin),
-        pt(element.position.y + corner.x * sin + corner.y * cos)
+    pushRotatedRectCorners(
+      points,
+      element.position,
+      textWidth,
+      textHeight,
+      element.rotation ?? 0,
+      element.transform
+    );
+
+    // PGF protocols the node shape's background path into the picture
+    // bounding box even when that path is neither drawn nor filled. Text ink
+    // alone is therefore insufficient: the node's inner separation and
+    // minimum size must also contribute.
+    if (element.nodeVisualWidth != null && element.nodeVisualHeight != null) {
+      pushRotatedRectCorners(
+        points,
+        element.nodeVisualCenter ?? element.position,
+        element.nodeVisualWidth,
+        element.nodeVisualHeight,
+        element.rotation ?? 0,
+        element.transform
       );
-      points.push(applyOptionalTransform(rotatedCorner, element.transform));
     }
   }
 
@@ -2386,6 +2541,66 @@ export function computeBounds(elements: SceneElement[]): WorldBounds | undefined
   }
 
   return worldBounds(pt(minX), pt(minY), pt(maxX), pt(maxY));
+}
+
+function pushElementPointsWithStrokeBounds(
+  target: WorldPoint[],
+  elementPoints: readonly WorldPoint[],
+  element: Extract<SceneElement, { kind: "Path" | "Circle" | "Ellipse" }>
+): void {
+  target.push(...elementPoints);
+  if (
+    elementPoints.length === 0 ||
+    element.style.stroke == null ||
+    element.style.stroke === "none" ||
+    element.style.lineWidth <= 0
+  ) {
+    return;
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const point of elementPoints) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+  const halfLineWidth = element.style.lineWidth / 2;
+  target.push(
+    worldPoint(pt(minX - halfLineWidth), pt(minY - halfLineWidth)),
+    worldPoint(pt(maxX + halfLineWidth), pt(maxY + halfLineWidth))
+  );
+}
+
+function pushRotatedRectCorners(
+  target: WorldPoint[],
+  center: WorldPoint,
+  width: number,
+  height: number,
+  rotationDegrees: number,
+  transform: SceneElement["transform"]
+): void {
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  const rotation = rotationDegrees * (Math.PI / 180);
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  const corners = [
+    worldPoint(pt(-halfWidth), pt(-halfHeight)),
+    worldPoint(pt(halfWidth), pt(-halfHeight)),
+    worldPoint(pt(halfWidth), pt(halfHeight)),
+    worldPoint(pt(-halfWidth), pt(halfHeight))
+  ];
+  for (const corner of corners) {
+    const rotatedCorner = worldPoint(
+      pt(center.x + corner.x * cos - corner.y * sin),
+      pt(center.y + corner.x * sin + corner.y * cos)
+    );
+    target.push(applyOptionalTransform(rotatedCorner, transform));
+  }
 }
 
 function applyOptionalTransform(
@@ -2459,7 +2674,7 @@ function pathBoundsPoints(commands: ScenePathCommand[]): WorldPoint[] {
       continue;
     }
 
-    if (command.kind === "Z" && subpathStart) {
+    if (subpathStart) {
       points.push(subpathStart);
       current = subpathStart;
     }
@@ -2681,30 +2896,6 @@ function isCmOptionEntry(entry: OptionEntry): boolean {
   return entry.kind === "kv" && (entry.key === "cm" || entry.key === "/tikz/cm");
 }
 
-export function initializeFeatureUsage(): FeatureUsage {
-  const usage: FeatureUsage = {};
-  for (const featureId of FEATURE_IDS) {
-    usage[featureId] = "unused";
-  }
-  return usage;
-}
-
-function markFeature(featureUsage: FeatureUsage, featureId: FeatureId, status: "supported" | "unsupported"): void {
-  if (!(featureId in featureUsage)) {
-    return;
-  }
-
-  const current = featureUsage[featureId];
-  if (status === "unsupported") {
-    featureUsage[featureId] = "used-unsupported";
-    return;
-  }
-
-  if (current !== "used-unsupported") {
-    featureUsage[featureId] = "used-supported";
-  }
-}
-
 function markForeachFeaturesFromFigure(figure: TikzFigure, featureUsage: FeatureUsage): void {
   const walkPathItems = (items: PathItem[]): void => {
     for (const item of items) {
@@ -2789,128 +2980,46 @@ function containsPgfMathRandomToken(input: string): boolean {
 }
 
 type FrameStyleBuckets = {
+  everyPathStyles: ProvenanceOptionList[];
   everyNodeStyles: ProvenanceOptionList[];
   everyTextNodePartStyles: ProvenanceOptionList[];
   everyFitStyles: ProvenanceOptionList[];
   everyPicStyles: ProvenanceOptionList[];
-  everyRectangleNodeStyles: ProvenanceOptionList[];
-  everyCircleNodeStyles: ProvenanceOptionList[];
-  everyDiamondNodeStyles: ProvenanceOptionList[];
-  everyTrapeziumNodeStyles: ProvenanceOptionList[];
-  everyIsoscelesTriangleNodeStyles: ProvenanceOptionList[];
-  everyKiteNodeStyles: ProvenanceOptionList[];
-  everyDartNodeStyles: ProvenanceOptionList[];
-  everyCircularSectorNodeStyles: ProvenanceOptionList[];
-  everyCylinderNodeStyles: ProvenanceOptionList[];
-  everyCloudNodeStyles: ProvenanceOptionList[];
-  everyStarburstNodeStyles: ProvenanceOptionList[];
-  everySignalNodeStyles: ProvenanceOptionList[];
-  everyTapeNodeStyles: ProvenanceOptionList[];
-  everyRectangleCalloutNodeStyles: ProvenanceOptionList[];
-  everyEllipseCalloutNodeStyles: ProvenanceOptionList[];
-  everyCloudCalloutNodeStyles: ProvenanceOptionList[];
-  everySingleArrowNodeStyles: ProvenanceOptionList[];
-  everyDoubleArrowNodeStyles: ProvenanceOptionList[];
+  everyShapeNodeStyles: Map<string, ProvenanceOptionList[]>;
 };
 
-const FRAME_STYLE_BUCKET_KEYS = [
+type FrameStyleListBucketKey = Exclude<keyof FrameStyleBuckets, "everyShapeNodeStyles">;
+
+const FRAME_STYLE_LIST_BUCKET_KEYS = [
+  "everyPathStyles",
   "everyNodeStyles",
   "everyTextNodePartStyles",
   "everyFitStyles",
-  "everyPicStyles",
-  "everyRectangleNodeStyles",
-  "everyCircleNodeStyles",
-  "everyDiamondNodeStyles",
-  "everyTrapeziumNodeStyles",
-  "everyIsoscelesTriangleNodeStyles",
-  "everyKiteNodeStyles",
-  "everyDartNodeStyles",
-  "everyCircularSectorNodeStyles",
-  "everyCylinderNodeStyles",
-  "everyCloudNodeStyles",
-  "everyStarburstNodeStyles",
-  "everySignalNodeStyles",
-  "everyTapeNodeStyles",
-  "everyRectangleCalloutNodeStyles",
-  "everyEllipseCalloutNodeStyles",
-  "everyCloudCalloutNodeStyles",
-  "everySingleArrowNodeStyles",
-  "everyDoubleArrowNodeStyles"
-] as const satisfies readonly (keyof FrameStyleBuckets)[];
+  "everyPicStyles"
+] as const satisfies readonly FrameStyleListBucketKey[];
 
-const FRAME_STYLE_BUCKET_BY_STYLE_KEY: Record<string, keyof FrameStyleBuckets> = {
+const FRAME_STYLE_BUCKET_BY_STYLE_KEY: Record<string, FrameStyleListBucketKey> = {
+  "every path/.style": "everyPathStyles",
   "every node/.style": "everyNodeStyles",
   "every text node part/.style": "everyTextNodePartStyles",
   "every fit/.style": "everyFitStyles",
-  "every pic/.style": "everyPicStyles",
-  "every rectangle node/.style": "everyRectangleNodeStyles",
-  "every circle node/.style": "everyCircleNodeStyles",
-  "every diamond node/.style": "everyDiamondNodeStyles",
-  "every trapezium node/.style": "everyTrapeziumNodeStyles",
-  "every isosceles triangle node/.style": "everyIsoscelesTriangleNodeStyles",
-  "every kite node/.style": "everyKiteNodeStyles",
-  "every dart node/.style": "everyDartNodeStyles",
-  "every circular sector node/.style": "everyCircularSectorNodeStyles",
-  "every cylinder node/.style": "everyCylinderNodeStyles",
-  "every cloud node/.style": "everyCloudNodeStyles",
-  "every starburst node/.style": "everyStarburstNodeStyles",
-  "every signal node/.style": "everySignalNodeStyles",
-  "every tape node/.style": "everyTapeNodeStyles",
-  "every rectangle callout node/.style": "everyRectangleCalloutNodeStyles",
-  "every ellipse callout node/.style": "everyEllipseCalloutNodeStyles",
-  "every cloud callout node/.style": "everyCloudCalloutNodeStyles",
-  "every single arrow node/.style": "everySingleArrowNodeStyles",
-  "every double arrow node/.style": "everyDoubleArrowNodeStyles"
+  "every pic/.style": "everyPicStyles"
 };
 
-const FRAME_STYLE_BUCKET_BY_APPEND_KEY: Record<string, keyof FrameStyleBuckets> = {
+const FRAME_STYLE_BUCKET_BY_APPEND_KEY: Record<string, FrameStyleListBucketKey> = {
+  "every path/.append style": "everyPathStyles",
   "every node/.append style": "everyNodeStyles",
   "every text node part/.append style": "everyTextNodePartStyles",
   "every fit/.append style": "everyFitStyles",
-  "every pic/.append style": "everyPicStyles",
-  "every rectangle node/.append style": "everyRectangleNodeStyles",
-  "every circle node/.append style": "everyCircleNodeStyles",
-  "every diamond node/.append style": "everyDiamondNodeStyles",
-  "every trapezium node/.append style": "everyTrapeziumNodeStyles",
-  "every isosceles triangle node/.append style": "everyIsoscelesTriangleNodeStyles",
-  "every kite node/.append style": "everyKiteNodeStyles",
-  "every dart node/.append style": "everyDartNodeStyles",
-  "every circular sector node/.append style": "everyCircularSectorNodeStyles",
-  "every cylinder node/.append style": "everyCylinderNodeStyles",
-  "every cloud node/.append style": "everyCloudNodeStyles",
-  "every starburst node/.append style": "everyStarburstNodeStyles",
-  "every signal node/.append style": "everySignalNodeStyles",
-  "every tape node/.append style": "everyTapeNodeStyles",
-  "every rectangle callout node/.append style": "everyRectangleCalloutNodeStyles",
-  "every ellipse callout node/.append style": "everyEllipseCalloutNodeStyles",
-  "every cloud callout node/.append style": "everyCloudCalloutNodeStyles",
-  "every single arrow node/.append style": "everySingleArrowNodeStyles",
-  "every double arrow node/.append style": "everyDoubleArrowNodeStyles"
+  "every pic/.append style": "everyPicStyles"
 };
 
-const LEGACY_TIKZSTYLE_BUCKET_BY_NAME: Record<string, keyof FrameStyleBuckets> = {
+const LEGACY_TIKZSTYLE_BUCKET_BY_NAME: Record<string, FrameStyleListBucketKey> = {
+  "every path": "everyPathStyles",
   "every node": "everyNodeStyles",
   "every text node part": "everyTextNodePartStyles",
   "every fit": "everyFitStyles",
-  "every pic": "everyPicStyles",
-  "every rectangle node": "everyRectangleNodeStyles",
-  "every circle node": "everyCircleNodeStyles",
-  "every diamond node": "everyDiamondNodeStyles",
-  "every trapezium node": "everyTrapeziumNodeStyles",
-  "every isosceles triangle node": "everyIsoscelesTriangleNodeStyles",
-  "every kite node": "everyKiteNodeStyles",
-  "every dart node": "everyDartNodeStyles",
-  "every circular sector node": "everyCircularSectorNodeStyles",
-  "every cylinder node": "everyCylinderNodeStyles",
-  "every cloud node": "everyCloudNodeStyles",
-  "every starburst node": "everyStarburstNodeStyles",
-  "every signal node": "everySignalNodeStyles",
-  "every tape node": "everyTapeNodeStyles",
-  "every rectangle callout node": "everyRectangleCalloutNodeStyles",
-  "every ellipse callout node": "everyEllipseCalloutNodeStyles",
-  "every cloud callout node": "everyCloudCalloutNodeStyles",
-  "every single arrow node": "everySingleArrowNodeStyles",
-  "every double arrow node": "everyDoubleArrowNodeStyles"
+  "every pic": "everyPicStyles"
 };
 
 const INHERITED_NODE_LAYOUT_KEYS = new Set([
@@ -2945,17 +3054,38 @@ const TREE_STYLE_BUCKET_BY_APPEND_KEY: Record<string, keyof Omit<TreeMetaBuckets
 };
 
 function cloneFrameStyleBuckets(base: FrameStyleBuckets): FrameStyleBuckets {
-  const buckets = {} as FrameStyleBuckets;
-  for (const key of FRAME_STYLE_BUCKET_KEYS) {
+  const buckets: FrameStyleBuckets = {
+    everyPathStyles: [], everyNodeStyles: [], everyTextNodePartStyles: [], everyFitStyles: [], everyPicStyles: [],
+    everyShapeNodeStyles: new Map(base.everyShapeNodeStyles)
+  };
+  for (const key of FRAME_STYLE_LIST_BUCKET_KEYS) {
     buckets[key] = [...base[key]];
   }
   return buckets;
 }
 
 function assignFrameStyleBuckets(target: FrameStyleBuckets, source: FrameStyleBuckets): void {
-  for (const key of FRAME_STYLE_BUCKET_KEYS) {
+  for (const key of FRAME_STYLE_LIST_BUCKET_KEYS) {
     target[key] = source[key];
   }
+  target.everyShapeNodeStyles = source.everyShapeNodeStyles;
+}
+
+function parseEveryShapeNodeStyleOptionKey(
+  key: string,
+  operation: ".style" | ".append style"
+): string | null {
+  const prefix = "every ";
+  const suffix = ` node/${operation}`;
+  if (!key.startsWith(prefix) || !key.endsWith(suffix)) {
+    return null;
+  }
+  return normalizeEveryShapeNodeStyleName(key.slice(prefix.length, -suffix.length));
+}
+
+function parseLegacyEveryShapeNodeStyleName(styleName: string): string | null {
+  const match = styleName.match(/^every\s+(.+?)\s+node$/i);
+  return match ? normalizeEveryShapeNodeStyleName(match[1] ?? "") : null;
 }
 
 export function resolveFrameMeta(
@@ -3309,6 +3439,17 @@ export function resolveFrameMeta(
         const parsedLayer = parseProvenanceStyleLayer(entry, sourceRef);
         if (parsedLayer) {
           styleBuckets[replaceBucket] = [parsedLayer];
+        } else if (replaceBucket === "everyPathStyles" && normalizeOptionValue(entry.valueRaw).length === 0) {
+          styleBuckets.everyPathStyles = [];
+        }
+        continue;
+      }
+
+      const replaceShapeStyle = parseEveryShapeNodeStyleOptionKey(entry.key, ".style");
+      if (replaceShapeStyle) {
+        const parsedLayer = parseProvenanceStyleLayer(entry, sourceRef);
+        if (parsedLayer) {
+          styleBuckets.everyShapeNodeStyles.set(replaceShapeStyle, [parsedLayer]);
         }
         continue;
       }
@@ -3341,6 +3482,24 @@ export function resolveFrameMeta(
         const parsedLayer = parseProvenanceStyleLayer(entry, sourceRef);
         if (parsedLayer) {
           styleBuckets[appendBucket] = [...styleBuckets[appendBucket], parsedLayer];
+        }
+        continue;
+      }
+
+      if (entry.key === "every path/.prefix style") {
+        const parsedLayer = parseProvenanceStyleLayer(entry, sourceRef);
+        if (parsedLayer) {
+          styleBuckets.everyPathStyles = [parsedLayer, ...styleBuckets.everyPathStyles];
+        }
+        continue;
+      }
+
+      const appendShapeStyle = parseEveryShapeNodeStyleOptionKey(entry.key, ".append style");
+      if (appendShapeStyle) {
+        const parsedLayer = parseProvenanceStyleLayer(entry, sourceRef);
+        if (parsedLayer) {
+          const existing = styleBuckets.everyShapeNodeStyles.get(appendShapeStyle) ?? [];
+          styleBuckets.everyShapeNodeStyles.set(appendShapeStyle, [...existing, parsedLayer]);
         }
         continue;
       }
@@ -3493,7 +3652,7 @@ function updateTreeLevelStyleLayers(
   if (append) {
     next[index] = {
       level,
-      layers: [...next[index].layers, layer]
+      layers: [...requireArrayValue(next, index).layers, layer]
     };
   } else {
     next[index] = {
@@ -3557,4 +3716,32 @@ function parseBoolish(raw: string): boolean | null {
 
 function normalizeLabelPinPosition(raw: string): string {
   return stripWrappingBraces(raw).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Local replay state stays out of serializable scene snapshots. */
+const geometryCheckpoints = new WeakMap<EvaluateTikzResult, ReadonlyMap<number, SemanticContextSnapshot>>();
+export function rememberGeometryCheckpoints(result: EvaluateTikzResult, checkpoints: ReadonlyMap<number, SemanticContextSnapshot>): void {
+  geometryCheckpoints.set(result, checkpoints);
+}
+export function getGeometryCheckpoints(result: EvaluateTikzResult): ReadonlyMap<number, SemanticContextSnapshot> | undefined {
+  return geometryCheckpoints.get(result);
+}
+
+function splitScopeSteps(
+  body: readonly Statement[],
+  steps: WeakMap<Statement, "enter" | "leave">,
+  attribution: WeakMap<Statement, ForeachStatementAttribution>,
+  sourceMaps: WeakMap<Statement, ExpansionSourceMap>
+): Statement[] {
+  return body.flatMap(statement => {
+    // Expansion finalization owns the entire attributed subtree.
+    const origin = attribution.get(statement);
+    if (statement.kind !== "Scope" || (origin && (origin.foreachStack.length > 0 || origin.sourceId !== statement.id)) || sourceMaps.has(statement)) return [statement];
+    const enter = { ...statement };
+    const leave = { ...statement, id: `${statement.id}:leave`, body: [] };
+    delete leave.options;
+    steps.set(enter, "enter");
+    steps.set(leave, "leave");
+    return [enter, ...splitScopeSteps(statement.body, steps, attribution, sourceMaps), leave];
+  });
 }

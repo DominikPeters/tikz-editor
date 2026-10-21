@@ -1,13 +1,16 @@
+import type { EditingIdentityState, IdentityMove } from "../editing-identities";
 import type { SessionSnapshot } from "../compute";
-import type { EditAction, EditActionResult } from "tikz-editor/edit/actions";
-import type { SourcePatch } from "tikz-editor/edit/types";
-import type { NodeShapePresetId } from "tikz-editor/edit/inspector";
+import type { EditAction, EditActionResult } from "@tikz-editor/core/edit/actions";
+import type { BeamerSlideEdit, DeckEditAction } from "@tikz-editor/core/beamer/index";
+import type { SourcePatch } from "@tikz-editor/core/edit/types";
+import type { NodeShapePresetId } from "@tikz-editor/core/edit/inspector";
 import type {
   AssistantItem,
   AssistantPendingApproval,
   AssistantThreadState,
   AssistantTurnStatus
 } from "../platform/types";
+import type { DocumentKind } from "@tikz-editor/core/document/kind";
 
 export type ToolMode =
   | "select"
@@ -69,7 +72,20 @@ export type CanvasTransform = {
   scale: number;
 };
 
+export type DeckSlideSelection = { source: string; frameIds: string[]; anchorId: string | null };
+export type DeckSlideNavigation = {
+  selection: DeckSlideSelection;
+  activeRootId: string | null;
+  steps: Record<string, number>;
+};
+
 export type HistoryEntry = {
+  deckSlidesBefore?: DeckSlideNavigation;
+  deckSlidesAfter?: DeckSlideNavigation;
+  identityRootsBefore?: Record<string, EditingIdentityState>;
+  identityRootsAfter?: Record<string, EditingIdentityState>;
+  identitiesBefore?: EditingIdentityState;
+  identitiesAfter?: EditingIdentityState;
   kind:
     | "move"
     | "move-handle"
@@ -81,12 +97,11 @@ export type HistoryEntry = {
     | "reorder"
     | "align"
     | "distribute"
-    | "flatten-foreach";
+    | "flatten-foreach"
+    | "text-edit";
   label: string;
   /** Optional key used to coalesce drag updates into one undo step. */
   mergeKey?: string;
-  /** Patches to apply to go backward (undo). */
-  backward: SourcePatch[];
   /** Patches to apply to go forward (redo). */
   forward: SourcePatch[];
   /** Source before the action (for full undo). */
@@ -115,13 +130,27 @@ export type FileRevision = {
 
 export type ExternalChangeStatus = "none" | "changed" | "missing" | "permission-needed" | "error";
 
+export type SourceChangeOrigin = "source-editor" | "assistant" | "disk" | "history" | "edit-command";
+
 export type DocumentSession = {
+  /** The overlay providing editing geometry while the active root remains a slide. */
+  drawingLayerRootId?: string | null;
+  deckSlideSelection?: DeckSlideSelection;
+  /** Session-only identities for every figure visited in this document. */
+  editingIdentityRoots?: Record<string, EditingIdentityState>;
+  editingIdentities?: EditingIdentityState;
+  /** Monotonic for this document session, including discarded undo branches. */
+  nextEditingIdentityId?: number;
+  pendingIdentityMoves?: IdentityMove[];
+  editingTargetsStale?: boolean;
   id: string;
   title: string;
   source: string;
   sourceRevision: number;
-  activeFigureId: string | null;
-  hasInitializedFigureSelection: boolean;
+  /** Session-only origin of this source revision, used when scheduling renders. */
+  lastSourceChangeOrigin?: SourceChangeOrigin;
+  activeRootId: string | null;
+  hasInitializedRootSelection: boolean;
   snapshot: SessionSnapshot;
   pendingRequestId: string | null;
   lastEditChangedSourceIds: string[] | null;
@@ -145,6 +174,7 @@ export type DocumentSession = {
   diskRevision: FileRevision | null;
   lastKnownDiskSource: string | null;
   externalChangeStatus: ExternalChangeStatus;
+  assistantSessionGeneration: number;
   assistantThreadId: string | null;
   assistantWorkspacePath: string | null;
   assistantFigurePath: string | null;
@@ -158,12 +188,52 @@ export type DocumentSession = {
   assistantError: string | null;
 };
 
+/** Document IDs are dynamic; an arbitrary ID may have no session. */
+export type DocumentSessions = Partial<Record<string, DocumentSession>>;
+
 export type WorkspacePersistedState = {
   workspaceVersion: number;
-  documents: Record<string, DocumentSession>;
+  documents: DocumentSessions;
   tabOrder: string[];
   activeDocumentId: string;
   recentDocumentIds: string[];
+};
+
+/**
+ * Structural mask for an active canvas text-editing session. While valid,
+ * the compute pipeline parses the document with `span` neutralized so
+ * momentarily-invalid TeX in the edited text cannot reshape document
+ * structure. Valid only while `documentId` and `sourceRevision` match the
+ * active document — any foreign source change invalidates it.
+ */
+export type CanvasTextEditMask = {
+  documentId: string;
+  elementId: string;
+  span: { from: number; to: number };
+  sourceRevision: number;
+};
+
+/** Source-backed build selection; canvas geometry must match revision and step. */
+export type DeckBuildSelection = {
+  documentId: string;
+  frameId: string;
+  sourceRevision: number;
+  rowId: string;
+  step: number;
+  sourceSpan: { from: number; to: number };
+  contentSpans: readonly { from: number; to: number }[];
+  revealSource: boolean;
+};
+
+/**
+ * A selected deck object (block, column, list, item, graphic, embedded
+ * tikzpicture). Object ids are only stable within one rendered frame layout;
+ * consumers must drop selections whose id no longer resolves.
+ */
+export type DeckObjectSelection = {
+  documentId: string;
+  frameId: string;
+  objectId: string;
 };
 
 export type WorkspaceEphemeralState = {
@@ -174,8 +244,11 @@ export type WorkspaceEphemeralState = {
   activeCanvasDragKind: CanvasDragKind | null;
   /** Source id currently being edited via source-number scrubbing. */
   activeSourceScrubSourceId: string | null;
+  activeInspectorEditDocumentId: string | null;
   /** Source id currently being edited through the canvas text popup. */
   activeCanvasTextEditSourceId: string | null;
+  /** Structural mask for the active canvas text-editing session (see type). */
+  canvasTextEditMask: CanvasTextEditMask | null;
   showGrid: boolean;
   showTransparencyGrid: boolean;
   snapModes: SnapModes;
@@ -189,6 +262,14 @@ export type WorkspaceEphemeralState = {
   selectedAddMatrixColumns: number;
   creationStrokeColor: string;
   creationFillColor: string;
+  /** Selected overlay step per deck frame, keyed by rootKey(documentId, rootId). */
+  deckStepByRootKey: Record<string, number>;
+  /** Selected deck object (Stage 3 object layer), scoped to one rendered frame. */
+  deckObjectSelection: DeckObjectSelection | null;
+  deckBuildSelection: DeckBuildSelection | null;
+  sourceReveal: { documentId: string; sourceRevision: number; span: { from: number; to: number } } | null;
+  /** A new slide's placeholder, to select in a text session once the slide is shown. */
+  deckPlaceholderSelection: { documentId: string; sourceRevision: number; span: { from: number; to: number } } | null;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -209,8 +290,10 @@ export type WorkspaceEphemeralState = {
   showObjectsPanel: boolean;
   showStylesPanel: boolean;
   showFiguresPanel: boolean;
+  showBuildsPanel: boolean;
+  showNotesPanel: boolean;
   showAssistantPanel: boolean;
-  rightSidebarTab: "inspector" | "objects" | "styles" | "assistant";
+  rightSidebarTab: "inspector" | "objects" | "styles" | "assistant" | "builds";
 
   // ── debug ─────────────────────────────────────────────────────────────────────
   showDevPanel: boolean;
@@ -222,7 +305,9 @@ export type EditorState = {
   // ── document slice ──────────────────────────────────────────────────────────
   source: string;
   sourceRevision: number;
-  activeFigureId: string | null;
+  /** Derived from the source (`\documentclass{beamer}` selects deck mode). */
+  documentKind: DocumentKind;
+  activeRootId: string | null;
   snapshot: SessionSnapshot;
   /** Request ID of the most recently triggered compute; null if up-to-date. */
   pendingRequestId: string | null;
@@ -251,7 +336,7 @@ export type EditorState = {
   activeHandleId: string | null;
   activeDocumentId: string;
   tabOrder: string[];
-  documents: Record<string, DocumentSession>;
+  documents: DocumentSessions;
   workspaceVersion: number;
   recentDocumentIds: string[];
 
@@ -262,8 +347,11 @@ export type EditorState = {
   activeCanvasDragKind: CanvasDragKind | null;
   /** Source id currently being edited via source-number scrubbing. */
   activeSourceScrubSourceId: string | null;
+  activeInspectorEditDocumentId: string | null;
   /** Source id currently being edited through the canvas text popup. */
   activeCanvasTextEditSourceId: string | null;
+  /** Structural mask for the active canvas text-editing session (see type). */
+  canvasTextEditMask: CanvasTextEditMask | null;
   showGrid: boolean;
   showTransparencyGrid: boolean;
   snapModes: SnapModes;
@@ -277,6 +365,14 @@ export type EditorState = {
   selectedAddMatrixColumns: number;
   creationStrokeColor: string;
   creationFillColor: string;
+  /** Selected overlay step per deck frame, keyed by rootKey(documentId, rootId). */
+  deckStepByRootKey: Record<string, number>;
+  /** Selected deck object (Stage 3 object layer), scoped to one rendered frame. */
+  deckObjectSelection: DeckObjectSelection | null;
+  deckBuildSelection: DeckBuildSelection | null;
+  sourceReveal: { documentId: string; sourceRevision: number; span: { from: number; to: number } } | null;
+  /** A new slide's placeholder, to select in a text session once the slide is shown. */
+  deckPlaceholderSelection: { documentId: string; sourceRevision: number; span: { from: number; to: number } } | null;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -297,8 +393,10 @@ export type EditorState = {
   showObjectsPanel: boolean;
   showStylesPanel: boolean;
   showFiguresPanel: boolean;
+  showBuildsPanel: boolean;
+  showNotesPanel: boolean;
   showAssistantPanel: boolean;
-  rightSidebarTab: "inspector" | "objects" | "styles" | "assistant";
+  rightSidebarTab: "inspector" | "objects" | "styles" | "assistant" | "builds";
 
   // ── debug ─────────────────────────────────────────────────────────────────────
   showDevPanel: boolean;
@@ -309,7 +407,8 @@ export type EditorState = {
 export type EditorAction =
   // Document
   | { type: "CODE_EDITED"; source: string }
-  | { type: "SET_ACTIVE_FIGURE"; figureId: string | null; documentId?: string }
+  | { type: "SET_ACTIVE_ROOT"; rootId: string | null; documentId?: string }
+  | { type: "SET_DRAWING_LAYER"; rootId: string }
   | { type: "NEW_DOCUMENT"; source?: string; title?: string }
   | { type: "SWITCH_DOCUMENT"; documentId: string }
   | { type: "CLOSE_DOCUMENT"; documentId?: string }
@@ -317,6 +416,8 @@ export type EditorAction =
   | {
       type: "MARK_DOCUMENT_SAVED";
       documentId?: string;
+      /** Exact contents written by an asynchronous save; omitted for synchronous opens. */
+      savedSource?: string;
       fileRef?: DocumentFileRef | null;
       diskRevision?: FileRevision | null;
       lastKnownDiskSource?: string | null;
@@ -337,51 +438,93 @@ export type EditorAction =
     }
   | {
       type: "APPLY_EDIT_ACTION";
-      action: EditAction;
+      documentId?: string;
+      action: EditAction | DeckEditAction;
       historyMergeKey?: string;
       parseOptions?: {
         indentSize?: 2 | 4;
-        propertyWriteMode?: "commit" | "preview" | "drag-frame" | "drag-end";
+        propertyWriteMode?: "commit" | "preview" | "drag-frame";
       };
       /** False for transient UI previews that should not affect undo/redo history. */
       recordInHistory?: boolean;
+      /** Reject deferred results after any intervening document edit. */
+      expectedDocumentRevision?: { documentId: string; sourceRevision: number };
       precomputedSource?: string;
       precomputedResult?: Extract<EditActionResult, { kind: "success" | "partial" }>;
+      /**
+       * Present when this edit comes from an active canvas text-editing
+       * session: the post-edit span of the edited text, installed as the
+       * structural parse mask atomically with the source change.
+       */
+      canvasTextEditMask?: { elementId: string; span: { from: number; to: number } };
+    }
+  | {
+      type: "EDIT_DECK_SLIDES";
+      documentId: string;
+      baseRevision: number;
+      edit: BeamerSlideEdit;
+      allowWarnings?: boolean;
+    }
+  | {
+      type: "SELECT_DECK_SLIDES";
+      documentId: string;
+      baseRevision: number;
+      frameIds: string[];
+      anchorId: string | null;
+      activeFrameId?: string;
+    }
+  | {
+      type: "APPLY_SOURCE_PATCHES";
+      documentId?: string;
+      baseRevision: number;
+      patches: SourcePatch[];
+      changedSourceIds: string[];
+      historyMergeKey?: string;
+      canvasTextEditMask?: {
+        elementId: string;
+        span: { from: number; to: number };
+      };
     }
   | {
       type: "SET_SOURCE_TRANSIENT";
+      documentId?: string;
+      expectedSourceRevision?: number;
+      expectedSource?: string;
       source: string;
       changedSourceIds?: string[] | null;
+      /** Owned preview reversal, validated against the expected source/revision. */
+      patches?: SourcePatch[];
+      identityMoves?: IdentityMove[];
     }
   | { type: "COMPUTE_REQUESTED"; requestId: string; documentId?: string }
   | { type: "SNAPSHOT_READY"; requestId: string; snapshot: SessionSnapshot; documentId?: string }
   | { type: "REORDER_TABS"; fromId: string; toId: string }
-  | { type: "SET_RIGHT_SIDEBAR_TAB"; tab: "inspector" | "objects" | "styles" | "assistant" }
+  | { type: "SET_RIGHT_SIDEBAR_TAB"; tab: "inspector" | "objects" | "styles" | "assistant" | "builds" }
   | {
       type: "ASSISTANT_THREAD_READY";
-      documentId?: string;
+      documentId?: string; sessionGeneration?: number;
       threadId: string;
       workspacePath: string;
       figurePath: string;
       previewPath: string;
     }
-  | { type: "ASSISTANT_THREAD_LOADED"; documentId?: string; state: AssistantThreadState }
+  | { type: "ASSISTANT_THREAD_LOADED"; documentId?: string; sessionGeneration?: number; state: AssistantThreadState }
   | { type: "ASSISTANT_NEW_CHAT"; documentId?: string }
-  | { type: "ASSISTANT_TURN_STATUS"; documentId?: string; status: AssistantTurnStatus; turnId?: string | null; error?: string | null }
-  | { type: "ASSISTANT_ITEM_STARTED"; documentId?: string; item: AssistantItem }
-  | { type: "ASSISTANT_ITEM_UPDATED"; documentId?: string; item: AssistantItem }
-  | { type: "ASSISTANT_ITEM_COMPLETED"; documentId?: string; item: AssistantItem }
-  | { type: "ASSISTANT_ITEM_DELTA"; documentId?: string; itemId: string; deltaType: string; delta: string }
-  | { type: "ASSISTANT_APPROVAL_REQUESTED"; documentId?: string; approval: AssistantPendingApproval }
-  | { type: "ASSISTANT_APPROVAL_CLEARED"; documentId?: string; requestId: string }
+  | { type: "ASSISTANT_TURN_STATUS"; documentId?: string; sessionGeneration?: number; status: AssistantTurnStatus; turnId?: string | null; error?: string | null }
+  | { type: "ASSISTANT_ITEM_STARTED"; documentId?: string; sessionGeneration?: number; item: AssistantItem }
+  | { type: "ASSISTANT_ITEM_UPDATED"; documentId?: string; sessionGeneration?: number; item: AssistantItem }
+  | { type: "ASSISTANT_ITEM_COMPLETED"; documentId?: string; sessionGeneration?: number; item: AssistantItem }
+  | { type: "ASSISTANT_ITEM_DELTA"; documentId?: string; sessionGeneration?: number; itemId: string; deltaType: string; delta: string }
+  | { type: "ASSISTANT_APPROVAL_REQUESTED"; documentId?: string; sessionGeneration?: number; approval: AssistantPendingApproval }
+  | { type: "ASSISTANT_APPROVAL_CLEARED"; documentId?: string; sessionGeneration?: number; requestId: string }
   | {
       type: "ASSISTANT_SOURCE_UPDATED";
-      documentId?: string;
+      documentId?: string; sessionGeneration?: number;
       source: string;
       revisionToken: string;
       historyMergeKey?: string;
     }
-  | { type: "ASSISTANT_SET_ERROR"; documentId?: string; message: string | null }
+  | { type: "ASSISTANT_SET_ERROR"; documentId?: string; sessionGeneration?: number; message: string | null }
   // History
   | { type: "UNDO" }
   | { type: "REDO" }
@@ -403,7 +546,12 @@ export type EditorAction =
   | { type: "SET_ADD_MATRIX_PRESET"; rows: number; columns: number }
   | { type: "SET_CREATION_STROKE_COLOR"; value: string }
   | { type: "SET_CREATION_FILL_COLOR"; value: string }
+  | { type: "SET_ACTIVE_INSPECTOR_EDIT"; documentId: string | null }
   | { type: "SET_ACTIVE_SOURCE_SCRUB"; sourceId: string | null }
+  | { type: "REVEAL_SOURCE"; documentId: string; sourceRevision: number; span: { from: number; to: number } }
+  | { type: "SET_DECK_BUILD_SELECTION"; selection: DeckBuildSelection | null }
+  | { type: "SET_DECK_STEP"; rootId: string; step: number }
+  | { type: "SET_DECK_OBJECT_SELECTION"; frameId: string; objectId: string | null }
   | { type: "TOGGLE_CANVAS_AID"; aid: CanvasAid }
   | { type: "TOGGLE_SNAP_MODE"; mode: SnapMode }
   | { type: "REQUEST_FIT_TO_CONTENT" }
@@ -414,7 +562,7 @@ export type EditorAction =
   | { type: "SET_CANVAS_STATUS_HINT"; hint: string | null }
   // Layout
   | { type: "TOGGLE_PANEL"; panel: "source" | "inspector" }
-  | { type: "SYNC_LAYOUT_STATE"; sourceVisible: boolean; inspectorVisible: boolean; objectsVisible: boolean; stylesVisible: boolean; figuresVisible: boolean; assistantVisible: boolean; activeRightTab: "inspector" | "objects" | "styles" | "assistant" }
+  | { type: "SYNC_LAYOUT_STATE"; sourceVisible: boolean; inspectorVisible: boolean; objectsVisible: boolean; stylesVisible: boolean; figuresVisible: boolean; buildsVisible?: boolean; notesVisible?: boolean; assistantVisible: boolean; activeRightTab: "inspector" | "objects" | "styles" | "assistant" | "builds" }
   // Debug
   | { type: "TOGGLE_DEV_PANEL" }
   | { type: "SET_SNAP_DEBUG"; snapDebug: DeveloperSnapDebugState | null; log?: DeveloperLogEntry }

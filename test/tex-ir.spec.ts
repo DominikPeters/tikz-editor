@@ -1,0 +1,2399 @@
+import { describe, expect, it } from "vitest";
+import {
+  analyzeSimpleTexParagraph,
+  analyzeSimpleTexResources,
+  classicComputerModernTextFontProfile,
+  computerModernTexMetricProvider,
+  createSimpleTexLayoutDocumentIr,
+  createSimpleTexLayoutDocumentIrFromPreparation,
+  luaLatexDefaultTextFontProfile,
+  prepareSimpleTexLayoutDocument,
+  prepareTexLayoutParagraphsFromVList,
+  parseSimpleTexParagraphIr,
+  projectSimpleTexSourceByPolicy,
+  simpleTexSourceHasLineBreak,
+  splitSimpleTexSourceAtLineBreaks,
+  texLength,
+  texLayoutItemsForParagraphPlan,
+} from "../packages/core/src/text/tex/index.js";
+import {
+  lowerSimpleTexBlocksToVList,
+  prepareSimpleTexVList,
+  texVListParagraphItems,
+  type TexVListItem,
+} from "../packages/core/src/text/tex/vlist/index.js";
+
+describe("simple TeX paragraph IR", () => {
+  it("analyzes fallback eligibility and IR in one pass", () => {
+    const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \textit{Beta}`, 120);
+
+    expect(analysis.fallbackReason).toBeNull();
+    expect(analysis.ir?.blocks).toHaveLength(1);
+    expect(analysis.ir?.unsupportedCommand).toBe(false);
+
+    const inlineMath = analyzeSimpleTexParagraph(String.raw`Alpha $x$`, 120);
+    expect(inlineMath.ir?.unsupportedCommand).toBe(false);
+    expect(inlineMath.fallbackReason).toBeNull();
+  });
+
+  it("projects node-mode policies from source-backed IR nodes", () => {
+    const explicitBreak = String.raw`Alpha {\textbf{ Beta \\ Gamma }} Delta`;
+    expect(simpleTexSourceHasLineBreak(explicitBreak)).toBe(true);
+    expect(splitSimpleTexSourceAtLineBreaks(explicitBreak)).toEqual([
+      String.raw`Alpha {\textbf{ Beta`,
+      String.raw`Gamma }} Delta`,
+    ]);
+    expect(
+      projectSimpleTexSourceByPolicy(explicitBreak, {
+        removeLineBreaks: true,
+      })
+    ).toBe(String.raw`Alpha {\textbf{ BetaGamma }} Delta`);
+
+    const restricted = String.raw`Alpha \par   Beta \paragraph{kept}`;
+    expect(
+      projectSimpleTexSourceByPolicy(restricted, {
+        removeControlParagraphBreaks: true,
+      })
+    ).toBe(String.raw`Alpha Beta \paragraph{kept}`);
+    expect(simpleTexSourceHasLineBreak(String.raw`$x\\y$ % \\`)).toBe(false);
+    expect(simpleTexSourceHasLineBreak("Alpha\nBeta\n\nGamma")).toBe(false);
+  });
+
+  it("classifies an unmatched math delimiter as malformed literal source", () => {
+    expect(parseSimpleTexParagraphIr("$").nodes).toEqual([
+      expect.objectContaining({
+        kind: "literal",
+        text: "$",
+        reason: "malformed-input",
+        sourceStart: 0,
+        sourceEnd: 1,
+      }),
+    ]);
+  });
+
+  it.each([String.raw`\\`, String.raw`\newline`, String.raw`\linebreak[4]`])(
+    "checks possible %s breaks through the IR",
+    (command) => {
+      expect(simpleTexSourceHasLineBreak(`Alpha ${command} Beta`)).toBe(true);
+      expect(simpleTexSourceHasLineBreak(`$x${command}y$`)).toBe(false);
+      expect(simpleTexSourceHasLineBreak(`Alpha % ${command}\nBeta`)).toBe(false);
+    }
+  );
+
+  it("keeps other controls out of explicit line-break analysis", () => {
+    expect(simpleTexSourceHasLineBreak(String.raw`\textbf{Alpha} $\frac{a}{b}$`)).toBe(false);
+    expect(simpleTexSourceHasLineBreak(String.raw`\newliner \linebreaker`)).toBe(false);
+  });
+
+  it("parses mbox as an inline text hbox node", () => {
+    const source = String.raw`Alpha \mbox{ beta \textit{gamma} $x$ } Omega`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const mbox = parsed.nodes.find((node) => node.kind === "mbox");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(mbox).toMatchObject({
+      kind: "mbox",
+      text: String.raw`\mbox{ beta \textit{gamma} $x$ }`,
+      content: String.raw` beta \textit{gamma} $x$ `,
+      contentStart: 12,
+      contentEnd: 37,
+      children: [
+        { kind: "space" },
+        { kind: "text", text: "beta" },
+        { kind: "space" },
+        { kind: "font-command", command: "textit" },
+        { kind: "space" },
+        { kind: "math", content: "x" },
+        { kind: "space" },
+      ],
+    });
+    expect(parsed.blocks[0]?.nodes.some((node) => node.kind === "mbox")).toBe(true);
+  });
+
+  it("parses makebox and zero-width lap boxes as inline text hbox nodes", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A\makebox{b}B\makebox[20pt][r]{c}C\llap{d}D\rlap{e}E\fbox{f}F\framebox[24pt][l]{g}G`
+    );
+    const boxes = parsed.nodes.filter((node) => node.kind === "mbox");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(boxes).toMatchObject([
+      {
+        kind: "mbox",
+        command: "makebox",
+        text: String.raw`\makebox{b}`,
+        content: "b",
+      },
+      {
+        kind: "mbox",
+        command: "makebox",
+        text: String.raw`\makebox[20pt][r]{c}`,
+        content: "c",
+        boxWidth: 20,
+        boxAlign: "right",
+      },
+      {
+        kind: "mbox",
+        command: "llap",
+        text: String.raw`\llap{d}`,
+        content: "d",
+        boxWidth: 0,
+        boxAlign: "right",
+      },
+      {
+        kind: "mbox",
+        command: "rlap",
+        text: String.raw`\rlap{e}`,
+        content: "e",
+        boxWidth: 0,
+        boxAlign: "left",
+      },
+      {
+        kind: "mbox",
+        command: "fbox",
+        text: String.raw`\fbox{f}`,
+        content: "f",
+      },
+      {
+        kind: "mbox",
+        command: "framebox",
+        text: String.raw`\framebox[24pt][l]{g}`,
+        content: "g",
+        boxWidth: 24,
+        boxAlign: "left",
+      },
+    ]);
+    expect(boxes[0]).not.toHaveProperty("boxWidth");
+    expect(boxes[0]).not.toHaveProperty("boxAlign");
+  });
+
+  it("parses colorbox and fcolorbox colors with source-backed contents", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A\colorbox{yellow}{b \textbf{c} $x$}D\fcolorbox[rgb]{1,0,0}[HTML]{00FF00}{e}F`
+    );
+    const boxes = parsed.nodes.filter((node) => node.kind === "mbox");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(boxes).toMatchObject([
+      {
+        command: "colorbox",
+        content: String.raw`b \textbf{c} $x$`,
+        backgroundColor: "#ffff00",
+        children: [
+          { kind: "text", text: "b" },
+          { kind: "space" },
+          { kind: "font-command", command: "textbf" },
+          { kind: "space" },
+          { kind: "math", content: "x" },
+        ],
+      },
+      {
+        command: "fcolorbox",
+        content: "e",
+        backgroundColor: "#00ff00",
+        frameColor: "#ff0000",
+      },
+    ]);
+    expect(boxes[0]).toMatchObject({ contentStart: 19, contentEnd: 35 });
+    expect(boxes[0]).not.toHaveProperty("frameColor");
+  });
+
+  it("parses inline rule and raisebox commands", () => {
+    const source = String.raw`A\rule[1pt]{2pt}{3pt}B\raisebox{4pt}[5pt][6pt]{x \textbf{y}}C`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const rule = parsed.nodes.find((node) => node.kind === "rule");
+    const raisebox = parsed.nodes.find((node) => node.kind === "raisebox");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(rule).toMatchObject({
+      kind: "rule",
+      text: String.raw`\rule[1pt]{2pt}{3pt}`,
+      raise: 1,
+      width: 2,
+      height: 3,
+    });
+    expect(raisebox).toMatchObject({
+      kind: "raisebox",
+      text: String.raw`\raisebox{4pt}[5pt][6pt]{x \textbf{y}}`,
+      lift: 4,
+      boxHeight: 5,
+      boxDepth: 6,
+      content: String.raw`x \textbf{y}`,
+      children: [
+        { kind: "text", text: "x" },
+        { kind: "space" },
+        { kind: "font-command", command: "textbf" },
+      ],
+    });
+  });
+
+  it("parses includegraphics commands with options and source ranges", () => {
+    const source = String.raw`A \includegraphics[width=2cm,height=1cm,scale=0.5,keepaspectratio]{fig} B`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const graphics = parsed.nodes.find((node) => node.kind === "includegraphics");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(graphics).toMatchObject({
+      kind: "includegraphics",
+      text: String.raw`\includegraphics[width=2cm,height=1cm,scale=0.5,keepaspectratio]{fig}`,
+      filename: "fig",
+      filenameStart: source.indexOf("{fig}") + 1,
+      filenameEnd: source.indexOf("{fig}") + 4,
+      sourceStart: source.indexOf(String.raw`\includegraphics`),
+      sourceEnd: source.indexOf("{fig}") + "{fig}".length,
+    });
+    expect(graphics?.options.width).toMatchObject({
+      kind: "absolute",
+      raw: "2cm",
+      value: expect.closeTo(56.905512, 5),
+    });
+    expect(graphics?.options.height).toMatchObject({
+      kind: "absolute",
+      raw: "1cm",
+      value: expect.closeTo(28.452756, 5),
+    });
+    expect(graphics?.options.scale).toBe(0.5);
+    expect(graphics?.options.keepAspectRatio).toBe(true);
+    const optionStart = source.indexOf("[width=");
+    expect(graphics?.options.optionList).toMatchObject({
+      span: {
+        from: optionStart,
+        to: source.indexOf("]", optionStart) + 1,
+      },
+      entries: [
+        {
+          kind: "kv",
+          key: "width",
+          keySpan: { from: optionStart + 1, to: optionStart + 6 },
+          valueSpan: { from: optionStart + 7, to: optionStart + 10 },
+        },
+        { kind: "kv", key: "height" },
+        { kind: "kv", key: "scale" },
+        { kind: "flag", key: "keepaspectratio" },
+      ],
+    });
+  });
+
+  it("preserves contextual graphics dimensions and duplicate option spans", () => {
+    const source = String.raw`\includegraphics[width=20pt,unknown={a,b},width=.8\textwidth,height=2em]{fig}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const graphics = parsed.nodes.find((node) => node.kind === "includegraphics");
+
+    expect(graphics?.options.width).toEqual({
+      kind: "contextual",
+      raw: String.raw`.8\textwidth`,
+      factor: 0.8,
+      reference: "textwidth",
+    });
+    expect(graphics?.options.height).toEqual({
+      kind: "contextual",
+      raw: "2em",
+      factor: 2,
+      reference: "em",
+    });
+    expect(graphics?.options.optionList?.entries.map((entry) =>
+      entry.kind === "unknown" ? entry.raw : entry.key
+    )).toEqual(["width", "unknown", "width", "height"]);
+    for (const entry of graphics?.options.optionList?.entries ?? []) {
+      expect(source.slice(entry.span.from, entry.span.to)).toBe(entry.raw);
+    }
+  });
+
+  it("parses includegraphics crop and clip options", () => {
+    const source = String.raw`\includegraphics[trim=10bp 5bp 20bp 15bp,clip]{fig}\includegraphics[trim={10 5 20 15},clip=false,viewport=10 5 100 65]{fig}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const graphics = parsed.nodes.filter((node) => node.kind === "includegraphics");
+    const bp = 72.27 / 72;
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(graphics).toHaveLength(2);
+    expect(graphics[0]?.options.trim).toEqual({
+      left: 10 * bp,
+      bottom: 5 * bp,
+      right: 20 * bp,
+      top: 15 * bp,
+    });
+    expect(graphics[0]?.options.clip).toBe(true);
+    expect(graphics[1]?.options.trim).toEqual({
+      left: 10 * bp,
+      bottom: 5 * bp,
+      right: 20 * bp,
+      top: 15 * bp,
+    });
+    expect(graphics[1]?.options.clip).toBe(false);
+    expect(graphics[1]?.options.viewport).toEqual({
+      llx: 10 * bp,
+      lly: 5 * bp,
+      urx: 100 * bp,
+      ury: 65 * bp,
+    });
+    expect(graphics[1]?.options.raw).toBe("trim={10 5 20 15},clip=false,viewport=10 5 100 65");
+  });
+
+  it("discovers source-backed graphics resources and parses PDF pages once", () => {
+    const source = String.raw`% \includegraphics{ignored.pdf}
+\node {A \includegraphics[page={2}]{fig.pdf}};
+\node {\textbf{\includegraphics[page=zero]{bad.pdf}}};`;
+    const manifest = analyzeSimpleTexResources(source);
+    const ignoredStart = source.indexOf(String.raw`\includegraphics`);
+    const firstStart = source.indexOf(String.raw`\includegraphics`, ignoredStart + 1);
+    const secondStart = source.indexOf(String.raw`\includegraphics`, firstStart + 1);
+
+    expect(manifest.graphics).toEqual([
+      expect.objectContaining({
+        kind: "graphics",
+        filename: "fig.pdf",
+        sourceStart: firstStart,
+        sourceEnd: firstStart + String.raw`\includegraphics[page={2}]{fig.pdf}`.length,
+        options: expect.objectContaining({
+          raw: "page={2}",
+          page: { status: "valid", pageNumber: 2 },
+        }),
+      }),
+      expect.objectContaining({
+        kind: "graphics",
+        filename: "bad.pdf",
+        sourceStart: secondStart,
+        options: expect.objectContaining({
+          raw: "page=zero",
+          page: {
+            status: "invalid",
+            raw: "zero",
+            reason: "PDF page option must be a positive integer.",
+          },
+        }),
+      }),
+    ]);
+  });
+
+  it("discovers overlay-qualified graphics through the shared TeX CST", () => {
+    const source = String.raw`% \includegraphics{ignored.pdf}
+\only<2->{\includegraphics<3->[width=24pt,page=2]{shown.pdf}}`;
+    const commandStart = source.indexOf(String.raw`\includegraphics`, source.indexOf("\n"));
+    const manifest = analyzeSimpleTexResources(source);
+
+    expect(manifest.graphics).toEqual([
+      expect.objectContaining({
+        filename: "shown.pdf",
+        sourceStart: commandStart,
+        sourceEnd: source.length - 1,
+        options: expect.objectContaining({
+          raw: "width=24pt,page=2",
+          width: {
+            kind: "absolute",
+            raw: "24pt",
+            value: 24,
+          },
+          page: { status: "valid", pageNumber: 2 },
+        }),
+      }),
+    ]);
+  });
+
+  it("finds the same graphics in long documents across a series of edits", () => {
+    const body = String.raw`% \includegraphics{ignored.pdf}
+\begin{verbatim}
+\includegraphics{verbatim.pdf}
+\end{verbatim}
+\node {A \includegraphics[page={2}]{fig.pdf}};
+\only<2->{\includegraphics<3->[width=24pt,page=2]{shown.pdf}}
+\includegraphics[width=\includegraphics]{odd.pdf} \includegraphicsx{not.pdf}
+`;
+    // Comment padding past the long-document threshold keeps every offset.
+    const padded = (text: string) => `${text}\n${"% padding line\n".repeat(400)}`;
+    const edits = [
+      body,
+      body.replace("fig.pdf", "figure.pdf"),
+      body.replace("% \\includegraphics", "\\includegraphics"),
+      body.replace("\\begin{verbatim}", ""),
+      `\\includegraphics{first.pdf}\n${body}`,
+      body.replace("{shown.pdf}}", "{shown.pdf}"),
+    ];
+    for (const text of edits) {
+      expect(text.length).toBeLessThan(4096);
+      expect(analyzeSimpleTexResources(padded(text)).graphics).toEqual(analyzeSimpleTexResources(text).graphics);
+    }
+  });
+
+  it("parses phantom and smash commands as inline dimension boxes", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A\phantom{b}B\hphantom{c}C\vphantom{g}D\smash{\textit{x}}E`
+    );
+    const boxes = parsed.nodes.filter((node) => node.kind === "dimension-box");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(boxes).toMatchObject([
+      {
+        kind: "dimension-box",
+        command: "phantom",
+        text: String.raw`\phantom{b}`,
+        content: "b",
+      },
+      {
+        kind: "dimension-box",
+        command: "hphantom",
+        text: String.raw`\hphantom{c}`,
+        content: "c",
+      },
+      {
+        kind: "dimension-box",
+        command: "vphantom",
+        text: String.raw`\vphantom{g}`,
+        content: "g",
+      },
+      {
+        kind: "dimension-box",
+        command: "smash",
+        text: String.raw`\smash{\textit{x}}`,
+        content: String.raw`\textit{x}`,
+        children: [{ kind: "font-command", command: "textit" }],
+      },
+    ]);
+  });
+
+  it("rejects vertical material inside inline mbox nodes", () => {
+    const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \mbox{\par Beta}`, 120);
+
+    expect(analysis.ir?.unsupportedCommand).toBe(true);
+    expect(analysis.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
+  });
+
+  it("keeps paragraph-start lap boxes out of the simple text path", () => {
+    const verticalMode = analyzeSimpleTexParagraph(String.raw`\rlap{overlay} Alpha`, 120);
+    const inline = analyzeSimpleTexParagraph(String.raw`Alpha \rlap{overlay} Beta`, 120);
+
+    expect(verticalMode.ir?.unsupportedCommand).toBe(true);
+    expect(verticalMode.fallbackReason).toBe("Paragraph contains TeX syntax that is not supported by the simple text path.");
+    expect(inline.ir?.unsupportedCommand).toBe(false);
+    expect(inline.fallbackReason).toBeNull();
+  });
+
+  it("parses display math delimiters as vertical block items", () => {
+    const source = String.raw`Alpha $$x^2$$ \[y^2\] \begin{equation}z^2\end{equation} \begin{align}a&=b\end{align}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const displayItems = parsed.items.filter((item) => item.kind === "display-math");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(displayItems.map((item) => item.delimiter)).toEqual([
+      "double-dollar",
+      "bracket",
+      "equation",
+      "align",
+    ]);
+    expect(displayItems.map((item) => item.content)).toEqual([
+      "x^2",
+      "y^2",
+      "z^2",
+      "a&=b",
+    ]);
+  });
+
+  it("splits paragraphs while preserving source-level text commands", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`Alpha Beta \par \noindent Gamma \\[7pt] Delta`
+    );
+
+    expect(ir).toMatchObject({
+      kind: "simple-tex-paragraph",
+      unsupportedCommand: false,
+    });
+    expect(ir.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "text",
+      "space",
+      "paragraph-break",
+      "space",
+      "noindent",
+      "space",
+      "text",
+      "space",
+      "line-break",
+      "space",
+      "text",
+    ]);
+    expect(ir.blocks).toHaveLength(2);
+    expect(ir.blocks[0]).toMatchObject({
+      text: "Alpha Beta",
+      noIndent: false,
+    });
+    expect(ir.blocks[0]?.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "text",
+    ]);
+    expect(ir.blocks[1]).toMatchObject({
+      text: String.raw`Gamma \\[7pt] Delta`,
+      noIndent: true,
+    });
+    expect(ir.blocks[1]?.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "line-break",
+      "space",
+      "text",
+    ]);
+  });
+
+  it("parses vertical glue commands as non-paragraph block items", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \smallskip \noindent Beta \par \medskip Gamma \par \bigskip Delta \par \vspace{7pt} Epsilon \par \vskip 5pt plus 2pt minus 1pt Zeta \par \vfill Eta \par \vspace*{-4pt} Theta`
+    );
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.blocks.map((block) => block.text)).toEqual([
+      "Alpha",
+      "Beta",
+      "Gamma",
+      "Delta",
+      "Epsilon",
+      "Zeta",
+      "Eta",
+      "Theta",
+    ]);
+    expect(parsed.items.map((item) =>
+      item.kind === "vertical-glue"
+        ? {
+            kind: item.kind,
+            command: item.command,
+            size: item.size,
+            stretch: item.stretch,
+            shrink: item.shrink,
+            stretchOrder: item.stretchOrder,
+          }
+        : {
+            kind: item.kind,
+            text: item.kind === "paragraph" ? item.block.text : undefined,
+          }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      {
+        kind: "vertical-glue",
+        command: "smallskip",
+        size: 3,
+        stretch: 1,
+        shrink: 1,
+        stretchOrder: "normal",
+      },
+      { kind: "paragraph", text: "Beta" },
+      {
+        kind: "vertical-glue",
+        command: "medskip",
+        size: 6,
+        stretch: 2,
+        shrink: 2,
+        stretchOrder: "normal",
+      },
+      { kind: "paragraph", text: "Gamma" },
+      {
+        kind: "vertical-glue",
+        command: "bigskip",
+        size: 12,
+        stretch: 4,
+        shrink: 4,
+        stretchOrder: "normal",
+      },
+      { kind: "paragraph", text: "Delta" },
+      {
+        kind: "vertical-glue",
+        command: "vspace",
+        size: 7,
+        stretch: undefined,
+        shrink: undefined,
+        stretchOrder: "normal",
+      },
+      { kind: "paragraph", text: "Epsilon" },
+      {
+        kind: "vertical-glue",
+        command: "vskip",
+        size: 5,
+        stretch: 2,
+        shrink: 1,
+        stretchOrder: "normal",
+      },
+      { kind: "paragraph", text: "Zeta" },
+      {
+        kind: "vertical-glue",
+        command: "vfill",
+        size: 0,
+        stretch: 1,
+        shrink: undefined,
+        stretchOrder: "fill",
+      },
+      { kind: "paragraph", text: "Eta" },
+      {
+        kind: "vertical-glue",
+        command: "vspace",
+        size: -4,
+        stretch: undefined,
+        shrink: undefined,
+        stretchOrder: "normal",
+      },
+      { kind: "paragraph", text: "Theta" },
+    ]);
+  });
+
+  it("keeps horizontal-mode vspace attached to its unbroken paragraph", () => {
+    const source = String.raw`Alpha \vspace{7pt} Beta`;
+    const analysis = analyzeSimpleTexParagraph(source, 120);
+
+    expect(analysis.fallbackReason).toBeNull();
+    expect(analysis.ir?.unsupportedCommand).toBe(false);
+    expect(analysis.ir?.items).toHaveLength(1);
+    expect(analysis.ir?.blocks).toEqual([
+      expect.objectContaining({
+        text: source,
+        verticalAdjustments: [
+          expect.objectContaining({
+            kind: "vertical-glue",
+            command: "vspace",
+            size: 7,
+            sourceStart: source.indexOf(String.raw`\vspace`),
+            sourceEnd: source.indexOf(" Beta"),
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it("keeps post-display vspace on the resumed horizontal paragraph", () => {
+    const source = String.raw`\[x\]\vspace{4pt} Alpha Beta`;
+    const parsed = parseSimpleTexParagraphIr(source);
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.items.map((item) => item.kind)).toEqual([
+      "display-math",
+      "paragraph",
+    ]);
+    expect(parsed.blocks[0]).toEqual(expect.objectContaining({
+      text: String.raw`\vspace{4pt} Alpha Beta`,
+      verticalAdjustments: [
+        expect.objectContaining({
+          command: "vspace",
+          size: 4,
+        }),
+      ],
+    }));
+  });
+
+  it.each([["smallskip", 3], ["medskip", 6], ["bigskip", 12]] as const)("keeps horizontal-mode %s attached to its paragraph", (command, size) => {
+    const source = `Alpha \\${command} Beta`;
+    const analysis = analyzeSimpleTexParagraph(source, 120);
+
+    expect(analysis.fallbackReason).toBeNull();
+    expect(analysis.ir?.unsupportedCommand).toBe(false);
+    expect(analysis.ir?.items).toHaveLength(1);
+    expect(analysis.ir?.blocks[0].verticalAdjustments).toEqual([
+      expect.objectContaining({ command, size, sourceStart: source.indexOf("\\"), sourceEnd: source.indexOf(" Beta") }),
+    ]);
+  });
+
+  it("rejects primitive vertical glue in the middle of a paragraph", () => {
+    const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \vskip 3pt Beta`, 120);
+
+    expect(analysis.ir?.unsupportedCommand).toBe(true);
+    expect(analysis.fallbackReason).toContain("not supported");
+  });
+
+  it("parses explicit TeX hrule commands as vertical rule block items", () => {
+    const source = String.raw`Alpha \par \hrule width 24pt height 2pt depth 1pt Beta`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const ruleStart = source.indexOf(String.raw`\hrule`);
+    const ruleEnd = source.indexOf("Beta");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.items.map((item) =>
+      item.kind === "paragraph"
+        ? { kind: item.kind, text: item.block.text }
+        : item.kind === "vertical-rule"
+          ? {
+              kind: item.kind,
+              width: item.width,
+              height: item.height,
+              depth: item.depth,
+              sourceStart: item.sourceStart,
+              sourceEnd: item.sourceEnd,
+            }
+          : { kind: item.kind }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      {
+        kind: "vertical-rule",
+        width: 24,
+        height: 2,
+        depth: 1,
+        sourceStart: ruleStart,
+        sourceEnd: ruleEnd,
+      },
+      { kind: "paragraph", text: "Beta" },
+    ]);
+
+  });
+
+  it("parses explicit TeX penalty commands as penalty block items", () => {
+    const source = String.raw`Alpha \par \penalty -50 Beta`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const penaltyStart = source.indexOf(String.raw`\penalty`);
+    const penaltyEnd = source.indexOf(" Beta");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.items.map((item) =>
+      item.kind === "paragraph"
+        ? { kind: item.kind, text: item.block.text }
+        : item.kind === "penalty"
+          ? {
+              kind: item.kind,
+              penalty: item.penalty,
+              sourceStart: item.sourceStart,
+              sourceEnd: item.sourceEnd,
+            }
+          : { kind: item.kind }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      {
+        kind: "penalty",
+        penalty: -50,
+        sourceStart: penaltyStart,
+        sourceEnd: penaltyEnd,
+      },
+      { kind: "paragraph", text: "Beta" },
+    ]);
+
+  });
+
+  it("parses parbox commands as nested block items", () => {
+    const source = String.raw`\parbox[t][24pt][b]{40pt}{Alpha \par \begin{quote}Beta\end{quote}}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.nodes).toHaveLength(1);
+    expect(parsed.nodes[0]).toMatchObject({
+      kind: "box",
+      command: "parbox",
+      width: 40,
+      height: 24,
+      alignment: "bottom",
+      content: String.raw`Alpha \par \begin{quote}Beta\end{quote}`,
+    });
+    expect(parsed.blocks.map((block) => ({
+      text: block.text,
+      quoteDepth: block.quoteDepth,
+    }))).toEqual([
+      { text: "Alpha", quoteDepth: 0 },
+      { text: "Beta", quoteDepth: 1 },
+    ]);
+    expect(parsed.items.map((item) =>
+      item.kind === "box"
+        ? {
+            kind: item.kind,
+            command: item.command,
+            width: item.width,
+            height: item.height,
+            alignment: item.alignment,
+            bodyKinds: item.items.map((child) => child.kind),
+          }
+        : { kind: item.kind }
+    )).toEqual([
+      {
+        kind: "box",
+        command: "parbox",
+        width: 40,
+        height: 24,
+        alignment: "bottom",
+        bodyKinds: ["paragraph", "paragraph"],
+      },
+    ]);
+  });
+
+  it("parses minipage environments as nested block items", () => {
+    const source = String.raw`\begin{minipage}[b]{50pt}Alpha \par \begin{minipage}{20pt}Inner\end{minipage}\par Tail\end{minipage}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.nodes).toHaveLength(1);
+    expect(parsed.nodes[0]).toMatchObject({
+      kind: "box",
+      command: "minipage",
+      width: 50,
+      alignment: "bottom",
+    });
+    expect(parsed.blocks.map((block) => block.text)).toEqual([
+      "Alpha",
+      "Inner",
+      "Tail",
+    ]);
+    expect(parsed.items.map((item) =>
+      item.kind === "box"
+        ? {
+            kind: item.kind,
+            command: item.command,
+            width: item.width,
+            bodyKinds: item.items.map((child) => child.kind),
+          }
+        : { kind: item.kind }
+    )).toEqual([
+      {
+        kind: "box",
+        command: "minipage",
+        width: 50,
+        bodyKinds: ["paragraph", "box", "paragraph"],
+      },
+    ]);
+  });
+
+  it("uses syntax-tree environment boundaries rather than commands in comments", () => {
+    const source =
+      String.raw`\begin{minipage}{50pt}Alpha % \end{minipage}` +
+      "\n" +
+      String.raw`Beta\end{minipage}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.nodes).toHaveLength(1);
+    expect(parsed.nodes[0]).toMatchObject({
+      kind: "box",
+      command: "minipage",
+      width: 50,
+      content:
+        String.raw`Alpha % \end{minipage}` +
+        "\n" +
+        "Beta",
+      sourceStart: 0,
+      sourceEnd: source.length,
+    });
+  });
+
+  it("does not lower mismatched environment boundaries", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \begin{quote} Beta \end{quotation} Gamma`
+    );
+
+    expect(
+      parsed.nodes.filter((node) => node.kind === "environment-boundary")
+    ).toEqual([]);
+    expect(parsed.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "literal",
+          text: String.raw`\begin{quote}`,
+          reason: "malformed-input",
+          detail: String.raw`missing \end{quote}`,
+        }),
+        expect.objectContaining({
+          kind: "literal",
+          text: String.raw`\end{quotation}`,
+          reason: "malformed-input",
+          detail: String.raw`unexpected \end{quotation}`,
+        }),
+      ])
+    );
+  });
+
+  it("parses block-position unsupported commands as literal paragraphs", () => {
+    const source = String.raw`Alpha \par \unsupportedgraphics[width=1cm]{plot.pdf} \par Beta`;
+    const parsed = parseSimpleTexParagraphIr(source);
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.blocks.map((block) => block.text)).toEqual([
+      "Alpha",
+      String.raw`\unsupportedgraphics[width=1cm]{plot.pdf}`,
+      "Beta",
+    ]);
+    expect(parsed.items.map((item) =>
+      item.kind === "paragraph"
+        ? { kind: item.kind, text: item.block.text }
+        : { kind: item.kind }
+    )).toEqual([
+      { kind: "paragraph", text: "Alpha" },
+      { kind: "paragraph", text: String.raw`\unsupportedgraphics[width=1cm]{plot.pdf}` },
+      { kind: "paragraph", text: "Beta" },
+    ]);
+
+    const literalBlock = parsed.blocks[1];
+    const literals = literalBlock?.nodes.filter((node) => node.kind === "literal") ?? [];
+    expect(literals).toHaveLength(1);
+    expect(literals[0]).toMatchObject({
+      reason: "unsupported-command",
+      detail: String.raw`\unsupportedgraphics`,
+      sourceStart: source.indexOf(String.raw`\unsupportedgraphics`),
+    });
+  });
+
+  it("routes layout paragraph IR through V0 vlist paragraph items", () => {
+    const parsed = parseSimpleTexParagraphIr(String.raw`Alpha \\[7pt] Beta \par Gamma`);
+    const vlist = lowerSimpleTexBlocksToVList(parsed.blocks);
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(vlist.items.map((item) =>
+      item.kind === "paragraph"
+        ? {
+            blockIndex: item.blockIndex,
+            sourceSpan: item.sourceSpan,
+          }
+        : null
+    )).toEqual([
+      {
+        blockIndex: 0,
+        sourceSpan: {
+          start: parsed.blocks[0]?.sourceStart,
+          end: parsed.blocks[0]?.sourceEnd,
+        },
+      },
+      {
+        blockIndex: 1,
+        sourceSpan: {
+          start: parsed.blocks[1]?.sourceStart,
+          end: parsed.blocks[1]?.sourceEnd,
+        },
+      },
+    ]);
+    expect(layout.layoutMode).toBe("wrapped-explicit");
+    expect(layout.paragraphPlans.map((plan) => ({
+      blockIndex: plan.blockIndex,
+      segmentIndex: plan.segmentIndex,
+      text: plan.segment.text,
+    }))).toEqual([
+      { blockIndex: 0, segmentIndex: 0, text: "Alpha" },
+      { blockIndex: 0, segmentIndex: 1, text: "Beta" },
+      { blockIndex: 1, segmentIndex: 0, text: "Gamma" },
+    ]);
+  });
+
+  it("records paragraph-local alignment declarations", () => {
+    const ir = parseSimpleTexParagraphIr(String.raw`\centering Alpha \par Beta`);
+
+    expect(ir.nodes[0]).toMatchObject({
+      kind: "alignment",
+      alignment: "center",
+      alignmentProfile: "latex-declaration",
+    });
+    expect(ir.blocks).toHaveLength(2);
+    expect(ir.blocks[0]).toMatchObject({
+      text: "Alpha",
+      noIndent: true,
+      alignment: "center",
+      alignmentProfile: "latex-declaration",
+    });
+    expect(ir.blocks[1]).toMatchObject({
+      text: "Beta",
+      noIndent: false,
+    });
+  });
+
+  it("records LaTeX trivlist alignment environments as scoped paragraphs", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{center} Beta \par Gamma \end{center} \par Delta`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.filter((node) => node.kind === "environment-boundary"))
+      .toEqual([
+        expect.objectContaining({ boundary: "begin", name: "center" }),
+        expect.objectContaining({ boundary: "end", name: "center" }),
+      ]);
+    expect(ir.blocks.map((block) => ({
+      text: block.text,
+      noIndent: block.noIndent,
+      alignment: block.alignment,
+      alignmentProfile: block.alignmentProfile,
+      scopePath: block.scopePath?.map((role) =>
+        role.kind === "trivlist"
+          ? {
+              kind: role.kind,
+              envName: role.envName,
+              depth: role.depth,
+              alignment: role.alignment,
+            }
+          : { kind: role.kind }
+      ),
+    }))).toEqual([
+      {
+        text: "Alpha",
+        noIndent: false,
+        alignment: undefined,
+        alignmentProfile: undefined,
+        scopePath: undefined,
+      },
+      {
+        text: "Beta",
+        noIndent: true,
+        alignment: undefined,
+        alignmentProfile: undefined,
+        scopePath: [{ kind: "trivlist", envName: "center", depth: 1, alignment: "center" }],
+      },
+      {
+        text: "Gamma",
+        noIndent: true,
+        alignment: undefined,
+        alignmentProfile: undefined,
+        scopePath: [{ kind: "trivlist", envName: "center", depth: 1, alignment: "center" }],
+      },
+      {
+        text: "Delta",
+        noIndent: false,
+        alignment: undefined,
+        alignmentProfile: undefined,
+        scopePath: undefined,
+      },
+    ]);
+  });
+
+  it("keeps list-item and trivlist scope order from source nesting", () => {
+    const listInsideCenter = parseSimpleTexParagraphIr(
+      String.raw`\begin{center}\begin{itemize}\item Alpha\end{itemize}\end{center}`
+    );
+    const centerInsideList = parseSimpleTexParagraphIr(
+      String.raw`\begin{itemize}\item \begin{flushright}Alpha\end{flushright}\end{itemize}`
+    );
+
+    expect(listInsideCenter.unsupportedCommand).toBe(false);
+    expect(centerInsideList.unsupportedCommand).toBe(false);
+    expect(listInsideCenter.blocks[0]?.scopePath?.map((role) => role.kind)).toEqual([
+      "trivlist",
+      "list",
+      "list-item",
+    ]);
+    expect(centerInsideList.blocks[0]?.scopePath?.map((role) => role.kind)).toEqual([
+      "list",
+      "list-item",
+      "trivlist",
+    ]);
+  });
+
+  it("applies LaTeX list alignment resets in source scope order", () => {
+    const font = computerModernTexMetricProvider.resolveFont();
+    const listInsideCenter = parseSimpleTexParagraphIr(
+      String.raw`\begin{center}\begin{itemize}\item Alpha Beta\end{itemize}\end{center}`
+    );
+    const centerInsideList = parseSimpleTexParagraphIr(
+      String.raw`\begin{itemize}\item Alpha \begin{center}Beta Gamma\end{center}\end{itemize}`
+    );
+    const listInsideCenterLayout = createSimpleTexLayoutDocumentIr({
+      blocks: listInsideCenter.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { width: texLength(120) },
+    });
+    const centerInsideListLayout = createSimpleTexLayoutDocumentIr({
+      blocks: centerInsideList.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { width: texLength(120) },
+    });
+
+    expect(listInsideCenterLayout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      alignment: plan.alignment,
+      alignmentProfile: plan.alignmentProfile,
+    }))).toEqual([
+      { text: "Alpha Beta", alignment: "justified", alignmentProfile: undefined },
+    ]);
+    expect(centerInsideListLayout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      alignment: plan.alignment,
+      alignmentProfile: plan.alignmentProfile,
+    }))).toEqual([
+      { text: "Alpha", alignment: "justified", alignmentProfile: undefined },
+      { text: "Beta Gamma", alignment: "center", alignmentProfile: "latex-declaration" },
+    ]);
+  });
+
+  it("keeps quotation item indentation inside alignment environments", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`\begin{center}\begin{quotation}Alpha Beta\end{quotation}\end{center}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.blocks.map((block) => ({
+      text: block.text,
+      noIndent: block.noIndent,
+      firstLineIndentEm: block.firstLineIndentEm,
+      quotationItemFirstParagraph: block.quotationItemFirstParagraph,
+      scopePath: block.scopePath?.map((role) => role.kind),
+    }))).toEqual([
+      {
+        text: "Alpha Beta",
+        noIndent: true,
+        firstLineIndentEm: 1.5,
+        quotationItemFirstParagraph: true,
+        scopePath: ["trivlist", "quote"],
+      },
+    ]);
+  });
+
+  it("does not emit empty scope paths for vertical material before list items", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`\begin{itemize}\smallskip\item Alpha\end{itemize}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.items.map((item) => ({
+      kind: item.kind,
+      scopeKinds: "scopePath" in item
+        ? item.scopePath?.map((role) => role.kind)
+        : item.kind === "paragraph"
+          ? item.block.scopePath?.map((role) => role.kind)
+          : undefined,
+    }))).toEqual([
+      { kind: "vertical-glue", scopeKinds: ["list"] },
+      { kind: "paragraph", scopeKinds: ["list", "list-item"] },
+    ]);
+  });
+
+  it("records nested inline font commands in source IR", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`Alpha \textbf{Beta \textit{Gamma}} \textsf{\textsc{Delta}}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "font-command",
+      "space",
+      "font-command",
+    ]);
+    const command = ir.nodes[2];
+    expect(command).toMatchObject({
+      kind: "font-command",
+      command: "textbf",
+    });
+    if (command?.kind !== "font-command") {
+      throw new Error("expected font command node");
+    }
+    expect(command.children.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "font-command",
+    ]);
+    expect(command.children[2]).toMatchObject({
+      kind: "font-command",
+      command: "textit",
+    });
+    expect(ir.nodes[4]).toMatchObject({
+      kind: "font-command",
+      command: "textsf",
+    });
+  });
+
+  it("records remaining kernel inline font commands in source IR", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`\texttt{Type} \textbf{\textmd{Medium}} \textsl{Slant} \textit{\textup{Upright}}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes
+      .filter((node) => node.kind === "font-command")
+      .map((node) => node.kind === "font-command" ? node.command : null)).toEqual([
+        "texttt",
+        "textbf",
+        "textsl",
+        "textit",
+      ]);
+    const bold = ir.nodes[2];
+    expect(bold).toMatchObject({
+      kind: "font-command",
+      command: "textbf",
+      children: [{ kind: "font-command", command: "textmd" }],
+    });
+    const italic = ir.nodes[6];
+    expect(italic).toMatchObject({
+      kind: "font-command",
+      command: "textit",
+      children: [{ kind: "font-command", command: "textup" }],
+    });
+  });
+
+  it("associates command arguments across CST trivia", () => {
+    const source = String.raw`\textbf	% keep the argument on the next line
+{Alpha}`;
+    const ir = parseSimpleTexParagraphIr(source);
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes).toHaveLength(1);
+    expect(ir.nodes[0]).toMatchObject({
+      kind: "font-command",
+      command: "textbf",
+      text: source,
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: source.indexOf("Alpha"),
+      contentEnd: source.indexOf("Alpha") + "Alpha".length,
+      children: [expect.objectContaining({ kind: "text", text: "Alpha" })],
+    });
+  });
+
+  it("lowers CST comments and whitespace with TeX line semantics", () => {
+    const joined = String.raw`Alpha% discard this line
+  Beta`;
+    const joinedIr = parseSimpleTexParagraphIr(joined);
+
+    expect(joinedIr.unsupportedCommand).toBe(false);
+    expect(joinedIr.nodes).toEqual([
+      expect.objectContaining({ kind: "text", text: "Alpha" }),
+      expect.objectContaining({
+        kind: "comment",
+        text: String.raw`% discard this line
+  `,
+        sourceStart: joined.indexOf("%"),
+        sourceEnd: joined.indexOf("Beta"),
+      }),
+      expect.objectContaining({ kind: "text", text: "Beta" }),
+    ]);
+
+    const separated = String.raw`Alpha% discard this line
+
+Beta`;
+    const separatedIr = parseSimpleTexParagraphIr(separated);
+    expect(separatedIr.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "comment",
+      "paragraph-break",
+      "text",
+    ]);
+    expect(separatedIr.blocks).toHaveLength(2);
+
+    const tabbed = parseSimpleTexParagraphIr("Alpha\tBeta");
+    expect(tabbed.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "text",
+    ]);
+  });
+
+  it("records inline math delimiters and source spans in source IR", () => {
+    const source = String.raw`Alpha $x^2_y$ and \(z+1\).`;
+    const ir = parseSimpleTexParagraphIr(source);
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "math",
+      "space",
+      "text",
+      "space",
+      "math",
+      "text",
+    ]);
+    expect(ir.nodes[2]).toMatchObject({
+      kind: "math",
+      delimiter: "dollar",
+      text: "$x^2_y$",
+      content: "x^2_y",
+      sourceStart: source.indexOf("$x^2_y$"),
+      sourceEnd: source.indexOf("$x^2_y$") + "$x^2_y$".length,
+      contentStart: source.indexOf("x^2_y"),
+      contentEnd: source.indexOf("x^2_y") + "x^2_y".length,
+    });
+    expect(ir.nodes[6]).toMatchObject({
+      kind: "math",
+      delimiter: "paren",
+      text: String.raw`\(z+1\)`,
+      content: "z+1",
+      sourceStart: source.indexOf(String.raw`\(z+1\)`),
+      sourceEnd: source.indexOf(String.raw`\(z+1\)`) + String.raw`\(z+1\)`.length,
+      contentStart: source.indexOf("z+1"),
+      contentEnd: source.indexOf("z+1") + "z+1".length,
+    });
+  });
+
+  it("records scoped old-style font declarations in source IR", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`Alpha {\it Beta {\bf Gamma} Beta} {\sffamily Delta \scshape Epsilon}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.map((node) => node.kind)).toEqual([
+      "text",
+      "space",
+      "group",
+      "space",
+      "group",
+    ]);
+    const italicGroup = ir.nodes[2];
+    expect(italicGroup).toMatchObject({
+      kind: "group",
+    });
+    if (italicGroup?.kind !== "group") {
+      throw new Error("expected group node");
+    }
+    expect(italicGroup.children.map((node) => node.kind)).toEqual([
+      "font-declaration",
+      "text",
+      "space",
+      "group",
+      "space",
+      "text",
+    ]);
+    expect(italicGroup.children[0]).toMatchObject({
+      kind: "font-declaration",
+      command: "it",
+    });
+    expect(italicGroup.children[3]).toMatchObject({
+      kind: "group",
+    });
+  });
+
+  it("records typewriter and slanted font declarations in source IR", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`Alpha {\tt Typewriter} {\ttfamily Family} {\sl Slanted} {\slshape Shape}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes
+      .filter((node) => node.kind === "group")
+      .map((node) => node.kind === "group" ? node.children[0] : null)).toEqual([
+        expect.objectContaining({ kind: "font-declaration", command: "tt" }),
+        expect.objectContaining({ kind: "font-declaration", command: "ttfamily" }),
+        expect.objectContaining({ kind: "font-declaration", command: "sl" }),
+        expect.objectContaining({ kind: "font-declaration", command: "slshape" }),
+      ]);
+  });
+
+  it("records quote environment boundaries and paragraph quote depth", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`Alpha \begin{quote} Beta \end{quote} Gamma`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.filter((node) => node.kind === "environment-boundary"))
+      .toEqual([
+        expect.objectContaining({ boundary: "begin", name: "quote" }),
+        expect.objectContaining({ boundary: "end", name: "quote" }),
+      ]);
+    expect(ir.blocks.map((block) => ({
+      text: block.text,
+      quoteDepth: block.quoteDepth,
+      quotationDepth: block.quotationDepth,
+      noIndent: block.noIndent,
+      firstLineIndentEm: block.firstLineIndentEm,
+    }))).toEqual([
+      { text: "Alpha", quoteDepth: 0, quotationDepth: 0, noIndent: false, firstLineIndentEm: undefined },
+      { text: "Beta", quoteDepth: 1, quotationDepth: 0, noIndent: true, firstLineIndentEm: undefined },
+      { text: "Gamma", quoteDepth: 0, quotationDepth: 0, noIndent: false, firstLineIndentEm: undefined },
+    ]);
+  });
+
+  it("records quotation environment boundaries with quote layout depth", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`Alpha \begin{quotation} Beta \end{quotation} Gamma`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.filter((node) => node.kind === "environment-boundary"))
+      .toEqual([
+        expect.objectContaining({ boundary: "begin", name: "quotation" }),
+        expect.objectContaining({ boundary: "end", name: "quotation" }),
+      ]);
+    expect(ir.blocks.map((block) => ({
+      text: block.text,
+      quoteDepth: block.quoteDepth,
+      quotationDepth: block.quotationDepth,
+      noIndent: block.noIndent,
+      firstLineIndentEm: block.firstLineIndentEm,
+    }))).toEqual([
+      { text: "Alpha", quoteDepth: 0, quotationDepth: 0, noIndent: false, firstLineIndentEm: undefined },
+      { text: "Beta", quoteDepth: 1, quotationDepth: 1, noIndent: false, firstLineIndentEm: 1.5 },
+      { text: "Gamma", quoteDepth: 0, quotationDepth: 0, noIndent: false, firstLineIndentEm: undefined },
+    ]);
+  });
+
+  it("records LaTeX list item context and optional labels", () => {
+    const ir = parseSimpleTexParagraphIr(
+      String.raw`\begin{enumerate}\item Alpha \item[Custom] Beta \begin{itemize}\item Gamma\end{itemize}\end{enumerate}`
+    );
+
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.nodes.filter((node) => node.kind === "environment-boundary"))
+      .toEqual([
+        expect.objectContaining({ boundary: "begin", name: "enumerate" }),
+        expect.objectContaining({ boundary: "begin", name: "itemize" }),
+        expect.objectContaining({ boundary: "end", name: "itemize" }),
+        expect.objectContaining({ boundary: "end", name: "enumerate" }),
+      ]);
+    expect(ir.nodes.filter((node) => node.kind === "item")).toHaveLength(3);
+    expect(ir.blocks.map((block) => ({
+      text: block.text,
+      noIndent: block.noIndent,
+      listContext: block.listContext && {
+        kind: block.listContext.kind,
+        depth: block.listContext.depth,
+        labelDepth: block.listContext.labelDepth,
+        itemIndex: block.listContext.itemIndex,
+        totalLeftMarginEm: block.listContext.totalLeftMarginEm,
+        showLabel: block.listContext.showLabel,
+        labelText: block.listContext.label?.nodes.map((node) => node.text).join(""),
+      },
+    }))).toEqual([
+      {
+        text: "Alpha",
+        noIndent: true,
+        listContext: {
+          kind: "enumerate",
+          depth: 1,
+          labelDepth: 1,
+          itemIndex: 1,
+          totalLeftMarginEm: 2.5,
+          showLabel: true,
+          labelText: undefined,
+        },
+      },
+      {
+        text: "Beta",
+        noIndent: true,
+        listContext: {
+          kind: "enumerate",
+          depth: 1,
+          labelDepth: 1,
+          itemIndex: 2,
+          totalLeftMarginEm: 2.5,
+          showLabel: true,
+          labelText: "Custom",
+        },
+      },
+      {
+        text: "Gamma",
+        noIndent: true,
+        listContext: {
+          kind: "itemize",
+          depth: 2,
+          labelDepth: 1,
+          itemIndex: 1,
+          totalLeftMarginEm: 4.7,
+          showLabel: true,
+          labelText: undefined,
+        },
+      },
+    ]);
+  });
+
+  it("materializes spacefactor state in layout paragraph IR", () => {
+    const parsed = parseSimpleTexParagraphIr("Alpha. Beta Gamma");
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { textFontProfile: classicComputerModernTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(1);
+    const spaces = layout.paragraphPlans[0]
+      ? texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
+          atPt: font.atPt,
+          metricProvider: computerModernTexMetricProvider,
+          textFontProfile: classicComputerModernTextFontProfile,
+        }).filter((item) => item.kind === "space")
+      : [];
+    expect(spaces.map((space) => space.spaceFactor)).toEqual([3000, 1000]);
+    expect(spaces.map((space) => space.spaceGlueProfile)).toEqual(["font", "font"]);
+  });
+
+  it("materializes nested inline font commands as Computer Modern font runs", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A \textit{B \emph{C} \textbf{D}} \textnormal{\textbf{E}} \textrm{F} \textsf{G \textbf{H \textit{I}} \textsc{J}} \textsc{K \textsf{L} \textbf{M}} \textsf{\textbf{\textsc{N}}}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { textFontProfile: classicComputerModernTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(1);
+    expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
+      atPt: font.atPt,
+      metricProvider: computerModernTexMetricProvider,
+      textFontProfile: classicComputerModernTextFontProfile,
+    })
+      .filter((item) => item.kind === "text")
+      .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
+        { text: "A", font: "cmr10" },
+        { text: "B", font: "cmti10" },
+        { text: "C", font: "cmr10" },
+        { text: "D", font: "cmbxti10" },
+        { text: "E", font: "cmbx10" },
+        { text: "F", font: "cmr10" },
+        { text: "G", font: "cmss10" },
+        { text: "H", font: "cmssbx10" },
+        { text: "I", font: "cmssbx10" },
+        { text: "J", font: "cmcsc10" },
+        { text: "K", font: "cmcsc10" },
+        { text: "L", font: "cmcsc10" },
+        { text: "M", font: "cmbx10" },
+        { text: "N", font: "cmssbx10" },
+      ]);
+  });
+
+  it("maps LuaLaTeX regular textnormal text to Latin Modern Roman", () => {
+    const parsed = parseSimpleTexParagraphIr(String.raw`A \textnormal{B}`);
+    const font = luaLatexDefaultTextFontProfile.resolveTextFont(
+      luaLatexDefaultTextFontProfile.defaultFontState,
+      texLength(10),
+      computerModernTexMetricProvider
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { textFontProfile: luaLatexDefaultTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
+      atPt: font.atPt,
+      metricProvider: computerModernTexMetricProvider,
+      textFontProfile: luaLatexDefaultTextFontProfile,
+    })
+      .filter((item) => item.kind === "text")
+      .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
+        { text: "A", font: "lmroman10-regular" },
+        { text: "B", font: "lmroman10-regular" },
+      ]);
+  });
+
+  it("can materialize inline font commands through the LuaLaTeX default text profile", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A \textit{B \emph{C} \textbf{D}} \textnormal{\textbf{E}} \textrm{F} \textsf{G \textbf{H \textit{I}} \textsc{J}} \textsc{K \textsf{L} \textbf{M}} \textsf{\textbf{\textsc{N}}}`
+    );
+    const font = luaLatexDefaultTextFontProfile.resolveTextFont(
+      luaLatexDefaultTextFontProfile.defaultFontState,
+      texLength(10),
+      computerModernTexMetricProvider
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { textFontProfile: luaLatexDefaultTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(1);
+    expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
+      atPt: font.atPt,
+      metricProvider: computerModernTexMetricProvider,
+      textFontProfile: luaLatexDefaultTextFontProfile,
+    })
+      .filter((item) => item.kind === "text")
+      .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
+        { text: "A", font: "lmroman10-regular" },
+        { text: "B", font: "lmroman10-italic" },
+        { text: "C", font: "lmroman10-regular" },
+        { text: "D", font: "lmroman10-bolditalic" },
+        { text: "E", font: "lmroman10-bold" },
+        { text: "F", font: "lmroman10-regular" },
+        { text: "G", font: "lmsans10-regular" },
+        { text: "H", font: "lmsans10-bold" },
+        { text: "I", font: "lmsans10-boldoblique" },
+        { text: "J", font: "lmromancaps10-regular" },
+        { text: "K", font: "lmromancaps10-regular" },
+        { text: "L", font: "lmromancaps10-regular" },
+        { text: "M", font: "lmroman10-bold" },
+        { text: "N", font: "lmsans10-bold" },
+      ]);
+  });
+
+  it("materializes remaining kernel inline font commands through the LuaLaTeX default text profile", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A \texttt{B} \textsl{C} \textbf{\textmd{D}} \textit{\textup{E}} \textsf{\textsl{F}} \texttt{\textit{G}} \texttt{\textsl{H}} \texttt{\textbf{I}} \texttt{\textsc{J}}`
+    );
+    const font = luaLatexDefaultTextFontProfile.resolveTextFont(
+      luaLatexDefaultTextFontProfile.defaultFontState,
+      texLength(10),
+      computerModernTexMetricProvider
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { textFontProfile: luaLatexDefaultTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(1);
+    expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
+      atPt: font.atPt,
+      metricProvider: computerModernTexMetricProvider,
+      textFontProfile: luaLatexDefaultTextFontProfile,
+    })
+      .filter((item) => item.kind === "text")
+      .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
+        { text: "A", font: "lmroman10-regular" },
+        { text: "B", font: "lmmono10-regular" },
+        { text: "C", font: "lmromanslant10-regular" },
+        { text: "D", font: "lmroman10-regular" },
+        { text: "E", font: "lmroman10-regular" },
+        { text: "F", font: "lmsans10-oblique" },
+        { text: "G", font: "lmmono10-italic" },
+        { text: "H", font: "lmmonoslant10-regular" },
+        { text: "I", font: "lmmonolt10-bold" },
+        { text: "J", font: "lmmonocaps10-regular" },
+      ]);
+  });
+
+  it("materializes scoped font declarations as local Computer Modern font runs", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A {\it B {\bf C} D} {\itshape E {\bfseries F}} {\sf G {\bf H} {\bfseries I} {\sc J}} {\scshape K {\sffamily L} {\bfseries M}} {\em N {\em O} P} Q`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { textFontProfile: classicComputerModernTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(1);
+    expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
+      atPt: font.atPt,
+      metricProvider: computerModernTexMetricProvider,
+      textFontProfile: classicComputerModernTextFontProfile,
+    })
+      .filter((item) => item.kind === "text")
+      .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
+        { text: "A", font: "cmr10" },
+        { text: "B", font: "cmti10" },
+        { text: "C", font: "cmbx10" },
+        { text: "D", font: "cmti10" },
+        { text: "E", font: "cmti10" },
+        { text: "F", font: "cmbxti10" },
+        { text: "G", font: "cmss10" },
+        { text: "H", font: "cmbx10" },
+        { text: "I", font: "cmssbx10" },
+        { text: "J", font: "cmcsc10" },
+        { text: "K", font: "cmcsc10" },
+        { text: "L", font: "cmcsc10" },
+        { text: "M", font: "cmbx10" },
+        { text: "N", font: "cmti10" },
+        { text: "O", font: "cmr10" },
+        { text: "P", font: "cmti10" },
+        { text: "Q", font: "cmr10" },
+      ]);
+  });
+
+  it("materializes typewriter and slanted declarations as local LuaLaTeX font runs", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`A {\tt B {\bf C} D} {\ttfamily E {\itshape F}} {\sl G {\bfseries H}} {\slshape I {\upshape J}} K`
+    );
+    const font = luaLatexDefaultTextFontProfile.resolveTextFont(
+      luaLatexDefaultTextFontProfile.defaultFontState,
+      texLength(10),
+      computerModernTexMetricProvider
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: { textFontProfile: luaLatexDefaultTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(1);
+    expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
+      atPt: font.atPt,
+      metricProvider: computerModernTexMetricProvider,
+      textFontProfile: luaLatexDefaultTextFontProfile,
+    })
+      .filter((item) => item.kind === "text")
+      .map((item) => ({ text: item.text, font: item.font.id }))).toEqual([
+        { text: "A", font: "lmroman10-regular" },
+        { text: "B", font: "lmmono10-regular" },
+        { text: "C", font: "lmroman10-bold" },
+        { text: "D", font: "lmmono10-regular" },
+        { text: "E", font: "lmmono10-regular" },
+        { text: "F", font: "lmmono10-italic" },
+        { text: "G", font: "lmromanslant10-regular" },
+        { text: "H", font: "lmromanslant10-bold" },
+        { text: "I", font: "lmromanslant10-regular" },
+        { text: "J", font: "lmroman10-regular" },
+        { text: "K", font: "lmroman10-regular" },
+      ]);
+  });
+
+  it("materializes LaTeX article quote margins in layout metadata", () => {
+    const parsed = parseSimpleTexParagraphIr(String.raw`\begin{quote} Alpha Beta \end{quote}`);
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font,
+      options: { textFontProfile: classicComputerModernTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(1);
+    expect(layout.paragraphPlans[0]).toMatchObject({
+      segment: { noIndent: true },
+      alignment: "ragged-right",
+      alignmentProfile: "latex-quote",
+    });
+    expect(layout.paragraphPlans[0]?.breakContext).toMatchObject({
+      scopePolicy: {
+        leftMarginWidth: 2.5 * font.atPt,
+        rightMarginWidth: 2.5 * font.atPt,
+        allowParagraphIndent: true,
+        allowForcedBreakIndent: true,
+        forceParfillStretch: true,
+        suppressRaggedLeftCenterLeftskipStretch: true,
+        rightskipStretchMode: "ragged-right-infinite-otherwise-zero",
+      },
+    });
+    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+      "glue:10",
+      "paragraph:Alpha Beta",
+    ]);
+  });
+
+  it("materializes LaTeX article quotation margins and paragraph indentation in layout metadata", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{quotation} Alpha Beta \par Gamma Delta \end{quotation}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font,
+      options: { textFontProfile: classicComputerModernTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(2);
+    expect(layout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      noIndent: plan.segment.noIndent,
+      firstLineIndentEm: plan.segment.firstLineIndentEm,
+      quotationItemFirstParagraph: plan.segment.quotationItemFirstParagraph,
+      inlinePrefixKinds: plan.inlinePrefixItems.map((item) => item.kind),
+      inlinePrefixWidths: plan.inlinePrefixItems.map((item) =>
+        item.kind === "math" ? item.box.width : undefined
+      ),
+      firstLineIndentWidth: plan.breakContext.firstLineIndentWidth,
+      leftMarginWidth: plan.breakContext.scopePolicy.leftMarginWidth,
+      rightMarginWidth: plan.breakContext.scopePolicy.rightMarginWidth,
+    }))).toEqual([
+      {
+        text: "Alpha Beta",
+        noIndent: true,
+        firstLineIndentEm: 1.5,
+        quotationItemFirstParagraph: true,
+        inlinePrefixKinds: ["math", "penalty"],
+        inlinePrefixWidths: [1.5 * font.atPt, undefined],
+        firstLineIndentWidth: undefined,
+        leftMarginWidth: 2.5 * font.atPt,
+        rightMarginWidth: 2.5 * font.atPt,
+      },
+      {
+        text: "Gamma Delta",
+        noIndent: false,
+        firstLineIndentEm: 1.5,
+        quotationItemFirstParagraph: undefined,
+        inlinePrefixKinds: [],
+        inlinePrefixWidths: [],
+        firstLineIndentWidth: 1.5 * font.atPt,
+        leftMarginWidth: 2.5 * font.atPt,
+        rightMarginWidth: 2.5 * font.atPt,
+      },
+    ]);
+    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+      "glue:10",
+      "paragraph:Alpha Beta",
+      "paragraph:Gamma Delta",
+    ]);
+  });
+
+  it("models the first TikZ text-width quotation paragraph with a breakable item-label prefix", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{quotation}Normal document \par Figure natural\end{quotation}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font,
+      options: {
+        parindent: texLength(0),
+        textFontProfile: classicComputerModernTextFontProfile,
+        tikzTextWidthNode: true,
+        width: texLength(90),
+      },
+    });
+
+    expect(layout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      noIndent: plan.segment.noIndent,
+      quotationItemFirstParagraph: plan.segment.quotationItemFirstParagraph,
+      inlinePrefixKinds: plan.inlinePrefixItems.map((item) => item.kind),
+      inlinePrefixRoles: plan.inlinePrefixItems.map((item) => item.role),
+      inlinePrefixWidths: plan.inlinePrefixItems.map((item) =>
+        item.kind === "math" ? item.box.width : undefined
+      ),
+      firstLineIndentWidth: plan.breakContext.firstLineIndentWidth,
+    }))).toEqual([
+      {
+        text: "Normal document",
+        noIndent: true,
+        quotationItemFirstParagraph: true,
+        inlinePrefixKinds: ["math", "penalty"],
+        inlinePrefixRoles: ["list-label", "list-label"],
+        inlinePrefixWidths: [1.5 * font.atPt, undefined],
+        firstLineIndentWidth: undefined,
+      },
+      {
+        text: "Figure natural",
+        noIndent: false,
+        quotationItemFirstParagraph: undefined,
+        inlinePrefixKinds: [],
+        inlinePrefixRoles: [],
+        inlinePrefixWidths: [],
+        firstLineIndentWidth: 1.5 * font.atPt,
+      },
+    ]);
+  });
+
+  it("materializes LaTeX article list margins and labels in layout metadata", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{enumerate}\item Alpha \item Beta \begin{enumerate}\item Gamma\end{enumerate}\end{enumerate}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font,
+      options: { textFontProfile: classicComputerModernTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans.map((plan) => {
+      const lineLabel = plan.lineLabel;
+      const breakContext = plan.breakContext;
+      const label = lineLabel?.label;
+      return {
+        text: plan.segment.text,
+        leftMarginWidth: breakContext?.scopePolicy.leftMarginWidth,
+        rightMarginWidth: breakContext?.scopePolicy.rightMarginWidth,
+        label: label?.items
+          .filter((item) => item.kind === "text")
+          .map((item) => item.text)
+          .join(""),
+        labelRightEdge: label?.rightEdge,
+      };
+    })).toEqual([
+      {
+        text: "Alpha",
+        leftMarginWidth: 2.5 * font.atPt,
+        rightMarginWidth: 0,
+        label: "1.",
+        labelRightEdge: 2 * font.atPt,
+      },
+      {
+        text: "Beta",
+        leftMarginWidth: 2.5 * font.atPt,
+        rightMarginWidth: 0,
+        label: "2.",
+        labelRightEdge: 2 * font.atPt,
+      },
+      {
+        text: "Gamma",
+        leftMarginWidth: 4.7 * font.atPt,
+        rightMarginWidth: 0,
+        label: "(a)",
+        labelRightEdge: 4.2 * font.atPt,
+      },
+    ]);
+    expect(collectVListBoxes(layout.vlist.items)
+      .filter((item) => item.role?.kind === "list-item")
+      .map((item) => item.layout?.listItem?.label?.rightEdge)
+    ).toEqual(layout.paragraphPlans.flatMap((plan) =>
+      plan.lineLabel ? [plan.lineLabel.label.rightEdge] : []
+    ));
+  });
+
+  it("materializes LaTeX article description labels as in-flow hanging labels", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{description}\item[Term] Alpha \item Plain\end{description}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font,
+      options: { textFontProfile: classicComputerModernTextFontProfile },
+    });
+
+    expect(layout.paragraphPlans.map((plan) => {
+      const breakContext = plan.breakContext;
+      return {
+        text: plan.segment.text,
+        allowParagraphIndent: breakContext?.scopePolicy.allowParagraphIndent,
+        leftMarginWidth: breakContext?.scopePolicy.leftMarginWidth,
+        firstLineIndentWidth: breakContext?.firstLineIndentWidth,
+        textItems: texLayoutItemsForParagraphPlan(plan, {
+          atPt: font.atPt,
+          metricProvider: computerModernTexMetricProvider,
+          textFontProfile: classicComputerModernTextFontProfile,
+        })
+          .filter((item) => item.kind === "text")
+          .map((item) => ({ text: item.text, font: item.font.id })),
+      };
+    })).toEqual([
+      {
+        text: "Alpha",
+        allowParagraphIndent: false,
+        leftMarginWidth: 2.5 * font.atPt,
+        firstLineIndentWidth: -2 * font.atPt,
+        textItems: [
+          { text: "Term", font: "cmbx10" },
+          { text: "Alpha", font: "cmr10" },
+        ],
+      },
+      {
+        text: "Plain",
+        allowParagraphIndent: false,
+        leftMarginWidth: 2.5 * font.atPt,
+        firstLineIndentWidth: -2.5 * font.atPt,
+        textItems: [
+          { text: "Plain", font: "cmr10" },
+        ],
+      },
+    ]);
+    expect(layout.paragraphPlans.flatMap((plan) =>
+      plan.lineLabel ? [plan.lineLabel] : []
+    )).toEqual([]);
+  });
+
+  it("materializes LaTeX article itemize labels as explicit TeX glyphs", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{itemize}\item Alpha \begin{itemize}\item Beta \begin{itemize}\item Gamma \begin{itemize}\item Delta\end{itemize}\end{itemize}\end{itemize}\end{itemize}`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(layout.paragraphPlans.flatMap((plan) =>
+      plan.lineLabel ? [plan.lineLabel.label.items[0]] : []
+    ))
+      .toMatchObject([
+        { kind: "glyph", text: "•", code: 0x2022, font: { id: "lmroman10-regular" } },
+        { kind: "glyph", text: "–", code: 0x2013, font: { id: "lmroman10-bold" } },
+        { kind: "glyph", text: "*", code: 42, font: { id: "tcrm1000" } },
+        { kind: "glyph", text: ".", code: 183, font: { id: "tcrm1000" } },
+      ]);
+    expect(collectVListBoxes(layout.vlist.items)
+      .filter((item) => item.role?.kind === "list-item")
+      .map((item) => item.layout?.listItem?.label?.content)
+    ).toEqual([
+      { kind: "glyph", text: "•", code: 0x2022, fontId: "lmroman10-regular" },
+      { kind: "glyph", text: "–", code: 0x2013, fontId: "lmroman10-bold" },
+      { kind: "glyph", text: "*", code: 42, fontId: "tcrm1000" },
+      { kind: "glyph", text: ".", code: 183, fontId: "tcrm1000" },
+    ]);
+  });
+
+  it("materializes natural LaTeX article list vertical spacing as vlist glue", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Before \par \begin{itemize}\item Alpha \par More \item Beta \begin{itemize}\item Nested\end{itemize}\end{itemize} \par After`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+      "paragraph:Before",
+      "glue:10",
+      "hbox",
+      "paragraph:Alpha",
+      "glue:4",
+      "paragraph:More",
+      "glue:8",
+      "hbox",
+      "paragraph:Beta",
+      "glue:8",
+      "hbox",
+      "paragraph:Nested",
+      "glue:10",
+      "paragraph:After",
+    ]);
+  });
+
+  it("materializes depth-aware LaTeX list transition spacing", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{itemize}\item A \begin{itemize}\item B \begin{itemize}\item C\item D\end{itemize}\item E\end{itemize}\item F\end{itemize}`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+      "glue:13",
+      "hbox",
+      "paragraph:A",
+      "glue:8",
+      "hbox",
+      "paragraph:B",
+      "glue:4",
+      "hbox",
+      "paragraph:C",
+      "glue:2",
+      "hbox",
+      "paragraph:D",
+      "glue:4",
+      "hbox",
+      "paragraph:E",
+      "glue:8",
+      "hbox",
+      "paragraph:F",
+    ]);
+  });
+
+  it("materializes LaTeX quote list vertical skips as vlist glue", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{quote} Beta \par Gamma \end{quote} \par Delta`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(layout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      quoteRightskipMode: plan.breakContext.scopePolicy.rightskipStretchMode,
+    }))).toEqual([
+      { text: "Alpha", quoteRightskipMode: "default" },
+      { text: "Beta", quoteRightskipMode: "ragged-right-infinite-otherwise-zero" },
+      { text: "Gamma", quoteRightskipMode: "ragged-right-infinite-otherwise-zero" },
+      { text: "Delta", quoteRightskipMode: "default" },
+    ]);
+    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+      "paragraph:Alpha",
+      "glue:10",
+      "paragraph:Beta",
+      "glue:4",
+      "paragraph:Gamma",
+      "glue:10",
+      "paragraph:Delta",
+    ]);
+  });
+
+  it("mirrors computed paragraph vertical skips as explicit vlist glue", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{quote} Beta \par Gamma \end{quote} \par Delta`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "justified",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+      "paragraph:Alpha",
+      "glue:10",
+      "paragraph:Beta",
+      "glue:4",
+      "paragraph:Gamma",
+      "glue:10",
+      "paragraph:Delta",
+    ]);
+  });
+
+  it("derives layout paragraph IR from normalized vlist paragraph order", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{quote} Beta \par \begin{itemize}\item Gamma\end{itemize}\end{quote}`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(layout.rawVList.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "paragraph",
+      "paragraph",
+    ]);
+    expect(layout.vlist.items.map((item) => item.kind)).toEqual(["paragraph", "vbox"]);
+    expect(layout.paragraphPlans.map((plan) => plan.segment.text)).toEqual(
+      texVListParagraphItems(layout.vlist.items).map((item) => item.paragraph.text)
+    );
+  });
+
+  it("prepares simple TeX layout documents as one vlist object with paragraph plans", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{itemize}\item Beta\end{itemize}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+
+    const preparation = prepareSimpleTexLayoutDocument({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font,
+      options: {},
+    });
+
+    expect(preparation.rawVList.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "paragraph",
+    ]);
+    expect(preparation.materializedVList.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "glue",
+      "paragraph",
+    ]);
+    expect(preparation.normalizedVList.items.map((item) => item.kind)).toEqual([
+      "paragraph",
+      "vbox",
+    ]);
+    expect(flattenVListLeaves(preparation.vlist.items)).toEqual([
+      "paragraph:Alpha",
+      "glue:10",
+      "hbox",
+      "paragraph:Beta",
+    ]);
+    expect(preparation.paragraphPreparation.paragraphPlans.map((plan) => ({
+      blockIndex: plan.blockIndex,
+      text: plan.segment.text,
+      leftMarginWidth: plan.breakContext.scopePolicy.leftMarginWidth,
+    }))).toEqual([
+      { blockIndex: 0, text: "Alpha", leftMarginWidth: 0 },
+      { blockIndex: 1, text: "Beta", leftMarginWidth: 25 },
+    ]);
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font,
+      options: {},
+    });
+    expectParagraphPlansCoverVListParagraphs(layout);
+  });
+
+  it("builds equivalent layout document IR from an existing preparation object", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \par \begin{center} Beta \end{center}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const params = {
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right" as const,
+      font,
+      metricProvider: computerModernTexMetricProvider,
+      options: {},
+    };
+    const preparation = prepareSimpleTexLayoutDocument(params);
+
+    const direct = createSimpleTexLayoutDocumentIr(params);
+    const fromPreparation = createSimpleTexLayoutDocumentIrFromPreparation(preparation);
+
+    expect(preparation.reportAlignment).toBe(direct.reportAlignment);
+    expect(fromPreparation).toEqual(direct);
+  });
+
+  it("prepares paragraph layout plans and attaches list label hboxes before IR projection", () => {
+    const parsed = parseSimpleTexParagraphIr(String.raw`\begin{itemize}\item Alpha\end{itemize}`);
+    const font = computerModernTexMetricProvider.resolveFont();
+    const prepared = prepareSimpleTexVList(
+      lowerSimpleTexBlocksToVList(parsed.blocks),
+      font
+    );
+
+    const preparation = prepareTexLayoutParagraphsFromVList({
+      vlist: prepared.normalized,
+      defaultAlignment: "ragged-right",
+      font,
+      metricProvider: computerModernTexMetricProvider,
+      options: {},
+    });
+    const leaves = flattenVListLeaves(preparation.vlist.items);
+
+    expect(preparation.paragraphPlans).toHaveLength(1);
+    expect(preparation.paragraphPlans[0]).toMatchObject({
+      blockIndex: 0,
+      segmentIndex: 0,
+      segment: { text: "Alpha" },
+      breakContext: {
+        blockIndex: 0,
+        segmentIndex: 0,
+        scopePolicy: {
+          leftMarginWidth: 25,
+          rightMarginWidth: 0,
+          allowParagraphIndent: false,
+          allowForcedBreakIndent: false,
+          forceParfillStretch: true,
+          suppressRaggedLeftCenterLeftskipStretch: true,
+          rightskipStretchMode: "ragged-right-infinite-center-zero",
+        },
+      },
+      lineLabel: {
+        blockIndex: 0,
+        segmentIndex: 0,
+      },
+    });
+    expect(preparation.paragraphPlans[0]?.lineLabel?.label).toBeDefined();
+    expect(leaves.indexOf("hbox")).toBeGreaterThanOrEqual(0);
+    expect(leaves.indexOf("hbox")).toBeLessThan(leaves.indexOf("paragraph:Alpha"));
+  });
+
+  it("does not double-count quote and nested list entry spacing", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{quote}\begin{itemize}\item Alpha\item Beta\end{itemize}\end{quote}`
+    );
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font: computerModernTexMetricProvider.resolveFont(),
+      options: {},
+    });
+
+    expect(layout.paragraphPlans.map((plan) => ({
+      text: plan.segment.text,
+      quoteRightskipMode: plan.breakContext.scopePolicy.rightskipStretchMode,
+    }))).toEqual([
+      { text: "Alpha", quoteRightskipMode: "ragged-right-infinite-otherwise-zero" },
+      { text: "Beta", quoteRightskipMode: "ragged-right-infinite-otherwise-zero" },
+    ]);
+    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+      "glue:13",
+      "hbox",
+      "paragraph:Alpha",
+      "glue:4",
+      "hbox",
+      "paragraph:Beta",
+    ]);
+  });
+
+  it("resets right and center alignment declarations inside quote layout IR", () => {
+    const parsed = parseSimpleTexParagraphIr(String.raw`\begin{quote} Alpha Beta \end{quote}`);
+    const font = computerModernTexMetricProvider.resolveFont();
+
+    for (const defaultAlignment of ["ragged-left", "center"] as const) {
+      const layout = createSimpleTexLayoutDocumentIr({
+        blocks: parsed.blocks,
+        defaultAlignment,
+        font,
+        options: {},
+      });
+
+      expect(layout.paragraphPlans[0]).toMatchObject({
+        alignment: "justified",
+      });
+      expect(layout.paragraphPlans[0]).not.toHaveProperty("alignmentProfile");
+      expect(layout.paragraphPlans[0]?.breakContext).toMatchObject({
+        scopePolicy: {
+          forceParfillStretch: true,
+          rightskipStretchMode: "ragged-right-infinite-otherwise-zero",
+        },
+      });
+    }
+  });
+
+  it("materializes forced breaks in layout paragraph IR", () => {
+    const parsed = parseSimpleTexParagraphIr(String.raw`Alpha \\[7pt] Beta`);
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "ragged-right",
+      font,
+      options: {},
+    });
+
+    expect(layout.layoutMode).toBe("wrapped-explicit");
+    expect(layout.paragraphPlans).toHaveLength(2);
+    expect(layout.paragraphPlans[0]?.segment.forcedBreakAfter).toMatchObject({
+      lineLeading: "7pt",
+    });
+    expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
+      atPt: font.atPt,
+      metricProvider: computerModernTexMetricProvider,
+    }).map((item) => item.kind)).toEqual(["text"]);
+    expect(layout.paragraphPlans[1] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[1], {
+      atPt: font.atPt,
+      metricProvider: computerModernTexMetricProvider,
+    }).map((item) => item.kind)).toEqual(["text"]);
+  });
+
+  it("keeps forced breaks inside centered quote blocks in quote-local paragraph mode", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{quote} Alpha \\[7pt] Beta Gamma \end{quote}`
+    );
+    const font = computerModernTexMetricProvider.resolveFont();
+    const layout = createSimpleTexLayoutDocumentIr({
+      blocks: parsed.blocks,
+      defaultAlignment: "center",
+      font,
+      options: { tikzTextWidthNode: true, parindent: texLength(10) },
+    });
+
+    expect(layout.paragraphPlans).toHaveLength(1);
+    expect(layout.paragraphPlans[0]).toMatchObject({
+      alignment: "justified",
+      segment: { noIndent: true },
+    });
+    expect(layout.paragraphPlans[0] && texLayoutItemsForParagraphPlan(layout.paragraphPlans[0], {
+      atPt: font.atPt,
+      metricProvider: computerModernTexMetricProvider,
+    }).map((item) => item.kind)).toEqual([
+      "text",
+      "forced-break",
+      "text",
+      "space",
+      "text",
+    ]);
+  });
+});
+
+function flattenVListLeaves(items: readonly TexVListItem[]): readonly string[] {
+  const leaves: string[] = [];
+  for (const item of items) {
+    if (item.kind === "vbox") {
+      leaves.push(...flattenVListLeaves(item.items));
+      continue;
+    }
+    if (item.kind === "paragraph") {
+      leaves.push(`paragraph:${item.paragraph.text}`);
+      continue;
+    }
+    if (item.kind === "glue") {
+      leaves.push(`glue:${item.size}`);
+      continue;
+    }
+    leaves.push(item.kind);
+  }
+  return leaves;
+}
+
+function collectVListBoxes(items: readonly TexVListItem[]): readonly Extract<TexVListItem, { kind: "vbox" }>[] {
+  const boxes: Array<Extract<TexVListItem, { kind: "vbox" }>> = [];
+  for (const item of items) {
+    if (item.kind !== "vbox") {
+      continue;
+    }
+    boxes.push(item);
+    boxes.push(...collectVListBoxes(item.items));
+  }
+  return boxes;
+}
+
+function expectParagraphPlansCoverVListParagraphs(layout: {
+  readonly vlist: {
+    readonly items: readonly TexVListItem[];
+  };
+  readonly paragraphPlans: readonly {
+    readonly blockIndex: number;
+  }[];
+}): void {
+  expect(layout.paragraphPlans.map((plan) => plan.blockIndex)).toEqual(
+    texVListParagraphItems(layout.vlist.items).map((item) => item.paragraph.blockIndex)
+  );
+}

@@ -1,0 +1,273 @@
+import { describe, expect, it } from "vitest";
+import {
+  adaptTexFuzzWeights,
+  caseFromTexFuzzAst,
+  generateTexFuzzCase,
+  measureTexFuzzCoverage,
+  mergeTexFuzzCoverage,
+  normalizeTexFuzzWeights,
+  pickWeightedTexFuzzValue,
+  sampleTexFuzzProfileBudget,
+  TEX_FUZZ_FEATURE_DEFINITIONS,
+  TEX_FUZZ_EXPLICIT_EXCLUSIONS,
+  TEX_FUZZ_PROFILES,
+  texFuzzCombinationKey,
+  texFuzzRegistryAccounting,
+  TexFuzzRandom,
+  TexFuzzNoveltyTracker,
+  TEX_FUZZ_NOVELTY_COMBINATION_LIMIT,
+} from "@tikz-editor/tex-fuzz";
+
+describe("TeX fuzz semantic coverage", () => {
+  it("rejects incompatible report versions at the merge boundary", () => {
+    const report = measureTexFuzzCoverage([]);
+    expect(() => mergeTexFuzzCoverage([{ ...report, version: 999 }])).toThrow(/Unsupported.*schema/);
+  });
+  it("counts exact symbol co-occurrences across membership word boundaries", () => {
+    const cases = Array.from({ length: 70 }, (_, index) => ({
+      ast: [], source: "", features: ["always", "always", ...(index % 2 ? ["a"] : []),
+        ...(index % 3 ? ["b"] : []), ...(index % 5 ? ["c"] : [])],
+    }));
+    const coverage = measureTexFuzzCoverage(cases);
+    for (const tuple of [["a", "always"], ["a", "b"], ["always", "c"]]) {
+      expect(coverage.featurePairCounts[texFuzzCombinationKey(tuple)])
+        .toBe(cases.filter(item => tuple.every(feature => item.features.includes(feature))).length);
+    }
+    for (const tuple of [["a", "always", "b"], ["a", "b", "c"], ["always", "b", "c"]]) {
+      expect(coverage.featureTripleCounts[texFuzzCombinationKey(tuple)])
+        .toBe(cases.filter(item => tuple.every(feature => item.features.includes(feature))).length);
+    }
+    expect(coverage.featureCounts.always).toBe(70);
+  });
+  it("bounds dense novelty feedback while retaining exhaustive coverage reports", () => {
+    const features = Array.from({ length: 40 }, (_, index) => `feature-${index}`);
+    const novelty = new TexFuzzNoveltyTracker();
+    novelty.record(features);
+    expect(novelty.trackedCombinationCounts).toEqual({
+      pairs: TEX_FUZZ_NOVELTY_COMBINATION_LIMIT, triples: TEX_FUZZ_NOVELTY_COMBINATION_LIMIT,
+    });
+    const repeated = { features };
+    const novel = { features: features.map((feature) => `new-${feature}`) };
+    expect(novelty.choose([repeated, novel])).toBe(novel);
+    novelty.record([...features].reverse());
+    expect(novelty.choose([repeated, novel])).toBe(novel);
+    const coverage = measureTexFuzzCoverage([{ features, ast: [], source: "" }]);
+    expect(Object.keys(coverage.featurePairCounts)).toHaveLength(40 * 39 / 2);
+    expect(Object.keys(coverage.featureTripleCounts)).toHaveLength(40 * 39 * 38 / 6);
+  });
+
+  it("selects rare pairs/triples even when every individual feature was seen", () => {
+    const novelty = new TexFuzzNoveltyTracker();
+    novelty.record(["a", "b"]);
+    novelty.record(["a", "c"]);
+    novelty.record(["b", "c"]);
+    novelty.record(["a", "b", "c"]);
+    novelty.record(["d"]);
+    const repeated = { features: ["a", "b", "c"] };
+    const novel = { features: ["a", "b", "d"] };
+    expect(novelty.choose([repeated, novel])).toBe(novel);
+    expect(novelty.choose([novel, repeated])).toBe(novel);
+    expect(novelty.choose([repeated, { features: [...repeated.features] }])).toBe(repeated);
+  });
+
+  it("keeps production registry accounting exhaustive and reviewable", () => {
+    const accounting = texFuzzRegistryAccounting();
+    expect(accounting.missing).toEqual([]);
+    expect(accounting.staleExclusions).toEqual([]);
+    expect(new Set([...accounting.generated, ...accounting.excluded])).toEqual(new Set(accounting.production));
+    expect(accounting.generated).toContain("font-command:textbf");
+    expect(accounting.generated).toContain("font-command:texttt");
+    expect(accounting.generated).toContain("inline-kind:tabular");
+    expect(accounting.generated).toContain("inline-kind:transform-box");
+    expect(accounting.generated).toContain("control-kind:environment-boundary");
+    expect(accounting.generated).toContain("display-delimiter:flalign");
+    expect(accounting.generated).toContain("display-delimiter:flalign-star");
+    expect(accounting.excluded).toEqual([
+      "control-kind:unsupported-command",
+      "inline-kind:comment",
+      "inline-kind:includegraphics",
+      "inline-kind:literal",
+    ]);
+    expect(Object.keys(TEX_FUZZ_EXPLICIT_EXCLUSIONS)).toHaveLength(4);
+  });
+
+  it("defines every feature reached by aggressive and document generation", () => {
+    for (const profile of ["aggressive", "document"] as const) {
+      for (let seed = 0; seed < 25; seed += 1) {
+        for (const feature of generateTexFuzzCase(seed, { profile }).features) {
+          expect(TEX_FUZZ_FEATURE_DEFINITIONS[feature], `${profile} feature ${feature}`).toBeDefined();
+        }
+      }
+    }
+  }, 15_000);
+
+  it("generates bounded tables and records their cell content", () => {
+    const cases = Array.from({ length: 25 }, (_, seed) =>
+      generateTexFuzzCase(seed, { profile: "aggressive", depth: 5, size: 8 })
+    );
+    const tables = cases.filter((caseData) => caseData.features.includes("box.tabular"));
+    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.every((caseData) => caseData.source.includes("\\begin{tabular}"))).toBe(true);
+    const coverage = measureTexFuzzCoverage(tables);
+    expect(coverage.nodeKindCounts.tabular).toBeGreaterThan(0);
+    expect(coverage.nodeKindCounts.text).toBeGreaterThan(0);
+    expect(coverage.featureCounts["box.tabular"]).toBe(tables.length);
+  });
+
+  it("generates all bounded graphicx transforms and records their content", () => {
+    const cases = Array.from({ length: 25 }, (_, seed) =>
+      generateTexFuzzCase(seed, { profile: "aggressive", depth: 5, size: 8 })
+    );
+    const transforms = cases.filter((caseData) => caseData.features.some((feature) => feature.startsWith("box.transform.")));
+    const coverage = measureTexFuzzCoverage(transforms);
+    expect(coverage.nodeKindCounts["transform-box"]).toBeGreaterThan(0);
+    expect(coverage.nodeKindCounts.text).toBeGreaterThan(0);
+    for (const command of ["rotatebox", "scalebox", "resizebox", "reflectbox"] as const) {
+      const feature = `box.transform.${command}` as const;
+      const reached = transforms.filter((caseData) => caseData.features.includes(feature));
+      expect(reached.length, command).toBeGreaterThan(0);
+      expect(reached.every((caseData) => caseData.source.includes(`\\${command}`))).toBe(true);
+      expect(coverage.featureCounts[feature]).toBe(reached.length);
+    }
+  });
+
+  it("counts feature combinations, generic node depth, boundaries, and Unicode", () => {
+    const composed = caseFromTexFuzzAst([
+      {
+        kind: "font",
+        command: "textbf",
+        children: [{ kind: "group", children: [{ kind: "text", value: "café" }] }],
+      },
+      { kind: "math", content: "Ω_i" },
+    ]);
+    const decomposed = {
+      features: ["future.feature", "text.literal"],
+      ast: [{ kind: "future-node", children: [] }],
+      source: "cafe\u0301",
+    };
+    const coverage = measureTexFuzzCoverage([composed, decomposed]);
+
+    expect(coverage.caseCount).toBe(2);
+    expect(coverage.featureCounts["text.literal"]).toBe(2);
+    expect(coverage.featurePairCounts[texFuzzCombinationKey(["math.inline", "text.bold"])]).toBe(1);
+    expect(coverage.featureTripleCounts[texFuzzCombinationKey(["math.inline", "text.bold", "text.group"])]).toBe(1);
+    expect(coverage.nodeKindCounts["future-node"]).toBe(1);
+    expect(coverage.nodeDepthCounts["text@2"]).toBe(1);
+    expect(coverage.maximumDepthCounts["2"]).toBe(1);
+    expect(coverage.boundaryCounts["children:future-node:empty"]).toBe(1);
+    expect(coverage.boundaryCounts["token:control-sequence"]).toBeGreaterThan(0);
+    expect(coverage.unicodeBlockCounts["Greek and Coptic"]).toBe(1);
+    expect(coverage.unicodeBlockCounts["Combining Diacritical Marks"]).toBe(1);
+    expect(coverage.unicodeNormalizationCounts.NFC).toBe(1);
+    expect(coverage.unicodeNormalizationCounts.NFD).toBe(1);
+  });
+
+  it("merges independently measured reports without changing their keys", () => {
+    const first = measureTexFuzzCoverage([{ features: ["a"], ast: [], source: "x" }]);
+    const second = measureTexFuzzCoverage([{ features: ["a", "b"], ast: [], source: "β" }]);
+    const merged = mergeTexFuzzCoverage([first, second]);
+    expect(merged.caseCount).toBe(2);
+    expect(merged.featureCounts).toEqual({ a: 2, b: 1 });
+    expect(merged.featurePairCounts).toEqual({ '["a","b"]': 1 });
+  });
+
+  it("preserves exact repeated-set counts and per-source telemetry when aggregating dense cases", () => {
+    const features = Array.from({ length: 20 }, (_, index) => `feature-${index}`);
+    const cases = [
+      { features, ast: [{ kind: "text" }], source: "café" },
+      { features: [...features].reverse(), ast: [{ kind: "group", children: [{ kind: "text" }] }], source: "β" },
+      { features: features.slice(1), ast: [], source: "x" },
+    ];
+    expect(measureTexFuzzCoverage(cases)).toEqual(mergeTexFuzzCoverage(cases.map((caseData) => measureTexFuzzCoverage([caseData]))));
+  });
+});
+
+describe("TeX fuzz integer profiles", () => {
+  it("normalizes floating configuration deterministically with an exact sum", () => {
+    const weights = normalizeTexFuzzWeights({ b: 0.25, a: 0.25, c: 0.5 }, 11);
+    expect(weights).toEqual({ a: 3, b: 3, c: 5 });
+    expect(Object.values(weights).reduce((sum, weight) => sum + weight, 0)).toBe(11);
+    expect(Object.values(TEX_FUZZ_PROFILES["vertical-slice"].weights).reduce((sum, weight) => sum + weight, 0))
+      .toBe(10_000);
+    for (const profile of Object.values(TEX_FUZZ_PROFILES)) {
+      expect(Object.values(profile.weights).reduce((sum, weight) => sum + weight, 0), profile.id).toBe(10_000);
+    }
+    expect(TEX_FUZZ_PROFILES.document.weights["document.environment.itemize"]).toBeGreaterThan(0);
+    expect(TEX_FUZZ_PROFILES.aggressive.weights["document.environment.itemize"]).toBeUndefined();
+    expect(TEX_FUZZ_PROFILES.malformed.weights["text.line-break"])
+      .toBeGreaterThan(TEX_FUZZ_PROFILES["vertical-slice"].weights["text.line-break"] ?? 0);
+  });
+
+  it("selects only through recorded integer decisions", () => {
+    const first = new TexFuzzRandom(17);
+    const second = new TexFuzzRandom(17);
+    const choices = [{ value: "a", weight: 2 }, { value: "b", weight: 7 }] as const;
+    expect(pickWeightedTexFuzzValue(first, "feature", choices)).toBe(pickWeightedTexFuzzValue(second, "feature", choices));
+    expect(first.choices()).toEqual([{ path: "feature", upperExclusive: 9, value: first.choices()[0].value }]);
+  });
+
+  it("boosts unseen features using integer-only adaptive weights", () => {
+    const adapted = adaptTexFuzzWeights({ seen: 100, unseen: 100 }, { seen: 99 }, { noveltyBudget: 10, scale: 1000 });
+    const { seen, unseen } = adapted;
+    if (seen === undefined || unseen === undefined) throw new Error("Expected both normalized feature weights.");
+    expect(unseen).toBeGreaterThan(seen);
+    expect(seen + unseen).toBe(1000);
+    expect(Object.values(adapted).every(Number.isSafeInteger)).toBe(true);
+  });
+
+  it("uses profile weights for generated node selection", () => {
+    let canaryOracleCases = 0;
+    let aggressiveOracleCases = 0;
+    for (let seed = 0; seed < 300; seed += 1) {
+      if (generateTexFuzzCase(seed, { profile: "canary", depth: 2, size: 3 }).features.includes("oracle.supported-command")) {
+        canaryOracleCases += 1;
+      }
+      if (generateTexFuzzCase(seed, { profile: "aggressive", depth: 2, size: 3 }).features.includes("oracle.supported-command")) {
+        aggressiveOracleCases += 1;
+      }
+    }
+    expect(canaryOracleCases).toBeGreaterThan(200);
+    expect(aggressiveOracleCases).toBe(0);
+  });
+
+  it("feeds accumulated coverage back into deterministic generation", () => {
+    const observedLineBreaks = { "text.line-break": 100_000 };
+    let baselineLineBreakCases = 0;
+    let adaptedLineBreakCases = 0;
+    for (let seed = 0; seed < 500; seed += 1) {
+      if (generateTexFuzzCase(seed, { profile: "aggressive", depth: 3, size: 4 }).features.includes("text.line-break")) {
+        baselineLineBreakCases += 1;
+      }
+      const first = generateTexFuzzCase(seed, {
+        profile: "aggressive",
+        depth: 3,
+        size: 4,
+        coverageFeedback: observedLineBreaks,
+      });
+      const replay = generateTexFuzzCase(seed, {
+        profile: "aggressive",
+        depth: 3,
+        size: 4,
+        coverageFeedback: observedLineBreaks,
+      });
+      expect(replay).toEqual(first);
+      if (first.features.includes("text.line-break")) adaptedLineBreakCases += 1;
+    }
+    expect(adaptedLineBreakCases).toBeLessThan(baselineLineBreakCases / 2);
+  });
+
+  it("samples deterministic bounded budgets with a reachable long tail", () => {
+    const distribution = TEX_FUZZ_PROFILES.aggressive.size;
+    const samples = Array.from({ length: 500 }, (_, seed) =>
+      sampleTexFuzzProfileBudget(new TexFuzzRandom(seed), "size", distribution)
+    );
+    const replay = Array.from({ length: 500 }, (_, seed) =>
+      sampleTexFuzzProfileBudget(new TexFuzzRandom(seed), "size", distribution)
+    );
+    expect(replay).toEqual(samples);
+    expect(Math.min(...samples)).toBeGreaterThanOrEqual(1);
+    expect(Math.max(...samples)).toBeLessThanOrEqual(distribution.maximum);
+    expect(samples.some((size) => size <= distribution.typical)).toBe(true);
+    expect(samples.some((size) => size > distribution.typical * 2)).toBe(true);
+  });
+});

@@ -1,0 +1,52 @@
+[
+  {
+    "id": "normal-background",
+    "preamble": "\\setbeamercolor{normal text}{fg=black,bg=blue!10}",
+    "roles": ["normal text", "background canvas", "background"]
+  },
+  {
+    "id": "parent-order-empty-field",
+    "preamble": "\\setbeamercolor{one}{fg=red,bg=blue}\n\\setbeamercolor{two}{fg=green}\n\\setbeamercolor{ordered}{parent={one,two}}\n\\setbeamercolor{empty}{parent=ordered,fg=}",
+    "roles": ["ordered", "empty"]
+  },
+  {
+    "id": "star-and-unstar",
+    "preamble": "\\setbeamercolor{normal text}{bg=blue!10}\n\\setbeamercolor{kept}{parent=normal text,fg=red}\n\\setbeamercolor{kept}{fg=blue}\n\\setbeamercolor{reset}{parent=normal text,bg=red}\n\\setbeamercolor*{reset}{fg=blue}",
+    "roles": ["kept", "reset"]
+  },
+  {
+    "id": "theme-declaration-order",
+    "preamble": "\\setbeamercolor{palette primary}{fg=red,bg=red}\n\\usecolortheme{seahorse}\n\\setbeamercolor{palette secondary}{bg=red}",
+    "roles": ["palette primary", "palette secondary"]
+  },
+  {
+    "id": "default-madrid-seahorse",
+    "preamble": "\\usetheme{Madrid}\n\\usecolortheme{seahorse}",
+    "roles": ["palette primary", "palette secondary", "title in head/foot"]
+  },
+  {
+    "id": "late-structure-whale",
+    "preamble": "\\usecolortheme{whale}\n\\setbeamercolor{structure}{fg=red}",
+    "roles": ["palette primary", "palette secondary", "palette tertiary", "palette sidebar tertiary"]
+  },
+  {
+    "id": "late-structure-seahorse",
+    "preamble": "\\usecolortheme{seahorse}\n\\setbeamercolor{structure}{fg=red}",
+    "roles": ["palette primary", "palette secondary", "palette tertiary", "palette quaternary"]
+  },
+  {
+    "id": "alias-definition-order",
+    "preamble": "\\definecolor{accent}{RGB}{12,34,56}\n\\colorlet{snapshot}{accent}\n\\setbeamercolor{normal text}{fg=accent,bg=snapshot!20!white}\n\\definecolor{accent}{RGB}{78,90,123}\n\\providecolor{accent}{RGB}{255,0,0}",
+    "roles": ["normal text", "background canvas"]
+  },
+  {
+    "id": "starred-use-alias-snapshot",
+    "preamble": "\\setbeamercolor{structure}{fg=red}\n\\usebeamercolor{structure}\n\\usebeamercolor*{empty}\n\\colorlet{snapshot}{fg}\n\\setbeamercolor{normal text}{fg=snapshot}",
+    "roles": ["normal text"]
+  },
+  {
+    "id": "fractional-alias-mixes",
+    "preamble": "\\definecolor{brand}{rgb}{.2,.2,.7}\n\\colorlet{snapshot}{brand!50!white}\n\\setbeamercolor{normal text}{fg=snapshot!50!black,bg=brand!50!white}\n\\setbeamercolor{derived}{use=normal text,fg=normal text.fg,bg=normal text.bg!50!white}",
+    "roles": ["normal text", "derived"]
+  }
+]

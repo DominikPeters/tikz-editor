@@ -16,6 +16,7 @@ type MockStoreState = {
   activeFigureId: string | null;
   snapshot: {
     source: string;
+    figures: unknown[];
     editHandles: unknown[];
     scene: { elements: Array<{ sourceRef: { sourceId: string } }> };
   };
@@ -31,6 +32,7 @@ const mocks = vi.hoisted(() => {
     activeFigureId: null,
     snapshot: {
       source: "\\draw[dashed] (0,0) -- (1,0);",
+      figures: [],
       editHandles: [],
       scene: {
         elements: [{ sourceRef: { sourceId: "el-1" } }]
@@ -64,9 +66,9 @@ vi.mock("../../packages/app/src/colors/project-named-colors", () => ({
   useProjectNamedColorSwatches: () => []
 }));
 
-vi.mock("tikz-editor/edit/styles-cascade", async () => {
-  const actual = await vi.importActual<typeof import("tikz-editor/edit/styles-cascade")>(
-    "tikz-editor/edit/styles-cascade"
+vi.mock("@tikz-editor/core/edit/styles-cascade", async () => {
+  const actual = await vi.importActual<typeof import("@tikz-editor/core/edit/styles-cascade")>(
+    "@tikz-editor/core/edit/styles-cascade"
   );
   return {
     ...actual,

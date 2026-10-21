@@ -1,0 +1,33 @@
+name: Test SignPath Windows signing
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sign-windows:
+    runs-on: windows-2022
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test-sign Windows bundles
+        id: sign
+        uses: ./.github/actions/build-sign-windows
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: tikz-editor
+          signing-policy-slug: test-signing
+          artifact-configuration-slug: windows-signing
+          tauri-signing-private-key: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          tauri-signing-private-key-password: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Upload test-signed Windows bundles
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-signed-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.sign.outputs.signed-artifact-directory }}
+          compression-level: 0
+          if-no-files-found: error

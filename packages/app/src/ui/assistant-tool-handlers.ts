@@ -1,7 +1,8 @@
-import type { EmitSvgResult, SvgRenderModel, SvgRenderPart } from "tikz-editor/svg/index";
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import type { EmitSvgResult, SvgRenderModel, SvgRenderPart } from "@tikz-editor/core/svg/index";
 import type { SessionSnapshot } from "../compute";
-import type { Diagnostic } from "tikz-editor/diagnostics/types";
-import { PT_PER_CM } from "tikz-editor/edit/format";
+import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
 
 // ─── Diagnostics ──────────────────────────────────────────────────────────────
 
@@ -44,23 +45,23 @@ export function buildFigureContext(
   if (figures.length <= 1) {
     return null;
   }
-  const activeId = snap.activeFigureId;
+  const activeId = snap.activeRootId;
   const activeIndex = figures.findIndex((f) => f.id === activeId);
   if (activeIndex < 0) {
     return null;
   }
-  const figure = figures[activeIndex];
+  const figure = requireArrayValue(figures, activeIndex);
   const figureSource = fullSource.slice(figure.span.from, figure.span.to);
   const linesBeforeFigure = fullSource.slice(0, figure.span.from).split("\n").length;
   const numberedLines = figureSource
     .split("\n")
     .map((line, i) => `${linesBeforeFigure + i}: ${line}`)
     .join("\n");
-  // Build a listing of all figures with their indices and line ranges
+  // Parser inventory ranges are already one-based, like the numbered excerpt.
   const figureListing = figures
     .map((f, i) => {
       const marker = i === activeIndex ? " (active)" : "";
-      return `  Figure ${i + 1}: lines ${f.startLine + 1}–${f.endLine + 1}${marker}`;
+      return `  Figure ${i + 1}: lines ${f.startLine}–${f.endLine}${marker}`;
     })
     .join("\n");
 

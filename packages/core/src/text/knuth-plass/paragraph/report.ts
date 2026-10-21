@@ -2,15 +2,32 @@ import type { MeasurementService } from './measure.js';
 import type { AppliedBreak } from './applyBreaks.js';
 import type { AnyWrapper, GreedyLine, ParagraphRun } from './types.js';
 import type { ParagraphAlignment } from '../alignment.js';
-import type { KnuthPlassLayoutMode } from '../install.js';
+import type { KnuthPlassLayoutMode } from '../layout-options.js';
+import type { TextSourceRangePolicy } from '../../source-map.js';
+import type { DocumentGraphicsAsset } from '../../../graphics/types.js';
+import type { SimpleTexGraphicsOptions } from '../../tex/ir.js';
+import {
+  texLength,
+  texLineX,
+  type TexLength,
+  type TexLineX,
+  type TexLineY,
+} from '../../tex/coordinates.js';
+import {
+  layoutSourceOffset,
+  type SourceCoordinateSpace,
+  type SourceOffset,
+} from '../../source-coordinates.js';
 
-export interface ParagraphLayoutReport {
+export interface ParagraphLayoutReport<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
   paragraphId: string;
-  width: number;
+  sourceCoordinateSpace: Space;
+  sourceMappingMode: 'explicit' | 'reconstructed';
+  width: TexLength;
   alignment: ParagraphAlignment;
   layoutMode: KnuthPlassLayoutMode;
-  lines: LineReport[];
-  runs: RunReport[];
+  lines: LineReport<Space>[];
+  runs: RunReport<Space>[];
   errors: string[];
   internalMode: 'canonical' | 'degraded';
   internalDegradeReason: string | null;
@@ -18,55 +35,136 @@ export interface ParagraphLayoutReport {
   linebreakingMode: 'feasible' | 'overfull' | 'unknown';
 }
 
-export interface LineSegmentReport {
+export interface LineSegmentReport<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
   runIndex: number;
   kind: 'text' | 'space' | 'math';
   text?: string;
   startOffset?: number;
   endOffset?: number;
-  sourceStartRaw?: number;
-  sourceEndRaw?: number;
+  sourceStartRaw?: SourceOffset<Space>;
+  sourceEndRaw?: SourceOffset<Space>;
   sourceKind?: 'text' | 'math';
-  x: number;
-  width: number;
-  caretStops?: number[];
+  sourceRangePolicy?: TextSourceRangePolicy;
+  role?: 'list-label';
+  literal?: {
+    reason: string;
+    detail?: string;
+  };
+  fontId?: string;
+  fontAtPt?: TexLength;
+  color?: string;
+  glyphCode?: number;
+  mathSvgBody?: string;
+  mathConstructRanges?: LineMathConstructRangeReport<Space>[];
+  mathCaretEntries?: LineMathCaretEntryReport<Space>[];
+  mathBreakpoints?: LineMathBreakpointReport<Space>[];
+  /** Atomic graphics positioned relative to this segment's baseline. */
+  graphics?: LineGraphicsReport<Space>[];
+  x: TexLineX;
+  width: TexLength;
+  caretStops?: TexLineX[];
 }
 
-export interface LineReport {
+export interface LineGraphicsReport<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
+  asset: DocumentGraphicsAsset;
+  sourceStartRaw: SourceOffset<Space>;
+  sourceEndRaw: SourceOffset<Space>;
+  filenameStartRaw: SourceOffset<Space>;
+  filenameEndRaw: SourceOffset<Space>;
+  options: SimpleTexGraphicsOptions;
+  caretPolicy: "filename-linear";
+  x: TexLineX;
+  y: TexLineY;
+  width: TexLength;
+  height: TexLength;
+  crop?: {
+    x: TexLength;
+    y: TexLength;
+    width: TexLength;
+    height: TexLength;
+    clip: boolean;
+  };
+}
+
+export type LineMathCaretEntryKind =
+  | 'math-boundary'
+  | 'construct-boundary'
+  | 'command'
+  | 'group-boundary'
+  | 'glyph-boundary'
+  | 'synthetic-boundary';
+
+export interface LineMathCaretEntryReport<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
+  sourceOffsetRaw: SourceOffset<Space>;
+  sourceStartRaw?: SourceOffset<Space>;
+  sourceEndRaw?: SourceOffset<Space>;
+  x: TexLineX;
+  y: TexLineY;
+  height: TexLength;
+  depth: TexLength;
+  kind: LineMathCaretEntryKind;
+  priority?: number;
+  /** The caret's extent at the item's font size (glyphs), where it differs from the ink-based height. */
+  caretTop?: TexLineY;
+  caretBottom?: TexLineY;
+  hitBounds: {
+    xStart: TexLineX;
+    xEnd: TexLineX;
+    yStart: TexLineY;
+    yEnd: TexLineY;
+  };
+}
+
+export interface LineMathConstructRangeReport<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
+  sourceStartRaw: SourceOffset<Space>;
+  sourceEndRaw: SourceOffset<Space>;
+  xStart: TexLineX;
+  xEnd: TexLineX;
+}
+
+export interface LineMathBreakpointReport<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
+  kind: 'binary' | 'relation' | 'penalty';
+  sourceOffsetRaw: SourceOffset<Space>;
+  x: TexLineX;
+  penalty: number;
+}
+
+export interface LineReport<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
   lineIndex: number;
   startRun: number;
   endRun: number;
-  width: number;
-  targetWidth: number;
-  naturalWidth: number;
+  width: TexLength;
+  targetWidth: TexLength;
+  naturalWidth: TexLength;
   glueSetRatio: number;
   badness: number;
   spaceCount: number;
-  spaceDeltaPerGap: number;
-  ascent: number;
-  descent: number;
-  xStart: number;
-  xEnd: number;
-  break: BreakReport | null;
-  segments: LineSegmentReport[];
+  spaceDeltaPerGap: TexLength;
+  ascent: TexLength;
+  descent: TexLength;
+  xStart: TexLineX;
+  xEnd: TexLineX;
+  break: BreakReport<Space> | null;
+  segments: LineSegmentReport<Space>[];
 }
 
-export interface BreakReport {
+export interface BreakReport<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
   kind: 'space' | 'hyphen' | 'forced';
   runIndex: number;
-  sourceOffset: number;
+  sourceOffset: SourceOffset<Space>;
   visibleHyphen: boolean;
   lineLeading?: string;
   hyphenSource?: 'automatic' | 'explicit';
   splitOffset?: number;
+  width?: TexLength;
 }
 
-export interface RunReport {
+export interface RunReport<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
   runIndex: number;
-  kind: 'text' | 'space' | 'math';
-  sourceStart?: number;
-  sourceEnd?: number;
-  width: number;
+  kind: 'text' | 'space' | 'math' | 'penalty';
+  sourceStart?: SourceOffset<Space>;
+  sourceEnd?: SourceOffset<Space>;
+  width: TexLength;
   text?: string;
 }
 
@@ -89,7 +187,7 @@ export interface BuildReportInput {
 }
 
 const textSegmentWrapperBySegment = new WeakMap<object, AnyWrapper>();
-const textSegmentCaretStopsCache = new WeakMap<object, number[]>();
+const textSegmentCaretStopsCache = new WeakMap<object, TexLineX[]>();
 
 function textSliceWidth(
   measurement: MeasurementService | undefined,
@@ -97,27 +195,27 @@ function textSliceWidth(
   start: number,
   end: number,
   fullWidth: number
-): number {
+): TexLength {
   if (end <= start) {
-    return 0;
+    return texLength(0);
   }
 
   if (measurement) {
     const endWidth = measurement.measurePrefix(run.text, end, run.wrapper);
     const startWidth = measurement.measurePrefix(run.text, start, run.wrapper);
-    return endWidth - startWidth;
+    return texLength(endWidth - startWidth);
   }
 
   if (!run.text.length) {
-    return 0;
+    return texLength(0);
   }
 
-  return (fullWidth * (end - start)) / run.text.length;
+  return texLength((fullWidth * (end - start)) / run.text.length);
 }
 
 export function getOrBuildTextSegmentCaretStops(
   segment: LineSegmentReport
-): number[] | null {
+): TexLineX[] | null {
   if (segment.kind !== 'text') {
     return Array.isArray(segment.caretStops) ? segment.caretStops : null;
   }
@@ -136,11 +234,14 @@ export function getOrBuildTextSegmentCaretStops(
     return null;
   }
 
-  const stops = Array.from({ length: segment.text.length + 1 }, () => 0);
+  const stops = Array.from(
+    { length: segment.text.length + 1 },
+    () => texLineX(0)
+  );
   stops[0] = segment.x;
   for (let i = 1; i <= segment.text.length; i++) {
     const width = Number(wrapper.textWidth(segment.text.slice(0, i))) || 0;
-    stops[i] = segment.x + width;
+    stops[i] = texLineX(segment.x + width);
   }
   segment.caretStops = stops;
   textSegmentCaretStopsCache.set(segment, stops);
@@ -163,31 +264,32 @@ export function buildParagraphLayoutReport({
   externalFallbackUsed = false,
   linebreakingMode = 'unknown',
   lineMetrics = [],
-}: BuildReportInput): ParagraphLayoutReport {
+}: BuildReportInput): ParagraphLayoutReport<"layout"> {
   const breakByLine = new Map<number, AppliedBreak>();
   for (const entry of appliedBreaks) {
     breakByLine.set(entry.lineIndex, entry);
   }
 
-  const runReports: RunReport[] = runs.map((run) => ({
+  const runReports: RunReport<"layout">[] = runs.map((run) => ({
     runIndex: run.runIndex,
     kind: run.kind,
-    sourceStart: run.sourceStart,
-    sourceEnd: run.sourceEnd,
-    width: runWidths.get(run.runIndex) ?? 0,
-    text: run.kind === 'text' || run.kind === 'space' ? run.text : undefined,
+    sourceStart: layoutSourceOffset(run.sourceStart),
+    sourceEnd: layoutSourceOffset(run.sourceEnd),
+    width: texLength(runWidths.get(run.runIndex) ?? 0),
+    ...(run.kind === 'text' || run.kind === 'space' ? { text: run.text } : {}),
   }));
 
-  const lineReports: LineReport[] = lines.map((line) => {
+  const lineReports: LineReport<"layout">[] = lines.map((line) => {
     const appliedBreak = breakByLine.get(line.lineIndex) ?? null;
     const resolvedBreak = appliedBreak ?? line.break ?? null;
-    const segments: LineSegmentReport[] = [];
-    const xStart = line.xOffset ?? 0;
-    let x = xStart;
+    const segments: LineSegmentReport<"layout">[] = [];
+    const xStart = texLineX(line.xOffset ?? 0);
+    let x: TexLineX = xStart;
 
     for (let i = line.startRun; i <= line.endRun && i < runReports.length; i++) {
       const run = runs.at(i);
       if (!run) continue;
+      if (run.kind === 'penalty') continue;
 
       if (run.kind === 'text') {
         const startOffset = i === line.startRun ? line.startTextOffset : 0;
@@ -208,7 +310,7 @@ export function buildParagraphLayoutReport({
           runWidths.get(run.runIndex) ?? 0
         );
 
-        const segment: LineSegmentReport = {
+        const segment: LineSegmentReport<"layout"> = {
           runIndex: run.runIndex,
           kind: run.kind,
           text: run.text.slice(startOffset, endOffset),
@@ -219,51 +321,59 @@ export function buildParagraphLayoutReport({
         };
         textSegmentWrapperBySegment.set(segment, run.wrapper);
         segments.push(segment);
-        x += segmentWidth;
+        x = texLineX(x + segmentWidth);
         continue;
       }
 
-      let segmentWidth = runWidths.get(run.runIndex) ?? 0;
-      if (
-        run.kind === 'space' &&
-        (line.spaceCount ?? 0) > 0 &&
-        Number.isFinite(line.spaceDeltaPerGap ?? 0)
-      ) {
-        segmentWidth = Math.max(
-          0,
-          segmentWidth + (line.spaceDeltaPerGap ?? 0)
-        );
+      let segmentWidth = texLength(runWidths.get(run.runIndex) ?? 0);
+      if (run.kind === 'space' && (line.spaceCount ?? 0) > 0) {
+        const ratio = line.glueSetRatio ?? 0;
+        const stretch = run.texGlue?.stretch;
+        const shrink = run.texGlue?.shrink;
+        if (ratio > 0 && typeof stretch === 'number' && Number.isFinite(stretch)) {
+          segmentWidth = texLength(Math.max(0, segmentWidth + ratio * stretch));
+        } else if (ratio < 0 && typeof shrink === 'number' && Number.isFinite(shrink)) {
+          segmentWidth = texLength(Math.max(0, segmentWidth + ratio * shrink));
+        } else if (Number.isFinite(line.spaceDeltaPerGap ?? 0)) {
+          segmentWidth = texLength(Math.max(
+            0,
+            segmentWidth + (line.spaceDeltaPerGap ?? 0)
+          ));
+        }
       }
       segments.push({
         runIndex: run.runIndex,
         kind: run.kind,
-        text: run.kind === 'space' ? run.text : undefined,
+        ...(run.kind === 'space' ? { text: run.text } : {}),
         x,
         width: segmentWidth,
         caretStops:
           run.kind === 'space'
-            ? [x, x + segmentWidth]
-            : [x, x + segmentWidth],
+            ? [x, texLineX(x + segmentWidth)]
+            : [x, texLineX(x + segmentWidth)],
       });
-      x += segmentWidth;
+      x = texLineX(x + segmentWidth);
     }
 
     if (resolvedBreak?.kind === 'hyphen' && resolvedBreak.visibleHyphen) {
       const hyphenRun = runs.at(resolvedBreak.runIndex);
-      const hyphenWidth =
+      const hyphenWidth = texLength(
         hyphenRun?.kind === 'text' && measurement
           ? measurement.measureText('-', hyphenRun.wrapper)
-          : 0;
+          : 0
+      );
       if (hyphenWidth > 0) {
+        const insertedWidth = texLength(resolvedBreak.width ?? hyphenWidth);
+        const hyphenX = texLineX(x + insertedWidth - hyphenWidth);
         segments.push({
           runIndex: resolvedBreak.runIndex,
           kind: 'text',
           text: '-',
-          x,
+          x: hyphenX,
           width: hyphenWidth,
-          caretStops: [x, x + hyphenWidth],
+          caretStops: [hyphenX, texLineX(hyphenX + hyphenWidth)],
         });
-        x += hyphenWidth;
+        x = texLineX(x + insertedWidth);
       }
     }
 
@@ -273,15 +383,15 @@ export function buildParagraphLayoutReport({
       lineIndex: line.lineIndex,
       startRun: line.startRun,
       endRun: line.endRun,
-      width: line.lineNaturalWidth ?? line.width,
-      targetWidth: line.targetWidth ?? width,
-      naturalWidth: line.lineNaturalWidth ?? line.width,
+      width: texLength(line.lineNaturalWidth ?? line.width),
+      targetWidth: texLength(line.targetWidth ?? width),
+      naturalWidth: texLength(line.lineNaturalWidth ?? line.width),
       glueSetRatio: line.glueSetRatio ?? 0,
       badness: line.badness ?? 0,
       spaceCount: line.spaceCount ?? 0,
-      spaceDeltaPerGap: line.spaceDeltaPerGap ?? 0,
-      ascent: Number.isFinite(metrics.ascent) ? metrics.ascent : 0,
-      descent: Number.isFinite(metrics.descent) ? metrics.descent : 0,
+      spaceDeltaPerGap: texLength(line.spaceDeltaPerGap ?? 0),
+      ascent: texLength(Number.isFinite(metrics.ascent) ? metrics.ascent : 0),
+      descent: texLength(Number.isFinite(metrics.descent) ? metrics.descent : 0),
       xStart,
       xEnd: x,
       segments,
@@ -289,11 +399,12 @@ export function buildParagraphLayoutReport({
         ? {
             kind: resolvedBreak.kind,
             runIndex: resolvedBreak.runIndex,
-            sourceOffset: resolvedBreak.sourceOffset,
+            sourceOffset: layoutSourceOffset(resolvedBreak.sourceOffset),
             visibleHyphen: resolvedBreak.visibleHyphen,
-            lineLeading: resolvedBreak.lineLeading,
-            hyphenSource: resolvedBreak.hyphenSource,
-            splitOffset: resolvedBreak.splitOffset,
+            ...(resolvedBreak.lineLeading !== undefined ? { lineLeading: resolvedBreak.lineLeading } : {}),
+            ...(resolvedBreak.hyphenSource !== undefined ? { hyphenSource: resolvedBreak.hyphenSource } : {}),
+            ...(resolvedBreak.splitOffset !== undefined ? { splitOffset: resolvedBreak.splitOffset } : {}),
+            ...(!(resolvedBreak.width === undefined) ? { width: texLength(resolvedBreak.width) } : {}),
           }
         : null,
     };
@@ -301,7 +412,9 @@ export function buildParagraphLayoutReport({
 
   return {
     paragraphId,
-    width,
+    sourceCoordinateSpace: "layout",
+    sourceMappingMode: 'reconstructed',
+    width: texLength(width),
     alignment,
     layoutMode,
     lines: lineReports,

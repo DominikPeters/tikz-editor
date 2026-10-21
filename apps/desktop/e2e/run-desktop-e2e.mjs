@@ -4,6 +4,7 @@ import net from "node:net";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { remote } from "webdriverio";
+import { installDeterministicBridgeInPage } from "../src/platform/e2e-mock-bridge.ts";
 
 if (shouldRerunUnderXvfb()) {
   const result = spawnSync("xvfb-run", ["-a", process.execPath, ...process.argv.slice(1)], {
@@ -39,7 +40,7 @@ if (driverProbe.status !== 0) {
   throw new Error(`tauri-driver check failed:\n${driverProbe.stderr ?? driverProbe.stdout ?? ""}`);
 }
 
-const nativeDriver = resolveNativeWebkitDriver();
+const nativeDriver = resolveNativeDriver();
 const driverArgs = nativeDriver ? ["--native-driver", nativeDriver] : [];
 const driver = spawn("tauri-driver", driverArgs, {
   stdio: "pipe"
@@ -49,11 +50,13 @@ driver.stderr.on("data", (chunk) => {
   process.stderr.write(chunk);
 });
 
-await waitForDriverReady(driver);
-
-const browser = await createSession(appPath);
-
+let browser;
 try {
+  await waitForDriverReady(driver);
+  browser = await createSession(appPath);
+  if (process.env.TIKZ_DESKTOP_E2E_PORTABLE === "1") {
+    await scenarioPortableStorage(browser);
+  }
   await installDeterministicBridge(browser);
   const scenarios = [
     ["boot and tab lifecycle", scenarioBootAndTabLifecycle],
@@ -87,11 +90,20 @@ try {
   }
   console.log(`[desktop-e2e] Completed ${passed}/${scenarios.length} scenarios in ${Date.now() - runStartedAt}ms`);
 } finally {
-  await browser.deleteSession().catch(() => undefined);
-  driver.kill("SIGTERM");
+  await browser?.deleteSession().catch(() => undefined);
+  if (process.platform === "win32" && driver.pid) {
+    // Windows terminates the driver immediately; stop its native-driver child
+    // too so the next build flavor can bind the same WebDriver ports.
+    spawnSync("taskkill", ["/PID", String(driver.pid), "/T", "/F"], { stdio: "ignore" });
+  } else {
+    driver.kill("SIGTERM");
+  }
 }
 
 function resolveAppBinary() {
+  if (process.env.TIKZ_DESKTOP_E2E_APP_PATH) {
+    return path.resolve(process.env.TIKZ_DESKTOP_E2E_APP_PATH);
+  }
   const root = process.cwd();
   const binaryName = process.platform === "win32" ? "tikz-editor.exe" : "tikz-editor";
   const plain = path.resolve(root, "src-tauri/target/release", binaryName);
@@ -141,17 +153,24 @@ async function createSession(application) {
   const deadline = Date.now() + 20_000;
   let lastError = null;
   let warnedCapabilityFallback = false;
+  // EdgeDriver otherwise overrides the app's profile with a fresh temporary
+  // directory for each session, defeating portable persistence checks.
+  const portableOptions = process.platform === "win32" && process.env.TIKZ_DESKTOP_E2E_PORTABLE === "1"
+    ? { webviewOptions: { userDataFolder: path.join(path.dirname(application), "tikz-editor-data") } }
+    : {};
   const capabilityCandidates = [
     {
       "tauri:options": {
-        application
+        application,
+        ...portableOptions
       },
       "wdio:enforceWebDriverClassic": true
     },
     {
       browserName: "wry",
       "tauri:options": {
-        application
+        application,
+        ...portableOptions
       },
       "wdio:enforceWebDriverClassic": true
     }
@@ -182,129 +201,29 @@ async function createSession(application) {
 }
 
 async function installDeterministicBridge(browserInstance) {
-  await browserInstance.execute(() => {
-    const writes = [];
-    const exports = [];
-    const exportPayloads = [];
-    const clearRecentCalls = [];
-    const windowTitles = [];
-    const unsavedDecisions = [];
-    const unsavedPrompts = [];
-    const warnings = [];
-    const errors = [];
-    const linkedFiles = new Map();
-    const linkedRevisionForText = (text) => ({
-      hash: `e2e-${text.length}-${Array.from(text).reduce((hash, char) => ((hash * 31) + char.charCodeAt(0)) >>> 0, 0).toString(16)}`,
-      size: text.length
-    });
-    const linkedFileRefForPath = (filePath) => ({
-      kind: "file",
-      provider: "desktop-fs",
-      path: filePath,
-      name: filePath.split("/").pop() ?? "tikz-document.tex"
-    });
-    if (!window.__DESKTOP_E2E_CONSOLE_CAPTURE_INSTALLED__) {
-      const originalWarn = console.warn.bind(console);
-      const originalError = console.error.bind(console);
-      console.warn = (...args) => {
-        window.__DESKTOP_E2E_WARNINGS__.push(args.map((value) => String(value)).join(" "));
-        originalWarn(...args);
-      };
-      console.error = (...args) => {
-        window.__DESKTOP_E2E_ERRORS__.push(args.map((value) => String(value)).join(" "));
-        originalError(...args);
-      };
-      window.__DESKTOP_E2E_CONSOLE_CAPTURE_INSTALLED__ = true;
-    }
-    const bridge = {
-      openText: async (path) => {
-        const resolvedPath = path ?? "/tmp/opened-from-e2e.tex";
-        const source = "\\\\draw (9,9)--(10,10); % desktop-opened";
-        linkedFiles.set(resolvedPath, {
-          source,
-          revision: linkedRevisionForText(source)
-        });
-        return {
-          source,
-          path: resolvedPath,
-          name: resolvedPath.split("/").pop() ?? "opened-from-e2e.tex"
-        };
-      },
-      saveText: async ({ text, suggestedName, path, forceSaveAs }) => {
-        const computedPath =
-          forceSaveAs || !path
-            ? `/tmp/${(suggestedName ?? "tikz-document").replace(/[^A-Za-z0-9_.-]/g, "_")}`
-            : path;
-        writes.push({ text, path: computedPath, forceSaveAs });
-        return {
-          ok: true,
-          path: computedPath,
-          name: computedPath.split("/").pop() ?? "tikz-document.tex"
-        };
-      },
-      readLinkedText: async (filePath) => {
-        const entry = linkedFiles.get(filePath);
-        if (!entry) {
-          return { status: "missing" };
-        }
-        return {
-          status: "ok",
-          source: entry.source,
-          revision: entry.revision,
-          fileRef: linkedFileRefForPath(filePath)
-        };
-      },
-      writeLinkedText: async ({ path: filePath, text }) => {
-        const revision = linkedRevisionForText(text);
-        linkedFiles.set(filePath, { source: text, revision });
-        writes.push({ text, path: filePath, forceSaveAs: false });
-        return {
-          status: "saved",
-          revision,
-          fileRef: linkedFileRefForPath(filePath)
-        };
-      },
-      exportFile: async ({ fileName, mimeType, bytesBase64 }) => {
-        exports.push(fileName);
-        exportPayloads.push({ fileName, mimeType, bytesBase64 });
-        return true;
-      },
-      clearRecentFiles: async () => {
-        clearRecentCalls.push(Date.now());
-      },
-      readClipboard: async () => "",
-      writeClipboard: async () => undefined,
-      readCustomClipboardText: async () => null,
-      readCustomClipboardBytes: async () => null,
-      writeClipboardBundle: async () => undefined,
-      setWindowTitle: async (title) => {
-        window.__DESKTOP_E2E_TITLE__ = title;
-        windowTitles.push(title);
-      },
-      closeWindow: async () => {
-        window.__DESKTOP_E2E_CLOSED__ = true;
-      },
-      confirmUnsavedChanges: async (message) => {
-        unsavedPrompts.push(message);
-        return unsavedDecisions.shift() ?? "cancel";
-      },
-      onMenuCommand: async () => () => undefined,
-      onOpenRecent: async () => () => undefined,
-      onWindowCloseRequest: async () => () => undefined,
-      onContextMenuCommand: async () => () => undefined
-    };
-    window.__DESKTOP_E2E_WRITES__ = writes;
-    window.__DESKTOP_E2E_EXPORTS__ = exports;
-    window.__DESKTOP_E2E_EXPORT_PAYLOADS__ = exportPayloads;
-    window.__DESKTOP_E2E_CLEAR_RECENT_CALLS__ = clearRecentCalls;
-    window.__DESKTOP_E2E_WINDOW_TITLES__ = windowTitles;
-    window.__DESKTOP_E2E_UNSAVED_DECISIONS__ = unsavedDecisions;
-    window.__DESKTOP_E2E_UNSAVED_PROMPTS__ = unsavedPrompts;
-    window.__DESKTOP_E2E_WARNINGS__ = warnings;
-    window.__DESKTOP_E2E_ERRORS__ = errors;
-    window.__DESKTOP_E2E_CLOSED__ = false;
-    window.__TIKZ_EDITOR_DESKTOP_TEST_API__.setBridgeOverride(bridge);
+  await browserInstance.execute(installDeterministicBridgeInPage);
+}
+
+async function scenarioPortableStorage(browserInstance) {
+  assert.equal(process.platform, "win32", "Portable desktop e2e requires Windows");
+  const registryArgs = ["query", "HKCU\\Software\\TikZEditor\\Preferences", "/v", "AutomaticUpdateChecks"];
+  const readRegistry = () => spawnSync("reg.exe", registryArgs, { encoding: "utf8" });
+  const before = readRegistry();
+  assert.equal(await browserInstance.execute(() => window.__TAURI_INTERNALS__.invoke("desktop_is_portable")), true);
+  await browserInstance.execute(async () => {
+    localStorage.setItem("portable-e2e", "persisted");
+    await window.__TAURI_INTERNALS__.invoke("desktop_set_automatic_update_checks", { enabled: false });
   });
+  const data = path.join(path.dirname(appPath), "tikz-editor-data");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(data, "automatic-update-checks.json"), "utf8")), false);
+  assert.ok(fs.existsSync(path.join(data, "EBWebView")), "WebView2 profile should live beside the executable");
+  await browserInstance.reloadSession();
+  assert.equal(await browserInstance.execute(() => window.__TAURI_INTERNALS__.invoke("desktop_get_automatic_update_checks")), false);
+  assert.equal(await browserInstance.execute(() => localStorage.getItem("portable-e2e")), "persisted");
+  const after = readRegistry();
+  assert.equal(after.status, before.status);
+  assert.equal(after.stdout, before.stdout, "Portable preferences must not change the installed edition's registry value");
+  console.log("[desktop-e2e] PASS portable profile and preference persistence after restart");
 }
 
 async function scenarioBootAndTabLifecycle(browserInstance) {
@@ -770,13 +689,13 @@ async function isPortOpen(port) {
   });
 }
 
-function resolveNativeWebkitDriver() {
+function resolveNativeDriver() {
   const envCandidates = [
     process.env.WEBKIT_WEBDRIVER_PATH,
     process.env.NATIVE_WEBDRIVER_PATH
   ].filter(Boolean);
-  const pathCandidates = binariesFromPath(process.platform === "win32" ? ["WebKitWebDriver.exe"] : ["WebKitWebDriver"]);
-  const fallbackCandidates = [
+  const pathCandidates = binariesFromPath(process.platform === "win32" ? ["msedgedriver.exe"] : ["WebKitWebDriver"]);
+  const fallbackCandidates = process.platform === "win32" ? [] : [
     "/usr/bin/WebKitWebDriver",
     "/usr/libexec/webkit2gtk-4.1/WebKitWebDriver",
     "/usr/libexec/webkit2gtk-4.0/WebKitWebDriver"

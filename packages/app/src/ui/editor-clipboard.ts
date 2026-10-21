@@ -1,5 +1,6 @@
-import { renderTikzToSvg } from "tikz-editor/render/index";
-import { serializeSvgModel, serializeSvgModelAsync } from "tikz-editor/svg/index";
+import { renderTikzToSvg } from "@tikz-editor/core/render/index";
+import { serializeSvgModel, serializeSvgModelAsync } from "@tikz-editor/core/svg/index";
+import { isRecord } from "../validation";
 
 // Chromium custom clipboard formats require the "web " prefix.
 export const TIKZ_CLIPBOARD_MIME = "web application/x-tikz-editor+json";
@@ -92,12 +93,12 @@ function describeError(error: unknown): string {
 
 export function parseClipboardPayloadJson(raw: string): TikzClipboardPayload | null {
   try {
-    const parsed = JSON.parse(raw) as Partial<TikzClipboardPayload> | null;
-    if (parsed?.version !== 1 || !Array.isArray(parsed.snippets)) {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed) || parsed.version !== 1 || !Array.isArray(parsed.snippets)) {
       return null;
     }
     const snippets = parsed.snippets
-      .filter((snippet): snippet is string => typeof snippet === "string")
+      .filter((snippet: unknown): snippet is string => typeof snippet === "string")
       .map((snippet) => snippet.replace(/\r\n?/g, "\n").trim())
       .filter((snippet) => snippet.length > 0);
     if (snippets.length === 0) {
@@ -158,7 +159,8 @@ export function readClipboardPayloadFromDataTransfer(
 export async function readClipboardPayloadFromSystemClipboard(): Promise<
   { kind: "success"; payload: TikzClipboardPayload } | { kind: "failure"; reason: ClipboardReadFailureReason }
 > {
-  if (typeof navigator === "undefined" || !navigator.clipboard) {
+  const clipboard: unknown = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  if (!clipboard) {
     return { kind: "failure", reason: "unavailable" };
   }
 
@@ -273,8 +275,8 @@ export async function buildSelectionPngBase64(svgText: string | null): Promise<s
   try {
     const image = await loadSvgImage(svgUrl);
     const dimensions = parseSvgDimensions(svgText);
-    const width = Math.max(1, Math.ceil((dimensions?.width ?? image.naturalWidth ?? image.width) * 4));
-    const height = Math.max(1, Math.ceil((dimensions?.height ?? image.naturalHeight ?? image.height) * 4));
+    const width = Math.max(1, Math.ceil((dimensions?.width ?? image.naturalWidth) * 4));
+    const height = Math.max(1, Math.ceil((dimensions?.height ?? image.naturalHeight) * 4));
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -300,7 +302,7 @@ function parseSvgDimensions(svgText: string): { width: number; height: number } 
   }
   const parsed = new DOMParser().parseFromString(svgText, "image/svg+xml");
   const root = parsed.documentElement;
-  if (root?.nodeName.toLowerCase() !== "svg") {
+  if (root.nodeName.toLowerCase() !== "svg") {
     return null;
   }
 
@@ -309,7 +311,7 @@ function parseSvgDimensions(svgText: string): { width: number; height: number } 
     const values = viewBox.split(/[\s,]+/).map((value) => Number(value));
     const width = values[2];
     const height = values[3];
-    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+    if (width !== undefined && height !== undefined && Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
       return { width, height };
     }
   }
@@ -389,7 +391,8 @@ export async function writeClipboardPayload(
   payload: TikzClipboardPayload,
   options: { svgText?: string | null } = {}
 ): Promise<boolean> {
-  if (typeof navigator === "undefined" || !navigator.clipboard) {
+  const clipboard: unknown = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  if (!clipboard) {
     logClipboardDebug("Clipboard write unavailable: navigator.clipboard missing.");
     return false;
   }

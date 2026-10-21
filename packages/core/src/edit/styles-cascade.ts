@@ -1,5 +1,7 @@
+import { requireArrayValue } from "../utils/collections.js";
+import { isObjectRecord } from "../utils/records.js";
 import type { OptionEntry } from "../options/types.js";
-import type { StyleChainEntry, StyleSourceRef } from "../semantic/style-chain.js";
+import { RESOLVED_STYLE_KEYS, type StyleChainEntry, type StyleSourceRef } from "../semantic/style-chain.js";
 import type { SceneElement, ResolvedStyle } from "../semantic/types.js";
 import type { EditAction, StyleLevel } from "./actions.js";
 import {
@@ -119,8 +121,8 @@ export function buildStylesCascadeModel(
   const orderedEntries = [...element.styleChain].reverse();
   const writeTargetCache = new Map<string, PropertyTargetResolution>();
 
-  for (let index = 0; index < orderedEntries.length; index += 1) {
-    const entry = orderedEntries[index];
+  for (const [index, entry] of orderedEntries.entries()) {
+
     const targetId = entry.sourceRef ? sourceTargetIdForEntry(entry, entry.sourceRef) : null;
     const sectionTarget =
       targetId != null
@@ -140,7 +142,7 @@ export function buildStylesCascadeModel(
       sourceLabel: entry.sourceRef?.label ?? null,
       sourceLocation: formatSourceLocation(snapshot.source, entry.sourceRef),
       writable: !sectionTarget.readOnly,
-      readOnlyReason: sectionTarget.readOnlyReason,
+      ...(sectionTarget.readOnlyReason === undefined ? {} : { readOnlyReason: sectionTarget.readOnlyReason }),
       declarations: declarationDrafts.map((draft) => ({
         ...draft,
         status: draft.status ?? "unsupported",
@@ -179,12 +181,12 @@ export function buildSharedStylesCascadeModel(models: StylesCascadeModel[]): Sty
   if (models.length === 0) {
     return null;
   }
-  const signature = models[0].comparableSignature;
+  const signature = requireArrayValue(models, 0).comparableSignature;
   if (models.some((model) => model.comparableSignature !== signature)) {
     return null;
   }
 
-  const base = models[0];
+  const base = requireArrayValue(models, 0);
   return {
     elementKind: base.elementKind,
     elementIds: models.flatMap((model) => model.elementIds),
@@ -214,10 +216,10 @@ export function planStylesSetPropertyActions(
       continue;
     }
     const [plannedMutation] = buildPropertyMutations({
-      propertyId: mutation.propertyId ?? target.propertyId,
+      ...((mutation.propertyId ?? target.propertyId) === undefined ? {} : { propertyId: mutation.propertyId ?? target.propertyId }),
       key: mutation.key,
       value: mutation.value,
-      clearKeys: mutation.clearKeys
+      ...(mutation.clearKeys === undefined ? {} : { clearKeys: mutation.clearKeys })
     });
     if (!plannedMutation) {
       continue;
@@ -228,8 +230,8 @@ export function planStylesSetPropertyActions(
       level: target.level,
       key: plannedMutation.key,
       value: plannedMutation.value,
-      propertyId: plannedMutation.propertyId,
-      clearKeys: plannedMutation.clearKeys
+      ...(plannedMutation.propertyId === undefined ? {} : { propertyId: plannedMutation.propertyId }),
+      ...(plannedMutation.clearKeys === undefined ? {} : { clearKeys: plannedMutation.clearKeys })
     };
     unique.set(`${target.elementId}:${plannedMutation.key}:${plannedMutation.value}:${(plannedMutation.clearKeys ?? []).join(",")}`, action);
   }
@@ -245,13 +247,14 @@ export function planStylesTogglePropertyActions(
     if (!target.writable || target.elementId.trim().length === 0) {
       continue;
     }
+    const propertyId = target.propertyId ?? propertyIdForWriteKey(mutation.key);
     const action: EditAction = {
       kind: "setProperty",
       elementId: target.elementId,
       level: target.level,
       key: mutation.key,
       value: "",
-      propertyId: target.propertyId ?? propertyIdForWriteKey(mutation.key) ?? undefined,
+      ...(propertyId == null ? {} : { propertyId }),
       commentMode: mutation.mode,
       commentSourceText: mutation.sourceText
     };
@@ -352,8 +355,9 @@ function buildSectionDeclarations(
           const styleTarget = resolvePropertyTarget(source, styleTargetId);
           const styleWriteTarget: SetPropertyWriteTarget =
             styleTarget.kind === "found"
-              ? { ...writeTarget, elementId: styleTargetId, writable: true, reason: undefined }
+              ? { ...writeTarget, elementId: styleTargetId, writable: true }
               : { ...writeTarget, elementId: styleTargetId, writable: false, reason: styleTarget.reason };
+          if (styleTarget.kind === "found") delete styleWriteTarget.reason;
           const styleOptionsSpan =
             styleTarget.kind === "found" && styleTarget.target.optionsSpan && styleTarget.target.optionsSpan.to > styleTarget.target.optionsSpan.from
               ? styleTarget.target.optionsSpan
@@ -401,7 +405,9 @@ function buildSectionDeclarations(
     return declarations;
   }
 
-  for (const key of Object.keys(entry.resolvedContributions) as Array<keyof ResolvedStyle>) {
+  for (const contributionKey of Object.keys(entry.resolvedContributions)) {
+    const key = RESOLVED_STYLE_KEYS.find(candidate => candidate === contributionKey);
+    if (key === undefined) continue;
     const matched = mapContributionToDeclaration(key, entry.after, propertyMap, writeTarget, entry);
     if (!matched || seen.has(matched.priorityKey)) {
       continue;
@@ -546,8 +552,19 @@ function mapEntryToDeclaration(
     writeTarget,
     priorityKey: propertyId,
     defaultLike: false,
-    readOnlyReason: writeTarget.reason
+    ...(writeTarget.reason === undefined ? {} : { readOnlyReason: writeTarget.reason })
   };
+}
+
+const propertyIdSets = new WeakMap<Map<string, InspectorProperty>, ReadonlySet<string>>();
+
+function propertyIdSet(propertyMap: Map<string, InspectorProperty>): ReadonlySet<string> {
+  let ids = propertyIdSets.get(propertyMap);
+  if (!ids) {
+    ids = new Set(propertyMap.keys());
+    propertyIdSets.set(propertyMap, ids);
+  }
+  return ids;
 }
 
 function mapContributionToDeclaration(
@@ -557,7 +574,7 @@ function mapContributionToDeclaration(
   writeTarget: SetPropertyWriteTarget,
   entry: StyleChainEntry
 ): StylesDeclarationDraft | null {
-  const propertyId = propertyIdForStyleContribution(key, new Set(propertyMap.keys()));
+  const propertyId = propertyIdForStyleContribution(key, propertyIdSet(propertyMap));
   if (!propertyId) {
     return null;
   }
@@ -565,14 +582,17 @@ function mapContributionToDeclaration(
   if (!template) {
     return null;
   }
-  const property = overrideInspectorPropertyValue(template, styleValueForProperty(template, style), { ...writeTarget, writable: false });
+  const nextValue = styleValueForProperty(template, style);
+  const property = overrideInspectorPropertyValue(template, nextValue, { ...writeTarget, writable: false });
+  // Show raw string contributions even when no typed inspector preset represents them.
+  const cssValue = typeof nextValue === "string" ? nextValue : formatCssValue(property);
   return {
     id: `default:${propertyId}:${entry.kind}:${entry.sourceRef?.sourceKind ?? "unknown"}`,
     propertyId,
     label: template.label,
-    cssValue: formatCssValue(property),
+    cssValue,
     property,
-    sourceText: `${template.label}: ${formatCssValue(property)}`,
+    sourceText: `${template.label}: ${cssValue}`,
     writeTarget: { ...writeTarget, writable: false },
     priorityKey: propertyId,
     defaultLike: true,
@@ -586,10 +606,11 @@ function buildUnsupportedDeclaration(
   styleEntry: StyleChainEntry
 ): StylesDeclarationDraft {
   const raw = entry.raw.trim();
+  const rawLabel = raw.split("=")[0]?.trim() ?? "";
   return {
     id: `unsupported:${entry.span.from}`,
     propertyId: null,
-    label: raw.split("=")[0]?.trim() || raw,
+    label: rawLabel.length > 0 ? rawLabel : raw,
     cssValue: raw.includes("=") ? raw.slice(raw.indexOf("=") + 1).trim() : "",
     property: null,
     sourceText: raw,
@@ -958,18 +979,30 @@ function formatSectionSubtitle(entry: StyleChainEntry): string | null {
   return null;
 }
 
+let lineStartsSource: string | null = null;
+let lineStarts: number[] = [];
+
 function formatSourceLocation(source: string, sourceRef: StyleSourceRef | undefined): string | null {
   const span = sourceRef?.sourceSpan;
   if (!span) {
     return null;
   }
-  let line = 1;
-  for (let index = 0; index < span.from && index < source.length; index += 1) {
-    if (source.charCodeAt(index) === 10) {
-      line += 1;
+  // A selection builds one model per element over the same source: index its
+  // line starts once rather than scanning from the start for every section.
+  if (lineStartsSource !== source) {
+    lineStartsSource = source;
+    lineStarts = [0];
+    for (let index = 0; index < source.length; index += 1) {
+      if (source.charCodeAt(index) === 10) lineStarts.push(index + 1);
     }
   }
-  return `line ${line}`;
+  let low = 0, high = lineStarts.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    if (requireArrayValue(lineStarts, middle) <= span.from) low = middle;
+    else high = middle - 1;
+  }
+  return `line ${low + 1}`;
 }
 
 function entryValueForProperty(entry: OptionEntry, property: InspectorProperty): unknown {
@@ -1079,8 +1112,18 @@ function overrideInspectorPropertyValue(
   writeTarget: SetPropertyWriteTarget
 ): InspectorProperty {
   switch (property.kind) {
-    case "number":
-      return { ...property, value: typeof nextValue === "number" ? nextValue : property.value, write: property.write ? { ...writeTarget, key: property.write.key, transformContext: property.write.transformContext } : undefined };
+    case "number": {
+      const updated = { ...property, value: typeof nextValue === "number" ? nextValue : property.value };
+      if (property.write) {
+        const write = { ...writeTarget, key: property.write.key };
+        if (property.write.transformContext === undefined) delete write.transformContext;
+        else write.transformContext = property.write.transformContext;
+        updated.write = write;
+      } else {
+        delete updated.write;
+      }
+      return updated;
+    }
     case "length":
       return { ...property, value: typeof nextValue === "number" ? nextValue : property.value, write: { ...writeTarget, key: property.write.key } };
     case "color":
@@ -1093,28 +1136,28 @@ function overrideInspectorPropertyValue(
     case "lineWidth":
       return { ...property, value: typeof nextValue === "number" ? nextValue : property.value, presetLabel: lineWidthPresetLabel(typeof nextValue === "number" ? nextValue : property.value), write: { ...writeTarget, key: property.write.key } };
     case "dashStyle":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, DASH_STYLE_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "lineCap":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, LINE_CAP_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "lineJoin":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, LINE_JOIN_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "fillMode":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, FILL_MODE_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "fillShading":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, FILL_SHADING_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "fillPattern":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, FILL_PATTERN_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "roundedCorners": {
-      const next = (nextValue && typeof nextValue === "object") ? nextValue as { enabled?: boolean; radius?: number } : null;
+      const next = isObjectRecord(nextValue) ? nextValue : null;
       return {
         ...property,
-        enabled: next?.enabled ?? property.enabled,
-        radius: next?.radius ?? property.radius,
+        enabled: typeof next?.enabled === "boolean" ? next.enabled : property.enabled,
+        radius: typeof next?.radius === "number" ? next.radius : property.radius,
         write: { ...writeTarget, key: property.write.key }
       };
     }
     case "nodeShape":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, NODE_SHAPE_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "arrowTip":
     case "boolean":
     case "enum":
@@ -1131,8 +1174,9 @@ function overrideInspectorPropertyValue(
   }
 }
 
-function coerceInspectorStringValue<T extends string>(nextValue: unknown, fallback: T): T {
-  return typeof nextValue === "string" ? nextValue as T : fallback;
+function coerceInspectorStringValue<T extends string>(nextValue: unknown, fallback: T, options: readonly { value: T }[]): T | "custom" {
+  const known = options.find(option => option.value === nextValue);
+  return known?.value ?? (typeof nextValue === "string" ? "custom" : fallback);
 }
 
 function formatCssValue(property: InspectorProperty | null): string {

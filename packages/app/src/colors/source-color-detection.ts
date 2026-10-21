@@ -1,8 +1,10 @@
-import type { Tree } from "@lezer/common";
-import { parseOptionListRaw } from "tikz-editor/options/parse";
-import type { OptionEntry, OptionListAst } from "tikz-editor/options/types";
-import { normalizeColor, resolveDefineColorModel } from "tikz-editor/semantic/style/colors";
-import { parseStyleValueAsOptionList, readBalancedBlock } from "tikz-editor/semantic/style/option-utils";
+import type { SyntaxNode, Tree } from "@lezer/common";
+import { hexToRgb, rgbToHex } from "@tikz-editor/core/utils/color-convert";
+import { clamp, clamp01 } from "@tikz-editor/core/utils/math";
+import { parseOptionListRaw } from "@tikz-editor/core/options/parse";
+import type { OptionEntry, OptionListAst } from "@tikz-editor/core/options/types";
+import { normalizeColor, resolveDefineColorModel } from "@tikz-editor/core/semantic/style/colors";
+import { parseStyleValueAsOptionList, readBalancedBlock } from "@tikz-editor/core/semantic/style/option-utils";
 
 export type SourceRange = {
   from: number;
@@ -164,6 +166,7 @@ export function collectDetectedColors(
     occurrences.push(occurrence);
   };
 
+  // Only nodes in the visible ranges matter, so skip every subtree outside them.
   walkTree(tree, (name, from, to) => {
     if (name === "OptionList") {
       if (!intersectsRanges(from, to, normalizedRanges)) {
@@ -184,7 +187,7 @@ export function collectDetectedColors(
         return;
       }
       const valueGroup = groups[1];
-      if (valueGroup.innerRaw.length === 0) {
+      if (!valueGroup || valueGroup.innerRaw.length === 0) {
         return;
       }
 
@@ -216,8 +219,10 @@ export function collectDetectedColors(
         return;
       }
 
-      const modelRaw = groups[1].innerRaw.trim();
+      const modelGroup = groups[1];
       const specificationGroup = groups[2];
+      if (!modelGroup || !specificationGroup) return;
+      const modelRaw = modelGroup.innerRaw.trim();
       const specificationRaw = specificationGroup.innerRaw.trim();
       if (modelRaw.length === 0 || specificationRaw.length === 0) {
         return;
@@ -238,7 +243,7 @@ export function collectDetectedColors(
         readOnlyReason: DEFINECOLOR_READ_ONLY_REASON
       });
     }
-  });
+  }, normalizedRanges);
 
   occurrences.sort((left, right) => {
     if (left.from !== right.from) {
@@ -414,7 +419,7 @@ function resolveColorExpression(raw: string, context: ColorResolveContext): Colo
   }
 
   const normalizedBySemantic = normalizeColor(normalized, {
-    currentColor: context.currentColor
+    ...((context.currentColor) === undefined ? {} : { currentColor: context.currentColor })
   });
   if (isHexColor(normalizedBySemantic)) {
     return {
@@ -446,8 +451,9 @@ function resolveMixedColor(raw: string, context: ColorResolveContext): string | 
     }
     cursor += 1;
 
-    const mixToken = parts[cursor] && parts[cursor].length > 0 ? parts[cursor] : "white";
-    if (parts[cursor] && parts[cursor].length > 0) {
+    const candidateToken = parts[cursor];
+    const mixToken = candidateToken && candidateToken.length > 0 ? candidateToken : "white";
+    if (candidateToken && candidateToken.length > 0) {
       cursor += 1;
     }
 
@@ -464,7 +470,7 @@ function resolveMixedColor(raw: string, context: ColorResolveContext): string | 
     };
   }
 
-  return rgbToHex(current.r, current.g, current.b);
+  return rgbToHex(current);
 }
 
 function resolveColorTokenToRgb(
@@ -506,7 +512,7 @@ function resolveColorTokenToHex(
   }
 
   const normalized = normalizeColor(token, {
-    currentColor: context.currentColor
+    ...((context.currentColor) === undefined ? {} : { currentColor: context.currentColor })
   });
   if (!isHexColor(normalized)) {
     return null;
@@ -554,24 +560,22 @@ type DeclaredColorStatement = {
 };
 
 function collectDeclaredColorStatements(source: string, tree: Tree): DeclaredColorStatement[] {
-  const declarations: DeclaredColorStatement[] = [];
-
-  walkTree(tree, (name, from, to) => {
-    if (name !== "ColorletStatement" && name !== "DefineColorStatement") {
-      return;
+  // Each statement starts with its command, so find the commands in the text
+  // and climb to their statements rather than walking the whole tree.
+  const declarations = new Map<number, DeclaredColorStatement>();
+  for (const command of ["\\colorlet", "\\definecolor"]) {
+    for (let at = source.indexOf(command); at >= 0; at = source.indexOf(command, at + command.length)) {
+      for (let node: SyntaxNode | null = tree.resolveInner(at, 1); node; node = node.parent) {
+        if (node.name !== "ColorletStatement" && node.name !== "DefineColorStatement") continue;
+        declarations.set(node.from, { kind: node.name, from: node.from, to: node.to, raw: source.slice(node.from, node.to) });
+        break;
+      }
     }
-    declarations.push({
-      kind: name,
-      from,
-      to,
-      raw: source.slice(from, to)
-    });
-  });
-
-  return declarations;
+  }
+  return [...declarations.values()].sort((left, right) => left.from - right.from);
 }
 
-function sourceMayContainDeclaredColors(source: string): boolean {
+export function sourceMayContainDeclaredColors(source: string): boolean {
   return source.includes("\\colorlet") || source.includes("\\definecolor");
 }
 
@@ -632,13 +636,20 @@ function normalizeOptionKey(rawKey: string): string {
   return rawKey.trim().toLowerCase().replace(/\s+/gu, " ");
 }
 
-function walkTree(tree: Tree, visit: (name: string, from: number, to: number) => void): void {
+function walkTree(
+  tree: Tree,
+  visit: (name: string, from: number, to: number) => void,
+  ranges?: readonly SourceRange[]
+): void {
   const cursor = tree.cursor();
 
   for (;;) {
-    visit(cursor.name, cursor.from, cursor.to);
+    const inRanges = !ranges || intersectsRanges(cursor.from, cursor.to, ranges);
+    if (inRanges) {
+      visit(cursor.name, cursor.from, cursor.to);
+    }
 
-    if (cursor.firstChild()) {
+    if (inRanges && cursor.firstChild()) {
       continue;
     }
 
@@ -687,10 +698,10 @@ function intersectsRanges(from: number, to: number, ranges: readonly SourceRange
 function trimWithOffsets(raw: string, absoluteFrom: number): { value: string; from: number; to: number } {
   let start = 0;
   let end = raw.length;
-  while (start < end && isWhitespace(raw[start])) {
+  while (start < end && isWhitespace(raw.charAt(start))) {
     start += 1;
   }
-  while (end > start && isWhitespace(raw[end - 1])) {
+  while (end > start && isWhitespace(raw.charAt(end - 1))) {
     end -= 1;
   }
 
@@ -744,32 +755,4 @@ function normalizeHex(input: string): string {
     return `#${expanded}`;
   }
   return `#${raw}`;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const normalized = normalizeHex(hex).replace(/^#/, "");
-  const parsed = Number.parseInt(normalized, 16);
-  return {
-    r: (parsed >> 16) & 255,
-    g: (parsed >> 8) & 255,
-    b: parsed & 255
-  };
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  return (
-    "#" +
-    [r, g, b]
-      .map((component) => Math.round(Math.max(0, Math.min(255, component))))
-      .map((component) => component.toString(16).padStart(2, "0"))
-      .join("")
-  );
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function clamp01(value: number): number {
-  return clamp(value, 0, 1);
 }

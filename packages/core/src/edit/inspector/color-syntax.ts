@@ -57,7 +57,7 @@ export function normalizeInspectorColorValue(value: string | null): string | nul
   }
   const normalized = value.trim().toLowerCase();
   if (normalized in HEX_TO_NAMED_COLOR) {
-    return HEX_TO_NAMED_COLOR[normalized];
+    return HEX_TO_NAMED_COLOR[normalized] ?? null;
   }
   return normalized;
 }
@@ -306,7 +306,7 @@ export function normalizeInspectorDeclaredColorName(raw: string): string | null 
 
 export function skipInspectorWhitespace(source: string, startIndex: number): number {
   let cursor = startIndex;
-  while (cursor < source.length && /\s/u.test(source[cursor])) {
+  while (cursor < source.length && /\s/u.test(source.charAt(cursor))) {
     cursor += 1;
   }
   return cursor;

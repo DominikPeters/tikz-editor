@@ -1,5 +1,5 @@
 import type { ArrowTipKind } from "../types.js";
-import { parseLength } from "../coords/parse-length.js";
+import { PT_PER_CM } from "../../coords/source.js";
 
 export const NAMED_COLORS = new Set([
   "black",
@@ -23,7 +23,7 @@ export const NAMED_COLORS = new Set([
   "brown",
 ]);
 
-export const COLOR_HEX: Record<string, string> = {
+const NAMED_COLOR_HEX = {
   black: "#000000",
   darkgray: "#404040",
   white: "#ffffff",
@@ -45,7 +45,10 @@ export const COLOR_HEX: Record<string, string> = {
   brown: "#bf8040"
 };
 
+export const COLOR_HEX: typeof NAMED_COLOR_HEX & Record<string, string> = NAMED_COLOR_HEX;
+
 export const NON_STYLE_OPTION_KEYS = new Set([
+  "remember picture",
   "start angle",
   "end angle",
   "delta angle",
@@ -231,6 +234,9 @@ export const NON_STYLE_OPTION_KEYS = new Set([
   "bar shift",
   "bar interval width",
   "bar interval shift",
+  "every path/.style",
+  "every path/.append style",
+  "every path/.prefix style",
   "every node/.style",
   "every node/.append style",
   "every text node part/.style",
@@ -280,6 +286,9 @@ export const NON_STYLE_OPTION_KEYS = new Set([
 
 export const NON_STYLE_OPTION_FLAGS = new Set([
   "every picture",
+  // Records the picture's page position in the .aux file for `current page`
+  // and cross-picture node references; the renderer places pictures itself.
+  "remember picture",
   "behind path",
   "in front of path",
   "circle",
@@ -396,7 +405,7 @@ export const NON_STYLE_OPTION_FLAGS = new Set([
   "show background right"
 ]);
 
-export const PT_PER_CM = parseLength("1cm", "cm")!;
+export { PT_PER_CM };
 export const DEFAULT_TEXT_FONT_SIZE = 9.96264;
 export const FONT_SIZE_COMMAND_FACTORS: Record<string, number> = {
   "\\tiny": 0.5,

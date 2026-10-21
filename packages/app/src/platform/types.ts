@@ -1,6 +1,7 @@
 import type { LinkedTextReadResult, LinkedTextWriteResult } from "../linked-file-sync.js";
 import type { DocumentFileRef, FileRevision } from "../store/types.js";
 import type { AppMenuCommandId, AppMenuDefinition, AppMenuItem } from "../app-menu/index.js";
+import type { PlatformPresentationApi } from "../presentation/types.js";
 
 export type MenuCommandOrigin = "menu" | "shortcut" | "context-menu" | "platform";
 
@@ -44,6 +45,7 @@ export type PlatformFileApi = {
     | { status: "failed"; fileRef: DocumentFileRef | null; reason?: string }
   >;
   readLinkedText?: (fileRef: DocumentFileRef) => Promise<LinkedTextReadResult>;
+  readLocalAsset?: (path: string) => Promise<LocalAssetReadResult>;
   writeLinkedText?: (
     fileRef: DocumentFileRef,
     text: string,
@@ -51,9 +53,23 @@ export type PlatformFileApi = {
   ) => Promise<LinkedTextWriteResult>;
   syncLinkedFileWatches?: (fileRefs: readonly DocumentFileRef[]) => Promise<void> | void;
   bindLinkedFileChange?: (handler: (fileRef: DocumentFileRef) => void) => (() => void) | void;
+  syncLocalAssetWatches?: (paths: readonly string[]) => Promise<void> | void;
+  bindLocalAssetChange?: (handler: (path: string) => void) => (() => void) | void;
   exportFile?: (content: BlobPart[], options: { fileName: string; mimeType: string }) => Promise<boolean>;
   clearRecentFiles?: () => Promise<void>;
 };
+
+export type LocalAssetReadResult =
+  | {
+      status: "ok";
+      path: string;
+      bytesBase64: string;
+      size: number;
+      revision: string;
+      mtimeMs?: number;
+    }
+  | { status: "missing"; path?: string }
+  | { status: "failed"; reason?: string; path?: string };
 
 export type ArxivSourceFile = {
   path: string;
@@ -73,12 +89,12 @@ export type PlatformMenu = {
   dispatchCommand?: (commandId: AppMenuCommandId, origin?: MenuCommandOrigin) => void;
   syncNativeMenu?: (payload: {
     definition: AppMenuDefinition;
-    commandStates: Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>;
+    commandStates: Partial<Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>>;
     workspaceSignature?: string;
   }) => Promise<void> | void;
   showNativeContextMenu?: (payload: {
     items: readonly AppMenuItem[];
-    commandStates: Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>;
+    commandStates: Partial<Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>>;
     onCommandRun?: MenuCommandHandler;
   }) => Promise<void> | void;
 };
@@ -218,7 +234,7 @@ export type AssistantDynamicToolResult = {
   contentItems?: unknown[];
 };
 
-export type AssistantEvent =
+export type AssistantEvent = { sessionGeneration?: number } & (
   | { type: "thread-ready"; documentId: string; thread: AssistantThreadSummary }
   | { type: "thread-state"; documentId: string; state: AssistantThreadState }
   | { type: "turn-status"; documentId: string; turnId?: string; status: AssistantTurnStatus; error?: string | null }
@@ -233,7 +249,7 @@ export type AssistantEvent =
   | { type: "login-completed"; loginId: string | null; success: boolean; error?: string | null }
   | { type: "rate-limits-updated"; rateLimits: unknown }
   | { type: "dynamic-tool-call"; documentId: string; requestId: string; itemId?: string; tool: string; arguments?: unknown }
-  | { type: "error"; documentId?: string; message: string };
+  | { type: "error"; documentId?: string; message: string });
 
 export type CodexStatus = {
   installed: boolean;
@@ -247,6 +263,8 @@ export type UpdateInfo = {
   currentVersion: string;
   date?: string;
   body?: string;
+  /** Manual update package, used by portable distributions. */
+  downloadUrl?: string;
 };
 
 export type UpdateInstallProgress =
@@ -255,6 +273,9 @@ export type UpdateInstallProgress =
   | { type: "finished" };
 
 export type PlatformUpdateApi = {
+  getAutomaticUpdateChecks?: () => Promise<boolean>;
+  setAutomaticUpdateChecks?: (enabled: boolean) => Promise<void>;
+  resetAutomaticUpdateChecks?: () => Promise<boolean>;
   checkForUpdate: () => Promise<UpdateInfo | null>;
   installUpdate: (onProgress: (progress: UpdateInstallProgress) => void) => Promise<void>;
   relaunch: () => Promise<void>;
@@ -265,14 +286,17 @@ export type AssistantApi = {
   installCodex?: (method: "npm" | "brew" | "wsl") => Promise<string>;
   ensureDocumentThread?: (params: {
     documentId: string;
+    sessionGeneration?: number;
     source: string;
     threadId?: string | null;
     workspacePath?: string | null;
     figurePath?: string | null;
     previewPath?: string | null;
   }) => Promise<AssistantThreadSummary>;
+  resetDocumentThread?: (params: { documentId: string; sessionGeneration: number }) => Promise<void>;
   startTurn?: (params: {
     documentId: string;
+    sessionGeneration?: number;
     prompt: string;
     source: string;
     pngBase64?: string | null;
@@ -287,14 +311,15 @@ export type AssistantApi = {
   }) => Promise<{ turnId: string | null }>;
   steerTurn?: (params: {
     documentId: string;
+    sessionGeneration?: number;
     prompt: string;
     pastedImages?: AssistantPastedImage[];
   }) => Promise<{ turnId: string | null }>;
-  interruptTurn?: (params: { documentId: string }) => Promise<void>;
-  syncSource?: (params: { documentId: string; source: string }) => Promise<void>;
-  respondToApproval?: (params: { documentId: string; requestId: string; decision: string }) => Promise<void>;
-  respondToDynamicToolCall?: (params: { documentId: string; requestId: string; result: AssistantDynamicToolResult }) => Promise<void>;
-  loadThreadState?: (params: { documentId: string }) => Promise<AssistantThreadState | null>;
+  interruptTurn?: (params: { sessionGeneration?: number; documentId: string }) => Promise<void>;
+  syncSource?: (params: { sessionGeneration?: number; documentId: string; source: string }) => Promise<void>;
+  respondToApproval?: (params: { sessionGeneration?: number; documentId: string; requestId: string; decision: string }) => Promise<void>;
+  respondToDynamicToolCall?: (params: { sessionGeneration?: number; documentId: string; requestId: string; result: AssistantDynamicToolResult }) => Promise<void>;
+  loadThreadState?: (params: { sessionGeneration?: number; documentId: string }) => Promise<AssistantThreadState | null>;
   warmUp?: () => Promise<void>;
   listModels?: () => Promise<AssistantModelOption[]>;
   readAccountSnapshot?: () => Promise<AssistantAccountSnapshot | null>;
@@ -318,10 +343,31 @@ export type EditorPlatform = {
   assistant?: AssistantApi;
   updates?: PlatformUpdateApi;
   latex?: PlatformLatex;
+  presentation?: PlatformPresentationApi;
 };
 
 export type PlatformLatex = {
   checkAvailable: () => Promise<{ available: boolean; details: string }>;
-  compileTikzToSvg: (latexDocument: string) => Promise<string>;
+  compileTikzToSvg: (latexDocument: string, options?: { sourceDirectory?: string | null }) => Promise<string>;
   readLastCompileLog?: () => Promise<string>;
+  /**
+   * Compiles a whole document to PDF, keeping its auxiliary files per
+   * `buildKey` so that one compile's frame numbers, navigation and
+   * references feed the next. `marks` is the job's `.marks` file.
+   */
+  compileToPdf?: (latexDocument: string, options: LatexPdfCompileOptions) => Promise<LatexPdfCompileResult>;
+};
+
+export type LatexPdfCompileOptions = {
+  engine: "pdflatex" | "xelatex" | "lualatex";
+  sourceDirectory?: string | null;
+  buildKey: string;
+};
+
+export type LatexPdfCompileResult = {
+  pdf: Uint8Array;
+  marks: string;
+  log: string;
+  /** TeX reported errors; the PDF holds what it typeset regardless. */
+  hadErrors: boolean;
 };

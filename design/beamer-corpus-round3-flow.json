@@ -1,0 +1,1123 @@
+{
+  "formatVersion": 1,
+  "title": "Round 3 manual Beamer frame, title, overlay and package-box review",
+  "generatedAt": "2026-10-03T16:56:26.413Z",
+  "rendererFingerprint": "a9d884ddef821eec64195b5b39ae1a4faa775b1dc295174582c2334ce05c83c8",
+  "method": "Ten new downloaded-source frames were read manually, with native SVG/rsvg rasters and isolated authored-engine PDF/pdftoppm rasters. Original stock-Beamer reductions isolate five mechanisms. No renderer edits or builds. Exact comparison of the tracked fixtures is delegated to the combined followup gallery.",
+  "counts": {
+    "newCorpusFrames": 10,
+    "repositories": 3,
+    "actualSuccessfulNativePages": 13,
+    "nativeCorpusSvgStates": 12,
+    "nativeRasterStatesInspected": 12,
+    "nativeExceptionStates": 2,
+    "compiledCorpusReferencePages": 15,
+    "referenceRasterPagesInspected": 15,
+    "authorEngineReferencesWithoutFontAdaptation": 7,
+    "adaptedAuthorEngineReferences": 3,
+    "initialEngineMismatches": 3,
+    "initialActualEngineFontFailures": 3,
+    "resolvedActualEngineFontFailures": 3,
+    "remainingReferenceFailures": 0,
+    "derivedFixtureFrames": 11,
+    "derivedReferencePages": 15,
+    "derivedFixtureFiles": 4,
+    "strongCommonFeatureGaps": 5,
+    "expectedFailingDerivedFrames": 7,
+    "positiveControlFrames": 4,
+    "strictComparisonRun": false
+  },
+  "limitations": [
+    "Purposive sampling finds mechanisms; it does not estimate corpus-wide popularity or fidelity.",
+    "Every reference is an isolated selected frame with its source preamble. Earlier body-local settings, section/toc/navigation state, bibliography processing and deck-wide counters may differ. These full-source rasters are semantic/manual evidence, not exact glyph scores.",
+    "Two dl4nlp isolated builds provide an empty flags.tex as directed by the author preamble; the native source is unchanged.",
+    "Three Naereen2019 Makefiles select XeLaTeX. Initial pdfLaTeX renders were superseded. Actual-engine font failures were resolved using explicit paths to identical installed TeX Gyre Pagella faces and omitting unused Fira Code family/monofont declarations. These are adapted references, not unmodified author builds.",
+    "Native corpus fonts/themes include diagnosed Metropolis/Fira Sans substitution and unknown trigon/serif/professionalfonts components. The stock reductions avoid these confounders.",
+    "Native flow-05 throws on both states; its native page count is unknown. Counts do not substitute overlayStepCount for emitted pages.",
+    "Introduction frame23 was jointly reviewed with the tables agent and must count only once in the combined distinct-frame total.",
+    "The five groups are fidelity targets with exact page-count/text witnesses, not allowances for existing failures. Positive controls here mean successful rendering and visually correct feature behavior; strict geometry results remain pending."
+  ],
+  "reviewed": [
+    {
+      "id": "flow-00",
+      "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+      "commit": "5a60cd2392b29f12094fc1b5db53289da785164f",
+      "license": "CC-BY-SA-4.0",
+      "path": "latex/lecture01/dl4nlp2023-lecture01.tex",
+      "frame": 13,
+      "title": "Preliminary course roadmap",
+      "sourceSpan": {
+        "from": 6999,
+        "to": 7806
+      },
+      "spanCoordinateSystem": "Expanded current-source deck from loadCorpusSource, not raw authored-file offsets.",
+      "fullDeckSourceSha256": "4c4aac87fac574d23669931996fad6a01328ea694bb3f7a8310376d63cce3c47",
+      "frameSourceSha256": "d72c5c6cf8d4a7f898927be29ac91726aefd2199e22c769c2118f7f0e15fb738",
+      "sourceUrl": "https://github.com/dl4nlp-tuda/deep-learning-for-nlp-lectures/blob/5a60cd2392b29f12094fc1b5db53289da785164f/latex/lecture01/dl4nlp2023-lecture01.tex",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-00",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-00/source-frame.tex",
+      "nativeSvgStates": [
+        {
+          "step": 1,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-00/native-1.svg",
+          "raster": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-00/native-1.png",
+          "unsupportedItems": 1,
+          "svgLiteralSegments": 0
+        }
+      ],
+      "native": {
+        "pageCount": 1,
+        "overlayStepCount": 1,
+        "exceptionStates": []
+      },
+      "reference": {
+        "engine": "lualatex",
+        "status": "compiled",
+        "pageCount": 1,
+        "rasters": [
+          {
+            "page": 1,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-00/reference-1.png"
+          }
+        ],
+        "fontAdapted": false,
+        "engineEvidence": null
+      },
+      "contextWarnings": [
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "referenceHistory": [],
+      "observation": "The 14-item enumerate is replaced by a bounded unsupported card. Author TeX shows a compact roadmap. The stock shrink reduction independently demonstrates that native ignores shrink=20; the original whole-list fallback may also involve density or theme behavior.",
+      "findingIds": [
+        "frame-shrink"
+      ],
+      "jointlyReviewed": []
+    },
+    {
+      "id": "flow-01",
+      "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+      "commit": "5a60cd2392b29f12094fc1b5db53289da785164f",
+      "license": "CC-BY-SA-4.0",
+      "path": "latex/lecture03/dl4nlp2023-lecture03.tex",
+      "frame": 39,
+      "title": "(Online) Stochastic Gradient Descent",
+      "sourceSpan": {
+        "from": 26502,
+        "to": 27269
+      },
+      "spanCoordinateSystem": "Expanded current-source deck from loadCorpusSource, not raw authored-file offsets.",
+      "fullDeckSourceSha256": "14452dda5fcfda583a9ec918dba9d0ee45ee724330b472414fe34dd53b4af37a",
+      "frameSourceSha256": "ed52c865bc62ca7b0f082fa2238e0ea062370fd0ea8b13dcfc063797851f0b08",
+      "sourceUrl": "https://github.com/dl4nlp-tuda/deep-learning-for-nlp-lectures/blob/5a60cd2392b29f12094fc1b5db53289da785164f/latex/lecture03/dl4nlp2023-lecture03.tex",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-01",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-01/source-frame.tex",
+      "nativeSvgStates": [
+        {
+          "step": 1,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-01/native-1.svg",
+          "raster": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-01/native-1.png",
+          "unsupportedItems": 1,
+          "svgLiteralSegments": 0
+        }
+      ],
+      "native": {
+        "pageCount": 1,
+        "overlayStepCount": 1,
+        "exceptionStates": []
+      },
+      "reference": {
+        "engine": "lualatex",
+        "status": "compiled",
+        "pageCount": 1,
+        "rasters": [
+          {
+            "page": 1,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-01/reference-1.png"
+          }
+        ],
+        "fontAdapted": false,
+        "engineEvidence": null
+      },
+      "contextWarnings": [
+        "Created an empty flags.tex in oracle output, exactly as instructed by the source preamble, selecting ordinary presentation mode. Native source is unchanged.",
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "referenceHistory": [],
+      "observation": "The standard algpseudocode algorithmic environment is replaced by a bounded unsupported card, while following prose remains visible. TeX displays numbered and indented Function/While/State/Return content.",
+      "findingIds": [],
+      "jointlyReviewed": []
+    },
+    {
+      "id": "flow-02",
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "path": "Lectures/Introduction/main.tex",
+      "frame": 23,
+      "title": "Structural Indicators: Connections (Synergrid data )",
+      "sourceSpan": {
+        "from": 18028,
+        "to": 18719
+      },
+      "spanCoordinateSystem": "Expanded current-source deck from loadCorpusSource, not raw authored-file offsets.",
+      "fullDeckSourceSha256": "88396c9a8f2a0c2bbe3da0d9f53bb4fe086cf3a552be6ea2eef458ed16896bdb",
+      "frameSourceSha256": "5e59bea98bc992876ab01aa0a185836d6c1e663f692e0da4d6c8b3f582b7ca51",
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/Introduction/main.tex",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-02",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-02/source-frame.tex",
+      "nativeSvgStates": [
+        {
+          "step": 1,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-02/native-1.svg",
+          "raster": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-02/native-1.png",
+          "unsupportedItems": 0,
+          "svgLiteralSegments": 0
+        }
+      ],
+      "native": {
+        "pageCount": 1,
+        "overlayStepCount": 1,
+        "exceptionStates": []
+      },
+      "reference": {
+        "engine": "pdflatex",
+        "status": "compiled",
+        "pageCount": 1,
+        "rasters": [
+          {
+            "page": 1,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-02/reference-1.png"
+          }
+        ],
+        "fontAdapted": false,
+        "engineEvidence": null
+      },
+      "contextWarnings": [
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "referenceHistory": [],
+      "observation": "The framesubtitle text is absent natively. TeX shows the subtitle below the frame title and shifts the table/body accordingly. Table details were independently reviewed by the tables agent.",
+      "findingIds": [
+        "frame-subtitle"
+      ],
+      "jointlyReviewed": [
+        "tables review: Introduction frame23"
+      ]
+    },
+    {
+      "id": "flow-03",
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "path": "Lectures/Introduction/main.tex",
+      "frame": 33,
+      "title": "Sources of Electrical Energy in Belgium",
+      "sourceSpan": {
+        "from": 21686,
+        "to": 22325
+      },
+      "spanCoordinateSystem": "Expanded current-source deck from loadCorpusSource, not raw authored-file offsets.",
+      "fullDeckSourceSha256": "88396c9a8f2a0c2bbe3da0d9f53bb4fe086cf3a552be6ea2eef458ed16896bdb",
+      "frameSourceSha256": "fc7d982c7114b861741aa3ef66e0f46b2e646f8812ffdd98f13edb48ebaf77d8",
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/Introduction/main.tex",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-03",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-03/source-frame.tex",
+      "nativeSvgStates": [
+        {
+          "step": 1,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-03/native-1.svg",
+          "raster": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-03/native-1.png",
+          "unsupportedItems": 1,
+          "svgLiteralSegments": 0
+        }
+      ],
+      "native": {
+        "pageCount": 1,
+        "overlayStepCount": 1,
+        "exceptionStates": []
+      },
+      "reference": {
+        "engine": "pdflatex",
+        "status": "compiled",
+        "pageCount": 1,
+        "rasters": [
+          {
+            "page": 1,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-03/reference-1.png"
+          }
+        ],
+        "fontAdapted": false,
+        "engineEvidence": null
+      },
+      "contextWarnings": [
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "referenceHistory": [],
+      "observation": "Native replaces a basic titled tcolorbox and its itemize content with an unsupported card. TeX renders the blue frame, pale body fill, title and both items.",
+      "findingIds": [
+        "basic-tcolorbox"
+      ],
+      "jointlyReviewed": []
+    },
+    {
+      "id": "flow-04",
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "path": "Lectures/SSSA/main.tex",
+      "frame": 11,
+      "title": "Complex calculus",
+      "sourceSpan": {
+        "from": 9223,
+        "to": 9715
+      },
+      "spanCoordinateSystem": "Expanded current-source deck from loadCorpusSource, not raw authored-file offsets.",
+      "fullDeckSourceSha256": "5b8f43e5053bed4df191208524fb16207a8b7271508a12dca546f11bd6fdf9cd",
+      "frameSourceSha256": "4aa9943cde9c72f53dd59866d3c7c926fa398e3006e678e081ca648518beed15",
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/SSSA/main.tex",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-04",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-04/source-frame.tex",
+      "nativeSvgStates": [
+        {
+          "step": 1,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-04/native-1.svg",
+          "raster": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-04/native-1.png",
+          "unsupportedItems": 1,
+          "svgLiteralSegments": 2
+        }
+      ],
+      "native": {
+        "pageCount": 1,
+        "overlayStepCount": 1,
+        "exceptionStates": []
+      },
+      "reference": {
+        "engine": "pdflatex",
+        "status": "compiled",
+        "pageCount": 1,
+        "rasters": [
+          {
+            "page": 1,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-04/reference-1.png"
+          }
+        ],
+        "fontAdapted": false,
+        "engineEvidence": null
+      },
+      "contextWarnings": [
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "referenceHistory": [],
+      "observation": "Native displays unsupported tcolorbox content and literal display math. TeX shows the equations and standard Animation box. The package-box reduction isolates the box independently of these math commands.",
+      "findingIds": [
+        "basic-tcolorbox"
+      ],
+      "jointlyReviewed": []
+    },
+    {
+      "id": "flow-05",
+      "repository": "Naereen/slides",
+      "commit": "81ade12afe94aa3b3f263dfe4392888814c042ac",
+      "license": "MIT",
+      "path": "2017_12__Presentation_Inria_Lille_SequeL_Seminar/slides.tex",
+      "frame": 3,
+      "title": "Outline \\uncover<2>{and reference}",
+      "sourceSpan": {
+        "from": 9766,
+        "to": 10616
+      },
+      "spanCoordinateSystem": "Expanded current-source deck from loadCorpusSource, not raw authored-file offsets.",
+      "fullDeckSourceSha256": "eb470d7590e72c3219a0c0ef5fc254f35eb4620c821c56fd8e9c280823654eb3",
+      "frameSourceSha256": "49d9f2fdef438239471f4644cc7f1a74b27d7e766e721395691a86a22fbe32e4",
+      "sourceUrl": "https://github.com/Naereen/slides/blob/81ade12afe94aa3b3f263dfe4392888814c042ac/2017_12__Presentation_Inria_Lille_SequeL_Seminar/slides.tex",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-05",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-05/source-frame.tex",
+      "nativeSvgStates": [],
+      "native": {
+        "pageCount": null,
+        "overlayStepCount": 2,
+        "exceptionStates": [
+          {
+            "step": 1,
+            "message": "TeX vlist paragraph measurements are missing paragraph path 1."
+          },
+          {
+            "step": 2,
+            "message": "TeX vlist paragraph measurements are missing paragraph path 1."
+          }
+        ]
+      },
+      "reference": {
+        "engine": "pdflatex",
+        "status": "compiled",
+        "pageCount": 2,
+        "rasters": [
+          {
+            "page": 1,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-05/reference-1.png"
+          },
+          {
+            "page": 2,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-05/reference-2.png"
+          }
+        ],
+        "fontAdapted": false,
+        "engineEvidence": null
+      },
+      "contextWarnings": [
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "referenceHistory": [],
+      "observation": "Both native overlay attempts throw a missing-paragraph-path exception. TeX has two valid pages, a title suffix revealed on page2, and an invisible first enumerate item including its label. The stock invisible-list reduction shows a literal-command defect but does not reproduce the exception.",
+      "findingIds": [
+        "frame-title-overlays",
+        "invisible-default"
+      ],
+      "jointlyReviewed": []
+    },
+    {
+      "id": "flow-06",
+      "repository": "Naereen/slides",
+      "commit": "81ade12afe94aa3b3f263dfe4392888814c042ac",
+      "license": "MIT",
+      "path": "2019_06__About_Bernoulli_GLRTest__Seminar_at_PANAMA_IRISA_Rennes/slides.tex",
+      "frame": 11,
+      "title": "Regret of UCB and kl-UCB algorithms",
+      "sourceSpan": {
+        "from": 19644,
+        "to": 20882
+      },
+      "spanCoordinateSystem": "Expanded current-source deck from loadCorpusSource, not raw authored-file offsets.",
+      "fullDeckSourceSha256": "0e8a8af243e1121d91955351b0e04684bb4137af2f93b226ece002dff3569745",
+      "frameSourceSha256": "7119ceac095327d470b61e217a0ed621778b6a60fbb16a65e4189a303ccee903",
+      "sourceUrl": "https://github.com/Naereen/slides/blob/81ade12afe94aa3b3f263dfe4392888814c042ac/2019_06__About_Bernoulli_GLRTest__Seminar_at_PANAMA_IRISA_Rennes/slides.tex",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-06",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-06/source-frame.tex",
+      "nativeSvgStates": [
+        {
+          "step": 1,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-06/native-1.svg",
+          "raster": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-06/native-1.png",
+          "unsupportedItems": 0,
+          "svgLiteralSegments": 6
+        },
+        {
+          "step": 2,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-06/native-2.svg",
+          "raster": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-06/native-2.png",
+          "unsupportedItems": 0,
+          "svgLiteralSegments": 6
+        }
+      ],
+      "native": {
+        "pageCount": 2,
+        "overlayStepCount": 2,
+        "exceptionStates": []
+      },
+      "reference": {
+        "engine": "xelatex",
+        "status": "compiled",
+        "pageCount": 2,
+        "rasters": [
+          {
+            "page": 1,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-06/reference-1.png"
+          },
+          {
+            "page": 2,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-06/reference-2.png"
+          }
+        ],
+        "fontAdapted": true,
+        "engineEvidence": "2019_06__About_Bernoulli_GLRTest__Seminar_at_PANAMA_IRISA_Rennes/Makefile:17, latexmk -xelatex"
+      },
+      "contextWarnings": [
+        "Author Makefile selects XeLaTeX. Its system font lookup cannot find TeX Gyre Pagella; oracle resolves the identical installed TeX Gyre Pagella regular/bold/italic/bolditalic OTF files by explicit path. Native source is unchanged.",
+        "Fira Code is not installed. The selected frame and active chrome have no FiraCode/texttt/ttfamily/verb use; isolated oracle omits only its unused named-family and monofont declarations. Selected frame body and active body font are unchanged.",
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "referenceHistory": [
+        {
+          "engine": "pdflatex",
+          "status": "compiled",
+          "purpose": "Initial helper default, superseded after inspecting the author Makefile."
+        },
+        {
+          "engine": "xelatex",
+          "status": "failed",
+          "reason": "System font lookup could not find TeX Gyre Pagella; resolving the identical installed OTF faces then exposed missing Fira Code."
+        },
+        {
+          "engine": "xelatex",
+          "status": "compiled",
+          "adaptations": [
+            "Explicit path to identical installed TeX Gyre Pagella faces.",
+            "Omit unused Fira Code family/monofont declarations; selected frame and active chrome do not use them."
+          ]
+        }
+      ],
+      "observation": "The exampleblock<2-> visibility changes correctly between the two native states. Display math is painted as literal TeX and native theme/font diagnostics also apply. Author XeLaTeX shows the mathematical expressions inside green example blocks.",
+      "findingIds": [],
+      "jointlyReviewed": []
+    },
+    {
+      "id": "flow-07",
+      "repository": "Naereen/slides",
+      "commit": "81ade12afe94aa3b3f263dfe4392888814c042ac",
+      "license": "MIT",
+      "path": "2019_06__About_Bernoulli_GLRTest__Seminar_at_PANAMA_IRISA_Rennes/slides.tex",
+      "frame": 14,
+      "title": "Break-points and stationary sequences",
+      "sourceSpan": {
+        "from": 22597,
+        "to": 23470
+      },
+      "spanCoordinateSystem": "Expanded current-source deck from loadCorpusSource, not raw authored-file offsets.",
+      "fullDeckSourceSha256": "0e8a8af243e1121d91955351b0e04684bb4137af2f93b226ece002dff3569745",
+      "frameSourceSha256": "8b43e983fddb914104d39a2accfcc299f24b1b3994557004d17674e1e64f2ad4",
+      "sourceUrl": "https://github.com/Naereen/slides/blob/81ade12afe94aa3b3f263dfe4392888814c042ac/2019_06__About_Bernoulli_GLRTest__Seminar_at_PANAMA_IRISA_Rennes/slides.tex",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-07",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-07/source-frame.tex",
+      "nativeSvgStates": [
+        {
+          "step": 1,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-07/native-1.svg",
+          "raster": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-07/native-1.png",
+          "unsupportedItems": 0,
+          "svgLiteralSegments": 62
+        },
+        {
+          "step": 2,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-07/native-2.svg",
+          "raster": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-07/native-2.png",
+          "unsupportedItems": 0,
+          "svgLiteralSegments": 62
+        }
+      ],
+      "native": {
+        "pageCount": 2,
+        "overlayStepCount": 2,
+        "exceptionStates": []
+      },
+      "reference": {
+        "engine": "xelatex",
+        "status": "compiled",
+        "pageCount": 2,
+        "rasters": [
+          {
+            "page": 1,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-07/reference-1.png"
+          },
+          {
+            "page": 2,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-07/reference-2.png"
+          }
+        ],
+        "fontAdapted": true,
+        "engineEvidence": "2019_06__About_Bernoulli_GLRTest__Seminar_at_PANAMA_IRISA_Rennes/Makefile:17, latexmk -xelatex"
+      },
+      "contextWarnings": [
+        "Author Makefile selects XeLaTeX. Its system font lookup cannot find TeX Gyre Pagella; oracle resolves the identical installed TeX Gyre Pagella regular/bold/italic/bolditalic OTF files by explicit path. Native source is unchanged.",
+        "Fira Code is not installed. The selected frame and active chrome have no FiraCode/texttt/ttfamily/verb use; isolated oracle omits only its unused named-family and monofont declarations. Selected frame body and active body font are unchanged.",
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "referenceHistory": [
+        {
+          "engine": "pdflatex",
+          "status": "compiled",
+          "purpose": "Initial helper default, superseded after inspecting the author Makefile."
+        },
+        {
+          "engine": "xelatex",
+          "status": "failed",
+          "reason": "System font lookup could not find TeX Gyre Pagella; resolving the identical installed OTF faces then exposed missing Fira Code."
+        },
+        {
+          "engine": "xelatex",
+          "status": "compiled",
+          "adaptations": [
+            "Explicit path to identical installed TeX Gyre Pagella faces.",
+            "Omit unused Fira Code family/monofont declarations; selected frame and active chrome do not use them."
+          ]
+        }
+      ],
+      "observation": "The block<2-> visibility changes correctly between the two native states. Math commands and expanded tightlist declarations are painted literally. Author XeLaTeX shows ordinary math and lists; the list-register boundary is owned by the text agent.",
+      "findingIds": [],
+      "jointlyReviewed": []
+    },
+    {
+      "id": "flow-08",
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "path": "Lectures/SSSA/main.tex",
+      "frame": 4,
+      "title": "Power in perspective: The cyclist vs. the toaster",
+      "sourceSpan": {
+        "from": 3036,
+        "to": 3715
+      },
+      "spanCoordinateSystem": "Expanded current-source deck from loadCorpusSource, not raw authored-file offsets.",
+      "fullDeckSourceSha256": "5b8f43e5053bed4df191208524fb16207a8b7271508a12dca546f11bd6fdf9cd",
+      "frameSourceSha256": "b171cfe7ad4a6817eb3fe2940829cf0353e0008d74c18c87f86934f7c2542466",
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/SSSA/main.tex",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-08",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-08/source-frame.tex",
+      "nativeSvgStates": [
+        {
+          "step": 1,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-08/native-1.svg",
+          "raster": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-08/native-1.png",
+          "unsupportedItems": 1,
+          "svgLiteralSegments": 0
+        }
+      ],
+      "native": {
+        "pageCount": 1,
+        "overlayStepCount": 1,
+        "exceptionStates": []
+      },
+      "reference": {
+        "engine": "pdflatex",
+        "status": "compiled",
+        "pageCount": 1,
+        "rasters": [
+          {
+            "page": 1,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-08/reference-1.png"
+          }
+        ],
+        "fontAdapted": false,
+        "engineEvidence": null
+      },
+      "contextWarnings": [
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "referenceHistory": [],
+      "observation": "A center environment containing a basic titled tcolorbox and adjacent prose becomes one unsupported card. Author TeX paints the prose, colored box, body line break and link.",
+      "findingIds": [
+        "basic-tcolorbox"
+      ],
+      "jointlyReviewed": []
+    },
+    {
+      "id": "flow-09",
+      "repository": "Naereen/slides",
+      "commit": "81ade12afe94aa3b3f263dfe4392888814c042ac",
+      "license": "MIT",
+      "path": "2019_05__Audition_AGPR__ENS_de_Rennes/slides.tex",
+      "frame": 28,
+      "title": "Mon projet de recherche \\only<2->{à l'IRISA}",
+      "sourceSpan": {
+        "from": 49771,
+        "to": 51335
+      },
+      "spanCoordinateSystem": "Expanded current-source deck from loadCorpusSource, not raw authored-file offsets.",
+      "fullDeckSourceSha256": "03e72e5ce0453f5025d25a9bb6c920675113c15b2d7227d8a4ac2f2c27ce3591",
+      "frameSourceSha256": "5161e6f2c40da94f86a769871654f05839dd794c6a159c0b082216fc68b81434",
+      "sourceUrl": "https://github.com/Naereen/slides/blob/81ade12afe94aa3b3f263dfe4392888814c042ac/2019_05__Audition_AGPR__ENS_de_Rennes/slides.tex",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-09",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-09/source-frame.tex",
+      "nativeSvgStates": [
+        {
+          "step": 1,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-09/native-1.svg",
+          "raster": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-09/native-1.png",
+          "unsupportedItems": 0,
+          "svgLiteralSegments": 30
+        },
+        {
+          "step": 3,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-09/native-3.svg",
+          "raster": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-09/native-3.png",
+          "unsupportedItems": 0,
+          "svgLiteralSegments": 30
+        }
+      ],
+      "native": {
+        "pageCount": 3,
+        "overlayStepCount": 3,
+        "exceptionStates": []
+      },
+      "reference": {
+        "engine": "xelatex",
+        "status": "compiled",
+        "pageCount": 3,
+        "rasters": [
+          {
+            "page": 1,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-09/reference-1.png"
+          },
+          {
+            "page": 2,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-09/reference-2.png"
+          },
+          {
+            "page": 3,
+            "path": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/flow-09/reference-3.png"
+          }
+        ],
+        "fontAdapted": true,
+        "engineEvidence": "2019_05__Audition_AGPR__ENS_de_Rennes/Makefile:17, latexmk -xelatex"
+      },
+      "contextWarnings": [
+        "Author Makefile selects XeLaTeX. Its system font lookup cannot find TeX Gyre Pagella; oracle resolves the identical installed TeX Gyre Pagella regular/bold/italic/bolditalic OTF files by explicit path. Native source is unchanged.",
+        "Fira Code is not installed. The selected frame and active chrome have no FiraCode/texttt/ttfamily/verb use; isolated oracle omits only its unused named-family and monofont declarations. Selected frame body and active body font are unchanged.",
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "referenceHistory": [
+        {
+          "engine": "pdflatex",
+          "status": "compiled",
+          "purpose": "Initial helper default, superseded after inspecting the author Makefile."
+        },
+        {
+          "engine": "xelatex",
+          "status": "failed",
+          "reason": "System font lookup could not find TeX Gyre Pagella; resolving the identical installed OTF faces then exposed missing Fira Code."
+        },
+        {
+          "engine": "xelatex",
+          "status": "compiled",
+          "adaptations": [
+            "Explicit path to identical installed TeX Gyre Pagella faces.",
+            "Omit unused Fira Code family/monofont declarations; selected frame and active chrome do not use them."
+          ]
+        }
+      ],
+      "observation": "Native reveals body content over three states, but paints the title only<2-> command literally and always includes its suffix. Author XeLaTeX omits the suffix on page1 and includes it on pages2 and3.",
+      "findingIds": [
+        "frame-title-overlays"
+      ],
+      "jointlyReviewed": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "frame-shrink",
+      "fixtureIds": [
+        "flow-shrink-explicit",
+        "flow-shrink-control"
+      ],
+      "corpusFrames": [
+        "flow-00"
+      ],
+      "mechanism": "Built-in shrink=20 selects a minimum 20% frame-box reduction, cramped list spacing and top placement. Native short-list body geometry is identical to the unsized control.",
+      "expected": "Apply the Beamer shrink factor and cramped list glue, scaling the complete frame body and choosing a further reduction when needed to fit.",
+      "primarySource": "beamerbaseframesize.sty23-41 (shrink key),156-180 (shrinkframebox).",
+      "witness": "Stock reduction: both native body bounds are x28.452756,y98.814167,width307.289764,height65.49075pt; TeX shrink raster scales the list and places it near the frame top."
+    },
+    {
+      "id": "frame-subtitle",
+      "fixtureIds": [
+        "flow-subtitle-command",
+        "flow-subtitle-header",
+        "flow-subtitle-control"
+      ],
+      "corpusFrames": [
+        "flow-02"
+      ],
+      "mechanism": "The scanner stores the frame subtitle, but the renderer omits the subtitle row for ordinary frames. Both command and frame-header argument forms reproduce the gap.",
+      "expected": "Paint the ordinary frame subtitle with its stock font/color/spacing and include its height in the title/body geometry.",
+      "primarySource": "beamerbaselocalstructure.sty frametitle/framesubtitle definitions; beamerouterthemedefault.sty frametitle template.",
+      "witness": "Stock TeX shows Connections and annual growth under Grid connections; native shows only the title and uses the same body geometry as the no-subtitle control."
+    },
+    {
+      "id": "frame-title-overlays",
+      "fixtureIds": [
+        "flow-title-uncover",
+        "flow-title-only"
+      ],
+      "corpusFrames": [
+        "flow-05",
+        "flow-09"
+      ],
+      "mechanism": "Body overlays determine two native pages, but overlay-bearing title text is passed to ordinary text lowering and paints the command literally instead of projecting its visibility.",
+      "expected": "Evaluate stock only/uncover overlay commands inside ordinary frame titles for each page, preserving their respective space reservation semantics.",
+      "primarySource": "beamerbaseoverlay.sty only/uncover definitions and beamerbaseframe.sty frame-title preparation.",
+      "witness": "Native stock title text remains Outline \\uncover<2>and reference or Research \\only<2>at the institute on both pages. TeX reveals the suffix only on page2."
+    },
+    {
+      "id": "invisible-default",
+      "fixtureIds": [
+        "flow-invisible-default",
+        "flow-environment-overlay-control"
+      ],
+      "corpusFrames": [
+        "flow-05"
+      ],
+      "mechanism": "Stock invisible accepts omitted overlay syntax and hides its content. Native prints the command literally; inside a Beamer list the TeX label is hidden with the invisible item.",
+      "expected": "Project implicit invisible content with correct retained geometry and list-label visibility, without painting source. Preserve the passing stock block environment overlay behavior.",
+      "primarySource": "beamerbaseoverlay.sty590-592 declares invisible with default overlay syntax, selecting reallyinvisible/fakeinvisible.",
+      "witness": "The stock reduction compiles to two pages and has no native exception. TeX hides Introduction and label1 on both; native prints \\invisible{Introduction} and label1."
+    },
+    {
+      "id": "basic-tcolorbox",
+      "fixtureIds": [
+        "flow-basic-tcolorbox",
+        "flow-stock-block-control"
+      ],
+      "corpusFrames": [
+        "flow-03",
+        "flow-04",
+        "flow-08"
+      ],
+      "mechanism": "A standard tcolorbox with colback/colframe/title and an ordinary itemize body is recognized as unsupported flow. No custom command, package skin or library is needed.",
+      "expected": "Support the basic package environment, box dimensions/padding, title and body colors/border, and ordinary supported body content. Start with this bounded package scope before advanced skins.",
+      "primarySource": "tcolorbox.sty basic environment/options and tcbdrawing.code.tex drawing backend.",
+      "witness": "Native emits one bounded unsupported card, whereas TeX paints the title, both list items and a blue framed/pale-filled box. The ordinary Beamer block control preserves the same supported text."
+    }
+  ],
+  "manifestEntries": [
+    {
+      "id": "flow-shrink-control",
+      "file": "flow-frame-options.tex",
+      "frame": 1,
+      "family": "frame-sizing",
+      "pages": 1,
+      "oracleText": [
+        "Roadmap",
+        "First",
+        "Second",
+        "Third",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "flow-shrink-explicit",
+      "file": "flow-frame-options.tex",
+      "frame": 2,
+      "family": "frame-sizing",
+      "pages": 1,
+      "oracleText": [
+        "Roadmap",
+        "First",
+        "Second",
+        "Third",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "flow-subtitle-control",
+      "file": "flow-titles.tex",
+      "frame": 1,
+      "family": "frame-titles",
+      "pages": 1,
+      "oracleText": [
+        "Grid",
+        "short"
+      ]
+    },
+    {
+      "id": "flow-subtitle-command",
+      "file": "flow-titles.tex",
+      "frame": 2,
+      "family": "frame-titles",
+      "pages": 1,
+      "oracleText": [
+        "Grid",
+        "Connections",
+        "growth",
+        "short"
+      ]
+    },
+    {
+      "id": "flow-subtitle-header",
+      "file": "flow-titles.tex",
+      "frame": 3,
+      "family": "frame-titles",
+      "pages": 1,
+      "oracleText": [
+        "Grid",
+        "Connections",
+        "growth",
+        "short"
+      ]
+    },
+    {
+      "id": "flow-title-uncover",
+      "file": "flow-titles.tex",
+      "frame": 4,
+      "family": "frame-title-overlays",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "Outline",
+          "Fixed"
+        ],
+        [
+          "Outline",
+          "reference",
+          "Second"
+        ]
+      ]
+    },
+    {
+      "id": "flow-title-only",
+      "file": "flow-titles.tex",
+      "frame": 5,
+      "family": "frame-title-overlays",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "Research",
+          "Fixed"
+        ],
+        [
+          "Research",
+          "institute",
+          "Second"
+        ]
+      ]
+    },
+    {
+      "id": "flow-invisible-default",
+      "file": "flow-overlay-defaults.tex",
+      "frame": 1,
+      "family": "overlay-defaults",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "Outline",
+          "Second"
+        ],
+        [
+          "Outline",
+          "Second",
+          "Later"
+        ]
+      ]
+    },
+    {
+      "id": "flow-environment-overlay-control",
+      "file": "flow-overlay-defaults.tex",
+      "frame": 2,
+      "family": "environment-overlays",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "Hypotheses",
+          "Always"
+        ],
+        [
+          "Hypotheses",
+          "Always",
+          "Later",
+          "First",
+          "Second"
+        ]
+      ]
+    },
+    {
+      "id": "flow-basic-tcolorbox",
+      "file": "flow-package-boxes.tex",
+      "frame": 1,
+      "family": "package-boxes",
+      "pages": 1,
+      "oracleText": [
+        "Checks",
+        "Check",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "flow-stock-block-control",
+      "file": "flow-package-boxes.tex",
+      "frame": 2,
+      "family": "package-boxes",
+      "pages": 1,
+      "oracleText": [
+        "Checks",
+        "Check",
+        "First",
+        "Second"
+      ]
+    }
+  ],
+  "fixtureValidationArtifact": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/fixtures/results.json",
+  "fixtureValidation": [
+    {
+      "file": "flow-frame-options.tex",
+      "frames": 2,
+      "nativePages": 2,
+      "referenceStatus": "compiled",
+      "referencePages": 2
+    },
+    {
+      "file": "flow-titles.tex",
+      "frames": 5,
+      "nativePages": 7,
+      "referenceStatus": "compiled",
+      "referencePages": 7
+    },
+    {
+      "file": "flow-overlay-defaults.tex",
+      "frames": 2,
+      "nativePages": 4,
+      "referenceStatus": "compiled",
+      "referencePages": 4
+    },
+    {
+      "file": "flow-package-boxes.tex",
+      "frames": 2,
+      "nativePages": 2,
+      "referenceStatus": "compiled",
+      "referencePages": 2
+    }
+  ],
+  "deferred": [
+    {
+      "id": "algorithmic-package",
+      "corpusFrames": [
+        "flow-01"
+      ],
+      "reason": "This is a standard algpseudocode environment, not an author hack. Track as unsupported-environment recognition/package implementation work separately from the five current geometry/visibility groups."
+    },
+    {
+      "id": "original-paragraph-path-exception",
+      "corpusFrames": [
+        "flow-05"
+      ],
+      "reason": "Keep the source and error evidence. A stock invisible-list reduction does not reproduce the crash, so no crash fixture claim is made."
+    },
+    {
+      "id": "small-display-environments",
+      "corpusFrames": [
+        "flow-06"
+      ],
+      "reason": "Independent stock small+display and small+align controls pass. Math command lowering, not the font environment alone, explains the observed literals; delegated to the math/text review."
+    },
+    {
+      "id": "pre-item-list-registers",
+      "corpusFrames": [
+        "flow-07"
+      ],
+      "reason": "Expanded tightlist/list declarations paint literally. Text agent owns the generic pre-item declaration reduction."
+    },
+    {
+      "id": "overlayarea-squeeze",
+      "corpusFrames": [],
+      "reason": "No actual overlayarea or squeeze-option occurrence was found in this corpus search; no invented source provenance."
+    }
+  ],
+  "initialStrictSuite": {
+    "completedAt": "2026-10-03T17:07:08.488Z",
+    "rendererFingerprint": "a9d884ddef821eec64195b5b39ae1a4faa775b1dc295174582c2334ce05c83c8",
+    "cases": 11,
+    "snapshots": 15,
+    "passed": 2,
+    "mismatches": 9,
+    "invalidOracles": 0,
+    "exceptions": 0,
+    "results": [
+      {
+        "id": "flow-shrink-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "flow-shrink-explicit",
+        "status": "mismatch",
+        "failures": [
+          "State 1: maxAbsoluteGlyphDyPt=91.392348 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "flow-subtitle-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "flow-subtitle-command",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=1 (expected 0)",
+          "State 1: maxAbsoluteGlyphDyPt=7.200057 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "flow-subtitle-header",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=1 (expected 0)",
+          "State 1: maxAbsoluteGlyphDyPt=7.200057 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "flow-title-uncover",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=1 (expected 0)",
+          "State 1: unmatchedOracleTextLines=1 (expected 0)",
+          "State 2: unmatchedNativeTextLines=1 (expected 0)",
+          "State 2: unmatchedOracleTextLines=1 (expected 0)"
+        ]
+      },
+      {
+        "id": "flow-title-only",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=1 (expected 0)",
+          "State 1: unmatchedOracleTextLines=1 (expected 0)",
+          "State 2: unmatchedNativeTextLines=1 (expected 0)",
+          "State 2: unmatchedOracleTextLines=1 (expected 0)"
+        ]
+      },
+      {
+        "id": "flow-invisible-default",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=1 (expected 0)",
+          "State 1: unmatchedOracleTextLines=1 (expected 0)",
+          "State 2: unmatchedNativeTextLines=1 (expected 0)",
+          "State 2: unmatchedOracleTextLines=1 (expected 0)"
+        ]
+      },
+      {
+        "id": "flow-environment-overlay-control",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=3 (expected 0)",
+          "State 1: maxAbsoluteGlyphDyPt=2.399943 (maximum 0.01)",
+          "State 2: maxAbsoluteGlyphDyPt=2.399943 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "flow-basic-tcolorbox",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=5 (expected 0)"
+        ]
+      },
+      {
+        "id": "flow-stock-block-control",
+        "status": "mismatch",
+        "failures": [
+          "State 1: maxAbsoluteGlyphDyPt=2.399947 (maximum 0.01)"
+        ]
+      }
+    ]
+  },
+  "additionalControlFindings": [
+    {
+      "id": "stock-block-list-boundary-glue",
+      "fixtureIds": [
+        "flow-stock-block-control",
+        "flow-environment-overlay-control"
+      ],
+      "observation": "Opening and closing list glue each3pt are dropped, giving centered title/prose+2.4pt and body rows-.6pt. Hidden-space reservation is correct; covered-text matching fails because of this geometry.",
+      "diagnosis": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/controls-diagnosis.json"
+    }
+  ]
+}

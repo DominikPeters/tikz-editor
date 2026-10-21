@@ -1,0 +1,376 @@
+@top TexDocument { DocumentItem* }
+@top TexFragment { FragmentItem* }
+@top TexMathFragment { MathItem* }
+
+@dialects { beamer }
+
+@precedence {
+  knownCommand,
+  genericCommand
+}
+
+DocumentItem { TexItem }
+FragmentItem { TexItem }
+
+TexItem {
+  Comment |
+  OpaqueEnvironment |
+  MathEnvironment |
+  Environment |
+  DisplayMath |
+  InlineMath |
+  IncludeGraphicsCommand |
+  Definition |
+  GenericCommand |
+  Group |
+  OptionalArgument |
+  OverlaySpecification |
+  Whitespace |
+  Text
+}
+
+// A definition's body is not run where it stands, so it may begin an
+// environment that another body or definition ends:
+// `\newenvironment{x}{\begin{frame}}{\end{frame}}`.
+Definition {
+  EnvironmentDefinitionCmd Star? OverlaySpecification? DefinitionGap Group DefinitionArguments DefinitionBody DefinitionGap DefinitionBody |
+  CommandDefinitionCmd Star? OverlaySpecification? DefinitionGap (Group | ControlSequence) DefinitionArguments DefinitionBody
+}
+
+DefinitionGap { (Whitespace | Comment)* }
+
+DefinitionArguments { (DefinitionGap OptionalArgument)* DefinitionGap }
+
+DefinitionBody {
+  "{" DefinitionItem* "}"
+}
+
+// Within a body an environment's begin and end stand alone, paired or not.
+DefinitionItem {
+  Comment |
+  OpaqueEnvironment |
+  DisplayMath |
+  InlineMath |
+  IncludeGraphicsCommand |
+  Definition |
+  GenericCommand |
+  Group |
+  OptionalArgument |
+  OverlaySpecification |
+  Whitespace |
+  Text |
+  BeginEnvironment |
+  EndEnvironment |
+  BeginMathEnvironment |
+  EndMathEnvironment
+}
+
+OpaqueEnvironment {
+  OpaqueEnvironmentToken |
+  UnterminatedOpaqueEnvironmentToken MissingOpaqueEnvironmentEnd
+}
+
+Environment {
+  BeginEnvironment TexItem* EndEnvironment
+}
+
+BeginEnvironment {
+  BeginCommand EnvironmentNameLike "}"
+}
+
+EndEnvironment {
+  EndCommand EnvironmentNameLike "}"
+}
+
+EnvironmentNameLike {
+  EnvironmentName
+}
+
+EnvironmentName {
+  WordToken Star?
+}
+
+MathEnvironment {
+  BeginMathEnvironment MathItem* EndMathEnvironment
+}
+
+BeginMathEnvironment {
+  BeginCommand MathEnvironmentName Star? "}"
+}
+
+EndMathEnvironment {
+  EndCommand MathEnvironmentName Star? "}"
+}
+
+IncludeGraphicsCommand {
+  IncludeGraphicsCmd Star? OverlaySpecification? OptionalArgument* Group
+}
+
+GenericCommand {
+  ControlSequence
+}
+
+Group {
+  "{" TexItem* "}"
+}
+
+OptionalArgument {
+  "[" OptionalItem* "]"
+}
+
+OptionalItem {
+  Comment |
+  DisplayMath |
+  InlineMath |
+  GenericCommand |
+  Group |
+  OptionalArgument |
+  OverlaySpecification |
+  Whitespace |
+  Text
+}
+
+OverlaySpecification {
+  OverlayOpen OverlayItem* OverlayClose
+}
+
+OverlayItem {
+  GenericCommand |
+  Group |
+  Whitespace |
+  Text
+}
+
+InlineMath {
+  Dollar MathItem* Dollar |
+  InlineMathOpen MathItem* InlineMathClose
+}
+
+DisplayMath {
+  DoubleDollar MathItem* DoubleDollar |
+  DisplayMathOpen MathItem* DisplayMathClose
+}
+
+MathItem {
+  Comment |
+  MathEnvironment |
+  MathTextCommand |
+  MathCommand |
+  MathGroup |
+  MathScript |
+  AlignmentTab |
+  MathSpace |
+  MathNumber |
+  MathIdentifier |
+  MathOperator |
+  MathPunctuation
+}
+
+MathTextCommand {
+  MathTextCmd !knownCommand Star? OptionalArgument* Group
+}
+
+MathCommand {
+  ControlSequence !genericCommand
+}
+
+MathGroup {
+  "{" MathItem* "}"
+}
+
+MathScript {
+  (Superscript | Subscript) MathScriptArgument
+}
+
+MathScriptArgument {
+  MathGroup |
+  MathCommand |
+  MathNumber |
+  MathIdentifier |
+  MathOperator
+}
+
+MathSpace { Whitespace }
+MathNumber { NumberToken }
+MathIdentifier { WordToken | OtherTextToken }
+MathOperator { OperatorToken | Star | AngleText }
+MathPunctuation { "(" | ")" | "[" | "]" | PunctuationToken }
+
+Text {
+  WordToken |
+  NumberToken |
+  OperatorToken |
+  PunctuationToken |
+  "(" |
+  ")" |
+  OtherTextToken |
+  AngleText |
+  Star |
+  Superscript |
+  Subscript |
+  AlignmentTab
+}
+
+ControlSequence {
+  ControlWord |
+  ControlSymbol |
+  MathTextCmd |
+  BeamerSectionCmd |
+  BeamerFrameCmd |
+  BeamerOverlayCmd
+}
+
+IncludeGraphicsCmd {
+  @specialize<ControlWord, "\\includegraphics">
+}
+
+MathTextCmd {
+  @specialize<ControlWord, "\\intertext"> |
+  @specialize<ControlWord, "\\text"> |
+  @specialize<ControlWord, "\\textrm"> |
+  @specialize<ControlWord, "\\textsf"> |
+  @specialize<ControlWord, "\\texttt"> |
+  @specialize<ControlWord, "\\textnormal"> |
+  @specialize<ControlWord, "\\textbf"> |
+  @specialize<ControlWord, "\\textmd"> |
+  @specialize<ControlWord, "\\textit"> |
+  @specialize<ControlWord, "\\textsl"> |
+  @specialize<ControlWord, "\\textsc"> |
+  @specialize<ControlWord, "\\mbox"> |
+  @specialize<ControlWord, "\\hbox">
+}
+
+BeamerSectionCmd {
+  BeamerPartCmd |
+  BeamerSectionLevelCmd |
+  BeamerSubsectionCmd |
+  BeamerSubsubsectionCmd
+}
+
+BeamerFrameCmd {
+  BeamerFrameStartCmd |
+  BeamerFrameTitleCmd |
+  BeamerFrameSubtitleCmd
+}
+
+BeamerOverlayCmd {
+  BeamerOnlyCmd |
+  BeamerUncoverCmd |
+  BeamerVisibleCmd |
+  BeamerInvisibleCmd |
+  BeamerAltCmd |
+  BeamerTemporalCmd |
+  BeamerOnslideCmd |
+  BeamerPauseCmd
+}
+
+MathEnvironmentName {
+  MathEnvironmentWord
+}
+
+// Definition commands are keywords only where a definition can stand: in an
+// argument or in math they are ordinary commands.
+@external specialize { ControlWord } definitionCommand from "./definition-commands.js" {
+  EnvironmentDefinitionCmd,
+  CommandDefinitionCmd
+}
+
+// The names of math environments are keywords only where an environment is
+// named: elsewhere `math`, `array` or `cases` is a word of the text.
+@external specialize { WordToken } mathEnvironmentName from "./math-environment-names.js" {
+  MathEnvironmentWord
+}
+
+@external tokens opaqueEnvironmentTokens from "./opaque-tokens.js" {
+  OpaqueEnvironmentToken
+  UnterminatedOpaqueEnvironmentToken
+  MissingOpaqueEnvironmentEnd
+}
+
+@external tokens overlayTokens from "./overlay-tokens.js" {
+  OverlayOpen[@dialect=beamer]
+  OverlayClose[@dialect=beamer]
+}
+
+@external tokens mathDelimiterTokens from "./math-delimiter-tokens.js" {
+  Dollar
+  DoubleDollar
+}
+
+@tokens {
+  @precedence {
+    BeginCommand,
+    EndCommand,
+    BeamerPartCmd,
+    BeamerSubsubsectionCmd,
+    BeamerSubsectionCmd,
+    BeamerSectionLevelCmd,
+    BeamerFrameSubtitleCmd,
+    BeamerFrameTitleCmd,
+    BeamerFrameStartCmd,
+    BeamerOnlyCmd,
+    BeamerUncoverCmd,
+    BeamerVisibleCmd,
+    BeamerInvisibleCmd,
+    BeamerAltCmd,
+    BeamerTemporalCmd,
+    BeamerOnslideCmd,
+    BeamerPauseCmd,
+    InlineMathOpen,
+    InlineMathClose,
+    DisplayMathOpen,
+    DisplayMathClose,
+    ControlWord,
+    ControlSymbol,
+    Comment,
+    Whitespace,
+    NumberToken,
+    WordToken,
+    OperatorToken,
+    PunctuationToken,
+    AngleText,
+    OtherTextToken
+  }
+
+  Comment { "%" ![\n\r]* }
+  Whitespace { $[ \t\n\r]+ }
+
+  BeginCommand { "\\begin{" }
+  EndCommand { "\\end{" }
+
+  BeamerPartCmd[@dialect=beamer] { "\\part" }
+  BeamerSectionLevelCmd[@dialect=beamer] { "\\section" }
+  BeamerSubsectionCmd[@dialect=beamer] { "\\subsection" }
+  BeamerSubsubsectionCmd[@dialect=beamer] { "\\subsubsection" }
+  BeamerFrameStartCmd[@dialect=beamer] { "\\frame" }
+  BeamerFrameTitleCmd[@dialect=beamer] { "\\frametitle" }
+  BeamerFrameSubtitleCmd[@dialect=beamer] { "\\framesubtitle" }
+  BeamerOnlyCmd[@dialect=beamer] { "\\only" }
+  BeamerUncoverCmd[@dialect=beamer] { "\\uncover" }
+  BeamerVisibleCmd[@dialect=beamer] { "\\visible" }
+  BeamerInvisibleCmd[@dialect=beamer] { "\\invisible" }
+  BeamerAltCmd[@dialect=beamer] { "\\alt" }
+  BeamerTemporalCmd[@dialect=beamer] { "\\temporal" }
+  BeamerOnslideCmd[@dialect=beamer] { "\\onslide" }
+  BeamerPauseCmd[@dialect=beamer] { "\\pause" }
+
+  ControlWord { "\\" $[A-Za-z@]+ }
+  ControlSymbol { "\\" ![A-Za-z@\n\r] }
+
+  InlineMathOpen { "\\(" }
+  InlineMathClose { "\\)" }
+  DisplayMathOpen { "\\[" }
+  DisplayMathClose { "\\]" }
+
+  Star { "*" }
+  Superscript { "^" }
+  Subscript { "_" }
+  AlignmentTab { "&" }
+
+  NumberToken { $[0-9]+ ("." $[0-9]+)? }
+  WordToken { $[A-Za-z]+ }
+  OperatorToken { $[+\-/=|:!.;?]+ }
+  PunctuationToken { $['"`,]+ }
+  AngleText { "<" | ">" }
+  OtherTextToken { ![-A-Za-z0-9\\{}$%[\]<> \t\n\r*^_&+/=|:!,.;?()'"`]+ }
+}

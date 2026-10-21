@@ -1,3 +1,8 @@
+import { requireDefined } from "../utils/invariants.js";
+import { ADORNMENT_EDIT_NOOP_REASON } from "./actions/adornment-set-property.js";
+import { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-node-actions.js";
+import type { EditGeometrySession } from "./geometry-session.js";
+import { advanceIdentityMoves, collectIdentitySpans, geometryIdentityMoves, type IdentityMove } from "./identity-provenance.js";
 import type {
   EditHandle,
   EvaluateOptions
@@ -6,7 +11,7 @@ import type { WorldPoint, WorldBounds } from "../coords/points.js";
 import type { NodeItem, PathItem, PathStatement, Statement, Span } from "../ast/types.js";
 import type { SourcePatch } from "./types.js";
 import { applyEditIntent } from "./apply.js";
-import { replaceSpan } from "./patch.js";
+import { computeMinimalReplacementPatch, replaceSpan } from "./patch.js";
 import { PT_PER_CM, type DragFormatPrecision } from "./format.js";
 import {
   generateElementSource,
@@ -14,7 +19,7 @@ import {
   type AnchorReference,
   type ElementTemplate
 } from "./element-templates.js";
-import { resolvePropertyTarget } from "./property-target.js";
+import { changedSourceIdsForPropertyTarget, resolvePropertyTarget } from "./property-target.js";
 import type { AlignMode, DistributeAxis } from "./arrange.js";
 import {
   applyTextReplacements,
@@ -49,19 +54,16 @@ import {
 import {
   applyAlignElementsAction,
   applyDistributeElementsAction,
-  applyMoveElementsAction
+  applyMoveElementsAction,
+  type MoveElementsBaseline
 } from "./actions/move-arrange-actions.js";
 import { applyReorderElementsAction, buildParentReorderReplacement } from "./actions/reorder-elements.js";
-import { applyResizeElementAction } from "./actions/resize-element.js";
+import { applyResizeElementAction, type PathRectangleResizeBaseline } from "./actions/resize-element.js";
 import {
   applyRotateElementAction,
   type RotateElementAction
 } from "./actions/rotate-element.js";
-import {
-  applyPlannedSetPropertyAction,
-  cleanupIdiomaticPropertyWrites,
-  PROPERTY_WRITE_CLEANUP_NOOP_REASON
-} from "./property-write-planner.js";
+import { applyPlannedSetPropertyAction } from "./property-write-planner.js";
 import { applyGroupElementsAction, applyUngroupElementsAction } from "./actions/group-ungroup-actions.js";
 import { applyRepeatElementsAction } from "./actions/repeat.js";
 import {
@@ -85,7 +87,7 @@ import {
   type PositionNodeRelativeToAction
 } from "./actions/node-positioning-actions.js";
 import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } from "./parse-options.js";
-import { patchesMatchSourceTransition } from "./source-patches.js";
+import { composeSourcePatches, patchesMatchSourceTransition } from "./source-patches.js";
 import type { SemanticPropertyId } from "./property-registry.js";
 import { flattenForeachInSource, type FlattenForeachTarget } from "../foreach/flatten.js";
 import { applySetFigureBoundsAction, type SetFigureBoundsAction } from "./figure-bounds.js";
@@ -105,14 +107,27 @@ export type { ElementTemplate } from "./element-templates.js";
 export type ReorderDirection = "sendToBack" | "sendBackward" | "bringForward" | "bringToFront";
 export { ADORNMENT_EDIT_NOOP_REASON } from "./actions/adornment-set-property.js";
 export { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-node-actions.js";
-export { PROPERTY_WRITE_CLEANUP_NOOP_REASON };
+export type { MoveElementsBaseline };
+
+export type SetPropertyEditAction = {
+  kind: "setProperty";
+  elementId: string;
+  level: StyleLevel;
+  key: string;
+  value: string;
+  propertyId?: SemanticPropertyId;
+  clearKeys?: string[];
+  commentMode?: "disable" | "enable";
+  commentSourceText?: string;
+};
 
 export type EditAction =
+  | { kind: "setProperties"; actions: readonly SetPropertyEditAction[] }
   | { kind: "moveElement"; elementId: string; delta: WorldPoint; formatPrecision?: DragFormatPrecision }
-  | { kind: "moveElements"; elementIds: string[]; delta: WorldPoint; formatPrecision?: DragFormatPrecision }
+  | { kind: "moveElements"; bypassSnapping?: boolean; elementIds: string[]; delta: WorldPoint; formatPrecision?: DragFormatPrecision; baseline?: MoveElementsBaseline }
   | { kind: "alignElements"; elementIds: string[]; mode: AlignMode }
   | { kind: "distributeElements"; elementIds: string[]; axis: DistributeAxis }
-  | { kind: "moveHandle"; handleId: string; newWorld: WorldPoint }
+  | { kind: "moveHandle"; bypassSnapping?: boolean; handleId: string; newWorld: WorldPoint }
   | { kind: "connectHandle"; handleId: string; nodeName: string; nodeSourceId?: string; anchor: string }
   | { kind: "splitPath"; elementId: string; handleId: string }
   | { kind: "joinPaths"; elementIds: [string, string] }
@@ -122,21 +137,10 @@ export type EditAction =
   | { kind: "setPathPointKind"; elementId: string; handleId: string; pointKind: PathPointKind }
   | { kind: "appendToPath"; elementId: string; end: "start" | "end"; segmentSource: string }
   | { kind: "insertPathPoint"; elementId: string; segmentIndex: number; point: WorldPoint }
-  | {
-      kind: "setProperty";
-      elementId: string;
-      level: StyleLevel;
-      key: string;
-      value: string;
-      propertyId?: SemanticPropertyId;
-      clearKeys?: string[];
-      commentMode?: "disable" | "enable";
-      commentSourceText?: string;
-    }
+  | SetPropertyEditAction
   | RotateElementAction
   | { kind: "updateNodeText"; elementId: string; text: string }
   | SetFigureBoundsAction
-  | { kind: "cleanupPropertyWrites"; elementIds?: string[] }
   | { kind: "addElement"; template: ElementTemplate; at: WorldPoint }
   | { kind: "deleteElement"; elementId: string }
   | { kind: "deleteElements"; elementIds: string[] }
@@ -179,6 +183,7 @@ export type EditAction =
   | { kind: "transposeMatrix"; matrixSourceId: string }
   | {
       kind: "resizeElement";
+      rectangleBaseline?: PathRectangleResizeBaseline;
       elementId: string;
       role: ResizeRole;
       newWorld: WorldPoint;
@@ -194,24 +199,14 @@ export type EditAction =
       };
     };
 
-export type EditActionResult =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | {
-      kind: "partial";
-      newSource: string;
-      patches: SourcePatch[];
-      skippedHandles: string[];
-      reason: string;
-      selectedSourceIds?: string[];
-      changedSourceIds?: string[];
-    }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
+export type { EditActionResultLike as EditActionResult } from "./result-types.js";
+import type { EditActionResultLike as EditActionResult } from "./result-types.js";
 
 const DEFAULT_DUPLICATE_OFFSET_PT = 0.25 * PT_PER_CM;
 const GENERATED_NODE_NAME_RE = /(?:^|[^A-Za-z0-9_-])(node\d+)(?![A-Za-z0-9_-])/g;
 
 export type EditActionApplyOptions = {
+  geometry?: EditGeometrySession;
   evaluateOptions?: EvaluateOptions;
   parseOptions?: EditParseOptions;
 };
@@ -225,7 +220,8 @@ export function preflightPositionNodeRelativeToAction(
     source,
     action,
     options.evaluateOptions,
-    options.parseOptions ?? {}
+    options.parseOptions ?? {},
+    options.geometry
   );
   return {
     ...preflight,
@@ -242,16 +238,40 @@ type AnchorNameResolution = {
 
 export function applyEditAction(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: EditAction,
   options: EditActionApplyOptions = {}
 ): EditActionResult {
+  const currentSource = source;
   const evaluateOptions = options.evaluateOptions;
-  const parseOptions = options.parseOptions ?? {};
+  let parseOptions = options.parseOptions ?? {};
+  const geometry = options.geometry;
+  // Gesture positions are absolute (or total deltas). Always write from the
+  // immutable baseline, then adapt patches to the current source below.
+  if (geometry) {
+    source = geometry.source;
+    editHandles = geometry.semantic.editHandles;
+    parseOptions = {
+      ...parseOptions,
+      analysisView: null,
+      analysisSession: null,
+
+      preparedParse: { source, ...(parseOptions.activeFigureId === undefined ? {} : { activeFigureId: parseOptions.activeFigureId }), result: geometry.parsed }
+    };
+    const sourceFingerprint = geometry.semantic.editHandles[0]?.sourceRef.sourceFingerprint;
+    if (sourceFingerprint === undefined) delete parseOptions.sourceFingerprint;
+    else parseOptions.sourceFingerprint = sourceFingerprint;
+  }
+  if ("bypassSnapping" in action) parseOptions = { ...parseOptions, bypassSnapping: action.bypassSnapping };
   const rawResult = (() : EditActionResult => {
     switch (action.kind) {
-      case "moveHandle":
+      case "moveHandle": {
+        const initial = geometry?.semantic.editHandles.find(handle => handle.id === action.handleId);
+        if (initial && Math.hypot(initial.world.x - action.newWorld.x, initial.world.y - action.newWorld.y) < 1e-9) {
+          return { kind: "success", newSource: source, patches: [], changedSourceIds: [initial.sourceRef.sourceId] };
+        }
         return applyMoveHandle(source, editHandles, action.handleId, action.newWorld, parseOptions);
+      }
       case "connectHandle":
         return applyConnectHandle(source, editHandles, action.handleId, action.nodeName, action.nodeSourceId, action.anchor, parseOptions);
       case "splitPath":
@@ -271,23 +291,51 @@ export function applyEditAction(
       case "insertPathPoint":
         return applyInsertPathPointAction(source, editHandles, action, parseOptions);
       case "moveElement":
-        return applyMoveElements(source, editHandles, [action.elementId], action.delta, parseOptions, action.formatPrecision);
+        return applyMoveElements(source, editHandles, [action.elementId], action.delta, parseOptions, action.formatPrecision, undefined, geometry);
       case "moveElements":
-        return applyMoveElements(source, editHandles, action.elementIds, action.delta, parseOptions, action.formatPrecision);
+        return applyMoveElements(
+          source,
+          editHandles,
+          action.elementIds,
+          action.delta,
+          parseOptions,
+          action.formatPrecision,
+          action.baseline,
+          geometry
+        );
       case "alignElements":
-        return applyAlignElements(source, action, parseOptions);
+        return applyAlignElementsAction(source, action, parseOptions, geometry);
       case "distributeElements":
-        return applyDistributeElements(source, action, parseOptions);
+        return applyDistributeElementsAction(source, action, parseOptions, geometry);
       case "setProperty":
-        return applySetProperty(source, action, parseOptions);
+        return applySetProperty(source, action, parseOptions, geometry);
+      case "setProperties": {
+        let nextSource = source;
+        const steps: SourcePatch[][] = [];
+        const changedSourceIds = new Set<string>();
+        const skippedHandles: string[] = [];
+        for (const property of action.actions) {
+          const result = applySetProperty(nextSource, property, parseOptions, geometry);
+          if (result.kind === "unsupported" && result.reason === "setProperty would not change the source.") continue;
+          if (result.kind !== "success" && result.kind !== "partial") return result;
+          const normalized = normalizeResultPatches(nextSource, result);
+          if (normalized.kind !== "success" && normalized.kind !== "partial") return normalized;
+          steps.push(normalized.patches);
+          nextSource = result.newSource;
+          for (const id of result.changedSourceIds ?? [property.elementId]) changedSourceIds.add(id);
+          if (result.kind === "partial") skippedHandles.push(...result.skippedHandles);
+        }
+        const patches = composeSourcePatches(source, steps);
+        return skippedHandles.length > 0
+          ? { kind: "partial", newSource: nextSource, patches, changedSourceIds: [...changedSourceIds], skippedHandles, reason: "Some property targets could not be edited." }
+          : { kind: "success", newSource: nextSource, patches, changedSourceIds: [...changedSourceIds] };
+      }
       case "rotateElement":
-        return applyRotateElementAction(source, action, evaluateOptions, parseOptions);
+        return applyRotateElementAction(source, action, evaluateOptions, parseOptions, geometry);
       case "updateNodeText":
         return applyUpdateNodeText(source, action, parseOptions);
       case "setFigureBounds":
         return applySetFigureBoundsAction(source, action, parseOptions);
-      case "cleanupPropertyWrites":
-        return cleanupIdiomaticPropertyWrites(source, { ...parseOptions, propertyWriteMode: "drag-end" }, action.elementIds);
       case "addElement":
         return applyAddElement(source, action.template, action.at, parseOptions);
       case "deleteElement":
@@ -309,13 +357,13 @@ export function applyEditAction(
       case "addNodeAdornment":
         return applyAddNodeAdornmentAction(source, action, parseOptions);
       case "positionNodeRelativeTo":
-        return applyPositionNodeRelativeToAction(source, action, evaluateOptions, parseOptions);
+        return applyPositionNodeRelativeToAction(source, action, evaluateOptions, parseOptions, geometry);
       case "convertNodePositionToAbsolute":
-        return applyConvertNodePositionToAbsoluteAction(source, action, evaluateOptions, parseOptions);
+        return applyConvertNodePositionToAbsoluteAction(source, action, evaluateOptions, parseOptions, geometry);
       case "reorderElements":
         return applyReorderElementsAction(source, action.elementIds, action.direction, parseOptions);
       case "groupElements":
-        return applyGroupElements(source, action, parseOptions);
+        return applyGroupElementsAction(source, action.elementIds, parseOptions, geometry);
       case "ungroupElements":
         return applyUngroupElements(source, action, parseOptions);
       case "repeatElements":
@@ -339,10 +387,28 @@ export function applyEditAction(
       case "transposeMatrix":
         return applyTransposeMatrixAction(source, action, parseOptions);
       case "resizeElement":
-        return applyResizeElement(source, action, evaluateOptions, parseOptions);
+        return applyResizeElementAction(source, action, evaluateOptions, parseOptions, geometry);
     }
   })();
-  return normalizeResultPatches(source, rawResult);
+  let result = geometry && rawResult.kind === "unsupported" && (
+    rawResult.reason === ADORNMENT_EDIT_NOOP_REASON ||
+    rawResult.reason === PATH_ATTACHED_NODE_EDIT_NOOP_REASON ||
+    rawResult.reason === "rotateElement would not change the source."
+  ) ? { kind: "success" as const, newSource: source, patches: [] } : rawResult;
+  if (geometry && (result.kind === "success" || result.kind === "partial") && (
+    result.identityMoves || ["moveHandle", "connectHandle", "moveElement", "moveElements", "resizeElement", "rotateElement",
+      "setProperty", "setProperties", "alignElements", "distributeElements", "updateNodeText", "movePathAttachedNode"].includes(action.kind)
+  )) {
+    const baselineResult = normalizeResultPatches(source, result);
+    if (baselineResult.kind === "success" || baselineResult.kind === "partial") {
+      const identityMoves = geometryIdentityMoves(geometry, currentSource, result.newSource,
+        baselineResult.patches, result.identityMoves);
+      result = { ...result, geometryBaseSource: geometry.source };
+      if (identityMoves === undefined) delete result.identityMoves;
+      else result.identityMoves = identityMoves;
+    }
+  }
+  return normalizeResultPatches(currentSource, result);
 }
 
 function normalizeResultPatches(source: string, result: EditActionResult): EditActionResult {
@@ -356,7 +422,7 @@ function normalizeResultPatches(source: string, result: EditActionResult): EditA
 
   return {
     ...result,
-    patches: [computeReplacementPatch(source, result.newSource)]
+    patches: [computeMinimalReplacementPatch(source, result.newSource)]
   };
 }
 
@@ -366,8 +432,8 @@ function applyFlattenForeachAction(
   parseOptions: EditParseOptions
 ): EditActionResult {
   const flattened = flattenForeachInSource(source, action.target, {
-    recursive: action.recursive,
-    maxExpansions: action.maxExpansions
+    ...(action.recursive === undefined ? {} : { recursive: action.recursive }),
+    ...(action.maxExpansions === undefined ? {} : { maxExpansions: action.maxExpansions })
   });
 
   if (flattened.kind === "unsupported") {
@@ -450,7 +516,7 @@ function spansOverlap(left: Span, right: Span): boolean {
 
 function applyMoveHandle(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   handleId: string,
   newWorld: WorldPoint,
   parseOptions: EditParseOptions
@@ -461,7 +527,7 @@ function applyMoveHandle(
       kind: "success",
       newSource: result.newSource,
       patches: result.patches,
-      changedSourceIds: result.changedSourceIds
+      ...(result.changedSourceIds === undefined ? {} : { changedSourceIds: result.changedSourceIds })
     };
   }
   if (result.kind === "unsupported") {
@@ -472,7 +538,7 @@ function applyMoveHandle(
 
 function applyConnectHandle(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   handleId: string,
   nodeName: string,
   nodeSourceId: string | undefined,
@@ -525,7 +591,7 @@ function applyConnectHandle(
     return { kind: "error", message: "Handle span content mismatch (stale handle)." };
   }
 
-  const nameResolution = resolveAnchorNodeName(source, { nodeName, nodeSourceId, anchor }, parseOptions);
+  const nameResolution = resolveAnchorNodeName(source, { nodeName, ...(nodeSourceId === undefined ? {} : { nodeSourceId }), anchor }, parseOptions);
   if (!nameResolution) {
     return { kind: "error", message: "Node name is required for endpoint connection." };
   }
@@ -550,8 +616,17 @@ function applyConnectHandle(
   );
   const reorderedPatches = reordered ? reordered.patches : [];
   const newSource = reordered?.source ?? updated.source;
+  let identityMoves = collectIdentitySpans(parseTikzForEdit(source, parseOptions).figure.body);
+  if (nameResolution.insertedSpan) {
+    const from = nameResolution.insertedSpan.from;
+    identityMoves = advanceIdentityMoves(identityMoves, [{ oldSpan: nameResolution.insertedSpan,
+      newSpan: { from, to: from + nameResolution.insertedLength },
+      replacement: nameResolution.source.slice(from, from + nameResolution.insertedLength) }]);
+  }
+  identityMoves = advanceIdentityMoves(identityMoves, [{ oldSpan: adjustedHandleSpan, newSpan: updated.changedSpan, replacement }]);
+  if (reordered) identityMoves = advanceIdentityMoves(identityMoves, reordered.patches, reordered.identityMoves);
   const patches = nameResolution.insertedSpan
-    ? [computeReplacementPatch(source, newSource)]
+    ? [computeMinimalReplacementPatch(source, newSource)]
     : [
         {
           oldSpan: handle.sourceRef.sourceSpan,
@@ -564,6 +639,7 @@ function applyConnectHandle(
     kind: "success",
     newSource,
     patches,
+    identityMoves,
     // Reordering can renumber statement source ids, so avoid stale id hints.
     // Returning [] forces the drag path to use full recompute for this frame.
     changedSourceIds: reordered || nameResolution.insertedSpan ? [] : [handle.sourceRef.sourceId]
@@ -608,8 +684,8 @@ function resolveElementTemplateAnchorNames(
     source: currentSource,
     template: {
       ...template,
-      fromAnchor,
-      toAnchor
+      ...(fromAnchor === undefined ? {} : { fromAnchor }),
+      ...(toAnchor === undefined ? {} : { toAnchor })
     }
   };
 }
@@ -639,7 +715,7 @@ function resolveAnchorNodeName(
   return {
     source: named.source,
     anchor: { ...anchor, nodeName: named.name },
-    insertedSpan: named.insertedSpan,
+    ...(named.insertedSpan === undefined ? {} : { insertedSpan: named.insertedSpan }),
     insertedLength: named.insertedLength
   };
 }
@@ -757,7 +833,7 @@ function shiftSpan(span: Span, insertedSpan: Span | undefined, insertedLength: n
 
 function applySplitPath(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "splitPath" }>,
   parseOptions: EditParseOptions
 ): EditActionResult {
@@ -790,7 +866,7 @@ function applyReversePath(
 
 function applyDeletePathPoint(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "deletePathPoint" }>,
   parseOptions: EditParseOptions
 ): EditActionResult {
@@ -799,7 +875,7 @@ function applyDeletePathPoint(
 
 function applySetPathPointKind(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "setPathPointKind" }>,
   parseOptions: EditParseOptions
 ): EditActionResult {
@@ -808,29 +884,15 @@ function applySetPathPointKind(
 
 function applyMoveElements(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   elementIds: readonly string[],
   delta: WorldPoint,
   parseOptions: EditParseOptions = {},
-  formatPrecision?: DragFormatPrecision
+  formatPrecision?: DragFormatPrecision,
+  baseline?: MoveElementsBaseline,
+  geometry?: EditGeometrySession
 ): EditActionResult {
-  return applyMoveElementsAction(source, editHandles, elementIds, delta, formatPrecision, parseOptions);
-}
-
-function applyAlignElements(
-  source: string,
-  action: Extract<EditAction, { kind: "alignElements" }>,
-  parseOptions: EditParseOptions
-): EditActionResult {
-  return applyAlignElementsAction(source, action, parseOptions);
-}
-
-function applyDistributeElements(
-  source: string,
-  action: Extract<EditAction, { kind: "distributeElements" }>,
-  parseOptions: EditParseOptions
-): EditActionResult {
-  return applyDistributeElementsAction(source, action, parseOptions);
+  return applyMoveElementsAction(source, editHandles, elementIds, delta, formatPrecision, parseOptions, baseline, geometry);
 }
 
 function applyPasteStatements(
@@ -863,14 +925,6 @@ function applyDuplicateAdornment(source: string, targetId: string, parseOptions:
   return applyDuplicateAdornmentAction(source, targetId, parseOptions);
 }
 
-function applyGroupElements(
-  source: string,
-  action: Extract<EditAction, { kind: "groupElements" }>,
-  parseOptions: EditParseOptions
-): EditActionResult {
-  return applyGroupElementsAction(source, action.elementIds, parseOptions);
-}
-
 function applyUngroupElements(
   source: string,
   action: Extract<EditAction, { kind: "ungroupElements" }>,
@@ -879,19 +933,25 @@ function applyUngroupElements(
   return applyUngroupElementsAction(source, action.elementIds, parseOptions);
 }
 
-function resolveNodeTextSpanForElementId(
+function resolveNodeTextTargetForElementId(
   source: string,
   elementId: string,
   parseOptions: EditParseOptions
-): Span | null {
+): { textSpan: Span; changedSourceIds: string[] } | null {
   const normalizedId = elementId.trim();
   if (normalizedId.length === 0) {
     return null;
   }
 
   const resolvedTarget = resolvePropertyTarget(source, normalizedId, parseOptions);
-  if (resolvedTarget.kind === "found" && resolvedTarget.target.textSpan) {
-    return resolvedTarget.target.textSpan;
+  if (resolvedTarget.kind === "found") {
+    const target = resolvedTarget.target;
+    if (target.textSpan) {
+      return {
+        textSpan: target.textSpan,
+        changedSourceIds: changedSourceIdsForPropertyTarget(target)
+      };
+    }
   }
 
   const statementSnapshot = parseStatementSnapshot(source, parseOptions);
@@ -899,7 +959,7 @@ function resolveNodeTextSpanForElementId(
   if (statementRef?.statement.kind === "Path" && statementRef.statement.command === "node") {
     const nodeItem = statementRef.statement.items.find((item) => item.kind === "Node");
     if (nodeItem?.kind === "Node") {
-      return nodeItem.textSpan;
+      return { textSpan: nodeItem.textSpan, changedSourceIds: changedSourceIdsForPropertyTarget({ id: statementRef.statement.id }) };
     }
   }
 
@@ -908,7 +968,7 @@ function resolveNodeTextSpanForElementId(
   });
   const stack: Statement[] = [...parsed.figure.body];
   while (stack.length > 0) {
-    const statement = stack.shift()!;
+    const statement = requireDefined(stack.shift(), "Missing required stack.shift()");
     if (statement.kind === "Scope") {
       stack.unshift(...statement.body);
       continue;
@@ -919,12 +979,12 @@ function resolveNodeTextSpanForElementId(
     if (statement.command === "node" && statement.id === normalizedId) {
       const nodeItem = statement.items.find((item) => item.kind === "Node");
       if (nodeItem?.kind === "Node") {
-        return nodeItem.textSpan;
+        return { textSpan: nodeItem.textSpan, changedSourceIds: changedSourceIdsForPropertyTarget({ id: statement.id }) };
       }
     }
     for (const item of statement.items) {
       if (item.kind === "Node" && item.id === normalizedId) {
-        return item.textSpan;
+        return { textSpan: item.textSpan, changedSourceIds: changedSourceIdsForPropertyTarget({ id: statement.id }) };
       }
     }
   }
@@ -949,7 +1009,7 @@ function moveStatementAfterNamedDefinition(
   movingStatementId: string,
   name: string,
   parseOptions: EditParseOptions = {}
-): { source: string; patches: SourcePatch[] } | null {
+): { source: string; patches: SourcePatch[]; identityMoves: IdentityMove[] } | null {
   const snapshot = parseStatementSnapshot(source, parseOptions);
   const movingRef = snapshot.byId.get(movingStatementId);
   if (!movingRef) {
@@ -961,7 +1021,10 @@ function moveStatementAfterNamedDefinition(
     return null;
   }
 
-  const producerRef = snapshot.byId.get(producerId)!;
+  const producerRef = snapshot.byId.get(producerId);
+  if (!producerRef) {
+    return null;
+  }
 
   if (movingRef.parentKey !== producerRef.parentKey) {
     return null;
@@ -971,14 +1034,26 @@ function moveStatementAfterNamedDefinition(
     return null;
   }
 
-  const parentRefs = snapshot.byParentKey.get(movingRef.parentKey)!;
+  const parentRefs = snapshot.byParentKey.get(movingRef.parentKey);
+  if (!parentRefs) {
+    return null;
+  }
   const ids = parentRefs.map((ref) => ref.id);
+  if (!ids.includes(movingStatementId) || !ids.includes(producerId)) {
+    return null;
+  }
   const withoutMoving = ids.filter((id) => id !== movingStatementId);
   const producerIndexInFiltered = withoutMoving.indexOf(producerId);
+  if (producerIndexInFiltered < 0) {
+    return null;
+  }
   const nextOrder = [...withoutMoving];
   nextOrder.splice(producerIndexInFiltered + 1, 0, movingStatementId);
 
-  const replacement = buildParentReorderReplacement(snapshot.source, parentRefs, nextOrder)!;
+  const replacement = buildParentReorderReplacement(snapshot.source, parentRefs, nextOrder);
+  if (!replacement) {
+    return null;
+  }
 
   const applied = applyTextReplacements(source, [
     {
@@ -989,7 +1064,11 @@ function moveStatementAfterNamedDefinition(
 
   return {
     source: applied.source,
-    patches: applied.patches
+    patches: applied.patches,
+    identityMoves: parentRefs.flatMap(ref => {
+      const newSpan = replacement.newSpansById.get(ref.id);
+      return newSpan ? [{ oldSpan: ref.span, newSpan }] : [];
+    })
   };
 }
 
@@ -1051,9 +1130,10 @@ function normalizeNodeNameCandidate(raw: string | undefined): string | null {
 function applySetProperty(
   source: string,
   action: Extract<EditAction, { kind: "setProperty" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): EditActionResult {
-  return applyPlannedSetPropertyAction(source, action, parseOptions);
+  return applyPlannedSetPropertyAction(source, action, parseOptions, geometry);
 }
 
 function applyUpdateNodeText(
@@ -1061,10 +1141,11 @@ function applyUpdateNodeText(
   action: Extract<EditAction, { kind: "updateNodeText" }>,
   parseOptions: EditParseOptions
 ): EditActionResult {
-  const textSpan = resolveNodeTextSpanForElementId(source, action.elementId, parseOptions);
-  if (!textSpan) {
+  const target = resolveNodeTextTargetForElementId(source, action.elementId, parseOptions);
+  if (!target) {
     return { kind: "unsupported", reason: `No editable node text target found for ${action.elementId}` };
   }
+  const { textSpan } = target;
   const updated = replaceSpan(source, textSpan, action.text);
   if (updated.source === source) {
     return { kind: "unsupported", reason: "Node text update would not change the source." };
@@ -1079,17 +1160,8 @@ function applyUpdateNodeText(
         replacement: action.text
       }
     ],
-    changedSourceIds: [action.elementId.trim()]
+    changedSourceIds: target.changedSourceIds
   };
-}
-
-function applyResizeElement(
-  source: string,
-  action: Extract<EditAction, { kind: "resizeElement" }>,
-  evaluateOptions: EvaluateOptions | undefined,
-  parseOptions: EditParseOptions
-): EditActionResult {
-  return applyResizeElementAction(source, action, evaluateOptions, parseOptions);
 }
 
 function applyAddElement(
@@ -1117,36 +1189,8 @@ function applyAddElement(
   return {
     kind: "success",
     newSource,
-    patches: [computeReplacementPatch(source, newSource)],
+    patches: [computeMinimalReplacementPatch(source, newSource)],
     selectedSourceIds: [insertedStatementId],
     changedSourceIds: [insertedStatementId]
-  };
-}
-
-function computeReplacementPatch(oldSource: string, newSource: string): SourcePatch {
-  const oldLen = oldSource.length;
-  const newLen = newSource.length;
-  const minLen = Math.min(oldLen, newLen);
-
-  let prefix = 0;
-  while (prefix < minLen && oldSource.charCodeAt(prefix) === newSource.charCodeAt(prefix)) {
-    prefix += 1;
-  }
-
-  let oldSuffix = oldLen;
-  let newSuffix = newLen;
-  while (
-    oldSuffix > prefix &&
-    newSuffix > prefix &&
-    oldSource.charCodeAt(oldSuffix - 1) === newSource.charCodeAt(newSuffix - 1)
-  ) {
-    oldSuffix -= 1;
-    newSuffix -= 1;
-  }
-
-  return {
-    oldSpan: { from: prefix, to: oldSuffix },
-    newSpan: { from: prefix, to: newSuffix },
-    replacement: newSource.slice(prefix, newSuffix)
   };
 }

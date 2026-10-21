@@ -16,10 +16,12 @@ type UpdateModalProps = {
   onInstall: () => void;
   onClose: () => void;
   onLater: () => void;
+  onSkip: () => void;
 };
 
-export function UpdateModal({ update, phase, isWindows, onInstall, onClose, onLater }: UpdateModalProps) {
+export function UpdateModal({ update, phase, isWindows, onInstall, onClose, onLater, onSkip }: UpdateModalProps) {
   const installing = phase.status === "installing";
+  const downloadOnly = update.downloadUrl !== undefined;
   const progressLabel =
     phase.status === "installing"
       ? formatProgress(phase.downloadedBytes, phase.contentLength)
@@ -39,6 +41,7 @@ export function UpdateModal({ update, phase, isWindows, onInstall, onClose, onLa
       closeOnBackdrop={!installing}
       closeOnEscape={!installing}
       size="sm"
+      className={css.dialog ?? ""}
       labelledBy="update-modal-title"
       dataTestId="update-modal"
     >
@@ -46,7 +49,7 @@ export function UpdateModal({ update, phase, isWindows, onInstall, onClose, onLa
         title="Update Available"
         titleId="update-modal-title"
         showCloseButton={!installing}
-        onClose={installing ? undefined : onClose}
+        {...(installing ? {} : { onClose })}
         closeAriaLabel="Close update"
       />
       <Modal.Body>
@@ -73,7 +76,12 @@ export function UpdateModal({ update, phase, isWindows, onInstall, onClose, onLa
           </div>
         ) : null}
 
-        {isWindows && phase.status !== "installing" ? (
+        {downloadOnly ? (
+          <p className={css.instructions} data-select="text">
+            To update, close TikZ Editor and replace its program files with the
+            downloaded ZIP contents. Keep your tikz-editor-data folder.
+          </p>
+        ) : isWindows && phase.status !== "installing" ? (
           <p className={css.warning} data-select="text">
             Installing on Windows may close the app while the installer runs.
           </p>
@@ -100,21 +108,30 @@ export function UpdateModal({ update, phase, isWindows, onInstall, onClose, onLa
           </p>
         ) : null}
       </Modal.Body>
-      <Modal.Footer>
+      <Modal.Footer align="between" className={css.footer ?? ""}>
         <Modal.SecondaryButton
-          onClick={onLater}
+          onClick={onSkip}
           disabled={installing}
-          data-testid="update-later"
+          data-testid="update-skip"
         >
-          Later
+          Skip this version
         </Modal.SecondaryButton>
-        <Modal.PrimaryButton
-          onClick={onInstall}
-          disabled={installing}
-          data-testid="update-install"
-        >
-          {phase.status === "failed" ? "Retry" : "Install and Relaunch"}
-        </Modal.PrimaryButton>
+        <div className={css.actions}>
+          <Modal.SecondaryButton
+            onClick={onLater}
+            disabled={installing}
+            data-testid="update-later"
+          >
+            Later
+          </Modal.SecondaryButton>
+          <Modal.PrimaryButton
+            onClick={onInstall}
+            disabled={installing}
+            data-testid="update-install"
+          >
+            {phase.status === "failed" ? "Retry" : downloadOnly ? "Download ZIP" : "Install and Relaunch"}
+          </Modal.PrimaryButton>
+        </div>
       </Modal.Footer>
     </Modal>
   );

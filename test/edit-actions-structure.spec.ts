@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyEditAction } from "../packages/core/src/edit/actions.js";
 import { isUngroupableScopeStatement } from "../packages/core/src/edit/actions/group-ungroup-actions.js";
 import { buildParentReorderReplacement } from "../packages/core/src/edit/actions/reorder-elements.js";
+import { createEditAnalysisSession } from "../packages/core/src/edit/analysis.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
 import { wp } from "./coords-helpers.js";
@@ -731,6 +732,45 @@ describe("applyEditAction – reorderElements", () => {
 });
 
 describe("applyEditAction – group/ungroup", () => {
+  it("reports corrupted parent-list invariants without throwing", () => {
+    const groupSource = String.raw`\begin{tikzpicture}
+  \draw (0,0) -- (1,0);
+  \draw (0,1) -- (1,1);
+\end{tikzpicture}`;
+    const groupAnalysis = createEditAnalysisSession().ensure(groupSource);
+    groupAnalysis.statementSnapshot.byParentKey.delete("root");
+
+    const grouped = applyEditAction(groupSource, [], {
+      kind: "groupElements",
+      elementIds: ["path:0", "path:1"]
+    }, {
+      parseOptions: { analysisView: groupAnalysis }
+    });
+    expect(grouped).toEqual({
+      kind: "error",
+      message: "Grouping invariant failed: parent statement list root is missing."
+    });
+
+    const ungroupSource = String.raw`\begin{tikzpicture}
+  \begin{scope}
+    \draw (0,0) -- (1,0);
+  \end{scope}
+\end{tikzpicture}`;
+    const ungroupAnalysis = createEditAnalysisSession().ensure(ungroupSource);
+    ungroupAnalysis.statementSnapshot.byParentKey.delete("root");
+
+    const ungrouped = applyEditAction(ungroupSource, [], {
+      kind: "ungroupElements",
+      elementIds: ["scope:0"]
+    }, {
+      parseOptions: { analysisView: ungroupAnalysis }
+    });
+    expect(ungrouped).toEqual({
+      kind: "error",
+      message: "Ungrouping invariant failed: parent statement list root is missing."
+    });
+  });
+
   it("rejects too-small, unresolved, and cross-parent group selections", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);

@@ -1,0 +1,52 @@
+\documentclass[aspectratio=169]{beamer}
+\usepackage{amsmath,booktabs,array}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[plain,t]
+\begin{tabular}{>{\bfseries}l>{\itshape}c>{\ttfamily}r}
+Alpha & Middle & 100\\ Beta & Second & 22
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{>{\raggedright\arraybackslash\bfseries}p{46pt}r}
+Alpha Beta Gamma Delta & 1\\ Epsilon Zeta & 22
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{l!{ : }r}
+Alpha & 1\\ Beta & 22
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{|l|c|r|}
+\hline Alpha & Middle & 1\\\hline\hline Beta & X & 22\\\hline
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{|l|c|r|}
+\hline\multicolumn{2}{|c|}{Long heading} & 100\\\hline Alpha & Middle & 1\\\hline
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{p{35pt}m{35pt}b{35pt}r}
+Alpha Beta Gamma Delta & Alpha Beta Gamma Delta & Alpha Beta Gamma Delta & 1\\
+Epsilon & Zeta & Eta & 22
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\noindent{\renewcommand{\arraystretch}{1.2}\setlength{\extrarowheight}{2pt}\begin{tabular}{p{35pt}m{35pt}b{35pt}r}
+Alpha Beta Gamma & Alpha Beta Gamma & Alpha Beta Gamma & 1\\
+Epsilon & Zeta & Eta & 22
+\end{tabular}}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{>{\bfseries}p{48pt}<{!}r}
+Alpha Beta & 1\\ Gamma & 22
+\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\begin{tabular}{l>{$}c<{$}>{$}r<{$}}
+Alpha & x^2 & \frac12\\ Beta & a+b & 35
+\end{tabular}
+\end{frame}
+\end{document}

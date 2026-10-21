@@ -221,7 +221,7 @@ const CURSOR_DEFS: Record<CursorStyle, CursorDef> = {
 };
 
 export function applyCursorOverlayFrame(target: SVGGElement, frame: CursorOverlayFrame, scale = 1): void {
-  const def = CURSOR_DEFS[frame.cursor] ?? CURSOR_DEFS.pointer;
+  const def = CURSOR_DEFS[frame.cursor];
   const transform = `translate3d(${frame.x}px, ${frame.y}px, 0) scale(${scale})`;
   const glyphTransform = `translate(${def.offsetX ?? 0} ${def.offsetY ?? 0})`;
   const opacity = frame.visible ? "1" : "0";
@@ -244,7 +244,7 @@ const LAST_CURSOR_DOM_FRAME = new WeakMap<SVGGElement, { glyphTransform: string;
 const CURSOR_GLYPHS = new WeakMap<SVGGElement, SVGGElement | null>();
 
 export function getCursorOverlayBounds(cursor: CursorStyle, x: number, y: number, scale = 1): CursorOverlayBounds {
-  const def = CURSOR_DEFS[cursor] ?? CURSOR_DEFS.pointer;
+  const def = CURSOR_DEFS[cursor];
   const size = def.size ?? 24;
   return {
     x: x + (def.offsetX ?? 0) * scale,
@@ -265,7 +265,7 @@ export const CursorOverlay = memo(forwardRef<SVGGElement, CursorOverlayProps>(fu
   { x, y, visible, cursor, scale = 1 }: CursorOverlayProps,
   ref
 ) {
-  const def = CURSOR_DEFS[cursor] ?? CURSOR_DEFS.pointer;
+  const def = CURSOR_DEFS[cursor];
   const size = def.size ?? 24;
 
   return (

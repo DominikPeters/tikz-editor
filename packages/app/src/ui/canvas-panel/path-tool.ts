@@ -5,9 +5,10 @@ import {
   reverseComplexPathSegments,
   type AnchorReference,
   type ComplexPathSegment
-} from "tikz-editor/edit/element-templates";
+} from "@tikz-editor/core/edit/element-templates";
 import type { WorldPoint } from "../coords/types";
 
+import { distanceSquared } from "./geometry";
 import { resolveBezierControlsFromBend } from "./interaction-helpers";
 
 const MIN_SEGMENT_LENGTH_PT = 1e-3;
@@ -40,9 +41,9 @@ export function createPathToolDraft(
 ): PathToolDraft {
   return {
     startWorld: { ...startWorld },
-    startAnchor,
+    ...(startAnchor !== undefined ? { startAnchor: startAnchor } : {}),
     segments: [],
-    appendTarget
+    ...(appendTarget !== undefined ? { appendTarget: appendTarget } : {})
   };
 }
 
@@ -139,11 +140,22 @@ export function appendPathToolSegmentFromGesture(
   };
 }
 
+export function undoLastPathToolSegment(draft: PathToolDraft): PathToolDraft {
+  if (draft.segments.length === 0) {
+    return draft;
+  }
+
+  return {
+    ...draft,
+    segments: draft.segments.slice(0, -1)
+  };
+}
+
 export function generatePathToolSource(draft: PathToolDraft, options: { closed: boolean; strokeColor?: string }): string | null {
   return generateComplexPathSource(draft.startWorld, draft.segments, {
     closed: options.closed,
-    startAnchor: draft.startAnchor,
-    strokeColor: options.strokeColor
+    ...(draft.startAnchor !== undefined ? { startAnchor: draft.startAnchor } : {}),
+    ...(options.strokeColor !== undefined ? { strokeColor: options.strokeColor } : {})
   });
 }
 
@@ -170,10 +182,4 @@ export function generateAppendSegmentSource(draft: PathToolDraft): string | null
   );
 
   return generateComplexPathPrependSource(newStart, revSegs, newStartAnchor);
-}
-
-function distanceSquared(a: WorldPoint, b: WorldPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
 }

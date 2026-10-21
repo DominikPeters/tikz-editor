@@ -1,6 +1,5 @@
 import React from "react";
 import { BASIC_PICKER_COLORS } from "../colors/color-palette";
-import type { SnapToolPointerKind } from "tikz-editor/edit/snapping";
 import type { ToolMode } from "../store/types";
 
 // ── Custom Tool Icons ─────────────────────────────────────────────────────────
@@ -211,7 +210,6 @@ const TOOL_POPUP_KIND_MAP = new Map<ToolMode, ToolPopupKind>(
   TOOL_BUTTONS.flatMap((tool) => (tool.popupKind ? [[tool.mode, tool.popupKind] as const] : []))
 );
 
-const TOOL_CREATE_MODE_SET = new Set<ToolCreateMode>(TOOL_CREATE_MODES);
 
 export function toolModeFromShortcut(key: string): ToolMode | null {
   return TOOL_SHORTCUT_MAP.get(key.toLowerCase()) ?? null;
@@ -238,18 +236,10 @@ export function toolModeAutoOpensPopup(mode: ToolMode): boolean {
   return false;
 }
 
-export function isToolCreateMode(mode: ToolMode): mode is ToolCreateMode {
-  return TOOL_CREATE_MODE_SET.has(mode as ToolCreateMode);
-}
+const createModeSet: ReadonlySet<string> = new Set(TOOL_CREATE_MODES);
 
-export function toolCreateSnapKind(mode: ToolCreateMode): SnapToolPointerKind {
-  if (mode === "addGrid" || mode === "addRect" || mode === "addEllipse" || mode === "addShape") {
-    return "rect-corner";
-  }
-  if (mode === "addCircle") {
-    return "circle-edge";
-  }
-  return "line-end";
+export function isToolCreateMode(mode: ToolMode): mode is ToolCreateMode {
+  return createModeSet.has(mode);
 }
 
 export function shouldConstrainToolCreateToSquare(mode: ToolCreateMode): boolean {
@@ -273,7 +263,7 @@ export const TOOL_HINTS: Partial<Record<ToolMode, string>> = {
 };
 
 export function isCreationToolMode(mode: ToolMode): boolean {
-  return TOOL_CREATE_MODE_SET.has(mode as ToolCreateMode);
+  return createModeSet.has(mode);
 }
 
 export function toolSupportsStroke(mode: ToolMode): boolean {

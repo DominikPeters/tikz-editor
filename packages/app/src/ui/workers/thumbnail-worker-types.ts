@@ -1,5 +1,7 @@
+import type { DocumentGraphicsPreviewBundle } from "@tikz-editor/core/graphics/index";
+
 export type ThumbnailRenderParseOptions = {
-  activeFigureId: string;
+  activeRootId: string;
   includeContextDefinitions: boolean;
   recover?: boolean;
 };
@@ -15,13 +17,17 @@ export type ThumbnailRenderRequest = {
   source: string;
   figureId: string;
   figureSignature: string;
+  /** Path-free graphics preview state registered separately with the worker. */
+  graphicsPreviewBundleKey?: string;
+  /** Present for deck frames: render this Beamer frame's final overlay step. */
+  deckFrameIndex?: number;
   parseOptions: ThumbnailRenderParseOptions;
   svgOptions?: ThumbnailRenderSvgOptions;
 };
 
-export type ThumbnailCancelRequest = {
-  type: "cancelRequest";
-  requestId: string;
+export type ThumbnailRegisterGraphicsMessage = {
+  type: "registerGraphics";
+  bundle: DocumentGraphicsPreviewBundle;
 };
 
 export type ThumbnailCancelGroup = {
@@ -30,8 +36,8 @@ export type ThumbnailCancelGroup = {
 };
 
 export type ThumbnailWorkerRequestMessage =
+  | ThumbnailRegisterGraphicsMessage
   | ThumbnailRenderRequest
-  | ThumbnailCancelRequest
   | ThumbnailCancelGroup;
 
 export type ThumbnailRenderSuccess = {

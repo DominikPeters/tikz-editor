@@ -306,6 +306,8 @@ export type NodeItem = {
   textSource: "group" | "option";
   textSpan: Span;
   text: string;
+  /** Same-length masked text for structural parsing during a canvas text edit. */
+  structuralText?: string;
   adornment?: {
     kind: "label" | "pin";
     ownerNodeId: string;

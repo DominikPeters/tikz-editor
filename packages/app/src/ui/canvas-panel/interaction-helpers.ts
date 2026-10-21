@@ -1,16 +1,16 @@
-import type { ElementTemplate } from "tikz-editor/edit/actions";
-import type { SelectionGeometry } from "tikz-editor/edit/snapping";
-import type { EditHandle, SceneElement, ScenePathCommand } from "tikz-editor/semantic/types";
-import { CM_PER_PT, PT_PER_CM, formatNumber } from "tikz-editor/edit/format";
-import { worldPoint, worldVector, svgBounds, pt } from "tikz-editor/coords/index";
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import type { ElementTemplate } from "@tikz-editor/core/edit/actions";
+import type { EditHandle, SceneElement, ScenePathCommand } from "@tikz-editor/core/semantic/types";
+import { CM_PER_PT, PT_PER_CM, formatNumber } from "@tikz-editor/core/edit/format";
+import { worldPoint, worldVector, svgBounds, pt } from "@tikz-editor/core/coords/index";
 
 import { distanceSquared } from "./geometry";
 import { shouldConstrainToolCreateToSquare, type ToolCreateMode } from "../tool-config";
-import type { DragState, DragTooltipRow, SelectionAnchorRatio } from "./types";
+import type { DragState, DragTooltipRow } from "./types";
 import type { ResizeFrame } from "./resize-frames";
 import { resolveAddShapeDraft } from "./add-shape-draft";
-import type { SvgBounds, SvgPoint, WorldBounds, WorldPoint } from "../coords/types";
-import type { WorldVector } from "tikz-editor/coords/index";
+import type { SvgBounds, SvgPoint, WorldPoint } from "../coords/types";
+import type { WorldVector } from "@tikz-editor/core/coords/index";
 
 const DEFAULT_BEZIER_LENGTH_PT = 2 * PT_PER_CM;
 const STEP_SNAP_EPSILON = 1e-9;
@@ -24,34 +24,6 @@ export function boundsFromPoints(a: SvgPoint, b: SvgPoint): SvgBounds {
     pt(Math.min(a.y, b.y)),
     pt(Math.max(a.x, b.x)),
     pt(Math.max(a.y, b.y))
-  );
-}
-
-export function collectSourceIdsInBounds(boundsBySource: ReadonlyMap<string, SvgBounds>, selection: SvgBounds): string[] {
-  const result: string[] = [];
-  for (const [sourceId, bounds] of boundsBySource) {
-    if (boundsContainedWithin(bounds, selection)) {
-      result.push(sourceId);
-    }
-  }
-  return result;
-}
-
-export function deriveSelectionTranslationDeltaFromAnchor(
-  initialSelection: SelectionGeometry,
-  currentSelection: SelectionGeometry | null,
-  anchorRatio: SelectionAnchorRatio | null
-): WorldPoint {
-  if (!currentSelection) {
-    return worldPoint(pt(0), pt(0));
-  }
-
-  const ratio = anchorRatio ?? { x: 0.5, y: 0.5 };
-  const initialCenter = pointFromBoundsAnchorRatio(initialSelection.bounds, ratio);
-  const currentCenter = pointFromBoundsAnchorRatio(currentSelection.bounds, ratio);
-  return worldPoint(
-    pt(currentCenter.x - initialCenter.x),
-    pt(currentCenter.y - initialCenter.y)
   );
 }
 
@@ -77,20 +49,20 @@ export function createTemplateForToolDrag(
 
   if (mode === "addPath") {
     return hasDrag
-      ? { kind: "line", hasArrow: false, to: endWorld, strokeColor }
-      : { kind: "line", hasArrow: false, strokeColor };
+      ? { kind: "line", hasArrow: false, to: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}) }
+      : { kind: "line", hasArrow: false, ...(strokeColor !== undefined ? { strokeColor } : {}) };
   }
 
   if (mode === "addLine") {
     return hasDrag
-      ? { kind: "line", hasArrow: false, to: endWorld, strokeColor }
-      : { kind: "line", hasArrow: false, strokeColor };
+      ? { kind: "line", hasArrow: false, to: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}) }
+      : { kind: "line", hasArrow: false, ...(strokeColor !== undefined ? { strokeColor } : {}) };
   }
 
   if (mode === "addArrow") {
     return hasDrag
-      ? { kind: "line", hasArrow: true, to: endWorld, strokeColor }
-      : { kind: "line", hasArrow: true, strokeColor };
+      ? { kind: "line", hasArrow: true, to: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}) }
+      : { kind: "line", hasArrow: true, ...(strokeColor !== undefined ? { strokeColor } : {}) };
   }
 
   if (mode === "addBezier") {
@@ -99,27 +71,27 @@ export function createTemplateForToolDrag(
       pt((startWorld.y + endWorld.y) / 2)
     );
     if (hasDrag) {
-      return createBezierTemplateFromBend(startWorld, endWorld, bend, { strokeColor });
+      return createBezierTemplateFromBend(startWorld, endWorld, bend, { ...(strokeColor !== undefined ? { strokeColor } : {}) });
     }
-    return { kind: "bezier", strokeColor };
+    return { kind: "bezier", ...(strokeColor !== undefined ? { strokeColor } : {}) };
   }
 
   if (mode === "addGrid") {
     return hasDrag
-      ? { kind: "grid", corner: endWorld, strokeColor }
-      : { kind: "grid", strokeColor };
+      ? { kind: "grid", corner: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}) }
+      : { kind: "grid", ...(strokeColor !== undefined ? { strokeColor } : {}) };
   }
 
   if (mode === "addRect") {
     return hasDrag
-      ? { kind: "rectangle", corner: endWorld, strokeColor, fillColor }
-      : { kind: "rectangle", strokeColor, fillColor };
+      ? { kind: "rectangle", corner: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}), ...(fillColor !== undefined ? { fillColor } : {}) }
+      : { kind: "rectangle", ...(strokeColor !== undefined ? { strokeColor } : {}), ...(fillColor !== undefined ? { fillColor } : {}) };
   }
 
   if (mode === "addEllipse") {
     return hasDrag
-      ? { kind: "ellipse", corner: endWorld, strokeColor, fillColor }
-      : { kind: "ellipse", strokeColor, fillColor };
+      ? { kind: "ellipse", corner: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}), ...(fillColor !== undefined ? { fillColor } : {}) }
+      : { kind: "ellipse", ...(strokeColor !== undefined ? { strokeColor } : {}), ...(fillColor !== undefined ? { fillColor } : {}) };
   }
 
   if (mode === "addShape") {
@@ -133,23 +105,23 @@ export function createTemplateForToolDrag(
           kind: "node",
           shape: options?.selectedAddShape ?? "rectangle",
           text: "",
-          minimumWidthPt: draft.minimumWidthPt,
-          minimumHeightPt: draft.minimumHeightPt,
-          strokeColor,
-          fillColor
+          ...(draft.minimumWidthPt !== undefined ? { minimumWidthPt: draft.minimumWidthPt } : {}),
+          ...(draft.minimumHeightPt !== undefined ? { minimumHeightPt: draft.minimumHeightPt } : {}),
+          ...(strokeColor !== undefined ? { strokeColor } : {}),
+          ...(fillColor !== undefined ? { fillColor } : {})
         }
       : {
           kind: "node",
           shape: options?.selectedAddShape ?? "rectangle",
           text: "",
-          strokeColor,
-          fillColor
+          ...(strokeColor !== undefined ? { strokeColor } : {}),
+          ...(fillColor !== undefined ? { fillColor } : {})
         };
   }
 
   return hasDrag
-    ? { kind: "circle", edge: endWorld, strokeColor, fillColor }
-    : { kind: "circle", strokeColor, fillColor };
+    ? { kind: "circle", edge: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}), ...(fillColor !== undefined ? { fillColor } : {}) }
+    : { kind: "circle", ...(strokeColor !== undefined ? { strokeColor } : {}), ...(fillColor !== undefined ? { fillColor } : {}) };
 }
 
 export function resolveBezierControlsFromBend(
@@ -207,7 +179,7 @@ export function createBezierTemplateFromBend(
     to: controls.endWorld,
     control1: controls.control1,
     control2: controls.control2,
-    strokeColor: options?.strokeColor
+    ...(options?.strokeColor !== undefined ? { strokeColor: options.strokeColor } : {})
   };
 }
 
@@ -238,54 +210,15 @@ export function resolveHandleIdForDrag(
   drag: Extract<DragState, { kind: "handle" }>,
   handles: EditHandle[]
 ): string | null {
-  const direct = handles.find((handle) => handle.id === drag.handleId);
-  if (direct) {
-    return direct.id;
-  }
-
-  const best = findClosestHandleMatch(handles, drag.lastKnownWorld, (handle) => handle.kind === drag.handleKind);
-
-  if (!best) {
-    return null;
-  }
-
-  drag.handleId = best.id;
-  drag.sourceId = best.sourceRef.sourceId;
-  drag.lastKnownWorld = { ...best.world };
-  return best.id;
-}
-
-function findClosestHandleMatch(
-  handles: readonly EditHandle[],
-  target: WorldPoint,
-  predicate: (handle: EditHandle) => boolean
-): EditHandle | null {
-  let best: EditHandle | null = null;
-  let bestDistSq = Number.POSITIVE_INFINITY;
-  for (const handle of handles) {
-    if (!predicate(handle)) {
-      continue;
-    }
-    const dx = handle.world.x - target.x;
-    const dy = handle.world.y - target.y;
-    const distSq = dx * dx + dy * dy;
-    if (distSq < bestDistSq) {
-      bestDistSq = distSq;
-      best = handle;
-    }
-  }
-  return best;
-}
-
-function boundsContainedWithin(inner: SvgBounds, outer: SvgBounds): boolean {
-  return inner.minX >= outer.minX && inner.maxX <= outer.maxX && inner.minY >= outer.minY && inner.maxY <= outer.maxY;
-}
-
-function pointFromBoundsAnchorRatio(bounds: WorldBounds, ratio: SelectionAnchorRatio): WorldPoint {
-  return worldPoint(
-    pt(bounds.minX + (bounds.maxX - bounds.minX) * ratio.x),
-    pt(bounds.minY + (bounds.maxY - bounds.minY) * ratio.y)
-  );
+  const matches = handles.filter(handle => handle.kind === drag.handleKind && (
+    drag.handleEditingId ? handle.editingId === drag.handleEditingId
+      : handle.id === drag.handleId && handle.sourceRef.sourceId === drag.sourceId
+  ));
+  if (matches.length !== 1) return null;
+  const match = requireArrayValue(matches, 0);
+  drag.handleId = match.id;
+  drag.sourceId = match.sourceRef.sourceId;
+  return match.id;
 }
 
 function constrainRectCornerToSquare(startWorld: WorldPoint, cornerWorld: WorldPoint): WorldPoint {
@@ -548,7 +481,7 @@ export function pickClosestSourceId(
   sourceIds: readonly string[],
   preferredWorld: WorldPoint
 ): string {
-  let bestId = sourceIds[0];
+  let bestId = requireArrayValue(sourceIds, 0);
   let bestDistSq = Number.POSITIVE_INFINITY;
 
   for (const sourceId of sourceIds) {

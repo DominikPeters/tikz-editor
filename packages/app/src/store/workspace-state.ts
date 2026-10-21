@@ -1,7 +1,10 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import { getActiveDocument } from "./document-sessions";
 import type {
   CanvasTransform,
   DocumentFileRef,
   DocumentSession,
+  DocumentSessions,
   EditorState,
   ExternalChangeStatus,
   FileRevision,
@@ -9,11 +12,18 @@ import type {
   WorkspacePersistedState
 } from "./types";
 import { makeEmptySnapshot } from "../compute";
+import { detectDocumentKind, documentKindDependencySource, type DocumentKind } from "@tikz-editor/core/document/kind";
+import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 
 export const DEFAULT_SOURCE = String.raw`\begin{tikzpicture}
 \end{tikzpicture}`;
 
-export const WORKSPACE_VERSION = 3;
+/**
+ * Version 4 renames the per-document `activeFigureId` to `activeRootId`
+ * (document roots: tikz figures and beamer frames share one namespace).
+ * The stored id values are unchanged.
+ */
+export const WORKSPACE_VERSION = 4;
 
 export const DEFAULT_CANVAS_TRANSFORM: CanvasTransform = {
   translateX: 0,
@@ -25,12 +35,13 @@ export type WorkspaceSeedDocument = {
   id: string;
   title: string;
   source: string;
-  activeFigureId?: string | null;
+  activeRootId?: string | null;
   savedSource?: string;
   fileRef?: DocumentFileRef | null;
   diskRevision?: FileRevision | null;
   lastKnownDiskSource?: string | null;
   externalChangeStatus?: ExternalChangeStatus;
+  assistantSessionGeneration?: number;
   assistantThreadId?: string | null;
   assistantWorkspacePath?: string | null;
   assistantFigurePath?: string | null;
@@ -45,6 +56,12 @@ export type WorkspaceSeed = {
   recentDocumentIds: string[];
 };
 
+/** Ordering is recoverable UI metadata; it must not hide valid documents. */
+export function normalizeWorkspaceTabOrder(tabOrder: readonly string[], documentIds: Iterable<string>): string[] {
+  const validIds = new Set(documentIds);
+  return [...new Set([...tabOrder.filter((id) => validIds.has(id)), ...validIds])];
+}
+
 function createDocumentId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -53,24 +70,25 @@ function createDocumentId(): string {
 }
 
 function readDocument(
-  documents: Record<string, DocumentSession>,
+  documents: DocumentSessions,
   documentId: string
 ): DocumentSession | undefined {
-  return (documents as Partial<Record<string, DocumentSession>>)[documentId];
+  return documents[documentId];
 }
 
-function hasDocument(documents: Record<string, DocumentSession>, documentId: string): boolean {
+function hasDocument(documents: DocumentSessions, documentId: string): boolean {
   return readDocument(documents, documentId) !== undefined;
 }
 
 export function createDocumentSession(params: {
   source: string;
   title?: string;
-  activeFigureId?: string | null;
+  activeRootId?: string | null;
   fileRef?: DocumentFileRef | null;
   diskRevision?: FileRevision | null;
   lastKnownDiskSource?: string | null;
   externalChangeStatus?: ExternalChangeStatus;
+  assistantSessionGeneration?: number;
   assistantThreadId?: string | null;
   assistantWorkspacePath?: string | null;
   assistantFigurePath?: string | null;
@@ -78,13 +96,16 @@ export function createDocumentSession(params: {
 }): DocumentSession {
   const trimmedTitle = params.title?.trim();
   const title = trimmedTitle === undefined || trimmedTitle.length === 0 ? "Untitled" : trimmedTitle;
+  const ref = parseDocumentRootId(params.activeRootId ?? "");
+  const layer = ref?.kind === "beamer-frame-tikz" && ref.layer ? ref : null;
   return {
     id: createDocumentId(),
     title,
     source: params.source,
     sourceRevision: 0,
-    activeFigureId: params.activeFigureId ?? null,
-    hasInitializedFigureSelection: false,
+    activeRootId: layer ? formatDocumentRootId({ kind: "beamer-frame", index: layer.frameIndex }) : params.activeRootId ?? null,
+    drawingLayerRootId: layer ? params.activeRootId ?? null : null,
+    hasInitializedRootSelection: false,
     snapshot: makeEmptySnapshot(params.source),
     pendingRequestId: null,
     lastEditChangedSourceIds: null,
@@ -104,6 +125,7 @@ export function createDocumentSession(params: {
     diskRevision: params.diskRevision ?? null,
     lastKnownDiskSource: params.lastKnownDiskSource ?? null,
     externalChangeStatus: params.externalChangeStatus ?? "none",
+    assistantSessionGeneration: params.assistantSessionGeneration ?? 0,
     assistantThreadId: params.assistantThreadId ?? null,
     assistantWorkspacePath: params.assistantWorkspacePath ?? null,
     assistantFigurePath: params.assistantFigurePath ?? null,
@@ -134,16 +156,17 @@ export function createInitialWorkspaceState(): WorkspacePersistedState {
 }
 
 export function hydrateWorkspaceStateFromSeed(seed: WorkspaceSeed): WorkspacePersistedState {
-  const docs: Record<string, DocumentSession> = {};
+  const docs: DocumentSessions = {};
   for (const raw of seed.documents) {
     const doc = createDocumentSession({
       source: raw.source,
       title: raw.title,
-      activeFigureId: raw.activeFigureId ?? null,
+      activeRootId: raw.activeRootId ?? null,
       fileRef: raw.fileRef ?? null,
       diskRevision: raw.diskRevision ?? null,
       lastKnownDiskSource: raw.lastKnownDiskSource ?? null,
       externalChangeStatus: raw.externalChangeStatus ?? "none",
+      assistantSessionGeneration: raw.assistantSessionGeneration ?? 0,
       assistantThreadId: raw.assistantThreadId ?? null,
       assistantWorkspacePath: raw.assistantWorkspacePath ?? null,
       assistantFigurePath: raw.assistantFigurePath ?? null,
@@ -155,18 +178,17 @@ export function hydrateWorkspaceStateFromSeed(seed: WorkspaceSeed): WorkspacePer
     docs[doc.id] = doc;
   }
 
-  const tabOrder = seed.tabOrder.filter((id) => hasDocument(docs, id));
-  const fallbackOrder = tabOrder.length > 0 ? tabOrder : Object.keys(docs);
-  if (fallbackOrder.length === 0) {
+  const tabOrder = normalizeWorkspaceTabOrder(seed.tabOrder, Object.keys(docs));
+  if (tabOrder.length === 0) {
     return createInitialWorkspaceState();
   }
-  const activeDocumentId = hasDocument(docs, seed.activeDocumentId) ? seed.activeDocumentId : fallbackOrder[0];
-  const seededRecents = seed.recentDocumentIds.filter((id) => hasDocument(docs, id));
+  const activeDocumentId = hasDocument(docs, seed.activeDocumentId) ? seed.activeDocumentId : requireArrayValue(tabOrder, 0);
+  const seededRecents = [...new Set(seed.recentDocumentIds.filter((id) => hasDocument(docs, id)))];
   const normalizedRecents = seededRecents.length > 0 ? seededRecents : [activeDocumentId];
   return {
     workspaceVersion: WORKSPACE_VERSION,
     documents: docs,
-    tabOrder: fallbackOrder,
+    tabOrder,
     activeDocumentId,
     recentDocumentIds: normalizedRecents
   };
@@ -176,12 +198,14 @@ function normalizeWorkspaceActiveDocument(workspace: WorkspacePersistedState): W
   if (hasDocument(workspace.documents, workspace.activeDocumentId)) {
     return workspace;
   }
-  const fallbackId = workspace.tabOrder.find((id) => hasDocument(workspace.documents, id));
+  const documentIds = Object.keys(workspace.documents).filter((id) => workspace.documents[id] !== undefined);
+  const tabOrder = normalizeWorkspaceTabOrder(workspace.tabOrder, documentIds);
+  const fallbackId = tabOrder[0];
   if (fallbackId) {
     return {
       ...workspace,
       activeDocumentId: fallbackId,
-      tabOrder: workspace.tabOrder.filter((id) => hasDocument(workspace.documents, id))
+      tabOrder
     };
   }
   const replacement = createUntitledDocumentSession();
@@ -194,13 +218,29 @@ function normalizeWorkspaceActiveDocument(workspace: WorkspacePersistedState): W
   };
 }
 
+/**
+ * Mode follows the file: the document kind is derived from the source on
+ * every projection. Complete leading literal declarations depend on their
+ * lexical prefix; complex preambles retain the exact-source fallback.
+ */
+let documentKindCache: { source: string; kind: DocumentKind } | null = null;
+
+export function documentKindForSource(source: string): DocumentKind {
+  const dependencySource = documentKindDependencySource(source);
+  if (documentKindCache?.source !== dependencySource) {
+    documentKindCache = { source: dependencySource, kind: detectDocumentKind(dependencySource) };
+  }
+  return documentKindCache.kind;
+}
+
 export function projectState(workspace: WorkspacePersistedState, ui: WorkspaceEphemeralState): EditorState {
   const normalizedWorkspace = normalizeWorkspaceActiveDocument(workspace);
-  const active = normalizedWorkspace.documents[normalizedWorkspace.activeDocumentId];
+  const active = getActiveDocument(normalizedWorkspace);
   return {
     source: active.source,
     sourceRevision: active.sourceRevision,
-    activeFigureId: active.activeFigureId,
+    documentKind: documentKindForSource(active.source),
+    activeRootId: active.activeRootId,
     snapshot: active.snapshot,
     pendingRequestId: active.pendingRequestId,
     lastEditChangedSourceIds: active.lastEditChangedSourceIds,
@@ -224,7 +264,9 @@ export function projectState(workspace: WorkspacePersistedState, ui: WorkspaceEp
     hoveredElementId: ui.hoveredElementId,
     activeCanvasDragKind: ui.activeCanvasDragKind,
     activeSourceScrubSourceId: ui.activeSourceScrubSourceId,
+    activeInspectorEditDocumentId: ui.activeInspectorEditDocumentId,
     activeCanvasTextEditSourceId: ui.activeCanvasTextEditSourceId,
+    canvasTextEditMask: ui.canvasTextEditMask,
     showGrid: ui.showGrid,
     showTransparencyGrid: ui.showTransparencyGrid,
     snapModes: ui.snapModes,
@@ -238,6 +280,11 @@ export function projectState(workspace: WorkspacePersistedState, ui: WorkspaceEp
     selectedAddMatrixColumns: ui.selectedAddMatrixColumns,
     creationStrokeColor: ui.creationStrokeColor,
     creationFillColor: ui.creationFillColor,
+    deckStepByRootKey: ui.deckStepByRootKey,
+    deckObjectSelection: ui.deckObjectSelection,
+    deckBuildSelection: ui.deckBuildSelection,
+    sourceReveal: ui.sourceReveal,
+    deckPlaceholderSelection: ui.deckPlaceholderSelection,
     fitToContentRequestToken: ui.fitToContentRequestToken,
     fitToContentModeActive: ui.fitToContentModeActive,
     canvasFitToContentScale: ui.canvasFitToContentScale,
@@ -251,6 +298,8 @@ export function projectState(workspace: WorkspacePersistedState, ui: WorkspaceEp
     showObjectsPanel: ui.showObjectsPanel,
     showStylesPanel: ui.showStylesPanel,
     showFiguresPanel: ui.showFiguresPanel,
+    showBuildsPanel: ui.showBuildsPanel,
+    showNotesPanel: ui.showNotesPanel,
     showAssistantPanel: ui.showAssistantPanel,
     rightSidebarTab: ui.rightSidebarTab,
     showDevPanel: ui.showDevPanel,
@@ -276,7 +325,9 @@ export function uiStateFromEditorState(state: EditorState): WorkspaceEphemeralSt
     hoveredElementId: state.hoveredElementId,
     activeCanvasDragKind: state.activeCanvasDragKind,
     activeSourceScrubSourceId: state.activeSourceScrubSourceId,
+    activeInspectorEditDocumentId: state.activeInspectorEditDocumentId,
     activeCanvasTextEditSourceId: state.activeCanvasTextEditSourceId,
+    canvasTextEditMask: state.canvasTextEditMask,
     showGrid: state.showGrid,
     showTransparencyGrid: state.showTransparencyGrid,
     snapModes: state.snapModes,
@@ -290,6 +341,11 @@ export function uiStateFromEditorState(state: EditorState): WorkspaceEphemeralSt
     selectedAddMatrixColumns: state.selectedAddMatrixColumns,
     creationStrokeColor: state.creationStrokeColor,
     creationFillColor: state.creationFillColor,
+    deckStepByRootKey: state.deckStepByRootKey,
+    deckObjectSelection: state.deckObjectSelection,
+    deckBuildSelection: state.deckBuildSelection,
+    sourceReveal: state.sourceReveal,
+    deckPlaceholderSelection: state.deckPlaceholderSelection,
     fitToContentRequestToken: state.fitToContentRequestToken,
     fitToContentModeActive: state.fitToContentModeActive,
     canvasFitToContentScale: state.canvasFitToContentScale,
@@ -304,6 +360,8 @@ export function uiStateFromEditorState(state: EditorState): WorkspaceEphemeralSt
     showStylesPanel: state.showStylesPanel,
     showAssistantPanel: state.showAssistantPanel,
     showFiguresPanel: state.showFiguresPanel,
+    showBuildsPanel: state.showBuildsPanel,
+    showNotesPanel: state.showNotesPanel,
     rightSidebarTab: state.rightSidebarTab,
     showDevPanel: state.showDevPanel,
     developerLogs: state.developerLogs,

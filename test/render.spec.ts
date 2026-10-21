@@ -4,13 +4,21 @@ import { renderTikzToSvg, renderTikzToSvgAsync } from "../packages/core/src/rend
 import { parseLength } from "../packages/core/src/semantic/coords/parse-length.js";
 import type { SceneCircle, SceneEllipse, ScenePath, SceneText } from "../packages/core/src/semantic/types.js";
 import { applyMatrix } from "../packages/core/src/semantic/transform.js";
-import { getKnuthPlassReportsFromOutputJax } from "../packages/core/src/text/knuth-plass/index.js";
-import { getActiveMathJaxOutputJax } from "../packages/core/src/text/mathjax-engine.js";
-import type { NodeTextEngine, NodeTextMeasureRequest, NodeTextMetrics } from "../packages/core/src/text/types.js";
+import { getParagraphLayoutReports } from "../packages/core/src/text/knuth-plass/index.js";
+import { getActiveTextLayoutContext } from "../packages/core/src/text/layout-context.js";
+import { getTexVListLayout } from "../packages/core/src/text/tex/vlist/registry.js";
+import { projectInputRange } from "../packages/core/src/text/source-map.js";
+import type { DocumentGraphicsResolver } from "../packages/core/src/graphics/index.js";
+import type {
+  NodeTextEngine,
+  NodeTextMeasureRequest,
+  NodeTextMetrics,
+  NodeTextRenderPayload,
+} from "../packages/core/src/text/types.js";
 
 function readLineboxTranslateXs(svg: string): number[] {
   const xs: number[] = [];
-  const lineboxPattern = /<g\b[^>]*data-mjx-linebox="true"[^>]*>/g;
+  const lineboxPattern = /<g\b[^>]*data-tex-linebox="true"[^>]*>/g;
   for (const match of svg.matchAll(lineboxPattern)) {
     const tag = match[0];
     const transformMatch = tag.match(/transform="translate\(([-+0-9.]+)(?:\s*,\s*|\s+)([-+0-9.]+)\)"/);
@@ -19,8 +27,19 @@ function readLineboxTranslateXs(svg: string): number[] {
   return xs;
 }
 
+function readLineboxTranslateYs(svg: string): number[] {
+  const ys: number[] = [];
+  const lineboxPattern = /<g\b[^>]*data-tex-linebox="true"[^>]*>/g;
+  for (const match of svg.matchAll(lineboxPattern)) {
+    const tag = match[0];
+    const transformMatch = tag.match(/transform="translate\(([-+0-9.]+)(?:\s*,\s*|\s+)([-+0-9.]+)\)"/);
+    ys.push(transformMatch ? Number(transformMatch[2]) : 0);
+  }
+  return ys;
+}
+
 function countLineboxes(svg: string): number {
-  return (svg.match(/data-mjx-linebox=/g) ?? []).length;
+  return (svg.match(/data-tex-linebox=/g) ?? []).length;
 }
 
 function renderedMspaceAdvances(svg: string): number[] {
@@ -38,8 +57,8 @@ function renderedMspaceAdvances(svg: string): number[] {
   return advances;
 }
 
-function reportForParagraphId(paragraphId: string | null) {
-  const reports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
+function reportForParagraphId(paragraphId: string | null, context = getActiveTextLayoutContext()) {
+  const reports = getParagraphLayoutReports(context);
   return reports.find((report) => report.paragraphId === paragraphId) ?? null;
 }
 
@@ -130,10 +149,174 @@ describe("render pipeline", () => {
 \end{tikzpicture}`;
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
-    expect(result.svg.svg).toContain('data-latex="x^2"');
-    expect(result.svg.svg).toContain('data-latex="\\frac{1}{y}"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
+    // Cells desugar to `$...$` text (PGF's execute at begin/end node=$) and render
+    // through the same native TeX engine as ordinary node text.
+    expect(result.svg.svg).toContain('data-tex-inline-math="true"');
     expect(result.svg.svg).not.toContain('\\mbox{x^2}');
+    const cells = result.semantic.scene.elements.filter(
+      (element): element is SceneText => element.kind === "Text"
+    );
+    expect(cells.map((cell) => cell.text)).toEqual(["x^2", "\\frac{1}{y}"]);
+    for (const cell of cells) {
+      expect(cell.textRenderInfo?.mode).toBe("tex");
+      expect(
+        cell.textRenderInfo?.mode === "tex" ? cell.textRenderInfo.renderSourceText : null
+      ).toBe(`$${cell.text}$`);
+      expect(
+        cell.textRenderInfo?.mode === "tex" ? cell.textRenderInfo.paragraphId : null
+      ).toMatch(/^tex:/);
+    }
+  });
+
+  it("keeps $-toggle semantics for math-node cells that escape back to text", async () => {
+    // PGF implements math cells as `execute at begin node=$`/`execute at end node=$`,
+    // so a cell's own `$...$` toggles back OUT of math: `a $\text{plus}$ b` becomes
+    // `$a $\text{plus}$ b$` — math `a`, text `plus`, math `b`.
+    const source = String.raw`\begin{tikzpicture}
+  \matrix[matrix of math nodes] {
+    a $\text{plus}$ b & \\
+  };
+\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    const cells = result.semantic.scene.elements.filter(
+      (element): element is SceneText => element.kind === "Text"
+    );
+    expect(cells).toHaveLength(1);
+    expect(
+      cells[0]?.textRenderInfo?.mode === "tex"
+        ? cells[0].textRenderInfo.renderSourceText
+        : null
+    ).toBe("$a $\\text{plus}$ b$");
+    const inlineMathGroups = result.svg.svg.split('data-tex-inline-math="true"').length - 1;
+    expect(inlineMathGroups).toBe(2);
+  });
+
+  it("registers per-node paragraph geometry for identical labels at different source positions", async () => {
+    // Identical label text shares the expensive layout, but the registered
+    // report/vlist geometry embeds source offsets projected through each
+    // node's own source map — sharing one registration would bake the first
+    // node's offsets into caret mapping for the second.
+    const label = "cost $O(n)$ here";
+    const source = `\\begin{tikzpicture}
+  \\node at (0,0) {${label}};
+  \\node at (0,-2) {${label}};
+\\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    const cells = result.semantic.scene.elements.filter(
+      (element): element is SceneText => element.kind === "Text"
+    );
+    expect(cells).toHaveLength(2);
+    const paragraphIds = cells.map((cell) =>
+      cell.textRenderInfo?.mode === "tex" ? cell.textRenderInfo.paragraphId : null
+    );
+    expect(paragraphIds[0]).toMatch(/^tex:/);
+    expect(paragraphIds[1]).toMatch(/^tex:/);
+    expect(paragraphIds[0]).not.toBe(paragraphIds[1]);
+
+    const expectedSpans = [source.indexOf(label), source.lastIndexOf(label)];
+    const layoutContext = getActiveTextLayoutContext();
+    for (const [index, paragraphId] of paragraphIds.entries()) {
+      const layout = getTexVListLayout(layoutContext, paragraphId);
+      expect(layout, `registered vlist layout for node ${index}`).not.toBeNull();
+      const spanStart = expectedSpans[index];
+      expect(layout?.paragraphPlacements[0]?.sourceSpan).toEqual({
+        start: spanStart,
+        end: spanStart + label.length,
+      });
+    }
+  });
+
+  it("renders includegraphics placeholders through the TeX text engine without local paths", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node at (0,0) {A \includegraphics[width=1cm]{missing-image} B};
+\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    expect(result.semantic.featureUsage.text_includegraphics).toBe("used-supported");
+    expect(result.svg.svg).toContain('data-tex-includegraphics="placeholder"');
+    expect(result.svg.svg).toContain('data-tex-includegraphics-status="missing"');
+    expect(result.svg.svg).not.toContain("missing-image.png");
+  });
+
+  it("renders rasterized PDF includegraphics assets as embedded PNG data URIs", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node at (0,0) {\includegraphics[width=1cm,page=2]{figure.pdf}};
+\end{tikzpicture}`;
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "pdf-page-2",
+      resolve: () => ({
+        status: "resolved",
+        mimeType: "image/png",
+        dataBase64: "cGRmLXBuZw==",
+        naturalWidthPt: 100,
+        naturalHeightPt: 50,
+        revision: "figure.pdf:r1:page=2",
+        resolvedPath: "/tmp/tikz/figure.pdf",
+      }),
+    };
+    const result = await renderTikzToSvgAsync(source, {
+      graphicsResolver,
+    });
+
+    expect(result.svg.svg).toContain('data-tex-includegraphics="true"');
+    expect(result.svg.svg).toContain('href="data:image/png;base64,cGRmLXBuZw=="');
+    expect(result.svg.svg).not.toContain("/tmp/tikz/figure.pdf");
+    const sceneText = result.semantic.scene.elements.find(
+      (element): element is SceneText => element.kind === "Text"
+    );
+    const graphic =
+      sceneText?.textRenderInfo?.mode === "tex"
+        ? sceneText.textRenderInfo.graphicsPlacements?.[0]
+        : undefined;
+    const commandStart = source.indexOf(String.raw`\includegraphics`);
+    const filenameStart = source.indexOf("figure.pdf", commandStart);
+    expect(graphic).toMatchObject({
+      sourceCoordinateSpace: "document",
+      asset: {
+        filename: "figure.pdf",
+        status: "resolved",
+        naturalWidthPt: 100,
+        naturalHeightPt: 50,
+        revision: "figure.pdf:r1:page=2",
+      },
+      sourceSpan: {
+        start: commandStart,
+        end: source.indexOf("}", filenameStart) + 1,
+      },
+      filenameSpan: {
+        start: filenameStart,
+        end: filenameStart + "figure.pdf".length,
+      },
+    });
+  });
+
+  it("renders cropped includegraphics assets as embedded SVG image viewports", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \node at (0,0) {\includegraphics[trim=10pt 5pt 20pt 15pt,clip]{figure.png}};
+\end{tikzpicture}`;
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "cropped-png",
+      resolve: () => ({
+        status: "resolved",
+        mimeType: "image/png",
+        dataBase64: "Y3JvcHBlZA==",
+        naturalWidthPt: 120,
+        naturalHeightPt: 80,
+        revision: "figure.png:r1",
+        resolvedPath: "/tmp/tikz/figure.png",
+      }),
+    };
+    const result = await renderTikzToSvgAsync(source, {
+      graphicsResolver,
+    });
+
+    expect(result.svg.svg).toContain('data-tex-includegraphics="true"');
+    expect(result.svg.svg).toContain('overflow="hidden" viewBox="1000 1500 9000 6000"');
+    expect(result.svg.svg).toContain('href="data:image/png;base64,Y3JvcHBlZA=="');
+    expect(result.svg.svg).not.toContain("/tmp/tikz/figure.png");
   });
 
   it("supports fit around coordinates and marks fit capability usage", () => {
@@ -299,6 +482,34 @@ describe("render pipeline", () => {
     expect(circle.radius).toBeLessThan(2.5);
   });
 
+  it("includes invisible node boxes and stroked path extents in picture bounds", () => {
+    const stroked = renderTikzToSvg(String.raw`\begin{tikzpicture}
+  \draw[line width=2pt] (0pt,0pt) -- (10pt,0pt);
+\end{tikzpicture}`);
+    expect(stroked.semantic.scene.bounds).toEqual({
+      minX: -1,
+      minY: -1,
+      maxX: 11,
+      maxY: 1,
+    });
+
+    const node = renderTikzToSvg(String.raw`\begin{tikzpicture}
+  \node[inner sep=10pt] at (0,0) {X};
+\end{tikzpicture}`);
+    const text = node.semantic.scene.elements.find(
+      (element): element is SceneText => element.kind === "Text"
+    )!;
+    const bounds = node.semantic.scene.bounds!;
+    expect(bounds.maxX - bounds.minX).toBeCloseTo(
+      text.nodeVisualWidth ?? 0,
+      6
+    );
+    expect(bounds.maxY - bounds.minY).toBeCloseTo(
+      text.nodeVisualHeight ?? 0,
+      6
+    );
+  });
+
   it("mirrors rotated ellipse arc angles when emitting SVG path data", () => {
     const source = String.raw`\begin{tikzpicture}
   \fill (0,0) ellipse[x radius=1, y radius=2, rotate=45];
@@ -356,14 +567,14 @@ describe("render pipeline", () => {
     expect(result.semantic.scene.kind).toBe("SceneFigure");
   });
 
-  it("renders node text through MathJax in async mode", async () => {
+  it("renders node text through native TeX in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \node[draw,text width=2cm] at (0,0) {Hello \textit{World}};
 \end{tikzpicture}`;
 
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
   });
 
@@ -372,7 +583,7 @@ describe("render pipeline", () => {
   \node at (0,0) {$\ell^2$};
 \end{tikzpicture}`;
 
-    const cache = new Map<string, { cacheKey: string; viewBox: { x: number; y: number; width: number; height: number }; body: string }>();
+    const cache = new Map<string, NodeTextRenderPayload>();
     let ready = false;
     let flushCalls = 0;
 
@@ -386,7 +597,8 @@ describe("render pipeline", () => {
         cache.set(cacheKey, {
           cacheKey,
           viewBox: { x: 0, y: 0, width: 1000, height: 1000 },
-          body: "<g data-test='ready'></g>"
+          body: "<g data-test='ready'></g>",
+          graphicsPlacements: []
         });
         return {
           cacheKey,
@@ -414,7 +626,7 @@ describe("render pipeline", () => {
     });
 
     expect(flushCalls).toBeGreaterThan(0);
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     expect(result.svg.svg).toContain("data-test='ready'");
   });
 
@@ -429,7 +641,42 @@ describe("render pipeline", () => {
 
     expect(result.renderDiagnostics).toEqual([]);
     expect(result.svg.svg).toContain("<text");
-    expect(result.svg.svg).not.toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).not.toContain('data-text-renderer="tex"');
+  });
+
+  it("passes macro-expanded node text source maps to the text engine", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \newcommand{\wrap}[1]{\textbf{#1}}
+  \node at (0,0) {\wrap{Alpha}};
+\end{tikzpicture}`;
+    const requests: NodeTextMeasureRequest[] = [];
+    const textEngine: NodeTextEngine = {
+      validate: () => null,
+      measure: (request) => {
+        requests.push(request);
+        return null;
+      },
+      renderFromCache: () => null
+    };
+
+    await renderTikzToSvgAsync(source, { textEngine });
+
+    const request = requests.find((candidate) => candidate.text.includes("Alpha"));
+    expect(request?.text).toBe(String.raw`\textbf{Alpha}`);
+    expect(request?.sourceMap?.inputText).toBe(String.raw`\textbf{Alpha}`);
+    expect(projectInputRange(request?.sourceMap, "\\textbf{".length, "\\textbf{Alpha".length)).toEqual({
+      kind: "source-range",
+      from: source.indexOf("Alpha"),
+      to: source.indexOf("Alpha") + "Alpha".length,
+      policy: "caret"
+    });
+    expect(projectInputRange(request?.sourceMap, 0, "\\textbf{".length)).toEqual({
+      kind: "source-range",
+      from: source.indexOf(String.raw`\wrap{Alpha}`),
+      to: source.indexOf(String.raw`\wrap{Alpha}`) + String.raw`\wrap{Alpha}`.length,
+      policy: "macro",
+      macroName: "\\wrap"
+    });
   });
 
   it("uses custom validators for node text but skips matrices and user macro sources", async () => {
@@ -470,29 +717,30 @@ describe("render pipeline", () => {
     expect(validatedTexts).toEqual([]);
   });
 
-  it("reports invalid node TeX as parser errors while preserving rendering", async () => {
+  it("renders unsupported direct characters as literal runs without parser errors", async () => {
     const source = String.raw`\begin{tikzpicture}
   \node[draw] at (0,0) {A_};
 \end{tikzpicture}`;
 
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(true);
+    expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
     expect(result.svg.svg).toContain("<svg");
+    expect(result.svg.svg).toContain('data-tex-literal="unsupported-character"');
     expect(result.semantic.scene.elements.length).toBeGreaterThan(0);
   });
 
-  it("keeps rendering recoverable for partial text commands in explicit multiline node text", async () => {
+  it("renders partial text commands in explicit multiline node text as literal runs", async () => {
     const source = String.raw`\begin{tikzpicture}
-  \node at (0.2,3.2) [align=left]{I'm testing the Mathjax \\ rendering \te};
+  \node at (0.2,3.2) [align=left]{I'm testing the TeX \\ rendering \te};
 \end{tikzpicture}`;
 
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(true);
+    expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
     expect(result.svg.svg).toContain("<svg");
+    expect(result.svg.svg).toContain('data-tex-literal="unsupported-command"');
     expect(result.semantic.scene.elements.length).toBeGreaterThan(0);
-    expect(result.svg.svg).toContain("<text");
   });
 
   it("uses browser text measurement for plain node text fallback width", () => {
@@ -585,9 +833,9 @@ describe("render pipeline", () => {
     if (singleWordText?.kind === "Text" && multiWordText?.kind === "Text") {
       const singleRenderInfo = singleWordText.textRenderInfo;
       const multiRenderInfo = multiWordText.textRenderInfo;
-      expect(singleRenderInfo?.mode).toBe("mathjax");
-      expect(multiRenderInfo?.mode).toBe("mathjax");
-      if (singleRenderInfo?.mode === "mathjax" && multiRenderInfo?.mode === "mathjax") {
+      expect(singleRenderInfo?.mode).toBe("tex");
+      expect(multiRenderInfo?.mode).toBe("tex");
+      if (singleRenderInfo?.mode === "tex" && multiRenderInfo?.mode === "tex") {
         expect(singleRenderInfo.layoutKind).toBe("single-line");
         expect(multiRenderInfo.layoutKind).toBe("single-line");
       }
@@ -596,29 +844,26 @@ describe("render pipeline", () => {
     expect(renderedMspaceAdvances(multiWord.svg.svg).every((advance) => advance > 0)).toBe(true);
   });
 
-  it("preserves visible spaces in plain single-line MathJax node text", async () => {
+  it("preserves visible spaces in plain single-line native TeX node text", async () => {
     const source = String.raw`\begin{tikzpicture}
   \node[draw] (test) at (0, 1.5) {this is a node with text};
 \end{tikzpicture}`;
 
     const result = await renderTikzToSvgAsync(source);
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
-    const advances = renderedMspaceAdvances(result.svg.svg);
 
     expect(text?.kind).toBe("Text");
     if (text?.kind === "Text") {
       expect(text.text).toBe("this is a node with text");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         const report = reportForParagraphId(renderInfo.paragraphId);
         const spaceRuns = report?.runs.filter((run) => run.kind === "space") ?? [];
         expect(spaceRuns).toHaveLength(5);
         expect(spaceRuns.every((run) => run.width > 0)).toBe(true);
       }
     }
-    expect(advances).toHaveLength(5);
-    expect(advances.every((advance) => advance > 0)).toBe(true);
   });
 
   it("keeps long plain node text single-line without align or text width", async () => {
@@ -634,8 +879,8 @@ describe("render pipeline", () => {
       expect(text.text).toBe("Let me think of something long and fun to write");
       expect(text.text).not.toContain("\n");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("single-line");
         expect(renderInfo.paragraphId).toBeTruthy();
       }
@@ -654,18 +899,19 @@ describe("render pipeline", () => {
     if (text?.kind === "Text") {
       const renderInfo = text.textRenderInfo;
       expect(text.text).toBe("C");
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("single-line");
         expect(renderInfo.paragraphId).toBeTruthy();
         expect(renderInfo.renderSourceText).toBe("C");
       }
-      const defaultInset = (parseLength(".3333em", "pt") ?? 3.333) * 2;
+      const defaultInset = text.style.fontSize * 0.3333 * 2;
       expect((text.nodeVisualWidth ?? 0) - (text.textBlockWidth ?? 0)).toBeCloseTo(defaultInset, 3);
     }
 
     expect(result.svg.svg).toContain('data-text-layout-kind="single-line"');
-    expect(result.svg.svg).toContain(String.raw`\parbox[t]{`);
+    expect(result.svg.svg).toContain('data-paragraph-id="tex:');
+    expect(result.svg.svg).toContain('data-tex-font="lmroman10-regular"');
     expect(result.svg.svg).not.toContain(String.raw`\mbox{C}`);
     expect(countLineboxes(result.svg.svg)).toBeLessThanOrEqual(1);
   });
@@ -714,9 +960,9 @@ World};
     if (inlineText?.kind === "Text" && newlineText?.kind === "Text") {
       const inlineRenderInfo = inlineText.textRenderInfo;
       const newlineRenderInfo = newlineText.textRenderInfo;
-      expect(inlineRenderInfo?.mode).toBe("mathjax");
-      expect(newlineRenderInfo?.mode).toBe("mathjax");
-      if (inlineRenderInfo?.mode === "mathjax" && newlineRenderInfo?.mode === "mathjax") {
+      expect(inlineRenderInfo?.mode).toBe("tex");
+      expect(newlineRenderInfo?.mode).toBe("tex");
+      if (inlineRenderInfo?.mode === "tex" && newlineRenderInfo?.mode === "tex") {
         expect(inlineRenderInfo.layoutKind).toBe("single-line");
         expect(newlineRenderInfo.layoutKind).toBe("single-line");
       }
@@ -734,8 +980,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("FirstSecond");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("single-line");
         expect(renderInfo.renderSourceText).toBe("FirstSecond");
       }
@@ -752,12 +998,11 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("First\nSecond");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
-    expect(result.svg.svg).toContain(String.raw`\parbox[t]{`);
     expect(result.svg.svg).toContain('data-paragraph-id=');
     expect(result.svg.svg).not.toContain(String.raw`\begin{array}`);
     expect(countLineboxes(result.svg.svg)).toBeGreaterThan(1);
@@ -773,12 +1018,11 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("Abcd\ndefgh");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
-    expect(result.svg.svg).toContain(String.raw`\parbox[t]{`);
     expect(result.svg.svg).toContain('data-paragraph-id=');
     expect(countLineboxes(result.svg.svg)).toBeGreaterThan(1);
   });
@@ -793,16 +1037,79 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("$x$\nvariable");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
-    expect(result.svg.svg).toContain(String.raw`\parbox[t]{`);
     expect(result.svg.svg).toContain('data-paragraph-id=');
     expect(countLineboxes(result.svg.svg)).toBeGreaterThan(1);
     const xs = readLineboxTranslateXs(result.svg.svg);
     expect(xs.some((x) => x > 0.5)).toBe(true);
+  });
+
+  it("uses TeX-shaped paragraph reports for simple wrapped LuaLaTeX-default text", async () => {
+    const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
+  \node[draw,text width=32pt,align=left] at (0,0) {Alpha Beta};
+\end{tikzpicture}`);
+
+    const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
+    expect(text?.kind).toBe("Text");
+    const renderInfo = text?.textRenderInfo;
+    expect(renderInfo?.mode).toBe("tex");
+    if (renderInfo?.mode === "tex") {
+      expect(renderInfo.paragraphId).toMatch(/^tex:/);
+      expect(renderInfo.layoutKind).toBe("wrapped");
+      const report = reportForParagraphId(renderInfo.paragraphId);
+      expect(report?.lines).toHaveLength(2);
+      expect(report?.lines[0]?.segments.map((segment) => segment.text).join("")).toBe("Alpha");
+      expect(report?.lines[1]?.segments.map((segment) => segment.text).join("")).toBe("Beta");
+    }
+    expect(result.svg.svg).toContain('data-paragraph-id="tex:');
+    expect(result.svg.svg).toContain('data-tex-linebox="true"');
+    expect(result.svg.svg).toContain('data-tex-font="lmroman10-regular"');
+    expect(result.svg.svg).toContain("<path");
+    expect(result.svg.svg).not.toContain("<text");
+  });
+
+  it("emits TeX-derived glyph source ranges for wrapped display math editing", async () => {
+    const sourceText = String.raw`Intro \[x^2=y\] Outro`;
+    const source = String.raw`\begin{tikzpicture}
+  \node[text width=120pt,align=left] at (0,0) {Intro \[x^2=y\] Outro};
+\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    const sourceTextOffset = source.indexOf(sourceText);
+    const yOffset = sourceText.indexOf("y");
+    expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
+    expect(result.svg.svg).toContain('data-paragraph-id="tex:');
+    expect(result.svg.svg).toContain(`data-tex-glyph="73" data-source-start="${sourceTextOffset}" data-source-end="${sourceTextOffset + 1}"`);
+    expect(result.svg.svg).toContain(`data-source-start="${sourceTextOffset + yOffset}" data-source-end="${sourceTextOffset + yOffset + 1}"`);
+  });
+
+  it("keeps explicit TeX line breaks on the TeX-shaped paragraph path", async () => {
+    const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
+  \node[draw,text width=150pt,align=left] at (0,0) {Alpha \\[7pt] Beta};
+\end{tikzpicture}`);
+
+    const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
+    const renderInfo = text?.textRenderInfo;
+    expect(renderInfo?.mode).toBe("tex");
+    if (renderInfo?.mode === "tex") {
+      expect(renderInfo.paragraphId).toMatch(/^tex:/);
+      const report = reportForParagraphId(renderInfo.paragraphId);
+      expect(report?.lines).toHaveLength(2);
+      expect(report?.lines[0]?.break).toMatchObject({
+        kind: "forced",
+        lineLeading: "7pt",
+      });
+    }
+    expect(result.svg.svg).toContain('data-paragraph-id="tex:');
+    expect(result.svg.svg).toContain('data-lineleading="7pt"');
+    expect(readLineboxTranslateYs(result.svg.svg)).toEqual([
+      expect.closeTo(0, 6),
+      expect.closeTo(19.283935, 6),
+    ]);
   });
 
   it("keeps align=left explicit multiline text without text width on the fixed-lines paragraph path", async () => {
@@ -815,8 +1122,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("a\nvariable");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
@@ -840,8 +1147,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("$x$\nvariable");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
@@ -853,6 +1160,25 @@ World};
     expect(result.svg.svg).not.toContain('data-c="2D"');
     expect(result.semantic.scene.bounds).toBeDefined();
     expect((result.semantic.scene.bounds?.maxX ?? 0) - (result.semantic.scene.bounds?.minX ?? 0)).toBeLessThan(100);
+  });
+
+  it("keeps default natural-width inline math nodes on the same TeX path as aligned nodes", async () => {
+    const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
+  \node at (1.09,2.76) {node $x=y$};
+  \node[align=left] at (1.1,2.15) {node $x=y$};
+  \node[align=left, text width=100pt] at (2.01,1.47) {node $x=y$};
+\end{tikzpicture}`);
+
+    const textElements = result.semantic.scene.elements.filter((element): element is SceneText => element.kind === "Text");
+    expect(textElements).toHaveLength(3);
+    const renderInfos = textElements.map((element) => element.textRenderInfo);
+    expect(renderInfos.every((info) =>
+      info?.mode === "tex" && info.paragraphId != null && info.paragraphId.startsWith("tex:")
+    )).toBe(true);
+    expect(textElements[0]?.textBlockWidth).toBeCloseTo(textElements[1]?.textBlockWidth ?? 0, 6);
+    expect(textElements[0]?.textBlockHeight).toBeCloseTo(textElements[1]?.textBlockHeight ?? 0, 6);
+    expect(result.svg.svg).toContain('data-tex-inline-math="true"');
+    expect(result.svg.svg).not.toContain(String.raw`\mbox{node $x=y$}`);
   });
 
   it("does not preserve a leading space after \\\\ for wrapped text width nodes", async () => {
@@ -869,10 +1195,11 @@ World};
       expect(secondLine.startsWith(" ")).toBe(false);
       expect(secondLine.startsWith("and")).toBe(true);
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
-        expect(renderInfo.renderSourceText).toContain(String.raw`\\and this is the second`);
-        expect(renderInfo.renderSourceText).not.toContain(String.raw`\\ and this is the second`);
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
+        expect(renderInfo.renderSourceText).toContain(
+          String.raw`\\ and this is the second`
+        );
       }
     }
   });
@@ -891,12 +1218,12 @@ World};
       expect(secondLine.startsWith(" ")).toBe(false);
       expect(secondLine.startsWith("and")).toBe(true);
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
-    expect(result.svg.svg).toContain(String.raw`\parbox[t]{`);
+    expect(result.svg.svg).toContain('data-paragraph-id="tex:');
     expect(result.svg.svg).toContain('data-paragraph-id=');
     expect(result.svg.svg).not.toContain(String.raw`\begin{array}`);
     expect(countLineboxes(result.svg.svg)).toBeGreaterThan(1);
@@ -912,8 +1239,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("This is the first line\nand this is the second line");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
@@ -933,17 +1260,17 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("This is the first line\nand this is the second line");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
 
-    expect(result.svg.svg).toContain(String.raw`\parbox[t]{`);
+    expect(result.svg.svg).toContain('data-paragraph-id="tex:');
     expect(result.svg.svg).toContain('data-paragraph-id=');
     expect(result.svg.svg).not.toContain(String.raw`\begin{array}`);
     expect(countLineboxes(result.svg.svg)).toBeGreaterThan(1);
-    expect(result.svg.svg).toContain(String.raw`\\[10pt]`);
+    expect(result.svg.svg).toContain('data-lineleading="10pt"');
     expect(result.svg.svg).not.toContain('data-c="5B"');
     expect(result.svg.svg).not.toContain('data-c="5D"');
   });
@@ -958,8 +1285,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toContain("\n");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
       }
     }
@@ -1000,12 +1327,12 @@ World};
     expect(text?.kind).toBe("Text");
     if (text?.kind === "Text") {
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("wrapped");
       }
     }
-    const lineboxCount = (result.svg.svg.match(/data-mjx-linebox=/g) ?? []).length;
+    const lineboxCount = (result.svg.svg.match(/data-tex-linebox=/g) ?? []).length;
     expect(lineboxCount).toBeGreaterThan(1);
     expect(result.svg.svg).toContain('data-align="left"');
   });
@@ -1015,12 +1342,12 @@ World};
   \node[draw,text width=6.1cm,align=left] (A) at (0,0) {This is the first line and this is the second line which is much longer};
 \end{tikzpicture}`);
 
-    const lineboxCount = (result.svg.svg.match(/data-mjx-linebox=/g) ?? []).length;
+    const lineboxCount = (result.svg.svg.match(/data-tex-linebox=/g) ?? []).length;
     expect(lineboxCount).toBeGreaterThan(1);
     expect(result.svg.svg).toContain('data-align="left"');
     // The source contains no hyphen, so a rendered hyphen glyph indicates
     // discretionary hyphenation was applied by the line breaker.
-    expect(result.svg.svg).toContain('data-c="2D"');
+    expect(result.svg.svg).toMatch(/data-c="2D"|data-tex-glyph="45"/);
   });
 
   it("uses wider sentence spacing than ordinary interword spacing in wrapped paragraphs", async () => {
@@ -1057,20 +1384,24 @@ World};
       capitalAbbreviationText?.kind === "Text"
     ) {
       const ordinaryReport = reportForParagraphId(
-        ordinaryText.textRenderInfo?.mode === "mathjax" ? ordinaryText.textRenderInfo.paragraphId : null
+        ordinaryText.textRenderInfo?.mode === "tex" ? ordinaryText.textRenderInfo.paragraphId : null,
+        ordinary.textLayoutContext
       );
       const sentenceReport = reportForParagraphId(
-        sentenceText.textRenderInfo?.mode === "mathjax" ? sentenceText.textRenderInfo.paragraphId : null
+        sentenceText.textRenderInfo?.mode === "tex" ? sentenceText.textRenderInfo.paragraphId : null,
+        sentence.textLayoutContext
       );
       const lowercaseSentenceReport = reportForParagraphId(
-        lowercaseSentenceText.textRenderInfo?.mode === "mathjax"
+        lowercaseSentenceText.textRenderInfo?.mode === "tex"
           ? lowercaseSentenceText.textRenderInfo.paragraphId
-          : null
+          : null,
+        lowercaseSentence.textLayoutContext
       );
       const capitalAbbreviationReport = reportForParagraphId(
-        capitalAbbreviationText.textRenderInfo?.mode === "mathjax"
+        capitalAbbreviationText.textRenderInfo?.mode === "tex"
           ? capitalAbbreviationText.textRenderInfo.paragraphId
-          : null
+          : null,
+        capitalAbbreviation.textLayoutContext
       );
       expect(ordinaryReport).not.toBeNull();
       expect(sentenceReport).not.toBeNull();
@@ -1088,22 +1419,30 @@ World};
 
   it("preserves rendered interword mspace advances for wrapped align=left paragraphs", async () => {
     const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
-  \node[align=left, text width=380pt] at (0,0) {Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim. Aliquam lorem ante, dapibus in, viverra quis, feugiat a, tellus. Phasellus viverra nulla ut metus varius laoreet. Quisque rutrum. Aenean imperdiet. Etiam ultricies nisi vel augue. Curabitur ullamcorper ultricies nisi. Nam eget dui. Etiam rhoncus. Maecenas tempus, tellus eget condimentum rhoncus, sem quam semper libero, sit amet adipiscing sem neque sed ipsum. Nam quam nunc, blandit vel, luctus pulvinar, hendrerit id, lorem. Maecenas nec odio et ante tincidunt tempus. Donec vitae sapien ut libero venenatis faucibus. Nullam quis ante.};
+  \node[align=left, text width=380pt,font=\itshape] at (0,0) {Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim. Aliquam lorem ante, dapibus in, viverra quis, feugiat a, tellus. Phasellus viverra nulla ut metus varius laoreet. Quisque rutrum. Aenean imperdiet. Etiam ultricies nisi vel augue. Curabitur ullamcorper ultricies nisi. Nam eget dui. Etiam rhoncus. Maecenas tempus, tellus eget condimentum rhoncus, sem quam semper libero, sit amet adipiscing sem neque sed ipsum. Nam quam nunc, blandit vel, luctus pulvinar, hendrerit id, lorem. Maecenas nec odio et ante tincidunt tempus. Donec vitae sapien ut libero venenatis faucibus. Nullam quis ante.};
 \end{tikzpicture}`);
 
-    const advances = renderedMspaceAdvances(result.svg.svg);
+    const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
+    const report = reportForParagraphId(
+      text?.textRenderInfo?.mode === "tex" ? text.textRenderInfo.paragraphId : null
+    );
+    const advances = report?.lines.flatMap((line) =>
+      line.segments
+        .filter((segment) => segment.kind === "space")
+        .map((segment) => Number(segment.width) || 0)
+    ) ?? [];
     expect(advances.length).toBeGreaterThan(100);
     expect(advances.every((advance) => advance > 0)).toBe(true);
   });
 
   it("keeps normal wrapped align=left lorem paragraphs on the canonical two-pass path", async () => {
     const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
-  \node[align=left, text width=380pt] at (0,0) {Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim. Aliquam lorem ante, dapibus in, viverra quis, feugiat a, tellus. Phasellus viverra nulla ut metus varius laoreet. Quisque rutrum. Aenean imperdiet. Etiam ultricies nisi vel augue. Curabitur ullamcorper ultricies nisi. Nam eget dui. Etiam rhoncus. Maecenas tempus, tellus eget condimentum rhoncus, sem quam semper libero, sit amet adipiscing sem neque sed ipsum. Nam quam nunc, blandit vel, luctus pulvinar, hendrerit id, lorem. Maecenas nec odio et ante tincidunt tempus. Donec vitae sapien ut libero venenatis faucibus. Nullam quis ante.};
+  \node[align=left, text width=380pt,font=\itshape] at (0,0) {Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim. Aliquam lorem ante, dapibus in, viverra quis, feugiat a, tellus. Phasellus viverra nulla ut metus varius laoreet. Quisque rutrum. Aenean imperdiet. Etiam ultricies nisi vel augue. Curabitur ullamcorper ultricies nisi. Nam eget dui. Etiam rhoncus. Maecenas tempus, tellus eget condimentum rhoncus, sem quam semper libero, sit amet adipiscing sem neque sed ipsum. Nam quam nunc, blandit vel, luctus pulvinar, hendrerit id, lorem. Maecenas nec odio et ante tincidunt tempus. Donec vitae sapien ut libero venenatis faucibus. Nullam quis ante.};
 \end{tikzpicture}`);
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     const report =
-      text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax"
+      text?.kind === "Text" && text.textRenderInfo?.mode === "tex"
         ? reportForParagraphId(text.textRenderInfo.paragraphId)
         : null;
     expect(report).not.toBeNull();
@@ -1118,7 +1457,7 @@ World};
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     const report =
-      text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax"
+      text?.kind === "Text" && text.textRenderInfo?.mode === "tex"
         ? reportForParagraphId(text.textRenderInfo.paragraphId)
         : null;
     expect(report).not.toBeNull();
@@ -1133,7 +1472,7 @@ World};
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     expect(text?.kind).toBe("Text");
-    if (text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax") {
+    if (text?.kind === "Text" && text.textRenderInfo?.mode === "tex") {
       const report = reportForParagraphId(text.textRenderInfo.paragraphId);
       expect(report).not.toBeNull();
       expect(report?.alignment).toBe("justified");
@@ -1157,8 +1496,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("This is the first line\nand this is the second line which is much longer");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
         expect(renderInfo.paragraphId).toBeTruthy();
       }
@@ -1180,8 +1519,8 @@ World};
     if (text?.kind === "Text") {
       expect(text.text).toBe("This is the first line\nand this is the second line which is much longer");
       const renderInfo = text.textRenderInfo;
-      expect(renderInfo?.mode).toBe("mathjax");
-      if (renderInfo?.mode === "mathjax") {
+      expect(renderInfo?.mode).toBe("tex");
+      if (renderInfo?.mode === "tex") {
         expect(renderInfo.layoutKind).toBe("explicit-multiline");
         expect(renderInfo.paragraphId).toBeTruthy();
       }
@@ -1201,7 +1540,7 @@ World};
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     let reportParagraphId: string | null = null;
     expect(text?.kind).toBe("Text");
-    if (text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax") {
+    if (text?.kind === "Text" && text.textRenderInfo?.mode === "tex") {
       expect(text.text).toBe("Alpha\nBeta\nThe longest line here");
       expect(text.textRenderInfo.layoutKind).toBe("explicit-multiline");
       expect(text.textRenderInfo.paragraphId).toBeTruthy();
@@ -1225,7 +1564,7 @@ World};
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     let reportParagraphId: string | null = null;
     expect(text?.kind).toBe("Text");
-    if (text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax") {
+    if (text?.kind === "Text" && text.textRenderInfo?.mode === "tex") {
       expect(text.text).toBe("Alpha\nBeta\nThe longest line here");
       expect(text.textRenderInfo.layoutKind).toBe("explicit-multiline");
       expect(text.textRenderInfo.paragraphId).toBeTruthy();
@@ -1248,7 +1587,7 @@ World};
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     const report =
-      text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax"
+      text?.kind === "Text" && text.textRenderInfo?.mode === "tex"
         ? reportForParagraphId(text.textRenderInfo.paragraphId)
         : null;
     expect(countLineboxes(result.svg.svg)).toBe(3);
@@ -1267,7 +1606,7 @@ World};
 
     const text = result.semantic.scene.elements.find((element): element is SceneText => element.kind === "Text");
     const report =
-      text?.kind === "Text" && text.textRenderInfo?.mode === "mathjax"
+      text?.kind === "Text" && text.textRenderInfo?.mode === "tex"
         ? reportForParagraphId(text.textRenderInfo.paragraphId)
         : null;
     expect(countLineboxes(result.svg.svg)).toBe(3);
@@ -1279,40 +1618,40 @@ World};
     expect(report?.lines[0]?.break?.lineLeading).toBe("10pt");
   });
 
-  it("preserves node font italic styling through MathJax wrappers in async mode", async () => {
+  it("preserves node font italic styling through native TeX wrappers in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \draw[node font=\itshape] (0,0) -- +(1,0) node[above] {italic};
 \end{tikzpicture}`;
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
-    expect(result.svg.svg).toContain("\\textit");
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
+    expect(result.svg.svg).toContain('data-tex-font="lmroman10-italic"');
   });
 
-  it("wraps MathJax text with family and weight commands from font options", async () => {
+  it("wraps native TeX text with family and weight commands from font options", async () => {
     const source = String.raw`\begin{tikzpicture}
   \node[font=\sffamily\bfseries] at (0,0) {Hello};
 \end{tikzpicture}`;
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
-    expect(result.svg.svg).toContain("\\textbf{\\textsf{");
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
+    expect(result.svg.svg).toContain('data-tex-font="lmsans10-bold"');
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
   });
 
-  it("normalizes legacy family switches inside node text for MathJax validation", async () => {
+  it("normalizes legacy family switches inside node text for native TeX validation", async () => {
     const source = String.raw`\begin{tikzpicture}
   \node[draw] at (0,0) {{\sffamily\Large node n}};
   \node[draw] at (1,0) {\phantom{\sffamily\Large node n}};
 \end{tikzpicture}`;
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
     expect(result.svg.svg).not.toContain(String.raw`\sffamily`);
   });
 
-  it("resolves colorlet aliases before MathJax text rendering", async () => {
+  it("resolves colorlet aliases before native TeX text rendering", async () => {
     const source = String.raw`\begin{tikzpicture}
   \colorlet{mycolor}{blue}
   \node at (0,0) {\textcolor{mycolor}{this}};
@@ -1323,8 +1662,28 @@ World};
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");
     if (label?.kind === "Text") {
-      expect(label.text).toContain(String.raw`\textcolor{blue}{this}`);
+      expect(label.text).toContain(String.raw`\textcolor{mycolor}{this}`);
     }
+    expect(result.svg.svg).toContain('fill="#0000ff"');
+  });
+
+  it("resolves color aliases in native colorbox and fcolorbox contents", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \definecolor{paper}{HTML}{FFF4CC}
+  \colorlet{edge}{blue}
+  \node at (0,0) {\colorbox{paper}{one} \fcolorbox{edge}{paper}{two}};
+\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
+    expect(label?.kind).toBe("Text");
+    if (label?.kind === "Text") {
+      expect(label.text).toContain(String.raw`\colorbox{paper}{one}`);
+      expect(label.text).toContain(String.raw`\fcolorbox{edge}{paper}{two}`);
+    }
+    expect(result.svg.svg).toContain('data-tex-rule="colorbox-background"');
+    expect(result.svg.svg).toContain('fill="#fff4cc"');
+    expect(result.svg.svg).toContain('fill="#0000ff"');
   });
 
   it("skips node TeX validation when pgfmath parsing commands define runtime macros", async () => {
@@ -1361,7 +1720,7 @@ World};
     expect(result.svg.svg).not.toContain('fill="mypink!20"');
   });
 
-  it("resolves definecolor HTML aliases before MathJax text rendering", async () => {
+  it("resolves definecolor HTML aliases before native TeX text rendering", async () => {
     const source = String.raw`\begin{tikzpicture}
   \definecolor{brand}{HTML}{1A2B3C}
   \node at (0,0) {\textcolor{brand}{this}};
@@ -1372,11 +1731,12 @@ World};
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");
     if (label?.kind === "Text") {
-      expect(label.text).toContain(String.raw`\textcolor{#1a2b3c}{this}`);
+      expect(label.text).toContain(String.raw`\textcolor{brand}{this}`);
     }
+    expect(result.svg.svg).toContain('fill="#1a2b3c"');
   });
 
-  it("resolves definecolor rgb aliases before MathJax text rendering", async () => {
+  it("resolves definecolor rgb aliases before native TeX text rendering", async () => {
     const source = String.raw`\begin{tikzpicture}
   \definecolor{brand}{rgb}{0.1,0.2,0.3}
   \node at (0,0) {\textcolor{brand}{this}};
@@ -1387,18 +1747,19 @@ World};
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");
     if (label?.kind === "Text") {
-      expect(label.text).toContain(String.raw`\textcolor{#1a334d}{this}`);
+      expect(label.text).toContain(String.raw`\textcolor{brand}{this}`);
     }
+    expect(result.svg.svg).toContain('fill="#1a334d"');
   });
 
-  it("renders foreach \\textsf labels through MathJax in async mode", async () => {
+  it("renders foreach \\textsf labels through native TeX in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \foreach \label in {1,2,3}
     \node at (\label,0) {\textsf{\label}};
 \end{tikzpicture}`;
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     expect(result.svg.svg.includes('xml:space="preserve">\\textsf{')).toBe(false);
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
   });
@@ -1452,7 +1813,7 @@ World};
     expect(macroPaths[0]?.style.dashArray?.join(",")).toBe("4,2");
   });
 
-  it("expands user-defined text macros before MathJax rendering in async mode", async () => {
+  it("expands user-defined text macros before native TeX rendering in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \def\labelmacro{\textsf{A}}
   \node at (0,0) {$\labelmacro$};
@@ -1460,7 +1821,7 @@ World};
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");
     if (label?.kind === "Text") {
@@ -1468,7 +1829,7 @@ World};
     }
   });
 
-  it("expands fixed-arity newcommand macros before MathJax rendering in async mode", async () => {
+  it("expands fixed-arity newcommand macros before native TeX rendering in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \newcommand{\vect}[1]{\mathbf{#1}}
   \node at (0,0) {$\vect{x}$};
@@ -1476,7 +1837,7 @@ World};
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");
     if (label?.kind === "Text") {
@@ -1484,7 +1845,39 @@ World};
     }
   });
 
-  it("expands DeclareMathOperator macros before MathJax rendering in async mode", async () => {
+  it("maps rendered macro argument glyphs to argument source and generated glyphs to invocation source", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \newcommand{\pair}[2]{#1/#2}
+  \node[text width=100pt,align=left] at (0,0) {\pair{Left}{Right}};
+\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    const invocationStart = source.indexOf(String.raw`\pair{Left}{Right}`);
+    const invocationEnd = invocationStart + String.raw`\pair{Left}{Right}`.length;
+    const leftStart = source.indexOf("Left");
+    const rightStart = source.indexOf("Right");
+    expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
+    expect(result.svg.svg).toContain(`data-tex-glyph="76" data-source-start="${leftStart}" data-source-end="${leftStart + 1}"`);
+    expect(result.svg.svg).toContain(`data-tex-glyph="47" data-source-start="${invocationStart}" data-source-end="${invocationEnd}"`);
+    expect(result.svg.svg).toContain(`data-tex-glyph="82" data-source-start="${rightStart}" data-source-end="${rightStart + 1}"`);
+  });
+
+  it("maps rendered optional default macro text to the macro invocation source", async () => {
+    const source = String.raw`\begin{tikzpicture}
+  \newcommand{\tagged}[2][Default]{#1:#2}
+  \node[text width=120pt,align=left] at (0,0) {\tagged{Value}};
+\end{tikzpicture}`;
+    const result = await renderTikzToSvgAsync(source);
+
+    const invocationStart = source.indexOf(String.raw`\tagged{Value}`);
+    const invocationEnd = invocationStart + String.raw`\tagged{Value}`.length;
+    const valueStart = source.indexOf("Value");
+    expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
+    expect(result.svg.svg).toContain(`data-tex-glyph="68" data-source-start="${invocationStart}" data-source-end="${invocationEnd}"`);
+    expect(result.svg.svg).toContain(`data-tex-glyph="86" data-source-start="${valueStart}" data-source-end="${valueStart + 1}"`);
+  });
+
+  it("expands DeclareMathOperator macros before native TeX rendering in async mode", async () => {
     const source = String.raw`\DeclareMathOperator{\cone}{cone}
 \DeclareMathOperator*{\argmax}{argmax}
 \begin{tikzpicture}
@@ -1494,7 +1887,7 @@ World};
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     const labels = result.semantic.scene.elements
       .filter((element) => element.kind === "Text")
       .map((element) => (element.kind === "Text" ? element.text : ""));
@@ -1502,7 +1895,7 @@ World};
     expect(labels).toContain(String.raw`$\operatorname*{argmax}_{x \in X} f(x)$`);
   });
 
-  it("expands providecommand and DeclareRobustCommand macros before MathJax rendering in async mode", async () => {
+  it("expands providecommand and DeclareRobustCommand macros before native TeX rendering in async mode", async () => {
     const source = String.raw`\newcommand{\kept}{A}
 \providecommand{\kept}{B}
 \providecommand{\fresh}[1]{\mathcal{#1}}
@@ -1513,7 +1906,7 @@ World};
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");
     if (label?.kind === "Text") {
@@ -1521,7 +1914,7 @@ World};
     }
   });
 
-  it("expands newcommand optional/default arguments before MathJax rendering in async mode", async () => {
+  it("expands newcommand optional/default arguments before native TeX rendering in async mode", async () => {
     const source = String.raw`\begin{tikzpicture}
   \newcommand{\pair}[2][\alpha]{#1+#2}
   \node at (0,0) {$\pair{x}$};
@@ -1530,7 +1923,7 @@ World};
     const result = await renderTikzToSvgAsync(source);
 
     expect(result.parse.diagnostics.some((diagnostic) => diagnostic.code === "invalid-node-tex")).toBe(false);
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     const labels = result.semantic.scene.elements
       .filter((element) => element.kind === "Text")
       .map((element) => (element.kind === "Text" ? element.text : ""));
@@ -1546,7 +1939,7 @@ World};
 \end{tikzpicture}`;
     const result = await renderTikzToSvgAsync(source);
 
-    expect(result.svg.svg).toContain('data-text-renderer="mathjax"');
+    expect(result.svg.svg).toContain('data-text-renderer="tex"');
     expect(result.svg.svg.includes('xml:space="preserve">$\\mathstrut')).toBe(false);
     const label = result.semantic.scene.elements.find((element) => element.kind === "Text");
     expect(label?.kind).toBe("Text");

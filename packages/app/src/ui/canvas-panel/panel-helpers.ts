@@ -1,9 +1,11 @@
-import type { AdornmentOwnerGeometry, NodeItem, PathItem, Span, Statement } from "tikz-editor/ast/types";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import { mapWorldTransformToSvgTransform, svgPoint, svgBounds, worldPoint, worldVector, worldTransform, pt } from "tikz-editor/coords/index";
-import { parseCoordinateLike, parseLength } from "tikz-editor/semantic/coords/parse-length";
-import { resolveTransformInspectorMutationContextFromOptionEntries } from "tikz-editor/edit/property-write-builders";
-import type { OptionListAst } from "tikz-editor/options/types";
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import type { AdornmentOwnerGeometry, NodeItem, PathItem, Span, Statement } from "@tikz-editor/core/ast/types";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
+import { mapWorldTransformToSvgTransform, svgPoint, svgBounds, worldPoint, worldVector, worldTransform, pt } from "@tikz-editor/core/coords/index";
+import { parseCoordinateLike, parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
+import { resolveTransformInspectorMutationContextFromOptionEntries } from "@tikz-editor/core/edit/property-write-builders";
+import type { OptionListAst } from "@tikz-editor/core/options/types";
 import {
   isFrameLocalCoordinateEditHandle,
   type EditHandle,
@@ -13,11 +15,12 @@ import {
   type ScenePathCommand,
   type ScenePathShapeHint,
   type SceneText
-} from "tikz-editor/semantic/types";
-import type { SvgTransform, WorldTransform, WorldVector } from "tikz-editor/coords/index";
-import { intersectRayWithPolygon } from "tikz-editor/semantic/nodes/shape-geometry";
-import type { SvgViewBox } from "tikz-editor/svg/index";
-import { applyMatrixToVector, inverseMatrix } from "tikz-editor/semantic/transform";
+} from "@tikz-editor/core/semantic/types";
+import type { SvgTransform, WorldTransform, WorldVector } from "@tikz-editor/core/coords/index";
+import { intersectRayWithPolygon } from "@tikz-editor/core/semantic/nodes/shape-geometry";
+import { sceneGeometryIdentity } from "@tikz-editor/core/semantic/geometry-identity";
+import type { SvgViewBox } from "@tikz-editor/core/svg/index";
+import { applyMatrixToVector, inverseMatrix } from "@tikz-editor/core/semantic/transform";
 import type { CanvasDragKind } from "../../store/types";
 import type { ClientPoint, SvgBounds, SvgPoint, TextRectLocalPoint, WorldBounds, WorldPoint } from "../coords/types";
 import {
@@ -28,13 +31,11 @@ import {
 import type { HitRegion } from "./hit-regions";
 import type {
   DragState,
-  EditableTextTarget,
   GridResizeSnapConfig,
   SelectionAnchorRatio,
   SelectionBounds
 } from "./types";
 import {
-  clamp,
   distanceSquared,
   fmt,
   resizeCursorForVector,
@@ -50,7 +51,7 @@ type GuidesState = {
 };
 
 const GRID_SNAP_STEP_EPSILON = 1e-9;
-const DEFAULT_GRID_STEP = parseLength("1", "cm") ?? 28.4527559055;
+const DEFAULT_GRID_STEP = parseLength("1", "cm") ?? PT_PER_CM;
 
 export function collectSelectionBounds(
   elements: SceneElement[],
@@ -274,7 +275,56 @@ export function elementBoundsInSvg(element: SceneElement, viewBox: SvgViewBox): 
 }
 
 export function effectiveElementBoundsInSvg(element: SceneElement, viewBox: SvgViewBox): SvgBounds | null {
-  return constrainBoundsToClipChain(elementBoundsInSvg(element, viewBox), element.clipChain ?? [], viewBox);
+  const identity = sceneGeometryIdentity(element);
+  const cached = elementBoundsCache.get(identity);
+  const key = `${viewBox.x},${viewBox.y},${viewBox.width},${viewBox.height}`;
+  if (cached?.key === key) return cached.bounds;
+  const bounds = constrainBoundsToClipChain(elementBoundsInSvg(element, viewBox), element.clipChain ?? [], viewBox);
+  elementBoundsCache.set(identity, { key, bounds });
+  return bounds;
+}
+
+// One view per geometry token bounds memory during zooming and source editing.
+const elementBoundsCache = new WeakMap<object, { key: string; bounds: SvgBounds | null }>();
+
+const sourceElementIndexes = new WeakMap<readonly SceneElement[], ReadonlyMap<string, SceneElement[]>>();
+
+function nodeElementsForSource(elements: readonly SceneElement[], sourceId: string): readonly SceneElement[] {
+  let index = sourceElementIndexes.get(elements);
+  if (!index) {
+    const next = new Map<string, SceneElement[]>();
+    for (const element of elements) {
+      if (element.adornment) continue;
+      const id = element.sourceRef.sourceId;
+      const group = next.get(id);
+      if (group) group.push(element);
+      else next.set(id, [element]);
+    }
+    sourceElementIndexes.set(elements, next);
+    index = next;
+  }
+  return index.get(sourceId) ?? [];
+}
+
+type SourceItem = SceneElement | EditHandle;
+const itemIndexes = new WeakMap<readonly SourceItem[], ReadonlyMap<string, readonly SourceItem[]>>();
+
+/** A scene's elements or edit handles for one source, indexed once per array. */
+export function itemsForSource(items: readonly SceneElement[], sourceId: string): readonly SceneElement[];
+export function itemsForSource(items: readonly EditHandle[], sourceId: string): readonly EditHandle[];
+export function itemsForSource(items: readonly SourceItem[], sourceId: string): readonly SourceItem[] {
+  let index = itemIndexes.get(items);
+  if (!index) {
+    const next = new Map<string, SourceItem[]>();
+    for (const item of items) {
+      const group = next.get(item.sourceRef.sourceId);
+      if (group) group.push(item);
+      else next.set(item.sourceRef.sourceId, [item]);
+    }
+    itemIndexes.set(items, next);
+    index = next;
+  }
+  return index.get(sourceId) ?? [];
 }
 
 export function textBounds(element: SceneText, viewBox: SvgViewBox): SvgBounds {
@@ -484,13 +534,6 @@ export function selectionAnchorRatioFromPoint(bounds: WorldBounds, point: WorldP
   };
 }
 
-export function caretStrokeWidthInSvg(fontSizePt: number): number {
-  if (!Number.isFinite(fontSizePt) || fontSizePt <= 0) {
-    return 0.5;
-  }
-  return clamp(fontSizePt * 0.055, 0.45, 1.1);
-}
-
 export function estimateTextBlockWidth(text: string, fontSize: number): number {
   const lines = text.split("\n");
   const maxChars = lines.reduce((max, line) => Math.max(max, line.length), 0);
@@ -609,38 +652,6 @@ export function isMatrixNodeItem(item: NodeItem): boolean {
   return false;
 }
 
-export function resolveEditableTextTargetForSelectionOffsets(
-  targetId: string,
-  anchorOffset: number,
-  headOffset: number,
-  hitRegions: readonly HitRegion[],
-  resolveEditableTextTarget: (targetId: string, region: HitRegion | undefined) => EditableTextTarget | null
-): EditableTextTarget | null {
-  const rectRegions = hitRegions.filter(
-    (candidate): candidate is Extract<HitRegion, { shape: "rect" }> => candidate.targetId === targetId && candidate.shape === "rect"
-  );
-  if (rectRegions.length === 0) {
-    return null;
-  }
-
-  const minOffset = Math.min(anchorOffset, headOffset);
-  const maxOffset = Math.max(anchorOffset, headOffset);
-  let fallback: EditableTextTarget | null = null;
-
-  for (const region of rectRegions) {
-    const target = resolveEditableTextTarget(targetId, region);
-    if (!target) {
-      continue;
-    }
-    fallback ??= target;
-    if (minOffset >= target.sourceSpan.from && maxOffset <= target.sourceSpan.to) {
-      return target;
-    }
-  }
-
-  return fallback;
-}
-
 export function sourceHasSingleResizablePathShape(
   elements: readonly SceneElement[],
   editHandles: readonly EditHandle[],
@@ -663,9 +674,6 @@ export function sourceHasSingleResizablePathShape(
   }
   if (shapeElement.kind === "Ellipse") {
     return true;
-  }
-  if (shapeElement.kind !== "Path") {
-    return false;
   }
 
   const pathHandles = editHandles.filter(
@@ -967,7 +975,7 @@ export function preferredNodeBoundsForSource(
   viewBox: SvgViewBox,
   fallback: SvgBounds | null
 ): SvgBounds | null {
-  const sourceElements = elements.filter((element) => element.sourceRef.sourceId === sourceId && !element.adornment);
+  const sourceElements = nodeElementsForSource(elements, sourceId);
   if (sourceElements.length === 0) {
     return fallback;
   }
@@ -1000,7 +1008,7 @@ export function preferredNodeBoundsForSource(
 }
 
 export function isTextOnlyNodeSource(elements: SceneElement[], sourceId: string): boolean {
-  const sourceElements = elements.filter((element) => element.sourceRef.sourceId === sourceId && !element.adornment);
+  const sourceElements = nodeElementsForSource(elements, sourceId);
   if (sourceElements.length === 0) {
     return false;
   }
@@ -1008,7 +1016,7 @@ export function isTextOnlyNodeSource(elements: SceneElement[], sourceId: string)
 }
 
 function collectTextOnlyNodeVisualBoundsInSvg(
-  sourceElements: SceneElement[],
+  sourceElements: readonly SceneElement[],
   viewBox: SvgViewBox
 ): SvgBounds | null {
   let bounds: SvgBounds | null = null;
@@ -1160,7 +1168,7 @@ export function selectNudgeAnchorHandle(handles: EditHandle[]): EditHandle | nul
   if (handles.length === 0) {
     return null;
   }
-  return handles.find((handle) => handle.kind === "node-position") ?? handles[0];
+  return handles.find((handle) => handle.kind === "node-position") ?? requireArrayValue(handles, 0);
 }
 
 export function canvasDragKindFromDragState(drag: DragState | null): CanvasDragKind | null {
@@ -1189,16 +1197,7 @@ export function dragCursorForState(drag: DragState | null): string | null {
   if (drag.kind === "pan") {
     return "grabbing";
   }
-  if (
-    drag.kind === "marquee" ||
-    drag.kind === "tool-create" ||
-    drag.kind === "tool-bezier-bend" ||
-    drag.kind === "tool-path-segment" ||
-    drag.kind === "tool-freehand"
-  ) {
-    return "crosshair";
-  }
-  return null;
+  return "crosshair";
 }
 
 export function resizeCursorForRole(role: ResizeRole): string {

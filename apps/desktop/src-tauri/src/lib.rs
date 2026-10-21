@@ -1,4 +1,8 @@
 mod assistant;
+mod latex_pdf;
+mod presentation;
+mod update_preferences;
+mod portable;
 
 use assistant::{
     AssistantAccountSnapshot, AssistantModelOption, AssistantState, AssistantThreadStatePayload,
@@ -13,7 +17,7 @@ use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher}
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -24,7 +28,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{
@@ -201,6 +205,7 @@ const UPDATE_RELAUNCH_MARKER_FILENAME: &str = "pending-update-relaunch";
 const CONTEXT_MENU_EVENT_PREFIX: &str = "ctx::";
 const DESKTOP_OPEN_REQUESTS_CHANGED_EVENT: &str = "desktop-open-requests-changed";
 const DESKTOP_LINKED_FILE_CHANGED_EVENT: &str = "desktop-linked-file-changed";
+const DESKTOP_LOCAL_ASSET_CHANGED_EVENT: &str = "desktop-local-asset-changed";
 static NEXT_LATEX_COMPILE_ID: AtomicU64 = AtomicU64::new(1);
 #[cfg(target_os = "macos")]
 const DESKTOP_SVG_CLIPBOARD_FORMATS: [&str; 2] =
@@ -238,6 +243,19 @@ struct PendingOpenRequestsState {
 
 #[derive(Default)]
 struct LinkedFileWatchState {
+    registration: Arc<Mutex<LinkedFileWatchRegistration>>,
+}
+
+#[derive(Default)]
+struct LinkedFileWatchRegistration {
+    watcher: Option<RecommendedWatcher>,
+    // Authored paths identify documents; resolved paths identify filesystem events.
+    paths: HashMap<PathBuf, PathBuf>,
+    directories: HashSet<PathBuf>,
+}
+
+#[derive(Default)]
+struct LocalAssetWatchState {
     watcher: Mutex<Option<RecommendedWatcher>>,
     watched_paths: Arc<Mutex<HashSet<PathBuf>>>,
 }
@@ -335,6 +353,27 @@ enum LinkedTextWritePayload {
     },
 }
 
+#[derive(Serialize)]
+#[serde(tag = "status", rename_all = "kebab-case")]
+enum LocalAssetReadPayload {
+    Ok {
+        path: String,
+        #[serde(rename = "bytesBase64")]
+        bytes_base64: String,
+        size: u64,
+        revision: String,
+        #[serde(rename = "mtimeMs", skip_serializing_if = "Option::is_none")]
+        mtime_ms: Option<f64>,
+    },
+    Missing {
+        path: String,
+    },
+    Failed {
+        path: String,
+        reason: String,
+    },
+}
+
 #[derive(Clone, Serialize)]
 struct LinkedFileRefPayload {
     kind: String,
@@ -345,6 +384,11 @@ struct LinkedFileRefPayload {
 
 #[derive(Clone, Serialize)]
 struct LinkedFileChangedPayload {
+    path: String,
+}
+
+#[derive(Clone, Serialize)]
+struct LocalAssetChangedPayload {
     path: String,
 }
 
@@ -806,13 +850,17 @@ fn arxiv_source_files_from_response(bytes: &[u8]) -> Result<Vec<ArxivSourceFileP
     )])
 }
 
-fn hash_text_for_revision(text: &str) -> String {
+fn hash_bytes_for_revision(bytes: &[u8]) -> String {
     let mut hash: u32 = 0x811c9dc5;
-    for byte in text.as_bytes() {
+    for byte in bytes {
         hash ^= *byte as u32;
         hash = hash.wrapping_mul(0x01000193);
     }
     format!("{hash:08x}")
+}
+
+fn hash_text_for_revision(text: &str) -> String {
+    hash_bytes_for_revision(text.as_bytes())
 }
 
 fn revision_for_path_and_source(path: &Path, source: &str) -> FileRevisionPayload {
@@ -827,6 +875,14 @@ fn revision_for_path_and_source(path: &Path, source: &str) -> FileRevisionPayloa
         size: metadata.as_ref().map(|meta| meta.len()),
         hash: hash_text_for_revision(source),
     }
+}
+
+fn mtime_ms_for_metadata(metadata: &fs::Metadata) -> Option<f64> {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs_f64() * 1000.0)
 }
 
 fn linked_file_ref_payload(path: &Path) -> LinkedFileRefPayload {
@@ -861,7 +917,7 @@ fn normalize_watch_path(path: PathBuf) -> PathBuf {
     path.canonicalize().unwrap_or(path)
 }
 
-fn changed_linked_paths_for_event(
+fn changed_watched_paths_for_event(
     event_paths: &[PathBuf],
     watched_paths: &HashSet<PathBuf>,
 ) -> Vec<PathBuf> {
@@ -881,10 +937,115 @@ fn changed_linked_paths_for_event(
     out
 }
 
+fn linked_watch_identity(path: &Path) -> PathBuf {
+    // Missing aliases still need the canonical identity of their existing prefix.
+    path.ancestors()
+        .find_map(|ancestor| {
+            ancestor.canonicalize().ok().map(|resolved| {
+                resolved.join(
+                    path.strip_prefix(ancestor)
+                        .unwrap_or_else(|_| Path::new("")),
+                )
+            })
+        })
+        .unwrap_or_else(|| path.to_path_buf())
+}
+
+fn changed_linked_paths_for_event(
+    event_paths: &[PathBuf],
+    registrations: &mut HashMap<PathBuf, PathBuf>,
+) -> Vec<PathBuf> {
+    let events = event_paths
+        .iter()
+        .map(|path| linked_watch_identity(path))
+        .collect::<Vec<_>>();
+    let mut changed = Vec::new();
+    for (authored, identity) in registrations {
+        let previous = identity.clone();
+        if let Ok(resolved) = authored.canonicalize() {
+            *identity = resolved;
+        }
+        let alias = linked_watch_identity(authored);
+        if event_paths.iter().any(|event| authored.starts_with(event))
+            || events.iter().any(|event| {
+                [previous.as_path(), identity.as_path(), alias.as_path()]
+                    .iter()
+                    .any(|path| {
+                        path.starts_with(event)
+                            || (path.parent().is_some() && event.parent() == path.parent())
+                    })
+            })
+        {
+            changed.push(authored.clone());
+        }
+    }
+    changed
+}
+
+fn linked_watch_directories(registrations: &HashMap<PathBuf, PathBuf>) -> HashSet<PathBuf> {
+    let mut directories = HashSet::new();
+    for (authored, identity) in registrations {
+        for parent in [
+            authored.parent().map(linked_watch_identity),
+            identity.parent().map(Path::to_path_buf),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if parent.is_dir() {
+                directories.insert(parent);
+            }
+        }
+        // Missing lexical ancestors still need their containing directory watched:
+        // an alias may be removed before its replacement is created.
+        for ancestor in authored.ancestors() {
+            if fs::symlink_metadata(ancestor)
+                .map(|metadata| metadata.file_type().is_symlink())
+                .unwrap_or(true)
+            {
+                if let Some(parent) = ancestor.parent() {
+                    let parent = linked_watch_identity(parent);
+                    if parent.is_dir() {
+                        directories.insert(parent);
+                    }
+                }
+            }
+        }
+    }
+    directories
+}
+
+fn refresh_linked_watch_directories(
+    registration: &mut LinkedFileWatchRegistration,
+) -> Result<(), String> {
+    let desired = linked_watch_directories(&registration.paths);
+    if let Some(watcher) = registration.watcher.as_mut() {
+        for dir in desired.difference(&registration.directories) {
+            watcher
+                .watch(dir, RecursiveMode::NonRecursive)
+                .map_err(|error| error.to_string())?;
+        }
+        for dir in registration.directories.difference(&desired) {
+            let _ = watcher.unwatch(dir);
+        }
+    }
+    registration.directories = desired;
+    Ok(())
+}
+
 fn emit_linked_file_changed(app: &AppHandle, path: &Path) {
     let _ = app.emit(
         DESKTOP_LINKED_FILE_CHANGED_EVENT,
         LinkedFileChangedPayload {
+            path: path.to_string_lossy().to_string(),
+        },
+    );
+}
+
+fn emit_local_asset_changed(app: &AppHandle, path: &Path) {
+    let _ = app.emit(
+        DESKTOP_LOCAL_ASSET_CHANGED_EVENT,
+        LocalAssetChangedPayload {
             path: path.to_string_lossy().to_string(),
         },
     );
@@ -1140,6 +1301,9 @@ fn common_bin_dirs() -> Vec<PathBuf> {
     #[cfg(not(target_os = "windows"))]
     {
         vec![
+            // MacTeX links the TeX Live binaries here; a Finder launch has no
+            // shell PATH to find them.
+            PathBuf::from("/Library/TeX/texbin"),
             PathBuf::from("/opt/homebrew/bin"),
             PathBuf::from("/usr/local/bin"),
             PathBuf::from("/opt/local/bin"),
@@ -1381,6 +1545,19 @@ fn last_latex_compile_dir() -> PathBuf {
     latex_compile_working_dir().join("last")
 }
 
+fn resolve_latex_compile_cwd(source_directory: Option<&str>) -> Option<PathBuf> {
+    let raw = source_directory?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let path = PathBuf::from(raw);
+    let metadata = fs::metadata(&path).ok()?;
+    if !metadata.is_dir() {
+        return None;
+    }
+    Some(path.canonicalize().unwrap_or(path))
+}
+
 fn create_latex_compile_working_dir() -> Result<PathBuf, String> {
     let base = latex_compile_working_dir();
     fs::create_dir_all(&base).map_err(|e| {
@@ -1432,6 +1609,200 @@ fn read_text_if_exists(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_default()
 }
 
+fn embed_local_svg_image_refs(svg: &str, search_dirs: &[&Path]) -> String {
+    let with_xlink_refs = replace_svg_href_attribute(svg, "xlink:href", search_dirs);
+    replace_svg_href_attribute(&with_xlink_refs, "href", search_dirs)
+}
+
+fn replace_svg_href_attribute(svg: &str, attr_name: &str, search_dirs: &[&Path]) -> String {
+    let mut out = String::with_capacity(svg.len());
+    let mut cursor = 0;
+
+    while let Some(relative_attr_start) = svg[cursor..].find(attr_name) {
+        let attr_start = cursor + relative_attr_start;
+        let attr_end = attr_start + attr_name.len();
+        if !is_svg_attribute_name_boundary(svg, attr_start, attr_name.len()) {
+            out.push_str(&svg[cursor..attr_end]);
+            cursor = attr_end;
+            continue;
+        }
+
+        let mut scan = skip_ascii_whitespace(svg, attr_end);
+        if !svg[scan..].starts_with('=') {
+            out.push_str(&svg[cursor..attr_end]);
+            cursor = attr_end;
+            continue;
+        }
+
+        scan += 1;
+        scan = skip_ascii_whitespace(svg, scan);
+        let Some(quote_byte) = svg.as_bytes().get(scan).copied() else {
+            out.push_str(&svg[cursor..attr_end]);
+            cursor = attr_end;
+            continue;
+        };
+        if quote_byte != b'\'' && quote_byte != b'"' {
+            out.push_str(&svg[cursor..attr_end]);
+            cursor = attr_end;
+            continue;
+        }
+
+        let quote = quote_byte as char;
+        let value_start = scan + 1;
+        let Some(relative_value_end) = svg[value_start..].find(quote) else {
+            out.push_str(&svg[cursor..]);
+            return out;
+        };
+        let value_end = value_start + relative_value_end;
+        let value = &svg[value_start..value_end];
+
+        out.push_str(&svg[cursor..value_start]);
+        if let Some(data_uri) = data_uri_for_svg_image_href(value, search_dirs) {
+            out.push_str(&data_uri);
+        } else {
+            out.push_str(value);
+        }
+        cursor = value_end;
+    }
+
+    out.push_str(&svg[cursor..]);
+    out
+}
+
+fn skip_ascii_whitespace(input: &str, mut index: usize) -> usize {
+    while input
+        .as_bytes()
+        .get(index)
+        .is_some_and(|byte| byte.is_ascii_whitespace())
+    {
+        index += 1;
+    }
+    index
+}
+
+fn is_svg_attribute_name_boundary(input: &str, start: usize, len: usize) -> bool {
+    let before = input[..start].chars().next_back();
+    let after = input[start + len..].chars().next();
+    !before.is_some_and(is_svg_attribute_name_char)
+        && !after.is_some_and(is_svg_attribute_name_char)
+}
+
+fn is_svg_attribute_name_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, ':' | '_' | '-' | '.')
+}
+
+fn data_uri_for_svg_image_href(href: &str, search_dirs: &[&Path]) -> Option<String> {
+    let path = resolve_svg_image_href_path(href, search_dirs)?;
+    let mime_type = image_mime_type_for_path(&path)?;
+    let bytes = fs::read(&path).ok()?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Some(format!("data:{mime_type};base64,{encoded}"))
+}
+
+fn resolve_svg_image_href_path(href: &str, search_dirs: &[&Path]) -> Option<PathBuf> {
+    let trimmed = href.trim();
+    if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("data:") {
+        return None;
+    }
+
+    if let Ok(url) = Url::parse(trimmed) {
+        return if url.scheme() == "file" {
+            url.to_file_path().ok().filter(|path| path.is_file())
+        } else {
+            None
+        };
+    }
+
+    if has_url_scheme(trimmed) {
+        return None;
+    }
+
+    let path_value = trimmed
+        .split_once('#')
+        .map(|(path, _)| path)
+        .unwrap_or(trimmed)
+        .split_once('?')
+        .map(|(path, _)| path)
+        .unwrap_or(trimmed);
+    let decoded_path = decode_svg_href_path(path_value);
+    let path = PathBuf::from(decoded_path);
+    if path.is_absolute() {
+        return path.is_file().then_some(path);
+    }
+
+    search_dirs
+        .iter()
+        .map(|directory| directory.join(&path))
+        .find(|candidate| candidate.is_file())
+}
+
+fn has_url_scheme(value: &str) -> bool {
+    let Some(colon_index) = value.find(':') else {
+        return false;
+    };
+    if value[..colon_index]
+        .chars()
+        .any(|ch| matches!(ch, '/' | '\\' | '?' | '#'))
+    {
+        return false;
+    }
+    let mut chars = value[..colon_index].chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    first.is_ascii_alphabetic()
+        && chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '-' | '.'))
+}
+
+fn decode_svg_href_path(value: &str) -> String {
+    let unescaped = value
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">");
+    let bytes = unescaped.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            if let (Some(high), Some(low)) =
+                (hex_value(bytes[index + 1]), hex_value(bytes[index + 2]))
+            {
+                decoded.push((high << 4) | low);
+                index += 3;
+                continue;
+            }
+        }
+        decoded.push(bytes[index]);
+        index += 1;
+    }
+
+    String::from_utf8(decoded).unwrap_or(unescaped)
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn image_mime_type_for_path(path: &Path) -> Option<&'static str> {
+    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+    match extension.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "svg" => Some("image/svg+xml"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        _ => None,
+    }
+}
+
 fn format_command_failure(
     command_label: &str,
     status_code: Option<i32>,
@@ -1479,26 +1850,38 @@ struct CommandRunOutput {
 async fn run_shell_command(
     app: &AppHandle,
     command: &str,
-    args: &[&str],
+    args: &[String],
     working_dir: &Path,
+    timeout_secs: u64,
+    extra_env: &[(&str, String)],
 ) -> Result<CommandRunOutput, String> {
-    let (mut receiver, child) = app
+    // TeX's own helpers (kpsewhich, mktexpk, …) live beside it.
+    let executable = find_executable(command, None);
+    let mut shell_command = app
         .shell()
-        .command(command)
+        .command(executable.as_ref().map_or_else(
+            || command.to_string(),
+            |path| path.to_string_lossy().to_string(),
+        ))
         .args(args.to_vec())
-        .current_dir(working_dir)
-        .spawn()
-        .map_err(|e| {
-            format!(
-                "Failed to spawn `{command}` in {}: {e}",
-                working_dir.to_string_lossy()
-            )
-        })?;
+        .current_dir(working_dir);
+    if let Some(path) = augmented_path(executable.as_deref().and_then(Path::parent), None) {
+        shell_command = shell_command.env("PATH", path);
+    }
+    for (key, value) in extra_env {
+        shell_command = shell_command.env(key, value);
+    }
+    let (mut receiver, child) = shell_command.spawn().map_err(|e| {
+        format!(
+            "Failed to spawn `{command}` in {}: {e}",
+            working_dir.to_string_lossy()
+        )
+    })?;
 
     let mut stdout = Vec::<u8>::new();
     let mut stderr = Vec::<u8>::new();
     let mut status_code = None;
-    let deadline = Instant::now() + Duration::from_secs(LATEX_COMMAND_TIMEOUT_SECS);
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
 
     loop {
         let now = Instant::now();
@@ -1508,7 +1891,7 @@ async fn run_shell_command(
                 format_command_failure(command, None, &stdout, &stderr, None, working_dir);
             return Err(format!(
                 "Command timed out after {}s.\n{}",
-                LATEX_COMMAND_TIMEOUT_SECS, timeout_details
+                timeout_secs, timeout_details
             ));
         }
         let remaining = deadline.saturating_duration_since(now);
@@ -1520,7 +1903,7 @@ async fn run_shell_command(
                     format_command_failure(command, None, &stdout, &stderr, None, working_dir);
                 return Err(format!(
                     "Command timed out after {}s.\n{}",
-                    LATEX_COMMAND_TIMEOUT_SECS, timeout_details
+                    timeout_secs, timeout_details
                 ));
             }
         };
@@ -1554,8 +1937,14 @@ async fn run_shell_command(
 }
 
 #[tauri::command]
-async fn desktop_compile_tikz(latex_document: String, app: AppHandle) -> Result<String, String> {
+async fn desktop_compile_tikz(
+    latex_document: String,
+    source_directory: Option<String>,
+    app: AppHandle,
+) -> Result<String, String> {
     let working_dir = create_latex_compile_working_dir()?;
+    let compile_cwd = resolve_latex_compile_cwd(source_directory.as_deref())
+        .unwrap_or_else(|| working_dir.clone());
     clear_last_latex_compile_log();
     let tex_path = working_dir.join("input.tex");
     fs::write(&tex_path, &latex_document).map_err(|e| {
@@ -1565,17 +1954,24 @@ async fn desktop_compile_tikz(latex_document: String, app: AppHandle) -> Result<
         )
     })?;
 
-    // Run latex
+    // Run latex. Keep outputs in the temp directory, but use the source
+    // directory as cwd when available so relative graphics/input paths resolve
+    // the same way they do for the linked .tex file.
+    let output_directory_arg = format!("-output-directory={}", working_dir.to_string_lossy());
+    let tex_path_arg = tex_path.to_string_lossy().to_string();
     let latex_result = run_shell_command(
         &app,
         "latex",
         &[
-            "-interaction=batchmode",
-            "-file-line-error",
-            "-halt-on-error",
-            "input.tex",
+            "-interaction=batchmode".to_string(),
+            "-file-line-error".to_string(),
+            "-halt-on-error".to_string(),
+            output_directory_arg,
+            tex_path_arg,
         ],
-        &working_dir,
+        &compile_cwd,
+        LATEX_COMMAND_TIMEOUT_SECS,
+        &[],
     )
     .await?;
 
@@ -1613,19 +2009,23 @@ async fn desktop_compile_tikz(latex_document: String, app: AppHandle) -> Result<
 
     // Run dvisvgm
     let svg_path = working_dir.join("output.svg");
+    let svg_path_arg = svg_path.to_string_lossy().to_string();
+    let dvi_path_arg = dvi_path.to_string_lossy().to_string();
     let dvisvgm_result = run_shell_command(
         &app,
         "dvisvgm",
         &[
-            "--page=1",
-            "--bbox=min",
-            "--exact",
-            "--font-format=woff2",
-            "-o",
-            "output.svg",
-            "input.dvi",
+            "--page=1".to_string(),
+            "--bbox=min".to_string(),
+            "--exact".to_string(),
+            "--font-format=woff2".to_string(),
+            "-o".to_string(),
+            svg_path_arg,
+            dvi_path_arg,
         ],
-        &working_dir,
+        &compile_cwd,
+        LATEX_COMMAND_TIMEOUT_SECS,
+        &[],
     )
     .await?;
 
@@ -1654,6 +2054,7 @@ async fn desktop_compile_tikz(latex_document: String, app: AppHandle) -> Result<
     }
 
     let svg = fs::read_to_string(&svg_path).map_err(|e| format!("Failed to read SVG: {e}"))?;
+    let svg = embed_local_svg_image_refs(&svg, &[compile_cwd.as_path(), working_dir.as_path()]);
     publish_last_latex_compile_log(&working_dir);
     let _ = fs::remove_dir_all(&working_dir);
     Ok(svg)
@@ -1822,6 +2223,59 @@ fn desktop_read_linked_text(path: String) -> Result<LinkedTextReadPayload, Strin
 }
 
 #[tauri::command]
+fn desktop_read_local_asset(path: String) -> Result<LocalAssetReadPayload, String> {
+    let requested_path = PathBuf::from(path);
+    let normalized_path = normalize_watch_path(requested_path);
+    let path_string = normalized_path.to_string_lossy().to_string();
+    let metadata = match fs::metadata(&normalized_path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Ok(LocalAssetReadPayload::Missing { path: path_string });
+        }
+        Err(error) => {
+            return Ok(LocalAssetReadPayload::Failed {
+                path: path_string,
+                reason: error.to_string(),
+            });
+        }
+    };
+    if !metadata.is_file() {
+        return Ok(LocalAssetReadPayload::Failed {
+            path: path_string,
+            reason: "Path is not a file.".to_string(),
+        });
+    }
+    let bytes = match fs::read(&normalized_path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Ok(LocalAssetReadPayload::Missing { path: path_string });
+        }
+        Err(error) => {
+            return Ok(LocalAssetReadPayload::Failed {
+                path: path_string,
+                reason: error.to_string(),
+            });
+        }
+    };
+    let hash = hash_bytes_for_revision(&bytes);
+    let revision = format!(
+        "{}:{}:{}",
+        metadata.len(),
+        mtime_ms_for_metadata(&metadata)
+            .map(|mtime| format!("{mtime:.3}"))
+            .unwrap_or_else(|| "unknown".to_string()),
+        hash
+    );
+    Ok(LocalAssetReadPayload::Ok {
+        path: path_string,
+        bytes_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
+        size: metadata.len(),
+        revision,
+        mtime_ms: mtime_ms_for_metadata(&metadata),
+    })
+}
+
+#[tauri::command]
 fn desktop_write_linked_text(
     path: String,
     text: String,
@@ -1877,6 +2331,76 @@ fn desktop_write_linked_text(
 #[tauri::command]
 fn desktop_sync_linked_file_watches(paths: Vec<String>, app: AppHandle) -> Result<(), String> {
     let state = app.state::<LinkedFileWatchState>();
+    let paths = paths
+        .into_iter()
+        .filter(|path| !path.trim().is_empty())
+        .map(PathBuf::from)
+        .map(|path| {
+            let identity = linked_watch_identity(&path);
+            (path, identity)
+        })
+        .collect::<HashMap<_, _>>();
+    let mut current = state
+        .registration
+        .lock()
+        .map_err(|_| "linked file watch state unavailable".to_string())?;
+    let watcher = if paths.is_empty() {
+        None
+    } else {
+        let (events, received) = std::sync::mpsc::channel::<Vec<PathBuf>>();
+        let registration_for_events = Arc::clone(&state.registration);
+        let app_for_events = app.clone();
+        // notify's macOS watcher stops/joins its callback thread when paths change.
+        // Reconcile on an owner thread; the callback must never wait on its lock.
+        std::thread::spawn(move || {
+            for event_paths in received {
+                let changed = {
+                    let Ok(mut registration) = registration_for_events.lock() else {
+                        return;
+                    };
+                    let changed =
+                        changed_linked_paths_for_event(&event_paths, &mut registration.paths);
+                    let _ = refresh_linked_watch_directories(&mut registration);
+                    changed
+                };
+                for path in changed {
+                    emit_linked_file_changed(&app_for_events, &path);
+                }
+            }
+        });
+        Some(
+            RecommendedWatcher::new(
+                move |result: notify::Result<notify::Event>| {
+                    if let Ok(event) = result {
+                        if !event.paths.is_empty() {
+                            let _ = events.send(event.paths);
+                        }
+                    }
+                },
+                NotifyConfig::default(),
+            )
+            .map_err(|error| error.to_string())?,
+        )
+    };
+    let mut registration = LinkedFileWatchRegistration {
+        watcher,
+        paths,
+        directories: HashSet::new(),
+    };
+    if let Err(error) = refresh_linked_watch_directories(&mut registration) {
+        drop(current);
+        drop(registration);
+        return Err(error);
+    }
+    let retired = std::mem::replace(&mut *current, registration);
+    drop(current);
+    drop(retired);
+    Ok(())
+}
+
+#[tauri::command]
+fn desktop_sync_local_asset_watches(paths: Vec<String>, app: AppHandle) -> Result<(), String> {
+    let state = app.state::<LocalAssetWatchState>();
     let watched_paths: HashSet<PathBuf> = paths
         .into_iter()
         .map(|path| path.trim().to_string())
@@ -1889,7 +2413,7 @@ fn desktop_sync_linked_file_watches(paths: Vec<String>, app: AppHandle) -> Resul
         let mut watched = state
             .watched_paths
             .lock()
-            .map_err(|_| "linked file watch state unavailable".to_string())?;
+            .map_err(|_| "local asset watch state unavailable".to_string())?;
         *watched = watched_paths.clone();
     }
 
@@ -1904,7 +2428,7 @@ fn desktop_sync_linked_file_watches(paths: Vec<String>, app: AppHandle) -> Resul
         let mut watcher_slot = state
             .watcher
             .lock()
-            .map_err(|_| "linked file watcher unavailable".to_string())?;
+            .map_err(|_| "local asset watcher unavailable".to_string())?;
         *watcher_slot = None;
         return Ok(());
     }
@@ -1923,8 +2447,8 @@ fn desktop_sync_linked_file_watches(paths: Vec<String>, app: AppHandle) -> Resul
                 Ok(watched) => watched.clone(),
                 Err(_) => return,
             };
-            for path in changed_linked_paths_for_event(&event.paths, &watched_snapshot) {
-                emit_linked_file_changed(&app_for_callback, &path);
+            for path in changed_watched_paths_for_event(&event.paths, &watched_snapshot) {
+                emit_local_asset_changed(&app_for_callback, &path);
             }
         },
         NotifyConfig::default(),
@@ -1940,7 +2464,7 @@ fn desktop_sync_linked_file_watches(paths: Vec<String>, app: AppHandle) -> Resul
     let mut watcher_slot = state
         .watcher
         .lock()
-        .map_err(|_| "linked file watcher unavailable".to_string())?;
+        .map_err(|_| "local asset watcher unavailable".to_string())?;
     *watcher_slot = Some(watcher);
     Ok(())
 }
@@ -2008,11 +2532,17 @@ async fn desktop_show_message_dialog(
 
 #[tauri::command]
 fn desktop_confirm_window_close(app: AppHandle) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
-    window.destroy().map_err(|error| error.to_string())
+    // The frontend reaches this command only after Save/Discard acceptance and
+    // its recovery flush. Explicit exit also quits macOS when other windows exist.
+    app.state::<ExitApprovalState>()
+        .0
+        .store(true, Ordering::Release);
+    app.exit(0);
+    Ok(())
 }
+
+#[derive(Default)]
+struct ExitApprovalState(AtomicBool);
 
 #[tauri::command]
 fn desktop_list_recent_files(app: AppHandle) -> Result<Vec<String>, String> {
@@ -2233,10 +2763,35 @@ fn desktop_show_context_menu(
     window.popup_menu(&menu).map_err(|error| error.to_string())
 }
 
+// App-server requests and initialization use blocking channels and subprocess IO.
+// Keep those waits on the blocking pool, including when multiple IPC calls overlap.
+async fn run_assistant_command<T: Send + 'static>(
+    assistant: AssistantState,
+    command: impl FnOnce(AssistantState) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(move || command(assistant))
+        .await
+        .map_err(|error| format!("Assistant command worker failed: {error}"))?
+}
+
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_ensure_document_thread(
+async fn desktop_assistant_reset_document_thread(
     documentId: String,
+    sessionGeneration: u64,
+    assistant: tauri::State<'_, AssistantState>,
+) -> Result<(), String> {
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.reset_document_thread(documentId, sessionGeneration)
+    })
+    .await
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+async fn desktop_assistant_ensure_document_thread(
+    documentId: String,
+    sessionGeneration: Option<u64>,
     source: String,
     threadId: Option<String>,
     workspacePath: Option<String>,
@@ -2244,20 +2799,25 @@ fn desktop_assistant_ensure_document_thread(
     previewPath: Option<String>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<AssistantThreadSummary, String> {
-    assistant.ensure_document_thread(
-        documentId,
-        source,
-        threadId,
-        workspacePath,
-        figurePath,
-        previewPath,
-    )
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.ensure_document_thread(
+            documentId,
+            sessionGeneration.unwrap_or(0),
+            source,
+            threadId,
+            workspacePath,
+            figurePath,
+            previewPath,
+        )
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_start_turn(
+async fn desktop_assistant_start_turn(
     documentId: String,
+    sessionGeneration: Option<u64>,
     prompt: String,
     source: String,
     pngBase64: Option<String>,
@@ -2271,144 +2831,224 @@ fn desktop_assistant_start_turn(
     diagnosticsText: Option<String>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<serde_json::Value, String> {
-    let turn_id = assistant.start_turn(
-        documentId,
-        prompt,
-        source,
-        pngBase64,
-        pastedImages,
-        threadId,
-        workspacePath,
-        figurePath,
-        previewPath,
-        model,
-        figureContext,
-        diagnosticsText,
-    )?;
-    Ok(serde_json::json!({ "turnId": turn_id }))
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        let turn_id = assistant.start_turn(
+            documentId,
+            sessionGeneration.unwrap_or(0),
+            prompt,
+            source,
+            pngBase64,
+            pastedImages,
+            threadId,
+            workspacePath,
+            figurePath,
+            previewPath,
+            model,
+            figureContext,
+            diagnosticsText,
+        )?;
+        Ok(serde_json::json!({ "turnId": turn_id }))
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_interrupt_turn(
+async fn desktop_assistant_interrupt_turn(
     documentId: String,
+    sessionGeneration: Option<u64>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.interrupt_turn(documentId)
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.interrupt_turn(documentId, sessionGeneration.unwrap_or(0))
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_steer_turn(
+async fn desktop_assistant_steer_turn(
     documentId: String,
+    sessionGeneration: Option<u64>,
     prompt: String,
     pastedImages: Option<Vec<assistant::AssistantPastedImageInput>>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<serde_json::Value, String> {
-    let turn_id = assistant.steer_turn(documentId, prompt, pastedImages)?;
-    Ok(serde_json::json!({ "turnId": turn_id }))
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        let turn_id = assistant.steer_turn(
+            documentId,
+            sessionGeneration.unwrap_or(0),
+            prompt,
+            pastedImages,
+        )?;
+        Ok(serde_json::json!({ "turnId": turn_id }))
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_sync_source(
+async fn desktop_assistant_sync_source(
     documentId: String,
+    sessionGeneration: Option<u64>,
     source: String,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.sync_source(documentId, source)
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.sync_source(documentId, sessionGeneration.unwrap_or(0), source)
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_respond_to_approval(
+async fn desktop_assistant_respond_to_approval(
     documentId: String,
+    sessionGeneration: Option<u64>,
     requestId: String,
     decision: String,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.respond_to_approval(documentId, requestId, decision)
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.respond_to_approval(
+            documentId,
+            sessionGeneration.unwrap_or(0),
+            requestId,
+            decision,
+        )
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_respond_to_dynamic_tool_call(
+async fn desktop_assistant_respond_to_dynamic_tool_call(
     documentId: String,
+    sessionGeneration: Option<u64>,
     requestId: String,
     result: Value,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.respond_to_dynamic_tool_call(documentId, requestId, result)
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.respond_to_dynamic_tool_call(
+            documentId,
+            sessionGeneration.unwrap_or(0),
+            requestId,
+            result,
+        )
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_load_thread_state(
+async fn desktop_assistant_load_thread_state(
     documentId: String,
+    sessionGeneration: Option<u64>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<Option<AssistantThreadStatePayload>, String> {
-    assistant.load_thread_state(documentId)
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.load_thread_state(documentId, sessionGeneration.unwrap_or(0))
+    })
+    .await
 }
 
 #[tauri::command]
-fn desktop_assistant_warm_up(assistant: tauri::State<'_, AssistantState>) -> Result<(), String> {
-    assistant.warm_up()
+async fn desktop_assistant_warm_up(
+    assistant: tauri::State<'_, AssistantState>,
+) -> Result<(), String> {
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.warm_up()
+    })
+    .await
 }
 
 #[tauri::command]
-fn desktop_assistant_list_models(
+async fn desktop_assistant_list_models(
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<Vec<AssistantModelOption>, String> {
-    assistant.list_models()
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.list_models()
+    })
+    .await
 }
 
 #[tauri::command]
-fn desktop_assistant_read_account_snapshot(
+async fn desktop_assistant_read_account_snapshot(
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<AssistantAccountSnapshot, String> {
-    assistant.read_account_snapshot()
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.read_account_snapshot()
+    })
+    .await
 }
 
 #[tauri::command]
-fn desktop_assistant_read_account(
+async fn desktop_assistant_read_account(
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<serde_json::Value, String> {
-    assistant.read_account()
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.read_account()
+    })
+    .await
 }
 
 #[tauri::command]
-fn desktop_assistant_read_rate_limits(
+async fn desktop_assistant_read_rate_limits(
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<serde_json::Value, String> {
-    assistant.read_rate_limits()
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.read_rate_limits()
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_login_start(
+async fn desktop_assistant_login_start(
     loginType: String,
     apiKey: Option<String>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<serde_json::Value, String> {
-    assistant.login_start(&loginType, apiKey.as_deref())
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.login_start(&loginType, apiKey.as_deref())
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_login_cancel(
+async fn desktop_assistant_login_cancel(
     loginId: String,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.login_cancel(&loginId)
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.login_cancel(&loginId)
+    })
+    .await
 }
 
 #[tauri::command]
-fn desktop_assistant_logout(assistant: tauri::State<'_, AssistantState>) -> Result<(), String> {
-    assistant.logout()
+async fn desktop_assistant_logout(
+    assistant: tauri::State<'_, AssistantState>,
+) -> Result<(), String> {
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.logout()
+    })
+    .await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    if let Err(error) = portable::prepare(context.config()) {
+        rfd::MessageDialog::new()
+            .set_title("Could Not Start Portable TikZ Editor")
+            .set_description(&error)
+            .set_level(rfd::MessageLevel::Error)
+            .show();
+        return;
+    }
     let mut builder = tauri::Builder::default();
     #[cfg(desktop)]
     {
@@ -2434,29 +3074,65 @@ pub fn run() {
     let builder = builder
         .manage(RecentFilesState::default())
         .manage(PendingOpenRequestsState::default())
-        .manage(LinkedFileWatchState::default());
+        .manage(ExitApprovalState::default())
+        .manage(LinkedFileWatchState::default())
+        .manage(LocalAssetWatchState::default());
 
     builder
         .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Focused(true)) {
+                let _ = window.app_handle().emit_to(
+                    "main",
+                    "presentation-focused-window",
+                    window.label(),
+                );
+            }
+            if window.label().starts_with("presentation-")
+                && matches!(
+                    event,
+                    tauri::WindowEvent::Moved(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+                )
+            {
+                let _ = window
+                    .app_handle()
+                    .emit("presentation-displays-changed", ());
+            }
+            if window.label() == "main" {
+                if let tauri::WindowEvent::Destroyed = event {
+                    presentation::close_for_controller(window.app_handle());
+                }
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() != "main" {
+                    return;
+                }
                 api.prevent_close();
                 let _ = window.emit("desktop-window-close-request", ());
             }
         })
         .invoke_handler(tauri::generate_handler![
+            presentation::desktop_presentation_keep_awake,
+            presentation::desktop_prepare_presentation_window,
+            update_preferences::desktop_get_automatic_update_checks,
+            portable::desktop_is_portable,
+            update_preferences::desktop_set_automatic_update_checks,
+            update_preferences::desktop_reset_automatic_update_checks,
             desktop_check_codex_status,
             desktop_show_about_panel,
             desktop_install_codex,
             desktop_check_latex_available,
             desktop_compile_tikz,
+            latex_pdf::desktop_compile_latex_pdf,
             desktop_read_last_compile_log,
             desktop_open_text,
             desktop_open_binary,
             desktop_fetch_arxiv_source,
             desktop_save_text,
             desktop_read_linked_text,
+            desktop_read_local_asset,
             desktop_write_linked_text,
             desktop_sync_linked_file_watches,
+            desktop_sync_local_asset_watches,
             desktop_export_file,
             desktop_confirm_unsaved_changes,
             desktop_show_message_dialog,
@@ -2473,6 +3149,7 @@ pub fn run() {
             desktop_read_custom_clipboard_bytes,
             desktop_write_clipboard_bundle,
             desktop_show_context_menu,
+            desktop_assistant_reset_document_thread,
             desktop_assistant_ensure_document_thread,
             desktop_assistant_start_turn,
             desktop_assistant_interrupt_turn,
@@ -2491,6 +3168,9 @@ pub fn run() {
             desktop_assistant_logout
         ])
         .setup(|app| {
+            app.manage(presentation::PresentationPowerState::default());
+            #[cfg(target_os = "macos")]
+            presentation::install_display_observer(app.handle().clone());
             let handle = app.handle().clone();
             app.on_menu_event(move |_app, event| {
                 let raw_id = event.id().0.as_ref();
@@ -2547,6 +3227,7 @@ pub fn run() {
                     state: None,
                     radius: None,
                     color: None,
+                    interactive: false,
                 });
             }
 
@@ -2561,9 +3242,21 @@ pub fn run() {
 
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { code, api, .. } = &event {
+                // Tauri explicitly cannot cancel its restart exit code. Cocoa's
+                // applicationWillTerminate path is also outside ExitRequested.
+                if *code != Some(tauri::RESTART_EXIT_CODE)
+                    && !app.state::<ExitApprovalState>().0.load(Ordering::Acquire)
+                {
+                    if let Some(window) = app.get_webview_window("main") {
+                        api.prevent_exit();
+                        let _ = window.emit("desktop-window-close-request", ());
+                    }
+                }
+            }
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = event {
                 process_associated_open_urls(app, &urls);
@@ -2577,14 +3270,174 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    #[test]
+    fn linked_alias_events_keep_authored_paths_and_refresh_retargeted_directories() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let aliases = temp.path().join("aliases");
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        for dir in [&aliases, &first, &second] {
+            std::fs::create_dir(dir).unwrap();
+        }
+        let original = first.join("figure.tex");
+        let replacement = second.join("figure.tex");
+        let alias = aliases.join("Figure.tex");
+        let another = aliases.join("figure-alias.tex");
+        std::fs::write(&original, "original").unwrap();
+        std::fs::write(&replacement, "replacement").unwrap();
+        symlink(&original, &alias).unwrap();
+        symlink(&original, &another).unwrap();
+        let mut registrations = std::collections::HashMap::from([
+            (alias.clone(), super::linked_watch_identity(&alias)),
+            (another.clone(), super::linked_watch_identity(&another)),
+        ]);
+        let changed = super::changed_linked_paths_for_event(
+            &[original.canonicalize().unwrap()],
+            &mut registrations,
+        );
+        assert_eq!(
+            changed
+                .into_iter()
+                .collect::<std::collections::HashSet<_>>(),
+            [alias.clone(), another.clone()].into_iter().collect()
+        );
+        std::fs::remove_file(&alias).unwrap();
+        let mut watch = super::LinkedFileWatchRegistration {
+            paths: registrations,
+            ..Default::default()
+        };
+        super::changed_linked_paths_for_event(&[alias.clone()], &mut watch.paths);
+        super::refresh_linked_watch_directories(&mut watch).unwrap();
+        assert!(watch.directories.contains(&aliases.canonicalize().unwrap()));
+        let mut registrations = watch.paths;
+        symlink(&replacement, &alias).unwrap();
+        let changed = super::changed_linked_paths_for_event(&[alias.clone()], &mut registrations);
+        assert!(changed.contains(&alias));
+        assert_eq!(registrations[&alias], replacement.canonicalize().unwrap());
+        let directories = super::linked_watch_directories(&registrations);
+        assert!(directories.contains(&aliases.canonicalize().unwrap()));
+        assert!(directories.contains(&second.canonicalize().unwrap()));
+        assert!(
+            super::changed_linked_paths_for_event(&[replacement], &mut registrations)
+                .contains(&alias)
+        );
+        std::fs::remove_file(&original).unwrap();
+        assert!(
+            super::changed_linked_paths_for_event(&[original], &mut registrations)
+                .contains(&another)
+        );
+        std::fs::rename(&alias, aliases.join("renamed.tex")).unwrap();
+        assert!(
+            super::changed_linked_paths_for_event(&[alias.clone()], &mut registrations)
+                .contains(&alias)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_linked_alias_keeps_recreation_parent_through_missing_intervals() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        for directory in [&first, &second] {
+            std::fs::create_dir(directory).unwrap();
+            std::fs::write(directory.join("figure.tex"), "source").unwrap();
+        }
+        let directory_alias = temp.path().join("linked");
+        symlink(&first, &directory_alias).unwrap();
+        let authored = directory_alias.join("figure.tex");
+        let registrations = std::collections::HashMap::from([(
+            authored.clone(),
+            super::linked_watch_identity(&authored),
+        )]);
+        let recreation_parent = temp.path().canonicalize().unwrap();
+        let mut watch = super::LinkedFileWatchRegistration {
+            paths: registrations,
+            ..Default::default()
+        };
+        super::refresh_linked_watch_directories(&mut watch).unwrap();
+        assert!(watch.directories.contains(&recreation_parent));
+        std::fs::remove_file(&directory_alias).unwrap();
+        assert_eq!(
+            super::changed_linked_paths_for_event(&[directory_alias.clone()], &mut watch.paths),
+            vec![authored.clone()]
+        );
+        assert_eq!(
+            super::changed_linked_paths_for_event(
+                &[recreation_parent.join("linked")],
+                &mut watch.paths
+            ),
+            vec![authored.clone()]
+        );
+        // Reconcile before recreation, exactly as the asynchronous event owner does.
+        super::refresh_linked_watch_directories(&mut watch).unwrap();
+        assert!(watch.directories.contains(&recreation_parent));
+        symlink(&second, &directory_alias).unwrap();
+        assert_eq!(
+            super::changed_linked_paths_for_event(&[directory_alias.clone()], &mut watch.paths),
+            vec![authored.clone()]
+        );
+        assert_eq!(
+            watch.paths[&authored],
+            second.join("figure.tex").canonicalize().unwrap()
+        );
+        assert_eq!(
+            super::changed_linked_paths_for_event(
+                &[second.canonicalize().unwrap()],
+                &mut watch.paths
+            ),
+            vec![authored.clone()]
+        );
+        super::refresh_linked_watch_directories(&mut watch).unwrap();
+        assert!(watch.directories.contains(&second.canonicalize().unwrap()));
+        assert!(!watch.directories.contains(&first.canonicalize().unwrap()));
+        std::fs::rename(&directory_alias, temp.path().join("renamed")).unwrap();
+        assert_eq!(
+            super::changed_linked_paths_for_event(&[directory_alias], &mut watch.paths),
+            vec![authored]
+        );
+        super::refresh_linked_watch_directories(&mut watch).unwrap();
+        assert!(watch.directories.contains(&recreation_parent));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn missing_linked_alias_acquires_target_identity_when_created() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let alias = temp.path().join("Missing.tex");
+        let target_dir = temp.path().join("target");
+        std::fs::create_dir(&target_dir).unwrap();
+        let target = target_dir.join("figure.tex");
+        let mut registrations = std::collections::HashMap::from([(
+            alias.clone(),
+            super::linked_watch_identity(&alias),
+        )]);
+        std::fs::write(&target, "created").unwrap();
+        symlink(&target, &alias).unwrap();
+        assert_eq!(
+            super::changed_linked_paths_for_event(&[alias.clone()], &mut registrations),
+            vec![alias.clone()]
+        );
+        assert_eq!(registrations[&alias], target.canonicalize().unwrap());
+        assert!(super::linked_watch_directories(&registrations)
+            .contains(&target_dir.canonicalize().unwrap()));
+    }
+
     use super::{
-        changed_linked_paths_for_event, collect_associated_file_paths,
-        collect_associated_file_paths_from_urls, has_supported_association_extension,
-        map_unsaved_changes_dialog_result, validate_external_url,
+        changed_watched_paths_for_event, collect_associated_file_paths,
+        collect_associated_file_paths_from_urls, embed_local_svg_image_refs,
+        has_supported_association_extension, map_unsaved_changes_dialog_result,
+        validate_external_url,
     };
     use rfd::MessageDialogResult;
     use std::collections::HashSet;
+    use std::fs;
     use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
     use url::Url;
 
     #[test]
@@ -2634,41 +3487,29 @@ mod tests {
             "first.tikz".to_string(),
         ];
 
-        let collected = collect_associated_file_paths(&args, Some("/tmp/work"));
-        let rendered: Vec<String> = collected
-            .iter()
-            .map(|path| path.to_string_lossy().to_string())
-            .collect();
+        let work = std::env::temp_dir().join("work");
+        let collected = collect_associated_file_paths(&args, work.to_str());
         assert_eq!(
-            rendered,
-            vec![
-                "/tmp/work/first.tikz".to_string(),
-                "/tmp/work/second.tex".to_string()
-            ]
+            collected,
+            vec![work.join("first.tikz"), work.join("second.tex")]
         );
     }
 
     #[test]
     fn collects_associated_paths_from_file_urls() {
+        let work = std::env::temp_dir().join("work with spaces");
         let urls = vec![
-            Url::from_file_path("/tmp/work/first.tikz").unwrap(),
+            Url::from_file_path(work.join("first.tikz")).unwrap(),
             Url::parse("https://example.com/second.tex").unwrap(),
-            Url::from_file_path("/tmp/work/second.tex").unwrap(),
-            Url::from_file_path("/tmp/work/third.txt").unwrap(),
-            Url::from_file_path("/tmp/work/first.tikz").unwrap(),
+            Url::from_file_path(work.join("second.tex")).unwrap(),
+            Url::from_file_path(work.join("third.txt")).unwrap(),
+            Url::from_file_path(work.join("first.tikz")).unwrap(),
         ];
 
         let collected = collect_associated_file_paths_from_urls(&urls);
-        let rendered: Vec<String> = collected
-            .iter()
-            .map(|path| path.to_string_lossy().to_string())
-            .collect();
         assert_eq!(
-            rendered,
-            vec![
-                "/tmp/work/first.tikz".to_string(),
-                "/tmp/work/second.tex".to_string()
-            ]
+            collected,
+            vec![work.join("first.tikz"), work.join("second.tex")]
         );
     }
 
@@ -2706,7 +3547,7 @@ mod tests {
             PathBuf::from("/tmp/other/c.tex"),
         ]);
         let changed =
-            changed_linked_paths_for_event(&[PathBuf::from("/tmp/project/.a.tex.swp")], &watched);
+            changed_watched_paths_for_event(&[PathBuf::from("/tmp/project/.a.tex.swp")], &watched);
         assert_eq!(
             changed.into_iter().collect::<HashSet<_>>(),
             HashSet::from([
@@ -2714,5 +3555,29 @@ mod tests {
                 PathBuf::from("/tmp/project/b.tex")
             ])
         );
+    }
+
+    #[test]
+    fn embeds_relative_svg_image_hrefs_as_data_uris() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "tikz-editor-svg-embed-{}-{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("ballot-paper.jpeg"), [0xff, 0xd8, 0xff, 0xd9]).unwrap();
+
+        let svg = r#"<svg><image xlink:href="ballot-paper.jpeg"/><image href='missing.png'/><image href="https://example.com/a.png"/><image href="data:image/png;base64,abc"/></svg>"#;
+        let embedded = embed_local_svg_image_refs(svg, &[dir.as_path()]);
+
+        assert!(embedded.contains(r#"xlink:href="data:image/jpeg;base64,/9j/2Q==""#));
+        assert!(embedded.contains("href='missing.png'"));
+        assert!(embedded.contains(r#"href="https://example.com/a.png""#));
+        assert!(embedded.contains(r#"href="data:image/png;base64,abc""#));
+
+        fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -1,0 +1,3285 @@
+{
+  "sourceSha256": "d1ddfe9fd40658bc2ebb88433ef2893078aa2a9f61488ee2e406282e75eca894",
+  "environment": {
+    "engine": "lualatex",
+    "engineBanner": "This is LuaHBTeX, Version 1.21.0 (TeX Live 2025)",
+    "beamerClassPath": "/usr/local/texlive/2025/texmf-dist/tex/latex/beamer/beamer.cls",
+    "beamerClassSha256": "189abaf8955b840a37cfad68cbe97a0bd8f022a46869ca32cf63b9bef2c9ee8f",
+    "beamerClass": {
+      "date": "2025/02/04",
+      "version": "3.72",
+      "description": "A class for typesetting presentations"
+    }
+  },
+  "pages": [
+    {
+      "frameIndex": 0,
+      "continuation": 1,
+      "step": 1,
+      "trace": {
+        "coordinateSystem": {
+          "unit": "tex-pt",
+          "origin": "top-left",
+          "yAxis": "down"
+        },
+        "page": {
+          "x": 0,
+          "y": 0,
+          "width": 364.1953582763672,
+          "height": 273.14662170410156
+        },
+        "shipoutOrigin": {
+          "x": -72.26998901367188,
+          "y": -72.26998901367188
+        },
+        "boxes": [
+          {
+            "path": "root",
+            "x": 72.269989,
+            "y": 72.269989,
+            "width": 263.472626,
+            "height": 200.876633,
+            "depth": 0,
+            "totalHeight": 200.876633
+          },
+          {
+            "path": "root.1",
+            "x": 72.269989,
+            "y": 72.269989,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.2",
+            "x": 72.269989,
+            "y": 72.269989,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.2.2",
+            "x": 0,
+            "y": 72.269989,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.2.2.2",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.2.2.2.1",
+            "x": 0,
+            "y": 72.269989,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.3",
+            "x": 72.269989,
+            "y": 72.269989,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.3.4",
+            "x": 72.269989,
+            "y": -1.003738,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5",
+            "x": 72.269989,
+            "y": 72.269989,
+            "width": 263.472626,
+            "height": 200.876633,
+            "depth": 0,
+            "totalHeight": 200.876633
+          },
+          {
+            "path": "root.5.2",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.5.2.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": -28.452744,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.1.2",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.1.2.1",
+            "x": 0,
+            "y": 0,
+            "width": 364.195358,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.5.2.1.2.2.1.1.2.1.1",
+            "x": 0,
+            "y": 0,
+            "width": 364.195358,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.5.2.1.2.2.1.1.3",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.1.3.1",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.1.3.1.1",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3",
+            "x": 28.452744,
+            "y": 0,
+            "width": -56.905487,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.1.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": -28.452744,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.1.1.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": -28.452744,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.1.1.1.2",
+            "x": 0,
+            "y": 273.146622,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.1.1.1.2.1",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.1.1.1.3",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.2",
+            "x": 28.452744,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.2.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": 335.742615,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.2.1.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": 335.742615,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.2.1.1.3",
+            "x": 364.195358,
+            "y": 273.146622,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.2.1.1.3.1",
+            "x": 364.195358,
+            "y": 0,
+            "width": 0,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.2.1.1.4",
+            "x": 364.195358,
+            "y": 0,
+            "width": 0,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.2.1.1.4.4",
+            "x": 364.195358,
+            "y": 264.146606,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.2.1.1.4.7",
+            "x": 364.195358,
+            "y": 271.146606,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.3",
+            "x": 28.452744,
+            "y": 0,
+            "width": -56.905487,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.3.2",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.3.3.2.1",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.7",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.1.2.2.1.7.2",
+            "x": 28.452744,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.4",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 269.146622,
+            "depth": 0,
+            "totalHeight": 269.146622
+          },
+          {
+            "path": "root.5.2.4.9",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 269.146622,
+            "depth": 0,
+            "totalHeight": 269.146622
+          },
+          {
+            "path": "root.5.2.4.9.2",
+            "x": 28.452744,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.4.9.6",
+            "x": 28.452744,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.4.9.10",
+            "x": 28.452744,
+            "y": 1,
+            "width": 307.289871,
+            "height": 19.148758,
+            "depth": 0,
+            "totalHeight": 19.148758
+          },
+          {
+            "path": "root.5.2.4.9.10.2",
+            "x": 0,
+            "y": 1,
+            "width": 364.195358,
+            "height": 19.148758,
+            "depth": 0,
+            "totalHeight": 19.148758
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2",
+            "x": 0,
+            "y": 1,
+            "width": 364.195358,
+            "height": 19.148758,
+            "depth": 0,
+            "totalHeight": 19.148758
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.4",
+            "x": 0,
+            "y": 9.535904,
+            "width": 364.195358,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.4.3",
+            "x": 8.535904,
+            "y": 9.535904,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.4.4",
+            "x": 8.535904,
+            "y": 9.535904,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9",
+            "x": 0,
+            "y": 8.542358,
+            "width": 364.195358,
+            "height": 12.599945,
+            "depth": 5.400055,
+            "totalHeight": 18
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.3",
+            "x": 8.535904,
+            "y": 21.142303,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.4.9.19",
+            "x": 28.452744,
+            "y": 99.497375,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.4.9.23",
+            "x": 28.452744,
+            "y": 105.37764,
+            "width": 307.289871,
+            "height": 7.719742,
+            "depth": 0.120453,
+            "totalHeight": 7.840195
+          },
+          {
+            "path": "root.5.2.4.9.23.2",
+            "x": 28.452744,
+            "y": 113.097382,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.4.9.27",
+            "x": 167.613556,
+            "y": 116.345306,
+            "width": 28.968246,
+            "height": 12.455688,
+            "depth": 7.631607,
+            "totalHeight": 20.087296
+          },
+          {
+            "path": "root.5.2.4.9.27.1",
+            "x": 167.613556,
+            "y": 116.345306,
+            "width": 8.685287,
+            "height": 12.455688,
+            "depth": 7.631607,
+            "totalHeight": 20.087296
+          },
+          {
+            "path": "root.5.2.4.9.27.1.1",
+            "x": 167.613556,
+            "y": 116.345306,
+            "width": 8.685287,
+            "height": 12.455688,
+            "depth": 7.631607,
+            "totalHeight": 20.087296
+          },
+          {
+            "path": "root.5.2.4.9.27.1.1.1",
+            "x": 167.613556,
+            "y": 126.063507,
+            "width": 1.199997,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.4.9.27.1.1.2",
+            "x": 168.813553,
+            "y": 116.345306,
+            "width": 6.285294,
+            "height": 12.455688,
+            "depth": 7.631607,
+            "totalHeight": 20.087296
+          },
+          {
+            "path": "root.5.2.4.9.27.1.1.2.1",
+            "x": 168.813553,
+            "y": 116.345306,
+            "width": 6.285294,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "totalHeight": 5.168396
+          },
+          {
+            "path": "root.5.2.4.9.27.1.1.2.5",
+            "x": 168.813553,
+            "y": 128.712845,
+            "width": 6.285294,
+            "height": 7.599304,
+            "depth": 0.120453,
+            "totalHeight": 7.719757
+          },
+          {
+            "path": "root.5.2.4.9.27.1.1.3",
+            "x": 175.098846,
+            "y": 126.063507,
+            "width": 1.199997,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.4.9.31",
+            "x": 28.452744,
+            "y": 146.38681,
+            "width": 307.289871,
+            "height": 7.719742,
+            "depth": 0.120453,
+            "totalHeight": 7.840195
+          },
+          {
+            "path": "root.5.2.6",
+            "x": 28.452744,
+            "y": 273.146622,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.6.2",
+            "x": 28.452744,
+            "y": 273.146622,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.6.2.1",
+            "x": 28.452744,
+            "y": 273.146622,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.6.2.1.1",
+            "x": 28.452744,
+            "y": 273.146622,
+            "width": -56.905487,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.6.2.1.1.1",
+            "x": 28.452744,
+            "y": 273.146622,
+            "width": -56.905487,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.6.2.1.1.1.2",
+            "x": 0,
+            "y": 273.146622,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.6.2.1.1.1.2.1",
+            "x": 0,
+            "y": 273.146622,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.5.2.6.2.1.3",
+            "x": 28.452744,
+            "y": 273.146622,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          }
+        ],
+        "rules": [
+          {
+            "path": "root.5.2.1.2.2.1.1.2.1.1.4",
+            "x": 0,
+            "y": 0,
+            "width": 364.195358,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.4",
+            "x": 8.535904,
+            "y": 8.542358,
+            "width": 0,
+            "height": 12.599945,
+            "depth": 5.400055,
+            "totalHeight": 18
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.24",
+            "x": 96.663849,
+            "y": 8.542358,
+            "width": 0,
+            "height": 12.599945,
+            "depth": 5.400055,
+            "totalHeight": 18
+          },
+          {
+            "path": "root.5.2.4.9.27.1.1.2.3",
+            "x": 168.813553,
+            "y": 125.844513,
+            "width": 6.285294,
+            "height": 0.437988,
+            "depth": 0,
+            "totalHeight": 0.437988
+          }
+        ],
+        "glyphs": [
+          {
+            "path": "root.5.2.4.9.10.2.2.9.5",
+            "code": 68,
+            "x": 8.535904,
+            "y": 21.142303,
+            "width": 10.137589,
+            "height": 9.993591,
+            "depth": 0,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.6",
+            "code": 105,
+            "x": 18.673492,
+            "y": 21.142303,
+            "width": 3.311996,
+            "height": 9.417603,
+            "depth": 0,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.7",
+            "code": 115,
+            "x": 21.985489,
+            "y": 21.142303,
+            "width": 5.399994,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.9",
+            "code": 112,
+            "x": 27.385483,
+            "y": 21.142303,
+            "width": 7.22879,
+            "height": 6.537598,
+            "depth": 2.793594,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.10",
+            "code": 108,
+            "x": 34.614273,
+            "y": 21.142303,
+            "width": 3.311996,
+            "height": 9.993591,
+            "depth": 0,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.11",
+            "code": 97,
+            "x": 37.92627,
+            "y": 21.142303,
+            "width": 6.753601,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.13",
+            "code": 121,
+            "x": 44.291077,
+            "y": 21.142303,
+            "width": 6.451202,
+            "height": 6.3936,
+            "depth": 2.937592,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.15",
+            "code": 112,
+            "x": 55.436676,
+            "y": 21.142303,
+            "width": 7.22879,
+            "height": 6.537598,
+            "depth": 2.793594,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.16",
+            "code": 97,
+            "x": 62.665466,
+            "y": 21.142303,
+            "width": 6.753601,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.17",
+            "code": 103,
+            "x": 69.419067,
+            "y": 21.142303,
+            "width": 7.056,
+            "height": 6.537598,
+            "depth": 2.951996,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.18",
+            "code": 101,
+            "x": 76.475067,
+            "y": 21.142303,
+            "width": 6.263992,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.19",
+            "code": 115,
+            "x": 82.739059,
+            "y": 21.142303,
+            "width": 5.399994,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.10.2.2.9.22",
+            "code": 73,
+            "x": 92.83345,
+            "y": 21.142303,
+            "width": 3.830399,
+            "height": 9.993591,
+            "depth": 0,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.5.2.4.9.23.3",
+            "code": 66,
+            "x": 28.452744,
+            "y": 113.097382,
+            "width": 7.30365,
+            "height": 7.599304,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.23.4",
+            "code": 101,
+            "x": 35.756393,
+            "y": 113.097382,
+            "width": 4.861801,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.23.6",
+            "code": 102,
+            "x": 40.618195,
+            "y": 113.097382,
+            "width": 3.350693,
+            "height": 7.719742,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.23.7",
+            "code": 111,
+            "x": 43.968887,
+            "y": 113.097382,
+            "width": 5.475006,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.23.9",
+            "code": 114,
+            "x": 49.137299,
+            "y": 113.097382,
+            "width": 3.744904,
+            "height": 4.982254,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.23.10",
+            "code": 101,
+            "x": 52.882202,
+            "y": 113.097382,
+            "width": 4.861801,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.23.11",
+            "code": 46,
+            "x": 57.744003,
+            "y": 113.097382,
+            "width": 3.044098,
+            "height": 0.908844,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.27.1.1.2.1.2",
+            "code": 97,
+            "x": 169.153,
+            "y": 121.39325,
+            "width": 5.266953,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 37,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.27.1.1.2.5.1",
+            "code": 98,
+            "x": 168.813553,
+            "y": 136.312149,
+            "width": 5.661148,
+            "height": 7.599304,
+            "depth": 0.120453,
+            "fontId": 37,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.27.3",
+            "code": 61,
+            "x": 179.340454,
+            "y": 128.800995,
+            "width": 8.516693,
+            "height": 4.051483,
+            "depth": -1.423508,
+            "fontId": 18,
+            "fontName": "cmss10",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.27.5",
+            "code": 99,
+            "x": 190.898758,
+            "y": 128.800995,
+            "width": 4.861801,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 37,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.31.2",
+            "code": 65,
+            "x": 28.452744,
+            "y": 154.106552,
+            "width": 7.30365,
+            "height": 7.599304,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.31.3",
+            "code": 102,
+            "x": 35.756393,
+            "y": 154.106552,
+            "width": 3.350693,
+            "height": 7.719742,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.31.5",
+            "code": 116,
+            "x": 39.107086,
+            "y": 154.106552,
+            "width": 3.952942,
+            "height": 6.252441,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.31.6",
+            "code": 101,
+            "x": 43.060028,
+            "y": 154.106552,
+            "width": 4.861801,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.31.7",
+            "code": 114,
+            "x": 47.921829,
+            "y": 154.106552,
+            "width": 3.744904,
+            "height": 4.982254,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.5.2.4.9.31.8",
+            "code": 46,
+            "x": 51.666733,
+            "y": 154.106552,
+            "width": 3.044098,
+            "height": 0.908844,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          }
+        ],
+        "lines": [
+          {
+            "text": "DisplaypagesI",
+            "x": 8.535904,
+            "baselineY": 21.142303,
+            "glyphs": [
+              {
+                "path": "root.5.2.4.9.10.2.2.9.5",
+                "code": 68,
+                "x": 8.535904,
+                "y": 21.142303,
+                "width": 10.137589,
+                "height": 9.993591,
+                "depth": 0,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.5.2.4.9.10.2.2.9.6",
+                "code": 105,
+                "x": 18.673492,
+                "y": 21.142303,
+                "width": 3.311996,
+                "height": 9.417603,
+                "depth": 0,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.5.2.4.9.10.2.2.9.7",
+                "code": 115,
+                "x": 21.985489,
+                "y": 21.142303,
+                "width": 5.399994,
+                "height": 6.609604,
+                "depth": 0.143997,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.5.2.4.9.10.2.2.9.9",
+                "code": 112,
+                "x": 27.385483,
+                "y": 21.142303,
+                "width": 7.22879,
+                "height": 6.537598,
+                "depth": 2.793594,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.5.2.4.9.10.2.2.9.10",
+                "code": 108,
+                "x": 34.614273,
+                "y": 21.142303,
+                "width": 3.311996,
+                "height": 9.993591,
+                "depth": 0,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.5.2.4.9.10.2.2.9.11",
+                "code": 97,
+                "x": 37.92627,
+                "y": 21.142303,
+                "width": 6.753601,
+                "height": 6.609604,
+                "depth": 0.143997,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.5.2.4.9.10.2.2.9.13",
+                "code": 121,
+                "x": 44.291077,
+                "y": 21.142303,
+                "width": 6.451202,
+                "height": 6.3936,
+                "depth": 2.937592,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.5.2.4.9.10.2.2.9.15",
+                "code": 112,
+                "x": 55.436676,
+                "y": 21.142303,
+                "width": 7.22879,
+                "height": 6.537598,
+                "depth": 2.793594,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.5.2.4.9.10.2.2.9.16",
+                "code": 97,
+                "x": 62.665466,
+                "y": 21.142303,
+                "width": 6.753601,
+                "height": 6.609604,
+                "depth": 0.143997,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.5.2.4.9.10.2.2.9.17",
+                "code": 103,
+                "x": 69.419067,
+                "y": 21.142303,
+                "width": 7.056,
+                "height": 6.537598,
+                "depth": 2.951996,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.5.2.4.9.10.2.2.9.18",
+                "code": 101,
+                "x": 76.475067,
+                "y": 21.142303,
+                "width": 6.263992,
+                "height": 6.609604,
+                "depth": 0.143997,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.5.2.4.9.10.2.2.9.19",
+                "code": 115,
+                "x": 82.739059,
+                "y": 21.142303,
+                "width": 5.399994,
+                "height": 6.609604,
+                "depth": 0.143997,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.5.2.4.9.10.2.2.9.22",
+                "code": 73,
+                "x": 92.83345,
+                "y": 21.142303,
+                "width": 3.830399,
+                "height": 9.993591,
+                "depth": 0,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              }
+            ]
+          },
+          {
+            "text": "Before.",
+            "x": 28.452744,
+            "baselineY": 113.097382,
+            "glyphs": [
+              {
+                "path": "root.5.2.4.9.23.3",
+                "code": 66,
+                "x": 28.452744,
+                "y": 113.097382,
+                "width": 7.30365,
+                "height": 7.599304,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.5.2.4.9.23.4",
+                "code": 101,
+                "x": 35.756393,
+                "y": 113.097382,
+                "width": 4.861801,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.5.2.4.9.23.6",
+                "code": 102,
+                "x": 40.618195,
+                "y": 113.097382,
+                "width": 3.350693,
+                "height": 7.719742,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.5.2.4.9.23.7",
+                "code": 111,
+                "x": 43.968887,
+                "y": 113.097382,
+                "width": 5.475006,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.5.2.4.9.23.9",
+                "code": 114,
+                "x": 49.137299,
+                "y": 113.097382,
+                "width": 3.744904,
+                "height": 4.982254,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.5.2.4.9.23.10",
+                "code": 101,
+                "x": 52.882202,
+                "y": 113.097382,
+                "width": 4.861801,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.5.2.4.9.23.11",
+                "code": 46,
+                "x": 57.744003,
+                "y": 113.097382,
+                "width": 3.044098,
+                "height": 0.908844,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              }
+            ]
+          },
+          {
+            "text": "a",
+            "x": 169.153,
+            "baselineY": 121.39325,
+            "glyphs": [
+              {
+                "path": "root.5.2.4.9.27.1.1.2.1.2",
+                "code": 97,
+                "x": 169.153,
+                "y": 121.39325,
+                "width": 5.266953,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 37,
+                "fontName": "lmsans10-oblique",
+                "fontSize": 10.949997
+              }
+            ]
+          },
+          {
+            "text": "=c",
+            "x": 179.340454,
+            "baselineY": 128.800995,
+            "glyphs": [
+              {
+                "path": "root.5.2.4.9.27.3",
+                "code": 61,
+                "x": 179.340454,
+                "y": 128.800995,
+                "width": 8.516693,
+                "height": 4.051483,
+                "depth": -1.423508,
+                "fontId": 18,
+                "fontName": "cmss10",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.5.2.4.9.27.5",
+                "code": 99,
+                "x": 190.898758,
+                "y": 128.800995,
+                "width": 4.861801,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 37,
+                "fontName": "lmsans10-oblique",
+                "fontSize": 10.949997
+              }
+            ]
+          },
+          {
+            "text": "b",
+            "x": 168.813553,
+            "baselineY": 136.312149,
+            "glyphs": [
+              {
+                "path": "root.5.2.4.9.27.1.1.2.5.1",
+                "code": 98,
+                "x": 168.813553,
+                "y": 136.312149,
+                "width": 5.661148,
+                "height": 7.599304,
+                "depth": 0.120453,
+                "fontId": 37,
+                "fontName": "lmsans10-oblique",
+                "fontSize": 10.949997
+              }
+            ]
+          },
+          {
+            "text": "After.",
+            "x": 28.452744,
+            "baselineY": 154.106552,
+            "glyphs": [
+              {
+                "path": "root.5.2.4.9.31.2",
+                "code": 65,
+                "x": 28.452744,
+                "y": 154.106552,
+                "width": 7.30365,
+                "height": 7.599304,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.5.2.4.9.31.3",
+                "code": 102,
+                "x": 35.756393,
+                "y": 154.106552,
+                "width": 3.350693,
+                "height": 7.719742,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.5.2.4.9.31.5",
+                "code": 116,
+                "x": 39.107086,
+                "y": 154.106552,
+                "width": 3.952942,
+                "height": 6.252441,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.5.2.4.9.31.6",
+                "code": 101,
+                "x": 43.060028,
+                "y": 154.106552,
+                "width": 4.861801,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.5.2.4.9.31.7",
+                "code": 114,
+                "x": 47.921829,
+                "y": 154.106552,
+                "width": 3.744904,
+                "height": 4.982254,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.5.2.4.9.31.8",
+                "code": 46,
+                "x": 51.666733,
+                "y": 154.106552,
+                "width": 3.044098,
+                "height": 0.908844,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "frameIndex": 0,
+      "continuation": 2,
+      "step": 1,
+      "trace": {
+        "coordinateSystem": {
+          "unit": "tex-pt",
+          "origin": "top-left",
+          "yAxis": "down"
+        },
+        "page": {
+          "x": 0,
+          "y": 0,
+          "width": 364.1953582763672,
+          "height": 273.14662170410156
+        },
+        "shipoutOrigin": {
+          "x": -72.26998901367188,
+          "y": -72.26998901367188
+        },
+        "boxes": [
+          {
+            "path": "root",
+            "x": 72.269989,
+            "y": 72.269989,
+            "width": 263.472626,
+            "height": 200.876633,
+            "depth": 0,
+            "totalHeight": 200.876633
+          },
+          {
+            "path": "root.1",
+            "x": 72.269989,
+            "y": 72.269989,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.1.2",
+            "x": 0,
+            "y": 72.269989,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.1.2.2",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.1.2.2.1",
+            "x": 0,
+            "y": 72.269989,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.2",
+            "x": 72.269989,
+            "y": 72.269989,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.2.4",
+            "x": 72.269989,
+            "y": -1.003738,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4",
+            "x": 72.269989,
+            "y": 72.269989,
+            "width": 263.472626,
+            "height": 200.876633,
+            "depth": 0,
+            "totalHeight": 200.876633
+          },
+          {
+            "path": "root.4.2",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.4.2.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": -28.452744,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.1.2",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.1.2.1",
+            "x": 0,
+            "y": 0,
+            "width": 364.195358,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.4.2.1.2.2.1.1.2.1.1",
+            "x": 0,
+            "y": 0,
+            "width": 364.195358,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.4.2.1.2.2.1.1.3",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.1.3.1",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.1.3.1.1",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3",
+            "x": 28.452744,
+            "y": 0,
+            "width": -56.905487,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.1.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": -28.452744,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.1.1.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": -28.452744,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.1.1.1.2",
+            "x": 0,
+            "y": 273.146622,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.1.1.1.2.1",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.1.1.1.3",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.2",
+            "x": 28.452744,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.2.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": 335.742615,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.2.1.1",
+            "x": 28.452744,
+            "y": 0,
+            "width": 335.742615,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.2.1.1.3",
+            "x": 364.195358,
+            "y": 273.146622,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.2.1.1.3.1",
+            "x": 364.195358,
+            "y": 0,
+            "width": 0,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.2.1.1.4",
+            "x": 364.195358,
+            "y": 0,
+            "width": 0,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.2.1.1.4.4",
+            "x": 364.195358,
+            "y": 264.146606,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.2.1.1.4.7",
+            "x": 364.195358,
+            "y": 271.146606,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.3",
+            "x": 28.452744,
+            "y": 0,
+            "width": -56.905487,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.3.2",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.3.3.2.1",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.7",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.1.2.2.1.7.2",
+            "x": 28.452744,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.4",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 269.146622,
+            "depth": 0,
+            "totalHeight": 269.146622
+          },
+          {
+            "path": "root.4.2.4.4",
+            "x": 28.452744,
+            "y": 0,
+            "width": 307.289871,
+            "height": 269.146622,
+            "depth": 0,
+            "totalHeight": 269.146622
+          },
+          {
+            "path": "root.4.2.4.4.2",
+            "x": 28.452744,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.4.4.6",
+            "x": 28.452744,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.4.4.10",
+            "x": 28.452744,
+            "y": 1,
+            "width": 307.289871,
+            "height": 19.148758,
+            "depth": 0,
+            "totalHeight": 19.148758
+          },
+          {
+            "path": "root.4.2.4.4.10.2",
+            "x": 0,
+            "y": 1,
+            "width": 364.195358,
+            "height": 19.148758,
+            "depth": 0,
+            "totalHeight": 19.148758
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2",
+            "x": 0,
+            "y": 1,
+            "width": 364.195358,
+            "height": 19.148758,
+            "depth": 0,
+            "totalHeight": 19.148758
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.4",
+            "x": 0,
+            "y": 9.535904,
+            "width": 364.195358,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.4.3",
+            "x": 8.535904,
+            "y": 9.535904,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.4.4",
+            "x": 8.535904,
+            "y": 9.535904,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9",
+            "x": 0,
+            "y": 8.542358,
+            "width": 364.195358,
+            "height": 12.599945,
+            "depth": 5.400055,
+            "totalHeight": 18
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.3",
+            "x": 8.535904,
+            "y": 21.142303,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.4.4.19",
+            "x": 28.452744,
+            "y": 99.738083,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.4.4.21",
+            "x": 28.452744,
+            "y": 105.618347,
+            "width": 307.289871,
+            "height": 7.719742,
+            "depth": 2.255707,
+            "totalHeight": 9.975449
+          },
+          {
+            "path": "root.4.2.4.4.21.2",
+            "x": 28.452744,
+            "y": 113.338089,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.4.4.25",
+            "x": 152.054382,
+            "y": 119.111145,
+            "width": 60.086609,
+            "height": 9.937164,
+            "depth": 2.244751,
+            "totalHeight": 12.181915
+          },
+          {
+            "path": "root.4.2.4.4.25.3",
+            "x": 158.153519,
+            "y": 119.111145,
+            "width": 4.748001,
+            "height": 5.416,
+            "depth": 0,
+            "totalHeight": 5.416
+          },
+          {
+            "path": "root.4.2.4.4.25.9",
+            "x": 182.416779,
+            "y": 119.111145,
+            "width": 4.748001,
+            "height": 5.416,
+            "depth": 0,
+            "totalHeight": 5.416
+          },
+          {
+            "path": "root.4.2.4.4.25.15",
+            "x": 207.39299,
+            "y": 119.111145,
+            "width": 4.748001,
+            "height": 5.416,
+            "depth": 0,
+            "totalHeight": 5.416
+          },
+          {
+            "path": "root.4.2.4.4.29",
+            "x": 28.452744,
+            "y": 143.890488,
+            "width": 307.289871,
+            "height": 7.719742,
+            "depth": 2.255707,
+            "totalHeight": 9.975449
+          },
+          {
+            "path": "root.4.2.6",
+            "x": 28.452744,
+            "y": 273.146622,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.6.2",
+            "x": 28.452744,
+            "y": 273.146622,
+            "width": 307.289871,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.6.2.1",
+            "x": 28.452744,
+            "y": 273.146622,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.6.2.1.1",
+            "x": 28.452744,
+            "y": 273.146622,
+            "width": -56.905487,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.6.2.1.1.1",
+            "x": 28.452744,
+            "y": 273.146622,
+            "width": -56.905487,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.6.2.1.1.1.2",
+            "x": 0,
+            "y": 273.146622,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.6.2.1.1.1.2.1",
+            "x": 0,
+            "y": 273.146622,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          },
+          {
+            "path": "root.4.2.6.2.1.3",
+            "x": 28.452744,
+            "y": 273.146622,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "totalHeight": 0
+          }
+        ],
+        "rules": [
+          {
+            "path": "root.4.2.1.2.2.1.1.2.1.1.4",
+            "x": 0,
+            "y": 0,
+            "width": 364.195358,
+            "height": 273.146622,
+            "depth": 0,
+            "totalHeight": 273.146622
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.4",
+            "x": 8.535904,
+            "y": 8.542358,
+            "width": 0,
+            "height": 12.599945,
+            "depth": 5.400055,
+            "totalHeight": 18
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.26",
+            "x": 100.883041,
+            "y": 8.542358,
+            "width": 0,
+            "height": 12.599945,
+            "depth": 5.400055,
+            "totalHeight": 18
+          }
+        ],
+        "glyphs": [
+          {
+            "path": "root.4.2.4.4.10.2.2.9.5",
+            "code": 68,
+            "x": 8.535904,
+            "y": 21.142303,
+            "width": 10.137589,
+            "height": 9.993591,
+            "depth": 0,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.6",
+            "code": 105,
+            "x": 18.673492,
+            "y": 21.142303,
+            "width": 3.311996,
+            "height": 9.417603,
+            "depth": 0,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.7",
+            "code": 115,
+            "x": 21.985489,
+            "y": 21.142303,
+            "width": 5.399994,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.9",
+            "code": 112,
+            "x": 27.385483,
+            "y": 21.142303,
+            "width": 7.22879,
+            "height": 6.537598,
+            "depth": 2.793594,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.10",
+            "code": 108,
+            "x": 34.614273,
+            "y": 21.142303,
+            "width": 3.311996,
+            "height": 9.993591,
+            "depth": 0,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.11",
+            "code": 97,
+            "x": 37.92627,
+            "y": 21.142303,
+            "width": 6.753601,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.13",
+            "code": 121,
+            "x": 44.291077,
+            "y": 21.142303,
+            "width": 6.451202,
+            "height": 6.3936,
+            "depth": 2.937592,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.15",
+            "code": 112,
+            "x": 55.436676,
+            "y": 21.142303,
+            "width": 7.22879,
+            "height": 6.537598,
+            "depth": 2.793594,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.16",
+            "code": 97,
+            "x": 62.665466,
+            "y": 21.142303,
+            "width": 6.753601,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.17",
+            "code": 103,
+            "x": 69.419067,
+            "y": 21.142303,
+            "width": 7.056,
+            "height": 6.537598,
+            "depth": 2.951996,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.18",
+            "code": 101,
+            "x": 76.475067,
+            "y": 21.142303,
+            "width": 6.263992,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.19",
+            "code": 115,
+            "x": 82.739059,
+            "y": 21.142303,
+            "width": 5.399994,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.22",
+            "code": 73,
+            "x": 92.83345,
+            "y": 21.142303,
+            "width": 3.830399,
+            "height": 9.993591,
+            "depth": 0,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.10.2.2.9.24",
+            "code": 73,
+            "x": 97.052643,
+            "y": 21.142303,
+            "width": 3.830399,
+            "height": 9.993591,
+            "depth": 0,
+            "fontId": 40,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "path": "root.4.2.4.4.21.3",
+            "code": 66,
+            "x": 28.452744,
+            "y": 113.338089,
+            "width": 7.30365,
+            "height": 7.599304,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.21.4",
+            "code": 101,
+            "x": 35.756393,
+            "y": 113.338089,
+            "width": 4.861801,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.21.6",
+            "code": 102,
+            "x": 40.618195,
+            "y": 113.338089,
+            "width": 3.350693,
+            "height": 7.719742,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.21.7",
+            "code": 111,
+            "x": 43.968887,
+            "y": 113.338089,
+            "width": 5.475006,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.21.9",
+            "code": 114,
+            "x": 49.137299,
+            "y": 113.338089,
+            "width": 3.744904,
+            "height": 4.982254,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.21.10",
+            "code": 101,
+            "x": 52.882202,
+            "y": 113.338089,
+            "width": 4.861801,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.21.12",
+            "code": 97,
+            "x": 61.39035,
+            "y": 113.338089,
+            "width": 5.266953,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.21.13",
+            "code": 103,
+            "x": 66.657303,
+            "y": 113.338089,
+            "width": 5.475006,
+            "height": 4.982254,
+            "depth": 2.255707,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.21.14",
+            "code": 97,
+            "x": 72.132309,
+            "y": 113.338089,
+            "width": 5.266953,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.21.15",
+            "code": 105,
+            "x": 77.399261,
+            "y": 113.338089,
+            "width": 2.61705,
+            "height": 7.172241,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.21.16",
+            "code": 110,
+            "x": 80.016312,
+            "y": 113.338089,
+            "width": 5.661148,
+            "height": 4.982254,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.21.17",
+            "code": 46,
+            "x": 85.67746,
+            "y": 113.338089,
+            "width": 3.044098,
+            "height": 0.908844,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.25.1",
+            "code": 120,
+            "x": 152.054382,
+            "y": 129.048309,
+            "width": 5.047943,
+            "height": 4.861801,
+            "depth": 0,
+            "fontId": 37,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.25.3.1",
+            "code": 50,
+            "x": 158.153519,
+            "y": 124.527145,
+            "width": 4.248001,
+            "height": 5.416,
+            "depth": 0,
+            "fontId": 36,
+            "fontName": "lmsans8-regular",
+            "fontSize": 8
+          },
+          {
+            "path": "root.4.2.4.4.25.5",
+            "code": 43,
+            "x": 165.334808,
+            "y": 129.048309,
+            "width": 8.516693,
+            "height": 6.387497,
+            "depth": 0.912506,
+            "fontId": 18,
+            "fontName": "cmss10",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.25.7",
+            "code": 121,
+            "x": 176.28479,
+            "y": 129.048309,
+            "width": 5.047943,
+            "height": 4.861801,
+            "depth": 2.244751,
+            "fontId": 37,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.25.9.1",
+            "code": 50,
+            "x": 182.416779,
+            "y": 124.527145,
+            "width": 4.248001,
+            "height": 5.416,
+            "depth": 0,
+            "fontId": 36,
+            "fontName": "lmsans8-regular",
+            "fontSize": 8
+          },
+          {
+            "path": "root.4.2.4.4.25.11",
+            "code": 61,
+            "x": 190.20639,
+            "y": 129.048309,
+            "width": 8.516693,
+            "height": 4.051483,
+            "depth": -1.423508,
+            "fontId": 18,
+            "fontName": "cmss10",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.25.13",
+            "code": 122,
+            "x": 201.764694,
+            "y": 129.048309,
+            "width": 4.763245,
+            "height": 4.861801,
+            "depth": 0,
+            "fontId": 37,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.25.15.1",
+            "code": 50,
+            "x": 207.39299,
+            "y": 124.527145,
+            "width": 4.248001,
+            "height": 5.416,
+            "depth": 0,
+            "fontId": 36,
+            "fontName": "lmsans8-regular",
+            "fontSize": 8
+          },
+          {
+            "path": "root.4.2.4.4.29.2",
+            "code": 65,
+            "x": 28.452744,
+            "y": 151.610229,
+            "width": 7.30365,
+            "height": 7.599304,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.29.3",
+            "code": 102,
+            "x": 35.756393,
+            "y": 151.610229,
+            "width": 3.350693,
+            "height": 7.719742,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.29.5",
+            "code": 116,
+            "x": 39.107086,
+            "y": 151.610229,
+            "width": 3.952942,
+            "height": 6.252441,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.29.6",
+            "code": 101,
+            "x": 43.060028,
+            "y": 151.610229,
+            "width": 4.861801,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.29.7",
+            "code": 114,
+            "x": 47.921829,
+            "y": 151.610229,
+            "width": 3.744904,
+            "height": 4.982254,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.29.9",
+            "code": 97,
+            "x": 55.31308,
+            "y": 151.610229,
+            "width": 5.266953,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.29.10",
+            "code": 103,
+            "x": 60.580032,
+            "y": 151.610229,
+            "width": 5.475006,
+            "height": 4.982254,
+            "depth": 2.255707,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.29.11",
+            "code": 97,
+            "x": 66.055038,
+            "y": 151.610229,
+            "width": 5.266953,
+            "height": 5.047943,
+            "depth": 0.120453,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.29.12",
+            "code": 105,
+            "x": 71.321991,
+            "y": 151.610229,
+            "width": 2.61705,
+            "height": 7.172241,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.29.13",
+            "code": 110,
+            "x": 73.939041,
+            "y": 151.610229,
+            "width": 5.661148,
+            "height": 4.982254,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          },
+          {
+            "path": "root.4.2.4.4.29.14",
+            "code": 46,
+            "x": 79.600189,
+            "y": 151.610229,
+            "width": 3.044098,
+            "height": 0.908844,
+            "depth": 0,
+            "fontId": 16,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10.949997
+          }
+        ],
+        "lines": [
+          {
+            "text": "DisplaypagesII",
+            "x": 8.535904,
+            "baselineY": 21.142303,
+            "glyphs": [
+              {
+                "path": "root.4.2.4.4.10.2.2.9.5",
+                "code": 68,
+                "x": 8.535904,
+                "y": 21.142303,
+                "width": 10.137589,
+                "height": 9.993591,
+                "depth": 0,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.6",
+                "code": 105,
+                "x": 18.673492,
+                "y": 21.142303,
+                "width": 3.311996,
+                "height": 9.417603,
+                "depth": 0,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.7",
+                "code": 115,
+                "x": 21.985489,
+                "y": 21.142303,
+                "width": 5.399994,
+                "height": 6.609604,
+                "depth": 0.143997,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.9",
+                "code": 112,
+                "x": 27.385483,
+                "y": 21.142303,
+                "width": 7.22879,
+                "height": 6.537598,
+                "depth": 2.793594,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.10",
+                "code": 108,
+                "x": 34.614273,
+                "y": 21.142303,
+                "width": 3.311996,
+                "height": 9.993591,
+                "depth": 0,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.11",
+                "code": 97,
+                "x": 37.92627,
+                "y": 21.142303,
+                "width": 6.753601,
+                "height": 6.609604,
+                "depth": 0.143997,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.13",
+                "code": 121,
+                "x": 44.291077,
+                "y": 21.142303,
+                "width": 6.451202,
+                "height": 6.3936,
+                "depth": 2.937592,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.15",
+                "code": 112,
+                "x": 55.436676,
+                "y": 21.142303,
+                "width": 7.22879,
+                "height": 6.537598,
+                "depth": 2.793594,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.16",
+                "code": 97,
+                "x": 62.665466,
+                "y": 21.142303,
+                "width": 6.753601,
+                "height": 6.609604,
+                "depth": 0.143997,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.17",
+                "code": 103,
+                "x": 69.419067,
+                "y": 21.142303,
+                "width": 7.056,
+                "height": 6.537598,
+                "depth": 2.951996,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.18",
+                "code": 101,
+                "x": 76.475067,
+                "y": 21.142303,
+                "width": 6.263992,
+                "height": 6.609604,
+                "depth": 0.143997,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.19",
+                "code": 115,
+                "x": 82.739059,
+                "y": 21.142303,
+                "width": 5.399994,
+                "height": 6.609604,
+                "depth": 0.143997,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.22",
+                "code": 73,
+                "x": 92.83345,
+                "y": 21.142303,
+                "width": 3.830399,
+                "height": 9.993591,
+                "depth": 0,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              },
+              {
+                "path": "root.4.2.4.4.10.2.2.9.24",
+                "code": 73,
+                "x": 97.052643,
+                "y": 21.142303,
+                "width": 3.830399,
+                "height": 9.993591,
+                "depth": 0,
+                "fontId": 40,
+                "fontName": "lmsans12-regular",
+                "fontSize": 14.399994
+              }
+            ]
+          },
+          {
+            "text": "Beforeagain.",
+            "x": 28.452744,
+            "baselineY": 113.338089,
+            "glyphs": [
+              {
+                "path": "root.4.2.4.4.21.3",
+                "code": 66,
+                "x": 28.452744,
+                "y": 113.338089,
+                "width": 7.30365,
+                "height": 7.599304,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.21.4",
+                "code": 101,
+                "x": 35.756393,
+                "y": 113.338089,
+                "width": 4.861801,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.21.6",
+                "code": 102,
+                "x": 40.618195,
+                "y": 113.338089,
+                "width": 3.350693,
+                "height": 7.719742,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.21.7",
+                "code": 111,
+                "x": 43.968887,
+                "y": 113.338089,
+                "width": 5.475006,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.21.9",
+                "code": 114,
+                "x": 49.137299,
+                "y": 113.338089,
+                "width": 3.744904,
+                "height": 4.982254,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.21.10",
+                "code": 101,
+                "x": 52.882202,
+                "y": 113.338089,
+                "width": 4.861801,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.21.12",
+                "code": 97,
+                "x": 61.39035,
+                "y": 113.338089,
+                "width": 5.266953,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.21.13",
+                "code": 103,
+                "x": 66.657303,
+                "y": 113.338089,
+                "width": 5.475006,
+                "height": 4.982254,
+                "depth": 2.255707,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.21.14",
+                "code": 97,
+                "x": 72.132309,
+                "y": 113.338089,
+                "width": 5.266953,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.21.15",
+                "code": 105,
+                "x": 77.399261,
+                "y": 113.338089,
+                "width": 2.61705,
+                "height": 7.172241,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.21.16",
+                "code": 110,
+                "x": 80.016312,
+                "y": 113.338089,
+                "width": 5.661148,
+                "height": 4.982254,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.21.17",
+                "code": 46,
+                "x": 85.67746,
+                "y": 113.338089,
+                "width": 3.044098,
+                "height": 0.908844,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              }
+            ]
+          },
+          {
+            "text": "222",
+            "x": 158.153519,
+            "baselineY": 124.527145,
+            "glyphs": [
+              {
+                "path": "root.4.2.4.4.25.3.1",
+                "code": 50,
+                "x": 158.153519,
+                "y": 124.527145,
+                "width": 4.248001,
+                "height": 5.416,
+                "depth": 0,
+                "fontId": 36,
+                "fontName": "lmsans8-regular",
+                "fontSize": 8
+              },
+              {
+                "path": "root.4.2.4.4.25.9.1",
+                "code": 50,
+                "x": 182.416779,
+                "y": 124.527145,
+                "width": 4.248001,
+                "height": 5.416,
+                "depth": 0,
+                "fontId": 36,
+                "fontName": "lmsans8-regular",
+                "fontSize": 8
+              },
+              {
+                "path": "root.4.2.4.4.25.15.1",
+                "code": 50,
+                "x": 207.39299,
+                "y": 124.527145,
+                "width": 4.248001,
+                "height": 5.416,
+                "depth": 0,
+                "fontId": 36,
+                "fontName": "lmsans8-regular",
+                "fontSize": 8
+              }
+            ]
+          },
+          {
+            "text": "x+y=z",
+            "x": 152.054382,
+            "baselineY": 129.048309,
+            "glyphs": [
+              {
+                "path": "root.4.2.4.4.25.1",
+                "code": 120,
+                "x": 152.054382,
+                "y": 129.048309,
+                "width": 5.047943,
+                "height": 4.861801,
+                "depth": 0,
+                "fontId": 37,
+                "fontName": "lmsans10-oblique",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.25.5",
+                "code": 43,
+                "x": 165.334808,
+                "y": 129.048309,
+                "width": 8.516693,
+                "height": 6.387497,
+                "depth": 0.912506,
+                "fontId": 18,
+                "fontName": "cmss10",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.25.7",
+                "code": 121,
+                "x": 176.28479,
+                "y": 129.048309,
+                "width": 5.047943,
+                "height": 4.861801,
+                "depth": 2.244751,
+                "fontId": 37,
+                "fontName": "lmsans10-oblique",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.25.11",
+                "code": 61,
+                "x": 190.20639,
+                "y": 129.048309,
+                "width": 8.516693,
+                "height": 4.051483,
+                "depth": -1.423508,
+                "fontId": 18,
+                "fontName": "cmss10",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.25.13",
+                "code": 122,
+                "x": 201.764694,
+                "y": 129.048309,
+                "width": 4.763245,
+                "height": 4.861801,
+                "depth": 0,
+                "fontId": 37,
+                "fontName": "lmsans10-oblique",
+                "fontSize": 10.949997
+              }
+            ]
+          },
+          {
+            "text": "Afteragain.",
+            "x": 28.452744,
+            "baselineY": 151.610229,
+            "glyphs": [
+              {
+                "path": "root.4.2.4.4.29.2",
+                "code": 65,
+                "x": 28.452744,
+                "y": 151.610229,
+                "width": 7.30365,
+                "height": 7.599304,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.29.3",
+                "code": 102,
+                "x": 35.756393,
+                "y": 151.610229,
+                "width": 3.350693,
+                "height": 7.719742,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.29.5",
+                "code": 116,
+                "x": 39.107086,
+                "y": 151.610229,
+                "width": 3.952942,
+                "height": 6.252441,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.29.6",
+                "code": 101,
+                "x": 43.060028,
+                "y": 151.610229,
+                "width": 4.861801,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.29.7",
+                "code": 114,
+                "x": 47.921829,
+                "y": 151.610229,
+                "width": 3.744904,
+                "height": 4.982254,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.29.9",
+                "code": 97,
+                "x": 55.31308,
+                "y": 151.610229,
+                "width": 5.266953,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.29.10",
+                "code": 103,
+                "x": 60.580032,
+                "y": 151.610229,
+                "width": 5.475006,
+                "height": 4.982254,
+                "depth": 2.255707,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.29.11",
+                "code": 97,
+                "x": 66.055038,
+                "y": 151.610229,
+                "width": 5.266953,
+                "height": 5.047943,
+                "depth": 0.120453,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.29.12",
+                "code": 105,
+                "x": 71.321991,
+                "y": 151.610229,
+                "width": 2.61705,
+                "height": 7.172241,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.29.13",
+                "code": 110,
+                "x": 73.939041,
+                "y": 151.610229,
+                "width": 5.661148,
+                "height": 4.982254,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              },
+              {
+                "path": "root.4.2.4.4.29.14",
+                "code": 46,
+                "x": 79.600189,
+                "y": 151.610229,
+                "width": 3.044098,
+                "height": 0.908844,
+                "depth": 0,
+                "fontId": 16,
+                "fontName": "lmsans10-regular",
+                "fontSize": 10.949997
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

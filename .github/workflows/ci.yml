@@ -27,7 +27,12 @@ jobs:
         run: |
           npm run lint:ci
           npm run typecheck
+      - name: Deterministic adversarial TeX fuzz smoke
+        run: npm run fuzz:tex-adversarial:pr
       - run: npm test
+        env:
+          # Every frame of the pointer-invariant fuzzer; local runs take a quick subset.
+          POINTER_FUZZ_FULL: "1"
       - run: npm run -w @tikz-editor/desktop test:e2e:mock
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:ci
@@ -67,3 +72,113 @@ jobs:
         if: steps.cache-tauri-driver.outputs.cache-hit != 'true'
       - run: npm run -w @tikz-editor/desktop tauri:build -- --no-bundle
       - run: xvfb-run -a npm run test:desktop:e2e
+
+  desktop-windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+      - id: cache-tauri-driver
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/tauri-driver.exe
+          key: ${{ runner.os }}-tauri-driver-v1-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-tauri-driver-v1-
+      - run: npm ci
+      - name: Build unsigned Windows installers
+        shell: pwsh
+        run: |
+          $config = Join-Path $env:RUNNER_TEMP "tauri-ci.json"
+          '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -LiteralPath $config
+          npm run -w @tikz-editor/desktop tauri:build -- --ci --bundles nsis,msi --config $config
+      - name: Test Windows native code
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib
+      - name: Install tauri-driver
+        if: steps.cache-tauri-driver.outputs.cache-hit != 'true'
+        run: cargo install tauri-driver --locked
+      - name: Ensure WebView2 Runtime is installed
+        shell: pwsh
+        run: |
+          $client = "Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+          $roots = @("HKLM:\SOFTWARE\WOW6432Node", "HKLM:\SOFTWARE", "HKCU:\SOFTWARE\WOW6432Node", "HKCU:\SOFTWARE")
+          $installed = $roots | ForEach-Object {
+            Get-ItemPropertyValue -LiteralPath (Join-Path $_ $client) -Name pv -ErrorAction SilentlyContinue
+          } | Where-Object { $_ -and $_ -ne "0.0.0.0" }
+          if (-not $installed) {
+            $bootstrapper = Join-Path $env:RUNNER_TEMP "MicrosoftEdgeWebview2Setup.exe"
+            Invoke-WebRequest "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $bootstrapper
+            $install = Start-Process -FilePath $bootstrapper -ArgumentList "/silent", "/install" -Wait -PassThru
+            if ($install.ExitCode -ne 0) { throw "WebView2 installation failed: $($install.ExitCode)" }
+          }
+      - name: Install matching Microsoft Edge Driver
+        shell: pwsh
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool
+          if ($LASTEXITCODE -ne 0) { throw "Could not install msedgedriver-tool." }
+          & "$HOME/.cargo/bin/msedgedriver-tool.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Could not download Microsoft Edge Driver." }
+          $PWD.Path >> $env:GITHUB_PATH
+      - name: Run Windows desktop end-to-end tests
+        timeout-minutes: 10
+        run: npm run test:desktop:e2e
+      - name: Build portable Windows executable
+        run: npm run -w @tikz-editor/desktop tauri:build:portable -- --ci
+      - name: Package portable ZIP
+        shell: pwsh
+        run: ./apps/desktop/scripts/package-portable.ps1 -OutputDirectory "$env:RUNNER_TEMP\portable-output"
+      - name: Test relocated portable app and profile persistence
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP "Portable Apps With Spaces"
+          New-Item -ItemType Directory -Force -Path $directory | Out-Null
+          $archive = Get-ChildItem (Join-Path $env:RUNNER_TEMP "portable-output\*-portable.zip")
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath $directory
+          $env:TIKZ_DESKTOP_E2E_APP_PATH = Join-Path $directory "tikz-editor.exe"
+          $env:TIKZ_DESKTOP_E2E_PORTABLE = "1"
+          # Launch without WebDriver first: EdgeDriver overrides the app's own
+          # profile setting, so verify the release binary's storage independently.
+          $portableProfilePath = Join-Path $directory "tikz-editor-data\EBWebView"
+          $app = Start-Process -FilePath $env:TIKZ_DESKTOP_E2E_APP_PATH -WorkingDirectory $env:RUNNER_TEMP -PassThru
+          try {
+            $deadline = (Get-Date).AddSeconds(30)
+            while ((Get-Date) -lt $deadline) {
+              $app.Refresh()
+              if ($app.HasExited) { throw "Portable app exited before the profile check: $($app.ExitCode)" }
+              if ((Test-Path -LiteralPath $portableProfilePath -PathType Container) -and $app.MainWindowHandle -ne 0) { break }
+              Start-Sleep -Milliseconds 250
+            }
+            if (-not (Test-Path -LiteralPath $portableProfilePath -PathType Container)) {
+              throw "Portable app did not create its WebView2 profile at $portableProfilePath"
+            }
+            Write-Host "Portable app created its profile without WebDriver: $portableProfilePath"
+          } finally {
+            if (-not $app.HasExited) {
+              $null = $app.CloseMainWindow()
+              if (-not $app.WaitForExit(10000)) {
+                taskkill /PID $app.Id /T /F
+                if ($LASTEXITCODE -ne 0) { throw "Could not stop the portable launch probe." }
+              }
+            }
+          }
+          npm run test:desktop:e2e
+      - name: Upload unsigned Windows packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-ci-installers
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            apps/desktop/src-tauri/target/release/bundle/msi/*.msi
+            ${{ runner.temp }}/portable-output/*-portable.zip
+          if-no-files-found: error

@@ -6,7 +6,7 @@ import type { EditHandle } from "../../packages/core/src/semantic/types.js";
 import { identityMatrix, scaleMatrix, rotationMatrix, multiplyMatrix, translationMatrix } from "../../packages/core/src/semantic/transform.js";
 import { rewriteCoordinate, supportsUnsupportedCoordinateDetach } from "../../packages/core/src/edit/rewrite.js";
 import { PT_PER_CM } from "../../packages/core/src/edit/format.js";
-import type { SourceRef } from "../../packages/core/src/semantic/types.js";
+import type { EditHandleSourceRef } from "../../packages/core/src/semantic/types.js";
 import { flp, wp } from "../coords-helpers.js";
 
 const cm = (value: number): number => value * PT_PER_CM;
@@ -15,12 +15,12 @@ function makeHandle(
   overrides: Omit<Partial<EditHandle>, "sourceRef" | "runtimeId"> & {
     runtimeId?: string;
     world: WorldPoint;
-    sourceRef?: Partial<SourceRef> & { sourceSpan: { from: number; to: number } };
+    sourceRef?: Partial<EditHandleSourceRef> & { sourceSpan: { from: number; to: number } };
     coordinateSpace?: "frame-local" | "world-only";
   }
 ): EditHandle {
-  const sourceRefOverrides: Partial<SourceRef> = overrides.sourceRef ?? {};
-  const mergedSourceRef: SourceRef = {
+  const sourceRefOverrides: Partial<EditHandleSourceRef> = overrides.sourceRef ?? {};
+  const mergedSourceRef: EditHandleSourceRef = {
     sourceId: sourceRefOverrides.sourceId ?? "test-source-id",
     sourceSpan: sourceRefOverrides.sourceSpan ?? { from: 0, to: 0 },
     sourceFingerprint: sourceRefOverrides.sourceFingerprint ?? "test"

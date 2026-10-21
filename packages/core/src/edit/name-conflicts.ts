@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { PathItem, Statement } from "../ast/types.js";
 import type { OptionListAst } from "../options/types.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
@@ -227,7 +228,7 @@ function nextAvailableName(baseName: string, usedNames: ReadonlySet<string>): st
   if (/\s/u.test(normalized)) {
     const spacedSuffix = /^(.*\S)\s+(\d+)$/u.exec(normalized);
     const stem = spacedSuffix?.[1] ?? normalized;
-    let counter = spacedSuffix ? Number.parseInt(spacedSuffix[2], 10) + 1 : 2;
+    let counter = spacedSuffix ? Number.parseInt(requireArrayValue(spacedSuffix, 2), 10) + 1 : 2;
     if (!Number.isFinite(counter) || counter < 2) {
       counter = 2;
     }
@@ -241,8 +242,8 @@ function nextAvailableName(baseName: string, usedNames: ReadonlySet<string>): st
   }
 
   const digitSuffix = /^(.*?)(\d+)$/u.exec(normalized);
-  const stem = digitSuffix && digitSuffix[1].length > 0 ? digitSuffix[1] : normalized;
-  let counter = digitSuffix ? Number.parseInt(digitSuffix[2], 10) + 1 : 2;
+  const stem = digitSuffix && requireArrayValue(digitSuffix, 1).length > 0 ? digitSuffix[1] : normalized;
+  let counter = digitSuffix ? Number.parseInt(requireArrayValue(digitSuffix, 2), 10) + 1 : 2;
   if (!Number.isFinite(counter) || counter < 2) {
     counter = 2;
   }

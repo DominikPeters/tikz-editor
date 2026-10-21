@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { OptionEntry } from "../options/types.js";
 import { splitAllAtTopLevel } from "../domains/coordinates/parse.js";
 import { parseCoordinateLike, parseLength } from "../semantic/coords/parse-length.js";
@@ -588,8 +589,8 @@ export function buildNodeFontSetPropertyMutation(
 ): NodeFontSetPropertyMutation {
   const preset = values.sizePreset === "custom" ? null : NODE_FONT_PRESET_BY_ID.get(values.sizePreset);
   const safeCustomSize =
-    Number.isFinite(values.customSizePt) && (values.customSizePt ?? 0) > 0
-      ? (values.customSizePt as number)
+    values.customSizePt !== null && Number.isFinite(values.customSizePt) && values.customSizePt > 0
+      ? values.customSizePt
       : context.fallbackCustomSizePt;
   const commandParts: string[] = [];
 
@@ -853,7 +854,7 @@ export function buildShadowSetPropertyMutations(
   const allKeys = [...SHADOW_ALL_KEYS] as string[];
 
   if (nextContext.preset === "none") {
-    return [{ key: allKeys[0], value: "", clearKeys: allKeys }];
+    return [{ key: requireArrayValue(allKeys, 0), value: "", clearKeys: allKeys }];
   }
 
   const tikzKey = SHADOW_PRESET_TIKZ_KEY[nextContext.preset];
@@ -1041,10 +1042,7 @@ function arrowPresetSideRaw(preset: Exclude<ArrowTipPresetId, "custom">, side: A
   if (preset === "bar") {
     return "|";
   }
-  if (preset === "hooks") {
-    return side === "start" ? "Hooks[left]" : "Hooks[right]";
-  }
-  return "";
+  return side === "start" ? "Hooks[left]" : "Hooks[right]";
 }
 
 function parseRotateAroundTransformValue(

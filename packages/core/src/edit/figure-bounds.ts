@@ -24,7 +24,11 @@ export type SetFigureBoundsAction =
 
 export function resolveFigureBoundsState(source: string, parseOptions: EditParseOptions = {}): FigureBoundsState {
   const parsed = parseTikzForEdit(source, parseOptions);
-  const statement = firstGeometryStatement(parsed.figure.body);
+  return resolveFigureBoundsFromFigure(parsed.figure);
+}
+
+export function resolveFigureBoundsFromFigure(figure: TikzFigure): FigureBoundsState {
+  const statement = firstGeometryStatement(figure.body);
   if (statement?.kind !== "Path") {
     return { mode: "auto" };
   }
@@ -37,7 +41,7 @@ export function applySetFigureBoundsAction(
   parseOptions: EditParseOptions = {}
 ): EditActionResult {
   const parsed = parseTikzForEdit(source, parseOptions);
-  const current = resolveFigureBoundsState(source, parseOptions);
+  const current = resolveFigureBoundsFromFigure(parsed.figure);
 
   if (action.mode === "auto") {
     if (current.mode !== "fixed") {
@@ -143,7 +147,7 @@ function resolveFigureBoundsInsertOffset(source: string, figure: TikzFigure): nu
     return source.lastIndexOf("\n", figure.body[0].span.from - 1) + 1;
   }
   const slice = source.slice(figure.span.from, figure.span.to);
-  const endMatch = /\\end\{tikzpicture\*?\}/g;
+  const endMatch = /\\end\{(?:tikzpicture\*?|tikzlayer)\}/g;
   let lastMatch: RegExpExecArray | null = null;
   for (let match = endMatch.exec(slice); match !== null; match = endMatch.exec(slice)) {
     lastMatch = match;
@@ -198,6 +202,6 @@ function successResult(
     kind: "success",
     newSource,
     patches: [{ oldSpan, newSpan, replacement }],
-    changedSourceIds
+    ...(changedSourceIds === undefined ? {} : { changedSourceIds })
   };
 }

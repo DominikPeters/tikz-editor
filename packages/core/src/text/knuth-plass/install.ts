@@ -1,134 +1,54 @@
-import { KnuthPlassVisitor } from './KnuthPlassVisitor.js';
-import type { ParagraphLayoutReport } from './paragraph/report.js';
-import type { ParagraphAlignment } from './alignment.js';
-import {
-  clearKnuthPlassCaretMappingCache,
-  getKnuthPlassCaretFromPoint,
-  getKnuthPlassLineRangeFromPoint,
-  getKnuthPlassPointFromOffset,
-  getKnuthPlassSelectionRects,
-  type CaretFromPointParams,
-  type CaretHitResult,
-  type LineRangeFromPointResult,
-  type CaretPointResult,
-  type PointFromOffsetParams,
-  type SelectionRectsParams,
-  type SelectionRectsResult,
-} from './editor/hitmap.js';
-
-export type OutputJaxName = 'svg' | 'chtml';
-export type KnuthPlassLayoutMode =
-  | 'wrap'
-  | 'fixed-lines'
-  | 'wrapped-explicit';
-
-export interface WrappedTextGap {
-  sourceStart: number;
-  widthEm: number;
-  stretchEm?: number;
-  shrinkEm?: number;
-  spaceFactor?: number;
-}
-
-export interface KnuthPlassConfig {
-  alignment?: ParagraphAlignment;
-  layoutMode?: KnuthPlassLayoutMode;
-  wrappedTextGaps?: WrappedTextGap[];
-  pretolerance?: number;
-  tolerance?: number;
-  linepenalty?: number;
-  hyphenpenalty?: number;
-  exhyphenpenalty?: number;
-  adjdemerits?: number;
-  doublehyphendemerits?: number;
-  finalhyphendemerits?: number;
-  lefthyphenmin?: number;
-  righthyphenmin?: number;
-}
-
-export interface MathJaxOutputConfig {
-  linebreaks?: {
-    LinebreakVisitor?: typeof KnuthPlassVisitor;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-}
-
-export interface MathJaxConfigLike {
-  svg?: MathJaxOutputConfig;
-  chtml?: MathJaxOutputConfig;
-  [key: string]: unknown;
-}
-
-interface MathJaxOutputJaxLike {
-  knuthPlassOptions?: KnuthPlassConfig;
-  linebreaks?: {
-    getReports?(): ParagraphLayoutReport[];
-  };
-}
-
-export function installKnuthPlassVisitor(
-  config: MathJaxConfigLike,
-  outputs: OutputJaxName[] = ['svg']
-): MathJaxConfigLike {
-  for (const output of outputs) {
-    const outputConfig = (config[output] ??= {});
-    const linebreaks = (outputConfig.linebreaks ??= {});
-    linebreaks.LinebreakVisitor = KnuthPlassVisitor;
-  }
-
-  return config;
-}
-
-export function setKnuthPlassOptionsOnOutputJax(
-  outputJax: unknown,
-  options: KnuthPlassConfig | null | undefined
-): void {
-  if (!outputJax || typeof outputJax !== 'object') {
-    return;
-  }
-  if (!options || typeof options !== 'object') {
-    return;
-  }
-
-  const target = outputJax as MathJaxOutputJaxLike;
-  const existing =
-    target.knuthPlassOptions && typeof target.knuthPlassOptions === 'object'
-      ? target.knuthPlassOptions
-      : {};
-
-  target.knuthPlassOptions = {
-    ...existing,
-    ...options,
-  };
-}
-
-export function getKnuthPlassReportsFromOutputJax(
-  outputJax: unknown
-): ParagraphLayoutReport[] {
-  if (!outputJax || typeof outputJax !== 'object') {
-    return [];
-  }
-
-  const target = outputJax as MathJaxOutputJaxLike;
-  const fromVisitor = target.linebreaks?.getReports?.();
-  if (Array.isArray(fromVisitor)) {
-    return fromVisitor;
-  }
-  return [];
-}
-
+// Compatibility barrel for the editor geometry API. The filename is retained
+// temporarily because it is part of the published subpath surface.
 export {
   getKnuthPlassCaretFromPoint,
   getKnuthPlassLineRangeFromPoint,
+  getKnuthPlassParagraphCaretStops,
+  getKnuthPlassPlaceholderGeometry,
   getKnuthPlassPointFromOffset,
   getKnuthPlassSelectionRects,
+  getKnuthPlassVListBoxFromPoint,
+  getKnuthPlassVListBoxGeometry,
+  getKnuthPlassVListGeometrySnapshot,
+  getKnuthPlassVListItemFromPoint,
+  getKnuthPlassVListLabelFromPoint,
+  getKnuthPlassVListItemGeometry,
+  getKnuthPlassVListLabelGeometry,
+  getKnuthPlassVListParagraphGeometry,
+  getKnuthPlassVListSourceHit,
+  getKnuthPlassVListSourceHitFromSnapshot,
+  getKnuthPlassVListTreeHitFromSnapshot,
   clearKnuthPlassCaretMappingCache,
   type CaretFromPointParams,
+  type KnuthPlassParagraphCaretStop,
+  type KnuthPlassParagraphCaretStopsLine,
   type PointFromOffsetParams,
   type SelectionRectsParams,
   type CaretHitResult,
   type LineRangeFromPointResult,
   type CaretPointResult,
+  type PlaceholderGeometry,
+  type PlaceholderGeometryParams,
   type SelectionRectsResult,
-};
+  type VListBoxHitParams,
+  type VListBoxGeometry,
+  type VListBoxGeometryParams,
+  type VListGeometrySnapshot,
+  type VListGeometrySnapshotParams,
+  type VListGeometrySnapshotSource,
+  type VListGeometryTreeNode,
+  type VListItemHitParams,
+  type VListItemGeometry,
+  type VListItemGeometryParams,
+  type VListLabelHitParams,
+  type VListLabelHitResult,
+  type VListLabelGeometry,
+  type VListLabelGeometryParams,
+  type VListParagraphGeometry,
+  type VListParagraphGeometryParams,
+  type VListSourceHit,
+  type VListSourceHitFromSnapshotParams,
+  type VListSourceHitParams,
+  type VListTreeHitParams,
+  type VListTreeHitResult,
+} from "./editor/hitmap.js";

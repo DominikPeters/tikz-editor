@@ -4,7 +4,7 @@ import { cancelGroup, requestThumbnail } from "../workers/thumbnail-worker-clien
 export type DocumentThumbnailSource = {
   id: string;
   source: string;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   /** Last computed snapshot SVG; a no-cost fast path while it is still current. */
   snapshotSvg: string | null;
   snapshotSource: string | null;
@@ -62,11 +62,13 @@ export function useDocumentThumbnails(
       return;
     }
     let cancelled = false;
+    // A call, so the check after each await is not narrowed away; the cleanup flips it mid-run.
+    const isCancelled = (): boolean => cancelled;
     const groupId = `doc-gallery-thumbs-${(galleryGroupCounter += 1).toString(36)}`;
 
     const run = async (): Promise<void> => {
       for (const doc of docs) {
-        if (cancelled) {
+        if (isCancelled()) {
           return;
         }
         const signature = sourceSignature(doc.source);
@@ -86,16 +88,16 @@ export function useDocumentThumbnails(
           source: doc.source,
           // An unknown figure id resolves to the first figure, so this is safe
           // for documents whose figures have not been parsed yet.
-          figureId: doc.activeFigureId ?? "figure:0",
+          figureId: doc.activeRootId ?? "figure:0",
           figureSignature: signature,
           parseOptions: {
             recover: true,
-            activeFigureId: doc.activeFigureId ?? "figure:0",
+            activeRootId: doc.activeRootId ?? "figure:0",
             includeContextDefinitions: true
           },
           svgOptions: { padding: 8 }
         }).catch(() => null);
-        if (cancelled || !result?.ok) {
+        if (isCancelled() || !result?.ok) {
           continue;
         }
         storeInCache(key, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(result.svg)}`);

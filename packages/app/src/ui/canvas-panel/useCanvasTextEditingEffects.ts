@@ -1,14 +1,19 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { useEffect, type RefObject } from "react";
-import { svgPoint, svgBounds, viewportBounds, pt, px } from "tikz-editor/coords/index";
-import { getActiveMathJaxOutputJax } from "tikz-editor/text/mathjax-engine";
-import { getKnuthPlassPointFromOffset, getKnuthPlassSelectionRects } from "tikz-editor/text/knuth-plass";
+import { clientPoint, svgPoint, svgBounds, viewportBounds, pt, px } from "@tikz-editor/core/coords/index";
+import { getKnuthPlassPointFromOffset, getKnuthPlassSelectionRects } from "@tikz-editor/core/text/knuth-plass";
+import {
+  documentSourceOffset,
+  textareaOffset,
+  textareaOffsetToDocument,
+  type DocumentSourceOffset
+} from "@tikz-editor/core/text/source-coordinates";
 import type { SvgBounds, SvgPoint, ViewportPoint } from "../coords/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { clientToViewport, svgToViewport } from "../coords/convert";
 import { clientBoundsToViewport, svgBoundsToViewportBounds } from "../coords/text";
 import { resolveRectHitRegionContentBox } from "../coords/regions";
 import { clamp } from "./geometry";
-import { createSourceRenderOffsetMap } from "./text-offset-map";
 import { applyTextMeasureFont, createVisualTextLayout, resolveVisualLineLeft } from "./text-visual-layout";
 import type { CanvasSnapshot, EditableTextTarget, StateSetter, TextEditingSession, TextSelectionOverlay, TextSelectionOverlayBox } from "./types";
 import type { CanvasTextEditAction } from "./canvas-text-edit-machine";
@@ -20,7 +25,10 @@ export type UseCanvasTextEditingEffectsArgs = {
   dispatchCanvasTextEditAction: (action: CanvasTextEditAction) => void;
   selectedElementIds: ReadonlySet<string>;
   resolveEditableTextTargetById: (sourceId: string, sceneTextId?: string) => EditableTextTarget | null;
-  resolveRenderedMathTextElement: (target: EditableTextTarget) => SVGSVGElement | null;
+  resolveRenderedMathTextElement: (
+    target: EditableTextTarget,
+    paragraphIdOverride?: string
+  ) => SVGGraphicsElement | null;
   viewportRef: RefObject<HTMLDivElement | null>;
   pendingAdornmentTextEditTargetId: string | null;
   snapshot: CanvasSnapshot;
@@ -35,6 +43,9 @@ export type UseCanvasTextEditingEffectsArgs = {
   setPendingAdornmentTextEditTargetId: StateSetter<string | null>;
   canvasTransform: CanvasTransform;
   svgResult: CanvasSnapshot["svg"];
+  textLayoutContext: unknown;
+  /** In math, the rendered item the caret hugs (document offsets): sizes the caret to its level. */
+  caretEdge: { side: "before" | "after"; within: { from: number; to: number }; whole?: boolean } | null;
 };
 
 type RegionSelectionOverlayBox = {
@@ -69,7 +80,7 @@ function getFallbackOverlayMeasureContext(): CanvasRenderingContext2D | null {
 }
 
 function applyFallbackOverlayFont(ctx: CanvasRenderingContext2D | null, target: EditableTextTarget): void {
-  applyTextMeasureFont(ctx, target?.style);
+  applyTextMeasureFont(ctx, target.style);
 }
 
 function resolvePlainFallbackLineBoxes(
@@ -128,14 +139,14 @@ function resolveRegionSelectionOverlay(
   applyFallbackOverlayFont(ctx, target);
   const layout = createVisualTextLayout(
     target.text,
-    target.renderSourceText ?? target.text,
+    target.renderSourceText,
     (text) => {
       if (!ctx) {
         return Number.NaN;
       }
       return ctx.measureText(text).width;
     },
-    { syntax: target.usesMathJax ? "mathjax" : "plain" }
+    { syntax: target.usesTex ? "tex" : "plain" }
   );
   const ranges = layout.sourceLineRanges;
   const contentBox = resolveRectHitRegionContentBox(target.region);
@@ -156,8 +167,7 @@ function resolveRegionSelectionOverlay(
   const rects: RegionSelectionOverlayBox[] = [];
   const start = Math.min(selectionStart, selectionEnd);
   const end = Math.max(selectionStart, selectionEnd);
-  for (let index = 0; index < ranges.length; index += 1) {
-    const range = ranges[index];
+  for (const [index, range] of ranges.entries()) {
     const localStart = Math.max(start, range.start);
     const localEnd = Math.min(end, range.end);
     if (localEnd <= localStart) {
@@ -172,7 +182,7 @@ function resolveRegionSelectionOverlay(
     rects.push({
       bounds: svgBounds(pt(left), pt(lineBox.top), pt(left + width), pt(lineBox.top + lineBox.height)),
       center: svgPoint(pt(left + width / 2), pt(lineBox.top + lineBox.height / 2)),
-      rotationDeg: Number.isFinite(target.region.rotation) ? Number(target.region.rotation) : undefined
+      ...(Number.isFinite(target.region.rotation) ? { rotationDeg: Number(target.region.rotation) } : {})
     });
   }
   return { caret: null, rects };
@@ -186,8 +196,8 @@ function projectRegionSelectionOverlayToViewport(
   const projectPoint = (point: SvgPoint): ViewportPoint => svgToViewport(point, canvasTransform, viewBox);
   const projectBox = (box: RegionSelectionOverlayBox): TextSelectionOverlayBox => ({
     bounds: svgBoundsToViewportBounds(box.bounds, projectPoint),
-    center: box.center ? projectPoint(box.center) : undefined,
-    rotationDeg: box.rotationDeg
+    ...(box.center ? { center: projectPoint(box.center) } : {}),
+    ...(box.rotationDeg !== undefined ? { rotationDeg: box.rotationDeg } : {})
   });
   return {
     caret: overlay.caret ? projectBox(overlay.caret) : null,
@@ -196,14 +206,16 @@ function projectRegionSelectionOverlayToViewport(
 }
 
 async function estimateCaretHeight(
-  outputJax: unknown,
+  layoutContext: unknown,
   paragraphId: string,
   sourceText: string,
-  containerElement: SVGSVGElement,
+  sourceTextStartOffset: DocumentSourceOffset,
+  containerElement: SVGGraphicsElement,
   offset: number
 ): Promise<number | null> {
-  const nextOffset = Math.min(sourceText.length, offset + 1);
-  const prevOffset = Math.max(0, offset - 1);
+  const sourceEndOffset = sourceTextStartOffset + sourceText.length;
+  const nextOffset = Math.min(sourceEndOffset, offset + 1);
+  const prevOffset = Math.max(sourceTextStartOffset, offset - 1);
   const probes: Array<[number, number]> = [];
   if (nextOffset > offset) {
     probes.push([offset, nextOffset]);
@@ -212,15 +224,17 @@ async function estimateCaretHeight(
     probes.push([prevOffset, offset]);
   }
   for (const [startOffset, endOffset] of probes) {
-    const rects = await getKnuthPlassSelectionRects(outputJax, {
+    const rects = await getKnuthPlassSelectionRects(layoutContext, {
       paragraphId,
       sourceText,
+      sourceTextStartOffset,
+      sourceCoordinateSpace: "document",
       containerElement,
       startOffset,
       endOffset
     });
     if (rects.ok && rects.rects.length > 0) {
-      const rect = rects.rects[0];
+      const rect = requireArrayValue(rects.rects, 0);
       return Math.max(1, rect.bounds.maxY - rect.bounds.minY);
     }
   }
@@ -244,7 +258,9 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
     startTextEditingSession,
     setPendingAdornmentTextEditTargetId,
     canvasTransform,
-    svgResult
+    svgResult,
+    textLayoutContext,
+    caretEdge
   } = args;
 
   useEffect(() => {
@@ -258,7 +274,11 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
     if (!textEditingSession) {
       return;
     }
-    if (selectedElementIds.size > 0 && !selectedElementIds.has(textEditingSession.sourceId)) {
+    if (
+      textEditingSession.editMode !== "inline-typo" &&
+      selectedElementIds.size > 0 &&
+      !selectedElementIds.has(textEditingSession.sourceId)
+    ) {
       dispatchCanvasTextEditAction({ type: "session_close" });
     }
   }, [dispatchCanvasTextEditAction, selectedElementIds, textEditingSession]);
@@ -303,8 +323,15 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
       return;
     }
 
-    const boundedStart = clamp(textEditingSession.selectionStart, 0, textEditingSession.text.length);
-    const boundedEnd = clamp(textEditingSession.selectionEnd, 0, textEditingSession.text.length);
+    // While a trailing-backslash write is deferred, the session text is
+    // longer than the document span the overlay is measured against, so the
+    // caret must be bounded by both lengths.
+    const overlayTextLength = Math.min(
+      textEditingSession.text.length,
+      Math.max(0, target.sourceSpan.to - target.sourceSpan.from)
+    );
+    const boundedStart = clamp(textEditingSession.selectionStart, 0, overlayTextLength);
+    const boundedEnd = clamp(textEditingSession.selectionEnd, 0, overlayTextLength);
     if (textEditingSession.isForeachTemplateEdit || target.isForeachTemplateEdit) {
       dispatchCanvasTextEditAction({
         type: "overlay_resolved",
@@ -317,7 +344,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
       return;
     }
 
-    const outputJax = getActiveMathJaxOutputJax();
+    const layoutContext = textLayoutContext;
     const containerElement = resolveRenderedMathTextElement(target);
     const viewport = viewportRef.current;
     if (!viewport) {
@@ -333,16 +360,16 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
     }
 
     const requestRef = { cancelled: false };
+    const isRequestCancelled = () => requestRef.cancelled;
     const viewportRect = viewport.getBoundingClientRect();
-    const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
-    const renderAnchor = clamp(offsetMap.sourceToRender(boundedStart), 0, target.renderSourceText.length);
-    const renderFocus = clamp(offsetMap.sourceToRender(boundedEnd), 0, target.renderSourceText.length);
-    const renderStart = Math.min(renderAnchor, renderFocus);
-    const renderEnd = Math.max(renderAnchor, renderFocus);
+    const documentAnchor = textareaOffsetToDocument(textareaOffset(boundedStart), target.sourceSpan);
+    const documentFocus = textareaOffsetToDocument(textareaOffset(boundedEnd), target.sourceSpan);
+    const documentStart = documentSourceOffset(Math.min(documentAnchor, documentFocus));
+    const documentEnd = documentSourceOffset(Math.max(documentAnchor, documentFocus));
 
     void (async () => {
       const requiresParagraphGeometry =
-        target.usesMathJax && target.layoutKind !== "single-line";
+        target.usesTex && target.layoutKind !== "single-line";
       const pushOverlay = (overlay: TextSelectionOverlay | null) => {
         dispatchCanvasTextEditAction({
           type: "overlay_resolved",
@@ -355,7 +382,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
       };
       const setRegionFallbackOverlay = () => {
         if (requiresParagraphGeometry) {
-          console.error("[canvas-text-edit] Missing paragraph geometry for multiline MathJax overlay.", {
+          console.error("[canvas-text-edit] Missing paragraph geometry for multiline TeX overlay.", {
             sourceId: target.sourceId,
             paragraphId: target.paragraphId,
             layoutKind: target.layoutKind
@@ -382,19 +409,176 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
       };
 
       try {
-        if (!target.paragraphId || !outputJax || !containerElement) {
+        // Scope sessions span many rendered paragraphs: the caret resolves
+        // against the paragraph containing the offset, and a range
+        // selection renders one rect set per intersected paragraph.
+        const scopeParagraphs = target.scopeParagraphs;
+        if (scopeParagraphs && scopeParagraphs.length > 0) {
+          if (!layoutContext) {
+            pushOverlay(null);
+            return;
+          }
+          if (documentStart === documentEnd) {
+            // Structural source between rendered paragraphs (\begin{itemize},
+            // \vspace, blank lines) has no containing paragraph; the caret
+            // collapses onto the nearest rendered stop, preferring the
+            // preceding paragraph's end.
+            const paragraph =
+              scopeParagraphs.find(
+                (candidate) =>
+                  documentStart >= candidate.sourceSpan.from &&
+                  documentStart <= candidate.sourceSpan.to
+              ) ??
+              [...scopeParagraphs].sort((left, right) => {
+                const distance = (candidate: typeof left) =>
+                  documentStart > candidate.sourceSpan.to
+                    ? documentStart - candidate.sourceSpan.to
+                    : candidate.sourceSpan.from - documentStart;
+                const precedes = (candidate: typeof left) =>
+                  candidate.sourceSpan.to <= documentStart ? 0 : 1;
+                return (
+                  distance(left) - distance(right) ||
+                  precedes(left) - precedes(right)
+                );
+              })[0];
+            const paragraphContainer = paragraph
+              ? resolveRenderedMathTextElement(target, paragraph.paragraphId)
+              : null;
+            if (!paragraph || !paragraphContainer) {
+              pushOverlay(null);
+              return;
+            }
+            const caretDocumentOffset = Math.min(
+              Math.max(documentStart, paragraph.sourceSpan.from),
+              paragraph.sourceSpan.to
+            );
+            const sourceText = source.slice(
+              paragraph.sourceSpan.from,
+              paragraph.sourceSpan.to
+            );
+            const point = await getKnuthPlassPointFromOffset(layoutContext, {
+              paragraphId: paragraph.paragraphId,
+              sourceText,
+              sourceTextStartOffset: documentSourceOffset(paragraph.sourceSpan.from),
+              sourceCoordinateSpace: "document",
+              containerElement: paragraphContainer,
+              offset: caretDocumentOffset,
+              ...(caretEdge ? { edge: caretEdge } : {})
+            });
+            if (isRequestCancelled()) {
+              return;
+            }
+            if (!point.ok || point.clientPoint == null) {
+              pushOverlay(null);
+              return;
+            }
+            // In math the caret spans the font size of the item it hugs
+            // (smaller in scripts), centred on that extent.
+            const mathHeight = point.caretTop && point.caretBottom
+              ? Math.hypot(point.caretBottom.x - point.caretTop.x, point.caretBottom.y - point.caretTop.y)
+              : null;
+            const caretCenter = point.caretTop && point.caretBottom && mathHeight != null && mathHeight >= 1
+              ? clientPoint(
+                  px((point.caretTop.x + point.caretBottom.x) / 2),
+                  px((point.caretTop.y + point.caretBottom.y) / 2)
+                )
+              : point.clientPoint;
+            const height = (mathHeight != null && mathHeight >= 1 ? mathHeight : null) ??
+              (await estimateCaretHeight(
+                layoutContext,
+                paragraph.paragraphId,
+                sourceText,
+                documentSourceOffset(paragraph.sourceSpan.from),
+                paragraphContainer,
+                point.offset ?? caretDocumentOffset
+              )) ?? Math.max(1, target.region.height);
+            if (isRequestCancelled()) {
+              return;
+            }
+            pushOverlay({
+              sourceId: target.sourceId,
+              selectionStart: boundedStart,
+              selectionEnd: boundedEnd,
+              caret: {
+                bounds: viewportBounds(
+                  px(caretCenter.x - viewportRect.left),
+                  px(caretCenter.y - viewportRect.top - height / 2),
+                  px(caretCenter.x - viewportRect.left),
+                  px(caretCenter.y - viewportRect.top + height / 2)
+                ),
+                center: clientToViewport(caretCenter, viewportRect),
+                ...(typeof point.rotationDeg === "number" && Number.isFinite(point.rotationDeg) ? { rotationDeg: point.rotationDeg } : {})
+              },
+              rects: []
+            });
+            return;
+          }
+
+          const rects: TextSelectionOverlayBox[] = [];
+          for (const paragraph of scopeParagraphs) {
+            const startOffset = Math.max(documentStart, paragraph.sourceSpan.from);
+            const endOffset = Math.min(documentEnd, paragraph.sourceSpan.to);
+            if (endOffset <= startOffset) {
+              continue;
+            }
+            const paragraphContainer = resolveRenderedMathTextElement(
+              target,
+              paragraph.paragraphId
+            );
+            if (!paragraphContainer) {
+              continue;
+            }
+            const paragraphRects = await getKnuthPlassSelectionRects(layoutContext, {
+              paragraphId: paragraph.paragraphId,
+              sourceText: source.slice(paragraph.sourceSpan.from, paragraph.sourceSpan.to),
+              sourceTextStartOffset: documentSourceOffset(paragraph.sourceSpan.from),
+              sourceCoordinateSpace: "document",
+              containerElement: paragraphContainer,
+              startOffset: documentSourceOffset(startOffset),
+              endOffset: documentSourceOffset(endOffset)
+            });
+            if (isRequestCancelled()) {
+              return;
+            }
+            if (paragraphRects.ok) {
+              rects.push(...paragraphRects.rects.map((rect) => ({
+                bounds: clientBoundsToViewport(rect.bounds, viewportRect),
+                center: clientToViewport(rect.center, viewportRect),
+                rotationDeg: rect.rotationDeg
+              })));
+            }
+          }
+          pushOverlay(
+            rects.length > 0
+              ? {
+                  sourceId: target.sourceId,
+                  selectionStart: boundedStart,
+                  selectionEnd: boundedEnd,
+                  caret: null,
+                  rects
+                }
+              : null
+          );
+          return;
+        }
+
+        if (!target.paragraphId || !layoutContext || !containerElement) {
           setRegionFallbackOverlay();
           return;
         }
 
-        if (renderStart === renderEnd) {
-          const point = await getKnuthPlassPointFromOffset(outputJax, {
+        if (documentStart === documentEnd) {
+          const point = await getKnuthPlassPointFromOffset(layoutContext, {
             paragraphId: target.paragraphId,
-            sourceText: target.renderSourceText,
+            sourceText: target.layoutSourceText ?? target.text,
+            sourceTextStartOffset: documentSourceOffset(
+              target.layoutSourceSpan?.from ?? target.sourceSpan.from
+            ),
+            sourceCoordinateSpace: "document",
             containerElement,
-            offset: renderStart
+            offset: documentStart
           });
-          if (requestRef.cancelled) {
+          if (isRequestCancelled()) {
             return;
           }
           if (!point.ok || point.clientPoint == null) {
@@ -403,13 +587,16 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
           }
           const height =
             (await estimateCaretHeight(
-              outputJax,
+              layoutContext,
               target.paragraphId,
-              target.renderSourceText,
+              target.layoutSourceText ?? target.text,
+              documentSourceOffset(
+                target.layoutSourceSpan?.from ?? target.sourceSpan.from
+              ),
               containerElement,
-              point.offset ?? renderStart
+              point.offset ?? documentStart
             )) ?? Math.max(1, target.region.height);
-          if (requestRef.cancelled) {
+          if (isRequestCancelled()) {
             return;
           }
           pushOverlay({
@@ -424,24 +611,25 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
                 px(point.clientPoint.y - viewportRect.top + height / 2)
               ),
               center: clientToViewport(point.clientPoint, viewportRect),
-              rotationDeg:
-                typeof point.rotationDeg === "number" && Number.isFinite(point.rotationDeg)
-                  ? point.rotationDeg
-                  : undefined
+              ...(typeof point.rotationDeg === "number" && Number.isFinite(point.rotationDeg) ? { rotationDeg: point.rotationDeg } : {})
             },
             rects: []
           });
           return;
         }
 
-        const rects = await getKnuthPlassSelectionRects(outputJax, {
+        const rects = await getKnuthPlassSelectionRects(layoutContext, {
           paragraphId: target.paragraphId,
-          sourceText: target.renderSourceText,
+          sourceText: target.layoutSourceText ?? target.text,
+          sourceTextStartOffset: documentSourceOffset(
+            target.layoutSourceSpan?.from ?? target.sourceSpan.from
+          ),
+          sourceCoordinateSpace: "document",
           containerElement,
-          startOffset: renderStart,
-          endOffset: renderEnd
+          startOffset: documentStart,
+          endOffset: documentEnd
         });
-        if (requestRef.cancelled) {
+        if (isRequestCancelled()) {
           return;
         }
         if (!rects.ok || rects.rects.length === 0) {
@@ -460,7 +648,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
           }))
         });
       } catch {
-        if (requestRef.cancelled) {
+        if (isRequestCancelled()) {
           return;
         }
         setRegionFallbackOverlay();
@@ -480,7 +668,9 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
     textEditAsyncRequestRevision,
     viewportRef,
     canvasTransform,
-    svgResult
+    svgResult,
+    textLayoutContext,
+    caretEdge
   ]);
 
   useEffect(() => {

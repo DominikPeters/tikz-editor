@@ -1,0 +1,147 @@
+.toolbarControls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-right: 3px;
+}
+
+.labelButton {
+  padding: 4px 8px;
+  gap: 5px;
+}
+
+.newSlide {
+  margin-right: 6px;
+}
+
+.newSlideMain {
+  flex-direction: row;
+  padding: 4px 4px 4px 8px;
+}
+
+.gallery {
+  z-index: 1500;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  padding: 8px;
+  font-family: var(--font-ui);
+}
+
+.galleryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, calc(var(--app-ui-scale, 1) * 128px)));
+  gap: 10px 8px;
+}
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  cursor: default;
+}
+
+.layout:hover {
+  background: var(--btn-hover-bg);
+}
+
+.layout:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.layout[aria-current="true"] {
+  border-color: var(--accent);
+}
+
+.layoutPreview {
+  display: block;
+  width: 100%;
+  background: var(--bg-pane);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.layoutPreview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.layoutName {
+  text-align: center;
+}
+
+.presentButton {
+  flex-direction: row;
+  gap: 4px;
+  padding: 4px 4px 4px 8px;
+}
+
+.presenting {
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  color: var(--text-faint);
+}
+
+.menu {
+  left: auto;
+  z-index: 1500;
+  font-family: var(--font-ui);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: inherit;
+}
+
+.optionsError {
+  margin: 0;
+  font-size: calc(var(--app-ui-scale, 1) * 12px);
+  color: var(--color-error);
+  line-height: 1.4;
+}
+
+.displaySelect {
+  min-width: 0;
+  max-width: 62%;
+}
+
+.identifyRow {
+  justify-content: flex-end;
+}
+
+.feedback {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-diagnostics);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  color: var(--text);
+}
+
+@media (max-width: 520px) {
+  .displaySelect {
+    max-width: 58%;
+  }
+
+  .toolbarControls .presenting {
+    display: none;
+  }
+}

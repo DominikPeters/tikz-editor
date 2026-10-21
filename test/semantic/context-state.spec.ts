@@ -12,10 +12,12 @@ import {
   recordDependencyConsumer,
   recordDependencyProducer,
   markDependencyOpaque,
+  readContextMacroBinding,
   restoreSemanticContext,
   retargetEditHandlesSourceFingerprint,
   snapshotSemanticContext,
   writeContextColorAlias,
+  writeContextMacroBinding,
   writeNamedCoordinate
 } from "../../packages/core/src/semantic/context.js";
 import { defaultStyle } from "../../packages/core/src/semantic/style/defaults.js";
@@ -72,6 +74,37 @@ describe("semantic context state helpers", () => {
         sourceFingerprint: "next"
       }
     });
+  });
+
+  it("preserves copy-on-write color and macro registries across snapshots", () => {
+    const context = createSemanticContext(defaultStyle(), worldTransform(1, 0, 0, 1, 0, 0));
+    writeContextColorAlias(context, "accent", "blue");
+    writeContextMacroBinding(context, "\\value", {
+      kind: "text",
+      value: "before",
+      provenance: []
+    });
+    const snapshot = snapshotSemanticContext(context);
+
+    writeContextColorAlias(context, "accent", "red");
+    writeContextMacroBinding(context, "\\value", {
+      kind: "text",
+      value: "after",
+      provenance: []
+    });
+
+    const restored = createSemanticContext(defaultStyle(), worldTransform(1, 0, 0, 1, 0, 0));
+    restoreSemanticContext(restored, snapshot);
+    expect(resolveContextColorAliasValue(restored, "accent")).toBe("blue");
+    expect(readContextMacroBinding(restored, "\\value")).toMatchObject({
+      kind: "text",
+      value: "before"
+    });
+
+    writeContextColorAlias(restored, "accent", "green");
+    const restoredAgain = createSemanticContext(defaultStyle(), worldTransform(1, 0, 0, 1, 0, 0));
+    restoreSemanticContext(restoredAgain, snapshot);
+    expect(resolveContextColorAliasValue(restoredAgain, "accent")).toBe("blue");
   });
 
   it("tracks statement effects and replays their dependency summary", () => {

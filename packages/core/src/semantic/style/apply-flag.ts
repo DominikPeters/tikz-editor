@@ -15,7 +15,7 @@ export function applyFlagEntry(
   resolveColorAlias?: ColorAliasResolver
 ): ApplyOutcome {
   const currentColor = style.textColor ?? style.stroke ?? style.fill ?? "black";
-  const normalizedColorCandidate = normalizeColor(key, { currentColor, resolveAlias: resolveColorAlias });
+  const normalizedColorCandidate = normalizeColor(key, { currentColor, ...(resolveColorAlias === undefined ? {} : { resolveAlias: resolveColorAlias }) });
   if (key === "draw") {
     return {
       style: {
@@ -57,6 +57,9 @@ export function applyFlagEntry(
       transform,
       diagnostics: []
     };
+  }
+  if (key === "overlay") {
+    return { style: { ...style, overlay: true }, transform, diagnostics: [] };
   }
   if (key === "shade") {
     return { style: { ...style, fill: style.fill ?? "black", shadeEnabled: true }, transform, diagnostics: [] };

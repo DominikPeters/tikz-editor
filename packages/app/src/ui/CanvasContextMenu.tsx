@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { createPortal, flushSync } from "react-dom";
 import {
   CANVAS_CONTEXT_MENU_DEFINITION,
   type CanvasContextMenuDefinition,
@@ -8,31 +8,40 @@ import {
 import type { AppMenuCommandId, AppMenuItem } from "../app-menu";
 import type { CommandOrigin, CommandBindings } from "./editor-command-runtime";
 import { clampContextMenuAnchor, type ContextMenuAnchor } from "./canvas-panel/context-menu-target";
+import { formatAccelerator } from "./key-labels";
 import css from "./CanvasContextMenu.module.css";
-
-const IS_MAC_PLATFORM =
-  typeof navigator !== "undefined" &&
-  /(mac|iphone|ipad)/i.test(navigator.platform);
 
 type ContextMenuInheritedStyle = CSSProperties & {
   "--app-ui-font-size"?: string;
   "--app-ui-scale"?: string;
 };
 
-function formatAccelerator(accelerator: string | undefined): string {
-  if (!accelerator) {
-    return "";
+function navigateMenu(event: ReactKeyboardEvent<HTMLDivElement>) {
+  if (!(event.target instanceof HTMLElement)) return;
+  const menu = event.target.closest('[role="menu"]');
+  const buttons = Array.from(menu?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+    .filter((button) => !button.disabled && button.closest('[role="menu"]') === menu);
+  const index = buttons.findIndex(button => button === event.target);
+  if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+    event.preventDefault(); event.stopPropagation();
+    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[next]?.focus();
+  } else if (event.key === "ArrowLeft" && menu?.parentElement?.classList.contains(css.submenuPopup ?? "")) {
+    event.preventDefault(); event.stopPropagation();
+    const trigger = menu.parentElement.previousElementSibling;
+    if (trigger instanceof HTMLButtonElement) trigger.focus();
   }
+}
 
-  return accelerator
-    .split("+")
-    .map((part) => {
-      if (part === "CmdOrCtrl") {
-        return IS_MAC_PLATFORM ? "Cmd" : "Ctrl";
-      }
-      return part;
-    })
-    .join(IS_MAC_PLATFORM ? " " : "+");
+function positionSubmenu(element: HTMLDivElement) {
+  const popup = element.querySelector<HTMLDivElement>(`.${css.submenuPopup}`);
+  if (!popup) return;
+  popup.style.left = ""; popup.style.right = ""; popup.style.top = "";
+  const bounds = popup.getBoundingClientRect();
+  if (bounds.right > window.innerWidth - 4) {
+    popup.style.left = "auto"; popup.style.right = "calc(100% - 2px)";
+  }
+  if (bounds.bottom > window.innerHeight - 4) popup.style.top = `${-5 - (bounds.bottom - window.innerHeight + 4)}px`;
 }
 
 function ContextMenuPopup({
@@ -52,11 +61,11 @@ function ContextMenuPopup({
   // for mouse users, but touch needs an explicit open state.
   const [openSubmenuKey, setOpenSubmenuKey] = useState<string | null>(null);
   const hasCheckItems = items.some(
-    (item) => item.kind === "command" && bindings[item.commandId].checked != null
+    (item) => item.kind === "command" && bindings[item.commandId]?.checked != null
   );
 
   return (
-    <div className={css.menu} role="menu">
+    <div className={css.menu} role="menu" onKeyDown={navigateMenu}>
       {items.map((item, index) => {
         const itemKey = `${path}-${index}`;
         if (item.kind === "separator") {
@@ -66,21 +75,38 @@ function ContextMenuPopup({
         if (item.kind === "submenu") {
           const submenuOpen = openSubmenuKey === itemKey;
           return (
-            <div
-              key={`${itemKey}-submenu`}
-              className={css.submenu}
+            <div key={`${itemKey}-submenu`} className={css.submenu}
               data-open={submenuOpen ? "true" : "false"}
-            >
-              <button
-                type="button"
+              onPointerEnter={(event) => { positionSubmenu(event.currentTarget); }}
+              onFocus={(event) => { positionSubmenu(event.currentTarget); }}>
+              <button type="button"
                 className={[css.item, css.submenuTrigger, hasCheckItems ? "" : css.itemNoCheck]
                   .filter(Boolean)
                   .join(" ")}
                 role="menuitem"
                 aria-haspopup="menu"
                 aria-expanded={submenuOpen}
-                onClick={() => {
-                  setOpenSubmenuKey((current) => (current === itemKey ? null : itemKey));
+                onClick={(event) => {
+                  const submenu = event.currentTarget.parentElement;
+                  if (submenuOpen) {
+                    // Focus inside would keep the popup open via :focus-within.
+                    const focused = document.activeElement;
+                    if (focused instanceof HTMLElement && submenu?.contains(focused)) focused.blur();
+                    setOpenSubmenuKey(null);
+                    return;
+                  }
+                  // Commit the open state first: a tap has no hover, so the popup is
+                  // still hidden (and unfocusable) until data-open renders.
+                  const popup = event.currentTarget.nextElementSibling;
+                  flushSync(() => { setOpenSubmenuKey(itemKey); });
+                  if (submenu instanceof HTMLDivElement) positionSubmenu(submenu);
+                  popup?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowRight") {
+                    event.preventDefault(); event.stopPropagation();
+                    event.currentTarget.nextElementSibling?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+                  }
                 }}
               >
                 {hasCheckItems ? <span className={css.check} /> : null}
@@ -105,24 +131,24 @@ function ContextMenuPopup({
         }
 
         const binding = bindings[item.commandId];
-        const role = binding.checked == null ? "menuitem" : "menuitemcheckbox";
+        const role = binding?.checked == null ? "menuitem" : "menuitemcheckbox";
         return (
           <button
             key={`${itemKey}-${item.commandId}`}
             type="button"
             role={role}
-            aria-checked={binding.checked}
-            disabled={!binding.enabled}
+            aria-checked={binding?.checked}
+            disabled={!binding?.enabled}
             className={[css.item, hasCheckItems ? "" : css.itemNoCheck].filter(Boolean).join(" ")}
             data-testid={`canvas-context-cmd-${item.commandId}`}
             onClick={() => {
-              if (!binding.enabled) {
+              if (!binding?.enabled) {
                 return;
               }
               onCommandRun(item.commandId, origin);
             }}
           >
-            {hasCheckItems ? <span className={css.check}>{binding.checked ? "✓" : ""}</span> : null}
+            {hasCheckItems ? <span className={css.check}>{binding?.checked ? "✓" : ""}</span> : null}
             <span className={css.label}>{item.label}</span>
             <span className={css.shortcut}>{formatAccelerator(item.accelerator)}</span>
           </button>
@@ -187,9 +213,11 @@ export function CanvasContextMenu({
     );
 
     const computedStyle = getComputedStyle(container);
+    const fontSize = computedStyle.getPropertyValue("--app-ui-font-size").trim();
+    const scale = computedStyle.getPropertyValue("--app-ui-scale").trim();
     const nextInheritedStyle: ContextMenuInheritedStyle = {
-      "--app-ui-font-size": computedStyle.getPropertyValue("--app-ui-font-size").trim() || undefined,
-      "--app-ui-scale": computedStyle.getPropertyValue("--app-ui-scale").trim() || undefined
+      ...(fontSize ? { "--app-ui-font-size": fontSize } : {}),
+      ...(scale ? { "--app-ui-scale": scale } : {})
     };
     setInheritedStyle((current) =>
       current["--app-ui-font-size"] === nextInheritedStyle["--app-ui-font-size"] &&
@@ -200,12 +228,16 @@ export function CanvasContextMenu({
   }, [anchor, containerRef, open, target]);
 
   useEffect(() => {
+    if (open) menuRootRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }, [open]);
+
+  useEffect(() => {
     if (!open) {
       return;
     }
 
     function onPointerDown(event: PointerEvent) {
-      const targetNode = event.target as Node | null;
+      const targetNode = event.target instanceof Node ? event.target : null;
       if (!targetNode) {
         return;
       }
@@ -225,13 +257,21 @@ export function CanvasContextMenu({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        event.preventDefault(); event.stopPropagation();
         onClose();
+        containerRef.current?.focus();
       }
     }
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => { window.removeEventListener("keydown", onKeyDown); };
-  }, [onClose, open]);
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("blur", onClose);
+    window.addEventListener("resize", onClose);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("blur", onClose);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [containerRef, onClose, open]);
 
   if (!open) {
     return null;

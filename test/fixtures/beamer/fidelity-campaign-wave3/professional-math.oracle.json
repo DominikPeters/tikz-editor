@@ -1,0 +1,621 @@
+{
+  "sourceSha256": "9c64f4bfa0a3e560509fb5d83d0ecbf5eb63bec88151b81f183804105231e265",
+  "engine": "LuaLaTeX / TeX Live 2025",
+  "provenance": "compare-beamer-priorities.mjs, valid content witnesses and matching page counts",
+  "pages": [
+    {
+      "coordinateSystem": {
+        "unit": "tex-pt",
+        "origin": "top-left",
+        "yAxis": "down"
+      },
+      "page": {
+        "x": 0,
+        "y": 0,
+        "width": 455.24407958984375,
+        "height": 256.0747985839844
+      },
+      "shipoutOrigin": {
+        "x": -72.26998901367188,
+        "y": -72.26998901367188
+      },
+      "boxes": [],
+      "rules": [
+        {
+          "path": "root.5.2.1.2.2.1.1.2.1.1.4",
+          "x": 0,
+          "y": 0,
+          "width": 455.24408,
+          "height": 256.074799,
+          "depth": 0,
+          "totalHeight": 256.074799
+        },
+        {
+          "path": "root.5.2.4.9.10.2.2.9.4",
+          "x": 8.535904,
+          "y": 8.542358,
+          "width": 0,
+          "height": 12.599945,
+          "depth": 5.400055,
+          "totalHeight": 18
+        },
+        {
+          "path": "root.5.2.4.9.10.2.2.9.11",
+          "x": 42.375885,
+          "y": 8.542358,
+          "width": 0,
+          "height": 12.599945,
+          "depth": 5.400055,
+          "totalHeight": 18
+        }
+      ],
+      "glyphs": [
+        {
+          "path": "root.5.2.4.9.10.2.2.9.5",
+          "code": 65,
+          "x": 8.535904,
+          "y": 21.142303,
+          "width": 9.316803,
+          "height": 9.993591,
+          "depth": 0,
+          "fontId": 36,
+          "fontName": "lmsans12-regular",
+          "fontSize": 14.399994
+        },
+        {
+          "path": "root.5.2.4.9.10.2.2.9.6",
+          "code": 108,
+          "x": 17.852707,
+          "y": 21.142303,
+          "width": 3.311996,
+          "height": 9.993591,
+          "depth": 0,
+          "fontId": 36,
+          "fontName": "lmsans12-regular",
+          "fontSize": 14.399994
+        },
+        {
+          "path": "root.5.2.4.9.10.2.2.9.8",
+          "code": 112,
+          "x": 21.164703,
+          "y": 21.142303,
+          "width": 7.22879,
+          "height": 6.537598,
+          "depth": 2.793594,
+          "fontId": 36,
+          "fontName": "lmsans12-regular",
+          "fontSize": 14.399994
+        },
+        {
+          "path": "root.5.2.4.9.10.2.2.9.9",
+          "code": 104,
+          "x": 28.393494,
+          "y": 21.142303,
+          "width": 7.22879,
+          "height": 9.993591,
+          "depth": 0,
+          "fontId": 36,
+          "fontName": "lmsans12-regular",
+          "fontSize": 14.399994
+        },
+        {
+          "path": "root.5.2.4.9.10.2.2.9.10",
+          "code": 97,
+          "x": 35.622284,
+          "y": 21.142303,
+          "width": 6.753601,
+          "height": 6.609604,
+          "depth": 0.143997,
+          "fontId": 36,
+          "fontName": "lmsans12-regular",
+          "fontSize": 14.399994
+        },
+        {
+          "path": "root.5.2.4.9.23.3",
+          "code": 79,
+          "x": 28.452744,
+          "y": 121.426636,
+          "width": 8.059204,
+          "height": 7.840195,
+          "depth": 0.240906,
+          "fontId": 16,
+          "fontName": "lmsans10-regular",
+          "fontSize": 10.949997
+        },
+        {
+          "path": "root.5.2.4.9.23.4",
+          "code": 109,
+          "x": 36.511948,
+          "y": 121.426636,
+          "width": 8.69429,
+          "height": 4.982254,
+          "depth": 0,
+          "fontId": 16,
+          "fontName": "lmsans10-regular",
+          "fontSize": 10.949997
+        },
+        {
+          "path": "root.5.2.4.9.23.5",
+          "code": 101,
+          "x": 45.206238,
+          "y": 121.426636,
+          "width": 4.861801,
+          "height": 5.047943,
+          "depth": 0.120453,
+          "fontId": 16,
+          "fontName": "lmsans10-regular",
+          "fontSize": 10.949997
+        },
+        {
+          "path": "root.5.2.4.9.23.6",
+          "code": 103,
+          "x": 50.068039,
+          "y": 121.426636,
+          "width": 5.475006,
+          "height": 4.982254,
+          "depth": 2.255707,
+          "fontId": 16,
+          "fontName": "lmsans10-regular",
+          "fontSize": 10.949997
+        },
+        {
+          "path": "root.5.2.4.9.23.7",
+          "code": 97,
+          "x": 55.543045,
+          "y": 121.426636,
+          "width": 5.266953,
+          "height": 5.047943,
+          "depth": 0.120453,
+          "fontId": 16,
+          "fontName": "lmsans10-regular",
+          "fontSize": 10.949997
+        },
+        {
+          "path": "root.5.2.4.9.23.8",
+          "code": 58,
+          "x": 60.809998,
+          "y": 121.426636,
+          "width": 3.044098,
+          "height": 4.861801,
+          "depth": 0,
+          "fontId": 16,
+          "fontName": "lmsans10-regular",
+          "fontSize": 10.949997
+        },
+        {
+          "path": "root.5.2.4.9.23.11",
+          "code": 120,
+          "x": 68.715897,
+          "y": 121.426636,
+          "width": 6.258224,
+          "height": 4.714569,
+          "depth": 0,
+          "fontId": 21,
+          "fontName": "cmmi10",
+          "fontSize": 10.949997
+        },
+        {
+          "path": "root.5.2.4.9.23.13",
+          "code": 43,
+          "x": 77.40741,
+          "y": 121.426636,
+          "width": 8.516693,
+          "height": 6.387497,
+          "depth": 0.912506,
+          "fontId": 18,
+          "fontName": "cmr10",
+          "fontSize": 10.949997
+        },
+        {
+          "path": "root.5.2.4.9.23.16",
+          "code": 49,
+          "x": 88.357391,
+          "y": 121.426636,
+          "width": 5.475006,
+          "height": 7.056656,
+          "depth": 0,
+          "fontId": 18,
+          "fontName": "cmr10",
+          "fontSize": 10.949997
+        },
+        {
+          "path": "root.5.2.4.9.23.18",
+          "code": 61,
+          "x": 96.874008,
+          "y": 121.426636,
+          "width": 8.516693,
+          "height": 4.017273,
+          "depth": -1.457733,
+          "fontId": 18,
+          "fontName": "cmr10",
+          "fontSize": 10.949997
+        },
+        {
+          "path": "root.5.2.4.9.23.21.1",
+          "code": 80,
+          "x": 108.432312,
+          "y": 113.214081,
+          "width": 11.558365,
+          "height": 0,
+          "depth": 10.950134,
+          "fontId": 27,
+          "fontName": "cmex10",
+          "fontSize": 10.949997
+        },
+        {
+          "path": "root.5.2.4.9.23.22.1.1",
+          "code": 110,
+          "x": 119.990677,
+          "y": 116.380753,
+          "width": 5.157471,
+          "height": 3.444443,
+          "depth": 0,
+          "fontId": 22,
+          "fontName": "cmmi8",
+          "fontSize": 8
+        },
+        {
+          "path": "root.5.2.4.9.23.22.3.1",
+          "code": 105,
+          "x": 119.990677,
+          "y": 124.664215,
+          "width": 2.893951,
+          "height": 5.288696,
+          "depth": 0,
+          "fontId": 22,
+          "fontName": "cmmi8",
+          "fontSize": 8
+        },
+        {
+          "path": "root.5.2.4.9.23.22.3.2",
+          "code": 61,
+          "x": 122.884628,
+          "y": 124.664215,
+          "width": 6.611206,
+          "height": 3.023895,
+          "depth": -0.976105,
+          "fontId": 19,
+          "fontName": "cmr8",
+          "fontSize": 8
+        },
+        {
+          "path": "root.5.2.4.9.23.22.3.3",
+          "code": 49,
+          "x": 129.495834,
+          "y": 124.664215,
+          "width": 4.250061,
+          "height": 5.155563,
+          "depth": 0,
+          "fontId": 19,
+          "fontName": "cmr8",
+          "fontSize": 8
+        },
+        {
+          "path": "root.5.2.4.9.23.24",
+          "code": 105,
+          "x": 136.070862,
+          "y": 121.426636,
+          "width": 3.772415,
+          "height": 7.221786,
+          "depth": 0,
+          "fontId": 21,
+          "fontName": "cmmi10",
+          "fontSize": 10.949997
+        },
+        {
+          "path": "root.5.2.4.9.23.26",
+          "code": 46,
+          "x": 139.843277,
+          "y": 121.426636,
+          "width": 3.044098,
+          "height": 0.908844,
+          "depth": 0,
+          "fontId": 16,
+          "fontName": "lmsans10-regular",
+          "fontSize": 10.949997
+        }
+      ],
+      "lines": [
+        {
+          "text": "Alpha",
+          "x": 8.535904,
+          "baselineY": 21.142303,
+          "glyphs": [
+            {
+              "path": "root.5.2.4.9.10.2.2.9.5",
+              "code": 65,
+              "x": 8.535904,
+              "y": 21.142303,
+              "width": 9.316803,
+              "height": 9.993591,
+              "depth": 0,
+              "fontId": 36,
+              "fontName": "lmsans12-regular",
+              "fontSize": 14.399994
+            },
+            {
+              "path": "root.5.2.4.9.10.2.2.9.6",
+              "code": 108,
+              "x": 17.852707,
+              "y": 21.142303,
+              "width": 3.311996,
+              "height": 9.993591,
+              "depth": 0,
+              "fontId": 36,
+              "fontName": "lmsans12-regular",
+              "fontSize": 14.399994
+            },
+            {
+              "path": "root.5.2.4.9.10.2.2.9.8",
+              "code": 112,
+              "x": 21.164703,
+              "y": 21.142303,
+              "width": 7.22879,
+              "height": 6.537598,
+              "depth": 2.793594,
+              "fontId": 36,
+              "fontName": "lmsans12-regular",
+              "fontSize": 14.399994
+            },
+            {
+              "path": "root.5.2.4.9.10.2.2.9.9",
+              "code": 104,
+              "x": 28.393494,
+              "y": 21.142303,
+              "width": 7.22879,
+              "height": 9.993591,
+              "depth": 0,
+              "fontId": 36,
+              "fontName": "lmsans12-regular",
+              "fontSize": 14.399994
+            },
+            {
+              "path": "root.5.2.4.9.10.2.2.9.10",
+              "code": 97,
+              "x": 35.622284,
+              "y": 21.142303,
+              "width": 6.753601,
+              "height": 6.609604,
+              "depth": 0.143997,
+              "fontId": 36,
+              "fontName": "lmsans12-regular",
+              "fontSize": 14.399994
+            }
+          ]
+        },
+        {
+          "text": "P",
+          "x": 108.432312,
+          "baselineY": 113.214081,
+          "glyphs": [
+            {
+              "path": "root.5.2.4.9.23.21.1",
+              "code": 80,
+              "x": 108.432312,
+              "y": 113.214081,
+              "width": 11.558365,
+              "height": 0,
+              "depth": 10.950134,
+              "fontId": 27,
+              "fontName": "cmex10",
+              "fontSize": 10.949997
+            }
+          ]
+        },
+        {
+          "text": "n",
+          "x": 119.990677,
+          "baselineY": 116.380753,
+          "glyphs": [
+            {
+              "path": "root.5.2.4.9.23.22.1.1",
+              "code": 110,
+              "x": 119.990677,
+              "y": 116.380753,
+              "width": 5.157471,
+              "height": 3.444443,
+              "depth": 0,
+              "fontId": 22,
+              "fontName": "cmmi8",
+              "fontSize": 8
+            }
+          ]
+        },
+        {
+          "text": "Omega:x+1=i.",
+          "x": 28.452744,
+          "baselineY": 121.426636,
+          "glyphs": [
+            {
+              "path": "root.5.2.4.9.23.3",
+              "code": 79,
+              "x": 28.452744,
+              "y": 121.426636,
+              "width": 8.059204,
+              "height": 7.840195,
+              "depth": 0.240906,
+              "fontId": 16,
+              "fontName": "lmsans10-regular",
+              "fontSize": 10.949997
+            },
+            {
+              "path": "root.5.2.4.9.23.4",
+              "code": 109,
+              "x": 36.511948,
+              "y": 121.426636,
+              "width": 8.69429,
+              "height": 4.982254,
+              "depth": 0,
+              "fontId": 16,
+              "fontName": "lmsans10-regular",
+              "fontSize": 10.949997
+            },
+            {
+              "path": "root.5.2.4.9.23.5",
+              "code": 101,
+              "x": 45.206238,
+              "y": 121.426636,
+              "width": 4.861801,
+              "height": 5.047943,
+              "depth": 0.120453,
+              "fontId": 16,
+              "fontName": "lmsans10-regular",
+              "fontSize": 10.949997
+            },
+            {
+              "path": "root.5.2.4.9.23.6",
+              "code": 103,
+              "x": 50.068039,
+              "y": 121.426636,
+              "width": 5.475006,
+              "height": 4.982254,
+              "depth": 2.255707,
+              "fontId": 16,
+              "fontName": "lmsans10-regular",
+              "fontSize": 10.949997
+            },
+            {
+              "path": "root.5.2.4.9.23.7",
+              "code": 97,
+              "x": 55.543045,
+              "y": 121.426636,
+              "width": 5.266953,
+              "height": 5.047943,
+              "depth": 0.120453,
+              "fontId": 16,
+              "fontName": "lmsans10-regular",
+              "fontSize": 10.949997
+            },
+            {
+              "path": "root.5.2.4.9.23.8",
+              "code": 58,
+              "x": 60.809998,
+              "y": 121.426636,
+              "width": 3.044098,
+              "height": 4.861801,
+              "depth": 0,
+              "fontId": 16,
+              "fontName": "lmsans10-regular",
+              "fontSize": 10.949997
+            },
+            {
+              "path": "root.5.2.4.9.23.11",
+              "code": 120,
+              "x": 68.715897,
+              "y": 121.426636,
+              "width": 6.258224,
+              "height": 4.714569,
+              "depth": 0,
+              "fontId": 21,
+              "fontName": "cmmi10",
+              "fontSize": 10.949997
+            },
+            {
+              "path": "root.5.2.4.9.23.13",
+              "code": 43,
+              "x": 77.40741,
+              "y": 121.426636,
+              "width": 8.516693,
+              "height": 6.387497,
+              "depth": 0.912506,
+              "fontId": 18,
+              "fontName": "cmr10",
+              "fontSize": 10.949997
+            },
+            {
+              "path": "root.5.2.4.9.23.16",
+              "code": 49,
+              "x": 88.357391,
+              "y": 121.426636,
+              "width": 5.475006,
+              "height": 7.056656,
+              "depth": 0,
+              "fontId": 18,
+              "fontName": "cmr10",
+              "fontSize": 10.949997
+            },
+            {
+              "path": "root.5.2.4.9.23.18",
+              "code": 61,
+              "x": 96.874008,
+              "y": 121.426636,
+              "width": 8.516693,
+              "height": 4.017273,
+              "depth": -1.457733,
+              "fontId": 18,
+              "fontName": "cmr10",
+              "fontSize": 10.949997
+            },
+            {
+              "path": "root.5.2.4.9.23.24",
+              "code": 105,
+              "x": 136.070862,
+              "y": 121.426636,
+              "width": 3.772415,
+              "height": 7.221786,
+              "depth": 0,
+              "fontId": 21,
+              "fontName": "cmmi10",
+              "fontSize": 10.949997
+            },
+            {
+              "path": "root.5.2.4.9.23.26",
+              "code": 46,
+              "x": 139.843277,
+              "y": 121.426636,
+              "width": 3.044098,
+              "height": 0.908844,
+              "depth": 0,
+              "fontId": 16,
+              "fontName": "lmsans10-regular",
+              "fontSize": 10.949997
+            }
+          ]
+        },
+        {
+          "text": "i=1",
+          "x": 119.990677,
+          "baselineY": 124.664215,
+          "glyphs": [
+            {
+              "path": "root.5.2.4.9.23.22.3.1",
+              "code": 105,
+              "x": 119.990677,
+              "y": 124.664215,
+              "width": 2.893951,
+              "height": 5.288696,
+              "depth": 0,
+              "fontId": 22,
+              "fontName": "cmmi8",
+              "fontSize": 8
+            },
+            {
+              "path": "root.5.2.4.9.23.22.3.2",
+              "code": 61,
+              "x": 122.884628,
+              "y": 124.664215,
+              "width": 6.611206,
+              "height": 3.023895,
+              "depth": -0.976105,
+              "fontId": 19,
+              "fontName": "cmr8",
+              "fontSize": 8
+            },
+            {
+              "path": "root.5.2.4.9.23.22.3.3",
+              "code": 49,
+              "x": 129.495834,
+              "y": 124.664215,
+              "width": 4.250061,
+              "height": 5.155563,
+              "depth": 0,
+              "fontId": 19,
+              "fontName": "cmr8",
+              "fontSize": 8
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

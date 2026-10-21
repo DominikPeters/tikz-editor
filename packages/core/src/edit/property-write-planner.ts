@@ -1,7 +1,10 @@
+import { isObjectRecord } from "../utils/records.js";
 import type { EditActionResultLike } from "./result-types.js";
-import type { Span, Statement } from "../ast/types.js";
-import { renderTikzToSvg } from "../render/index.js";
+import type { Span } from "../ast/types.js";
 import type { SceneElement } from "../semantic/types.js";
+import { evaluateTikzFigure } from "../semantic/evaluate.js";
+import { createEditGeometrySession, type EditGeometrySession } from "./geometry-session.js";
+import { createEditAnalysisSession } from "./analysis.js";
 import { normalizeColor } from "../semantic/style/colors.js";
 import { replaceSpan } from "./patch.js";
 import { parseTikzForEdit, type EditParseOptions, type PropertyWriteInteractionMode } from "./parse-options.js";
@@ -34,6 +37,8 @@ export type PropertyWriteRequest = {
   action: SetPropertyAction;
   parseOptions?: EditParseOptions;
   mode?: PropertyWriteInteractionMode;
+  /** Evaluation of `source`, reused to re-evaluate only the edited statement. */
+  geometry?: EditGeometrySession;
 };
 
 export type PropertyWritePlan = {
@@ -54,61 +59,13 @@ type PaintOptions = {
   fillDisabled: boolean;
 };
 
-type CertificationRender = ReturnType<typeof renderTikzToSvg>;
-type CertificationRenderCache = Map<string, CertificationRender | null>;
-
 export function applyPlannedSetPropertyAction(
   source: string,
   action: SetPropertyAction,
-  parseOptions: EditParseOptions = {}
-): EditActionResultLike {
-  return withChangedSourceId(planPropertyWrite({ source, action, parseOptions }).selected, action.elementId);
-}
-
-export const PROPERTY_WRITE_CLEANUP_NOOP_REASON = "Property write cleanup would not change the source.";
-const LARGE_DRAG_END_CLEANUP_SOURCE_LENGTH = 100_000;
-
-export function cleanupIdiomaticPropertyWrites(
-  source: string,
   parseOptions: EditParseOptions = {},
-  elementIds?: readonly string[]
+  geometry?: EditGeometrySession
 ): EditActionResultLike {
-  if (shouldSkipLargeDragEndPaintCleanup(source, parseOptions)) {
-    return { kind: "unsupported", reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON };
-  }
-
-  let current = source;
-  const certificationCache: CertificationRenderCache = new Map();
-  const requestedElementIds = normalizeCleanupElementIds(elementIds);
-  const pathIds = requestedElementIds ?? collectPathStatementIds(parseTikzForEdit(source, parseOptions).figure.body);
-  for (const elementId of pathIds) {
-    const candidates = buildPaintCommandCleanupCandidates(
-      current,
-      {
-        elementId,
-        key: "draw",
-        value: "true"
-      },
-      parseOptions
-    );
-    for (const candidate of candidates) {
-      if (certifyEquivalentSource(current, candidate.source, parseOptions, certificationCache) && sourceLooksCleaner(candidate.source, current)) {
-        current = candidate.source;
-        break;
-      }
-    }
-  }
-
-  if (current === source) {
-    return { kind: "unsupported", reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON };
-  }
-
-  return {
-    kind: "success",
-    newSource: current,
-    patches: deriveSingleSourcePatch(source, current),
-    changedSourceIds: requestedElementIds && requestedElementIds.length > 0 ? requestedElementIds : undefined
-  };
+  return withChangedSourceId(planPropertyWrite({ source, action, parseOptions, ...(geometry === undefined ? {} : { geometry }) }).selected, action.elementId);
 }
 
 function withChangedSourceId(result: EditActionResultLike, sourceId: string): EditActionResultLike {
@@ -125,30 +82,6 @@ function withChangedSourceId(result: EditActionResultLike, sourceId: string): Ed
   };
 }
 
-function shouldSkipLargeDragEndPaintCleanup(source: string, parseOptions: EditParseOptions): boolean {
-  return (
-    parseOptions.propertyWriteMode === "drag-end" &&
-    source.length > LARGE_DRAG_END_CLEANUP_SOURCE_LENGTH &&
-    !hasConservativePaintCleanupToken(source)
-  );
-}
-
-function hasConservativePaintCleanupToken(source: string): boolean {
-  return (
-    source.includes("draw=none") ||
-    source.includes("fill=none") ||
-    source.includes("decorate=false") ||
-    source.includes("sharp corners")
-  );
-}
-
-function normalizeCleanupElementIds(elementIds: readonly string[] | undefined): string[] | null {
-  if (!elementIds) {
-    return null;
-  }
-  return elementIds.map((id) => id.trim()).filter((id) => id.length > 0);
-}
-
 export function planPropertyWrite(request: PropertyWriteRequest): PropertyWritePlan {
   const parseOptions = request.parseOptions ?? {};
   const mode = request.mode ?? parseOptions.propertyWriteMode ?? "commit";
@@ -159,21 +92,35 @@ export function planPropertyWrite(request: PropertyWriteRequest): PropertyWriteP
   if (mode === "preview" || mode === "drag-frame" || request.action.commentMode) {
     return { conservative, selected: conservative, certificates: [] };
   }
-  if (hasParseErrors(conservative.newSource, parseOptions)) {
+  // Cleanup parses the same few sources (conservative write, candidates, their
+  // steps) repeatedly; one planning step shares its parses.
+  // Candidates differ from the conservative write in one statement, so after
+  // one parse the rest reparse just that statement.
+  const analysisSession = createEditAnalysisSession(8, { incremental: true });
+  const snapshotParse = request.geometry?.source === request.source ? request.geometry.parsed : undefined;
+  const activeFigureId = parseOptions.activeFigureId ?? snapshotParse?.activeFigureId;
+  if (snapshotParse && snapshotParse.activeFigureId === activeFigureId) {
+    analysisSession.primeFromParse(snapshotParse, request.source, { activeFigureId });
+  }
+  const cleanupParseOptions: EditParseOptions = { ...parseOptions, analysisSession, analysisView: null };
+  delete cleanupParseOptions.preparedParse;
+  if (activeFigureId === undefined) delete cleanupParseOptions.activeFigureId;
+  else cleanupParseOptions.activeFigureId = activeFigureId;
+  if (hasParseErrors(conservative.newSource, cleanupParseOptions)) {
     return { conservative, selected: conservative, certificates: [] };
   }
 
-  const candidates = buildCleanupCandidates(request.source, conservative.newSource, request.action, parseOptions);
+  const checker = createEquivalenceChecker(conservative.newSource, cleanupParseOptions, request.geometry);
+  const candidates = buildCleanupCandidates(request.source, conservative.newSource, request.action, cleanupParseOptions, checker);
   if (candidates.length === 0) {
     return { conservative, selected: conservative, certificates: [] };
   }
 
-  const certificationCache: CertificationRenderCache = new Map();
   const certificates: CleanupCertificate[] = [];
   let selectedSource = conservative.newSource;
   let selectedReason: string | null = null;
   for (const candidate of candidates) {
-    const accepted = certifyEquivalentSource(conservative.newSource, candidate.source, parseOptions, certificationCache);
+    const accepted = checker.equivalent(conservative.newSource, candidate.source, request.action.elementId);
     certificates.push({
       accepted,
       reason: accepted ? candidate.reason : "candidate changed semantic render output",
@@ -204,7 +151,8 @@ function buildCleanupCandidates(
   originalSource: string,
   conservativeSource: string,
   action: SetPropertyAction,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  checker: EquivalenceChecker
 ): CleanupCandidate[] {
   const candidates: CleanupCandidate[] = [];
   const removal = buildDefaultOmissionCandidate(conservativeSource, action, parseOptions);
@@ -212,25 +160,15 @@ function buildCleanupCandidates(
     candidates.push({ source: removal, reason: "remove default-equivalent local property" });
   }
 
-  for (const candidate of buildPaintCommandCleanupCandidates(conservativeSource, action, parseOptions)) {
-    if (candidate.source !== conservativeSource && candidate.source !== originalSource) {
-      candidates.push(candidate);
+  if (!isPureComplementaryPaintAppend(originalSource, action, parseOptions)) {
+    for (const candidate of buildPaintCommandCleanupCandidates(conservativeSource, action, parseOptions, checker)) {
+      if (candidate.source !== conservativeSource && candidate.source !== originalSource) {
+        candidates.push(candidate);
+      }
     }
   }
 
   return dedupeCandidates(candidates);
-}
-
-function collectPathStatementIds(statements: readonly Statement[]): string[] {
-  const ids: string[] = [];
-  for (const statement of statements) {
-    if (statement.kind === "Path") {
-      ids.push(statement.id);
-    } else if (statement.kind === "Scope") {
-      ids.push(...collectPathStatementIds(statement.body));
-    }
-  }
-  return ids;
 }
 
 function hasParseErrors(source: string, parseOptions: EditParseOptions): boolean {
@@ -245,22 +183,17 @@ function buildDefaultOmissionCandidate(
   if (action.value.trim().length === 0 || !shouldOmitDefaultWhenEquivalent(action.propertyId ?? propertyIdForWriteKey(action.key))) {
     return null;
   }
-  const result = applySetPropertyActionRaw(
-    source,
-    {
-      ...action,
-      value: "",
-      clearKeys: undefined
-    },
-    parseOptions
-  );
+  const clearAction = { ...action, value: "" };
+  delete clearAction.clearKeys;
+  const result = applySetPropertyActionRaw(source, clearAction, parseOptions);
   return result.kind === "success" || result.kind === "partial" ? result.newSource : null;
 }
 
 function buildPaintCommandCleanupCandidates(
   source: string,
   action: SetPropertyAction,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  checker: EquivalenceChecker
 ): CleanupCandidate[] {
   if (!propertyCleanupKinds(action.propertyId ?? propertyIdForWriteKey(action.key)).includes("paint-command")) {
     return [];
@@ -276,7 +209,7 @@ function buildPaintCommandCleanupCandidates(
 
   const paint = resolvePaintOptions(source, action.elementId, parseOptions);
   const shouldPreserveInheritedDrawSuppression = paint.drawDisabled
-    && hasInheritedRenderableDrawBeforeCommand(source, action.elementId, parseOptions);
+    && hasInheritedRenderableDrawBeforeCommand(checker.elements(source, action.elementId), action.elementId);
   const commands = chooseCandidateCommands(paint);
   const candidates: CleanupCandidate[] = [];
   for (const nextCommand of commands) {
@@ -308,6 +241,32 @@ function chooseCandidateCommands(paint: PaintOptions): Array<"path" | "draw" | "
     candidates.push("draw");
   }
   return candidates.filter((candidate, index) => candidates.indexOf(candidate) === index);
+}
+
+function isPureComplementaryPaintAppend(
+  source: string,
+  action: SetPropertyAction,
+  parseOptions: EditParseOptions
+): boolean {
+  if (action.clearKeys && action.clearKeys.length > 0) {
+    return false;
+  }
+  const value = normalizeOptionValue(action.value);
+  if (value.length === 0 || isDisabledPaintValue(value)) {
+    return false;
+  }
+  const resolved = resolvePropertyTarget(source, action.elementId, parseOptions);
+  if (resolved.kind !== "found" || resolved.target.kind !== "path-statement") {
+    return false;
+  }
+  const command = normalizedPaintCommand(resolved.target.pathCommand);
+  const key = normalizeOptionKey(action.key);
+  const paint = resolvePaintOptions(source, action.elementId, parseOptions);
+  return (command === "draw" && key === "fill" && paint.fill == null && !paint.drawDisabled)
+    || (command === "fill"
+      && (key === "draw" || key === "color")
+      && paint.draw == null
+      && !paint.fillDisabled);
 }
 
 function commandRemovesExplicitDrawSuppression(command: "path" | "draw" | "fill"): boolean {
@@ -464,28 +423,13 @@ function isDisabledPaintValue(value: string | null): boolean {
   return normalized === "none" || normalized === "false";
 }
 
-function hasInheritedRenderableDrawBeforeCommand(
-  source: string,
-  elementId: string,
-  parseOptions: EditParseOptions
-): boolean {
-  try {
-    const rendered = renderTikzToSvg(source, {
-      parse: {
-        recover: true,
-        activeFigureId: parseOptions.activeFigureId,
-        includeContextDefinitions: true
-      }
-    });
-    const element = rendered.semantic.scene.elements.find((candidate) => sceneElementMatchesSourceId(candidate, elementId));
-    const commandDefault = element?.styleChain.find(
-      (entry) => entry.sourceRef?.sourceKind === "command-default" && styleSourceRefMatches(entry.sourceRef.sourceId, elementId)
-    );
-    return commandDefault?.before.drawExplicit === true
-      && hasRenderableStroke(commandDefault.before);
-  } catch {
-    return false;
-  }
+function hasInheritedRenderableDrawBeforeCommand(elements: readonly SceneElement[] | null, elementId: string): boolean {
+  const element = elements?.find((candidate) => sceneElementMatchesSourceId(candidate, elementId));
+  const commandDefault = element?.styleChain.find(
+    (entry) => entry.sourceRef?.sourceKind === "command-default" && styleSourceRefMatches(entry.sourceRef.sourceId, elementId)
+  );
+  return commandDefault?.before.drawExplicit === true
+    && hasRenderableStroke(commandDefault.before);
 }
 
 function sceneElementMatchesSourceId(element: SceneElement, sourceId: string): boolean {
@@ -496,46 +440,71 @@ function styleSourceRefMatches(sourceId: string, targetSourceId: string): boolea
   return sourceId === targetSourceId;
 }
 
-function certifyEquivalentSource(
-  leftSource: string,
-  rightSource: string,
-  parseOptions: EditParseOptions,
-  cache?: CertificationRenderCache
-): boolean {
-  const left = renderForCertification(leftSource, parseOptions, cache);
-  const right = renderForCertification(rightSource, parseOptions, cache);
-  if (!left || !right) {
-    return false;
-  }
-  return (
-    diagnosticsSignature(left.parse.diagnostics) === diagnosticsSignature(right.parse.diagnostics) &&
-    semanticSignature(left.semantic.scene.elements) === semanticSignature(right.semantic.scene.elements) &&
-    svgSignature(left.svg.svg) === svgSignature(right.svg.svg)
-  );
-}
+type EquivalenceChecker = {
+  /** Whether two sources, differing only in the statement of `elementId`, parse and evaluate alike. */
+  equivalent(left: string, right: string, elementId: string): boolean;
+  /** The evaluated elements of `elementId`'s statement in `source`, or null. */
+  elements(source: string, elementId: string): readonly SceneElement[] | null;
+};
 
-function renderForCertification(
-  source: string,
+/**
+ * Cleanup candidates differ from the conservative write in one statement
+ * only, so only that statement is re-evaluated, from the evaluation of the
+ * source before the edit when given, or else of the conservative write.
+ * The scene decides the SVG, so it is compared without emitting any.
+ */
+function createEquivalenceChecker(
+  conservativeSource: string,
   parseOptions: EditParseOptions,
-  cache: CertificationRenderCache | undefined
-): CertificationRender | null {
-  if (cache?.has(source)) {
-    return cache.get(source) ?? null;
-  }
-  try {
-    const rendered = renderTikzToSvg(source, {
-      parse: {
-        recover: true,
-        activeFigureId: parseOptions.activeFigureId,
-        includeContextDefinitions: true
+  geometry: EditGeometrySession | undefined
+): EquivalenceChecker {
+  let fallback: EditGeometrySession | null | undefined;
+  const fallbackSession = (): EditGeometrySession | null => {
+    if (fallback !== undefined) return fallback;
+    try {
+      const parsed = parseTikzForEdit(conservativeSource, parseOptions);
+      fallback = createEditGeometrySession(
+        { source: conservativeSource, parsed, semantic: evaluateTikzFigure(parsed.figure, conservativeSource) },
+        {},
+        parseOptions
+      );
+    } catch {
+      fallback = null;
+    }
+    return fallback;
+  };
+  const elements = (source: string, elementId: string): readonly SceneElement[] | null => {
+    // The fallback evaluates the whole picture, so it is built only when needed.
+    for (const session of [() => geometry, fallbackSession]) {
+      const current = session();
+      if (!current) continue;
+      try {
+        return current.measureStatement(source, elementId, parseTikzForEdit(source, parseOptions));
+      } catch {
+        // This session cannot evaluate an edit outside its statement; try the next.
       }
-    });
-    cache?.set(source, rendered);
-    return rendered;
-  } catch {
-    cache?.set(source, null);
+    }
     return null;
-  }
+  };
+  const diagnostics = new Map<string, string>();
+  const diagnosticsOf = (source: string): string => {
+    let signature = diagnostics.get(source);
+    if (signature === undefined) {
+      signature = diagnosticsSignature(parseTikzForEdit(source, parseOptions).diagnostics);
+      diagnostics.set(source, signature);
+    }
+    return signature;
+  };
+  return {
+    elements,
+    equivalent(left, right, elementId) {
+      if (diagnosticsOf(left) !== diagnosticsOf(right)) return false;
+      const leftElements = elements(left, elementId);
+      const rightElements = elements(right, elementId);
+      return leftElements != null && rightElements != null &&
+        semanticSignature(leftElements) === semanticSignature(rightElements);
+    }
+  };
 }
 
 function semanticSignature(value: unknown): string {
@@ -549,10 +518,10 @@ function sanitizeSemanticValue(value: unknown, geometricStyle = false): unknown 
   if (typeof value === "number") {
     return normalizeSignatureNumber(value);
   }
-  if (!value || typeof value !== "object") {
+  if (!isObjectRecord(value)) {
     return value;
   }
-  const input = value as Record<string, unknown>;
+  const input = value;
   const output: Record<string, unknown> = {};
   const isGeometricElement = input.kind === "Path" || input.kind === "Circle" || input.kind === "Ellipse";
   for (const [key, entryValue] of Object.entries(input)) {
@@ -601,23 +570,6 @@ function normalizePaintColorForSignature(value: unknown): unknown {
   return normalizeColor(trimmed);
 }
 
-function svgSignature(svg: string): string {
-  return svg.replace(/\b(stroke|fill|stop-color)="([^"]*)"/gu, (_match, attribute: string, value: string) =>
-    `${attribute}="${normalizeSvgPaintForSignature(value)}"`
-  );
-}
-
-function normalizeSvgPaintForSignature(value: string): string {
-  const trimmed = value.trim();
-  if (/^url\(/iu.test(trimmed)) {
-    return value;
-  }
-  if (trimmed.length === 0 || trimmed.toLowerCase() === "none") {
-    return "none";
-  }
-  return normalizeColor(trimmed);
-}
-
 function normalizeSignatureNumber(value: number): number {
   if (!Number.isFinite(value)) {
     return value;
@@ -627,18 +579,18 @@ function normalizeSignatureNumber(value: number): number {
 }
 
 function isInvisibleSceneElement(value: unknown): boolean {
-  if (!value || typeof value !== "object") {
+  if (!isObjectRecord(value)) {
     return false;
   }
-  const element = value as Record<string, unknown>;
+  const element = value;
   if (element.kind !== "Path" && element.kind !== "Circle" && element.kind !== "Ellipse") {
     return false;
   }
   const style = element.style;
-  if (!style || typeof style !== "object") {
+  if (!isObjectRecord(style)) {
     return false;
   }
-  const styleRecord = style as Record<string, unknown>;
+  const styleRecord = style;
   return (
     !hasRenderableStroke(styleRecord) &&
     !hasRenderableFill(styleRecord) &&
@@ -686,7 +638,7 @@ function numericStyleValue(value: unknown, fallback: number): number {
 }
 
 function hasEnabledDecoration(value: unknown): boolean {
-  return Boolean(value && typeof value === "object" && (value as Record<string, unknown>).enabled === true);
+  return isObjectRecord(value) && value.enabled === true;
 }
 
 function hasNonEmptyArray(value: unknown): boolean {

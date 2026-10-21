@@ -1,7 +1,8 @@
-import { worldToLocal } from "tikz-editor/edit/coords";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import type { EditHandle, SceneCircle, SceneElement, SceneEllipse, ScenePath, ScenePathShapeHint, SceneText } from "tikz-editor/semantic/types";
-import { isFrameLocalCoordinateEditHandle } from "tikz-editor/semantic/types";
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import { worldToLocal } from "@tikz-editor/core/edit/coords";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import type { EditHandle, SceneCircle, SceneElement, SceneEllipse, ScenePath, ScenePathShapeHint, SceneText } from "@tikz-editor/core/semantic/types";
+import { isFrameLocalCoordinateEditHandle } from "@tikz-editor/core/semantic/types";
 import {
   applyFrameTransform,
   applyFrameVector,
@@ -14,11 +15,11 @@ import {
   worldTransform,
   worldVector,
   pt
-} from "tikz-editor/coords/index";
-import type { FrameLocalPoint, FrameTransform, WorldBounds, WorldTransform, WorldVector } from "tikz-editor/coords/index";
-import { applyMatrix } from "tikz-editor/semantic/transform";
-import type { SvgViewBox } from "tikz-editor/svg/types";
-import { svgPoint } from "tikz-editor/coords/index";
+} from "@tikz-editor/core/coords/index";
+import type { FrameLocalPoint, FrameTransform, WorldBounds, WorldTransform, WorldVector } from "@tikz-editor/core/coords/index";
+import { applyMatrix } from "@tikz-editor/core/semantic/transform";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
+import { svgPoint } from "@tikz-editor/core/coords/index";
 import type { SvgBounds, SvgPoint, WorldPoint } from "../coords/types";
 import { svgToWorldPoint, worldToSvgPoint } from "./geometry";
 
@@ -80,14 +81,11 @@ export function resolveResizeFrameForSource(
     if (element.kind === "Circle") {
       return resolveCircleResizeFrame(element, editHandles, sourceId, viewBox);
     }
-    if (element.kind === "Ellipse") {
-      return resolveEllipseResizeFrame(element, editHandles, sourceId, viewBox);
-    }
-    return null;
+    return resolveEllipseResizeFrame(element, editHandles, sourceId, viewBox);
   }
 
   if (nonTextElements.length === 0 && textElements.length === 1) {
-    return resolveTextResizeFrame(sourceId, textElements[0], viewBox);
+    return resolveTextResizeFrame(sourceId, requireArrayValue(textElements, 0), viewBox);
   }
   return null;
 }
@@ -122,6 +120,24 @@ export function resolveResizeFrameFromBounds(
   return buildResizeFrame(sourceId, centerWorld, cornersByRoleWorld, viewBox);
 }
 
+/** Scope handles follow the parent's axes, matching the scope edit action. */
+export function resolveResizeFrameInFrame(
+  sourceId: string,
+  bounds: WorldBounds,
+  frame: FrameTransform,
+  viewBox: SvgViewBox
+): ResizeFrame | null {
+  if (!(bounds.maxX - bounds.minX > EPSILON) || !(bounds.maxY - bounds.minY > EPSILON) ||
+    Math.abs(frame.a * frame.d - frame.b * frame.c) < EPSILON) return null;
+  const point = (x: number, y: number) => applyFrameTransform(frame, frameLocalPoint(pt(x), pt(y)));
+  return buildResizeFrame(sourceId, point((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2), {
+    "top-left": point(bounds.minX, bounds.maxY),
+    "top-right": point(bounds.maxX, bounds.maxY),
+    "bottom-right": point(bounds.maxX, bounds.minY),
+    "bottom-left": point(bounds.minX, bounds.minY)
+  }, viewBox);
+}
+
 function resolvePathResizeFrame(
   path: ScenePath,
   sourceElements: readonly SceneElement[],
@@ -137,7 +153,7 @@ function resolvePathResizeFrame(
   if (pathShapeHint === "rectangle") {
     return resolvePathRectangleResizeFrame(editHandles, sourceId, viewBox);
   }
-  if (pathShapeHint === "circle" || pathShapeHint === "ellipse") {
+  {
     const centerHandle = pickCenterPathPointHandle(editHandles, sourceId);
     if (!centerHandle) {
       return null;
@@ -162,7 +178,6 @@ function resolvePathResizeFrame(
       )
     );
   }
-  return null;
 }
 
 function resolveNodePathResizeFrame(
@@ -183,8 +198,9 @@ function resolveNodePathResizeFrame(
   if (!corners) {
     return resolveGenericNodePathResizeFrame(path, sourceId, viewBox);
   }
-  const transformedCorners = path.transform
-    ? corners.map((corner) => applyMatrix(path.transform!, corner))
+  const transform = path.transform;
+  const transformedCorners = transform
+    ? corners.map((corner) => applyMatrix(transform, corner))
     : corners;
   const centerWorld = worldPoint(
     pt(transformedCorners.reduce((sum, point) => sum + point.x, 0) / transformedCorners.length),
@@ -281,9 +297,7 @@ function approximatePathBoundsInWorld(path: ScenePath): WorldBounds | null {
       current = command.to;
       continue;
     }
-    if (command.kind === "Z") {
-      continue;
-    }
+    continue;
   }
 
   if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
@@ -547,9 +561,10 @@ function buildResizeFrame(
 function resolveRectanglePathCorners(path: ScenePath): WorldPoint[] | null {
   const corners: WorldPoint[] = [];
   let closed = false;
+  const isClosed = () => closed;
   for (const command of path.commands) {
     if (command.kind === "M" || command.kind === "L") {
-      if (closed) {
+      if (isClosed()) {
         return null;
       }
       corners.push(command.to);
@@ -584,10 +599,10 @@ function resolveRectangleBasis(corners: readonly WorldPoint[]): { u: WorldVector
     return null;
   }
 
-  const edge01 = subtractPoints(corners[1], corners[0]);
-  const edge12 = subtractPoints(corners[2], corners[1]);
-  const edge23 = subtractPoints(corners[3], corners[2]);
-  const edge30 = subtractPoints(corners[0], corners[3]);
+  const edge01 = subtractPoints(requireArrayValue(corners, 1), requireArrayValue(corners, 0));
+  const edge12 = subtractPoints(requireArrayValue(corners, 2), requireArrayValue(corners, 1));
+  const edge23 = subtractPoints(requireArrayValue(corners, 3), requireArrayValue(corners, 2));
+  const edge30 = subtractPoints(requireArrayValue(corners, 0), requireArrayValue(corners, 3));
   const len01 = Math.hypot(edge01.x, edge01.y);
   const len12 = Math.hypot(edge12.x, edge12.y);
   const len23 = Math.hypot(edge23.x, edge23.y);

@@ -33,7 +33,7 @@ export type FrameStats = {
 
 export type ProfilingEnvironmentMetadata = {
   generatedAtIso: string;
-  appMode: "production";
+  appMode: "production" | "development";
   browserProject: string;
   gitCommitSha: string | null;
   tracesDir: string;
@@ -213,10 +213,10 @@ export async function readSourceRevision(page: import("@playwright/test").Page):
   });
 }
 
-export function buildEnvironmentMetadata(testInfo: TestInfo): ProfilingEnvironmentMetadata {
+export function buildEnvironmentMetadata(testInfo: TestInfo, appMode: ProfilingEnvironmentMetadata["appMode"] = "production"): ProfilingEnvironmentMetadata {
   return {
     generatedAtIso: new Date().toISOString(),
-    appMode: "production",
+    appMode,
     browserProject: testInfo.project.name,
     gitCommitSha: readGitCommitSha(),
     tracesDir: TRACES_DIR
@@ -229,7 +229,8 @@ export function writeScenarioReport<
 >(
   manifest: ProfilingScenarioManifest,
   testInfo: TestInfo,
-  variants: Array<ProfilingVariantReport<TMetrics, TProbeSnapshot>>
+  variants: Array<ProfilingVariantReport<TMetrics, TProbeSnapshot>>,
+  appMode: ProfilingEnvironmentMetadata["appMode"] = "production"
 ): string {
   ensureTracesDir();
   const report: ProfilingScenarioReport<TMetrics, TProbeSnapshot> = {
@@ -239,7 +240,7 @@ export function writeScenarioReport<
       category: manifest.category,
       description: manifest.description
     },
-    environment: buildEnvironmentMetadata(testInfo),
+    environment: buildEnvironmentMetadata(testInfo, appMode),
     variants
   };
   const outPath = reportPathForScenario(manifest.id);
@@ -264,7 +265,8 @@ export async function captureProfileVariant<
 }): Promise<ProfilingVariantReport<TMetrics, TProbeSnapshot>> {
   await resetAppProfilingSession(params.page, `${params.scenarioId}:${params.variantId}`);
   const browserName = params.page.context().browser()?.browserType().name() ?? "unknown";
-  const client = browserName === "chromium" ? await startCDPProfile(params.page) : null;
+  const client = browserName === "chromium" && process.env.TIKZ_PROFILE_CPU !== "0"
+    ? await startCDPProfile(params.page) : null;
   const result = await params.run();
   const instrumentation = await readAppProfilingSnapshot(params.page);
   const cpuProfilePath =

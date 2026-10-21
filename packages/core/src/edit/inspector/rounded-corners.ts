@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { ScenePathCommand } from "../../semantic/types.js";
 
 const ROUNDED_CORNERS_DEFAULT_RADIUS = 4;
@@ -41,12 +42,12 @@ export function pathHasRoundableCorner(commands: ScenePathCommand[]): boolean {
     }
 
     for (let index = 0; index < segments.length - 1; index += 1) {
-      if (joinProducesCorner(segments[index], segments[index + 1])) {
+      if (joinProducesCorner(requireArrayValue(segments, index), requireArrayValue(segments, index + 1))) {
         return true;
       }
     }
 
-    if (subpath.closed && joinProducesCorner(segments[segments.length - 1], segments[0])) {
+    if (subpath.closed && joinProducesCorner(requireArrayValue(segments, segments.length - 1), requireArrayValue(segments, 0))) {
       return true;
     }
   }
@@ -97,8 +98,8 @@ export function computeLineBasedPathRoundedCornersMax(commands: ScenePathCommand
     current = null;
   };
 
-  for (let index = 0; index < commands.length; index += 1) {
-    const command = commands[index];
+  for (const [index, command] of commands.entries()) {
+
     if (command.kind === "M") {
       flushSubpath(false);
       current = command.to;
@@ -135,9 +136,7 @@ export function computeLineBasedPathRoundedCornersMax(commands: ScenePathCommand
       continue;
     }
 
-    if (command.kind === "Z") {
-      flushSubpath(true, index);
-    }
+    flushSubpath(true, index);
   }
   flushSubpath(false);
 
@@ -188,20 +187,18 @@ export function computeGenericPathRoundedCornersMax(commands: ScenePathCommand[]
       continue;
     }
 
-    if (command.kind === "Z") {
-      if (current && start) {
-        const closingLength = pointDistance(current, start);
-        if (Number.isFinite(closingLength) && closingLength > EPSILON) {
-          lengths.push(closingLength);
-        }
+    if (current && start) {
+      const closingLength = pointDistance(current, start);
+      if (Number.isFinite(closingLength) && closingLength > EPSILON) {
+        lengths.push(closingLength);
       }
-      if (lengths.length > 0) {
-        subpaths.push({ lengths, closed: true });
-      }
-      lengths = [];
-      start = null;
-      current = null;
     }
+    if (lengths.length > 0) {
+      subpaths.push({ lengths, closed: true });
+    }
+    lengths = [];
+    start = null;
+    current = null;
   }
   flushOpenSubpath();
 
@@ -313,8 +310,8 @@ export function maxRoundedCornersForSubpath(lengths: readonly number[], closed: 
   }
 
   let max = Number.POSITIVE_INFINITY;
-  for (let index = 0; index < lengths.length; index += 1) {
-    const length = lengths[index];
+  for (const [index, length] of lengths.entries()) {
+
     if (!Number.isFinite(length) || length <= 1e-9) {
       continue;
     }
@@ -407,15 +404,13 @@ function extractCornerSubpaths(commands: readonly ScenePathCommand[]): Array<{ s
       continue;
     }
 
-    if (command.kind === "Z") {
-      if (current && start) {
-        const closingLength = pointDistance(current, start);
-        if (closingLength > EPSILON) {
-          segments.push({ kind: "L", from: current, to: start });
-        }
+    if (current && start) {
+      const closingLength = pointDistance(current, start);
+      if (closingLength > EPSILON) {
+        segments.push({ kind: "L", from: current, to: start });
       }
-      flushSubpath(true);
     }
+    flushSubpath(true);
   }
 
   flushSubpath(false);

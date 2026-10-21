@@ -1,16 +1,8 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "paths": {
-      "tikz-editor/*": ["../../packages/core/src/*"]
-    }
+    "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
   "include": ["src", "../../packages/app/src/types/**/*.d.ts"]
 }

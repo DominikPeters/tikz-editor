@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { capabilityMatrix, type CapabilityRow } from "tikz-editor/capabilities";
-import type { Diagnostic } from "tikz-editor/diagnostics/types";
-import type { SemanticDependencyGraph } from "tikz-editor/semantic";
-import type { EditHandle, FeatureUsage, SceneElement } from "tikz-editor/semantic/types";
+import { capabilityMatrix, type CapabilityRow } from "@tikz-editor/core/capabilities";
+import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
+import type { SemanticDependencyGraph } from "@tikz-editor/core/semantic";
+import type { EditHandle, FeatureUsage, SceneElement } from "@tikz-editor/core/semantic/types";
 import { useEditorStore } from "../store/store";
 import { TreeView } from "./TreeView";
 import { Modal } from "./Modal";
@@ -58,7 +58,7 @@ export function DevPanel() {
     () => summarizeDependencies(snapshot.semanticResult?.dependencies ?? null),
     [snapshot.semanticResult?.dependencies]
   );
-  const currentHistoryEntry = historyIndex >= 0 ? history[historyIndex] : null;
+  const currentHistoryEntry = historyIndex >= 0 ? history[historyIndex] ?? null : null;
 
   if (!showDevPanel) return null;
 
@@ -73,7 +73,7 @@ export function DevPanel() {
       initialHeight={PANEL_INITIAL_HEIGHT}
       labelledBy={PANEL_TITLE_ID}
       dataTestId="developer-panel"
-      className={css.dialog}
+      className={css.dialog ?? ""}
       onClose={close}
     >
       <Modal.Header
@@ -111,7 +111,7 @@ export function DevPanel() {
           <div className={css.content}>
             {tab === "overview" ? (
               <OverviewTab
-                activeFigureId={snapshot.activeFigureId}
+                activeRootId={snapshot.activeRootId}
                 diagnostics={diagnostics}
                 dependencySummary={dependencySummary}
                 featureSummary={featureSummary}
@@ -176,7 +176,7 @@ export function DevPanel() {
 }
 
 function OverviewTab({
-  activeFigureId,
+  activeRootId,
   diagnostics,
   dependencySummary,
   featureSummary,
@@ -188,7 +188,7 @@ function OverviewTab({
   snapshot,
   toolMode
 }: {
-  activeFigureId: string | null;
+  activeRootId: string | null;
   diagnostics: readonly DiagnosticRow[];
   dependencySummary: DependencySummary;
   featureSummary: FeatureSummary;
@@ -206,7 +206,7 @@ function OverviewTab({
     <div className={css.stack}>
       <section className={css.summaryGrid} aria-label="Developer panel summary">
         <Metric label="Diagnostics" value={`${errorCount} errors / ${warningCount} warnings`} tone={errorCount > 0 ? "bad" : warningCount > 0 ? "warn" : "good"} />
-        <Metric label="Figures" value={String(figureCount)} detail={activeFigureId ?? "No active figure"} />
+        <Metric label="Figures" value={String(figureCount)} detail={activeRootId ?? "No active figure"} />
         <Metric label="Scene" value={`${sceneElementCount} elements`} detail={`${snapshot.editHandles.length} edit handles`} />
         <Metric label="Selection" value={`${selectedCount} selected`} detail={`Tool: ${toolMode}`} />
         <Metric label="Features" value={`${featureSummary.supported.length} supported`} detail={`${featureSummary.unsupported.length} unsupported`} tone={featureSummary.unsupported.length > 0 ? "warn" : "neutral"} />
@@ -370,7 +370,6 @@ function EditingTab({
               ["kind", currentHistoryEntry.kind],
               ["label", currentHistoryEntry.label],
               ["merge key", currentHistoryEntry.mergeKey ?? "none"],
-              ["backward patches", String(currentHistoryEntry.backward.length)],
               ["forward patches", String(currentHistoryEntry.forward.length)],
               ["source before", `${currentHistoryEntry.sourceBefore.length} chars`],
               ["source after", `${currentHistoryEntry.sourceAfter.length} chars`]
@@ -503,8 +502,8 @@ function DependenciesTab({
           <div className={css.itemList}>
             {resources.slice(0, MAX_LIST_ROWS).map((node) => (
               <div key={node.id} className={css.compactRow}>
-                <code>{node.kind === "resource" ? node.resourceKind : node.id}</code>
-                <span>{node.kind === "resource" ? node.resourceKey : ""}</span>
+                <code>{node.resourceKind}</code>
+                <span>{node.resourceKey}</span>
               </div>
             ))}
           </div>
@@ -599,7 +598,7 @@ function PipelineTab({
           <pre className={css.json}>{stringifyDebug({
             revision: snapshot.revision,
             source: snapshot.source.slice(0, 500) + (snapshot.source.length > 500 ? "..." : ""),
-            activeFigureId: snapshot.activeFigureId,
+            activeRootId: snapshot.activeRootId,
             figures: snapshot.figures,
             editHandles: snapshot.editHandles.length,
             sceneElements: snapshot.scene?.elements.length ?? 0,
@@ -694,8 +693,8 @@ function HandleList({ activeHandleId, handles }: { activeHandleId: string | null
               ["world", formatPoint(handle.world)],
               ["source text", truncate(handle.sourceText, 80)],
               ["rewrite target", handle.rewriteTargetHandleId ?? "none"],
-              ["positioning", "positioningContext" in handle && handle.positioningContext ? `${handle.positioningContext.direction} of ${handle.positioningContext.targetNodeName}` : "none"],
-              ["path attachment", "pathAttachmentContext" in handle && handle.pathAttachmentContext ? `${handle.pathAttachmentContext.hostPathSourceId} @ ${handle.pathAttachmentContext.pos}` : "none"]
+              ["positioning", formatPositioningContext("positioningContext" in handle ? handle.positioningContext : undefined)],
+              ["path attachment", formatPathAttachmentContext("pathAttachmentContext" in handle ? handle.pathAttachmentContext : undefined)]
             ]}
           />
         </article>
@@ -798,7 +797,7 @@ function summarizeFeatureUsage(featureUsage: FeatureUsage | null): FeatureSummar
     if (state === "used-supported") {
       supported.push(formatFeature(feature));
     } else if (state === "used-unsupported") {
-      unsupported.push(formatCapabilityFeature(feature, capabilityMatrix[feature as keyof typeof capabilityMatrix]));
+      unsupported.push(formatCapabilityFeature(feature, Object.entries(capabilityMatrix).find(([id]) => id === feature)?.[1]));
     }
   }
   return {
@@ -942,4 +941,12 @@ function stringifyDebug(value: unknown): string {
     replacer,
     2
   );
+}
+
+function formatPositioningContext(context: { direction: string; targetNodeName: string } | undefined): string {
+  return context ? `${context.direction} of ${context.targetNodeName}` : "none";
+}
+
+function formatPathAttachmentContext(context: { hostPathSourceId: string; pos: number } | undefined): string {
+  return context ? `${context.hostPathSourceId} @ ${context.pos}` : "none";
 }

@@ -5,12 +5,13 @@ import {
   type WorldVector
 } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
+import { distanceSquared } from "../../utils/math.js";
 import type { OptionListAst } from "../../options/types.js";
 import type { StyleChainEntry } from "../style-chain.js";
 import type { ScenePathAttachment } from "../types.js";
 import type { PlacementSegment } from "./types.js";
 
-type ArcParams = Extract<PlacementSegment, { kind: "arc" }>["params"];
+type ArcSegment = Extract<PlacementSegment, { kind: "arc" }>;
 
 export type PathPositionPreset =
   | "at start"
@@ -31,7 +32,6 @@ export const PATH_POSITION_PRESETS: ReadonlyArray<{ key: PathPositionPreset; t: 
   { key: "at end", t: 1, label: "End" }
 ] as const;
 
-const POSITION_PRESET_KEYS = new Set(PATH_POSITION_PRESETS.map((preset) => preset.key));
 const EXPLICIT_DIRECTIONS = new Set([
   "above",
   "below",
@@ -59,7 +59,7 @@ export function normalizePathPosition(position: number): number {
   if (!Number.isFinite(position)) {
     return 0.5;
   }
-  return Math.max(0, Math.min(1, position));
+  return position;
 }
 
 export function resolvePathPositionFraction(options: OptionListAst | undefined): number | null {
@@ -69,7 +69,7 @@ export function resolvePathPositionFraction(options: OptionListAst | undefined):
 
   let value: number | null = null;
   for (const entry of options.entries) {
-    if (entry.kind === "flag" && POSITION_PRESET_KEYS.has(entry.key as PathPositionPreset)) {
+    if (entry.kind === "flag" && PATH_POSITION_PRESETS.some(preset => preset.key === entry.key)) {
       value = PATH_POSITION_PRESETS.find((preset) => preset.key === entry.key)?.t ?? value;
       continue;
     }
@@ -89,7 +89,8 @@ export function resolvePathPositionPreset(
   segment: PlacementSegment | null,
   options: { normalizedThreshold?: number; worldThresholdPt?: number } = {}
 ): { preset: PathPositionPreset | null; snappedT: number } {
-  const clamped = normalizePathPosition(position);
+  const normalized = normalizePathPosition(position);
+  if (normalized < 0 || normalized > 1) return { preset: null, snappedT: normalized };
   const normalizedThreshold = options.normalizedThreshold ?? 0.03;
   const worldThresholdPt = options.worldThresholdPt ?? 10;
   const segmentLength = segment ? approximatePlacementSegmentLength(segment) : null;
@@ -99,7 +100,7 @@ export function resolvePathPositionPreset(
 
   let best: { preset: PathPositionPreset; t: number; delta: number } | null = null;
   for (const preset of PATH_POSITION_PRESETS) {
-    const delta = Math.abs(clamped - preset.t);
+    const delta = Math.abs(normalized - preset.t);
     if (delta > threshold) {
       continue;
     }
@@ -108,7 +109,7 @@ export function resolvePathPositionPreset(
     }
   }
 
-  return best ? { preset: best.preset, snappedT: best.t } : { preset: null, snappedT: clamped };
+  return best ? { preset: best.preset, snappedT: best.t } : { preset: null, snappedT: normalized };
 }
 
 export function approximatePlacementSegmentLength(segment: PlacementSegment): number {
@@ -120,7 +121,8 @@ export function approximatePlacementSegmentLength(segment: PlacementSegment): nu
   }
   if (segment.kind === "arc") {
     const delta = Math.abs(segment.params.endAngle - segment.params.startAngle) * (Math.PI / 180);
-    const avgRadius = (Math.abs(segment.params.rx) + Math.abs(segment.params.ry)) / 2;
+    const basis = arcBasis(segment);
+    const avgRadius = (Math.hypot(basis.x.x, basis.x.y) + Math.hypot(basis.y.x, basis.y.y)) / 2;
     return delta * avgRadius;
   }
   let length = 0;
@@ -134,66 +136,74 @@ export function approximatePlacementSegmentLength(segment: PlacementSegment): nu
 }
 
 export function pointAtPlacementSegment(segment: PlacementSegment, t: number): WorldPoint {
-  const clamped = normalizePathPosition(t);
+  const normalized = normalizePathPosition(t);
   if (segment.kind === "line") {
-    return interpolate(segment.from, segment.to, clamped);
+    return interpolate(segment.from, segment.to, normalized);
   }
   if (segment.kind === "hv") {
-    if (clamped <= 0.5) {
-      return interpolate(segment.from, segment.bend, clamped * 2);
+    if (normalized <= 0.5) {
+      return interpolate(segment.from, segment.bend, normalized * 2);
     }
-    return interpolate(segment.bend, segment.to, (clamped - 0.5) * 2);
+    return interpolate(segment.bend, segment.to, (normalized - 0.5) * 2);
   }
   if (segment.kind === "cubic") {
-    return cubicPoint(segment.from, segment.c1, segment.c2, segment.to, clamped);
+    return cubicPoint(segment.from, segment.c1, segment.c2, segment.to, normalized);
   }
-  const center = arcCenter(segment.from, segment.params);
-  const angle = segment.params.startAngle + (segment.params.endAngle - segment.params.startAngle) * clamped;
+  const basis = arcBasis(segment);
+  const center = arcCenter(segment, basis);
+  const angle = segment.params.startAngle + (segment.params.endAngle - segment.params.startAngle) * normalized;
   const radians = (angle * Math.PI) / 180;
   return worldPoint(
-    pt(center.x + segment.params.rx * Math.cos(radians)),
-    pt(center.y + segment.params.ry * Math.sin(radians))
+    center.x + basis.x.x * Math.cos(radians) + basis.y.x * Math.sin(radians),
+    center.y + basis.x.y * Math.cos(radians) + basis.y.y * Math.sin(radians)
   );
 }
 
 export function tangentAtPlacementSegment(segment: PlacementSegment, t: number): WorldVector {
-  const clamped = normalizePathPosition(t);
+  const normalized = normalizePathPosition(t);
   if (segment.kind === "line") {
     return worldVector(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
   }
   if (segment.kind === "hv") {
-    if (clamped < 0.5) {
+    if (normalized < 0.5) {
       return worldVector(segment.bend.x - segment.from.x, segment.bend.y - segment.from.y);
     }
     return worldVector(segment.to.x - segment.bend.x, segment.to.y - segment.bend.y);
   }
   if (segment.kind === "cubic") {
-    const u = 1 - clamped;
+    const u = 1 - normalized;
     return worldVector(
       3 * u * u * (segment.c1.x - segment.from.x) +
-        6 * u * clamped * (segment.c2.x - segment.c1.x) +
-        3 * clamped * clamped * (segment.to.x - segment.c2.x),
+        6 * u * normalized * (segment.c2.x - segment.c1.x) +
+        3 * normalized * normalized * (segment.to.x - segment.c2.x),
       3 * u * u * (segment.c1.y - segment.from.y) +
-        6 * u * clamped * (segment.c2.y - segment.c1.y) +
-        3 * clamped * clamped * (segment.to.y - segment.c2.y)
+        6 * u * normalized * (segment.c2.y - segment.c1.y) +
+        3 * normalized * normalized * (segment.to.y - segment.c2.y)
     );
   }
-  const angle = segment.params.startAngle + (segment.params.endAngle - segment.params.startAngle) * clamped;
+  const angle = segment.params.startAngle + (segment.params.endAngle - segment.params.startAngle) * normalized;
   const radians = (angle * Math.PI) / 180;
   const delta = segment.params.endAngle >= segment.params.startAngle ? 1 : -1;
+  const basis = arcBasis(segment);
   return worldVector(
-    -segment.params.rx * Math.sin(radians) * delta,
-    segment.params.ry * Math.cos(radians) * delta
+    (-1 * basis.x.x * Math.sin(radians) + basis.y.x * Math.cos(radians)) * delta,
+    (-1 * basis.x.y * Math.sin(radians) + basis.y.y * Math.cos(radians)) * delta
   );
 }
 
-export function closestPointOnPlacementSegment(segment: PlacementSegment, point: WorldPoint): { t: number; point: WorldPoint } {
+export function closestPointOnPlacementSegment(
+  segment: PlacementSegment,
+  point: WorldPoint,
+  options: { extrapolate?: boolean; referenceT?: number } = {}
+): { t: number; point: WorldPoint } {
+  const extrapolate = options.extrapolate ?? false;
+  const referenceT = normalizePathPosition(options.referenceT ?? 0.5);
   if (segment.kind === "line") {
-    return closestPointOnLine(point, segment.from, segment.to);
+    return closestPointOnLine(point, segment.from, segment.to, extrapolate ? -Infinity : 0, extrapolate ? Infinity : 1);
   }
   if (segment.kind === "hv") {
-    const first = closestPointOnLine(point, segment.from, segment.bend);
-    const second = closestPointOnLine(point, segment.bend, segment.to);
+    const first = closestPointOnLine(point, segment.from, segment.bend, extrapolate ? -Infinity : 0, 1);
+    const second = closestPointOnLine(point, segment.bend, segment.to, 0, extrapolate ? Infinity : 1);
     const firstDist = distanceSquared(point, first.point);
     const secondDist = distanceSquared(point, second.point);
     return firstDist <= secondDist
@@ -201,23 +211,42 @@ export function closestPointOnPlacementSegment(segment: PlacementSegment, point:
       : { t: 0.5 + second.t * 0.5, point: second.point };
   }
   if (segment.kind === "cubic") {
-    return closestPointOnCubic(point, segment.from, segment.c1, segment.c2, segment.to);
+    return closestPointOnCubic(point, segment.from, segment.c1, segment.c2, segment.to,
+      extrapolate ? Math.min(0, referenceT - 1) : 0,
+      extrapolate ? Math.max(1, referenceT + 1) : 1,
+      referenceT);
   }
 
-  const center = arcCenter(segment.from, segment.params);
+  const basis = arcBasis(segment);
+  const center = arcCenter(segment, basis);
   const dx = point.x - center.x;
   const dy = point.y - center.y;
-  const rawAngle = Math.atan2(
-    segment.params.rx * dy,
-    segment.params.ry * dx
-  ) * 180 / Math.PI;
+  const determinant = basis.x.x * basis.y.y - basis.x.y * basis.y.x;
+  // Keep the existing radial projection policy in the arc's parameter frame.
+  // Collapsed axes have no inverse; project onto each surviving axis instead.
+  const xNormSquared = basis.x.x * basis.x.x + basis.x.y * basis.x.y;
+  const yNormSquared = basis.y.x * basis.y.x + basis.y.y * basis.y.y;
+  const localX = Math.abs(determinant) > 1e-12
+    ? (basis.y.y * dx - basis.y.x * dy) / determinant
+    : xNormSquared > 1e-12 ? (basis.x.x * dx + basis.x.y * dy) / xNormSquared : 0;
+  const localY = Math.abs(determinant) > 1e-12
+    ? (basis.x.x * dy - basis.x.y * dx) / determinant
+    : yNormSquared > 1e-12 ? (basis.y.x * dx + basis.y.y * dy) / yNormSquared : 0;
+  const rawAngle = Math.atan2(localY, localX) * 180 / Math.PI;
+  if (extrapolate) {
+    const sweep = segment.params.endAngle - segment.params.startAngle;
+    const referenceAngle = segment.params.startAngle + sweep * referenceT;
+    const angle = rawAngle + 360 * Math.round((referenceAngle - rawAngle) / 360);
+    const t = Math.abs(sweep) < 1e-12 ? referenceT : (angle - segment.params.startAngle) / sweep;
+    return { t, point: pointAtPlacementSegment(segment, t) };
+  }
   const angle = normalizeDegrees(rawAngle);
   const start = normalizeDegrees(segment.params.startAngle);
   const end = normalizeDegrees(segment.params.endAngle);
   const delta = normalizeSignedAngle(segment.params.endAngle - segment.params.startAngle);
   const sweepPositive = delta >= 0;
   const candidateAngle = clampAngleToArc(angle, start, end, sweepPositive);
-  const normalized = delta === 0 ? 0 : normalizePathPosition((candidateAngle - segment.params.startAngle) / delta);
+  const normalized = delta === 0 ? 0 : Math.max(0, Math.min(1, (candidateAngle - segment.params.startAngle) / delta));
   return { t: normalized, point: pointAtPlacementSegment(segment, normalized) };
 }
 
@@ -511,28 +540,29 @@ function distance(a: WorldPoint, b: WorldPoint): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function distanceSquared(a: WorldPoint, b: WorldPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
-}
-
-function closestPointOnLine(p: WorldPoint, a: WorldPoint, b: WorldPoint): { t: number; point: WorldPoint } {
+function closestPointOnLine(p: WorldPoint, a: WorldPoint, b: WorldPoint, minT = 0, maxT = 1): { t: number; point: WorldPoint } {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const lengthSq = dx * dx + dy * dy;
   if (lengthSq < 1e-12) {
     return { t: 0, point: { ...a } };
   }
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
+  const t = Math.max(minT, Math.min(maxT, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
   return { t, point: interpolate(a, b, t) };
 }
 
-function closestPointOnCubic(p: WorldPoint, c0: WorldPoint, c1: WorldPoint, c2: WorldPoint, c3: WorldPoint): { t: number; point: WorldPoint } {
-  let bestT = 0;
-  let bestDistSq = Number.POSITIVE_INFINITY;
+function closestPointOnCubic(
+  p: WorldPoint, c0: WorldPoint, c1: WorldPoint, c2: WorldPoint, c3: WorldPoint,
+  minT = 0, maxT = 1, referenceT = 0.5
+): { t: number; point: WorldPoint } {
+  let bestT = Math.max(minT, Math.min(maxT, referenceT));
+  let bestDistSq = distanceSquared(p, cubicPoint(c0, c1, c2, c3, bestT));
+  if (bestDistSq < 1e-12) {
+    return { t: bestT, point: cubicPoint(c0, c1, c2, c3, bestT) };
+  }
+  const step = (maxT - minT) / 32;
   for (let index = 0; index <= 32; index += 1) {
-    const t = index / 32;
+    const t = minT + index * step;
     const point = cubicPoint(c0, c1, c2, c3, t);
     const currentDistSq = distanceSquared(p, point);
     if (currentDistSq < bestDistSq) {
@@ -540,8 +570,8 @@ function closestPointOnCubic(p: WorldPoint, c0: WorldPoint, c1: WorldPoint, c2: 
       bestT = t;
     }
   }
-  let lo = Math.max(0, bestT - 1 / 32);
-  let hi = Math.min(1, bestT + 1 / 32);
+  let lo = Math.max(minT, bestT - step);
+  let hi = Math.min(maxT, bestT + step);
   for (let index = 0; index < 18; index += 1) {
     const mid1 = lo + (hi - lo) / 3;
     const mid2 = hi - (hi - lo) / 3;
@@ -553,15 +583,23 @@ function closestPointOnCubic(p: WorldPoint, c0: WorldPoint, c1: WorldPoint, c2: 
       lo = mid1;
     }
   }
-  const t = (lo + hi) / 2;
+  const refinedT = (lo + hi) / 2;
+  const t = distanceSquared(p, cubicPoint(c0, c1, c2, c3, refinedT)) < bestDistSq ? refinedT : bestT;
   return { t, point: cubicPoint(c0, c1, c2, c3, t) };
 }
 
-function arcCenter(from: WorldPoint, params: ArcParams): WorldPoint {
-  const startRadians = (params.startAngle * Math.PI) / 180;
+function arcBasis(segment: ArcSegment): NonNullable<ArcSegment["basis"]> {
+  return segment.basis ?? {
+    x: worldVector(segment.params.rx, 0),
+    y: worldVector(0, segment.params.ry)
+  };
+}
+
+function arcCenter(segment: ArcSegment, basis: NonNullable<ArcSegment["basis"]>): WorldPoint {
+  const startRadians = (segment.params.startAngle * Math.PI) / 180;
   return worldPoint(
-    from.x - params.rx * Math.cos(startRadians),
-    from.y - params.ry * Math.sin(startRadians)
+    segment.from.x - basis.x.x * Math.cos(startRadians) - basis.y.x * Math.sin(startRadians),
+    segment.from.y - basis.x.y * Math.cos(startRadians) - basis.y.y * Math.sin(startRadians)
   );
 }
 

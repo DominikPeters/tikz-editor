@@ -1,0 +1,1401 @@
+import { requireDefined } from "../utils/invariants.js";
+import { requireArrayValue } from "../utils/collections.js";
+import type { Span } from "../ast/types.js";
+import type { Diagnostic } from "../diagnostics/types.js";
+import { parseSimpleTexInlineNodes } from "../text/tex/ir.js";
+import {
+  concatMappedText,
+  createGeneratedMappedText,
+  createIdentityMappedText,
+} from "../text/source-map.js";
+import {
+  beamerSyntaxContext,
+  beamerOptionalArgumentAfter,
+  beamerOverlayArgumentAfter,
+  beamerRequiredArgumentAfter,
+  beamerControlSequencesIn,
+  beamerEnvironmentBoundariesIn,
+  type BeamerSyntaxContext,
+  type BeamerEnvironmentBoundary,
+} from "./syntax.js";
+import type {
+  BeamerColumnAlignment,
+  BeamerBlockBodyNode,
+  BeamerBlockEnvironment,
+  BeamerColumnBodyNode,
+  BeamerColumnFlowNode,
+  BeamerColumnsBodyNode,
+  BeamerFrameBodyIr,
+  BeamerFrameBodyNode,
+  BeamerLeafFlowNode,
+  BeamerParagraphBodyNode,
+  BeamerTitlePageBodyNode,
+  BeamerTheoremBodyNode,
+  BeamerTikzBodyNode,
+  BeamerUnsupportedBodyNode,
+  BeamerVerticalSpaceBodyNode,
+  ParseBeamerFrameBodyParams,
+} from "./content-types.js";
+import { scanBeamerFrameOverlays, type BeamerOverlayModel } from "./overlay.js";
+import { beamerTikzLayerState, readBeamerOverlayPicture } from "./overlay-pictures.js";
+import {
+  resolveBeamerTheoremOccurrences,
+  type BeamerTheoremOccurrence,
+} from "./theorems.js";
+import type { BeamerTheoremTemplateVariant } from "./types.js";
+import { projectBeamerPreformatted } from "./preformatted.js";
+import { parseTcolorboxOptions } from "./tcolorbox.js";
+
+const LIST_ENVIRONMENTS = new Set([
+  "itemize",
+  "enumerate",
+  "description",
+]);
+function isBlockEnvironment(name: string): name is BeamerBlockEnvironment {
+  return name === "block" || name === "alertblock" || name === "exampleblock";
+}
+const PROOF_ENVIRONMENTS = new Map<string, string>([
+  ["proof", "Proof"],
+  ["Proof", "Proof"],
+  ["Beweis", "Beweis"],
+]);
+
+function isProofEnvironment(name: string): boolean {
+  return PROOF_ENVIRONMENTS.has(name);
+}
+
+/**
+ * Lower frame-level source structure into a source-backed composition IR.
+ *
+ * This frontend owns Beamer environments. Text leaves remain exact source
+ * spans for the generic TeX paragraph/vlist frontend.
+ */
+export function parseBeamerFrameBody(
+  params: ParseBeamerFrameBodyParams
+): BeamerFrameBodyIr {
+  const { source, frame } = params;
+  const context = beamerSyntaxContext(source, params.syntax);
+  const diagnostics: Diagnostic[] = [];
+  // Validate at the package boundary even when unsupported listings become
+  // source cards before paragraph layout runs.
+  if (/\\begin\s*\{lstlisting\}/u.test(source.slice(frame.bodySpan.from, frame.bodySpan.to))) {
+    projectBeamerPreformatted(createIdentityMappedText(source.slice(frame.bodySpan.from, frame.bodySpan.to), frame.bodySpan.from), source, diagnostics);
+  }
+  const tokens = beamerEnvironmentBoundariesIn(context, frame.bodySpan);
+  const theoremOccurrences =
+    params.theoremOccurrences ??
+    (params.document
+      ? resolveBeamerTheoremOccurrences(params.document, context.syntax)
+      : new Map<number, BeamerTheoremOccurrence>());
+  const theoremTemplate =
+    params.document?.preamble.theoremTemplate ?? "default";
+  const overlays = params.overlays ?? scanBeamerFrameOverlays(source, frame, context.syntax);
+  const children: BeamerFrameBodyNode[] = [];
+  let cursor = frame.bodySpan.from;
+  let nodeIndex = 0;
+  const tikzLayer = beamerTikzLayerState(source) === "ours";
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = requireArrayValue(tokens, index);
+    // The fixed box owns its inner paragraph/list structure; do not extract
+    // child environments into the surrounding frame's vertical flow.
+    if (token.kind === "begin" && token.name === "overlayarea") {
+      const endIndex = matchingEnvironmentEnd(tokens, index);
+      if (endIndex >= 0) { index = endIndex; continue; }
+    }
+    // The editor's drawing layer stays in the paragraph, as an overlay picture does.
+    if (tikzLayer && token.kind === "begin" && token.name === "tikzlayer") {
+      const endIndex = matchingEnvironmentEnd(tokens, index);
+      if (endIndex >= 0) {
+        index = endIndex;
+        continue;
+      }
+    }
+    const unsupportedEndIndex = findUnsupportedEnvironmentEndIndex(
+      context,
+      tokens,
+      index,
+      overlays,
+      theoremOccurrences
+    );
+    if (unsupportedEndIndex >= 0) {
+      pushTextNode(source, { from: cursor, to: token.span.from }, frame.id, children);
+      children.push({
+        kind: "unsupported",
+        id: `${frame.id}:unsupported:${token.span.from}`,
+        span: { from: token.span.from, to: requireArrayValue(tokens, unsupportedEndIndex).span.to },
+        message: `The ${token.name} environment is not supported in this preview.`,
+      });
+      cursor = requireArrayValue(tokens, unsupportedEndIndex).span.to;
+      index = unsupportedEndIndex;
+      continue;
+    }
+    if (
+      token.kind !== "begin" ||
+      (token.name !== "columns" &&
+        token.name !== "tikzpicture" &&
+        token.name !== "center" &&
+        token.name !== "tcolorbox" &&
+        !isProofEnvironment(token.name) &&
+        !theoremOccurrences.has(token.span.from) &&
+        !isBlockEnvironment(token.name))
+    ) {
+      continue;
+    }
+    const endIndex = matchingEnvironmentEnd(tokens, index);
+    if (endIndex < 0) {
+      diagnostics.push({
+        severity: "error",
+        code: token.name === "columns"
+          ? "beamer-unterminated-columns"
+          : "beamer-unterminated-block",
+        message: `The ${token.name} environment has no matching end.`,
+        span: token.span,
+      });
+      break;
+    }
+    const end = requireArrayValue(tokens, endIndex);
+    const tikzNode = frameTikzFlowNode({
+      source,
+      context,
+      frameId: frame.id,
+      begin: token,
+      end,
+      nodeIndex,
+    });
+    if (
+      (token.name === "tikzpicture" || token.name === "center") &&
+      !tikzNode
+    ) {
+      // An ordinary center environment remains owned by the generic TeX
+      // vlist frontend. Only extract a center whose sole material is one
+      // TikZ picture.
+      // Overlay pictures stay in the paragraph as one zero-sized box.
+      // Their inner environments belong to TikZ, not to frame flow.
+      if (token.name === "tikzpicture") index = endIndex;
+      continue;
+    }
+    pushTextNode(source, { from: cursor, to: token.span.from }, frame.id, children);
+    children.push(
+      tikzNode ??
+      (token.name === "columns"
+        ? parseColumns({
+            context,
+            frameId: frame.id,
+            begin: token,
+            end,
+            tokens: tokens.slice(index + 1, endIndex),
+            diagnostics,
+            nodeIndex,
+            theoremOccurrences,
+            theoremTemplate,
+            overlays,
+          })
+        : isProofEnvironment(token.name) ||
+            theoremOccurrences.has(token.span.from)
+          ? parseTheorem({
+              context,
+              ownerId: frame.id,
+              begin: token,
+              end,
+              nodeIndex,
+              occurrence: theoremOccurrences.get(token.span.from) ?? null,
+              theoremTemplate,
+              theoremOccurrences,
+              overlays,
+            })
+          : parseBlock({
+            context,
+            ownerId: frame.id,
+            begin: token,
+            end,
+            nodeIndex,
+            diagnostics,
+            theoremOccurrences,
+            overlays,
+          })
+      )
+    );
+    nodeIndex += 1;
+    cursor = end.span.to;
+    index = endIndex;
+  }
+
+  pushTextNode(source, { from: cursor, to: frame.bodySpan.to }, frame.id, children);
+  return {
+    kind: "frame-body",
+    frameId: frame.id,
+    span: frame.bodySpan,
+    children: applyStandaloneAlignment(source, splitStandaloneFrameCommands(context, frame.id, children)),
+    overlays,
+    diagnostics,
+  };
+}
+
+/** A declaration before an extracted picture still governs the following
+ * frame material. It contributes no line or trivlist spacing of its own. */
+function applyStandaloneAlignment(source: string, children: BeamerFrameBodyNode[]): BeamerFrameBodyNode[] {
+  let alignment: "left" | "center" = "left";
+  return children.flatMap<BeamerFrameBodyNode>(node => {
+    if (node.kind === "paragraph") {
+      const declaration = /^\s*\\(centering|raggedright)\s*$/u.exec(source.slice(node.span.from, node.span.to).replace(/%[^\n]*/gu, ""));
+      if (declaration) { alignment = declaration[1] === "centering" ? "center" : "left"; return []; }
+      return [alignment === "center" ? { ...node, alignment } : node];
+    }
+    if (node.kind === "tikzpicture" && alignment === "center") return [{ ...node, horizontalAlignment: "center" as const }];
+    return [node];
+  });
+}
+
+function parseTheorem(params: {
+  context: BeamerSyntaxContext;
+  ownerId: string;
+  begin: BeamerEnvironmentBoundary;
+  end: BeamerEnvironmentBoundary;
+  nodeIndex: number;
+  occurrence: BeamerTheoremOccurrence | null;
+  theoremTemplate: BeamerTheoremTemplateVariant;
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
+  overlays: BeamerOverlayModel;
+}): BeamerTheoremBodyNode {
+  const {
+    context,
+    ownerId,
+    begin,
+    end,
+    nodeIndex,
+    occurrence,
+    theoremTemplate,
+  } = params;
+  let cursor = begin.span.to;
+  let overlay = beamerOverlayArgumentAfter(context, cursor, end.span.from) ??
+    undefined;
+  if (overlay) {
+    cursor = overlay.span.to;
+  }
+  const addition = beamerOptionalArgumentAfter(
+    context,
+    cursor,
+    end.span.from
+  ) ?? undefined;
+  if (addition) {
+    cursor = addition.span.to;
+  }
+  if (!overlay) {
+    overlay = beamerOverlayArgumentAfter(context, cursor, end.span.from) ??
+      undefined;
+    if (overlay) {
+      cursor = overlay.span.to;
+    }
+  }
+  const proofName = PROOF_ENVIRONMENTS.get(begin.name);
+  const proof = proofName != null;
+  const declaration = occurrence?.declaration ?? null;
+  const titleOwner = { from: begin.span.from, to: cursor };
+  const displayName = proof
+    ? addition?.value ?? proofName
+    : declaration?.displayName.value ?? begin.name;
+  const titleParts = [
+    createGeneratedMappedText(
+      displayName,
+      proof
+        ? "Beamer proof heading"
+        : "Beamer theorem declaration heading",
+      titleOwner
+    ),
+  ];
+  if (
+    !proof &&
+    occurrence?.number &&
+    (theoremTemplate === "numbered" || theoremTemplate === "ams-style")
+  ) {
+    titleParts.push(
+      createGeneratedMappedText(
+        ` ${occurrence.number}`,
+        "Beamer theorem counter",
+        titleOwner
+      )
+    );
+  }
+  if (!proof && addition) {
+    titleParts.push(
+      createGeneratedMappedText(" (", "Beamer theorem heading punctuation", titleOwner),
+      createIdentityMappedText(addition.value, addition.contentSpan.from),
+      createGeneratedMappedText(")", "Beamer theorem heading punctuation", titleOwner)
+    );
+  }
+  if (proof || theoremTemplate === "ams-style") {
+    titleParts.push(
+      createGeneratedMappedText(".", "Beamer theorem heading punctuation", titleOwner)
+    );
+  }
+  const titleMapped = concatMappedText(titleParts);
+  const title = {
+    span: titleOwner,
+    contentSpan: titleOwner,
+    value: titleMapped.text,
+  };
+  const bodySpan = { from: cursor, to: end.span.from };
+  const children = parseBlockLeafContent(context, bodySpan,
+    `${ownerId}:theorem:${nodeIndex}`, params.overlays, params.theoremOccurrences);
+  return {
+    kind: "theorem",
+    id: `${ownerId}:theorem:${nodeIndex}`,
+    environment: begin.name,
+    blockEnvironment:
+      declaration?.style === "example" ? "exampleblock" : "block",
+    theoremStyle: declaration?.style ?? "definition",
+    theoremTemplate,
+    declaration,
+    number: occurrence?.number ?? null,
+    proof,
+    qed: proof,
+    span: { from: begin.span.from, to: end.span.to },
+    beginSpan: begin.span,
+    endSpan: end.span,
+    ...(overlay !== undefined ? { overlay } : {}),
+    ...(addition !== undefined ? { addition } : {}),
+    title,
+    titleMapped,
+    bodySpan,
+    children,
+  };
+}
+
+function splitStandaloneFrameCommands(
+  context: BeamerSyntaxContext,
+  frameId: string,
+  children: readonly BeamerFrameBodyNode[]
+): BeamerFrameBodyNode[] {
+  return splitStandaloneVerticalSpaces(
+    context,
+    frameId,
+    splitVerticalFillCommands(
+      context,
+      stripFrameTitleCommands(
+        context,
+        splitTitlePageCommands(context, frameId, children)
+      )
+    )
+  );
+}
+
+/**
+ * `\frametitle`/`\framesubtitle` commands are frame header material: the
+ * scanner lifts their values into the frame model, and Beamer never
+ * typesets the commands as body prose. Remove them (with their arguments)
+ * from paragraph flow so they are neither rendered literally nor editable
+ * as body text.
+ */
+function stripFrameTitleCommands(
+  context: BeamerSyntaxContext,
+  children: readonly BeamerFrameBodyNode[]
+): BeamerFrameBodyNode[] {
+  const { source } = context;
+  const result: BeamerFrameBodyNode[] = [];
+  for (const child of children) {
+    if (child.kind !== "paragraph") {
+      result.push(child);
+      continue;
+    }
+    const removals: Span[] = [];
+    for (const command of beamerControlSequencesIn(context, child.span)) {
+      if (
+        (command.name !== "frametitle" && command.name !== "framesubtitle") ||
+        !hasBalancedBraces(source, { from: child.span.from, to: command.from })
+      ) {
+        continue;
+      }
+      let cursor = command.to;
+      const overlay = beamerOverlayArgumentAfter(context, cursor, child.span.to);
+      if (overlay) {
+        cursor = overlay.span.to;
+      }
+      const optional = beamerOptionalArgumentAfter(
+        context,
+        cursor,
+        child.span.to
+      );
+      if (optional) {
+        cursor = optional.span.to;
+      }
+      const value = beamerRequiredArgumentAfter(context, cursor, child.span.to);
+      if (value) {
+        removals.push({ from: command.from, to: value.span.to });
+      }
+    }
+    if (removals.length === 0) {
+      result.push(child);
+      continue;
+    }
+    emitParagraphPieces(source, child, removals, result);
+  }
+  return result;
+}
+
+/**
+ * TeX ends the current paragraph when it reaches vertical glue like
+ * `\vfill` in horizontal mode. The generic text frontend only supports
+ * vertical glue at paragraph-block starts (mid-paragraph `\vspace` gets
+ * the LaTeX `\vadjust` lowering; other glue aborts the whole chunk), so
+ * cut body chunks in front of each `\vfill` — the glue then leads its own
+ * chunk, which the frontend supports, and the surrounding prose survives.
+ */
+function splitVerticalFillCommands(
+  context: BeamerSyntaxContext,
+  children: readonly BeamerFrameBodyNode[]
+): BeamerFrameBodyNode[] {
+  const { source } = context;
+  const result: BeamerFrameBodyNode[] = [];
+  for (const child of children) {
+    if (child.kind !== "paragraph") {
+      result.push(child);
+      continue;
+    }
+    const cuts: Span[] = [];
+    let pieceStart = child.span.from;
+    for (const command of beamerControlSequencesIn(context, child.span)) {
+      if (command.name !== "vfill") {
+        continue;
+      }
+      const before = trimSpan(source, { from: pieceStart, to: command.from });
+      if (
+        before.to <= before.from ||
+        !hasBalancedBraces(source, { from: pieceStart, to: command.from })
+      ) {
+        continue;
+      }
+      cuts.push({ from: command.from, to: command.from });
+      pieceStart = command.from;
+    }
+    if (cuts.length === 0) {
+      result.push(child);
+      continue;
+    }
+    emitParagraphPieces(source, child, cuts, result);
+  }
+  return result;
+}
+
+/**
+ * Re-emit one paragraph node as the trimmed non-empty pieces around the
+ * given disjoint ordered spans. The first piece keeps the original node id
+ * so untouched siblings never collide; later pieces derive from it.
+ */
+function emitParagraphPieces(
+  source: string,
+  child: BeamerParagraphBodyNode,
+  removals: readonly Span[],
+  target: BeamerFrameBodyNode[]
+): void {
+  let cursor = child.span.from;
+  let pieceIndex = 0;
+  const pushPiece = (span: Span) => {
+    const trimmed = trimSpan(source, span);
+    if (trimmed.to <= trimmed.from) {
+      return;
+    }
+    target.push({
+      kind: "paragraph",
+      id: pieceIndex === 0 ? child.id : `${child.id}:${pieceIndex}`,
+      span: trimmed,
+    });
+    pieceIndex += 1;
+  };
+  for (const removal of removals) {
+    if (removal.from < cursor) {
+      continue;
+    }
+    pushPiece({ from: cursor, to: removal.from });
+    cursor = removal.to;
+  }
+  pushPiece({ from: cursor, to: child.span.to });
+}
+
+function hasBalancedBraces(source: string, span: Span): boolean {
+  let depth = 0;
+  for (let index = span.from; index < span.to; index += 1) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth < 0) {
+        return false;
+      }
+    }
+  }
+  return depth === 0;
+}
+
+function splitTitlePageCommands(
+  context: BeamerSyntaxContext,
+  frameId: string,
+  children: readonly BeamerFrameBodyNode[]
+): BeamerFrameBodyNode[] {
+  const { source } = context;
+  const result: BeamerFrameBodyNode[] = [];
+  let titlePageIndex = 0;
+  let paragraphIndex = 0;
+  for (const child of children) {
+    if (child.kind !== "paragraph") {
+      result.push(child);
+      continue;
+    }
+    const commands = beamerControlSequencesIn(context, child.span).filter(
+      (command) => command.name === "titlepage" || command.name === "maketitle" || command.name === "tableofcontents"
+    );
+    if (commands.length === 0) {
+      result.push(child);
+      continue;
+    }
+    let cursor = child.span.from;
+    for (const command of commands) {
+      const before = trimSpan(source, { from: cursor, to: command.from });
+      if (before.to > before.from) {
+        result.push({
+          kind: "paragraph",
+          id: `${frameId}:paragraph:${paragraphIndex}`,
+          span: before,
+        });
+        paragraphIndex += 1;
+      }
+      if (command.name === "tableofcontents") {
+        const options = beamerOptionalArgumentAfter(context, command.to, child.span.to) ?? undefined;
+        const span = { from: command.from, to: options?.span.to ?? command.to };
+        result.push({ kind: "contents", id: `${frameId}:contents:${titlePageIndex++}`, span, ...(options ? { options } : {}) });
+        cursor = span.to;
+        continue;
+      }
+      const titlePage: BeamerTitlePageBodyNode = {
+        kind: "title-page",
+        id: `${frameId}:title-page:${titlePageIndex}`,
+        span: { from: command.from, to: command.to },
+        commandSpan: { from: command.from, to: command.to },
+      };
+      result.push(titlePage);
+      titlePageIndex += 1;
+      cursor = command.to;
+    }
+    const after = trimSpan(source, { from: cursor, to: child.span.to });
+    if (after.to > after.from) {
+      result.push({
+        kind: "paragraph",
+        id: `${frameId}:paragraph:${paragraphIndex}`,
+        span: after,
+      });
+      paragraphIndex += 1;
+    }
+  }
+  return result;
+}
+
+function splitStandaloneVerticalSpaces(
+  context: BeamerSyntaxContext,
+  frameId: string,
+  children: readonly BeamerFrameBodyNode[]
+): BeamerFrameBodyNode[] {
+  const result: BeamerFrameBodyNode[] = [];
+  let verticalSpaceIndex = 0;
+  for (const child of children) {
+    if (child.kind !== "paragraph") {
+      result.push(child);
+      continue;
+    }
+    const nodes = standaloneVerticalSpaceNodes(
+      context,
+      frameId,
+      child.span,
+      verticalSpaceIndex
+    );
+    if (!nodes) {
+      result.push(child);
+      continue;
+    }
+    result.push(...nodes);
+    verticalSpaceIndex += nodes.length;
+  }
+  return result;
+}
+
+function standaloneVerticalSpaceNodes(
+  context: BeamerSyntaxContext,
+  frameId: string,
+  span: Span,
+  firstIndex: number
+): BeamerVerticalSpaceBodyNode[] | null {
+  const { source } = context;
+  const result: BeamerVerticalSpaceBodyNode[] = [];
+  let cursor = span.from;
+  for (const command of beamerControlSequencesIn(context, span)) {
+    if (!isIgnorableFrameSource(source, { from: cursor, to: command.from })) return null;
+    const node = verticalSpaceNode(context, command, span.to, `${frameId}:vspace:${firstIndex + result.length}`);
+    if (!node) return null;
+    result.push(node);
+    cursor = node.span.to;
+  }
+  return result.length > 0 &&
+      isIgnorableFrameSource(source, { from: cursor, to: span.to })
+    ? result
+    : null;
+}
+
+function verticalSpaceNode(
+  context: BeamerSyntaxContext,
+  command: { name: string; from: number; to: number; starred: boolean },
+  limit: number,
+  id: string
+): BeamerVerticalSpaceBodyNode | null {
+  if (command.name === "smallskip" || command.name === "medskip" || command.name === "bigskip") {
+    if (command.starred) return null;
+    return { kind: "vertical-space", id, command: command.name, starred: false,
+      span: { from: command.from, to: command.to } };
+  }
+  if (command.name !== "vspace") return null;
+  const value = beamerRequiredArgumentAfter(context, command.to, limit);
+  return value ? { kind: "vertical-space", id, command: "vspace", starred: command.starred, value,
+    span: { from: command.from, to: value.span.to } } : null;
+}
+
+function isIgnorableFrameSource(source: string, span: Span): boolean {
+  return source
+    .slice(span.from, span.to)
+    .replace(/%[^\r\n]*(?:\r?\n|$)/gu, "")
+    .trim() === "";
+}
+
+function frameTikzFlowNode(params: {
+  source: string;
+  context: BeamerSyntaxContext;
+  frameId: string;
+  begin: BeamerEnvironmentBoundary;
+  end: BeamerEnvironmentBoundary;
+  nodeIndex: number;
+}): BeamerTikzBodyNode | null {
+  const { source, context, frameId, begin, end, nodeIndex } = params;
+  if (begin.name === "tikzpicture") {
+    const roots = scanTikzRootsInSpan(context, frameId, {
+      from: begin.span.from,
+      to: end.span.to,
+    });
+    const root = roots[0];
+    return root && !readBeamerOverlayPicture(context, root.span)
+      ? {
+          kind: "tikzpicture",
+          id: `${frameId}:tikz:${nodeIndex}`,
+          span: root.span,
+          root,
+          horizontalAlignment: "left",
+        }
+      : null;
+  }
+  if (begin.name !== "center") {
+    return null;
+  }
+  const innerSpan = { from: begin.span.to, to: end.span.from };
+  const roots = scanTikzRootsInSpan(context, frameId, innerSpan);
+  const root = roots[0];
+  if (roots.length !== 1 || !root || readBeamerOverlayPicture(context, root.span)) {
+    return null;
+  }
+  const surroundingMaterial =
+    source.slice(innerSpan.from, root.span.from) +
+    source.slice(root.span.to, innerSpan.to);
+  if (surroundingMaterial.trim() !== "") {
+    return null;
+  }
+  return {
+    kind: "tikzpicture",
+    id: `${frameId}:tikz:${nodeIndex}`,
+    span: { from: begin.span.from, to: end.span.to },
+    root,
+    horizontalAlignment: "center",
+  };
+}
+
+function parseBlock(params: {
+  context: BeamerSyntaxContext;
+  ownerId: string;
+  begin: BeamerEnvironmentBoundary;
+  end: BeamerEnvironmentBoundary;
+  nodeIndex: number;
+  diagnostics: Diagnostic[];
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
+  overlays: BeamerOverlayModel;
+}): BeamerBlockBodyNode | BeamerUnsupportedBodyNode {
+  const {
+    context,
+    ownerId,
+    begin,
+    end,
+    nodeIndex,
+    diagnostics,
+  } = params;
+  if (begin.name === "tcolorbox") {
+    const options = beamerOptionalArgumentAfter(context, begin.span.to, end.span.from) ?? undefined;
+    const parsed = parseTcolorboxOptions(context.source, options, begin.span);
+    const bodySpan = { from: options?.span.to ?? begin.span.to, to: end.span.from };
+    const setup = beamerControlSequencesIn(context, { from: 0, to: begin.span.from }).find(command => command.name === "tcbset");
+    if (setup) parsed.diagnostics.push({ severity: "warning", code: "beamer-tcolorbox-unsupported-setup",
+      span: { from: setup.from, to: setup.to }, message: "Global tcolorbox style declarations are not supported in this preview." });
+    const lowerPart = beamerControlSequencesIn(context, bodySpan).find(command => ["tcblower", "tcbsubtitle"].includes(command.name));
+    const nestedBox = beamerEnvironmentBoundariesIn(context, bodySpan).find(token => token.kind === "begin" && (token.name === "tcolorbox" || isBlockEnvironment(token.name)));
+    if (lowerPart || nestedBox) parsed.diagnostics.push({ severity: "warning", code: "beamer-tcolorbox-unsupported-content",
+      span: nestedBox?.span ?? { from: requireDefined(lowerPart, "Expected an internal content value").from, to: requireDefined(lowerPart, "Expected an internal content value").to }, message: "Lower, subtitle and nested package boxes are not supported in this tcolorbox preview." });
+    diagnostics.push(...parsed.diagnostics);
+    const id = `${ownerId}:tcolorbox:${nodeIndex}`;
+    if (parsed.diagnostics.length) return { kind: "unsupported", id, span: { from: begin.span.from, to: end.span.to }, message: requireArrayValue(parsed.diagnostics, 0).message };
+    return {
+      kind: "block", packageBox: "tcolorbox", environment: "block", id,
+      span: { from: begin.span.from, to: end.span.to }, beginSpan: begin.span, endSpan: end.span,
+      ...(options !== undefined ? { options } : {}), title: parsed.title, bodySpan,
+      children: parseBlockLeafContent(context, bodySpan, id, params.overlays, params.theoremOccurrences),
+    };
+  }
+  // An action spec (`\begin{block}<2->`) precedes the title; visibility is
+  // handled by the frame overlay model, the parser only skips past it.
+  const overlay = beamerOverlayArgumentAfter(
+    context,
+    begin.span.to,
+    end.span.from
+  );
+  const options = beamerOptionalArgumentAfter(
+    context,
+    overlay?.span.to ?? begin.span.to,
+    end.span.from
+  ) ?? undefined;
+  const title = beamerRequiredArgumentAfter(
+    context,
+    options?.span.to ?? overlay?.span.to ?? begin.span.to,
+    end.span.from
+  );
+  if (!title) {
+    diagnostics.push({
+      severity: "error",
+      code: "beamer-block-missing-title",
+      message: `A Beamer ${begin.name} requires a title argument.`,
+      span: begin.span,
+    });
+  }
+  const blockEnvironment = begin.name;
+  if (!isBlockEnvironment(blockEnvironment)) throw new Error("Expected a Beamer block environment");
+  const fallbackTitle: BeamerBlockBodyNode["title"] = title ?? {
+    span: { from: begin.span.to, to: begin.span.to },
+    contentSpan: { from: begin.span.to, to: begin.span.to },
+    value: "",
+  };
+  const bodySpan = {
+    from: fallbackTitle.span.to,
+    to: end.span.from,
+  };
+  const children = parseBlockLeafContent(context, bodySpan,
+    `${ownerId}:block:${nodeIndex}`, params.overlays, params.theoremOccurrences);
+  return {
+    kind: "block",
+    id: `${ownerId}:block:${nodeIndex}`,
+    environment: blockEnvironment,
+    span: { from: begin.span.from, to: end.span.to },
+    beginSpan: begin.span,
+    endSpan: end.span,
+    ...(options !== undefined ? { options } : {}),
+    title: fallbackTitle,
+    bodySpan,
+    children,
+  };
+}
+
+/** Keep an unsupported block child local without swallowing supported siblings. */
+function parseBlockLeafContent(
+  context: BeamerSyntaxContext,
+  bodySpan: Span,
+  ownerId: string,
+  overlays: BeamerOverlayModel,
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>
+): BeamerLeafFlowNode[] {
+  const tokens = beamerEnvironmentBoundariesIn(context, bodySpan);
+  const children: BeamerLeafFlowNode[] = [];
+  let cursor = bodySpan.from;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = requireArrayValue(tokens, index);
+    // Beamer block leaves do not recursively lower package boxes. Keep their
+    // complete source local instead of feeding begin/end tokens to prose.
+    const endIndex = token.kind === "begin" && token.name === "tcolorbox"
+      ? matchingEnvironmentEnd(tokens, index)
+      : findUnsupportedEnvironmentEndIndex(context, tokens, index, overlays, theoremOccurrences);
+    if (endIndex < 0) continue;
+    const begin = requireArrayValue(tokens, index);
+    const span = { from: begin.span.from, to: requireArrayValue(tokens, endIndex).span.to };
+    pushTextNode(context.source, { from: cursor, to: span.from }, ownerId, children);
+    children.push({ kind: "unsupported", id: `${ownerId}:unsupported:${span.from}`,
+      span, message: `The ${begin.name} environment is not supported in this preview.` });
+    cursor = span.to;
+    index = endIndex;
+  }
+  pushTextNode(context.source, { from: cursor, to: bodySpan.to }, ownerId, children);
+  return children;
+}
+
+function parseColumns(params: {
+  context: BeamerSyntaxContext;
+  frameId: string;
+  begin: BeamerEnvironmentBoundary;
+  end: BeamerEnvironmentBoundary;
+  tokens: readonly BeamerEnvironmentBoundary[];
+  diagnostics: Diagnostic[];
+  nodeIndex: number;
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
+  theoremTemplate: BeamerTheoremTemplateVariant;
+  overlays: BeamerOverlayModel;
+}): BeamerColumnsBodyNode {
+  const {
+    context,
+    frameId,
+    begin,
+    end,
+    tokens,
+    diagnostics,
+    nodeIndex,
+    theoremOccurrences,
+    theoremTemplate,
+  } = params;
+  const options = beamerOptionalArgumentAfter(
+    context,
+    begin.span.to,
+    end.span.from
+  ) ?? undefined;
+  // beamer.cls executes its `c` class option by default. The columns
+  // environment then inherits that class default before applying its keys.
+  const alignment = resolveColumnAlignment(options?.value, "center");
+  const columns: BeamerColumnBodyNode[] = [];
+  const heads: { beginSpan: Span; endSpan: Span; bodyTo: number }[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = requireArrayValue(tokens, index);
+    if (token.kind !== "begin" || token.name !== "column") {
+      continue;
+    }
+    const endIndex = matchingEnvironmentEnd(tokens, index);
+    if (endIndex < 0) {
+      diagnostics.push({
+        severity: "error",
+        code: "beamer-unterminated-column",
+        message: "The column environment has no matching end.",
+        span: token.span,
+      });
+      continue;
+    }
+    const columnEnd = requireArrayValue(tokens, endIndex);
+    heads.push({ beginSpan: token.span, endSpan: columnEnd.span,
+      bodyTo: columnEnd.span.from });
+    index = endIndex;
+  }
+  // The command form opens the same minipage until the next column or the
+  // columns end. Explicit column environments already own their contents.
+  const commands = beamerControlSequencesIn(context, {
+    from: options?.span.to ?? begin.span.to, to: end.span.from,
+  }).filter(command => command.name === "column" && !heads.some(head =>
+    command.from >= head.beginSpan.from && command.from < head.endSpan.to));
+  for (const command of commands) {
+    heads.push({ beginSpan: { from: command.from, to: command.to },
+      endSpan: { from: end.span.from, to: end.span.from }, bodyTo: end.span.from });
+  }
+  heads.sort((a, b) => a.beginSpan.from - b.beginSpan.from);
+  for (const [index, head] of heads.entries()) {
+    if (head.endSpan.from === head.endSpan.to) {
+      head.bodyTo = heads[index + 1]?.beginSpan.from ?? end.span.from;
+      head.endSpan = { from: head.bodyTo, to: head.bodyTo };
+    }
+    let cursor = head.beginSpan.to;
+    const overlayBefore = beamerOverlayArgumentAfter(context, cursor, head.bodyTo);
+    if (overlayBefore) cursor = overlayBefore.span.to;
+    const columnOptions = beamerOptionalArgumentAfter(
+      context,
+      cursor,
+      head.bodyTo
+    ) ?? undefined;
+    if (columnOptions) cursor = columnOptions.span.to;
+    const overlayAfter = beamerOverlayArgumentAfter(context, cursor, head.bodyTo);
+    if (overlayAfter) cursor = overlayAfter.span.to;
+    const width = beamerRequiredArgumentAfter(
+      context,
+      cursor,
+      head.bodyTo
+    );
+    if (!width) {
+      diagnostics.push({
+        severity: "error",
+        code: "beamer-column-missing-width",
+        message: "A Beamer column requires a width argument.",
+        span: head.beginSpan,
+      });
+      continue;
+    }
+    const trailingOverlay = beamerOverlayArgumentAfter(context, width.span.to, head.bodyTo);
+    const bodySpan = {
+      from: trailingOverlay?.span.to ?? width.span.to,
+      to: head.bodyTo,
+    };
+    columns.push({
+      kind: "column",
+      id: `${frameId}:columns:${nodeIndex}:column:${columns.length}`,
+      span: { from: head.beginSpan.from, to: head.endSpan.to },
+      beginSpan: head.beginSpan,
+      endSpan: head.endSpan,
+      ...(columnOptions !== undefined ? { options: columnOptions } : {}),
+      alignment: resolveColumnAlignment(columnOptions?.value, alignment),
+      width,
+      bodySpan,
+      children: parseColumnFlow(
+        context,
+        frameId,
+        columns.length,
+        bodySpan,
+        tokens.filter(token => token.span.from >= bodySpan.from && token.span.to <= bodySpan.to),
+        diagnostics,
+        theoremOccurrences,
+        theoremTemplate,
+        params.overlays
+      ),
+    });
+  }
+  return {
+    kind: "columns",
+    id: `${frameId}:columns:${nodeIndex}`,
+    span: { from: begin.span.from, to: end.span.to },
+    beginSpan: begin.span,
+    endSpan: end.span,
+    ...(options !== undefined ? { options } : {}),
+    alignment,
+    bodySpan: {
+      from: options?.span.to ?? begin.span.to,
+      to: end.span.from,
+    },
+    columns,
+  };
+}
+
+function resolveColumnAlignment(
+  optionSource: string | undefined,
+  fallback: BeamerColumnAlignment
+): BeamerColumnAlignment {
+  if (!optionSource) {
+    return fallback;
+  }
+  let result = fallback;
+  for (const entry of splitTopLevelOptions(optionSource)) {
+    const key = entry.split("=", 1)[0]?.trim();
+    if (key === "T") {
+      result = "T";
+    } else if (key === "t") {
+      result = "top";
+    } else if (key === "c") {
+      result = "center";
+    } else if (key === "b") {
+      result = "bottom";
+    }
+  }
+  return result;
+}
+
+function splitTopLevelOptions(value: string): string[] {
+  const entries: string[] = [];
+  let start = 0;
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value.charAt(index);
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}") {
+      braceDepth = Math.max(0, braceDepth - 1);
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]") {
+      bracketDepth = Math.max(0, bracketDepth - 1);
+    } else if (char === "," && braceDepth === 0 && bracketDepth === 0) {
+      entries.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  entries.push(value.slice(start));
+  return entries;
+}
+
+function parseColumnFlow(
+  context: BeamerSyntaxContext,
+  frameId: string,
+  columnIndex: number,
+  bodySpan: Span,
+  tokens: readonly BeamerEnvironmentBoundary[],
+  diagnostics: Diagnostic[],
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>,
+  theoremTemplate: BeamerTheoremTemplateVariant,
+  overlays: BeamerOverlayModel
+): BeamerColumnFlowNode[] {
+  const { source } = context;
+  const structural: Array<{
+    span: Span;
+    node: BeamerColumnFlowNode;
+  }> = [];
+  // Preserve unsupported outer environments before extracting nested lists or pictures.
+  for (let index = 0; index < tokens.length; index += 1) {
+    const endIndex = findUnsupportedEnvironmentEndIndex(
+      context,
+      tokens,
+      index,
+      overlays,
+      theoremOccurrences
+    );
+    if (endIndex < 0) {
+      continue;
+    }
+    const begin = requireArrayValue(tokens, index);
+    const span = { from: begin.span.from, to: requireArrayValue(tokens, endIndex).span.to };
+    structural.push({
+      span,
+      node: {
+        kind: "unsupported",
+        id: `${frameId}:column:${columnIndex}:unsupported:${span.from}`,
+        span,
+        message: `The ${begin.name} environment is not supported in this preview.`,
+      },
+    });
+    index = endIndex;
+  }
+  let nodeIndex = 0;
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = requireArrayValue(tokens, index);
+    if (
+      token.kind !== "begin" ||
+      (
+        !isProofEnvironment(token.name) &&
+        token.name !== "tcolorbox" &&
+        !theoremOccurrences.has(token.span.from) &&
+        !isBlockEnvironment(token.name)
+      )
+    ) {
+      continue;
+    }
+    const endIndex = matchingEnvironmentEnd(tokens, index);
+    if (endIndex < 0) {
+      continue;
+    }
+    const end = requireArrayValue(tokens, endIndex);
+    const node = isProofEnvironment(token.name) ||
+        theoremOccurrences.has(token.span.from)
+      ? parseTheorem({
+          context,
+          ownerId: `${frameId}:column:${columnIndex}`,
+          begin: token,
+          end,
+          nodeIndex,
+          occurrence: theoremOccurrences.get(token.span.from) ?? null,
+          theoremTemplate,
+          theoremOccurrences,
+          overlays,
+        })
+      : parseBlock({
+          context,
+          ownerId: `${frameId}:column:${columnIndex}`,
+          begin: token,
+          end,
+          nodeIndex,
+          diagnostics,
+          theoremOccurrences,
+          overlays,
+        });
+    structural.push({ span: node.span, node });
+    nodeIndex += 1;
+    index = endIndex;
+  }
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = requireArrayValue(tokens, index);
+    if (
+      token.kind !== "begin" ||
+      !(token.name === "itemize" || token.name === "enumerate" || token.name === "description")
+    ) {
+      continue;
+    }
+    const endIndex = matchingEnvironmentEnd(tokens, index);
+    if (endIndex < 0) {
+      continue;
+    }
+    const end = requireArrayValue(tokens, endIndex);
+    const span = { from: token.span.from, to: end.span.to };
+    structural.push({
+      span,
+      node: {
+        kind: "list",
+        id: `${frameId}:column:${columnIndex}:list:${nodeIndex}`,
+        environment: token.name,
+        span,
+      },
+    });
+    nodeIndex += 1;
+    index = endIndex;
+  }
+
+  for (const root of scanTikzRootsInSpan(context, frameId, bodySpan)) {
+    // An overlay picture is an empty box in the text around it.
+    if (readBeamerOverlayPicture(context, root.span)) continue;
+    structural.push({
+      span: root.span,
+      node: {
+        kind: "tikzpicture",
+        id: `${frameId}:column:${columnIndex}:tikz:${nodeIndex}`,
+        span: root.span,
+        root,
+        horizontalAlignment: "left",
+      },
+    });
+    nodeIndex += 1;
+  }
+
+  for (const command of beamerControlSequencesIn(context, bodySpan)) {
+    const node = verticalSpaceNode(context, command, bodySpan.to, `${frameId}:column:${columnIndex}:vspace:${nodeIndex}`);
+    if (!node || isInsideNativeTextFlow(context, command.from, overlays)) continue;
+    if (structural.some(entry => entry.span.from <= command.from && command.from < entry.span.to)) continue;
+    const before = Math.max(bodySpan.from, ...structural.filter(entry => entry.span.to <= command.from).map(entry => entry.span.to));
+    const after = Math.min(bodySpan.to, ...structural.filter(entry => entry.span.from >= node.span.to).map(entry => entry.span.from));
+    // A source newline does not end a TeX paragraph. Keep spacing between
+    // text runs in the native frontend, which owns paragraph and line breaks.
+    if (!isIgnorableFrameSource(source, { from: before, to: command.from }) &&
+      !isIgnorableFrameSource(source, { from: node.span.to, to: after })) continue;
+    structural.push({ span: node.span, node });
+    nodeIndex += 1;
+  }
+
+  structural.sort((left, right) => left.span.from - right.span.from);
+  const result: BeamerColumnFlowNode[] = [];
+  let cursor = bodySpan.from;
+  for (const entry of structural) {
+    if (entry.span.from < cursor) {
+      continue;
+    }
+    pushTextNode(
+      source,
+      { from: cursor, to: entry.span.from },
+      `${frameId}:column:${columnIndex}`,
+      result
+    );
+    result.push(entry.node);
+    cursor = entry.span.to;
+  }
+  pushTextNode(
+    source,
+    { from: cursor, to: bodySpan.to },
+    `${frameId}:column:${columnIndex}`,
+    result
+  );
+  return result;
+}
+
+function scanTikzRootsInSpan(
+  context: BeamerSyntaxContext,
+  frameId: string,
+  span: Span
+) {
+  const tokens = beamerEnvironmentBoundariesIn(context, span);
+  const roots: Array<{
+    kind: "tikzpicture";
+    id: string;
+    span: Span;
+    beginSpan: Span;
+    endSpan: Span;
+  }> = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = requireArrayValue(tokens, index);
+    if (token.kind !== "begin" || token.name !== "tikzpicture") {
+      continue;
+    }
+    const endIndex = matchingEnvironmentEnd(tokens, index);
+    if (endIndex < 0) {
+      continue;
+    }
+    const end = requireArrayValue(tokens, endIndex);
+    roots.push({
+      kind: "tikzpicture",
+      id: `${frameId}:tikz:${roots.length}`,
+      span: { from: token.span.from, to: end.span.to },
+      beginSpan: token.span,
+      endSpan: end.span,
+    });
+    index = endIndex;
+  }
+  return roots;
+}
+
+function matchingEnvironmentEnd(
+  tokens: readonly BeamerEnvironmentBoundary[],
+  beginIndex: number
+): number {
+  const begin = tokens[beginIndex];
+  if (begin?.kind !== "begin") {
+    return -1;
+  }
+  let depth = 0;
+  for (let index = beginIndex; index < tokens.length; index += 1) {
+    const token = requireArrayValue(tokens, index);
+    if (token.name !== begin.name) {
+      continue;
+    }
+    depth += token.kind === "begin" ? 1 : -1;
+    if (depth === 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function pushTextNode(
+  source: string,
+  span: Span,
+  ownerId: string,
+  target: { length: number; push(node: BeamerParagraphBodyNode): unknown }
+): void {
+  const trimmed = trimSpan(source, span);
+  if (trimmed.to <= trimmed.from) {
+    return;
+  }
+  target.push({
+    kind: "paragraph",
+    id: `${ownerId}:paragraph:${target.length}`,
+    span: trimmed,
+  });
+}
+
+function trimSpan(source: string, span: Span): Span {
+  let { from, to } = span;
+  while (from < to && /\s/u.test(source.charAt(from))) {
+    from += 1;
+  }
+  while (to > from && /\s/u.test(source.charAt(to - 1))) {
+    to -= 1;
+  }
+  return { from, to };
+}
+
+function isInsideNativeTextFlow(
+  context: BeamerSyntaxContext,
+  offset: number,
+  overlays: BeamerOverlayModel
+): boolean {
+  let node = context.syntax.tree.resolveInner(offset + 1, 1);
+  while (node.parent) {
+    if (["InlineMath", "DisplayMath", "MathEnvironment"].includes(node.name)) {
+      return true;
+    }
+    if (
+      node.name === "Group" &&
+      node.from < offset &&
+      !overlays.commands.some((command) =>
+        command.branches.some((branch) =>
+          branch.span.from === node.from && branch.span.to === node.to
+        )
+      )
+    ) {
+      // Overlay argument groups can contain frame flow; other groups stay inline.
+      return true;
+    }
+    // Keep nested failures inside supported paragraph containers in their own frontend.
+    if (node.name === "Environment" && node.from < offset) {
+      const boundary = context.syntax.environmentBoundaryByStart.get(node.from);
+      if (
+        boundary &&
+        (LIST_ENVIRONMENTS.has(boundary.name) || [
+          "tikzpicture",
+          "tikzlayer",
+          "minipage",
+          "quote",
+          "quotation",
+          "center",
+          "flushleft",
+          "flushright",
+        ].includes(boundary.name))
+      ) {
+        return true;
+      }
+    }
+    node = node.parent;
+  }
+  return false;
+}
+
+function findUnsupportedEnvironmentEndIndex(
+  context: BeamerSyntaxContext,
+  tokens: readonly BeamerEnvironmentBoundary[],
+  index: number,
+  overlays: BeamerOverlayModel,
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>
+): number {
+  const begin = requireArrayValue(tokens, index);
+  if (begin.kind === "begin" && begin.name === "lstlisting" && !isInsideNativeTextFlow(context, begin.span.from, overlays)) {
+    const endIndex = matchingEnvironmentEnd(tokens, index);
+    if (endIndex < 0) return -1;
+    const raw = context.source.slice(begin.span.from, requireArrayValue(tokens, endIndex).span.to);
+    const projected = projectBeamerPreformatted(createIdentityMappedText(raw, begin.span.from), context.source, []);
+    return projected.text === raw ? endIndex : -1;
+  }
+  if (
+    begin.kind !== "begin" ||
+    [
+      "columns",
+      "column",
+      "tikzpicture",
+      "tabular",
+      "lstlisting",
+      "alltt",
+      "subfigure",
+      "figure",
+      "table",
+      "tcolorbox",
+      "overprint",
+      "overlayarea",
+      "center",
+      "onlyenv",
+      "uncoverenv",
+      "visibleenv",
+      "invisibleenv",
+      "thebibliography",
+    ].includes(begin.name) ||
+    isBlockEnvironment(begin.name) ||
+    isProofEnvironment(begin.name) ||
+    theoremOccurrences.has(begin.span.from) ||
+    isInsideNativeTextFlow(context, begin.span.from, overlays)
+  ) {
+    return -1;
+  }
+  const isOverlaySyntax = overlays.commands.some((command) =>
+    command.syntaxSpans.some((span) =>
+      span.from === begin.span.from && span.to >= begin.span.to
+    )
+  );
+  if (isOverlaySyntax) {
+    return -1;
+  }
+  const endIndex = matchingEnvironmentEnd(tokens, index);
+  if (endIndex < 0) {
+    return -1;
+  }
+  // Reuse native recognition so supported text environments keep their renderer.
+  const firstNode = parseSimpleTexInlineNodes(
+    context.source.slice(begin.span.from, requireArrayValue(tokens, endIndex).span.to)
+  ).nodes[0];
+  if (
+    firstNode?.kind === "literal" &&
+    firstNode.sourceStart === 0 &&
+    firstNode.reason === "unsupported-command"
+  ) {
+    return endIndex;
+  }
+  return -1;
+}

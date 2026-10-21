@@ -185,7 +185,7 @@ describe("semantic node helper coverage", () => {
   it("parses multipart node text and rectangle split options", () => {
     const parts = parseNodeParts(String.raw`top \nodepart[style={x[y]}] {second} lower \nodepart   {third} c \nodepart{2} d \nodepart{{fourth}} e \nodepart{} tail \nodepart missing`);
     expect(parts).toEqual([
-      { name: "text", text: "top tail \\nodepartmissing" },
+      { name: "text", text: "top tail \\nodepart missing" },
       { name: "second", text: "lower" },
       { name: "third", text: "c" },
       { name: "2", text: "d" },
@@ -206,14 +206,29 @@ describe("semantic node helper coverage", () => {
     expect(resolveRectangleSplitIgnoreEmptyParts(parseOptionListRaw("[rectangle split ignore empty parts=0]"))).toBe(false);
     expect(resolveRectangleSplitIgnoreEmptyParts(parseOptionListRaw("[rectangle split ignore empty parts=yes]"))).toBe(true);
 
-    expect(resolveRectangleSplitPartTexts(parts, 4)).toEqual(["top tail \\nodepartmissing", "lower d", "c", "e"]);
+    expect(resolveRectangleSplitPartTexts(parts, 4)).toEqual(["top tail \\nodepart missing", "lower d", "c", "e"]);
     expect(resolveRectangleSplitPartTexts(parseNodeParts(String.raw`a\nodepart{text} x\nodepart{one} y\nodepart{twentieth} z\nodepart{unknown} u\nodepart{21} v`), 2)).toEqual(["a x y", "z"]);
+
+    expect(
+      parseNodeParts(
+        String.raw`top {\nodepart{two} nested} $x+\nodepart{two}$ % \nodepart{two}` +
+          "\n" +
+          String.raw`\nodepart{lower} bottom`
+      )
+    ).toEqual([
+      {
+        name: "text",
+        text:
+          String.raw`top {\nodepart{two} nested} $x+\nodepart{two}$ % \nodepart{two}`,
+      },
+      { name: "lower", text: "bottom" },
+    ]);
   });
 
   it("resolves node placement fractions and segment interpolation variants", () => {
     expect(resolveNodePositionFraction(undefined)).toBeNull();
     expect(resolveNodePositionFraction(parseOptionListRaw("[very near start]"))).toBeCloseTo(0.125);
-    expect(resolveNodePositionFraction(parseOptionListRaw("[near start,near end,at end,pos=2]"))).toBe(1);
+    expect(resolveNodePositionFraction(parseOptionListRaw("[near start,near end,at end,pos=2]"))).toBe(2);
     expect(resolveNodePositionFraction(parseOptionListRaw("[pos=bad]"))).toBeNull();
 
     expect(pointAtPlacementSegment({ kind: "line", from: wp(0, 0), to: wp(10, 0) }, 0.25).x).toBeCloseTo(2.5);
@@ -298,9 +313,9 @@ describe("semantic node helper coverage", () => {
       }),
       "math"
     );
-    expect(measured.textRenderInfo.mode).toBe("mathjax");
-    if (measured.textRenderInfo.mode !== "mathjax") {
-      throw new Error("expected MathJax render info");
+    expect(measured.textRenderInfo.mode).toBe("tex");
+    if (measured.textRenderInfo.mode !== "tex") {
+      throw new Error("expected native TeX render info");
     }
     expect(measured.textRenderInfo.layoutKind).toBe("explicit-multiline");
     expect(measured.textRenderInfo.paragraphAlignment).toBe("center");
@@ -320,8 +335,8 @@ describe("semantic node helper coverage", () => {
           renderSourceText: "x y"
       })
     );
-    if (measuredWrappedCenter.textRenderInfo.mode !== "mathjax") {
-      throw new Error("expected MathJax render info");
+    if (measuredWrappedCenter.textRenderInfo.mode !== "tex") {
+      throw new Error("expected native TeX render info");
     }
     expect(measuredWrappedCenter.textRenderInfo.paragraphAlignment).toBe("center");
 
@@ -338,6 +353,13 @@ describe("semantic node helper coverage", () => {
 
     const empty = resolveNodeLayout("", parseOptionListRaw("[text height=5pt]"), style);
     expect(empty.textBlockHeight).toBeGreaterThan(0);
+    const largeFont = resolveNodeLayout(
+      "X",
+      undefined,
+      { ...style, fontSize: 20 }
+    );
+    expect(largeFont.naturalWidth - largeFont.textBlockWidth)
+      .toBeCloseTo(2 * 0.3333 * 20, 6);
     const circle = adjustNodeLayoutForShape(wrapped, "circle");
     const ellipse = adjustNodeLayoutForShape(wrapped, "ellipse");
     expect(circle.visualWidth).toBeCloseTo(circle.visualHeight);

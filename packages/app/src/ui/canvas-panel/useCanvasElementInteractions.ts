@@ -1,10 +1,14 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import type { EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
-import { clientPoint, px, pt, worldBounds, worldVector } from "tikz-editor/coords/index";
-import { buildSnapContext, collectSelectionGeometryFromBounds, collectSourceWorldBounds, type SnapBounds, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "tikz-editor/edit/snapping";
-import type { EditHandle, SceneElement } from "tikz-editor/semantic/types";
+import { clientPoint, px, pt, worldVector } from "@tikz-editor/core/coords/index";
+import { buildSnapContext, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "@tikz-editor/core/edit/snapping";
+import type { Span } from "@tikz-editor/core/ast/types";
+import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
+import type { EditHandle, SceneElement } from "@tikz-editor/core/semantic/types";
 import type { ClientPoint, WorldBounds, WorldPoint } from "../coords/types";
-import { resolveEligibleExplicitPath, type ExplicitPathAnalysis } from "tikz-editor/edit/path-editing";
-import { closestPointOnLine, closestPointOnCubic } from "tikz-editor/edit/curve-math";
+import { resolveEligibleExplicitPath, type ExplicitPathAnalysis } from "@tikz-editor/core/edit/path-editing";
+import { closestPointOnLine, closestPointOnCubic } from "@tikz-editor/core/edit/curve-math";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { clientToWorldPoint } from "./geometry";
 import { makeMergeKey, selectionAnchorRatioFromPoint } from "./panel-helpers";
@@ -27,6 +31,7 @@ import type {
   ValueSetter
 } from "./types";
 import type { HitRegion } from "./hit-regions";
+import { collectElementDragGeometry } from "./element-drag-geometry";
 
 export type UseCanvasElementInteractionsArgs = {
   svgResult: CanvasSnapshot["svg"];
@@ -42,6 +47,8 @@ export type UseCanvasElementInteractionsArgs = {
   directManipulationDisabledReasonBySourceId?: ReadonlyMap<string, string>;
   snapshot: CanvasSnapshot;
   source: string;
+  prepareEditGeometry: () => EditGeometrySession | undefined;
+  nestedFigureSpan?: Span | null;
   setWarning: StateSetter<string | null>;
   onBucketFillRegion: (region: HitRegion | undefined) => void;
   setSnapLines: StateSetter<SnapLine[]>;
@@ -58,9 +65,15 @@ export type UseCanvasElementInteractionsArgs = {
   scopeOverlay: ScopeOverlayIndex;
   focusedScopeId: string | null;
   applyActionWithFeedback: ApplyActionWithFeedbackFn;
-  activeFigureId: string | null;
+  activeRootId: string | null;
   parseOptions: CanvasEditParseOptions;
   onNodePositionTargetPick?: (targetId: string) => boolean;
+  /** Deck object-layer selection for regions carrying a `deckObjectId`. */
+  onDeckObjectSelect?: (objectId: string) => void;
+  /** Double-click on a deck object region (nested figure entry). */
+  onDeckObjectActivate?: (objectId: string) => void;
+  /** Select a shape whose picture has not supplied the current editing geometry yet. */
+  onLayerEnter?: (entry: NonNullable<HitRegion["layerEntry"]>) => void;
 };
 
 function clientPointFromEvent(event: Pick<PointerEvent | ReactPointerEvent<SVGElement> | ReactMouseEvent<SVGElement>, "clientX" | "clientY">): ClientPoint {
@@ -93,6 +106,8 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     directManipulationDisabledReasonBySourceId,
     snapshot,
     source,
+    prepareEditGeometry,
+    nestedFigureSpan,
     setWarning,
     onBucketFillRegion,
     setSnapLines,
@@ -109,27 +124,20 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     scopeOverlay,
     focusedScopeId,
     applyActionWithFeedback,
-    activeFigureId,
     parseOptions,
-    onNodePositionTargetPick
+    onNodePositionTargetPick,
+    onDeckObjectSelect,
+    onDeckObjectActivate,
+    onLayerEnter
   } = args;
 
+  const lastDeckObjectPressRef = useRef<{ objectId: string; at: number } | null>(null);
   const pendingScopeDrillRef = useRef<{
     pointerId: number;
     startClient: ClientPoint;
     selectedScopeId: string;
     hitSourceId: string;
     dragIds: string[];
-    moved: boolean;
-    dragStarted: boolean;
-  } | null>(null);
-  const pendingTextInteractionRef = useRef<{
-    pointerId: number;
-    startClient: ClientPoint;
-    targetId: string;
-    textTarget: EditableTextTarget;
-    dragIds: string[];
-    wasSelectedOnWorldPointerDown: boolean;
     moved: boolean;
     dragStarted: boolean;
   } | null>(null);
@@ -174,59 +182,34 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         ? buildSnapContext({
             sceneElements: snapshot.scene.elements,
             selectedSourceIds: snapExcludedSourceIds,
+            ...(snapshot.semanticResult?.dependencies !== undefined ? { dependencies: snapshot.semanticResult.dependencies } : {}),
             guides: snapGuideInput,
             settings: snapSettingsPatch,
             zoom: canvasTransform.scale,
             viewportWorld: viewportWorldBounds
           })
         : null;
-      const worldBoundsBySource = snapshot.scene
-        ? collectSourceWorldBounds(snapshot.scene.elements)
-        : new Map<string, SnapBounds>();
-      const worldInteractionBoundsBySource = new Map<string, SnapBounds>(worldBoundsBySource);
-      for (const scopeId of scopeOverlay.scopesById.keys()) {
-        let mergedBounds: WorldBounds | null = null;
-        for (const [sourceId, sourceBounds] of worldBoundsBySource.entries()) {
-          const ancestors = scopeOverlay.ancestorScopeIdsBySourceId.get(sourceId) ?? [];
-          if (!ancestors.includes(scopeId)) {
-            continue;
-          }
-          mergedBounds = mergedBounds
-            ? worldBounds(
-                pt(Math.min(mergedBounds.minX, sourceBounds.minX)),
-                pt(Math.min(mergedBounds.minY, sourceBounds.minY)),
-                pt(Math.max(mergedBounds.maxX, sourceBounds.maxX)),
-                pt(Math.max(mergedBounds.maxY, sourceBounds.maxY))
-              )
-            : worldBounds(sourceBounds.minX, sourceBounds.minY, sourceBounds.maxX, sourceBounds.maxY);
-        }
-        if (!mergedBounds) {
-          continue;
-        }
-        worldInteractionBoundsBySource.set(scopeId, Object.assign(worldBounds(
-          mergedBounds.minX,
-          mergedBounds.minY,
-          mergedBounds.maxX,
-          mergedBounds.maxY
-        ), { sourceId: scopeId }));
-      }
-
-      const initialSelection = collectSelectionGeometryFromBounds(worldInteractionBoundsBySource, draggedIds);
+      const initialSelection = collectElementDragGeometry(snapshot.scene?.elements ?? [], draggedIds, scopeOverlay);
       const selectionAnchorRatio = initialSelection
         ? selectionAnchorRatioFromPoint(initialSelection.bounds, world)
         : null;
       setSnapLines([]);
 
+      const geometry = prepareEditGeometry();
       setDragState({
         kind: "element",
+        ...(geometry !== undefined ? { geometry } : {}),
         pointerId,
         elementIds: draggedIds,
         startWorld: world,
-        adornmentDragFromText:
-          draggedIds.length === 1 && draggedIds[0]?.startsWith("node-adornment:")
-            ? options.adornmentDragFromText === true
-            : undefined,
+        ...(draggedIds.length === 1 && draggedIds[0]?.startsWith("node-adornment:") ? { adornmentDragFromText: options.adornmentDragFromText === true } : {}),
         lastAppliedTotalDelta: worldVector(pt(0), pt(0)),
+        baseline: {
+          source: nestedFigureSpan ? maskTikzPictureSource(source, nestedFigureSpan) : source,
+          editHandles: snapshot.editHandles,
+          ...(parseOptions.sourceFingerprint !== undefined ? { sourceFingerprint: parseOptions.sourceFingerprint } : {})
+        },
+        latestSource: source,
         snapContext,
         initialSelection,
         selectionAnchorRatio,
@@ -247,6 +230,8 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     },
     [
       canvasTransform.scale,
+      nestedFigureSpan,
+      parseOptions.sourceFingerprint,
       directManipulationDisabledReasonBySourceId,
       draggableSourceIds,
       logSnapDebug,
@@ -257,8 +242,11 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       snapGuideInput,
       snapSettingsPatch,
       snapshot.scene,
+      snapshot.editHandles,
+      snapshot.semanticResult,
       snapshot.source,
       source,
+      prepareEditGeometry,
       viewportWorldBounds
     ]
   );
@@ -381,80 +369,12 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       setSnapLines([]);
     }
 
-    function onTextWorldPointerMove(event: PointerEvent) {
-      const pending = pendingTextInteractionRef.current;
-      if (pending?.pointerId !== event.pointerId || pending.dragStarted) {
-        return;
-      }
-      const clientPoint = clientPointFromEvent(event);
-      const dx = clientPoint.x - pending.startClient.x;
-      const dy = clientPoint.y - pending.startClient.y;
-      if ((dx * dx) + (dy * dy) <= 16) {
-        return;
-      }
-      pending.moved = true;
-      if (!svgResult) {
-        return;
-      }
-      const world = clientToWorldPoint(clientPoint, interactionSvgRef.current, svgResult.viewBox);
-      if (!world) {
-        return;
-      }
-      if (!pending.wasSelectedOnWorldPointerDown) {
-        dispatch({ type: "SELECT", id: pending.targetId, additive: false });
-        dispatch({
-          type: "SET_FOCUSED_SCOPE",
-          scopeId: resolveFocusedScopeIdForSelection(pending.targetId, scopeOverlay)
-        });
-      }
-      closeTextEditingSession();
-      startElementDrag(event.pointerId, world, pending.dragIds);
-      pending.dragStarted = true;
-    }
-
-    function onTextWorldPointerUp(event: PointerEvent) {
-      const pending = pendingTextInteractionRef.current;
-      if (pending?.pointerId !== event.pointerId) {
-        return;
-      }
-      pendingTextInteractionRef.current = null;
-      if (pending.moved) {
-        return;
-      }
-      dispatch({ type: "SELECT", id: pending.targetId, additive: false });
-      dispatch({
-        type: "SET_FOCUSED_SCOPE",
-        scopeId: resolveFocusedScopeIdForSelection(pending.targetId, scopeOverlay)
-      });
-      beginCanvasTextInteraction(
-        {
-          shiftKey: false,
-          ctrlKey: false,
-          metaKey: false,
-          button: 0,
-          detail: 1,
-          clientX: event.clientX,
-          clientY: event.clientY,
-          pointerId: event.pointerId,
-          currentTarget: {
-            setPointerCapture() {
-              // No-op for deferred text activation outside the original React event.
-            }
-          }
-        } as unknown as ReactPointerEvent<SVGElement>,
-        pending.textTarget
-      );
-    }
-
     window.addEventListener("pointerdown", onTouchPointerDownCapture, true);
     window.addEventListener("pointerup", onTouchPointerEndCapture, true);
     window.addEventListener("pointercancel", onTouchPointerEndCapture, true);
     window.addEventListener("pointermove", onWorldPointerMove);
     window.addEventListener("pointerup", onWorldPointerUp);
     window.addEventListener("pointercancel", onWorldPointerUp);
-    window.addEventListener("pointermove", onTextWorldPointerMove);
-    window.addEventListener("pointerup", onTextWorldPointerUp);
-    window.addEventListener("pointercancel", onTextWorldPointerUp);
     return () => {
       window.removeEventListener("pointerdown", onTouchPointerDownCapture, true);
       window.removeEventListener("pointerup", onTouchPointerEndCapture, true);
@@ -462,11 +382,8 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       window.removeEventListener("pointermove", onWorldPointerMove);
       window.removeEventListener("pointerup", onWorldPointerUp);
       window.removeEventListener("pointercancel", onWorldPointerUp);
-      window.removeEventListener("pointermove", onTextWorldPointerMove);
-      window.removeEventListener("pointerup", onTextWorldPointerUp);
-      window.removeEventListener("pointercancel", onTextWorldPointerUp);
     };
-  }, [beginCanvasTextInteraction, closeTextEditingSession, dispatch, interactionSvgRef, scopeOverlay, selectedElementIds, setSnapLines, startElementDrag, svgResult]);
+  }, [dispatch, interactionSvgRef, scopeOverlay, selectedElementIds, setSnapLines, startElementDrag, svgResult]);
 
   const onElementPointerDown = useCallback(
     (event: ReactPointerEvent<SVGElement>, targetId: string, region?: HitRegion) => {
@@ -483,6 +400,47 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         return;
       }
       if (toolMode !== "select") return;
+      if (region?.layerEntry && onLayerEnter && event.button === 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        suppressNextBackgroundClickRef.current = true;
+        viewportRef.current?.focus({ preventScroll: true });
+        closeTextEditingSession();
+        onLayerEnter(region.layerEntry);
+        return;
+      }
+      if (
+        region?.shape === "rect" &&
+        region.deckObjectId != null &&
+        onDeckObjectSelect &&
+        event.button === 0
+      ) {
+        // Deck object layer: clicking chrome or a non-text render selects
+        // the object instead of opening a text session.
+        event.preventDefault();
+        event.stopPropagation();
+        suppressNextBackgroundClickRef.current = true;
+        viewportRef.current?.focus({ preventScroll: true });
+        closeTextEditingSession();
+        // Chromium reports `detail: 0` on pointerdown, so double clicks are
+        // detected by hand: a second press on the same object within the
+        // double-click window activates it (nested figure entry for
+        // embedded tikzpictures) instead of re-selecting.
+        const now = performance.now();
+        const previousPress = lastDeckObjectPressRef.current;
+        lastDeckObjectPressRef.current = { objectId: region.deckObjectId, at: now };
+        if (
+          onDeckObjectActivate &&
+          previousPress?.objectId === region.deckObjectId &&
+          now - previousPress.at < 500
+        ) {
+          lastDeckObjectPressRef.current = null;
+          onDeckObjectActivate(region.deckObjectId);
+          return;
+        }
+        onDeckObjectSelect(region.deckObjectId);
+        return;
+      }
       const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
       const clientPoint = clientPointFromEvent(event);
       const hitSourceId = typeof region?.sourceId === "string" ? region.sourceId : targetId;
@@ -515,7 +473,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       event.stopPropagation();
       suppressNextBackgroundClickRef.current = true;
 
-      if (!additiveSelection && matrixEdgeSelection && event.button === 0) {
+      if (!additiveSelection && matrixEdgeSelection) {
         closeTextEditingSession();
         setExpandedDensePathSourceId(null);
         dispatch({ type: "SELECT_RANGE", ids: matrixEdgeSelection.selectionIds });
@@ -529,36 +487,12 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
 
       const textTarget = resolvedTargetId === targetId ? resolveEditableTextTarget(targetId, region) : null;
       if (!additiveSelection && textTarget) {
-        const draggedIds = alreadySelected && selectedElementIds.size > 0 ? [...selectedElementIds] : [resolvedTargetId];
-        const supportsDeferredTextDrag = snapshot.editHandles.some(
-          (handle: EditHandle) =>
-            handle.sourceRef.sourceId === resolvedTargetId &&
-            handle.kind === "node-position" &&
-            handle.pathAttachmentContext != null
-        );
-        if (
-          supportsDeferredTextDrag &&
-          event.pointerType !== "touch" &&
-          draggedIds.every((id) => draggableSourceIds.has(id))
-        ) {
-          pendingTextInteractionRef.current = {
-            pointerId: event.pointerId,
-            startClient: clientPoint,
-            targetId: resolvedTargetId,
-            textTarget,
-            dragIds: draggedIds,
-            wasSelectedOnWorldPointerDown: alreadySelected,
-            moved: false,
-            dragStarted: false
-          };
-        } else {
-          dispatch({ type: "SELECT", id: targetId, additive: false });
-          dispatch({
-            type: "SET_FOCUSED_SCOPE",
-            scopeId: resolveFocusedScopeIdForSelection(targetId, scopeOverlay)
-          });
-          beginCanvasTextInteraction(event, textTarget);
-        }
+        dispatch({ type: "SELECT", id: targetId, additive: false });
+        dispatch({
+          type: "SET_FOCUSED_SCOPE",
+          scopeId: resolveFocusedScopeIdForSelection(targetId, scopeOverlay)
+        });
+        beginCanvasTextInteraction(event, textTarget);
         return;
       }
 
@@ -652,6 +586,9 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       interactionSvgRef,
       onBucketFillRegion,
       onNodePositionTargetPick,
+      onDeckObjectSelect,
+      onDeckObjectActivate,
+      onLayerEnter,
       expandedDensePathSourceId,
       resolveEditableTextTarget,
       selectedElementIds,
@@ -661,7 +598,6 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       closeTextEditingSession,
       startElementDrag,
       scopeOverlay,
-      snapshot.editHandles,
       svgResult,
       toolMode,
       viewportRef
@@ -675,10 +611,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       const resolved = resolveEligibleExplicitPath(
         source,
         sourceId,
-        parseOptions ?? {
-          activeFigureId:
-            activeFigureId ?? (snapshot.figures.length > 1 ? null : undefined)
-        }
+        parseOptions
       );
       if (resolved.kind !== "eligible") return false;
       const analysis = resolved.analysis;
@@ -701,7 +634,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       });
       return true;
     },
-    [svgResult, snapshot, source, parseOptions, activeFigureId, interactionSvgRef, canvasTransform.scale, applyActionWithFeedback]
+    [svgResult, snapshot, source, parseOptions, interactionSvgRef, canvasTransform.scale, applyActionWithFeedback]
   );
 
   const onElementDoubleClick = useCallback(
@@ -809,24 +742,22 @@ function findClosestSegmentWorldPoint(
   let best: { segmentIndex: number; point: WorldPoint; distance: number } | null = null;
 
   for (let i = 0; i < analysis.segments.length; i++) {
-    const seg = analysis.segments[i];
-    const startW = resolveAnchorWorld(editHandles, sourceId, analysis.anchors[seg.startAnchorIndex]);
-    const endW = resolveAnchorWorld(editHandles, sourceId, analysis.anchors[seg.endAnchorIndex]);
+    const seg = requireArrayValue(analysis.segments, i);
+    const startW = resolveAnchorWorld(editHandles, sourceId, requireArrayValue(analysis.anchors, seg.startAnchorIndex));
+    const endW = resolveAnchorWorld(editHandles, sourceId, requireArrayValue(analysis.anchors, seg.endAnchorIndex));
     if (!startW || !endW) continue;
 
     let closest: { point: WorldPoint };
     if (seg.kind === "line") {
       closest = closestPointOnLine(pointer, startW, endW);
-    } else if (seg.kind === "cubic") {
-      const c1Item = seg.control1Index != null ? analysis.statement.items[seg.control1Index] : null;
-      const c2Item = seg.control2Index != null ? analysis.statement.items[seg.control2Index] : null;
+    } else {
+      const c1Item = analysis.statement.items[seg.control1Index];
+      const c2Item = analysis.statement.items[seg.control2Index];
       if (c1Item?.kind !== "Coordinate" || c2Item?.kind !== "Coordinate") continue;
       const c1W = resolveControlWorld(editHandles, sourceId, c1Item.span);
       const c2W = seg.usedAnd ? resolveControlWorld(editHandles, sourceId, c2Item.span) : c1W;
       if (!c1W || !c2W) continue;
       closest = closestPointOnCubic(pointer, startW, c1W, c2W, endW);
-    } else {
-      continue;
     }
 
     const dist = Math.hypot(closest.point.x - pointer.x, closest.point.y - pointer.y);

@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type { OptionListAst } from "../../options/types.js";
 import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings } from "../../macros/index.js";
 import type { MacroBinding } from "../../macros/index.js";
@@ -48,7 +49,7 @@ export function createDefaultPlotSettings(): PlotSettings {
     variable: "\\x",
     mark: null,
     tension: 0.55,
-    barWidth: parseLength("10pt", "pt")!,
+    barWidth: requireDefined(parseLength("10pt", "pt"), "Expected an internal plot value"),
     barShift: 0,
     barIntervalWidth: 1,
     barIntervalShift: 0.5
@@ -91,9 +92,6 @@ function applyPlotOptionList(
       continue;
     }
 
-    if (entry.kind !== "kv" && entry.kind !== "unknown") {
-      continue;
-    }
     if (entry.kind === "unknown") {
       continue;
     }
@@ -408,7 +406,7 @@ function unwrapSingleOuterBracePair(raw: string): string | null {
 
   let depth = 0;
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\") {
       index += 1;
       continue;
@@ -442,7 +440,7 @@ function splitTopLevelOnce(input: string, separator: string): { left: string; ri
   let bracketDepth = 0;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
     if (char === "\\") {
       index += 1;
       continue;

@@ -1,0 +1,166 @@
+{
+  "formatVersion": 1,
+  "description": "Stock Beamer and default caption/subcaption package figure/table caption and flow fidelity.",
+  "fidelity": [
+    {
+      "id": "center-image",
+      "file": "center-image.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "After"
+      ],
+      "images": 1
+    },
+    {
+      "id": "numbered",
+      "file": "numbered.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "After"
+      ],
+      "images": 0
+    },
+    {
+      "id": "table",
+      "file": "table.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Gamma",
+        "After"
+      ],
+      "images": 0
+    },
+    {
+      "id": "leading-figure",
+      "file": "leading-figure.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "After"
+      ],
+      "images": 1
+    },
+    {
+      "id": "frame-local-numbered",
+      "file": "scoped-templates.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Figure1:Alpha",
+        "After"
+      ],
+      "images": 0
+    },
+    {
+      "id": "frame-template-restored",
+      "file": "scoped-templates.tex",
+      "frame": 2,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Figure:Beta",
+        "After"
+      ],
+      "images": 0
+    },
+    {
+      "id": "package-star-short",
+      "file": "package-default.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Anunnumberedplot.",
+        "After."
+      ],
+      "images": 0
+    },
+    {
+      "id": "package-star-counter",
+      "file": "package-default.tex",
+      "frame": 2,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Figure1:Alphaplot.",
+        "Unnumberedaside.",
+        "Figure2:Betaplot.",
+        "After."
+      ],
+      "images": 0
+    },
+    {
+      "id": "package-star-long",
+      "file": "package-default.tex",
+      "frame": 3,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Alongunnumberedcaption",
+        "After."
+      ],
+      "images": 0
+    },
+    {
+      "id": "package-numbered-long-math",
+      "file": "package-default.tex",
+      "frame": 4,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Figure3:Alongnumberedcaption",
+        "After."
+      ],
+      "images": 0
+    },
+    {
+      "id": "package-star-table",
+      "file": "package-default.tex",
+      "frame": 5,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Anunnumberedtable.",
+        "Alpha12",
+        "After."
+      ],
+      "images": 0
+    },
+    {
+      "id": "subcaption-star-short",
+      "file": "package-subcaption.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Aplotusingthesubcaptionpackage.",
+        "After."
+      ],
+      "images": 0
+    },
+    {
+      "id": "package-class14-star",
+      "file": "package-class14.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Acaptioninalargerclass.",
+        "After."
+      ],
+      "images": 0
+    }
+  ],
+  "recognition": []
+}

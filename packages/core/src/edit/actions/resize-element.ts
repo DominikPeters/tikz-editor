@@ -1,3 +1,6 @@
+import { requireDefined } from "../../utils/invariants.js";
+import { requireArrayValue } from "../../utils/collections.js";
+import type { EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type {
   EditHandle,
@@ -14,18 +17,18 @@ import {
 } from "../../semantic/types.js";
 import { pt } from "../../coords/scalars.js";
 import { applyFrameTransform } from "../../coords/frame.js";
-import { frameLocalPoint, worldPoint } from "../../coords/points.js";
-import type { FrameLocalPoint, WorldPoint } from "../../coords/points.js";
+import { frameLocalPoint, worldPoint, worldVector } from "../../coords/points.js";
+import type { FrameLocalPoint, WorldPoint, WorldVector } from "../../coords/points.js";
 import type { FrameTransform } from "../../coords/transforms.js";
 import { frameTransform, worldTransform } from "../../coords/transforms.js";
 import type { CoordinateItem, NodeItem, PathItem, PathOptionItem, Statement, Span } from "../../ast/types.js";
 import type { PropertyTarget } from "../property-target.js";
-import { resolvePropertyTarget } from "../property-target.js";
+import { changedSourceIdsForPropertyTarget, resolvePropertyTarget } from "../property-target.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { parseCircleRadiusFromCoordinateRaw, parseEllipseRadiiFromCoordinateRaw } from "../../semantic/path/parsers.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
 import { resolveNodeShape } from "../../semantic/nodes/options.js";
-import { inverseMatrix } from "../../semantic/transform.js";
+import { applyMatrix, inverseMatrix, multiplyMatrix } from "../../semantic/transform.js";
 import { collectSourceWorldBounds } from "../snapping/index.js";
 import { worldToLocal } from "../coords.js";
 import { replaceSpan } from "../patch.js";
@@ -34,15 +37,17 @@ import {
   CM_PER_PT,
   formatNumber,
   pointDimensionFormatOptions,
-  pointDistanceFormatOptions,
   type DragFormatPrecision
 } from "../format.js";
 import { applyTextReplacements } from "../statement-ops.js";
 import { resolveTransformInspectorMutationContextFromOptionEntries } from "../property-write-builders.js";
+import { resolveStatementOptionFrame, resolveStatementParentFrame } from "../parent-frame.js";
+import { mutateOrderedOptionEntries, planOrderedScopeTranslation } from "./move-arrange-actions.js";
+import type { OptionEntry } from "../../options/types.js";
 import {
   applyOptionMutationsToTarget,
   normalizeOptionKey,
-  rewriteOptionListMutations,
+  rewriteSourceBackedOptionListMutations,
   serializeOptionEntry,
   type OptionMutation,
   type OptionMutationApplyResult
@@ -80,7 +85,14 @@ type ResizeRole =
 
 type NodeWidthResizeStrategy = "minimum-width" | "text-width";
 
+export type PathRectangleResizeBaseline = {
+  source: string;
+  elementId: string;
+  context: PathRectangleResizeContext;
+};
+
 export type ResizeElementAction = {
+  rectangleBaseline?: PathRectangleResizeBaseline;
   elementId: string;
   role: ResizeRole;
   newWorld: WorldPoint;
@@ -101,18 +113,71 @@ export type ResizeElementAction = {
   };
 };
 
+type ResizeSourceEvaluation = {
+  parsed: ReturnType<typeof parseTikzForEdit>;
+  semantic: Pick<ReturnType<typeof evaluateTikzFigure>, "scene" | "editHandles">;
+  boundsBySource: ReturnType<typeof collectSourceWorldBounds>;
+};
+
+type ResolveResizeSourceEvaluation = (source: string) => ResizeSourceEvaluation;
+
+function createResizeSourceEvaluationResolver(
+  evaluateOptions: EvaluateOptions | undefined,
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession,
+  elementId?: string
+): ResolveResizeSourceEvaluation {
+  const cache = new Map<string, ResizeSourceEvaluation>();
+  return (source) => {
+    const cached = cache.get(source);
+    if (cached) {
+      return cached;
+    }
+    const parsed = geometry?.source === source ? geometry.parsed : parseTikzForEdit(source, parseOptions);
+    const semantic = geometry && elementId
+      ? { scene: { ...geometry.semantic.scene, elements: geometry.measure(source, elementId) }, editHandles: geometry.semantic.editHandles }
+      : evaluateTikzFigure(parsed.figure, source, evaluateOptions);
+    const evaluation = {
+      parsed,
+      semantic,
+      boundsBySource: collectSourceWorldBounds(semantic.scene.elements)
+    };
+    cache.set(source, evaluation);
+    return evaluation;
+  };
+}
+
 
 export function applyResizeElementAction(
   source: string,
   action: ResizeElementAction,
   evaluateOptions: EvaluateOptions | undefined,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  geometry?: EditGeometrySession
 ): EditActionResultLike {
   const elementId = action.elementId.trim();
   if (elementId.length === 0) {
     return { kind: "unsupported", reason: "Missing element id for resizeElement." };
   }
 
+  if (action.rectangleBaseline) {
+    const baseline = action.rectangleBaseline;
+    if (baseline.elementId !== elementId) {
+      return { kind: "unsupported", reason: "Rectangle resize baseline belongs to another element." };
+    }
+    // The caller owns this drag session and cancels it on unrelated source edits.
+    // Reuse the starting handles instead of reevaluating the figure per event.
+    return applyResizePathRectangle(baseline.source, action, baseline.context);
+  }
+
+  if (geometry) {
+    source = geometry.source;
+    parseOptions = { ...parseOptions, analysisView: null, analysisSession: null,
+      };
+    const sourceFingerprint = geometry.semantic.editHandles[0]?.sourceRef.sourceFingerprint;
+    if (sourceFingerprint === undefined) delete parseOptions.sourceFingerprint;
+    else parseOptions.sourceFingerprint = sourceFingerprint;
+  }
   const resolved = resolvePropertyTarget(source, elementId, parseOptions);
   if (resolved.kind === "not-found") {
     return { kind: "unsupported", reason: resolved.reason };
@@ -121,17 +186,13 @@ export function applyResizeElementAction(
     return { kind: "unsupported", reason: FIT_DIRECT_MANIPULATION_BLOCK_REASON };
   }
 
-  const parsed = parseTikzForEdit(source, {
-    ...parseOptions,
-  });
+  const resolveSourceEvaluation = createResizeSourceEvaluationResolver(evaluateOptions, parseOptions, geometry, elementId);
+  const { parsed, semantic } = resolveSourceEvaluation(source);
   if (sourceUsesFitNodeFromParseResult(source, parsed, elementId)) {
     return { kind: "unsupported", reason: FIT_DIRECT_MANIPULATION_BLOCK_REASON };
   }
-  const semantic = evaluateTikzFigure(parsed.figure, source, evaluateOptions);
-  const boundsBySource = collectSourceWorldBounds(semantic.scene.elements);
-  const scopeBoundsById = buildScopeBoundsById(parsed.figure.body, boundsBySource);
   if (findScopeStatementById(parsed.figure.body, elementId)) {
-    return applyResizeScope(source, action, resolved.target, scopeBoundsById, parsed.figure.body);
+    return restoreResizeBaselineOnNoop(applyResizeScope(source, action, resolved.target, parsed.figure.body, semantic.scene.elements, parseOptions, geometry, evaluateOptions), geometry, elementId);
   }
   const hasNodePositionHandle = semantic.editHandles.some(
     (handle) => handle.sourceRef.sourceId === elementId && handle.kind === "node-position"
@@ -150,13 +211,13 @@ export function applyResizeElementAction(
       return rectangleContext;
     }
 
-    return applyResizePathCircleOrEllipse(
+    return restoreResizeBaselineOnNoop(applyResizePathCircleOrEllipse(
       source,
       action,
       parsed.figure.body,
       semantic.scene.elements,
       semantic.editHandles
-    );
+    ), geometry, elementId);
   }
 
   const resizeTarget = resolveResizePropertyTarget(
@@ -166,6 +227,7 @@ export function applyResizeElementAction(
     resolved.target,
     parseOptions
   );
+  const changedSourceIds = changedSourceIdsForPropertyTarget(resizeTarget);
   const isDiamondNodeShape = isDiamondNodeShapeInPathStatement(parsed.figure.body, elementId);
   const currentBounds = action.referenceBounds ?? resolveNodeResizeBounds(semantic.scene.elements, elementId);
   if (!currentBounds) {
@@ -190,10 +252,7 @@ export function applyResizeElementAction(
   ]);
   const floorRewrite = applyOptionMutationsToTarget(source, resizeTarget, floorMutations);
   const floorSource = floorRewrite ? floorRewrite.source : source;
-  const floorParsed = parseTikzForEdit(floorSource, {
-    ...parseOptions,
-  });
-  const floorSemantic = evaluateTikzFigure(floorParsed.figure, floorSource, evaluateOptions);
+  const { semantic: floorSemantic } = resolveSourceEvaluation(floorSource);
   const floorBounds = resolveNodeResizeBounds(floorSemantic.scene.elements, elementId);
   if (!floorBounds) {
     return { kind: "unsupported", reason: "Could not resolve intrinsic node bounds for resize." };
@@ -203,13 +262,23 @@ export function applyResizeElementAction(
   const localPointerDelta = nodeLinearTransform
     ? worldVectorToLocal(pointerDelta, nodeLinearTransform)
     : pointerDelta;
-  const requestedWidth = 2 * Math.abs(localPointerDelta.x);
-  const requestedHeight = 2 * Math.abs(localPointerDelta.y);
+  let requestedWidth = 2 * Math.abs(localPointerDelta.x);
+  let requestedHeight = 2 * Math.abs(localPointerDelta.y);
+  if (action.preserveAspect && affectsWidth && affectsHeight) {
+    const initialSize = requireDefined(resolveNodeResizeLocalSize(semantic.scene.elements, elementId), "Missing required resolveNodeResizeLocalSize(semantic.scene.elements, elementId)");
+    const ratio = action.preserveAspectRatio ?? initialSize.height / initialSize.width;
+    if (ratio > 0 && Number.isFinite(ratio)) {
+      requestedWidth = Math.max(requestedWidth, requestedHeight / ratio);
+      requestedHeight = requestedWidth * ratio;
+    }
+  }
+  const baselineSize = requireDefined(resolveNodeResizeLocalSize(semantic.scene.elements, elementId), "Missing required resolveNodeResizeLocalSize(semantic.scene.elements, elementId)");
+  if (geometry && (!affectsWidth || Math.abs(requestedWidth - baselineSize.width) < 1e-6) &&
+      (!affectsHeight || Math.abs(requestedHeight - baselineSize.height) < 1e-6)) {
+    return { kind: "success", newSource: source, patches: [], changedSourceIds };
+  }
   const intrinsicWorldWidth = floorBounds.maxX - floorBounds.minX;
-  const intrinsicWorldHeight = floorBounds.maxY - floorBounds.minY;
-  const intrinsicLocal = nodeLinearTransform
-    ? worldSizeToLocalSize({ width: intrinsicWorldWidth, height: intrinsicWorldHeight }, nodeLinearTransform)
-    : { width: intrinsicWorldWidth, height: intrinsicWorldHeight };
+  const intrinsicLocal = requireDefined(resolveNodeResizeLocalSize(floorSemantic.scene.elements, elementId), "Missing required resolveNodeResizeLocalSize(floorSemantic.scene.elements, elementId)");
   const intrinsicWidth = intrinsicLocal.width;
   const intrinsicHeight = intrinsicLocal.height;
   const inferredTextWidthInset = resolveNodeTextWidthInsetLocal({
@@ -225,12 +294,14 @@ export function applyResizeElementAction(
     widthResizeStrategy === "text-width"
       ? Math.max(RESIZE_EPSILON, requestedWidth - effectiveTextWidthInset)
       : null;
-  const liveBounds = resolveNodeResizeBounds(semantic.scene.elements, elementId)!;
-  const liveWorldWidth = liveBounds.maxX - liveBounds.minX;
-  const liveWorldHeight = liveBounds.maxY - liveBounds.minY;
-  const liveLocalSize = nodeLinearTransform
-    ? worldSizeToLocalSize({ width: liveWorldWidth, height: liveWorldHeight }, nodeLinearTransform)
-    : { width: liveWorldWidth, height: liveWorldHeight };
+  const liveBounds = resolveNodeResizeBounds(semantic.scene.elements, elementId);
+  if (!liveBounds) {
+    return {
+      kind: "error",
+      message: `Resize invariant failed: current bounds for ${elementId} are missing.`
+    };
+  }
+  const liveLocalSize = requireDefined(resolveNodeResizeLocalSize(semantic.scene.elements, elementId), "Missing required resolveNodeResizeLocalSize(semantic.scene.elements, elementId)");
 
   if (isDiamondNodeShape && isSideResizeRole(action.role)) {
     const rewritten = rewriteDiamondSideResize({
@@ -241,14 +312,14 @@ export function applyResizeElementAction(
       requestedHeight,
       currentWidth: liveLocalSize.width,
       currentHeight: liveLocalSize.height,
-      formatPrecision: action.formatPrecision
+      ...(action.formatPrecision === undefined ? {} : { formatPrecision: action.formatPrecision })
     });
     if (rewritten) {
       return {
         kind: "success",
         newSource: rewritten.source,
         patches: [rewritten.patch],
-        changedSourceIds: [elementId]
+        changedSourceIds
       };
     }
   }
@@ -268,20 +339,18 @@ export function applyResizeElementAction(
     intrinsicHeight,
     preserveExplicitWidthFloor: preserveExplicitWidthFloor && !preservePathAttachedWidthFloor,
     preserveExplicitHeightFloor,
-    formatPrecision: action.formatPrecision
+    ...(action.formatPrecision === undefined ? {} : { formatPrecision: action.formatPrecision })
   });
   const rewritten = chooseBestNodeResizeMutationCandidate({
     source,
     resizeTarget,
     elementId,
-    evaluateOptions,
-    parseOptions,
-    nodeLinearTransform,
     affectsWidth,
     affectsHeight,
     requestedWidth,
     requestedHeight,
-    candidates: resizeCandidates
+    candidates: resizeCandidates,
+    resolveSourceEvaluation
   });
   if (!rewritten) {
     if (nodeLinearTransform && !preserveExplicitWidthFloor && !preserveExplicitHeightFloor) {
@@ -289,18 +358,24 @@ export function applyResizeElementAction(
         kind: "success",
         newSource: source,
         patches: [],
-        changedSourceIds: [elementId]
+        changedSourceIds
       };
     }
-    return { kind: "unsupported", reason: "Resize would not change node constraints." };
+    return restoreResizeBaselineOnNoop({ kind: "unsupported", reason: "Resize would not change node constraints." }, geometry, elementId, changedSourceIds);
   }
 
   return {
     kind: "success",
     newSource: rewritten.source,
     patches: [rewritten.patch],
-    changedSourceIds: [elementId]
+    changedSourceIds
   };
+}
+
+function restoreResizeBaselineOnNoop(result: EditActionResultLike, geometry: EditGeometrySession | undefined, elementId: string, changedSourceIds = [elementId]): EditActionResultLike {
+  return geometry && result.kind === "unsupported" && result.reason === "Resize would not change node constraints."
+    ? { kind: "success", newSource: geometry.source, patches: [], changedSourceIds }
+    : result;
 }
 
 function buildNodeResizeMutationCandidates(args: {
@@ -330,10 +405,13 @@ function buildNodeResizeMutationCandidates(args: {
     formatPrecision
   } = args;
   if (widthResizeStrategy === "text-width" && affectsWidth) {
+    if (requestedTextWidth == null) {
+      return [];
+    }
     const textWidthMutation: OptionMutation = {
       kind: "set",
       value: `${formatNumber(
-        Math.max(RESIZE_EPSILON, requestedTextWidth!),
+        Math.max(RESIZE_EPSILON, requestedTextWidth),
         pointDimensionFormatOptions(formatPrecision)
       )}pt`
     };
@@ -446,27 +524,23 @@ function chooseBestNodeResizeMutationCandidate(args: {
   source: string;
   resizeTarget: PropertyTarget;
   elementId: string;
-  evaluateOptions: EvaluateOptions | undefined;
-  parseOptions: EditParseOptions;
-  nodeLinearTransform: { a: number; b: number; c: number; d: number } | null;
   affectsWidth: boolean;
   affectsHeight: boolean;
   requestedWidth: number;
   requestedHeight: number;
   candidates: ReadonlyArray<{ mutations: Map<string, OptionMutation>; explicitConstraintCount: number; removesOtherConstraint: boolean }>;
+  resolveSourceEvaluation: ResolveResizeSourceEvaluation;
 }): OptionMutationApplyResult | null {
   const {
     source,
     resizeTarget,
     elementId,
-    evaluateOptions,
-    parseOptions,
-    nodeLinearTransform,
     affectsWidth,
     affectsHeight,
     requestedWidth,
     requestedHeight,
-    candidates
+    candidates,
+    resolveSourceEvaluation
   } = args;
 
   let best: OptionMutationApplyResult | null = null;
@@ -475,18 +549,9 @@ function chooseBestNodeResizeMutationCandidate(args: {
   for (const candidate of candidates) {
     const rewritten = applyOptionMutationsToTarget(source, resizeTarget, candidate.mutations);
     const candidateSource = rewritten ? rewritten.source : source;
-    const parsed = parseTikzForEdit(candidateSource, {
-      ...parseOptions,
-    });
-    const semantic = evaluateTikzFigure(parsed.figure, candidateSource, evaluateOptions);
-    const boundsBySource = collectSourceWorldBounds(semantic.scene.elements);
-    const bounds = boundsBySource.get(elementId);
-    if (!bounds) {
-      continue;
-    }
-    const localSize = nodeLinearTransform
-      ? worldSizeToLocalSize({ width: bounds.maxX - bounds.minX, height: bounds.maxY - bounds.minY }, nodeLinearTransform)
-      : { width: bounds.maxX - bounds.minX, height: bounds.maxY - bounds.minY };
+    const { semantic } = resolveSourceEvaluation(candidateSource);
+    const localSize = resolveNodeResizeLocalSize(semantic.scene.elements, elementId);
+    if (!localSize) continue;
     const score =
       (affectsWidth ? Math.abs(localSize.width - requestedWidth) : 0) +
       (affectsHeight ? Math.abs(localSize.height - requestedHeight) : 0) +
@@ -505,156 +570,122 @@ function applyResizeScope(
   source: string,
   action: ResizeElementAction,
   target: PropertyTarget,
-  scopeBoundsById: ReadonlyMap<string, { minX: number; minY: number; maxX: number; maxY: number }>,
-  statements: readonly Statement[]
+  statements: readonly Statement[],
+  elements: readonly SceneElement[],
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession,
+  evaluateOptions: EvaluateOptions = {}
 ): EditActionResultLike {
-  const bounds = action.referenceBounds ?? scopeBoundsById.get(action.elementId);
-  if (!bounds) {
-    return { kind: "unsupported", reason: "No geometry bounds were found for the selected scope." };
+  const unsupported = (reason: string): EditActionResultLike => ({ kind: "unsupported", reason });
+  const referenceTransform = action.referenceScopeTransform;
+  if (referenceTransform && [referenceTransform.xscale, referenceTransform.yscale, referenceTransform.xshift, referenceTransform.yshift]
+    .some(value => !Number.isFinite(value))) {
+    return unsupported("Scope resize produced a non-finite transform.");
   }
-
-  const currentWidth = bounds.maxX - bounds.minX;
-  const currentHeight = bounds.maxY - bounds.minY;
+  const parent = resolveStatementParentFrame(source, action.elementId, parseOptions, geometry, evaluateOptions);
+  const full = resolveStatementOptionFrame(source, action.elementId, undefined, parseOptions, geometry, evaluateOptions);
+  const inverseParent = parent && inverseMatrix(worldTransform(parent.a, parent.b, parent.c, parent.d, parent.e, parent.f));
+  if (!parent || !full || !inverseParent) return unsupported("Could not resolve the scope resize coordinate frame.");
+  const toParentFrame = (frame: FrameTransform) => multiplyMatrix(inverseParent,
+    worldTransform(frame.a, frame.b, frame.c, frame.d, frame.e, frame.f));
+  const own = toParentFrame(full);
+  let base = own;
+  if (Math.abs(own.b) > 1e-8 || Math.abs(own.c) > 1e-8 || own.a <= 1e-12 || own.d <= 1e-12) {
+    return unsupported("Scope resize currently supports only non-rotated scopes with positive axis scales.");
+  }
+  // Measure geometry in the inherited frame. Inverting a rotated world AABB
+  // would enlarge it and move the fixed edge, so transform the scene instead.
+  const localBounds = buildScopeBoundsById(statements, collectSourceWorldBounds([...elements], inverseParent)).get(action.elementId);
+  let bounds = localBounds;
+  if (action.referenceBounds && Math.abs(parent.b) < 1e-8 && Math.abs(parent.c) < 1e-8) {
+    const before = action.referenceBounds;
+    const first = applyMatrix(inverseParent, wp(before.minX, before.minY));
+    const second = applyMatrix(inverseParent, wp(before.maxX, before.maxY));
+    bounds = { minX: Math.min(first.x, second.x), maxX: Math.max(first.x, second.x),
+      minY: Math.min(first.y, second.y), maxY: Math.max(first.y, second.y) };
+  }
+  if (action.referenceScopeTransform && !geometry) {
+    const authored = resolveTransformInspectorMutationContextFromOptionEntries(target.options?.entries).values;
+    const reference = action.referenceScopeTransform;
+    // Legacy callers provide an aggregate baseline but no original source.
+    // That reconstructs only the canonical shift-before-axis-scale frame.
+    if (!action.referenceBounds || Math.abs(own.a - authored.xscale) > 1e-8 || Math.abs(own.d - authored.yscale) > 1e-8 ||
+        Math.abs(own.e - authored.xshift) > 1e-8 || Math.abs(own.f - authored.yshift) > 1e-8) {
+      return unsupported("Scope resize needs its original geometry baseline to preserve this authored transform order.");
+    }
+    if (reference.xscale <= 1e-12 || reference.yscale <= 1e-12) return unsupported("Scope resize requires a non-zero baseline scale.");
+    base = worldTransform(reference.xscale, 0, 0, reference.yscale, reference.xshift, reference.yshift);
+    if (bounds && (Math.abs(parent.b) >= 1e-8 || Math.abs(parent.c) >= 1e-8)) {
+      // The original world AABB cannot recover a rotated local box. The
+      // canonical baseline affine can recover it from the current geometry.
+      bounds = { minX: base.e + base.a / own.a * (bounds.minX - own.e),
+        maxX: base.e + base.a / own.a * (bounds.maxX - own.e),
+        minY: base.f + base.d / own.d * (bounds.minY - own.f),
+        maxY: base.f + base.d / own.d * (bounds.maxY - own.f) };
+    }
+  }
+  if (!bounds) return unsupported("No geometry bounds were found for the selected scope.");
+  const currentWidth = bounds.maxX - bounds.minX, currentHeight = bounds.maxY - bounds.minY;
   if (!(currentWidth > RESIZE_EPSILON) || !(currentHeight > RESIZE_EPSILON)) {
-    return { kind: "unsupported", reason: "Resize requires a scope with non-zero bounds." };
+    return unsupported("Resize requires a scope with non-zero bounds.");
   }
-
   const affectsWidth = action.role.includes("left") || action.role.includes("right");
   const affectsHeight = action.role.includes("top") || action.role.includes("bottom");
-  if (!affectsWidth && !affectsHeight) {
-    return { kind: "unsupported", reason: `Unsupported resize role: ${action.role}` };
-  }
-
-  const currentContext = resolveTransformInspectorMutationContextFromOptionEntries(target.options?.entries);
-  if (Math.abs(currentContext.values.rotate) > 1e-6) {
-    return { kind: "unsupported", reason: "Scope resize currently supports only non-rotated scopes." };
-  }
-  const baseValues = action.referenceScopeTransform ?? currentContext.values;
-
+  if (!affectsWidth && !affectsHeight) return unsupported(`Unsupported resize role: ${action.role}`);
+  const pointer = applyMatrix(inverseParent, action.newWorld);
   const fixed = resolveFixedScopePoint(bounds, action.role);
-  let nextWidth = affectsWidth ? Math.abs(action.newWorld.x - fixed.x) : currentWidth;
-  let nextHeight = affectsHeight ? Math.abs(action.newWorld.y - fixed.y) : currentHeight;
-
-  if (action.preserveAspect && affectsWidth && affectsHeight) {
-    const uniformScale = Math.max(nextWidth / currentWidth, nextHeight / currentHeight);
-    nextWidth = currentWidth * uniformScale;
-    nextHeight = currentHeight * uniformScale;
+  let ratioX = affectsWidth ? Math.max(Math.abs(pointer.x - fixed.x), RESIZE_EPSILON) / currentWidth : 1;
+  let ratioY = affectsHeight ? Math.max(Math.abs(pointer.y - fixed.y), RESIZE_EPSILON) / currentHeight : 1;
+  if (action.preserveAspect && affectsWidth && affectsHeight) ratioX = ratioY = Math.max(ratioX, ratioY);
+  if (Math.abs(ratioX - 1) < 1e-10 && Math.abs(ratioY - 1) < 1e-10 &&
+      Math.abs(base.a - own.a) < 1e-10 && Math.abs(base.d - own.d) < 1e-10 &&
+      Math.abs(base.e - own.e) < 1e-10 && Math.abs(base.f - own.f) < 1e-10) {
+    return unsupported("Resize would not change node constraints.");
   }
-
-  nextWidth = Math.max(nextWidth, RESIZE_EPSILON);
-  nextHeight = Math.max(nextHeight, RESIZE_EPSILON);
-
-  const scaleRatioX = affectsWidth ? nextWidth / currentWidth : 1;
-  const scaleRatioY = affectsHeight ? nextHeight / currentHeight : 1;
-  const nextValues = {
-    xscale: baseValues.xscale * scaleRatioX,
-    yscale: baseValues.yscale * scaleRatioY,
-    xshift: affectsWidth
-      ? fixed.x - scaleRatioX * (fixed.x - baseValues.xshift)
-      : baseValues.xshift,
-    yshift: affectsHeight
-      ? fixed.y - scaleRatioY * (fixed.y - baseValues.yshift)
-      : baseValues.yshift
-  };
-
-  if (
-    !Number.isFinite(nextValues.xscale) ||
-    !Number.isFinite(nextValues.yscale) ||
-    !Number.isFinite(nextValues.xshift) ||
-    !Number.isFinite(nextValues.yshift)
-  ) {
-    return { kind: "unsupported", reason: "Scope resize produced a non-finite transform." };
+  const entries = target.options?.entries ?? [];
+  const scaleMutations = new Map<string, OptionMutation>();
+  const writtenRatios = { xscale: 1, yscale: 1 };
+  for (const [axis, ratio] of [["xscale", ratioX * base.a / own.a], ["yscale", ratioY * base.d / own.d]] as const) {
+    if (Math.abs(ratio - 1) < 1e-12) continue;
+    const candidates = entries.filter((entry): entry is Extract<OptionEntry, { kind: "kv" }> =>
+      entry.kind === "kv" && normalizeOptionKey(entry.key).replace(/^\/tikz\//, "") === axis);
+    if (candidates.length > 1) return unsupported("Scope resize cannot safely rewrite repeated scale entries.");
+    const current = candidates[0] ? Number(candidates[0].valueRaw.trim()) : 1;
+    if (!Number.isFinite(current)) return unsupported("Scope resize requires numeric authored scale entries.");
+    const formatted = formatNumber(current * ratio, action.formatPrecision === "snapped" ? { fractionDigits: 12 } : undefined);
+    writtenRatios[axis] = Number(formatted) / current;
+    scaleMutations.set(candidates[0] ? normalizeOptionKey(candidates[0].key) : axis, { kind: "set", value: formatted });
   }
-
-  const rewritten = applyScopeTransformRewrite(source, target, nextValues, action.formatPrecision);
-  if (!rewritten) {
-    return { kind: "unsupported", reason: "Resize would not change node constraints." };
+  const scaledEntries = mutateOrderedOptionEntries(entries, scaleMutations);
+  const scaledFrame = resolveStatementOptionFrame(source, action.elementId, scaledEntries, parseOptions, geometry, evaluateOptions, true);
+  if (!scaledFrame) return unsupported("Could not resolve the scope resize coordinate frame.");
+  const scaledOwn = toParentFrame(scaledFrame);
+  // The written scale precision determines the displacement. Use that same
+  // effective ratio for the anchor correction rather than chasing the pointer.
+  const effectiveX = scaledOwn.a / own.a, effectiveY = scaledOwn.d / own.d;
+  if (Math.abs(scaledOwn.b) > 1e-8 || Math.abs(scaledOwn.c) > 1e-8 || effectiveX <= 0 || effectiveY <= 0 ||
+      Math.abs(effectiveX - writtenRatios.xscale) > 1e-8 || Math.abs(effectiveY - writtenRatios.yscale) > 1e-8) {
+    return unsupported("Scope resize cannot preserve the authored transform order.");
   }
-
-  return {
-    kind: "success",
-    newSource: rewritten.source,
-    patches: [rewritten.patch],
-    changedSourceIds: expandScopeChangedSourceIds(statements, [action.elementId])
-  };
+  const desiredOwn = { ...scaledOwn, e: fixed.x - scaledOwn.a / base.a * (fixed.x - base.e), f: fixed.y - scaledOwn.d / base.d * (fixed.y - base.f) };
+  const desired = multiplyMatrix(worldTransform(parent.a, parent.b, parent.c, parent.d, parent.e, parent.f),
+    worldTransform(desiredOwn.a, desiredOwn.b, desiredOwn.c, desiredOwn.d, desiredOwn.e, desiredOwn.f));
+  const shiftMutations = planOrderedScopeTranslation(scaledEntries, wp(desired.e - scaledFrame.e, desired.f - scaledFrame.f),
+    prefix => resolveStatementOptionFrame(source, action.elementId, prefix, parseOptions, geometry, evaluateOptions),
+    action.formatPrecision, entries.length);
+  if (!shiftMutations) return unsupported("Could not keep the scope resize anchor in its authored coordinate frame.");
+  // New shifts precede new scales; existing entries retain their exact order.
+  const mutations = new Map([...shiftMutations, ...scaleMutations]);
+  const finalFrame = resolveStatementOptionFrame(source, action.elementId, mutateOrderedOptionEntries(entries, mutations),
+    parseOptions, geometry, evaluateOptions, true);
+  if (!finalFrame || !(["a", "b", "c", "d"] as const).every(key => Math.abs(finalFrame[key] - desired[key]) < 1e-8)) {
+    return unsupported("Scope resize cannot preserve the authored transform order.");
+  }
+  const rewritten = applyOptionMutationsToTarget(source, target, mutations);
+  if (!rewritten) return unsupported("Resize would not change node constraints.");
+  return { kind: "success", newSource: rewritten.source, patches: [rewritten.patch],
+    changedSourceIds: expandScopeChangedSourceIds(statements, [action.elementId]) };
 }
-
-function applyScopeTransformRewrite(
-  source: string,
-  target: PropertyTarget,
-  values: { xscale: number; yscale: number; xshift: number; yshift: number },
-  formatPrecision: DragFormatPrecision | undefined
-): OptionMutationApplyResult | null {
-  const orderedSetMutations = new Map<string, OptionMutation>();
-  if (Math.abs(values.xshift) > RESIZE_EPSILON) {
-    orderedSetMutations.set("xshift", {
-      kind: "set",
-      value: `${formatNumber(values.xshift, pointDistanceFormatOptions(formatPrecision))}pt`
-    });
-  }
-  if (Math.abs(values.yshift) > RESIZE_EPSILON) {
-    orderedSetMutations.set("yshift", {
-      kind: "set",
-      value: `${formatNumber(values.yshift, pointDistanceFormatOptions(formatPrecision))}pt`
-    });
-  }
-  if (Math.abs(values.xscale - 1) > RESIZE_EPSILON) {
-    orderedSetMutations.set("xscale", { kind: "set", value: formatNumber(values.xscale) });
-  }
-  if (Math.abs(values.yscale - 1) > RESIZE_EPSILON) {
-    orderedSetMutations.set("yscale", { kind: "set", value: formatNumber(values.yscale) });
-  }
-
-  if (target.options && target.optionsSpan) {
-    const filteredOptions = {
-      ...target.options,
-      entries: target.options.entries.filter((entry) => {
-        if (entry.kind !== "kv" && entry.kind !== "flag") {
-          return true;
-        }
-        const key = normalizeOptionKey(entry.key);
-        return !SCOPE_TRANSFORM_OPTION_KEYS.has(key);
-      })
-    };
-    const replacement = rewriteOptionListMutations(
-      filteredOptions,
-      orderedSetMutations,
-      undefined,
-      target.optionsFormat
-    );
-    const oldSpan = target.optionsSpan;
-    const previous = source.slice(oldSpan.from, oldSpan.to);
-    if (previous === replacement) {
-      return null;
-    }
-    const updated = replaceSpan(source, oldSpan, replacement);
-    return {
-      source: updated.source,
-      patch: {
-        oldSpan,
-        newSpan: updated.changedSpan,
-        replacement
-      }
-    };
-  }
-
-  return applyOptionMutationsToTarget(source, target, orderedSetMutations);
-}
-
-const SCOPE_TRANSFORM_OPTION_KEYS = new Set([
-  "scale",
-  "/tikz/scale",
-  "xscale",
-  "/tikz/xscale",
-  "yscale",
-  "/tikz/yscale",
-  "shift",
-  "/tikz/shift",
-  "xshift",
-  "/tikz/xshift",
-  "yshift",
-  "/tikz/yshift"
-]);
 
 function resolveFixedScopePoint(
   bounds: { minX: number; minY: number; maxX: number; maxY: number },
@@ -805,15 +836,28 @@ type PathRectangleResizeResolution =
   | { kind: "not-rectangle" }
   | { kind: "unsupported"; reason: string };
 
-function applyResizePathRectangle(
+/** Prepare from the current rendered snapshot once, at the start of a drag. */
+export function preparePathRectangleResize(
   source: string,
+  statements: readonly Statement[],
+  elements: readonly SceneElement[],
+  editHandles: readonly EditHandle[],
+  elementId: string
+): PathRectangleResizeBaseline | null {
+  if (editHandles.some(handle => handle.sourceRef.sourceId === elementId && handle.kind === "node-position")) return null;
+  const context = resolvePathRectangleResizeContext(statements, elements, editHandles, elementId);
+  return context.kind === "found" ? { source, elementId, context } : null;
+}
+
+/** Project to the actual moving corner/edge before snapping; direction limits constrained motion. */
+export function projectPathRectangleResize(
   action: ResizeElementAction,
   context: PathRectangleResizeContext
-): EditActionResultLike {
+): { point: WorldPoint; direction: WorldVector | null; nextStartWorld: WorldPoint; nextOppositeWorld: WorldPoint } | null {
   const affectsWidth = action.role.includes("left") || action.role.includes("right");
   const affectsHeight = action.role.includes("top") || action.role.includes("bottom");
   if (!affectsWidth && !affectsHeight) {
-    return { kind: "unsupported", reason: `Unsupported resize role: ${action.role}` };
+    return null;
   }
 
   const transform = isFrameLocalCoordinateEditHandle(context.startHandle)
@@ -827,7 +871,7 @@ function applyResizePathRectangle(
     ? context.oppositeHandle.local
     : worldToLocal(context.oppositeHandle.world, transform);
   if (!localPointer || !startLocal || !oppositeLocal) {
-    return { kind: "unsupported", reason: "Could not resolve local geometry for rectangle resize." };
+    return null;
   }
 
   const roleCorners = resolveRectangleRoleCorners(startLocal, oppositeLocal);
@@ -841,15 +885,18 @@ function applyResizePathRectangle(
   let minY = currentMinY;
   let maxY = currentMaxY;
 
+  let movingPoint: FrameLocalPoint;
+  let direction: WorldVector | null = null;
   if (isRectangleCornerRole(action.role)) {
     const fixedLocal = roleCorners[oppositeRectangleCornerRole(action.role)];
     let movingLocal = localPointer;
     if (action.preserveAspect) {
       const currentWidth = currentMaxX - currentMinX;
       const currentHeight = currentMaxY - currentMinY;
+      const requestedAspectRatio = action.preserveAspectRatio;
       const fixedAspectRatio =
-        Number.isFinite(action.preserveAspectRatio) && action.preserveAspectRatio! > RESIZE_EPSILON
-          ? action.preserveAspectRatio!
+        requestedAspectRatio != null && Number.isFinite(requestedAspectRatio) && requestedAspectRatio > RESIZE_EPSILON
+          ? requestedAspectRatio
           : currentWidth > RESIZE_EPSILON && currentHeight > RESIZE_EPSILON
             ? currentHeight / currentWidth
             : null;
@@ -859,12 +906,17 @@ function applyResizePathRectangle(
         const preservedWidth = Math.max(nextWidth, nextHeight / fixedAspectRatio);
         const preservedHeight = preservedWidth * fixedAspectRatio;
         const roleDirection = rectangleCornerDirection(action.role);
+        direction = worldVector(
+          pt(transform.a * roleDirection.x + transform.c * roleDirection.y * fixedAspectRatio),
+          pt(transform.b * roleDirection.x + transform.d * roleDirection.y * fixedAspectRatio)
+        );
         movingLocal = frameLocalPoint(
           pt(fixedLocal.x + roleDirection.x * preservedWidth),
           pt(fixedLocal.y + roleDirection.y * preservedHeight)
         );
       }
     }
+    movingPoint = movingLocal;
     minX = Math.min(fixedLocal.x, movingLocal.x);
     maxX = Math.max(fixedLocal.x, movingLocal.x);
     minY = Math.min(fixedLocal.y, movingLocal.y);
@@ -873,12 +925,16 @@ function applyResizePathRectangle(
     const fixedX = action.role === "left"
       ? (roleCorners["top-right"].x + roleCorners["bottom-right"].x) / 2
       : (roleCorners["top-left"].x + roleCorners["bottom-left"].x) / 2;
+    movingPoint = frameLocalPoint(localPointer.x, pt((currentMinY + currentMaxY) / 2));
+    direction = worldVector(pt(transform.a), pt(transform.b));
     minX = Math.min(fixedX, localPointer.x);
     maxX = Math.max(fixedX, localPointer.x);
-  } else if (action.role === "top" || action.role === "bottom") {
+  } else {
     const fixedY = action.role === "top"
       ? (roleCorners["bottom-left"].y + roleCorners["bottom-right"].y) / 2
       : (roleCorners["top-left"].y + roleCorners["top-right"].y) / 2;
+    movingPoint = frameLocalPoint(pt((currentMinX + currentMaxX) / 2), localPointer.y);
+    direction = worldVector(pt(transform.c), pt(transform.d));
     minY = Math.min(fixedY, localPointer.y);
     maxY = Math.max(fixedY, localPointer.y);
   }
@@ -891,6 +947,22 @@ function applyResizePathRectangle(
 
   const nextStartWorld = applyFrameTransform(transform, nextStartLocal);
   const nextOppositeWorld = applyFrameTransform(transform, nextOppositeLocal);
+  return { point: applyFrameTransform(transform, movingPoint), direction, nextStartWorld, nextOppositeWorld };
+}
+
+function applyResizePathRectangle(
+  source: string,
+  action: ResizeElementAction,
+  context: PathRectangleResizeContext
+): EditActionResultLike {
+  if (!action.role.includes("left") && !action.role.includes("right") && !action.role.includes("top") && !action.role.includes("bottom")) {
+    return { kind: "unsupported", reason: `Unsupported resize role: ${action.role}` };
+  }
+  const geometry = projectPathRectangleResize(action, context);
+  if (!geometry) {
+    return { kind: "unsupported", reason: "Could not resolve local geometry for rectangle resize." };
+  }
+  const { nextStartWorld, nextOppositeWorld } = geometry;
   let oppositeRewriteHandle = context.oppositeHandle;
   if (
     isRelativeCoordinateEditHandle(oppositeRewriteHandle) &&
@@ -907,6 +979,9 @@ function applyResizePathRectangle(
     { handle: oppositeRewriteHandle, newWorld: nextOppositeWorld }
   ];
 
+  const restoresBaseline = action.rectangleBaseline &&
+    pointDistanceSquared(nextStartWorld, context.startHandle.world) <= 1e-12 &&
+    pointDistanceSquared(nextOppositeWorld, context.oppositeHandle.world) <= 1e-12;
   const replacementBySpan = new Map<string, { span: Span; text: string }>();
   for (const target of rewriteTargets) {
     const handle = target.handle;
@@ -915,6 +990,7 @@ function applyResizePathRectangle(
       return { kind: "unsupported", reason: "Some selected handles are stale. Wait for recompute and try again." };
     }
 
+    if (restoresBaseline) continue;
     const text = rewriteCoordinate(target.newWorld, handle, source);
     if (text == null) {
       return { kind: "unsupported", reason: "Could not rewrite one or more rectangle coordinates." };
@@ -940,7 +1016,10 @@ function applyResizePathRectangle(
 
   const replacements = [...replacementBySpan.values()];
   if (replacements.length === 0) {
-    return { kind: "unsupported", reason: "Resize would not change node constraints." };
+    // A baseline no-op can restore the original source after previous updates.
+    return action.rectangleBaseline
+      ? { kind: "success", newSource: source, patches: [], changedSourceIds: [action.elementId] }
+      : { kind: "unsupported", reason: "Resize would not change node constraints." };
   }
 
   const applied = applyTextReplacements(source, replacements);
@@ -969,7 +1048,7 @@ function resolvePathRectangleResizeContext(
     return { kind: "not-rectangle" };
   }
 
-  const rectangle = nonTextElements[0];
+  const rectangle = requireArrayValue(nonTextElements, 0);
   if (rectangle.kind !== "Path") {
     return { kind: "not-rectangle" };
   }
@@ -987,7 +1066,8 @@ function resolvePathRectangleResizeContext(
     };
   }
 
-  const [startHandle, oppositeHandle] = pathPointHandles;
+  const startHandle = requireArrayValue(pathPointHandles, 0);
+  const oppositeHandle = requireArrayValue(pathPointHandles, 1);
   if (startHandle.rewriteMode === "unsupported" || oppositeHandle.rewriteMode === "unsupported") {
     return {
       kind: "unsupported",
@@ -1032,7 +1112,7 @@ function resolvePathShapeHintFromItems(items: readonly PathItem[]): ScenePathSha
   if (hints.size !== 1) {
     return null;
   }
-  return [...hints][0];
+  return requireArrayValue([...hints], 0);
 }
 
 function collectPathShapeHints(items: readonly PathItem[], hints: Set<ScenePathShapeHint>): void {
@@ -1091,24 +1171,27 @@ function applyResizePathCircleOrEllipse(
     return { kind: "unsupported", reason: "Resize requires explicit circle/ellipse radii for single-axis drags." };
   }
 
-  let nextRxLocal = affectsWidth ? localDx : currentLocalRadii!.rx;
-  let nextRyLocal = affectsHeight ? localDy : currentLocalRadii!.ry;
+  let nextRxLocal = localDx;
+  if (!affectsWidth && currentLocalRadii) {
+    nextRxLocal = currentLocalRadii.rx;
+  }
+  let nextRyLocal = localDy;
+  if (!affectsHeight && currentLocalRadii) {
+    nextRyLocal = currentLocalRadii.ry;
+  }
   if (context.shapeKind === "circle") {
-    const currentRadius = currentLocalRadii?.rx ?? Math.max(nextRxLocal, nextRyLocal);
-    const nextRadius = Math.max(
-      affectsWidth ? localDx : currentRadius,
-      affectsHeight ? localDy : currentRadius
-    );
+    const nextRadius = affectsWidth && affectsHeight ? Math.max(localDx, localDy) : affectsWidth ? localDx : localDy;
     nextRxLocal = nextRadius;
     nextRyLocal = nextRadius;
-  } else if (context.shapeKind === "ellipse" && action.preserveAspect) {
+  } else if (action.preserveAspect) {
     const fallbackAspectRatio =
       currentLocalRadii && currentLocalRadii.rx > RESIZE_EPSILON && currentLocalRadii.ry > RESIZE_EPSILON
         ? currentLocalRadii.ry / currentLocalRadii.rx
         : null;
+    const requestedAspectRatio = action.preserveAspectRatio;
     const fixedAspectRatio =
-      Number.isFinite(action.preserveAspectRatio) && action.preserveAspectRatio! > RESIZE_EPSILON
-        ? action.preserveAspectRatio!
+      requestedAspectRatio != null && Number.isFinite(requestedAspectRatio) && requestedAspectRatio > RESIZE_EPSILON
+        ? requestedAspectRatio
         : fallbackAspectRatio;
     if (!fixedAspectRatio || fixedAspectRatio <= RESIZE_EPSILON) {
       return { kind: "unsupported", reason: "Resize requires explicit ellipse radii to preserve aspect ratio." };
@@ -1146,7 +1229,12 @@ function applyResizePathCircleOrEllipse(
   const radiusMutations = buildShapeRadiusMutations(context, nextRxLocal, nextRyLocal);
   const optionTarget = pickPathShapeResizeOptionTarget(context.syntax.optionItems);
   if (optionTarget) {
-    const replacement = rewriteOptionListMutations(optionTarget.options, radiusMutations);
+    const replacement = rewriteSourceBackedOptionListMutations(
+      source,
+      optionTarget.span,
+      optionTarget.options,
+      radiusMutations
+    );
     const rewritten = applySpanTextReplacement(source, optionTarget.span, replacement);
     if (!rewritten) {
       return { kind: "unsupported", reason: "Resize would not change node constraints." };
@@ -1167,10 +1255,10 @@ function applyResizePathCircleOrEllipse(
   }
 
   const inserted = `[${entries.join(", ")}]`;
-  const rewritten = applySpanTextReplacement(source, {
+  const rewritten = requireDefined(applySpanTextReplacement(source, {
     from: context.syntax.keywordSpan.to,
     to: context.syntax.keywordSpan.to
-  }, inserted)!;
+  }, inserted), "Missing required applySpanTextReplacement(source, { from: context.syntax.keywordSpan.to, to: context.syntax.keywordSp");
 
   return {
     kind: "success",
@@ -1202,12 +1290,12 @@ function resolvePathShapeResizeContext(
   let requireSingleCenterHandle = false;
 
   if (explicitShapeElements.length === 1 && nonTextElements.length === 1) {
-    const explicitShape = explicitShapeElements[0];
+    const explicitShape = requireArrayValue(explicitShapeElements, 0);
     shapeKind = explicitShape.kind === "Circle" ? "circle" : "ellipse";
     center = explicitShape.center;
-  } else if (explicitShapeElements.length === 0 && nonTextElements.length === 1 && nonTextElements[0].kind === "Path") {
-    const pathElement = nonTextElements[0];
-    const hint = resolveScenePathShapeHint(pathElement, pathStatement);
+  } else if (explicitShapeElements.length === 0 && nonTextElements.length === 1 && requireArrayValue(nonTextElements, 0).kind === "Path") {
+    const pathElement = requireArrayValue(nonTextElements, 0);
+    const hint = pathElement.kind === "Path" ? resolveScenePathShapeHint(pathElement, pathStatement) : null;
     if (hint === "circle" || hint === "ellipse") {
       shapeKind = hint;
       requireSingleCenterHandle = true;
@@ -1233,7 +1321,7 @@ function resolvePathShapeResizeContext(
     return { kind: "unsupported", reason: "Resize requires circle/ellipse paths with explicit center coordinates." };
   }
 
-  let centerHandle = candidateHandles[0];
+  let centerHandle = requireArrayValue(candidateHandles, 0);
   if (center) {
     let bestDistanceSq = Number.POSITIVE_INFINITY;
     for (const handle of candidateHandles) {
@@ -1264,21 +1352,21 @@ function resolvePathShapeResizeSyntax(items: readonly PathItem[]): PathShapeResi
   if (keywordItems.length !== 1) {
     return null;
   }
-  const keywordItem = keywordItems[0];
+  const keywordItem = requireArrayValue(keywordItems, 0);
   const keywordIndex = items.findIndex((item) => item.id === keywordItem.id);
 
   const optionItems: PathOptionItem[] = [];
   let payloadCoordinate: CoordinateItem | null = null;
   for (let index = keywordIndex + 1; index < items.length; index += 1) {
-    const next = items[index];
+    const next = requireArrayValue(items, index);
     if (next.kind === "PathComment") {
       continue;
     }
-    if (next.kind === "PathOption" && !payloadCoordinate) {
+    if (next.kind === "PathOption") {
       optionItems.push(next);
       continue;
     }
-    if (next.kind === "Coordinate" && !payloadCoordinate) {
+    if (next.kind === "Coordinate") {
       const parsed =
         keywordItem.keyword === "circle"
           ? parseCircleRadiusFromCoordinateRaw(next.raw) != null
@@ -1468,7 +1556,7 @@ function pickPathShapeResizeOptionTarget(
     return null;
   }
   for (let index = optionItems.length - 1; index >= 0; index -= 1) {
-    const item = optionItems[index];
+    const item = requireArrayValue(optionItems, index);
     const hasRadiusEntry = item.options.entries.some(
       (entry) =>
         entry.kind === "kv" &&
@@ -1478,7 +1566,7 @@ function pickPathShapeResizeOptionTarget(
       return item;
     }
   }
-  return optionItems[optionItems.length - 1];
+  return requireArrayValue(optionItems, optionItems.length - 1);
 }
 
 function applySpanTextReplacement(
@@ -1559,11 +1647,10 @@ function resolveNodeResizeLinearTransform(
   sourceId: string
 ): { a: number; b: number; c: number; d: number } | null {
   const sourceElements = elements.filter((element) => element.sourceRef.sourceId === sourceId && !element.adornment);
-  const transformed = sourceElements.find((element) => element.transform != null);
-  if (!transformed) {
+  const transform = sourceElements.find((element) => element.transform != null)?.transform;
+  if (!transform) {
     return null;
   }
-  const transform = transformed.transform!;
   return {
     a: transform.a,
     b: transform.b,
@@ -1590,6 +1677,15 @@ function resolveNodeResizeBounds(
   return boundsBySource.get(sourceId) ?? null;
 }
 
+/** Measure the untransformed shape; inverse-transforming its world AABB
+ * overestimates both dimensions after rotation or skew. */
+function resolveNodeResizeLocalSize(elements: readonly SceneElement[], sourceId: string): { width: number; height: number } | null {
+  const localElements = elements.filter(element => element.sourceRef.sourceId === sourceId)
+    .map(element => { const local = { ...element }; delete local.transform; return local; });
+  const bounds = resolveNodeResizeBounds(localElements, sourceId);
+  return bounds ? { width: bounds.maxX - bounds.minX, height: bounds.maxY - bounds.minY } : null;
+}
+
 function targetHasOptionKey(target: PropertyTarget, key: string): boolean {
   const normalized = normalizeOptionKey(key);
   for (const entry of target.options?.entries ?? []) {
@@ -1611,7 +1707,7 @@ function resolveNodeWidthResizeStrategy(target: PropertyTarget, affectsWidth: bo
 }
 
 function resolveNodeHorizontalInsetFallback(target: PropertyTarget): number {
-  const defaultInnerXSep = parseLength(".3333em", "pt")!;
+  const defaultInnerXSep = requireDefined(parseLength(".3333em", "pt"), "Missing required parseLength(\".3333em\", \"pt\")");
   let innerXSep = defaultInnerXSep;
   for (const entry of target.options?.entries ?? []) {
     if (entry.kind !== "kv") {
@@ -1654,8 +1750,15 @@ function resolveNodeTextWidthInsetLocal(args: {
     return null;
   }
 
-  const nodeVisualWidth = textElement.nodeVisualWidth!;
-  const textBlockWidth = textElement.textBlockWidth!;
+  const { nodeVisualWidth, textBlockWidth } = textElement;
+  if (
+    typeof nodeVisualWidth !== "number" ||
+    typeof textBlockWidth !== "number" ||
+    !Number.isFinite(nodeVisualWidth) ||
+    !Number.isFinite(textBlockWidth)
+  ) {
+    return null;
+  }
   const rawInset = Math.max(0, nodeVisualWidth - textBlockWidth);
   if (!args.nodeLinearTransform) {
     return rawInset;
@@ -1832,8 +1935,8 @@ function resolveTargetMinimumDimensions(target: PropertyTarget): {
   hasExplicitMinimumWidth: boolean;
   hasExplicitMinimumHeight: boolean;
 } {
-  let minimumWidth = parseLength("1pt", "pt")!;
-  let minimumHeight = parseLength("1pt", "pt")!;
+  let minimumWidth = requireDefined(parseLength("1pt", "pt"), "Missing required parseLength(\"1pt\", \"pt\")");
+  let minimumHeight = requireDefined(parseLength("1pt", "pt"), "Missing required parseLength(\"1pt\", \"pt\")");
   let minimumSize: number | null = null;
   let hasExplicitMinimumWidth = false;
   let hasExplicitMinimumHeight = false;
@@ -1974,7 +2077,7 @@ function resolveResizePropertyTarget(
     return defaultTarget;
   }
 
-  const nodeTarget = resolvePropertyTarget(source, nodeIds[0], parseOptions);
+  const nodeTarget = resolvePropertyTarget(source, requireArrayValue(nodeIds, 0), parseOptions);
   if (nodeTarget.kind === "found") {
     return nodeTarget.target;
   }
@@ -2041,7 +2144,7 @@ function isDiamondNodeShapeInPathStatement(statements: readonly Statement[], ele
   if (nodes.length !== 1) {
     return false;
   }
-  return resolveNodeShape(nodes[0].options) === "diamond";
+  return resolveNodeShape(requireArrayValue(nodes, 0).options) === "diamond";
 }
 
 function collectPathNodeItems(items: readonly PathItem[]): NodeItem[] {

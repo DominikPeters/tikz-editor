@@ -1,3 +1,5 @@
+import { clamp } from "../utils/math.js";
+
 const TRAILING_ESCAPE_DISCHARGE_SUFFIX = "phantom{}";
 
 export type TeXPrefixMathMode =
@@ -357,8 +359,4 @@ function normalizeIndex(value: number, max: number): number {
     return 0;
   }
   return clamp(Math.floor(value), 0, max);
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }

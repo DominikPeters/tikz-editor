@@ -1,5 +1,10 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { COLOR_HEX, NAMED_COLORS } from "./constants.js";
 import { normalizeOptionValue } from "./option-utils.js";
+import { hexToRgb, rgbToHex } from "../../utils/color-convert.js";
+import { clamp01 } from "../../utils/math.js";
+
+export { clamp01 } from "../../utils/math.js";
 
 export type ColorAliasResolver = (rawColorName: string) => string | null;
 
@@ -183,8 +188,9 @@ export function resolveColorToCss(
 
 function toRgbColor(color: string): { r: number; g: number; b: number } | null {
   const normalized = color.trim().toLowerCase();
-  if (normalized in COLOR_HEX) {
-    return hexToRgb(COLOR_HEX[normalized]);
+  const namedColor = COLOR_HEX[normalized];
+  if (namedColor !== undefined) {
+    return hexToRgb(namedColor);
   }
   if (/^#[0-9a-f]{3}$/i.test(normalized) || /^#[0-9a-f]{6}$/i.test(normalized)) {
     return hexToRgb(normalized);
@@ -192,16 +198,9 @@ function toRgbColor(color: string): { r: number; g: number; b: number } | null {
   return null;
 }
 
-export function clamp01(value: number): number {
-  if (value < 0) {
-    return 0;
-  }
-  if (value > 1) {
-    return 1;
-  }
-  return value;
-}
-
+function parseComponentList(raw: string, count: 1): [number] | null;
+function parseComponentList(raw: string, count: 3): [number, number, number] | null;
+function parseComponentList(raw: string, count: 4): [number, number, number, number] | null;
 function parseComponentList(raw: string, count: number): number[] | null {
   const parts = raw
     .split(",")
@@ -272,8 +271,8 @@ function parseMixedColor(raw: string, currentColor: string | null, resolveAlias?
     }
     cursor += 1;
 
-    const mixColorName = parts[cursor] && parts[cursor].length > 0 ? parts[cursor] : "white";
-    if (parts[cursor] && parts[cursor].length > 0) {
+    const mixColorName = parts[cursor] && requireArrayValue(parts, cursor).length > 0 ? requireArrayValue(parts, cursor) : "white";
+    if (parts[cursor] && requireArrayValue(parts, cursor).length > 0) {
       cursor += 1;
     }
 
@@ -304,7 +303,7 @@ function resolveMixedColorToken(
   if (!resolvedAlias || resolvedAlias === relative) {
     return relative;
   }
-  return normalizeColor(resolvedAlias, { currentColor, resolveAlias });
+  return normalizeColor(resolvedAlias, { currentColor, ...(resolveAlias === undefined ? {} : { resolveAlias: resolveAlias }) });
 }
 
 function resolveAliasesInMixedColorExpression(raw: string, resolveAlias?: ColorAliasResolver): string {
@@ -377,7 +376,7 @@ function parseNamedRgbComponents(raw: string): { r: number; g: number; b: number
     if (!match) {
       return null;
     }
-    const channel = match[1].toLowerCase();
+    const channel = requireArrayValue(match, 1).toLowerCase();
     const value = Number(match[2]);
     if (!Number.isFinite(value)) {
       return null;
@@ -400,7 +399,7 @@ function unwrapSingleBracePair(raw: string): string {
 
   let depth = 0;
   for (let index = 0; index < trimmed.length; index += 1) {
-    const char = trimmed[index];
+    const char = trimmed.charAt(index);
     if (char === "\\") {
       index += 1;
       continue;
@@ -435,32 +434,12 @@ function resolveCurrentColor(color: string | null | undefined): string | null {
   if (normalized.length === 0 || normalized === "." || normalized === "none") {
     return null;
   }
-  if (normalized in COLOR_HEX) {
-    return COLOR_HEX[normalized];
+  const namedColor = COLOR_HEX[normalized];
+  if (namedColor !== undefined) {
+    return namedColor;
   }
   if (/^#[0-9a-f]{3}$/i.test(normalized) || /^#[0-9a-f]{6}$/i.test(normalized)) {
     return normalized;
   }
   return parseMixedColor(normalized, null) ?? normalized;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const normalized = hex.replace(/^#/, "");
-  const value = normalized.length === 3 ? normalized.split("").map((char) => char + char).join("") : normalized;
-  const parsed = Number.parseInt(value, 16);
-  return {
-    r: (parsed >> 16) & 255,
-    g: (parsed >> 8) & 255,
-    b: parsed & 255
-  };
-}
-
-function rgbToHex(rgb: { r: number; g: number; b: number }): string {
-  return (
-    "#" +
-    [rgb.r, rgb.g, rgb.b]
-      .map((component) => Math.round(Math.max(0, Math.min(255, component))))
-      .map((component) => component.toString(16).padStart(2, "0"))
-      .join("")
-  );
 }

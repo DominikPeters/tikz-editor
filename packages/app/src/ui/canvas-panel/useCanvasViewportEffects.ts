@@ -1,14 +1,15 @@
-import { useEffect, useLayoutEffect, type MutableRefObject, type RefObject } from "react";
-import { viewportPoint as makeViewportPoint, clientPoint, px } from "tikz-editor/coords/index";
+import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
+import { viewportPoint as makeViewportPoint, clientPoint, px } from "@tikz-editor/core/coords/index";
 import { clamp, distanceSquared, viewportToSvgPoint } from "./geometry";
 import { resolveToolCreateCurrentWorld } from "./interaction-helpers";
 import type { ClientPoint, SvgPoint, ViewportPoint, WorldPoint } from "../coords/types";
 import type { CanvasTransform } from "../../store/types";
-import type { CanvasSnapshot, DragState, PendingTouchViewport, SourceBoundsMap, StateSetter, ValueSetter } from "./types";
-import type { ResizeFrame } from "./resize-frames";
-import type { SvgViewBox } from "tikz-editor/svg/types";
+import type { CanvasSnapshot, DragState, PendingTouchViewport, StateSetter, ValueSetter } from "./types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 
 export type UseCanvasViewportEffectsArgs = {
+  canvasContextKey?: string;
+  viewportStateReadyRef?: MutableRefObject<boolean>;
   dragRef: MutableRefObject<DragState | null>;
   pendingTouchViewportRef: MutableRefObject<PendingTouchViewport | null>;
   suppressNextBackgroundClickRef: MutableRefObject<boolean>;
@@ -17,18 +18,10 @@ export type UseCanvasViewportEffectsArgs = {
   setToolCursorWorld: StateSetter<WorldPoint | null>;
   viewportRef: RefObject<HTMLDivElement | null>;
   setViewportSize: StateSetter<{ width: number; height: number }>;
-  canvasTransform: CanvasTransform;
   canvasTransformRef: MutableRefObject<CanvasTransform>;
-  selectedElementIds: ReadonlySet<string>;
-  selectedElementIdsRef: MutableRefObject<ReadonlySet<string>>;
   svgResult: CanvasSnapshot["svg"];
   svgResultRef: MutableRefObject<CanvasSnapshot["svg"]>;
-  fitToContentModeActive: boolean;
   fitToContentModeActiveRef: MutableRefObject<boolean>;
-  sourceBoundsSvg: SourceBoundsMap;
-  sourceBoundsSvgRef: MutableRefObject<SourceBoundsMap>;
-  resizeFramesBySource: ReadonlyMap<string, ResizeFrame | null>;
-  liveResizeFramesRef: MutableRefObject<ReadonlyMap<string, ResizeFrame | null>>;
   previousViewBoxRef: MutableRefObject<SvgViewBox | null>;
   dispatchCanvasTransform: (transform: CanvasTransform) => void;
   zoomSpeed: number;
@@ -48,18 +41,10 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     setToolCursorWorld,
     viewportRef,
     setViewportSize,
-    canvasTransform,
     canvasTransformRef,
-    selectedElementIds,
-    selectedElementIdsRef,
     svgResult,
     svgResultRef,
-    fitToContentModeActive,
     fitToContentModeActiveRef,
-    sourceBoundsSvg,
-    sourceBoundsSvgRef,
-    resizeFramesBySource,
-    liveResizeFramesRef,
     previousViewBoxRef,
     dispatchCanvasTransform,
     zoomSpeed,
@@ -68,6 +53,16 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     setFitToContentModeActive,
     requestFitToContent
   } = args;
+  const dispatchTransformRef = useRef(dispatchCanvasTransform);
+  const previousViewBoxContextRef = useRef(args.canvasContextKey);
+  useLayoutEffect(() => { dispatchTransformRef.current = dispatchCanvasTransform; });
+  const [interactionViewport, setInteractionViewport] = useState<HTMLDivElement | null>(null);
+  // A stable ref can point at a replaced DOM node; inspect it after every commit.
+  // The identity comparison makes the setter a no-op while the surface is unchanged.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    setInteractionViewport(current => current === viewportRef.current ? current : viewportRef.current);
+  });
 
   useEffect(() => {
     const onModifierKeyChange = (event: KeyboardEvent) => {
@@ -104,7 +99,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
   }, [dragRef, setToolCursorWorld, setToolDraft]);
 
   useEffect(() => {
-    const viewport = viewportRef.current;
+    const viewport = interactionViewport;
     if (!viewport) return;
 
     const updateSize = () => {
@@ -121,33 +116,14 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     observer.observe(viewport);
 
     return () => { observer.disconnect(); };
-  }, [setViewportSize, viewportRef]);
+  }, [setViewportSize, interactionViewport]);
 
   useLayoutEffect(() => {
-    canvasTransformRef.current = canvasTransform;
-  }, [canvasTransform, canvasTransformRef]);
-
-  useEffect(() => {
-    selectedElementIdsRef.current = selectedElementIds;
-  }, [selectedElementIds, selectedElementIdsRef]);
-
-  useEffect(() => {
-    svgResultRef.current = svgResult;
-  }, [svgResult, svgResultRef]);
-
-  useLayoutEffect(() => {
-    fitToContentModeActiveRef.current = fitToContentModeActive;
-  }, [fitToContentModeActive, fitToContentModeActiveRef]);
-
-  useEffect(() => {
-    sourceBoundsSvgRef.current = sourceBoundsSvg;
-  }, [sourceBoundsSvg, sourceBoundsSvgRef]);
-
-  useEffect(() => {
-    liveResizeFramesRef.current = resizeFramesBySource;
-  }, [liveResizeFramesRef, resizeFramesBySource]);
-
-  useLayoutEffect(() => {
+    if (previousViewBoxContextRef.current !== args.canvasContextKey || args.viewportStateReadyRef?.current === false) {
+      previousViewBoxContextRef.current = args.canvasContextKey;
+      previousViewBoxRef.current = null;
+    }
+    if (args.viewportStateReadyRef?.current === false) return;
     if (!svgResult) {
       previousViewBoxRef.current = null;
       return;
@@ -172,10 +148,10 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       ((previous.y + previous.height) - (svgResult.viewBox.y + svgResult.viewBox.height)) * scale;
 
     dispatchCanvasTransform({ translateX, translateY, scale });
-  }, [canvasTransformRef, dispatchCanvasTransform, previousViewBoxRef, svgResult]);
+  }, [args.canvasContextKey, args.viewportStateReadyRef, canvasTransformRef, dispatchCanvasTransform, previousViewBoxRef, svgResult]);
 
   useEffect(() => {
-    const viewport = viewportRef.current;
+    const viewport = interactionViewport;
     if (!viewport) return;
 
     const activeTouchPointers = new Map<number, ClientPoint>();
@@ -276,7 +252,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
         setFitToContentModeActive(false);
       }
 
-      dispatchCanvasTransform({ translateX, translateY, scale: nextScale });
+      dispatchTransformRef.current({ translateX, translateY, scale: nextScale });
     };
 
     const updatePointerPinchGesture = () => {
@@ -290,6 +266,17 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     const onWheel = (event: WheelEvent) => {
       const currentSvg = svgResultRef.current;
       if (!currentSvg) return;
+      // Plain wheel gestures over the text edit surface scroll its textarea,
+      // not the canvas. Zoom chords keep zooming the canvas (and must not
+      // fall through to browser page zoom).
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        event.target instanceof Element &&
+        event.target.closest('[data-testid="canvas-text-edit-popup"]')
+      ) {
+        return;
+      }
       const currentTransform = canvasTransformRef.current;
 
       event.preventDefault();
@@ -316,11 +303,11 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
         const translateX = viewportPoint.x - (svgPoint.x - currentSvg.viewBox.x) * nextScale;
         const translateY = viewportPoint.y - (svgPoint.y - currentSvg.viewBox.y) * nextScale;
 
-        dispatchCanvasTransform({ translateX, translateY, scale: nextScale });
+        dispatchTransformRef.current({ translateX, translateY, scale: nextScale });
         return;
       }
 
-      dispatchCanvasTransform({
+      dispatchTransformRef.current({
         translateX: currentTransform.translateX - event.deltaX,
         translateY: currentTransform.translateY - event.deltaY,
         scale: currentTransform.scale
@@ -382,7 +369,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
         current != null &&
         Math.hypot(current.x - start.point.x, current.y - start.point.y) <= 12 &&
         event.timeStamp - start.time <= 320;
-      if (isTap && current) {
+      if (isTap) {
         if (
           lastTouchTap &&
           event.timeStamp - lastTouchTap.time <= 360 &&
@@ -425,7 +412,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       return null;
     };
 
-    const viewportTouchIds = (touches: TouchList): number[] => {
+    const viewportTouchPair = (touches: TouchList): [number, number] | null => {
       const rect = viewport.getBoundingClientRect();
       const ids: number[] = [];
       for (let index = 0; index < touches.length; index += 1) {
@@ -440,12 +427,13 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
           ids.push(touch.identifier);
         }
       }
-      return ids;
+      const [first, second] = ids;
+      return first === undefined || second === undefined ? null : [first, second];
     };
 
     const beginTouchEventPinch = (event: TouchEvent): boolean => {
-      const ids = viewportTouchIds(event.touches);
-      if (ids.length < 2) {
+      const ids = viewportTouchPair(event.touches);
+      if (!ids) {
         return false;
       }
       const first = touchPointById(event.touches, ids[0]);
@@ -454,7 +442,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
         return false;
       }
       touchEventPinchActive = true;
-      touchEventPinchIds = [ids[0], ids[1]];
+      touchEventPinchIds = ids;
       activeTouchPointers.clear();
       touchStartPointers.clear();
       claimViewportPinch(event);
@@ -471,9 +459,9 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       const second = touchPointById(event.touches, touchEventPinchIds[1]);
       if (!first || !second) {
         pinchGesture = null;
-        const ids = viewportTouchIds(event.touches);
-        if (ids.length >= 2) {
-          touchEventPinchIds = [ids[0], ids[1]];
+        const ids = viewportTouchPair(event.touches);
+        if (ids) {
+          touchEventPinchIds = ids;
           return updateTouchEventPinch(event);
         }
         if (event.touches.length === 0) {
@@ -507,36 +495,55 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       }
       updateTouchEventPinch(event);
     };
+    const clearTouchGesture = () => {
+      activeTouchPointers.clear();
+      touchStartPointers.clear();
+      touchEventPinchActive = false;
+      touchEventPinchIds = null;
+      suppressTapUntilTouchesEnd = false;
+      lastTouchTap = null;
+      pinchGesture = null;
+      clearPendingTouchViewport();
+    };
+    const onPointerCancel = (event: PointerEvent) => {
+      // WebKit cancels the pointers once a touch-event pinch claims them;
+      // that pinch ends through touchend/touchcancel instead.
+      if (touchEventPinchActive) {
+        stopPinchEvent(event);
+        return;
+      }
+      if (activeTouchPointers.has(event.pointerId)) clearTouchGesture();
+    };
 
     viewport.addEventListener("wheel", onWheel, { passive: false });
     viewport.addEventListener("pointerdown", onPointerDown, { capture: true, passive: false });
     window.addEventListener("pointermove", onPointerMove, { capture: true, passive: false });
     window.addEventListener("pointerup", onPointerUp, { capture: true, passive: false });
-    window.addEventListener("pointercancel", onPointerUp, { capture: true, passive: false });
+    window.addEventListener("pointercancel", onPointerCancel, { capture: true, passive: false });
     window.addEventListener("touchstart", onTouchStart, { capture: true, passive: false });
     window.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
     window.addEventListener("touchend", onTouchEnd, { capture: true, passive: false });
     window.addEventListener("touchcancel", onTouchEnd, { capture: true, passive: false });
+    window.addEventListener("blur", clearTouchGesture);
 
     return () => {
       viewport.removeEventListener("wheel", onWheel);
       viewport.removeEventListener("pointerdown", onPointerDown, { capture: true });
       window.removeEventListener("pointermove", onPointerMove, { capture: true });
       window.removeEventListener("pointerup", onPointerUp, { capture: true });
-      window.removeEventListener("pointercancel", onPointerUp, { capture: true });
+      window.removeEventListener("pointercancel", onPointerCancel, { capture: true });
       window.removeEventListener("touchstart", onTouchStart, { capture: true });
       window.removeEventListener("touchmove", onTouchMove, { capture: true });
       window.removeEventListener("touchend", onTouchEnd, { capture: true });
       window.removeEventListener("touchcancel", onTouchEnd, { capture: true });
-      activeTouchPointers.clear();
-      touchStartPointers.clear();
-      pinchGesture = null;
+      window.removeEventListener("blur", clearTouchGesture);
+      clearTouchGesture();
     };
   }, [
     MAX_SCALE,
     MIN_SCALE,
     canvasTransformRef,
-    dispatchCanvasTransform,
+    args.canvasContextKey,
     dragRef,
     fitToContentModeActiveRef,
     pendingTouchViewportRef,
@@ -545,7 +552,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     setFitToContentModeActive,
     svgResultRef,
     suppressNextBackgroundClickRef,
-    viewportRef,
+    interactionViewport,
     zoomSpeed
   ]);
 }

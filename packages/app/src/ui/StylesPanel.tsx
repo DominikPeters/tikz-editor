@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
-import type { InspectorProperty, SetPropertyWriteTarget } from "tikz-editor/edit/inspector";
-import { buildPropertyMutationsFromRequest } from "tikz-editor/edit/property-registry";
+import type { InspectorProperty, SetPropertyWriteTarget } from "@tikz-editor/core/edit/inspector";
+import { buildPropertyMutationsFromRequest } from "@tikz-editor/core/edit/property-registry";
 import {
   areStylesCascadeModelsIdentical,
   buildSharedStylesCascadeModel,
@@ -12,10 +12,10 @@ import {
   type StylesCascadeDeclaration,
   type StylesCascadeModel,
   type StylesCascadeSection
-} from "tikz-editor/edit/styles-cascade";
-import { NON_STYLE_OPTION_FLAGS, NON_STYLE_OPTION_KEYS } from "tikz-editor/semantic/style/constants";
-import type { SceneElement } from "tikz-editor/semantic/types";
-import { getSharedEditAnalysisView, getSharedEditAnalysisSession } from "../edit-analysis-manager";
+} from "@tikz-editor/core/edit/styles-cascade";
+import { NON_STYLE_OPTION_FLAGS, NON_STYLE_OPTION_KEYS } from "@tikz-editor/core/semantic/style/constants";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
+import { buildEditParseOptions } from "../edit-parse-options";
 import { useProjectNamedColorSwatches } from "../colors/project-named-colors";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { useEditorStore } from "../store/store";
@@ -59,7 +59,7 @@ const ALL_KEY_SUGGESTIONS: CustomDropdownItem<string>[] = (() => {
 export function StylesPanel() {
   const selectedIds = useEditorStore((s) => s.selectedElementIds);
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
-  const activeFigureId = useEditorStore((s) => s.activeFigureId);
+  const activeRootId = useEditorStore((s) => s.activeRootId);
   const snapshot = useEditorStore((s) => s.snapshot);
   const source = useEditorStore((s) => s.source);
   const sourceRevision = useEditorStore((s) => s.sourceRevision);
@@ -81,24 +81,17 @@ export function StylesPanel() {
       .map((sourceId) => bySource.get(sourceId))
       .filter((element): element is SceneElement => element != null);
   }, [selectedIds, selectedSourceIds, snapshot.scene]);
-  const editAnalysisView = useMemo(
+  const parseOptions = useMemo(
     () =>
-      getSharedEditAnalysisView({
+      buildEditParseOptions({
         documentId: activeDocumentId,
         sourceRevision,
         source,
-        activeFigureId,
-        snapshot
+        activeRootId,
+        snapshot,
+        analysis: "shared"
       }),
-    [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
-  );
-  const parseOptions = useMemo(
-    () => ({
-      activeFigureId,
-      analysisView: editAnalysisView,
-      analysisSession: getSharedEditAnalysisSession()
-    }),
-    [activeFigureId, editAnalysisView]
+    [activeDocumentId, activeRootId, snapshot, source, sourceRevision]
   );
 
   const models = useMemo(
@@ -140,7 +133,7 @@ export function StylesPanel() {
 
   const applySimpleMutation = useCallback(
     (writeTargets: readonly SetPropertyWriteTarget[], key: string, value: string, clearKeys?: string[]) => {
-      dispatchActions(planStylesSetPropertyActions(writeTargets, { key, value, clearKeys }));
+      dispatchActions(planStylesSetPropertyActions(writeTargets, { key, value, ...(clearKeys === undefined ? {} : { clearKeys }) }));
     },
     [dispatchActions]
   );
@@ -169,7 +162,13 @@ export function StylesPanel() {
           applySimpleMutation(writeTargets, property.write.key, String(nextValue));
           return;
         case "number": {
-          const writes = property.write ? writeTargets.map((target) => ({ ...target, key: property.write!.key, transformContext: property.write!.transformContext })) : [];
+          const write = property.write;
+          const writes = write ? writeTargets.map((target) => {
+            const updated = { ...target, key: write.key };
+            if (write.transformContext === undefined) delete updated.transformContext;
+            else updated.transformContext = write.transformContext;
+            return updated;
+          }) : [];
           if (property.write?.transformContext) {
             applyRegistryMutations(writes, buildPropertyMutationsFromRequest({
               kind: "transform",
@@ -196,27 +195,39 @@ export function StylesPanel() {
           applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "line-width-value", value: `${nextValue}pt` }));
           return;
         case "dashStyle": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "dash-style", value: String(nextValue) as Exclude<typeof property.value, "custom"> }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "dash-style", value: selected.value }));
           return;
         }
         case "lineCap": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "line-cap", value: String(nextValue) as Exclude<typeof property.value, "custom"> }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "line-cap", value: selected.value }));
           return;
         }
         case "lineJoin": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "line-join", value: String(nextValue) as Exclude<typeof property.value, "custom"> }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "line-join", value: selected.value }));
           return;
         }
         case "fillMode": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "fill-mode", value: String(nextValue) as Exclude<typeof property.value, "custom">, context: property.context }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "fill-mode", value: selected.value, context: property.context }));
           return;
         }
         case "fillShading": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "fill-shading", value: String(nextValue) as Exclude<typeof property.value, "custom"> }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "fill-shading", value: selected.value }));
           return;
         }
         case "fillPattern": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "fill-pattern", value: String(nextValue) as Exclude<typeof property.value, "custom"> }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "fill-pattern", value: selected.value }));
           return;
         }
         case "roundedCorners": {
@@ -229,7 +240,9 @@ export function StylesPanel() {
           return;
         }
         case "nodeShape": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "node-shape", value: String(nextValue) as Exclude<typeof property.value, "custom"> }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "node-shape", value: selected.value }));
           return;
         }
         case "arrowTip":
@@ -297,13 +310,15 @@ export function StylesPanel() {
         ? section.addPropertyTemplates[templateId] ?? null
         : Object.values(section.addPropertyTemplates).find(
             (t) => {
-              if ("write" in t && t.write?.key === keyName) return true;
+              const write = "write" in t ? t.write : undefined;
+              if (write?.key === keyName) return true;
               return t.label.toLowerCase() === keyName.toLowerCase();
             }
           ) ?? null;
       if (template) {
         // Add the property with a sensible default value via raw key=value
-        const writeKey = ("write" in template && template.write) ? template.write.key : keyName;
+        const write = "write" in template ? template.write : undefined;
+        const writeKey = write?.key ?? keyName;
         let defaultValue: string;
         switch (template.kind) {
           case "color":
@@ -382,7 +397,7 @@ export function StylesPanel() {
 
   if (selectedSourceIds.length === 0) {
     return (
-      <SidePanel className={css.panel}>
+      <SidePanel className={css.panel ?? ""}>
         <SidePanel.Content>
           <p className={css.hint}>Select an element to inspect its style cascade.</p>
         </SidePanel.Content>
@@ -392,7 +407,7 @@ export function StylesPanel() {
 
   if (selectedSourceIds.length > 1 && !areStylesCascadeModelsIdentical(models)) {
     return (
-      <SidePanel className={css.panel}>
+      <SidePanel className={css.panel ?? ""}>
         <SidePanel.Content>
           <p className={css.hint}>Styles are available for a single element, or for multiple selected elements with identical cascades.</p>
         </SidePanel.Content>
@@ -402,7 +417,7 @@ export function StylesPanel() {
 
   if (!model) {
     return (
-      <SidePanel className={css.panel}>
+      <SidePanel className={css.panel ?? ""}>
         <SidePanel.Content>
           <p className={css.hint}>Styles data is unavailable for the current selection.</p>
         </SidePanel.Content>
@@ -411,11 +426,11 @@ export function StylesPanel() {
   }
 
   return (
-    <SidePanel className={css.panel}>
+    <SidePanel className={css.panel ?? ""}>
       <SidePanel.Header>
         {model.elementIds.length > 1 ? `${model.elementIds.length} selected (matching styles)` : model.elementKind}
       </SidePanel.Header>
-      <SidePanel.Content className={css.content}>
+      <SidePanel.Content className={css.content ?? ""}>
         {model.sections.map((section) => (
           <SidePanel.Section key={section.id}>
             <SidePanel.SectionHeader>
@@ -425,7 +440,7 @@ export function StylesPanel() {
               </div>
               {section.sourceLocation ? <div className={css.sectionLocation}>{section.sourceLocation}</div> : null}
             </SidePanel.SectionHeader>
-            <SidePanel.SectionBody className={css.ruleBody}>
+            <SidePanel.SectionBody className={css.ruleBody ?? ""}>
               {section.declarations.map((declaration) => (
                 <DeclarationRow
                   key={declaration.id}
@@ -516,7 +531,7 @@ function DeclarationRow({
             options={ALL_KEY_SUGGESTIONS}
             onChange={(newKey) => { onRenameKey(declaration, newKey); }}
             onCommit={(newKey) => { onRenameKey(declaration, newKey); }}
-            triggerClassName={css.keyInput}
+            triggerClassName={css.keyInput ?? ""}
           />
         ) : (
           <span className={css.propertyName}>{keySlug}</span>
@@ -610,7 +625,7 @@ function renderValueEditor(
           options={options}
           onChange={(value) => { onPropertyChange(declaration, property, value); }}
           onCommit={(rawText) => { onRawValueCommit(declaration, rawText); }}
-          triggerClassName={css.valueInput}
+          triggerClassName={css.valueInput ?? ""}
         />
       );
     }
@@ -687,7 +702,7 @@ function RawValueInput({
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
-          (e.target as HTMLInputElement).blur();
+          e.currentTarget.blur();
         }
         if (e.key === "Escape") {
           setEditText(value);
@@ -765,7 +780,7 @@ function AddPropertyRow({
             onAdd(section, value);
           }
         }}
-        triggerClassName={css.keyInput}
+        triggerClassName={css.keyInput ?? ""}
       />
     </div>
   );
@@ -774,14 +789,8 @@ function AddPropertyRow({
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function toPropertyKey(declaration: StylesCascadeDeclaration): string {
-  if (
-    declaration.property
-    && "write" in declaration.property
-    && declaration.property.write
-    && declaration.property.write.key.length > 0
-  ) {
-    return declaration.property.write.key;
-  }
+  const write = declaration.property && "write" in declaration.property ? declaration.property.write : undefined;
+  if (write && write.key.length > 0) return write.key;
   const raw = declaration.sourceText.trim();
   const eqIndex = raw.indexOf("=");
   if (eqIndex > 0) {

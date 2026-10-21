@@ -1,7 +1,11 @@
-import { PT_PER_CM } from "tikz-editor/edit/format";
-import { GRID_MINOR_TARGET_PX } from "tikz-editor/edit/snapping/types";
-import type { SvgViewBox } from "tikz-editor/svg/types";
-import { svgPoint, viewportPoint, pt, px } from "tikz-editor/coords/index";
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import { formatNumber, PT_PER_CM } from "@tikz-editor/core/edit/format";
+import { clamp as clampValue } from "@tikz-editor/core/utils/math";
+export { clamp, distanceSquared } from "@tikz-editor/core/utils/math";
+import { pickGridStepPt } from "@tikz-editor/core/edit/snapping";
+import { GRID_MINOR_TARGET_PX } from "@tikz-editor/core/edit/snapping/types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
+import { svgPoint, viewportPoint, pt, px } from "@tikz-editor/core/coords/index";
 import type { CanvasTransform } from "../../store/types";
 import {
   clientToSvg as typedClientToSvg,
@@ -12,7 +16,7 @@ import {
   worldToSvg as typedWorldToSvg
 } from "../coords/convert";
 import type { ClientPoint, SvgPoint, TextRectLocalPoint, ViewportPoint, WorldPoint } from "../coords/types";
-import type { WorldVector } from "tikz-editor/coords/index";
+import type { WorldVector } from "@tikz-editor/core/coords/index";
 
 export type RulerTick = {
   viewportPos: number;
@@ -73,7 +77,7 @@ export function buildTicks(
     ticks.push({
       viewportPos: mapWorldToViewport(worldValue),
       major,
-      label: major ? formatCm(worldValue / PT_PER_CM) : undefined
+      ...(major ? { label: formatCm(worldValue / PT_PER_CM) } : {})
     });
   }
 
@@ -169,9 +173,10 @@ function rotateTypedPointAroundCenter<TPoint extends SvgPoint | TextRectLocalPoi
   const dx = point.x - cx;
   const dy = point.y - cy;
   return {
-    x: cx + dx * cos - dy * sin,
-    y: cy + dx * sin + dy * cos
-  } as TPoint;
+    ...point,
+    x: pt(cx + dx * cos - dy * sin),
+    y: pt(cy + dx * sin + dy * cos)
+  };
 }
 
 export function viewportToSvgPoint(
@@ -199,7 +204,7 @@ export function toViewportYFromWorld(worldY: number, viewBox: SvgViewBox, transf
 }
 
 export function worldToSvgPoint(point: WorldPoint, viewBox: Pick<SvgViewBox, "y" | "height">): SvgPoint {
-  return typedWorldToSvg(point, viewBox as SvgViewBox);
+  return typedWorldToSvg(point, viewBox);
 }
 
 export function worldToSvgY(worldY: number, viewBox: Pick<SvgViewBox, "y" | "height">): number {
@@ -207,23 +212,11 @@ export function worldToSvgY(worldY: number, viewBox: Pick<SvgViewBox, "y" | "hei
 }
 
 export function svgToWorldPoint(point: SvgPoint, viewBox: Pick<SvgViewBox, "y" | "height">): WorldPoint {
-  return typedSvgToWorld(point, viewBox as SvgViewBox);
-}
-
-export function pickStepPt(scale: number, targetPixels: number): number {
-  const cmSteps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50];
-  const minStepPt = targetPixels / Math.max(scale, 1e-6);
-
-  for (const cmStep of cmSteps) {
-    const pt = cmStep * PT_PER_CM;
-    if (pt >= minStepPt) return pt;
-  }
-
-  return cmSteps[cmSteps.length - 1] * PT_PER_CM;
+  return typedSvgToWorld(point, viewBox);
 }
 
 export function resolveOverlayGridSteps(scale: number, minorTargetPx: number = GRID_MINOR_TARGET_PX): OverlayGridSteps {
-  const minorStep = pickStepPt(scale, minorTargetPx);
+  const minorStep = pickGridStepPt(scale, minorTargetPx);
   return {
     minorStep,
     majorStep: minorStep * OVERLAY_MAJOR_STEP_MULTIPLE
@@ -251,12 +244,12 @@ function formatCm(valueCm: number): string {
   return rounded2.toFixed(2);
 }
 
-export function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
+export function clampFinite(value: number, min: number, max: number): number {
+  return Number.isFinite(value) ? clampValue(value, min, max) : min;
 }
 
 export function fmt(value: number): string {
-  return Number(value.toFixed(4)).toString();
+  return formatNumber(value, { fractionDigits: 4 });
 }
 
 export function resizeCursorForVector(vector: WorldVector): string {
@@ -269,7 +262,7 @@ export function resizeCursorForVector(vector: WorldVector): string {
     { angle: 135, cursor: "nesw-resize" }
   ];
 
-  let best = candidates[0];
+  let best = requireArrayValue(candidates, 0);
   let bestDiff = Number.POSITIVE_INFINITY;
   for (const candidate of candidates) {
     const diff = Math.min(Math.abs(angle - candidate.angle), 180 - Math.abs(angle - candidate.angle));
@@ -284,10 +277,4 @@ export function resizeCursorForVector(vector: WorldVector): string {
 
 export function vectorLengthSquared(vector: Pick<WorldPoint, "x" | "y">): number {
   return vector.x * vector.x + vector.y * vector.y;
-}
-
-export function distanceSquared(a: WorldPoint, b: WorldPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
 }

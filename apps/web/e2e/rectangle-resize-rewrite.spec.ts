@@ -33,7 +33,7 @@ test.describe("rectangle resize source rewrite", () => {
       documentId: "e2e-rectangle-resize",
       sourceRevision: 1,
       source: currentSource,
-      activeFigureId: parsed.activeFigureId,
+      activeRootId: parsed.activeRootId,
       snapshot: {
         source: staleSource,
         revision: 1,
@@ -55,7 +55,7 @@ test.describe("rectangle resize source rewrite", () => {
       },
       {
         parseOptions: {
-          activeFigureId: parsed.activeFigureId,
+          activeRootId: parsed.activeRootId,
           analysisView,
           analysisSession: session ?? createEditAnalysisSession(),
           propertyWriteMode: "drag-frame"

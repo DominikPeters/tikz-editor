@@ -1,21 +1,62 @@
+import { requireDefined } from "../../../utils/invariants.js";
+import { requireArrayValue } from "../../../utils/collections.js";
 import {
   getOrBuildTextSegmentCaretStops,
   type LineSegmentReport,
   type ParagraphLayoutReport,
 } from '../paragraph/report.js';
-import { px } from "../../../coords/scalars.js";
+import { px, type CoordinateBrand, type Px } from "../../../coords/scalars.js";
 import {
   parseSourceSpans,
   type SourceSpan,
   type MathSourceSpan,
   type TextSourceSpan,
 } from './sourceParser.js';
-import {
-  createMathPrefixCache,
-  readPrefixUnitsFromTable,
-} from './mathPrefix.js';
 import { clientBounds, clientPoint as makeClientPoint } from '../../../coords/points.js';
 import type { ClientBounds, ClientPoint } from '../../../coords/points.js';
+import { getTexVListLayout } from '../../tex/vlist/registry.js';
+import { flattenPositionedTexVListItems } from '../../tex/vlist/traversal.js';
+import type {
+  PositionedTexVListItem,
+  TexBoxMetrics,
+  TexHBoxItem,
+  TexVBoxRole,
+  TexVListBoxReportItem,
+  TexVListLayout,
+} from '../../tex/vlist/types.js';
+import type { TexMathBox } from '../../tex/layout-inline-items.js';
+import { scanSimpleTexLineBreak } from '../../tex/ir.js';
+import {
+  projectTexHBoxXToLine,
+  projectTexHBoxYToLine,
+  projectTexVListXToLine,
+  texHBoxX,
+  texHBoxY,
+  texLength,
+  texLineX,
+  texLineY,
+  texVListX,
+  texVListY,
+  type TexHBoxX,
+  type TexHBoxY,
+  type TexLength,
+  type TexLineX,
+  type TexLineY,
+  type TexVListX,
+  type TexVListY,
+} from '../../tex/coordinates.js';
+import { getParagraphLayoutReport } from '../report-registry.js';
+import { clamp } from '../../../utils/math.js';
+import {
+  sourceOffsetForSpace,
+  type SourceCoordinateSpace,
+  type SourceOffset,
+} from '../../source-coordinates.js';
+
+type CaretSourceCoordinateSpace = Extract<
+  SourceCoordinateSpace,
+  'layout' | 'document'
+>;
 
 // The core package builds without the DOM lib; keep the editor hit-testing
 // helpers structurally typed so they remain importable in Node-only builds.
@@ -39,38 +80,78 @@ type SvgOwnerLike = {
   viewBox?: { baseVal?: { width?: number } };
 };
 type Element = {
+  tagName?: string;
   getBoundingClientRect?(): ClientRectLike;
   getScreenCTM?(): ScreenMatrixLike | null;
+  viewBox?: SvgOwnerLike['viewBox'];
   ownerSVGElement?: SvgOwnerLike | null;
   querySelector?(selector: string): Element | null;
   querySelectorAll?(selector: string): ArrayLike<Element>;
 };
-type OutputJaxLike = {
-  linebreaks?: {
-    getReports?(): ParagraphLayoutReport[];
-  };
-};
 type LineDirectionUnit = Readonly<{ x: number; y: number }>;
+type MathBaselineCoord = CoordinateBrand<'KnuthPlassMathBaselineCoord'>;
+type LineReportPoint = Readonly<{ x: TexLineX; y: TexLineY }>;
+type MathBaselinePoint = Readonly<{ x: TexLineX; y: MathBaselineCoord }>;
+type MathCaretBounds = Readonly<{
+  xStart: TexLineX;
+  xEnd: TexLineX;
+  yStart: MathBaselineCoord;
+  yEnd: MathBaselineCoord;
+}>;
 
 function lineDirectionUnit(x: number, y: number): LineDirectionUnit {
   return { x, y };
 }
 
-export interface CaretBaseParams {
+function lineReportCoord(value: number): TexLineX {
+  return texLineX(value);
+}
+
+function lineReportY(value: number): TexLineY {
+  return texLineY(value);
+}
+
+function mathBaselineCoord(value: number): MathBaselineCoord {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Named constructor establishes the math-baseline coordinate frame.
+  return value as MathBaselineCoord;
+}
+
+export interface CaretBaseParams<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> {
   paragraphId: string;
   sourceText: string;
+  /** Offset represented by `sourceText[0]` in the declared coordinate space. */
+  sourceTextStartOffset?: SourceOffset<Space>;
+  /** Defaults to `layout` for backwards-compatible direct layout callers. */
+  sourceCoordinateSpace?: Space;
   containerElement: Element;
 }
 
-export interface CaretFromPointParams extends CaretBaseParams {
+export interface CaretFromPointParams<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends CaretBaseParams<Space> {
   clientPoint: ClientPoint;
 }
 
-export interface PointFromOffsetParams extends CaretBaseParams {
+export interface PointFromOffsetParams<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends CaretBaseParams<Space> {
   offset: number;
+  /**
+   * Which rendered item the caret hugs when several meet at the offset
+   * (math only): the end of an item inside `within` (`x^\star‸)` inside
+   * the superscript), or the start of one (`x^\star‸)` before the
+   * parenthesis). With `whole`, the caret is after `within` as one item
+   * (`$x^\star$‸`): at its rightmost caret entry, sized like its start.
+   * Without an edge, the default projection decides.
+   */
+  edge?: { side: 'before' | 'after'; within: { from: number; to: number }; whole?: boolean };
 }
 
-export interface SelectionRectsParams extends CaretBaseParams {
+export interface SelectionRectsParams<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends CaretBaseParams<Space> {
   startOffset: number;
   endOffset: number;
 }
@@ -80,7 +161,6 @@ export type CaretMappingErrorCode =
   | 'paragraph-not-found'
   | 'source-parse-error'
   | 'alignment-error'
-  | 'math-measurement-error'
   | 'geometry-error';
 
 export interface CaretMappingError {
@@ -95,27 +175,235 @@ interface ResultBase {
   error: CaretMappingError | null;
 }
 
-export interface CaretHitResult extends ResultBase {
-  offset: number | null;
+export interface CaretHitResult<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends ResultBase {
+  offset: SourceOffset<Space> | null;
   lineIndex: number | null;
   kind: 'text' | 'space' | 'math' | null;
-  snappedToMathPrefix: boolean;
 }
 
-export interface CaretPointResult extends ResultBase {
-  offset: number | null;
+export interface CaretPointResult<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends ResultBase {
+  offset: SourceOffset<Space> | null;
   lineIndex: number | null;
   lineLocalX: number | null;
   clientPoint: ClientPoint | null;
   rotationDeg: number | null;
   kind: 'text' | 'space' | 'math' | null;
-  snappedToMathPrefix: boolean;
+  /** In math: the caret's top and bottom at the chosen item's size (a script's caret is short). */
+  caretTop?: ClientPoint;
+  caretBottom?: ClientPoint;
 }
 
-export interface LineRangeFromPointResult extends ResultBase {
+export interface LineRangeFromPointResult<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends ResultBase {
   lineIndex: number | null;
-  lineStartOffset: number | null;
-  lineEndOffset: number | null;
+  lineStartOffset: SourceOffset<Space> | null;
+  lineEndOffset: SourceOffset<Space> | null;
+}
+
+export interface VListBoxGeometry {
+  role: 'quote' | 'list' | 'list-item' | null;
+  vlistPath: readonly number[];
+  localLeft: number | null;
+  localRight: number | null;
+  localTop: number | null;
+  localBottom: number | null;
+  depth: number | null;
+  listKind: string | null;
+  listLabelDepth: number | null;
+  listLeftMarginEm: number | null;
+  listItemIndex: number | null;
+  sourceStart: number | null;
+  sourceEnd: number | null;
+  clientLeft: number;
+  clientRight: number;
+  clientTop: number;
+  clientBottom: number;
+}
+
+export interface VListBoxGeometryParams {
+  containerElement: Element;
+  layoutContext?: unknown;
+  paragraphId?: string | null;
+}
+
+export type VListGeometrySnapshotSource = 'registered' | 'empty';
+
+export interface VListGeometryTreeNode {
+  itemKind: TexVListBoxReportItem['itemKind'] | null;
+  vlistPath: readonly number[];
+  localLeft: number | null;
+  localRight: number | null;
+  localTop: number | null;
+  localBottom: number | null;
+  sourceStart: number | null;
+  sourceEnd: number | null;
+  clientLeft: number;
+  clientRight: number;
+  clientTop: number;
+  clientBottom: number;
+  blockIndex: number | null;
+  box: VListBoxGeometry | null;
+  item: VListItemGeometry | null;
+  paragraph: VListParagraphGeometry | null;
+  children: readonly VListGeometryTreeNode[];
+}
+
+export interface VListGeometrySnapshot {
+  source: VListGeometrySnapshotSource;
+  tree: readonly VListGeometryTreeNode[];
+  boxes: readonly VListBoxGeometry[];
+  items: readonly VListItemGeometry[];
+  labels: readonly VListLabelGeometry[];
+  paragraphs: readonly VListParagraphGeometry[];
+  placeholders: readonly PlaceholderGeometry[];
+}
+
+export type VListGeometrySnapshotParams = VListBoxGeometryParams;
+
+export interface VListBoxHitParams extends VListBoxGeometryParams {
+  clientPoint: ClientPoint;
+}
+
+export interface VListItemGeometry {
+  kind: 'glue' | 'hbox' | 'rule' | 'penalty' | 'placeholder' | 'display-math' | null;
+  vlistPath: readonly number[];
+  localLeft: number | null;
+  localRight: number | null;
+  localTop: number | null;
+  localBottom: number | null;
+  sourceStart: number | null;
+  sourceEnd: number | null;
+  placeholderReason: string | null;
+  hboxRole: 'list-label' | 'display-align-row' | null;
+  listLabelKind: string | null;
+  listLabelPlacement: string | null;
+  listKind: string | null;
+  listDepth: number | null;
+  listLabelDepth: number | null;
+  listItemIndex: number | null;
+  listLabelBlockIndex: number | null;
+  displayAlignDelimiter: string | null;
+  displayAlignRowIndex: number | null;
+  clientLeft: number;
+  clientRight: number;
+  clientTop: number;
+  clientBottom: number;
+}
+
+export interface VListItemGeometryParams {
+  containerElement: Element;
+  layoutContext?: unknown;
+  paragraphId?: string | null;
+}
+
+export interface VListItemHitParams extends VListItemGeometryParams {
+  clientPoint: ClientPoint;
+}
+
+export interface VListLabelGeometry extends VListItemGeometry {
+  kind: 'hbox';
+  hboxRole: 'list-label';
+  listLabelKind: string;
+  listLabelPlacement: string;
+  listKind: string;
+  listDepth: number;
+  listLabelDepth: number;
+  listItemIndex: number;
+  listLabelBlockIndex: number;
+}
+
+export type VListLabelGeometryParams = VListItemGeometryParams;
+
+export interface VListLabelHitParams extends VListLabelGeometryParams {
+  clientPoint: ClientPoint;
+}
+
+export interface VListLabelHitResult {
+  label: VListLabelGeometry;
+  paragraph: VListParagraphGeometry | null;
+}
+
+export type VListSourceHit = {
+  readonly offset: number;
+  readonly selectionRange?: {
+    readonly start: number;
+    readonly end: number;
+  };
+};
+
+export interface VListSourceHitParams {
+  readonly labelHit?: VListLabelHitResult | null;
+  readonly itemHit?: VListItemGeometry | null;
+  readonly paragraphHit?: VListParagraphGeometry | null;
+}
+
+export interface VListSourceHitFromSnapshotParams {
+  readonly snapshot?: VListGeometrySnapshot | null;
+  readonly clientPoint: ClientPoint;
+}
+
+export interface VListTreeHitParams {
+  snapshot?: VListGeometrySnapshot | null;
+  clientPoint: ClientPoint;
+}
+
+export interface VListTreeHitResult {
+  path: readonly VListGeometryTreeNode[];
+  node: VListGeometryTreeNode;
+  box: VListBoxGeometry | null;
+  item: VListItemGeometry | null;
+  label: VListLabelGeometry | null;
+  paragraph: VListParagraphGeometry | null;
+  labelParagraph: VListParagraphGeometry | null;
+}
+
+export interface VListParagraphGeometry {
+  blockIndex: number;
+  vlistPath: readonly number[];
+  localLeft: number;
+  localRight: number;
+  localTop: number;
+  localBottom: number;
+  lineIndices: readonly number[];
+  sourceHitPolicy: 'caret' | 'source-range';
+  sourceStart: number;
+  sourceEnd: number;
+  clientLeft: number;
+  clientRight: number;
+  clientTop: number;
+  clientBottom: number;
+}
+
+export interface VListParagraphGeometryParams {
+  containerElement: Element;
+  layoutContext?: unknown;
+  paragraphId?: string | null;
+}
+
+export interface PlaceholderGeometry {
+  reason: string | null;
+  vlistPath: readonly number[];
+  localLeft: number | null;
+  localRight: number | null;
+  localTop: number | null;
+  localBottom: number | null;
+  sourceStart: number | null;
+  sourceEnd: number | null;
+  clientLeft: number;
+  clientRight: number;
+  clientTop: number;
+  clientBottom: number;
+}
+
+export interface PlaceholderGeometryParams {
+  containerElement: Element;
+  layoutContext?: unknown;
+  paragraphId?: string | null;
 }
 
 export interface SelectionRect {
@@ -127,37 +415,44 @@ export interface SelectionRect {
   rotationDeg: number;
 }
 
-export interface SelectionRectsResult extends ResultBase {
-  startOffset: number;
-  endOffset: number;
+export interface SelectionRectsResult<
+  Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
+> extends ResultBase {
+  startOffset: SourceOffset<Space>;
+  endOffset: SourceOffset<Space>;
   rects: SelectionRect[];
 }
 
 interface Stop {
   offset: number;
-  x: number;
+  x: TexLineX;
+  y?: MathBaselineCoord;
   kind: 'text' | 'space' | 'math';
-  snappedToMathPrefix: boolean;
   lineStart: boolean;
   lineEnd: boolean;
 }
 
 interface LineGeometry {
   lineIndex: number;
-  clientLeft: number;
-  clientRight: number;
-  clientTop: number;
-  clientBottom: number;
-  clientCenterY: number;
+  clientLeft: Px;
+  clientRight: Px;
+  clientTop: Px;
+  clientBottom: Px;
+  clientCenterY: Px;
   reportToSvgScaleX: number;
   screenMatrix: { a: number; b: number; c: number; d: number; e: number; f: number };
   inverseScreenMatrix: { a: number; b: number; c: number; d: number; e: number; f: number };
+  /** Exact line height perpendicular to its baseline, when layout supplied it. */
+  clientNormalHeight?: Px;
 }
 
 interface LineHitMap extends LineGeometry {
+  reportLine: ParagraphLayoutReport['lines'][number];
   stopsByX: Stop[];
   stopsByOffset: Stop[];
   stopsByOffsetExact: Map<number, Stop[]>;
+  mathConstructRanges: MathConstructRange[];
+  mathCaretEntries: MathCaretEntry[];
   minOffset: number;
   maxOffset: number;
   breakInfo: ParagraphLayoutReport['lines'][number]['break'];
@@ -184,10 +479,36 @@ interface AlignedSegment {
   rawEnd: number;
   sourceKind: 'text' | 'math';
   mathSpan?: MathSourceSpan;
+  mathConstructRanges?: MathConstructRange[];
+  mathCaretEntries?: MathCaretEntry[];
+}
+
+interface MathConstructRange {
+  sourceStartRaw: number;
+  sourceEndRaw: number;
+  xStart: TexLineX;
+  xEnd: TexLineX;
+}
+
+interface MathCaretEntry {
+  sourceOffsetRaw: number;
+  sourceStartRaw?: number;
+  sourceEndRaw?: number;
+  x: TexLineX;
+  y: MathBaselineCoord;
+  height: MathBaselineCoord;
+  depth: MathBaselineCoord;
+  kind: NonNullable<LineSegmentReport['mathCaretEntries']>[number]['kind'];
+  priority?: number;
+  /** Font-level caret extent (glyphs); y/height/depth are ink-based. */
+  caretTop?: MathBaselineCoord;
+  caretBottom?: MathBaselineCoord;
+  hitBounds: MathCaretBounds;
 }
 
 interface CachedParagraphEntry {
   sourceText: string;
+  sourceTextStartOffset: number;
   report: ParagraphLayoutReport;
   containerElement: Element;
   containerGeometry: ContainerGeometrySnapshot | null;
@@ -207,8 +528,14 @@ interface ContainerGeometrySnapshot {
   matrixF: number;
 }
 
+interface NormalizedClientRect {
+  clientLeft: Px;
+  clientRight: Px;
+  clientTop: Px;
+  clientBottom: Px;
+}
+
 const EPSILON = 1e-6;
-const mathPrefixCache = createMathPrefixCache();
 let paragraphCacheByOutput = new WeakMap<object, Map<string, CachedParagraphEntry>>();
 
 function readContainerGeometrySnapshot(containerElement: Element | null | undefined): ContainerGeometrySnapshot | null {
@@ -282,35 +609,17 @@ function sameContainerGeometry(
   );
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function invalidParamsResult<T extends ResultBase>(
-  paragraphId: string,
-  base: Omit<T, keyof ResultBase>,
-  message: string
-): T {
-  return {
-    ...(base as object),
-    ok: false,
-    paragraphId,
-    error: {
-      code: 'invalid-params',
-      paragraphId,
-      message,
-    },
-  } as T;
-}
-
-function errorResult<T extends ResultBase>(
-  paragraphId: string,
-  base: Omit<T, keyof ResultBase>,
+type CaretMappingErrorFactory<T extends ResultBase> = (
   code: CaretMappingErrorCode,
   message: string
-): T {
-  return {
-    ...(base as object),
+) => T;
+
+function createCaretMappingErrorFactory<T extends object>(
+  paragraphId: string,
+  base: T
+): CaretMappingErrorFactory<T & ResultBase> {
+  return (code, message) => ({
+    ...base,
     ok: false,
     paragraphId,
     error: {
@@ -318,29 +627,14 @@ function errorResult<T extends ResultBase>(
       paragraphId,
       message,
     },
-  } as T;
-}
-
-function readReportsFromOutputJax(outputJax: unknown): ParagraphLayoutReport[] {
-  if (!outputJax || typeof outputJax !== 'object') {
-    return [];
-  }
-
-  const target = outputJax as OutputJaxLike;
-  const fromVisitor = target.linebreaks?.getReports?.();
-  if (Array.isArray(fromVisitor)) {
-    return fromVisitor;
-  }
-  return [];
+  });
 }
 
 function findReportByParagraphId(
-  outputJax: unknown,
+  layoutContext: unknown,
   paragraphId: string
-): { report: ParagraphLayoutReport | null; reports: ParagraphLayoutReport[] } {
-  const reports = readReportsFromOutputJax(outputJax);
-  const report = reports.find((entry) => entry.paragraphId === paragraphId) ?? null;
-  return { report, reports };
+): { report: ParagraphLayoutReport | null } {
+  return { report: getParagraphLayoutReport(layoutContext, paragraphId) };
 }
 
 function collectLineGeometryElements(
@@ -353,7 +647,7 @@ function collectLineGeometryElements(
 
   const lineBoxes =
     typeof (containerElement).querySelectorAll === 'function'
-      ? Array.from((containerElement).querySelectorAll('[data-mjx-linebox="true"]'))
+      ? Array.from((containerElement).querySelectorAll('[data-tex-linebox="true"]'))
       : [];
   if (lineBoxes.length === expectedCount) {
     return lineBoxes;
@@ -373,11 +667,759 @@ function collectLineGeometryElements(
   return null;
 }
 
+export function getKnuthPlassVListBoxGeometry(
+  params: VListBoxGeometryParams | null | undefined
+): VListBoxGeometry[] {
+  return [...getKnuthPlassVListGeometrySnapshot(params).boxes];
+}
+
+export function getKnuthPlassVListBoxFromPoint(
+  params: VListBoxHitParams | null | undefined
+): VListBoxGeometry | null {
+  const point = params?.clientPoint;
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+  return getKnuthPlassVListTreeHitFromSnapshot({
+    snapshot: getKnuthPlassVListGeometrySnapshot(params),
+    clientPoint: point,
+  })?.box ?? null;
+}
+
+export function getKnuthPlassVListItemGeometry(
+  params: VListItemGeometryParams | null | undefined
+): VListItemGeometry[] {
+  return [...getKnuthPlassVListGeometrySnapshot(params).items];
+}
+
+export function getKnuthPlassVListGeometrySnapshot(
+  params: VListGeometrySnapshotParams | null | undefined
+): VListGeometrySnapshot {
+  const containerElement = params?.containerElement;
+  if (!containerElement || typeof containerElement !== 'object') {
+    return emptyVListGeometrySnapshot();
+  }
+
+  const layout = getTexVListLayout(params.layoutContext, params.paragraphId);
+  const matrix = containerElement.getScreenCTM?.();
+  if (layout && matrix) {
+    const boxes = registeredVListBoxGeometry(layout, matrix);
+    const items = registeredVListItemGeometry(layout, matrix);
+    const paragraphs = registeredVListParagraphGeometry(layout, matrix);
+    return vlistGeometrySnapshot({
+      source: 'registered',
+      boxes,
+      items,
+      paragraphs,
+      tree: registeredVListGeometryTree(layout, matrix, boxes, items, paragraphs),
+    });
+  }
+
+  return emptyVListGeometrySnapshot();
+}
+
+function vlistGeometrySnapshot(params: {
+  source: VListGeometrySnapshotSource;
+  boxes: readonly VListBoxGeometry[];
+  items: readonly VListItemGeometry[];
+  paragraphs: readonly VListParagraphGeometry[];
+  tree: readonly VListGeometryTreeNode[];
+}): VListGeometrySnapshot {
+  const labels = params.items.filter(isVListLabelGeometry);
+  return {
+    source: params.source,
+    tree: params.tree,
+    boxes: params.boxes,
+    items: params.items,
+    labels,
+    paragraphs: params.paragraphs,
+    placeholders: placeholdersFromVListItems(params.items),
+  };
+}
+
+function emptyVListGeometrySnapshot(): VListGeometrySnapshot {
+  return {
+    source: 'empty',
+    tree: [],
+    boxes: [],
+    items: [],
+    labels: [],
+    paragraphs: [],
+    placeholders: [],
+  };
+}
+
+export function getKnuthPlassVListItemFromPoint(
+  params: VListItemHitParams | null | undefined
+): VListItemGeometry | null {
+  const point = params?.clientPoint;
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+  return getKnuthPlassVListTreeHitFromSnapshot({
+    snapshot: getKnuthPlassVListGeometrySnapshot(params),
+    clientPoint: point,
+  })?.item ?? null;
+}
+
+export function getKnuthPlassVListLabelGeometry(
+  params: VListLabelGeometryParams | null | undefined
+): VListLabelGeometry[] {
+  return [...getKnuthPlassVListGeometrySnapshot(params).labels];
+}
+
+export function getKnuthPlassVListLabelFromPoint(
+  params: VListLabelHitParams | null | undefined
+): VListLabelHitResult | null {
+  const point = params?.clientPoint;
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+  const snapshot = getKnuthPlassVListGeometrySnapshot(params);
+  const hit = getKnuthPlassVListTreeHitFromSnapshot({
+    snapshot,
+    clientPoint: point,
+  });
+  const label = hit?.label ?? null;
+  if (!label) {
+    return null;
+  }
+  return {
+    label,
+    paragraph: hit?.labelParagraph ?? null,
+  };
+}
+
+export function getKnuthPlassVListSourceHit(
+  params: VListSourceHitParams | null | undefined
+): VListSourceHit | null {
+  const labelStart = params?.labelHit
+    ? sourceBackedStart(params.labelHit.label.sourceStart, params.labelHit.label.sourceEnd)
+    : null;
+  if (labelStart != null) {
+    return { offset: labelStart };
+  }
+
+  if (params?.labelHit?.paragraph) {
+    return { offset: params.labelHit.paragraph.sourceStart };
+  }
+
+  if (params?.paragraphHit?.sourceHitPolicy === 'source-range') {
+    return {
+      offset: params.paragraphHit.sourceStart,
+      selectionRange: {
+        start: params.paragraphHit.sourceStart,
+        end: params.paragraphHit.sourceEnd,
+      },
+    };
+  }
+
+  const item = params?.itemHit;
+  if (!item || (item.kind === 'hbox' && item.hboxRole !== 'display-align-row')) {
+    return null;
+  }
+  const itemStart = sourceBackedStart(item.sourceStart, item.sourceEnd);
+  if (itemStart == null || item.sourceEnd == null) {
+    return null;
+  }
+  return {
+    offset: itemStart,
+    selectionRange: {
+      start: itemStart,
+      end: item.sourceEnd,
+    },
+  };
+}
+
+export function getKnuthPlassVListSourceHitFromSnapshot(
+  params: VListSourceHitFromSnapshotParams | null | undefined
+): VListSourceHit | null {
+  const snapshot = params?.snapshot;
+  const point = params?.clientPoint;
+  if (!snapshot || !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+  const hit = getKnuthPlassVListTreeHitFromSnapshot({
+    snapshot,
+    clientPoint: point,
+  });
+  if (!hit) {
+    return null;
+  }
+  return getKnuthPlassVListSourceHit({
+    labelHit: hit.label
+      ? {
+          label: hit.label,
+          paragraph: hit.labelParagraph,
+        }
+      : null,
+    itemHit: hit.item,
+    paragraphHit: hit.paragraph,
+  });
+}
+
+export function getKnuthPlassVListTreeHitFromSnapshot(
+  params: VListTreeHitParams | null | undefined
+): VListTreeHitResult | null {
+  const snapshot = params?.snapshot;
+  const point = params?.clientPoint;
+  if (!snapshot || !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+  const path = deepestVListGeometryTreePathFromPoint(snapshot.tree, point);
+  const node = path.at(-1);
+  if (!node) {
+    return null;
+  }
+  const label = nearestVListLabelGeometryForPath(path);
+  return {
+    path,
+    node,
+    box: nearestVListBoxGeometryForPath(path),
+    item: nearestVListItemGeometryForPath(path),
+    label,
+    paragraph: nearestVListParagraphGeometryForPath(path),
+    labelParagraph: label
+      ? (
+          nearestVListParagraphGeometryForPath(path, label.listLabelBlockIndex) ??
+          snapshot.paragraphs.find((paragraph) => paragraph.blockIndex === label.listLabelBlockIndex) ??
+          null
+        )
+      : null,
+  };
+}
+
+export function getKnuthPlassVListParagraphGeometry(
+  params: VListParagraphGeometryParams | null | undefined
+): VListParagraphGeometry[] {
+  return [...getKnuthPlassVListGeometrySnapshot(params).paragraphs];
+}
+
+export function getKnuthPlassPlaceholderGeometry(
+  params: PlaceholderGeometryParams | null | undefined
+): PlaceholderGeometry[] {
+  return [...getKnuthPlassVListGeometrySnapshot(params).placeholders];
+}
+
+function placeholdersFromVListItems(items: readonly VListItemGeometry[]): PlaceholderGeometry[] {
+  return items
+    .filter((item) => item.kind === 'placeholder')
+    .map((item) => ({
+      reason: item.placeholderReason,
+      vlistPath: item.vlistPath,
+      localLeft: item.localLeft,
+      localRight: item.localRight,
+      localTop: item.localTop,
+      localBottom: item.localBottom,
+      sourceStart: item.sourceStart,
+      sourceEnd: item.sourceEnd,
+      clientLeft: item.clientLeft,
+      clientRight: item.clientRight,
+      clientTop: item.clientTop,
+      clientBottom: item.clientBottom,
+    }));
+}
+
+function texVListBoxRoleGeometryFromReportRole(
+  role: TexVBoxRole | undefined
+): Pick<VListBoxGeometry, 'depth' | 'listKind' | 'listLabelDepth' | 'listLeftMarginEm' | 'listItemIndex'> {
+  return {
+    depth: role?.depth ?? null,
+    listKind: role?.kind === 'list' || role?.kind === 'list-item' ? role.listKind : null,
+    listLabelDepth: role?.kind === 'list' || role?.kind === 'list-item' ? role.labelDepth : null,
+    listLeftMarginEm: role?.kind === 'list' ? role.totalLeftMarginEm : null,
+    listItemIndex: role?.kind === 'list-item' ? role.itemIndex : null,
+  };
+}
+
+function registeredVListBoxGeometry(
+  layout: TexVListLayout,
+  matrix: ScreenMatrixLike
+): VListBoxGeometry[] {
+  const boxes: VListBoxGeometry[] = [];
+  for (const item of layout.boxReport.items) {
+    if (item.itemKind !== 'vbox') {
+      continue;
+    }
+    const bounds = clientRectForVListBoxReportItem(item, matrix);
+    if (!bounds) {
+      continue;
+    }
+    const role = item.role;
+    boxes.push({
+      role: vlistRoleKind(role),
+      vlistPath: item.path,
+      ...texVListLocalBoundsForBoxReportItem(item),
+      ...texVListBoxRoleGeometryFromReportRole(role),
+      sourceStart: item.sourceSpan?.start ?? null,
+      sourceEnd: item.sourceSpan?.end ?? null,
+      ...bounds,
+    });
+  }
+  return boxes;
+}
+
+function registeredVListItemGeometry(
+  layout: TexVListLayout,
+  matrix: ScreenMatrixLike
+): VListItemGeometry[] {
+  const items: VListItemGeometry[] = [];
+  for (const item of layout.boxReport.items) {
+    if (
+      item.itemKind !== 'glue' &&
+      item.itemKind !== 'hbox' &&
+      item.itemKind !== 'rule' &&
+      item.itemKind !== 'penalty' &&
+      item.itemKind !== 'placeholder' &&
+      item.itemKind !== 'display-math'
+    ) {
+      continue;
+    }
+    if (
+      item.itemKind === 'glue' &&
+      item.glue?.origin?.kind !== 'explicit-command'
+    ) {
+      continue;
+    }
+    const localBounds = texVListLocalBoundsForItemGeometry(item, layout);
+    const bounds = clientRectForLocalBounds(localBounds, matrix);
+    if (!bounds) {
+      continue;
+    }
+    items.push({
+      kind: item.itemKind,
+      vlistPath: item.path,
+      ...localBounds,
+      sourceStart: item.sourceSpan?.start ?? null,
+      sourceEnd: item.sourceSpan?.end ?? null,
+      placeholderReason: item.itemKind === 'placeholder' ? item.placeholderReason ?? null : null,
+      ...texVListHboxRoleGeometryFromReportItem(item),
+      ...bounds,
+    });
+  }
+  return items;
+}
+
+function registeredVListParagraphGeometry(
+  layout: TexVListLayout,
+  matrix: ScreenMatrixLike
+): VListParagraphGeometry[] {
+  const paragraphs: VListParagraphGeometry[] = [];
+  for (const placement of layout.paragraphPlacements) {
+    const localLeft = texVListX(placement.x);
+    const localTop = texVListY(placement.y);
+    if (!Number.isFinite(localLeft) || !Number.isFinite(localTop)) {
+      continue;
+    }
+    const bounds = clientRectForTexVListBox(
+      localLeft,
+      localTop,
+      placement.metrics.width,
+      placement.metrics.height + placement.metrics.depth,
+      matrix
+    );
+    if (!bounds) {
+      continue;
+    }
+    paragraphs.push({
+      blockIndex: placement.blockIndex,
+      vlistPath: placement.vlistPath,
+      localLeft,
+      localRight: localLeft + placement.metrics.width,
+      localTop,
+      localBottom: localTop + placement.metrics.height + placement.metrics.depth,
+      lineIndices: placement.lineIndices,
+      sourceHitPolicy: placement.sourceHitPolicy,
+      sourceStart: placement.sourceSpan.start,
+      sourceEnd: placement.sourceSpan.end,
+      ...bounds,
+    });
+  }
+  return paragraphs;
+}
+
+function registeredVListGeometryTree(
+  layout: TexVListLayout,
+  matrix: ScreenMatrixLike,
+  boxes: readonly VListBoxGeometry[],
+  items: readonly VListItemGeometry[],
+  paragraphs: readonly VListParagraphGeometry[]
+): VListGeometryTreeNode[] {
+  const boxesByPath = geometryByPath(boxes);
+  const itemsByPath = geometryByPath(items);
+  const paragraphsByPath = geometryByPath(paragraphs);
+  return layout.boxReport.tree.flatMap((item) =>
+    registeredVListGeometryTreeNode(item, matrix, boxesByPath, itemsByPath, paragraphsByPath)
+  );
+}
+
+function registeredVListGeometryTreeNode(
+  item: TexVListBoxReportItem,
+  matrix: ScreenMatrixLike,
+  boxesByPath: ReadonlyMap<string, VListBoxGeometry>,
+  itemsByPath: ReadonlyMap<string, VListItemGeometry>,
+  paragraphsByPath: ReadonlyMap<string, VListParagraphGeometry>
+): readonly VListGeometryTreeNode[] {
+  const itemGeometry = itemsByPath.get(vlistPathKey(item.path)) ?? null;
+  const bounds = itemGeometry
+    ? clientBoundsFromGeometry(itemGeometry)
+    : clientRectForVListBoxReportItem(item, matrix);
+  if (!bounds) {
+    return [];
+  }
+  const box = boxesByPath.get(vlistPathKey(item.path)) ?? null;
+  const paragraph = paragraphsByPath.get(vlistPathKey(item.path)) ?? null;
+  return [{
+    itemKind: item.itemKind,
+    vlistPath: item.path,
+    ...texVListLocalBoundsForBoxReportItem(item),
+    sourceStart: item.sourceSpan?.start ?? null,
+    sourceEnd: item.sourceSpan?.end ?? null,
+    ...bounds,
+    blockIndex: item.blockIndex ?? null,
+    box,
+    item: itemGeometry,
+    paragraph,
+    children: (item.children ?? []).flatMap((child) =>
+      registeredVListGeometryTreeNode(child, matrix, boxesByPath, itemsByPath, paragraphsByPath)
+    ),
+  }];
+}
+
+function clientBoundsFromGeometry(
+  geometry: Pick<VListItemGeometry, 'clientLeft' | 'clientRight' | 'clientTop' | 'clientBottom'>
+): NormalizedClientRect {
+  return {
+    clientLeft: px(geometry.clientLeft),
+    clientRight: px(geometry.clientRight),
+    clientTop: px(geometry.clientTop),
+    clientBottom: px(geometry.clientBottom),
+  };
+}
+
+function geometryByPath<T extends { readonly vlistPath: readonly number[] }>(
+  geometry: readonly T[]
+): ReadonlyMap<string, T> {
+  return new Map(geometry.map((item) => [vlistPathKey(item.vlistPath), item]));
+}
+
+function vlistPathKey(path: readonly number[]): string {
+  return path.join('.');
+}
+
+function deepestVListGeometryTreePathFromPoint(
+  nodes: readonly VListGeometryTreeNode[],
+  point: ClientPoint
+): readonly VListGeometryTreeNode[] {
+  const candidates: readonly VListGeometryTreeNode[][] = nodes.flatMap((node) => {
+    const childPath = deepestVListGeometryTreePathFromPoint(node.children, point);
+    if (childPath.length > 0) {
+      return [[node, ...childPath]];
+    }
+    return pointInsideClientBounds(node, point) ? [[node]] : [];
+  });
+  return [...candidates].sort(compareVListGeometryTreePathHitPriority)[0] ?? [];
+}
+
+function compareVListGeometryTreePathHitPriority(
+  left: readonly VListGeometryTreeNode[],
+  right: readonly VListGeometryTreeNode[]
+): number {
+  if (left.length !== right.length) {
+    return right.length - left.length;
+  }
+  const leftLeaf = left.at(-1);
+  const rightLeaf = right.at(-1);
+  if (!leftLeaf || !rightLeaf) {
+    return right.length - left.length;
+  }
+  return clientBoundsArea(leftLeaf) - clientBoundsArea(rightLeaf);
+}
+
+function nearestVListBoxGeometryForPath(
+  path: readonly VListGeometryTreeNode[]
+): VListBoxGeometry | null {
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    const box = path[index]?.box;
+    if (box) {
+      return box;
+    }
+  }
+  return null;
+}
+
+function nearestVListItemGeometryForPath(
+  path: readonly VListGeometryTreeNode[]
+): VListItemGeometry | null {
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    const item = path[index]?.item;
+    if (item) {
+      return item;
+    }
+  }
+  return null;
+}
+
+function nearestVListLabelGeometryForPath(
+  path: readonly VListGeometryTreeNode[]
+): VListLabelGeometry | null {
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    const item = path[index]?.item;
+    if (item && isVListLabelGeometry(item)) {
+      return item;
+    }
+  }
+  return null;
+}
+
+function nearestVListParagraphGeometryForPath(
+  path: readonly VListGeometryTreeNode[],
+  blockIndex?: number
+): VListParagraphGeometry | null {
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    const paragraph = path[index]?.paragraph;
+    if (paragraph && (blockIndex === undefined || paragraph.blockIndex === blockIndex)) {
+      return paragraph;
+    }
+  }
+  return null;
+}
+
+function isVListLabelGeometry(item: VListItemGeometry): item is VListLabelGeometry {
+  return (
+    item.kind === 'hbox' &&
+    item.hboxRole === 'list-label' &&
+    item.listLabelKind !== null &&
+    item.listLabelPlacement !== null &&
+    item.listKind !== null &&
+    item.listDepth !== null &&
+    item.listLabelDepth !== null &&
+    item.listItemIndex !== null &&
+    item.listLabelBlockIndex !== null
+  );
+}
+
+function sourceBackedStart(sourceStart: number | null, sourceEnd: number | null): number | null {
+  return sourceStart != null && sourceEnd != null && sourceEnd > sourceStart
+    ? sourceStart
+    : null;
+}
+
+function pointInsideClientBounds(
+  item: Pick<VListItemGeometry, 'clientLeft' | 'clientRight' | 'clientTop' | 'clientBottom'>,
+  point: ClientPoint
+): boolean {
+  return (
+    point.x >= item.clientLeft - EPSILON &&
+    point.x <= item.clientRight + EPSILON &&
+    point.y >= item.clientTop - EPSILON &&
+    point.y <= item.clientBottom + EPSILON
+  );
+}
+
+function clientBoundsArea(
+  item: Pick<VListItemGeometry, 'clientLeft' | 'clientRight' | 'clientTop' | 'clientBottom'>
+): number {
+  return Math.max(0, item.clientRight - item.clientLeft) * Math.max(0, item.clientBottom - item.clientTop);
+}
+
+function texVListHboxRoleGeometryFromReportItem(item: TexVListBoxReportItem): Pick<
+  VListItemGeometry,
+  | 'hboxRole'
+  | 'listLabelKind'
+  | 'listLabelPlacement'
+  | 'listKind'
+  | 'listDepth'
+  | 'listLabelDepth'
+  | 'listItemIndex'
+  | 'listLabelBlockIndex'
+  | 'displayAlignDelimiter'
+  | 'displayAlignRowIndex'
+> {
+  const role = item.hboxRole;
+  if (role?.kind === 'list-label') {
+    return {
+      hboxRole: 'list-label',
+      listLabelKind: role.labelKind,
+      listLabelPlacement: role.placement,
+      listKind: role.listKind,
+      listDepth: role.depth,
+      listLabelDepth: role.labelDepth,
+      listItemIndex: role.itemIndex,
+      listLabelBlockIndex: role.blockIndex,
+      displayAlignDelimiter: null,
+      displayAlignRowIndex: null,
+    };
+  }
+  if (role?.kind === 'display-align-row') {
+    return {
+      ...emptyVListHboxRoleGeometry(),
+      hboxRole: 'display-align-row',
+      displayAlignDelimiter: role.delimiter,
+      displayAlignRowIndex: role.rowIndex,
+    };
+  }
+  return emptyVListHboxRoleGeometry();
+}
+
+function emptyVListHboxRoleGeometry(): Pick<
+  VListItemGeometry,
+  | 'hboxRole'
+  | 'listLabelKind'
+  | 'listLabelPlacement'
+  | 'listKind'
+  | 'listDepth'
+  | 'listLabelDepth'
+  | 'listItemIndex'
+  | 'listLabelBlockIndex'
+  | 'displayAlignDelimiter'
+  | 'displayAlignRowIndex'
+> {
+  return {
+    hboxRole: null,
+    listLabelKind: null,
+    listLabelPlacement: null,
+    listKind: null,
+    listDepth: null,
+    listLabelDepth: null,
+    listItemIndex: null,
+    listLabelBlockIndex: null,
+    displayAlignDelimiter: null,
+    displayAlignRowIndex: null,
+  };
+}
+
+function vlistRoleKind(role: TexVBoxRole | undefined): VListBoxGeometry['role'] {
+  if (role?.kind === 'quote' || role?.kind === 'list' || role?.kind === 'list-item') {
+    return role.kind;
+  }
+  return null;
+}
+
+function clientRectForVListBoxReportItem(
+  item: TexVListBoxReportItem,
+  matrix: ScreenMatrixLike
+): NormalizedClientRect | null {
+  if (
+    !Number.isFinite(item.x) ||
+    !Number.isFinite(item.y) ||
+    !Number.isFinite(item.width) ||
+    !Number.isFinite(item.totalHeight)
+  ) {
+    return null;
+  }
+  return clientRectForTexVListBox(
+    texVListX(item.x),
+    texVListY(item.y),
+    item.width,
+    item.totalHeight,
+    matrix
+  );
+}
+
+function clientRectForTexVListBox(
+  x: TexVListX,
+  y: TexVListY,
+  width: number,
+  height: number,
+  matrix: ScreenMatrixLike
+): NormalizedClientRect | null {
+  return clientRectForLocalBox(x, y, width, height, matrix);
+}
+
+function clientRectForLocalBox(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  matrix: ScreenMatrixLike
+): NormalizedClientRect | null {
+  const points = [
+    transformLocalPoint(matrix, x, y),
+    transformLocalPoint(matrix, x + width, y),
+    transformLocalPoint(matrix, x, y + height),
+    transformLocalPoint(matrix, x + width, y + height),
+  ];
+  if (points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))) {
+    return null;
+  }
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return {
+    clientLeft: px(Math.min(...xs)),
+    clientRight: px(Math.max(...xs)),
+    clientTop: px(Math.min(...ys)),
+    clientBottom: px(Math.max(...ys)),
+  };
+}
+
+function clientRectForLocalBounds(
+  bounds: TexVListRootBounds,
+  matrix: ScreenMatrixLike
+): NormalizedClientRect | null {
+  return clientRectForLocalBox(
+    bounds.localLeft,
+    bounds.localTop,
+    bounds.localRight - bounds.localLeft,
+    bounds.localBottom - bounds.localTop,
+    matrix
+  );
+}
+
+function transformLocalPoint(
+  matrix: ScreenMatrixLike,
+  x: number,
+  y: number
+): { readonly x: number; readonly y: number } {
+  return {
+    x: matrix.a * x + matrix.c * y + matrix.e,
+    y: matrix.b * x + matrix.d * y + matrix.f,
+  };
+}
+
+type TexVListRootBounds = Readonly<{
+  localLeft: TexVListX;
+  localRight: TexVListX;
+  localTop: TexVListY;
+  localBottom: TexVListY;
+}>;
+
+function texVListLocalBoundsForBoxReportItem(
+  item: TexVListBoxReportItem
+): TexVListRootBounds {
+  return {
+    localLeft: texVListX(item.x),
+    localRight: texVListX(item.x + item.width),
+    localTop: texVListY(item.y),
+    localBottom: texVListY(item.y + item.totalHeight),
+  };
+}
+
+function texVListLocalBoundsForItemGeometry(
+  item: TexVListBoxReportItem,
+  layout: TexVListLayout
+): TexVListRootBounds {
+  const bounds = texVListLocalBoundsForBoxReportItem(item);
+  if (item.itemKind !== 'glue' || item.totalHeight <= EPSILON) {
+    return bounds;
+  }
+  const hitWidth = Math.max(item.width, layout.metrics.width);
+  return {
+    ...bounds,
+    localRight: texVListX(bounds.localLeft + hitWidth),
+  };
+}
+
 function readLineGeometry(
   containerElement: Element,
-  report: ParagraphLayoutReport
+  report: ParagraphLayoutReport,
+  layoutContext?: unknown
 ): LineGeometry[] {
   const sortedLines = [...report.lines].sort((a, b) => a.lineIndex - b.lineIndex);
+  const registered = registeredLineGeometry(containerElement, report, layoutContext, sortedLines);
+  if (registered) {
+    return registered;
+  }
   const geometryElements = collectLineGeometryElements(containerElement, sortedLines.length);
   if (!geometryElements) {
     throw new Error(
@@ -451,11 +1493,11 @@ function readLineGeometry(
 
     return {
       lineIndex: line.lineIndex,
-      clientLeft: Math.min(left, right),
-      clientRight: Math.max(left, right),
-      clientTop: Math.min(top, bottom),
-      clientBottom: Math.max(top, bottom),
-      clientCenterY: (top + bottom) / 2,
+      clientLeft: px(Math.min(left, right)),
+      clientRight: px(Math.max(left, right)),
+      clientTop: px(Math.min(top, bottom)),
+      clientBottom: px(Math.max(top, bottom)),
+      clientCenterY: px((Math.min(top, bottom) + Math.max(top, bottom)) / 2),
       reportToSvgScaleX: viewBoxWidth / reportWidth,
       screenMatrix: {
         a: Number(screenMatrix.a),
@@ -470,17 +1512,174 @@ function readLineGeometry(
   });
 }
 
+function registeredLineGeometry(
+  containerElement: Element,
+  report: ParagraphLayoutReport,
+  layoutContext: unknown,
+  sortedLines: readonly ParagraphLayoutReport['lines'][number][]
+): LineGeometry[] | null {
+  const layout = getTexVListLayout(layoutContext, report.paragraphId);
+  const rootMatrix = containerElement.getScreenCTM?.();
+  const reportToSvgScaleX = reportToContainerSvgScaleX(
+    containerElement,
+    Number(report.width)
+  );
+  if (!layout || !rootMatrix || reportToSvgScaleX == null) {
+    return null;
+  }
+  const linePlacementByIndex = new Map(
+    layout.linePlacements.map((placement) => [placement.lineIndex, placement])
+  );
+  if (sortedLines.some((line) => !linePlacementByIndex.has(line.lineIndex))) {
+    return null;
+  }
+  const reportWidth = Number(report.width);
+  if (!Number.isFinite(reportWidth) || reportWidth <= EPSILON) {
+    throw new Error(`Invalid report width for paragraph '${report.paragraphId}'.`);
+  }
+  const baseMatrix = normalizedScreenMatrix(rootMatrix, `paragraph '${report.paragraphId}'`);
+  return sortedLines.map((line) => {
+    const placement = linePlacementByIndex.get(line.lineIndex);
+    if (!placement) {
+      throw new Error(`Missing registered line placement for line ${line.lineIndex}.`);
+    }
+    const lineStart = Number(line.xStart);
+    const lineEnd = Number(line.xEnd);
+    if (!Number.isFinite(lineStart) || !Number.isFinite(lineEnd) || lineEnd < lineStart - EPSILON) {
+      throw new Error(`Line ${line.lineIndex} is missing valid xStart/xEnd metadata.`);
+    }
+    const lineHeight = Number(placement.height);
+    const lineTop = Number(placement.y);
+    // A line can be empty of height: one holding only an empty box (`\mbox{}`,
+    // an overlay picture) is set at 0pt height and depth.
+    if (
+      !Number.isFinite(lineTop) ||
+      !Number.isFinite(lineHeight) ||
+      lineHeight < 0
+    ) {
+      throw new Error(`Invalid registered line placement for line ${line.lineIndex}.`);
+    }
+    const lineMatrix = translatedScreenMatrix(baseMatrix, lineStart, lineTop);
+    const inverseScreenMatrix = inverseScreenMatrixForLine(lineMatrix, line.lineIndex);
+    const bounds = clientRectForLocalBox(
+      -lineStart,
+      0,
+      report.width,
+      lineHeight,
+      lineMatrix
+    );
+    if (!bounds) {
+      throw new Error(`Invalid registered client rect for line ${line.lineIndex}.`);
+    }
+    return {
+      lineIndex: line.lineIndex,
+      clientLeft: bounds.clientLeft,
+      clientRight: bounds.clientRight,
+      clientTop: bounds.clientTop,
+      clientBottom: bounds.clientBottom,
+      clientCenterY: px((bounds.clientTop + bounds.clientBottom) / 2),
+      reportToSvgScaleX,
+      screenMatrix: lineMatrix,
+      inverseScreenMatrix,
+      clientNormalHeight: transformedLineNormalHeight(lineMatrix, lineHeight * reportToSvgScaleX),
+    };
+  });
+}
+
+function reportToContainerSvgScaleX(
+  containerElement: Element,
+  reportWidth: number
+): number | null {
+  if (!Number.isFinite(reportWidth) || reportWidth <= EPSILON) {
+    return null;
+  }
+  const tagName = String(containerElement.tagName ?? "").toLowerCase();
+  if (tagName === "g") {
+    // A paragraph <g> is authored directly in its owner's SVG coordinate
+    // space. Its screen CTM already includes every outer translation and
+    // scale, so applying the owner's viewBox ratio a second time drifts both
+    // hit-testing and caret projection.
+    return 1;
+  }
+  const viewBoxWidth = Number(
+    containerElement.viewBox?.baseVal?.width ??
+      containerElement.ownerSVGElement?.viewBox?.baseVal?.width
+  );
+  return Number.isFinite(viewBoxWidth) && viewBoxWidth > EPSILON
+    ? viewBoxWidth / reportWidth
+    : null;
+}
+
+function normalizedScreenMatrix(
+  matrix: ScreenMatrixLike,
+  context: string
+): ScreenMatrixLike {
+  if (
+    !Number.isFinite(Number(matrix.a)) ||
+    !Number.isFinite(Number(matrix.b)) ||
+    !Number.isFinite(Number(matrix.c)) ||
+    !Number.isFinite(Number(matrix.d)) ||
+    !Number.isFinite(Number(matrix.e)) ||
+    !Number.isFinite(Number(matrix.f))
+  ) {
+    throw new Error(`Unable to read screen transform for ${context}.`);
+  }
+  return {
+    a: Number(matrix.a),
+    b: Number(matrix.b),
+    c: Number(matrix.c),
+    d: Number(matrix.d),
+    e: Number(matrix.e),
+    f: Number(matrix.f),
+  };
+}
+
+function translatedScreenMatrix(
+  matrix: ScreenMatrixLike,
+  x: number,
+  y: number
+): ScreenMatrixLike {
+  return {
+    a: matrix.a,
+    b: matrix.b,
+    c: matrix.c,
+    d: matrix.d,
+    e: matrix.a * x + matrix.c * y + matrix.e,
+    f: matrix.b * x + matrix.d * y + matrix.f,
+  };
+}
+
+function inverseScreenMatrixForLine(
+  screenMatrix: ScreenMatrixLike,
+  lineIndex: number
+): ScreenMatrixLike {
+  const determinant = screenMatrix.a * screenMatrix.d - screenMatrix.b * screenMatrix.c;
+  if (!Number.isFinite(determinant) || Math.abs(determinant) <= EPSILON) {
+    throw new Error(`Non-invertible screen transform for line ${lineIndex}.`);
+  }
+  return {
+    a: screenMatrix.d / determinant,
+    b: -screenMatrix.b / determinant,
+    c: -screenMatrix.c / determinant,
+    d: screenMatrix.a / determinant,
+    e: (screenMatrix.c * screenMatrix.f - screenMatrix.d * screenMatrix.e) / determinant,
+    f: (screenMatrix.b * screenMatrix.e - screenMatrix.a * screenMatrix.f) / determinant,
+  };
+}
+
 function lineLocalClientPoint(
   line: LineGeometry,
   reportLine: ParagraphLayoutReport['lines'][number],
-  x: number
+  x: TexLineX,
+  y: TexLineY = lineReportY(0)
 ): ClientPoint {
   const lineStart = Number(reportLine.xStart);
   const localReportX = x - lineStart;
   const svgX = localReportX * line.reportToSvgScaleX;
+  const svgY = y * line.reportToSvgScaleX;
   return makeClientPoint(
-    px(line.screenMatrix.a * svgX + line.screenMatrix.c * 0 + line.screenMatrix.e),
-    px(line.screenMatrix.b * svgX + line.screenMatrix.d * 0 + line.screenMatrix.f)
+    px(line.screenMatrix.a * svgX + line.screenMatrix.c * svgY + line.screenMatrix.e),
+    px(line.screenMatrix.b * svgX + line.screenMatrix.d * svgY + line.screenMatrix.f)
   );
 }
 
@@ -502,18 +1701,40 @@ function lineBaselineOriginPoint(
   reportLine: ParagraphLayoutReport['lines'][number]
 ): ClientPoint {
   const lineStart = Number(reportLine.xStart);
-  return lineLocalClientPoint(line, reportLine, lineStart);
+  return lineLocalClientPoint(line, reportLine, lineReportCoord(lineStart));
+}
+
+function lineBaselineY(reportLine: ParagraphLayoutReport['lines'][number]): TexLineY {
+  const ascent = Number(reportLine.ascent);
+  return lineReportY(Number.isFinite(ascent) ? ascent : 0);
+}
+
+function mathBaselineYToLineY(
+  reportLine: ParagraphLayoutReport['lines'][number],
+  y: MathBaselineCoord
+): TexLineY {
+  return lineReportY(lineBaselineY(reportLine) + y);
+}
+
+function linePointToMathBaselinePoint(
+  reportLine: ParagraphLayoutReport['lines'][number],
+  point: LineReportPoint
+): MathBaselinePoint {
+  return {
+    x: point.x,
+    y: mathBaselineCoord(point.y - lineBaselineY(reportLine)),
+  };
 }
 
 function lineBoxNormalOffset(
   line: LineGeometry,
   reportLine: ParagraphLayoutReport['lines'][number]
-): number {
+): Px {
   const origin = lineBaselineOriginPoint(line, reportLine);
   const normal = lineNormalUnit(line);
   const lineBoxCenterX = (line.clientLeft + line.clientRight) / 2;
   const lineBoxCenterY = line.clientCenterY;
-  return (
+  return px(
     (lineBoxCenterX - origin.x) * normal.x +
     (lineBoxCenterY - origin.y) * normal.y
   );
@@ -522,11 +1743,12 @@ function lineBoxNormalOffset(
 function lineClientHeight(
   line: LineGeometry,
   reportLine: ParagraphLayoutReport['lines'][number]
-): number {
+): Px {
+  if (line.clientNormalHeight !== undefined) return line.clientNormalHeight;
   const fallback = Math.max(1, line.clientBottom - line.clientTop);
   const reportLineWidth = Number(reportLine.xEnd) - Number(reportLine.xStart);
   if (!Number.isFinite(reportLineWidth) || reportLineWidth <= EPSILON) {
-    return fallback;
+    return px(fallback);
   }
   const lineWidthScreen = reportLineWidth * line.reportToSvgScaleX * Math.hypot(line.screenMatrix.a, line.screenMatrix.b);
   const bboxHeight = Math.max(0, line.clientBottom - line.clientTop);
@@ -541,39 +1763,172 @@ function lineClientHeight(
     inferredHeight = (bboxWidth - lineWidthScreen * cos) / sin;
   }
   if (!Number.isFinite(inferredHeight) || inferredHeight <= EPSILON) {
-    return fallback;
+    return px(fallback);
   }
-  return Math.max(1, Math.min(fallback, inferredHeight));
+  return px(Math.max(1, Math.min(fallback, inferredHeight)));
 }
 
-function clientToLineLocalX(
+function transformedLineNormalHeight(matrix: ScreenMatrixLike, height: number): Px {
+  const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+  return px(Math.max(1, height * Math.abs(determinant) / Math.hypot(matrix.a, matrix.b)));
+}
+
+function clientToLineLocalPoint(
   line: LineGeometry,
   reportLine: ParagraphLayoutReport['lines'][number],
   clientPoint: ClientPoint
-): number {
+): LineReportPoint {
   const lineStart = Number(reportLine.xStart);
   const localX =
     line.inverseScreenMatrix.a * clientPoint.x +
     line.inverseScreenMatrix.c * clientPoint.y +
     line.inverseScreenMatrix.e;
-  const reportX = localX / line.reportToSvgScaleX + lineStart;
-  return reportX;
+  const localY =
+    line.inverseScreenMatrix.b * clientPoint.x +
+    line.inverseScreenMatrix.d * clientPoint.y +
+    line.inverseScreenMatrix.f;
+  return {
+    x: lineReportCoord(localX / line.reportToSvgScaleX + lineStart),
+    y: lineReportY(localY / line.reportToSvgScaleX),
+  };
 }
 
 function annotateSegmentSource(
   segment: LineSegmentReport,
   rawStart: number,
   rawEnd: number,
-  sourceKind: 'text' | 'math'
+  sourceKind: 'text' | 'math',
+  sourceCoordinateSpace: SourceCoordinateSpace
 ): void {
-  const writable = segment as LineSegmentReport & {
-    sourceStartRaw?: number;
-    sourceEndRaw?: number;
-    sourceKind?: 'text' | 'math';
+  segment.sourceStartRaw = sourceOffsetForSpace(rawStart, sourceCoordinateSpace);
+  segment.sourceEndRaw = sourceOffsetForSpace(rawEnd, sourceCoordinateSpace);
+  segment.sourceKind = sourceKind;
+}
+
+type ExplicitSegmentSourceRange =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'invalid'; readonly error: string }
+  | {
+      readonly kind: 'valid';
+      readonly rawStart: number;
+      readonly rawEnd: number;
+      readonly sourceKind: 'text' | 'math';
+    };
+
+function explicitSegmentSourceRange(
+  segment: LineSegmentReport,
+  sourceText: string,
+  sourceTextStartOffset: number
+): ExplicitSegmentSourceRange {
+  const hasStart = segment.sourceStartRaw !== undefined;
+  const hasEnd = segment.sourceEndRaw !== undefined;
+  if (!hasStart && !hasEnd) {
+    return { kind: 'absent' };
+  }
+  const rawStart = Number(segment.sourceStartRaw);
+  const rawEnd = Number(segment.sourceEndRaw);
+  if (
+    !Number.isFinite(rawStart) ||
+    !Number.isFinite(rawEnd) ||
+    rawStart < sourceTextStartOffset ||
+    rawEnd < rawStart ||
+    rawEnd > sourceTextStartOffset + sourceText.length
+  ) {
+    return {
+      kind: 'invalid',
+      error:
+        `Explicit segment source range ${String(segment.sourceStartRaw)}:${String(segment.sourceEndRaw)} ` +
+        `is invalid for source view ${sourceTextStartOffset}:` +
+        `${sourceTextStartOffset + sourceText.length}.`,
+    };
+  }
+  return {
+    kind: 'valid',
+    rawStart,
+    rawEnd,
+    sourceKind: segment.sourceKind === 'math' ? 'math' : 'text',
   };
-  writable.sourceStartRaw = rawStart;
-  writable.sourceEndRaw = rawEnd;
-  writable.sourceKind = sourceKind;
+}
+
+function normalizeMathConstructRanges(
+  ranges: LineSegmentReport['mathConstructRanges']
+): MathConstructRange[] | undefined {
+  if (!Array.isArray(ranges)) {
+    return undefined;
+  }
+  const normalized = ranges.flatMap((range) => {
+    const sourceStartRaw = Number(range.sourceStartRaw);
+    const sourceEndRaw = Number(range.sourceEndRaw);
+    const xStart = Number(range.xStart);
+    const xEnd = Number(range.xEnd);
+    return Number.isFinite(sourceStartRaw) &&
+      Number.isFinite(sourceEndRaw) &&
+      Number.isFinite(xStart) &&
+      Number.isFinite(xEnd) &&
+      sourceEndRaw > sourceStartRaw &&
+      xEnd > xStart
+      ? [{
+        sourceStartRaw,
+        sourceEndRaw,
+        xStart: lineReportCoord(xStart),
+        xEnd: lineReportCoord(xEnd),
+      }]
+      : [];
+  });
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeMathCaretEntries(
+  entries: LineSegmentReport['mathCaretEntries']
+): MathCaretEntry[] | undefined {
+  if (!Array.isArray(entries)) {
+    return undefined;
+  }
+  const normalized = entries.flatMap((entry) => {
+    const sourceOffsetRaw = Number(entry.sourceOffsetRaw);
+    const x = Number(entry.x);
+    const y = Number(entry.y);
+    const height = Number(entry.height);
+    const depth = Number(entry.depth);
+    const xStart = Number(entry.hitBounds.xStart);
+    const xEnd = Number(entry.hitBounds.xEnd);
+    const yStart = Number(entry.hitBounds.yStart);
+    const yEnd = Number(entry.hitBounds.yEnd);
+    if (
+      !Number.isFinite(sourceOffsetRaw) ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      !Number.isFinite(height) ||
+      !Number.isFinite(depth) ||
+      !Number.isFinite(xStart) ||
+      !Number.isFinite(xEnd) ||
+      !Number.isFinite(yStart) ||
+      !Number.isFinite(yEnd)
+    ) {
+      return [];
+    }
+    return [{
+      sourceOffsetRaw,
+      ...(Number.isFinite(Number(entry.sourceStartRaw)) ? { sourceStartRaw: Number(entry.sourceStartRaw) } : {}),
+      ...(Number.isFinite(Number(entry.sourceEndRaw)) ? { sourceEndRaw: Number(entry.sourceEndRaw) } : {}),
+      x: lineReportCoord(x),
+      y: mathBaselineCoord(y),
+      height: mathBaselineCoord(height),
+      depth: mathBaselineCoord(depth),
+      kind: entry.kind,
+      ...(Number.isFinite(Number(entry.priority)) ? { priority: Number(entry.priority) } : {}),
+      ...(Number.isFinite(Number(entry.caretTop)) && Number.isFinite(Number(entry.caretBottom))
+        ? { caretTop: mathBaselineCoord(Number(entry.caretTop)), caretBottom: mathBaselineCoord(Number(entry.caretBottom)) }
+        : {}),
+      hitBounds: {
+        xStart: lineReportCoord(Math.min(xStart, xEnd)),
+        xEnd: lineReportCoord(Math.max(xStart, xEnd)),
+        yStart: mathBaselineCoord(Math.min(yStart, yEnd)),
+        yEnd: mathBaselineCoord(Math.max(yStart, yEnd)),
+      },
+    }];
+  });
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 function buildRunRawRanges(
@@ -663,45 +2018,7 @@ function buildRunRawRanges(
   };
 
   const consumeTeXLinebreakCommand = (start: number): number | null => {
-    if (sourceText.charAt(start) !== '\\') {
-      return null;
-    }
-
-    if (sourceText.charAt(start + 1) === '\\') {
-      let cursor = start + 2;
-      if (sourceText.charAt(cursor) === '*') {
-        cursor += 1;
-      }
-
-      while (cursor < sourceText.length && /\s/.test(sourceText.charAt(cursor))) {
-        cursor += 1;
-      }
-
-      if (sourceText.charAt(cursor) === '[') {
-        cursor += 1;
-        while (cursor < sourceText.length && sourceText.charAt(cursor) !== ']') {
-          cursor += 1;
-        }
-        if (cursor >= sourceText.length) {
-          return null;
-        }
-        cursor += 1;
-      }
-
-      return cursor;
-    }
-
-    const named = 'newline';
-    if (sourceText.slice(start + 1, start + 1 + named.length) !== named) {
-      return null;
-    }
-
-    const boundary = sourceText.charAt(start + 1 + named.length);
-    if (/[A-Za-z]/.test(boundary)) {
-      return null;
-    }
-
-    return start + 1 + named.length;
+    return scanSimpleTexLineBreak(sourceText, start)?.end ?? null;
   };
 
   const consumeSpaceLike = (): { rawStart: number; rawEnd: number } | null => {
@@ -758,28 +2075,28 @@ function buildRunRawRanges(
   };
 
   const shouldExitActiveMath = (
-    run: { kind: 'text' | 'space' | 'math'; text?: string },
-    nextRun: { kind: 'text' | 'space' | 'math'; text?: string } | null
+    run: { kind: 'text' | 'space' | 'math' | 'penalty'; text?: string },
+    nextRun: { kind: 'text' | 'space' | 'math' | 'penalty'; text?: string } | null
   ): boolean => {
-    if (!activeMathSpan || run.kind === 'math') {
+    if (!activeMathSpan || run.kind === 'math' || run.kind === 'penalty') {
       return false;
     }
     if (nextRun?.kind === 'math') {
       return false;
     }
     const start = nextTextStart();
-    if (!Number.isFinite(start)) {
+    if (start === null || !Number.isFinite(start)) {
       return false;
     }
     if (run.kind === 'space') {
-      return /\s/.test(sourceText.charAt(start as number)) || consumeTeXLinebreakCommand(start as number) != null;
+      return /\s/.test(sourceText.charAt(start)) || consumeTeXLinebreakCommand(start) != null;
     }
     const text = String(run.text ?? '');
-    return text.length > 0 && sourceText.startsWith(text, start as number);
+    return text.length > 0 && sourceText.startsWith(text, start);
   };
 
   for (let runIndex = 0; runIndex < runs.length; runIndex++) {
-    const run = runs[runIndex];
+    const run = requireArrayValue(runs, runIndex);
     const nextRun = runs[runIndex + 1] ?? null;
 
     if (shouldExitActiveMath(run, nextRun)) {
@@ -834,38 +2151,162 @@ function buildRunRawRanges(
 
 function alignSegmentsToSource(
   report: ParagraphLayoutReport,
-  sourceText: string
+  sourceText: string,
+  sourceTextStartOffset: number
 ): { aligned: AlignedSegment[]; error: string | null } {
   const parsed = parseSourceSpans(sourceText);
   if (parsed.error) {
     return {
       aligned: [],
-      error: `${parsed.error.message} (index=${parsed.error.index})`,
+      error: `${parsed.error.message} (index=${sourceTextStartOffset + parsed.error.index})`,
     };
   }
 
+  if (report.sourceMappingMode === 'reconstructed' && sourceTextStartOffset !== 0) {
+    return {
+      aligned: [],
+      error: 'Reconstructed source mappings require a zero-origin layout source view.',
+    };
+  }
+
+  const sourceSpans = parsed.spans.map((span): SourceSpan => ({
+    ...span,
+    rawStart: span.rawStart + sourceTextStartOffset,
+    rawEnd: span.rawEnd + sourceTextStartOffset,
+    ...(span.kind === 'math' ? {
+      contentStart: span.contentStart + sourceTextStartOffset,
+      contentEnd: span.contentEnd + sourceTextStartOffset,
+    } : {}),
+  }));
+
   const mathSpanByRange = new Map<string, MathSourceSpan>();
-  for (const span of parsed.spans) {
+  for (const span of sourceSpans) {
     if (span.kind === 'math') {
       mathSpanByRange.set(`${span.rawStart}:${span.rawEnd}`, span);
     }
   }
 
-  const runRaw = buildRunRawRanges(report, parsed.spans, sourceText);
-  if (runRaw.error) {
-    return {
-      aligned: [],
-      error: runRaw.error,
-    };
-  }
+  let fallbackRunRaw: ReturnType<typeof buildRunRawRanges> | null = null;
+  const getFallbackRunRaw = () => {
+    fallbackRunRaw ??= buildRunRawRanges(report, sourceSpans, sourceText);
+    return fallbackRunRaw;
+  };
 
   const aligned: AlignedSegment[] = [];
   const sortedLines = [...report.lines].sort((a, b) => a.lineIndex - b.lineIndex);
 
   for (let lineCursor = 0; lineCursor < sortedLines.length; lineCursor++) {
-    const line = sortedLines[lineCursor];
+    const line = requireArrayValue(sortedLines, lineCursor);
     for (let segmentIndex = 0; segmentIndex < line.segments.length; segmentIndex++) {
-      const segment = line.segments[segmentIndex];
+      const segment = requireArrayValue(line.segments, segmentIndex);
+      const explicitRange = explicitSegmentSourceRange(segment, sourceText, sourceTextStartOffset);
+      if (explicitRange.kind === 'invalid') {
+        return { aligned: [], error: explicitRange.error };
+      }
+      if (explicitRange.kind === 'valid') {
+        if (
+          explicitRange.sourceKind === 'math' &&
+          isTransparentMathFragmentSeparator(segment)
+        ) {
+          continue;
+        }
+        const mathSpan = explicitRange.sourceKind === 'math'
+          ? mathSpanByRange.get(`${explicitRange.rawStart}:${explicitRange.rawEnd}`)
+          : undefined;
+        if (explicitRange.sourceKind === 'math' && !mathSpan) {
+          const grouped = alignExplicitMathSegmentGroup(
+            line,
+            segmentIndex,
+            sourceText,
+            mathSpanByRange,
+            report.sourceCoordinateSpace,
+            sourceTextStartOffset
+          );
+          if (grouped.error) {
+            const containingMathSpan = findContainingMathSpan(
+              mathSpanByRange,
+              explicitRange.rawStart,
+              explicitRange.rawEnd
+            );
+            if (containingMathSpan) {
+              annotateSegmentSource(
+                segment,
+                explicitRange.rawStart,
+                explicitRange.rawEnd,
+                'math',
+                report.sourceCoordinateSpace
+              );
+              const mathConstructRanges = normalizeMathConstructRanges(segment.mathConstructRanges);
+              const mathCaretEntries = normalizeMathCaretEntries(segment.mathCaretEntries);
+              aligned.push({
+                lineIndex: line.lineIndex,
+                line,
+                segment,
+                rawStart: explicitRange.rawStart,
+                rawEnd: explicitRange.rawEnd,
+                sourceKind: 'math',
+                mathSpan: containingMathSpan,
+                ...(mathConstructRanges !== undefined ? { mathConstructRanges } : {}),
+                ...(mathCaretEntries !== undefined ? { mathCaretEntries } : {}),
+              });
+              continue;
+            }
+            return { aligned: [], error: grouped.error };
+          }
+          if (grouped.entry) {
+            aligned.push(grouped.entry);
+            segmentIndex = grouped.endSegmentIndex ?? segmentIndex;
+            continue;
+          }
+          return {
+            aligned: [],
+            error: `Failed to align math segment ${explicitRange.rawStart}:${explicitRange.rawEnd} to parsed source span.`,
+          };
+        }
+        annotateSegmentSource(
+          segment,
+          explicitRange.rawStart,
+          explicitRange.rawEnd,
+          explicitRange.sourceKind,
+          report.sourceCoordinateSpace
+        );
+        const mathConstructRanges = explicitRange.sourceKind === 'math'
+          ? normalizeMathConstructRanges(segment.mathConstructRanges) : undefined;
+        const mathCaretEntries = explicitRange.sourceKind === 'math'
+          ? normalizeMathCaretEntries(segment.mathCaretEntries) : undefined;
+        aligned.push({
+          lineIndex: line.lineIndex,
+          line,
+          segment,
+          rawStart: explicitRange.rawStart,
+          rawEnd: explicitRange.rawEnd,
+          sourceKind: explicitRange.sourceKind,
+          ...(mathSpan !== undefined ? { mathSpan: mathSpan } : {}),
+          ...(mathConstructRanges !== undefined ? { mathConstructRanges } : {}),
+          ...(mathCaretEntries !== undefined ? { mathCaretEntries } : {}),
+        });
+        continue;
+      }
+      if (segment.role === 'list-label') {
+        continue;
+      }
+
+      if (report.sourceMappingMode === 'explicit') {
+        return {
+          aligned: [],
+          error:
+            `Explicit paragraph '${report.paragraphId}' has no source range for ` +
+            `line ${line.lineIndex}, segment ${segmentIndex}.`,
+        };
+      }
+
+      const runRaw = getFallbackRunRaw();
+      if (runRaw.error) {
+        return {
+          aligned: [],
+          error: runRaw.error,
+        };
+      }
       const runRange = runRaw.runRawByIndex.get(segment.runIndex);
       if (!runRange) {
         return {
@@ -877,7 +2318,7 @@ function alignSegmentsToSource(
       if (segment.kind === 'math') {
         const mathGroupStartIndex = segmentIndex;
         const groupStartX = segment.x;
-        let groupEndX = segment.x + Math.max(0, segment.width);
+        let groupEndX = texLineX(segment.x + Math.max(0, segment.width));
         let groupRawStart = runRange.rawStart;
         let groupRawEnd = runRange.rawEnd;
 
@@ -885,8 +2326,8 @@ function alignSegmentsToSource(
           segmentIndex + 1 < line.segments.length &&
           line.segments[segmentIndex + 1]?.kind === 'math'
         ) {
-          const next = line.segments[segmentIndex + 1];
-          groupEndX = Math.max(groupEndX, next.x + Math.max(0, next.width));
+          const next = requireArrayValue(line.segments, segmentIndex + 1);
+          groupEndX = texLineX(Math.max(groupEndX, next.x + Math.max(0, next.width)));
           const nextRange = runRaw.runRawByIndex.get(next.runIndex);
           if (!nextRange) {
             return {
@@ -900,7 +2341,13 @@ function alignSegmentsToSource(
         }
 
         for (let i = mathGroupStartIndex; i <= segmentIndex; i++) {
-          annotateSegmentSource(line.segments[i], groupRawStart, groupRawEnd, 'math');
+          annotateSegmentSource(
+            requireArrayValue(line.segments, i),
+            groupRawStart,
+            groupRawEnd,
+            'math',
+            report.sourceCoordinateSpace
+          );
         }
 
         const mathSpan = mathSpanByRange.get(`${groupRawStart}:${groupRawEnd}`);
@@ -911,6 +2358,17 @@ function alignSegmentsToSource(
           };
         }
 
+        const groupCaretStops = mathGroupStartIndex === segmentIndex &&
+          Array.isArray(segment.caretStops)
+          ? segment.caretStops
+          : [groupStartX, texLineX(Math.max(groupStartX, groupEndX))];
+        const groupConstructRanges = mathGroupStartIndex === segmentIndex
+          ? normalizeMathConstructRanges(segment.mathConstructRanges)
+          : undefined;
+        const groupCaretEntries = mathGroupStartIndex === segmentIndex
+          ? normalizeMathCaretEntries(segment.mathCaretEntries)
+          : undefined;
+
         aligned.push({
           lineIndex: line.lineIndex,
           line,
@@ -918,19 +2376,27 @@ function alignSegmentsToSource(
             runIndex: line.segments[mathGroupStartIndex]?.runIndex ?? segment.runIndex,
             kind: 'math',
             x: groupStartX,
-            width: Math.max(0, groupEndX - groupStartX),
-            caretStops: [groupStartX, Math.max(groupStartX, groupEndX)],
+            width: texLength(Math.max(0, groupEndX - groupStartX)),
+            caretStops: groupCaretStops,
           },
           rawStart: groupRawStart,
           rawEnd: groupRawEnd,
           sourceKind: 'math',
           mathSpan,
+          ...(groupConstructRanges !== undefined ? { mathConstructRanges: groupConstructRanges } : {}),
+          ...(groupCaretEntries !== undefined ? { mathCaretEntries: groupCaretEntries } : {}),
         });
         continue;
       }
 
       if (segment.kind === 'space') {
-        annotateSegmentSource(segment, runRange.rawStart, runRange.rawEnd, 'text');
+        annotateSegmentSource(
+          segment,
+          runRange.rawStart,
+          runRange.rawEnd,
+          'text',
+          report.sourceCoordinateSpace
+        );
         aligned.push({
           lineIndex: line.lineIndex,
           line,
@@ -967,7 +2433,13 @@ function alignSegmentsToSource(
           error: `Text segment raw range exceeds run-aligned range for runIndex=${segment.runIndex}.`,
         };
       }
-      annotateSegmentSource(segment, rawStart, rawEnd, 'text');
+      annotateSegmentSource(
+        segment,
+        rawStart,
+        rawEnd,
+        'text',
+        report.sourceCoordinateSpace
+      );
       aligned.push({
         lineIndex: line.lineIndex,
         line,
@@ -982,12 +2454,220 @@ function alignSegmentsToSource(
   return { aligned, error: null };
 }
 
+function findContainingMathSpan(
+  mathSpanByRange: ReadonlyMap<string, MathSourceSpan>,
+  rawStart: number,
+  rawEnd: number
+): MathSourceSpan | undefined {
+  for (const span of mathSpanByRange.values()) {
+    if (span.rawStart <= rawStart && rawEnd <= span.rawEnd) {
+      return span;
+    }
+  }
+  return undefined;
+}
+
+function alignExplicitMathSegmentGroup(
+  line: ParagraphLayoutReport['lines'][number],
+  startSegmentIndex: number,
+  sourceText: string,
+  mathSpanByRange: ReadonlyMap<string, MathSourceSpan>,
+  sourceCoordinateSpace: SourceCoordinateSpace,
+  sourceTextStartOffset: number
+): {
+  readonly entry?: AlignedSegment;
+  readonly endSegmentIndex?: number;
+  readonly error?: string;
+} {
+  const first = requireArrayValue(line.segments, startSegmentIndex);
+  if (first.kind !== 'math') {
+    return {};
+  }
+  const firstRange = explicitSegmentSourceRange(first, sourceText, sourceTextStartOffset);
+  if (firstRange.kind !== 'valid' || firstRange.sourceKind !== 'math') {
+    return {};
+  }
+
+  const segments: LineSegmentReport[] = [first];
+  let groupRawStart = firstRange.rawStart;
+  let groupRawEnd = firstRange.rawEnd;
+  let groupStartX = first.x;
+  let groupEndX = texLineX(first.x + Math.max(0, first.width));
+  let endSegmentIndex = startSegmentIndex;
+  let mathSpan = mathSpanByRange.get(`${groupRawStart}:${groupRawEnd}`);
+
+  while (!mathSpan && endSegmentIndex + 1 < line.segments.length) {
+    let nextSegmentIndex = endSegmentIndex + 1;
+    while (
+      nextSegmentIndex < line.segments.length &&
+      isTransparentMathFragmentSeparator(line.segments[nextSegmentIndex])
+    ) {
+      nextSegmentIndex += 1;
+    }
+    const next = line.segments.at(nextSegmentIndex);
+    if (next?.kind !== 'math') {
+      break;
+    }
+    const nextRange = explicitSegmentSourceRange(next, sourceText, sourceTextStartOffset);
+    if (nextRange.kind === 'invalid') {
+      return { error: nextRange.error };
+    }
+    if (nextRange.kind !== 'valid' || nextRange.sourceKind !== 'math') {
+      break;
+    }
+    segments.push(next);
+    groupRawStart = Math.min(groupRawStart, nextRange.rawStart);
+    groupRawEnd = Math.max(groupRawEnd, nextRange.rawEnd);
+    groupStartX = texLineX(Math.min(groupStartX, next.x));
+    groupEndX = texLineX(Math.max(groupEndX, next.x + Math.max(0, next.width)));
+    endSegmentIndex = nextSegmentIndex;
+    mathSpan = mathSpanByRange.get(`${groupRawStart}:${groupRawEnd}`);
+  }
+
+  const caretStops = combineExplicitMathGroupCaretStops(
+    segments,
+    groupRawStart,
+    groupRawEnd,
+    groupStartX,
+    groupEndX
+  );
+  const mathConstructRanges = combineExplicitMathConstructRanges(segments);
+  const mathCaretEntries = combineExplicitMathCaretEntries(segments);
+  const sourceRangePolicy = segments.find(
+    (segment) => segment.sourceRangePolicy && segment.sourceRangePolicy !== 'caret'
+  )?.sourceRangePolicy;
+  if (
+    !mathSpan &&
+    sourceRangePolicy == null &&
+    caretStops.length !== groupRawEnd - groupRawStart + 1
+  ) {
+    return {
+      error:
+        `Explicit math segment ${groupRawStart}:${groupRawEnd} has neither a parsed math span ` +
+        'nor a complete caret-stop map.',
+    };
+  }
+
+  for (const groupedSegment of segments) {
+    annotateSegmentSource(
+      groupedSegment,
+      groupRawStart,
+      groupRawEnd,
+      'math',
+      sourceCoordinateSpace
+    );
+  }
+
+  return {
+    endSegmentIndex,
+    entry: {
+      lineIndex: line.lineIndex,
+      line,
+      segment: {
+        runIndex: first.runIndex,
+        kind: 'math',
+        x: groupStartX,
+        width: texLength(Math.max(0, groupEndX - groupStartX)),
+        caretStops,
+        ...(sourceRangePolicy ? { sourceRangePolicy: sourceRangePolicy } : {}),
+      },
+      rawStart: groupRawStart,
+      rawEnd: groupRawEnd,
+      sourceKind: 'math',
+      ...(mathSpan !== undefined ? { mathSpan: mathSpan } : {}),
+      ...(mathConstructRanges !== undefined ? { mathConstructRanges: mathConstructRanges } : {}),
+      ...(mathCaretEntries !== undefined ? { mathCaretEntries: mathCaretEntries } : {}),
+    },
+  };
+}
+
+function isTransparentMathFragmentSeparator(
+  segment: LineSegmentReport | undefined
+): boolean {
+  if (segment?.kind !== 'space') {
+    return false;
+  }
+  const rawStart = Number(segment.sourceStartRaw);
+  const rawEnd = Number(segment.sourceEndRaw);
+  return segment.sourceKind === 'math' &&
+    Number.isFinite(rawStart) &&
+    rawStart === rawEnd;
+}
+
+function combineExplicitMathGroupCaretStops(
+  segments: readonly LineSegmentReport[],
+  groupRawStart: number,
+  groupRawEnd: number,
+  groupStartX: TexLineX,
+  groupEndX: TexLineX
+): TexLineX[] {
+  const stops = Array.from({ length: Math.max(0, groupRawEnd - groupRawStart) + 1 }, () => Number.NaN);
+  stops[0] = groupStartX;
+  stops[stops.length - 1] = groupEndX;
+  for (const segment of segments) {
+    const rawStart = Number(segment.sourceStartRaw);
+    const rawEnd = Number(segment.sourceEndRaw);
+    if (!Number.isFinite(rawStart) || !Number.isFinite(rawEnd)) {
+      continue;
+    }
+    if (!Array.isArray(segment.caretStops)) {
+      continue;
+    }
+    for (let rawOffset = rawStart; rawOffset <= rawEnd; rawOffset += 1) {
+      const groupIndex = rawOffset - groupRawStart;
+      const segmentIndex = rawOffset - rawStart;
+      const stop = segment.caretStops[segmentIndex];
+      if (groupIndex >= 0 && groupIndex < stops.length && stop !== undefined && Number.isFinite(stop)) {
+        stops[groupIndex] = stop;
+      }
+    }
+  }
+  interpolateLineStops(stops, groupStartX, groupEndX);
+  return stops.map(texLineX);
+}
+
+function interpolateLineStops(stops: number[], startX: number, endX: number): void {
+  if (!Number.isFinite(stops[0])) {
+    stops[0] = startX;
+  }
+  if (!Number.isFinite(stops[stops.length - 1])) {
+    stops[stops.length - 1] = endX;
+  }
+  let previousKnown = 0;
+  for (let index = 1; index < stops.length; index += 1) {
+    if (!Number.isFinite(stops[index])) {
+      continue;
+    }
+    const left = stops[previousKnown] ?? startX;
+    const right = stops[index] ?? left;
+    const gap = index - previousKnown;
+    for (let fill = previousKnown + 1; fill < index; fill += 1) {
+      stops[fill] = left + ((right - left) * (fill - previousKnown)) / gap;
+    }
+    previousKnown = index;
+  }
+}
+
+function combineExplicitMathConstructRanges(
+  segments: readonly LineSegmentReport[]
+): MathConstructRange[] | undefined {
+  const ranges = segments.flatMap((segment) => normalizeMathConstructRanges(segment.mathConstructRanges) ?? []);
+  return ranges.length > 0 ? ranges : undefined;
+}
+
+function combineExplicitMathCaretEntries(
+  segments: readonly LineSegmentReport[]
+): MathCaretEntry[] | undefined {
+  const entries = segments.flatMap((segment) => normalizeMathCaretEntries(segment.mathCaretEntries) ?? []);
+  return entries.length > 0 ? entries : undefined;
+}
+
 function markLineEndpoints(stops: Stop[]): Stop[] {
   if (!stops.length) {
     return stops;
   }
-  let minX = stops[0].x;
-  let maxX = stops[0].x;
+  let minX = Number(requireArrayValue(stops, 0).x);
+  let maxX = Number(requireArrayValue(stops, 0).x);
   for (const stop of stops) {
     minX = Math.min(minX, stop.x);
     maxX = Math.max(maxX, stop.x);
@@ -999,10 +2679,9 @@ function markLineEndpoints(stops: Stop[]): Stop[] {
   return stops;
 }
 
-async function buildStopsByLine(
-  outputJax: unknown,
+function buildStopsByLine(
   alignedSegments: AlignedSegment[]
-): Promise<Map<number, Stop[]>> {
+): Map<number, Stop[]> {
   const stopsByLine = new Map<number, Stop[]>();
 
   const addStop = (lineIndex: number, stop: Stop) => {
@@ -1018,27 +2697,75 @@ async function buildStopsByLine(
 
     if (aligned.sourceKind === 'math') {
       const span = aligned.mathSpan;
-      if (!span) {
-        throw new Error(`Missing parsed math span for line ${aligned.lineIndex}.`);
-      }
-      const table = await mathPrefixCache.getOrBuild(outputJax, span);
-      for (let i = 0; i <= rawLength; i++) {
-        const offset = aligned.rawStart + i;
-        const ratio = offset <= span.contentStart
-          ? 0
-          : offset >= span.contentEnd
-            ? 1
-            : readPrefixUnitsFromTable(clamp(offset - span.contentStart, 0, span.content.length), span.content.length, 1, table);
+      const providedStops = (getOrBuildTextSegmentCaretStops(aligned.segment) ?? [])
+        .map((value) => Number(value));
+      if (aligned.segment.sourceRangePolicy && aligned.segment.sourceRangePolicy !== 'caret') {
+        if (providedStops.length < 2 || !providedStops.every((value) => Number.isFinite(value))) {
+          throw new Error(
+            `Source-range math segment ${aligned.rawStart}:${aligned.rawEnd} has no endpoint caret stops.`
+          );
+        }
         addStop(aligned.lineIndex, {
-          offset,
-          x: segLeft + ratio * segWidth,
+          offset: aligned.rawStart,
+          x: lineReportCoord(providedStops[0] ?? segLeft),
           kind: 'math',
-          snappedToMathPrefix: true,
           lineStart: false,
           lineEnd: false,
         });
+        addStop(aligned.lineIndex, {
+          offset: aligned.rawEnd,
+          x: lineReportCoord(providedStops.at(-1) ?? segLeft + segWidth),
+          kind: 'math',
+          lineStart: false,
+          lineEnd: false,
+        });
+        continue;
       }
-      continue;
+      if (
+        providedStops.length === rawLength + 1 &&
+        providedStops.every((value) => Number.isFinite(value))
+      ) {
+        for (let i = 0; i <= rawLength; i++) {
+          const offset = aligned.rawStart + i;
+          const mathEntry = bestMathCaretEntryForOffset(aligned.mathCaretEntries, offset);
+          addStop(aligned.lineIndex, {
+            offset,
+            x: lineReportCoord(providedStops[i] ?? 0),
+            ...(mathEntry ? { y: mathEntry.y } : {}),
+            kind: 'math',
+            lineStart: false,
+            lineEnd: false,
+          });
+        }
+        continue;
+      }
+      if (!span) {
+        throw new Error(
+          `Explicit math source range ${aligned.rawStart}:${aligned.rawEnd} has no complete caret-stop map.`
+        );
+      }
+      const spanRawLength = Math.max(0, span.rawEnd - span.rawStart);
+      if (
+        providedStops.length === spanRawLength + 1 &&
+        providedStops.every((value) => Number.isFinite(value))
+      ) {
+        for (let i = 0; i <= spanRawLength; i++) {
+          const offset = span.rawStart + i;
+          const mathEntry = bestMathCaretEntryForOffset(aligned.mathCaretEntries, offset);
+          addStop(aligned.lineIndex, {
+            offset,
+            x: lineReportCoord(providedStops[i] ?? 0),
+            ...(mathEntry ? { y: mathEntry.y } : {}),
+            kind: 'math',
+            lineStart: false,
+            lineEnd: false,
+          });
+        }
+        continue;
+      }
+      throw new Error(
+        `Native math source range ${span.rawStart}:${span.rawEnd} has no complete caret-stop map.`
+      );
     }
 
     if (aligned.segment.kind === 'space') {
@@ -1046,9 +2773,8 @@ async function buildStopsByLine(
         const t = rawLength > 0 ? i / rawLength : 0;
         addStop(aligned.lineIndex, {
           offset: aligned.rawStart + i,
-          x: segLeft + segWidth * t,
+          x: lineReportCoord(segLeft + segWidth * t),
           kind: 'space',
-          snappedToMathPrefix: false,
           lineStart: false,
           lineEnd: false,
         });
@@ -1058,21 +2784,44 @@ async function buildStopsByLine(
 
     const providedStops = (getOrBuildTextSegmentCaretStops(aligned.segment) ?? [])
       .map((value) => Number(value));
+    if (aligned.segment.sourceRangePolicy && aligned.segment.sourceRangePolicy !== 'caret') {
+      if (providedStops.length < 2 || !providedStops.every((value) => Number.isFinite(value))) {
+        throw new Error(
+          `Source-range text segment ${aligned.rawStart}:${aligned.rawEnd} has no endpoint caret stops.`
+        );
+      }
+      addStop(aligned.lineIndex, {
+        offset: aligned.rawStart,
+        x: lineReportCoord(providedStops[0] ?? segLeft),
+        kind: 'text',
+        lineStart: false,
+        lineEnd: false,
+      });
+      addStop(aligned.lineIndex, {
+        offset: aligned.rawEnd,
+        x: lineReportCoord(providedStops.at(-1) ?? segLeft + segWidth),
+        kind: 'text',
+        lineStart: false,
+        lineEnd: false,
+      });
+      continue;
+    }
     if (
       providedStops.length !== rawLength + 1 ||
       !providedStops.every((value) => Number.isFinite(value))
     ) {
       throw new Error(
-        `Text segment for runIndex=${aligned.segment.runIndex} is missing valid caretStops.`
+        `Text segment for runIndex=${aligned.segment.runIndex} range ` +
+        `${aligned.rawStart}:${aligned.rawEnd} has ${providedStops.length} caret stops; ` +
+        `expected ${rawLength + 1} for ${JSON.stringify(aligned.segment.text ?? '')}.`
       );
     }
 
     for (let i = 0; i <= rawLength; i++) {
       addStop(aligned.lineIndex, {
         offset: aligned.rawStart + i,
-        x: providedStops[i],
+        x: lineReportCoord(providedStops[i] ?? 0),
         kind: 'text',
-        snappedToMathPrefix: false,
         lineStart: false,
         lineEnd: false,
       });
@@ -1097,7 +2846,9 @@ function buildLineHitMaps(
   stopsByLine: Map<number, Stop[]>,
   geometryByLineIndex: Map<number, LineGeometry>,
   sourceLength: number,
-  visibleHyphenBreakOffsetByLine: Map<number, number>
+  visibleHyphenBreakOffsetByLine: Map<number, number>,
+  mathConstructRangesByLine: Map<number, MathConstructRange[]>,
+  mathCaretEntriesByLine: Map<number, MathCaretEntry[]>
 ): LineHitMap[] {
   const lines = [...report.lines].sort((a, b) => a.lineIndex - b.lineIndex);
   return lines.map((line) => {
@@ -1117,8 +2868,8 @@ function buildLineHitMaps(
       list.push(stop);
       exact.set(stop.offset, list);
     }
-    const minOffset = byOffset[0].offset;
-    const maxOffset = byOffset[byOffset.length - 1].offset;
+    const minOffset = requireArrayValue(byOffset, 0).offset;
+    const maxOffset = requireArrayValue(byOffset, byOffset.length - 1).offset;
     const geometry = geometryByLineIndex.get(line.lineIndex);
     if (!geometry) {
       throw new Error(`Missing geometry for line ${line.lineIndex}.`);
@@ -1126,15 +2877,434 @@ function buildLineHitMaps(
 
     return {
       ...geometry,
+      reportLine: line,
       stopsByX: byX,
       stopsByOffset: byOffset,
       stopsByOffsetExact: exact,
+      mathConstructRanges: mathConstructRangesByLine.get(line.lineIndex) ?? [],
+      mathCaretEntries: mathCaretEntriesByLine.get(line.lineIndex) ?? [],
       minOffset,
       maxOffset,
       breakInfo: line.break,
       visibleHyphenBreakOffset: visibleHyphenBreakOffsetByLine.get(line.lineIndex) ?? null,
     };
   });
+}
+
+function buildDisplayMathLineHitMaps(
+  layoutContext: unknown,
+  report: ParagraphLayoutReport,
+  containerElement: Element
+): LineHitMap[] {
+  const layout = getTexVListLayout(layoutContext, report.paragraphId);
+  const rootMatrix = containerElement.getScreenCTM?.();
+  const reportToSvgScaleX = reportToContainerSvgScaleX(
+    containerElement,
+    Number(report.width)
+  );
+  if (!layout || !rootMatrix || reportToSvgScaleX == null) {
+    return [];
+  }
+
+  const baseMatrix = normalizedScreenMatrix(rootMatrix, `paragraph '${report.paragraphId}'`);
+  if (!Number.isFinite(reportToSvgScaleX) || reportToSvgScaleX <= EPSILON) {
+    return [];
+  }
+
+  const baseLineIndex = Math.max(-1, ...report.lines.map((line) => line.lineIndex));
+  return flattenPositionedTexVListItems(layout.items)
+    .flatMap((item, displayIndex) =>
+      displayMathLineHitMapFromPositionedItem({
+        item,
+        lineIndex: baseLineIndex + 1 + displayIndex,
+        report,
+        matrix: baseMatrix,
+        reportToSvgScaleX,
+      })
+    )
+    .sort((left, right) => {
+      if (Math.abs(left.clientCenterY - right.clientCenterY) > EPSILON) {
+        return left.clientCenterY - right.clientCenterY;
+      }
+      return left.lineIndex - right.lineIndex;
+    });
+}
+
+function displayMathLineHitMapFromPositionedItem(params: {
+  readonly item: PositionedTexVListItem;
+  readonly lineIndex: number;
+  readonly report: ParagraphLayoutReport;
+  readonly matrix: ScreenMatrixLike;
+  readonly reportToSvgScaleX: number;
+}): LineHitMap[] {
+  const source = displayMathSourceForPositionedItem(params.item);
+  if (!source) {
+    return [];
+  }
+  const metrics = params.item.metrics;
+  const totalHeight = Math.max(1, metrics.height + metrics.depth);
+  const width = texLength(Math.max(0, metrics.width));
+  const sourceStart = Math.max(0, Math.floor(source.sourceStart));
+  const sourceEnd = Math.max(sourceStart, Math.floor(source.sourceEnd));
+  if (sourceEnd <= sourceStart || width <= EPSILON) {
+    return [];
+  }
+
+  const xStart = projectTexVListXToLine(
+    params.item.x,
+    texVListX(0),
+    texLineX(0)
+  );
+  const y = params.item.y;
+  if (!Number.isFinite(xStart) || !Number.isFinite(y)) {
+    return [];
+  }
+  const xEnd = texLineX(xStart + width);
+  // Synthetic display lines use the same top-left frame as paragraph lines.
+  // mathBaselineYToLineY adds the ascent when projecting caret/selection data.
+  const lineMatrix = translatedScreenMatrix(params.matrix, xStart, y);
+  const inverseScreenMatrix = inverseScreenMatrixForLine(lineMatrix, params.lineIndex);
+  const bounds = clientRectForLocalBox(
+    0,
+    0,
+    width,
+    totalHeight,
+    lineMatrix
+  );
+  if (!bounds) {
+    return [];
+  }
+
+  const reportLine = displayMathSyntheticReportLine({
+    lineIndex: params.lineIndex,
+    source,
+    metrics,
+    xStart,
+    xEnd,
+    sourceCoordinateSpace: params.report.sourceCoordinateSpace,
+  });
+  const stops = displayMathStopsForBox(source, xStart, width);
+  const exact = new Map<number, Stop[]>();
+  for (const stop of stops) {
+    const list = exact.get(stop.offset) ?? [];
+    list.push(stop);
+    exact.set(stop.offset, list);
+  }
+  const constructRangeReports = displayMathConstructRangesForBox(
+    source,
+    xStart,
+    width,
+    params.report.sourceCoordinateSpace
+  );
+  const constructRanges = normalizeMathConstructRanges(constructRangeReports) ?? [];
+  const mathCaretEntryReports = displayMathCaretEntriesForBox(
+    source,
+    xStart,
+    params.report.sourceCoordinateSpace
+  );
+  const mathCaretEntries = normalizeMathCaretEntries(mathCaretEntryReports) ?? [];
+  return [{
+    lineIndex: params.lineIndex,
+    clientLeft: bounds.clientLeft,
+    clientRight: bounds.clientRight,
+    clientTop: bounds.clientTop,
+    clientBottom: bounds.clientBottom,
+    clientCenterY: px((bounds.clientTop + bounds.clientBottom) / 2),
+    reportToSvgScaleX: params.reportToSvgScaleX,
+    screenMatrix: lineMatrix,
+    inverseScreenMatrix,
+    clientNormalHeight: transformedLineNormalHeight(lineMatrix, totalHeight * params.reportToSvgScaleX),
+    reportLine,
+    stopsByX: stops,
+    stopsByOffset: [...stops].sort((left, right) => {
+      if (left.offset !== right.offset) {
+        return left.offset - right.offset;
+      }
+      return left.x - right.x;
+    }),
+    stopsByOffsetExact: exact,
+    mathConstructRanges: constructRanges,
+    mathCaretEntries,
+    minOffset: sourceStart,
+    maxOffset: sourceEnd,
+    breakInfo: null,
+    visibleHyphenBreakOffset: null,
+  }];
+}
+
+function displayMathSyntheticReportLine<Space extends SourceCoordinateSpace>(params: {
+  readonly lineIndex: number;
+  readonly source: TexMathBox;
+  readonly metrics: TexBoxMetrics;
+  readonly xStart: TexLineX;
+  readonly xEnd: TexLineX;
+  readonly sourceCoordinateSpace: Space;
+}): ParagraphLayoutReport<Space>['lines'][number] {
+  const width = texLength(Math.max(0, params.xEnd - params.xStart));
+  const mathConstructRanges = displayMathConstructRangesForBox(
+    params.source,
+    params.xStart,
+    width,
+    params.sourceCoordinateSpace
+  );
+  const mathCaretEntries = displayMathCaretEntriesForBox(
+    params.source,
+    params.xStart,
+    params.sourceCoordinateSpace
+  );
+  const mathBreakpoints = displayMathBreakpointsForBox(
+    params.source,
+    params.xStart,
+    width,
+    params.sourceCoordinateSpace
+  );
+  return {
+    lineIndex: params.lineIndex,
+    startRun: -1,
+    endRun: -1,
+    width,
+    targetWidth: width,
+    naturalWidth: width,
+    glueSetRatio: 0,
+    badness: 0,
+    spaceCount: 0,
+    spaceDeltaPerGap: texLength(0),
+    ascent: params.metrics.height,
+    descent: params.metrics.depth,
+    xStart: params.xStart,
+    xEnd: params.xEnd,
+    break: null,
+    segments: [{
+      runIndex: -1,
+      kind: 'math',
+      text: params.source.content,
+      sourceStartRaw: sourceOffsetForSpace(params.source.sourceStart, params.sourceCoordinateSpace),
+      sourceEndRaw: sourceOffsetForSpace(params.source.sourceEnd, params.sourceCoordinateSpace),
+      sourceKind: 'math',
+      x: params.xStart,
+      width,
+      caretStops: displayMathCaretStopsForBox(params.source, params.xStart, width),
+      ...(mathConstructRanges !== undefined ? { mathConstructRanges } : {}),
+      ...(mathCaretEntries !== undefined ? { mathCaretEntries } : {}),
+      ...(mathBreakpoints !== undefined ? { mathBreakpoints } : {}),
+      ...(params.source.svgBody !== undefined ? { mathSvgBody: params.source.svgBody } : {}),
+    }],
+  };
+}
+
+function displayMathSourceForPositionedItem(item: PositionedTexVListItem): TexMathBox | null {
+  if (item.item.kind === 'display-math') {
+    return item.item.box;
+  }
+  if (item.item.kind !== 'hbox') {
+    return null;
+  }
+  return displayMathSourceForHBox(item.item);
+}
+
+function displayMathSourceForHBox(item: TexHBoxItem): TexMathBox | null {
+  if (item.role?.kind !== 'display-align-row') {
+    return null;
+  }
+  const hitMap = item.box.hitMap;
+  if (hitMap?.kind !== 'tex-math') {
+    return null;
+  }
+  if (
+    typeof hitMap.sourceStart !== 'number' || !Number.isFinite(hitMap.sourceStart) ||
+    typeof hitMap.sourceEnd !== 'number' || !Number.isFinite(hitMap.sourceEnd) ||
+    typeof hitMap.contentStart !== 'number' || !Number.isFinite(hitMap.contentStart) ||
+    typeof hitMap.contentEnd !== 'number' || !Number.isFinite(hitMap.contentEnd) ||
+    typeof hitMap.width !== 'number' || !Number.isFinite(hitMap.width) ||
+    typeof hitMap.height !== 'number' || !Number.isFinite(hitMap.height) ||
+    typeof hitMap.depth !== 'number' || !Number.isFinite(hitMap.depth)
+  ) {
+    return null;
+  }
+  return {
+    source: '',
+    content: '',
+    sourceStart: hitMap.sourceStart,
+    sourceEnd: hitMap.sourceEnd,
+    contentStart: hitMap.contentStart,
+    contentEnd: hitMap.contentEnd,
+    width: texLength(hitMap.width),
+    height: texLength(hitMap.height),
+    depth: texLength(hitMap.depth),
+    ...(hitMap.caretMap !== undefined ? { caretMap: hitMap.caretMap } : {}),
+    ...(hitMap.caretStops !== undefined ? { caretStops: hitMap.caretStops } : {}),
+    ...(hitMap.constructRanges !== undefined ? { constructRanges: hitMap.constructRanges } : {}),
+    ...(hitMap.breakpoints !== undefined ? { breakpoints: hitMap.breakpoints } : {}),
+  };
+}
+
+function displayMathStopsForBox(
+  box: TexMathBox,
+  x: TexLineX,
+  width: TexLength
+): Stop[] {
+  const stops = displayMathCaretStopsForBox(box, x, width);
+  const rawLength = Math.max(0, Math.floor(box.sourceEnd - box.sourceStart));
+  return markLineEndpoints(stops.map((stopX, index): Stop => ({
+    offset: Math.max(0, Math.floor(box.sourceStart + index)),
+    x: lineReportCoord(stopX),
+    kind: 'math',
+    lineStart: false,
+    lineEnd: false,
+  })).filter((stop, index) => index <= rawLength));
+}
+
+function displayMathCaretStopsForBox(
+  box: Pick<TexMathBox, 'sourceStart' | 'sourceEnd' | 'caretStops'>,
+  x: TexLineX,
+  width: TexLength
+): TexLineX[] {
+  const rawLength = Math.max(0, Math.floor(box.sourceEnd - box.sourceStart));
+  const localStops = box.caretStops;
+  if (Array.isArray(localStops) && localStops.length === rawLength + 1) {
+    return localStops.map((stop) => {
+      const numericStop = Number(stop);
+      return projectDisplayMathHBoxXToLine(
+        texHBoxX(Math.max(
+          0,
+          Math.min(width, Number.isFinite(numericStop) ? numericStop : 0)
+        )),
+        x
+      );
+    });
+  }
+  return Array.from({ length: rawLength + 1 }, (_, index) =>
+    texLineX(x + (rawLength > 0 ? (width * index) / rawLength : 0))
+  );
+}
+
+function displayMathConstructRangesForBox<Space extends SourceCoordinateSpace>(
+  box: Pick<TexMathBox, 'constructRanges'>,
+  x: TexLineX,
+  width: TexLength,
+  sourceCoordinateSpace: Space
+): LineSegmentReport<Space>['mathConstructRanges'] {
+  const ranges = box.constructRanges;
+  if (!ranges?.length) {
+    return undefined;
+  }
+  return ranges.map((range) => ({
+    sourceStartRaw: sourceOffsetForSpace(range.sourceStart, sourceCoordinateSpace),
+    sourceEndRaw: sourceOffsetForSpace(range.sourceEnd, sourceCoordinateSpace),
+    xStart: projectDisplayMathHBoxXToLine(
+      texHBoxX(Math.max(0, Math.min(width, range.xStart))),
+      x
+    ),
+    xEnd: projectDisplayMathHBoxXToLine(
+      texHBoxX(Math.max(0, Math.min(width, range.xEnd))),
+      x
+    ),
+  }));
+}
+
+function displayMathCaretEntriesForBox<Space extends SourceCoordinateSpace>(
+  box: Pick<TexMathBox, 'caretMap'>,
+  x: TexLineX,
+  sourceCoordinateSpace: Space
+): LineSegmentReport<Space>['mathCaretEntries'] {
+  const entries = box.caretMap?.entries;
+  if (!entries?.length) {
+    return undefined;
+  }
+  return entries.map((entry) => ({
+    sourceOffsetRaw: sourceOffsetForSpace(entry.sourceOffset, sourceCoordinateSpace),
+    ...(entry.sourceSpan ? {
+      sourceStartRaw: sourceOffsetForSpace(entry.sourceSpan.start, sourceCoordinateSpace),
+      sourceEndRaw: sourceOffsetForSpace(entry.sourceSpan.end, sourceCoordinateSpace),
+    } : {}),
+    x: projectDisplayMathHBoxXToLine(
+      entry.x,
+      x
+    ),
+    y: projectDisplayMathHBoxYToLine(entry.y),
+    height: entry.height,
+    depth: entry.depth,
+    kind: entry.kind,
+    ...(entry.priority !== undefined ? { priority: entry.priority } : {}),
+    ...(entry.caretExtent ? {
+      caretTop: projectDisplayMathHBoxYToLine(entry.caretExtent.top),
+      caretBottom: projectDisplayMathHBoxYToLine(entry.caretExtent.bottom),
+    } : {}),
+    hitBounds: {
+      xStart: projectDisplayMathHBoxXToLine(
+        entry.hitBounds.xStart,
+        x
+      ),
+      xEnd: projectDisplayMathHBoxXToLine(
+        entry.hitBounds.xEnd,
+        x
+      ),
+      yStart: projectDisplayMathHBoxYToLine(entry.hitBounds.yStart),
+      yEnd: projectDisplayMathHBoxYToLine(entry.hitBounds.yEnd),
+    },
+  }));
+}
+
+function displayMathBreakpointsForBox<Space extends SourceCoordinateSpace>(
+  box: Pick<TexMathBox, 'breakpoints'>,
+  x: TexLineX,
+  width: TexLength,
+  sourceCoordinateSpace: Space
+): LineSegmentReport<Space>['mathBreakpoints'] {
+  const breakpoints = box.breakpoints;
+  if (!breakpoints?.length) {
+    return undefined;
+  }
+  return breakpoints.map((breakpoint) => ({
+    kind: breakpoint.kind,
+    sourceOffsetRaw: sourceOffsetForSpace(breakpoint.sourceOffset, sourceCoordinateSpace),
+    x: projectDisplayMathHBoxXToLine(
+      texHBoxX(Math.max(0, Math.min(width, breakpoint.x))),
+      x
+    ),
+    penalty: breakpoint.penalty,
+  }));
+}
+
+function projectDisplayMathHBoxXToLine(
+  position: TexHBoxX,
+  lineOrigin: TexLineX
+): TexLineX {
+  return projectTexHBoxXToLine(position, texHBoxX(0), lineOrigin);
+}
+
+function projectDisplayMathHBoxYToLine(position: TexHBoxY): TexLineY {
+  return projectTexHBoxYToLine(position, texHBoxY(0), texLineY(0));
+}
+
+function buildMathConstructRangesByLine(
+  alignedSegments: readonly AlignedSegment[]
+): Map<number, MathConstructRange[]> {
+  const byLine = new Map<number, MathConstructRange[]>();
+  for (const segment of alignedSegments) {
+    if (segment.sourceKind !== 'math' || !segment.mathConstructRanges?.length) {
+      continue;
+    }
+    const ranges = byLine.get(segment.lineIndex) ?? [];
+    ranges.push(...segment.mathConstructRanges);
+    byLine.set(segment.lineIndex, ranges);
+  }
+  return byLine;
+}
+
+function buildMathCaretEntriesByLine(
+  alignedSegments: readonly AlignedSegment[]
+): Map<number, MathCaretEntry[]> {
+  const byLine = new Map<number, MathCaretEntry[]>();
+  for (const segment of alignedSegments) {
+    if (segment.sourceKind !== 'math' || !segment.mathCaretEntries?.length) {
+      continue;
+    }
+    const entries = byLine.get(segment.lineIndex) ?? [];
+    entries.push(...segment.mathCaretEntries);
+    byLine.set(segment.lineIndex, entries);
+  }
+  return byLine;
 }
 
 function buildVisibleHyphenBreakOffsetByLine(
@@ -1165,50 +3335,158 @@ function buildVisibleHyphenBreakOffsetByLine(
   return byLine;
 }
 
-async function buildParagraphHitMap(
-  outputJax: unknown,
+function buildParagraphHitMap(
+  layoutContext: unknown,
   report: ParagraphLayoutReport,
   sourceText: string,
+  sourceTextStartOffset: number,
   containerElement: Element
-): Promise<ParagraphHitMap> {
-  const aligned = alignSegmentsToSource(report, sourceText);
+): ParagraphHitMap {
+  const aligned = alignSegmentsToSource(report, sourceText, sourceTextStartOffset);
   if (aligned.error) {
     throw new Error(aligned.error);
   }
 
-  const lineGeometry = readLineGeometry(containerElement, report);
+  const lineGeometry = readLineGeometry(containerElement, report, layoutContext);
   const geometryByLineIndex = new Map(lineGeometry.map((entry) => [entry.lineIndex, entry]));
-  const stopsByLine = await buildStopsByLine(outputJax, aligned.aligned);
+  const stopsByLine = buildStopsByLine(aligned.aligned);
   const visibleHyphenBreakOffsetByLine = buildVisibleHyphenBreakOffsetByLine(report, aligned.aligned);
+  const mathConstructRangesByLine = buildMathConstructRangesByLine(aligned.aligned);
+  const mathCaretEntriesByLine = buildMathCaretEntriesByLine(aligned.aligned);
   const lines = buildLineHitMaps(
     report,
     stopsByLine,
     geometryByLineIndex,
     sourceText.length,
-    visibleHyphenBreakOffsetByLine
+    visibleHyphenBreakOffsetByLine,
+    mathConstructRangesByLine,
+    mathCaretEntriesByLine
   );
+  const displayLines = buildDisplayMathLineHitMaps(layoutContext, report, containerElement);
 
   return {
     report,
     sourceText,
-    lines,
+    lines: [...lines, ...displayLines],
   };
 }
 
+export interface KnuthPlassParagraphCaretStop {
+  readonly offset: number;
+  /** Line-frame x in report pt (same frame as `line.xStart`/segment x). */
+  readonly x: number;
+  readonly kind: 'text' | 'math' | 'space';
+}
+
+export interface KnuthPlassParagraphCaretStopsLine {
+  readonly lineIndex: number;
+  readonly kind: 'report' | 'display-math';
+  /** Sorted by x, ties by ascending offset — the click map's stop order. */
+  readonly stops: readonly KnuthPlassParagraphCaretStop[];
+  /** Display-math rows only: box placement in the vlist frame. */
+  readonly display?: { x: number; y: number; width: number; height: number };
+}
+
+/**
+ * The ordered caret-stop domain of a paragraph, DOM-free: exactly the stops
+ * `getKnuthPlassCaretFromPoint` can resolve a click to, derived from the
+ * same alignment + stop-building pass as the hit map (single source of
+ * truth). Display-math rows are included when the paragraph's positioned
+ * vlist items are provided; only their client-rect conversion needs a DOM,
+ * not the stops themselves.
+ */
+export function getKnuthPlassParagraphCaretStops(params: {
+  report: ParagraphLayoutReport;
+  sourceText: string;
+  sourceTextStartOffset: number;
+  vlistItems?: readonly PositionedTexVListItem[];
+}): { lines: KnuthPlassParagraphCaretStopsLine[]; error: string | null } {
+  const aligned = alignSegmentsToSource(
+    params.report,
+    params.sourceText,
+    params.sourceTextStartOffset
+  );
+  if (aligned.error) {
+    return { lines: [], error: aligned.error };
+  }
+  let stopsByLine: Map<number, Stop[]>;
+  try {
+    stopsByLine = buildStopsByLine(aligned.aligned);
+  } catch (error) {
+    return { lines: [], error: error instanceof Error ? error.message : String(error) };
+  }
+  const lines: KnuthPlassParagraphCaretStopsLine[] = [...stopsByLine.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([lineIndex, stops]) => ({
+      lineIndex,
+      kind: 'report',
+      stops: stops.map((stop) => ({
+        offset: stop.offset,
+        x: Number(stop.x),
+        kind: stop.kind,
+      })),
+    }));
+
+  const baseLineIndex = Math.max(-1, ...params.report.lines.map((line) => line.lineIndex));
+  const displayLines = (params.vlistItems
+    ? flattenPositionedTexVListItems(params.vlistItems)
+    : []
+  ).flatMap((item, displayIndex): KnuthPlassParagraphCaretStopsLine[] => {
+    const source = displayMathSourceForPositionedItem(item);
+    if (!source) {
+      return [];
+    }
+    const metrics = item.metrics;
+    const width = texLength(Math.max(0, metrics.width));
+    const sourceStart = Math.max(0, Math.floor(source.sourceStart));
+    const sourceEnd = Math.max(sourceStart, Math.floor(source.sourceEnd));
+    if (sourceEnd <= sourceStart || width <= EPSILON) {
+      return [];
+    }
+    const xStart = projectTexVListXToLine(item.x, texVListX(0), texLineX(0));
+    const y = Number(item.y);
+    if (!Number.isFinite(xStart) || !Number.isFinite(y)) {
+      return [];
+    }
+    const stops = displayMathStopsForBox(source, xStart, width);
+    if (!stops.length) {
+      return [];
+    }
+    return [{
+      lineIndex: baseLineIndex + 1 + displayIndex,
+      kind: 'display-math',
+      stops: stops.map((stop) => ({
+        offset: stop.offset,
+        x: Number(stop.x),
+        kind: stop.kind,
+      })),
+      display: {
+        x: Number(xStart),
+        y,
+        width: Number(width),
+        height: Math.max(1, metrics.height + metrics.depth),
+      },
+    }];
+  });
+
+  return { lines: [...lines, ...displayLines], error: null };
+}
+
 async function getParagraphHitMap(
-  outputJax: unknown,
+  layoutContext: unknown,
   report: ParagraphLayoutReport,
   sourceText: string,
+  sourceTextStartOffset: number,
   containerElement: Element
 ): Promise<ParagraphHitMap> {
-  if (!outputJax || typeof outputJax !== 'object') {
-    return buildParagraphHitMap(outputJax, report, sourceText, containerElement);
+  if (!layoutContext || typeof layoutContext !== 'object') {
+    return buildParagraphHitMap(layoutContext, report, sourceText, sourceTextStartOffset, containerElement);
   }
 
-  let map = paragraphCacheByOutput.get(outputJax);
+  let map = paragraphCacheByOutput.get(layoutContext);
   if (!map) {
     map = new Map<string, CachedParagraphEntry>();
-    paragraphCacheByOutput.set(outputJax, map);
+    paragraphCacheByOutput.set(layoutContext, map);
   }
 
   const existing = map.get(report.paragraphId);
@@ -1216,13 +3494,20 @@ async function getParagraphHitMap(
   if (
     existing?.report === report &&
     existing.sourceText === sourceText &&
+    existing.sourceTextStartOffset === sourceTextStartOffset &&
     existing.containerElement === containerElement &&
     sameContainerGeometry(existing.containerGeometry, containerGeometry)
   ) {
     return existing.mapPromise;
   }
 
-  const mapPromise = buildParagraphHitMap(outputJax, report, sourceText, containerElement).catch((error) => {
+  const mapPromise = Promise.resolve().then(() => buildParagraphHitMap(
+    layoutContext,
+    report,
+    sourceText,
+    sourceTextStartOffset,
+    containerElement
+  )).catch((error: unknown) => {
     const current = map.get(report.paragraphId);
     if (current?.mapPromise === mapPromise) {
       map.delete(report.paragraphId);
@@ -1232,6 +3517,7 @@ async function getParagraphHitMap(
 
   map.set(report.paragraphId, {
     sourceText,
+    sourceTextStartOffset,
     report,
     containerElement,
     containerGeometry,
@@ -1242,10 +3528,10 @@ async function getParagraphHitMap(
 }
 
 function nearestStopByX(stops: Stop[], x: number): Stop {
-  let best = stops[0];
+  let best = requireArrayValue(stops, 0);
   let bestDistance = Math.abs(best.x - x);
   for (let i = 1; i < stops.length; i++) {
-    const candidate = stops[i];
+    const candidate = requireArrayValue(stops, i);
     const distance = Math.abs(candidate.x - x);
     if (distance < bestDistance - EPSILON) {
       best = candidate;
@@ -1259,15 +3545,306 @@ function nearestStopByX(stops: Stop[], x: number): Stop {
   return best;
 }
 
+function nearestMathCaretEntryByPoint(
+  entries: readonly MathCaretEntry[],
+  point: MathBaselinePoint
+): MathCaretEntry | null {
+  const containing = entries.filter((entry) =>
+    point.x >= entry.hitBounds.xStart - EPSILON &&
+    point.x <= entry.hitBounds.xEnd + EPSILON &&
+    point.y >= entry.hitBounds.yStart - EPSILON &&
+    point.y <= entry.hitBounds.yEnd + EPSILON
+  );
+  if (!containing.length) {
+    return null;
+  }
+  let best = requireArrayValue(containing, 0);
+  let bestDistance = mathCaretEntryDistance(best, point);
+  for (let index = 1; index < containing.length; index += 1) {
+    const candidate = requireArrayValue(containing, index);
+    const distance = mathCaretEntryDistance(candidate, point);
+    if ((candidate.priority ?? 0) > (best.priority ?? 0)) {
+      best = candidate;
+      bestDistance = distance;
+      continue;
+    }
+    if ((candidate.priority ?? 0) < (best.priority ?? 0)) {
+      continue;
+    }
+    if (distance < bestDistance - EPSILON) {
+      best = candidate;
+      bestDistance = distance;
+      continue;
+    }
+    if (
+      Math.abs(distance - bestDistance) <= EPSILON &&
+      candidate.sourceOffsetRaw < best.sourceOffsetRaw
+    ) {
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+function mathCaretEntryDistance(
+  entry: MathCaretEntry,
+  point: MathBaselinePoint
+): number {
+  const dx = point.x - entry.x;
+  const dy = point.y - mathCaretEntryCenterY(entry);
+  return dx * dx + dy * dy;
+}
+
+function stopFromMathCaretEntry(entry: MathCaretEntry): Stop {
+  return {
+    offset: entry.sourceOffsetRaw,
+    x: entry.x,
+    y: entry.y,
+    kind: 'math',
+    lineStart: false,
+    lineEnd: false,
+  };
+}
+
+function mathCaretEntryCenterY(entry: MathCaretEntry): MathBaselineCoord {
+  return mathBaselineCoord(entry.y + (entry.depth - entry.height) / 2);
+}
+
+function bestMathCaretEntryForOffset(
+  entries: readonly MathCaretEntry[] | undefined,
+  offset: number
+): MathCaretEntry | null {
+  const exact = entries?.filter((entry) => entry.sourceOffsetRaw === offset) ?? [];
+  if (!exact.length) {
+    return null;
+  }
+  return exact.sort((left, right) =>
+    (right.priority ?? 0) - (left.priority ?? 0) ||
+    mathCaretOffsetAnchorScore(right, offset) - mathCaretOffsetAnchorScore(left, offset) ||
+    left.y - right.y ||
+    left.x - right.x
+  )[0] ?? null;
+}
+
+/**
+ * The math caret entry for an offset on a given side of the items there:
+ * an item ending at the offset inside `within` ('after'), or one starting
+ * there inside it ('before'). Null when the layout has no such entry.
+ */
+function edgeMathCaretEntry(
+  entries: readonly MathCaretEntry[] | undefined,
+  offset: number,
+  edge: NonNullable<PointFromOffsetParams['edge']>
+): MathCaretEntry | null {
+  if (edge.whole && edge.side === 'after') {
+    // After a whole item: its start entry's level, at its right edge.
+    const start = edgeMathCaretEntry(entries, edge.within.from, { side: 'before', within: edge.within });
+    const inside = entries?.filter((entry) =>
+      entry.sourceOffsetRaw >= edge.within.from && entry.sourceOffsetRaw <= edge.within.to) ?? [];
+    if (!start || inside.length === 0) {
+      return null;
+    }
+    return { ...start, x: inside.reduce((right, entry) => (entry.x > right ? entry.x : right), start.x) };
+  }
+  const matching = entries?.filter((entry) => {
+    if (entry.sourceOffsetRaw !== offset || entry.sourceStartRaw == null || entry.sourceEndRaw == null) {
+      return false;
+    }
+    return edge.side === 'after'
+      ? entry.sourceEndRaw === offset && entry.sourceStartRaw >= edge.within.from && entry.sourceStartRaw < offset
+      : entry.sourceStartRaw === offset && entry.sourceEndRaw <= edge.within.to && entry.sourceEndRaw > offset;
+  }) ?? [];
+  return matching.sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0))[0] ?? null;
+}
+
+function mathCaretOffsetAnchorScore(entry: MathCaretEntry, offset: number): number {
+  if (entry.sourceStartRaw === offset) {
+    return 2;
+  }
+  if (entry.sourceEndRaw === offset) {
+    return 1;
+  }
+  return 0;
+}
+
+interface MathSelectionLocalBox {
+  xStart: TexLineX;
+  xEnd: TexLineX;
+  yStart: MathBaselineCoord;
+  yEnd: MathBaselineCoord;
+}
+
+function mathSelectionLocalBoxesForRange(
+  line: LineHitMap,
+  rangeStart: number,
+  rangeEnd: number,
+  startStop: Stop,
+  endStop: Stop
+): MathSelectionLocalBox[] {
+  if (
+    startStop.kind !== 'math' ||
+    endStop.kind !== 'math' ||
+    !line.mathCaretEntries.length ||
+    !mathSelectionContainedBySingleSegment(line, rangeStart, rangeEnd)
+  ) {
+    return [];
+  }
+  const selectedEntries = line.mathCaretEntries.filter((entry) =>
+    mathCaretEntryContainedByRange(entry, rangeStart, rangeEnd)
+  );
+  if (!selectedEntries.length) {
+    return [];
+  }
+  const visibleEntries = selectedEntries.filter((entry) =>
+    entry.hitBounds.yEnd - entry.hitBounds.yStart > EPSILON
+  );
+  if (!visibleEntries.length) {
+    return [];
+  }
+  const startEntry = bestMathCaretEntryForOffset(line.mathCaretEntries, startStop.offset);
+  const endEntry = bestMathCaretEntryForOffset(line.mathCaretEntries, endStop.offset);
+  // The selected items' boxes, and the carets at the range's ends: an end caret's own item
+  // (the `\nabla` after `\lambda_i`) can lie outside the range.
+  return mathSelectionEntryRowGroups(visibleEntries).map((group) => {
+    const ends = [startEntry, endEntry].filter((entry): entry is MathCaretEntry =>
+      entry != null && mathCaretEntryOverlapsRow(entry, group));
+    return {
+      xStart: lineReportCoord(Math.min(...group.entries.map((entry) => entry.hitBounds.xStart), ...ends.map((entry) => entry.x))),
+      xEnd: lineReportCoord(Math.max(...group.entries.map((entry) => entry.hitBounds.xEnd), ...ends.map((entry) => entry.x))),
+      yStart: group.yStart,
+      yEnd: group.yEnd,
+    };
+  });
+}
+
+interface MathSelectionEntryRowGroup {
+  entries: MathCaretEntry[];
+  yStart: MathBaselineCoord;
+  yEnd: MathBaselineCoord;
+}
+
+function mathSelectionEntryRowGroups(entries: readonly MathCaretEntry[]): MathSelectionEntryRowGroup[] {
+  const groups: MathSelectionEntryRowGroup[] = [];
+  for (const entry of [...entries].sort((left, right) =>
+    left.hitBounds.yStart - right.hitBounds.yStart ||
+    left.hitBounds.yEnd - right.hitBounds.yEnd ||
+    left.hitBounds.xStart - right.hitBounds.xStart
+  )) {
+    const group = groups.find((candidate) => mathCaretEntryOverlapsRow(entry, candidate));
+    if (!group) {
+      groups.push({
+        entries: [entry],
+        yStart: entry.hitBounds.yStart,
+        yEnd: entry.hitBounds.yEnd,
+      });
+      continue;
+    }
+    group.entries.push(entry);
+    group.yStart = mathBaselineCoord(Math.min(group.yStart, entry.hitBounds.yStart));
+    group.yEnd = mathBaselineCoord(Math.max(group.yEnd, entry.hitBounds.yEnd));
+  }
+  return groups;
+}
+
+function mathCaretEntryOverlapsRow(
+  entry: MathCaretEntry,
+  row: Pick<MathSelectionEntryRowGroup, 'yStart' | 'yEnd'>
+): boolean {
+  return entry.hitBounds.yStart <= row.yEnd + EPSILON &&
+    entry.hitBounds.yEnd >= row.yStart - EPSILON;
+}
+
+function mathSelectionContainedBySingleSegment(
+  line: LineHitMap,
+  rangeStart: number,
+  rangeEnd: number
+): boolean {
+  return line.reportLine.segments.some((segment) => {
+    if (segment.kind !== 'math' && segment.sourceKind !== 'math') {
+      return false;
+    }
+    const sourceStart = Number(segment.sourceStartRaw);
+    const sourceEnd = Number(segment.sourceEndRaw);
+    return Number.isFinite(sourceStart) &&
+      Number.isFinite(sourceEnd) &&
+      rangeStart >= sourceStart &&
+      rangeEnd <= sourceEnd;
+  });
+}
+
+function mathSelectionClientHeight(
+  line: LineHitMap,
+  reportLine: ParagraphLayoutReport['lines'][number],
+  localX: TexLineX,
+  box: MathSelectionLocalBox
+): Px {
+  const top = lineLocalClientPoint(line, reportLine, localX, mathBaselineYToLineY(reportLine, box.yStart));
+  const bottom = lineLocalClientPoint(line, reportLine, localX, mathBaselineYToLineY(reportLine, box.yEnd));
+  return px(Math.max(1, Math.hypot(bottom.x - top.x, bottom.y - top.y)));
+}
+
+function selectionRectForLineLocalSpan(
+  line: LineHitMap,
+  reportLine: ParagraphLayoutReport['lines'][number],
+  startOffset: number,
+  endOffset: number,
+  localStartX: TexLineX,
+  localEndX: TexLineX,
+  localCenterY: TexLineY,
+  height: Px,
+  normalOffset: Px
+): SelectionRect | null {
+  const startPoint = lineLocalClientPoint(line, reportLine, localStartX, localCenterY);
+  const endPoint = lineLocalClientPoint(line, reportLine, localEndX, localCenterY);
+  const segmentWidth = Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y);
+  if (segmentWidth <= EPSILON) {
+    return null;
+  }
+  const baselineCenterX = (startPoint.x + endPoint.x) / 2;
+  const baselineCenterY = (startPoint.y + endPoint.y) / 2;
+  const normal = lineNormalUnit(line);
+  const centerX = baselineCenterX + normal.x * normalOffset;
+  const centerY = baselineCenterY + normal.y * normalOffset;
+  const left = centerX - segmentWidth / 2;
+
+  return {
+    lineIndex: line.lineIndex,
+    startOffset,
+    endOffset,
+    bounds: clientBounds(
+      px(left),
+      px(centerY - height / 2),
+      px(left + Math.max(1, segmentWidth)),
+      px(centerY + height / 2)
+    ),
+    center: makeClientPoint(px(centerX), px(centerY)),
+    rotationDeg: (Math.atan2(line.screenMatrix.b, line.screenMatrix.a) * 180) / Math.PI,
+  };
+}
+
+function mathCaretEntryContainedByRange(
+  entry: MathCaretEntry,
+  rangeStart: number,
+  rangeEnd: number
+): boolean {
+  const sourceStart = entry.sourceStartRaw;
+  const sourceEnd = entry.sourceEndRaw;
+  return sourceStart !== undefined &&
+    sourceEnd !== undefined &&
+    sourceEnd > sourceStart &&
+    sourceStart >= rangeStart &&
+    sourceEnd <= rangeEnd;
+}
+
 function stopForOffset(line: LineHitMap, offset: number, preferLineStart: boolean): Stop | null {
   const exact = line.stopsByOffsetExact.get(offset) ?? [];
   if (!exact.length) {
     return null;
   }
   if (preferLineStart) {
-    return exact.find((entry) => entry.lineStart) ?? exact[0];
+    return exact.find((entry) => entry.lineStart) ?? exact[0] ?? null;
   }
-  return exact.find((entry) => entry.lineEnd) ?? exact[exact.length - 1];
+  return exact.find((entry) => entry.lineEnd) ?? exact[exact.length - 1] ?? null;
 }
 
 function firstStopAtOrAfter(line: LineHitMap, offset: number): Stop | null {
@@ -1289,7 +3866,7 @@ function lastStopAtOrBefore(line: LineHitMap, offset: number): Stop | null {
     return exact;
   }
   for (let index = line.stopsByOffset.length - 1; index >= 0; index -= 1) {
-    const stop = line.stopsByOffset[index];
+    const stop = requireArrayValue(line.stopsByOffset, index);
     if (stop.offset < offset) {
       return stop;
     }
@@ -1400,7 +3977,7 @@ function inferLineByClientPoint(
   let bestFallbackDistance = Number.POSITIVE_INFINITY;
 
   for (const line of hitMap.lines) {
-    const reportLine = reportLineByIndex.get(line.lineIndex)!;
+    const reportLine = reportLineByIndex.get(line.lineIndex) ?? line.reportLine;
 
     const origin = lineBaselineOriginPoint(line, reportLine);
     const reportLineEnd = Number(reportLine.xEnd);
@@ -1411,12 +3988,21 @@ function inferLineByClientPoint(
         : Number.isFinite(reportLineStart)
           ? reportLineStart
           : 0;
-    const end = lineLocalClientPoint(line, reportLine, effectiveLineEnd);
+    const end = lineLocalClientPoint(line, reportLine, lineReportCoord(effectiveLineEnd));
     const tangent = lineTangentUnit(line);
     const normal = lineNormalUnit(line);
     const dx = clientPoint.x - origin.x;
     const dy = clientPoint.y - origin.y;
-    const normalDistance = Math.abs(dx * normal.x + dy * normal.y);
+    const normalPosition = dx * normal.x + dy * normal.y;
+    const normalOffset = lineBoxNormalOffset(line, reportLine);
+    const normalHalfHeight = lineClientHeight(line, reportLine) / 2;
+    const normalMin = normalOffset - normalHalfHeight;
+    const normalMax = normalOffset + normalHalfHeight;
+    let normalDistance = normalPosition < normalMin
+      ? normalMin - normalPosition
+      : normalPosition > normalMax
+        ? normalPosition - normalMax
+        : 0;
     const tangentPosition = dx * tangent.x + dy * tangent.y;
     const lineLength = Math.max(0, Math.hypot(end.x - origin.x, end.y - origin.y));
     let outsideDistance = 0;
@@ -1425,7 +4011,15 @@ function inferLineByClientPoint(
     } else if (tangentPosition > lineLength) {
       outsideDistance = tangentPosition - lineLength;
     }
-    const fallbackDistance = Math.abs(clientPoint.y - line.clientCenterY);
+    let fallbackDistance = Math.abs(clientPoint.y - line.clientCenterY);
+    const mathLinePoint = clientToLineLocalPoint(line, reportLine, clientPoint);
+    const mathPoint = linePointToMathBaselinePoint(reportLine, mathLinePoint);
+    const mathEntry = nearestMathCaretEntryByPoint(line.mathCaretEntries, mathPoint);
+    if (mathEntry) {
+      normalDistance = 0;
+      outsideDistance = 0;
+      fallbackDistance = Math.sqrt(mathCaretEntryDistance(mathEntry, mathPoint));
+    }
 
     const betterNormal = normalDistance < bestNormalDistance - EPSILON;
     const tiedNormal = Math.abs(normalDistance - bestNormalDistance) <= EPSILON;
@@ -1446,13 +4040,10 @@ function inferLineByClientPoint(
     }
   }
 
-  return best!;
+  return requireDefined(best, "Hit map must contain at least one line.");
 }
 
 function mapBuildFailureCode(message: string): CaretMappingErrorCode {
-  if (/tex2svg/i.test(message)) {
-    return 'math-measurement-error';
-  }
   if (/opening|closing|parse/i.test(message)) {
     return 'source-parse-error';
   }
@@ -1462,60 +4053,124 @@ function mapBuildFailureCode(message: string): CaretMappingErrorCode {
   return 'alignment-error';
 }
 
-export async function getKnuthPlassCaretFromPoint(
-  outputJax: unknown,
-  params: Partial<CaretFromPointParams> | null | undefined
-): Promise<CaretHitResult> {
-  const paragraphId = String(params?.paragraphId ?? '');
-  if (!params || !paragraphId || typeof params.sourceText !== 'string' || !params.containerElement || !params.clientPoint) {
-    return invalidParamsResult<CaretHitResult>(
-      paragraphId,
-      { offset: null, lineIndex: null, kind: null, snappedToMathPrefix: false },
-      'Expected paragraphId, sourceText, containerElement, and clientPoint.'
-    );
-  }
+type HitMapResolution<T extends ResultBase> =
+  | { kind: 'resolved'; hitMap: ParagraphHitMap }
+  | { kind: 'error'; result: T };
 
-  const { report } = findReportByParagraphId(outputJax, paragraphId);
+async function resolveHitMap<T extends ResultBase>(
+  layoutContext: unknown,
+  params: CaretBaseParams,
+  createError: CaretMappingErrorFactory<T>
+): Promise<HitMapResolution<T>> {
+  const { paragraphId, sourceText, containerElement } = params;
+  const sourceTextStartOffset = Math.floor(params.sourceTextStartOffset ?? 0);
+  if (!Number.isFinite(sourceTextStartOffset) || sourceTextStartOffset < 0) {
+    return {
+      kind: 'error',
+      result: createError('invalid-params', 'sourceTextStartOffset must be a non-negative integer.'),
+    };
+  }
+  const { report } = findReportByParagraphId(layoutContext, paragraphId);
   if (!report) {
-    return errorResult<CaretHitResult>(
-      paragraphId,
-      { offset: null, lineIndex: null, kind: null, snappedToMathPrefix: false },
-      'paragraph-not-found',
-      `Paragraph '${paragraphId}' was not found in Knuth-Plass reports.`
-    );
+    return {
+      kind: 'error',
+      result: createError(
+        'paragraph-not-found',
+        `Paragraph '${paragraphId}' was not found in Knuth-Plass reports.`
+      ),
+    };
+  }
+  const requestedSourceSpace = params.sourceCoordinateSpace ?? 'layout';
+  if (report.sourceCoordinateSpace !== requestedSourceSpace) {
+    return {
+      kind: 'error',
+      result: createError(
+        'alignment-error',
+        `Paragraph '${paragraphId}' uses ${report.sourceCoordinateSpace} source coordinates, ` +
+          `but the hit-test source was declared as ${requestedSourceSpace}.`
+      ),
+    };
   }
 
   let hitMap: ParagraphHitMap;
   try {
-    hitMap = await getParagraphHitMap(outputJax, report, params.sourceText, params.containerElement);
+    hitMap = await getParagraphHitMap(
+      layoutContext,
+      report,
+      sourceText,
+      sourceTextStartOffset,
+      containerElement
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to build paragraph caret map.';
-    return errorResult<CaretHitResult>(
-      paragraphId,
-      { offset: null, lineIndex: null, kind: null, snappedToMathPrefix: false },
-      mapBuildFailureCode(message),
-      message
-    );
+    return {
+      kind: 'error',
+      result: createError(mapBuildFailureCode(message), message),
+    };
   }
 
   if (!hitMap.lines.length) {
-    return errorResult<CaretHitResult>(
-      paragraphId,
-      { offset: null, lineIndex: null, kind: null, snappedToMathPrefix: false },
-      'alignment-error',
-      'Paragraph hitmap contains no line data.'
+    return {
+      kind: 'error',
+      result: createError('alignment-error', 'Paragraph hitmap contains no line data.'),
+    };
+  }
+
+  return { kind: 'resolved', hitMap };
+}
+
+export function getKnuthPlassCaretFromPoint(
+  layoutContext: unknown,
+  params: Partial<CaretFromPointParams<'document'>> & { sourceCoordinateSpace: 'document' }
+): Promise<CaretHitResult<'document'>>;
+export function getKnuthPlassCaretFromPoint(
+  layoutContext: unknown,
+  params: (Partial<CaretFromPointParams<'layout'>> & { sourceCoordinateSpace?: 'layout' }) | null | undefined
+): Promise<CaretHitResult<'layout'>>;
+export async function getKnuthPlassCaretFromPoint(
+  layoutContext: unknown,
+  params: Partial<CaretFromPointParams> | null | undefined
+): Promise<CaretHitResult> {
+  const paragraphId = String(params?.paragraphId ?? '');
+  const createError = createCaretMappingErrorFactory(paragraphId, {
+    offset: null,
+    lineIndex: null,
+    kind: null,
+  });
+  if (!params || !paragraphId || typeof params.sourceText !== 'string' || !params.containerElement || !params.clientPoint) {
+    return createError(
+      'invalid-params',
+      'Expected paragraphId, sourceText, containerElement, and clientPoint.'
     );
   }
 
-  const line = inferLineByClientPoint(hitMap, params.clientPoint);
-  const reportLine = hitMap.report.lines.find((entry) => entry.lineIndex === line.lineIndex)!;
-
-  const lineX = clientToLineLocalX(line, reportLine, params.clientPoint);
-  const stop = nearestStopByX(line.stopsByX, lineX);
-  if (stop.offset < 0 || stop.offset > params.sourceText.length) {
-    return errorResult<CaretHitResult>(
+  const resolution = await resolveHitMap(
+    layoutContext,
+    {
       paragraphId,
-      { offset: null, lineIndex: null, kind: null, snappedToMathPrefix: false },
+      sourceText: params.sourceText,
+      ...(params.sourceTextStartOffset !== undefined ? { sourceTextStartOffset: params.sourceTextStartOffset } : {}),
+      ...(params.sourceCoordinateSpace !== undefined ? { sourceCoordinateSpace: params.sourceCoordinateSpace } : {}),
+      containerElement: params.containerElement,
+    },
+    createError
+  );
+  if (resolution.kind === 'error') {
+    return resolution.result;
+  }
+  const { hitMap } = resolution;
+
+  const line = inferLineByClientPoint(hitMap, params.clientPoint);
+  const reportLine = line.reportLine;
+
+  const linePoint = clientToLineLocalPoint(line, reportLine, params.clientPoint);
+  const mathPoint = linePointToMathBaselinePoint(reportLine, linePoint);
+  const mathEntry = nearestMathCaretEntryByPoint(line.mathCaretEntries, mathPoint);
+  const stop = mathEntry ? stopFromMathCaretEntry(mathEntry) : nearestStopByX(line.stopsByX, linePoint.x);
+  const sourceStart = Math.floor(params.sourceTextStartOffset ?? 0);
+  const sourceEnd = sourceStart + params.sourceText.length;
+  if (stop.offset < sourceStart || stop.offset > sourceEnd) {
+    return createError(
       'alignment-error',
       `Measured stop offset ${stop.offset} is outside source bounds.`
     );
@@ -1524,208 +4179,174 @@ export async function getKnuthPlassCaretFromPoint(
   return {
     ok: true,
     paragraphId,
-    offset: stop.offset,
+    offset: sourceOffsetForSpace(
+      stop.offset,
+      params.sourceCoordinateSpace ?? 'layout'
+    ),
     lineIndex: line.lineIndex,
     kind: stop.kind,
-    snappedToMathPrefix: stop.snappedToMathPrefix,
     error: null,
   };
 }
 
+export function getKnuthPlassPointFromOffset(
+  layoutContext: unknown,
+  params: Partial<PointFromOffsetParams<'document'>> & { sourceCoordinateSpace: 'document' }
+): Promise<CaretPointResult<'document'>>;
+export function getKnuthPlassPointFromOffset(
+  layoutContext: unknown,
+  params: (Partial<PointFromOffsetParams<'layout'>> & { sourceCoordinateSpace?: 'layout' }) | null | undefined
+): Promise<CaretPointResult<'layout'>>;
 export async function getKnuthPlassPointFromOffset(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: Partial<PointFromOffsetParams> | null | undefined
 ): Promise<CaretPointResult> {
   const paragraphId = String(params?.paragraphId ?? '');
+  const createError = createCaretMappingErrorFactory(paragraphId, {
+    offset: null,
+    lineIndex: null,
+    lineLocalX: null,
+    clientPoint: null,
+    rotationDeg: null,
+    kind: null,
+  });
   if (!params || !paragraphId || typeof params.sourceText !== 'string' || !params.containerElement) {
-    return invalidParamsResult<CaretPointResult>(
-      paragraphId,
-      {
-        offset: null,
-        lineIndex: null,
-        lineLocalX: null,
-        clientPoint: null,
-        rotationDeg: null,
-        kind: null,
-        snappedToMathPrefix: false,
-      },
+    return createError(
+      'invalid-params',
       'Expected paragraphId, sourceText, containerElement, and offset.'
     );
   }
 
-  const { report } = findReportByParagraphId(outputJax, paragraphId);
-  if (!report) {
-    return errorResult<CaretPointResult>(
+  const resolution = await resolveHitMap(
+    layoutContext,
+    {
       paragraphId,
-      {
-        offset: null,
-        lineIndex: null,
-        lineLocalX: null,
-        clientPoint: null,
-        rotationDeg: null,
-        kind: null,
-        snappedToMathPrefix: false,
-      },
-      'paragraph-not-found',
-      `Paragraph '${paragraphId}' was not found in Knuth-Plass reports.`
-    );
+      sourceText: params.sourceText,
+      ...(params.sourceTextStartOffset !== undefined ? { sourceTextStartOffset: params.sourceTextStartOffset } : {}),
+      ...(params.sourceCoordinateSpace !== undefined ? { sourceCoordinateSpace: params.sourceCoordinateSpace } : {}),
+      containerElement: params.containerElement,
+    },
+    createError
+  );
+  if (resolution.kind === 'error') {
+    return resolution.result;
   }
+  const { hitMap } = resolution;
 
-  let hitMap: ParagraphHitMap;
-  try {
-    hitMap = await getParagraphHitMap(outputJax, report, params.sourceText, params.containerElement);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to build paragraph caret map.';
-    return errorResult<CaretPointResult>(
-      paragraphId,
-      {
-        offset: null,
-        lineIndex: null,
-        lineLocalX: null,
-        clientPoint: null,
-        rotationDeg: null,
-        kind: null,
-        snappedToMathPrefix: false,
-      },
-      mapBuildFailureCode(message),
-      message
-    );
-  }
-
-  if (!hitMap.lines.length) {
-    return errorResult<CaretPointResult>(
-      paragraphId,
-      {
-        offset: null,
-        lineIndex: null,
-        lineLocalX: null,
-        clientPoint: null,
-        rotationDeg: null,
-        kind: null,
-        snappedToMathPrefix: false,
-      },
-      'alignment-error',
-      'Paragraph hitmap contains no line data.'
-    );
-  }
-
-  const targetOffset = clamp(Math.floor(params.offset ?? 0), 0, params.sourceText.length);
+  const sourceStart = Math.floor(params.sourceTextStartOffset ?? 0);
+  const sourceEnd = sourceStart + params.sourceText.length;
+  const targetOffset = clamp(Math.floor(params.offset ?? sourceStart), sourceStart, sourceEnd);
   const exact = findBestStopForOffset(hitMap.lines, targetOffset);
   const selected = exact ?? findNearestStopForOffset(hitMap.lines, targetOffset);
   if (!selected) {
-    return errorResult<CaretPointResult>(
-      paragraphId,
-      {
-        offset: null,
-        lineIndex: null,
-        lineLocalX: null,
-        clientPoint: null,
-        rotationDeg: null,
-        kind: null,
-        snappedToMathPrefix: false,
-      },
+    return createError(
       'alignment-error',
       `Offset ${targetOffset} has no measured caret stop.`
     );
   }
 
-  const reportLine = hitMap.report.lines.find(
-    (entry) => entry.lineIndex === selected.line.lineIndex
-  )!;
+  const reportLine = selected.line.reportLine;
 
-  const baselinePoint = lineLocalClientPoint(selected.line, reportLine, selected.stop.x);
+  const mathPointEntry = selected.stop.kind === 'math'
+    ? (params.edge ? edgeMathCaretEntry(selected.line.mathCaretEntries, selected.stop.offset, params.edge) : null) ??
+      bestMathCaretEntryForOffset(selected.line.mathCaretEntries, selected.stop.offset)
+    : null;
+  const mathLocalY = mathPointEntry
+    ? mathCaretEntryCenterY(mathPointEntry)
+    : selected.stop.kind === 'math' && selected.stop.y !== undefined
+      ? selected.stop.y
+      : null;
+  const pointX = mathPointEntry?.x ?? selected.stop.x;
+  const pointY = mathLocalY === null
+    ? lineReportY(0)
+    : mathBaselineYToLineY(reportLine, mathLocalY);
+  const localPoint = lineLocalClientPoint(selected.line, reportLine, pointX, pointY);
   const normal = lineNormalUnit(selected.line);
-  const normalOffset = lineBoxNormalOffset(selected.line, reportLine);
+  const normalOffset = mathLocalY === null ? lineBoxNormalOffset(selected.line, reportLine) : px(0);
   const clientPoint = makeClientPoint(
-    px(baselinePoint.x + normal.x * normalOffset),
-    px(baselinePoint.y + normal.y * normalOffset)
+    px(localPoint.x + normal.x * normalOffset),
+    px(localPoint.y + normal.y * normalOffset)
   );
+  const caretExtent = mathPointEntry
+    ? {
+        caretTop: lineLocalClientPoint(selected.line, reportLine, pointX, mathBaselineYToLineY(reportLine,
+          mathBaselineCoord(mathPointEntry.caretTop ?? mathPointEntry.y - mathPointEntry.height))),
+        caretBottom: lineLocalClientPoint(selected.line, reportLine, pointX, mathBaselineYToLineY(reportLine,
+          mathBaselineCoord(mathPointEntry.caretBottom ?? mathPointEntry.y + mathPointEntry.depth))),
+      }
+    : {};
 
   return {
+    ...caretExtent,
     ok: true,
     paragraphId,
-    offset: selected.stop.offset,
+    offset: sourceOffsetForSpace(
+      selected.stop.offset,
+      params.sourceCoordinateSpace ?? 'layout'
+    ),
     lineIndex: selected.line.lineIndex,
-    lineLocalX: selected.stop.x,
+    lineLocalX: pointX,
     clientPoint,
     rotationDeg: (Math.atan2(selected.line.screenMatrix.b, selected.line.screenMatrix.a) * 180) / Math.PI,
     kind: selected.stop.kind,
-    snappedToMathPrefix: selected.stop.snappedToMathPrefix,
     error: null,
   };
 }
 
+export function getKnuthPlassSelectionRects(
+  layoutContext: unknown,
+  params: Partial<SelectionRectsParams<'document'>> & { sourceCoordinateSpace: 'document' }
+): Promise<SelectionRectsResult<'document'>>;
+export function getKnuthPlassSelectionRects(
+  layoutContext: unknown,
+  params: (Partial<SelectionRectsParams<'layout'>> & { sourceCoordinateSpace?: 'layout' }) | null | undefined
+): Promise<SelectionRectsResult<'layout'>>;
 export async function getKnuthPlassSelectionRects(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: Partial<SelectionRectsParams> | null | undefined
 ): Promise<SelectionRectsResult> {
   const paragraphId = String(params?.paragraphId ?? '');
+  const sourceCoordinateSpace = params?.sourceCoordinateSpace ?? 'layout';
+  const createError = createCaretMappingErrorFactory(paragraphId, {
+    startOffset: sourceOffsetForSpace(0, sourceCoordinateSpace),
+    endOffset: sourceOffsetForSpace(0, sourceCoordinateSpace),
+    rects: [],
+  });
   if (!params || !paragraphId || typeof params.sourceText !== 'string' || !params.containerElement) {
-    return invalidParamsResult<SelectionRectsResult>(
-      paragraphId,
-      {
-        startOffset: 0,
-        endOffset: 0,
-        rects: [],
-      },
+    return createError(
+      'invalid-params',
       'Expected paragraphId, sourceText, containerElement, startOffset, and endOffset.'
     );
   }
 
-  const { report } = findReportByParagraphId(outputJax, paragraphId);
-  if (!report) {
-    return errorResult<SelectionRectsResult>(
+  const resolution = await resolveHitMap(
+    layoutContext,
+    {
       paragraphId,
-      {
-        startOffset: 0,
-        endOffset: 0,
-        rects: [],
-      },
-      'paragraph-not-found',
-      `Paragraph '${paragraphId}' was not found in Knuth-Plass reports.`
-    );
+      sourceText: params.sourceText,
+      ...(params.sourceTextStartOffset !== undefined ? { sourceTextStartOffset: params.sourceTextStartOffset } : {}),
+      ...(params.sourceCoordinateSpace !== undefined ? { sourceCoordinateSpace: params.sourceCoordinateSpace } : {}),
+      containerElement: params.containerElement,
+    },
+    createError
+  );
+  if (resolution.kind === 'error') {
+    return resolution.result;
   }
+  const { hitMap } = resolution;
 
-  let hitMap: ParagraphHitMap;
-  try {
-    hitMap = await getParagraphHitMap(outputJax, report, params.sourceText, params.containerElement);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to build paragraph caret map.';
-    return errorResult<SelectionRectsResult>(
-      paragraphId,
-      {
-        startOffset: 0,
-        endOffset: 0,
-        rects: [],
-      },
-      mapBuildFailureCode(message),
-      message
-    );
-  }
-
-  if (!hitMap.lines.length) {
-    return errorResult<SelectionRectsResult>(
-      paragraphId,
-      {
-        startOffset: 0,
-        endOffset: 0,
-        rects: [],
-      },
-      'alignment-error',
-      'Paragraph hitmap contains no line data.'
-    );
-  }
-
-  const start = clamp(Math.floor(params.startOffset ?? 0), 0, params.sourceText.length);
-  const end = clamp(Math.floor(params.endOffset ?? 0), 0, params.sourceText.length);
+  const sourceStart = Math.floor(params.sourceTextStartOffset ?? 0);
+  const sourceEnd = sourceStart + params.sourceText.length;
+  const start = clamp(Math.floor(params.startOffset ?? sourceStart), sourceStart, sourceEnd);
+  const end = clamp(Math.floor(params.endOffset ?? sourceStart), sourceStart, sourceEnd);
   const rangeStart = Math.min(start, end);
   const rangeEnd = Math.max(start, end);
   if (rangeStart === rangeEnd) {
     return {
       ok: true,
       paragraphId,
-      startOffset: rangeStart,
-      endOffset: rangeEnd,
+      startOffset: sourceOffsetForSpace(rangeStart, sourceCoordinateSpace),
+      endOffset: sourceOffsetForSpace(rangeEnd, sourceCoordinateSpace),
       rects: [],
       error: null,
     };
@@ -1746,134 +4367,141 @@ export async function getKnuthPlassSelectionRects(
     if (endStop.offset < startStop.offset) {
       continue;
     }
-
-    const reportLine = hitMap.report.lines.find((entry) => entry.lineIndex === line.lineIndex)!;
-
-    const startPoint = lineLocalClientPoint(line, reportLine, startStop.x);
-    const endPoint = lineLocalClientPoint(line, reportLine, endStop.x);
-    const segmentWidth = Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y);
-    if (segmentWidth <= EPSILON) {
+    const reportLine = line.reportLine;
+    const mathSelectionBoxes = mathSelectionLocalBoxesForRange(line, rangeStart, rangeEnd, startStop, endStop);
+    if (mathSelectionBoxes.length) {
+      for (const mathSelectionBox of mathSelectionBoxes) {
+        const rect = selectionRectForLineLocalSpan(
+          line,
+          reportLine,
+          startStop.offset,
+          endStop.offset,
+          mathSelectionBox.xStart,
+          mathSelectionBox.xEnd,
+          mathBaselineYToLineY(
+            reportLine,
+            mathBaselineCoord((mathSelectionBox.yStart + mathSelectionBox.yEnd) / 2)
+          ),
+          mathSelectionClientHeight(line, reportLine, mathSelectionBox.xStart, mathSelectionBox),
+          px(0)
+        );
+        if (rect) {
+          rects.push(rect);
+        }
+      }
       continue;
     }
-    const baselineCenterX = (startPoint.x + endPoint.x) / 2;
-    const baselineCenterY = (startPoint.y + endPoint.y) / 2;
-    const normal = lineNormalUnit(line);
-    const normalOffset = lineBoxNormalOffset(line, reportLine);
-    const centerX = baselineCenterX + normal.x * normalOffset;
-    const centerY = baselineCenterY + normal.y * normalOffset;
-    const height = lineClientHeight(line, reportLine);
-    const left = centerX - segmentWidth / 2;
 
-    rects.push({
-      lineIndex: line.lineIndex,
-      startOffset: startStop.offset,
-      endOffset: endStop.offset,
-      bounds: clientBounds(
-        px(left),
-        px(centerY - height / 2),
-        px(left + Math.max(1, segmentWidth)),
-        px(centerY + height / 2)
-      ),
-      center: makeClientPoint(px(centerX), px(centerY)),
-      rotationDeg: (Math.atan2(line.screenMatrix.b, line.screenMatrix.a) * 180) / Math.PI,
-    });
+    const selectedMathConstructs = line.mathConstructRanges.filter((range) =>
+      rangeEnd > range.sourceStartRaw && rangeStart < range.sourceEndRaw
+    );
+    const localStartX = lineReportCoord(Math.min(
+      startStop.x,
+      ...selectedMathConstructs.map((range) => range.xStart)
+    ));
+    const localEndX = lineReportCoord(Math.max(
+      endStop.x,
+      ...selectedMathConstructs.map((range) => range.xEnd)
+    ));
+    const rect = selectionRectForLineLocalSpan(
+      line,
+      reportLine,
+      startStop.offset,
+      endStop.offset,
+      localStartX,
+      localEndX,
+      lineReportY(0),
+      lineClientHeight(line, reportLine),
+      lineBoxNormalOffset(line, reportLine)
+    );
+    if (rect) {
+      rects.push(rect);
+    }
   }
 
   return {
     ok: true,
     paragraphId,
-    startOffset: rangeStart,
-    endOffset: rangeEnd,
+    startOffset: sourceOffsetForSpace(rangeStart, sourceCoordinateSpace),
+    endOffset: sourceOffsetForSpace(rangeEnd, sourceCoordinateSpace),
     rects,
     error: null,
   };
 }
 
+export function getKnuthPlassLineRangeFromPoint(
+  layoutContext: unknown,
+  params: Partial<CaretFromPointParams<'document'>> & { sourceCoordinateSpace: 'document' }
+): Promise<LineRangeFromPointResult<'document'>>;
+export function getKnuthPlassLineRangeFromPoint(
+  layoutContext: unknown,
+  params: (Partial<CaretFromPointParams<'layout'>> & { sourceCoordinateSpace?: 'layout' }) | null | undefined
+): Promise<LineRangeFromPointResult<'layout'>>;
 export async function getKnuthPlassLineRangeFromPoint(
-  outputJax: unknown,
+  layoutContext: unknown,
   params: Partial<CaretFromPointParams> | null | undefined
 ): Promise<LineRangeFromPointResult> {
   const paragraphId = String(params?.paragraphId ?? '');
+  const createError = createCaretMappingErrorFactory(paragraphId, {
+    lineIndex: null,
+    lineStartOffset: null,
+    lineEndOffset: null,
+  });
   if (!params || !paragraphId || typeof params.sourceText !== 'string' || !params.containerElement || !params.clientPoint) {
-    return invalidParamsResult<LineRangeFromPointResult>(
-      paragraphId,
-      {
-        lineIndex: null,
-        lineStartOffset: null,
-        lineEndOffset: null,
-      },
+    return createError(
+      'invalid-params',
       'Expected paragraphId, sourceText, containerElement, and clientPoint.'
     );
   }
 
-  const { report } = findReportByParagraphId(outputJax, paragraphId);
-  if (!report) {
-    return errorResult<LineRangeFromPointResult>(
+  const resolution = await resolveHitMap(
+    layoutContext,
+    {
       paragraphId,
-      {
-        lineIndex: null,
-        lineStartOffset: null,
-        lineEndOffset: null,
-      },
-      'paragraph-not-found',
-      `Paragraph '${paragraphId}' was not found in Knuth-Plass reports.`
-    );
+      sourceText: params.sourceText,
+      ...(params.sourceTextStartOffset !== undefined ? { sourceTextStartOffset: params.sourceTextStartOffset } : {}),
+      ...(params.sourceCoordinateSpace !== undefined ? { sourceCoordinateSpace: params.sourceCoordinateSpace } : {}),
+      containerElement: params.containerElement,
+    },
+    createError
+  );
+  if (resolution.kind === 'error') {
+    return resolution.result;
   }
-
-  let hitMap: ParagraphHitMap;
-  try {
-    hitMap = await getParagraphHitMap(outputJax, report, params.sourceText, params.containerElement);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to build paragraph caret map.';
-    return errorResult<LineRangeFromPointResult>(
-      paragraphId,
-      {
-        lineIndex: null,
-        lineStartOffset: null,
-        lineEndOffset: null,
-      },
-      mapBuildFailureCode(message),
-      message
-    );
-  }
-
-  if (!hitMap.lines.length) {
-    return errorResult<LineRangeFromPointResult>(
-      paragraphId,
-      {
-        lineIndex: null,
-        lineStartOffset: null,
-        lineEndOffset: null,
-      },
-      'alignment-error',
-      'Paragraph hitmap contains no line data.'
-    );
-  }
+  const { hitMap } = resolution;
 
   const line = inferLineByClientPoint(hitMap, params.clientPoint);
-  const lineStartOffset = clamp(Math.floor(line.minOffset), 0, params.sourceText.length);
-  const lineEndOffset = clamp(Math.floor(line.maxOffset), 0, params.sourceText.length);
+  const sourceStart = Math.floor(params.sourceTextStartOffset ?? 0);
+  const sourceEnd = sourceStart + params.sourceText.length;
+  const lineStartOffset = clamp(Math.floor(line.minOffset), sourceStart, sourceEnd);
+  const lineEndOffset = clamp(Math.floor(line.maxOffset), sourceStart, sourceEnd);
   return {
     ok: true,
     paragraphId,
     lineIndex: line.lineIndex,
-    lineStartOffset: Math.min(lineStartOffset, lineEndOffset),
-    lineEndOffset: Math.max(lineStartOffset, lineEndOffset),
+    lineStartOffset: sourceOffsetForSpace(
+      Math.min(lineStartOffset, lineEndOffset),
+      params.sourceCoordinateSpace ?? 'layout'
+    ),
+    lineEndOffset: sourceOffsetForSpace(
+      Math.max(lineStartOffset, lineEndOffset),
+      params.sourceCoordinateSpace ?? 'layout'
+    ),
     error: null,
   };
 }
 
-export function clearKnuthPlassCaretMappingCache(outputJax?: unknown): void {
-  if (outputJax && typeof outputJax === 'object') {
-    paragraphCacheByOutput.delete(outputJax);
+export function clearKnuthPlassCaretMappingCache(layoutContext?: unknown): void {
+  if (layoutContext && typeof layoutContext === 'object') {
+    paragraphCacheByOutput.delete(layoutContext);
     return;
   }
   paragraphCacheByOutput = new WeakMap<object, Map<string, CachedParagraphEntry>>();
 }
 
-export function __getKnuthPlassCaretMappingCacheSize(outputJax: unknown): number {
-  if (!outputJax || typeof outputJax !== 'object') {
+export function __getKnuthPlassCaretMappingCacheSize(layoutContext: unknown): number {
+  if (!layoutContext || typeof layoutContext !== 'object') {
     return 0;
   }
-  return paragraphCacheByOutput.get(outputJax)?.size ?? 0;
+  return paragraphCacheByOutput.get(layoutContext)?.size ?? 0;
 }

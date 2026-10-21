@@ -1,9 +1,12 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { coordinateTransform, type AxisBasis } from "./axis-basis.js";
 import type { CoordinateForm, CoordinateItem } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
 import { splitAllAtTopLevel } from "../../domains/coordinates/parse.js";
 import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings, type MacroBinding } from "../../macros/index.js";
 import {
+  currentFrame,
   readNamedCoordinate,
   readNamedNodeGeometry,
   type NamedNodeGeometry,
@@ -15,7 +18,8 @@ import type { FrameLocalPoint, WorldPoint, WorldVector } from "../../coords/poin
 import { frameTransform } from "../../coords/transforms.js";
 import type { FrameTransform, WorldTransform } from "../../coords/transforms.js";
 import { applyMatrix, applyMatrixToVector, inverseMatrix } from "../transform.js";
-import { parseLength, parseQuantityExpression } from "./parse-length.js";
+import { coordinateSourceUnit, parseLength, parseLengthWithInfo, parseQuantityExpression } from "./parse-length.js";
+import type { CoordinateSourceUnits } from "../types.js";
 import { intersectRayWithPolygon } from "../nodes/shape-geometry.js";
 
 export type EvaluatedCoordinate = {
@@ -23,7 +27,10 @@ export type EvaluatedCoordinate = {
   world: WorldPoint | null;
   local?: FrameLocalPoint;
   frame?: FrameTransform;
-  origin?: "named" | "calc" | "perpendicular" | "intersection" | "numeric-anchor";
+  sourceUnits?: CoordinateSourceUnits;
+  origin?: "named" | "calc" | "perpendicular" | "intersection" | "numeric-anchor" | "turn";
+  /** Turn coordinates depend on the current logical point even without +/++. */
+  relativeBase?: WorldPoint;
   coordinateForm: CoordinateForm;
   relativePrefix?: "+" | "++";
   diagnostics: string[];
@@ -44,9 +51,20 @@ type ParsedLineSpec = {
   endRaw: string;
 };
 
+/** Transform-option points are scanned before CTM application; named anchors remain world-valued. */
+export function evaluateTransformCoordinate(raw: string, context: SemanticContext, basis?: AxisBasis): WorldPoint | null {
+  const frame = currentFrame(context);
+  const parsed = parseCoordinate(raw);
+  if (parsed.form === "named") return evaluateRawCoordinate(raw, context).world;
+  const localContext = { ...context, stack: [...context.stack.slice(0, -1), {
+    ...frame, axisBasis: basis ?? frame.axisBasis, transform: { ...frame.transform, a: 1, b: 0, c: 0, d: 1, e: pt(0), f: pt(0) }
+  }] };
+  return evaluateRawCoordinate(raw, localContext).world;
+}
+
 export function evaluateCoordinate(item: CoordinateItem, context: SemanticContext): EvaluatedCoordinate {
   const diagnostics: string[] = [];
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const traceCollector = context.macroTraceCollector ?? undefined;
 
   if (item.form === "named") {
@@ -85,7 +103,10 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
       frame.transform
     );
     return evaluatedCalc.point
-      ? worldOnlyCoordinate("calc", evaluatedCalc.point, evaluatedCalc.diagnostics, item.relativePrefix === "++", "calc")
+      ? {
+          ...worldOnlyCoordinate("calc", evaluatedCalc.point, evaluatedCalc.diagnostics, item.relativePrefix === "++", "calc", item.relativePrefix),
+          frame: asFrameTransform(frame.transform)
+        }
       : invalidCoordinate("calc", evaluatedCalc.diagnostics, item.relativePrefix === "++");
   }
 
@@ -105,13 +126,17 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
 
       const localPt = frameLocalPoint(pt(x), pt(y));
       const frameMatrix = asFrameTransform(frame.transform);
+      const optionalX1 = coordinateSourceUnit(parsed.x);
+      const optionalY2 = coordinateSourceUnit(parsed.y);
       return transformedCoordinate(
         "explicit",
         localPt,
-        applyFrameTransform(frameMatrix, localPt),
+        coordinateWorld(localPt, frameMatrix, item, context),
         frameMatrix,
         diagnostics,
-        item.relativePrefix === "++"
+        item.relativePrefix === "++",
+        item.relativePrefix,
+        { ...(optionalX1 === undefined ? {} : { x: optionalX1 }), ...(optionalY2 === undefined ? {} : { y: optionalY2 }) }
       );
     }
 
@@ -173,7 +198,7 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
     }
 
     const localPt = frameLocalPoint(pt(x), pt(y));
-    const frameMatrix = asFrameTransform(frame.transform);
+    const frameMatrix = asFrameTransform(coordinateTransform(frame.transform, frame.axisBasis));
     return transformedCoordinate(
       "xyz",
       localPt,
@@ -190,10 +215,13 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
   }
 
   let localPoint: FrameLocalPoint;
+  let scalarX: boolean;
+  let scalarY: boolean;
+  let sourceUnits: CoordinateSourceUnits | undefined;
 
   if (item.form === "polar") {
     const angleQuantity = parseQuantityExpression(expandCoordinateComponent(item.x.trim(), frame.macroBindings, traceCollector));
-    const radius = parseLength(expandCoordinateComponent(item.y, frame.macroBindings, traceCollector), "cm");
+    const radius = parseLengthWithInfo(expandCoordinateComponent(item.y, frame.macroBindings, traceCollector), "cm");
     if (!angleQuantity || radius == null) {
       diagnostics.push(`invalid-polar-coordinate:${item.raw}`);
       return invalidCoordinate("polar", diagnostics, item.relativePrefix === "++");
@@ -203,16 +231,27 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
     // `\pgfmathparse{#1}` normalizes the angle expression numerically before trig.
     const angle = angleQuantity.value;
     const radians = (angle * Math.PI) / 180;
-    localPoint = frameLocalPoint(pt(radius * Math.cos(radians)), pt(radius * Math.sin(radians)));
+    scalarX = scalarY = !radius.hasExplicitUnit;
+    const optionalRadius3 = coordinateSourceUnit(expandCoordinateComponent(item.y, frame.macroBindings, traceCollector));
+    sourceUnits = { ...(optionalRadius3 === undefined ? {} : { radius: optionalRadius3 }) };
+    localPoint = frameLocalPoint(pt(radius.value * Math.cos(radians)), pt(radius.value * Math.sin(radians)));
   } else {
-    const x = parseLength(expandCoordinateComponent(item.x, frame.macroBindings, traceCollector), "cm");
-    const y = parseLength(expandCoordinateComponent(item.y, frame.macroBindings, traceCollector), "cm");
+    const x = parseLengthWithInfo(expandCoordinateComponent(item.x, frame.macroBindings, traceCollector), "cm");
+    const y = parseLengthWithInfo(expandCoordinateComponent(item.y, frame.macroBindings, traceCollector), "cm");
     if (x == null || y == null) {
       diagnostics.push(`invalid-cartesian-coordinate:${item.raw}`);
       return invalidCoordinate("cartesian", diagnostics, item.relativePrefix === "++");
     }
 
-    localPoint = frameLocalPoint(pt(x), pt(y));
+    scalarX = !x.hasExplicitUnit;
+    scalarY = !y.hasExplicitUnit;
+    const optionalX4 = coordinateSourceUnit(expandCoordinateComponent(item.x, frame.macroBindings, traceCollector));
+    const optionalY5 = coordinateSourceUnit(expandCoordinateComponent(item.y, frame.macroBindings, traceCollector));
+    sourceUnits = {
+      ...(optionalX4 === undefined ? {} : { x: optionalX4 }),
+      ...(optionalY5 === undefined ? {} : { y: optionalY5 })
+    };
+    localPoint = frameLocalPoint(pt(x.value), pt(y.value));
   }
 
   if (item.relativePrefix) {
@@ -222,7 +261,7 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
       const form: CoordinateForm = item.form === "polar" ? "polar" : "cartesian";
       return invalidCoordinate(form, diagnostics, item.relativePrefix === "++", item.relativePrefix);
     }
-    const frameMatrix = asFrameTransform(frame.transform);
+    const frameMatrix = asFrameTransform(coordinateTransform(frame.transform, frame.axisBasis, scalarX, scalarY));
     const delta = applyFrameVector(frameMatrix, frameLocalVector(pt(localPoint.x), pt(localPoint.y)));
     const form: CoordinateForm = item.form === "polar" ? "polar" : "cartesian";
     return transformedCoordinate(
@@ -232,20 +271,29 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
       frameMatrix,
       diagnostics,
       item.relativePrefix === "++",
-      item.relativePrefix
+      item.relativePrefix,
+      sourceUnits
     );
   }
 
   const coordinateForm: CoordinateForm = item.form === "polar" ? "polar" : "cartesian";
-  const frameMatrix = asFrameTransform(frame.transform);
+  const frameMatrix = asFrameTransform(coordinateTransform(frame.transform, frame.axisBasis, scalarX, scalarY));
   return transformedCoordinate(
     coordinateForm,
     localPoint,
     applyFrameTransform(frameMatrix, localPoint),
     frameMatrix,
     diagnostics,
-    true
+    true,
+    undefined,
+    sourceUnits
   );
+}
+
+function coordinateWorld(local: FrameLocalPoint, frame: FrameTransform, item: CoordinateItem, context: SemanticContext): WorldPoint {
+  if (!item.relativePrefix || !context.currentPoint) return applyFrameTransform(frame, local);
+  const delta = applyFrameVector(frame, frameLocalVector(local.x, local.y));
+  return worldPoint(pt(context.currentPoint.x + delta.x), pt(context.currentPoint.y + delta.y));
 }
 
 function transformedCoordinate(
@@ -255,17 +303,19 @@ function transformedCoordinate(
   frame: FrameTransform,
   diagnostics: string[],
   advancesCurrentPoint: boolean,
-  relativePrefix?: "+" | "++"
+  relativePrefix?: "+" | "++",
+  sourceUnits?: CoordinateSourceUnits
 ): EvaluatedCoordinate {
   return {
     kind: "transformed",
+    ...(sourceUnits === undefined ? {} : { sourceUnits: sourceUnits }),
     coordinateForm,
     local,
     world,
     frame,
     diagnostics,
     advancesCurrentPoint,
-    relativePrefix
+    ...(relativePrefix === undefined ? {} : { relativePrefix: relativePrefix })
   };
 }
 
@@ -284,7 +334,7 @@ function worldOnlyCoordinate(
     origin,
     diagnostics,
     advancesCurrentPoint,
-    relativePrefix
+    ...(relativePrefix === undefined ? {} : { relativePrefix: relativePrefix })
   };
 }
 
@@ -300,7 +350,7 @@ function invalidCoordinate(
     world: null,
     diagnostics,
     advancesCurrentPoint,
-    relativePrefix
+    ...(relativePrefix === undefined ? {} : { relativePrefix: relativePrefix })
   };
 }
 
@@ -311,8 +361,8 @@ function parseExplicitCoordinate(raw: string): ParsedExplicitCoordinate | null {
     return null;
   }
 
-  const system = csMatch[1].trim().toLowerCase();
-  const kvValues = parseTopLevelKvPairs(csMatch[2]);
+  const system = requireArrayValue(csMatch, 1).trim().toLowerCase();
+  const kvValues = parseTopLevelKvPairs(requireArrayValue(csMatch, 2));
   if (system === "perpendicular") {
     const horizontalLineThrough = kvValues.get("horizontal line through");
     const verticalLineThrough = kvValues.get("vertical line through");
@@ -561,7 +611,7 @@ function tokenizeCalcTerms(input: string): Array<{ op: "+" | "-"; term: string }
   let bracketDepth = 0;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
 
     if (char === "\\") {
       index += 1;
@@ -642,6 +692,7 @@ function tryParseCalcInterpolation(term: string): { left: string; right: string;
   }
 
   const [left, factorRaw, right] = parts;
+  if (left === undefined || factorRaw === undefined || right === undefined) return null;
   if (!left.startsWith("(") || !left.endsWith(")") || !right.startsWith("(") || !right.endsWith(")")) {
     return null;
   }
@@ -704,8 +755,9 @@ function parsePerpendicularCoordinate(raw: string): { operator: "|-" | "-|"; lef
       continue;
     }
 
+    if (split.operator !== "|-" && split.operator !== "-|") continue;
     return {
-      operator: split.operator as "|-" | "-|",
+      operator: split.operator,
       leftRaw,
       rightRaw
     };
@@ -738,7 +790,7 @@ function tryEvaluateIntersectionCoordinate(
 
   const diagnostics: string[] = [];
   const solution = prefixMatch[1] ? Number(prefixMatch[1]) : 1;
-  const objectPair = splitAtTopLevelKeyword(prefixMatch[2], "and");
+  const objectPair = splitAtTopLevelKeyword(requireArrayValue(prefixMatch, 2), "and");
   if (!objectPair) {
     return { point: null, diagnostics: ["invalid-intersection-coordinate"] };
   }
@@ -830,7 +882,7 @@ function findTopLevelEquals(input: string): number {
   let bracketDepth = 0;
 
   for (let i = 0; i < input.length; i += 1) {
-    const char = input[i];
+    const char = input.charAt(i);
     if (char === "\\") {
       i += 1;
       continue;
@@ -878,7 +930,7 @@ function splitAtTopLevelOperator(
   let bracketDepth = 0;
 
   for (let i = 0; i < input.length; i += 1) {
-    const char = input[i];
+    const char = input.charAt(i);
     if (char === "\\") {
       i += 1;
       continue;
@@ -934,7 +986,7 @@ function splitAtTopLevelKeyword(input: string, keyword: string): { left: string;
   let bracketDepth = 0;
 
   for (let i = 0; i <= input.length - needle.length; i += 1) {
-    const char = input[i];
+    const char = input.charAt(i);
     if (char === "\\") {
       i += 1;
       continue;
@@ -1041,23 +1093,24 @@ export function evaluateRawCoordinate(
   relativePrefix?: CoordinateItem["relativePrefix"]
 ): EvaluatedCoordinate {
   const parsed = parseCoordinate(raw);
-  const pseudo: CoordinateItem = {
-    kind: "Coordinate",
-    id: "raw-coordinate",
-    span: { from: 0, to: raw.length },
-    relativePrefix,
-    x: parsed.x,
-    y: parsed.y,
-    z: parsed.z,
-    raw,
-    form: parsed.form,
-    optionsSpan: parsed.optionsSpan
+  const optionalOptionsSpan6 = parsed.optionsSpan
       ? {
           from: parsed.optionsSpan.from,
           to: parsed.optionsSpan.to
         }
-      : undefined,
-    options: undefined
+      : undefined;
+  const pseudo: CoordinateItem = {
+    kind: "Coordinate",
+    id: "raw-coordinate",
+    span: { from: 0, to: raw.length },
+    ...(relativePrefix === undefined ? {} : { relativePrefix: relativePrefix }),
+    x: parsed.x,
+    y: parsed.y,
+    ...(parsed.z === undefined ? {} : { z: parsed.z }),
+    raw,
+    form: parsed.form,
+    ...(optionalOptionsSpan6 === undefined ? {} : { optionsSpan: optionalOptionsSpan6 }),
+
   };
   return evaluateCoordinate(pseudo, context);
 }
@@ -1067,8 +1120,9 @@ function expandCoordinateComponent(
   bindings: ReadonlyMap<string, MacroBinding>,
   trace: SemanticContext["macroTraceCollector"] | undefined
 ): string {
+  const optionalTrace7 = trace ?? undefined;
   return expandMacroBindings(raw, bindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: trace ?? undefined
+    ...(optionalTrace7 === undefined ? {} : { trace: optionalTrace7 })
   });
 }

@@ -1,6 +1,6 @@
-import { useEffect, useRef, type RefObject } from "react";
-import { diffSvgModels, type SvgDiffHints, type SvgPatchOp, type SvgRenderModel } from "tikz-editor/svg/index";
-import { recordProfilingSvgPatchTiming } from "tikz-editor/profiling";
+import { useLayoutEffect, useRef, type RefObject } from "react";
+import { diffSvgModels, type SvgDiffHints, type SvgPatchOp, type SvgRenderModel } from "@tikz-editor/core/svg/index";
+import { recordProfilingSvgPatchTiming } from "@tikz-editor/core/profiling";
 
 import { SvgDomPatcher } from "./svg-dom-patcher";
 import css from "./CanvasPanel.module.css";
@@ -9,17 +9,19 @@ export function CanvasSVGLayer(params: {
   model: SvgRenderModel | null;
   diffHints?: SvgDiffHints;
   forceReplaceAll: boolean;
+  /** Drawn over a slide (a drawing layer): no page of its own. */
+  overBackdrop?: boolean;
   showTransparencyGrid: boolean;
   showDocumentBounds: boolean;
   onFallback: (reason: "replaceDefs" | "replaceAll" | "patch-failure") => void;
   hostRef?: RefObject<HTMLDivElement | null>;
 }) {
-  const { model, diffHints, forceReplaceAll, showTransparencyGrid, showDocumentBounds, onFallback, hostRef: externalHostRef } = params;
+  const { model, diffHints, forceReplaceAll, overBackdrop, showTransparencyGrid, showDocumentBounds, onFallback, hostRef: externalHostRef } = params;
   const internalHostRef = useRef<HTMLDivElement | null>(null);
   const patcherRef = useRef<SvgDomPatcher | null>(null);
   const previousModelRef = useRef<SvgRenderModel | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const host = internalHostRef.current;
     if (!host) {
       return;
@@ -33,7 +35,9 @@ export function CanvasSVGLayer(params: {
     };
   }, []);
 
-  useEffect(() => {
+  // The model is ready; install its SVG during the commit so the next paint
+  // shows this frame rather than painting the previous slide once more.
+  useLayoutEffect(() => {
     if (!model || !patcherRef.current) {
       return;
     }
@@ -83,8 +87,8 @@ export function CanvasSVGLayer(params: {
 
   const className = [
     css.svgLayer,
-    showDocumentBounds ? "" : css.svgLayerNoDocumentBounds,
-    showTransparencyGrid ? css.svgLayerTransparencyGrid : ""
+    overBackdrop ? css.svgLayerOverBackdrop : showDocumentBounds ? "" : css.svgLayerNoDocumentBounds,
+    !overBackdrop && showTransparencyGrid ? css.svgLayerTransparencyGrid : ""
   ].filter(Boolean).join(" ");
   return (
     <div

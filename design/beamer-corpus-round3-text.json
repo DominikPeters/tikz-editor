@@ -1,0 +1,683 @@
+{
+  "formatVersion": 1,
+  "reviewedAt": "2026-10-03",
+  "purpose": "New math and text fidelity candidates from manual corpus review. The original reductions are exact comparison inputs; current failures are not accepted goldens.",
+  "summary": {
+    "selectedNewSourceFrames": 10,
+    "repositories": 5,
+    "nativeSnapshotsInspected": 11,
+    "correspondingReferenceRastersInspected": 11,
+    "selectedFramesWithValidReference": 10,
+    "selectedFramesWithFailedReference": 0,
+    "initialReferencesRequiringContextRepair": 1,
+    "additionalExploratoryFramesExcluded": 2,
+    "originalFixtureGroups": 5,
+    "manifestEntries": 12,
+    "failingReductions": 5,
+    "controls": 7,
+    "sampling": "Purposive manual selection, excluding the 52 previously reviewed source frames; not a corpus pass-rate estimate. Expanded source, native SVG rasters, and authored TeX PDF rasters were inspected."
+  },
+  "artifactRoot": "artifacts/beamer-corpus-renderer/manual-review-round3/text-review",
+  "referencePolicy": [
+    "Native images use the fresh shared renderer distribution. No production renderer changes or build were made for this review.",
+    "AGH and dl4nlp references use LuaLaTeX; the other selected author references use pdfLaTeX. These corpus images establish semantic defects, not a claim of strict cross-engine glyph equality.",
+    "dl4nlp uses the empty flags.tex explicitly prescribed by its author preamble. Montreso uses the author's Makefile flags selecting ordinary 4:3 slides. No package stubs or source feature removals were used.",
+    "Ordinary isolated-frame probes retain the author preamble and navigation context, but may omit prior body assignments and document-wide bibliography state. Claims below are also reproduced in original small documents.",
+    "AGH23 frame5 has a reference to an earlier numbered equation. Its isolated reference was invalid for that claim. A complete two-pass author build produced a 70-page PDF; the corresponding frame is PDF page6, selected by its text rather than equating source-frame and PDF-page numbers. Its label1 resolves correctly in both renderers.",
+    "The exact fixture gallery uses the existing LuaLaTeX glyph/font/geometry oracle. All 12 original fixture frame probes independently compiled as one-page references during this review."
+  ],
+  "reviewed": [
+    {
+      "id": "text-00",
+      "repository": "AGH-MOwNiT-2017/lectures",
+      "path": "12_iteracyjne.tex",
+      "frame": 27,
+      "expandedSpan": {
+        "from": 17771,
+        "to": 17993
+      },
+      "nativeSteps": [
+        1
+      ],
+      "referencePages": [
+        1
+      ],
+      "engine": "lualatex",
+      "referenceStatus": "valid",
+      "observation": "The aligned spectrum formulas and Polish prose render without literal math. An explicitly empty frame title paints an extra title band and shifts the body down in native.",
+      "report": "text-00/result.json",
+      "comparison": "text-00/comparison.png",
+      "commit": "0dbc5e4df150194729ccb93d2059c041bd45dc77",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/AGH-MOwNiT-2017/lectures/blob/0dbc5e4df150194729ccb93d2059c041bd45dc77/12_iteracyjne.tex"
+    },
+    {
+      "id": "text-01",
+      "repository": "AGH-MOwNiT-2017/lectures",
+      "path": "12_iteracyjne.tex",
+      "frame": 39,
+      "expandedSpan": {
+        "from": 22565,
+        "to": 22834
+      },
+      "nativeSteps": [
+        1
+      ],
+      "referencePages": [
+        1
+      ],
+      "engine": "lualatex",
+      "referenceStatus": "valid",
+      "observation": "The cases expression, Polish accents and included asset remain visible. Graphic scale differs; this mixed graphic case is not used to claim a math defect.",
+      "report": "text-01/result.json",
+      "comparison": "text-01/comparison.png",
+      "commit": "0dbc5e4df150194729ccb93d2059c041bd45dc77",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/AGH-MOwNiT-2017/lectures/blob/0dbc5e4df150194729ccb93d2059c041bd45dc77/12_iteracyjne.tex"
+    },
+    {
+      "id": "text-02",
+      "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+      "path": "latex/lecture03/dl4nlp2023-lecture03.tex",
+      "frame": 32,
+      "expandedSpan": {
+        "from": 22298,
+        "to": 22630
+      },
+      "nativeSteps": [
+        1
+      ],
+      "referencePages": [
+        1
+      ],
+      "engine": "lualatex",
+      "referenceStatus": "valid",
+      "observation": "The standard physics derivative command inside aligned math paints literal source. An independent dv reduction fails; ordinary derivatives and aligned math are not implicated. Metropolis/font substitutions are separate known limits.",
+      "report": "text-02/result.json",
+      "comparison": "text-02/comparison.png",
+      "commit": "5a60cd2392b29f12094fc1b5db53289da785164f",
+      "license": "CC-BY-SA-4.0",
+      "sourceUrl": "https://github.com/dl4nlp-tuda/deep-learning-for-nlp-lectures/blob/5a60cd2392b29f12094fc1b5db53289da785164f/latex/lecture03/dl4nlp2023-lecture03.tex"
+    },
+    {
+      "id": "text-03",
+      "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+      "path": "latex/lecture05/dl4nlp2023-lecture05.tex",
+      "frame": 24,
+      "expandedSpan": {
+        "from": 18851,
+        "to": 19226
+      },
+      "nativeSteps": [
+        1
+      ],
+      "referencePages": [
+        1
+      ],
+      "engine": "lualatex",
+      "referenceStatus": "valid",
+      "observation": "The body containing bm vectors, physics abs and a declared softmax operator falls back. Separate reductions establish bm and physics failures; simple and starred declared operators pass. A nested built-in operator inside the declaration body is a distinct lower-priority limitation.",
+      "report": "text-03/result.json",
+      "comparison": "text-03/comparison.png",
+      "commit": "5a60cd2392b29f12094fc1b5db53289da785164f",
+      "license": "CC-BY-SA-4.0",
+      "sourceUrl": "https://github.com/dl4nlp-tuda/deep-learning-for-nlp-lectures/blob/5a60cd2392b29f12094fc1b5db53289da785164f/latex/lecture05/dl4nlp2023-lecture05.tex"
+    },
+    {
+      "id": "text-04",
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "path": "Lectures/frequency_control/main.tex",
+      "frame": 27,
+      "expandedSpan": {
+        "from": 19894,
+        "to": 20339
+      },
+      "nativeSteps": [
+        1
+      ],
+      "referencePages": [
+        1
+      ],
+      "engine": "pdflatex",
+      "referenceStatus": "valid",
+      "observation": "Ordinary aligned differential equations, fractions, min/max and textbf prose remain mathematical glyphs. Author typography and spacing differ; this is a semantic math control, not an exact corpus pass.",
+      "report": "text-04/result.json",
+      "comparison": "text-04/comparison.png",
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/frequency_control/main.tex"
+    },
+    {
+      "id": "text-06",
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "path": "Lectures/TransfomerAndPF/main.tex",
+      "frame": 14,
+      "expandedSpan": {
+        "from": 13283,
+        "to": 13508
+      },
+      "nativeSteps": [
+        1
+      ],
+      "referencePages": [
+        1
+      ],
+      "engine": "pdflatex",
+      "referenceStatus": "valid",
+      "observation": "The linked and underlined video label and graphic remain visible. Provides a short href/underline control; differences in the author theme do not establish a link-text failure.",
+      "report": "text-06/result.json",
+      "comparison": "text-06/comparison.png",
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/TransfomerAndPF/main.tex"
+    },
+    {
+      "id": "text-07",
+      "repository": "AGH-MOwNiT-2017/lectures",
+      "path": "23_rozwiazywanie_rownan_rozniczkowych_czastkowych.tex",
+      "frame": 5,
+      "expandedSpan": {
+        "from": 7100,
+        "to": 7341
+      },
+      "nativeSteps": [
+        1
+      ],
+      "referencePages": [
+        6
+      ],
+      "engine": "lualatex",
+      "referenceStatus": "valid-full-author-context",
+      "fullAuthorPdfPages": 70,
+      "observation": "After restoring the full authored document context, the reference reads (1) in both renderers, and the Polish list and b-squared expressions look closely matched. The isolated unresolved-reference image is retained only as evidence of an invalid review oracle.",
+      "report": "text-07/result.json",
+      "reference": "text-07/full-author/deck.pdf",
+      "referenceAux": "text-07/full-author/deck.aux",
+      "comparison": "text-07/comparison-full-author.png",
+      "commit": "0dbc5e4df150194729ccb93d2059c041bd45dc77",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/AGH-MOwNiT-2017/lectures/blob/0dbc5e4df150194729ccb93d2059c041bd45dc77/23_rozwiazywanie_rownan_rozniczkowych_czastkowych.tex"
+    },
+    {
+      "id": "text-08",
+      "repository": "AGH-MOwNiT-2017/lectures",
+      "path": "5_aproksymacja.tex",
+      "frame": 16,
+      "expandedSpan": {
+        "from": 11983,
+        "to": 12237
+      },
+      "nativeSteps": [
+        1
+      ],
+      "referencePages": [
+        1
+      ],
+      "engine": "lualatex",
+      "referenceStatus": "valid",
+      "observation": "The long url breaks after punctuation and underscores in TeX. Native treats the whole URL as one unbreakable run, moves the prefix to its own line, and overflows the slide. Ordinary Polish accents and the long title remain readable.",
+      "report": "text-08/result.json",
+      "comparison": "text-08/comparison.png",
+      "commit": "0dbc5e4df150194729ccb93d2059c041bd45dc77",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/AGH-MOwNiT-2017/lectures/blob/0dbc5e4df150194729ccb93d2059c041bd45dc77/5_aproksymacja.tex"
+    },
+    {
+      "id": "text-09",
+      "repository": "montreso/asd-lectures",
+      "path": "00-introcorso.tex",
+      "frame": 32,
+      "expandedSpan": {
+        "from": 33743,
+        "to": 34030
+      },
+      "nativeSteps": [
+        1
+      ],
+      "referencePages": [
+        1
+      ],
+      "engine": "pdflatex",
+      "referenceStatus": "valid-author-build-flags",
+      "observation": "The author's BIL expands to a standard itemize plus itemsep/parskip/parsep assignments before the first item. Native prints these commands. The reduction uses direct standard commands and reproduces the failure without the author's macro name. URL link color is also different but is not folded into the wrapping diagnosis.",
+      "report": "text-09/result.json",
+      "comparison": "text-09/comparison.png",
+      "commit": "164a6216fe16e5d4cc4fd018d0bee6ea9a0d9c0b",
+      "license": "CC-BY-SA-4.0",
+      "sourceUrl": "https://github.com/montreso/asd-lectures/blob/164a6216fe16e5d4cc4fd018d0bee6ea9a0d9c0b/00-introcorso.tex"
+    },
+    {
+      "id": "text-11",
+      "repository": "Naereen/slides",
+      "path": "2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex",
+      "frame": 6,
+      "expandedSpan": {
+        "from": 12222,
+        "to": 13117
+      },
+      "nativeSteps": [
+        1,
+        2
+      ],
+      "referencePages": [
+        1,
+        2
+      ],
+      "engine": "pdflatex",
+      "referenceStatus": "valid",
+      "observation": "The probability formula, sum, underbraces and ordinary small font environment are rendered mathematically. The final overlay reveals Pandoc tightlist assignments printed before the item, corroborating the pre-item register defect. Theme font/color substitutions remain separate.",
+      "report": "text-11/result.json",
+      "comparison": "text-11/comparison.png",
+      "lastComparison": "text-11/comparison-last.png",
+      "commit": "81ade12afe94aa3b3f263dfe4392888814c042ac",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/Naereen/slides/blob/81ade12afe94aa3b3f263dfe4392888814c042ac/2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex"
+    }
+  ],
+  "excludedExplorations": [
+    {
+      "id": "text-05",
+      "repository": "paulgp/applied-methods-phd",
+      "path": "lectures/18_bartik_sim_iv.tex",
+      "frame": 71,
+      "referenceStatus": "compiled",
+      "reason": "Custom wideitemize is unsupported. The author-context numbered align also falls back, while an ordinary numbered-align reduction passes. This mixed author configuration is not promoted as an align or macro-parameter defect."
+    },
+    {
+      "id": "text-10",
+      "repository": "leeper/lectures",
+      "path": "2015-07-01-useR/slides.tex",
+      "frame": 13,
+      "referenceStatus": "compiled",
+      "reason": "The isolated reference is white text on a white Beamer page despite pagecolor{black}; its intended author background context is insufficiently established. The native unsupported styled paragraph is recorded but no fidelity claim is promoted."
+    }
+  ],
+  "todos": [
+    {
+      "id": "TXT01",
+      "priority": "high",
+      "title": "Use the standard URL line-break opportunities",
+      "evidence": [
+        "text-08"
+      ],
+      "fixture": "text-url-breakpoints.tex",
+      "failingFrame": 1,
+      "controlFrames": [
+        2
+      ],
+      "expected": "Break URLs at the standard permitted punctuation and underscore boundaries while retaining their typewriter glyphs and link target.",
+      "primarySource": "url.sty32-38 UrlBreaks/UrlBigBreaks/UrlNoBreaks; url.sty143-146 math-class breakpoint construction.",
+      "witness": "Original minimal url-full-width compiles in TeX and wraps on two lines; native paints a single URL run beyond the slide edge. No minipage or author macro is needed."
+    },
+    {
+      "id": "TXT02",
+      "priority": "high",
+      "title": "Apply list registers before the first item",
+      "evidence": [
+        "text-09",
+        "text-11"
+      ],
+      "fixture": "text-list-register-prefix.tex",
+      "failingFrame": 1,
+      "controlFrames": [
+        2
+      ],
+      "expected": "Apply itemsep, parskip and parsep in the list's scope before its first item, producing glue rather than printable command text.",
+      "primarySource": "LaTeX setlength and list registers; size11.clo list profile assignments. Montreso's BIL and Pandoc tightlist both use these standard interfaces.",
+      "witness": "The direct three-assignment reduction prints three literal segments before Alpha; the ordinary list control is clear. Author macro names have been removed."
+    },
+    {
+      "id": "TXT03",
+      "priority": "high",
+      "title": "Suppress an explicitly empty frame title",
+      "evidence": [
+        "text-00"
+      ],
+      "fixture": "text-empty-frame-title.tex",
+      "failingFrame": 1,
+      "controlFrames": [
+        2
+      ],
+      "expected": "An empty title argument and an absent title should both produce a void frametitle box, retaining the theme headline and footline.",
+      "primarySource": "beamerbaseframe.sty121-129 checks beamer@frametitle against @empty and clears beamer@frametitlebox.",
+      "witness": "The original Warsaw reduction paints an extra gradient title band and shifts Alpha body down; the omitted-title control matches the TeX body placement visually."
+    },
+    {
+      "id": "TXT04",
+      "priority": "medium",
+      "title": "Render the common bm bold-math command",
+      "evidence": [
+        "text-03"
+      ],
+      "fixture": "text-bold-math.tex",
+      "failingFrame": 1,
+      "controlFrames": [
+        2,
+        3,
+        4
+      ],
+      "expected": "A bm vector and matrix should remain math with bold symbol styling, preserving subscript structure. Do not limit support to an author-specific macro alias.",
+      "primarySource": "The standard tools/bm.sty package interface; boldsymbol and mathbf provide the nearby supported control.",
+      "witness": "The independent bm reduction paints display-math-unsupported source while boldsymbol/Mathbf renders correctly. Plain and starred DeclareMathOperator controls and a stock small environment display are successful separate controls."
+    },
+    {
+      "id": "TXT05",
+      "priority": "high",
+      "title": "Render escaped percent in math",
+      "evidence": [
+        "tables-review/t3-10"
+      ],
+      "fixture": "text-math-percent.tex",
+      "failingFrame": 1,
+      "controlFrames": [
+        2
+      ],
+      "corpusProvenance": {
+        "repository": "Naereen/slides",
+        "path": "2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex",
+        "frame": 12,
+        "reviewOwner": "tables",
+        "comparison": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-10/pair-1.png"
+      },
+      "expected": "Escaped percent must remain a percent glyph inside title, inline and displayed math, with ordinary text percent behavior preserved.",
+      "primarySource": "Standard LaTeX escaped-percent command in math and text; the reduction is accepted by the unmodified TeX engine.",
+      "witness": "The small original frame produces math-error twice and display-math-unsupported once; ordinary text escaped percent is a clean control. The corpus image independently shows the same math error in caption and title percentages."
+    }
+  ],
+  "lowerPriorityFollowups": [
+    {
+      "title": "Physics derivative and absolute-value commands",
+      "evidence": [
+        "text-02",
+        "text-03"
+      ],
+      "reductions": [
+        "minimal/physics-dv",
+        "minimal/physics-abs"
+      ],
+      "observation": "Independent dv and abs formulas compile in the actual physics package but paint raw source. Treat this as established-package support work, independently of ordinary align/frac or custom author macros."
+    },
+    {
+      "title": "Declared operator bodies containing a nested built-in operator",
+      "evidence": [
+        "text-03"
+      ],
+      "reductions": [
+        "minimal/operator-nested-name",
+        "minimal/operator-soft-kern-control"
+      ],
+      "controls": [
+        "minimal/operator-thin-space",
+        "minimal/operator-negative-space",
+        "minimal/operatorname-thin-space"
+      ],
+      "observation": "A nested max command inside the declared operator body fails. Positive and negative thin spaces with literal operator letters pass, so this is not classified as a general spacing or DeclareMathOperator-star failure."
+    },
+    {
+      "title": "Count display math source fallbacks during triage",
+      "observation": "physics, bm and nested-operator reductions report zero paragraph literalFallbacks and zero unsupportedItems, yet SVG has data-tex-literal=display-math-unsupported. Read the source-backed SVG marker or shared render trace when shortlisting; absence of a reported literal is not sufficient evidence of success.",
+      "implementedByHarnessCommit": "e804c293"
+    }
+  ],
+  "manifestEntries": [
+    {
+      "id": "text-url-breakpoints",
+      "file": "text-url-breakpoints.tex",
+      "frame": 1,
+      "family": "url",
+      "todos": [
+        "TXT01"
+      ],
+      "evidence": [
+        "text-08"
+      ],
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "More"
+      ]
+    },
+    {
+      "id": "text-short-url-control",
+      "file": "text-url-breakpoints.tex",
+      "frame": 2,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "More"
+      ]
+    },
+    {
+      "id": "text-list-register-prefix",
+      "file": "text-list-register-prefix.tex",
+      "frame": 1,
+      "family": "list-registers",
+      "todos": [
+        "TXT02"
+      ],
+      "evidence": [
+        "text-09",
+        "text-11"
+      ],
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "text-list-register-control",
+      "file": "text-list-register-prefix.tex",
+      "frame": 2,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "text-explicit-empty-title",
+      "file": "text-empty-frame-title.tex",
+      "frame": 1,
+      "family": "frame-title",
+      "todos": [
+        "TXT03"
+      ],
+      "evidence": [
+        "text-00"
+      ],
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-absent-title-control",
+      "file": "text-empty-frame-title.tex",
+      "frame": 2,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-bm-vector",
+      "file": "text-bold-math.tex",
+      "frame": 1,
+      "family": "math-package",
+      "todos": [
+        "TXT04"
+      ],
+      "evidence": [
+        "text-03"
+      ],
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-boldsymbol-control",
+      "file": "text-bold-math.tex",
+      "frame": 2,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-declared-operator-controls",
+      "file": "text-bold-math.tex",
+      "frame": 3,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-small-display-control",
+      "file": "text-bold-math.tex",
+      "frame": 4,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-math-percent",
+      "file": "text-math-percent.tex",
+      "frame": 1,
+      "family": "math-symbols",
+      "todos": [
+        "TXT05"
+      ],
+      "evidence": [
+        "tables-review/t3-10"
+      ],
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-percent-control",
+      "file": "text-math-percent.tex",
+      "frame": 2,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    }
+  ],
+  "initialStrictSuite": {
+    "completedAt": "2026-10-03T17:07:08.488Z",
+    "rendererFingerprint": "a9d884ddef821eec64195b5b39ae1a4faa775b1dc295174582c2334ce05c83c8",
+    "cases": 12,
+    "snapshots": 12,
+    "passed": 5,
+    "mismatches": 7,
+    "invalidOracles": 0,
+    "exceptions": 0,
+    "results": [
+      {
+        "id": "text-url-breakpoints",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=2 (expected 0)",
+          "State 1: unmatchedOracleTextLines=2 (expected 0)"
+        ]
+      },
+      {
+        "id": "text-short-url-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "text-list-register-prefix",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=2 (expected 0)",
+          "State 1: maxAbsoluteGlyphDyPt=37.919938 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "text-list-register-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "text-explicit-empty-title",
+        "status": "mismatch",
+        "failures": [
+          "State 1: maxAbsoluteGlyphDyPt=11.605169 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "text-absent-title-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "text-bm-vector",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=2 (expected 0)"
+        ]
+      },
+      {
+        "id": "text-boldsymbol-control",
+        "status": "mismatch",
+        "failures": [
+          "State 1: fontMatch=false",
+          "State 1: maxAbsoluteGlyphDxPt=0.47112 (maximum 0.02)"
+        ]
+      },
+      {
+        "id": "text-declared-operator-controls",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "text-small-display-control",
+        "status": "mismatch",
+        "failures": [
+          "State 1: maxAbsoluteGlyphDyPt=0.959934 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "text-math-percent",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=2 (expected 0)",
+          "State 1: unmatchedOracleTextLines=3 (expected 0)"
+        ]
+      },
+      {
+        "id": "text-percent-control",
+        "status": "passed",
+        "failures": []
+      }
+    ]
+  },
+  "additionalControlFindings": [
+    {
+      "id": "beamer-boldsymbol-font-profile",
+      "fixtureId": "text-boldsymbol-control",
+      "observation": "Generic boldsymbol fallback selects serif cmmib10 instead of active Beamer lmsans10-boldoblique, changing the advance and centered positions.",
+      "diagnosis": "artifacts/beamer-corpus-renderer/manual-review-round3/text-review/strict-control-diagnosis.json"
+    },
+    {
+      "id": "scoped-small-display-extent",
+      "fixtureId": "text-small-display-control",
+      "observation": "Initial baseline fallback uses ambient13.6 rather than the leading scoped display12; centering leaves +.959934pt on all body glyphs.",
+      "diagnosis": "artifacts/beamer-corpus-renderer/manual-review-round3/text-review/strict-control-diagnosis.json"
+    }
+  ]
+}

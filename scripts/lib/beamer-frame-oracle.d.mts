@@ -1,0 +1,104 @@
+import type {
+  BeamerDocumentModel,
+  BeamerFrameModel,
+} from "../../packages/core/src/beamer/types.js";
+
+export const BEAMER_FRAME_ORACLE_VERSION: number;
+export const SP_PER_TEX_POINT: number;
+
+export interface BeamerProbePageTrace {
+  readonly pageNumber: number;
+  readonly metadata: Readonly<Record<string, string>>;
+  readonly dimensions: Readonly<
+    Record<string, { readonly sp: number; readonly texPt: number }>
+  >;
+}
+
+export interface BeamerStructuredTextLine {
+  readonly text: string;
+  readonly bounds: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  } | null;
+  readonly baseline: { readonly x: number; readonly y: number } | null;
+  readonly font: {
+    readonly name: string | null;
+    readonly size: number | null;
+    readonly weight: string | null;
+    readonly style: string | null;
+  } | null;
+}
+
+export function beamerProbeInstrumentation(): string;
+export function beamerPageTraceLuaSource(): string;
+export function isCompleteBeamerOracleFrame(source: string, frame: BeamerFrameModel): boolean;
+export interface BeamerDeckCounterContext {
+  readonly totalFrames: number;
+  readonly navSource: string;
+  readonly tocSource?: string;
+  readonly frames: readonly { readonly beforeFrameNumber: number; readonly afterFrameNumber: number; readonly firstPage: number; readonly lastPage: number }[];
+}
+export function buildBeamerFrameProbeSource(
+  source: string,
+  document: BeamerDocumentModel,
+  frameIndex: number,
+  theoremCounterSeed?: readonly {
+    readonly counter: string;
+    readonly value: number;
+  }[],
+  deckContext?: BeamerDeckCounterContext | null
+): {
+  readonly frame: BeamerFrameModel;
+  readonly source: string;
+  readonly navSource: string;
+};
+export function buildBeamerNavigationSeed(
+  source: string,
+  document: BeamerDocumentModel,
+  deckContext?: BeamerDeckCounterContext | null
+): string;
+export function parseBeamerProbeLog(log: string): {
+  readonly pages: readonly BeamerProbePageTrace[];
+};
+export function parseBeamerPageTraceTsv(tsv: string): {
+  readonly pages: readonly {
+    readonly pageNumber: number;
+    readonly boxKind: string;
+    readonly width: { readonly sp: number; readonly texPt: number };
+    readonly height: { readonly sp: number; readonly texPt: number };
+    readonly depth: { readonly sp: number; readonly texPt: number };
+    readonly boxes: readonly unknown[];
+    readonly rules: readonly unknown[];
+    readonly glyphs: readonly unknown[];
+    readonly glues: readonly unknown[];
+    readonly kerns: readonly unknown[];
+  }[];
+};
+export function parsePdfInfo(output: string): {
+  readonly pageCount: number;
+  readonly widthPdfPt: number;
+  readonly heightPdfPt: number;
+  readonly description: string | null;
+  readonly rotation: number;
+};
+export function parseBeamerClassVersion(source: string): {
+  readonly date: string;
+  readonly version: string;
+  readonly description: string;
+} | null;
+export function summarizeMutoolStructuredText(value: unknown): {
+  readonly pages: readonly {
+    readonly pageNumber: number;
+    readonly textBounds: {
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+    } | null;
+    readonly lines: readonly BeamerStructuredTextLine[];
+  }[];
+};
+export function fileSha256(path: string): string;
+export function firstVersionLine(output: unknown): string;

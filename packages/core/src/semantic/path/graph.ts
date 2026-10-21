@@ -1,3 +1,5 @@
+import { requireDefined } from "../../utils/invariants.js";
+import { requireArrayValue } from "../../utils/collections.js";
 import type { GraphOperationItem, GraphSpecChain, GraphSpecSegment, Span } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import { parseOptionListRaw } from "../../options/parse.js";
@@ -19,12 +21,20 @@ import {
 } from "./graph-parse-utils.js";
 
 const CONNECTOR_OPERATORS = ["<->", "-!-", "->", "<-", "--"] as const;
-const DEFAULT_GRAPH_STEP_PT = parseLength("1cm", "cm")!;
-const DEFAULT_GRAPH_SEP_PT = parseLength("1em", "cm")!;
-const DEFAULT_GRAPH_RADIUS_PT = parseLength("1cm", "cm")!;
+const DEFAULT_GRAPH_STEP_PT = requireDefined(parseLength("1cm", "cm"), "Expected an internal graph value");
+const DEFAULT_GRAPH_SEP_PT = requireDefined(parseLength("1em", "cm"), "Expected an internal graph value");
+const DEFAULT_GRAPH_RADIUS_PT = requireDefined(parseLength("1cm", "cm"), "Expected an internal graph value");
 const BUILTIN_COLOR_CLASSES = ["all", "source", "target", "source'", "target'"] as const;
+const BUILTIN_COLOR_CLASS_SET: ReadonlySet<string> = new Set(BUILTIN_COLOR_CLASSES);
 const GRAPH_NODE_BUDGET = 10_000;
 const GRAPH_EDGE_BUDGET = 10_000;
+const AUTO_OPTION_LIST = parseOptionListRaw("[auto]", 0);
+const CONNECTOR_OPTION_LISTS = new Map<ConnectorOperator, OptionListAst>(
+  CONNECTOR_OPERATORS.filter((operator) => operator !== "--" && operator !== "-!-").map((operator) => [
+    operator,
+    parseOptionListRaw(`[${operator}]`, 0)
+  ])
+);
 
 type ConnectorOperator = (typeof CONNECTOR_OPERATORS)[number];
 type GraphMode = "multi" | "simple";
@@ -105,6 +115,11 @@ type GraphScopeState = {
   placementBaseChainShift: GraphVector2;
   placementBaseGroupShift: GraphVector2;
   placementResetsCounters: boolean;
+};
+
+type CartesianChainOffsetCacheEntry = {
+  offsets: GraphVector2[];
+  simulationScope: GraphScopeState;
 };
 
 type GraphNodeAccumulatorOp =
@@ -254,6 +269,10 @@ class GraphPlanner {
   private readonly operation: GraphOperationItem;
   private readonly nodeRecords = new Map<string, GraphNodeRecord>();
   private readonly nodeSets = new Map<string, Set<string>>();
+  private readonly cartesianChainOffsets = new WeakMap<
+    Map<number, OptionListAst[]>,
+    Map<string, CartesianChainOffsetCacheEntry>
+  >();
   private placementIndex = 0;
   private anonymousNodeCounter = 1;
 
@@ -302,11 +321,11 @@ class GraphPlanner {
       this.edges.push({
         from: edge.from,
         to: edge.to,
-        fromAnchor: edge.fromAnchor,
-        toAnchor: edge.toAnchor,
+        ...(edge.fromAnchor === undefined ? {} : { fromAnchor: edge.fromAnchor }),
+        ...(edge.toAnchor === undefined ? {} : { toAnchor: edge.toAnchor }),
         operator: edge.operator,
-        options: edge.options,
-        nodes: edge.nodes,
+        ...(edge.options === undefined ? {} : { options: edge.options }),
+        ...(edge.nodes === undefined ? {} : { nodes: edge.nodes }),
         span: edge.span
       });
     }
@@ -325,7 +344,7 @@ class GraphPlanner {
         separator: " "
       },
       mode: "multi",
-      asTextOverride: undefined,
+
       emptyNodes: false,
       mathNodes: false,
       putNodeTextIncomingOptions: [],
@@ -377,7 +396,7 @@ class GraphPlanner {
       // The numbering object is intentionally shared unless an option locally overrides it.
       numbering: scope.numbering,
       mode: scope.mode,
-      asTextOverride: scope.asTextOverride,
+      ...(scope.asTextOverride === undefined ? {} : { asTextOverride: scope.asTextOverride }),
       emptyNodes: scope.emptyNodes,
       mathNodes: scope.mathNodes,
       putNodeTextIncomingOptions: [...scope.putNodeTextIncomingOptions],
@@ -399,7 +418,9 @@ class GraphPlanner {
       wrapAfter: scope.wrapAfter,
       nodeCountHint: scope.nodeCountHint,
       circularPlacement: { ...scope.circularPlacement },
-      levelStyleOptionLists: cloneLevelStyleOptionLists(scope.levelStyleOptionLists),
+      // Level style maps are immutable after assignment. Share them across the
+      // many short-lived scope clones and replace the map when a style is added.
+      levelStyleOptionLists: scope.levelStyleOptionLists,
       chainSepDistance: scope.chainSepDistance,
       groupSepDistance: scope.groupSepDistance,
       placementBaseChainShift: { ...scope.placementBaseChainShift },
@@ -560,7 +581,7 @@ class GraphPlanner {
         return {
           kind: "step",
           operator: connector.operator,
-          edgeOptions: edgeOptionRead?.options,
+          ...(edgeOptionRead?.options === undefined ? {} : { edgeOptions: edgeOptionRead.options }),
           span: {
             from: from + connector.index,
             to: from + nextNode.next
@@ -587,8 +608,8 @@ class GraphPlanner {
           return { kind: "done" };
         }
 
-        const connector = chain.connectors[index];
-        const nextNodeSpec = chain.nodes[index + 1];
+        const connector = requireArrayValue(chain.connectors, index);
+        const nextNodeSpec = requireArrayValue(chain.nodes, index + 1);
         index += 1;
         const edgeOptions =
           connector.optionsRaw && connector.optionsSpan
@@ -601,7 +622,7 @@ class GraphPlanner {
         return {
           kind: "step",
           operator: connector.operator,
-          edgeOptions,
+          ...(edgeOptions === undefined ? {} : { edgeOptions }),
           span: {
             from: connector.span.from,
             to: nextNodeSpec.span.to
@@ -644,7 +665,7 @@ class GraphPlanner {
     let chainColors = cloneColorMap(firstTerm.colors);
     const edges: GraphPlannedEdgeInternal[] = [...firstTerm.edges];
 
-    while (true) {
+    for (;;) {
       const step = reader.readNext(chainScope, {
         logicalWidth: layout.logicalWidth + chainWidth,
         logicalDepth: layout.logicalDepth,
@@ -871,7 +892,7 @@ class GraphPlanner {
       return null;
     }
 
-    const macroRaw = match[1];
+    const macroRaw = requireArrayValue(match, 1);
     const normalizedMacro = macroRaw.toLowerCase();
     const macro: ParsedSubgraphSpec["macro"] | null =
       normalizedMacro === "i_n"
@@ -896,7 +917,7 @@ class GraphPlanner {
 
     return {
       macro,
-      options,
+      ...(options === undefined ? {} : { options: options }),
       span: {
         from,
         to: from + raw.length
@@ -1017,8 +1038,7 @@ class GraphPlanner {
     const names: string[] = [];
     const localScope = shorePrefix.length > 0 ? appendScopedNamePrefix(scope, shorePrefix) : scope;
     const wrap = wrapAfter != null && wrapAfter > 0 ? Math.max(1, Math.floor(wrapAfter)) : null;
-    for (let index = 0; index < labels.length; index += 1) {
-      const label = labels[index];
+    for (const [index, label] of labels.entries()) {
       const col = wrap ? index % wrap : index;
       const row = wrap ? Math.floor(index / wrap) : 0;
       const nodeLayout: GraphLayoutContext = {
@@ -1034,7 +1054,7 @@ class GraphPlanner {
         baseNameWasQuoted: nameToken.quoted,
         textCandidate: textToken.text,
         explicitReference: false,
-        options: undefined,
+
         span
       };
 
@@ -1117,7 +1137,7 @@ class GraphPlanner {
       baseNameWasQuoted: nameToken.quoted,
       textCandidate: textToken.text,
       explicitReference,
-      options: nodeOptions,
+      ...(nodeOptions === undefined ? {} : { options: nodeOptions }),
       span: {
         from,
         to: from + raw.length
@@ -1352,9 +1372,10 @@ class GraphPlanner {
       }
     }
 
+    const optionalStyleOptions1 = optionListFromEntries(retainedEntries, options);
     return {
       scope,
-      styleOptions: optionListFromEntries(retainedEntries, options),
+      ...(optionalStyleOptions1 === undefined ? {} : { styleOptions: optionalStyleOptions1 }),
       accumulatorOps,
       finalNodeText: this.resolveNodeText(scope, baseNodeText),
       colorOps,
@@ -1448,7 +1469,7 @@ class GraphPlanner {
     scope: GraphScopeState
   ): { styleOptions?: OptionListAst; operators: GraphOperatorInvocation[] } {
     if (!options) {
-      return { styleOptions: undefined, operators: [] };
+      return { operators: [] };
     }
 
     const operators: GraphOperatorInvocation[] = [];
@@ -1463,8 +1484,9 @@ class GraphPlanner {
       retainedEntries.push(entry);
     }
 
+    const optionalStyleOptions2 = optionListFromEntries(retainedEntries, options);
     return {
-      styleOptions: optionListFromEntries(retainedEntries, options),
+      ...(optionalStyleOptions2 === undefined ? {} : { styleOptions: optionalStyleOptions2 }),
       operators
     };
   }
@@ -1552,9 +1574,7 @@ class GraphPlanner {
         record.targetEdgeNodes.push(clonePlannedEdgeNode(operation.node));
         continue;
       }
-      if (operation.kind === "add-source-node") {
-        record.sourceEdgeNodes.push(clonePlannedEdgeNode(operation.node));
-      }
+      record.sourceEdgeNodes.push(clonePlannedEdgeNode(operation.node));
     }
   }
 
@@ -1586,7 +1606,7 @@ class GraphPlanner {
     this.nodes.push({
       name,
       text,
-      options,
+      ...(options === undefined ? {} : { options: options }),
       span,
       defaultPoint,
       placementHint: {
@@ -1637,25 +1657,49 @@ class GraphPlanner {
       return graphPoint(0, 0);
     }
 
-    let simulationScope = this.cloneScope(scope);
-    simulationScope.chainShift = { ...scope.placementBaseChainShift };
-    simulationScope.groupShift = { ...scope.placementBaseGroupShift };
-    simulationScope.placementBaseChainShift = { ...scope.placementBaseChainShift };
-    simulationScope.placementBaseGroupShift = { ...scope.placementBaseGroupShift };
+    let entriesByScope = this.cartesianChainOffsets.get(scope.levelStyleOptionLists);
+    if (!entriesByScope) {
+      entriesByScope = new Map();
+      this.cartesianChainOffsets.set(scope.levelStyleOptionLists, entriesByScope);
+    }
 
-    const offset: GraphVector2 = { x: 0, y: 0 };
-    for (let step = 1; step <= steps; step += 1) {
+    const cacheKey = [
+      scope.placementBaseChainShift.x,
+      scope.placementBaseChainShift.y,
+      scope.placementBaseGroupShift.x,
+      scope.placementBaseGroupShift.y
+    ].join(":");
+    let entry = entriesByScope.get(cacheKey);
+    if (!entry) {
+      const simulationScope = this.cloneScope(scope);
+      simulationScope.chainShift = { ...scope.placementBaseChainShift };
+      simulationScope.groupShift = { ...scope.placementBaseGroupShift };
+      simulationScope.placementBaseChainShift = { ...scope.placementBaseChainShift };
+      simulationScope.placementBaseGroupShift = { ...scope.placementBaseGroupShift };
+      entry = {
+        offsets: [{ x: 0, y: 0 }],
+        simulationScope
+      };
+      entriesByScope.set(cacheKey, entry);
+    }
+
+    while (entry.offsets.length <= steps) {
+      const step = entry.offsets.length;
       const levelOptionLists = scope.levelStyleOptionLists.get(step);
       if (levelOptionLists && levelOptionLists.length > 0) {
         for (const optionList of levelOptionLists) {
-          simulationScope = this.applyGroupOptionControls(simulationScope, optionList, false);
+          entry.simulationScope = this.applyGroupOptionControls(entry.simulationScope, optionList, false);
         }
       }
 
-      offset.x += simulationScope.chainShift.x;
-      offset.y += simulationScope.chainShift.y;
+      const previous = requireArrayValue(entry.offsets, step - 1);
+      entry.offsets.push({
+        x: previous.x + entry.simulationScope.chainShift.x,
+        y: previous.y + entry.simulationScope.chainShift.y
+      });
     }
 
+    const offset = requireArrayValue(entry.offsets, steps);
     return graphPoint(offset.x, offset.y);
   }
 
@@ -1728,14 +1772,17 @@ class GraphPlanner {
       ...targetRecord.targetEdgeNodes.map(clonePlannedEdgeNode)
     ];
 
+    const optionalFromAnchor3 = scope.sourceAnchor ?? undefined;
+    const optionalToAnchor4 = scope.targetAnchor ?? undefined;
+    const optionalNodes5 = edgeNodes.length > 0 ? edgeNodes : undefined;
     return {
       from: oriented.from,
       to: oriented.to,
-      fromAnchor: scope.sourceAnchor ?? undefined,
-      toAnchor: scope.targetAnchor ?? undefined,
+      ...(optionalFromAnchor3 === undefined ? {} : { fromAnchor: optionalFromAnchor3 }),
+      ...(optionalToAnchor4 === undefined ? {} : { toAnchor: optionalToAnchor4 }),
       operator: normalizedKind,
-      options: edgeOptions,
-      nodes: edgeNodes.length > 0 ? edgeNodes : undefined,
+      ...(edgeOptions === undefined ? {} : { options: edgeOptions }),
+      ...(optionalNodes5 === undefined ? {} : { nodes: optionalNodes5 }),
       span
     };
   }
@@ -1952,7 +1999,11 @@ function applyGraphScopeControlKv(
 
   const levelStyle = parseLevelStyleDefinition(entry);
   if (levelStyle) {
-    addLevelStyleOption(scope.levelStyleOptionLists, levelStyle.level, levelStyle.options);
+    scope.levelStyleOptionLists = addLevelStyleOption(
+      scope.levelStyleOptionLists,
+      levelStyle.level,
+      levelStyle.options
+    );
     return { consumed: true, scope };
   }
   if (applyPlacementControlFromKv(scope, key, entry.valueRaw, updatePlacementBase)) {
@@ -1999,7 +2050,7 @@ function applyGraphScopeControlFlag(
     return { consumed: true, scope: applyNumberNodes(scope) };
   }
   if (isEdgeKindFlag(key)) {
-    scope.defaultOperatorEdgeKind = key as ConnectorOperator;
+    scope.defaultOperatorEdgeKind = key;
     return { consumed: true, scope };
   }
   if (applyPlacementControlFromFlag(scope, key, updatePlacementBase)) {
@@ -2100,17 +2151,15 @@ function appendScopedNamePrefix(scope: GraphScopeState, rawName: string): GraphS
   };
 }
 
-function cloneLevelStyleOptionLists(levelStyleOptionLists: Map<number, OptionListAst[]>): Map<number, OptionListAst[]> {
-  const cloned = new Map<number, OptionListAst[]>();
-  for (const [level, optionLists] of levelStyleOptionLists.entries()) {
-    cloned.set(level, [...optionLists]);
-  }
-  return cloned;
-}
-
-function addLevelStyleOption(target: Map<number, OptionListAst[]>, level: number, options: OptionListAst): void {
+function addLevelStyleOption(
+  target: Map<number, OptionListAst[]>,
+  level: number,
+  options: OptionListAst
+): Map<number, OptionListAst[]> {
+  const next = new Map(target);
   const existing = target.get(level) ?? [];
-  target.set(level, [...existing, options]);
+  next.set(level, [...existing, options]);
+  return next;
 }
 
 function parseLevelStyleDefinition(entry: OptionEntry): { level: number; options: OptionListAst } | null {
@@ -2580,7 +2629,7 @@ function parseDirectionalEdgeShortcut(rawToken: string, span: Span): GraphNodeAc
     return [];
   }
 
-  const direction = trimmed[0];
+  const direction = trimmed.charAt(0);
   const payload = trimmed.slice(1).trim();
   if (payload.length === 0) {
     return [];
@@ -2621,14 +2670,14 @@ function makeGraphEdgeNode(textRaw: string, optionsRaw: string, span: Span, defa
   const mergedOptions =
     defaultAuto
       ? mergeOptionLists([
-          parseOptionListRaw("[auto]", span.from),
+          rebaseOptionList(AUTO_OPTION_LIST, span.from),
           ...(parsedOptions ? [parsedOptions] : [])
         ])
       : parsedOptions;
 
   return {
     text: normalizeGraphText(textRaw),
-    options: mergedOptions,
+    ...(mergedOptions === undefined ? {} : { options: mergedOptions }),
     span
   };
 }
@@ -2784,13 +2833,13 @@ function stripTrailingGraphComment(raw: string): string {
   let depthParen = 0;
   let inQuote = false;
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\" && index + 1 < raw.length) {
       index += 1;
       continue;
     }
-    if (char === '"' && raw[index - 1] !== "\\") {
-      if (inQuote && raw[index + 1] === '"') {
+    if (char === '"' && raw.charAt(index - 1) !== "\\") {
+      if (inQuote && raw.charAt(index + 1) === '"') {
         index += 1;
         continue;
       }
@@ -2891,7 +2940,7 @@ function stripMatchingQuotes(raw: string): string {
 
 function stripWrappingBraces(raw: string): string {
   let normalized = raw.trim();
-  while (true) {
+  for (;;) {
     const stripped = stripOuterBraces(normalized);
     if (!stripped) {
       return normalized;
@@ -2923,7 +2972,7 @@ function stripOuterBraces(raw: string): { inner: string; innerOffset: number } |
 
 function readTrailingOptionList(raw: string): { raw: string; start: number } | null {
   const trimmedEnd = trimRightIndex(raw);
-  if (trimmedEnd < 0 || raw[trimmedEnd] !== "]") {
+  if (trimmedEnd < 0 || raw.charAt(trimmedEnd) !== "]") {
     return null;
   }
 
@@ -2932,9 +2981,9 @@ function readTrailingOptionList(raw: string): { raw: string; start: number } | n
   let depthParen = 0;
   let inQuote = false;
   for (let index = trimmedEnd; index >= 0; index -= 1) {
-    const char = raw[index];
-    if (char === '"' && raw[index - 1] !== "\\") {
-      if (inQuote && raw[index - 1] === '"') {
+    const char = raw.charAt(index);
+    if (char === '"' && raw.charAt(index - 1) !== "\\") {
+      if (inQuote && raw.charAt(index - 1) === '"') {
         index -= 1;
         continue;
       }
@@ -2986,18 +3035,18 @@ function pairMatchingAndStar(left: string[], right: string[]): Array<{ from: str
   const pairs: Array<{ from: string; to: string }> = [];
   const min = Math.min(left.length, right.length);
   for (let index = 0; index < min; index += 1) {
-    pairs.push({ from: left[index], to: right[index] });
+    pairs.push({ from: requireArrayValue(left, index), to: requireArrayValue(right, index) });
   }
 
   if (left.length > right.length) {
-    const lastRight = right[right.length - 1];
+    const lastRight = requireArrayValue(right, right.length - 1);
     for (let index = min; index < left.length; index += 1) {
-      pairs.push({ from: left[index], to: lastRight });
+      pairs.push({ from: requireArrayValue(left, index), to: lastRight });
     }
   } else if (right.length > left.length) {
-    const lastLeft = left[left.length - 1];
+    const lastLeft = requireArrayValue(left, left.length - 1);
     for (let index = min; index < right.length; index += 1) {
-      pairs.push({ from: lastLeft, to: right[index] });
+      pairs.push({ from: lastLeft, to: requireArrayValue(right, index) });
     }
   }
 
@@ -3007,7 +3056,7 @@ function pairMatchingAndStar(left: string[], right: string[]): Array<{ from: str
 function buildPathPairs(nodes: string[], maxPairs = GRAPH_EDGE_BUDGET): Array<{ from: string; to: string }> {
   const pairs: Array<{ from: string; to: string }> = [];
   for (let index = 1; index < nodes.length && pairs.length < maxPairs; index += 1) {
-    pairs.push({ from: nodes[index - 1], to: nodes[index] });
+    pairs.push({ from: requireArrayValue(nodes, index - 1), to: requireArrayValue(nodes, index) });
   }
   return pairs;
 }
@@ -3018,7 +3067,7 @@ function buildCyclePairs(nodes: string[], maxPairs = GRAPH_EDGE_BUDGET): Array<{
   }
   const pairs = buildPathPairs(nodes, maxPairs);
   if (pairs.length < maxPairs) {
-    pairs.push({ from: nodes[nodes.length - 1], to: nodes[0] });
+    pairs.push({ from: requireArrayValue(nodes, nodes.length - 1), to: requireArrayValue(nodes, 0) });
   }
   return pairs;
 }
@@ -3030,7 +3079,7 @@ function buildCliquePairs(nodes: string[], maxPairs = GRAPH_EDGE_BUDGET): Array<
       if (pairs.length >= maxPairs) {
         return pairs;
       }
-      pairs.push({ from: nodes[left], to: nodes[right] });
+      pairs.push({ from: requireArrayValue(nodes, left), to: requireArrayValue(nodes, right) });
     }
   }
   return pairs;
@@ -3077,7 +3126,7 @@ function buildGridPairs(
       if (pairs.length >= maxPairs) {
         return pairs;
       }
-      pairs.push({ from: nodes[index], to: nodes[rightIndex] });
+      pairs.push({ from: requireArrayValue(nodes, index), to: requireArrayValue(nodes, rightIndex) });
     }
 
     const downIndex = index + wrap;
@@ -3085,23 +3134,53 @@ function buildGridPairs(
       if (pairs.length >= maxPairs) {
         return pairs;
       }
-      pairs.push({ from: nodes[index], to: nodes[downIndex] });
+      pairs.push({ from: requireArrayValue(nodes, index), to: requireArrayValue(nodes, downIndex) });
     }
   }
   return pairs;
 }
 
 function connectorToOptionList(operator: ConnectorOperator): OptionListAst | undefined {
-  if (operator === "--" || operator === "-!-") {
-    return undefined;
+  return CONNECTOR_OPTION_LISTS.get(operator);
+}
+
+function rebaseOptionList(options: OptionListAst, from: number): OptionListAst {
+  if (from === options.span.from) {
+    return options;
   }
-  return parseOptionListRaw(`[${operator}]`, 0);
+  const offset = from - options.span.from;
+  return {
+    ...options,
+    span: { from: options.span.from + offset, to: options.span.to + offset },
+    entries: options.entries.map((entry) => rebaseOptionEntry(entry, offset))
+  };
+}
+
+function rebaseOptionEntry(entry: OptionEntry, offset: number): OptionEntry {
+  const span = { from: entry.span.from + offset, to: entry.span.to + offset };
+  if (entry.kind === "unknown") {
+    return { ...entry, span };
+  }
+  const keySpan = entry.keySpan
+    ? { from: entry.keySpan.from + offset, to: entry.keySpan.to + offset }
+    : undefined;
+  if (entry.kind === "flag") {
+    return { ...entry, span, ...(keySpan === undefined ? {} : { keySpan }) };
+  }
+  const valueSpan = entry.valueSpan
+    ? { from: entry.valueSpan.from + offset, to: entry.valueSpan.to + offset }
+    : entry.valueSpan;
+  return {
+    ...entry,
+    span,
+    ...(keySpan === undefined ? {} : { keySpan }),
+    ...(valueSpan === undefined ? {} : { valueSpan })
+  };
 }
 
 function dedupeSimpleEdges(edges: GraphPlannedEdgeInternal[]): GraphPlannedEdgeInternal[] {
   const lastByPair = new Map<string, number>();
-  for (let index = 0; index < edges.length; index += 1) {
-    const edge = edges[index];
+  for (const [index, edge] of edges.entries()) {
     if (edge.passthroughSimple) {
       continue;
     }
@@ -3109,8 +3188,7 @@ function dedupeSimpleEdges(edges: GraphPlannedEdgeInternal[]): GraphPlannedEdgeI
   }
 
   const deduped: GraphPlannedEdgeInternal[] = [];
-  for (let index = 0; index < edges.length; index += 1) {
-    const edge = edges[index];
+  for (const [index, edge] of edges.entries()) {
     if (edge.passthroughSimple) {
       deduped.push(edge);
       continue;
@@ -3137,24 +3215,24 @@ function simplePairKey(left: string, right: string): string {
 function clonePlannedEdgeNode(node: GraphPlannedEdgeNode): GraphPlannedEdgeNode {
   return {
     text: node.text,
-    options: node.options,
+    ...(node.options === undefined ? {} : { options: node.options }),
     span: node.span
   };
 }
 
 function readQuotedText(raw: string, start: number): { text: string; next: number } | null {
-  if (raw[start] !== '"') {
+  if (raw.charAt(start) !== '"') {
     return null;
   }
 
   let collected = "";
   let depthBrace = 0;
   for (let index = start + 1; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
 
     if (char === "\\" && index + 1 < raw.length) {
       collected += char;
-      collected += raw[index + 1];
+      collected += raw.charAt(index + 1);
       index += 1;
       continue;
     }
@@ -3172,7 +3250,7 @@ function readQuotedText(raw: string, start: number): { text: string; next: numbe
     }
 
     if (char === '"' && depthBrace === 0) {
-      if (raw[index + 1] === '"') {
+      if (raw.charAt(index + 1) === '"') {
         collected += '"';
         index += 1;
         continue;
@@ -3275,7 +3353,7 @@ function parseColorOpFromEntry(entry: OptionEntry, declaredColorClasses: Set<str
       return undefined;
     }
 
-    const from = normalizeColorClassName(recolorMatch[1]);
+    const from = normalizeColorClassName(requireArrayValue(recolorMatch, 1));
     const to = normalizeColorClassName(entry.valueRaw);
     if (from.length === 0 || to.length === 0) {
       return undefined;
@@ -3292,7 +3370,7 @@ function parseColorOpFromEntry(entry: OptionEntry, declaredColorClasses: Set<str
     const key = normalizeGraphOptionKey(entry.key);
     const removeByNotMatch = key.match(/^not\s+(.+)$/);
     if (removeByNotMatch) {
-      const color = normalizeColorClassName(removeByNotMatch[1]);
+      const color = normalizeColorClassName(requireArrayValue(removeByNotMatch, 1));
       if (color.length > 0 && isKnownColorClass(color, declaredColorClasses)) {
         return { kind: "remove", color };
       }
@@ -3320,7 +3398,7 @@ function isKnownColorClass(color: string, declaredColorClasses: Set<string>): bo
   if (declaredColorClasses.has(color)) {
     return true;
   }
-  return BUILTIN_COLOR_CLASSES.includes(color as (typeof BUILTIN_COLOR_CLASSES)[number]);
+  return BUILTIN_COLOR_CLASS_SET.has(color);
 }
 
 function parseOperatorInvocationsFromEntry(
@@ -3391,7 +3469,7 @@ function parseOperatorFromRaw(raw: string, scope: GraphScopeState, context: Grap
   if (parsed.length === 0) {
     return null;
   }
-  return parsed[0];
+  return requireArrayValue(parsed, 0);
 }
 
 function parseOperatorsFromRaw(raw: string, scope: GraphScopeState, context: GraphOperatorContext): GraphOperatorInvocation[] {
@@ -3448,7 +3526,7 @@ function parseColorPair(raw: string, defaultFrom: string, defaultTo: string): { 
   let cursor = 0;
   while (cursor < trimmed.length) {
     cursor = skipWhitespace(trimmed, cursor);
-    if (cursor >= trimmed.length || trimmed[cursor] !== "{") {
+    if (cursor >= trimmed.length || trimmed.charAt(cursor) !== "{") {
       break;
     }
     const segment = readBalancedSegment(trimmed, cursor, "{", "}");
@@ -3460,8 +3538,8 @@ function parseColorPair(raw: string, defaultFrom: string, defaultTo: string): { 
   }
 
   if (braces.length >= 2) {
-    const from = normalizeColorClassName(braces[0]);
-    const to = normalizeColorClassName(braces[1]);
+    const from = normalizeColorClassName(requireArrayValue(braces, 0));
+    const to = normalizeColorClassName(requireArrayValue(braces, 1));
     return {
       from: from.length > 0 ? from : defaultFrom,
       to: to.length > 0 ? to : defaultTo
@@ -3472,8 +3550,8 @@ function parseColorPair(raw: string, defaultFrom: string, defaultTo: string): { 
     .map((part) => part.raw.trim())
     .filter((part) => part.length > 0);
   if (commaParts.length >= 2) {
-    const from = normalizeColorClassName(commaParts[0]);
-    const to = normalizeColorClassName(commaParts[1]);
+    const from = normalizeColorClassName(requireArrayValue(commaParts, 0));
+    const to = normalizeColorClassName(requireArrayValue(commaParts, 1));
     return {
       from: from.length > 0 ? from : defaultFrom,
       to: to.length > 0 ? to : defaultTo
@@ -3507,14 +3585,14 @@ function buildOperatorPairs(operator: GraphOperatorInvocation, colors: GraphColo
     const pairs: Array<{ from: string; to: string }> = [];
     const min = Math.min(fromNodes.length, toNodes.length);
     for (let index = 0; index < min; index += 1) {
-      pairs.push({ from: fromNodes[index], to: toNodes[index] });
+      pairs.push({ from: requireArrayValue(fromNodes, index), to: requireArrayValue(toNodes, index) });
     }
     return pairs;
   }
   return pairMatchingAndStar(fromNodes, toNodes);
 }
 
-function isEdgeKindFlag(key: string): boolean {
+function isEdgeKindFlag(key: string): key is ConnectorOperator {
   return key === "--" || key === "->" || key === "<-" || key === "<->" || key === "-!-";
 }
 
@@ -3525,7 +3603,7 @@ function isDefaultEdgeKindKey(key: string): boolean {
 function parseDefaultEdgeKind(raw: string): ConnectorOperator | null {
   const normalized = stripWrappingBraces(raw).trim();
   if (isEdgeKindFlag(normalized)) {
-    return normalized as ConnectorOperator;
+    return normalized;
   }
   return null;
 }
@@ -3620,7 +3698,7 @@ function parseVertexList(raw: string, diagnostics: string[]): string[] {
     .filter((segment) => segment.length > 0);
 
   if (parts.length === 3 && parts[1] === "...") {
-    const expanded = expandRange(parts[0], parts[2], diagnostics);
+    const expanded = expandRange(requireArrayValue(parts, 0), requireArrayValue(parts, 2), diagnostics);
     if (expanded.length > 0) {
       return expanded;
     }
@@ -3659,8 +3737,8 @@ function expandRange(leftRaw: string, rightRaw: string, diagnostics: string[]): 
   }
 
   if (left.length === 1 && right.length === 1) {
-    const leftCode = left.codePointAt(0)!;
-    const rightCode = right.codePointAt(0)!;
+    const leftCode = requireDefined(left.codePointAt(0), "Expected an internal graph value");
+    const rightCode = requireDefined(right.codePointAt(0), "Expected an internal graph value");
     const count = Math.abs(rightCode - leftCode) + 1;
     if (count > GRAPH_NODE_BUDGET) {
       pushUniqueDiagnostic(diagnostics, "graph-node-budget-exceeded");

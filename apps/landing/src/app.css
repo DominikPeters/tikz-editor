@@ -246,11 +246,6 @@ select {
   font-weight: 650;
 }
 
-.sourceToken--typeName {
-  color: #0f766e;
-  font-weight: 650;
-}
-
 .sourceToken--string {
   color: #9a3412;
 }
@@ -259,74 +254,8 @@ select {
   color: #15803d;
 }
 
-.sourceToken--comment {
-  color: #6b7280;
-  font-style: italic;
-}
-
 .sourceToken--punctuation {
   color: #78716c;
-}
-
-.sourceToken--meta {
-  color: #7c3aed;
-}
-
-.fakeToolbarRow {
-  display: flex;
-  justify-content: center;
-  padding: 8px 10px 6px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-header);
-}
-
-.fakeToolbarGroup {
-  display: inline-flex;
-  align-items: center;
-  overflow: hidden;
-  border: 1px solid var(--border-light);
-  border-radius: 3px;
-  background: var(--btn-disabled-bg);
-}
-
-.fakeToolbarButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-right: 1px solid var(--border-light);
-  background: var(--btn-disabled-bg);
-  color: var(--text-faint);
-  cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.fakeToolbarButton:last-child {
-  border-right: 0;
-}
-
-.fakeToolbarButton:hover {
-  background: color-mix(in srgb, var(--bg-header) 64%, var(--btn-disabled-bg));
-  color: var(--text);
-}
-
-.fakeToolbarButtonActive {
-  background: color-mix(in srgb, var(--text) 12%, transparent);
-  color: var(--text);
-}
-
-.fakeToolbarButtonPressed {
-  background: color-mix(in srgb, var(--text) 18%, transparent);
-  color: var(--text);
-}
-
-.fakeToolbarButtonIcon {
-  display: block;
-  width: 14px;
-  height: 14px;
 }
 
 .snapOverlay {
@@ -387,7 +316,7 @@ select {
 }
 
 .landingHeroCopy {
-  max-width: 680px;
+  max-width: 780px;
   margin-bottom: clamp(16px, 2vw, 24px);
   text-align: center;
   margin: 0 auto;
@@ -426,7 +355,7 @@ select {
 }
 
 .landingHeroText {
-  max-width: 700px;
+  max-width: 680px;
   margin: 16px auto 0;
   color: var(--landing-muted);
   font-size: clamp(1rem, 1.1vw, 1.2rem);
@@ -451,7 +380,6 @@ select {
 .landingPrimaryLink {
   display: inline-flex;
   align-items: center;
-  gap: 0.4em;
   height: 34px;
   padding: 0 14px;
   border: 1px solid color-mix(in srgb, var(--landing-blue) 42%, var(--landing-line-strong));
@@ -478,7 +406,6 @@ select {
 .landingDownloadLink {
   display: inline-flex;
   align-items: center;
-  gap: 0.42em;
   height: 34px;
   padding: 0 12px;
   border: 1px solid color-mix(in srgb, var(--landing-blue) 54%, var(--landing-line-strong));
@@ -502,16 +429,36 @@ select {
   text-decoration: none;
 }
 
-.landingDownloadIcons {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1em;
+.landingPortableDownloadLink,
+.landingPortableDownloadLink:visited {
+  border-color: color-mix(in srgb, var(--landing-blue) 22%, var(--landing-line));
+  background: transparent;
+  color: color-mix(in srgb, var(--landing-blue) 75%, var(--landing-muted));
+  font-weight: 400;
+}
+
+.landingPortableDownloadLink:hover {
+  border-color: color-mix(in srgb, var(--landing-blue) 54%, var(--landing-line-strong));
+  background: color-mix(in srgb, var(--landing-blue) 6%, transparent);
+  color: var(--landing-blue);
+}
+
+.landingPortableDownloadLink .landingDownloadSize {
+  color: color-mix(in srgb, var(--landing-blue) 40%, var(--landing-faint));
+}
+
+.landingPortableDownloadLink:hover .landingDownloadSize {
+  color: var(--landing-blue);
+}
+
+.landingCtaContent {
+  white-space: nowrap;
 }
 
 .landingCtaIcon {
-  flex: 0 0 auto;
-  position: relative;
-  top: 0;
+  display: inline-block;
+  margin-inline-end: 0.4em;
+  vertical-align: -0.125em;
 }
 
 .landingCtaLabel {
@@ -523,8 +470,7 @@ select {
   font-size: 0.78em;
   font-weight: 400;
   line-height: 1.15;
-  position: relative;
-  top: 0.14em;
+  margin-inline-start: 0.5em;
 }
 
 .landingDownloadLink:hover .landingDownloadSize {
@@ -1321,6 +1267,45 @@ select {
 }
 
 .landingHowItWorks a:hover {
+  color: var(--landing-teal);
+}
+
+.landingCodeSigningPolicy {
+  padding: clamp(22px, 3vw, 34px) 0;
+  border-top: 1px solid var(--landing-line);
+  background: var(--landing-bg);
+  scroll-margin-top: calc(var(--landing-header-height) + 18px);
+}
+
+.landingCodeSigningPolicyInner {
+  width: min(720px, calc(100vw - 32px));
+  margin: 0 auto;
+}
+
+.landingCodeSigningPolicy h2 {
+  margin: 0 0 10px;
+  color: var(--landing-ink);
+  font-size: 1.1rem;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.landingCodeSigningPolicy p {
+  margin: 0;
+  color: var(--landing-muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.landingCodeSigningPolicy p + p {
+  margin-top: 10px;
+}
+
+.landingCodeSigningPolicy a {
+  color: var(--landing-blue);
+}
+
+.landingCodeSigningPolicy a:hover {
   color: var(--landing-teal);
 }
 

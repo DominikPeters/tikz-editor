@@ -1,3 +1,11 @@
+import type { DeckActiveFrame } from "../../compute";
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import { deckPageDerived, DeckPageDerivedKey, deckObjectIndexKey, deckTextContextKey } from "../../deck-page-derived-cache";
+import { beginDocumentEdit } from "../../edit-session";
+import { executeDocumentEdit, nestedEditBaseSource } from "../../edit-execution";
+import { useStableCallback } from "../hooks/useStableCallback";
+import { createEditGeometrySession, type EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
+import { buildSelectionRects } from "../builds-panel/build-selection";
 import {
 Suspense,
 lazy,
@@ -8,62 +16,60 @@ useLayoutEffect,
 useMemo,
 useRef,
 useState,
-type ClipboardEvent as ReactClipboardEvent,
-type DragEvent as ReactDragEvent,
 type KeyboardEvent as ReactKeyboardEvent,
 type MouseEvent as ReactMouseEvent,
-type PointerEvent as ReactPointerEvent,
-type SyntheticEvent as ReactSyntheticEvent
+type PointerEvent as ReactPointerEvent
 } from "react";
-import { clientPoint as makeClientPoint,svgPoint as makeSvgPoint,worldPoint as makeWorldPoint,pt,px,svgBounds,viewportPoint } from "tikz-editor/coords/index";
+import { worldPoint as makeWorldPoint,pt,px,svgBounds,viewportPoint } from "@tikz-editor/core/coords/index";
 import {
 ADORNMENT_EDIT_NOOP_REASON,
 PATH_ATTACHED_NODE_EDIT_NOOP_REASON,
-PROPERTY_WRITE_CLEANUP_NOOP_REASON,
-applyEditAction,
 preflightPositionNodeRelativeToAction,
 type EditAction,
 type EditActionResult
-} from "tikz-editor/edit/actions";
-import { PT_PER_CM,formatNumber } from "tikz-editor/edit/format";
+} from "@tikz-editor/core/edit/actions";
+import { PT_PER_CM,formatNumber } from "@tikz-editor/core/edit/format";
 import {
 makeForeachTemplateTargetId,
 resolvePropertyTargetFromParseResult
-} from "tikz-editor/edit/property-target";
-import type { SnapLine } from "tikz-editor/edit/snapping";
-import { renderTikzToSvg } from "tikz-editor/render/index";
+} from "@tikz-editor/core/edit/property-target";
+import type { SnapLine } from "@tikz-editor/core/edit/snapping";
+import {
+  beamerObjectAtOffset,
+  beamerObjectDuplicationPatch,
+  buildBeamerCaretStopDomain,
+  buildBeamerObjectIndex,
+  resolveBeamerEditScopeAt,
+  type BeamerCaretDomain,
+  type BeamerObjectNode
+} from "@tikz-editor/core/beamer/index";
+import { renderTikzToSvg } from "@tikz-editor/core/render/index";
 import type {
 EditHandlePositioningContext,
 NodeAnchorTarget,
 SceneElement
-} from "tikz-editor/semantic/types";
-import type { SvgRenderModel } from "tikz-editor/svg";
-import type { SvgDiffHints, SvgViewBox } from "tikz-editor/svg/index";
-import {
-getKnuthPlassCaretFromPoint,
-getKnuthPlassLineRangeFromPoint
-} from "tikz-editor/text/knuth-plass";
-import { createMathJaxNodeTextEngine,getActiveMathJaxOutputJax } from "tikz-editor/text/mathjax-engine";
-import type { NodeTextEngine,NodeTextLayoutKind } from "tikz-editor/text/types";
+} from "@tikz-editor/core/semantic/types";
+import type { SvgRenderModel } from "@tikz-editor/core/svg";
+import type { SvgDiffHints, SvgViewBox } from "@tikz-editor/core/svg/index";
+import { createTexNodeTextEngine } from "@tikz-editor/core/text/tex-node-text-engine";
+import { createTextLayoutContext, getTextLayoutReportProvider } from "@tikz-editor/core/text/layout-context";
+import type { NodeTextEngine,NodeTextLayoutKind } from "@tikz-editor/core/text/types";
 import { useShallow } from "zustand/react/shallow";
 import type { AppMenuCommandId } from "../../app-menu";
 import { buildCanvasContextMenuDefinition } from "../../context-menu";
-import { getSharedEditAnalysisSession,getSharedEditAnalysisView } from "../../edit-analysis-manager";
+import { buildEditParseOptions } from "../../edit-parse-options";
 import { getActiveEditorPlatform } from "../../platform/current";
 import { GRID_SIZE_MINOR_TARGET_PX } from "../../settings/types";
 import { useSettingsStore } from "../../settings/useSettingsStore";
-import { buildSnapshotEditSourceFingerprint } from "../../source-identity";
 import { useEditorStore } from "../../store/store";
 import type { CanvasDragKind,CanvasTransform } from "../../store/types";
-import { resolveBucketFillEdit } from "./bucket-fill";
+import { deckStepRootKey, rootKey } from "../../root-key";
+import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
-import {
-INITIAL_CANVAS_TEXT_EDIT_STATE,
-isCanvasTextInputIntentType,
-reduceCanvasTextEdit,
-type CanvasTextEditAction
-} from "./canvas-text-edit-machine";
+import { DeckResizeOverlay } from "./DeckResizeOverlay";
 import { CanvasPanelView } from "./CanvasPanelView";
+import { useDeckOverlayContextMenu } from "./useDeckOverlayContextMenu";
 import { useCanvasContextMenuController,useCanvasContextMenuState } from "./useCanvasContextMenus";
 import {
 appendFreehandToolPoint,
@@ -71,12 +77,12 @@ generateFreehandToolSource
 } from "./freehand-tool";
 import {
 clamp,
-clientToSvgPoint,
-viewportToSvgPoint,
 viewportToWorldPoint,
 worldToSvgPoint
 } from "./geometry";
-import type { HitRegion } from "./hit-regions";
+import type { Span } from "@tikz-editor/core/ast/types";
+import { buildHitRegions, type HitRegion } from "./hit-regions";
+import { freehandDraftInPictureCoordinates, pathDraftInPictureCoordinates, templateInPictureCoordinates, worldToPictureCoordinates } from "./picture-coordinates";
 import {
 pickClosestSourceId
 } from "./interaction-helpers";
@@ -87,35 +93,27 @@ canvasDragKindFromDragState,
 collectNewSourceIds,
 collectSourceBounds,
 dragCursorForState,
-makeMergeKey,
-mapPointToRectRegionLocal,
 preferredNodeBoundsForSource,
 previewArrowPoints,
-rectHitRegionsForTargetId,
-resolveRectHitRegionContentBox
+rectHitRegionsForTargetId
 } from "./panel-helpers";
 import {
 appendPathToolSegmentFromGesture,
 generateAppendSegmentSource,
 generatePathToolSource,
+pathToolCurrentPoint,
 pathToolHasDrawableSegments,
+undoLastPathToolSegment,
 type PathToolGestureSegment
 } from "./path-tool";
 import { collectDensePathSourceIds, resolvePathSelectionHint } from "./path-selection-hint";
 import type { resolveResizeFrameForSource } from "./resize-frames";
 import { isSvgPointWithinScopeBounds } from "./scope-overlay";
 import {
-clampSnapDebugOverlayRect,
 summarizeSnapContextForDebug,
 summarizeSnapLinesForDebug,
-toDebugPoint,
-type SnapDebugContextSummary,
-type SnapDebugLineSummary,
-type SnapDebugOverlayRect,
-type SnapDebugPoint
+toDebugPoint
 } from "./snap-debug";
-import { createSourceRenderOffsetMap } from "./text-offset-map";
-import { applyTextMeasureFont,collectLogicalLineRanges,createVisualTextLayout,resolveVisualLineLeft } from "./text-visual-layout";
 import type {
 ApplyActionFeedback,
 CanvasSnapshot,
@@ -133,8 +131,11 @@ PathToolDraft,
 PendingAddedSelection,
 PendingBezier,
 PendingTouchViewport,
+ScopeParagraphRef,
 SnapDebugLogInput,
-SourceBoundsMap
+SourceBoundsMap,
+StateSetter,
+TextEditingSession
 } from "./types";
 import { useCanvasDerivedState } from "./useCanvasDerivedState";
 import { useCanvasDragController } from "./useCanvasDragController";
@@ -146,59 +147,29 @@ import { useCanvasKeyboardClipboard } from "./useCanvasKeyboardClipboard";
 import { useCanvasSelectionDerivedState } from "./useCanvasSelectionDerivedState";
 import { useCanvasSelectionInteractions } from "./useCanvasSelectionInteractions";
 import { useCanvasSvgPatchInvalidation } from "./useCanvasSvgPatchInvalidation";
-import { useCanvasTextEditingEffects } from "./useCanvasTextEditingEffects";
+import { useCanvasTextEditSession } from "./useCanvasTextEditSession";
 import { useCanvasToolInteractions } from "./useCanvasToolInteractions";
 import { useCanvasTouchLongPress } from "./useCanvasTouchLongPress";
 import { useCanvasViewportEffects } from "./useCanvasViewportEffects";
 import { useCanvasViewportPersistence } from "./useCanvasViewportPersistence";
+import { expandSvgViewBox } from "./viewport-view-box";
 import { useBucketFillPreview,type BucketPreviewSession } from "./useBucketFillPreview";
 import type { ClientPoint,SvgBounds,ViewportPoint,WorldPoint } from "../coords/types";
+import { getDockLayoutHandle } from "../DockLayout";
 import { useEditorCommandRuntime,type CommandOrigin } from "../editor-command-runtime";
+import { isMacLikePlatform } from "../key-labels";
 import {
 formatEquationText,
 type EquationNodeTarget
 } from "../equation-utils";
-
-type TextEditCaretOverlay = {
-  left: number;
-  top: number;
-  height: number;
-};
 
 const EquationModal = lazy(async () => {
   const mod = await import("../EquationModal");
   return { default: mod.EquationModal };
 });
 
-type SnapDebugOverlayState = {
-  atIso: string;
-  phase: string;
-  note: string | null;
-  snapshotMatchesSource: boolean;
-  dragKind: DragState["kind"] | null;
-  rawPoint: SnapDebugPoint | null;
-  rawDelta: SnapDebugPoint | null;
-  snappedPoint: SnapDebugPoint | null;
-  snappedDelta: SnapDebugPoint | null;
-  offset: SnapDebugPoint | null;
-  context: SnapDebugContextSummary | null;
-  lineCount: number;
-  lineSummary: SnapDebugLineSummary[];
-};
+const EMPTY_GUIDES: GuidesState = { vertical: [], horizontal: [] };
 
-type SnapDebugOverlayDragState =
-  | {
-      kind: "move";
-      startClient: ClientPoint;
-      startLeft: number;
-      startTop: number;
-    }
-  | {
-      kind: "resize";
-      startClient: ClientPoint;
-      startWidth: number;
-      startHeight: number;
-    };
 
 const RULER_SIZE = 24;
 const MIN_SCALE = 0.05;
@@ -328,317 +299,6 @@ function intervalsOverlap(a0: number, a1: number, b0: number, b1: number): boole
   return leftMin < rightMax && rightMin < leftMax;
 }
 
-const DOCUMENT_BOUNDS_OFF_MIN_PADDING_WORLD = 200;
-const TEXT_CARET_OVERLAY_EPSILON_PX = 0.25;
-const TEXTAREA_CARET_MIRROR_STYLE_PROPERTIES = [
-  "box-sizing",
-  "direction",
-  "width",
-  "height",
-  "overflow-x",
-  "overflow-y",
-  "border-top-width",
-  "border-right-width",
-  "border-bottom-width",
-  "border-left-width",
-  "border-top-style",
-  "border-right-style",
-  "border-bottom-style",
-  "border-left-style",
-  "padding-top",
-  "padding-right",
-  "padding-bottom",
-  "padding-left",
-  "font",
-  "font-family",
-  "font-feature-settings",
-  "font-kerning",
-  "font-optical-sizing",
-  "font-size",
-  "font-stretch",
-  "font-style",
-  "font-variant",
-  "font-variant-ligatures",
-  "font-weight",
-  "letter-spacing",
-  "line-height",
-  "tab-size",
-  "text-align",
-  "text-indent",
-  "text-rendering",
-  "text-transform",
-  "word-spacing"
-] as const;
-
-function resolveTextareaLineHeightPx(textarea: HTMLTextAreaElement): number {
-  const computed = textarea.ownerDocument.defaultView?.getComputedStyle(textarea);
-  if (!computed) {
-    return 16;
-  }
-  const lineHeight = Number.parseFloat(computed.lineHeight);
-  if (Number.isFinite(lineHeight) && lineHeight > 0) {
-    return lineHeight;
-  }
-  const fontSize = Number.parseFloat(computed.fontSize);
-  if (Number.isFinite(fontSize) && fontSize > 0) {
-    return fontSize * 1.2;
-  }
-  return 16;
-}
-
-function resolveTextareaCaretClientRect(textarea: HTMLTextAreaElement, offset: number): DOMRect | null {
-  const documentRef = textarea.ownerDocument;
-  const windowRef = documentRef.defaultView;
-  if (!windowRef) {
-    return null;
-  }
-  const computed = windowRef.getComputedStyle(textarea);
-  const textareaRect = textarea.getBoundingClientRect();
-  const mirror = documentRef.createElement("div");
-  const marker = documentRef.createElement("span");
-  const boundedOffset = clamp(offset, 0, textarea.value.length);
-  const beforeCaret = textarea.value.slice(0, boundedOffset);
-  const afterCaret = textarea.value.slice(boundedOffset);
-
-  mirror.style.position = "fixed";
-  mirror.style.visibility = "hidden";
-  mirror.style.pointerEvents = "none";
-  mirror.style.whiteSpace = "pre-wrap";
-  mirror.style.wordWrap = "break-word";
-  mirror.style.wordBreak = "break-word";
-  mirror.style.overflowWrap = "break-word";
-  mirror.style.overflow = "hidden";
-  mirror.style.left = `${textareaRect.left}px`;
-  mirror.style.top = `${textareaRect.top}px`;
-  for (const property of TEXTAREA_CARET_MIRROR_STYLE_PROPERTIES) {
-    mirror.style.setProperty(property, computed.getPropertyValue(property));
-  }
-
-  marker.style.display = "inline-block";
-  marker.style.width = "0";
-  marker.style.height = `${resolveTextareaLineHeightPx(textarea)}px`;
-  marker.style.padding = "0";
-  marker.style.border = "0";
-  marker.style.margin = "0";
-  marker.style.verticalAlign = "text-bottom";
-
-  try {
-    mirror.append(beforeCaret, marker, afterCaret);
-    documentRef.body.append(mirror);
-    const markerRect = marker.getBoundingClientRect();
-    if (!Number.isFinite(markerRect.left) || !Number.isFinite(markerRect.top)) {
-      return null;
-    }
-    const height = Math.max(1, markerRect.height || resolveTextareaLineHeightPx(textarea));
-    return new windowRef.DOMRect(
-      markerRect.left - textarea.scrollLeft,
-      markerRect.top - textarea.scrollTop,
-      1,
-      height
-    );
-  } finally {
-    mirror.remove();
-  }
-}
-
-type TextSelectionDragMode = "char" | "word" | "line";
-
-type TextLineRange = {
-  start: number;
-  end: number;
-};
-
-function resolveTextSelectionModeFromClickCount(clickCount: number): TextSelectionDragMode {
-  if (clickCount >= 3) {
-    return "line";
-  }
-  if (clickCount === 2) {
-    return "word";
-  }
-  return "char";
-}
-
-function resolveWordSelectionRange(
-  text: string,
-  offset: number
-): { start: number; end: number } {
-  const boundedOffset = clamp(offset, 0, text.length);
-  if (text.length === 0) {
-    return { start: boundedOffset, end: boundedOffset };
-  }
-
-  let pivot = boundedOffset;
-  if (pivot >= text.length) {
-    pivot = text.length - 1;
-  } else if (pivot > 0) {
-    const currentChar = text[pivot] ?? "";
-    const previousChar = text[pivot - 1] ?? "";
-    if (/\s/.test(currentChar) && !/\s/.test(previousChar)) {
-      pivot -= 1;
-    }
-  }
-
-  const pivotChar = text[pivot] ?? "";
-  const isWhitespaceRun = /\s/.test(pivotChar);
-  let start = pivot;
-  let end = pivot + 1;
-  while (start > 0) {
-    const previousChar = text[start - 1] ?? "";
-    if ((/\s/.test(previousChar)) !== isWhitespaceRun) {
-      break;
-    }
-    start -= 1;
-  }
-  while (end < text.length) {
-    const nextChar = text[end] ?? "";
-    if ((/\s/.test(nextChar)) !== isWhitespaceRun) {
-      break;
-    }
-    end += 1;
-  }
-  return { start, end };
-}
-
-function resolveLogicalLineRangeForOffset(text: string, offset: number): TextLineRange {
-  const boundedOffset = clamp(offset, 0, text.length);
-  const ranges = collectLogicalLineRanges(text);
-  const pivot = text.length === 0 ? 0 : Math.min(Math.max(0, boundedOffset), text.length - 1);
-  for (const range of ranges) {
-    if (pivot >= range.start && pivot < range.end) {
-      return range;
-    }
-  }
-  return ranges[ranges.length - 1] ?? { start: 0, end: text.length };
-}
-
-function resolveTextSelectionRangeForMode(
-  text: string,
-  mode: TextSelectionDragMode,
-  offset: number,
-  lineRange: TextLineRange | null = null
-): TextLineRange {
-  const boundedOffset = clamp(offset, 0, text.length);
-  if (mode === "char") {
-    return { start: boundedOffset, end: boundedOffset };
-  }
-  if (mode === "word") {
-    return resolveWordSelectionRange(text, boundedOffset);
-  }
-  return lineRange ?? resolveLogicalLineRangeForOffset(text, boundedOffset);
-}
-
-function resolveTextSelectionRangeForDrag(
-  text: string,
-  mode: TextSelectionDragMode,
-  anchorOffset: number,
-  focusOffset: number,
-  anchorLineRange: TextLineRange | null = null,
-  focusLineRange: TextLineRange | null = null
-): TextLineRange {
-  const anchorRange = resolveTextSelectionRangeForMode(text, mode, anchorOffset, anchorLineRange);
-  const focusRange = resolveTextSelectionRangeForMode(text, mode, focusOffset, focusLineRange);
-  return {
-    start: Math.min(anchorRange.start, focusRange.start),
-    end: Math.max(anchorRange.end, focusRange.end)
-  };
-}
-
-let fallbackTextMeasureContext: CanvasRenderingContext2D | null | undefined;
-
-function getFallbackTextMeasureContext(): CanvasRenderingContext2D | null {
-  if (fallbackTextMeasureContext !== undefined) {
-    return fallbackTextMeasureContext;
-  }
-  if (typeof document === "undefined") {
-    fallbackTextMeasureContext = null;
-    return fallbackTextMeasureContext;
-  }
-  const canvas = document.createElement("canvas");
-  fallbackTextMeasureContext = canvas.getContext("2d");
-  return fallbackTextMeasureContext;
-}
-
-function applyFallbackMeasureFont(ctx: CanvasRenderingContext2D | null, target: EditableTextTarget): void {
-  applyTextMeasureFont(ctx, target.style);
-}
-
-function estimateTextOffsetFromClient(
-  target: EditableTextTarget,
-  clientPoint: ClientPoint,
-  interactionSvgElement: SVGSVGElement | null,
-  viewportRef: { current: HTMLDivElement | null },
-  svgResult: { viewBox: SvgViewBox } | null,
-  canvasTransform: CanvasTransform
-): number {
-  const contentBox = resolveRectHitRegionContentBox(target.region);
-  const svgPoint = clientToSvgPoint(clientPoint, interactionSvgElement) ?? (() => {
-    const viewportPoint = viewportPointFromClient(clientPoint, viewportRef.current);
-    return svgResult
-      ? viewportToSvgPoint(viewportPoint, canvasTransform, svgResult.viewBox)
-      : makeSvgPoint(pt(clientPoint.x), pt(clientPoint.y));
-  })();
-  const localPoint = mapPointToRectRegionLocal(svgPoint, target.region);
-  const ctx = getFallbackTextMeasureContext();
-  applyFallbackMeasureFont(ctx, target);
-  const layout = createVisualTextLayout(
-    target.text,
-    target.renderSourceText ?? target.text,
-    (text) => {
-      if (!ctx) {
-        return Number.NaN;
-      }
-      return ctx.measureText(text).width;
-    },
-    { syntax: target.usesMathJax ? "mathjax" : "plain" }
-  );
-  const ranges = layout.sourceLineRanges;
-
-  const yRatio =
-    contentBox.height <= 1e-6
-      ? 0
-      : clamp((localPoint.y - contentBox.y) / contentBox.height, 0, 0.999999);
-  const lineIndex = Math.min(
-    ranges.length - 1,
-    Math.max(0, Math.floor(yRatio * ranges.length))
-  );
-  const lineWidth = layout.getLineWidth(lineIndex);
-  const lineLeft = resolveVisualLineLeft(contentBox.width, lineWidth, target.style.textAlign);
-  const localLineX = localPoint.x - contentBox.x - lineLeft;
-  return layout.resolveSourceOffsetFromLineX(lineIndex, localLineX);
-}
-
-function estimateTextLineRangeFromClient(
-  target: EditableTextTarget,
-  clientPoint: ClientPoint,
-  interactionSvgElement: SVGSVGElement | null,
-  viewportRef: { current: HTMLDivElement | null },
-  svgResult: { viewBox: SvgViewBox } | null,
-  canvasTransform: CanvasTransform
-): TextLineRange {
-  const ranges = collectLogicalLineRanges(target.text);
-  if (ranges.length === 0) {
-    return { start: 0, end: 0 };
-  }
-  if (ranges.length === 1) {
-    return ranges[0];
-  }
-
-  const contentBox = resolveRectHitRegionContentBox(target.region);
-  const svgPoint = clientToSvgPoint(clientPoint, interactionSvgElement) ?? (() => {
-    const viewportPoint = viewportPointFromClient(clientPoint, viewportRef.current);
-    return svgResult
-      ? viewportToSvgPoint(viewportPoint, canvasTransform, svgResult.viewBox)
-      : makeSvgPoint(pt(clientPoint.x), pt(clientPoint.y));
-  })();
-  const localPoint = mapPointToRectRegionLocal(svgPoint, target.region);
-  const yRatio =
-    contentBox.height <= 1e-6
-      ? 0
-      : clamp((localPoint.y - contentBox.y) / contentBox.height, 0, 0.999999);
-  const index = Math.min(ranges.length - 1, Math.max(0, Math.floor(yRatio * ranges.length)));
-  return ranges[index] ?? ranges[ranges.length - 1];
-}
-
 function viewportPointFromClient(clientPoint: ClientPoint, viewport: HTMLDivElement | null): ViewportPoint {
   const rect = viewport?.getBoundingClientRect();
   return viewportPoint(
@@ -658,22 +318,6 @@ function resolveFallbackTextLayoutKind(text: string, hasFixedWidth: boolean | un
     return "wrapped";
   }
   return "single-line";
-}
-
-function expandSvgViewBox(
-  viewBox: SvgViewBox,
-  viewportSize: { width: number; height: number },
-  scale: number
-): SvgViewBox {
-  const safeScale = Math.max(scale, 1e-3);
-  const viewportWorldExtent = Math.max(viewportSize.width, viewportSize.height) / safeScale;
-  const padding = Math.max(DOCUMENT_BOUNDS_OFF_MIN_PADDING_WORLD, viewportWorldExtent * 2);
-  return {
-    x: viewBox.x - padding,
-    y: viewBox.y - padding,
-    width: viewBox.width + padding * 2,
-    height: viewBox.height + padding * 2
-  };
 }
 
 function mergeBoundsList(boundsList: readonly SvgBounds[]): SvgBounds | null {
@@ -749,6 +393,21 @@ function computeAutoScaleForImportedTikz(
   return formatScopeScale(clampedScale);
 }
 
+type DeckParagraph = DeckActiveFrame["layout"]["paragraphs"][number];
+type DeckScopeEntry = {
+  scope: DeckActiveFrame["layout"]["editScopes"][number];
+  scopeParagraphs: ScopeParagraphRef[];
+  maskRanges: Span[];
+  anchorBounds: SvgBounds | null;
+};
+type DeckEditingTopology = {
+  scopesById: Map<string, DeckScopeEntry>;
+  paragraphById: Map<string, DeckParagraph>;
+  regions: HitRegion[];
+  atomSpanByRegionKey: Map<string, Span>;
+};
+const deckEditingKey = new DeckPageDerivedKey<DeckEditingTopology>();
+
 export const CanvasPanel = memo(function CanvasPanel({
   repeatPreviewModel = null
 }: {
@@ -759,7 +418,8 @@ export const CanvasPanel = memo(function CanvasPanel({
   const {
     assistantLockReason,
     source,
-    activeFigureId,
+    activeRootId,
+    documentKind,
     activeDocumentId,
     tabOrder,
     sourceRevision,
@@ -770,6 +430,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     hoveredElementId,
     activeCanvasDragKind,
     activeSourceScrubSourceId,
+    deckObjectSelection,
+    deckPlaceholderSelection,
     lastEditChangedSourceIds,
     lastEditChangeToken,
     lastEditWarningMessage,
@@ -799,7 +461,8 @@ export const CanvasPanel = memo(function CanvasPanel({
   } = useEditorStore(useShallow((s) => ({
     assistantLockReason: s.documents[s.activeDocumentId]?.assistantLockReason ?? null,
     source: s.source,
-    activeFigureId: s.activeFigureId,
+    activeRootId: s.activeRootId,
+    documentKind: s.documentKind,
     activeDocumentId: s.activeDocumentId,
     tabOrder: s.tabOrder,
     sourceRevision: s.sourceRevision,
@@ -810,6 +473,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     hoveredElementId: s.hoveredElementId,
     activeCanvasDragKind: s.activeCanvasDragKind,
     activeSourceScrubSourceId: s.activeSourceScrubSourceId,
+    deckObjectSelection: s.deckObjectSelection,
+    deckPlaceholderSelection: s.deckPlaceholderSelection,
     lastEditChangedSourceIds: s.lastEditChangedSourceIds,
     lastEditChangeToken: s.lastEditChangeToken,
     lastEditWarningMessage: s.documents[s.activeDocumentId]?.lastEditWarningMessage ?? null,
@@ -837,30 +502,108 @@ export const CanvasPanel = memo(function CanvasPanel({
     showDevPanel: s.showDevPanel,
     dispatch: s.dispatch
   })));
-  const { gridSize, handleSizePx, zoomSpeed, snapHapticsEnabled, mathJaxFont } = useSettingsStore(useShallow((s) => ({
+  const { gridSize, handleSizePx, zoomSpeed, snapHapticsEnabled, textEditPlacement } = useSettingsStore(useShallow((s) => ({
     gridSize: s.settings.canvas.gridSize,
     handleSizePx: s.settings.canvas.handleSizePx,
     zoomSpeed: s.settings.canvas.zoomSpeed,
     snapHapticsEnabled: s.settings.canvas.snapHapticsEnabled,
-    mathJaxFont: s.settings.rendering.mathJaxFont
+    textEditPlacement: s.settings.canvas.textEditPlacement
   })));
   const gridMinorTargetPx = GRID_SIZE_MINOR_TARGET_PX[gridSize];
 
-  const baseSvgResult = snapshot.svg;
-  const baseSvgModel = snapshot.svgModel;
+  // The frame paints the slide; its overlay scene supplies editing geometry.
+  const deckActiveFrame = snapshot.deck?.activeFrame ?? null;
+  const activeDeckStep = useEditorStore(s => s.deckStepByRootKey[deckStepRootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
+  const drawingLayerRootId = useEditorStore(s => s.documents[s.activeDocumentId]?.drawingLayerRootId ?? null);
+  const deckFrameFresh = !!deckActiveFrame && snapshot.source === source && deckActiveFrame.frameId === activeRootId &&
+    deckActiveFrame.step === Math.min(activeDeckStep, Math.max(1, deckActiveFrame.stepCount));
+  const deckBuildSelection = useEditorStore((s) => s.deckBuildSelection);
+  const deckBuildSelectionRects = useMemo(() => {
+    if (!deckActiveFrame || !deckBuildSelection || snapshot.source !== source ||
+      deckBuildSelection.documentId !== activeDocumentId ||
+      deckBuildSelection.frameId !== deckActiveFrame.frameId ||
+      deckBuildSelection.step !== deckActiveFrame.step ||
+      deckBuildSelection.sourceRevision !== sourceRevision) return [];
+    return buildSelectionRects(deckActiveFrame.layout, source, deckBuildSelection.contentSpans);
+  }, [activeDocumentId, deckActiveFrame, deckBuildSelection, snapshot.source, source, sourceRevision]);
+  const deckTextLayoutContext = useMemo(() => {
+    if (!deckActiveFrame) {
+      return null;
+    }
+    return deckPageDerived(deckActiveFrame, snapshot.source, deckTextContextKey, () => {
+      const paragraphs = deckActiveFrame.layout.paragraphs;
+      const reports = paragraphs.map((paragraph) => paragraph.report);
+      const layouts = paragraphs.map((paragraph) => ({
+        paragraphId: paragraph.paragraphId,
+        layout: paragraph.vlistLayout
+      }));
+      const layoutsByParagraph = new Map(layouts.map((entry) => [entry.paragraphId, entry.layout]));
+      return createTextLayoutContext({
+        getParagraphReports: () => reports,
+        getVListLayouts: () => layouts,
+        getVListLayout: (paragraphId) => layoutsByParagraph.get(paragraphId) ?? null,
+      });
+    });
+  }, [deckActiveFrame, snapshot.source]);
+  const textLayoutContext = useMemo(() => {
+    if (!deckTextLayoutContext || !snapshot.textLayoutContext) return deckTextLayoutContext ?? snapshot.textLayoutContext ?? null;
+    const deck = getTextLayoutReportProvider(deckTextLayoutContext);
+    const picture = getTextLayoutReportProvider(snapshot.textLayoutContext);
+    if (!deck || !picture) return deckTextLayoutContext;
+    return createTextLayoutContext({
+      getParagraphReport: id => picture.getParagraphReport?.(id) ?? deck.getParagraphReport?.(id) ??
+        picture.getParagraphReports().find(report => report.paragraphId === id) ?? deck.getParagraphReports().find(report => report.paragraphId === id) ?? null,
+      getParagraphReports: () => [...deck.getParagraphReports(), ...picture.getParagraphReports()],
+      getVListLayouts: () => [...deck.getVListLayouts(), ...picture.getVListLayouts()],
+      getVListLayout: id => picture.getVListLayout(id) ?? deck.getVListLayout(id),
+    });
+  }, [deckTextLayoutContext, snapshot.textLayoutContext]);
+  const deckSvgResult = useMemo(
+    () =>
+      deckActiveFrame
+        ? {
+            svg: deckActiveFrame.svg,
+            viewBox: deckActiveFrame.viewBox,
+            model: deckActiveFrame.svgModel,
+            diagnostics: []
+          }
+        : null,
+    [deckActiveFrame]
+  );
+  const baseSvgResult = deckSvgResult ?? snapshot.svg;
+  const baseSvgModel = deckActiveFrame?.svgModel ?? snapshot.svgModel;
   const [warning, setWarning] = useState<string | null>(null);
   const [dragTooltip, setDragTooltip] = useState<DragTooltipState | null>(null);
-  const dragTooltipBoundaryRef = useRef<{ left: number; top: number; right: number; bottom: number } | null>(null);
+  const [dragTooltipBoundary, setDragTooltipBoundary] = useState<{
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+  } | null>(null);
+  const [nodePositionTargetTooltip, setNodePositionTargetTooltip] = useState<{
+    content: string;
+    anchor: { x: number; y: number };
+  } | null>(null);
   const [dragCursorLock, setDragCursorLock] = useState<string | null>(null);
   const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
-  const [snapDebug, setSnapDebug] = useState<SnapDebugOverlayState | null>(null);
-  const [snapDebugRect, setSnapDebugRect] = useState<SnapDebugOverlayRect>({
-    left: 10,
-    top: 10,
-    width: 460,
-    height: 220
-  });
-  const [guides, setGuides] = useState<GuidesState>({ vertical: [], horizontal: [] });
+  const activeGuideFigureKey = rootKey(activeDocumentId, activeRootId);
+  const [guidesByFigureKey, setGuidesByFigureKey] = useState(() => new Map<string, GuidesState>());
+  const guides = guidesByFigureKey.get(activeGuideFigureKey) ?? EMPTY_GUIDES;
+  const setGuides = useCallback<StateSetter<GuidesState>>(
+    (update) => {
+      setGuidesByFigureKey((current) => {
+        const previous = current.get(activeGuideFigureKey) ?? EMPTY_GUIDES;
+        const next = typeof update === "function" ? update(previous) : update;
+        if (next === previous) {
+          return current;
+        }
+        const updated = new Map(current);
+        updated.set(activeGuideFigureKey, next);
+        return updated;
+      });
+    },
+    [activeGuideFigureKey]
+  );
   const [guidePreview, setGuidePreview] = useState<GuidePreview | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const svgResult = useMemo(() => {
@@ -894,11 +637,6 @@ export const CanvasPanel = memo(function CanvasPanel({
   const [pendingBezier, setPendingBezier] = useState<PendingBezier | null>(null);
   const [marqueeDraft, setMarqueeDraft] = useState<Extract<DragState, { kind: "marquee" }> | null>(null);
   const [nodeAnchorOverlay, setNodeAnchorOverlay] = useState<NodeAnchorOverlayState | null>(null);
-  const [canvasTextEditState, setCanvasTextEditState] = useState(INITIAL_CANVAS_TEXT_EDIT_STATE);
-  const canvasTextEditStateRef = useRef(INITIAL_CANVAS_TEXT_EDIT_STATE);
-  const textEditingSession = canvasTextEditState.session;
-  const textSelectionOverlay = canvasTextEditState.selectionOverlay;
-  const [pendingAdornmentTextEditTargetId, setPendingAdornmentTextEditTargetId] = useState<string | null>(null);
   const [pendingNodePositionTargetPick, setPendingNodePositionTargetPick] = useState<{ nodeSourceId: string } | null>(null);
   const suppressNodeAnchorClickRef = useRef(false);
   const [pendingNodePositionAnchorHoverSourceId, setPendingNodePositionAnchorHoverSourceId] = useState<string | null>(null);
@@ -929,6 +667,10 @@ export const CanvasPanel = memo(function CanvasPanel({
     [dispatch]
   );
   const bucketPreviewSessionRef = useRef<BucketPreviewSession | null>(null);
+  const { commitFill } = useBucketFillPreview({
+    toolMode, hoveredElementId, bucketFillColor, source, snapshot,
+    activeDocumentId, activeRootId, dispatch, bucketPreviewSessionRef
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -973,68 +715,54 @@ export const CanvasPanel = memo(function CanvasPanel({
       unlisten?.();
     };
   }, [platform.accessibility]);
-  useLayoutEffect(() => {
-    canvasTextEditStateRef.current = canvasTextEditState;
-  }, [canvasTextEditState]);
-
-  const dispatchCanvasTextEditAction = useCallback((action: CanvasTextEditAction) => {
-    const reduced = reduceCanvasTextEdit(canvasTextEditStateRef.current, action);
-    canvasTextEditStateRef.current = reduced.state;
-    setCanvasTextEditState(reduced.state);
-    for (const effect of reduced.effects) {
-      if (effect.type !== "apply_source_patch") {
-        continue;
-      }
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        action: {
-          kind: "updateNodeText",
-          elementId: effect.sourceId,
-          text: effect.nextText
-        },
-        historyMergeKey: effect.historyMergeKey,
-        precomputedResult: {
-          kind: "success",
-          newSource: effect.nextSource,
-          patches: [
-            {
-              oldSpan: effect.previousSpan,
-              newSpan: effect.changedSpan,
-              replacement: effect.replacement
-            }
-          ],
-          changedSourceIds: [effect.sourceId]
-        }
-      });
+  /**
+   * Nested figure mode (design doc, "Nested TikZ figure editing"): a
+   * beamer document whose active root addresses an embedded tikzpicture
+   * renders through the plain tikz pipeline over the masked snapshot; the
+   * deck layers above are inert because `snapshot.deck` is null. Entry
+   * and exit just swap the active root — viewport persistence gives the
+   * figure its own auto-fit slot and restores the deck view on return.
+   */
+  const nestedFigureRef = useMemo(() => {
+    const ref = activeRootId ? parseDocumentRootId(activeRootId) : null;
+    return ref?.kind === "beamer-frame-tikz" ? ref : null;
+  }, [activeRootId]);
+  const isNestedFigureMode =
+    nestedFigureRef != null && documentKind === "beamer" && snapshot.deck == null;
+  /** A drawing layer, edited in place over its slide (`frame:i:overlay:j`). */
+  const overlayLayer = snapshot.overlayLayer ?? null;
+  /** The slide a drawing layer is on: the layer shares its view. */
+  const viewportRootId = nestedFigureRef?.layer
+    ? formatDocumentRootId({ kind: "beamer-frame", index: nestedFigureRef.frameIndex })
+    : activeRootId;
+  /** The parsed picture's span while nested — the maskable region. */
+  const nestedFigureSpan = useMemo(() => {
+    if (snapshot.overlayLayer?.pageCoordinates) return snapshot.parseResult?.figure.span ?? null;
+    if (!isNestedFigureMode) {
+      return null;
     }
-  }, [dispatch]);
-
-  const closeTextEditingSession = useCallback(() => {
-    dispatchCanvasTextEditAction({ type: "session_close" });
-  }, [dispatchCanvasTextEditAction]);
-
-  const activeCanvasTextEditSourceId = textEditingSession?.sourceId ?? null;
-  useEffect(() => {
-    dispatch({ type: "SET_ACTIVE_CANVAS_TEXT_EDIT", sourceId: activeCanvasTextEditSourceId });
-    return () => {
-      dispatch({ type: "SET_ACTIVE_CANVAS_TEXT_EDIT", sourceId: null });
-    };
-  }, [activeCanvasTextEditSourceId, dispatch]);
+    const figure =
+      snapshot.figures.find((candidate) => candidate.id === snapshot.activeRootId) ??
+      (snapshot.figures.length > 0 ? snapshot.figures[0] : null);
+    return figure?.span ?? null;
+  }, [isNestedFigureMode, snapshot]);
 
   const editParseOptions = useMemo(
-    () => ({
-      activeFigureId:
-        activeFigureId ?? (snapshot.figures.length > 1 ? null : undefined),
-      analysisView: getSharedEditAnalysisView({
+    () => {
+      const rootId = nestedFigureSpan ? snapshot.parseResult?.activeFigureId : activeRootId;
+      return buildEditParseOptions({
         documentId: activeDocumentId,
         sourceRevision,
-        source,
-        activeFigureId,
-        snapshot
-      }),
-      analysisSession: getSharedEditAnalysisSession()
-    }),
-    [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
+        // Nested figure edits parse the masked document (statement ids and
+        // spans then match the snapshot's edit handles exactly) under the
+        // snapshot's own tikz root id.
+        source: nestedFigureSpan ? maskTikzPictureSource(nestedEditBaseSource(source, snapshot), nestedFigureSpan) : source,
+        ...(rootId !== undefined ? { activeRootId: rootId } : {}),
+        snapshot,
+        analysis: "shared"
+      });
+    },
+    [activeDocumentId, activeRootId, nestedFigureSpan, snapshot, source, sourceRevision]
   );
 
   const canvasCommandStateRef = useRef<{
@@ -1044,74 +772,16 @@ export const CanvasPanel = memo(function CanvasPanel({
     viewBox: SvgViewBox | null;
     editParseOptions: typeof editParseOptions;
   } | null>(null);
-  canvasCommandStateRef.current = {
-    source,
-    selectedElementIds,
-    sceneElements: snapshot.scene?.elements ?? [],
-    viewBox: svgResult?.viewBox ?? null,
-    editParseOptions
-  };
-  const handleAddNodeAdornmentCommand = useCallback((kind: "label" | "pin") => {
-    const state = canvasCommandStateRef.current;
-    if (!state) {
-      return;
-    }
-    const result = resolveNodeAdornmentContextAction({
-      source: state.source,
-      clickedTargetId: contextMenuContextRef.current.clickedTargetId,
-      selectedTargetId: state.selectedElementIds.size === 1 ? [...state.selectedElementIds][0] ?? null : null,
-      clickedWorld: contextMenuContextRef.current.clickedWorld,
-      sceneElements: state.sceneElements,
-      viewBox: state.viewBox,
-      adornmentKind: kind,
-      text: kind === "pin" ? "Pin" : "Label",
-      parseOptions: state.editParseOptions
-    });
-    if (result.kind !== "ready") {
-      return;
-    }
-    dispatch({
-      type: "APPLY_EDIT_ACTION",
-      action: result.action
-    });
-    setPendingAdornmentTextEditTargetId(result.pendingTextTargetId);
-  }, [contextMenuContextRef, dispatch]);
-  const handlePositionNodeRelativeToCommand = useCallback(() => {
-    const state = canvasCommandStateRef.current;
-    const selectedSourceId = state?.selectedElementIds.size === 1 ? [...state.selectedElementIds][0] ?? null : null;
-    if (!selectedSourceId) {
-      return;
-    }
-    closeTextEditingSession();
-    clearPendingNodePositionTargetPick();
-    setPendingNodePositionTargetPick({ nodeSourceId: selectedSourceId });
-  }, [clearPendingNodePositionTargetPick, closeTextEditingSession]);
-  const handleConvertNodePositionToAbsoluteCommand = useCallback(() => {
-    const state = canvasCommandStateRef.current;
-    const selectedSourceId = state?.selectedElementIds.size === 1 ? [...state.selectedElementIds][0] ?? null : null;
-    const applyActionWithFeedback = applyActionWithFeedbackRef.current;
-    if (!selectedSourceId || !applyActionWithFeedback) {
-      return;
-    }
-    applyActionWithFeedback({
-      kind: "convertNodePositionToAbsolute",
-      nodeId: selectedSourceId
-    });
-    clearPendingNodePositionTargetPick();
-  }, [clearPendingNodePositionTargetPick]);
-  const handleOpenEditEquationCommand = useCallback((target: EquationNodeTarget) => {
-    setEquationModalTarget(target);
-  }, []);
-
-  const commandRuntime = useEditorCommandRuntime({
-    onAddNodeAdornment: handleAddNodeAdornmentCommand,
-    onPositionNodeRelativeTo: handlePositionNodeRelativeToCommand,
-    onConvertNodePositionToAbsolute: handleConvertNodePositionToAbsoluteCommand,
-    onOpenEditEquation: handleOpenEditEquationCommand,
-    activeHandleIdOverride: contextMenuHandleIdOverride
+  useLayoutEffect(() => {
+    canvasCommandStateRef.current = {
+      source,
+      selectedElementIds,
+      sceneElements: snapshot.scene?.elements ?? [],
+      viewBox: svgResult?.viewBox ?? null,
+      editParseOptions
+    };
   });
-
-  const dispatchCanvasTransform = useCallback(
+  const dispatchCanvasTransform = useStableCallback(
     (transform: CanvasTransform) => {
       if (
         Math.abs(transform.translateX - canvasTransform.translateX) < 1e-9 &&
@@ -1121,8 +791,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         return;
       }
       dispatch({ type: "SET_CANVAS_TRANSFORM", transform });
-    },
-    [canvasTransform.scale, canvasTransform.translateX, canvasTransform.translateY, dispatch]
+    }
   );
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -1130,10 +799,15 @@ export const CanvasPanel = memo(function CanvasPanel({
   const leftRulerRef = useRef<SVGSVGElement | null>(null);
   const interactionSvgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const cancelCanvasGestureRef = useRef<(() => void) | null>(null);
   const suppressNextBackgroundClickRef = useRef(false);
   const pathDraftRef = useRef<PathToolDraft | null>(null);
   const freehandDraftRef = useRef<FreehandToolDraft | null>(null);
+  const previousCanvasContextKeyRef = useRef(`${rootKey(activeDocumentId, activeRootId)}:${drawingLayerRootId ?? ""}`);
   const pendingAddedSelectionRef = useRef<PendingAddedSelection | null>(null);
+  const pendingLayerSelectionRef = useRef<{
+    documentId: string; source: string; rootId: string; sourceId: string; frameRootId: string | null;
+  } | null>(null);
   const canvasTransformRef = useRef(canvasTransform);
   const selectedElementIdsRef = useRef(selectedElementIds);
   const svgResultRef = useRef(svgResult);
@@ -1141,42 +815,9 @@ export const CanvasPanel = memo(function CanvasPanel({
   const liveResizeFramesRef = useRef(new Map<string, ReturnType<typeof resolveResizeFrameForSource>>());
   const previousViewBoxRef = useRef<SvgViewBox | null>(null);
   const guideDragRef = useRef<GuideDragState | null>(null);
-  const snapDebugDragRef = useRef<SnapDebugOverlayDragState | null>(null);
   const textEngineRef = useRef<NodeTextEngine | null>(null);
   const svgLayerHostRef = useRef<HTMLDivElement | null>(null);
   const appliedPathAttachedNodePreviewRef = useRef<Array<{ element: SVGElement; transform: string | null }>>([]);
-  const textEditTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const textEditPopupRef = useRef<HTMLDivElement | null>(null);
-  const [textEditPopupHeight, setTextEditPopupHeight] = useState<number | null>(null);
-  const [textEditCaretOverlay, setTextEditCaretOverlay] = useState<TextEditCaretOverlay | null>(null);
-  const supportsFieldSizing = typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("field-sizing", "content");
-  const textEditTextareaSizing = useMemo(() => {
-    if (!textEditingSession || supportsFieldSizing) {
-      return null;
-    }
-
-    const lines = textEditingSession.text.split(/\r?\n/);
-    return {
-      rows: Math.max(1, lines.length)
-    };
-  }, [supportsFieldSizing, textEditingSession]);
-  const textSelectionDragRef = useRef<{
-    pointerId: number;
-    sourceId: string;
-    sceneTextId: string;
-    anchorOffset: number;
-    mode: TextSelectionDragMode;
-    anchorLineRange: TextLineRange | null;
-  } | null>(null);
-  const pendingTextEditPasteRef = useRef<string | null>(null);
-  const pendingTextEditInsertTextRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!textEditingSession) {
-      pendingTextEditPasteRef.current = null;
-      pendingTextEditInsertTextRef.current = null;
-    }
-  }, [textEditingSession]);
 
   useEffect(() => {
     for (const entry of appliedPathAttachedNodePreviewRef.current) {
@@ -1211,13 +852,19 @@ export const CanvasPanel = memo(function CanvasPanel({
   }, [pathAttachedNodePreview, snapshot.source]);
   const pendingTouchViewportRef = useRef<PendingTouchViewport | null>(null);
 
-  // Cache viewport boundary once on drag-start, clear on drag-end (avoids getBoundingClientRect per frame)
-  if (dragTooltip && !dragTooltipBoundaryRef.current && viewportRef.current) {
-    const r = viewportRef.current.getBoundingClientRect();
-    dragTooltipBoundaryRef.current = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
-  } else if (!dragTooltip) {
-    dragTooltipBoundaryRef.current = null;
-  }
+  const dragTooltipVisible = dragTooltip != null;
+  useLayoutEffect(() => {
+    if (!dragTooltipVisible) {
+      setDragTooltipBoundary(null);
+      return;
+    }
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+    const rect = viewport.getBoundingClientRect();
+    setDragTooltipBoundary({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+  }, [dragTooltipVisible]);
 
   const setActiveCanvasDragKind = useCallback(
     (kind: CanvasDragKind | null) => {
@@ -1228,6 +875,7 @@ export const CanvasPanel = memo(function CanvasPanel({
 
   const setDragState = useCallback(
     (next: DragState | null) => {
+      if (next && "latestSource" in next) next.editSession = beginDocumentEdit(useEditorStore.getState());
       dragRef.current = next;
       if (!next) {
         setNodeAnchorOverlay(null);
@@ -1242,6 +890,56 @@ export const CanvasPanel = memo(function CanvasPanel({
   useEffect(() => {
     pathDraftRef.current = pathDraft;
   }, [pathDraft]);
+
+  useLayoutEffect(() => {
+    const nextContextKey = `${rootKey(activeDocumentId, activeRootId)}:${drawingLayerRootId ?? ""}`;
+    if (previousCanvasContextKeyRef.current === nextContextKey) {
+      return;
+    }
+    previousCanvasContextKeyRef.current = nextContextKey;
+    cancelCanvasGestureRef.current?.();
+
+    pathDraftRef.current = null;
+    freehandDraftRef.current = null;
+    const pendingTouch = pendingTouchViewportRef.current;
+    if (pendingTouch) {
+      clearTimeout(pendingTouch.timer);
+      pendingTouchViewportRef.current = null;
+    }
+    guideDragRef.current = null;
+    document.body.classList.remove("is-dragging-guide-horizontal");
+    document.body.classList.remove("is-dragging-guide-vertical");
+
+    clearPendingNodePositionTargetPick();
+    setPathDraft(null);
+    setFreehandDraft(null);
+    setPathSegmentDraft(null);
+    setToolDraft(null);
+    setBezierBendDraft(null);
+    setPendingBezier(null);
+    setMarqueeDraft(null);
+    setMagnifierState(null);
+    setPathAttachedNodePreview(null);
+    setExpandedDensePathSourceId(null);
+    setToolCursorWorld(null);
+    setNodeAnchorOverlay(null);
+    setSnapLines([]);
+    setGuidePreview(null);
+    setContextMenuState(null);
+    setWarning(null);
+    dispatch({ type: "SET_HOVERED_ELEMENT", id: null });
+    if (dragRef.current) {
+      setDragState(null);
+    }
+  }, [
+    activeDocumentId,
+    activeRootId,
+    drawingLayerRootId,
+    clearPendingNodePositionTargetPick,
+    dispatch,
+    setContextMenuState,
+    setDragState
+  ]);
 
   useEffect(() => {
     freehandDraftRef.current = freehandDraft;
@@ -1269,7 +967,6 @@ export const CanvasPanel = memo(function CanvasPanel({
         lineCount: lines.length,
         lineSummary: summarizeSnapLinesForDebug(lines)
       };
-      setSnapDebug(nextSnapDebug);
       dispatch({
         type: "SET_SNAP_DEBUG",
         snapDebug: nextSnapDebug,
@@ -1298,51 +995,15 @@ export const CanvasPanel = memo(function CanvasPanel({
     if (!platform.id.startsWith("desktop")) {
       return;
     }
-    if (typeof navigator === "undefined" || !/(mac|iphone|ipad)/i.test(navigator.platform)) {
+    if (!isMacLikePlatform()) {
       return;
     }
     void platform.haptics?.performSnapFeedback?.();
   }, [platform, snapHapticsEnabled]);
 
-  const onSnapDebugMovePointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) {
-        return;
-      }
-      snapDebugDragRef.current = {
-        kind: "move",
-        startClient: makeClientPoint(px(event.clientX), px(event.clientY)),
-        startLeft: snapDebugRect.left,
-        startTop: snapDebugRect.top
-      };
-      document.body.classList.add("is-dragging-snap-debug");
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    [snapDebugRect.left, snapDebugRect.top]
-  );
-
-  const onSnapDebugResizePointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) {
-        return;
-      }
-      snapDebugDragRef.current = {
-        kind: "resize",
-        startClient: makeClientPoint(px(event.clientX), px(event.clientY)),
-        startWidth: snapDebugRect.width,
-        startHeight: snapDebugRect.height
-      };
-      document.body.classList.add("is-resizing-snap-debug");
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    [snapDebugRect.height, snapDebugRect.width]
-  );
-
   useEffect(() => {
     let cancelled = false;
-    void createMathJaxNodeTextEngine({ font: mathJaxFont })
+    void createTexNodeTextEngine()
       .then((engine) => {
         if (!cancelled) {
           textEngineRef.current = engine;
@@ -1358,78 +1019,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     return () => {
       cancelled = true;
     };
-  }, [mathJaxFont]);
-
-  useEffect(() => {
-    function onPointerMove(event: PointerEvent) {
-      const drag = snapDebugDragRef.current;
-      if (!drag) {
-        return;
-      }
-
-      if (viewportSize.width <= 0 || viewportSize.height <= 0) {
-        return;
-      }
-
-      if (drag.kind === "move") {
-        setSnapDebugRect((current) =>
-          clampSnapDebugOverlayRect(
-            {
-              ...current,
-              left: drag.startLeft + (event.clientX - drag.startClient.x),
-              top: drag.startTop + (event.clientY - drag.startClient.y)
-            },
-            viewportSize.width,
-            viewportSize.height
-          )
-        );
-        return;
-      }
-
-      setSnapDebugRect((current) =>
-        clampSnapDebugOverlayRect(
-            {
-              ...current,
-            width: drag.startWidth + (event.clientX - drag.startClient.x),
-            height: drag.startHeight + (event.clientY - drag.startClient.y)
-            },
-          viewportSize.width,
-          viewportSize.height
-        )
-      );
-    }
-
-    function clearSnapDebugDragState() {
-      if (!snapDebugDragRef.current) {
-        return;
-      }
-      snapDebugDragRef.current = null;
-      document.body.classList.remove("is-dragging-snap-debug");
-      document.body.classList.remove("is-resizing-snap-debug");
-    }
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", clearSnapDebugDragState);
-    window.addEventListener("pointercancel", clearSnapDebugDragState);
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", clearSnapDebugDragState);
-      window.removeEventListener("pointercancel", clearSnapDebugDragState);
-      clearSnapDebugDragState();
-    };
-  }, [viewportSize.height, viewportSize.width]);
-
-  useEffect(() => {
-    if (!showDevPanel) {
-      return;
-    }
-    if (viewportSize.width <= 0 || viewportSize.height <= 0) {
-      return;
-    }
-    setSnapDebugRect((current) =>
-      clampSnapDebugOverlayRect(current, viewportSize.width, viewportSize.height)
-    );
-  }, [showDevPanel, viewportSize.height, viewportSize.width]);
+  }, []);
 
   const densePathSourceIds = useMemo(() => {
     return collectDensePathSourceIds(snapshot.scene?.elements);
@@ -1488,21 +1078,32 @@ export const CanvasPanel = memo(function CanvasPanel({
       }),
     [pendingNodePositionTargetPick?.nodeSourceId, snapshot]
   );
-  const pendingNodePositionTargetStatusBySourceId = useMemo(() => {
-    const statusBySourceId = new Map<string, NodePositionTargetStatus>();
-    if (!pendingNodePositionTargetPick || pendingNodePositionTargetAnchors.length === 0) {
-      return statusBySourceId;
+  const pendingNodePositionEffectiveHoverSourceId = pendingNodePositionTargetPick
+    ? pendingNodePositionAnchorHoverSourceId ?? hoveredElementId
+    : null;
+  const prepareEditGeometry = useStableCallback(() => {
+    if (!snapshot.parseResult || !snapshot.semanticResult || snapshot.source !== source) return;
+    return createEditGeometrySession({
+      source: nestedFigureSpan ? maskTikzPictureSource(nestedEditBaseSource(source, snapshot), nestedFigureSpan) : source,
+      parsed: snapshot.parseResult,
+      semantic: snapshot.semanticResult
+    }, { textEngine: textEngineRef.current, ...snapshot.overlayLayer?.evaluate }, editParseOptions);
+  });
+
+  const resolvePendingNodePositionTargetStatus = useMemo(() => {
+    if (!pendingNodePositionTargetPick) {
+      return null;
     }
-    const sourceFingerprint = buildSnapshotEditSourceFingerprint({
-      documentId: activeDocumentId,
-      sourceRevision,
-      sourceLength: source.length,
-      sourceRefs: snapshot.editHandles.map((handle) => handle.sourceRef)
-    });
-    for (const anchor of pendingNodePositionTargetAnchors) {
+    const statusBySourceId = new Map<string, NodePositionTargetStatus>();
+    const { sourceFingerprint } = editParseOptions;
+    return (anchor: NodeAnchorTarget): NodePositionTargetStatus | null => {
       const targetSourceId = anchor.nodeSourceId?.trim();
       if (!targetSourceId) {
-        continue;
+        return null;
+      }
+      const cached = statusBySourceId.get(targetSourceId);
+      if (cached) {
+        return cached;
       }
       const action: EditAction = {
         kind: "positionNodeRelativeTo",
@@ -1510,47 +1111,67 @@ export const CanvasPanel = memo(function CanvasPanel({
         targetNodeName: anchor.nodeName,
         targetNodeSourceId: targetSourceId
       };
+      const { sourceFingerprint: _sourceFingerprint, ...positionParseOptions } = editParseOptions;
+      const geometry = prepareEditGeometry();
       const preflight = preflightPositionNodeRelativeToAction(source, action, {
-        evaluateOptions: { sourceFingerprint, textEngine: activeTextEngine },
-        parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
+        ...(geometry !== undefined ? { geometry } : {}),
+        evaluateOptions: { ...(sourceFingerprint !== undefined ? { sourceFingerprint: sourceFingerprint } : {}), textEngine: activeTextEngine, ...snapshot.overlayLayer?.evaluate },
+        parseOptions: { ...positionParseOptions, propertyWriteMode: "drag-frame", ...(sourceFingerprint !== undefined ? { sourceFingerprint } : {}) }
       });
       const { result } = preflight;
-      if (result.kind === "success" || result.kind === "partial") {
-        statusBySourceId.set(targetSourceId, {
-          anchor,
-          action,
-          result,
-          preview: preflight.preview,
-          usable: true,
-          reason: null
-        });
-        continue;
+      const status: NodePositionTargetStatus =
+        result.kind === "success" || result.kind === "partial"
+          ? {
+              anchor,
+              action,
+              result,
+              preview: preflight.preview,
+              usable: true,
+              reason: null
+            }
+          : {
+              anchor,
+              action,
+              result,
+              preview: null,
+              usable: false,
+              reason: formatNodePositionTargetFailureReason({
+                rawReason: result.kind === "unsupported" ? result.reason : result.message,
+                currentNodeSourceId: pendingNodePositionTargetPick.nodeSourceId,
+                target: anchor,
+                snapshot
+              })
+            };
+      statusBySourceId.set(targetSourceId, status);
+      return status;
+    };
+  }, [
+    prepareEditGeometry,
+    activeTextEngine,
+    editParseOptions,
+    pendingNodePositionTargetPick,
+    snapshot,
+    source
+  ]);
+  const pendingNodePositionTargetStatusBySourceId = useMemo(() => {
+    const statusBySourceId = new Map<string, NodePositionTargetStatus>();
+    if (!pendingNodePositionEffectiveHoverSourceId || !resolvePendingNodePositionTargetStatus) {
+      return statusBySourceId;
+    }
+    const hoveredAnchor = pendingNodePositionTargetAnchors.find(
+      (anchor) => anchor.nodeSourceId === pendingNodePositionEffectiveHoverSourceId
+    );
+    if (hoveredAnchor?.nodeSourceId) {
+      const status = resolvePendingNodePositionTargetStatus(hoveredAnchor);
+      if (status) {
+        statusBySourceId.set(hoveredAnchor.nodeSourceId, status);
       }
-      const rawReason = result.kind === "unsupported" ? result.reason : result.message;
-      statusBySourceId.set(targetSourceId, {
-        anchor,
-        action,
-        result,
-        preview: null,
-        usable: false,
-        reason: formatNodePositionTargetFailureReason({
-          rawReason,
-          currentNodeSourceId: pendingNodePositionTargetPick.nodeSourceId,
-          target: anchor,
-          snapshot
-        })
-      });
     }
     return statusBySourceId;
   }, [
-    activeDocumentId,
-    activeTextEngine,
-    editParseOptions,
+    pendingNodePositionEffectiveHoverSourceId,
     pendingNodePositionTargetAnchors,
-    pendingNodePositionTargetPick,
-    snapshot,
-    source,
-    sourceRevision
+    resolvePendingNodePositionTargetStatus
   ]);
 
   const pendingNodePositionHitRegionCursorByTargetId = useMemo(() => {
@@ -1558,15 +1179,18 @@ export const CanvasPanel = memo(function CanvasPanel({
       return;
     }
     const cursorByTargetId = new Map<string, string>();
-    for (const [sourceId, status] of pendingNodePositionTargetStatusBySourceId) {
-      cursorByTargetId.set(sourceId, status.usable ? "pointer" : "not-allowed");
+    for (const anchor of pendingNodePositionTargetAnchors) {
+      if (anchor.nodeSourceId) {
+        const status = pendingNodePositionTargetStatusBySourceId.get(anchor.nodeSourceId);
+        cursorByTargetId.set(anchor.nodeSourceId, status?.usable === false ? "not-allowed" : "pointer");
+      }
     }
     return cursorByTargetId;
-  }, [pendingNodePositionTargetPick, pendingNodePositionTargetStatusBySourceId]);
-
-  const pendingNodePositionEffectiveHoverSourceId = pendingNodePositionTargetPick
-    ? pendingNodePositionAnchorHoverSourceId ?? hoveredElementId
-    : null;
+  }, [
+    pendingNodePositionTargetAnchors,
+    pendingNodePositionTargetPick,
+    pendingNodePositionTargetStatusBySourceId
+  ]);
 
   const pendingNodePositionAnchorOverlay = useMemo<NodeAnchorOverlayState | null>(() => {
     if (!pendingNodePositionTargetPick || pendingNodePositionTargetAnchors.length === 0) {
@@ -1594,26 +1218,29 @@ export const CanvasPanel = memo(function CanvasPanel({
     pendingNodePositionTargetStatusBySourceId
   ]);
 
-  const nodePositionTargetTooltip = useMemo(() => {
+  useLayoutEffect(() => {
     if (!pendingNodePositionTargetPick || !pendingNodePositionEffectiveHoverSourceId || !svgResult) {
-      return null;
+      setNodePositionTargetTooltip(null);
+      return;
     }
     const status = pendingNodePositionTargetStatusBySourceId.get(pendingNodePositionEffectiveHoverSourceId);
     if (!status || status.usable || !status.reason) {
-      return null;
+      setNodePositionTargetTooltip(null);
+      return;
     }
     const viewportRect = viewportRef.current?.getBoundingClientRect();
     if (!viewportRect) {
-      return null;
+      setNodePositionTargetTooltip(null);
+      return;
     }
     const svg = worldToSvgPoint(status.anchor.world, svgResult.viewBox);
-    return {
+    setNodePositionTargetTooltip({
       content: status.reason,
       anchor: {
         x: viewportRect.left + canvasTransform.translateX + (svg.x - svgResult.viewBox.x) * canvasTransform.scale,
         y: viewportRect.top + canvasTransform.translateY + (svg.y - svgResult.viewBox.y) * canvasTransform.scale
       }
-    };
+    });
   }, [
     canvasTransform.scale,
     canvasTransform.translateX,
@@ -1645,7 +1272,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       links.push({
         key: `selected:${handle.id}`,
         sourceId: handle.sourceRef.sourceId,
-        targetSourceId: targetCenterAnchor?.nodeSourceId,
+        ...(targetCenterAnchor?.nodeSourceId !== undefined ? { targetSourceId: targetCenterAnchor.nodeSourceId } : {}),
         from: endpoints.from,
         to: endpoints.to
       });
@@ -1657,7 +1284,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         links.push({
           key: `pending:${pendingNodePositionTargetPick.nodeSourceId}:${status.anchor.nodeSourceId ?? status.anchor.nodeName}`,
           sourceId: pendingNodePositionTargetPick.nodeSourceId,
-          targetSourceId: status.anchor.nodeSourceId,
+          ...(status.anchor.nodeSourceId !== undefined ? { targetSourceId: status.anchor.nodeSourceId } : {}),
           from: status.preview.currentAnchor,
           to: status.preview.targetAnchor
         });
@@ -1683,14 +1310,20 @@ export const CanvasPanel = memo(function CanvasPanel({
       return;
     }
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
+      const isUndo =
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "z";
+      if (event.key !== "Escape" && !isUndo) {
         return;
       }
       event.preventDefault();
+      event.stopImmediatePropagation();
       clearPendingNodePositionTargetPick();
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => { window.removeEventListener("keydown", handleKeyDown); };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => { window.removeEventListener("keydown", handleKeyDown, true); };
   }, [clearPendingNodePositionTargetPick, pendingNodePositionTargetPick]);
 
   useEffect(() => {
@@ -1720,12 +1353,13 @@ export const CanvasPanel = memo(function CanvasPanel({
     curveControlLines,
     marqueeBounds,
     handleDisplays,
-    hitRegions,
+    hitRegions: sceneHitRegions,
     visibleRanges,
     viewportWorldBounds,
     scopeOverlay
   } = useCanvasSelectionDerivedState({
     snapshot,
+    textEngine: textEngineRef.current,
     selectedElementIds,
     collapsedDensePathSourceIds,
     svgResult,
@@ -1736,12 +1370,374 @@ export const CanvasPanel = memo(function CanvasPanel({
     ROTATE_HANDLE_OFFSET_PX
   });
 
-  canvasTransformRef.current = canvasTransform;
-  selectedElementIdsRef.current = selectedElementIds;
-  svgResultRef.current = svgResult;
-  fitToContentModeActiveRef.current = fitToContentModeActive;
-  sourceBoundsSvgRef.current = sourceBoundsSvg;
-  liveResizeFramesRef.current = resizeFramesBySource;
+  // One editing session per Beamer edit scope: hit regions and targets are
+  // grouped by the scope owning each directly-authored run, per
+  // design/beamer-canvas-editing.md.
+  const deckEditing = useMemo(() => {
+    const layout = deckActiveFrame?.layout;
+    if (!layout) {
+      return { scopesById: new Map<string, DeckScopeEntry>(), paragraphById: new Map<string, DeckParagraph>(),
+        regions: [] as HitRegion[], atomSpanByRegionKey: new Map<string, Span>() };
+    }
+    return deckPageDerived(deckActiveFrame, snapshot.source, deckEditingKey, () => {
+      const scopesById = new Map<string, DeckScopeEntry>();
+      const paragraphById = new Map<string, DeckParagraph>();
+      const regions: HitRegion[] = [];
+      const atomSpanByRegionKey = new Map<string, Span>();
+      const editScopes = layout.editScopes;
+      for (const scope of editScopes) {
+        scopesById.set(scope.id, {
+          scope,
+          scopeParagraphs: [],
+          maskRanges: [],
+          anchorBounds: null
+        });
+      }
+      for (const paragraph of layout.paragraphs) {
+        paragraphById.set(paragraph.paragraphId, paragraph);
+        // Chrome text (headline/footline) can mirror preamble metadata spans;
+        // it never participates in editing sessions.
+        if (paragraph.role === "headline" || paragraph.role === "footline") {
+          continue;
+        }
+        const scope = resolveBeamerEditScopeAt(editScopes, paragraph.sourceSpan.from);
+        if (!scope || paragraph.sourceSpan.to > scope.span.to) {
+          continue;
+        }
+        const entry = scopesById.get(scope.id);
+        if (!entry) {
+          continue;
+        }
+        entry.scopeParagraphs.push({
+          paragraphId: paragraph.paragraphId,
+          sourceSpan: paragraph.sourceSpan,
+          bounds: paragraph.bounds
+        });
+        entry.anchorBounds = entry.anchorBounds
+          ? svgBounds(
+              pt(Math.min(entry.anchorBounds.minX, paragraph.bounds.x)),
+              pt(Math.min(entry.anchorBounds.minY, paragraph.bounds.y)),
+              pt(Math.max(entry.anchorBounds.maxX, paragraph.bounds.x + paragraph.bounds.width)),
+              pt(Math.max(entry.anchorBounds.maxY, paragraph.bounds.y + paragraph.bounds.height))
+            )
+          : svgBounds(
+              pt(paragraph.bounds.x),
+              pt(paragraph.bounds.y),
+              pt(paragraph.bounds.x + paragraph.bounds.width),
+              pt(paragraph.bounds.y + paragraph.bounds.height)
+            );
+        const pushRegion = (key: string, bounds: { x: number; y: number; width: number; height: number }) => {
+          regions.push({
+            shape: "rect",
+            key,
+            sourceId: scope.id,
+            targetId: scope.id,
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            cx: bounds.x + bounds.width / 2,
+            cy: bounds.y + bounds.height / 2,
+            rotation: 0,
+            interactionMode: "text",
+            pointerMode: "fill",
+            sceneTextKey: paragraph.paragraphId,
+            contentWidth: bounds.width,
+            contentHeight: bounds.height
+          });
+        };
+        for (const editable of paragraph.editableTextSpans) {
+          // Math islands are click-into targets, but only structure-free
+          // prose runs are safe to mask during edits.
+          if (editable.kind === "text") {
+            entry.maskRanges.push(editable.span);
+          }
+          editable.hitBounds.forEach((bounds, index) => {
+            pushRegion(`deck-text:${editable.id}:${index}`, bounds);
+          });
+        }
+        // Atomic renders (macro output) select their invocation span.
+        for (const atom of paragraph.atomicRenderSpans) {
+          atom.hitBounds.forEach((bounds, index) => {
+            const key = `deck-atom:${atom.id}:${index}`;
+            atomSpanByRegionKey.set(key, atom.span);
+            pushRegion(key, bounds);
+          });
+        }
+      }
+      // Frame-level atoms: embedded tikzpictures and graphics select their
+      // whole source span in the enclosing scope's session.
+      const frameAtoms = [
+        // Overlay pictures are drawn over the page, not set in a scope's text.
+        ...layout.embeddedTikz.filter((tikz) => !tikz.overlay).map((tikz) => ({
+          id: tikz.itemId,
+          span: tikz.sourceSpan,
+          bounds: tikz.bounds,
+          visible: true
+        })),
+        ...layout.graphics.map((graphics) => ({
+          id: graphics.itemId,
+          span: graphics.sourceSpan,
+          bounds: graphics.bounds,
+          visible: graphics.visibility === "visible"
+        }))
+      ];
+      for (const atom of frameAtoms) {
+        if (!atom.visible) {
+          continue;
+        }
+        const scope = resolveBeamerEditScopeAt(editScopes, atom.span.from);
+        const entry = scope ? scopesById.get(scope.id) : undefined;
+        if (!scope || !entry) {
+          continue;
+        }
+        // Atom-only scopes (e.g. a drawing-only frame body) have no rendered
+        // paragraphs; the atom itself anchors the session surface.
+        const anchorParagraph = entry.scopeParagraphs[0]?.paragraphId;
+        entry.anchorBounds ??= svgBounds(
+          pt(atom.bounds.x),
+          pt(atom.bounds.y),
+          pt(atom.bounds.x + atom.bounds.width),
+          pt(atom.bounds.y + atom.bounds.height)
+        );
+        const key = `deck-atom:${atom.id}`;
+        atomSpanByRegionKey.set(key, atom.span);
+        regions.push({
+          shape: "rect",
+          key,
+          sourceId: scope.id,
+          targetId: scope.id,
+          x: atom.bounds.x,
+          y: atom.bounds.y,
+          width: atom.bounds.width,
+          height: atom.bounds.height,
+          cx: atom.bounds.x + atom.bounds.width / 2,
+          cy: atom.bounds.y + atom.bounds.height / 2,
+          rotation: 0,
+          interactionMode: "text",
+          pointerMode: "fill",
+          ...(anchorParagraph ? { sceneTextKey: anchorParagraph } : {}),
+          contentWidth: atom.bounds.width,
+          contentHeight: atom.bounds.height
+        });
+      }
+      return { scopesById, paragraphById, regions, atomSpanByRegionKey };
+    });
+  }, [deckActiveFrame, snapshot.source]);
+
+  // Object-layer topology (design doc "Object layer"): selectable structural
+  // nodes for the active frame. Built against the snapshot's own source so
+  // node spans always match the rendered layout; object edits additionally
+  // require the snapshot to be current (`snapshot.source === source`).
+  const deckObjectIndex = useMemo(() => {
+    const layout = deckActiveFrame?.layout;
+    if (!layout) {
+      return null;
+    }
+    return deckPageDerived(deckActiveFrame, snapshot.source, deckObjectIndexKey, () => buildBeamerObjectIndex({
+      items: layout.items,
+      paragraphs: layout.paragraphs,
+      source: snapshot.source
+    }));
+  }, [deckActiveFrame, snapshot.source]);
+
+  const deckSelectedObject = useMemo(() => {
+    if (!deckObjectSelection || !deckObjectIndex || !deckActiveFrame) {
+      return null;
+    }
+    if (
+      deckObjectSelection.documentId !== activeDocumentId ||
+      deckObjectSelection.frameId !== deckActiveFrame.frameId
+    ) {
+      return null;
+    }
+    return deckObjectIndex.byId.get(deckObjectSelection.objectId) ?? null;
+  }, [activeDocumentId, deckActiveFrame, deckObjectIndex, deckObjectSelection]);
+
+  const selectDeckObject = useCallback(
+    (objectId: string | null) => {
+      if (!deckActiveFrame || !deckFrameFresh) {
+        return;
+      }
+      const placeholder = deckActiveFrame.layout.items.find((item) =>
+        item.id === objectId && item.kind === "unsupported"
+      );
+      if (placeholder) {
+        if (!useEditorStore.getState().showSourcePanel) {
+          const dock = getDockLayoutHandle();
+          if (dock) {
+            dock.togglePanel("source");
+          } else {
+            dispatch({ type: "TOGGLE_PANEL", panel: "source" });
+          }
+        }
+        // Clear first so clicking the same card triggers source selection again.
+        dispatch({
+          type: "SET_DECK_OBJECT_SELECTION",
+          frameId: deckActiveFrame.frameId,
+          objectId: null
+        });
+      }
+      dispatch({
+        type: "SET_DECK_OBJECT_SELECTION",
+        frameId: deckActiveFrame.frameId,
+        objectId
+      });
+    },
+    [deckActiveFrame, deckFrameFresh, dispatch]
+  );
+
+
+  /**
+   * Esc ladder rung 1 (session → object): select the innermost object
+   * containing the caret when the session closes on Escape, and move
+   * keyboard focus to the viewport for the remaining rungs.
+   */
+  const handleCanvasSessionEscape = useCallback(
+    (session: TextEditingSession, caretDocumentOffset: number) => {
+      if (deckObjectIndex && session.isScopeSession && snapshot.source === source) {
+        const node = beamerObjectAtOffset(deckObjectIndex, caretDocumentOffset);
+        if (node) {
+          selectDeckObject(node.id);
+        }
+      }
+      viewportRef.current?.focus({ preventScroll: true });
+    },
+    [deckObjectIndex, selectDeckObject, snapshot.source, source, viewportRef]
+  );
+
+  // Click targets for the object layer. Container chrome (blocks, columns)
+  // sits UNDER the text regions — clicking text always yields a caret —
+  // while non-text renders (graphics, embedded tikz, list markers) sit on
+  // top and select their object.
+  const deckObjectRegions = useMemo(() => {
+    const under: HitRegion[] = [];
+    const over: HitRegion[] = [];
+    const layout = deckActiveFrame?.layout;
+    if (!layout || !deckObjectIndex) {
+      return { under, over };
+    }
+    const regionFor = (
+      node: BeamerObjectNode,
+      key: string,
+      bounds: { x: number; y: number; width: number; height: number }
+    ): HitRegion => ({
+      shape: "rect",
+      key,
+      sourceId: node.id,
+      targetId: node.id,
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      cx: bounds.x + bounds.width / 2,
+      cy: bounds.y + bounds.height / 2,
+      rotation: 0,
+      pointerMode: "fill",
+      deckObjectId: node.id
+    });
+    for (const node of deckObjectIndex.nodes) {
+      if (node.overlayPicture) {
+        // Reached through its shapes, below.
+        continue;
+      }
+      if (node.kind === "block" || node.kind === "columns" || node.kind === "column") {
+        under.push(regionFor(node, `deck-object:${node.id}`, node.bounds));
+      } else if (node.kind === "graphics" || node.kind === "tikzpicture" || node.kind === "unsupported") {
+        over.push(regionFor(node, `deck-object:${node.id}`, node.bounds));
+      }
+    }
+    // Other pictures' shapes can request their editing geometry without changing slides.
+    // Their regions are built in the layer's own SVG coordinates (the page as its view box,
+    // as in the layer's editor) and shifted onto the page.
+    const page = layout.page.page;
+    for (const picture of layout.embeddedTikz) {
+      const layer = picture.overlay;
+      if (!layer) continue;
+      if (snapshot.overlayLayer?.pageCoordinates && layer.rootId === snapshot.overlayLayer.rootId) continue;
+      const viewBox = { x: layer.pageCoordinates ? 0 : -layer.origin.x,
+        y: layer.pageCoordinates ? 0 : layer.origin.y - page.height, width: page.width, height: page.height };
+      for (const region of buildHitRegions([...layer.elements], viewBox, canvasTransform.scale)) {
+        // Enter the layer before editing a node's text in it.
+        const layerRegion = { ...region };
+        if (layerRegion.shape === "rect") {
+          delete layerRegion.interactionMode;
+          delete layerRegion.sceneTextKey;
+        }
+        over.push({
+          ...layerRegion,
+          key: `deck-layer:${layer.rootId}:${region.key}`,
+          offset: layer.pageCoordinates ? { x: 0, y: 0 } : { x: layer.origin.x, y: page.height - layer.origin.y },
+          layerEntry: { rootId: layer.rootId, sourceId: region.targetId }
+        });
+      }
+    }
+    for (const item of layout.items) {
+      if (item.kind !== "list-marker" || item.visibility === "hidden") {
+        continue;
+      }
+      const objectId = deckObjectIndex.objectIdByMarkerId.get(item.id);
+      const node = objectId ? deckObjectIndex.byId.get(objectId) : undefined;
+      if (!node) {
+        continue;
+      }
+      over.push(regionFor(node, `deck-object-marker:${item.id}`, item.bounds));
+    }
+    return { under, over };
+  }, [canvasTransform.scale, deckActiveFrame, deckObjectIndex, snapshot.overlayLayer]);
+
+  const hitRegions = useMemo<HitRegion[]>(() => {
+    if (!deckActiveFrame) {
+      return sceneHitRegions;
+    }
+    return [
+      ...sceneHitRegions,
+      ...deckObjectRegions.under,
+      ...deckEditing.regions,
+      ...deckObjectRegions.over
+    ];
+  }, [deckActiveFrame, deckEditing, deckObjectRegions, sceneHitRegions]);
+
+  // Rendered caret-stop domains for canvas-focus arrow motion, built lazily
+  // per scope from the same layout the hit regions come from and cached
+  // until the frame layout changes. A domain carries the source its layout
+  // was rendered from (not the newer store source), which is how a session
+  // tells whether the layout has caught up with its buffer.
+  const layoutSource = snapshot.source;
+  const layoutOverlayBranches = snapshot.deck?.activeFrame?.layout.overlayBranches;
+  const deckCaretDomainCache = useMemo(
+    () => new Map<string, BeamerCaretDomain | null>(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cache identity tracks the layout inputs
+    [deckEditing, layoutSource, layoutOverlayBranches]
+  );
+  const resolveDeckCaretDomain = useStableCallback((scopeId: string): BeamerCaretDomain | null => {
+    const cached = deckCaretDomainCache.get(scopeId);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const entry = deckEditing.scopesById.get(scopeId);
+    if (!entry) {
+      deckCaretDomainCache.set(scopeId, null);
+      return null;
+    }
+    const paragraphs = entry.scopeParagraphs
+      .map((ref) => deckEditing.paragraphById.get(ref.paragraphId))
+      .filter((paragraph): paragraph is NonNullable<typeof paragraph> => paragraph != null);
+    const domain = paragraphs.length
+      ? buildBeamerCaretStopDomain({ paragraphs, source: layoutSource, overlayBranches: layoutOverlayBranches })
+      : null;
+    deckCaretDomainCache.set(scopeId, domain);
+    return domain;
+  });
+
+  useLayoutEffect(() => {
+    canvasTransformRef.current = canvasTransform;
+    selectedElementIdsRef.current = selectedElementIds;
+    svgResultRef.current = svgResult;
+    fitToContentModeActiveRef.current = fitToContentModeActive;
+    sourceBoundsSvgRef.current = sourceBoundsSvg;
+    liveResizeFramesRef.current = resizeFramesBySource;
+  });
 
   const {
     snapGuideInput,
@@ -1929,14 +1925,18 @@ export const CanvasPanel = memo(function CanvasPanel({
     canvasTransform
   });
 
-  const { maxZoomScale } = useCanvasViewportPersistence({
+  const { maxZoomScale, viewportStateReadyRef } = useCanvasViewportPersistence({
     baseSvgResult,
     svgResult,
     viewportSize,
+    fitPadding: deckActiveFrame || overlayLayer ? 12 : 44,
     dispatch,
     dispatchCanvasTransform,
     activeDocumentId,
-    activeFigureId,
+    activeRootId,
+    viewportRootId,
+    // A layer's snapshot names its picture's own root (`figure:0`).
+    snapshotActiveRootId: overlayLayer && snapshot.source === source ? activeRootId : snapshot.activeRootId,
     tabOrder,
     canvasTransform,
     fitToContentModeActive,
@@ -1966,7 +1966,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     if (!warning) {
       return;
     }
-    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+    const clipboard: unknown = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+    if (!clipboard || typeof navigator.clipboard.writeText !== "function") {
       return;
     }
     void navigator.clipboard.writeText(warning);
@@ -1984,17 +1985,21 @@ export const CanvasPanel = memo(function CanvasPanel({
   );
 
   const applyActionWithFeedback = useCallback(
-    (action: EditAction, historyMergeKey?: string, sourceOverride?: string): ApplyActionFeedback => {
+    (action: EditAction, historyMergeKey?: string, sourceOverride?: string, geometry?: EditGeometrySession, recordInHistory?: boolean): ApplyActionFeedback => {
       const sourceForEdit = sourceOverride ?? source;
-      const sourceFingerprint = buildSnapshotEditSourceFingerprint({
-        documentId: activeDocumentId,
-        sourceRevision,
-        sourceLength: sourceForEdit.length,
-        sourceRefs: snapshot.editHandles.map((handle) => handle.sourceRef)
-      });
-      const result = applyEditAction(sourceForEdit, snapshot.editHandles, action, {
-        evaluateOptions: { sourceFingerprint, textEngine: textEngineRef.current },
-        parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
+      // A new shape is written in the picture's own coordinates.
+      if (action.kind === "addElement" && snapshot.scene?.rootTransform) {
+        const toPicture = worldToPictureCoordinates(snapshot.scene);
+        action = { ...action, at: toPicture(action.at), template: templateInPictureCoordinates(action.template, toPicture) };
+      }
+      const drawingLayerRootId = useEditorStore.getState().documents[activeDocumentId]?.drawingLayerRootId;
+      const result = executeDocumentEdit({ documentId: activeDocumentId, source: sourceForEdit, sourceRevision, activeRootId, snapshot,
+        ...(drawingLayerRootId !== undefined ? { drawingLayerRootId } : {}) }, action, {
+        ...(geometry !== undefined ? { geometry: geometry } : {}),
+        parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame" },
+        evaluateOptions: { textEngine: textEngineRef.current },
+        nestedFigureSpan: nestedFigureSpan ? { from: nestedFigureSpan.from,
+          to: nestedFigureSpan.to + (sourceForEdit.length - source.length) } : null
       });
 
       if (result.kind === "success" || result.kind === "partial") {
@@ -2008,12 +2013,13 @@ export const CanvasPanel = memo(function CanvasPanel({
           dispatch({
             type: "APPLY_EDIT_ACTION",
             action,
-            historyMergeKey,
+            ...(historyMergeKey !== undefined ? { historyMergeKey: historyMergeKey } : {}),
+            ...(recordInHistory !== undefined ? { recordInHistory: recordInHistory } : {}),
             precomputedSource: sourceForEdit,
             precomputedResult: result
           });
         }
-        return { sourceChanged, newSource: sourceChanged ? result.newSource : undefined };
+        return { sourceChanged, ...(sourceChanged ? { newSource: result.newSource } : {}), result };
       }
 
       if (result.kind === "unsupported") {
@@ -2026,9 +2032,6 @@ export const CanvasPanel = memo(function CanvasPanel({
         if (action.kind === "movePathAttachedNode" && result.reason === PATH_ATTACHED_NODE_EDIT_NOOP_REASON) {
           return { sourceChanged: false };
         }
-        if (action.kind === "cleanupPropertyWrites" && result.reason === PROPERTY_WRITE_CLEANUP_NOOP_REASON) {
-          return { sourceChanged: false };
-        }
         setWarning(result.reason);
       } else {
         setWarning(result.message);
@@ -2036,9 +2039,11 @@ export const CanvasPanel = memo(function CanvasPanel({
 
       return { sourceChanged: false };
     },
-    [activeDocumentId, dispatch, editParseOptions, source, sourceRevision, snapshot.editHandles]
+    [activeDocumentId, activeRootId, dispatch, editParseOptions, nestedFigureSpan, source, sourceRevision, snapshot]
   );
-  applyActionWithFeedbackRef.current = applyActionWithFeedback;
+  useLayoutEffect(() => {
+    applyActionWithFeedbackRef.current = applyActionWithFeedback;
+  });
 
   const queueSelectionForAddedElement = useCallback(
     (preferredWorld: WorldPoint, preferredSourceId?: string) => {
@@ -2046,7 +2051,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       for (const element of snapshot.scene?.elements ?? []) {
         beforeIds.add(element.sourceRef.sourceId);
       }
-      pendingAddedSelectionRef.current = { beforeIds, preferredWorld, preferredSourceId };
+      pendingAddedSelectionRef.current = { beforeIds, preferredWorld, ...(preferredSourceId !== undefined ? { preferredSourceId: preferredSourceId } : {}) };
     },
     [snapshot.scene]
   );
@@ -2061,6 +2066,62 @@ export const CanvasPanel = memo(function CanvasPanel({
     setPathSegmentDraft(null);
     setToolCursorWorld(segment.endWorld);
   }, []);
+
+  const undoTransientCanvasStep = useCallback(() => {
+    const draft = pathDraftRef.current;
+    if (draft) {
+      const nextDraft = draft.segments.length > 0 ? undoLastPathToolSegment(draft) : null;
+      pathDraftRef.current = nextDraft;
+      setPathDraft(nextDraft);
+      setPathSegmentDraft(null);
+      setToolCursorWorld(nextDraft ? pathToolCurrentPoint(nextDraft) : null);
+      setNodeAnchorOverlay(null);
+      setSnapLines([]);
+      if (dragRef.current?.kind === "tool-path-segment") {
+        setDragState(null);
+      }
+      return true;
+    }
+
+    const activeDrag = dragRef.current;
+    const hasBezierDraft =
+      pendingBezier != null ||
+      bezierBendDraft != null ||
+      toolDraft?.toolMode === "addBezier" ||
+      activeDrag?.kind === "tool-bezier-bend" ||
+      (activeDrag?.kind === "tool-create" && activeDrag.toolMode === "addBezier");
+    if (hasBezierDraft) {
+      setPendingBezier(null);
+      setBezierBendDraft(null);
+      setToolDraft(null);
+      setToolCursorWorld(null);
+      setNodeAnchorOverlay(null);
+      setSnapLines([]);
+      if (
+        activeDrag?.kind === "tool-bezier-bend" ||
+        (activeDrag?.kind === "tool-create" && activeDrag.toolMode === "addBezier")
+      ) {
+        setDragState(null);
+      }
+      return true;
+    }
+
+    if (pendingNodePositionTargetPick) {
+      clearPendingNodePositionTargetPick();
+      setToolCursorWorld(null);
+      setSnapLines([]);
+      return true;
+    }
+
+    return false;
+  }, [
+    bezierBendDraft,
+    clearPendingNodePositionTargetPick,
+    pendingBezier,
+    pendingNodePositionTargetPick,
+    setDragState,
+    toolDraft
+  ]);
 
   const appendFreehandSamplePoint = useCallback((point: WorldPoint): WorldPoint[] | null => {
     let nextPoints: WorldPoint[] | null = null;
@@ -2097,12 +2158,12 @@ export const CanvasPanel = memo(function CanvasPanel({
       return;
     }
 
-    const snippet = generateFreehandToolSource(draft, canvasTransform.scale, freehandSmoothingPx, {
+    const snippet = generateFreehandToolSource(freehandDraftInPictureCoordinates(draft, worldToPictureCoordinates(snapshot.scene)), canvasTransform.scale, freehandSmoothingPx, {
       strokeColor: creationStrokeColor
     });
     if (snippet) {
-      const firstPoint = draft.points[0];
-      const lastPoint = draft.points[draft.points.length - 1];
+      const firstPoint = requireArrayValue(draft.points, 0);
+      const lastPoint = requireArrayValue(draft.points, draft.points.length - 1);
       queueSelectionForAddedElement(
         makeWorldPoint(
           pt((firstPoint.x + lastPoint.x) / 2),
@@ -2124,7 +2185,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     setFreehandDraft(null);
     setToolCursorWorld(null);
     dispatch({ type: "SET_TOOL_MODE", mode: "select" });
-  }, [applyActionWithFeedback, canvasTransform.scale, creationStrokeColor, dispatch, freehandSmoothingPx, queueSelectionForAddedElement, setDragState]);
+  }, [applyActionWithFeedback, canvasTransform.scale, creationStrokeColor, dispatch, freehandSmoothingPx, queueSelectionForAddedElement, setDragState, snapshot.scene]);
 
   const finalizePathDraft = useCallback(
     (closed: boolean) => {
@@ -2144,7 +2205,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       }
 
       if (draft.appendTarget) {
-        const segSource = generateAppendSegmentSource(draft);
+        const segSource = generateAppendSegmentSource(pathDraftInPictureCoordinates(draft, worldToPictureCoordinates(snapshot.scene)));
         if (!segSource) {
           setPathDraft(null);
           setToolCursorWorld(null);
@@ -2161,7 +2222,7 @@ export const CanvasPanel = memo(function CanvasPanel({
           pendingAddedSelectionRef.current = null;
         }
       } else {
-        const snippet = generatePathToolSource(draft, { closed, strokeColor: creationStrokeColor });
+        const snippet = generatePathToolSource(pathDraftInPictureCoordinates(draft, worldToPictureCoordinates(snapshot.scene)), { closed, strokeColor: creationStrokeColor });
         if (!snippet) {
           setPathDraft(null);
           setToolCursorWorld(null);
@@ -2182,7 +2243,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       setToolCursorWorld(null);
       dispatch({ type: "SET_TOOL_MODE", mode: "select" });
     },
-    [applyActionWithFeedback, creationStrokeColor, dispatch, setDragState]
+    [applyActionWithFeedback, creationStrokeColor, dispatch, setDragState, snapshot.scene]
   );
 
   
@@ -2191,6 +2252,74 @@ export const CanvasPanel = memo(function CanvasPanel({
     (targetId: string, region: HitRegion | undefined): EditableTextTarget | null => {
       if (region?.shape !== "rect" || region.interactionMode === "move") {
         return null;
+      }
+      const deckScopeEntry = deckEditing.scopesById.get(targetId);
+      if (deckScopeEntry) {
+        if (!deckFrameFresh) return null;
+        const { scope } = deckScopeEntry;
+        const text = source.slice(scope.span.from, scope.span.to);
+        if (!text) {
+          return null;
+        }
+        // Atom-only scopes (e.g. a drawing-only frame body) resolve without
+        // a rendered paragraph: the session opens on the scope buffer with
+        // the atom span selected, and there is no canvas caret geometry.
+        const paragraph =
+          (region.sceneTextKey
+            ? deckEditing.paragraphById.get(region.sceneTextKey)
+            : undefined) ??
+          (deckScopeEntry.scopeParagraphs[0]
+            ? deckEditing.paragraphById.get(deckScopeEntry.scopeParagraphs[0].paragraphId)
+            : undefined);
+        const layoutSourceText = paragraph
+          ? source.slice(paragraph.sourceSpan.from, paragraph.sourceSpan.to)
+          : text;
+        if (!layoutSourceText) {
+          return null;
+        }
+        const firstTextSegment = paragraph?.report.lines
+          .flatMap((line) => line.segments)
+          .find((segment) =>
+            (segment.kind === "text" || segment.kind === "space") &&
+            segment.fontAtPt != null
+          );
+        const textAlign =
+          paragraph?.report.alignment === "center"
+            ? "center"
+            : paragraph?.report.alignment === "ragged-left"
+              ? "right"
+              : paragraph?.report.alignment === "justified"
+                ? "justify"
+                : "left";
+        const atomicSelectionSpan = deckEditing.atomSpanByRegionKey.get(region.key);
+        return {
+          sourceId: scope.id,
+          sceneTextId: paragraph?.paragraphId ?? scope.id,
+          sourceSpan: scope.span,
+          text,
+          structuralMaskRanges: deckScopeEntry.maskRanges,
+          scopeParagraphs: deckScopeEntry.scopeParagraphs,
+          ...(atomicSelectionSpan !== undefined ? { atomicSelectionSpan } : {}),
+          layoutSourceSpan: paragraph?.sourceSpan ?? scope.span,
+          layoutSourceText,
+          renderSourceText: layoutSourceText,
+          usesTex: true,
+          paragraphId: paragraph?.paragraphId ?? null,
+          // Scope buffers always resolve carets through paragraph geometry;
+          // the single-line estimate path assumes plain text.
+          layoutKind: "wrapped",
+          style: {
+            fontSize: Number(firstTextSegment?.fontAtPt ?? 11),
+            fontStyle: "normal",
+            fontWeight: "normal",
+            fontFamily: "sans",
+            textAlign
+          },
+          totalWidth: paragraph?.bounds.width ?? region.width,
+          region,
+          editMode: "default",
+          ...(deckScopeEntry.anchorBounds != null ? { popupAnchorBox: deckScopeEntry.anchorBounds } : {})
+        };
       }
       const sceneText = sceneTextByRegionKey.get(region.sceneTextKey ?? region.key);
       if (!sceneText) {
@@ -2256,16 +2385,16 @@ export const CanvasPanel = memo(function CanvasPanel({
         sourceSpan,
         text: sourceSlice,
         renderSourceText:
-          sceneText.textRenderInfo?.mode === "mathjax"
+          sceneText.textRenderInfo?.mode === "tex"
             ? sceneText.textRenderInfo.renderSourceText
             : sourceSlice,
-        usesMathJax: sceneText.textRenderInfo?.mode === "mathjax",
+        usesTex: sceneText.textRenderInfo?.mode === "tex",
         paragraphId:
-          sceneText.textRenderInfo?.mode === "mathjax"
+          sceneText.textRenderInfo?.mode === "tex"
             ? sceneText.textRenderInfo.paragraphId
             : null,
         layoutKind:
-          sceneText.textRenderInfo?.mode === "mathjax"
+          sceneText.textRenderInfo?.mode === "tex"
             ? sceneText.textRenderInfo.layoutKind
             : resolveFallbackTextLayoutKind(sourceSlice, sceneText.textHasFixedWidth, !!sceneText.matrixCell),
         style: sceneText.style,
@@ -2282,7 +2411,7 @@ export const CanvasPanel = memo(function CanvasPanel({
             )
       };
     },
-    [sceneTextByRegionKey, snapshot.parseResult, snapshot.scene, source, sourceBoundsSvg, svgResult]
+    [deckEditing, deckFrameFresh, sceneTextByRegionKey, snapshot.parseResult, snapshot.scene, source, sourceBoundsSvg, svgResult]
   );
 
   const editableTextRegionKeys = useMemo(() => {
@@ -2324,615 +2453,343 @@ export const CanvasPanel = memo(function CanvasPanel({
     [hitRegions, resolveEditableTextTarget]
   );
 
-  const resolveRenderedMathTextElement = useCallback((target: EditableTextTarget): SVGSVGElement | null => {
-    const host = svgLayerHostRef.current;
-    if (!host) {
-      return null;
-    }
-    const candidates = Array.from(host.querySelectorAll<SVGSVGElement>('svg[data-text-renderer="mathjax"]'));
-    for (const candidate of candidates) {
-      if (candidate.getAttribute("data-scene-text-id") === target.sceneTextId) {
-        return candidate;
-      }
-    }
-    for (const candidate of candidates) {
-      if (candidate.getAttribute("data-paragraph-id") === target.paragraphId) {
-        return candidate;
-      }
-    }
-    for (const candidate of candidates) {
-      if (candidate.getAttribute("data-source-id") === target.sourceId) {
-        return candidate;
-      }
-    }
-    return null;
-  }, []);
+  const {
+    textEditingSession,
+    textSelectionOverlay,
+    view: canvasTextEditView,
+    beginCanvasTextInteraction,
+    closeTextEditingSession,
+    requestAdornmentTextEdit,
+    startTextEditingSession
+  } = useCanvasTextEditSession({
+    contextKey: rootKey(activeDocumentId, activeRootId),
+    source,
+    sourceRevision,
+    snapshot,
+    toolMode,
+    selectedElementIds,
+    canvasTransform,
+    svgResult,
+    viewportSize,
+    sourceBoundsSvg,
+    viewportRef,
+    interactionSvgRef,
+    svgLayerHostRef,
+    suppressNextBackgroundClickRef,
+    resolveEditableTextTargetById,
+    resolveDeckCaretDomain,
+    deckCaretLayout: deckCaretDomainCache,
+    onCanvasSessionEscape: handleCanvasSessionEscape,
+    textLayoutContext,
+    textEditPlacement,
+    dispatch
+  });
 
-  const resolveTextOffsetFromClient = useCallback(
-    async (target: EditableTextTarget, clientPoint: ClientPoint): Promise<number | null> => {
-      if (target.isForeachTemplateEdit) {
-        return null;
+  const enterNestedFigure = useCallback(
+    (node: BeamerObjectNode): boolean => {
+      if (node.kind !== "tikzpicture" || !node.rootId) {
+        return false;
       }
-      const outputJax = getActiveMathJaxOutputJax();
-      const containerElement = resolveRenderedMathTextElement(target);
-      const requiresParagraphGeometry = target.usesMathJax && target.layoutKind !== "single-line";
-      if (!target.paragraphId || !outputJax || !containerElement) {
-        if (requiresParagraphGeometry) {
-          console.error("[canvas-text-edit] Missing paragraph geometry for multiline MathJax hit-testing.", {
-            sourceId: target.sourceId,
-            paragraphId: target.paragraphId,
-            layoutKind: target.layoutKind
-          });
-          return null;
-        }
-        return estimateTextOffsetFromClient(
-          target,
-          clientPoint,
-          interactionSvgRef.current,
-          viewportRef,
-          svgResult,
-          canvasTransform
-        );
-      }
-      const result = await getKnuthPlassCaretFromPoint(outputJax, {
-        paragraphId: target.paragraphId,
-        sourceText: target.renderSourceText,
-        containerElement,
-        clientPoint
-      });
-      if (!result.ok || result.offset == null) {
-        return null;
-      }
-      const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
-      return clamp(offsetMap.renderToSource(result.offset), 0, target.text.length);
+      closeTextEditingSession();
+      selectDeckObject(null);
+      dispatch({ type: "SET_ACTIVE_ROOT", rootId: node.rootId });
+      return true;
     },
-    [
-      canvasTransform,
-      resolveRenderedMathTextElement,
-      svgResult,
-      viewportRef
-    ]
+    [closeTextEditingSession, dispatch, selectDeckObject]
   );
 
-  const resolveTextLineRangeFromClient = useCallback(
-    async (target: EditableTextTarget, clientPoint: ClientPoint): Promise<TextLineRange | null> => {
-      if (target.isForeachTemplateEdit) {
-        return null;
-      }
-      const outputJax = getActiveMathJaxOutputJax();
-      const containerElement = resolveRenderedMathTextElement(target);
-      const requiresParagraphGeometry = target.usesMathJax && target.layoutKind !== "single-line";
-      if (target.paragraphId && outputJax && containerElement) {
-        const result = await getKnuthPlassLineRangeFromPoint(outputJax, {
-          paragraphId: target.paragraphId,
-          sourceText: target.renderSourceText,
-          containerElement,
-          clientPoint
-        });
-        if (result.ok && result.lineStartOffset != null && result.lineEndOffset != null) {
-          const offsetMap = createSourceRenderOffsetMap(target.text, target.renderSourceText);
-          const start = clamp(offsetMap.renderToSource(result.lineStartOffset), 0, target.text.length);
-          const end = clamp(offsetMap.renderToSource(result.lineEndOffset), 0, target.text.length);
-          return {
-            start: Math.min(start, end),
-            end: Math.max(start, end)
-          };
-        }
-      }
-      if (requiresParagraphGeometry) {
-        console.error("[canvas-text-edit] Missing paragraph geometry for multiline MathJax line-range resolution.", {
-          sourceId: target.sourceId,
-          paragraphId: target.paragraphId,
-          layoutKind: target.layoutKind
-        });
-        return null;
-      }
-      return estimateTextLineRangeFromClient(
-        target,
-        clientPoint,
-        interactionSvgRef.current,
-        viewportRef,
-        svgResult,
-        canvasTransform
-      );
-    },
-    [
-      canvasTransform,
-      interactionSvgRef,
-      resolveRenderedMathTextElement,
-      svgResult,
-      viewportRef
-    ]
+  const exitNestedFigure = useCallback(() => {
+    if (!nestedFigureRef) {
+      return;
+    }
+    closeTextEditingSession();
+    dispatch({
+      type: "SET_ACTIVE_ROOT",
+      rootId: formatDocumentRootId({
+        kind: "beamer-frame",
+        index: nestedFigureRef.frameIndex
+      })
+    });
+  }, [closeTextEditingSession, dispatch, nestedFigureRef]);
+
+  const nestedFigureBreadcrumb = useMemo(
+    () =>
+      isNestedFigureMode
+        ? {
+            slideLabel: `Slide ${nestedFigureRef.frameIndex + 1}`,
+            figureLabel: nestedFigureRef.layer ? "Drawing" : `Figure ${nestedFigureRef.index + 1}`,
+            onExit: exitNestedFigure
+          }
+        : null,
+    [exitNestedFigure, isNestedFigureMode, nestedFigureRef]
   );
 
-  const startTextEditingSession = useCallback(
-    (
-      target: EditableTextTarget,
-      selectionStart: number,
-      selectionEnd: number,
-      historyMergeKey?: string
-    ) => {
-      dispatchCanvasTextEditAction({
-        type: "start_session",
-        target,
-        source,
-        selectionStart,
-        selectionEnd,
-        historyMergeKey: historyMergeKey ?? makeMergeKey("canvas-text-edit", target.sourceId, Date.now())
-      });
-    },
-    [dispatchCanvasTextEditAction, source]
-  );
-
-  const beginCanvasTextInteraction = useCallback(
-    (event: ReactPointerEvent<SVGElement>, target: EditableTextTarget) => {
-      if (event.shiftKey || event.ctrlKey || event.metaKey || event.button !== 0) {
+  /**
+   * Enter/F2 drill-in: reopen a text session inside the selected object —
+   * at its first rendered caret stop, with the whole atom span selected
+   * for graphics — while embedded tikzpictures enter the nested figure
+   * editor instead.
+   */
+  const openDeckObjectTextSession = useCallback(
+    (node: BeamerObjectNode) => {
+      if (node.kind === "unsupported") {
+        selectDeckObject(node.id);
         return;
       }
-      suppressNextBackgroundClickRef.current = true;
-      if (target.isForeachTemplateEdit) {
-        event.preventDefault();
+      const layout = deckActiveFrame?.layout;
+      if (!layout) {
+        return;
+      }
+      const scope = resolveBeamerEditScopeAt(layout.editScopes, node.sourceSpan.from);
+      if (!scope) {
+        return;
+      }
+      const target = resolveEditableTextTargetById(scope.id);
+      if (!target) {
+        return;
+      }
+      const clampLocal = (offset: number): number =>
+        Math.min(Math.max(offset - target.sourceSpan.from, 0), target.text.length);
+      if (node.kind === "graphics" || node.kind === "tikzpicture") {
         startTextEditingSession(
           target,
-          0,
-          target.text.length,
-          textEditingSession?.sourceId === target.sourceId ? textEditingSession.historyMergeKey : undefined
+          clampLocal(node.sourceSpan.from),
+          clampLocal(node.sourceSpan.to)
         );
         return;
       }
-      const requestRevision = canvasTextEditState.asyncRequestRevision + 1;
-      const baseInputRevision = canvasTextEditState.inputRevision;
-      const existingHistoryMergeKey =
-        textEditingSession?.sourceId === target.sourceId ? textEditingSession.historyMergeKey : undefined;
-      const clickCount = event.detail >= 2 ? event.detail : 1;
-      const mode = resolveTextSelectionModeFromClickCount(clickCount);
-      const clientPoint = makeClientPoint(px(event.clientX), px(event.clientY));
-      const requiresParagraphGeometry = target.usesMathJax && target.layoutKind !== "single-line";
-      const provisionalOffset = requiresParagraphGeometry
-        ? 0
-        : estimateTextOffsetFromClient(
-            target,
-            clientPoint,
-            interactionSvgRef.current,
-            viewportRef,
-            svgResult,
-            canvasTransform
-          );
-      const provisionalLineRange = mode === "line"
-        ? resolveLogicalLineRangeForOffset(target.text, provisionalOffset)
-        : null;
-      const provisionalSelection = resolveTextSelectionRangeForMode(
-        target.text,
-        mode,
-        provisionalOffset,
-        provisionalLineRange
+      const domain = resolveDeckCaretDomain(scope.id);
+      let offset =
+        node.kind === "item" && node.listItem
+          ? node.listItem.item.contentSpan.from
+          : node.sourceSpan.from;
+      const within = domain?.offsets.find(
+        (candidate) => candidate >= offset && candidate <= node.sourceSpan.to
       );
-      dispatchCanvasTextEditAction({
-        type: "pointer_down_provisional",
-        target,
-        source,
-        pointerId: event.pointerId,
-        selectionStart: provisionalSelection.start,
-        selectionEnd: provisionalSelection.end,
-        anchorOffset: provisionalOffset,
-        mode,
-        anchorLineRange: provisionalLineRange,
-        historyMergeKey: existingHistoryMergeKey ?? makeMergeKey("canvas-text-edit", target.sourceId, Date.now())
-      });
-      textSelectionDragRef.current = {
-        pointerId: event.pointerId,
-        sourceId: target.sourceId,
-        sceneTextId: target.sceneTextId,
-        anchorOffset: provisionalOffset,
-        mode,
-        anchorLineRange: provisionalLineRange
-      };
-      const pointerId = event.pointerId;
-      const pointerCaptureTarget = event.currentTarget;
-      const offsetPromise = resolveTextOffsetFromClient(target, clientPoint);
-      const lineRangePromise = mode === "line"
-        ? resolveTextLineRangeFromClient(target, clientPoint)
-        : Promise.resolve<TextLineRange | null>(null);
-      void Promise.all([offsetPromise, lineRangePromise]).then(([offset, lineRange]) => {
-        const resolvedOffset = offset == null ? provisionalOffset : clamp(offset, 0, target.text.length);
-        const resolvedLineRange = mode === "line"
-          ? (
-              lineRange
-                ? {
-                    start: clamp(lineRange.start, 0, target.text.length),
-                    end: clamp(lineRange.end, 0, target.text.length)
-                  }
-                : provisionalLineRange
-            )
-          : null;
-        const selection = resolveTextSelectionRangeForMode(
-          target.text,
-          mode,
-          resolvedOffset,
-          resolvedLineRange
-        );
-        dispatchCanvasTextEditAction({
-          type: "pointer_resolved",
-          requestRevision,
-          baseInputRevision,
-          sourceId: target.sourceId,
-          sceneTextId: target.sceneTextId,
-          pointerId,
-          selectionStart: selection.start,
-          selectionEnd: selection.end,
-          anchorOffset: resolvedOffset,
-          anchorLineRange: resolvedLineRange
-        });
-        if (textSelectionDragRef.current?.pointerId === pointerId) {
-          textSelectionDragRef.current = {
-            pointerId,
-            sourceId: target.sourceId,
-            sceneTextId: target.sceneTextId,
-            anchorOffset: resolvedOffset,
-            mode,
-            anchorLineRange: resolvedLineRange
+      if (within != null) {
+        offset = within;
+      }
+      const local = clampLocal(offset);
+      startTextEditingSession(target, local, local);
+    },
+    [deckActiveFrame, resolveDeckCaretDomain, resolveEditableTextTargetById, selectDeckObject, startTextEditingSession]
+  );
+
+  // A duplicate's copy only exists after the frame re-renders; remember the
+  // inserted span and reselect the object that appears inside it.
+  const pendingDeckReselectRef = useRef<{
+    frameId: string;
+    kind: BeamerObjectNode["kind"];
+    span: Span;
+  } | null>(null);
+
+  const applyDeckObjectEdit = useStableCallback(
+    (mode: "delete" | "duplicate", node: BeamerObjectNode) => {
+      if (!deckActiveFrame || !deckObjectIndex) {
+        return;
+      }
+      if (snapshot.source !== source) {
+        // The layout (and the object index derived from it) lags behind the
+        // source; refuse rather than patch through stale spans. (The reducer
+        // repeats this guard; failing silently here avoids a warning toast
+        // for a keypress that raced a reconcile.)
+        return;
+      }
+      if (mode === "duplicate") {
+        // The action recomputes this patch deterministically; it is built
+        // here only for the reselect span of the not-yet-rendered copy.
+        const patch = beamerObjectDuplicationPatch(source, node);
+        if (!patch || patch.edits.length === 0) {
+          return;
+        }
+        if (patch.selectSpan) {
+          pendingDeckReselectRef.current = {
+            frameId: deckActiveFrame.frameId,
+            kind: node.kind,
+            span: patch.selectSpan
           };
         }
-        try {
-          pointerCaptureTarget.setPointerCapture(pointerId);
-        } catch {
-          // Ignore pointer capture failures; the window listeners still complete the drag.
+      }
+      dispatch({
+        type: "APPLY_EDIT_ACTION",
+        action: {
+          kind: mode === "delete" ? "deckDeleteObject" : "deckDuplicateObject",
+          frameId: deckActiveFrame.frameId,
+          objectId: node.id
         }
       });
-    },
-    [
-      canvasTransform,
-      canvasTextEditState.asyncRequestRevision,
-      canvasTextEditState.inputRevision,
-      dispatchCanvasTextEditAction,
-      interactionSvgRef,
-      resolveTextLineRangeFromClient,
-      resolveTextOffsetFromClient,
-      source,
-      startTextEditingSession,
-      svgResult,
-      textEditingSession,
-      viewportRef
-    ]
+      if (mode === "delete") {
+        selectDeckObject(null);
+      }
+    }
   );
 
-  const dispatchTextEditBeforeInputIntent = useCallback(
-    (nativeEvent: InputEvent, textarea: HTMLTextAreaElement) => {
-      if (typeof nativeEvent.inputType !== "string") {
-        return;
-      }
-      const inputType = nativeEvent.inputType;
-      const isSupported = isCanvasTextInputIntentType(inputType);
-      if (isSupported) {
-        nativeEvent.preventDefault();
-      }
-      nativeEvent.stopPropagation();
-      let data = nativeEvent.data;
-      if (inputType === "insertFromDrop" && data == null) {
-        data = nativeEvent.dataTransfer?.getData("text/plain") ?? null;
-      }
-      if (inputType === "insertText" && data == null) {
-        data = pendingTextEditInsertTextRef.current;
-      }
-      if (inputType === "insertFromPaste" && data == null) {
-        data = pendingTextEditPasteRef.current;
-      }
-      if (inputType === "insertFromPaste") {
-        pendingTextEditPasteRef.current = null;
-      }
-      pendingTextEditInsertTextRef.current = null;
-      dispatchCanvasTextEditAction({
-        type: "textarea_input_intent",
-        inputType,
-        data,
-        selectionStart: textarea.selectionStart ?? 0,
-        selectionEnd: textarea.selectionEnd ?? 0
-      });
-    },
-    [dispatchCanvasTextEditAction]
-  );
-
-  const handleTextEditTextareaSelect = useCallback((event: ReactSyntheticEvent<HTMLTextAreaElement>) => {
-    const textarea = event.currentTarget;
-    dispatchCanvasTextEditAction({
-      type: "textarea_selection",
-      selectionStart: textarea.selectionStart ?? 0,
-      selectionEnd: textarea.selectionEnd ?? 0
-    });
-  }, [dispatchCanvasTextEditAction]);
-
-  const stopTextEditTextareaClipboardPropagation = useCallback((event: ReactClipboardEvent<HTMLTextAreaElement>) => {
-    event.stopPropagation();
-  }, []);
-
-  const handleTextEditTextareaPaste = useCallback((event: ReactClipboardEvent<HTMLTextAreaElement>) => {
-    event.stopPropagation();
-    pendingTextEditPasteRef.current = event.clipboardData.getData("text/plain");
-  }, []);
-
-  const handleTextEditTextareaDrop = useCallback((event: ReactDragEvent<HTMLTextAreaElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const textarea = event.currentTarget;
-    dispatchCanvasTextEditAction({
-      type: "textarea_input_intent",
-      inputType: "insertFromDrop",
-      data: event.dataTransfer.getData("text/plain"),
-      selectionStart: textarea.selectionStart ?? 0,
-      selectionEnd: textarea.selectionEnd ?? 0
-    });
-  }, [dispatchCanvasTextEditAction]);
-
-  const handleTextEditTextareaKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      textSelectionDragRef.current = null;
-      dispatchCanvasTextEditAction({ type: "session_close" });
+  useEffect(() => {
+    const pending = pendingDeckReselectRef.current;
+    if (!pending || !deckObjectIndex || !deckActiveFrame) {
       return;
     }
+    if (snapshot.source !== source || deckActiveFrame.frameId !== pending.frameId) {
+      return;
+    }
+    pendingDeckReselectRef.current = null;
+    // Items' topology spans run through the next `\item`/`\end` token, past
+    // the inserted copy, so match on the span START falling inside it.
+    const node = deckObjectIndex.nodes.find(
+      (candidate) =>
+        candidate.kind === pending.kind &&
+        candidate.sourceSpan.from >= pending.span.from &&
+        candidate.sourceSpan.from < pending.span.to
+    );
+    selectDeckObject(node ? node.id : null);
+  }, [deckActiveFrame, deckObjectIndex, selectDeckObject, snapshot.source, source]);
 
-    if ((event.ctrlKey || event.metaKey) && !event.altKey) {
-      const lowerKey = event.key.toLowerCase();
-      let historyIntent: "historyUndo" | "historyRedo" | null = null;
-      if (lowerKey === "z") {
-        historyIntent = event.shiftKey ? "historyRedo" : "historyUndo";
-      } else if (lowerKey === "y" && !event.shiftKey) {
-        historyIntent = "historyRedo";
+  // A new slide opens with its placeholder selected once it is shown, so
+  // typing replaces it.
+  const handledPlaceholderSelectionRef = useRef(deckPlaceholderSelection);
+  useEffect(() => {
+    const request = deckPlaceholderSelection, layout = deckActiveFrame?.layout;
+    if (!request || handledPlaceholderSelectionRef.current === request || !layout || deckActiveFrame.frameId !== activeRootId ||
+      request.documentId !== activeDocumentId || request.sourceRevision !== sourceRevision || snapshot.source !== source) return;
+    handledPlaceholderSelectionRef.current = request;
+    const scope = resolveBeamerEditScopeAt(layout.editScopes, request.span.from);
+    const target = scope && resolveEditableTextTargetById(scope.id);
+    if (!target) return;
+    const local = (offset: number): number => Math.min(Math.max(offset - target.sourceSpan.from, 0), target.text.length);
+    startTextEditingSession(target, local(request.span.from), local(request.span.to));
+  }, [activeDocumentId, activeRootId, deckActiveFrame, deckPlaceholderSelection, resolveEditableTextTargetById, snapshot.source, source, sourceRevision, startTextEditingSession]);
+
+  /**
+   * Viewport keys while a deck object is selected: Esc walks up the parent
+   * chain and finally clears, Enter/F2 drills back into text, Delete
+   * removes the object, Cmd/Ctrl+D duplicates it.
+   */
+  const handleDeckObjectViewportKey = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>): boolean => {
+      if (!deckSelectedObject) {
+        return false;
       }
-      if (historyIntent) {
-        pendingTextEditInsertTextRef.current = null;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (
+        target?.isContentEditable ||
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA"
+      ) {
+        return false;
+      }
+      if (event.key === "Escape") {
         event.preventDefault();
-        event.stopPropagation();
-        const textarea = event.currentTarget;
-        dispatchCanvasTextEditAction({
-          type: "textarea_input_intent",
-          inputType: historyIntent,
-          data: null,
-          selectionStart: textarea.selectionStart ?? 0,
-          selectionEnd: textarea.selectionEnd ?? 0
-        });
-        return;
+        selectDeckObject(deckSelectedObject.parentId);
+        return true;
       }
-    }
+      if (event.key === "Enter" || event.key === "F2") {
+        event.preventDefault();
+        // Embedded tikzpictures enter the nested figure editor; other
+        // objects (or a picture without a root id) drill into text.
+        if (!enterNestedFigure(deckSelectedObject)) {
+          openDeckObjectTextSession(deckSelectedObject);
+        }
+        return true;
+      }
+      if (
+        (event.key === "Backspace" || event.key === "Delete") &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        applyDeckObjectEdit("delete", deckSelectedObject);
+        return true;
+      }
+      if (
+        event.key.toLowerCase() === "d" &&
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        !event.shiftKey
+      ) {
+        event.preventDefault();
+        applyDeckObjectEdit("duplicate", deckSelectedObject);
+        return true;
+      }
+      return false;
+    },
+    [applyDeckObjectEdit, deckSelectedObject, enterNestedFigure, openDeckObjectTextSession, selectDeckObject]
+  );
 
-    if (event.ctrlKey || event.metaKey || event.altKey) {
-      pendingTextEditInsertTextRef.current = null;
-      event.stopPropagation();
+  const deckObjectSelectionBox = useMemo(() => {
+    if (!deckSelectedObject) {
+      return null;
+    }
+    const pad = 1.5;
+    return {
+      objectId: deckSelectedObject.id,
+      kind: deckSelectedObject.kind,
+      x: deckSelectedObject.bounds.x - pad,
+      y: deckSelectedObject.bounds.y - pad,
+      width: deckSelectedObject.bounds.width + pad * 2,
+      height: deckSelectedObject.bounds.height + pad * 2
+    };
+  }, [deckSelectedObject]);
+
+  const handleAddNodeAdornmentCommand = useCallback((kind: "label" | "pin") => {
+    const state = canvasCommandStateRef.current;
+    if (!state) {
       return;
     }
-    pendingTextEditInsertTextRef.current = event.key.length === 1 ? event.key : null;
-  }, [dispatchCanvasTextEditAction]);
-
-  const handleTextEditPopupPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    event.stopPropagation();
+    const result = resolveNodeAdornmentContextAction({
+      source: state.source,
+      clickedTargetId: contextMenuContextRef.current.clickedTargetId,
+      selectedTargetId: state.selectedElementIds.size === 1 ? [...state.selectedElementIds][0] ?? null : null,
+      clickedWorld: contextMenuContextRef.current.clickedWorld,
+      sceneElements: state.sceneElements,
+      viewBox: state.viewBox,
+      adornmentKind: kind,
+      text: kind === "pin" ? "Pin" : "Label",
+      parseOptions: state.editParseOptions
+    });
+    if (result.kind !== "ready") {
+      return;
+    }
+    dispatch({
+      type: "APPLY_EDIT_ACTION",
+      action: result.action
+    });
+    requestAdornmentTextEdit(result.pendingTextTargetId);
+  }, [contextMenuContextRef, dispatch, requestAdornmentTextEdit]);
+  const handlePositionNodeRelativeToCommand = useCallback(() => {
+    const state = canvasCommandStateRef.current;
+    const selectedSourceId = state?.selectedElementIds.size === 1 ? [...state.selectedElementIds][0] ?? null : null;
+    if (!selectedSourceId) {
+      return;
+    }
+    closeTextEditingSession();
+    clearPendingNodePositionTargetPick();
+    setPendingNodePositionTargetPick({ nodeSourceId: selectedSourceId });
+  }, [clearPendingNodePositionTargetPick, closeTextEditingSession]);
+  const handleConvertNodePositionToAbsoluteCommand = useCallback(() => {
+    const state = canvasCommandStateRef.current;
+    const selectedSourceId = state?.selectedElementIds.size === 1 ? [...state.selectedElementIds][0] ?? null : null;
+    const applyActionWithFeedback = applyActionWithFeedbackRef.current;
+    if (!selectedSourceId || !applyActionWithFeedback) {
+      return;
+    }
+    applyActionWithFeedback({
+      kind: "convertNodePositionToAbsolute",
+      nodeId: selectedSourceId
+    });
+    clearPendingNodePositionTargetPick();
+  }, [clearPendingNodePositionTargetPick]);
+  const handleOpenEditEquationCommand = useCallback((target: EquationNodeTarget) => {
+    setEquationModalTarget(target);
   }, []);
 
-  useLayoutEffect(() => {
-    const textarea = textEditTextareaRef.current;
-    if (!textEditingSession || !textarea) {
-      return;
-    }
-    const handleBeforeInput = (event: Event) => {
-      const inputEvent = event as InputEvent;
-      if (typeof inputEvent.inputType !== "string") {
-        return;
-      }
-      dispatchTextEditBeforeInputIntent(inputEvent, textarea);
-    };
-    textarea.addEventListener("beforeinput", handleBeforeInput);
-    return () => { textarea.removeEventListener("beforeinput", handleBeforeInput); };
-  }, [dispatchTextEditBeforeInputIntent, textEditingSession]);
-
-  useEffect(() => {
-    const textarea = textEditTextareaRef.current;
-    if (!textEditingSession || !textarea) {
-      return;
-    }
-    if (document.activeElement !== textarea) {
-      textarea.focus({ preventScroll: true });
-    }
-    const start = clamp(textEditingSession.selectionStart, 0, textEditingSession.text.length);
-    const end = clamp(textEditingSession.selectionEnd, 0, textEditingSession.text.length);
-    if (textarea.selectionStart !== start || textarea.selectionEnd !== end) {
-      textarea.setSelectionRange(start, end);
-    }
-  }, [textEditingSession]);
-
-  useEffect(() => {
-    const textarea = textEditTextareaRef.current;
-    if (!textEditingSession?.isForeachTemplateEdit || !textarea || textEditPopupHeight == null) {
-      return;
-    }
-    if (document.activeElement !== textarea) {
-      textarea.focus({ preventScroll: true });
-    }
-  }, [textEditingSession, textEditPopupHeight]);
-
-  useEffect(() => {
-    const textarea = textEditTextareaRef.current;
-    if (!textEditingSession || !textarea) {
-      return;
-    }
-    const syncSelectionFromTextarea = () => {
-      dispatchCanvasTextEditAction({
-        type: "textarea_selection",
-        selectionStart: textarea.selectionStart ?? 0,
-        selectionEnd: textarea.selectionEnd ?? 0
-      });
-    };
-    const handleDocumentSelectionChange = () => {
-      if (document.activeElement === textarea) {
-        syncSelectionFromTextarea();
-      }
-    };
-    textarea.addEventListener("select", syncSelectionFromTextarea);
-    textarea.addEventListener("mouseup", syncSelectionFromTextarea);
-    document.addEventListener("selectionchange", handleDocumentSelectionChange);
-    return () => {
-      textarea.removeEventListener("select", syncSelectionFromTextarea);
-      textarea.removeEventListener("mouseup", syncSelectionFromTextarea);
-      document.removeEventListener("selectionchange", handleDocumentSelectionChange);
-    };
-  }, [dispatchCanvasTextEditAction, textEditingSession]);
-
-  useLayoutEffect(() => {
-    const textarea = textEditTextareaRef.current;
-    if (!textEditingSession || !textarea) {
-      setTextEditCaretOverlay(null);
-      return;
-    }
-    if (textEditingSession.selectionStart !== textEditingSession.selectionEnd) {
-      setTextEditCaretOverlay(null);
-      return;
-    }
-    const syncTextEditCaretOverlay = () => {
-      const currentTextarea = textEditTextareaRef.current;
-      if (!currentTextarea) {
-        setTextEditCaretOverlay(null);
-        return;
-      }
-      const caretOffset = clamp(
-        textEditingSession.selectionStart,
-        0,
-        textEditingSession.text.length
-      );
-      const measuredRect = resolveTextareaCaretClientRect(currentTextarea, caretOffset);
-      if (!measuredRect) {
-        setTextEditCaretOverlay(null);
-        return;
-      }
-      const textareaRect = currentTextarea.getBoundingClientRect();
-      const rawLeft = measuredRect.left - textareaRect.left;
-      const rawTop = measuredRect.top - textareaRect.top;
-      const minLeft = 0;
-      const maxLeft = textareaRect.width;
-      const height = Math.max(1, Math.min(measuredRect.height, textareaRect.height));
-      const minTop = 0;
-      const maxTop = textareaRect.height - height;
-      const nextOverlay = {
-        left: clamp(rawLeft, minLeft, maxLeft),
-        top: clamp(rawTop, minTop, maxTop),
-        height
-      };
-      setTextEditCaretOverlay((current) => {
-        if (
-          current &&
-          Math.abs(current.left - nextOverlay.left) <= TEXT_CARET_OVERLAY_EPSILON_PX &&
-          Math.abs(current.top - nextOverlay.top) <= TEXT_CARET_OVERLAY_EPSILON_PX &&
-          Math.abs(current.height - nextOverlay.height) <= TEXT_CARET_OVERLAY_EPSILON_PX
-        ) {
-          return current;
-        }
-        return nextOverlay;
-      });
-    };
-
-    syncTextEditCaretOverlay();
-    textarea.addEventListener("focus", syncTextEditCaretOverlay);
-    textarea.addEventListener("input", syncTextEditCaretOverlay);
-    textarea.addEventListener("select", syncTextEditCaretOverlay);
-    textarea.addEventListener("keyup", syncTextEditCaretOverlay);
-    textarea.addEventListener("mouseup", syncTextEditCaretOverlay);
-    textarea.addEventListener("scroll", syncTextEditCaretOverlay, { passive: true });
-    const windowRef = textarea.ownerDocument.defaultView;
-    windowRef?.addEventListener("resize", syncTextEditCaretOverlay);
-    return () => {
-      textarea.removeEventListener("focus", syncTextEditCaretOverlay);
-      textarea.removeEventListener("input", syncTextEditCaretOverlay);
-      textarea.removeEventListener("select", syncTextEditCaretOverlay);
-      textarea.removeEventListener("keyup", syncTextEditCaretOverlay);
-      textarea.removeEventListener("mouseup", syncTextEditCaretOverlay);
-      textarea.removeEventListener("scroll", syncTextEditCaretOverlay);
-      windowRef?.removeEventListener("resize", syncTextEditCaretOverlay);
-    };
-  }, [textEditingSession, textEditPopupHeight]);
-
-  useEffect(() => {
-    const handlePointerMove = (event: PointerEvent) => {
-      const drag = textSelectionDragRef.current;
-      if (drag?.pointerId !== event.pointerId) {
-        return;
-      }
-      if (event.pointerType === "mouse" && event.buttons === 0) {
-        textSelectionDragRef.current = null;
-        return;
-      }
-      const target = resolveEditableTextTargetById(drag.sourceId, drag.sceneTextId);
-      if (!target) {
-        textSelectionDragRef.current = null;
-        return;
-      }
-      const requestRevision = canvasTextEditStateRef.current.asyncRequestRevision;
-      const baseInputRevision = canvasTextEditStateRef.current.inputRevision;
-      const clientPoint = makeClientPoint(px(event.clientX), px(event.clientY));
-      const offsetPromise = resolveTextOffsetFromClient(target, clientPoint);
-      const lineRangePromise = drag.mode === "line"
-        ? resolveTextLineRangeFromClient(target, clientPoint)
-        : Promise.resolve<TextLineRange | null>(null);
-      void Promise.all([offsetPromise, lineRangePromise]).then(([offset, focusLineRange]) => {
-        const resolvedOffset = offset == null ? drag.anchorOffset : clamp(offset, 0, target.text.length);
-        const selection = resolveTextSelectionRangeForDrag(
-          target.text,
-          drag.mode,
-          drag.anchorOffset,
-          resolvedOffset,
-          drag.anchorLineRange,
-          focusLineRange
-        );
-        dispatchCanvasTextEditAction({
-          type: "drag_resolved",
-          requestRevision,
-          baseInputRevision,
-          sourceId: target.sourceId,
-          sceneTextId: target.sceneTextId,
-          selectionStart: selection.start,
-          selectionEnd: selection.end
-        });
-      });
-    };
-
-    const handlePointerUp = (event: PointerEvent) => {
-      const drag = textSelectionDragRef.current;
-      if (drag?.pointerId !== event.pointerId) {
-        return;
-      }
-      textSelectionDragRef.current = null;
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
-    };
-  }, [
-    dispatchCanvasTextEditAction,
-    resolveEditableTextTargetById,
-    resolveTextLineRangeFromClient,
-    resolveTextOffsetFromClient
-  ]);
-
-  useEffect(() => {
-    if (!textEditingSession) {
-      return;
-    }
-    const handleGlobalPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-      if (viewportRef.current?.contains(target)) {
-        return;
-      }
-      textSelectionDragRef.current = null;
-      dispatchCanvasTextEditAction({ type: "session_close" });
-    };
-    window.addEventListener("pointerdown", handleGlobalPointerDown, true);
-    return () => { window.removeEventListener("pointerdown", handleGlobalPointerDown, true); };
-  }, [dispatchCanvasTextEditAction, textEditingSession]);
+  const commandRuntime = useEditorCommandRuntime({
+    onAddNodeAdornment: handleAddNodeAdornmentCommand,
+    onPositionNodeRelativeTo: handlePositionNodeRelativeToCommand,
+    onConvertNodePositionToAbsolute: handleConvertNodePositionToAbsoluteCommand,
+    onOpenEditEquation: handleOpenEditEquationCommand,
+    ...(contextMenuHandleIdOverride !== undefined ? { activeHandleIdOverride: contextMenuHandleIdOverride } : {})
+  });
 
   const handleNodePositionTargetPick = useCallback(
     (targetId: string): boolean => {
@@ -2943,7 +2800,10 @@ export const CanvasPanel = memo(function CanvasPanel({
       if (!target?.nodeSourceId) {
         return true;
       }
-      const status = pendingNodePositionTargetStatusBySourceId.get(target.nodeSourceId);
+      const status =
+        pendingNodePositionTargetStatusBySourceId.get(target.nodeSourceId) ??
+        resolvePendingNodePositionTargetStatus?.(target) ??
+        null;
       if (status && !status.usable) {
         return true;
       }
@@ -2977,6 +2837,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       pendingNodePositionTargetAnchors,
       pendingNodePositionTargetPick,
       pendingNodePositionTargetStatusBySourceId,
+      resolvePendingNodePositionTargetStatus,
       source
     ]
   );
@@ -3018,12 +2879,26 @@ export const CanvasPanel = memo(function CanvasPanel({
   );
 
   const { onElementPointerDown, onElementDoubleClick } = useCanvasElementInteractions({
+    prepareEditGeometry,
+    nestedFigureSpan,
     svgResult,
     toolMode,
     selectedElementIds,
     suppressNextBackgroundClickRef,
     viewportRef,
     beginCanvasTextInteraction,
+    onDeckObjectSelect: selectDeckObject,
+    onLayerEnter: ({ rootId, sourceId }) => {
+      selectDeckObject(null);
+      pendingLayerSelectionRef.current = { documentId: activeDocumentId, source, rootId, sourceId, frameRootId: activeRootId };
+      dispatch({ type: "SET_DRAWING_LAYER", rootId });
+    },
+    onDeckObjectActivate: (objectId: string) => {
+      const node = deckObjectIndex?.byId.get(objectId);
+      if (!node || !enterNestedFigure(node)) {
+        selectDeckObject(objectId);
+      }
+    },
     closeTextEditingSession,
     interactionSvgRef,
     dispatch,
@@ -3033,16 +2908,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     source,
     setWarning,
     onBucketFillRegion: (region: HitRegion | undefined) => {
-      const resolution = resolveBucketFillEdit({
-        sourceId: region?.sourceId ?? "",
-        colorToken: bucketFillColor,
-        source: bucketPreviewSessionRef.current?.baseSource ?? source,
-        elements: snapshot.scene?.elements ?? [],
-        editHandles: snapshot.editHandles,
-        activeFigureId,
-        figureCount: snapshot.figures.length,
-        propertyWriteMode: "commit"
-      });
+      const resolution = commitFill(region?.sourceId ?? "");
 
       if (resolution.kind !== "ready") {
         if (resolution.reason !== "setProperty would not change the source.") {
@@ -3056,12 +2922,6 @@ export const CanvasPanel = memo(function CanvasPanel({
         setWarning(`${resolution.result.reason} (${skippedCount} handle${skippedCount === 1 ? "" : "s"} skipped)`);
       }
 
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        action: resolution.action,
-        precomputedResult: resolution.result
-      });
-      bucketPreviewSessionRef.current = null;
     },
     setSnapLines,
     logSnapDebug,
@@ -3077,7 +2937,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     scopeOverlay,
     focusedScopeId,
     applyActionWithFeedback,
-    activeFigureId,
+    activeRootId,
     parseOptions: editParseOptions,
     onNodePositionTargetPick: handleNodePositionTargetPick
   });
@@ -3087,6 +2947,10 @@ export const CanvasPanel = memo(function CanvasPanel({
     onResizeHandlePointerDown,
     onRotateHandlePointerDown
   } = useCanvasHandleInteractions({
+    scopeOverlay,
+    prepareEditGeometry,
+    nodeAnchorTargets,
+    matrixCellAnchorHints,
     svgResult,
     toolMode,
     viewportRef,
@@ -3098,6 +2962,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     directManipulationDisabledReasonBySourceId,
     snapshot,
     source,
+    nestedFigureSpan,
+    parseOptions: editParseOptions,
     setWarning,
     setSnapLines,
     logSnapDebug,
@@ -3199,6 +3065,12 @@ export const CanvasPanel = memo(function CanvasPanel({
     dispatch
   });
 
+  const deckOverlayMenu = useDeckOverlayContextMenu({
+    index: deckObjectIndex, selected: deckSelectedObject, frame: deckActiveFrame,
+    viewportRef, svgRef: interactionSvgRef, bindings: commandRuntime.bindings,
+    closeText: closeTextEditingSession, editObject: applyDeckObjectEdit,
+  });
+
   const { onElementContextMenu, onCanvasContextMenu } = useCanvasSelectionInteractions({
     openCanvasContextMenuAt,
     closeTextEditingSession,
@@ -3281,9 +3153,27 @@ export const CanvasPanel = memo(function CanvasPanel({
         clearPendingNodePositionTargetPick();
         return;
       }
+      // Clear the deck object selection only for genuine background clicks:
+      // the handler fires on both the interaction svg and the viewport, and
+      // clicks on hit regions bubble here with a mismatched target (their
+      // suppression ref is consumed by the first of the two invocations).
+      if (
+        deckSelectedObject &&
+        event.target === event.currentTarget &&
+        !suppressNextBackgroundClickRef.current
+      ) {
+        selectDeckObject(null);
+      }
       onBackgroundClick(event);
     },
-    [clearPendingNodePositionTargetPick, onBackgroundClick, pendingNodePositionTargetPick]
+    [
+      clearPendingNodePositionTargetPick,
+      deckSelectedObject,
+      onBackgroundClick,
+      pendingNodePositionTargetPick,
+      selectDeckObject,
+      suppressNextBackgroundClickRef
+    ]
   );
 
   const {
@@ -3298,6 +3188,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     setContextMenuState,
     toolMode,
     finalizePathDraft,
+    undoTransientCanvasStep,
     setWarning,
     setFreehandDraft,
     dragRef,
@@ -3327,6 +3218,10 @@ export const CanvasPanel = memo(function CanvasPanel({
   });
 
   useCanvasViewportEffects({
+    // The view box of a slide and of its drawing layer are the same page in
+    // different coordinates; switching between them must not shift the view.
+    canvasContextKey: `${rootKey(activeDocumentId, activeRootId)}:${snapshot.deck ? "deck" : snapshot.overlayLayer ? "layer" : "figure"}`,
+    viewportStateReadyRef,
     dragRef,
     pendingTouchViewportRef,
     suppressNextBackgroundClickRef,
@@ -3335,18 +3230,10 @@ export const CanvasPanel = memo(function CanvasPanel({
     setToolCursorWorld,
     viewportRef,
     setViewportSize,
-    canvasTransform,
     canvasTransformRef,
-    selectedElementIds,
-    selectedElementIdsRef,
     svgResult,
     svgResultRef,
-    fitToContentModeActive,
     fitToContentModeActiveRef,
-    sourceBoundsSvg,
-    sourceBoundsSvgRef,
-    resizeFramesBySource,
-    liveResizeFramesRef,
     previousViewBoxRef,
     dispatchCanvasTransform,
     zoomSpeed,
@@ -3370,17 +3257,6 @@ export const CanvasPanel = memo(function CanvasPanel({
     isPointerOverGuideDeleteZone,
     setGuides,
     showGuides
-  });
-
-  useBucketFillPreview({
-    toolMode,
-    hoveredElementId,
-    bucketFillColor,
-    source,
-    snapshot,
-    activeFigureId,
-    dispatch,
-    bucketPreviewSessionRef
   });
 
   useEffect(() => {
@@ -3429,16 +3305,6 @@ export const CanvasPanel = memo(function CanvasPanel({
       body.style.removeProperty("--canvas-drag-cursor");
     };
   }, [dragCursorLock]);
-
-  useEffect(() => {
-    if (showDevPanel) {
-      return;
-    }
-    snapDebugDragRef.current = null;
-    document.body.classList.remove("is-dragging-snap-debug");
-    document.body.classList.remove("is-resizing-snap-debug");
-    setSnapDebug(null);
-  }, [showDevPanel]);
 
   useEffect(() => {
     if (snapshot.source === source) {
@@ -3533,24 +3399,17 @@ export const CanvasPanel = memo(function CanvasPanel({
     }
   }, [closeTextEditingSession, setDragState, toolMode]);
 
-  useCanvasTextEditingEffects({
-    toolMode,
-    textEditingSession,
-    textEditAsyncRequestRevision: canvasTextEditState.asyncRequestRevision,
-    dispatchCanvasTextEditAction,
-    selectedElementIds,
-    resolveEditableTextTargetById,
-    resolveRenderedMathTextElement,
-    viewportRef,
-    pendingAdornmentTextEditTargetId,
-    snapshot,
-    source,
-    sourceRevision,
-    startTextEditingSession,
-    setPendingAdornmentTextEditTargetId,
-    canvasTransform,
-    svgResult
-  });
+  useEffect(() => {
+    const pending = pendingLayerSelectionRef.current;
+    if (!pending) return;
+    if (pending.documentId !== activeDocumentId || pending.frameRootId !== activeRootId || pending.source !== source) {
+      pendingLayerSelectionRef.current = null;
+      return;
+    }
+    if (snapshot.overlayLayer?.rootId !== pending.rootId || snapshot.source !== source) return;
+    pendingLayerSelectionRef.current = null;
+    dispatch({ type: "SELECT", id: pending.sourceId, additive: false });
+  }, [activeDocumentId, activeRootId, dispatch, snapshot, source]);
 
   useEffect(() => {
     const pending = pendingAddedSelectionRef.current;
@@ -3590,7 +3449,7 @@ export const CanvasPanel = memo(function CanvasPanel({
             : pickClosestSourceId(sceneElements, newSourceIds, pending.preferredWorld)
         );
 
-    dispatch({ type: "SELECT", id: selectedId, additive: false });
+    if (selectedId !== undefined) dispatch({ type: "SELECT", id: selectedId, additive: false });
   }, [dispatch, snapshot.scene, snapshot.source, source]);
 
   const dragControllerConfig = useMemo(() => ({
@@ -3677,7 +3536,11 @@ export const CanvasPanel = memo(function CanvasPanel({
     svgResultRef
   ]);
 
-  useCanvasDragController(dragControllerConfig);
+  // In a drawing layer, a click where it draws nothing is a click on the slide: back to it.
+  const onEmptyClick = useStableCallback((additive: boolean) => {
+    if (overlayLayer && !overlayLayer.pageCoordinates && !additive) exitNestedFigure();
+  });
+  cancelCanvasGestureRef.current = useCanvasDragController({ ...dragControllerConfig, setFreehandDraft, onEmptyClick });
 
   useEffect(() => () => { setActiveCanvasDragKind(null); }, [setActiveCanvasDragKind]);
 
@@ -3739,94 +3602,6 @@ export const CanvasPanel = memo(function CanvasPanel({
     }
     return names;
   }, [snapshot.semanticResult?.nodeAnchorTargets]);
-  const textEditPopup = useMemo(() => {
-    if (!textEditingSession || !svgResult) {
-      return null;
-    }
-    const minPadding = 12;
-    const popupGap = 10;
-    const popupChromeWidth = 14;
-    const popupHeight = textEditPopupHeight ?? 0;
-    const contentBox = resolveRectHitRegionContentBox(textEditingSession.region);
-    const popupAnchorBox = textEditingSession.popupAnchorBox;
-    const sourceBounds = popupAnchorBox ? undefined : sourceBoundsSvg.get(textEditingSession.sourceId);
-    const anchorLeft = popupAnchorBox?.minX ?? sourceBounds?.minX ?? contentBox.x;
-    const anchorRight = popupAnchorBox?.maxX ?? sourceBounds?.maxX ?? (contentBox.x + contentBox.width);
-    const anchorTop = popupAnchorBox?.minY ?? sourceBounds?.minY ?? contentBox.y;
-    const anchorBottom = popupAnchorBox?.maxY ?? sourceBounds?.maxY ?? (contentBox.y + contentBox.height);
-    const leftEdge =
-      canvasTransform.translateX + (anchorLeft - svgResult.viewBox.x) * canvasTransform.scale;
-    const rightEdge =
-      canvasTransform.translateX + (anchorRight - svgResult.viewBox.x) * canvasTransform.scale;
-    const topEdge =
-      canvasTransform.translateY + (anchorTop - svgResult.viewBox.y) * canvasTransform.scale;
-    const bottomEdge =
-      canvasTransform.translateY + (anchorBottom - svgResult.viewBox.y) * canvasTransform.scale;
-    const centerX = (leftEdge + rightEdge) / 2;
-    const nodeWidthPx = rightEdge - leftEdge;
-    const contentWidthPx = Math.max(contentBox.width * canvasTransform.scale, 1);
-    const maxWidth = clamp(Math.round(nodeWidthPx + 80), 160, viewportSize.width - minPadding * 2);
-    const textareaWidth = clamp(
-      Math.round(contentWidthPx),
-      48,
-      Math.max(48, maxWidth - popupChromeWidth)
-    );
-    let top = bottomEdge + popupGap;
-    if (top + popupHeight > viewportSize.height - minPadding) {
-      top = topEdge - popupHeight - popupGap;
-    }
-    return {
-      centerX: clamp(centerX, minPadding + maxWidth / 2, viewportSize.width - minPadding - maxWidth / 2),
-      top: clamp(top, minPadding, Math.max(minPadding, viewportSize.height - popupHeight - minPadding)),
-      maxWidth,
-      textareaWidth
-    };
-  }, [
-    canvasTransform.scale,
-    canvasTransform.translateX,
-    canvasTransform.translateY,
-    svgResult,
-    sourceBoundsSvg,
-    textEditingSession,
-    textEditPopupHeight,
-    viewportSize.height,
-    viewportSize.width
-  ]);
-
-  useLayoutEffect(() => {
-    const textarea = textEditTextareaRef.current;
-    if (!textarea) {
-      return;
-    }
-    if (!textEditingSession || supportsFieldSizing) {
-      textarea.style.height = "";
-      return;
-    }
-
-    textarea.style.height = "0px";
-    textarea.style.height = `${Math.ceil(textarea.scrollHeight)}px`;
-  }, [supportsFieldSizing, textEditingSession, textEditPopup?.textareaWidth]);
-
-  useLayoutEffect(() => {
-    if (!textEditingSession || !textEditPopup) {
-      setTextEditPopupHeight(null);
-      return;
-    }
-
-    const popup = textEditPopupRef.current;
-    if (!popup) {
-      return;
-    }
-
-    const nextHeight = Math.ceil(popup.getBoundingClientRect().height);
-    setTextEditPopupHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
-  }, [textEditingSession, textEditPopup]);
-
-  const hideNativeTextEditCaret =
-    textEditingSession != null &&
-    textEditingSession.selectionStart === textEditingSession.selectionEnd &&
-    textEditCaretOverlay != null;
-
   const contextMenuDefinition = useMemo(
     () =>
       buildCanvasContextMenuDefinition({
@@ -3858,6 +3633,21 @@ export const CanvasPanel = memo(function CanvasPanel({
   return (
     <>
       <CanvasPanelView
+        beamerLinks={deckActiveFrame && !textEditingSession && toolMode === "select" && snapshot.source === source
+          ? deckActiveFrame.layout.paragraphs.flatMap((paragraph) => (paragraph.links ?? []).map((link) => ({
+              ...link,
+              bounds: { ...link.bounds, x: link.bounds.x + paragraph.bounds.x, y: link.bounds.y + paragraph.bounds.y },
+            })))
+          : []}
+        onBeamerLinkActivate={(destination) => {
+          if (destination.kind === "external") {
+            void platform.window?.openExternalUrl?.(destination.url);
+          } else {
+            selectDeckObject(null);
+            dispatch({ type: "SET_DECK_STEP", rootId: destination.frameId, step: destination.step });
+            dispatch({ type: "SET_ACTIVE_ROOT", rootId: destination.frameId });
+          }
+        }}
         prefersNonBlinkingTextInsertionIndicator={prefersNonBlinkingTextInsertionIndicator}
         showRulers={showRulers}
         viewportSize={viewportSize}
@@ -3865,12 +3655,47 @@ export const CanvasPanel = memo(function CanvasPanel({
         leftRulerRef={leftRulerRef}
         onTopRulerPointerDown={onTopRulerPointerDown}
         onLeftRulerPointerDown={onLeftRulerPointerDown}
-        onCanvasContextMenu={onCanvasContextMenu}
+        onCanvasContextMenu={(event) => { if (!deckOverlayMenu.onContextMenu(event)) onCanvasContextMenu(event); }}
         rulers={rulers}
         LEFT_RULER_DRAG_SOURCE_WIDTH_PX={LEFT_RULER_DRAG_SOURCE_WIDTH_PX}
         toolMode={toolMode}
         viewportRef={viewportRef}
-        onViewportKeyDown={onViewportKeyDown}
+        onViewportKeyDown={(event) => {
+          if (deckSelectedObject && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) {
+            event.preventDefault();
+            const rect = viewportRef.current?.getBoundingClientRect();
+            deckOverlayMenu.openForObject(deckSelectedObject, (rect?.left ?? 0) + 24, (rect?.top ?? 0) + 24);
+            return;
+          }
+          if (handleDeckObjectViewportKey(event)) {
+            return;
+          }
+          if (
+            event.key === "Escape" &&
+            isNestedFigureMode &&
+            toolMode === "select" &&
+            selectedElementIds.size === 0
+          ) {
+            // Top rung of the nested-figure Esc ladder: with nothing left
+            // to deselect, Esc returns to the owning slide.
+            event.preventDefault();
+            exitNestedFigure();
+            return;
+          }
+          if (deckActiveFrame && deckActiveFrame.stepCount > 1 && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+            event.preventDefault();
+            const delta = event.key === "ArrowRight" ? 1 : -1;
+            const nextStep = Math.min(
+              Math.max(1, deckActiveFrame.step + delta),
+              deckActiveFrame.stepCount
+            );
+            if (nextStep !== deckActiveFrame.step) {
+              dispatch({ type: "SET_DECK_STEP", rootId: deckActiveFrame.frameId, step: nextStep });
+            }
+            return;
+          }
+          onViewportKeyDown(event);
+        }}
         onViewportCopy={onViewportCopy}
         onViewportCut={onViewportCut}
         onViewportPaste={onViewportPaste}
@@ -3880,7 +3705,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         onViewportPointerDown={onViewportPointerDown}
         onViewportPointerUp={onViewportPointerUp}
         svgResult={svgResult}
-        noActiveFigure={snapshot.figures.length > 0 && snapshot.activeFigureId == null}
+        noActiveFigure={snapshot.figures.length > 0 && snapshot.activeRootId == null}
         assistantLockReason={assistantLockReason}
         snapshot={snapshot}
         svgModel={svgModel}
@@ -3920,14 +3745,21 @@ export const CanvasPanel = memo(function CanvasPanel({
         hoveredElementId={hoveredElementId}
         editableTextRegionKeys={editableTextRegionKeys}
         draggableSourceIds={draggableSourceIds}
-        hitRegionCursorByTargetId={pendingNodePositionHitRegionCursorByTargetId}
+        {...(pendingNodePositionHitRegionCursorByTargetId !== undefined ? { hitRegionCursorByTargetId: pendingNodePositionHitRegionCursorByTargetId } : {})}
         onElementPointerDown={onElementPointerDown}
-        onElementContextMenu={onElementContextMenu}
+        onElementContextMenu={(event, id, region, handle) => {
+          if (!deckOverlayMenu.onContextMenu(event, region)) onElementContextMenu(event, id, region, handle);
+        }}
         onElementDoubleClick={onElementDoubleClick}
         onHoverChange={(id: string | null) => { dispatch({ type: "SET_HOVERED_ELEMENT", id }); }}
         nodePositionLinks={nodePositionLinks}
         marqueeBounds={marqueeBounds}
         selectionBoxes={selectionBoxes}
+        deckObjectSelectionBox={deckObjectSelectionBox}
+        deckResizeOverlay={<DeckResizeOverlay source={snapshot.source} layout={deckActiveFrame?.layout ?? null}
+          index={deckObjectIndex} selected={deckSelectedObject} scale={canvasTransform.scale}
+          svgRef={interactionSvgRef} closeText={closeTextEditingSession} />}
+        deckBuildSelectionRects={deckBuildSelectionRects}
         adornmentHighlightBoxes={adornmentHighlightBoxes}
         selectedAdornmentConnectors={selectedAdornmentConnectors}
         selectionStrokeWidth={selectionStrokeWidth}
@@ -3937,13 +3769,9 @@ export const CanvasPanel = memo(function CanvasPanel({
         curveControlLines={curveControlLines}
         curveControlStrokeWidth={curveControlStrokeWidth}
         nodeAnchorOverlay={pendingNodePositionAnchorOverlay ?? nodeAnchorOverlay}
-        onNodeAnchorPointerDown={pendingNodePositionTargetPick ? handleNodeAnchorPointerDown : undefined}
-        onNodeAnchorClick={pendingNodePositionTargetPick ? handleNodeAnchorClick : undefined}
-        onNodeAnchorHoverChange={
-          pendingNodePositionTargetPick
-            ? setPendingNodePositionAnchorHoverSourceId
-            : undefined
-        }
+        {...(pendingNodePositionTargetPick ? { onNodeAnchorPointerDown: handleNodeAnchorPointerDown } : {})}
+        {...(pendingNodePositionTargetPick ? { onNodeAnchorClick: handleNodeAnchorClick } : {})}
+        {...(pendingNodePositionTargetPick ? { onNodeAnchorHoverChange: setPendingNodePositionAnchorHoverSourceId } : {})}
         nodePositionTargetTooltip={nodePositionTargetTooltip}
         handleHalfSize={handleHalfSize}
         handleDisplays={handleDisplays}
@@ -3960,34 +3788,29 @@ export const CanvasPanel = memo(function CanvasPanel({
           setContextMenuState(null);
         }}
         dragTooltip={dragTooltip}
-        dragTooltipBoundary={dragTooltipBoundaryRef.current}
+        dragTooltipBoundary={dragTooltipBoundary}
         warning={warning}
         copyWarningToClipboard={copyWarningToClipboard}
         onWarningBarKeyDown={onWarningBarKeyDown}
-        textEditingSession={textEditingSession}
-        textEditPopup={textEditPopup}
-        textEditPopupHeight={textEditPopupHeight}
-        textEditPopupRef={textEditPopupRef}
-        textEditTextareaSizing={textEditTextareaSizing}
-        textEditTextareaRef={textEditTextareaRef}
-        textEditCaretOverlay={textEditCaretOverlay}
-        hideNativeTextEditCaret={hideNativeTextEditCaret}
-        onTextEditPopupPointerDown={handleTextEditPopupPointerDown}
-        onTextEditTextareaSelect={handleTextEditTextareaSelect}
-        onTextEditTextareaCopy={stopTextEditTextareaClipboardPropagation}
-        onTextEditTextareaCut={stopTextEditTextareaClipboardPropagation}
-        onTextEditTextareaPaste={handleTextEditTextareaPaste}
-        onTextEditTextareaDrop={handleTextEditTextareaDrop}
-        onTextEditTextareaKeyDown={handleTextEditTextareaKeyDown}
+        canvasTextEdit={canvasTextEditView}
         selectionHint={canvasSelectionHint}
-        showDevPanel={false}
-        snapDebugRect={snapDebugRect}
-        onSnapDebugMovePointerDown={onSnapDebugMovePointerDown}
-        snapDebug={snapDebug}
-        onSnapDebugResizePointerDown={onSnapDebugResizePointerDown}
         magnifierState={magnifierState}
+        deckStepper={
+          deckActiveFrame && deckActiveFrame.stepCount > 1
+            ? {
+                step: deckActiveFrame.step,
+                stepCount: deckActiveFrame.stepCount,
+                onStepChange: (step: number) => {
+                  dispatch({ type: "SET_DECK_STEP", rootId: deckActiveFrame.frameId, step });
+                }
+              }
+            : null
+        }
+        nestedFigureBreadcrumb={nestedFigureBreadcrumb}
+        layerBackdropSvg={overlayLayer?.pageCoordinates ? null : overlayLayer?.backdropSvg ?? null}
         RULER_SIZE={RULER_SIZE}
       />
+      {deckOverlayMenu.menu}
       {equationModalTarget ? (
         <Suspense fallback={null}>
           <EquationModal

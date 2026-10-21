@@ -1,14 +1,16 @@
+import { getActiveDocument } from "../packages/app/src/store/document-sessions.js";
 import { describe, expect, it } from "vitest";
 import { editorReducer, makeInitialState, DEFAULT_SOURCE } from "../packages/app/src/store/reducer.js";
 import type { EditorAction, EditorState, HistoryEntry } from "../packages/app/src/store/types.js";
 import type { TikzFigureInventoryItem } from "../packages/core/src/ast/types.js";
-import { makeEmptySnapshot } from "../packages/app/src/compute.js";
-import { PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "../packages/core/src/edit/actions.js";
+import { computeSnapshot, makeEmptySnapshot } from "../packages/app/src/compute.js";
 import type { WorldPoint } from "../packages/core/src/coords/points.js";
 import type { EditHandle } from "../packages/core/src/semantic/types.js";
 import { identityMatrix } from "../packages/core/src/semantic/transform.js";
 import { computeSourceFingerprint } from "../packages/core/src/utils/source-fingerprint.js";
 import { PT_PER_CM } from "../packages/core/src/edit/format.js";
+import { prepareBeamerDocument, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
+import { buildBeamerObjectIndex } from "../packages/core/src/beamer/object-index.js";
 import { wp } from "./coords-helpers.js";
 
 // Helper to dispatch a sequence of actions
@@ -101,6 +103,26 @@ function applySourcePatches(
 // ── CODE_EDITED ────────────────────────────────────────────────────────────────
 
 describe("editorReducer – CODE_EDITED", () => {
+  it("clears stale identity moves when a transient source update has no moves", () => {
+    const initial = makeInitialState();
+    const doc = getActiveDocument(initial);
+    const state: EditorState = {
+      ...initial,
+      documents: {
+        ...initial.documents,
+        [doc.id]: {
+          ...doc,
+          pendingIdentityMoves: [{ oldSpan: { from: 0, to: 1 }, newSpan: { from: 1, to: 2 } }]
+        }
+      }
+    };
+
+    const after = editorReducer(state, { type: "SET_SOURCE_TRANSIENT", source: `${doc.source}\n` });
+
+    expect(getActiveDocument(after)).not.toHaveProperty("pendingIdentityMoves");
+    expect(getActiveDocument(state)).toHaveProperty("pendingIdentityMoves");
+  });
+
   it("updates source when it changes", () => {
     const state = applyActions([{ type: "CODE_EDITED", source: "new source" }]);
     expect(state.source).toBe("new source");
@@ -114,7 +136,6 @@ describe("editorReducer – CODE_EDITED", () => {
         {
           kind: "move",
           label: "Moved element",
-          backward: [],
           forward: [],
           sourceBefore: "before",
           sourceAfter: "after"
@@ -132,6 +153,18 @@ describe("editorReducer – CODE_EDITED", () => {
     const initial = makeInitialState();
     const next = editorReducer(initial, { type: "CODE_EDITED", source: DEFAULT_SOURCE });
     expect(next).toBe(initial); // same reference = no change
+  });
+
+  it("derives the document kind from the source", () => {
+    const initial = makeInitialState();
+    expect(initial.documentKind).toBe("tikz");
+    const deck = editorReducer(initial, {
+      type: "CODE_EDITED",
+      source: "\\documentclass{beamer}\n\\begin{document}\n\\begin{frame}{A}\n\\end{frame}\n\\end{document}"
+    });
+    expect(deck.documentKind).toBe("beamer");
+    const back = editorReducer(deck, { type: "CODE_EDITED", source: DEFAULT_SOURCE });
+    expect(back.documentKind).toBe("tikz");
   });
 
   it("records changed source ids and patches while source scrubbing is active", () => {
@@ -226,27 +259,69 @@ describe("editorReducer – compute lifecycle", () => {
       ...makeEmptySnapshot("source"),
       source: "source",
       figures: [figureA, figureB],
-      activeFigureId: null
+      activeRootId: null
     };
     const afterFirst = applyActions([
       { type: "COMPUTE_REQUESTED", requestId: "req-1" },
       { type: "SNAPSHOT_READY", requestId: "req-1", snapshot: firstSnapshot }
     ]);
-    expect(afterFirst.activeFigureId).toBe("figure:a");
+    expect(afterFirst.activeRootId).toBe("figure:a");
 
-    const switched = editorReducer(afterFirst, { type: "SET_ACTIVE_FIGURE", figureId: "figure:b" });
-    expect(switched.activeFigureId).toBe("figure:b");
+    const switched = editorReducer(afterFirst, { type: "SET_ACTIVE_ROOT", rootId: "figure:b" });
+    expect(switched.activeRootId).toBe("figure:b");
 
     const secondSnapshot = {
       ...firstSnapshot,
       figures: [figureA],
-      activeFigureId: null
+      activeRootId: null
     };
     const afterRemoval = applyActions([
       { type: "COMPUTE_REQUESTED", requestId: "req-2" },
       { type: "SNAPSHOT_READY", requestId: "req-2", snapshot: secondSnapshot }
     ], switched);
-    expect(afterRemoval.activeFigureId).toBeNull();
+    expect(afterRemoval.activeRootId).toBeNull();
+  });
+
+  it("reconciles the active root against deck frames for beamer snapshots", () => {
+    const deckSnapshot = {
+      ...makeEmptySnapshot("deck source"),
+      source: "deck source",
+      deck: {
+        document: scanBeamerDocument("deck source"),
+        frames: [
+          { id: "frame:0", frameIndex: 0, span: { from: 0, to: 10 }, title: "A", stepCount: 1 },
+          { id: "frame:1", frameIndex: 1, span: { from: 10, to: 20 }, title: "B", stepCount: 3 }
+        ],
+        activeFrame: null,
+        diagnostics: []
+      }
+    };
+    const afterFirst = applyActions([
+      { type: "COMPUTE_REQUESTED", requestId: "req-1" },
+      { type: "SNAPSHOT_READY", requestId: "req-1", snapshot: deckSnapshot }
+    ]);
+    // Frames are the root inventory: auto-select works despite empty figures.
+    expect(afterFirst.activeRootId).toBe("frame:0");
+
+    const switched = editorReducer(afterFirst, { type: "SET_ACTIVE_ROOT", rootId: "frame:1" });
+    expect(switched.activeRootId).toBe("frame:1");
+  });
+
+  it("SET_DECK_STEP stores the requested step per root", () => {
+    const initial = makeInitialState();
+    const documentId = initial.activeDocumentId;
+    const stepped = editorReducer(initial, { type: "SET_DECK_STEP", rootId: "frame:2", step: 3 });
+    expect(stepped.deckStepByRootKey[`${documentId}::frame:2`]).toBe(3);
+
+    const other = editorReducer(stepped, { type: "SET_DECK_STEP", rootId: "frame:4", step: 2 });
+    expect(other.deckStepByRootKey[`${documentId}::frame:2`]).toBe(3);
+    expect(other.deckStepByRootKey[`${documentId}::frame:4`]).toBe(2);
+
+    // Steps clamp to at least 1 and no-op updates keep the state reference.
+    const clamped = editorReducer(other, { type: "SET_DECK_STEP", rootId: "frame:4", step: 0 });
+    expect(clamped.deckStepByRootKey[`${documentId}::frame:4`]).toBe(1);
+    const same = editorReducer(clamped, { type: "SET_DECK_STEP", rootId: "frame:4", step: 1 });
+    expect(same).toBe(clamped);
   });
 
   it("auto-selects the first figure when source changes from no figures to one figure", () => {
@@ -262,20 +337,20 @@ describe("editorReducer – compute lifecycle", () => {
       ...makeEmptySnapshot(""),
       source: "",
       figures: [],
-      activeFigureId: null
+      activeRootId: null
     };
     const emptyState = applyActions([
       { type: "CODE_EDITED", source: "" },
       { type: "COMPUTE_REQUESTED", requestId: "req-empty" },
       { type: "SNAPSHOT_READY", requestId: "req-empty", snapshot: emptySnapshot }
     ]);
-    expect(emptyState.activeFigureId).toBeNull();
+    expect(emptyState.activeRootId).toBeNull();
 
     const lineSnapshot = {
       ...makeEmptySnapshot("source"),
       source: "source",
       figures: [figure],
-      activeFigureId: null
+      activeRootId: null
     };
     const afterLine = applyActions([
       { type: "CODE_EDITED", source: "source" },
@@ -283,7 +358,7 @@ describe("editorReducer – compute lifecycle", () => {
       { type: "SNAPSHOT_READY", requestId: "req-line", snapshot: lineSnapshot }
     ], emptyState);
 
-    expect(afterLine.activeFigureId).toBe("figure:0");
+    expect(afterLine.activeRootId).toBe("figure:0");
   });
 
   it("auto-selects first figure when figure count grows and the previous active figure became invalid", () => {
@@ -316,19 +391,19 @@ describe("editorReducer – compute lifecycle", () => {
       ...makeEmptySnapshot("source-1"),
       source: "source-1",
       figures: [figure0],
-      activeFigureId: null
+      activeRootId: null
     };
     const afterFirst = applyActions([
       { type: "COMPUTE_REQUESTED", requestId: "req-1" },
       { type: "SNAPSHOT_READY", requestId: "req-1", snapshot: firstSnapshot }
     ]);
-    expect(afterFirst.activeFigureId).toBe("figure:0");
+    expect(afterFirst.activeRootId).toBe("figure:0");
 
     const secondSnapshot = {
       ...makeEmptySnapshot("source-2"),
       source: "source-2",
       figures: [figureA, figureB],
-      activeFigureId: null
+      activeRootId: null
     };
     const afterSecond = applyActions([
       { type: "CODE_EDITED", source: "source-2" },
@@ -336,7 +411,7 @@ describe("editorReducer – compute lifecycle", () => {
       { type: "SNAPSHOT_READY", requestId: "req-2", snapshot: secondSnapshot }
     ], afterFirst);
 
-    expect(afterSecond.activeFigureId).toBe("figure:a");
+    expect(afterSecond.activeRootId).toBe("figure:a");
   });
 });
 
@@ -527,7 +602,7 @@ describe("editorReducer – APPLY_EDIT_ACTION", () => {
     expect(next.lastEditChangedSourceIds).toEqual(["elem-1"]);
   });
 
-  it("keeps source patches for path-attached node moves while disabling changed-id incremental render", () => {
+  it("keeps source patches and incremental target hints for path-attached node moves", () => {
     const source = "\\draw (0,0) -- node[above] {r} (1,0);";
     const oldNodeSyntax = "node[above]";
     const oldNodeFrom = source.indexOf(oldNodeSyntax);
@@ -557,11 +632,11 @@ describe("editorReducer – APPLY_EDIT_ACTION", () => {
             replacement: "node[pos=0.6,above]"
           }
         ],
-        changedSourceIds: ["node:0:2"]
+        changedSourceIds: ["path:0"]
       }
     });
 
-    expect(next.lastEditChangedSourceIds).toBeNull();
+    expect(next.lastEditChangedSourceIds).toEqual(["path:0"]);
     expect(next.lastEditPatches).toHaveLength(1);
     expect(applySourcePatches(source, next.lastEditPatches ?? [])).toBe(next.source);
   });
@@ -855,6 +930,11 @@ describe("editorReducer – selection", () => {
 // ── SET_TOOL_MODE ──────────────────────────────────────────────────────────────
 
 describe("editorReducer – SET_TOOL_MODE", () => {
+  it("keeps a legacy overlay-root navigation on its owning slide", () => {
+    const state = editorReducer(makeInitialState(), { type: "SET_ACTIVE_ROOT", rootId: "frame:2:overlay:1" });
+    expect(state.activeRootId).toBe("frame:2");
+    expect(getActiveDocument(state).drawingLayerRootId).toBe("frame:2:overlay:1");
+  });
   it("updates tool mode", () => {
     const state = applyActions([{ type: "SET_TOOL_MODE", mode: "addNode" }]);
     expect(state.toolMode).toBe("addNode");
@@ -865,6 +945,52 @@ describe("editorReducer – SET_TOOL_MODE", () => {
     expect(initial.toolMode).toBe("select");
     const after = editorReducer(initial, { type: "SET_TOOL_MODE", mode: "select" });
     expect(after).toBe(initial);
+  });
+
+  it("opens the slide's drawing layer for a drawing tool, the one there or the one to come", async () => {
+    const source = String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}{A}
+Text.
+\begin{tikzpicture}[overlay]\draw (0,0) -- (1,1);\end{tikzpicture}
+\begin{tikzpicture}[remember picture, overlay]\draw (0,0) -- (1,1);\end{tikzpicture}
+\end{frame}
+\begin{frame}{B}
+Text.
+\end{frame}
+\end{document}`;
+    const loaded = applyActions([{ type: "CODE_EDITED", source }]);
+    for (const [frame, layer] of [["frame:0", "frame:0:overlay:1"], ["frame:1", "frame:1:overlay:0"]] as const) {
+      const { snapshot } = await computeSnapshot({ id: frame, source, activeRootId: frame });
+      const shown = applyActions([
+        { type: "SET_ACTIVE_ROOT", rootId: frame },
+        { type: "COMPUTE_REQUESTED", requestId: frame },
+        { type: "SNAPSHOT_READY", requestId: frame, snapshot }
+      ], loaded);
+      expect(editorReducer(shown, { type: "SET_TOOL_MODE", mode: "magnify" }).activeRootId).toBe(frame);
+      const drawing = editorReducer(shown, { type: "SET_TOOL_MODE", mode: "addRect" });
+      expect(drawing.toolMode).toBe("addRect");
+      expect(drawing.activeRootId).toBe(frame);
+      expect(getActiveDocument(drawing).drawingLayerRootId).toBe(layer);
+    }
+  });
+
+  it("shares the slide's current step when entering, changing, and leaving its drawing layer", () => {
+    const source = String.raw`\documentclass{beamer}\begin{document}\begin{frame}A\pause B\end{frame}\end{document}`;
+    const initial = applyActions([
+      { type: "CODE_EDITED", source },
+      { type: "SET_ACTIVE_ROOT", rootId: "frame:0" },
+      { type: "SET_DECK_STEP", rootId: "frame:0", step: 2 },
+      { type: "SET_TOOL_MODE", mode: "addRect" }
+    ]);
+    expect(initial.activeRootId).toBe("frame:0");
+    expect(getActiveDocument(initial).drawingLayerRootId).toBe("frame:0:overlay:0");
+    const changed = editorReducer(initial, { type: "SET_DECK_STEP", rootId: initial.activeRootId!, step: 3 });
+    expect(changed.deckStepByRootKey[`${changed.activeDocumentId}::frame:0`]).toBe(3);
+    expect(changed.deckStepByRootKey[`${changed.activeDocumentId}::frame:0:overlay:0`]).toBeUndefined();
+    const back = editorReducer(changed, { type: "SET_ACTIVE_ROOT", rootId: "frame:0" });
+    expect(back.deckStepByRootKey[`${back.activeDocumentId}::frame:0`]).toBe(3);
   });
 });
 
@@ -1141,7 +1267,7 @@ describe("editorReducer – branch edge cases", () => {
     expect(editorReducer(initial, { type: "SWITCH_DOCUMENT", documentId: "missing" })).toBe(initial);
     expect(editorReducer(initial, { type: "CLOSE_DOCUMENT", documentId: "missing" })).toBe(initial);
     expect(editorReducer(initial, { type: "REORDER_TABS", fromId: initial.activeDocumentId, toId: initial.activeDocumentId })).toBe(initial);
-    expect(editorReducer(initial, { type: "SET_ACTIVE_FIGURE", figureId: null })).toBe(initial);
+    expect(editorReducer(initial, { type: "SET_ACTIVE_ROOT", rootId: null })).toBe(initial);
     expect(editorReducer(initial, { type: "COMPUTE_REQUESTED", requestId: "req-missing", documentId: "missing" })).toBe(initial);
   });
 
@@ -1151,8 +1277,8 @@ describe("editorReducer – branch edge cases", () => {
     const firstId = initial.activeDocumentId;
     const secondId = withSecond.activeDocumentId;
 
-    const figureChanged = editorReducer(withSecond, { type: "SET_ACTIVE_FIGURE", figureId: "figure:1", documentId: secondId });
-    expect(figureChanged.activeFigureId).toBe("figure:1");
+    const figureChanged = editorReducer(withSecond, { type: "SET_ACTIVE_ROOT", rootId: "figure:1", documentId: secondId });
+    expect(figureChanged.activeRootId).toBe("figure:1");
 
     const reordered = editorReducer(figureChanged, { type: "REORDER_TABS", fromId: secondId, toId: firstId });
     expect(reordered.tabOrder[0]).toBe(secondId);
@@ -1182,7 +1308,7 @@ describe("editorReducer – branch edge cases", () => {
       documents: {
         ...requested.documents,
         [requested.activeDocumentId]: {
-          ...requested.documents[requested.activeDocumentId],
+          ...getActiveDocument(requested),
           activeHandleId
         }
       }
@@ -1204,7 +1330,7 @@ describe("editorReducer – branch edge cases", () => {
       snapshot: currentSnapshot
     });
     expect(ready.pendingRequestId).toBeNull();
-    expect(ready.activeFigureId).toBe("figure:0");
+    expect(ready.activeRootId).toBe("figure:0");
     expect(ready.activeHandleId).toBe(activeHandleId);
 
     const staleIgnored = editorReducer(ready, {
@@ -1258,15 +1384,6 @@ describe("editorReducer – branch edge cases", () => {
       expect(state.history[state.historyIndex]?.kind).toBe(expectedHistoryKind);
     }
 
-    const cleanupNoop = editorReducer(state, {
-      type: "APPLY_EDIT_ACTION",
-      action: { kind: "cleanupPropertyWrites" },
-      precomputedResult: {
-        kind: "unsupported",
-        reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-      }
-    } as unknown as EditorAction);
-    expect(cleanupNoop).toBe(state);
   });
 
   it("covers selection and UI no-op branches", () => {
@@ -1379,7 +1496,7 @@ describe("editorReducer – assistant integration", () => {
 
   it("updates assistant thread metadata, items, deltas, approvals, and error state", () => {
     let state = makeInitialState();
-    const activeDoc = () => state.documents[state.activeDocumentId];
+    const activeDoc = () => getActiveDocument(state);
     state = editorReducer(state, {
       type: "ASSISTANT_THREAD_READY",
       threadId: "thread-1",
@@ -1407,7 +1524,7 @@ describe("editorReducer – assistant integration", () => {
       documents: {
         ...state.documents,
         [state.activeDocumentId]: {
-          ...state.documents[state.activeDocumentId],
+          ...getActiveDocument(state),
           assistantItems: [
             { type: "userMessage", id: "optimistic-user-message:1", content: [] },
             ...activeDoc().assistantItems
@@ -1505,7 +1622,7 @@ describe("editorReducer – assistant integration", () => {
       documents: {
         ...unchangedSource.documents,
         [unchangedSource.activeDocumentId]: {
-          ...unchangedSource.documents[unchangedSource.activeDocumentId],
+          ...getActiveDocument(unchangedSource),
           lastEditWarningMessage: "old warning",
           lastEditWarningToken: 3
         }
@@ -1518,5 +1635,231 @@ describe("editorReducer – assistant integration", () => {
     });
     expect(updated.lastEditWarningMessage).toBeNull();
     expect(updated.lastEditWarningToken).toBe(4);
+  });
+});
+
+// ── APPLY_EDIT_ACTION (deck) ──────────────────────────────────────────────────
+
+describe("editorReducer – deck edit actions", () => {
+  const DECK_SOURCE = [
+    "\\documentclass{beamer}",
+    "\\begin{document}",
+    "\\begin{frame}{Objects}",
+    "\\begin{block}{Facts}",
+    "Body prose.",
+    "\\end{block}",
+    "\\end{frame}",
+    "\\end{document}"
+  ].join("\n");
+
+  async function makeDeckState(): Promise<{
+    state: EditorState;
+    frameId: string;
+    blockId: string;
+  }> {
+    const page = await prepareBeamerDocument(DECK_SOURCE).renderFrame({
+      frameIndex: 0,
+      step: 1
+    });
+    const layout = page.layout;
+    const index = buildBeamerObjectIndex({
+      items: layout.items,
+      paragraphs: layout.paragraphs,
+      source: DECK_SOURCE
+    });
+    const block = index.nodes.find((node) => node.kind === "block");
+    expect(block).toBeDefined();
+    const activeFrame = {
+      frameId: layout.frameId,
+      frameIndex: 0,
+      step: 1,
+      stepCount: layout.stepCount,
+      svg: "",
+      svgModel: null,
+      viewBox: null,
+      layout
+    } as unknown as NonNullable<NonNullable<EditorState["snapshot"]["deck"]>["activeFrame"]>;
+    const initial = makeInitialState();
+    const state: EditorState = {
+      ...initial,
+      source: DECK_SOURCE,
+      snapshot: {
+        ...makeEmptySnapshot(DECK_SOURCE),
+        source: DECK_SOURCE,
+        deck: { frames: [], document: scanBeamerDocument(DECK_SOURCE), activeFrame, diagnostics: [] }
+      },
+      deckObjectSelection: {
+        documentId: initial.activeDocumentId,
+        frameId: layout.frameId,
+        objectId: block!.id
+      }
+    };
+    return { state, frameId: layout.frameId, blockId: block!.id };
+  }
+
+  it("applies a deck delete with history and clears the object selection", async () => {
+    const { state, frameId, blockId } = await makeDeckState();
+    const edited = editorReducer(state, {
+      type: "APPLY_EDIT_ACTION",
+      action: { kind: "deckDeleteObject", frameId, objectId: blockId }
+    });
+    expect(edited.source).not.toContain("Facts");
+    expect(edited.history).toHaveLength(1);
+    expect(edited.history[0]?.kind).toBe("delete");
+    expect(edited.deckObjectSelection).toBeNull();
+    // Non-null changed ids make the compute pipeline reconcile immediately
+    // (skipping the typing debounce) — deck edits are structural edits.
+    expect(edited.lastEditChangedSourceIds).toEqual([]);
+
+    const undone = editorReducer(edited, { type: "UNDO" });
+    expect(undone.source).toBe(DECK_SOURCE);
+  });
+
+  it("applies deck property edits through the shared bookkeeping", async () => {
+    const { state, frameId, blockId } = await makeDeckState();
+    const edited = editorReducer(state, {
+      type: "APPLY_EDIT_ACTION",
+      action: {
+        kind: "deckRenameEnvironment",
+        frameId,
+        objectId: blockId,
+        name: "exampleblock"
+      }
+    });
+    expect(edited.source).toContain("\\begin{exampleblock}{Facts}");
+    expect(edited.history[0]?.kind).toBe("set-property");
+    expect(edited.deckObjectSelection).not.toBeNull();
+  });
+
+  it("refuses deck actions while the snapshot lags the source", async () => {
+    const { state, frameId, blockId } = await makeDeckState();
+    const stale: EditorState = { ...state, source: `${DECK_SOURCE}\n% trailing edit` };
+    const edited = editorReducer(stale, {
+      type: "APPLY_EDIT_ACTION",
+      action: { kind: "deckDeleteObject", frameId, objectId: blockId }
+    });
+    expect(edited.source).toBe(stale.source);
+    expect(edited.lastEditWarningMessage).toContain("still catching up");
+  });
+
+  it("still warns for tikz edit actions on deck documents", async () => {
+    const { state } = await makeDeckState();
+    const edited = editorReducer(state, {
+      type: "APPLY_EDIT_ACTION",
+      action: { kind: "deleteElement", elementId: "elem-1" }
+    });
+    expect(edited.source).toBe(DECK_SOURCE);
+    expect(edited.lastEditWarningMessage).toContain("Slide editing");
+  });
+
+  it("surfaces unsupported deck edits as warnings", async () => {
+    const { state, frameId, blockId } = await makeDeckState();
+    const edited = editorReducer(state, {
+      type: "APPLY_EDIT_ACTION",
+      action: {
+        kind: "deckRenameEnvironment",
+        frameId,
+        objectId: blockId,
+        name: "columns"
+      }
+    });
+    expect(edited.source).toBe(DECK_SOURCE);
+    expect(edited.lastEditWarningMessage).toContain("Edit action skipped");
+  });
+});
+
+// ── APPLY_EDIT_ACTION: nested figure mode ─────────────────────────────────────
+
+describe("editorReducer – nested figure edit actions", () => {
+  const NESTED_SOURCE = [
+    "\\documentclass{beamer}",
+    "\\begin{document}",
+    "\\begin{frame}{Nested demo}",
+    "Intro line before the picture.",
+    "\\begin{tikzpicture}",
+    "\\node[draw, fill=blue!20] (a) at (0,0) {Alpha};",
+    "\\node[draw] (b) at (3,1) {Beta};",
+    "\\draw[->] (a) -- (b);",
+    "\\end{tikzpicture}",
+    "Text after the picture.",
+    "\\end{frame}",
+    "\\end{document}",
+  ].join("\n");
+
+  async function makeNestedState(): Promise<EditorState> {
+    const response = await computeSnapshot({
+      id: "nested-reducer",
+      documentId: "doc-nested-reducer",
+      source: NESTED_SOURCE,
+      activeRootId: "frame:0:tikzpicture:0"
+    });
+    expect(response.snapshot.deck).toBeNull();
+    return {
+      ...makeInitialState(),
+      source: NESTED_SOURCE,
+      activeRootId: "frame:0:tikzpicture:0",
+      snapshot: response.snapshot
+    };
+  }
+
+  it("applies a tikz action against the masked snapshot and patches the real source", async () => {
+    const state = await makeNestedState();
+    const handle = state.snapshot.editHandles.find(
+      (candidate) =>
+        NESTED_SOURCE.slice(
+          candidate.sourceRef.sourceSpan.from,
+          candidate.sourceRef.sourceSpan.to
+        ) === "(0,0)"
+    );
+    expect(handle).toBeDefined();
+    const next = editorReducer(state, {
+      type: "APPLY_EDIT_ACTION",
+      action: { kind: "moveHandle", handleId: handle!.id, newWorld: wp(cm(2), cm(1)) }
+    });
+    // The patch replays onto the UNMASKED document: the coordinate moved
+    // and the surrounding beamer source is untouched.
+    expect(next.source).toContain("(a) at (2,1)");
+    expect(next.source).toContain("\\documentclass{beamer}");
+    expect(next.source).toContain("Intro line before the picture.");
+    expect(next.history).toHaveLength(1);
+    expect(next.history[0]?.sourceBefore).toBe(NESTED_SOURCE);
+  });
+
+  it("silently rejects deck actions while the nested root is active", async () => {
+    const state = await makeNestedState();
+    const next = editorReducer(state, {
+      type: "APPLY_EDIT_ACTION",
+      action: { kind: "deckDeleteObject", frameId: "frame:0", objectId: "anything" }
+    });
+    expect(next).toBe(state);
+  });
+
+  it("refuses tikz actions while the nested snapshot lags the source", async () => {
+    const state = await makeNestedState();
+    const stale: EditorState = { ...state, source: `${state.source}\n% trailing edit` };
+    const next = editorReducer(stale, {
+      type: "APPLY_EDIT_ACTION",
+      action: { kind: "moveHandle", handleId: "whatever", newWorld: wp(cm(1), cm(1)) }
+    });
+    expect(next.source).toBe(stale.source);
+    expect(next.lastEditWarningMessage).toContain("catching up");
+  });
+});
+
+describe("undo history bounds", () => {
+  it("drops the oldest steps of a long session and keeps undo working", () => {
+    let state = makeInitialState();
+    for (let index = 0; index < 1005; index++) {
+      state = editorReducer(state, {
+        type: "APPLY_EDIT_ACTION",
+        action: { kind: "setProperty", elementId: "path:0", level: "command", key: "draw", value: index % 2 ? "red" : "blue" },
+        precomputedSource: state.source,
+        precomputedResult: { kind: "success", newSource: `${state.source.split("\n%")[0]}\n% ${index}`, patches: [] }
+      });
+    }
+    expect(state.history).toHaveLength(1000);
+    expect(state.historyIndex).toBe(999);
+    const undone = editorReducer(state, { type: "UNDO" });
+    expect(undone.source.endsWith("% 1003")).toBe(true);
   });
 });

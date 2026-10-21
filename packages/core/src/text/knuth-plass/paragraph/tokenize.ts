@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 import type {
   AnyWrapper,
   BreakRef,
@@ -146,7 +147,7 @@ function normalizeForcedLineLeadingRuns(runs: ParagraphRun[]): ParagraphRun[] {
   };
 
   for (let i = 0; i < runs.length - 1; i++) {
-    const run = runs[i];
+    const run = requireArrayValue(runs, i);
     if (run.kind !== 'space') continue;
     if (run.breakRef.kind !== 'mspace') continue;
     if (!run.breakRef.isForcedLineBreak && !run.breakRef.lineLeading) continue;
@@ -193,7 +194,7 @@ function normalizeForcedLineLeadingRuns(runs: ParagraphRun[]): ParagraphRun[] {
   let cursor = 0;
 
   for (let i = 0; i < runs.length; i++) {
-    const run = runs[i];
+    const run = requireArrayValue(runs, i);
 
     if (run.kind === 'text') {
       const consumed = trimmedByTextRun.get(i) ?? 0;
@@ -255,14 +256,14 @@ function normalizeForcedLineLeadingRuns(runs: ParagraphRun[]): ParagraphRun[] {
   return normalized;
 }
 
-function emitRun<T extends ParagraphRun>(
+function emitRun(
   runs: ParagraphRun[],
-  run: Omit<T, 'runIndex'>
+  run: Omit<MathRun, 'runIndex'> | Omit<SpaceRun, 'runIndex'> | Omit<TextRun, 'runIndex'>
 ): void {
   const fullRun = {
     ...run,
     runIndex: runs.length,
-  } as T;
+  };
   runs.push(fullRun);
 }
 
@@ -286,7 +287,7 @@ function warnUnsupported(
 function emitAtomicMathRun(context: FlattenContext, wrapper: AnyWrapper) {
   const sourceStart = context.cursor.value;
   const sourceEnd = sourceStart + 1;
-  emitRun<MathRun>(context.runs, {
+  emitRun(context.runs, {
     kind: 'math',
     wrapper,
     sourceStart,
@@ -329,7 +330,7 @@ function emitTextPieces(wrapper: AnyWrapper, context: FlattenContext) {
             wordIndex,
           };
 
-          emitRun<SpaceRun>(context.runs, {
+          emitRun(context.runs, {
             kind: 'space',
             text: ' ',
             wrapper,
@@ -341,7 +342,7 @@ function emitTextPieces(wrapper: AnyWrapper, context: FlattenContext) {
           continue;
         }
 
-        emitRun<TextRun>(context.runs, {
+        emitRun(context.runs, {
           kind: 'text',
           text: token,
           wrapper,
@@ -396,7 +397,7 @@ function flattenWrapper(wrapper: AnyWrapper | null | undefined, context: Flatten
     const lineLeading = getMspaceLineLeading(wrapper);
     const sourceStart = context.cursor.value;
     const sourceEnd = sourceStart + 1;
-    emitRun<SpaceRun>(context.runs, {
+    emitRun(context.runs, {
       kind: 'space',
       text: ' ',
       wrapper,
@@ -405,7 +406,7 @@ function flattenWrapper(wrapper: AnyWrapper | null | undefined, context: Flatten
         wrapper,
         linebreak,
         isForcedLineBreak: isForcedMspaceBreak(wrapper, linebreak),
-        lineLeading,
+        ...(lineLeading !== undefined ? { lineLeading: lineLeading } : {}),
       },
       sourceStart,
       sourceEnd,

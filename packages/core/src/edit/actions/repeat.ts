@@ -1,3 +1,5 @@
+import { requireDefined } from "../../utils/invariants.js";
+import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { CoordinateItem, NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
 import { walkPathItems } from "../../ast/walk.js";
@@ -69,10 +71,10 @@ export function getRepeatSelectionEligibility(
     return { kind: "ineligible", reason: "Repeat currently requires statements from the same parent scope." };
   }
 
-  const first = refs[0];
-  const last = refs[refs.length - 1];
+  const first = requireArrayValue(refs, 0);
+  const last = requireArrayValue(refs, refs.length - 1);
   for (let index = 1; index < refs.length; index += 1) {
-    if (refs[index].index !== refs[index - 1].index + 1) {
+    if (requireArrayValue(refs, index).index !== requireArrayValue(refs, index - 1).index + 1) {
       return { kind: "ineligible", reason: "Repeat currently requires one contiguous authored block." };
     }
   }
@@ -124,14 +126,14 @@ export function applyRepeatElementsAction(
       text: replacementText
     }
   ]);
-  const inserted = applied.applied[0];
+  const inserted = requireArrayValue(applied.applied, 0);
 
   const replacementSpan = inserted.newSpan;
   const nextSnapshot = parseStatementSnapshot(applied.source, parseOptions);
   const insertedRefs = nextSnapshot.all.filter(
     (ref) => ref.span.from >= replacementSpan.from && ref.span.to <= replacementSpan.to
   );
-  const outerRef = insertedRefs.find((ref) => ref.parentKey === eligibility.refs[0].parentKey) ?? insertedRefs[0];
+  const outerRef = insertedRefs.find((ref) => ref.parentKey === requireArrayValue(eligibility.refs, 0).parentKey) ?? insertedRefs[0];
   const insertedStatementIds = insertedRefs.map((ref) => ref.id);
   const loopIds = insertedStatementIds.filter((id) => id.startsWith("foreach:"));
 
@@ -139,7 +141,7 @@ export function applyRepeatElementsAction(
     kind: "success",
     newSource: applied.source,
     patches: applied.patches,
-    selectedSourceIds: outerRef ? [outerRef.id] : undefined,
+    ...(outerRef ? { selectedSourceIds: [outerRef.id] } : {}),
     changedSourceIds: uniqueStrings([...action.elementIds, ...loopIds])
   };
 }
@@ -156,8 +158,8 @@ function buildRepeatReplacement(
   }
 ): { text: string } {
   const snippet = refs.length === 1
-    ? statementSnippet(source, refs[0])
-    : source.slice(refs[0].span.from, refs[refs.length - 1].span.to);
+    ? statementSnippet(source, requireArrayValue(refs, 0))
+    : source.slice(requireArrayValue(refs, 0).span.from, requireArrayValue(refs, refs.length - 1).span.to);
   const usedLoopVars = new Set<string>();
   const xLoop = options.columns > 1
     ? {
@@ -174,7 +176,7 @@ function buildRepeatReplacement(
       }
     : null;
   const body = refs.length === 1
-    ? translateSingleStatementSnippet(source, refs[0], xLoop, yLoop, options.parseOptions)
+    ? translateSingleStatementSnippet(source, requireArrayValue(refs, 0), xLoop, yLoop, options.parseOptions)
     : wrapRepeatedBlockInScope(source, refs, xLoop, yLoop);
 
   return {
@@ -198,7 +200,7 @@ function translateSingleStatementSnippet(
   const wrapped = wrapSnippetInFigure(snippet);
   const wrappedParseOptions = withoutActiveFigure(parseOptions);
   const wrappedParsed = parseTikzForEdit(wrapped, wrappedParseOptions);
-  const rootStatement = wrappedParsed.figure.body[0];
+  const rootStatement = requireArrayValue(wrappedParsed.figure.body, 0);
 
   if (rootStatement.kind === "Path") {
     const rewritten = rewritePathStatementCoordinates(wrapped, rootStatement, xLoop, yLoop);
@@ -231,10 +233,10 @@ function wrapRepeatedBlockInScope(
   xLoop: RepeatLoop | null,
   yLoop: RepeatLoop | null
 ): string {
-  const first = refs[0];
-  const last = refs[refs.length - 1];
+  const first = requireArrayValue(refs, 0);
+  const last = requireArrayValue(refs, refs.length - 1);
   const block = source.slice(first.span.from, last.span.to);
-  const shiftTuple = buildShiftTuple(xLoop, yLoop)!;
+  const shiftTuple = requireDefined(buildShiftTuple(xLoop, yLoop), "Missing required buildShiftTuple(xLoop, yLoop)");
   return `\\begin{scope}[shift={${shiftTuple}}]\n${reindentSnippet(block, "  ")}\n\\end{scope}`;
 }
 
@@ -284,12 +286,12 @@ function rewritePathStatementCoordinates(
   yLoop: RepeatLoop | null
 ): string | null {
   const replacements: Array<{ span: Span; text: string }> = [];
-  let failed = false;
+  const status = { failed: false };
   const nodeNameCoordinateIds = collectNodeNameCoordinateIds(statement.items);
 
   walkPathItems(statement.items, {
     onPathItem: (item) => {
-      if (failed) {
+      if (status.failed) {
         return;
       }
 
@@ -299,7 +301,7 @@ function rewritePathStatementCoordinates(
         }
         const translated = buildTranslatedCoordinateItemRaw(item, source, xLoop, yLoop);
         if (!translated) {
-          failed = true;
+          status.failed = true;
           return;
         }
         replacements.push({ span: item.span, text: translated });
@@ -314,26 +316,26 @@ function rewritePathStatementCoordinates(
           yLoop
         );
         if (!translated) {
-          failed = true;
+          status.failed = true;
           return;
         }
         replacements.push({ span: item.target.span, text: translated });
       }
     },
     onNode: (node) => {
-      if (failed || !node.atSpan || !node.atRaw) {
+      if (status.failed || !node.atSpan || !node.atRaw) {
         return;
       }
       const translated = buildTranslatedNodePlacementRaw(node, source, xLoop, yLoop);
       if (!translated) {
-        failed = true;
+        status.failed = true;
         return;
       }
       replacements.push({ span: node.atSpan, text: translated });
     }
   });
 
-  if (failed || replacements.length === 0) {
+  if (status.failed || replacements.length === 0) {
     return null;
   }
 
@@ -342,9 +344,9 @@ function rewritePathStatementCoordinates(
 
 function collectNodeNameCoordinateIds(items: readonly PathItem[]): Set<string> {
   const ids = new Set<string>();
-  for (let index = 0; index < items.length; index += 1) {
-    const current = items[index];
-    if (current?.kind !== "Coordinate" || current.form !== "named") {
+  for (const [index, current] of items.entries()) {
+
+    if (current.kind !== "Coordinate" || current.form !== "named") {
       continue;
     }
     const next = items[index + 1];
@@ -491,7 +493,7 @@ function applyInlineScopeShift(
   yLoop: RepeatLoop | null,
   parseOptions: EditParseOptions
 ): string | null {
-  const shiftTuple = buildShiftTuple(xLoop, yLoop)!;
+  const shiftTuple = requireDefined(buildShiftTuple(xLoop, yLoop), "Missing required buildShiftTuple(xLoop, yLoop)");
 
   const result = applySetPropertyAction(
     source,

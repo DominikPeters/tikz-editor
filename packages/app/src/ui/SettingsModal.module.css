@@ -75,7 +75,7 @@
 }
 
 .settingsGroup {
-  background: var(--settings-card-bg);
+  background: var(--settings-card-bg, var(--bg-pane));
   border: 1px solid var(--border-light);
   border-radius: 6px;
   overflow: hidden;
@@ -121,9 +121,9 @@
 .numberInput {
   height: 24px;
   padding: 0 8px;
-  border: 1px solid var(--settings-control-border);
+  border: 1px solid var(--settings-control-border, var(--border));
   border-radius: 4px;
-  background: var(--settings-control-bg);
+  background: var(--settings-control-bg, var(--bg-pane));
   color: var(--text);
   font-family: inherit;
   font-size: calc(var(--app-ui-scale, 1) * 11px);
@@ -134,7 +134,7 @@
   -webkit-appearance: none;
   appearance: none;
   padding-right: 18px;
-  background-color: var(--settings-control-bg);
+  background-color: var(--settings-control-bg, var(--bg-pane));
   background-image:
     linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
     linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);

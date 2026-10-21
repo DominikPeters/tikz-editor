@@ -286,7 +286,7 @@ describe("svg emitter", () => {
     const secondEmitted = emitSvg(secondSemantic.scene, {
       reuse: {
         previousModel: firstEmitted.model,
-        affectedSourceIds: [firstSemantic.scene.elements[0]!.sourceRef.sourceId]
+        affectedSourceIds: [firstSemantic.scene.elements[0].sourceRef.sourceId]
       }
     });
 
@@ -953,8 +953,8 @@ describe("svg emitter", () => {
     const semantic = evaluateTikzFigure(parsed.figure, source);
     const emitted = emitSvg(semantic.scene);
 
-    expect(emitted.svg).toContain('font-family="MJX-NCM-Sans, CMU Sans Serif, Latin Modern Sans, Helvetica, Arial, sans-serif"');
+    expect(emitted.svg).toContain('font-family="Latin Modern Sans, CMU Sans Serif, Helvetica, Arial, sans-serif"');
     expect(emitted.svg).toContain('font-weight="700"');
-    expect(emitted.svg).toContain('font-family="MJX-NCM-Monospace, Latin Modern Mono, CMU Typewriter Text, Courier New, monospace"');
+    expect(emitted.svg).toContain('font-family="Latin Modern Mono, CMU Typewriter Text, Courier New, monospace"');
   });
 });

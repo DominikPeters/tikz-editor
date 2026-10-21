@@ -4,21 +4,35 @@ import { evaluateTikzFigure } from "../semantic/evaluate.js";
 import type { EvaluateOptions, EvaluateTikzResult } from "../semantic/index.js";
 import { emitSvg } from "../svg/emit.js";
 import type { EmitSvgOptions, EmitSvgResult } from "../svg/index.js";
-import { createMathJaxNodeTextEngine } from "../text/mathjax-engine.js";
+import { createTexNodeTextEngine } from "../text/tex-node-text-engine.js";
+import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type { NodeTextEngine } from "../text/types.js";
-import type { NodeItem } from "../ast/types.js";
+import type { TextLayoutContext } from "../text/layout-context.js";
+import { runTextRenderOperation, retainSceneTextLayout } from "../text/render-scope.js";
+import type { NodeItem, TikzFigure } from "../ast/types.js";
 import { parseNodeParts } from "../semantic/nodes/multipart.js";
-
-let mathJaxEngineUnavailable = false;
-let mathJaxEngineUnavailableReason: string | null = null;
-let lastMathJaxWarning: string | null = null;
+import type { CooperativeWorkOptions } from "../semantic/cooperative-work.js";
+import { evaluateTikzFigureAsync } from "../semantic/evaluate.js";
 
 export type RenderTikzOptions = {
   parse?: ParseTikzOptions;
   evaluate?: EvaluateOptions;
+  semanticEvaluator?: (
+    figure: TikzFigure,
+    source: string,
+    options: EvaluateOptions
+  ) => EvaluateTikzResult;
+  /** Used by asynchronous renders; each batch runs inside this render's text scope. */
+  cooperative?: CooperativeWorkOptions;
+  semanticEvaluatorAsync?: (
+    figure: TikzFigure, source: string, options: EvaluateOptions, work: CooperativeWorkOptions
+  ) => Promise<EvaluateTikzResult>;
   svg?: EmitSvgOptions;
+  /** Resolve source-dependent output options from the render's existing parse. */
+  svgOptionsFromParse?: (parse: ParseTikzResult) => EmitSvgOptions;
   textEngine?: NodeTextEngine | null;
-  validateNodeText?: boolean;
+  /** Shared document-local graphics resolver for every rendering layer. */
+  graphicsResolver?: DocumentGraphicsResolver;
 };
 
 export type RenderDiagnostic = {
@@ -32,18 +46,34 @@ export type RenderTikzToSvgResult = {
   semantic: EvaluateTikzResult;
   svg: EmitSvgResult;
   renderDiagnostics: RenderDiagnostic[];
+  /** Local owner of editing reports for this result's text. */
+  textLayoutContext: TextLayoutContext | null;
 };
 
 export function renderTikzToSvg(source: string, opts: RenderTikzOptions = {}): RenderTikzToSvgResult {
   const parseResult = parseTikz(source, opts.parse);
-  const semanticResult = evaluateTikzFigure(parseResult.figure, parseResult.source, opts.evaluate);
-  const svgResult = emitSvg(semanticResult.scene, opts.svg);
+  const svgOptions = { ...opts.svg, ...opts.svgOptionsFromParse?.(parseResult) };
+  const textScope = opts.evaluate?.textEngine?.createRenderScope?.();
+  const svgScope = svgOptions.textEngine === opts.evaluate?.textEngine ? textScope : svgOptions.textEngine?.createRenderScope?.();
+  const graphicsResolver = opts.graphicsResolver ?? opts.evaluate?.graphicsResolver;
+  const semanticResult = runTextRenderOperation(textScope, () => (opts.semanticEvaluator ?? evaluateTikzFigure)(
+    parseResult.figure,
+    parseResult.source,
+    {
+      ...opts.evaluate,
+      ...(graphicsResolver === undefined ? {} : { graphicsResolver }),
+    }
+  ));
+  const svgResult = runTextRenderOperation(svgScope, () => emitSvg(semanticResult.scene, svgOptions));
+  retainSceneTextLayout(textScope, semanticResult.scene);
+  if (svgScope !== textScope) retainSceneTextLayout(svgScope, semanticResult.scene);
 
   return {
     parse: parseResult,
     semantic: semanticResult,
     svg: svgResult,
-    renderDiagnostics: []
+    renderDiagnostics: [],
+    textLayoutContext: textScope?.layoutContext ?? opts.evaluate?.textEngine?.layoutContext ?? svgScope?.layoutContext ?? svgOptions.textEngine?.layoutContext ?? null,
   };
 }
 
@@ -55,95 +85,73 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
     : opts.evaluate?.textEngine ?? opts.svg?.textEngine;
   let textEngine = providedEngine;
   const shouldCreateDefaultTextEngine = textEngine === undefined;
-  const browserRuntime = hasBrowserDomGlobals();
-  const useDefaultNodeTextValidator = opts.validateNodeText ?? true;
-  const hasUserMacros = containsUserMacroDefinitions(source);
-  if (shouldCreateDefaultTextEngine && !browserRuntime && mathJaxEngineUnavailable) {
-    renderDiagnostics.push({
-      code: "mathjax-engine-unavailable",
-      message:
-        mathJaxEngineUnavailableReason ??
-        "MathJax text engine is unavailable in this runtime; using plain SVG text fallback.",
-      severity: "warning"
-    });
-    textEngine = null;
-  } else if (shouldCreateDefaultTextEngine && (!mathJaxEngineUnavailable || browserRuntime)) {
-    try {
-      textEngine = await createMathJaxNodeTextEngine();
-      if (!browserRuntime) {
-        mathJaxEngineUnavailableReason = null;
-      }
-    } catch (error) {
-      const message = describeMathJaxFailure(error);
-      textEngine = null;
-      renderDiagnostics.push({
-        code: "mathjax-engine-unavailable",
-        message,
-        severity: "warning"
-      });
-      logMathJaxWarning(message);
-      if (!browserRuntime) {
-        mathJaxEngineUnavailable = true;
-        mathJaxEngineUnavailableReason = message;
-      }
-    }
+  if (shouldCreateDefaultTextEngine) {
+    textEngine = await createTexNodeTextEngine();
   }
 
+  const optionalNodeTextValidator2 = opts.parse?.nodeTextValidator ??
+      (hasExplicitTextEngine ? createRenderNodeTextValidator(source, textEngine) : undefined);
   const parseOpts: ParseTikzOptions = {
     ...opts.parse,
     includeContextDefinitions: opts.parse?.includeContextDefinitions ?? true,
-    nodeTextValidator:
-      opts.parse?.nodeTextValidator ??
-      (useDefaultNodeTextValidator && textEngine && !hasUserMacros
-        ? ({ node }) => {
-            if (isMatrixNode(node)) {
-              return null;
-            }
-            return textEngine?.validate(normalizeNodeTextForValidation(node.text)) ?? null;
-          }
-        : undefined)
+    ...(optionalNodeTextValidator2 === undefined ? {} : { nodeTextValidator: optionalNodeTextValidator2 })
   };
 
+  const optionalTextEngine3 = opts.evaluate?.textEngine ?? textEngine;
+  const optionalGraphicsResolver4 = opts.graphicsResolver ?? opts.evaluate?.graphicsResolver;
   const evaluateOpts: EvaluateOptions = {
     ...opts.evaluate,
-    textEngine: opts.evaluate?.textEngine ?? textEngine
-  };
-
-  const svgOpts: EmitSvgOptions = {
-    ...opts.svg,
-    textEngine: opts.svg?.textEngine ?? textEngine
+    ...(optionalTextEngine3 === undefined ? {} : { textEngine: optionalTextEngine3 }),
+    ...(optionalGraphicsResolver4 === undefined ? {} : { graphicsResolver: optionalGraphicsResolver4 }),
   };
 
   const parseResult = parseTikz(source, parseOpts);
-  let semanticResult = evaluateTikzFigure(parseResult.figure, parseResult.source, evaluateOpts);
-  let svgResult = emitSvg(semanticResult.scene, svgOpts);
+  const outputOptions = { ...opts.svg, ...opts.svgOptionsFromParse?.(parseResult) };
+  const optionalTextEngine5 = outputOptions.textEngine ?? textEngine;
+  const svgOpts: EmitSvgOptions = {
+    ...outputOptions,
+    ...(optionalTextEngine5 === undefined ? {} : { textEngine: optionalTextEngine5 })
+  };
+  const textScope = evaluateOpts.textEngine?.createRenderScope?.();
+  const svgScope = svgOpts.textEngine === evaluateOpts.textEngine ? textScope : svgOpts.textEngine?.createRenderScope?.();
+
+  const semanticEvaluator = opts.semanticEvaluator ?? evaluateTikzFigure;
+  const evaluate = () => opts.cooperative && (!opts.semanticEvaluator || opts.semanticEvaluatorAsync)
+    ? (opts.semanticEvaluatorAsync ?? evaluateTikzFigureAsync)(parseResult.figure, parseResult.source, evaluateOpts, {
+      ...opts.cooperative, run: operation => runTextRenderOperation(textScope, operation)
+    })
+    : runTextRenderOperation(textScope, () => semanticEvaluator(parseResult.figure, parseResult.source, evaluateOpts));
+  let semanticResult = await evaluate();
+  opts.cooperative?.signal?.throwIfAborted();
+  let svgResult = runTextRenderOperation(svgScope, () => emitSvg(semanticResult.scene, svgOpts));
 
   const flushedPendingTextKeys = await textEngine?.flushPending?.();
   if (flushedPendingTextKeys && flushedPendingTextKeys.length > 0) {
-    semanticResult = evaluateTikzFigure(parseResult.figure, parseResult.source, evaluateOpts);
-    svgResult = emitSvg(semanticResult.scene, svgOpts);
+    opts.cooperative?.signal?.throwIfAborted();
+    semanticResult = await evaluate();
+    svgResult = runTextRenderOperation(svgScope, () => emitSvg(semanticResult.scene, svgOpts));
   }
+  retainSceneTextLayout(textScope, semanticResult.scene);
+  if (svgScope !== textScope) retainSceneTextLayout(svgScope, semanticResult.scene);
 
   return {
     parse: parseResult,
     semantic: semanticResult,
     svg: svgResult,
-    renderDiagnostics
+    renderDiagnostics,
+    textLayoutContext: textScope?.layoutContext ?? evaluateOpts.textEngine?.layoutContext ?? svgScope?.layoutContext ?? svgOpts.textEngine?.layoutContext ?? null,
   };
 }
 
-function hasBrowserDomGlobals(): boolean {
-  const candidate = globalThis as { window?: unknown; document?: unknown };
-  return candidate.window != null && candidate.document != null;
-}
-
-function describeMathJaxFailure(error: unknown): string {
-  const details = error instanceof Error ? error.message : String(error);
-  const normalizedDetails = details.trim();
-  if (!normalizedDetails) {
-    return "MathJax text engine initialization failed; falling back to plain SVG text rendering.";
-  }
-  return `MathJax text engine initialization failed; falling back to plain SVG text rendering. (${normalizedDetails})`;
+/** Share text diagnostics between full renders and incremental statement parses. */
+export function createRenderNodeTextValidator(
+  source: string,
+  textEngine: NodeTextEngine | null | undefined
+): ParseTikzOptions["nodeTextValidator"] {
+  if (!textEngine || containsUserMacroDefinitions(source)) return undefined;
+  return ({ node }) => isMatrixNode(node)
+    ? null
+    : textEngine.validate(normalizeNodeTextForValidation(node.text));
 }
 
 function containsUserMacroDefinitions(source: string): boolean {
@@ -167,14 +175,4 @@ function normalizeNodeTextForValidation(text: string): string {
     return text;
   }
   return parts.map((part) => part.text).filter((partText) => partText.length > 0).join(" ");
-}
-
-function logMathJaxWarning(message: string): void {
-  if (lastMathJaxWarning === message) {
-    return;
-  }
-  lastMathJaxWarning = message;
-  if (typeof console !== "undefined" && typeof console.warn === "function") {
-    console.warn(`[tikz-editor] ${message}`);
-  }
 }

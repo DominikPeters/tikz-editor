@@ -1,0 +1,39 @@
+{
+  "benchmark": "beamer-frontend",
+  "schemaVersion": 1,
+  "phase": "pre-cst-cutover",
+  "commit": "8eb2e334",
+  "measuredAt": "2026-07-26T19:04:18.472Z",
+  "runtime": {
+    "node": "v26.3.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "input": {
+    "path": "test/fixtures/beamer/kkt_theorem_beamer.tex",
+    "bytes": 15808,
+    "characters": 15808,
+    "frames": 20
+  },
+  "settings": {
+    "warmups": 25,
+    "iterations": 200,
+    "revisionMode": "unique-trailing-comment"
+  },
+  "phases": {
+    "scanBeamerDocument": {
+      "samples": 200,
+      "minMs": 0.5950420000000349,
+      "medianMs": 0.7055410000000393,
+      "p95Ms": 2.1192499999999654,
+      "maxMs": 26.15108399999997
+    },
+    "prepareBeamerDocument": {
+      "samples": 200,
+      "minMs": 0.7706660000000056,
+      "medianMs": 0.8339579999999387,
+      "p95Ms": 1.044917000000055,
+      "maxMs": 1.2280829999999696
+    }
+  }
+}

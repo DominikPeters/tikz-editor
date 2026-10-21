@@ -5,7 +5,7 @@ type MockRenderResult = {
     source: string;
     figure: { body: unknown[] };
     figures: Array<{ id: string }>;
-    activeFigureId: string | null;
+    activeRootId: string | null;
   };
   semantic: {
     editHandles: unknown[];
@@ -41,7 +41,7 @@ function makeRenderResult(source: string, label = "full"): MockRenderResult {
       source,
       figure: { body: [] },
       figures: [{ id: "figure:0" }],
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     },
     semantic: {
       editHandles: [],
@@ -60,31 +60,53 @@ describe("computeSnapshot edge orchestration", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
-    vi.doUnmock("tikz-editor/render/index");
-    vi.doUnmock("tikz-editor/parser/index");
-    vi.doUnmock("tikz-editor/semantic/index");
-    vi.doUnmock("tikz-editor/svg/index");
-    vi.doUnmock("tikz-editor/text/mathjax-engine");
+    vi.doUnmock("@tikz-editor/core/render/index");
+    vi.doUnmock("@tikz-editor/core/parser/index");
+    vi.doUnmock("@tikz-editor/core/semantic/index");
+    vi.doUnmock("@tikz-editor/core/svg/index");
+    vi.doUnmock("@tikz-editor/core/text/tex-node-text-engine");
   });
 
-  it("uses the full path with a missing optional text engine and reuses warm prewarm results", async () => {
-    const renderTikzToSvgAsync = vi.fn(async (source: string) => makeRenderResult(source));
-    vi.doMock("tikz-editor/render/index", () => ({ renderTikzToSvgAsync }));
-    vi.doMock("tikz-editor/text/mathjax-engine", () => ({
-      createMathJaxNodeTextEngine: vi.fn(async () => {
-        throw new Error("MathJax unavailable");
-      })
+  it("uses the full path with the native text engine and reuses warm prewarm results", async () => {
+    const textEngine = {
+      validate: () => null,
+      measure: () => null,
+      renderFromCache: () => null
+    };
+    const semanticEvaluate = vi.fn((input: { source: string }) => ({
+      semantic: makeRenderResult(input.source).semantic,
+      stats: {}
     }));
-    vi.doMock("tikz-editor/parser/index", () => ({
+    const renderTikzToSvgAsync = vi.fn(async (
+      source: string,
+      options: {
+        semanticEvaluator?: (
+          figure: MockRenderResult["parse"]["figure"],
+          source: string,
+          evaluateOptions: Record<string, unknown>
+        ) => MockRenderResult["semantic"];
+      }
+    ) => {
+      const result = makeRenderResult(source);
+      const semantic = options.semanticEvaluator?.(result.parse.figure, source, {});
+      return semantic ? { ...result, semantic } : result;
+    });
+    vi.doMock("@tikz-editor/core/render/index", () => ({ renderTikzToSvgAsync }));
+    vi.doMock("@tikz-editor/core/text/tex-node-text-engine", () => ({
+      createTexNodeTextEngine: vi.fn(async () => textEngine)
+    }));
+    vi.doMock("@tikz-editor/core/parser/index", () => ({
       createIncrementalParseSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         prime: vi.fn(),
         reset: vi.fn()
       }))
     }));
-    vi.doMock("tikz-editor/semantic/index", () => ({
+    vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         reset: vi.fn(),
-        evaluate: vi.fn()
+        evaluate: semanticEvaluate
       }))
     }));
 
@@ -92,15 +114,7 @@ describe("computeSnapshot edge orchestration", () => {
     const rendered = await computeSnapshot({
       id: "full-default-kind",
       documentId: "doc-1",
-      source: "\\begin{tikzpicture}\\end{tikzpicture}",
-      changedSourceIds: [" path:0 ", "", "path:0"],
-      patches: [
-        {
-          oldSpan: { from: 1, to: 2 },
-          newSpan: { from: 1, to: 3 },
-          replacement: "xx"
-        }
-      ]
+      source: "\\begin{tikzpicture}\\end{tikzpicture}"
     });
 
     expect(rendered.id).toBe("full-default-kind");
@@ -108,7 +122,7 @@ describe("computeSnapshot edge orchestration", () => {
     expect(rendered.snapshot.incremental).toBeNull();
     expect(renderTikzToSvgAsync).toHaveBeenCalledWith(
       "\\begin{tikzpicture}\\end{tikzpicture}",
-      expect.objectContaining({ textEngine: null })
+      expect.objectContaining({ textEngine })
     );
 
     const prewarm = await computeSnapshot({
@@ -122,6 +136,7 @@ describe("computeSnapshot edge orchestration", () => {
     expect(prewarm.snapshot.source).toBe("\\begin{tikzpicture}\\end{tikzpicture}");
     expect(prewarm.diagnostics).toEqual([]);
     expect(renderTikzToSvgAsync).toHaveBeenCalledTimes(1);
+    expect(semanticEvaluate).toHaveBeenCalledTimes(1);
   });
 
   it("returns compute-error diagnostics and clears cached state when full rendering throws", async () => {
@@ -131,20 +146,26 @@ describe("computeSnapshot edge orchestration", () => {
       .mockRejectedValueOnce(new Error("render exploded"));
     const parseReset = vi.fn();
     const semanticReset = vi.fn();
-    vi.doMock("tikz-editor/render/index", () => ({
+    vi.doMock("@tikz-editor/core/render/index", () => ({
       renderTikzToSvgAsync
     }));
-    vi.doMock("tikz-editor/text/mathjax-engine", () => ({
-      createMathJaxNodeTextEngine: vi.fn(async () => null)
+    vi.doMock("@tikz-editor/core/text/tex-node-text-engine", () => ({
+      createTexNodeTextEngine: vi.fn(async () => ({
+        validate: () => null,
+        measure: () => null,
+        renderFromCache: () => null
+      }))
     }));
-    vi.doMock("tikz-editor/parser/index", () => ({
+    vi.doMock("@tikz-editor/core/parser/index", () => ({
       createIncrementalParseSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         prime: vi.fn(),
         reset: parseReset
       }))
     }));
-    vi.doMock("tikz-editor/semantic/index", () => ({
+    vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         evaluate: vi.fn(),
         reset: semanticReset
       }))
@@ -170,15 +191,17 @@ describe("computeSnapshot edge orchestration", () => {
       }
     ]);
     expect(parseReset).toHaveBeenCalledTimes(1);
-    expect(semanticReset).toHaveBeenCalledTimes(1);
+    // Each full render clears its private semantic baseline; a failed render
+    // clears its partial state again before returning an error snapshot.
+    expect(semanticReset).toHaveBeenCalledTimes(3);
   });
 
-  it("merges dependency, matrix, scope, and pending MathJax source ids into SVG reuse hints", async () => {
+  it("merges dependency, matrix, scope, and pending TeX source ids into SVG reuse hints", async () => {
     const fullResult = makeRenderResult("seed", "seed");
     const parseResult = {
       source: "next",
       figures: [{ id: "figure:0" }],
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       figure: {
         body: [
           {
@@ -205,12 +228,12 @@ describe("computeSnapshot edge orchestration", () => {
           {
             kind: "Text",
             sourceRef: { sourceId: "text:0" },
-            textRenderInfo: { mode: "mathjax", cacheKey: "mathjax:changed" }
+            textRenderInfo: { mode: "tex", cacheKey: "tex:changed" }
           },
           {
             kind: "Text",
             sourceRef: { sourceId: "text:1" },
-            textRenderInfo: { mode: "mathjax", cacheKey: "mathjax:unchanged" }
+            textRenderInfo: { mode: "tex", cacheKey: "tex:unchanged" }
           }
         ]
       }
@@ -248,37 +271,40 @@ describe("computeSnapshot edge orchestration", () => {
       validate: () => null,
       measure: () => null,
       renderFromCache: () => null,
-      flushPending: vi.fn(async () => ["mathjax:changed"])
+      flushPending: vi.fn(async () => ["tex:changed"])
     };
 
-    vi.doMock("tikz-editor/render/index", () => ({
-      renderTikzToSvgAsync: vi.fn(async () => fullResult)
+    vi.doMock("@tikz-editor/core/render/index", () => ({
+      renderTikzToSvgAsync: vi.fn(async () => fullResult),
+      createRenderNodeTextValidator: vi.fn(() => undefined)
     }));
-    vi.doMock("tikz-editor/text/mathjax-engine", () => ({
-      createMathJaxNodeTextEngine: vi.fn(async () => textEngine)
+    vi.doMock("@tikz-editor/core/text/tex-node-text-engine", () => ({
+      createTexNodeTextEngine: vi.fn(async () => textEngine)
     }));
-    vi.doMock("tikz-editor/parser/index", () => ({
+    vi.doMock("@tikz-editor/core/parser/index", () => ({
       createIncrementalParseSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         prime: vi.fn(),
         reset: vi.fn(),
         evaluate: parseEvaluate
       }))
     }));
-    vi.doMock("tikz-editor/semantic/index", () => ({
+    vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         reset: vi.fn(),
         evaluate: semanticEvaluate
       })),
       collectGeometryInvalidation
     }));
-    vi.doMock("tikz-editor/svg/index", () => ({ emitSvg }));
+    vi.doMock("@tikz-editor/core/svg/index", () => ({ emitSvg }));
 
     const { computeSnapshot } = await import("../packages/app/src/compute.js");
-    await computeSnapshot({ id: "seed", source: "seed", activeFigureId: "figure:0" });
+    await computeSnapshot({ id: "seed", source: "seed", activeRootId: "figure:0" });
     const incremental = await computeSnapshot({
       id: "incremental",
       source: "next",
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       sourceRevision: 2,
       changedSourceIds: [" matrix:0 ", "scope:0", ""],
       patches: [
@@ -339,7 +365,7 @@ describe("computeSnapshot edge orchestration", () => {
     const parseResult = {
       source: "next",
       figures: [{ id: "figure:0" }],
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       figure: { body: [] }
     };
     const semanticResult = {
@@ -361,28 +387,30 @@ describe("computeSnapshot edge orchestration", () => {
       recomputedStatementCount: 1,
       reusedStatementCount: 0
     };
-    const emitSvg = vi.fn(() => ({
+    const emitSvg = vi.fn((_scene: unknown, _options: unknown) => ({
       svg: "<svg></svg>",
       model: makeModel("opaque"),
       diagnostics: []
     }));
 
-    vi.doMock("tikz-editor/text/mathjax-engine", () => ({
-      createMathJaxNodeTextEngine: vi.fn(async () => ({
+    vi.doMock("@tikz-editor/core/text/tex-node-text-engine", () => ({
+      createTexNodeTextEngine: vi.fn(async () => ({
         validate: () => null,
         measure: () => null,
         renderFromCache: () => null,
         flushPending: vi.fn(async () => [])
       }))
     }));
-    vi.doMock("tikz-editor/parser/index", () => ({
+    vi.doMock("@tikz-editor/core/parser/index", () => ({
       createIncrementalParseSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         reset: vi.fn(),
         evaluate: vi.fn(() => ({ parse: parseResult, stats: parseStats }))
       }))
     }));
-    vi.doMock("tikz-editor/semantic/index", () => ({
+    vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         reset: vi.fn(),
         evaluate: vi.fn(() => ({ semantic: semanticResult, stats: semanticStats }))
       })),
@@ -391,7 +419,7 @@ describe("computeSnapshot edge orchestration", () => {
         reachedOpaque: true
       }))
     }));
-    vi.doMock("tikz-editor/svg/index", () => ({ emitSvg }));
+    vi.doMock("@tikz-editor/core/svg/index", () => ({ emitSvg }));
 
     const { computeSnapshot } = await import("../packages/app/src/compute.js");
     const response = await computeSnapshot({
@@ -404,7 +432,8 @@ describe("computeSnapshot edge orchestration", () => {
     expect(response.snapshot.incremental?.fallbackReason).toBe("opaque-dependency");
     expect(emitSvg).toHaveBeenCalledWith(
       semanticResult.scene,
-      expect.objectContaining({ reuse: undefined })
+      expect.any(Object)
     );
+    expect(emitSvg.mock.calls[0]?.[1]).not.toHaveProperty("reuse");
   });
 });

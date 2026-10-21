@@ -50,7 +50,7 @@ const SOURCE_T = { x: 2, y: 0 };
 
 function queryNodeSceneElements(contentGroup: SVGGElement): NodeSceneElements | null {
   const sCircle = contentGroup.querySelector('circle[data-source-id="path:1"]');
-  const sLabel = contentGroup.querySelector('[data-source-id="path:1"][data-text-renderer="mathjax"]');
+  const sLabel = contentGroup.querySelector('[data-source-id="path:1"][data-text-renderer="tex"]');
   const edgeLine = contentGroup.querySelector<SVGPathElement>('path[data-source-id="path:3"]:not([data-arrow-tip-kind])');
   const edgeTip = contentGroup.querySelector<SVGPathElement>('path[data-source-id="path:3"][data-arrow-tip-kind]');
 

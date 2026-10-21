@@ -6,7 +6,8 @@ import {
   generateAppendSegmentSource,
   generatePathToolSource,
   pathToolCloseRadiusWorld,
-  pathToolShouldClose
+  pathToolShouldClose,
+  undoLastPathToolSegment
 } from "../../packages/app/src/ui/canvas-panel/path-tool.js";
 import { wp } from "../coords-helpers.js";
 
@@ -60,6 +61,26 @@ describe("path-tool state machine", () => {
       throw new Error("Expected a bezier segment.");
     }
     expect(segment.to).toEqual(wp(cm(2), cm(0)));
+  });
+
+  it("undoes only the most recent draft segment", () => {
+    const base = createPathToolDraft(wp(cm(0), cm(0)));
+    const withFirst = appendPathToolSegmentFromGesture(base, {
+      endWorld: wp(cm(1), cm(0)),
+      bendWorld: wp(cm(0.5), cm(0)),
+      asBezier: false
+    });
+    const withSecond = appendPathToolSegmentFromGesture(withFirst, {
+      endWorld: wp(cm(1), cm(1)),
+      bendWorld: wp(cm(1), cm(0.5)),
+      asBezier: false
+    });
+
+    const undone = undoLastPathToolSegment(withSecond);
+
+    expect(undone.segments).toEqual(withFirst.segments);
+    expect(undone.startWorld).toEqual(base.startWorld);
+    expect(undoLastPathToolSegment(base)).toBe(base);
   });
 
   it("recognizes close intent when clicking near the first point", () => {

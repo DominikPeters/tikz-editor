@@ -1,7 +1,9 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import type { EditGeometrySession } from "../geometry-session.js";
 import type { NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import { worldPoint, type WorldPoint } from "../../coords/points.js";
-import type { FrameTransform } from "../../coords/transforms.js";
+import { frameTransform, type FrameTransform } from "../../coords/transforms.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { resolveMatrixMode } from "../../semantic/nodes/matrix.js";
@@ -11,6 +13,7 @@ import type { EditHandlePositioningContext, EvaluateOptions, NodeAnchorTarget } 
 import { worldToLocal, localToSourceUnits } from "../coords.js";
 import { CM_PER_PT, formatNumber } from "../format.js";
 import { normalizeOptionKey } from "../option-key.js";
+import { rewriteSourceBackedOptionListMutations, type OptionMutation } from "../option-mutations.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import { resolvePropertyTarget, type PropertyTarget, type PropertyTargetOptionsFormat } from "../property-target.js";
 import { rewritePositioningFromContext } from "../rewrite.js";
@@ -65,18 +68,6 @@ const DIRECTION_ANCHORS: Record<PositioningDirection, { target: string; current:
   "below right": { target: "south east", current: "north west" }
 };
 
-const BASIC_ANCHORS = [
-  "center",
-  "north",
-  "south",
-  "east",
-  "west",
-  "north east",
-  "north west",
-  "south east",
-  "south west"
-] as const;
-
 const PLACEMENT_OPTION_KEYS = new Set(["at", "xshift", "yshift"]);
 const CARDINAL_SNAP_RATIO = 0.25;
 
@@ -92,16 +83,18 @@ export function applyPositionNodeRelativeToAction(
   source: string,
   action: PositionNodeRelativeToAction,
   evaluateOptions: EvaluateOptions | undefined,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): EditActionResult {
-  return preflightPositionNodeRelativeToAction(source, action, evaluateOptions, parseOptions).result;
+  return preflightPositionNodeRelativeToAction(source, action, evaluateOptions, parseOptions, geometry).result;
 }
 
 export function preflightPositionNodeRelativeToAction(
   source: string,
   action: PositionNodeRelativeToAction,
   evaluateOptions: EvaluateOptions | undefined,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): PositionNodeRelativeToPreflight {
   const nodeResolution = resolveEditableNodeRef(source, action.nodeId, parseOptions);
   if (nodeResolution.kind !== "found") {
@@ -123,7 +116,7 @@ export function preflightPositionNodeRelativeToAction(
   }
 
   const parsed = parseTikzForEdit(source, parseOptions);
-  const semantic = evaluateTikzFigure(parsed.figure, source, evaluateOptions);
+  const semantic = geometry?.semantic ?? evaluateTikzFigure(parsed.figure, source, evaluateOptions);
   const placement = resolveRelativePlacementContext({
     semantic,
     nodeSourceId: nodeResolution.nodeRef.nodeSourceId,
@@ -195,7 +188,8 @@ export function applyConvertNodePositionToAbsoluteAction(
   source: string,
   action: ConvertNodePositionToAbsoluteAction,
   evaluateOptions: EvaluateOptions | undefined,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): EditActionResult {
   const nodeResolution = resolveEditableNodeRef(source, action.nodeId, parseOptions);
   if (nodeResolution.kind !== "found") {
@@ -203,7 +197,7 @@ export function applyConvertNodePositionToAbsoluteAction(
   }
 
   const parsed = parseTikzForEdit(source, parseOptions);
-  const semantic = evaluateTikzFigure(parsed.figure, source, evaluateOptions);
+  const semantic = geometry?.semantic ?? evaluateTikzFigure(parsed.figure, source, evaluateOptions);
   if (hasPathAttachment(semantic.scene.elements, nodeResolution.nodeRef.nodeSourceId)) {
     return { kind: "unsupported", reason: "Path-attached nodes cannot be converted to absolute positioning." };
   }
@@ -228,9 +222,10 @@ export function applyConvertNodePositionToAbsoluteAction(
     return { kind: "unsupported", reason: absolutePoint.reason };
   }
 
+  const { a, b, c, d, e, f } = positioningHandle.transform;
   const coordinate = formatPlacementCoordinateFromWorld(
     absolutePoint.world,
-    positioningHandle.transform as unknown as FrameTransform
+    frameTransform(a, b, c, d, e, f)
   );
   const rewritten = rewriteNodePlacementSource({
     source,
@@ -401,16 +396,25 @@ function rewriteNodePlacementSource(input: {
 }): { source: string; patches: ReturnType<typeof applyTextReplacements>["patches"] } | null {
   const replacements: TextReplacement[] = [];
 
-  const optionsReplacement = rewritePlacementOptions(
-    input.nodeRef.node.options,
-    input.target.optionsFormat ?? "bracketed",
-    input.placementEntry
-  );
-  const nodeOptionsSpan = input.nodeRef.node.optionsSpan ?? input.nodeRef.node.options?.span;
-  if (nodeOptionsSpan) {
-    const previous = input.source.slice(nodeOptionsSpan.from, nodeOptionsSpan.to);
-    if (previous !== optionsReplacement) {
-      replacements.push({ span: nodeOptionsSpan, text: optionsReplacement });
+  const nodeOptions = input.nodeRef.node.options;
+  const nodeOptionsSpan = input.nodeRef.node.optionsSpan ?? nodeOptions?.span;
+  if (nodeOptions && nodeOptionsSpan) {
+    const mutations = buildPlacementMutations(nodeOptions, input.placementEntry);
+    if (mutations.size > 0) {
+      const optionsReplacement = rewriteSourceBackedOptionListMutations(
+        input.source,
+        nodeOptionsSpan,
+        nodeOptions,
+        mutations,
+        input.target.optionsFormat ?? "bracketed",
+        // Keep an explicit anchor= option after the placement key so the
+        // authored anchor still overrides the placement's implied anchor.
+        { beforeKey: "anchor" }
+      );
+      const previous = input.source.slice(nodeOptionsSpan.from, nodeOptionsSpan.to);
+      if (previous !== optionsReplacement) {
+        replacements.push({ span: nodeOptionsSpan, text: optionsReplacement });
+      }
     }
   } else if (input.placementEntry) {
     replacements.push({
@@ -449,37 +453,24 @@ function rewriteNodePlacementSource(input: {
   return { source: applied.source, patches: applied.patches };
 }
 
-function rewritePlacementOptions(
-  options: OptionListAst | undefined,
-  format: PropertyTargetOptionsFormat,
+function buildPlacementMutations(
+  options: OptionListAst,
   placementEntry: string | null
-): string {
-  if (!options) {
-    return placementEntry ? wrapSerializedOptions(placementEntry, format) : "";
-  }
-
-  const parts: string[] = [];
-  let insertedPlacement = false;
+): Map<string, OptionMutation> {
+  const mutations = new Map<string, OptionMutation>();
   for (const entry of options.entries) {
-    if (shouldRemovePlacementOption(entry)) {
-      continue;
-    }
-    if (placementEntry && !insertedPlacement && optionEntryKey(entry) === "anchor") {
-      parts.push(placementEntry);
-      insertedPlacement = true;
-    }
-    const normalized = normalizeOptionEntryRaw(entry);
-    if (normalized.length > 0) {
-      parts.push(normalized);
+    const key = optionEntryKey(entry);
+    if (key && shouldRemovePlacementOption(entry)) {
+      mutations.set(key, { kind: "remove" });
     }
   }
-  if (placementEntry && !insertedPlacement) {
-    parts.push(placementEntry);
+  if (placementEntry) {
+    const equalsIndex = placementEntry.indexOf("=");
+    const key = normalizeOptionKey(equalsIndex >= 0 ? placementEntry.slice(0, equalsIndex) : placementEntry);
+    const value = equalsIndex >= 0 ? placementEntry.slice(equalsIndex + 1).trim() : "";
+    mutations.set(key, { kind: "set", value });
   }
-  if (parts.length === 0) {
-    return format === "bracketed" ? "" : wrapSerializedOptions("", format);
-  }
-  return wrapSerializedOptions(parts.join(", "), format);
+  return mutations;
 }
 
 function shouldRemovePlacementOption(entry: OptionEntry): boolean {
@@ -495,20 +486,6 @@ function optionEntryKey(entry: OptionEntry): string | null {
     return null;
   }
   return normalizeOptionKey(entry.key);
-}
-
-function normalizeOptionEntryRaw(entry: OptionEntry): string {
-  const raw = entry.raw.trim();
-  if (raw.length > 0) {
-    return raw;
-  }
-  if (entry.kind === "kv") {
-    return `${entry.key}=${entry.valueRaw}`;
-  }
-  if (entry.kind === "flag") {
-    return entry.key;
-  }
-  return "";
 }
 
 function wrapSerializedOptions(content: string, format: PropertyTargetOptionsFormat): string {
@@ -694,10 +671,7 @@ function resolveExplicitAnchor(options: OptionListAst | undefined): string | nul
     }
     anchor = normalizeAnchorName(normalizeOptionValue(entry.valueRaw));
   }
-  if (!anchor || anchor === "base" || anchor === "mid") {
-    return anchor;
-  }
-  return BASIC_ANCHORS.includes(anchor as (typeof BASIC_ANCHORS)[number]) ? anchor : anchor;
+  return anchor;
 }
 
 function normalizeAnchorName(anchor: string): string {
@@ -752,7 +726,7 @@ function resolveStandaloneNodeAtRemovalSpan(source: string, nodeRef: NodeRef): S
   if (nodeIndex < 2) {
     return null;
   }
-  const atKeyword = nodeRef.statement.items[nodeIndex - 2];
+  const atKeyword = requireArrayValue(nodeRef.statement.items, nodeIndex - 2);
   const coordinate = nodeRef.statement.items[nodeIndex - 1];
   if (!isAtKeyword(atKeyword) || coordinate?.kind !== "Coordinate") {
     return null;
@@ -817,7 +791,7 @@ function formatPlacementCoordinateFromWorld(world: WorldPoint, transform?: Frame
 
 function hasPathAttachment(elements: ReturnType<typeof evaluateTikzFigure>["scene"]["elements"], sourceId: string): boolean {
   return elements.some(
-    (element) => element.sourceRef.sourceId === sourceId && "pathAttachment" in element && element.pathAttachment != null
+    (element) => element.sourceRef.sourceId === sourceId && "pathAttachment" in element
   );
 }
 

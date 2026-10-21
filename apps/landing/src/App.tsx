@@ -15,6 +15,7 @@ import {
   RiEdit2Line,
   RiExternalLinkLine,
   RiFileListLine,
+  RiFolderZipLine,
   RiGithubFill,
   RiNodeTree,
   RiRobot2Line,
@@ -266,6 +267,7 @@ export function App() {
       <main className="landingPage">
         <Hero />
         <EditorStory />
+        <CodeSigningPolicy />
       </main>
       <TikzDevFooter />
     </div>
@@ -300,6 +302,8 @@ function TikzDevFooter() {
         <span aria-hidden="true">·</span>
         <a href="https://github.com/DominikPeters/tikz-editor/issues">Feedback and issues</a>
         <span aria-hidden="true">·</span>
+        <a href="#code-signing-policy">Code signing</a>
+        <span aria-hidden="true">·</span>
         <a href="https://tikz.dev">PGF/<span className="landingTikzName">TikZ</span> Manual</a>
       </div>
       <div className="landingFooterMeta"><em>Last updated: {landingBuildDate}</em></div>
@@ -311,6 +315,9 @@ function Hero() {
   const desktopDownloadSelection = useDesktopDownloadSelection();
   const desktopDownload = getDesktopDownload(desktopDownloadSelection);
   const DesktopDownloadIcon = desktopDownload.icon;
+  const portableDownload = releaseDownloadMetadata.downloads.find(
+    (download) => download.platform === "windows" && /_x64-portable\.zip$/i.test(download.name)
+  );
 
   return (
     <section className="landingHero" aria-labelledby="landing-title">
@@ -331,16 +338,18 @@ function Hero() {
         </p>
         <div className="landingHeroActions" aria-label="Landing page links">
           <a href="https://tikz.dev/editor/web" className="landingPrimaryLink">
-            <RiExternalLinkLine className="landingCtaIcon" aria-hidden="true" size={17} />
-            <span className="landingCtaLabel">Open TikZ Editor Web</span>
+            <span className="landingCtaContent">
+              <RiExternalLinkLine className="landingCtaIcon" aria-hidden="true" size={17} />
+              <span className="landingCtaLabel">Open TikZ Editor Web</span>
+            </span>
           </a>
           <div className="landingDownloadBlock">
             <a href={desktopDownload.primary.url} className="landingDownloadLink">
-              <span className="landingDownloadIcons" aria-hidden="true">
-                <DesktopDownloadIcon className="landingCtaIcon" size={17} />
+              <span className="landingCtaContent">
+                <DesktopDownloadIcon className="landingCtaIcon" aria-hidden="true" size={17} />
+                <span className="landingCtaLabel">{desktopDownload.primary.label}</span>
+                <span className="landingDownloadSize">{formatDownloadSize(desktopDownload.primary.sizeBytes)}</span>
               </span>
-              <span className="landingCtaLabel">{desktopDownload.primary.label}</span>
-              <span className="landingDownloadSize">{formatDownloadSize(desktopDownload.primary.sizeBytes)}</span>
             </a>
             <div className="landingDownloadAlternates">
               {desktopDownload.alternatePrefix}
@@ -352,6 +361,18 @@ function Hero() {
               ))}
             </div>
           </div>
+          {desktopDownloadSelection.platform === "windows" && portableDownload ? (
+            <div className="landingDownloadBlock">
+              <a href={portableDownload.url} className="landingDownloadLink landingPortableDownloadLink">
+                <span className="landingCtaContent">
+                  <RiFolderZipLine className="landingCtaIcon" aria-hidden="true" size={17} />
+                  <span className="landingCtaLabel">Windows Portable</span>
+                  <span className="landingDownloadSize">{formatDownloadSize(portableDownload.sizeBytes)}</span>
+                </span>
+              </a>
+              <div className="landingDownloadAlternates">ZIP · No installation needed</div>
+            </div>
+          ) : null}
         </div>
       </div>
       <figure className="landingHeroScreenshot" aria-label="TikZ Editor interface screenshot">
@@ -446,7 +467,10 @@ function getDesktopDownload(selection: DesktopDownloadSelection) {
       icon: RiWindowsFill,
       primary: downloadLink("Download for Windows", mustFindDownload((download) => download.platform === "windows" && download.format === "exe")),
       alternatePrefix: "",
-      alternates: [releaseLink("Other platforms")]
+      alternates: [
+        releaseLink("Other platforms"),
+        { label: "Code-signing policy", url: "#code-signing-policy", sizeBytes: 0 }
+      ]
     };
   }
 
@@ -703,13 +727,43 @@ function HowItWorksSection() {
           Now, the app does not parse arbitrary TeX code; it only parses commands that are frequently used in the process of making TikZ figures. Thus, code that is very "hacky" will likely not be interpreted correctly. Still, coverage is pretty good and increasing over time. The app parses the given TikZ code and builds an internal representation of it which becomes a semantic layer that resolves coordinates, styles, transforms, loops, nodes, paths, and text into editable scene elements. This representation is closely linked to the syntactic input, by tagging it with line and character ranges. This allows the app to change parts of the code using small patches, without having to re-write the TikZ code in some canonical format. This way, the user's indentation and line breaks are preserved faithfully. The scene is then rendered using SVG.
         </p>
         <p>
-          Text and math rendering are done via <a href="https://www.mathjax.org/">MathJax</a>. To support multi-line text, the app re-implements the TeX algorithm for hyphenation and the <a href="https://en.wikipedia.org/wiki/Knuth%E2%80%93Plass_line-breaking_algorithm">Knuth-Plass line-breaking algorithm</a>. This was a major effort, but it means that the way that multi-line text is displayed in the app usually exactly mirrors the way that TeX renders the same text.
+          Node contents are rendered by a text and math engine written from scratch to mirror LaTeX as closely as possible. To support multi-line text, the app re-implements TeX hyphenation and the <a href="https://en.wikipedia.org/wiki/Knuth%E2%80%93Plass_line-breaking_algorithm">Knuth-Plass line-breaking algorithm</a>. This was a major effort, but it means that multi-line text in the app usually closely mirrors the same text rendered by TeX.
         </p>
         <p>
           The app includes a custom color picker that internally converts RGB colors to the closest color representable by short xcolor strings, so that #409a40 becomes violet!88!white!45!green. The code for this is available as the npm package <a href="https://www.npmjs.com/package/xcolor-rgb-convert">xcolor-rgb-convert</a>.
         </p>
         <p>
           The app supports importing a variety of file formats based on converters that I developed for this purpose; these converters are available as standalone npm packages: <a href="https://www.npmjs.com/package/svg2tikz">svg2tikz</a>, <a href="https://www.npmjs.com/package/pptx2tikz">pptx2tikz</a> built on top of <a href="https://github.com/pipipi-pikachu/pptxtojson">pptxtojson</a>, and <a href="https://www.npmjs.com/package/ipe2tikz">ipe2tikz</a>. The desktop app also supports directly pasting objects from PowerPoint and Keynote; for the latter feature I built an interpreter for the keynote clipboard format, available as npm package <a href="https://www.npmjs.com/package/keynote-clipboard">keynote-clipboard</a>. The desktop app also includes support for AI assistance via the <a href="https://developers.openai.com/codex/app-server">Codex App Server</a>. The app's source editor is built on top of <a href="https://codemirror.net/">CodeMirror</a>.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function CodeSigningPolicy() {
+  return (
+    <section className="landingCodeSigningPolicy" id="code-signing-policy" aria-labelledby="code-signing-policy-title">
+      <div className="landingCodeSigningPolicyInner">
+        <h2 id="code-signing-policy-title">Code signing policy</h2>
+        <p>
+          Official Windows releases: Free code signing
+          provided by <a href="https://signpath.io/">SignPath.io</a>, certificate by{" "}
+          <a href="https://signpath.org/">SignPath Foundation</a>. Committer, reviewer, and release approver:{" "}
+          <a href="https://dominik-peters.de/">Dominik Peters</a>.
+        </p>
+        <p>
+          Official macOS releases: Code signed by Dominik Peters.
+        </p>
+        <p>
+          <strong>Privacy policy:</strong> Unless deactivated during install or from the settings menu, on startup, 
+          the desktop app requests information about the most recent available version from{" "}
+          <code>tikz.dev</code>. The server receives standard connection information such as the IP address,
+          but the request contains no documents, TikZ source, usage analytics, or persistent identifiers.
+        </p>
+        <p>
+          Other network requests are made only when the user invokes a networked feature, such as opening a
+          paper from arXiv, using Codex assistance, previewing with TikZJax, following an external link, or
+          downloading an update.
         </p>
       </div>
     </section>
@@ -727,7 +781,7 @@ function MagnifyToolPreview({ svg, label }: { svg: string; label: string }) {
     frameWidth: 0,
     frameHeight: 0
   });
-  const style = {
+  const style: CSSProperties & { [key: `--${string}`]: string | number } = {
     "--landingMagnifyX": `${center.x}px`,
     "--landingMagnifyY": `${center.y}px`,
     "--landingMagnifyFrameWidth": `${center.frameWidth}px`,
@@ -735,7 +789,7 @@ function MagnifyToolPreview({ svg, label }: { svg: string; label: string }) {
     "--landingMagnifyContentX": `${lensRadiusPx - center.x * magnifyScale}px`,
     "--landingMagnifyContentY": `${lensRadiusPx - center.y * magnifyScale}px`,
     "--landingMagnifyScale": magnifyScale
-  } as CSSProperties;
+  };
 
   const setCenterFromFrame = useCallback((xPx: number, yPx: number, frameWidth: number, frameHeight: number): void => {
     setCenter({
@@ -982,5 +1036,5 @@ function Tok({ kind, children }: { kind: "keyword" | "type" | "string" | "number
 }
 
 function line(id: string, number: string, content: ReactNode, active = false, folded = false, foldControl?: "open" | "closed"): CodeLine {
-  return { id, number, content, active, folded, foldControl };
+  return { id, number, content, active, folded, ...(foldControl === undefined ? {} : { foldControl }) };
 }

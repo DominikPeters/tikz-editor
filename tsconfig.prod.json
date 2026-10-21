@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true
+  },
+  "include": [
+    "packages/*/src/**/*.ts",
+    "packages/*/src/**/*.tsx",
+    "apps/*/src/**/*.ts",
+    "apps/*/src/**/*.tsx"
+  ]
+}

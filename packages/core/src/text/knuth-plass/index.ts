@@ -1,4 +1,3 @@
-export { KnuthPlassVisitor } from './KnuthPlassVisitor.js';
 export {
   DEFAULT_PARAGRAPH_ALIGNMENT,
   TEX_INTERWORD_SHRINK_EM,
@@ -12,28 +11,66 @@ export {
   type AlignmentGlue,
 } from './alignment.js';
 export {
-  installKnuthPlassVisitor,
-  getKnuthPlassReportsFromOutputJax,
-  setKnuthPlassOptionsOnOutputJax,
   getKnuthPlassCaretFromPoint,
   getKnuthPlassLineRangeFromPoint,
+  getKnuthPlassParagraphCaretStops,
+  getKnuthPlassPlaceholderGeometry,
   getKnuthPlassPointFromOffset,
   getKnuthPlassSelectionRects,
+  getKnuthPlassVListBoxFromPoint,
+  getKnuthPlassVListBoxGeometry,
+  getKnuthPlassVListGeometrySnapshot,
+  getKnuthPlassVListItemFromPoint,
+  getKnuthPlassVListItemGeometry,
+  getKnuthPlassVListLabelFromPoint,
+  getKnuthPlassVListLabelGeometry,
+  getKnuthPlassVListParagraphGeometry,
+  getKnuthPlassVListSourceHit,
+  getKnuthPlassVListSourceHitFromSnapshot,
+  getKnuthPlassVListTreeHitFromSnapshot,
   clearKnuthPlassCaretMappingCache,
-  type KnuthPlassConfig,
-  type KnuthPlassLayoutMode,
-  type WrappedTextGap,
-  type MathJaxConfigLike,
-  type MathJaxOutputConfig,
-  type OutputJaxName,
   type CaretFromPointParams,
+  type KnuthPlassParagraphCaretStop,
+  type KnuthPlassParagraphCaretStopsLine,
   type PointFromOffsetParams,
   type SelectionRectsParams,
   type CaretHitResult,
   type LineRangeFromPointResult,
   type CaretPointResult,
+  type PlaceholderGeometry,
+  type PlaceholderGeometryParams,
   type SelectionRectsResult,
+  type VListBoxHitParams,
+  type VListBoxGeometry,
+  type VListBoxGeometryParams,
+  type VListGeometrySnapshot,
+  type VListGeometrySnapshotParams,
+  type VListGeometrySnapshotSource,
+  type VListGeometryTreeNode,
+  type VListItemHitParams,
+  type VListItemGeometry,
+  type VListItemGeometryParams,
+  type VListLabelHitParams,
+  type VListLabelHitResult,
+  type VListLabelGeometry,
+  type VListLabelGeometryParams,
+  type VListParagraphGeometry,
+  type VListParagraphGeometryParams,
+  type VListSourceHit,
+  type VListSourceHitFromSnapshotParams,
+  type VListSourceHitParams,
+  type VListTreeHitParams,
+  type VListTreeHitResult,
 } from './install.js';
+export {
+  getParagraphLayoutReports,
+  registerParagraphLayoutReports,
+} from "./report-registry.js";
+export type {
+  KnuthPlassConfig,
+  KnuthPlassLayoutMode,
+  WrappedTextGap,
+} from "./layout-options.js";
 
 export type {
   ParagraphLayoutReport,
@@ -81,6 +118,22 @@ export { createEnglishHyphenator, EnglishHyphenator } from './paragraph/hyphenat
 export { englishDefaults, ENGLISH_LANGUAGE_CODE } from './languages/en.js';
 
 export {
+  documentOffsetToTextarea,
+  documentSourceOffset,
+  layoutSourceOffset,
+  sourceOffsetForSpace,
+  sourceSpanForSpace,
+  textareaOffset,
+  textareaOffsetToDocument,
+  type DocumentSourceOffset,
+  type LayoutSourceOffset,
+  type SourceCoordinateSpace,
+  type SourceOffset,
+  type SourceSpan as BrandedSourceSpan,
+  type TextareaOffset,
+} from '../source-coordinates.js';
+
+export {
   parseSourceSpans,
   type SourceParseError,
   type SourceParseResult,
@@ -89,16 +142,3 @@ export {
   type MathSourceSpan,
   type MathDelimiterKind,
 } from './editor/sourceParser.js';
-
-export {
-  stabilizePrefixForMeasurement,
-  scanTeXPrefixState,
-  hasDanglingMathScriptOperator,
-  createMathPrefixCache,
-  normalizeMathSourceForCache,
-  seedPrefixWidthTable,
-  finalizePrefixWidthTable,
-  readPrefixUnitsFromTable,
-  findNearestPrefixIndexFromTable,
-  type MathPrefixCache,
-} from './editor/mathPrefix.js';

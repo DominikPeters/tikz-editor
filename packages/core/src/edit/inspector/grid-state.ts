@@ -55,7 +55,7 @@ export function findPathStatementInSource(source: string, sourceId: string, pars
   }
   const parsed = parseTikz(source, {
     recover: true,
-    activeFigureId: parseOptions.activeFigureId,
+    ...(parseOptions.activeFigureId === undefined ? {} : { activeFigureId: parseOptions.activeFigureId }),
   });
   return findPathStatementById(parsed.figure.body, sourceId);
 }
@@ -65,11 +65,8 @@ function collectGridKeywords(
 ): Array<{ keyword: Extract<PathItem, { kind: "PathKeyword" }>; options: Extract<PathItem, { kind: "PathOption" }> | null }> {
   const collected: Array<{ keyword: Extract<PathItem, { kind: "PathKeyword" }>; options: Extract<PathItem, { kind: "PathOption" }> | null }> = [];
 
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
-    if (!item) {
-      continue;
-    }
+  for (const [index, item] of items.entries()) {
+
     if (item.kind === "PathKeyword" && item.keyword === "grid") {
       const next = items[index + 1];
       collected.push({

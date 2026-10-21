@@ -1,0 +1,176 @@
+{
+  "formatVersion": 1,
+  "title": "Graphicx text transforms fidelity",
+  "description": "Original source-backed rotatebox/scalebox/resizebox/reflectbox cases. Exact painted glyph origins, underlying fonts, affine axes and rule bounds.",
+  "fidelity": [
+    {
+      "id": "rotate-quarter-turn",
+      "file": "transforms.tex",
+      "frame": 1,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "rotate-negative-half-turn",
+      "file": "transforms.tex",
+      "frame": 2,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "rotate-center-origin",
+      "file": "transforms.tex",
+      "frame": 3,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "rotate-edge-origins",
+      "file": "transforms.tex",
+      "frame": 4,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "rotate-explicit-pivot",
+      "file": "transforms.tex",
+      "frame": 5,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "scale-text-math-rule",
+      "file": "transforms.tex",
+      "frame": 6,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "scale-nonuniform",
+      "file": "transforms.tex",
+      "frame": 7,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "reflect-negative-scale",
+      "file": "transforms.tex",
+      "frame": 8,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "resize-width",
+      "file": "transforms.tex",
+      "frame": 9,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "resize-height-totalheight",
+      "file": "transforms.tex",
+      "frame": 10,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "scale-minipage",
+      "file": "transforms.tex",
+      "frame": 11,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "minipage-top-bottom",
+      "file": "transforms.tex",
+      "frame": 12,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "rotated-wrapped-minipage",
+      "file": "transforms.tex",
+      "frame": 13,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    },
+    {
+      "id": "nested-transforms",
+      "file": "transforms.tex",
+      "frame": 14,
+      "family": "transforms",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Before",
+        "After"
+      ]
+    }
+  ],
+  "recognition": []
+}

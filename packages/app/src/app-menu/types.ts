@@ -1,5 +1,18 @@
 export const APP_MENU_COMMAND_IDS = {
   NEW_DOCUMENT: "file.new-document",
+  NEW_BEAMER_DOCUMENT: "file.new-beamer-document",
+  NEW_TIKZ_DOCUMENT: "file.new-tikz-document",
+  PRESENT_CURRENT: "present.current",
+  PRESENT_BEGINNING: "present.beginning",
+  PRESENT_WINDOW: "present.window",
+  PRESENT_REHEARSE: "present.rehearse",
+  PRESENT_OPTIONS: "present.options",
+  PRESENT_SHOW_PRESENTER: "present.show-presenter",
+  PRESENT_RESTORE_OUTPUT: "present.restore-output",
+  PRESENT_SWAP_DISPLAYS: "present.swap-displays",
+  PRESENT_BLACK: "present.black",
+  PRESENT_WHITE: "present.white",
+  PRESENT_END: "present.end",
   OPEN_DOCUMENT: "file.open-document",
   OPEN_FROM_ARXIV: "file.open-from-arxiv",
   IMPORT_IPE: "file.import-ipe",
@@ -99,6 +112,14 @@ export const APP_MENU_COMMAND_IDS = {
   TOGGLE_INSPECTOR_PANEL: "view.toggle-inspector-panel",
   TOGGLE_OBJECTS_PANEL: "view.toggle-objects-panel",
   TOGGLE_STYLES_PANEL: "view.toggle-styles-panel",
+  TOGGLE_BUILDS_PANEL: "view.toggle-builds-panel",
+  TOGGLE_NOTES_PANEL: "view.toggle-notes-panel",
+  OVERLAY_NEXT: "overlay.next",
+  OVERLAY_FROM: "overlay.from",
+  OVERLAY_ONLY: "overlay.only",
+  OVERLAY_THROUGH: "overlay.through",
+  OVERLAY_EDIT: "overlay.edit",
+  OVERLAY_REMOVE: "overlay.remove",
   TOGGLE_FIGURES_PANEL: "view.toggle-figures-panel",
   TOGGLE_ASSISTANT_PANEL: "view.toggle-assistant-panel",
   TOGGLE_DEV_PANEL: "view.toggle-dev-panel",
@@ -110,6 +131,7 @@ export const APP_MENU_COMMAND_IDS = {
   CHECK_FOR_UPDATES: "help.check-for-updates",
   SHOW_ABOUT: "help.show-about",
   SHOW_COMPILED_PICTURE: "file.show-compiled-picture",
+  SHOW_COMPILED_SLIDE: "file.show-compiled-slide",
   OPEN_SETTINGS: "file.open-settings",
   CLEAR_RECENT_FILES: "file.clear-recent-files"
 } as const;
@@ -155,7 +177,7 @@ export type AppMenuItem =
   | AppMenuRecentFilesItem
   | AppMenuWorkspaceListItem;
 
-export type AppMenuSectionId = "file" | "edit" | "path" | "insert" | "view" | "help";
+export type AppMenuSectionId = "file" | "edit" | "path" | "insert" | "view" | "present" | "help";
 
 export type AppMenuSection = {
   id: AppMenuSectionId;

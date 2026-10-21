@@ -49,7 +49,7 @@ test("figure thumbnails render math text through worker pipeline", async ({ page
           return false;
         }
         const payload = decodeURIComponent(src.slice(src.indexOf(",") + 1));
-        return payload.includes('data-text-renderer="mathjax"');
+        return payload.includes('data-text-renderer="tex"');
       });
     });
   }).toBe(true);

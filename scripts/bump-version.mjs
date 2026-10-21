@@ -9,14 +9,19 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 
 const packageJsonUpdates = [
   { file: "package.json" },
+  { file: "packages/lezer-tex/package.json" },
   { file: "packages/lezer-tikz/package.json" },
   {
     file: "packages/lang-tikz/package.json",
-    internalDependencies: ["@tikz-editor/lezer-tikz"],
+    internalDependencies: ["@tikz-editor/lezer-tex", "@tikz-editor/lezer-tikz"],
   },
   {
     file: "packages/core/package.json",
-    internalDependencies: ["@tikz-editor/lezer-tikz"],
+    internalDependencies: ["@tikz-editor/lezer-tex", "@tikz-editor/lezer-tikz"],
+  },
+  {
+    file: "packages/tex-fuzz/package.json",
+    internalDependencies: ["@tikz-editor/core"],
   },
   {
     file: "packages/app/package.json",
@@ -214,24 +219,22 @@ async function updateTauriConfig(version) {
 async function replaceInFile(file, pattern, replacement) {
   const absolutePath = path.join(repoRoot, file);
   const text = await readFile(absolutePath, "utf8");
-  const updated = text.replace(pattern, replacement);
-
-  if (updated === text) {
+  if (!pattern.test(text)) {
     throw new Error(`No matching version entry found in ${file}`);
   }
 
-  await writeFile(absolutePath, updated);
+  await writeFile(absolutePath, text.replace(pattern, replacement));
 }
 
 async function updateCargoFiles(version) {
   await replaceInFile(
     "apps/desktop/src-tauri/Cargo.toml",
-    /(^\[package\]\nname = "app"\nversion = ")[^"]+(")/m,
+    /(^\[package\]\nname = "tikz-editor"\nversion = ")[^"]+(")/m,
     `$1${version}$2`,
   );
   await replaceInFile(
     "apps/desktop/src-tauri/Cargo.lock",
-    /(\[\[package\]\]\nname = "app"\nversion = ")[^"]+(")/,
+    /(\[\[package\]\]\nname = "tikz-editor"\nversion = ")[^"]+(")/,
     `$1${version}$2`,
   );
 }
@@ -284,19 +287,19 @@ async function verifyVersion(version) {
 
   if (
     !new RegExp(
-      `^\\[package\\]\\nname = "app"\\nversion = "${escapedVersion}"`,
+      `^\\[package\\]\\nname = "tikz-editor"\\nversion = "${escapedVersion}"`,
       "m",
     ).test(cargoToml)
   ) {
-    throw new Error("Cargo.toml app package version did not verify");
+    throw new Error("Cargo.toml tikz-editor package version did not verify");
   }
 
   if (
     !new RegExp(
-      `\\[\\[package\\]\\]\\nname = "app"\\nversion = "${escapedVersion}"`,
+      `\\[\\[package\\]\\]\\nname = "tikz-editor"\\nversion = "${escapedVersion}"`,
     ).test(cargoLock)
   ) {
-    throw new Error("Cargo.lock app package version did not verify");
+    throw new Error("Cargo.lock tikz-editor package version did not verify");
   }
 }
 

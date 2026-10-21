@@ -1,6 +1,15 @@
 import { LRLanguage, LanguageSupport, foldNodeProp, foldInside, foldService, syntaxTree } from "@codemirror/language";
+import { parseMixed, type Input, type SyntaxNodeRef } from "@lezer/common";
 import { styleTags, tags as t } from "@lezer/highlight";
-import { parser } from "@tikz-editor/lezer-tikz";
+import {
+  beamerDocumentParser,
+  texDocumentParser,
+  texFragmentParser,
+} from "@tikz-editor/lezer-tex";
+import { parser as baseTikzParser } from "@tikz-editor/lezer-tikz";
+
+import { completeSyntaxTree } from "./complete-parse.js";
+import { texHeadings } from "./headings.js";
 
 const tikzHighlighting = styleTags({
   Comment: t.lineComment,
@@ -84,6 +93,120 @@ const tikzHighlighting = styleTags({
   "⚠": t.invalid,
 });
 
+const texHighlighting = styleTags({
+  Comment: t.lineComment,
+
+  "BeginCommand EndCommand": t.keyword,
+  // A rule tags only a node's own text, not its children's, so the name
+  // (a WordToken inside EnvironmentName) needs the inheriting form.
+  "EnvironmentName/... MathEnvironmentName": t.typeName,
+  "IncludeGraphicsCmd": t.keyword,
+  "BeamerPartCmd BeamerSectionLevelCmd BeamerSubsectionCmd BeamerSubsubsectionCmd BeamerFrameStartCmd BeamerFrameTitleCmd BeamerFrameSubtitleCmd BeamerOnlyCmd BeamerUncoverCmd BeamerVisibleCmd BeamerInvisibleCmd BeamerAltCmd BeamerTemporalCmd BeamerOnslideCmd BeamerPauseCmd":
+    t.keyword,
+
+  "ControlWord ControlSymbol MathTextCmd EnvironmentDefinitionCmd CommandDefinitionCmd": t.meta,
+  // Beamer overlay specifications (`<2->`) read as one unit.
+  "OverlaySpecification/...": t.labelName,
+
+  "InlineMath/Dollar DisplayMath/DoubleDollar InlineMathOpen InlineMathClose DisplayMathOpen DisplayMathClose":
+    t.regexp,
+  "MathIdentifier/WordToken MathIdentifier/OtherTextToken": t.variableName,
+  "MathNumber/NumberToken": t.number,
+  "MathOperator/OperatorToken MathOperator/Star MathOperator/AngleText MathScript/Superscript MathScript/Subscript AlignmentTab":
+    t.operator,
+  "MathPunctuation/PunctuationToken": t.punctuation,
+
+  "( )": t.paren,
+  "[ ]": t.squareBracket,
+  "{ }": t.brace,
+  "< >": t.angleBracket,
+  "⚠": t.invalid,
+});
+
+// Prose is most of a document, so it keeps the default colour there; node
+// text inside a picture is coloured as a string to set it apart from code.
+const texFragmentTextHighlighting = styleTags({
+  "Text/WordToken Text/NumberToken Text/OperatorToken Text/PunctuationToken Text/OtherTextToken":
+    t.string,
+});
+
+const texFoldProps = foldNodeProp.add({
+  Environment: foldInside,
+  MathEnvironment: foldInside,
+  Group: foldInside,
+  OptionalArgument: foldInside,
+  OverlaySpecification: foldInside,
+  InlineMath: foldInside,
+  DisplayMath: foldInside,
+  MathGroup: foldInside,
+});
+
+// Lezer reuses only tree nodes across edits, never the contents of its
+// compact buffers, so an edit reparses everything sharing a buffer with it.
+// Smaller buffers keep that region small: a keystroke in a long document
+// reparses in about a millisecond instead of five, for twice the tree memory
+// (2 MB rather than 1 MB for a 150 KB paper).
+const EDITOR_BUFFER_LENGTH = 128;
+
+const highlightedTexFragmentParser = texFragmentParser.configure({
+  props: [texHighlighting, texFragmentTextHighlighting, texFoldProps],
+  bufferLength: EDITOR_BUFFER_LENGTH,
+});
+
+const mixedTikzParser = baseTikzParser.configure({
+  bufferLength: EDITOR_BUFFER_LENGTH,
+  props: [
+    tikzHighlighting,
+    foldNodeProp.add({
+      TikzEnvironment: foldInside,
+      ScopeStatement: foldInside,
+      Group: foldInside,
+    }),
+  ],
+  wrap: parseMixed((node) =>
+    node.name === "NodeTextGroup"
+      ? {
+          parser: highlightedTexFragmentParser,
+          bracketed: true,
+        }
+      : null
+  ),
+});
+
+function isTikzEnvironment(node: SyntaxNodeRef, input: Input): boolean {
+  if (node.name !== "Environment") {
+    return false;
+  }
+  const prefix = input.read(node.from, Math.min(node.to, node.from + 96));
+  return /^\\begin\{tikzpicture\*?\}/u.test(prefix);
+}
+
+const mixedTexDocumentParser = texDocumentParser.configure({
+  props: [texHighlighting, texFoldProps],
+  bufferLength: EDITOR_BUFFER_LENGTH,
+  wrap: parseMixed((node, input) =>
+    isTikzEnvironment(node, input)
+      ? {
+          parser: mixedTikzParser,
+          bracketed: true,
+        }
+      : null
+  ),
+});
+
+const mixedBeamerDocumentParser = beamerDocumentParser.configure({
+  props: [texHighlighting, texFoldProps],
+  bufferLength: EDITOR_BUFFER_LENGTH,
+  wrap: parseMixed((node, input) =>
+    isTikzEnvironment(node, input)
+      ? {
+          parser: mixedTikzParser,
+          bracketed: true,
+        }
+      : null
+  ),
+});
+
 const tikzEnvironmentFolding = foldService.of((state, lineStart) => {
   const line = state.doc.lineAt(lineStart);
   const text = line.text;
@@ -103,7 +226,7 @@ const tikzEnvironmentFolding = foldService.of((state, lineStart) => {
   const from = line.from + beginIndex + beginMatch[0].length;
 
   let searchPos = beginIndex + beginMatch[0].length;
-  while (true) {
+  for (;;) {
     const nextBegin = text.indexOf(beginToken, searchPos);
     const nextEnd = text.indexOf(endToken, searchPos);
 
@@ -130,7 +253,7 @@ const tikzEnvironmentFolding = foldService.of((state, lineStart) => {
     let lineSearchPos = 0;
     const lineText = searchLine.text;
 
-    while (true) {
+    for (;;) {
       const nextBegin = lineText.indexOf(beginToken, lineSearchPos);
       const nextEnd = lineText.indexOf(endToken, lineSearchPos);
 
@@ -157,21 +280,34 @@ const tikzEnvironmentFolding = foldService.of((state, lineStart) => {
 });
 
 export const tikzLanguage = LRLanguage.define({
-  parser: parser.configure({
-    props: [
-      tikzHighlighting,
-      foldNodeProp.add({
-        TikzEnvironment: foldInside,
-        ScopeStatement: foldInside,
-        Group: foldInside,
-      })
-    ],
-  }),
+  parser: mixedTikzParser,
   languageData: {
     commentTokens: { line: "%" },
   },
 });
 
 export function tikz(): LanguageSupport {
-  return new LanguageSupport(tikzLanguage, [tikzEnvironmentFolding]);
+  return new LanguageSupport(tikzLanguage, [tikzEnvironmentFolding, completeSyntaxTree]);
+}
+
+export const texLanguage = LRLanguage.define({
+  parser: mixedTexDocumentParser,
+  languageData: {
+    commentTokens: { line: "%" },
+  },
+});
+
+export function tex(): LanguageSupport {
+  return new LanguageSupport(texLanguage, [texHeadings, completeSyntaxTree]);
+}
+
+export const beamerLanguage = LRLanguage.define({
+  parser: mixedBeamerDocumentParser,
+  languageData: {
+    commentTokens: { line: "%" },
+  },
+});
+
+export function beamer(): LanguageSupport {
+  return new LanguageSupport(beamerLanguage, [texHeadings, completeSyntaxTree]);
 }

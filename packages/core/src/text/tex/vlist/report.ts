@@ -1,0 +1,366 @@
+import type { KnuthPlassLayoutMode } from "../../knuth-plass/index.js";
+import type { ParagraphLayoutReport } from "../../knuth-plass/paragraph/report.js";
+import type {
+  GreedyLine,
+  ParagraphRun,
+} from "../../knuth-plass/paragraph/types.js";
+import type {
+  ResolvedTexFont,
+  ShapedTexTextRun,
+  TexMetricProvider,
+} from "../fonts/types.js";
+import type { TexParagraphAlignment } from "../ir.js";
+import type { TexLayoutLabel } from "../layout-inline-items.js";
+import { buildTexParagraphReport } from "../paragraph-report.js";
+import {
+  combineTexBrokenLayoutParagraphs,
+  type TexBrokenLayoutParagraph,
+} from "./combined-paragraph-breaks.js";
+import type {
+  TexLayoutReport,
+  TexVListParagraphBoxMeasurement,
+  TexVListParagraphHorizontalLayout,
+  TexVListParagraphLineAssignment,
+  TexVListDocument,
+  TexVListLayout,
+  TexVListLayoutOptions,
+} from "./types.js";
+import { collectTexGraphicsPlacements } from "./graphics-placements.js";
+import {
+  computeTexVListNaturalTotalHeight,
+  layoutTexVListItems,
+  metricsForRootBox,
+  offsetPositionedTexVListItems,
+  texVListBaselineY,
+  texVListGlueSetForTargetHeight,
+  texVListRootVerticalOffset,
+} from "./layout.js";
+import {
+  texLength,
+  texVListX,
+  texVListY,
+  type TexLength,
+} from "../coordinates.js";
+import {
+  createMeasuredParagraphVListMeasurer,
+  createTexVListParagraphHorizontalLayoutsFromLineBoxes,
+  texVListParagraphMeasurementFromHorizontalLayout,
+  texVListParagraphMeasurementMap,
+  validateTexVListParagraphMeasurements,
+} from "./paragraph-measurement.js";
+import {
+  resolveDisplayMathVerticalGlueInVList,
+} from "./spacing.js";
+import { texVListBoxLayoutReport } from "./box-report.js";
+import {
+  assertAllReportLinesPlaced,
+  texVListLinePlacements,
+  texVListParagraphPlacements,
+} from "./placements.js";
+import { texVListPathKey } from "./paths.js";
+import { texVListParagraphEntries } from "./traversal.js";
+
+export interface TexVListMeasuredParagraphLayoutOptions extends TexVListLayoutOptions {
+  readonly lineHeight: TexLength;
+  readonly firstLineIndex?: number;
+  readonly firstLineAscent?: TexLength;
+  readonly paragraphMeasurements: readonly TexVListParagraphBoxMeasurement[];
+  readonly reports?: readonly (TexLayoutReport | ParagraphLayoutReport<"layout">)[];
+  readonly errors?: readonly string[];
+}
+
+export interface TexVListHorizontalParagraphLayoutOptions extends TexVListLayoutOptions {
+  readonly lineHeight: TexLength;
+  readonly firstLineIndex?: number;
+  readonly firstLineAscent?: TexLength;
+  readonly paragraphLayouts: readonly TexVListParagraphHorizontalLayout[];
+  readonly reports?: readonly (TexLayoutReport | ParagraphLayoutReport<"layout">)[];
+  readonly errors?: readonly string[];
+}
+
+export interface TexVListParagraphReportAssemblyResult {
+  readonly report: ParagraphLayoutReport<"layout">;
+  readonly layout: TexVListLayout<"layout">;
+}
+
+export interface TexVListCombinedParagraphReportInput {
+  readonly runs: readonly ParagraphRun[];
+  readonly lines: readonly GreedyLine[];
+  readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
+  readonly runWidths: ReadonlyMap<number, TexLength>;
+  readonly lineLabels: ReadonlyMap<number, {
+    readonly label: TexLayoutLabel;
+    readonly lineRunIndex: number;
+  }>;
+  readonly paragraphLineSpans: readonly {
+    readonly blockIndex: number;
+    readonly vlistPath: readonly number[];
+    readonly lineIndices: readonly number[];
+  }[];
+  readonly errors: readonly string[];
+  readonly linebreakingMode: "feasible" | "overfull";
+}
+
+export interface TexVListCombinedParagraphReportAssemblyOptions extends TexVListLayoutOptions {
+  readonly paragraphId: string;
+  readonly alignment: TexParagraphAlignment;
+  readonly layoutMode: KnuthPlassLayoutMode;
+  readonly font: ResolvedTexFont;
+  readonly metricProvider: TexMetricProvider;
+  readonly combined: TexVListCombinedParagraphReportInput;
+  readonly baselineSkip?: TexLength;
+}
+
+export interface TexVListBrokenParagraphReportAssemblyOptions extends TexVListLayoutOptions {
+  readonly paragraphId: string;
+  readonly alignment: TexParagraphAlignment;
+  readonly layoutMode: KnuthPlassLayoutMode;
+  readonly font: ResolvedTexFont;
+  readonly metricProvider: TexMetricProvider;
+  readonly entries: readonly TexBrokenLayoutParagraph[];
+  readonly initialErrors?: readonly string[];
+  readonly baselineSkip?: TexLength;
+}
+
+export interface TexVListBrokenParagraphReportLaidOutResult extends TexVListParagraphReportAssemblyResult {
+  readonly status: "laid-out";
+  readonly combined: TexVListCombinedParagraphReportInput;
+}
+
+export interface TexVListBrokenParagraphReportEmptyResult {
+  readonly status: "empty";
+  readonly combined: TexVListCombinedParagraphReportInput;
+}
+
+export type TexVListBrokenParagraphReportAssemblyResult =
+  | TexVListBrokenParagraphReportLaidOutResult
+  | TexVListBrokenParagraphReportEmptyResult;
+
+const LATEX_NORMAL_BASELINESKIP_EM = 1.2;
+const LATEX_NORMAL_STRUT_HEIGHT_EM = 0.85;
+
+export function layoutTexVListFromBrokenParagraphs(
+  document: TexVListDocument,
+  options: TexVListBrokenParagraphReportAssemblyOptions
+): TexVListBrokenParagraphReportAssemblyResult {
+  const combined = combineTexBrokenLayoutParagraphs({
+    entries: options.entries,
+    ...(options.initialErrors !== undefined ? { initialErrors: options.initialErrors } : {}),
+  });
+  if ((combined.runs.length === 0 || combined.lines.length === 0) &&
+      (document.items.length === 0 || texVListParagraphEntries(document.items).length > 0)) {
+    return {
+      status: "empty",
+      combined,
+    };
+  }
+  return {
+    status: "laid-out",
+    ...layoutTexVListFromCombinedParagraphReport(document, {
+      width: options.width,
+      ...(options.height !== undefined ? { height: options.height } : {}),
+      ...(options.verticalAlign !== undefined ? { verticalAlign: options.verticalAlign } : {}),
+      paragraphId: options.paragraphId,
+      alignment: options.alignment,
+      layoutMode: options.layoutMode,
+      font: options.font,
+      metricProvider: options.metricProvider,
+      combined,
+      ...(options.baselineSkip !== undefined ? { baselineSkip: options.baselineSkip } : {}),
+      ...(options.initialPreviousDepth !== undefined ? { initialPreviousDepth: options.initialPreviousDepth } : {}),
+      ...(options.displayMathProfile !== undefined ? { displayMathProfile: options.displayMathProfile } : {}),
+    }),
+    combined,
+  };
+}
+
+export function layoutTexVListFromCombinedParagraphReport(
+  document: TexVListDocument,
+  options: TexVListCombinedParagraphReportAssemblyOptions
+): TexVListParagraphReportAssemblyResult {
+  const paragraphLineAssignments = texVListParagraphLineAssignmentsFromSpans(
+    options.combined.paragraphLineSpans
+  );
+  const builtReport = buildTexParagraphReport({
+    paragraphId: options.paragraphId,
+    width: options.width,
+    alignment: options.alignment,
+    runs: options.combined.runs,
+    lines: options.combined.lines,
+    shapedRuns: options.combined.shapedRuns,
+    runWidths: options.combined.runWidths,
+    lineLabels: options.combined.lineLabels,
+    linebreakingMode: options.combined.linebreakingMode,
+    layoutMode: options.layoutMode,
+    font: options.font,
+    metricProvider: options.metricProvider,
+    errors: options.combined.errors,
+  });
+  const lineHeight =
+    options.baselineSkip ?? texLatexNormalParagraphLineHeight(options.font);
+  const horizontalLayout = createTexVListParagraphHorizontalLayoutsFromLineBoxes({
+    report: builtReport.report,
+    lineBoxes: builtReport.lineBoxes,
+    paragraphLineAssignments,
+    lineHeight,
+    baselineSkips: new Map(texVListParagraphEntries(document.items).flatMap(({ item }) =>
+      item.paragraph.baselineSkip != null ? [[item.blockIndex, item.paragraph.baselineSkip] as const] : [])),
+  });
+  const firstLineIndex = horizontalLayout.report.lines[0]?.lineIndex;
+  const layout = layoutTexVListFromHorizontalParagraphs(document, {
+    width: options.width,
+    ...(options.height !== undefined ? { height: options.height } : {}),
+    ...(options.verticalAlign !== undefined ? { verticalAlign: options.verticalAlign } : {}),
+    paragraphAlignment: options.alignment,
+    lineHeight,
+    ...(options.initialPreviousDepth !== undefined ? { initialPreviousDepth: options.initialPreviousDepth } : {}),
+    ...(options.displayMathProfile !== undefined ? { displayMathProfile: options.displayMathProfile } : {}),
+    ...(firstLineIndex !== undefined ? { firstLineIndex } : {}),
+    firstLineAscent: texLatexNormalFirstLineAscent(
+      builtReport.report,
+      options.font
+    ),
+    paragraphLayouts: horizontalLayout.paragraphLayouts,
+    reports: [horizontalLayout.report],
+    errors: horizontalLayout.report.errors,
+  });
+  assertAllReportLinesPlaced(horizontalLayout.report.lines, layout.linePlacements);
+  return {
+    report: horizontalLayout.report,
+    layout,
+  };
+}
+
+function texVListParagraphLineAssignmentsFromSpans(
+  spans: TexVListCombinedParagraphReportInput["paragraphLineSpans"]
+): readonly TexVListParagraphLineAssignment[] {
+  return spans.map((span) => ({
+    blockIndex: span.blockIndex,
+    vlistPath: [...span.vlistPath],
+    lineIndices: [...span.lineIndices],
+  }));
+}
+
+function texLatexNormalParagraphLineHeight(font: ResolvedTexFont): TexLength {
+  return texLength(font.atPt * LATEX_NORMAL_BASELINESKIP_EM);
+}
+
+function texLatexNormalFirstLineAscent(
+  report: ParagraphLayoutReport<"layout">,
+  font: ResolvedTexFont
+): TexLength {
+  return texLength(Math.max(
+    font.atPt * LATEX_NORMAL_STRUT_HEIGHT_EM,
+    ...report.lines.map((line) => Number(line.ascent) || 0)
+  ));
+}
+
+export function layoutTexVListFromHorizontalParagraphs(
+  document: TexVListDocument,
+  options: TexVListHorizontalParagraphLayoutOptions
+): TexVListLayout<"layout"> {
+  const paragraphsByPath = new Map(
+    texVListParagraphEntries(document.items).map((entry) => [
+      texVListPathKey(entry.path),
+      entry.item.paragraph,
+    ])
+  );
+  return layoutTexVListFromMeasuredParagraphs(document, {
+    ...options,
+    paragraphMeasurements: options.paragraphLayouts.map((paragraph) =>
+      texVListParagraphMeasurementFromHorizontalLayout(
+        paragraph,
+        paragraphsByPath.get(
+          texVListPathKey(paragraph.vlistPath)
+        )?.verticalAdjustments
+      )
+    ),
+  });
+}
+
+export function layoutTexVListFromMeasuredParagraphs(
+  document: TexVListDocument,
+  options: TexVListMeasuredParagraphLayoutOptions
+): TexVListLayout<"layout"> {
+  validateTexVListParagraphMeasurements(document, options.paragraphMeasurements);
+  const paragraphMeasurements = texVListParagraphMeasurementMap(options.paragraphMeasurements);
+  const resolvedDocument = resolveDisplayMathVerticalGlueInVList(
+    document,
+    paragraphMeasurements,
+    {
+      lineHeight: options.lineHeight,
+      ...(options.initialPreviousDepth !== undefined ? { initialPreviousDepth: options.initialPreviousDepth } : {}),
+      ...(options.displayMathProfile !== undefined ? { displayMathProfile: options.displayMathProfile } : {}),
+    }
+  );
+  const measurer = createMeasuredParagraphVListMeasurer(paragraphMeasurements);
+  const naturalTotalHeight = computeTexVListNaturalTotalHeight(
+    resolvedDocument.items,
+    measurer
+  );
+  const glueSet = texVListGlueSetForTargetHeight(
+    resolvedDocument.items,
+    naturalTotalHeight,
+    options.height
+  );
+  const laidOut = layoutTexVListItems(
+    resolvedDocument.items,
+    measurer,
+    glueSet,
+    texVListY(0),
+    [],
+    texVListX(0),
+    {
+      inlineScopeWidth: options.width,
+      ...(options.paragraphAlignment
+        ? { paragraphAlignment: options.paragraphAlignment }
+        : {}),
+    }
+  );
+
+  const naturalLaidOutHeight = texLength(laidOut.cursor);
+  const totalHeight = Number.isFinite(options.height) && options.height !== undefined
+    ? texLength(Math.max(options.height, naturalLaidOutHeight))
+    : naturalLaidOutHeight;
+  const rootOffset = texVListRootVerticalOffset(
+    naturalLaidOutHeight,
+    totalHeight,
+    options.verticalAlign
+  );
+  const shiftedItems = offsetPositionedTexVListItems(laidOut.positioned, rootOffset);
+  const linePlacements = texVListLinePlacements(
+    shiftedItems,
+    paragraphMeasurements,
+    options.lineHeight
+  );
+  const paragraphReports = (options.reports ?? []).filter(
+    (report): report is ParagraphLayoutReport<"layout"> =>
+      "paragraphId" in report
+  );
+  const firstLineTop = options.firstLineIndex !== undefined
+    ? linePlacements.find((placement) => placement.lineIndex === options.firstLineIndex)?.y ?? null
+    : null;
+  const shiftedBaselineY = texVListBaselineY(
+    firstLineTop,
+    options.firstLineAscent ?? texLength(0)
+  );
+  const metrics = metricsForRootBox(options.width, totalHeight, shiftedBaselineY);
+  const baseline = shiftedBaselineY === null ? { kind: "none" } as const : { kind: "explicit", y: shiftedBaselineY } as const;
+  return {
+    metrics,
+    baseline,
+    items: shiftedItems,
+    boxReport: texVListBoxLayoutReport(shiftedItems, metrics, baseline),
+    paragraphPlacements: texVListParagraphPlacements(
+      shiftedItems,
+      paragraphMeasurements
+    ),
+    linePlacements,
+    graphicsPlacements: collectTexGraphicsPlacements(
+      paragraphReports,
+      linePlacements
+    ),
+    reports: options.reports ?? [],
+    errors: [...options.errors ?? []],
+  };
+}

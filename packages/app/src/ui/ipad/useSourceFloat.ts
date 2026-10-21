@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject
 } from "react";
+import { isRecord } from "../../validation";
 import { readSafeAreaBottom } from "./ipad-safe-area";
 
 export type SourceFloatRect = { x: number; y: number; width: number; height: number };
@@ -52,6 +53,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 function readStoredFloatRect(): StoredFloatRect | null {
   if (typeof localStorage === "undefined") {
     return null;
@@ -61,16 +66,15 @@ function readStoredFloatRect(): StoredFloatRect | null {
     if (!stored) {
       return null;
     }
-    const parsed = JSON.parse(stored) as StoredFloatRect;
-    if (!Number.isFinite(parsed.x) || !Number.isFinite(parsed.y) || !Number.isFinite(parsed.width)) {
+    const parsed: unknown = JSON.parse(stored);
+    if (!isRecord(parsed)) {
       return null;
     }
-    return {
-      x: parsed.x,
-      y: parsed.y,
-      width: parsed.width,
-      height: Number.isFinite(parsed.height) ? parsed.height : null
-    };
+    const { x, y, width, height } = parsed;
+    if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(width)) {
+      return null;
+    }
+    return { x, y, width, height: isFiniteNumber(height) ? height : null };
   } catch {
     return null;
   }

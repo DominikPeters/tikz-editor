@@ -1,4 +1,6 @@
+import { isObjectRecord } from "../utils/records.js";
 import type { Tree } from "@lezer/common";
+import { parseSyntax } from "@tikz-editor/lezer-tikz";
 
 import { FeatureFlags } from "../ast/features.js";
 import type { Diagnostic } from "../diagnostics/types.js";
@@ -6,16 +8,21 @@ import type { NodeItem, PathItem, TikzFigure, TikzFigureInventoryItem, Span, Sta
 import type { ParseTikzOptions, ParseTikzResult } from "./index.js";
 import type { SourcePatch } from "../edit/types.js";
 import {
+  compareDiagnosticPosition,
   getCachedContextDefinitions,
-  resolveActiveFigureSpan
+  resolveActiveFigureSpan,
+  resolveParseWindowSource,
+  scanFigureSpans
 } from "./shared.js";
-import { parseTikz } from "./index.js";
+import { applyStructuralMasks, parseTikz } from "./index.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
+import { buildLineStarts, lineForOffset } from "../text/line-map.js";
 
 export type IncrementalParseTrigger = "drag-element" | "drag-handle" | "other";
 
 export type IncrementalParseFallbackReason =
-  | "non-drag-trigger"
+  | "structural-mask-changed"
+  | "context-definitions-changed"
   | "missing-patches"
   | "no-previous-cache"
   | "source-unchanged-active-figure-mismatch"
@@ -48,16 +55,23 @@ export type IncrementalParseEvaluateInput = {
   patchBaseRevision?: number | null;
   changedSourceIds?: readonly string[];
   trigger?: IncrementalParseTrigger;
+  /** Infer a source edit against the last evaluated revision, after coalescing. */
+  inferChanges?: boolean;
+  nodeTextValidator?: ParseTikzOptions["nodeTextValidator"];
+  structuralMasks?: ParseTikzOptions["structuralMasks"];
 };
 
 export type IncrementalParseEvaluateResult = {
   parse: ParseTikzResult;
   stats: IncrementalParseStats;
+  /** Changes relative to the cached parse, including any coalesced edits. */
+  changes?: { patches: SourcePatch[]; changedSourceIds: string[] };
 };
 
 export type IncrementalParseSession = {
   evaluate: (input: IncrementalParseEvaluateInput) => IncrementalParseEvaluateResult;
-  prime: (parse: ParseTikzResult, options?: Pick<ParseTikzOptions, "activeFigureId" | "includeContextDefinitions"> & { sourceRevision?: number | null }) => void;
+  prime: (parse: ParseTikzResult, options?: Pick<ParseTikzOptions, "activeFigureId" | "includeContextDefinitions" | "structuralMasks"> & { sourceRevision?: number | null }) => void;
+  fork: () => IncrementalParseSession;
   reset: () => void;
 };
 
@@ -78,45 +92,59 @@ type CachedIncrementalParseState = {
   sourceRevision: number | null;
   activeFigureId: string | null;
   includeContextDefinitions: boolean;
+  structuralMasks: readonly Span[];
   figures: TikzFigureInventoryItem[];
   activeFigureSpan: Span | null;
   contextDefinitions: Statement[];
   figure: TikzFigure;
   statementRefsBySourceId: Map<string, StatementRef>;
   diagnosticPartition: ParseDiagnosticPartition;
-  tree: Tree;
-  treeFresh: boolean;
+  /** Built on first use: most consumers of an incremental parse never read it. */
+  tree: () => Tree;
 };
 
 const SNIPPET_PREFIX = "\\begin{tikzpicture}\n";
 const SNIPPET_SUFFIX = "\n\\end{tikzpicture}";
-const BEGIN_TIKZ_PATTERN = /\\begin\{tikzpicture\*?\}/u;
-const END_TIKZ_PATTERN = /\\end\{tikzpicture\*?\}/u;
 
 export function createIncrementalParseSession(): IncrementalParseSession {
-  let cached: CachedIncrementalParseState | null = null;
+  return createSession(null);
+}
+
+function createSession(initial: CachedIncrementalParseState | null): IncrementalParseSession {
+  let cached = initial;
 
   const prime = (
     parse: ParseTikzResult,
-    options: Pick<ParseTikzOptions, "activeFigureId" | "includeContextDefinitions"> & { sourceRevision?: number | null } = {}
+    options: Pick<ParseTikzOptions, "activeFigureId" | "includeContextDefinitions" | "structuralMasks"> & { sourceRevision?: number | null } = {}
   ): void => {
     cached = buildCache(parse, {
       activeFigureId: options.activeFigureId ?? parse.activeFigureId,
       includeContextDefinitions: options.includeContextDefinitions ?? false,
-      sourceRevision: options.sourceRevision ?? null,
-      treeFresh: true
+      structuralMasks: options.structuralMasks ?? [],
+      sourceRevision: options.sourceRevision ?? null
     });
   };
 
   const evaluate = (input: IncrementalParseEvaluateInput): IncrementalParseEvaluateResult => {
     const activeFigureId = input.activeFigureId;
     const includeContextDefinitions = input.includeContextDefinitions ?? false;
-    const trigger = input.trigger ?? "other";
+    const structuralMasks = input.structuralMasks ?? [];
+    const structuralSource = applyStructuralMasks(input.source, structuralMasks);
     let patches = normalizePatches(input.patches ?? []);
     let patchApplication: IncrementalParseStats["patchApplication"] =
       patches.length > 0 ? "direct" : undefined;
-    const changedSourceIds = normalizeSourceIds(input.changedSourceIds ?? []);
-    if (cached && patches.length > 0) {
+    let changedSourceIds = normalizeSourceIds(input.changedSourceIds ?? []);
+    if (input.inferChanges && cached) {
+      const currentCache = cached;
+      patches = deriveSingleSourcePatch(currentCache.source, input.source);
+      changedSourceIds = normalizeSourceIds(patches.flatMap((patch) => {
+        const owner = findContainingStatementRef(currentCache.statementRefsBySourceId, patch.oldSpan);
+        return owner ? [owner.sourceId] : [];
+      }));
+      // These patches already refer to the actual cached revision.
+      patchApplication = patches.length > 0 ? "rebased" : undefined;
+    }
+    if (!input.inferChanges && cached && patches.length > 0) {
       const currentCache = cached;
       const patchBaseMatchesCache = revisionsMatch(input.patchBaseRevision, currentCache.sourceRevision);
       const patchesApplyToCached =
@@ -131,11 +159,12 @@ export function createIncrementalParseSession(): IncrementalParseSession {
       }
     }
 
+    // Only an absent id means "the cached figure": null asks for no figure.
     if (
       cached?.source === input.source &&
-      cached.activeFigureId === (activeFigureId ?? cached.activeFigureId) &&
+      cached.activeFigureId === (activeFigureId === undefined ? cached.activeFigureId : activeFigureId) &&
       cached.includeContextDefinitions === includeContextDefinitions &&
-      patches.length === 0
+      patches.length === 0 && sameSpans(cached.structuralMasks, structuralMasks)
     ) {
       cached = {
         ...cached,
@@ -151,115 +180,139 @@ export function createIncrementalParseSession(): IncrementalParseSession {
       };
     }
 
-    const fallback = decideFallbackReason({
+    const fallbackToFull = (reason: IncrementalParseFallbackReason): IncrementalParseEvaluateResult => {
+      const parse = parseTikz(input.source, {
+        recover: true,
+        ...(activeFigureId !== undefined ? { activeFigureId } : {}),
+        includeContextDefinitions,
+        ...(input.nodeTextValidator !== undefined ? { nodeTextValidator: input.nodeTextValidator } : {}),
+        structuralMasks
+      });
+      cached = buildCache(parse, {
+        activeFigureId: activeFigureId ?? parse.activeFigureId,
+        includeContextDefinitions, structuralMasks, sourceRevision: input.sourceRevision ?? null
+      });
+      return { parse, stats: {
+        strategy: "full", fallbackReason: reason, ...(patchApplication !== undefined ? { patchApplication } : {}),
+        reparsedStatementCount: countStatements(parse.figure.body), reusedStatementCount: 0
+      } };
+    };
+
+    if (cached?.source === input.source && !sameSpans(cached.structuralMasks, structuralMasks)) {
+      return fallbackToFull("structural-mask-changed");
+    }
+    // Text changed only outside the picture and the statements it reads (its
+    // context definitions): every statement stands, only where they stand moved.
+    const currentCache = cached;
+    const figureSpan = currentCache?.activeFigureSpan;
+    const shiftOnly = currentCache != null && figureSpan != null && changedSourceIds.length === 0 && patches.length > 0 &&
+      currentCache.activeFigureId === (activeFigureId === undefined ? currentCache.activeFigureId : activeFigureId) &&
+      currentCache.includeContextDefinitions === includeContextDefinitions &&
+      currentCache.diagnosticPartition.global.length === 0 &&
+      patches.every((patch) => (patch.oldSpan.to <= figureSpan.from || patch.oldSpan.from >= figureSpan.to) &&
+        ![...currentCache.statementRefsBySourceId.values()].some((ref) => ref.span.from <= patch.oldSpan.to && patch.oldSpan.from <= ref.span.to));
+    const fallback = shiftOnly ? null : decideFallbackReason({
       cached,
       inputSource: input.source,
       activeFigureId,
       includeContextDefinitions,
       patches,
-      changedSourceIds,
-      trigger
+      changedSourceIds
     });
-    if (fallback) {
-      const parse = parseTikz(input.source, {
-        recover: true,
-        activeFigureId,
-        includeContextDefinitions,
-      });
-      cached = buildCache(parse, {
-        activeFigureId: activeFigureId ?? parse.activeFigureId,
-        includeContextDefinitions,
-        sourceRevision: input.sourceRevision ?? null,
-        treeFresh: true
-      });
-      return {
-        parse,
-        stats: {
-          strategy: "full",
-          fallbackReason: fallback,
-          patchApplication,
-          reparsedStatementCount: countStatements(parse.figure.body),
-          reusedStatementCount: 0
-        }
-      };
-    }
-
-    if (!cached) {
-      const parse = parseTikz(input.source, {
-        recover: true,
-        activeFigureId,
-        includeContextDefinitions,
-      });
-      cached = buildCache(parse, {
-        activeFigureId: activeFigureId ?? parse.activeFigureId,
-        includeContextDefinitions,
-        sourceRevision: input.sourceRevision ?? null,
-        treeFresh: true
-      });
-      return {
-        parse,
-        stats: {
-          strategy: "full",
-          fallbackReason: "no-previous-cache",
-          patchApplication,
-          reparsedStatementCount: countStatements(parse.figure.body),
-          reusedStatementCount: 0
-        }
-      };
+    if (fallback || !cached) {
+      return fallbackToFull(fallback ?? "no-previous-cache");
     }
 
     try {
+      const previousSource = cached.source;
       const changedRefs = new Map<string, StatementRef>();
       for (const sourceId of changedSourceIds) {
         const ref = cached.statementRefsBySourceId.get(sourceId);
         if (!ref) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "patch-source-id-mismatch", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("patch-source-id-mismatch");
         }
         changedRefs.set(sourceId, ref);
       }
 
-      for (const patch of patches) {
+      for (const patch of shiftOnly ? [] : patches) {
         const owner = findContainingStatementRef(cached.statementRefsBySourceId, patch.oldSpan);
         if (!owner) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "patch-overlaps-unknown-statement", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("patch-overlaps-unknown-statement");
         }
         if (!changedRefs.has(owner.sourceId)) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "patch-source-id-mismatch", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("patch-source-id-mismatch");
         }
       }
 
-      const nextFigures = shiftFigureInventory(cached.figures, patches);
+      const rebasedMasks = cached.structuralMasks.map(mask => shiftSpanThroughPatches(mask, patches));
+      if (!sameSpans(rebasedMasks, structuralMasks)) {
+        const changedSpans = [...changedRefs.values()].map(ref => shiftSpanThroughPatches(ref.span, patches));
+        if ([...rebasedMasks, ...structuralMasks].some(mask => !changedSpans.some(span => span.from <= mask.from && mask.to <= span.to))) {
+          return fallbackToFull("structural-mask-changed");
+        }
+      }
+      const nextFigures = shiftFigureInventory(cached.figures, patches, structuralSource);
+      // Typing a delimiter, comment or verbatim text can move where figures
+      // begin and end, which shifting the old inventory cannot show.
+      if (patches.some((patch) => figureScanMayChange(previousSource, input.source, patch)) &&
+        !sameSpans(scanFigureSpans(structuralSource), nextFigures.map((figure) => figure.span))) {
+        return fallbackToFull("patch-touches-figure-delimiter");
+      }
       const nextActiveFigureSpan = resolveActiveFigureSpan(
         nextFigures.map((figure) => figure.span),
         activeFigureId ?? cached.activeFigureId
       );
       if (!nextActiveFigureSpan) {
-        return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "active-figure-unresolved", patchApplication, input.sourceRevision ?? null);
+        return fallbackToFull("active-figure-unresolved");
+      }
+      const contextDefinitions = includeContextDefinitions
+        ? getCachedContextDefinitions(input.source.slice(0, nextActiveFigureSpan.from), collectContextDefinitions)
+        : [];
+      if (shiftOnly && includeContextDefinitions) {
+        // Definitions are statements of the picture; none may appear, go or change.
+        const before = cached.contextDefinitions;
+        if (before.length !== contextDefinitions.length || before.some((definition, index) => {
+          const nextDefinition = contextDefinitions[index];
+          return !nextDefinition || previousSource.slice(definition.span.from, definition.span.to) !==
+            input.source.slice(nextDefinition.span.from, nextDefinition.span.to);
+        })) {
+          return fallbackToFull("context-definitions-changed");
+        }
       }
 
-      const nextFigure = shiftSpansDeep(structuredClone(cached.figure), patches);
+      const nextFigure = shiftFigure(cached.figure, patches);
       const changedSourceIdSet = new Set(changedSourceIds);
       const statementReplacementDiagnostics = new Map<string, Diagnostic[]>();
 
       for (const sourceId of changedSourceIds) {
         const previousRef = cached.statementRefsBySourceId.get(sourceId);
         if (!previousRef) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "patch-source-id-mismatch", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("patch-source-id-mismatch");
         }
         const nextSpan = shiftSpanThroughPatches(previousRef.span, patches);
         const snippet = input.source.slice(nextSpan.from, nextSpan.to);
-        const parsedSnippet = parseStatementSnippet(snippet);
+        const snippetMasks = structuralMasks.filter(mask => nextSpan.from <= mask.from && mask.to <= nextSpan.to)
+          .map(mask => ({ from: mask.from - nextSpan.from + SNIPPET_PREFIX.length, to: mask.to - nextSpan.from + SNIPPET_PREFIX.length }));
+        const parsedSnippet = parseStatementSnippet(snippet, input.nodeTextValidator, snippetMasks);
         if (parsedSnippet.parse.figure.body.length !== 1) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "statement-structure-changed", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("statement-structure-changed");
         }
         if (parsedSnippet.hasParseError) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "statement-parse-error", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("statement-parse-error");
         }
 
         const replacement = parsedSnippet.parse.figure.body.at(0);
         const previousStatement = getStatementAtPath(nextFigure, previousRef.parentPath, previousRef.index);
         if (!replacement || replacement.kind !== previousStatement?.kind) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "statement-structure-changed", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("statement-structure-changed");
+        }
+
+        // Item ids are positional: an added or removed item (an option list
+        // a property edit inserts, a deleted point) renumbers the items after
+        // it, and can change generated ids in other statements. Rebuild ids
+        // from the complete document then.
+        if (identityStructure(previousStatement) !== identityStructure(replacement)) {
+          return fallbackToFull("statement-structure-changed");
         }
 
         const rebasedStatement = shiftSpansDeep(replacement, nextSpan.from - SNIPPET_PREFIX.length);
@@ -268,7 +321,7 @@ export function createIncrementalParseSession(): IncrementalParseSession {
 
         const partition = partitionDiagnostics(parsedSnippet.parse.diagnostics, parsedSnippet.parse.figure.body);
         if (partition.global.length > 0) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "statement-global-diagnostics", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("statement-global-diagnostics");
         }
         const localDiagnostics = partition.localBySourceId.get(replacement.id) ?? [];
         for (const diagnostic of localDiagnostics) {
@@ -291,70 +344,73 @@ export function createIncrementalParseSession(): IncrementalParseSession {
         sourceRevision: input.sourceRevision ?? null,
         activeFigureId: activeFigureId ?? cached.activeFigureId,
         includeContextDefinitions,
+        structuralMasks,
         figures: nextFigures,
         activeFigureSpan: nextActiveFigureSpan,
-        contextDefinitions: includeContextDefinitions
-          ? getCachedContextDefinitions(input.source.slice(0, nextActiveFigureSpan.from), collectContextDefinitions)
-          : [],
+        contextDefinitions,
         figure: nextFigure,
         statementRefsBySourceId: nextIndex,
         diagnosticPartition: nextDiagnosticPartition,
-        tree: cached.tree,
-        treeFresh: false
+        tree: lazy(() => parseSyntax(resolveParseWindowSource(structuralSource, nextActiveFigureSpan)))
       };
       cached = nextCache;
       return {
         parse: createParseResultFromCache(nextCache, input.source),
+        changes: { patches, changedSourceIds },
         stats: {
           strategy: "incremental",
-          patchApplication,
+          ...(patchApplication !== undefined ? { patchApplication } : {}),
           reparsedStatementCount: changedSourceIds.length,
           reusedStatementCount: Math.max(0, nextIndex.size - changedSourceIds.length)
         }
       };
     } catch {
-      return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "runtime-error", patchApplication, input.sourceRevision ?? null);
+      return fallbackToFull("runtime-error");
     }
   };
-
-  function fallbackToFull(
-    source: string,
-    activeFigureId: string | null | undefined,
-    includeContextDefinitions: boolean,
-    reason: IncrementalParseFallbackReason,
-    patchApplication: IncrementalParseStats["patchApplication"],
-    sourceRevision: number | null
-  ): IncrementalParseEvaluateResult {
-    const parse = parseTikz(source, {
-      recover: true,
-      activeFigureId,
-      includeContextDefinitions,
-    });
-      cached = buildCache(parse, {
-        activeFigureId: activeFigureId ?? parse.activeFigureId,
-        includeContextDefinitions,
-        sourceRevision,
-        treeFresh: true
-      });
-    return {
-      parse,
-      stats: {
-        strategy: "full",
-        fallbackReason: reason,
-        patchApplication,
-        reparsedStatementCount: countStatements(parse.figure.body),
-        reusedStatementCount: 0
-      }
-    };
-  }
 
   return {
     evaluate,
     prime,
-    reset: () => {
-      cached = null;
-    }
+    fork: () => createSession(cached),
+    reset: () => { cached = null; }
   };
+}
+
+
+// What the figure scanner reacts to: comments, verbatim, environment delimiters.
+const FIGURE_SCAN_TOKENS = /%|\\(?:begin|end|verb)(?![a-zA-Z])/u;
+
+/** Whether the lines a patch touches, before or after it, hold anything the figure scanner reads. */
+function figureScanMayChange(before: string, after: string, patch: SourcePatch): boolean {
+  const lines = (text: string, span: Span) => {
+    const end = text.indexOf("\n", span.to);
+    return text.slice(text.lastIndexOf("\n", span.from - 1) + 1, end < 0 ? text.length : end);
+  };
+  return FIGURE_SCAN_TOKENS.test(lines(before, patch.oldSpan)) || FIGURE_SCAN_TOKENS.test(lines(after, patch.newSpan));
+}
+
+function sameSpans(left: readonly Span[], right: readonly Span[]): boolean {
+  return left.length === right.length && left.every((span, index) => {
+    const other = right[index];
+    return span.from === other?.from && span.to === other.to;
+  });
+}
+
+function identityStructure(statement: Statement): string {
+  const items = (entries: readonly PathItem[]): string => entries.map((item) => {
+    const foreachClauses = item.kind === "Node" || item.kind === "PicOperation" || item.kind === "ChildOperation"
+      ? item.foreachClauses : undefined;
+    const clauses = foreachClauses?.map((clause) => clause.kind).join(",") ?? "";
+    if (item.kind === "ChildOperation") return `${item.kind}[${clauses}](${items(item.body)})`;
+    if (item.kind === "ToOperation" || item.kind === "EdgeOperation" || item.kind === "EdgeFromParentOperation") {
+      return `${item.kind}(${items(item.nodes ?? [])};${"pics" in item ? items(item.pics ?? []) : ""})`;
+    }
+    return `${item.kind}[${clauses}]`;
+  }).join("|");
+  if (statement.kind === "Scope") return `Scope(${statement.body.map(identityStructure).join("|")})`;
+  if (statement.kind === "Path") return `Path(${items(statement.items)})`;
+  return statement.kind;
 }
 
 function alignStatementIds(previous: Statement, next: Statement): void {
@@ -407,12 +463,19 @@ function alignPathItems(previous: readonly PathItem[], next: PathItem[]): void {
       alignPathItems(previousItem.body, nextItem.body);
       continue;
     }
+    if (previousItem.kind === "PicOperation" && nextItem.kind === "PicOperation") {
+      alignClauseIds(previousItem.foreachClauses, nextItem.foreachClauses);
+      continue;
+    }
     if (
       (previousItem.kind === "ToOperation" && nextItem.kind === "ToOperation") ||
       (previousItem.kind === "EdgeOperation" && nextItem.kind === "EdgeOperation") ||
       (previousItem.kind === "EdgeFromParentOperation" && nextItem.kind === "EdgeFromParentOperation")
     ) {
       alignNodeItems(previousItem.nodes, nextItem.nodes);
+      if ("pics" in previousItem && "pics" in nextItem) {
+        alignPathItems(previousItem.pics ?? [], nextItem.pics ?? []);
+      }
     }
   }
 }
@@ -469,11 +532,7 @@ function decideFallbackReason(input: {
   includeContextDefinitions: boolean;
   patches: SourcePatch[];
   changedSourceIds: string[];
-  trigger: IncrementalParseTrigger;
 }): IncrementalParseFallbackReason | null {
-  if (input.trigger !== "drag-element" && input.trigger !== "drag-handle") {
-    return "non-drag-trigger";
-  }
   if (!input.cached) {
     return "no-previous-cache";
   }
@@ -503,7 +562,7 @@ function decideFallbackReason(input: {
   if (!activeFigureSpan) {
     return "active-figure-unresolved";
   }
-  const delimiterSpans = resolveFigureDelimiterSpans(input.cached.source, activeFigureSpan);
+  const delimiterSpans = resolveFigureDelimiterSpans(input.cached.figures, activeFigureSpan);
   for (const patch of input.patches) {
     if (
       patch.oldSpan.from < activeFigureSpan.from ||
@@ -521,12 +580,16 @@ function decideFallbackReason(input: {
   return null;
 }
 
-function parseStatementSnippet(snippet: string): {
+function parseStatementSnippet(snippet: string, nodeTextValidator?: ParseTikzOptions["nodeTextValidator"], structuralMasks?: ParseTikzOptions["structuralMasks"]): {
   parse: ParseTikzResult;
   hasParseError: boolean;
 } {
   const source = `${SNIPPET_PREFIX}${snippet}\n${SNIPPET_SUFFIX.slice(1)}`;
-  const parse = parseTikz(source, { recover: true });
+  const parse = parseTikz(source, {
+    recover: true,
+    ...(nodeTextValidator !== undefined ? { nodeTextValidator } : {}),
+    ...(structuralMasks !== undefined ? { structuralMasks } : {})
+  });
   return {
     parse,
     hasParseError: parse.diagnostics.some((diagnostic) => diagnostic.severity === "error")
@@ -536,7 +599,9 @@ function parseStatementSnippet(snippet: string): {
 function createParseResultFromCache(cache: CachedIncrementalParseState, source: string): ParseTikzResult {
   return {
     source,
-    tree: cache.tree,
+    get tree() {
+      return cache.tree();
+    },
     figure: cache.figure,
     figures: cache.figures,
     activeFigureId: cache.activeFigureId,
@@ -545,36 +610,45 @@ function createParseResultFromCache(cache: CachedIncrementalParseState, source: 
   };
 }
 
+function lazy<T>(build: () => T): () => T {
+  let value: { readonly current: T } | undefined;
+  return () => (value ??= { current: build() }).current;
+}
+
 function buildCache(
   parse: ParseTikzResult,
   options: {
     activeFigureId: string | null | undefined;
     includeContextDefinitions: boolean;
+    structuralMasks: readonly Span[];
     sourceRevision: number | null;
-    treeFresh: boolean;
   }
 ): CachedIncrementalParseState {
-  const activeFigureSpan = resolveActiveFigureSpan(
-    parse.figures.map((figure) => figure.span),
-    options.activeFigureId ?? parse.activeFigureId
-  );
+  // The figure the parse resolved, not the one requested: a request may name
+  // a root this source no longer has, which a full parse replaces with its
+  // default, and the cache must describe what the parse holds.
+  const activeFigureId = parse.activeFigureId ?? options.activeFigureId ?? null;
+  const activeFigureSpan = resolveActiveFigureSpan(parse.figures.map((figure) => figure.span), activeFigureId);
   const partition = partitionDiagnostics(parse.diagnostics, parse.figure.body);
   return {
     source: parse.source,
     sourceRevision: options.sourceRevision,
-    activeFigureId: options.activeFigureId ?? parse.activeFigureId,
+    activeFigureId,
     includeContextDefinitions: options.includeContextDefinitions,
+    structuralMasks: options.structuralMasks,
     figures: structuredClone(parse.figures),
     activeFigureSpan,
     contextDefinitions:
       options.includeContextDefinitions && activeFigureSpan
         ? getCachedContextDefinitions(parse.source.slice(0, activeFigureSpan.from), collectContextDefinitions)
         : [],
-    figure: structuredClone(parse.figure),
+    // Consumers do not change parse trees (foreach reindexing rewrites ids
+    // to the values they already have), so the cache shares the caller's
+    // tree; an edit copies only the statements it moves.
+    figure: parse.figure,
     statementRefsBySourceId: buildStatementIndex(parse.figure.body),
     diagnosticPartition: partition,
-    tree: parse.tree,
-    treeFresh: options.treeFresh
+    tree: lazy(() => parse.tree)
   };
 }
 
@@ -636,9 +710,16 @@ function partitionDiagnostics(
 
 function shiftFigureInventory(
   figures: readonly TikzFigureInventoryItem[],
-  patches: readonly SourcePatch[]
+  patches: readonly SourcePatch[],
+  source: string
 ): TikzFigureInventoryItem[] {
-  return figures.map((figure) => shiftSpansDeep(structuredClone(figure), patches));
+  const lineStarts = buildLineStarts(source);
+  return figures.map((figure) => {
+    const shifted = shiftSpansDeep(structuredClone(figure), patches);
+    shifted.startLine = lineForOffset(shifted.span.from, lineStarts);
+    shifted.endLine = lineForOffset(Math.max(shifted.span.from, shifted.span.to - 1), lineStarts);
+    return shifted;
+  });
 }
 
 function shiftDiagnosticPartition(
@@ -659,6 +740,9 @@ function shiftDiagnosticPartition(
     }
     localBySourceId.set(sourceId, nextDiagnostics);
   }
+  for (const [sourceId, diagnostics] of replacements) {
+    if (!localBySourceId.has(sourceId)) localBySourceId.set(sourceId, structuredClone(diagnostics));
+  }
   const global = structuredClone(partition.global);
   for (const diagnostic of global) {
     shiftDiagnosticThroughPatchesInPlace(diagnostic, patches);
@@ -675,13 +759,73 @@ function collectDiagnostics(partition: ParseDiagnosticPartition): Diagnostic[] {
     diagnostics.push(...localDiagnostics);
   }
   diagnostics.push(...partition.global);
-  diagnostics.sort((left, right) => {
-    if (left.span.from !== right.span.from) {
-      return left.span.from - right.span.from;
+  return diagnostics.sort(compareDiagnosticPosition);
+}
+
+/**
+ * The figure with spans moved through the patches. Statements that end
+ * before the first patch are unchanged and shared with the previous parse;
+ * the rest (including any scope around a patch) are copied.
+ */
+function shiftFigure(figure: TikzFigure, patches: readonly SourcePatch[]): TikzFigure {
+  const firstChange = Math.min(...patches.map((patch) => patch.oldSpan.from));
+  const { body, ...rest } = figure;
+  return {
+    ...cloneShiftingSpans(rest, patches),
+    body: body.map((statement) => statement.span.to < firstChange || standsThroughPatches(statement.span, patches)
+      ? statement : cloneShiftingSpans(statement, patches))
+  };
+}
+
+/**
+ * A statement no patch reaches whose place the patches keep (they add and
+ * remove as much before it): every span in it stands, so it is shared, not
+ * copied. Statements on the path to a patch are always copied, as the patched
+ * statement is replaced in its parent's body.
+ */
+function standsThroughPatches(span: Span, patches: readonly SourcePatch[]): boolean {
+  if (patches.some((patch) => patch.oldSpan.from <= span.to && span.from <= patch.oldSpan.to)) return false;
+  const next = shiftSpanThroughPatches(span, patches);
+  return next.from === span.from && next.to === span.to;
+}
+
+/**
+ * A copy of an AST value with every span shifted through the patches, in one
+ * pass (as structuredClone and then shiftSpansDeep: any object with numeric
+ * `from` and `to` is a span). Anything but plain objects and arrays falls
+ * back to that pair.
+ */
+function cloneShiftingSpans<T>(value: T, patches: readonly SourcePatch[]): T {
+  const copies = new Map<object, unknown>();
+  const copy = (current: unknown): unknown => {
+    if (!current || typeof current !== "object") return current;
+    const known = copies.get(current);
+    if (known !== undefined) return known;
+    if (Array.isArray(current)) {
+      const result: unknown[] = [];
+      copies.set(current, result);
+      for (const entry of current) result.push(copy(entry));
+      return result;
     }
-    return left.span.to - right.span.to;
-  });
-  return diagnostics;
+    if (Object.getPrototypeOf(current) !== Object.prototype) {
+      const result = shiftSpansDeep(structuredClone(current), patches);
+      copies.set(current, result);
+      return result;
+    }
+    if (!isObjectRecord(current)) return current;
+    const record = current;
+    const result: Record<string, unknown> = {};
+    copies.set(current, result);
+    for (const key of Object.keys(record)) result[key] = copy(record[key]);
+    if (typeof record.from === "number" && typeof record.to === "number") {
+      const next = shiftSpanThroughPatches({ from: record.from, to: record.to }, patches);
+      result.from = next.from;
+      result.to = next.to;
+    }
+    return result;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This internal AST clone preserves every field and only replaces numeric span endpoints with numbers.
+  return copy(value) as T;
 }
 
 function shiftSpansDeep<T>(value: T, patchesOrDelta: readonly SourcePatch[] | number): T {
@@ -705,13 +849,13 @@ function shiftSpansDeep<T>(value: T, patchesOrDelta: readonly SourcePatch[] | nu
     if (
       "from" in current &&
       "to" in current &&
-      typeof (current as { from?: unknown }).from === "number" &&
-      typeof (current as { to?: unknown }).to === "number"
+      typeof current.from === "number" &&
+      typeof current.to === "number"
     ) {
-      const span = current as { from: number; to: number };
+      const span = { from: current.from, to: current.to };
       const next = patches ? shiftSpanThroughPatches(span, patches) : shiftSpan(span, delta);
-      span.from = next.from;
-      span.to = next.to;
+      current.from = next.from;
+      current.to = next.to;
     }
     for (const child of Object.values(current)) {
       visit(child);
@@ -738,7 +882,13 @@ function shiftSpan(span: Span, delta: number): Span {
 
 function shiftSpanThroughPatches(span: Span, patches: readonly SourcePatch[]): Span {
   let next = { ...span };
-  for (const patch of patches) {
+  // All old spans refer to the same source. Apply right to left so a
+  // replacement cannot shift a span into the range of a later patch.
+  for (let index = patches.length - 1; index >= 0; index--) {
+    const patch = patches[index];
+    if (!patch) {
+      throw new Error(`Missing source patch at index ${index}`);
+    }
     next = shiftSpanThroughSinglePatch(next, patch);
   }
   return next;
@@ -746,7 +896,7 @@ function shiftSpanThroughPatches(span: Span, patches: readonly SourcePatch[]): S
 
 function shiftSpanThroughSinglePatch(span: Span, patch: SourcePatch): Span {
   const oldSpan = patch.oldSpan;
-  const newSpan = patch.newSpan;
+  const newSpan = { from: oldSpan.from, to: oldSpan.from + patch.replacement.length };
   const delta = width(newSpan) - width(oldSpan);
   if (span.to <= oldSpan.from) {
     return span;
@@ -782,24 +932,17 @@ function spansOverlap(left: Span, right: Span): boolean {
   return left.from < right.to && right.from < left.to;
 }
 
-function resolveFigureDelimiterSpans(source: string, figureSpan: Span): {
+function resolveFigureDelimiterSpans(figures: readonly TikzFigureInventoryItem[], figureSpan: Span): {
   begin: Span;
   end: Span;
 } {
-  const figureSource = source.slice(figureSpan.from, figureSpan.to);
-  const beginMatch = BEGIN_TIKZ_PATTERN.exec(figureSource);
-  const endMatch = END_TIKZ_PATTERN.exec(figureSource);
-  const beginLength = beginMatch?.at(0)?.length ?? 0;
-  const endLength = endMatch?.at(0)?.length ?? 0;
+  const figure = figures.find((candidate) => candidate.span.from === figureSpan.from && candidate.span.to === figureSpan.to);
+  if (!figure) {
+    throw new Error("Active figure is missing from the inventory");
+  }
   return {
-    begin: {
-      from: figureSpan.from,
-      to: figureSpan.from + beginLength
-    },
-    end: {
-      from: Math.max(figureSpan.from, figureSpan.to - endLength),
-      to: figureSpan.to
-    }
+    begin: figure.beginSpan,
+    end: figure.endSpan
   };
 }
 
@@ -830,8 +973,11 @@ function findContainingStatementRef(
   span: Span
 ): StatementRef | null {
   let best: StatementRef | null = null;
+  // Text inserted right at a statement's start or end lands outside its shifted
+  // span, so the statement does not own it: reparsing it would never read it.
+  const insertion = span.from === span.to;
   for (const ref of refsBySourceId.values()) {
-    if (ref.span.from <= span.from && ref.span.to >= span.to) {
+    if (insertion ? ref.span.from < span.from && span.to < ref.span.to : ref.span.from <= span.from && ref.span.to >= span.to) {
       if (!best || width(ref.span) < width(best.span)) {
         best = ref;
       }

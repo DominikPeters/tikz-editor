@@ -545,12 +545,12 @@ describe("semantic evaluator / nodes and shapes", () => {
 
       const label = result.scene.elements.find(
         (element): element is Extract<(typeof result.scene.elements)[number], { kind: "Text" }> =>
-          element.kind === "Text" && element.text === "$v$"
+          element.kind === "Text" && element.text === String.raw`\tiny{$v$}`
       );
       expect(label).toBeDefined();
       if (label?.kind === "Text") {
         expect(label.style.fontSize).toBeLessThan(8);
-        expect(label.text).toBe("$v$");
+        expect(label.text).toBe(String.raw`\tiny{$v$}`);
       }
     });
 
@@ -1927,6 +1927,27 @@ describe("semantic evaluator / nodes and shapes", () => {
       }
     });
 
+    it("keeps shape style replacement and appends data-driven across shape aliases", () => {
+      const source = String.raw`\begin{tikzpicture}
+    \tikzset{
+      every rectangle node/.style={draw},
+      every rectangle node/.append style={fill=blue}
+    }
+    \tikzstyle{every circle node}=[draw]
+    \tikzstyle{every circle node}+=[fill=green]
+    \node[rounded rectangle] at (0,0) {R};
+    \node[circle] at (2,0) {C};
+  \end{tikzpicture}`;
+      const result = evaluateSemantic(source);
+
+      const roundedRectangle = result.scene.elements.find(
+        (element) => element.kind === "Path" && element.id.startsWith("scene-node-box:")
+      );
+      const circle = elementsOfKind(result.scene.elements, "Circle")[0];
+      expect(roundedRectangle?.style.fill).toBe("#0000ff");
+      expect(circle?.style.fill).toBe("#00ff00");
+    });
+
     it("applies every-node style keys for diamond and trapezium nodes", () => {
       const source = String.raw`\begin{tikzpicture}[
     every node/.style={draw},
@@ -2336,7 +2357,7 @@ describe("semantic evaluator / nodes and shapes", () => {
       const label = result.scene.elements.find((element) => element.kind === "Text" && element.text.includes("favorite color"));
       expect(label?.kind).toBe("Text");
       if (label?.kind === "Text") {
-        expect(label.text).toContain(String.raw`\textcolor{blue}{this}`);
+        expect(label.text).toContain(String.raw`\textcolor{mycolor}{this}`);
       }
     });
 
@@ -2360,7 +2381,7 @@ describe("semantic evaluator / nodes and shapes", () => {
       const label = result.scene.elements.find((element) => element.kind === "Text" && element.text.includes("Brand is"));
       expect(label?.kind).toBe("Text");
       if (label?.kind === "Text") {
-        expect(label.text).toContain(String.raw`\textcolor{#1a2b3c}{this}`);
+        expect(label.text).toContain(String.raw`\textcolor{brand}{this}`);
       }
     });
 

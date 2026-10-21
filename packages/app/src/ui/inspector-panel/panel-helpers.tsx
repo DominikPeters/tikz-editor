@@ -1,4 +1,5 @@
-import { formatNumber } from "tikz-editor/edit/format";
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import { formatNumber } from "@tikz-editor/core/edit/format";
 import {
   LINE_WIDTH_PRESETS,
   ROUNDED_CORNERS_DEFAULT_RADIUS,
@@ -21,20 +22,20 @@ import {
   type SetPropertyWriteTarget,
   type ShadowPresetId,
   type ShadowPresetOption
-} from "tikz-editor/edit/inspector";
+} from "@tikz-editor/core/edit/inspector";
 import type {
   ArrowTipWriteTarget,
   FillPatternOptionMutationContext,
   NodeFontMutationContext,
   NodeMinimumDimensionsMutationContext,
   ShadowMutationContext
-} from "tikz-editor/edit/property-write-builders";
-import type { StylesCascadeModel } from "tikz-editor/edit/styles-cascade";
-import { makeDefaultArrowMarker } from "tikz-editor/semantic/style/arrows";
-import type { ArrowTipKind } from "tikz-editor/semantic/types";
-import { renderArrowTipPreviewPaths } from "tikz-editor/svg/arrows/preview";
-import { renderPathMorphingDecorationPreviewSvg } from "tikz-editor/svg/decorations/preview";
-import { renderFillPatternPreviewSvg } from "tikz-editor/svg/patterns/preview";
+} from "@tikz-editor/core/edit/property-write-builders";
+import type { StylesCascadeModel } from "@tikz-editor/core/edit/styles-cascade";
+import { makeDefaultArrowMarker } from "@tikz-editor/core/semantic/style/arrows";
+import type { ArrowTipKind } from "@tikz-editor/core/semantic/types";
+import { renderArrowTipPreviewPaths } from "@tikz-editor/core/svg/arrows/preview";
+import { renderPathMorphingDecorationPreviewSvg } from "@tikz-editor/core/svg/decorations/preview";
+import { renderFillPatternPreviewSvg } from "@tikz-editor/core/svg/patterns/preview";
 import type { CustomDropdownItem, CustomDropdownOption } from "../CustomDropdown";
 import css from "./InspectorPanel.module.css";
 
@@ -563,7 +564,7 @@ export function buildMultiInspectorModel(descriptors: InspectorDescriptor[], sel
     };
   }
 
-  const first = descriptors[0];
+  const first = requireArrayValue(descriptors, 0);
   const sections: MultiInspectorSection[] = [];
 
   for (const baseSection of first.sections) {
@@ -739,7 +740,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !allValuesEqual(enumProperties.map((property) => property.value)),
       options: base.options,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -763,11 +764,11 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       label: base.label,
       value: booleanProperties[0]?.value ?? false,
       mixed: !allValuesEqual(booleanProperties.map((property) => property.value)),
-      trueValue,
-      falseValue,
-      clearKeys,
+      ...(trueValue === undefined ? {} : { trueValue }),
+      ...(falseValue === undefined ? {} : { falseValue }),
+      ...(clearKeys === undefined ? {} : { clearKeys }),
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -782,6 +783,9 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       ? numberProperties[0]?.clearKeys
       : undefined;
 
+    const minimums = numberProperties.map(property => property.min);
+    const exclusiveMinimums = numberProperties.map(property => property.minExclusive);
+    const maximums = numberProperties.map(property => property.max);
     return {
       kind: "number",
       id: base.id,
@@ -789,20 +793,14 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       value: numberProperties[0]?.value ?? 0,
       mixed: !numbersAreEqual(numberProperties.map((property) => property.value)),
       step: base.step,
-      min: numberProperties.every((property) => property.min != null)
-        ? Math.max(...numberProperties.map((property) => property.min as number))
-        : undefined,
-      minExclusive: numberProperties.every((property) => property.minExclusive != null)
-        ? Math.max(...numberProperties.map((property) => property.minExclusive as number))
-        : undefined,
-      max: numberProperties.every((property) => property.max != null)
-        ? Math.min(...numberProperties.map((property) => property.max as number))
-        : undefined,
-      unit: base.unit,
-      defaultValue: consensusDefaultValue(numberProperties),
-      clearKeys,
+      ...(minimums.every(value => value !== undefined) ? { min: Math.max(...minimums) } : {}),
+      ...(exclusiveMinimums.every(value => value !== undefined) ? { minExclusive: Math.max(...exclusiveMinimums) } : {}),
+      ...(maximums.every(value => value !== undefined) ? { max: Math.min(...maximums) } : {}),
+      ...(base.unit === undefined ? {} : { unit: base.unit }),
+      ...defaultValueFields(numberProperties),
+      ...(clearKeys === undefined ? {} : { clearKeys }),
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -817,6 +815,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       ? lengthProperties[0]?.clearKeys
       : undefined;
 
+    const dimensionsContexts = lengthProperties.map(property => property.minimumDimensionsContext);
     return {
       kind: "length",
       id: base.id,
@@ -825,14 +824,12 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !numbersAreEqual(values),
       step: base.step,
       unit: base.unit,
-      defaultValue: consensusDefaultValue(lengthProperties),
-      clearKeys,
+      ...defaultValueFields(lengthProperties),
+      ...(clearKeys === undefined ? {} : { clearKeys }),
       writes,
-      note: allValuesEqual(notes) ? (notes[0] ?? undefined) : undefined,
-      minimumDimensionsContexts: lengthProperties.map((property) => property.minimumDimensionsContext).every((context) => context != null)
-        ? (lengthProperties.map((property) => property.minimumDimensionsContext as NodeMinimumDimensionsMutationContext))
-        : undefined,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...(allValuesEqual(notes) && notes[0] != null ? { note: notes[0] } : {}),
+      ...(dimensionsContexts.every(context => context !== undefined) ? { minimumDimensionsContexts: dimensionsContexts } : {}),
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -855,10 +852,10 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !allValuesEqual(values),
       step: base.step,
       unit: base.unit,
-      clearKeys,
+      ...(clearKeys === undefined ? {} : { clearKeys }),
       writes,
-      note: allValuesEqual(notes) ? (notes[0] ?? undefined) : undefined,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...(allValuesEqual(notes) && notes[0] != null ? { note: notes[0] } : {}),
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -878,8 +875,8 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !allValuesEqual(values),
       options: base.options,
       writes,
-      note: allValuesEqual(notes) ? (notes[0] ?? undefined) : undefined,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...(allValuesEqual(notes) && notes[0] != null ? { note: notes[0] } : {}),
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -900,8 +897,8 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       value: values[0] ?? "unset",
       mixed: !allValuesEqual(values),
       writes,
-      clearKeys,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...(clearKeys === undefined ? {} : { clearKeys }),
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -950,7 +947,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       })),
       writes,
       notes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -972,7 +969,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed,
       options: dedupeStrings(colorProperties.flatMap((property) => property.options)),
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -992,7 +989,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       options: base.options,
       contexts: fillModeProperties.map((property) => property.context),
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1012,8 +1009,8 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !allValuesEqual(values),
       options: base.options,
       writes,
-      note: allValuesEqual(notes) ? (notes[0] ?? undefined) : undefined,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...(allValuesEqual(notes) && notes[0] != null ? { note: notes[0] } : {}),
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1033,8 +1030,8 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !allValuesEqual(values),
       options: base.options,
       writes,
-      note: allValuesEqual(notes) ? (notes[0] ?? undefined) : undefined,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...(allValuesEqual(notes) && notes[0] != null ? { note: notes[0] } : {}),
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1053,10 +1050,10 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       value: values[0] ?? 0,
       mixed: !numbersAreEqual(values),
       step: base.step,
-      unit: base.unit,
+      ...(base.unit === undefined ? {} : { unit: base.unit }),
       contexts: fillPatternOptionProperties.map((property) => property.context),
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1078,7 +1075,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       max: base.max,
       step: base.step,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1098,7 +1095,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       previewLineWidth: averageNumbers(dashProperties.map((property) => property.previewLineWidth)),
       options: base.options,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1118,7 +1115,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       previewLineWidth: averageNumbers(lineCapProperties.map((property) => property.previewLineWidth)),
       options: base.options,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1138,7 +1135,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       previewLineWidth: averageNumbers(lineJoinProperties.map((property) => property.previewLineWidth)),
       options: base.options,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1158,7 +1155,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       previewLineWidth: averageNumbers(pathMorphingProperties.map((property) => property.previewLineWidth)),
       options: base.options,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1200,7 +1197,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       step: base.step,
       mixed,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1222,7 +1219,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       previewLineWidth: averageNumbers(arrowProperties.map((property) => property.previewLineWidth)),
       options: arrowBase.options,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1244,20 +1241,29 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       options: shadowBase.options,
       contexts,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
   return null;
 }
 
+function readOnlyReasonFields(writes: Parameters<typeof deriveReadOnlyReason>[0]): { readOnlyReason?: string } {
+  const readOnlyReason = deriveReadOnlyReason(writes);
+  return readOnlyReason === undefined ? {} : { readOnlyReason };
+}
+
+function defaultValueFields(properties: ReadonlyArray<{ defaultValue?: number }>): { defaultValue?: number } {
+  const defaultValue = consensusDefaultValue(properties);
+  return defaultValue === undefined ? {} : { defaultValue };
+}
+
 function consensusDefaultValue(properties: ReadonlyArray<{ defaultValue?: number }>): number | undefined {
   const values = properties.map((property) => property.defaultValue);
-  if (values.some((value) => value == null)) {
+  if (!values.every((value) => value !== undefined)) {
     return undefined;
   }
-  const numericValues = values as number[];
-  return numbersAreEqual(numericValues) ? numericValues[0] : undefined;
+  return numbersAreEqual(values) ? values[0] : undefined;
 }
 
 export function deriveReadOnlyReason(
@@ -1403,8 +1409,8 @@ export function nodeFontSizeValueLabel(
     return "Mixed";
   }
   if (value === "custom") {
-    return Number.isFinite(customSizePt) && (customSizePt ?? 0) > 0
-      ? `Custom (${formatNumber(customSizePt as number)}pt)`
+    return customSizePt !== null && Number.isFinite(customSizePt) && customSizePt > 0
+      ? `Custom (${formatNumber(customSizePt)}pt)`
       : "Custom";
   }
   return options.find((option) => option.value === value)?.label ?? "Custom";
@@ -1928,6 +1934,7 @@ export function ArrowTipPreview({
               strokeWidth={path.strokeWidth}
               strokeLinecap={path.lineCap}
               strokeLinejoin={path.lineJoin}
+              strokeMiterlimit={path.miterLimit}
             />
           ))}
         </g>

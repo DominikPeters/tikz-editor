@@ -1,18 +1,68 @@
 {
   "name": "@tikz-editor/core",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Reusable TikZ parser/semantic/SVG engine",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./capabilities": {
+      "types": "./dist/capabilities/index.d.ts",
+      "import": "./dist/capabilities/index.js"
+    },
+    "./beamer": {
+      "types": "./dist/beamer/index.d.ts",
+      "import": "./dist/beamer/index.js"
+    },
+    "./corpus": {
+      "types": "./dist/corpus/index.d.ts",
+      "import": "./dist/corpus/index.js"
+    },
+    "./coords": {
+      "types": "./dist/coords/index.d.ts",
+      "import": "./dist/coords/index.js"
+    },
+    "./graphics": {
+      "types": "./dist/graphics/index.d.ts",
+      "import": "./dist/graphics/index.js"
+    },
+    "./edit/snapping": {
+      "types": "./dist/edit/snapping/index.d.ts",
+      "import": "./dist/edit/snapping/index.js"
+    },
+    "./semantic": {
+      "types": "./dist/semantic/index.d.ts",
+      "import": "./dist/semantic/index.js"
+    },
+    "./svg": {
+      "types": "./dist/svg/index.d.ts",
+      "import": "./dist/svg/index.js"
+    },
+    "./text/knuth-plass": {
+      "types": "./dist/text/knuth-plass/index.d.ts",
+      "import": "./dist/text/knuth-plass/index.js"
+    },
+    "./*.js": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@mathjax/src": "^4.1.1",
-    "@lezer/common": "^1.5.1",
-    "@tikz-editor/lezer-tikz": "0.5.2",
-    "mathjax": "^4.1.1",
+    "@lezer/common": "^1.5.3",
+    "@lezer/lr": "^1.4.11",
+    "@tikz-editor/lezer-tex": "0.6.0",
+    "@tikz-editor/lezer-tikz": "0.6.0",
     "xml-formatter": "^3.6.7"
   },
   "devDependencies": {

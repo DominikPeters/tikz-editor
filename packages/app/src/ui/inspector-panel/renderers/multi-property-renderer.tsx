@@ -1,5 +1,5 @@
-import { formatNumber } from "tikz-editor/edit/format";
-import type { NodeFontFamilyId, NodeFontSizePresetId } from "tikz-editor/edit/inspector";
+import { formatNumber } from "@tikz-editor/core/edit/format";
+import type { NodeFontFamilyId, NodeFontSizePresetId } from "@tikz-editor/core/edit/inspector";
 import { ColorPickerField } from "../../ColorPicker";
 import { CustomDropdown } from "../../CustomDropdown";
 import css from "../InspectorPanel.module.css";
@@ -331,7 +331,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
               options={property.options}
               namedColorSwatches={projectNamedColorSwatches}
               disabled={!writable}
-              triggerLabelClassName={valueClassName}
+              triggerLabelClassName={valueClassName ?? ""}
               onChange={(nextValue) => {
                 const firstWrite = property.writes[0];
                 if (!firstWrite) {
@@ -846,7 +846,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
     );
   }
 
-  if (property.kind === "shadowPreset") {
+  {
     const writable = property.writes.some((write) => write.writable && write.elementId.length > 0);
     const dropdownValue = property.mixed ? SHADOW_PRESET_MIXED_OPTION_VALUE : property.value;
     return (
@@ -880,5 +880,4 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
     );
   }
 
-  return null;
 }

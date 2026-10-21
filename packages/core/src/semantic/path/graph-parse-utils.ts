@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 
 export function splitTopLevel(
@@ -13,13 +14,13 @@ export function splitTopLevel(
   let inQuote = false;
 
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\" && index + 1 < raw.length) {
       index += 1;
       continue;
     }
-    if (char === '"' && raw[index - 1] !== "\\") {
-      if (inQuote && raw[index + 1] === '"') {
+    if (char === '"' && raw.charAt(index - 1) !== "\\") {
+      if (inQuote && raw.charAt(index + 1) === '"') {
         index += 1;
         continue;
       }
@@ -30,7 +31,7 @@ export function splitTopLevel(
       continue;
     }
     if (isCommentStart(raw, index)) {
-      while (index < raw.length && raw[index] !== "\n" && raw[index] !== "\r") {
+      while (index < raw.length && raw.charAt(index) !== "\n" && raw.charAt(index) !== "\r") {
         index += 1;
       }
       continue;
@@ -105,13 +106,13 @@ export function findNextConnector<T extends string>(
   let inQuote = false;
 
   for (let index = start; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\" && index + 1 < raw.length) {
       index += 1;
       continue;
     }
-    if (char === '"' && raw[index - 1] !== "\\") {
-      if (inQuote && raw[index + 1] === '"') {
+    if (char === '"' && raw.charAt(index - 1) !== "\\") {
+      if (inQuote && raw.charAt(index + 1) === '"') {
         index += 1;
         continue;
       }
@@ -122,7 +123,7 @@ export function findNextConnector<T extends string>(
       continue;
     }
     if (isCommentStart(raw, index)) {
-      while (index < raw.length && raw[index] !== "\n" && raw[index] !== "\r") {
+      while (index < raw.length && raw.charAt(index) !== "\n" && raw.charAt(index) !== "\r") {
         index += 1;
       }
       continue;
@@ -171,20 +172,20 @@ export function readBalancedSegment(
   open: string,
   close: string
 ): { raw: string; next: number } | null {
-  if (raw[start] !== open) {
+  if (raw.charAt(start) !== open) {
     return null;
   }
 
   let depth = 0;
   let inQuote = false;
   for (let index = start; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\" && index + 1 < raw.length) {
       index += 1;
       continue;
     }
-    if (char === '"' && raw[index - 1] !== "\\") {
-      if (inQuote && raw[index + 1] === '"') {
+    if (char === '"' && raw.charAt(index - 1) !== "\\") {
+      if (inQuote && raw.charAt(index + 1) === '"') {
         index += 1;
         continue;
       }
@@ -195,7 +196,7 @@ export function readBalancedSegment(
       continue;
     }
     if (isCommentStart(raw, index)) {
-      while (index < raw.length && raw[index] !== "\n" && raw[index] !== "\r") {
+      while (index < raw.length && raw.charAt(index) !== "\n" && raw.charAt(index) !== "\r") {
         index += 1;
       }
       continue;
@@ -224,13 +225,13 @@ export function findTopLevelChar(raw: string, needle: string): number {
   let inQuote = false;
 
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\" && index + 1 < raw.length) {
       index += 1;
       continue;
     }
-    if (char === '"' && raw[index - 1] !== "\\") {
-      if (inQuote && raw[index + 1] === '"') {
+    if (char === '"' && raw.charAt(index - 1) !== "\\") {
+      if (inQuote && raw.charAt(index + 1) === '"') {
         index += 1;
         continue;
       }
@@ -241,7 +242,7 @@ export function findTopLevelChar(raw: string, needle: string): number {
       continue;
     }
     if (isCommentStart(raw, index)) {
-      while (index < raw.length && raw[index] !== "\n" && raw[index] !== "\r") {
+      while (index < raw.length && raw.charAt(index) !== "\n" && raw.charAt(index) !== "\r") {
         index += 1;
       }
       continue;
@@ -288,8 +289,8 @@ export function mergeOptionLists(optionLists: OptionListAst[]): OptionListAst | 
     return optionLists[0];
   }
 
-  const first = optionLists[0];
-  const last = optionLists[optionLists.length - 1];
+  const first = requireArrayValue(optionLists, 0);
+  const last = requireArrayValue(optionLists, optionLists.length - 1);
   return {
     span: {
       from: first.span.from,
@@ -326,7 +327,7 @@ export function stripOptionListBrackets(raw: string): string {
 
 export function trimRightIndex(raw: string): number {
   for (let index = raw.length - 1; index >= 0; index -= 1) {
-    if (!/\s/.test(raw[index])) {
+    if (!/\s/.test(raw.charAt(index))) {
       return index;
     }
   }
@@ -336,13 +337,13 @@ export function trimRightIndex(raw: string): number {
 export function skipWhitespace(raw: string, cursor: number): number {
   let index = cursor;
   while (index < raw.length) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (/\s/.test(char)) {
       index += 1;
       continue;
     }
     if (isCommentStart(raw, index)) {
-      while (index < raw.length && raw[index] !== "\n" && raw[index] !== "\r") {
+      while (index < raw.length && raw.charAt(index) !== "\n" && raw.charAt(index) !== "\r") {
         index += 1;
       }
       continue;
@@ -353,10 +354,10 @@ export function skipWhitespace(raw: string, cursor: number): number {
 }
 
 function isCommentStart(raw: string, index: number): boolean {
-  if (raw[index] !== "%") {
+  if (raw.charAt(index) !== "%") {
     return false;
   }
-  if (index > 0 && raw[index - 1] === "\\") {
+  if (index > 0 && raw.charAt(index - 1) === "\\") {
     return false;
   }
   return true;

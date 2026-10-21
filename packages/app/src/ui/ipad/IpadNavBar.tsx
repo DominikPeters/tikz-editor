@@ -69,11 +69,11 @@ export function IpadNavBar({
   }, [commandRuntime]);
 
   const commandEnabled = useCallback((commandId: AppMenuCommandId): boolean => {
-    return commandRuntime.bindings[commandId]?.enabled === true;
+    return commandRuntime.bindings[commandId].enabled === true;
   }, [commandRuntime]);
 
   const commandChecked = useCallback((commandId: AppMenuCommandId): boolean => {
-    return commandRuntime.bindings[commandId]?.checked === true;
+    return commandRuntime.bindings[commandId].checked === true;
   }, [commandRuntime]);
 
   return (

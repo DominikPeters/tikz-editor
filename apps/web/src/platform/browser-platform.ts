@@ -4,12 +4,9 @@ import type {
   PlatformUpdateApi
 } from "@tikz-editor/app/platform/types";
 import type { DocumentFileRef, FileRevision } from "@tikz-editor/app/store/types";
-import { revisionForText, type LinkedTextReadResult, type LinkedTextWriteResult } from "@tikz-editor/app/linked-file-sync";
-
-type StorageLike = {
-  getItem: (key: string) => string | null;
-  setItem: (key: string, value: string) => void;
-};
+import { revisionForText, revisionsMatch, type LinkedTextReadResult, type LinkedTextWriteResult } from "@tikz-editor/app/linked-file-sync";
+import { resolvePlatformStorage, type StorageLike } from "@tikz-editor/app/platform/storage";
+import { createBrowserPresentationApi } from "@tikz-editor/app/presentation";
 
 type ClipboardLike = {
   readText?: () => Promise<string>;
@@ -59,9 +56,22 @@ export type BrowserPlatformEnvironment = {
   updates?: PlatformUpdateApi;
 };
 
+declare global {
+  var __TIKZ_EDITOR_BROWSER_PLATFORM_ENV__: BrowserPlatformEnvironment | undefined;
+  var showOpenFilePicker: FsApiLike["showOpenFilePicker"];
+  var showSaveFilePicker: FsApiLike["showSaveFilePicker"];
+}
+
 function readInjectedTestEnvironment(): BrowserPlatformEnvironment {
-  const globalLike = globalThis as unknown as { __TIKZ_EDITOR_BROWSER_PLATFORM_ENV__?: BrowserPlatformEnvironment };
-  return globalLike.__TIKZ_EDITOR_BROWSER_PLATFORM_ENV__ ?? {};
+  return globalThis.__TIKZ_EDITOR_BROWSER_PLATFORM_ENV__ ?? {};
+}
+
+function isCallable(value: unknown): value is (...args: unknown[]) => unknown {
+  return typeof value === "function";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 const BROWSER_FILE_PROVIDER = "browser-fsa";
@@ -93,23 +103,12 @@ function createHandleId(): string {
   return `handle-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 }
 
-function resolveStorage(env: BrowserPlatformEnvironment): StorageLike | null {
-  if (env.storage) {
-    return env.storage;
-  }
-  if (typeof localStorage !== "undefined") {
-    return localStorage;
-  }
-  return null;
-}
-
 function resolveClipboard(env: BrowserPlatformEnvironment): ClipboardLike | null {
   if (env.clipboard) {
     return env.clipboard;
   }
-  if (typeof navigator !== "undefined" && navigator.clipboard) {
-    return navigator.clipboard;
-  }
+  const host: Partial<Pick<Navigator, "clipboard">> | undefined = typeof navigator === "undefined" ? undefined : navigator;
+  if (host?.clipboard) return host.clipboard;
   return null;
 }
 
@@ -117,9 +116,8 @@ function resolveFsApi(env: BrowserPlatformEnvironment): FsApiLike | null {
   if (env.fsApi) {
     return env.fsApi;
   }
-  const globalLike = globalThis as unknown as FsApiLike;
-  if (typeof globalLike.showOpenFilePicker === "function" && typeof globalLike.showSaveFilePicker === "function") {
-    return globalLike;
+  if (typeof globalThis.showOpenFilePicker === "function" && typeof globalThis.showSaveFilePicker === "function") {
+    return { showOpenFilePicker: globalThis.showOpenFilePicker.bind(globalThis), showSaveFilePicker: globalThis.showSaveFilePicker.bind(globalThis) };
   }
   return null;
 }
@@ -211,74 +209,71 @@ function saveKnownHandleIds(storage: StorageLike | null, ids: Set<string>): void
   }
 }
 
-function openTextFileWithInput(): Promise<{ source: string; fileRef: DocumentFileRef } | null> {
+function openFileWithInput<T extends object>(
+  accept: string,
+  read: (file: File) => Promise<T>
+): Promise<(T & { fileRef: DocumentFileRef }) | null> {
   return new Promise((resolve) => {
-    if (typeof document === "undefined") {
+    if (typeof document === "undefined" || !document.querySelector("body, frameset")) {
       resolve(null);
       return;
     }
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".tex,.tikz,.txt,.svg,.ipe,text/plain,image/svg+xml";
+    input.accept = accept;
     input.style.display = "none";
-    input.addEventListener("change", () => {
+    let completed = false;
+    const cleanup = () => {
+      input.removeEventListener("change", onChange);
+      input.removeEventListener("cancel", onCancel);
+      input.remove();
+    };
+    const onCancel = () => {
+      if (completed) return;
+      completed = true;
+      cleanup();
+      resolve(null);
+    };
+    const onChange = () => {
+      if (completed) return;
+      completed = true;
+      const file = input.files?.[0];
+      cleanup();
+      if (!file) {
+        resolve(null);
+        return;
+      }
       void (async () => {
-        const file = input.files?.[0];
-        if (!file) {
-          input.remove();
+        try {
+          const result = await read(file);
+          resolve({
+            ...result,
+            fileRef: { kind: "file", name: file.name, provider: DOWNLOAD_PROVIDER }
+          });
+        } catch (error) {
+          logBrowserPlatformDebug("Browser file input read failed.", error);
           resolve(null);
-          return;
         }
-        const text = await file.text();
-        input.remove();
-        resolve({
-          source: text,
-          fileRef: {
-            kind: "file",
-            name: file.name,
-            provider: DOWNLOAD_PROVIDER
-          }
-        });
       })();
-    }, { once: true });
+    };
+    input.addEventListener("change", onChange);
+    input.addEventListener("cancel", onCancel);
     document.body.appendChild(input);
-    input.click();
+    try {
+      input.click();
+    } catch (error) {
+      logBrowserPlatformDebug("Browser file input open failed.", error);
+      onCancel();
+    }
   });
 }
 
+function openTextFileWithInput(): Promise<{ source: string; fileRef: DocumentFileRef } | null> {
+  return openFileWithInput(".tex,.tikz,.txt,.svg,.ipe,text/plain,image/svg+xml", async (file) => ({ source: await file.text() }));
+}
+
 function openBinaryFileWithInput(): Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef } | null> {
-  return new Promise((resolve) => {
-    if (typeof document === "undefined") {
-      resolve(null);
-      return;
-    }
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation";
-    input.style.display = "none";
-    input.addEventListener("change", () => {
-      void (async () => {
-        const file = input.files?.[0];
-        if (!file) {
-          input.remove();
-          resolve(null);
-          return;
-        }
-        const bytes = await file.arrayBuffer();
-        input.remove();
-        resolve({
-          bytes,
-          fileRef: {
-            kind: "file",
-            name: file.name,
-            provider: DOWNLOAD_PROVIDER
-          }
-        });
-      })();
-    }, { once: true });
-    document.body.appendChild(input);
-    input.click();
-  });
+  return openFileWithInput(".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation", async (file) => ({ bytes: await file.arrayBuffer() }));
 }
 
 function downloadTextFile(text: string, fileName: string): boolean {
@@ -288,7 +283,7 @@ function downloadTextFile(text: string, fileName: string): boolean {
     typeof URL === "undefined" ||
     typeof URL.createObjectURL !== "function" ||
     typeof URL.revokeObjectURL !== "function" ||
-    !document.body
+    !document.querySelector("body, frameset")
   ) {
     return false;
   }
@@ -309,19 +304,15 @@ function downloadTextFile(text: string, fileName: string): boolean {
 }
 
 async function requestHandlePermission(handle: unknown, mode: "read" | "readwrite"): Promise<boolean> {
-  const maybeHandle = handle as {
-    queryPermission?: (options: { mode: "read" | "readwrite" }) => Promise<PermissionState>;
-    requestPermission?: (options: { mode: "read" | "readwrite" }) => Promise<PermissionState>;
-  };
-  if (typeof maybeHandle?.queryPermission !== "function" || typeof maybeHandle?.requestPermission !== "function") {
+  if (!isRecord(handle) || !isCallable(handle.queryPermission) || !isCallable(handle.requestPermission)) {
     return true;
   }
   try {
-    const queried = await maybeHandle.queryPermission({ mode });
+    const queried: unknown = await handle.queryPermission({ mode });
     if (queried === "granted") {
       return true;
     }
-    const requested = await maybeHandle.requestPermission({ mode });
+    const requested: unknown = await handle.requestPermission({ mode });
     return requested === "granted";
   } catch (error) {
     logBrowserPlatformDebug("Browser file handle permission request failed.", error);
@@ -331,8 +322,13 @@ async function requestHandlePermission(handle: unknown, mode: "read" | "readwrit
 
 export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {}): EditorPlatform {
   const mergedEnv = { ...readInjectedTestEnvironment(), ...env };
-  const storage = resolveStorage(mergedEnv);
+  const storage = resolvePlatformStorage(mergedEnv.storage);
   const clipboard = resolveClipboard(mergedEnv);
+  const readClipboardText = clipboard?.readText?.bind(clipboard);
+  const writeClipboardText = clipboard?.writeText?.bind(clipboard);
+  const readClipboardCustomText = clipboard?.readCustomText?.bind(clipboard);
+  const readClipboardCustomBytes = clipboard?.readCustomBytes?.bind(clipboard);
+  const writeClipboardBundle = clipboard?.writeBundle?.bind(clipboard);
   const fsApi = resolveFsApi(mergedEnv);
   const fsHandleStore = resolveFsHandleStore(mergedEnv);
   const knownHandleIds = new Set(loadKnownHandleIds(storage));
@@ -358,16 +354,16 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
     return await fsHandleStore.load(fileRef.handleId);
   }
 
-  async function openViaFsApi(): Promise<{ source: string; fileRef: DocumentFileRef } | null> {
+  async function openViaFsApi(): Promise<{ source: string; fileRef: DocumentFileRef } | null | undefined> {
     if (!fsApi?.showOpenFilePicker) {
-      return null;
+      return undefined;
     }
     try {
       const handles = await fsApi.showOpenFilePicker({
         multiple: false,
         types: ACCEPT_TYPES
       });
-      const handle = handles?.[0];
+      const handle = handles[0];
       if (!handle) {
         return null;
       }
@@ -384,21 +380,24 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
         }
       };
     } catch (error) {
-      logBrowserPlatformDebug("Browser file picker open failed or was cancelled.", error);
-      return null;
+      if (typeof error === "object" && error !== null && "name" in error && error.name === "AbortError") {
+        return null;
+      }
+      logBrowserPlatformDebug("Browser file picker open failed; trying file input.", error);
+      return undefined;
     }
   }
 
-  async function openBinaryViaFsApi(): Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef } | null> {
+  async function openBinaryViaFsApi(): Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef } | null | undefined> {
     if (!fsApi?.showOpenFilePicker) {
-      return null;
+      return undefined;
     }
     try {
       const handles = await fsApi.showOpenFilePicker({
         multiple: false,
         types: ACCEPT_PPTX_TYPES
       });
-      const handle = handles?.[0];
+      const handle = handles[0];
       if (!handle) {
         return null;
       }
@@ -413,8 +412,11 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
         }
       };
     } catch (error) {
-      logBrowserPlatformDebug("Browser binary file picker open failed or was cancelled.", error);
-      return null;
+      if (typeof error === "object" && error !== null && "name" in error && error.name === "AbortError") {
+        return null;
+      }
+      logBrowserPlatformDebug("Browser binary file picker open failed; trying file input.", error);
+      return undefined;
     }
   }
 
@@ -423,12 +425,18 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
     if (!canWrite) {
       return false;
     }
-    const maybeHandle = handle as { createWritable?: () => Promise<{ write: (value: string) => Promise<void>; close: () => Promise<void> }> };
-    if (typeof maybeHandle.createWritable !== "function") {
+    return await writeWithHandle(text, handle);
+  }
+
+  async function writeWithHandle(text: string, handle: unknown): Promise<boolean> {
+    if (!isRecord(handle) || !isCallable(handle.createWritable)) {
       return false;
     }
     try {
-      const writable = await maybeHandle.createWritable();
+      const writable: unknown = await handle.createWritable();
+      if (!isRecord(writable) || !isCallable(writable.write) || !isCallable(writable.close)) {
+        return false;
+      }
       await writable.write(text);
       await writable.close();
       return true;
@@ -440,14 +448,14 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
 
   async function readLinkedText(fileRef: DocumentFileRef): Promise<LinkedTextReadResult> {
     const handle = await resolvePersistedHandle(fileRef);
+    return await readLinkedTextFromHandle(fileRef, handle);
+  }
+
+  async function readLinkedTextFromHandle(fileRef: DocumentFileRef, handle: unknown): Promise<LinkedTextReadResult> {
     if (!handle) {
       return { status: "permission-needed" };
     }
-    const maybeHandle = handle as {
-      name?: string;
-      getFile?: () => Promise<{ text: () => Promise<string>; lastModified?: number; size?: number }>;
-    };
-    if (typeof maybeHandle.getFile !== "function") {
+    if (!isRecord(handle) || !isCallable(handle.getFile)) {
       return { status: "failed", reason: "Stored browser file handle is unavailable." };
     }
     const canRead = await requestHandlePermission(handle, "read");
@@ -455,15 +463,21 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
       return { status: "permission-needed" };
     }
     try {
-      const file = await maybeHandle.getFile();
-      const source = await file.text();
+      const file: unknown = await handle.getFile();
+      if (!isRecord(file) || !isCallable(file.text)) {
+        return { status: "failed", reason: "Stored browser file is unavailable." };
+      }
+      const source: unknown = await file.text();
+      if (typeof source !== "string") {
+        return { status: "failed", reason: "Stored browser file did not contain text." };
+      }
       return {
         status: "ok",
         source,
-        revision: revisionForText(source, { mtimeMs: file.lastModified, size: file.size }),
+        revision: revisionForText(source, { ...(typeof file.lastModified === "number" ? { mtimeMs: file.lastModified } : {}), ...(typeof file.size === "number" ? { size: file.size } : {}) }),
         fileRef: {
           ...fileRef,
-          name: maybeHandle.name ?? fileRef.name
+          name: typeof handle.name === "string" ? handle.name : fileRef.name
         }
       };
     } catch (error) {
@@ -477,31 +491,31 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
     text: string,
     expectedRevision: FileRevision | null
   ): Promise<LinkedTextWriteResult> {
-    const current = await readLinkedText(fileRef);
-    if (current.status !== "ok") {
+    const handle = await resolvePersistedHandle(fileRef);
+    async function checkDiskRevision(): Promise<LinkedTextReadResult | Extract<LinkedTextWriteResult, { status: "changed-on-disk" }>> {
+      const current = await readLinkedTextFromHandle(fileRef, handle);
+      if (current.status === "ok" && expectedRevision && !revisionsMatch(current.revision, expectedRevision)) {
+        return { ...current, status: "changed-on-disk" };
+      }
       return current;
     }
-    if (
-      expectedRevision &&
-      (current.revision.hash !== expectedRevision.hash ||
-        current.revision.mtimeMs !== expectedRevision.mtimeMs ||
-        current.revision.size !== expectedRevision.size)
-    ) {
-      return {
-        status: "changed-on-disk",
-        source: current.source,
-        revision: current.revision,
-        fileRef: current.fileRef
-      };
+    const initial = await checkDiskRevision();
+    if (initial.status !== "ok") {
+      return initial;
     }
-    const handle = await resolvePersistedHandle(fileRef);
-    if (!handle) {
+    if (!(await requestHandlePermission(handle, "readwrite"))) {
       return { status: "permission-needed" };
     }
-    if (!(await saveWithHandle(text, handle))) {
+    // Permission prompts can stay open while another editor changes the file.
+    // Validate again after the prompt, without another permission wait before writing.
+    const beforeWrite = await checkDiskRevision();
+    if (beforeWrite.status !== "ok") {
+      return beforeWrite;
+    }
+    if (!(await writeWithHandle(text, handle))) {
       return { status: "failed", reason: "Could not write the linked file." };
     }
-    const saved = await readLinkedText(fileRef);
+    const saved = await readLinkedTextFromHandle(fileRef, handle);
     if (saved.status === "ok") {
       return {
         status: "saved",
@@ -561,18 +575,19 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
 
   return {
     id: mergedEnv.id ?? "web",
+    presentation: createBrowserPresentationApi(),
     persistence: {
-      load: (key) => storage?.getItem(key) ?? null,
+      load: (key) => storage.getItem(key) ?? null,
       save: (key, value) => {
-        storage?.setItem(key, value);
+        storage.setItem(key, value);
       }
     },
     clipboard: {
-      readText: clipboard?.readText ? async () => clipboard.readText!() : undefined,
-      writeText: clipboard?.writeText ? async (text) => clipboard.writeText!(text) : undefined,
-      readCustomText: clipboard?.readCustomText ? async (formats) => clipboard.readCustomText!(formats) : undefined,
-      readCustomBytes: clipboard?.readCustomBytes ? async (formats) => clipboard.readCustomBytes!(formats) : undefined,
-      writeBundle: clipboard?.writeBundle ? async (payload) => clipboard.writeBundle!(payload) : undefined
+      ...(readClipboardText === undefined ? {} : { readText: async () => readClipboardText() }),
+      ...(writeClipboardText === undefined ? {} : { writeText: async (text) => writeClipboardText(text) }),
+      ...(readClipboardCustomText === undefined ? {} : { readCustomText: async (formats) => readClipboardCustomText(formats) }),
+      ...(readClipboardCustomBytes === undefined ? {} : { readCustomBytes: async (formats) => readClipboardCustomBytes(formats) }),
+      ...(writeClipboardBundle === undefined ? {} : { writeBundle: async (payload) => writeClipboardBundle(payload) })
     },
     menu: {
       usesNativeMenuBar: false,
@@ -610,14 +625,14 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
     files: {
       openText: async () => {
         const fsResult = await openViaFsApi();
-        if (fsResult) {
+        if (fsResult !== undefined) {
           return fsResult;
         }
         return await openTextFileWithInput();
       },
       openBinary: async () => {
         const fsResult = await openBinaryViaFsApi();
-        if (fsResult) {
+        if (fsResult !== undefined) {
           return fsResult;
         }
         return await openBinaryFileWithInput();
@@ -670,7 +685,7 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
           typeof URL === "undefined" ||
           typeof URL.createObjectURL !== "function" ||
           typeof URL.revokeObjectURL !== "function" ||
-          !document.body
+          !document.querySelector("body, frameset")
         ) {
           return Promise.resolve(false);
         }
@@ -690,6 +705,6 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
         }
       }
     },
-    updates: mergedEnv.updates
+    ...(mergedEnv.updates === undefined ? {} : { updates: mergedEnv.updates })
   };
 }

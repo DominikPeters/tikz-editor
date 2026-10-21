@@ -1,4 +1,7 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useAfterCanvasPaint } from "../hooks/useAfterCanvasPaint";
+import { whenIdle } from "../frame-scheduling";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { clamp } from "@tikz-editor/core/utils/math";
 import { useShallow } from "zustand/react/shallow";
 import { useSettingsStore } from "../../settings/useSettingsStore";
 import { EDITOR_FONT_SIZE_MAX_PX, EDITOR_FONT_SIZE_MIN_PX } from "../../settings/types";
@@ -12,7 +15,8 @@ import {
   Transaction,
   StateEffect,
   StateField,
-  type Range
+  type Range,
+  type Text
 } from "@codemirror/state";
 import {
   defaultKeymap,
@@ -28,7 +32,6 @@ import {
 } from "@codemirror/commands";
 import {
   bracketMatching,
-  defaultHighlightStyle,
   foldGutter,
   foldKeymap,
   HighlightStyle,
@@ -57,14 +60,14 @@ import {
   type ViewUpdate
 } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
-import type { PathItem, Span, Statement } from "tikz-editor/ast/types";
-import { collectSymbols, type DocumentSymbols } from "tikz-editor/completion/index";
-import { resolveDocHoverTarget } from "tikz-editor/completion/doc-hover";
-import { recordProfilingSourcePanelSyncTiming } from "tikz-editor/profiling";
-import type { SceneElement } from "tikz-editor/semantic/types";
-import { NAMED_COLORS } from "tikz-editor/semantic/style/constants";
-import { patchesMatchSourceTransition } from "tikz-editor/edit/source-patches";
-import { tikz } from "@tikz-editor/lang-tikz";
+import type { PathItem, Span, Statement } from "@tikz-editor/core/ast/types";
+import { collectSymbols, type DocumentSymbols } from "@tikz-editor/core/completion/index";
+import { resolveDocHoverTarget } from "@tikz-editor/core/completion/doc-hover";
+import { recordProfilingSourcePanelSyncTiming } from "@tikz-editor/core/profiling";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
+import { NAMED_COLORS } from "@tikz-editor/core/semantic/style/constants";
+import { applySourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
+import { beamer, tex, tikz } from "@tikz-editor/lang-tikz";
 import { tikzCompletion } from "./tikz-autocomplete";
 import { lookupTikzDocEntry } from "./tikz-docs";
 import { getActiveEditorPlatform } from "../../platform/current";
@@ -75,11 +78,13 @@ import { useEditorStore } from "../../store/store";
 import { ColorPicker } from "../ColorPicker";
 import {
   SOURCE_ACCESSORY_COMMAND_EVENT,
-  SOURCE_FORMAT_REQUEST_EVENT
+  SOURCE_FORMAT_REQUEST_EVENT,
+  isSourceAccessoryCommandDetail
 } from "../source-sync";
-import type { SourceAccessoryCommandDetail } from "../source-sync";
 import css from "./SourcePanel.module.css";
-import { formatTikzSource } from "tikz-editor/edit/source-format";
+import { formatTikzSource } from "@tikz-editor/core/edit/source-format";
+import { hasMultipleRoots } from "../../root-inventory";
+import type { SessionSnapshot } from "../../compute";
 
 // ── Dynamic configuration compartments ──────────────────────────────────────
 
@@ -88,26 +93,50 @@ const fontSizeCompartment = new Compartment();
 const tabSizeCompartment = new Compartment();
 const editableCompartment = new Compartment();
 const highlightCompartment = new Compartment();
+const languageCompartment = new Compartment();
+
+type SourceLanguageMode = "tikz" | "tex" | "beamer";
+
+function sourceLanguage(mode: SourceLanguageMode) {
+  if (mode === "beamer") {
+    return beamer();
+  }
+  return mode === "tex" ? tex() : tikz();
+}
 
 // ── Theme-aware highlight styles ─────────────────────────────────────────────
 
-const darkHighlightStyle = HighlightStyle.define([
-  { tag: t.keyword,        color: "#569cd6", fontWeight: "bold" },
-  { tag: t.typeName,       color: "#4ec9b0" },
-  { tag: t.lineComment,    color: "#6a9955", fontStyle: "italic" },
-  { tag: t.blockComment,   color: "#6a9955", fontStyle: "italic" },
-  { tag: t.string,         color: "#ce9178" },
-  { tag: t.special(t.string), color: "#dcdcaa" },
-  { tag: t.regexp,         color: "#c586c0", fontWeight: "600" },
-  { tag: t.number,         color: "#b5cea8" },
-  { tag: t.variableName,   color: "#9cdcfe" },
-  { tag: t.attributeName,  color: "#9cdcfe" },
-  { tag: t.propertyName,   color: "#9cdcfe" },
-  { tag: t.operator,       color: "#d4d4d4" },
-  { tag: t.punctuation,    color: "#d4d4d4" },
-  { tag: t.bracket,        color: "#ffd700" },
-  { tag: t.name,           color: "#d4d4d4" },
-]);
+// One set of roles, coloured per theme, so both themes say the same thing:
+// structure, commands (in text and in math alike), names, math and numbers
+// (delimiters included), option keys and overlays, node text and comments.
+// Prose, operators and brackets keep the text colour.
+type SyntaxPalette = Record<"structure" | "command" | "name" | "math" | "option" | "nodeText" | "comment" | "invalid", string>;
+
+const LIGHT_SYNTAX: SyntaxPalette = {
+  structure: "#7a3e9d", command: "#1f5fa8", name: "#0f766e", math: "#2e7d32",
+  option: "#8a6100", nodeText: "#a31515", comment: "#6e7781", invalid: "#d00000"
+};
+
+const DARK_SYNTAX: SyntaxPalette = {
+  structure: "#c586c0", command: "#569cd6", name: "#4ec9b0", math: "#b5cea8",
+  option: "#d7ba7d", nodeText: "#ce9178", comment: "#6a9955", invalid: "#f44747"
+};
+
+function syntaxHighlightStyle(palette: SyntaxPalette): HighlightStyle {
+  return HighlightStyle.define([
+    { tag: t.keyword, color: palette.structure },
+    { tag: t.meta, color: palette.command },
+    { tag: [t.typeName, t.className], color: palette.name },
+    { tag: [t.variableName, t.literal, t.regexp, t.special(t.string)], color: palette.math },
+    { tag: t.labelName, color: palette.option },
+    { tag: t.string, color: palette.nodeText },
+    { tag: t.comment, color: palette.comment, fontStyle: "italic" },
+    { tag: t.invalid, color: palette.invalid }
+  ]);
+}
+
+const lightHighlightStyle = syntaxHighlightStyle(LIGHT_SYNTAX);
+const darkHighlightStyle = syntaxHighlightStyle(DARK_SYNTAX);
 
 function buildHighlightExtension(dark: boolean) {
   return dark ? [Prec.highest(syntaxHighlighting(darkHighlightStyle))] : [];
@@ -117,14 +146,14 @@ function buildHighlightExtension(dark: boolean) {
 
 const setHighlight = StateEffect.define<[number, number] | null>();
 const setDiagnostics = StateEffect.define<DiagnosticInput[]>();
-const setFigureOverlay = StateEffect.define<DecorationSet>();
+type FigureOverlayRequest = { source: string; figures: readonly FigureOverlayFigure[]; activeRootId: string | null };
+export const setFigureOverlay = StateEffect.define<FigureOverlayRequest>();
 const sourcePanelExternalSyncAnnotation = Annotation.define<{ nextSource: string; sourceRevision: number }>();
 
 type PendingExternalSourceSync = {
   nextSource: string;
   sourceRevision: number;
   lastEditPatches: readonly SourceSyncPatch[] | null;
-  lastEditPatchBaseRevision: number | null;
   patchChain: SourceSyncPatchStep[] | null;
   coalescedToAnimationFrame: boolean;
 };
@@ -143,7 +172,7 @@ export type DiagnosticInput = {
   severity: DiagnosticSeverity;
   message: string;
   code?: string;
-  source: "parse" | "semantic";
+  source: "parse" | "semantic" | "beamer";
 };
 
 type Diagnostic = DiagnosticInput;
@@ -199,17 +228,11 @@ const EMPTY_SYMBOLS: DocumentSymbols = {
 const MAX_DIAGNOSTICS = 300;
 const MAX_DECORATED_SPAN = 160;
 const MAX_RECOVERY_NOISE_DISTANCE = 80;
-const DIAGNOSTIC_DEBOUNCE_MS = 120;
 const DOCS_TOOLTIP_HOVER_TIME_MS = 650;
 const MIN_FORMATTER_MAX_LINE_LENGTH = 40;
 const MAX_FORMATTER_MAX_LINE_LENGTH = 240;
 
 const SOURCE_PICKER_COLORS = uniqueStrings(["none", ...NAMED_COLORS]);
-const ENABLE_TIKZ_AUTOCOMPLETE = true;
-
-type MathJaxBrowserRuntime = {
-  typesetPromise?: (elements?: Element[]) => Promise<void>;
-};
 
 function stripTikzPrefixInSignatureHtml(signatureHtml: string): string {
   const template = document.createElement("template");
@@ -222,22 +245,6 @@ function stripTikzPrefixInSignatureHtml(signatureHtml: string): string {
     }
   });
   return template.innerHTML;
-}
-
-function includesInlineMath(text: string | null | undefined): boolean {
-  return typeof text === "string" && text.includes("\\(");
-}
-
-function maybeTypesetTooltipMathJax(dom: HTMLElement): void {
-  const runtime = (globalThis as { MathJax?: MathJaxBrowserRuntime }).MathJax;
-  if (!runtime || typeof runtime.typesetPromise !== "function") {
-    return;
-  }
-  queueMicrotask(() => {
-    void runtime.typesetPromise?.([dom]).catch(() => {
-      // Keep tooltip rendering resilient if MathJax fails on malformed inline input.
-    });
-  });
 }
 
 // ── State fields ─────────────────────────────────────────────────────────────
@@ -273,20 +280,23 @@ const diagnosticsField = StateField.define<{ list: Diagnostic[]; decorations: De
   provide: (f) => EditorView.decorations.from(f, (v) => v.decorations)
 });
 
-const figureOverlayField = StateField.define<DecorationSet>({
-  create: () => Decoration.none,
+export const figureOverlayField = StateField.define<{
+  request: FigureOverlayRequest | null;
+  decorations: DecorationSet;
+}>({
+  create: () => ({ request: null, decorations: Decoration.none }),
   update(value, tr) {
-    for (const effect of tr.effects) {
-      if (effect.is(setFigureOverlay)) {
-        return effect.value;
-      }
+    const request = tr.effects.find(effect => effect.is(setFigureOverlay))?.value;
+    const next = request ?? value.request;
+    if (next && (request || tr.docChanged) && tr.state.doc.length === next.source.length && tr.state.doc.toString() === next.source) {
+      return { request: next, decorations: buildFigureOverlayDecorations({ ...next, docLength: tr.state.doc.length }) };
     }
-    if (tr.docChanged) {
-      return value.map(tr.changes);
-    }
-    return value;
+    // A new range can arrive before the coalesced source sync. Keep it pending
+    // until the matching document arrives, rather than mapping it a second time.
+    if (request) return { request, decorations: Decoration.none };
+    return tr.docChanged ? { ...value, decorations: value.decorations.map(tr.changes) } : value;
   },
-  provide: (f) => EditorView.decorations.from(f)
+  provide: field => EditorView.decorations.from(field, value => value.decorations)
 });
 
 function findExternalSourceSyncAnnotation(
@@ -304,22 +314,8 @@ function findExternalSourceSyncAnnotation(
 function buildExternalSourceSyncChanges(
   currentSource: string,
   nextSource: string,
-  lastEditPatches: readonly SourceSyncPatch[] | null,
-  canTrustPatches: boolean,
-  trustedPatchChain: readonly SourceSyncPatchStep[] | null
+  lastEditPatches: readonly SourceSyncPatch[] | null
 ): SourceSyncChanges {
-  if (trustedPatchChain && trustedPatchChain.length > 0) {
-    return {
-      changes: trustedPatchChain.flatMap((step) => sourcePatchChanges(step.patches)),
-      trustedPatch: true
-    };
-  }
-  if (canTrustPatches && lastEditPatches && lastEditPatches.length > 0) {
-    return {
-      changes: sourcePatchChanges(lastEditPatches),
-      trustedPatch: true
-    };
-  }
   if (
     lastEditPatches &&
     lastEditPatches.length > 0 &&
@@ -327,13 +323,41 @@ function buildExternalSourceSyncChanges(
   ) {
     return {
       changes: sourcePatchChanges(lastEditPatches),
-      trustedPatch: false
+      trustedPatch: true
     };
   }
+  // Undo, reloads and assistant updates carry no patch. Replace only the
+  // span that differs: replacing the whole document would make the editor
+  // reparse its syntax from scratch and lose folds and the caret's place.
+  let prefix = 0;
+  const limit = Math.min(currentSource.length, nextSource.length);
+  while (prefix < limit && currentSource.charCodeAt(prefix) === nextSource.charCodeAt(prefix)) prefix += 1;
+  let currentEnd = currentSource.length;
+  let nextEnd = nextSource.length;
+  while (currentEnd > prefix && nextEnd > prefix && currentSource.charCodeAt(currentEnd - 1) === nextSource.charCodeAt(nextEnd - 1)) {
+    currentEnd -= 1;
+    nextEnd -= 1;
+  }
   return {
-    changes: { from: 0, to: currentSource.length, insert: nextSource },
+    changes: { from: prefix, to: currentEnd, insert: nextSource.slice(prefix, nextEnd) },
     trustedPatch: false
   };
+}
+
+function patchChainMatchesSourceTransition(
+  currentSource: string,
+  nextSource: string,
+  patchChain: readonly SourceSyncPatchStep[]
+): boolean {
+  let source = currentSource;
+  for (const step of patchChain) {
+    const applied = applySourcePatches(source, step.patches);
+    if (applied.kind !== "success") {
+      return false;
+    }
+    source = applied.source;
+  }
+  return source === nextSource;
 }
 
 function sourcePatchChanges(patches: readonly SourceSyncPatch[]): SourceSyncChange[] {
@@ -344,7 +368,8 @@ function sourcePatchChanges(patches: readonly SourceSyncPatch[]): SourceSyncChan
   }));
 }
 
-class ExternalSourceSyncManager {
+// Exported for tests (test/web/source-sync-stale-buffer.spec.ts).
+export class ExternalSourceSyncManager {
   private lastKnownSource: string;
   private lastKnownRevision: number | null;
 
@@ -375,7 +400,6 @@ class ExternalSourceSyncManager {
     nextSource: string,
     sourceRevision: number,
     lastEditPatches: readonly SourceSyncPatch[] | null,
-    lastEditPatchBaseRevision: number | null,
     patchChain: readonly SourceSyncPatchStep[] | null,
     coalescedToAnimationFrame: boolean
   ): void {
@@ -386,32 +410,25 @@ class ExternalSourceSyncManager {
       this.lastKnownRevision = sourceRevision;
       return;
     }
-    if (
-      this.lastKnownRevision == null &&
-      lastEditPatchBaseRevision != null &&
-      lastEditPatches != null &&
-      lastEditPatches.length > 0
-    ) {
-      this.lastKnownRevision = lastEditPatchBaseRevision;
-    }
-    const canTrustPatches =
-      lastEditPatches != null &&
-      lastEditPatches.length > 0 &&
-      lastEditPatchBaseRevision != null &&
-      lastEditPatchBaseRevision === this.lastKnownRevision;
-    const trustedPatchChain =
+    // Revision bookkeeping cannot authorize patch application: buffer edits
+    // reset lastKnownRevision to null, and revision numbers are per-document
+    // counters that can collide across document switches. Patches are applied
+    // only when replaying them on the tracked buffer content reproduces
+    // nextSource exactly; anything else falls back to replacing the whole
+    // document.
+    const verifiedPatchChain =
       patchChain &&
       patchChain.length > 0 &&
-      patchChain[0]?.baseRevision === this.lastKnownRevision &&
-      patchChain[patchChain.length - 1]?.sourceRevision === sourceRevision
+      patchChain[patchChain.length - 1]?.sourceRevision === sourceRevision &&
+      patchChainMatchesSourceTransition(this.lastKnownSource, nextSource, patchChain)
         ? patchChain
         : null;
-    if (trustedPatchChain) {
-      const patchCount = trustedPatchChain.reduce((count, step) => count + step.patches.length, 0);
+    if (verifiedPatchChain) {
+      const patchCount = verifiedPatchChain.reduce((count, step) => count + step.patches.length, 0);
       const startedAt = performance.now();
       dispatchPatchChainWithStableHorizontalScroll(
         this.view,
-        trustedPatchChain,
+        verifiedPatchChain,
         nextSource,
         sourceRevision
       );
@@ -431,9 +448,7 @@ class ExternalSourceSyncManager {
     const syncChanges = buildExternalSourceSyncChanges(
       this.lastKnownSource,
       nextSource,
-      lastEditPatches,
-      canTrustPatches,
-      null
+      lastEditPatches
     );
     const patchCount = Array.isArray(syncChanges.changes) ? syncChanges.changes.length : 1;
     const mode = Array.isArray(syncChanges.changes) ? "patch" : "replace";
@@ -461,7 +476,7 @@ class ExternalSourceSyncManager {
   }
 }
 
-const externalSourceSyncPlugin = ViewPlugin.fromClass(ExternalSourceSyncManager);
+export const externalSourceSyncPlugin = ViewPlugin.fromClass(ExternalSourceSyncManager);
 
 function useExternalSourceSync(
   viewRef: RefObject<EditorView | null>,
@@ -470,11 +485,16 @@ function useExternalSourceSync(
   lastEditPatches: readonly SourceSyncPatch[] | null,
   lastEditPatchBaseRevision: number | null,
   coalesceToAnimationFrame: boolean,
-  throttleMs = 0
+  inIdleTime = false,
+  onSourceSynced?: () => void
 ) {
   const rafIdRef = useRef<number | null>(null);
-  const throttleIdRef = useRef<number | null>(null);
+  const cancelIdleRef = useRef<(() => void) | null>(null);
   const pendingSyncRef = useRef<PendingExternalSourceSync | null>(null);
+  const onSourceSyncedRef = useRef(onSourceSynced);
+  useLayoutEffect(() => {
+    onSourceSyncedRef.current = onSourceSynced;
+  }, [onSourceSynced]);
 
   useEffect(() => {
     return () => {
@@ -482,10 +502,8 @@ function useExternalSourceSync(
         window.cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
-      if (throttleIdRef.current != null) {
-        window.clearTimeout(throttleIdRef.current);
-        throttleIdRef.current = null;
-      }
+      cancelIdleRef.current?.();
+      cancelIdleRef.current = null;
       pendingSyncRef.current = null;
     };
   }, []);
@@ -505,12 +523,11 @@ function useExternalSourceSync(
         window.cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
-      if (throttleIdRef.current != null) {
-        window.clearTimeout(throttleIdRef.current);
-        throttleIdRef.current = null;
-      }
+      cancelIdleRef.current?.();
+      cancelIdleRef.current = null;
       pendingSyncRef.current = null;
-      plugin.syncExternalSource(source, sourceRevision, lastEditPatches, lastEditPatchBaseRevision, null, false);
+      plugin.syncExternalSource(source, sourceRevision, lastEditPatches, null, false);
+      onSourceSyncedRef.current?.();
       return;
     }
 
@@ -533,13 +550,12 @@ function useExternalSourceSync(
       nextSource: source,
       sourceRevision,
       lastEditPatches,
-      lastEditPatchBaseRevision,
       patchChain,
       coalescedToAnimationFrame: true
     };
     const flushPendingSync = () => {
       rafIdRef.current = null;
-      throttleIdRef.current = null;
+      cancelIdleRef.current = null;
       const pending = pendingSyncRef.current;
       pendingSyncRef.current = null;
       if (!pending) {
@@ -549,23 +565,20 @@ function useExternalSourceSync(
         pending.nextSource,
         pending.sourceRevision,
         pending.lastEditPatches,
-        pending.lastEditPatchBaseRevision,
         pending.patchChain,
         pending.coalescedToAnimationFrame
       );
+      onSourceSyncedRef.current?.();
     };
-    if (throttleMs > 0) {
-      if (throttleIdRef.current != null) {
-        return;
-      }
-      throttleIdRef.current = window.setTimeout(flushPendingSync, throttleMs);
+    if (rafIdRef.current != null || cancelIdleRef.current != null) {
       return;
     }
-    if (rafIdRef.current != null) {
+    if (inIdleTime) {
+      cancelIdleRef.current = whenIdle(flushPendingSync);
       return;
     }
     rafIdRef.current = window.requestAnimationFrame(flushPendingSync);
-  }, [coalesceToAnimationFrame, lastEditPatchBaseRevision, lastEditPatches, source, sourceRevision, throttleMs, viewRef]);
+  }, [coalesceToAnimationFrame, lastEditPatchBaseRevision, lastEditPatches, inIdleTime, source, sourceRevision, viewRef]);
 }
 
 const diagnosticTooltip = hoverTooltip((view, pos) => {
@@ -611,6 +624,45 @@ export function prioritizeDiagnosticsForDisplay(diagnostics: readonly Diagnostic
     result.push(diagnostic);
   }
   return result;
+}
+
+export function sourcePanelDiagnostics(
+  snapshot: SessionSnapshot,
+  source: string
+): DiagnosticInput[] {
+  if (snapshot.source !== source) {
+    return [];
+  }
+  if (snapshot.deck) {
+    return prioritizeDiagnosticsForDisplay(
+      snapshot.deck.diagnostics.map((diagnostic) => ({
+        ...diagnostic,
+        code: diagnostic.code ?? "beamer",
+        from: diagnostic.span.from,
+        to: diagnostic.span.to,
+        source: "beamer" as const
+      }))
+    );
+  }
+
+  const result: DiagnosticInput[] = [];
+  for (const diagnostic of snapshot.parseResult?.diagnostics ?? []) {
+    result.push({
+      ...diagnostic,
+      from: diagnostic.span.from,
+      to: diagnostic.span.to,
+      source: "parse"
+    });
+  }
+  for (const diagnostic of snapshot.semanticResult?.diagnostics ?? []) {
+    result.push({
+      ...diagnostic,
+      from: diagnostic.span.from,
+      to: diagnostic.span.to,
+      source: "semantic"
+    });
+  }
+  return prioritizeDiagnosticsForDisplay(result);
 }
 
 function isRecoveryNoiseDiagnostic(
@@ -725,14 +777,6 @@ const docsTooltip = hoverTooltip(async (view, pos, side) => {
       linkRow.appendChild(link);
       dom.appendChild(linkRow);
 
-      const shouldTypesetMath =
-        includesInlineMath(entry.signatureHtml) ||
-        includesInlineMath(entry.defaultHtml) ||
-        includesInlineMath(entry.snippetHtml);
-      if (shouldTypesetMath) {
-        maybeTypesetTooltipMathJax(dom);
-      }
-
       return { dom };
     }
   };
@@ -759,9 +803,16 @@ export function SourcePanel() {
   const {
     source,
     sourceRevision,
+    documentKind,
+    activeDocumentId,
+    deckObjectSelection,
+    deckBuildSelection,
+    sourceReveal,
+    showSourcePanel,
     lastEditPatches,
     lastEditPatchBaseRevision,
-    activeFigureId,
+    activeRootId,
+    deckNavigationSource,
     snapshot,
     activeCanvasDragKind,
     activeCanvasTextEditSourceId,
@@ -772,9 +823,16 @@ export function SourcePanel() {
   } = useEditorStore(useShallow((s) => ({
     source: s.source,
     sourceRevision: s.sourceRevision,
+    documentKind: s.documentKind,
+    activeDocumentId: s.activeDocumentId,
+    deckObjectSelection: s.deckObjectSelection,
+    deckBuildSelection: s.deckBuildSelection,
+    sourceReveal: s.sourceReveal,
+    showSourcePanel: s.showSourcePanel,
     lastEditPatches: s.lastEditPatches,
     lastEditPatchBaseRevision: s.lastEditPatchBaseRevision,
-    activeFigureId: s.activeFigureId,
+    activeRootId: s.activeRootId,
+    deckNavigationSource: s.documents[s.activeDocumentId]?.deckSlideSelection?.source === s.source ? s.source : null,
     snapshot: s.snapshot,
     activeCanvasDragKind: s.activeCanvasDragKind,
     activeCanvasTextEditSourceId: s.activeCanvasTextEditSourceId,
@@ -783,7 +841,16 @@ export function SourcePanel() {
     assistantLockReason: s.documents[s.activeDocumentId]?.assistantLockReason ?? null,
     dispatch: s.dispatch
   })));
-  const figures = snapshot.figures;
+  const sourceLanguageMode: SourceLanguageMode =
+    documentKind === "beamer"
+      ? "beamer"
+      : /\\begin\{tikzpicture\*?\}/u.test(source)
+        ? "tex"
+        : "tikz";
+  const figures = useMemo(
+    () => (snapshot.deck ? snapshot.deck.frames : snapshot.figures),
+    [snapshot.deck, snapshot.figures]
+  );
   const {
     editorWordWrap,
     editorFontSize,
@@ -808,21 +875,14 @@ export function SourcePanel() {
   const suppressStoreSelectionSyncRef = useRef(false);
   const suppressElementScrollOnFigureSwitchRef = useRef(false);
   const colorPickerApplyingRef = useRef(false);
-  const diagnosticTimerRef = useRef<number | null>(null);
   const spanIndexRef = useRef<SourceSpanIndex>(EMPTY_SPAN_INDEX);
   const symbolsRef = useRef<DocumentSymbols>(EMPTY_SYMBOLS);
   const selectedElementIdsRef = useRef(selectedElementIds);
   const figuresRef = useRef(figures);
-  const activeFigureIdRef = useRef(activeFigureId);
+  const activeRootIdRef = useRef(activeRootId);
   const [activeColorPicker, setActiveColorPicker] = useState<ActiveColorPickerSession | null>(null);
   const projectNamedColorSwatches = useProjectNamedColorSwatches();
-  const figureOverlaySignature = useMemo(
-    () =>
-      figures.length < 2
-        ? `${activeFigureId ?? ""}:single:${source.length}`
-        : `${activeFigureId ?? ""}:${source.length}:${figures.map((figure) => `${figure.id}:${figure.span.from}:${figure.span.to}`).join("|")}`,
-    [activeFigureId, figures, source.length]
-  );
+
 
   useEffect(() => {
     selectedElementIdsRef.current = selectedElementIds;
@@ -830,8 +890,8 @@ export function SourcePanel() {
 
   useEffect(() => {
     figuresRef.current = figures;
-    activeFigureIdRef.current = activeFigureId;
-  }, [activeFigureId, figures]);
+    activeRootIdRef.current = activeRootId;
+  }, [activeRootId, figures]);
 
   useEffect(() => {
     spanIndexRef.current = buildSourceSpanIndex(snapshot.scene?.elements ?? [], snapshot.parseResult?.figure.body);
@@ -895,13 +955,13 @@ export function SourcePanel() {
         return;
       }
 
-      // Drive active-figure switching from CodeMirror selection updates so
-      // keyboard navigation and all cursor moves behave consistently.
-      if (update.view.hasFocus) {
+      // Follow caret movement across figures. Skip edits (including undo)
+      // because the root inventory still describes the previous source.
+      if (update.view.hasFocus && !update.docChanged) {
         const head = clamp(update.state.selection.main.head, 0, update.state.doc.length);
         const targetFigure = figuresRef.current.find((figure) => head >= figure.span.from && head <= figure.span.to) ?? null;
-        if (targetFigure && targetFigure.id !== activeFigureIdRef.current) {
-          dispatch({ type: "SET_ACTIVE_FIGURE", figureId: targetFigure.id });
+        if (targetFigure && targetFigure.id !== activeRootIdRef.current) {
+          dispatch({ type: "SET_ACTIVE_ROOT", rootId: targetFigure.id });
         }
       }
 
@@ -929,13 +989,11 @@ export function SourcePanel() {
       }
     });
 
-    const completionExtension = ENABLE_TIKZ_AUTOCOMPLETE
-      ? autocompletion({
+    const completionExtension = autocompletion({
           override: [
             (context) => tikzCompletion(context, symbolsRef.current)
           ]
-        })
-      : autocompletion();
+        });
 
     const state = CMState.create({
       doc: source,
@@ -951,7 +1009,7 @@ export function SourcePanel() {
         dropCursor(),
         CMState.allowMultipleSelections.of(true),
         indentOnInput(),
-        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        syntaxHighlighting(lightHighlightStyle, { fallback: true }),
         bracketMatching(),
         closeBrackets(),
         completionExtension,
@@ -969,7 +1027,7 @@ export function SourcePanel() {
           ...lintKeymap,
         ]),
         editorKeymap,
-        tikz(),
+        languageCompartment.of(sourceLanguage(sourceLanguageMode)),
         wordWrapCompartment.of(editorWordWrap ? EditorView.lineWrapping : []),
         fontSizeCompartment.of(EditorView.theme({ "& .cm-scroller": { fontSize: `${editorFontSize}px` } })),
         tabSizeCompartment.of(CMState.tabSize.of(editorIndentSize)),
@@ -1019,10 +1077,6 @@ export function SourcePanel() {
 
     return () => {
       dispatch({ type: "SET_ACTIVE_SOURCE_SCRUB", sourceId: null });
-      if (diagnosticTimerRef.current != null) {
-        clearTimeout(diagnosticTimerRef.current);
-        diagnosticTimerRef.current = null;
-      }
       view.destroy();
       viewRef.current = null;
     };
@@ -1055,6 +1109,14 @@ export function SourcePanel() {
   }, [assistantLockReason]);
 
   useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: languageCompartment.reconfigure(sourceLanguage(sourceLanguageMode))
+    });
+  }, [sourceLanguageMode]);
+
+  useEffect(() => {
     const observer = new MutationObserver(() => {
       setDarkMode(document.documentElement.dataset.colorScheme === "dark");
     });
@@ -1068,6 +1130,65 @@ export function SourcePanel() {
     view.dispatch({ effects: highlightCompartment.reconfigure(buildHighlightExtension(darkMode)) });
   }, [darkMode]);
 
+
+  useEffect(() => {
+    const view = viewRef.current;
+    const selected = deckBuildSelection;
+    if (!view || !showSourcePanel || selected?.documentId !== activeDocumentId || selected.frameId !== activeRootId ||
+      selected.sourceRevision !== sourceRevision ||
+      (view.hasFocus && !selected.revealSource)) return;
+    ignoreNextSelectionSyncRef.current = true;
+    dispatchSelectionWithStableHorizontalScroll(view, {
+      selection: { anchor: selected.sourceSpan.from, head: selected.sourceSpan.to },
+      annotations: [Transaction.addToHistory.of(false)], scrollIntoView: true
+    });
+    if (selected.revealSource) view.focus();
+  }, [activeDocumentId, activeRootId, deckBuildSelection, showSourcePanel, sourceRevision]);
+
+  const lastSourceReveal = useRef<{ value: typeof sourceReveal; view: EditorView } | null>(null);
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !showSourcePanel || !sourceReveal || (lastSourceReveal.current?.value === sourceReveal && lastSourceReveal.current.view === view) ||
+      sourceReveal.documentId !== activeDocumentId || sourceReveal.sourceRevision !== sourceRevision) return;
+    lastSourceReveal.current = { value: sourceReveal, view };
+    ignoreNextSelectionSyncRef.current = true;
+    dispatchSelectionWithStableHorizontalScroll(view, {
+      selection: { anchor: sourceReveal.span.from, head: sourceReveal.span.to },
+      annotations: [Transaction.addToHistory.of(false)], scrollIntoView: true,
+    });
+    view.focus();
+  }, [sourceReveal, activeDocumentId, sourceRevision, showSourcePanel]);
+
+  const revealedPlaceholderSelectionRef = useRef<{ value: typeof deckObjectSelection; view: EditorView } | null>(null);
+  useEffect(() => {
+    const view = viewRef.current;
+    const frame = snapshot.deck?.activeFrame;
+    if (
+      !view ||
+      !showSourcePanel ||
+      !deckObjectSelection ||
+      (revealedPlaceholderSelectionRef.current?.value === deckObjectSelection && revealedPlaceholderSelectionRef.current.view === view) ||
+      deckObjectSelection.documentId !== activeDocumentId ||
+      deckObjectSelection.frameId !== frame?.frameId ||
+      snapshot.source !== source
+    ) {
+      return;
+    }
+    const item = frame.layout.items.find((candidate) =>
+      candidate.kind === "unsupported" && candidate.id === deckObjectSelection.objectId
+    );
+    if (!item || item.visibility === "hidden") {
+      return;
+    }
+    revealedPlaceholderSelectionRef.current = { value: deckObjectSelection, view };
+    ignoreNextSelectionSyncRef.current = true;
+    dispatchSelectionWithStableHorizontalScroll(view, {
+      selection: { anchor: item.sourceSpan.from, head: item.sourceSpan.to },
+      annotations: [Transaction.addToHistory.of(false)],
+      scrollIntoView: true
+    });
+    view.focus();
+  }, [activeDocumentId, deckObjectSelection, showSourcePanel, snapshot.deck, snapshot.source, source]);
 
   // ── Canvas selection → source selection sync ────────────────────────────────
   useEffect(() => {
@@ -1129,44 +1250,25 @@ export function SourcePanel() {
     });
   }, [selectedElementIds]);
 
-  // ── Sync store source → CodeMirror (for WYSIWYG changes) ───────────────────
-  useExternalSourceSync(
-    viewRef,
-    source,
-    sourceRevision,
-    lastEditPatches,
-    lastEditPatchBaseRevision,
-    activeCanvasDragKind != null || lastEditPatches != null,
-    activeCanvasDragKind != null || activeCanvasTextEditSourceId != null ? 80 : 0
-  );
-
-  useEffect(() => {
+  const prevActiveFigureRef = useRef<{ rootId: string | null; navigationSource: string | null; view: EditorView | null }>({ rootId: activeRootId, navigationSource: deckNavigationSource, view: null });
+  const syncActiveFigureSelection = useCallback(() => {
     const view = viewRef.current;
-    if (!view) {
+    // A slide edit changes source and root selection before the new render
+    // snapshot and the coalesced CodeMirror update arrive. Do not consume the
+    // root change using positions from either older document.
+    if (!view || snapshot.source !== source || view.state.doc.toString() !== source ||
+      (snapshot.deck && snapshot.activeRootId !== activeRootId)) {
       return;
     }
-    const decorations = buildFigureOverlayDecorations({
-      docLength: view.state.doc.length,
-      figures,
-      activeFigureId
-    });
-    view.dispatch({ effects: setFigureOverlay.of(decorations) });
-  }, [activeFigureId, figureOverlaySignature, figures]);
-
-  const prevActiveFigureIdRef = useRef(activeFigureId);
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view) {
-      return;
-    }
-    const activeFigure = figures.find((figure) => figure.id === activeFigureId);
+    const activeFigure = figures.find((figure) => figure.id === activeRootId);
     if (!activeFigure) {
       return;
     }
     // Only scroll to figure top when the active figure actually changes,
     // not on every reparse (which updates the `figures` array reference).
-    const figureChanged = prevActiveFigureIdRef.current !== activeFigureId;
-    prevActiveFigureIdRef.current = activeFigureId;
+    const figureChanged = prevActiveFigureRef.current.view !== view || prevActiveFigureRef.current.rootId !== activeRootId ||
+      (deckNavigationSource != null && prevActiveFigureRef.current.navigationSource !== deckNavigationSource);
+    prevActiveFigureRef.current = { rootId: activeRootId, navigationSource: deckNavigationSource, view };
     if (!figureChanged) {
       return;
     }
@@ -1190,7 +1292,31 @@ export function SourcePanel() {
     view.dispatch({
       effects: EditorView.scrollIntoView(anchor, { y: "start", yMargin: 8 })
     });
-  }, [activeFigureId, figures]);
+  }, [activeRootId, deckNavigationSource, figures, snapshot.source, snapshot.deck, snapshot.activeRootId, source]);
+
+  const syncSourceCosmetics = useCallback(() => {
+    syncActiveFigureSelection();
+    const view = viewRef.current;
+    if (view?.state.doc.toString() === source) {
+      view.dispatch({ effects: setFigureOverlay.of({ source: snapshot.source, figures, activeRootId }) });
+    }
+  }, [activeRootId, figures, snapshot.source, source, syncActiveFigureSelection]);
+  const sourceCosmeticsReady = snapshot.source === source &&
+    (!snapshot.deck || snapshot.activeRootId === activeRootId);
+  const scheduleSourceCosmetics = useAfterCanvasPaint(syncSourceCosmetics, sourceCosmeticsReady);
+
+  // Buffer and edit bookkeeping remain immediate; only auto-scroll/dimming
+  // wait until the current canvas has had a paint opportunity.
+  useExternalSourceSync(
+    viewRef,
+    source,
+    sourceRevision,
+    lastEditPatches,
+    lastEditPatchBaseRevision,
+    activeCanvasDragKind != null || lastEditPatches != null,
+    activeCanvasDragKind != null || activeCanvasTextEditSourceId != null,
+    scheduleSourceCosmetics
+  );
 
   useEffect(() => {
     if (!activeColorPicker) {
@@ -1198,7 +1324,7 @@ export function SourcePanel() {
     }
 
     function handlePointerDown(event: PointerEvent): void {
-      const target = event.target as Node | null;
+      const target = event.target instanceof Node ? event.target : null;
       if (!target) {
         return;
       }
@@ -1241,44 +1367,21 @@ export function SourcePanel() {
   }, [hoveredElementId, snapshot.scene]);
 
   // ── Update diagnostic decorations when snapshot changes ────────────────────
-  useEffect(() => {
-    if (diagnosticTimerRef.current != null) {
-      clearTimeout(diagnosticTimerRef.current);
-    }
-
-    diagnosticTimerRef.current = window.setTimeout(() => {
-      diagnosticTimerRef.current = null;
-      const view = viewRef.current;
-      if (!view) return;
-
-      const docSource = view.state.doc.toString();
-      const parse = snapshot.parseResult;
-      const semantic = snapshot.semanticResult;
-
-      if (parse?.source !== docSource) {
-        view.dispatch({ effects: setDiagnostics.of([]) });
-        return;
-      }
-
-      const list = prioritizeDiagnosticsForDisplay([
-        ...parse.diagnostics.map((d) => ({ ...d, from: d.span.from, to: d.span.to, source: "parse" as const })),
-        ...(semantic?.diagnostics ?? []).map((d) => ({
-          ...d,
-          from: d.span.from,
-          to: d.span.to,
-          source: "semantic" as const
-        }))
-      ]);
-      view.dispatch({ effects: setDiagnostics.of(list) });
-    }, DIAGNOSTIC_DEBOUNCE_MS);
-
-    return () => {
-      if (diagnosticTimerRef.current != null) {
-        clearTimeout(diagnosticTimerRef.current);
-        diagnosticTimerRef.current = null;
-      }
-    };
+  // After the canvas paints. A drag publishes a snapshot every frame, almost
+  // always with the same diagnostics: those need no transaction.
+  const appliedDiagnosticsRef = useRef<{ doc: Text; key: string } | null>(null);
+  const applyDiagnostics = useCallback(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const doc = view.state.doc;
+    const list = doc.length === snapshot.source.length ? sourcePanelDiagnostics(snapshot, doc.toString()) : [];
+    const key = JSON.stringify(list.map(({ from, to, severity, code, message }) => [from, to, severity, code, message]));
+    const applied = appliedDiagnosticsRef.current;
+    if (applied?.doc === doc && applied.key === key) return;
+    appliedDiagnosticsRef.current = { doc, key };
+    view.dispatch({ effects: setDiagnostics.of(list) });
   }, [snapshot]);
+  useAfterCanvasPaint(applyDiagnostics, true);
 
   useEffect(() => {
     const handleFormatRequest = (): void => {
@@ -1318,7 +1421,10 @@ export function SourcePanel() {
       if (!view || assistantLockReason) {
         return;
       }
-      const detail = (event as CustomEvent<SourceAccessoryCommandDetail>).detail;
+      const detail: unknown = event instanceof CustomEvent ? event.detail : null;
+      if (!isSourceAccessoryCommandDetail(detail)) {
+        return;
+      }
       switch (detail.command) {
         case "indent":
           indentMore(view);
@@ -1373,21 +1479,8 @@ export function SourcePanel() {
     : null;
 
   const diagnostics = useMemo(() => {
-    const parse = snapshot.parseResult;
-    const semantic = snapshot.semanticResult;
-    const result: DiagnosticInput[] = [];
-    if (parse) {
-      for (const d of parse.diagnostics) {
-        result.push({ ...d, from: d.span.from, to: d.span.to, source: "parse" });
-      }
-    }
-    if (semantic) {
-      for (const d of semantic.diagnostics) {
-        result.push({ ...d, from: d.span.from, to: d.span.to, source: "semantic" });
-      }
-    }
-    return prioritizeDiagnosticsForDisplay(result);
-  }, [snapshot.parseResult, snapshot.semanticResult]);
+    return sourcePanelDiagnostics(snapshot, source);
+  }, [snapshot, source]);
 
   return (
     <div className={css.panel}>
@@ -1397,9 +1490,7 @@ export function SourcePanel() {
       {diagnostics.length > 0 && (
         <div className={css.diagnostics}>
           {diagnostics.slice(0, 5).map((d, i) => {
-            const line = snapshot.parseResult
-              ? snapshot.parseResult.source.slice(0, d.from).split("\n").length
-              : null;
+            const line = source.slice(0, d.from).split("\n").length;
             return (
               <div
                 key={i}
@@ -1426,7 +1517,7 @@ export function SourcePanel() {
               >
                 <span className={css.diagnosticIcon}>{d.severity === "error" ? "\u2298" : "\u26A0"}</span>
                 <span className={css.diagnosticMessage} data-select="text">{d.message}</span>
-                {line != null && <span className={css.diagnosticLocation}>Ln {line}</span>}
+                {<span className={css.diagnosticLocation}>Ln {line}</span>}
               </div>
             );
           })}
@@ -1467,10 +1558,10 @@ type FigureOverlayFigure = {
 function buildFigureOverlayDecorations(params: {
   docLength: number;
   figures: readonly FigureOverlayFigure[];
-  activeFigureId: string | null;
+  activeRootId: string | null;
 }): DecorationSet {
-  const { docLength, figures, activeFigureId } = params;
-  if (figures.length < 2) {
+  const { docLength, figures, activeRootId } = params;
+  if (!hasMultipleRoots(figures.length)) {
     return Decoration.none;
   }
   const normalizedFigures = figures
@@ -1490,7 +1581,7 @@ function buildFigureOverlayDecorations(params: {
     return Decoration.none;
   }
   const decorations: Range<Decoration>[] = [];
-  const activeFigure = activeFigureId ? normalizedFigures.find((figure) => figure.id === activeFigureId) : null;
+  const activeFigure = activeRootId ? normalizedFigures.find((figure) => figure.id === activeRootId) : null;
   if (activeFigure) {
     if (activeFigure.span.from > 0) {
       decorations.push(Decoration.mark({ class: "cm-figure-dimmed" }).range(0, activeFigure.span.from));
@@ -1598,7 +1689,7 @@ function buildSourceSpanIndex(elements: readonly SceneElement[], statements: rea
   for (const element of elements) {
     const sourceId = element.sourceRef.sourceId.trim();
     const sourceSpan = element.sourceRef.sourceSpan;
-    if (!sourceId || !sourceSpan || sourceSpan.to <= sourceSpan.from) {
+    if (!sourceId || sourceSpan.to <= sourceSpan.from) {
       continue;
     }
     const existing = sceneSpansBySourceId.get(sourceId);
@@ -1676,12 +1767,12 @@ function collectTreeChildSpansBySourceId(elements: readonly SceneElement[]): Map
     if (!treeChild) {
       continue;
     }
-    const sourceId = treeChild.childSourceId?.trim() ?? "";
+    const sourceId = treeChild.childSourceId.trim();
     if (!sourceId) {
       continue;
     }
     const span = treeChild.bodySpan ?? treeChild.childOperationSpan;
-    if (!span || span.to <= span.from) {
+    if (span.to <= span.from) {
       continue;
     }
     const existing = spans.get(sourceId);
@@ -1970,10 +2061,6 @@ function uniqueStrings(values: Iterable<string>): string[] {
     unique.add(trimmed);
   }
   return [...unique].sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
-}
-
-function clamp(v: number, lo: number, hi: number) {
-  return Math.min(hi, Math.max(lo, v));
 }
 
 function computeInlineColorPopoverStyle(anchorRect: DOMRectReadOnly): CSSProperties {

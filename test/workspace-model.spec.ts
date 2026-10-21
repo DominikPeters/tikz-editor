@@ -1,3 +1,4 @@
+import { requireDocumentSession } from "../packages/app/src/store/document-sessions.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SOURCE, editorReducer, makeInitialState } from "../packages/app/src/store/reducer.js";
 import {
@@ -20,7 +21,7 @@ describe("workspace model", () => {
     expect(state.documents[state.activeDocumentId]).toBeDefined();
     expect(state.source).toBe(state.documents[state.activeDocumentId]?.source);
     expect(state.source).toBe(DEFAULT_SOURCE);
-    expect(state.workspaceVersion).toBe(3);
+    expect(state.workspaceVersion).toBe(4);
     expect(state.recentDocumentIds).toEqual([state.activeDocumentId]);
   });
 
@@ -59,6 +60,27 @@ describe("workspace model", () => {
 
     const switchedBack = editorReducer(editedSecond, { type: "SWITCH_DOCUMENT", documentId: firstId });
     expect(switchedBack.source).toBe(initial.source);
+  });
+
+  it("can restore transient source in an inactive document", () => {
+    const initial = makeInitialState();
+    const firstId = initial.activeDocumentId;
+    const withSecond = editorReducer(initial, {
+      type: "NEW_DOCUMENT",
+      source: "\\draw (2,2)--(3,3);",
+      title: "Doc B"
+    });
+    const secondId = withSecond.activeDocumentId;
+
+    const restored = editorReducer(withSecond, {
+      type: "SET_SOURCE_TRANSIENT",
+      documentId: firstId,
+      source: "\\draw (9,9)--(10,10);"
+    });
+
+    expect(restored.activeDocumentId).toBe(secondId);
+    expect(restored.source).toBe(withSecond.source);
+    expect(restored.documents[firstId]?.source).toBe("\\draw (9,9)--(10,10);");
   });
 
   it("closes tabs and falls back to a fresh doc after close-all", () => {
@@ -124,7 +146,7 @@ describe("workspace model", () => {
     });
 
     expect(workspace.activeDocumentId).toBe("doc-b");
-    expect(workspace.tabOrder).toEqual(["doc-b"]);
+    expect(workspace.tabOrder).toEqual(["doc-b", "doc-a"]);
     expect(workspace.recentDocumentIds).toEqual(["doc-b"]);
   });
 
@@ -160,9 +182,27 @@ describe("workspace model", () => {
     expect(projected.activeDocumentId).toBe(documentId);
     expect(projected.tabOrder).toEqual([documentId]);
 
+    const recovered = projectState({
+      ...workspace,
+      activeDocumentId: "missing",
+      tabOrder: ["missing"]
+    }, ui);
+    expect(recovered.activeDocumentId).toBe(documentId);
+    expect(recovered.tabOrder).toEqual([documentId]);
+    expect(requireDocumentSession(recovered.documents, documentId).source).toBe(requireDocumentSession(workspace.documents, documentId).source);
+
+    const sparse = projectState({
+      ...workspace,
+      documents: { missing: undefined, ...workspace.documents },
+      activeDocumentId: "missing",
+      tabOrder: ["missing", documentId]
+    }, ui);
+    expect(sparse.activeDocumentId).toBe(documentId);
+    expect(sparse.tabOrder).toEqual([documentId]);
+
     const replacement = projectState({
       ...workspace,
-      documents: {},
+      documents: { missing: undefined },
       activeDocumentId: "missing",
       tabOrder: ["missing"],
       recentDocumentIds: ["missing"]

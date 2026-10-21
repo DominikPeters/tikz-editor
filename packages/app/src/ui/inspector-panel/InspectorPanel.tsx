@@ -1,3 +1,4 @@
+import type { EditAction } from "@tikz-editor/core/edit/actions";
 import {
 RiAlignCenter,
 RiAlignJustify,
@@ -10,7 +11,7 @@ RiFontSerif,
 RiItalic
 } from "@remixicon/react";
 import { useCallback,useEffect,useMemo,useState,type FocusEvent,type JSX } from "react";
-import { CM_PER_PT, formatNumber } from "tikz-editor/edit/format";
+import { CM_PER_PT, formatNumber } from "@tikz-editor/core/edit/format";
 import {
 getInspectorDescriptor,
 NODE_INNER_SEP_DEFAULT,
@@ -21,7 +22,7 @@ type NodeFontSizePresetId,
 type NodeTextAlignInspectorValue,
 type SetPropertyWriteTarget,
 type ShadowPresetId
-} from "tikz-editor/edit/inspector";
+} from "@tikz-editor/core/edit/inspector";
 import {
 buildNodeMinimumDimensionSetPropertyMutations,
 buildShadowMutationContextForPreset,
@@ -29,8 +30,8 @@ buildShadowSetPropertyMutations,
 buildTransformSetPropertyMutations,
 type NodeMinimumDimensionKey,
 type ShadowMutationContext
-} from "tikz-editor/edit/property-write-builders";
-import { propertyIdForWriteKey } from "tikz-editor/edit/property-registry";
+} from "@tikz-editor/core/edit/property-write-builders";
+import { propertyIdForWriteKey } from "@tikz-editor/core/edit/property-registry";
 import { BASIC_PICKER_COLORS } from "../../colors/color-palette";
 import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
 import { useEditorStore } from "../../store/store";
@@ -199,8 +200,8 @@ export function InspectorPanel() {
     }
     if (!write.transformContext) {
       applySetProperty(write, formatNumberWriteValue(property, next), {
-        clearKeys: property.clearKeys,
-        recordInHistory: options.recordInHistory
+        ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys }),
+        ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
       });
       return;
     }
@@ -214,23 +215,20 @@ export function InspectorPanel() {
       return;
     }
 
-    const mergeKey = `single-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const mutation of mutations) {
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        historyMergeKey: mergeKey,
-        recordInHistory: options.recordInHistory,
-        action: {
-          kind: "setProperty",
-          elementId: write.elementId,
-          level: write.level,
-          key: mutation.key,
-          value: mutation.value,
-          propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
-          clearKeys: mutation.clearKeys
-        }
+      const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
+      actions.push({
+        kind: "setProperty",
+        elementId: write.elementId,
+        level: write.level,
+        key: mutation.key,
+        value: mutation.value,
+        ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
+        clearKeys: mutation.clearKeys
       });
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }
 
   function renderSingleTextField(
@@ -273,22 +271,18 @@ export function InspectorPanel() {
       return;
     }
 
-    const mergeKey = `multi-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const write of writableWrites) {
       if (!write.transformContext) {
-        dispatch({
-          type: "APPLY_EDIT_ACTION",
-          historyMergeKey: mergeKey,
-          recordInHistory: options.recordInHistory,
-          action: {
-            kind: "setProperty",
-            elementId: write.elementId,
-            level: write.level,
-            key: write.key,
-            value: formatNumberWriteValue(property, next),
-            propertyId: write.propertyId ?? propertyIdForWriteKey(write.key) ?? undefined,
-            clearKeys: property.clearKeys
-          }
+        const resolvedPropertyId = write.propertyId ?? propertyIdForWriteKey(write.key) ?? undefined;
+        actions.push({
+          kind: "setProperty",
+          elementId: write.elementId,
+          level: write.level,
+          key: write.key,
+          value: formatNumberWriteValue(property, next),
+          ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
+          ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
         });
         continue;
       }
@@ -298,22 +292,19 @@ export function InspectorPanel() {
         next
       );
       for (const mutation of mutations) {
-        dispatch({
-          type: "APPLY_EDIT_ACTION",
-          historyMergeKey: mergeKey,
-          recordInHistory: options.recordInHistory,
-          action: {
-            kind: "setProperty",
-            elementId: write.elementId,
-            level: write.level,
-            key: mutation.key,
-            value: mutation.value,
-            propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
+        const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
+        actions.push({
+          kind: "setProperty",
+          elementId: write.elementId,
+          level: write.level,
+          key: mutation.key,
+          value: mutation.value,
+          ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
           clearKeys: mutation.clearKeys
-          }
         });
       }
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }
 
   function formatNumberWriteValue(
@@ -592,23 +583,20 @@ export function InspectorPanel() {
       if (mutations.length === 0) {
         return;
       }
-      const mergeKey = options.recordInHistory === false ? undefined : `single-set:${Date.now().toString(36)}`;
+      const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
       for (const mutation of mutations) {
-        dispatch({
-          type: "APPLY_EDIT_ACTION",
-          historyMergeKey: mergeKey,
-          recordInHistory: options.recordInHistory,
-          action: {
-            kind: "setProperty",
-            elementId: property.write.elementId,
-            level: property.write.level,
-            key: mutation.key,
-            value: mutation.value,
-            propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
+        const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
+        actions.push({
+          kind: "setProperty",
+          elementId: property.write.elementId,
+          level: property.write.level,
+          key: mutation.key,
+          value: mutation.value,
+          ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
           clearKeys: mutation.clearKeys
-          }
         });
       }
+      if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
       return;
     }
     if (property.write.shadowContext) {
@@ -616,8 +604,8 @@ export function InspectorPanel() {
       return;
     }
     applySetProperty(property.write, `${formatNumber(value)}pt`, {
-      clearKeys: property.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys }),
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }
 
@@ -630,38 +618,35 @@ export function InspectorPanel() {
     if (!write.shadowContext || !write.writable || write.elementId.length === 0) return;
     const ctx = write.shadowContext;
     let nextContext: ShadowMutationContext;
-    if (propertyId === "shadow-xshift") {
-      nextContext = { ...ctx, xshiftPt: value as number };
-    } else if (propertyId === "shadow-yshift") {
-      nextContext = { ...ctx, yshiftPt: value as number };
-    } else if (propertyId === "shadow-scale") {
-      nextContext = { ...ctx, scale: value as number };
-    } else if (propertyId === "shadow-opacity") {
-      nextContext = { ...ctx, opacity: value as number };
-    } else if (propertyId === "shadow-color") {
-      nextContext = { ...ctx, color: value as string | null };
+    if (propertyId === "shadow-xshift" && typeof value === "number") {
+      nextContext = { ...ctx, xshiftPt: value };
+    } else if (propertyId === "shadow-yshift" && typeof value === "number") {
+      nextContext = { ...ctx, yshiftPt: value };
+    } else if (propertyId === "shadow-scale" && typeof value === "number") {
+      nextContext = { ...ctx, scale: value };
+    } else if (propertyId === "shadow-opacity" && typeof value === "number") {
+      nextContext = { ...ctx, opacity: value };
+    } else if (propertyId === "shadow-color" && (typeof value === "string" || value === null)) {
+      nextContext = { ...ctx, color: value };
     } else {
       return;
     }
     const mutations = buildShadowSetPropertyMutations(nextContext);
     if (mutations.length === 0) return;
-    const mergeKey = options.recordInHistory === false ? undefined : `single-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const mutation of mutations) {
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        historyMergeKey: mergeKey,
-        recordInHistory: options.recordInHistory,
-        action: {
-          kind: "setProperty",
-          elementId: write.elementId,
-          level: write.level,
-          key: mutation.key,
-          value: mutation.value,
-          propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
-          clearKeys: mutation.clearKeys
-        }
+      const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
+      actions.push({
+        kind: "setProperty",
+        elementId: write.elementId,
+        level: write.level,
+        key: mutation.key,
+        value: mutation.value,
+        ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
+        clearKeys: mutation.clearKeys
       });
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }
 
   function applyShadowPresetValue(
@@ -674,22 +659,20 @@ export function InspectorPanel() {
       nextPreset === context.preset ? context : buildShadowMutationContextForPreset(nextPreset);
     const mutations = buildShadowSetPropertyMutations(nextContext);
     if (mutations.length === 0) return;
-    const mergeKey = `single-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const mutation of mutations) {
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        historyMergeKey: mergeKey,
-        action: {
-          kind: "setProperty",
-          elementId: write.elementId,
-          level: write.level,
-          key: mutation.key,
-          value: mutation.value,
-          propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
-          clearKeys: mutation.clearKeys
-        }
+      const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
+      actions.push({
+        kind: "setProperty",
+        elementId: write.elementId,
+        level: write.level,
+        key: mutation.key,
+        value: mutation.value,
+        ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
+        clearKeys: mutation.clearKeys
       });
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "setProperties", actions } });
   }
 
   function applyMultiLengthValue(
@@ -721,31 +704,28 @@ export function InspectorPanel() {
       if (writableEntries.length === 0) {
         return;
       }
-      const mergeKey = options.recordInHistory === false ? undefined : `multi-set:${Date.now().toString(36)}`;
+      const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
       for (const { write, context } of writableEntries) {
         const mutations = buildNodeMinimumDimensionSetPropertyMutations(context, editedKey, value);
         for (const mutation of mutations) {
-          dispatch({
-            type: "APPLY_EDIT_ACTION",
-            historyMergeKey: mergeKey,
-            recordInHistory: options.recordInHistory,
-            action: {
-              kind: "setProperty",
-              elementId: write.elementId,
-              level: write.level,
-              key: mutation.key,
-              value: mutation.value,
-              propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
-          clearKeys: mutation.clearKeys
-            }
+          const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
+          actions.push({
+            kind: "setProperty",
+            elementId: write.elementId,
+            level: write.level,
+            key: mutation.key,
+            value: mutation.value,
+            ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
+            clearKeys: mutation.clearKeys
           });
         }
       }
+      if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
       return;
     }
     applySetPropertyMany(property.writes, `${formatNumber(value)}pt`, {
-      clearKeys: property.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys }),
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }
 
@@ -755,7 +735,7 @@ export function InspectorPanel() {
     options: NumberChangeOptions = {}
   ): void {
     applyFillPatternOptionValue(property.write, property.option, value, property.context, {
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }
 
@@ -765,7 +745,7 @@ export function InspectorPanel() {
     options: NumberChangeOptions = {}
   ): void {
     applyFillPatternOptionValueMany(property.writes, property.option, value, property.contexts, {
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }
 
@@ -812,7 +792,7 @@ export function InspectorPanel() {
     const trimmed = draftRaw.trim();
     if (trimmed.length === 0) {
       applySetProperty(property.write, "", {
-        clearKeys: property.clearKeys
+        ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
       });
       return;
     }
@@ -821,7 +801,7 @@ export function InspectorPanel() {
       return;
     }
     applySetProperty(property.write, `${formatNumber(next)}pt`, {
-      clearKeys: property.clearKeys
+      ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
     });
   }
 
@@ -832,7 +812,7 @@ export function InspectorPanel() {
     const trimmed = draftRaw.trim();
     if (trimmed.length === 0) {
       applySetPropertyMany(property.writes, "", {
-        clearKeys: property.clearKeys
+        ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
       });
       return;
     }
@@ -841,7 +821,7 @@ export function InspectorPanel() {
       return;
     }
     applySetPropertyMany(property.writes, `${formatNumber(next)}pt`, {
-      clearKeys: property.clearKeys
+      ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
     });
   }
 
@@ -932,8 +912,8 @@ export function InspectorPanel() {
           writable,
           value: property.value,
           step: property.step,
-          min: property.min,
-          max: property.max,
+          ...(property.min === undefined ? {} : { min: property.min }),
+          ...(property.max === undefined ? {} : { max: property.max }),
           onPreview: (next) => { handleNumberChange(property, String(next), { recordInHistory: false }); },
           onCommit: (next) => { handleNumberChange(property, String(next)); }
         })}
@@ -1004,8 +984,8 @@ export function InspectorPanel() {
           writable,
           value: property.value,
           step: property.step,
-          min: property.min,
-          max: property.max,
+          ...(property.min === undefined ? {} : { min: property.min }),
+          ...(property.max === undefined ? {} : { max: property.max }),
           onPreview: (next) => { handleMultiNumberChange(property, String(next), { recordInHistory: false }); },
           onCommit: (next) => { handleMultiNumberChange(property, String(next)); }
         })}
@@ -1195,7 +1175,7 @@ export function InspectorPanel() {
           const trimmed = raw.trim();
           if (trimmed.length === 0) {
             applySetProperty(property.write, "", {
-              clearKeys: property.clearKeys
+              ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
             });
             return;
           }
@@ -1204,7 +1184,7 @@ export function InspectorPanel() {
             return;
           }
           applySetProperty(property.write, `${formatNumber(next)}pt`, {
-            clearKeys: property.clearKeys
+            ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
           });
         }}
         onBlur={(event) => {
@@ -1261,7 +1241,7 @@ export function InspectorPanel() {
           const trimmed = raw.trim();
           if (trimmed.length === 0) {
             applySetPropertyMany(property.writes, "", {
-              clearKeys: property.clearKeys
+              ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
             });
             return;
           }
@@ -1270,7 +1250,7 @@ export function InspectorPanel() {
             return;
           }
           applySetPropertyMany(property.writes, `${formatNumber(next)}pt`, {
-            clearKeys: property.clearKeys
+            ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
           });
         }}
         onBlur={(event) => {
@@ -1803,7 +1783,7 @@ export function InspectorPanel() {
     return (
       <>
         <SidePanel.Header>tikzpicture</SidePanel.Header>
-        <SidePanel.Content className={css.content}>
+        <SidePanel.Content className={css.content ?? ""}>
           <div className={css.elementInfo}>
             <SidePanel.Section>
               <SidePanel.SectionHeader>
@@ -1833,7 +1813,7 @@ export function InspectorPanel() {
     return (
       <>
         <SidePanel.Header>{toolLabel} Tool</SidePanel.Header>
-        <SidePanel.Content className={css.content}>
+        <SidePanel.Content className={css.content ?? ""}>
           <div className={css.elementInfo}>
             {hint ? (
               <div className={css.toolHint}>{hint}</div>
@@ -1971,7 +1951,7 @@ export function InspectorPanel() {
   }
 
   return (
-    <SidePanel className={css.panel}>
+    <SidePanel className={css.panel ?? ""}>
       {isCreationToolMode(toolMode) ? (
         renderToolOptionsPanel()
       ) : selectedSourceIds.length === 0 ? (
@@ -1984,7 +1964,7 @@ export function InspectorPanel() {
         ) : (
           <>
             <SidePanel.Header>{renderedDescriptor.elementKind}</SidePanel.Header>
-            <SidePanel.Content className={css.content}>
+            <SidePanel.Content className={css.content ?? ""}>
               <div className={css.elementInfo}>
                 {renderedDescriptor.readOnlyReason ? (
                   <div className={css.globalNote}>{renderedDescriptor.readOnlyReason}</div>
@@ -2021,7 +2001,7 @@ export function InspectorPanel() {
           <SidePanel.Header>
             {renderedMultiModel?.selectionCount ?? selectedSourceIds.length} selected
           </SidePanel.Header>
-          <SidePanel.Content className={css.content}>
+          <SidePanel.Content className={css.content ?? ""}>
             <div className={css.elementInfo}>
               {renderMultiArrangeQuickActions()}
               {!renderedMultiModel || renderedMultiModel.sections.length === 0 ? (

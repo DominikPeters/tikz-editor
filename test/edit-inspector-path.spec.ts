@@ -227,8 +227,10 @@ describe("getInspectorDescriptor – path controls", () => {
     });
     const sectionIds = descriptor.sections.map((section) => section.id);
 
-    expect(sectionIds.indexOf("path")).toBeLessThan(sectionIds.indexOf("stroke"));
-    expect(sectionIds.indexOf("stroke")).toBeLessThan(sectionIds.indexOf("fill"));
+    expect(sectionIds).toEqual(["transform", "path", "stroke", "fill", "shadow"]);
+    expect(
+      descriptor.sections.find((section) => section.id === "path")?.properties.map((property) => property.id)
+    ).toEqual(["path-morphing-decoration", "rounded-corners"]);
   });
 
   it("shows grid controls for a single grid operation with keyword-targeted writes", () => {
@@ -1134,9 +1136,9 @@ describe("getInspectorDescriptor – path controls", () => {
     expect(dashStylePresetFromStyle([1, 2, 3], 1)).toBe("custom");
     expect(dashStylePresetFromStyle([5, 5], 1)).toBe("custom");
     expect(lineCapPresetFromStyle("round")).toBe("round");
-    expect(lineCapPresetFromStyle("invalid" as never)).toBe("custom");
+    expect(lineCapPresetFromStyle("invalid")).toBe("custom");
     expect(lineJoinPresetFromStyle("bevel")).toBe("bevel");
-    expect(lineJoinPresetFromStyle("invalid" as never)).toBe("custom");
+    expect(lineJoinPresetFromStyle("invalid")).toBe("custom");
   });
 
   it("resolves fill mode from flag, disabled, and corner-color option states", () => {
@@ -1568,6 +1570,12 @@ describe("getInspectorDescriptor – path controls", () => {
       source,
       editHandles: rendered.semantic.editHandles
     });
+    expect(descriptor.sections.map((section) => section.id)).toEqual([
+      "transform",
+      "path",
+      "stroke",
+      "shadow"
+    ]);
     const shadowSection = descriptor.sections.find((section) => section.id === "shadow");
     expect(shadowSection).toBeDefined();
     if (!shadowSection) {

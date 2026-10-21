@@ -1,9 +1,11 @@
+import { retainSnapTargets, SNAP_RELEASE_RATIO } from "./retention.js";
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
-import type { WorldPoint } from "../../coords/points.js";
+import type { WorldPoint, WorldVector } from "../../coords/points.js";
 import { buildSnapContext, resolveSnapSettings } from "./context.js";
 import { createGapSnapLines, collectGapSnaps } from "./gap-snaps.js";
 import {
+  SNAP_EPSILON,
   translateBounds,
   translatePoints
 } from "./geometry.js";
@@ -20,9 +22,11 @@ import {
 } from "./point-snaps.js";
 import type {
   Axis,
+  AxisSnapCandidate,
   AxisSnapBuckets,
   GapSnapCandidate,
   SelectionGeometry,
+  SelectionSnapPoint,
   SnapContext,
   SnapHandlePositionInput,
   SnapKeyboardNudgeInput,
@@ -72,13 +76,15 @@ export function snapSelectionTranslation(input: SnapSelectionTranslationInput): 
     settings,
     selection: movedSelection,
     includeGaps: true,
+    ...(input.previousTargets === undefined ? {} : { previousTargets: input.previousTargets }),
     enabledAxis: input.enabledAxis
   });
 
   return {
     offset: snap.offset,
     snappedDelta: worldPoint(pt(input.rawDelta.x + snap.offset.x), pt(input.rawDelta.y + snap.offset.y)),
-    lines: snap.lines
+    lines: snap.lines,
+    targets: snap.targets
   };
 }
 
@@ -96,12 +102,14 @@ export function snapHandlePosition(input: SnapHandlePositionInput): SnapResult {
   const referencePoints =
     input.allowSelfSnap || !input.sourceId
       ? input.context.referencePoints
-      : input.context.referencePoints.filter((point) => point.sourceId !== input.sourceId);
+      : referencesExcluding(input.context, input.sourceId);
 
   return snapPointerWithPointsAndGrid({
     context: input.context,
     settings,
+    ...(input.previousTargets === undefined ? {} : { previousTargets: input.previousTargets }),
     pointer: input.point,
+    ...(input.direction === undefined ? {} : { direction: input.direction }),
     referencePoints,
   });
 }
@@ -148,6 +156,7 @@ export function snapToolPointer(input: SnapToolPointerInput): SnapResult {
     return snapPointerWithPointsAndGrid({
       context: input.context,
       settings,
+      ...(input.previousTargets === undefined ? {} : { previousTargets: input.previousTargets }),
       pointer: input.pointer,
       referencePoints: input.context.referencePoints
     });
@@ -156,6 +165,7 @@ export function snapToolPointer(input: SnapToolPointerInput): SnapResult {
   return snapPointerWithPointsAndGrid({
     context: input.context,
     settings,
+    ...(input.previousTargets === undefined ? {} : { previousTargets: input.previousTargets }),
     pointer: input.pointer,
     referencePoints: input.context.referencePoints
   });
@@ -165,46 +175,89 @@ function snapPointerWithPointsAndGrid({
   context,
   settings,
   pointer,
-  referencePoints
+  direction,
+  referencePoints,
+  previousTargets
 }: {
+  previousTargets?: AxisSnapBuckets;
   context: SnapContext;
   settings: SnapSettings;
-  pointer: WorldPoint;
-  referencePoints: WorldPoint[];
+  pointer: SelectionSnapPoint;
+  direction?: WorldVector | null;
+  referencePoints: readonly WorldPoint[];
 }): SnapResult {
+  const thresholdWorld = settings.thresholdPx / context.zoom;
   const firstPass = collectPointAndGridSnaps({
     context,
     settings,
     selectionPoints: [pointer],
     referencePoints,
-    enabledAxis: null,
-    thresholdWorld: settings.thresholdPx / context.zoom,
+    thresholdWorld,
     clusterBreakWorld: SNAP_CLUSTER_BREAK_PX / context.zoom
   });
 
-  const offset = pointSnapOffset(firstPass.nearest);
+  retainSnapTargets(firstPass.nearest, previousTargets, context, settings, [pointer]);
+  let offset = pointSnapOffset(firstPass.nearest);
+  if (direction) {
+    // Independent x/y offsets would leave the permitted resize line. Choose
+    // the nearest reachable target and solve the other coordinate along it.
+    offset = worldPoint(pt(0), pt(0));
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    const length = Math.hypot(direction.x, direction.y);
+    for (const axis of ["x", "y"] as const) {
+      if (Math.abs(direction[axis]) <= SNAP_EPSILON * length) continue;
+      for (const candidate of firstPass.nearest[axis]) {
+        const step = candidate.offset / direction[axis];
+        const distance = Math.abs(step) * length;
+        const retained = previousTargets?.[axis].some(target => sameSnapTarget(candidate, target));
+        if (distance <= thresholdWorld * (retained ? SNAP_RELEASE_RATIO : 1) + SNAP_EPSILON && distance < nearestDistance) {
+          nearestDistance = distance;
+          offset = worldPoint(pt(step * direction.x), pt(step * direction.y));
+        }
+      }
+    }
+  }
   const snappedPoint = worldPoint(pt(pointer.x + offset.x), pt(pointer.y + offset.y));
-
-  const secondPass = collectPointAndGridSnaps({
-    context,
-    settings,
-    selectionPoints: [snappedPoint],
-    referencePoints,
-    enabledAxis: null,
-    thresholdWorld: 0,
-    clusterBreakWorld: SNAP_CLUSTER_BREAK_PX / context.zoom
-  });
-
-  const lines = [
-    ...createPointSnapLines(secondPass.nearest),
-    ...createPointerLinesForPointSnap(secondPass.nearest, snappedPoint)
-  ];
+  const targets = createEmptySnapBuckets();
+  for (const axis of ["x", "y"] as const) {
+    // A stationary edge coordinate must not pin or advertise a resize snap.
+    if (direction && Math.abs(direction[axis]) <= SNAP_EPSILON * Math.hypot(direction.x, direction.y)) continue;
+    targets[axis] = firstPass.nearest[axis].filter(target => Math.abs(target.offset - offset[axis]) <= SNAP_EPSILON);
+  }
 
   return {
     offset,
     snappedPoint,
-    lines
+    targets,
+    lines: pointerSnapLines(context, { ...snappedPoint, ...(pointer.role === undefined ? {} : { role: pointer.role }) }, targets, settings, referencePoints)
   };
+}
+
+/** Validate pointer targets against the point actually produced by an edit. */
+export function pointerSnapLines(
+  context: SnapContext,
+  point: SelectionSnapPoint,
+  targets: AxisSnapBuckets,
+  settings: SnapSettings = context.settings,
+  referencePoints: readonly WorldPoint[] = context.referencePoints
+): SnapLine[] {
+  const secondPass = collectPointAndGridSnaps({
+    context,
+    settings,
+    selectionPoints: [point],
+    referencePoints,
+    thresholdWorld: 0,
+    clusterBreakWorld: SNAP_CLUSTER_BREAK_PX / context.zoom
+  });
+  for (const axis of ["x", "y"] as const) {
+    secondPass.nearest[axis] = secondPass.nearest[axis].filter(candidate =>
+      targets[axis].some(target => sameSnapTarget(candidate, target))
+    );
+  }
+  return withReferenceBounds([
+    ...createPointSnapLines(secondPass.nearest),
+    ...createPointerLinesForPointSnap(secondPass.nearest, point)
+  ], context);
 }
 
 function runSelectionSnapPasses({
@@ -212,14 +265,16 @@ function runSelectionSnapPasses({
   settings,
   selection,
   includeGaps,
-  enabledAxis
+  enabledAxis,
+  previousTargets
 }: {
+  previousTargets?: AxisSnapBuckets;
   context: SnapContext;
   settings: SnapSettings;
   selection: SelectionGeometry;
   includeGaps: boolean;
   enabledAxis: Axis | null | undefined;
-}): { offset: WorldPoint; lines: SnapLine[] } {
+}): { offset: WorldPoint; lines: SnapLine[]; targets: AxisSnapBuckets } {
   const thresholdWorld = settings.thresholdPx / context.zoom;
 
   const firstPass = collectPointGridAndGapSnaps({
@@ -227,38 +282,67 @@ function runSelectionSnapPasses({
     settings,
     selection,
     includeGaps,
-    enabledAxis,
+    ...(enabledAxis === undefined ? {} : { enabledAxis }),
     thresholdWorld,
     clusterBreakWorld: SNAP_CLUSTER_BREAK_PX / context.zoom
   });
 
+  retainSnapTargets(firstPass.nearest, previousTargets, context, settings, selection.snapPoints, selection, enabledAxis);
   const offset = worldPoint(pt(firstPass.nearest.x[0]?.offset ?? 0), pt(firstPass.nearest.y[0]?.offset ?? 0));
+  const targets = {
+    x: firstPass.nearest.x.filter((target) => Math.abs(target.offset - offset.x) <= SNAP_EPSILON),
+    y: firstPass.nearest.y.filter((target) => Math.abs(target.offset - offset.y) <= SNAP_EPSILON)
+  };
 
   const snappedSelection: SelectionGeometry = {
     bounds: translateBounds(selection.bounds, offset),
     snapPoints: translatePoints(selection.snapPoints, offset)
   };
 
+  return {
+    offset,
+    targets,
+    lines: selectionSnapLines(context, snappedSelection, targets, settings)
+  };
+}
+
+/** Validate retained targets against the geometry actually produced by an edit. */
+export function selectionSnapLines(
+  context: SnapContext,
+  selection: SelectionGeometry,
+  targets: AxisSnapBuckets,
+  settings: SnapSettings = context.settings
+): SnapLine[] {
   const secondPass = collectPointGridAndGapSnaps({
     context,
     settings,
-    selection: snappedSelection,
-    includeGaps,
-    enabledAxis,
+    selection,
+    includeGaps: true,
     thresholdWorld: 0,
     clusterBreakWorld: SNAP_CLUSTER_BREAK_PX / context.zoom
   });
+  for (const axis of ["x", "y"] as const) {
+    secondPass.nearest[axis] = secondPass.nearest[axis].filter((candidate) =>
+      targets[axis].some((target) => sameSnapTarget(candidate, target))
+    );
+  }
 
   const pointLines = createPointSnapLines(secondPass.nearest);
   const gapLines = createGapSnapLines(
-    snappedSelection.bounds,
+    selection.bounds,
     collectGapCandidates(secondPass.nearest)
   );
 
-  return {
-    offset,
-    lines: [...pointLines, ...gapLines]
-  };
+  return withReferenceBounds([...pointLines, ...gapLines], context);
+}
+
+function sameSnapTarget(candidate: AxisSnapCandidate, target: AxisSnapCandidate): boolean {
+  if (candidate.kind === "gap" || target.kind === "gap") {
+    return candidate.kind === "gap" && target.kind === "gap" &&
+      candidate.direction === target.direction && candidate.gap === target.gap;
+  }
+  return candidate.kind === target.kind && candidate.sourceId === target.sourceId &&
+    candidate.role === target.role && Math.abs(candidate.key - target.key) <= SNAP_EPSILON;
 }
 
 function collectPointGridAndGapSnaps({
@@ -290,8 +374,8 @@ function collectPointGridAndGapSnaps({
       minOffset,
       nearest,
       kind: "point",
-      enabledAxis,
-      clusterBreakWorld
+      ...(enabledAxis === undefined ? {} : { enabledAxis }),
+      ...(clusterBreakWorld === undefined ? {} : { clusterBreakWorld })
     });
   }
 
@@ -300,7 +384,7 @@ function collectPointGridAndGapSnaps({
     guides: context.guides,
     minOffset,
     nearest,
-    enabledAxis
+    ...(enabledAxis === undefined ? {} : { enabledAxis })
   });
 
   if (settings.grid.enabled) {
@@ -309,7 +393,7 @@ function collectPointGridAndGapSnaps({
       minOffset,
       nearest,
       gridStep: pickGridStepPt(context.zoom, settings.grid.minorTargetPx),
-      enabledAxis
+      ...(enabledAxis === undefined ? {} : { enabledAxis })
     });
   }
 
@@ -319,7 +403,7 @@ function collectPointGridAndGapSnaps({
       visibleGaps: context.visibleGaps,
       minOffset,
       nearest,
-      enabledAxis
+      ...(enabledAxis === undefined ? {} : { enabledAxis })
     });
   }
 
@@ -337,8 +421,8 @@ function collectPointAndGridSnaps({
 }: {
   context: SnapContext;
   settings: SnapSettings;
-  selectionPoints: WorldPoint[];
-  referencePoints: WorldPoint[];
+  selectionPoints: SelectionSnapPoint[];
+  referencePoints: readonly WorldPoint[];
   enabledAxis?: Axis | null;
   thresholdWorld: number;
   clusterBreakWorld?: number;
@@ -355,8 +439,8 @@ function collectPointAndGridSnaps({
       minOffset,
       nearest,
       kind: "point",
-      enabledAxis,
-      clusterBreakWorld
+      ...(enabledAxis === undefined ? {} : { enabledAxis }),
+      ...(clusterBreakWorld === undefined ? {} : { clusterBreakWorld })
     });
   }
 
@@ -365,7 +449,7 @@ function collectPointAndGridSnaps({
     guides: context.guides,
     minOffset,
     nearest,
-    enabledAxis
+    ...(enabledAxis === undefined ? {} : { enabledAxis })
   });
 
   if (settings.grid.enabled) {
@@ -374,7 +458,7 @@ function collectPointAndGridSnaps({
       minOffset,
       nearest,
       gridStep: pickGridStepPt(context.zoom, settings.grid.minorTargetPx),
-      enabledAxis
+      ...(enabledAxis === undefined ? {} : { enabledAxis })
     });
   }
 
@@ -393,4 +477,23 @@ function shouldBypassSnapping(settings: SnapSettings, modifiers?: { ctrlOrMeta: 
 
 function effectiveSettings(context: SnapContext, patch?: SnapSettingsPatch): SnapSettings {
   return resolveSnapSettings(patch, context.settings);
+}
+
+function withReferenceBounds(lines: SnapLine[], context: SnapContext): SnapLine[] {
+  let byId = referenceBoundsIndexes.get(context.referenceBounds);
+  if (!byId) { byId = new Map(context.referenceBounds.map(bounds => [bounds.sourceId, bounds])); referenceBoundsIndexes.set(context.referenceBounds, byId); }
+  return lines.map(line => {
+    const referenceBounds = line.referenceBounds ?? line.sourceIds?.flatMap(id => byId.get(id) ?? []);
+    return { ...line, ...(referenceBounds === undefined ? {} : { referenceBounds }) };
+  });
+}
+
+const referenceBoundsIndexes = new WeakMap<SnapContext["referenceBounds"], Map<string, SnapContext["referenceBounds"][number]>>();
+const excludedReferences = new WeakMap<SnapContext["referencePoints"], Map<string, SnapContext["referencePoints"]>>();
+function referencesExcluding(context: SnapContext, sourceId: string): SnapContext["referencePoints"] {
+  let exclusions = excludedReferences.get(context.referencePoints);
+  if (!exclusions) { exclusions = new Map(); excludedReferences.set(context.referencePoints, exclusions); }
+  let points = exclusions.get(sourceId);
+  if (!points) { points = context.referencePoints.filter(point => point.sourceId !== sourceId); exclusions.set(sourceId, points); }
+  return points;
 }

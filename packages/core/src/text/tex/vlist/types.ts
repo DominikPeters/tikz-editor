@@ -1,0 +1,602 @@
+import type { ParagraphLayoutReport } from "../../knuth-plass/paragraph/report.js";
+import type {
+  SourceCoordinateSpace,
+  SourceOffset,
+} from "../../source-coordinates.js";
+import type { DocumentGraphicsAsset } from "../../../graphics/types.js";
+import type {
+  SimpleTexListKind,
+  SimpleTexListContext,
+  SimpleTexTrivlistEnvironmentName,
+  SimpleTexFontState,
+  SimpleTexGraphicsOptions,
+  SimpleTexBoxCommandName,
+  SimpleTexDisplayMathDelimiter,
+  SimpleTexDisplayMathState,
+  SimpleTexSegmentInput,
+  SimpleTexVerticalGlueCommandName,
+  TexAlignmentProfile,
+  TexParagraphAlignment,
+  TexSpaceGlueProfile,
+} from "../ir.js";
+import type { TexDimensionContext } from "../dimensions.js";
+import type {
+  TexMathBox,
+  TexMathDisplayAlignment,
+  TexMathDisplayAlignmentOpenedInterline,
+} from "../layout-inline-items.js";
+import type {
+  TexDisplayMathLayoutProfile,
+  TexListMarkerProfile,
+} from "../layout-options.js";
+import type {
+  TexHBoxX,
+  TexHBoxY,
+  TexLength,
+  TexVListLocalX,
+  TexVListLocalY,
+  TexVListX,
+  TexVListY,
+} from "../coordinates.js";
+
+export interface TexSourceSpan {
+  readonly start: number;
+  readonly end: number;
+}
+
+export interface TexBoxMetrics {
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
+}
+
+export type TexVBoxBaseline =
+  | { readonly kind: "first-line" }
+  | { readonly kind: "center" }
+  | { readonly kind: "explicit"; readonly y: TexVListLocalY }
+  | { readonly kind: "none" };
+
+export type TexVListBaseline =
+  | { readonly kind: "explicit"; readonly y: TexVListY }
+  | { readonly kind: "none" };
+
+export type TexGlueOrder = "normal" | "fil" | "fill" | "filll";
+export type TexDimenExpr = TexLength | string;
+export type TexDisplayMathSkipVariant = "normal" | "short";
+
+export type TexGlueOrigin =
+  | {
+      readonly kind: "explicit-command";
+      readonly command: SimpleTexVerticalGlueCommandName;
+    }
+  | {
+      readonly kind: "quote-boundary";
+      readonly beforeBlockIndex: number;
+    }
+  | {
+      readonly kind: "list-boundary";
+      readonly beforeBlockIndex: number;
+    }
+  | {
+      readonly kind: "trivlist-boundary";
+      readonly beforeBlockIndex: number;
+    }
+  | {
+      readonly kind: "paragraph-boundary-interline";
+      readonly boundary: "plain" | "quote" | "list" | "trivlist";
+    }
+  | {
+      readonly kind: "display-math-boundary";
+      readonly side: "above" | "below";
+      readonly variant?: TexDisplayMathSkipVariant;
+      /** Centered material edge used for TeX's pre-display overlap test. */
+      readonly displayLeftEdge?: TexLength;
+      readonly profile?: TexDisplayMathLayoutProfile;
+      readonly baselineSkip?: TexLength;
+    }
+  | {
+      readonly kind: "display-math-interline";
+      readonly side: "above" | "below";
+      readonly purpose: "align-top-correction" | "align-row-baseline" | "align-structural";
+      readonly openedInterline: TexMathDisplayAlignmentOpenedInterline;
+    }
+  | {
+      readonly kind: "display-math-interline";
+      readonly side: "above" | "below";
+      readonly purpose?: undefined;
+    }
+  | {
+      readonly kind: "display-alignment-intertext-skip";
+      readonly side: "above" | "below";
+    }
+  | {
+      readonly kind: "display-alignment-intertext-leading";
+      readonly openedInterline: TexMathDisplayAlignmentOpenedInterline;
+    };
+
+export interface TexLineBox {
+  readonly lineIndex: number;
+  readonly sourceSpan?: TexSourceSpan;
+  readonly y: TexVListLocalY;
+  readonly targetWidth: TexLength;
+  readonly metrics: TexBoxMetrics;
+  readonly lineLeading?: string;
+  readonly preDisplaySize?: TexLength;
+}
+
+export type TexRenderItem =
+  | {
+      readonly kind: "tex-glyph-run";
+      readonly text: string;
+      readonly fontId: string;
+      readonly atPt: TexLength;
+      readonly x: TexHBoxX;
+      readonly baseline: TexHBoxY;
+      readonly color?: string;
+    }
+  | {
+      readonly kind: "tex-glyph";
+      readonly text: string;
+      readonly code: number;
+      readonly sourceSpan?: TexSourceSpan;
+      readonly fontId: string;
+      readonly atPt: TexLength;
+      readonly x: TexHBoxX;
+      readonly baseline: TexHBoxY;
+      readonly color?: string;
+    }
+  | {
+      readonly kind: "tex-math-svg";
+      readonly svgBody: string;
+      readonly x: TexHBoxX;
+      readonly baseline: TexHBoxY;
+    };
+
+export interface TexHitMap {
+  readonly kind: string;
+  readonly sourceStart?: number;
+  readonly sourceEnd?: number;
+  readonly contentStart?: number;
+  readonly contentEnd?: number;
+  readonly width?: TexLength;
+  readonly height?: TexLength;
+  readonly depth?: TexLength;
+  readonly caretMap?: TexMathBox["caretMap"];
+  readonly caretStops?: readonly TexHBoxX[];
+  readonly constructRanges?: TexMathBox["constructRanges"];
+  readonly breakpoints?: TexMathBox["breakpoints"];
+}
+
+export interface TexHorizontalLayout {
+  readonly metrics: TexBoxMetrics;
+  readonly lines?: readonly TexLineBox[];
+  readonly renderItems: readonly TexRenderItem[];
+  readonly hitMap?: TexHitMap;
+}
+
+export interface TexVListParagraphHorizontalLayout {
+  readonly baselineSkip?: TexLength;
+  readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
+  readonly lineIndices: readonly number[];
+  readonly horizontal: TexHorizontalLayout;
+}
+
+export interface TexParagraphInput extends SimpleTexSegmentInput {
+  readonly fontSizePt?: TexLength;
+  readonly baselineSkip?: TexLength;
+  readonly blockIndex: number;
+  readonly dimensionContext?: TexDimensionContext;
+  /**
+   * Horizontal-mode `\vspace` adjustments, retained until line breaking can
+   * identify the line after which TeX ships each adjustment.
+   */
+  readonly verticalAdjustments?: readonly TexGlueItem[];
+  readonly alignment?: TexParagraphAlignment;
+  readonly alignmentProfile?: TexAlignmentProfile;
+  readonly spaceGlueProfile?: TexSpaceGlueProfile;
+  readonly tikzTextWidthNode?: boolean;
+  readonly sourceHitPolicy?: "caret" | "source-range";
+  readonly listContext?: SimpleTexListContext;
+  readonly scopePath?: readonly TexVBoxRole[];
+  readonly ignoreAncestorBreakMargins?: boolean;
+  readonly useScopedLineWidth?: boolean;
+  readonly overfullSingleLineFallback?: boolean;
+}
+
+export interface TexParagraphItem {
+  readonly kind: "paragraph";
+  readonly sourceSpan: TexSourceSpan;
+  readonly blockIndex: number;
+  readonly paragraph: TexParagraphInput;
+}
+
+export type TexHBoxRole = {
+  readonly kind: "list-label";
+  readonly labelKind: TexVBoxListItemLabelKind;
+  readonly placement: TexVBoxListItemLabelPlacement;
+  readonly listKind: SimpleTexListKind;
+  readonly depth: number;
+  readonly labelDepth: number;
+  readonly itemIndex: number;
+  /** Source owner of the list item, independent of its list-local ordinal. */
+  readonly itemCommandSpan?: TexSourceSpan;
+  readonly blockIndex: number;
+} | {
+  readonly kind: "display-align-row";
+  readonly delimiter: SimpleTexDisplayMathDelimiter;
+  readonly rowIndex: number;
+} | {
+  /**
+   * A zero-sized line shipped by horizontal-mode display/list transitions.
+   */
+  readonly kind: "display-empty-line";
+  readonly position: "before-display" | "after-display-vspace";
+};
+
+export interface TexHBoxItem {
+  readonly kind: "hbox";
+  readonly sourceSpan?: TexSourceSpan;
+  readonly scopePath?: readonly TexVBoxRole[];
+  readonly role?: TexHBoxRole;
+  /** Inline displacement relative to the containing VList origin. */
+  readonly x?: TexVListLocalX;
+  readonly advance?: TexLength;
+  readonly affectsVBoxBaseline?: boolean;
+  readonly verticalPlacement?: {
+    readonly kind: "paragraph-first-line-baseline";
+    readonly blockIndex: number;
+  };
+  readonly box: TexHorizontalLayout;
+}
+
+export type TexVBoxRole =
+  | { readonly kind: "quote"; readonly depth: number }
+  | {
+      readonly kind: "trivlist";
+      readonly envName: SimpleTexTrivlistEnvironmentName;
+      readonly depth: number;
+      readonly alignment: TexParagraphAlignment;
+    }
+  | {
+      readonly kind: "list";
+      readonly sourceStart?: number;
+      readonly listKind: SimpleTexListKind;
+      readonly depth: number;
+      readonly labelDepth: number;
+      readonly ownLeftMarginEm: number;
+      readonly totalLeftMarginEm: number;
+    }
+  | {
+      readonly kind: "list-item";
+      readonly listKind: SimpleTexListKind;
+      readonly depth: number;
+      readonly labelDepth: number;
+      readonly itemIndex: number;
+    };
+
+export interface TexVBoxLayout {
+  readonly leftMarginWidth: TexLength;
+  readonly rightMarginWidth: TexLength;
+  readonly list?: TexVBoxListLayout;
+  readonly listItem?: TexVBoxListItemLayout;
+  readonly paragraphPolicy?: TexVBoxParagraphPolicy;
+}
+
+export interface TexVBoxListLayout {
+  readonly ownLeftMarginWidth: TexLength;
+  readonly labelRightEdge: TexLength;
+  readonly descriptionLabelSepWidth: TexLength;
+}
+
+export type TexVBoxListItemLabelKind = "default" | "custom" | "description";
+export type TexVBoxListItemLabelPlacement = "margin" | "inline";
+export type TexVBoxListItemLabelContent =
+  | { readonly kind: "source" }
+  | { readonly kind: "text"; readonly text: string }
+  | { readonly kind: "marker"; readonly marker: TexListMarkerProfile }
+  | {
+      readonly kind: "glyph";
+      readonly text: string;
+      readonly code: number;
+      readonly fontId: string;
+    };
+
+export interface TexVBoxListItemLabelBox {
+  readonly kind: TexVBoxListItemLabelKind;
+  readonly placement: TexVBoxListItemLabelPlacement;
+  readonly content: TexVBoxListItemLabelContent;
+  readonly fontState?: SimpleTexFontState;
+  /** Document-relative right edge used by paragraph report labels. */
+  readonly rightEdge?: TexVListX;
+  readonly sourceSpan?: TexSourceSpan;
+}
+
+export interface TexVBoxListItemDescriptionLayout {
+  readonly labelFirstLineIndentWidth: TexLength;
+  readonly bodyFirstLineIndentWidth: TexLength;
+  /** Beamer: the label column's width; a wider label pushes the first line by the difference. */
+  readonly marginLabelWidth?: TexLength;
+}
+
+export interface TexVBoxListItemLayout {
+  readonly itemIndex: number;
+  readonly label?: TexVBoxListItemLabelBox;
+  readonly description?: TexVBoxListItemDescriptionLayout;
+}
+
+export interface TexVBoxParagraphPolicy {
+  readonly fallbackAlignment?: TexParagraphAlignment;
+  readonly resetAlignment?: TexParagraphAlignment;
+  readonly resetAlignmentProfile?: TexAlignmentProfile;
+  readonly resetAlignmentSource?: "restored-current" | "latex-list";
+  readonly resetSpaceGlueProfileTo?: TexSpaceGlueProfile;
+  readonly preserveSpaceGlueProfile?: boolean;
+  readonly resetFinalHyphenDemeritsFromAlignment?: boolean;
+  readonly preserveRaggedRight?: boolean;
+  readonly raggedRightProfile?: TexAlignmentProfile;
+  readonly resetInheritedAlignment?: boolean;
+  readonly resetSpaceGlueProfile?: boolean;
+  readonly allowParagraphIndent?: boolean;
+  readonly allowForcedBreakIndent?: boolean;
+}
+
+export interface TexVBoxItem {
+  readonly kind: "vbox";
+  /** Scope boxes expose a live getter while their child spans accumulate. */
+  readonly sourceSpan?: TexSourceSpan | undefined;
+  readonly scopePath?: readonly TexVBoxRole[];
+  readonly role?: TexVBoxRole;
+  readonly material?: {
+    readonly command: SimpleTexBoxCommandName;
+  };
+  readonly layout?: TexVBoxLayout;
+  readonly width?: TexDimenExpr;
+  readonly height?: TexDimenExpr;
+  readonly items: readonly TexVListItem[];
+  readonly alignment?: "top" | "center" | "bottom";
+}
+
+export interface TexGlueItem {
+  readonly kind: "glue";
+  readonly sourceSpan?: TexSourceSpan;
+  readonly scopePath?: readonly TexVBoxRole[];
+  readonly origin?: TexGlueOrigin;
+  readonly size: TexLength;
+  /** Resolved em/ex unit retained for editing zero-valued source glue. */
+  readonly relativeUnitPt?: TexLength;
+  readonly stretch?: TexLength;
+  readonly shrink?: TexLength;
+  readonly stretchOrder?: TexGlueOrder;
+  readonly shrinkOrder?: TexGlueOrder;
+}
+
+export interface TexPenaltyItem {
+  readonly kind: "penalty";
+  readonly sourceSpan?: TexSourceSpan;
+  readonly scopePath?: readonly TexVBoxRole[];
+  readonly penalty: number;
+}
+
+export interface TexRuleItem {
+  readonly kind: "rule";
+  readonly sourceSpan?: TexSourceSpan;
+  readonly scopePath?: readonly TexVBoxRole[];
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
+}
+
+export interface TexPlaceholderItem {
+  readonly kind: "placeholder";
+  readonly sourceSpan: TexSourceSpan;
+  readonly scopePath?: readonly TexVBoxRole[];
+  readonly reason: string;
+  readonly estimated: TexBoxMetrics;
+  /**
+   * Raw source text rendered as a literal typewriter run so the placeholder
+   * is visible and editable instead of an empty box
+   * (design/tex-total-rendering.md).
+   */
+  readonly literalText?: string;
+}
+
+export interface TexDisplayMathItem extends SimpleTexDisplayMathState {
+  readonly kind: "display-math";
+  readonly sourceSpan: TexSourceSpan;
+  readonly scopePath?: readonly TexVBoxRole[];
+  readonly text: string;
+  readonly content: string;
+  readonly delimiter: SimpleTexDisplayMathDelimiter;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly targetWidth: TexLength;
+  readonly box: TexMathBox;
+}
+
+export interface TexDisplayAlignmentItem extends SimpleTexDisplayMathState {
+  readonly kind: "display-alignment";
+  readonly sourceSpan: TexSourceSpan;
+  readonly scopePath?: readonly TexVBoxRole[];
+  readonly text: string;
+  readonly content: string;
+  readonly delimiter: SimpleTexDisplayMathDelimiter;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly targetWidth: TexLength;
+  readonly alignment: TexMathDisplayAlignment;
+}
+
+export type TexVListItem =
+  | TexParagraphItem
+  | TexHBoxItem
+  | TexVBoxItem
+  | TexGlueItem
+  | TexPenaltyItem
+  | TexRuleItem
+  | TexDisplayMathItem
+  | TexDisplayAlignmentItem
+  | TexPlaceholderItem;
+
+export interface TexVListDocument {
+  readonly kind: "vlist";
+  readonly sourceSpan?: TexSourceSpan;
+  readonly items: readonly TexVListItem[];
+}
+
+export interface PositionedTexVListItem {
+  readonly item: TexVListItem;
+  readonly path: readonly number[];
+  /** Absolute inline position in the root VList coordinate space. */
+  readonly x: TexVListX;
+  readonly y: TexVListY;
+  readonly metrics: TexBoxMetrics;
+  readonly baseline?: TexVBoxBaseline;
+  readonly lastDepth?: TexLength;
+  readonly children?: readonly PositionedTexVListItem[];
+}
+
+export interface TexVListBoxReportItem {
+  readonly itemKind: TexVListItem["kind"];
+  readonly path: readonly number[];
+  readonly children?: readonly TexVListBoxReportItem[];
+  readonly sourceSpan?: TexSourceSpan;
+  readonly x: TexVListX;
+  readonly y: TexVListY;
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly depth: TexLength;
+  readonly totalHeight: TexLength;
+  readonly blockIndex?: number;
+  readonly baseline?: TexVBoxBaseline;
+  readonly role?: TexVBoxRole;
+  readonly hboxRole?: TexHBoxRole;
+  readonly listItem?: TexVBoxListItemLayout;
+  readonly glue?: {
+    readonly size: TexLength;
+    readonly relativeUnitPt?: TexLength;
+    readonly stretch?: TexLength;
+    readonly shrink?: TexLength;
+    readonly stretchOrder?: TexGlueOrder;
+    readonly shrinkOrder?: TexGlueOrder;
+    readonly origin?: TexGlueOrigin;
+  };
+  readonly penalty?: number;
+  readonly placeholderReason?: string;
+  readonly displayMath?: {
+    readonly delimiter: SimpleTexDisplayMathDelimiter;
+    readonly contentStart: number;
+    readonly contentEnd: number;
+  };
+}
+
+export interface TexVListBoxLayoutReport {
+  readonly kind: "tex-vlist-boxes";
+  readonly metrics: TexBoxMetrics;
+  readonly baseline: TexVListBaseline;
+  readonly tree: readonly TexVListBoxReportItem[];
+  readonly items: readonly TexVListBoxReportItem[];
+}
+
+export type TexLayoutReport = TexVListBoxLayoutReport;
+
+export interface TexVListLayout<Space extends SourceCoordinateSpace = SourceCoordinateSpace> {
+  readonly metrics: TexBoxMetrics;
+  readonly baseline: TexVListBaseline;
+  readonly items: readonly PositionedTexVListItem[];
+  readonly boxReport: TexVListBoxLayoutReport;
+  readonly paragraphPlacements: readonly TexVListParagraphPlacement[];
+  readonly linePlacements: readonly TexVListLinePlacement[];
+  /** Atomic graphics in this VList's top-left coordinate system. */
+  readonly graphicsPlacements: readonly TexGraphicsPlacement<Space>[];
+  readonly reports: readonly (TexLayoutReport | ParagraphLayoutReport<Space>)[];
+  readonly errors: readonly string[];
+}
+
+export interface TexGraphicsPlacement<
+  Space extends SourceCoordinateSpace = SourceCoordinateSpace,
+> {
+  readonly id: string;
+  readonly sourceCoordinateSpace: Space;
+  readonly paragraphId: string;
+  readonly lineIndex: number;
+  readonly asset: DocumentGraphicsAsset;
+  readonly sourceSpan: {
+    readonly start: SourceOffset<Space>;
+    readonly end: SourceOffset<Space>;
+  };
+  readonly filenameSpan: {
+    readonly start: SourceOffset<Space>;
+    readonly end: SourceOffset<Space>;
+  };
+  readonly options: SimpleTexGraphicsOptions;
+  readonly caretPolicy: "filename-linear";
+  readonly bounds: {
+    readonly x: TexVListX;
+    readonly y: TexVListY;
+    readonly width: TexLength;
+    readonly height: TexLength;
+  };
+  readonly baselineY: TexVListY;
+  readonly crop?: {
+    readonly x: TexLength;
+    readonly y: TexLength;
+    readonly width: TexLength;
+    readonly height: TexLength;
+    readonly clip: boolean;
+  };
+}
+
+export interface TexVListLayoutOptions {
+  readonly width: TexLength;
+  readonly height?: TexLength;
+  readonly verticalAlign?: "top" | "center" | "bottom";
+  readonly paragraphAlignment?: TexParagraphAlignment;
+  readonly displayMathProfile?: TexDisplayMathLayoutProfile;
+  /** Previous TeX box depth when this VList is a source fragment. */
+  readonly initialPreviousDepth?: TexLength;
+}
+
+export interface TexVListParagraphLineAssignment {
+  readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
+  readonly lineIndices: readonly number[];
+}
+
+export interface TexVListParagraphLineOffset {
+  readonly lineIndex: number;
+  readonly y: TexVListLocalY;
+  readonly metrics?: TexBoxMetrics;
+}
+
+export interface TexVListParagraphBoxMeasurement {
+  readonly baselineSkip?: TexLength;
+  readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
+  readonly lineIndices: readonly number[];
+  readonly lineOffsets: readonly TexVListParagraphLineOffset[];
+  readonly lastLinePreDisplaySize?: TexLength;
+  readonly standardMetrics: TexBoxMetrics;
+  readonly ruleLeadingMetrics: TexBoxMetrics;
+  readonly lastLineMetrics?: TexBoxMetrics;
+  readonly standardAdvance: TexLength;
+  readonly ruleLeadingAdvance: TexLength;
+}
+
+export interface TexVListParagraphPlacement {
+  readonly blockIndex: number;
+  readonly vlistPath: readonly number[];
+  readonly sourceSpan: TexSourceSpan;
+  readonly sourceHitPolicy: "caret" | "source-range";
+  readonly lineIndices: readonly number[];
+  readonly x: TexVListX;
+  readonly y: TexVListY;
+  readonly metrics: TexBoxMetrics;
+}
+
+export interface TexVListLinePlacement {
+  readonly lineIndex: number;
+  readonly x: TexVListX;
+  readonly y: TexVListY;
+  readonly height: TexLength;
+}

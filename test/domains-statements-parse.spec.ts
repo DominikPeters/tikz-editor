@@ -60,61 +60,61 @@ describe("domains statement parser mapping", () => {
     const tikzSet = mapNode(testNode("TikzSetStatement", 0, 8), "\\tikzset");
     expect(tikzSet).toMatchObject({
       kind: "TikzSet",
-      payloadRaw: "",
-      payloadSpan: undefined
+      payloadRaw: ""
     });
+    expect(tikzSet).not.toHaveProperty("payloadSpan");
     expect(tikzSet?.kind === "TikzSet" ? tikzSet.optionList.entries : []).toEqual([]);
 
     const pgfkeys = mapNode(testNode("PgfkeysStatement", 0, 8), "\\pgfkeys");
     expect(pgfkeys).toMatchObject({
       kind: "Pgfkeys",
-      payloadRaw: "",
-      payloadSpan: undefined
+      payloadRaw: ""
     });
+    expect(pgfkeys).not.toHaveProperty("payloadSpan");
 
     const tikzStyle = mapNode(testNode("TikzStyleStatement", 0, 10), "\\tikzstyle");
     expect(tikzStyle).toMatchObject({
       kind: "TikzStyle",
       styleNameRaw: "",
-      styleNameSpan: undefined,
       definitionKind: "style",
-      payloadRaw: "",
-      payloadSpan: undefined
+      payloadRaw: ""
     });
+    expect(tikzStyle).not.toHaveProperty("styleNameSpan");
+    expect(tikzStyle).not.toHaveProperty("payloadSpan");
 
     const wrapperWithoutChild = mapNode(testNode("StyleDefinitionStatement", 0, 10), "\\tikzstyle");
     expect(wrapperWithoutChild).toBeNull();
   });
 
-  it("maps malformed color and macro statements with empty spans and values", () => {
+  it("maps malformed color and macro statements with absent spans and empty values", () => {
     const colorlet = mapNode(testNode("ColorletStatement", 0, 9), "\\colorlet");
     expect(colorlet).toMatchObject({
       kind: "Colorlet",
       nameRaw: "",
-      nameSpan: undefined,
-      valueRaw: "",
-      valueSpan: undefined
+      valueRaw: ""
     });
+    expect(colorlet).not.toHaveProperty("nameSpan");
+    expect(colorlet).not.toHaveProperty("valueSpan");
 
     const defineColor = mapNode(testNode("DefineColorStatement", 0, 12), "\\definecolor");
     expect(defineColor).toMatchObject({
       kind: "DefineColor",
       nameRaw: "",
-      nameSpan: undefined,
       modelRaw: "",
-      modelSpan: undefined,
-      specificationRaw: "",
-      specificationSpan: undefined
+      specificationRaw: ""
     });
+    expect(defineColor).not.toHaveProperty("nameSpan");
+    expect(defineColor).not.toHaveProperty("modelSpan");
+    expect(defineColor).not.toHaveProperty("specificationSpan");
 
     const macroDefinition = mapNode(testNode("MacroDefinitionStatement", 0, 4), "\\def");
     expect(macroDefinition).toMatchObject({
       kind: "MacroDefinition",
       nameRaw: "",
-      nameSpan: undefined,
-      valueRaw: "",
-      valueSpan: undefined
+      valueRaw: ""
     });
+    expect(macroDefinition).not.toHaveProperty("nameSpan");
+    expect(macroDefinition).not.toHaveProperty("valueSpan");
   });
 
   it("maps macro aliases with command, grouped, and missing targets", () => {
@@ -154,9 +154,9 @@ describe("domains statement parser mapping", () => {
     expect(missingTarget).toMatchObject({
       kind: "MacroAlias",
       nameRaw: "\\d",
-      targetRaw: "",
-      targetSpan: undefined
+      targetRaw: ""
     });
+    expect(missingTarget).not.toHaveProperty("targetSpan");
   });
 
   it("maps incomplete macro command definitions without throwing", () => {
@@ -178,14 +178,14 @@ describe("domains statement parser mapping", () => {
       kind: "MacroCommandDefinition",
       commandRaw: "\\newcommand",
       nameRaw: "",
-      nameSpan: undefined,
       arity: 0,
       optionalDefaultRaw: "default",
       optionalDefaultSpan: { from: 32, to: 39 },
       bodyRaw: "",
-      bodySpan: undefined,
       starred: false
     });
+    expect(statement).not.toHaveProperty("nameSpan");
+    expect(statement).not.toHaveProperty("bodySpan");
   });
 
   it("returns null for unsupported statement node types", () => {

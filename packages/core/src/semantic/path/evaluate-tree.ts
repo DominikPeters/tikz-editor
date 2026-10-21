@@ -1,4 +1,10 @@
+import { currentFrame } from "../context.js";
+import { evaluateTransformCoordinate } from "../coords/evaluate.js";
 import type { WorldPoint } from "../../coords/points.js";
+import { worldPoint } from "../../coords/points.js";
+import { pt } from "../../coords/scalars.js";
+import { worldTransform } from "../../coords/transforms.js";
+import { applyMatrix, inverseMatrix } from "../transform.js";
 import type { EdgeOperationItem, PathStatement, Span } from "../../ast/types.js";
 import {
   readNamedCoordinate,
@@ -28,8 +34,8 @@ import { cloneCustomStyleRegistry } from "../style/custom-styles.js";
 import { applyPicDefinitionsFromOptionLists, clonePicDefinitionRegistry } from "../pics/registry.js";
 import { resolveContextDelta, type parseStyleValueAsOptionList } from "../style/resolve.js";
 import { styleDiagnosticCode, styleDiagnosticSpan, type StyleDiagnostic } from "../style/diagnostics.js";
-import { resolveFrameMeta } from "../evaluate.js";
-import type { DiagnosticPushFn, FeatureMarkFn } from "./types.js";
+import { resolveFrameMeta, resolvePathBoundary } from "../evaluate.js";
+import type { DiagnosticPushFn, FeatureMarkFn, PathEvaluationOptions } from "./types.js";
 
 function pushStyleDiagnostic(
   pushDiagnostic: DiagnosticPushFn,
@@ -95,10 +101,9 @@ export function handleChildOperationCluster(params: {
     style: ResolvedStyle,
     markFeature: FeatureMarkFn,
     pushDiagnostic: DiagnosticPushFn,
-    options?: { honorInitialCurrentPoint?: boolean }
+    options?: PathEvaluationOptions
   ) => SceneElement[];
   frontNodeElements: SceneElement[];
-  evaluateRawCoordinateWorld: (rawCoordinate: string) => WorldPoint | null;
 }): { consumed: number; treeParentCandidate: TreeParentCandidate } {
   const {
     statement,
@@ -111,8 +116,7 @@ export function handleChildOperationCluster(params: {
     pushDiagnostic,
     emittedTreeHookDiagnostics,
     evaluatePathStatement,
-    frontNodeElements,
-    evaluateRawCoordinateWorld
+    frontNodeElements
   } = params;
   let treeParentCandidate = params.treeParentCandidate;
 
@@ -160,8 +164,7 @@ export function handleChildOperationCluster(params: {
   }
   const clusterChildCount = cluster.children.length;
 
-  for (let childIndex = 0; childIndex < cluster.children.length; childIndex += 1) {
-    const child = cluster.children[childIndex];
+  for (const [childIndex, child] of cluster.children.entries()) {
     const childIndexOneBased = childIndex + 1;
     const defaultChildLevel = parentFrame.treeLevel + 1;
     const childSourceRef = {
@@ -172,15 +175,33 @@ export function handleChildOperationCluster(params: {
     } as const;
 
     const childCustomStyles = cloneCustomStyleRegistry(parentFrame.customStyles);
+    const levelStyleLayers = resolveTreeLevelStyleLayers(parentFrame, defaultChildLevel).map(
+      (layer): StyleTraceLayerInput => ({ kind: "scope", sourceRef: layer.sourceRef, rawOptions: [layer.options] })
+    );
+    const resolvedLevelStyle = resolveContextDelta(
+      parentFrame.style,
+      parentFrame.transform,
+      levelStyleLayers,
+      childCustomStyles,
+      (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
+      parentFrame.styleChain,
+      (raw) => resolveContextColorAliasValue(context, raw),
+      parentFrame.axisBasis
+    );
+    const levelFrameMeta = resolveFrameMeta({
+      ...parentFrame,
+      treeLevel: defaultChildLevel,
+      treeCurrentLevelSiblingDistancePt: null,
+      treeMissing: false
+    }, resolvedLevelStyle.expandedOptionLists, childSourceRef);
+    const levelGrowthAnchorPoint = treeParentCandidate.nameRaw
+      ? resolveNamedTreeAnchorPoint(
+          context, treeParentCandidate.nameRaw, levelFrameMeta.treeGrowthParentAnchor,
+          treeParentCandidate.point, treeParentCandidate.point
+        )
+      : treeParentCandidate.point;
     const styleLayers: StyleTraceLayerInput[] = [];
-    for (const layer of parentFrame.treeEveryChildStyles) {
-      styleLayers.push({
-        kind: "scope",
-        sourceRef: layer.sourceRef,
-        rawOptions: [layer.options]
-      });
-    }
-    for (const layer of resolveTreeLevelStyleLayers(parentFrame, defaultChildLevel)) {
+    for (const layer of levelFrameMeta.treeEveryChildStyles) {
       styleLayers.push({
         kind: "scope",
         sourceRef: layer.sourceRef,
@@ -197,30 +218,31 @@ export function handleChildOperationCluster(params: {
     const childPicDefinitions = clonePicDefinitionRegistry(parentFrame.picDefinitions);
     applyPicDefinitionsFromOptionLists(
       childPicDefinitions,
-      styleLayers.flatMap((layer) => layer.rawOptions),
+      [...levelStyleLayers, ...styleLayers].flatMap((layer) => layer.rawOptions),
       childSourceRef
     );
 
     const resolvedChildStyle = resolveContextDelta(
-      parentFrame.style,
-      parentFrame.transform,
+      resolvedLevelStyle.style,
+      // PGF applies level transforms before anchoring at the world parent;
+      // every-child and local-child transforms then act around that origin.
+      worldTransform(
+        resolvedLevelStyle.transform.a, resolvedLevelStyle.transform.b,
+        resolvedLevelStyle.transform.c, resolvedLevelStyle.transform.d,
+        levelGrowthAnchorPoint.x, levelGrowthAnchorPoint.y
+      ),
       styleLayers,
       childCustomStyles,
-      evaluateRawCoordinateWorld,
-      parentFrame.styleChain,
-      (raw) => resolveContextColorAliasValue(context, raw)
+      (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
+      resolvedLevelStyle.chain,
+      (raw) => resolveContextColorAliasValue(context, raw),
+      resolvedLevelStyle.axisBasis
     );
-    for (const diagnostic of resolvedChildStyle.diagnostics) {
+    for (const diagnostic of [...resolvedLevelStyle.diagnostics, ...resolvedChildStyle.diagnostics]) {
       pushStyleDiagnostic(pushDiagnostic, diagnostic, "Tree child option issue", child.span);
     }
 
-    const childMetaBase = {
-      ...parentFrame,
-      treeLevel: defaultChildLevel,
-      treeCurrentLevelSiblingDistancePt: null,
-      treeMissing: false
-    };
-    const childFrameMeta = resolveFrameMeta(childMetaBase, resolvedChildStyle.expandedOptionLists, childSourceRef);
+    const childFrameMeta = resolveFrameMeta(levelFrameMeta, resolvedChildStyle.expandedOptionLists, childSourceRef);
     if (childFrameMeta.treeLevel !== defaultChildLevel) {
       markFeature("tree_level_styles", "supported");
     }
@@ -248,32 +270,37 @@ export function handleChildOperationCluster(params: {
 
     const effectiveSiblingDistancePt = childFrameMeta.treeCurrentLevelSiblingDistancePt ?? childFrameMeta.treeSiblingDistancePt;
     const tentativeOrigin = computeTreeChildOrigin(
-      treeParentCandidate.point,
+      worldPoint(pt(resolvedChildStyle.transform.e), pt(resolvedChildStyle.transform.f)),
       childFrameMeta.treeLevelDistancePt,
       effectiveSiblingDistancePt,
       childIndexOneBased,
       clusterChildCount,
       childFrameMeta.treeGrowDirectionDegrees,
-      childFrameMeta.treeGrowReverse
+      childFrameMeta.treeGrowReverse,
+      resolvedChildStyle.transform
     );
     const parentGrowthAnchorPoint =
       treeParentCandidate.nameRaw && treeParentCandidate.nameRaw.trim().length > 0
         ? resolveNamedTreeAnchorPoint(
             context,
             treeParentCandidate.nameRaw,
-            childFrameMeta.treeGrowthParentAnchor,
+            levelFrameMeta.treeGrowthParentAnchor,
             treeParentCandidate.point,
             tentativeOrigin
           )
         : treeParentCandidate.point;
     const childOrigin = computeTreeChildOrigin(
-      parentGrowthAnchorPoint,
+      worldPoint(
+        pt(parentGrowthAnchorPoint.x + resolvedChildStyle.transform.e - levelGrowthAnchorPoint.x),
+        pt(parentGrowthAnchorPoint.y + resolvedChildStyle.transform.f - levelGrowthAnchorPoint.y)
+      ),
       childFrameMeta.treeLevelDistancePt,
       effectiveSiblingDistancePt,
       childIndexOneBased,
       clusterChildCount,
       childFrameMeta.treeGrowDirectionDegrees,
-      childFrameMeta.treeGrowReverse
+      childFrameMeta.treeGrowReverse,
+      resolvedChildStyle.transform
     );
 
     if (childFrameMeta.treeMissing) {
@@ -299,11 +326,16 @@ export function handleChildOperationCluster(params: {
       ...parentFrame,
       style: resolvedChildStyle.style,
       styleChain: resolvedChildStyle.chain,
-      transform: resolvedChildStyle.transform,
+      transform: worldTransform(
+        resolvedChildStyle.transform.a, resolvedChildStyle.transform.b,
+        resolvedChildStyle.transform.c, resolvedChildStyle.transform.d,
+        childOrigin.x, childOrigin.y
+      ),
+      axisBasis: resolvedChildStyle.axisBasis,
       customStyles: childCustomStyles,
       picDefinitions: childPicDefinitions,
-      colorAliases: new Map(parentFrame.colorAliases),
-      macroBindings: new Map(parentFrame.macroBindings),
+      colorAliases: parentFrame.colorAliases.fork(),
+      macroBindings: parentFrame.macroBindings.fork(),
       namePrefix: childFrameMeta.namePrefix,
       nameSuffix: childFrameMeta.nameSuffix,
       nodeLayerMode: childFrameMeta.nodeLayerMode,
@@ -316,28 +348,12 @@ export function handleChildOperationCluster(params: {
       pinDistancePt: childFrameMeta.pinDistancePt,
       pinEdgeRaw: childFrameMeta.pinEdgeRaw,
       transformShape: childFrameMeta.transformShape,
+      everyPathStyles: childFrameMeta.everyPathStyles,
       everyNodeStyles: childFrameMeta.everyNodeStyles,
       everyTextNodePartStyles: childFrameMeta.everyTextNodePartStyles,
       everyFitStyles: childFrameMeta.everyFitStyles,
       everyPicStyles: childFrameMeta.everyPicStyles,
-      everyRectangleNodeStyles: childFrameMeta.everyRectangleNodeStyles,
-      everyCircleNodeStyles: childFrameMeta.everyCircleNodeStyles,
-      everyDiamondNodeStyles: childFrameMeta.everyDiamondNodeStyles,
-      everyTrapeziumNodeStyles: childFrameMeta.everyTrapeziumNodeStyles,
-      everyIsoscelesTriangleNodeStyles: childFrameMeta.everyIsoscelesTriangleNodeStyles,
-      everyKiteNodeStyles: childFrameMeta.everyKiteNodeStyles,
-      everyDartNodeStyles: childFrameMeta.everyDartNodeStyles,
-      everyCircularSectorNodeStyles: childFrameMeta.everyCircularSectorNodeStyles,
-      everyCylinderNodeStyles: childFrameMeta.everyCylinderNodeStyles,
-      everyCloudNodeStyles: childFrameMeta.everyCloudNodeStyles,
-      everyStarburstNodeStyles: childFrameMeta.everyStarburstNodeStyles,
-      everySignalNodeStyles: childFrameMeta.everySignalNodeStyles,
-      everyTapeNodeStyles: childFrameMeta.everyTapeNodeStyles,
-      everyRectangleCalloutNodeStyles: childFrameMeta.everyRectangleCalloutNodeStyles,
-      everyEllipseCalloutNodeStyles: childFrameMeta.everyEllipseCalloutNodeStyles,
-      everyCloudCalloutNodeStyles: childFrameMeta.everyCloudCalloutNodeStyles,
-      everySingleArrowNodeStyles: childFrameMeta.everySingleArrowNodeStyles,
-      everyDoubleArrowNodeStyles: childFrameMeta.everyDoubleArrowNodeStyles,
+      everyShapeNodeStyles: childFrameMeta.everyShapeNodeStyles,
       treeLevel: childFrameMeta.treeLevel,
       treeLevelDistancePt: childFrameMeta.treeLevelDistancePt,
       treeSiblingDistancePt: childFrameMeta.treeSiblingDistancePt,
@@ -364,24 +380,62 @@ export function handleChildOperationCluster(params: {
 
     const savedCurrentPoint = context.currentPoint;
     const savedPathStartPoint = context.pathStartPoint;
+    let restPathFramePushed = false;
     context.stack.push(childFrame);
     try {
-      context.currentPoint = childOrigin;
-      context.pathStartPoint = childOrigin;
-      const scopedChildRootName = applyNameScope(preparedRoot.rootNameRaw, context);
+      let scopedChildRootName = applyNameScope(preparedRoot.rootNameRaw, context);
+      const rootIndex = splitBody.body.findIndex((item) => item.kind === "Node");
       const childStatement: PathStatement = {
         kind: "Path",
         id: `${statement.id}:tree-child:${childIndexOneBased}:${child.id}`,
         span: child.span,
-        command: "path",
-        options: undefined,
-        items: splitBody.body
+        command: "node",
+
+        items: splitBody.body.slice(0, rootIndex + 1)
       };
-      const childElements = withDependencySource(context, childStatement.id, () =>
-        evaluatePathStatement(childStatement, context, resolvedChildStyle.style, markFeature, pushDiagnostic, {
-          honorInitialCurrentPoint: true
+      const makePathFrame = (command: "node" | "path") => {
+        const sourceRef = { sourceId: childStatement.id, sourceSpan: child.span, sourceKind: "tree-generated-path", label: command };
+        const { resolved, customStyles } = resolvePathBoundary(childFrame, context, command, sourceRef);
+        for (const diagnostic of resolved.diagnostics) {
+          pushStyleDiagnostic(pushDiagnostic, diagnostic, "Tree path option issue", child.span);
+        }
+        const picDefinitions = clonePicDefinitionRegistry(childFrame.picDefinitions);
+        applyPicDefinitionsFromOptionLists(picDefinitions, resolved.expandedOptionLists, sourceRef);
+        return {
+          ...childFrame, ...resolveFrameMeta(childFrame, resolved.expandedOptionLists, sourceRef),
+          style: resolved.style, styleChain: resolved.chain, transform: resolved.transform, axisBasis: resolved.axisBasis,
+          customStyles, picDefinitions, colorAliases: childFrame.colorAliases.fork(), macroBindings: childFrame.macroBindings.fork()
+        };
+      };
+      const nodePathFrame = makePathFrame("node");
+      const childElements: SceneElement[] = [];
+      context.stack.push(nodePathFrame);
+      try {
+        scopedChildRootName = applyNameScope(preparedRoot.rootNameRaw, context);
+        context.currentPoint = worldPoint(pt(nodePathFrame.transform.e), pt(nodePathFrame.transform.f));
+        context.pathStartPoint = context.currentPoint;
+        childElements.push(...withDependencySource(context, childStatement.id, () =>
+          evaluatePathStatement(childStatement, context, nodePathFrame.style, markFeature, pushDiagnostic, { honorInitialCurrentPoint: true })
+        ));
+      } finally {
+        context.stack.pop();
+      }
+
+      // PGF emits a separate path after the generated node, including its
+      // descendants/body and edge. Its every-path state starts from the child
+      // scope, rather than retaining the node path's styles or transforms.
+      const restPathFrame = makePathFrame("path");
+      context.stack.push(restPathFrame);
+      restPathFramePushed = true;
+      context.currentPoint = worldPoint(pt(restPathFrame.transform.e), pt(restPathFrame.transform.f));
+      context.pathStartPoint = context.currentPoint;
+      const rootPoint = readNamedCoordinate(context, scopedChildRootName) ?? childOrigin;
+      childElements.push(...withDependencySource(context, childStatement.id, () =>
+        evaluatePathStatement({ ...childStatement, command: "path", items: splitBody.body.slice(rootIndex + 1) }, context, restPathFrame.style, markFeature, pushDiagnostic, {
+          honorInitialCurrentPoint: true,
+          initialTreeParentCandidate: { nameRaw: preparedRoot.rootNameRaw, point: rootPoint, span: preparedRoot.rootSpan }
         })
-      );
+      ));
 
       const treeRootSourceId = extractTreeRootSourceId(statement.id);
       const childOperationSpan =
@@ -406,8 +460,8 @@ export function handleChildOperationCluster(params: {
         childIndex,
         level: childFrameMeta.treeLevel,
         childOperationSpan,
-        bodySpan: childBodySpan,
-        optionsSpan: childOptionsSpan
+        ...(childBodySpan === undefined ? {} : { bodySpan: childBodySpan }),
+        ...(childOptionsSpan === undefined ? {} : { optionsSpan: childOptionsSpan })
       };
       for (const el of childElements) {
         // Preserve nested child metadata from recursive evaluations.
@@ -442,16 +496,21 @@ export function handleChildOperationCluster(params: {
       if (edgeSpec) {
         markFeature("edge_from_parent_operation", "supported");
       }
+      const edgeTargetInverse = inverseMatrix(currentFrame(context).transform);
       const materializedEdge: EdgeOperationItem = {
         kind: "EdgeOperation",
         id: `${child.id}:edge-from-parent:${childIndexOneBased}`,
         span: edgeSpec?.span ?? child.span,
-        optionsSpan: edgeSpec?.optionsSpan,
-        options: edgeSpec?.options,
-        nodes: edgeSpec?.nodes,
+        ...(edgeSpec?.optionsSpan === undefined ? {} : { optionsSpan: edgeSpec.optionsSpan }),
+        ...(edgeSpec?.options === undefined ? {} : { options: edgeSpec.options }),
+        ...(edgeSpec?.nodes === undefined ? {} : { nodes: edgeSpec.nodes }),
         target: {
           kind: "coordinate",
-          raw: formatPointCoordinateRaw(childAnchorPoint)
+          // The endpoint is already world-space; encode it in the active
+          // child frame so ordinary coordinate evaluation applies the CTM once.
+          raw: edgeTargetInverse
+            ? formatPointCoordinateRaw(applyMatrix(edgeTargetInverse, childAnchorPoint))
+            : `(${scopedChildRootName}${childFrameMeta.treeChildAnchor === "border" ? "" : `.${childFrameMeta.treeChildAnchor}`})`
         },
         raw: edgeSpec?.raw ?? "edge from parent"
       };
@@ -494,15 +553,16 @@ export function handleChildOperationCluster(params: {
         });
       }
 
-      const activeTreeFrame = context.stack[context.stack.length - 1];
+      const activeTreeFrame = currentFrame(context);
       const resolvedTreeEdgeStyle = resolveContextDelta(
         activeTreeFrame.style,
         activeTreeFrame.transform,
         edgeOptionLayers,
         activeTreeFrame.customStyles,
-        evaluateRawCoordinateWorld,
+        (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
         activeTreeFrame.styleChain,
-        (raw) => resolveContextColorAliasValue(context, raw)
+        (raw) => resolveContextColorAliasValue(context, raw),
+        activeTreeFrame.axisBasis
       );
       for (const diagnostic of resolvedTreeEdgeStyle.diagnostics) {
         const code = styleDiagnosticCode(diagnostic);
@@ -569,6 +629,7 @@ export function handleChildOperationCluster(params: {
     } finally {
       context.currentPoint = savedCurrentPoint;
       context.pathStartPoint = savedPathStartPoint;
+      if (restPathFramePushed) context.stack.pop();
       context.stack.pop();
     }
   }

@@ -1,0 +1,54 @@
+% Built-in Beamer declarations and ordinary LaTeX size/list scopes.
+\documentclass[aspectratio=169]{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[plain,t]
+  \onslide<1->Alpha\par
+  \onslide<2->Beta\par
+  \onslide<3->Gamma\par
+\end{frame}
+\begin{frame}[plain,t]
+  Before\par
+  \onslide+<2->Later\par
+  \onslide Always\par
+  \onslide*<3>{Only}\par
+  \onslide<2->{Group} Tail\par
+\end{frame}
+\begin{frame}[plain,t]
+  Before\par
+  \begin{overprint}[120pt]
+    \onslide<1|handout:0>Alpha.
+    \onslide<2|handout:0>Beta.\par Second line.
+    \onslide<3|handout:1>Gamma.
+  \end{overprint}\par
+  After\par
+\end{frame}
+\begin{frame}[plain,t]
+  \begin{small}
+    Alpha paragraph.
+    \begin{itemize}
+      \setlength{\itemsep}{1em}
+      \item Beta
+      \item Gamma
+    \end{itemize}
+  \end{small}
+  Delta paragraph.
+\end{frame}
+\begin{frame}[t]
+  \begin{small}Alpha\par
+    \begin{footnotesize}Beta\par\end{footnotesize}
+    Gamma\par
+  \end{small}
+  Delta\par
+\end{frame}
+\begin{frame}[plain,t]
+  \small Alpha\par Beta\par
+  \normalsize Gamma\par
+  \begin{itemize}
+    \setlength{\itemsep}{5pt plus 2pt minus 1pt}
+    \item Delta
+    \item Epsilon
+  \end{itemize}
+  \begin{itemize}\item Zeta\item Eta\end{itemize}
+\end{frame}
+\end{document}

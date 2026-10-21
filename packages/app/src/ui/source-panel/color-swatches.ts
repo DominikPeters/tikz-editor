@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { Extension } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
 import type { EditorView} from "@codemirror/view";
@@ -26,7 +27,7 @@ class ColorSwatchWidget extends WidgetType {
     super();
   }
 
-  eq(other: ColorSwatchWidget): boolean {
+  override eq(other: ColorSwatchWidget): boolean {
     return (
       this.occurrence.from === other.occurrence.from &&
       this.occurrence.to === other.occurrence.to &&
@@ -73,7 +74,7 @@ class ColorSwatchWidget extends WidgetType {
     return dom;
   }
 
-  ignoreEvent(): boolean {
+  override ignoreEvent(): boolean {
     return true;
   }
 }
@@ -156,9 +157,9 @@ function sameRanges(left: readonly SourceRange[], right: readonly SourceRange[])
     return false;
   }
   for (let index = 0; index < left.length; index += 1) {
-    const leftRange = left[index];
-    const rightRange = right[index];
-    if (leftRange?.from !== rightRange?.from || leftRange.to !== rightRange.to) {
+    const leftRange = requireArrayValue(left, index);
+    const rightRange = requireArrayValue(right, index);
+    if (leftRange.from !== rightRange.from || leftRange.to !== rightRange.to) {
       return false;
     }
   }

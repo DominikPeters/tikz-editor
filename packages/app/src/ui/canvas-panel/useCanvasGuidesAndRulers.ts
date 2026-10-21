@@ -1,5 +1,5 @@
 import { useCallback, useMemo, type Dispatch, type MutableRefObject, type PointerEvent as ReactPointerEvent, type RefObject, type SetStateAction } from "react";
-import { viewportPoint as makeViewportPoint, clientPoint as makeClientPoint, px } from "tikz-editor/coords/index";
+import { viewportPoint as makeViewportPoint, clientPoint as makeClientPoint, px } from "@tikz-editor/core/coords/index";
 import {
   buildTicks,
   buildValueSequence,
@@ -20,7 +20,7 @@ import {
 import type { CanvasTransform } from "../../store/types";
 import type { ClientPoint } from "../coords/types";
 import type { GuideDragState, GuideOrientation, GuidePreview, GuidesState } from "./types";
-import type { SvgViewBox } from "tikz-editor/svg/index";
+import type { SvgViewBox } from "@tikz-editor/core/svg/index";
 
 export type GridLines = {
   verticalMinor: number[];

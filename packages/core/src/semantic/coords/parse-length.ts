@@ -12,14 +12,34 @@ export type ParsedLength = {
   hasExplicitUnit: boolean;
 };
 
-export function parseLength(input: string, defaultUnit: "cm" | "pt"): number | null {
-  const parsed = parseLengthWithInfo(input, defaultUnit);
+export type ParseLengthOptions = {
+  /** Context-dependent TeX unit sizes, expressed in pt. */
+  unitFactors?: Readonly<Partial<Record<"em" | "ex", number>>>;
+};
+
+/** Preserve simple authored units; expressions with declared units can be rewritten in pt. */
+export function coordinateSourceUnit(raw: string): string | undefined {
+  const normalized = normalizeLengthInput(raw);
+  const match = normalized.match(/(?:\d|\.)\s*(cm|mm|pt|bp|pc|in|dd|cc|sp|em|ex)\s*$/u);
+  return match?.[1] ?? (hasExplicitLengthUnit(normalized) ? "pt" : undefined);
+}
+
+export function parseLength(
+  input: string,
+  defaultUnit: "cm" | "pt",
+  options: ParseLengthOptions = {}
+): number | null {
+  const parsed = parseLengthWithInfo(input, defaultUnit, options);
   return parsed?.value ?? null;
 }
 
-export function parseLengthWithInfo(input: string, defaultUnit: "cm" | "pt"): ParsedLength | null {
+export function parseLengthWithInfo(
+  input: string,
+  defaultUnit: "cm" | "pt",
+  options: ParseLengthOptions = {}
+): ParsedLength | null {
   const normalizedInput = normalizeLengthInput(input);
-  const quantity = parseQuantityExpression(normalizedInput);
+  const quantity = parseQuantityExpression(normalizedInput, options);
   if (quantity == null) {
     return null;
   }
@@ -35,8 +55,13 @@ export function parseLengthWithInfo(input: string, defaultUnit: "cm" | "pt"): Pa
   };
 }
 
-export function parseQuantityExpression(input: string): ParsedQuantity | null {
-  const result = evaluatePgfMathExpression(input);
+export function parseQuantityExpression(
+  input: string,
+  options: ParseLengthOptions = {}
+): ParsedQuantity | null {
+  const result = evaluatePgfMathExpression(input, {
+    ...(options.unitFactors !== undefined ? { unitFactors: options.unitFactors } : {})
+  });
   if (result.ok === false) {
     return null;
   }
@@ -54,7 +79,7 @@ export function parseCoordinateLike(raw: string): { x: string; y: string } | nul
   if (parts.length < 2) {
     return null;
   }
-  return { x: parts[0], y: parts[1] };
+  return { x: parts[0] ?? "", y: parts[1] ?? "" };
 }
 
 function normalizeLengthInput(input: string): string {
@@ -72,7 +97,7 @@ function normalizeLengthInput(input: string): string {
 function hasExplicitLengthUnit(input: string): boolean {
   let index = 0;
   while (index < input.length) {
-    const char = input[index];
+    const char = input.charAt(index);
     if (/\s/.test(char) || char === "+" || char === "-") {
       index += 1;
       continue;
@@ -84,7 +109,7 @@ function hasExplicitLengthUnit(input: string): boolean {
 
       if (char === ".") {
         index += 1;
-        while (index < input.length && isDigit(input[index])) {
+        while (index < input.length && isDigit(input.charAt(index))) {
           hasDigits = true;
           index += 1;
         }
@@ -92,27 +117,27 @@ function hasExplicitLengthUnit(input: string): boolean {
           continue;
         }
       } else {
-        while (index < input.length && isDigit(input[index])) {
+        while (index < input.length && isDigit(input.charAt(index))) {
           hasDigits = true;
           index += 1;
         }
-        if (index < input.length && input[index] === ".") {
+        if (index < input.length && input.charAt(index) === ".") {
           index += 1;
-          while (index < input.length && isDigit(input[index])) {
+          while (index < input.length && isDigit(input.charAt(index))) {
             hasDigits = true;
             index += 1;
           }
         }
       }
 
-      if (index < input.length && (input[index] === "e" || input[index] === "E")) {
+      if (index < input.length && (input.charAt(index) === "e" || input.charAt(index) === "E")) {
         const exponentStart = index;
         index += 1;
-        if (index < input.length && (input[index] === "+" || input[index] === "-")) {
+        if (index < input.length && (input.charAt(index) === "+" || input.charAt(index) === "-")) {
           index += 1;
         }
         const exponentDigitsStart = index;
-        while (index < input.length && isDigit(input[index])) {
+        while (index < input.length && isDigit(input.charAt(index))) {
           index += 1;
         }
         if (exponentDigitsStart === index) {
@@ -120,12 +145,12 @@ function hasExplicitLengthUnit(input: string): boolean {
         }
       }
 
-      while (index < input.length && /\s/.test(input[index])) {
+      while (index < input.length && /\s/.test(input.charAt(index))) {
         index += 1;
       }
 
       const unitStart = index;
-      while (index < input.length && /[A-Za-z]/.test(input[index])) {
+      while (index < input.length && /[A-Za-z]/.test(input.charAt(index))) {
         index += 1;
       }
       if (index > unitStart) {
@@ -150,7 +175,7 @@ function unwrapSingleOuterBracePair(raw: string): string | null {
 
   let depth = 0;
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\") {
       index += 1;
       continue;

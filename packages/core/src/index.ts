@@ -1,10 +1,19 @@
 export { FeatureFlags } from "./ast/features.js";
+export { prepareBeamerDocument, scanBeamerDocument } from "./beamer/index.js";
+export {
+  formatDocumentRootId,
+  parseDocumentRootId,
+  tikzFigureIndexFromRootId,
+  type DocumentRootKind,
+  type DocumentRootRef,
+} from "./document/root-id.js";
+export { detectDocumentKind, type DocumentKind } from "./document/kind.js";
 export * from "./coords/index.js";
+export type * from "./graphics/index.js";
 export { parseTikz, createIncrementalParseSession } from "./parser/index.js";
 export { applyEdit, applyEditIntent } from "./edit/apply.js";
 export { EditorSession } from "./edit/session.js";
 export { createEditAnalysisSession } from "./edit/analysis.js";
-export { collectTikzSnippetsFromDocs, extractTikzSnippetsFromSource } from "./corpus/extract.js";
 export {
   evaluateTikzFigure,
   createIncrementalSemanticSession,
@@ -13,8 +22,16 @@ export {
 export { emitSvg, emitSvgModel, serializeSvgModel, serializeSvgModelAsync, diffSvgModels } from "./svg/index.js";
 export { renderTikzToSvg, renderTikzToSvgAsync } from "./render/index.js";
 export { capabilityMatrix, FEATURE_IDS } from "./capabilities/index.js";
-export { createMathJaxNodeTextEngine, setWorkerFontLoader } from "./text/mathjax-engine.js";
-export type { MathJaxFont } from "./text/mathjax-engine.js";
+export { createTexNodeTextEngine } from "./text/tex-node-text-engine.js";
+export {
+  ComputerModernTexMetricProvider,
+  DEFAULT_COMPUTER_MODERN_TEXT_FONTS,
+  computerModernTexMetricProvider
+} from "./text/tex/index.js";
+export {
+  renderTexParagraphSvgBody,
+  renderTexVListSvgMetadata
+} from "./text/tex/index.js";
 export { collectSymbols, resolveDocHoverTarget } from "./completion/index.js";
 export {
   createPdfExportArtifact,
@@ -53,10 +70,10 @@ export {
 } from "./edit/snapping/index.js";
 
 export type { ParseTikzOptions, ParseTikzResult } from "./parser/index.js";
+export type * from "./beamer/index.js";
 export type * from "./parser/incremental.js";
 export type { TikzEdit, ApplyEditResult, EditIntent, EditIntentResult, SourcePatch } from "./edit/types.js";
 export type { EditAnalysisSession, EditAnalysisView, EditAnalysisOptions } from "./edit/analysis.js";
-export type { TikzSnippet, TikzSnippetKind } from "./corpus/extract.js";
 export type { EvaluateTikzResult } from "./semantic/index.js";
 export type {
   EmitSvgResult,
@@ -90,6 +107,7 @@ export type {
 } from "./edit/action-availability.js";
 export type * from "./edit/snapping/types.js";
 export type * from "./text/types.js";
+export type * from "./text/tex/index.js";
 export type * from "./ast/types.js";
 export type * from "./diagnostics/types.js";
 export type * from "./semantic/index.js";

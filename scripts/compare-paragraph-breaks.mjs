@@ -1,12 +1,22 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
 
 import { ensureDistBuildFresh } from "./ensure-dist-build.mjs";
+import { loadTexFuzzModules } from "./lib/tex-fuzz-loader.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DEFAULT_OUT_DIR = join(repoRoot, "artifacts", "paragraph-break-compare");
@@ -15,6 +25,7 @@ const DEFAULT_WIDTHS = [120, 160, 220, 280, 360];
 const DEFAULT_CASE_COUNT = 25;
 const DEFAULT_MIN_WORDS = 20;
 const DEFAULT_MAX_WORDS = 90;
+const ORACLE_CACHE_VERSION = "luatex-tikz-paragraph-v8-shared-tex-fuzz-amsmath";
 const DEFAULT_WORD_BANK_TEXT = `
 Lorem ipsum dolor sit amet consectetuer adipiscing elit Aenean commodo ligula eget dolor
 Aenean massa Cum sociis natoque penatibus et magnis dis parturient montes nascetur ridiculus mus
@@ -29,6 +40,16 @@ condimentum rhoncus sem quam semper libero sit amet adipiscing sem neque sed ips
 blandit vel luctus pulvinar hendrerit id lorem Maecenas nec odio et ante tincidunt tempus Donec vitae
 sapien ut libero venenatis faucibus Nullam quis ante
 `;
+const DEFAULT_INLINE_MATH_FRAGMENTS = [
+  "$x$",
+  "$y$",
+  "$z$",
+  "$a+b$",
+  "$m-n$",
+  "$uv$",
+  String.raw`\(p+q\)`,
+  String.raw`\(r-s\)`,
+];
 
 const LIGATURE_NORMALIZATION = new Map([
   ["\uFB00", "ff"],
@@ -38,6 +59,10 @@ const LIGATURE_NORMALIZATION = new Map([
   ["\uFB04", "ffl"],
   ["\uFB05", "ft"],
   ["\uFB06", "st"],
+]);
+const SIMPLE_MATH_OPERATOR_NORMALIZATION = new Map([
+  ["+", " + "],
+  ["-", " - "],
 ]);
 
 function usage() {
@@ -49,6 +74,7 @@ Usage:
 Options:
   --text <text>          Plain paragraph text to compare.
   --input <file>         Read plain paragraph text from a file.
+  --text-is-tex          Treat --text/--input content as TeX node content instead of escaping it.
   --align <mode>         One of left, right, center, justify. Default: left.
   --width <pt>           Text width in pt. Default: 380.
   --fuzz <count>         Run randomized comparisons instead of a single case.
@@ -57,7 +83,12 @@ Options:
   --widths <csv>         Fuzz widths in pt. Default: 120,160,220,280,360
   --min-words <n>        Fuzz minimum word count. Default: 20
   --max-words <n>        Fuzz maximum word count. Default: 90
+  --inline-math-fuzz     Include simple inline math fragments in randomized paragraphs.
   --word-bank <file>     Plain text file used to build the fuzz word bank.
+  --font-encoding <enc>  One of TU, OT1, T1. Default: TU. OT1 forces cmr10.
+  --oracle-cache-dir <dir>
+                         Cache LuaLaTeX oracle JSON across runs. Default:
+                         <out-dir>/oracle-cache
   --out-dir <dir>        Artifact output root.
   --help                 Show this message.
 `.trim();
@@ -75,7 +106,11 @@ function parseArgs(argv) {
     widths: [...DEFAULT_WIDTHS],
     minWords: DEFAULT_MIN_WORDS,
     maxWords: DEFAULT_MAX_WORDS,
+    inlineMathFuzz: false,
+    textIsTex: false,
     wordBankPath: null,
+    fontEncoding: "TU",
+    oracleCacheDir: null,
     outDir: DEFAULT_OUT_DIR,
   };
 
@@ -94,6 +129,10 @@ function parseArgs(argv) {
     if (arg === "--input" && next != null) {
       options.inputPath = resolve(next);
       i += 1;
+      continue;
+    }
+    if (arg === "--text-is-tex") {
+      options.textIsTex = true;
       continue;
     }
     if (arg === "--align" && next != null) {
@@ -136,8 +175,26 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
+    if (arg === "--inline-math-fuzz") {
+      options.inlineMathFuzz = true;
+      continue;
+    }
     if (arg === "--word-bank" && next != null) {
       options.wordBankPath = resolve(next);
+      i += 1;
+      continue;
+    }
+    if (arg === "--font-encoding" && next != null) {
+      const normalized = next.toUpperCase();
+      if (normalized !== "TU" && normalized !== "OT1" && normalized !== "T1") {
+        throw new Error(`Invalid font encoding: ${next}`);
+      }
+      options.fontEncoding = normalized;
+      i += 1;
+      continue;
+    }
+    if (arg === "--oracle-cache-dir" && next != null) {
+      options.oracleCacheDir = resolve(next);
       i += 1;
       continue;
     }
@@ -216,9 +273,18 @@ function escapePlainTextForTeX(text) {
     .replaceAll("\r", " ");
 }
 
-function buildTikzSnippet({ text, align, widthPt }) {
+function normalizeTexNodeContent(text) {
+  return text
+    .replaceAll("\r\n", " ")
+    .replaceAll("\n", " ")
+    .replaceAll("\r", " ");
+}
+
+function buildTikzSnippet({ text, align, widthPt, fontCommand = "", textIsTex = false }) {
+  const fontOption = fontCommand ? `, font=${fontCommand}` : "";
+  const nodeText = textIsTex ? normalizeTexNodeContent(text) : escapePlainTextForTeX(text);
   return String.raw`\begin{tikzpicture}
-  \node[align=${align}, text width=${widthPt}pt] at (0,0) {${escapePlainTextForTeX(text)}};
+  \node[align=${align}, text width=${widthPt}pt${fontOption}] at (0,0) {${nodeText}};
 \end{tikzpicture}`;
 }
 
@@ -241,6 +307,16 @@ function buildRandomParagraph(rng, wordBank, options) {
   let capitalizeNext = true;
 
   for (let index = 0; index < count; index += 1) {
+    if (
+      options.inlineMathFuzz &&
+      index > 0 &&
+      index < count - 1 &&
+      rng() < 0.18
+    ) {
+      pieces.push(sampleOne(rng, DEFAULT_INLINE_MATH_FRAGMENTS));
+      continue;
+    }
+
     let word = sampleOne(rng, wordBank);
     if (capitalizeNext) {
       word = titleCaseWord(word);
@@ -266,6 +342,30 @@ function buildRandomParagraph(rng, wordBank, options) {
   return pieces.join(" ");
 }
 
+// Paragraph wrapping has separate focused fuzzers for boxes and vertical
+// layout. Keep the shared generator's prose/style/math subtree here so this
+// runner remains a line-breaking oracle instead of duplicating those suites.
+function projectGeneratedProseCase(texFuzz, generated) {
+  const projectNodes = (nodes) => nodes.flatMap((node) => {
+    if (node.kind === "text") return [{ ...node, value: node.value.replaceAll("Ω", "Omega") }];
+    if (["space", "accent", "math"].includes(node.kind)) return [node];
+    if (["group", "font", "font-declaration", "color"].includes(node.kind)) {
+      return [{ ...node, children: projectNodes(node.children) }];
+    }
+    if (node.kind === "style-declaration" && node.command !== "fontsize") {
+      return [{ ...node, children: projectNodes(node.children) }];
+    }
+    return "children" in node ? projectNodes(node.children) : [];
+  });
+  const ast = projectNodes(generated.ast);
+  if (!ast.some((node) => node.kind !== "space")) ast.push({ kind: "text", value: "Alpha" });
+  return texFuzz.caseFromTexFuzzAst(ast, {
+    seed: generated.seed,
+    profile: generated.profile,
+    choices: generated.choices,
+  });
+}
+
 function luaStringLiteral(value) {
   return `[=[${value.replaceAll("]=]", "]=] .. ']=]' .. [=[")}]=]`;
 }
@@ -284,6 +384,11 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
   local disc_id = node.id("disc")
   local penalty_id = node.id("penalty")
   local ligatures = {
+    [11] = "ff",
+    [12] = "fi",
+    [13] = "fl",
+    [14] = "ffi",
+    [15] = "ffl",
     [0xFB00] = "ff",
     [0xFB01] = "fi",
     [0xFB02] = "fl",
@@ -291,18 +396,31 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
     [0xFB04] = "ffl",
     [0xFB05] = "ft",
     [0xFB06] = "st",
+    [0] = "-",
   }
   local function json_escape(value)
     local backslash = string.char(92)
     local quote = string.char(34)
     value = value:gsub(backslash, backslash .. backslash)
     value = value:gsub(quote, backslash .. quote)
+    value = value:gsub("[%z\1-\31]", function(char)
+      return string.format(backslash .. "u%04x", string.byte(char))
+    end)
     value = value:gsub(string.char(10), backslash .. "n")
     value = value:gsub(string.char(13), backslash .. "r")
     value = value:gsub(string.char(9), backslash .. "t")
     return quote .. value .. quote
   end
   local function glyph_text(n)
+    if n.components then
+      local parts = {}
+      for component in node.traverse(n.components) do
+        parts[#parts + 1] = glyph_text(component)
+      end
+      if #parts > 0 then
+        return table.concat(parts)
+      end
+    end
     local replacement = ligatures[n.char]
     if replacement then
       return replacement
@@ -331,8 +449,16 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
           parts[#parts + 1] = nested
         end
       elseif cur.id == disc_id then
-        -- Inactive discretionary nodes remain inside line boxes; selected
-        -- line-break hyphens are already materialized as glyphs.
+        -- Inactive discretionary nodes keep their visible content in the
+        -- replacement/no-break list. Selected line-break hyphens are already
+        -- materialized as glyphs in the line box.
+        local replacement = cur.replace or cur.no_break
+        if replacement then
+          local nested = line_text(replacement)
+          if #nested > 0 then
+            parts[#parts + 1] = nested
+          end
+        end
       end
       cur = cur.next
     end
@@ -478,14 +604,27 @@ function buildLuaTeXOracleScript({ outputPath, align, widthPt }) {
 `;
 }
 
-function buildLuaTeXOracleDocument({ text, align, widthPt }) {
-  const snippet = buildTikzSnippet({ text, align, widthPt });
+function buildLuaTeXOracleDocument({ text, align, widthPt, fontEncoding, textIsTex }) {
+  const forceComputerModern = fontEncoding === "OT1";
+  const snippet = buildTikzSnippet({
+    text,
+    align,
+    widthPt,
+    fontCommand: forceComputerModern ? String.raw`\tikzcomparecmr` : "",
+    textIsTex: textIsTex === true,
+  });
+  const fontEncodingLine = fontEncoding === "T1" ? String.raw`\usepackage[T1]{fontenc}` : "";
+  const fontDefinitionLine = forceComputerModern
+    ? String.raw`\font\tikzcomparecmr=cmr10 at 10pt`
+    : "";
 
   return String.raw`\documentclass{standalone}
-\usepackage[T1]{fontenc}
+${fontEncodingLine}
+\usepackage{amsmath,amssymb}
 \usepackage{tikz}
 \begin{document}
 \makeatletter
+${fontDefinitionLine}
 \pretolerance=100
 \tolerance=200
 \hyphenpenalty=50
@@ -500,15 +639,73 @@ function buildLuaTeXOracleDocument({ text, align, widthPt }) {
 `;
 }
 
+function oracleCacheKey(caseSpec) {
+  const payload = {
+    version: ORACLE_CACHE_VERSION,
+    align: caseSpec.align,
+    widthPt: caseSpec.widthPt,
+    fontEncoding: caseSpec.fontEncoding,
+    textIsTex: caseSpec.textIsTex === true,
+    text: caseSpec.text,
+    texFuzzGeneratorVersion: caseSpec.texFuzz?.generatorVersion ?? null,
+    texFuzzFeatures: caseSpec.texFuzz?.features ?? [],
+  };
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function tryReadCachedLuaTeXOracle(caseSpec, caseDir, oracleCacheDir) {
+  if (!oracleCacheDir) {
+    return null;
+  }
+  const key = oracleCacheKey(caseSpec);
+  const cachePath = join(oracleCacheDir, `${key}.json`);
+  if (!existsSync(cachePath)) {
+    return null;
+  }
+  const oracleJsonPath = join(caseDir, "oracle.json");
+  copyFileSync(cachePath, oracleJsonPath);
+  writeFileSync(
+    join(caseDir, "oracle-cache.json"),
+    JSON.stringify({ status: "hit", key, path: cachePath }, null, 2),
+    "utf8"
+  );
+  return JSON.parse(readFileSync(oracleJsonPath, "utf8"));
+}
+
+function writeCachedLuaTeXOracle(caseSpec, caseDir, oracleCacheDir, oracleJsonPath) {
+  if (!oracleCacheDir) {
+    return;
+  }
+  mkdirSync(oracleCacheDir, { recursive: true });
+  const key = oracleCacheKey(caseSpec);
+  const cachePath = join(oracleCacheDir, `${key}.json`);
+  copyFileSync(oracleJsonPath, cachePath);
+  writeFileSync(
+    join(caseDir, "oracle-cache.json"),
+    JSON.stringify({ status: "miss", key, path: cachePath }, null, 2),
+    "utf8"
+  );
+}
+
 function runCommand(command, args, options = {}) {
   return spawnSync(command, args, {
     cwd: options.cwd,
     encoding: "utf8",
+    env: {
+      ...process.env,
+      TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
+      TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
+    },
     maxBuffer: 20 * 1024 * 1024,
   });
 }
 
-function runLuaTeXOracle(caseSpec, caseDir) {
+function runLuaTeXOracle(caseSpec, caseDir, oracleCacheDir) {
+  const cached = tryReadCachedLuaTeXOracle(caseSpec, caseDir, oracleCacheDir);
+  if (cached) {
+    return cached;
+  }
+
   if (!commandExists("lualatex")) {
     throw new Error("lualatex command not found.");
   }
@@ -544,6 +741,7 @@ function runLuaTeXOracle(caseSpec, caseDir) {
       throw new Error(`LuaTeX oracle did not produce ${basename(oracleJsonPath)}.`);
     }
     writeFileSync(oracleJsonPath, readFileSync(oracleJsonTempPath, "utf8"), "utf8");
+    writeCachedLuaTeXOracle(caseSpec, caseDir, oracleCacheDir, oracleJsonPath);
     return JSON.parse(readFileSync(oracleJsonPath, "utf8"));
   } finally {
     rmSync(workDir, { recursive: true, force: true });
@@ -553,24 +751,38 @@ function runLuaTeXOracle(caseSpec, caseDir) {
 async function loadRendererModules() {
   const distEntry = ensureDistBuildFresh(repoRoot);
   const coreModule = await import(pathToFileURL(distEntry).href);
-  const mathJaxModule = await import(
-    pathToFileURL(resolve(repoRoot, "packages/core/dist/text/mathjax-engine.js")).href
+  const layoutContextModule = await import(
+    pathToFileURL(resolve(repoRoot, "packages/core/dist/text/layout-context.js")).href
   );
   const knuthPlassModule = await import(
     pathToFileURL(resolve(repoRoot, "packages/core/dist/text/knuth-plass/index.js")).href
   );
   return {
     renderTikzToSvgAsync: coreModule.renderTikzToSvgAsync,
-    getActiveMathJaxOutputJax: mathJaxModule.getActiveMathJaxOutputJax,
-    getKnuthPlassReportsFromOutputJax: knuthPlassModule.getKnuthPlassReportsFromOutputJax,
+    getActiveTextLayoutContext: layoutContextModule.getActiveTextLayoutContext,
+    getParagraphLayoutReports: knuthPlassModule.getParagraphLayoutReports,
   };
 }
 
 function normalizeLineTextFromSegments(segments) {
   const text = segments
-    .map((segment) => (segment.kind === "text" || segment.kind === "space" ? segment.text ?? "" : ""))
+    .map((segment) =>
+      segment.kind === "math"
+        ? normalizeSimpleMathLineText(segment.text ?? "")
+        : segment.kind === "text" || segment.kind === "space"
+        ? segment.text ?? ""
+        : ""
+    )
     .join("");
   return normalizeVisibleText(text);
+}
+
+function normalizeSimpleMathLineText(text) {
+  let normalized = text;
+  for (const [operator, replacement] of SIMPLE_MATH_OPERATOR_NORMALIZATION) {
+    normalized = normalized.split(operator).join(replacement);
+  }
+  return normalized.replace(/[ \t]+/g, " ").trim();
 }
 
 async function runOurRenderer(caseSpec, caseDir, renderer) {
@@ -585,13 +797,13 @@ async function runOurRenderer(caseSpec, caseDir, renderer) {
   if (!textElement || textElement.kind !== "Text") {
     throw new Error("Renderer output does not contain a scene text element.");
   }
-  if (textElement.textRenderInfo?.mode !== "mathjax") {
-    throw new Error("Renderer output for the compared case is not MathJax-backed text.");
+  if (textElement.textRenderInfo?.mode !== "tex") {
+    throw new Error("Renderer output for the compared case is not native TeX text.");
   }
 
   const paragraphId = textElement.textRenderInfo.paragraphId;
-  const outputJax = renderer.getActiveMathJaxOutputJax();
-  const reports = renderer.getKnuthPlassReportsFromOutputJax(outputJax);
+  const layoutContext = renderer.getActiveTextLayoutContext();
+  const reports = renderer.getParagraphLayoutReports(layoutContext);
   const report = [...reports].reverse().find((entry) => entry.paragraphId === paragraphId) ?? null;
   if (!report) {
     throw new Error(`Could not find paragraph report for ${paragraphId ?? "null"}.`);
@@ -706,13 +918,13 @@ ${rows}
   writeFileSync(join(runDir, "index.html"), html, "utf8");
 }
 
-async function runCase(caseSpec, renderer, runDir, index) {
+async function runCase(caseSpec, renderer, runDir, index, oracleCacheDir) {
   const slug = `${String(index + 1).padStart(3, "0")}-${slugify(`${caseSpec.align}-${caseSpec.widthPt}-${caseSpec.text.slice(0, 48)}`)}`;
   const caseDir = join(runDir, slug);
   mkdirSync(caseDir, { recursive: true });
 
   try {
-    const oracle = runLuaTeXOracle(caseSpec, caseDir);
+    const oracle = runLuaTeXOracle(caseSpec, caseDir, oracleCacheDir);
     const ours = await runOurRenderer(caseSpec, caseDir, renderer);
     const comparison = compareParagraphLines(oracle, ours);
     const payload = {
@@ -721,7 +933,9 @@ async function runCase(caseSpec, renderer, runDir, index) {
       slug,
       align: caseSpec.align,
       widthPt: caseSpec.widthPt,
+      textIsTex: caseSpec.textIsTex === true,
       text: caseSpec.text,
+      texFuzz: caseSpec.texFuzz ?? null,
       oracle,
       ours,
       comparison,
@@ -738,13 +952,14 @@ async function runCase(caseSpec, renderer, runDir, index) {
       align: caseSpec.align,
       widthPt: caseSpec.widthPt,
       text: caseSpec.text,
+      texFuzz: caseSpec.texFuzz ?? null,
     };
     writeFileSync(join(caseDir, "case.json"), JSON.stringify(payload, null, 2), "utf8");
     return payload;
   }
 }
 
-function summarizeCases(cases, seed) {
+function summarizeCases(cases, seed, generatorVersion = null) {
   const comparableCases = cases.filter((entry) => entry.status === "ok");
   const totalComparable = comparableCases.length || 1;
   const exactLineMatches = comparableCases.filter((entry) => entry.comparison.exactLineTextAgreement).length;
@@ -776,7 +991,10 @@ function summarizeCases(cases, seed) {
 
   return {
     seed,
+    texFuzzGeneratorVersion: generatorVersion,
+    texFuzzFeatures: [...new Set(cases.flatMap((entry) => entry.texFuzz?.features ?? []))].sort(),
     cases: cases.length,
+    inlineMathCases: cases.filter((entry) => entry.textIsTex === true && /(?:\$|\\\()/u.test(entry.text)).length,
     comparableCases: comparableCases.length,
     errorCases: cases.length - comparableCases.length,
     exactLineTextAgreementRate: exactLineMatches / totalComparable,
@@ -800,8 +1018,11 @@ async function main() {
   mkdirSync(options.outDir, { recursive: true });
   const runDir = join(options.outDir, timestampSlug());
   mkdirSync(runDir, { recursive: true });
+  const oracleCacheDir = options.oracleCacheDir ?? join(options.outDir, "oracle-cache");
+  mkdirSync(oracleCacheDir, { recursive: true });
 
   const renderer = await loadRendererModules();
+  const texFuzz = await loadTexFuzzModules();
   const cases = [];
 
   if (options.fuzzCount > 0) {
@@ -815,13 +1036,31 @@ async function main() {
     }
 
     for (let index = 0; index < options.fuzzCount; index += 1) {
+      const caseSeed = (options.seed + Math.imul(index + 1, 0x9E3779B1)) >>> 0;
+      const generated = options.inlineMathFuzz
+        ? projectGeneratedProseCase(
+          texFuzz,
+          texFuzz.generateTexFuzzCase(caseSeed, { profile: "aggressive", depth: 3, size: 4 })
+        )
+        : null;
+      const randomParagraph = buildRandomParagraph(rng, wordBank, options);
       const caseSpec = {
         id: `fuzz-${index + 1}`,
         align: sampleOne(rng, options.alignments),
         widthPt: sampleOne(rng, options.widths),
-        text: buildRandomParagraph(rng, wordBank, options),
+        fontEncoding: options.fontEncoding,
+        textIsTex: options.inlineMathFuzz,
+        text: generated ? `${randomParagraph} ${generated.source}` : randomParagraph,
+        texFuzz: generated ? {
+          schemaVersion: generated.schemaVersion,
+          generatorVersion: generated.generatorVersion,
+          seed: generated.seed,
+          profile: generated.profile,
+          features: generated.features,
+          choices: generated.choices,
+        } : null,
       };
-      const payload = await runCase(caseSpec, renderer, runDir, index);
+      const payload = await runCase(caseSpec, renderer, runDir, index, oracleCacheDir);
       cases.push(payload);
       if (payload.status === "ok") {
         const marker = payload.comparison.exactLineTextAgreement ? "match" : "mismatch";
@@ -845,9 +1084,11 @@ async function main() {
       id: "single-case",
       align: options.align,
       widthPt: options.widthPt,
+      fontEncoding: options.fontEncoding,
+      textIsTex: options.textIsTex,
       text,
     };
-    const payload = await runCase(caseSpec, renderer, runDir, 0);
+    const payload = await runCase(caseSpec, renderer, runDir, 0, oracleCacheDir);
     if (payload.status !== "ok") {
       throw new Error(payload.error);
     }
@@ -855,7 +1096,7 @@ async function main() {
     console.log(JSON.stringify(payload, null, 2));
   }
 
-  const summary = summarizeCases(cases, options.seed);
+  const summary = summarizeCases(cases, options.seed, texFuzz.TEX_FUZZ_GENERATOR_VERSION);
   writeFileSync(join(runDir, "summary.json"), JSON.stringify(summary, null, 2), "utf8");
   writeHtmlReport(runDir, summary, cases);
   console.log(`[paragraph-compare] wrote report to ${runDir}`);

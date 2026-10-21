@@ -1,16 +1,27 @@
-import type { WorldPoint } from "../../coords/points.js";
+import type { WorldPoint, WorldVector } from "../../coords/points.js";
 import type { FeatureId } from "../../capabilities/feature-ids.js";
 import type { PicOperationItem } from "../../ast/types.js";
 import type { SceneElement } from "../types.js";
 
 export type FeatureMarkFn = (featureId: FeatureId, status: "supported" | "unsupported") => void;
 export type DiagnosticPushFn = (code: string, message: string, spanFrom: number, spanTo: number) => void;
-export type ArcParameters = { startAngle: number; endAngle: number; rx: number; ry: number };
+export type ArcParameters = { startAngle: number; endAngle: number; rx: number; ry: number; usesBasis?: boolean };
 export type PlacementSegment =
   | { kind: "line"; from: WorldPoint; to: WorldPoint }
   | { kind: "hv"; operator: "-|" | "|-"; from: WorldPoint; bend: WorldPoint; to: WorldPoint }
   | { kind: "cubic"; from: WorldPoint; c1: WorldPoint; c2: WorldPoint; to: WorldPoint }
-  | { kind: "arc"; from: WorldPoint; to: WorldPoint; params: ArcParameters };
+  | {
+      kind: "arc";
+      from: WorldPoint;
+      to: WorldPoint;
+      params: ArcParameters;
+      /** Transformed zero/ninety-degree axes; absent on legacy identity-frame segments. */
+      basis?: { x: WorldVector; y: WorldVector };
+      /** PGF timer axes after XY basis conversion, before the CTM. */
+      localBasis?: { x: WorldVector; y: WorldVector };
+      /** Final PGF cubic control in world space, used only by TikZ `turn` lookup. */
+      turnLookupControl?: WorldPoint;
+    };
 
 export type PicEvaluationResult = {
   behindElements: SceneElement[];
@@ -25,5 +36,6 @@ export type PicEvaluationFn = (
 
 export type PathEvaluationOptions = {
   honorInitialCurrentPoint?: boolean;
+  initialTreeParentCandidate?: { nameRaw: string | null; point: WorldPoint; span: { from: number; to: number } };
   evaluatePicOperation?: PicEvaluationFn;
 };

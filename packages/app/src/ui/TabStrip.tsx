@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useEditorStore } from "../store/store";
 import css from "./TabStrip.module.css";
+import { NEW_BEAMER_SOURCE } from "../presentation/launch";
 
 function reorder(order: string[], fromId: string, toId: string): string[] {
   const from = order.indexOf(fromId);
@@ -108,7 +109,7 @@ export function TabStrip({
       <button
         type="button"
         className={css.add}
-        onClick={() => { dispatch({ type: "NEW_DOCUMENT" }); }}
+        onClick={() => { dispatch(useEditorStore.getState().documentKind === "beamer" ? { type: "NEW_DOCUMENT", source: NEW_BEAMER_SOURCE } : { type: "NEW_DOCUMENT" }); }}
         aria-label="New document"
         data-testid="tab-new"
       >

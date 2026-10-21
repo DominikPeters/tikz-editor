@@ -1,5 +1,6 @@
 import type { PathStatement, Statement } from "../ast/types.js";
 import { parseTikz, type ParseTikzResult } from "../parser/index.js";
+import { createIncrementalParseSession, type IncrementalParseSession } from "../parser/incremental.js";
 import {
   resolveFigurePropertyTargetFromParseResult,
   resolvePropertyTargetFromParseResult,
@@ -33,6 +34,7 @@ type EditAnalysisCache = {
   pathStatementCache: Map<string, PathStatement | null>;
   figureTargetCache: PropertyTargetResolution | null;
   view: EditAnalysisView;
+  incremental?: IncrementalParseSession;
 };
 
 export type EditAnalysisSession = {
@@ -45,28 +47,22 @@ export type EditAnalysisSession = {
   reset: () => void;
 };
 
-export function createEditAnalysisSession(): EditAnalysisSession {
-  let cached: EditAnalysisCache | null = null;
-  // Keep the previous entry so that callers with a slightly stale source
-  // (e.g. snapshot.source that hasn't caught up to the latest edit) still
-  // get a cache hit instead of triggering a redundant full parse.
-  let previous: EditAnalysisCache | null = null;
+/**
+ * Keeps the last `capacity` parses, most recent first. Two by default, so
+ * that callers with a slightly stale source (e.g. snapshot.source that hasn't
+ * caught up to the latest edit) still get a cache hit instead of triggering
+ * a redundant full parse. With `incremental`, a new source is parsed from the
+ * most recent parse, reparsing only the statement its change falls in (the
+ * parser falls back to a full parse when the change does not fit one).
+ */
+export function createEditAnalysisSession(capacity = 2, sessionOptions: { incremental?: boolean } = {}): EditAnalysisSession {
+  let entries: EditAnalysisCache[] = [];
 
-  const lookup = (source: string, activeFigureId: string | null | undefined): EditAnalysisCache | null => {
-    if (cached?.source === source && cached.activeFigureId === activeFigureId) {
-      return cached;
-    }
-    if (previous?.source === source && previous.activeFigureId === activeFigureId) {
-      return previous;
-    }
-    return null;
-  };
+  const lookup = (source: string, activeFigureId: string | null | undefined): EditAnalysisCache | null =>
+    entries.find((entry) => entry.source === source && entry.activeFigureId === activeFigureId) ?? null;
 
   const store = (entry: EditAnalysisCache): void => {
-    if (cached && cached !== entry) {
-      previous = cached;
-    }
-    cached = entry;
+    entries = [entry, ...entries.filter((candidate) => candidate !== entry)].slice(0, capacity);
   };
 
   const ensure = (source: string, options: EditAnalysisOptions = {}): EditAnalysisView => {
@@ -75,9 +71,10 @@ export function createEditAnalysisSession(): EditAnalysisSession {
     if (hit) {
       return hit.view;
     }
-    const parseResult = parseTikz(source, {
+    const base = sessionOptions.incremental ? entries.find((entry) => entry.activeFigureId === activeFigureId) : undefined;
+    const parseResult = base ? parseFrom(base, source, activeFigureId) : parseTikz(source, {
       recover: true,
-      activeFigureId,
+      ...(activeFigureId === undefined ? {} : { activeFigureId }),
       includeContextDefinitions: true
     });
     const entry = createCache(source, parseResult, activeFigureId);
@@ -99,10 +96,17 @@ export function createEditAnalysisSession(): EditAnalysisSession {
     },
     ensure,
     reset() {
-      cached = null;
-      previous = null;
+      entries = [];
     }
   };
+}
+
+function parseFrom(base: EditAnalysisCache, source: string, activeFigureId: string | null | undefined): ParseTikzResult {
+  if (!base.incremental) {
+    base.incremental = createIncrementalParseSession();
+    base.incremental.prime(base.parseResult, { ...(activeFigureId === undefined ? {} : { activeFigureId }), includeContextDefinitions: true });
+  }
+  return base.incremental.fork().evaluate({ source, ...(activeFigureId === undefined ? {} : { activeFigureId }), includeContextDefinitions: true, inferChanges: true }).parse;
 }
 
 function createCache(
@@ -114,18 +118,7 @@ function createCache(
   const propertyTargetCache = new Map<string, PropertyTargetResolution>();
   const pathStatementCache = new Map<string, PathStatement | null>();
 
-  const cache: EditAnalysisCache = {
-    source,
-    activeFigureId,
-    parseResult,
-    statementSnapshot,
-    propertyTargetCache,
-    pathStatementCache,
-    figureTargetCache: null,
-    view: null as unknown as EditAnalysisView
-  };
-
-  cache.view = {
+  const view: EditAnalysisView = {
     source,
     activeFigureId,
     parseResult,
@@ -157,6 +150,10 @@ function createCache(
     }
   };
 
+  const cache: EditAnalysisCache = {
+    source, activeFigureId, parseResult, statementSnapshot,
+    propertyTargetCache, pathStatementCache, figureTargetCache: null, view
+  };
   return cache;
 }
 

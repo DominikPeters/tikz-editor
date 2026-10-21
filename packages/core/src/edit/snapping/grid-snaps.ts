@@ -1,13 +1,13 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
+import { PT_PER_CM } from "../../coords/source.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { SNAP_EPSILON } from "./geometry.js";
 import { roundSnapValue } from "./point-snaps.js";
 import type { Axis, AxisMinOffset, AxisSnapBuckets } from "./types.js";
 
 const GRID_STEPS_CM = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50];
-const PT_PER_CM = 28.4527559055;
-
 export function pickGridStepPt(scale: number, targetPixels: number): number {
   const minStepPt = targetPixels / Math.max(scale, 1e-6);
 
@@ -18,7 +18,7 @@ export function pickGridStepPt(scale: number, targetPixels: number): number {
     }
   }
 
-  return GRID_STEPS_CM[GRID_STEPS_CM.length - 1] * PT_PER_CM;
+  return requireArrayValue(GRID_STEPS_CM, GRID_STEPS_CM.length - 1) * PT_PER_CM;
 }
 
 export function snapToNextMultiple(value: number, step: number, direction: -1 | 1): number {
@@ -50,7 +50,7 @@ export function collectGridSnaps({
     return;
   }
 
-  for (const point of selectionPoints) {
+  for (const [selectionIndex, point] of selectionPoints.entries()) {
     if (enabledAxis !== "y") {
       const gridX = roundSnapValue(Math.round(point.x / gridStep) * gridStep);
       const offsetX = gridX - point.x;
@@ -63,6 +63,7 @@ export function collectGridSnaps({
 
         nearest.x.push({
           kind: "grid",
+          selectionIndex,
           axis: "x",
           from: worldPoint(pt(point.x), pt(point.y)),
           to: worldPoint(pt(gridX), pt(point.y)),
@@ -85,6 +86,7 @@ export function collectGridSnaps({
 
         nearest.y.push({
           kind: "grid",
+          selectionIndex,
           axis: "y",
           from: worldPoint(pt(point.x), pt(point.y)),
           to: worldPoint(pt(point.x), pt(gridY)),

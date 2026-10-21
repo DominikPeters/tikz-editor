@@ -20,5 +20,3 @@ export const CURSOR_FOR_HANDLE_ROLE = {
   topRight: "nesw-resize",
   bottomLeft: "nesw-resize"
 } as const satisfies Record<string, CursorStyle>;
-
-export const CURSOR_FOR_ROTATE_HANDLE = "rotate" as const satisfies CursorStyle;

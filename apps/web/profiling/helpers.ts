@@ -13,7 +13,7 @@ export type PaperTarget = {
   source: string;
   targetLine: string;
   targetOffset: number;
-  activeFigureId: string;
+  activeRootId: string;
   activeFigureNumber: number;
   targetSourceId: string;
 };
@@ -64,7 +64,7 @@ export function resolvePaperTarget(targetLines: string | readonly string[]): Pap
     source,
     targetLine,
     targetOffset,
-    activeFigureId: figure.id,
+    activeRootId: figure.id,
     activeFigureNumber,
     targetSourceId: targetStatement.id
   };
@@ -75,7 +75,7 @@ export async function seedWorkspace(
   target: PaperTarget,
   docId: string
 ): Promise<void> {
-  await page.addInitScript(({ source, activeFigureId, id }) => {
+  await page.addInitScript(({ source, activeRootId, id }) => {
     const payload = {
       workspaceVersion: 3,
       documents: [
@@ -83,7 +83,7 @@ export async function seedWorkspace(
           id,
           title: "equal_shares_arxiv_v2.tex",
           source,
-          activeFigureId,
+          activeRootId,
           savedSource: source,
           fileRef: null,
           assistantThreadId: null,
@@ -99,7 +99,7 @@ export async function seedWorkspace(
     localStorage.setItem("tikz-editor:workspace", JSON.stringify(payload));
   }, {
     source: target.source,
-    activeFigureId: target.activeFigureId,
+    activeRootId: target.activeRootId,
     id: docId
   });
 }
@@ -129,10 +129,10 @@ export async function resolveVisibleSamplePointForSelector(
   selector: string
 ): Promise<{ x: number; y: number }> {
   return await page.evaluate((rawSelector) => {
-    const elements = [...document.querySelectorAll(rawSelector)];
+    const elements = Array.from(document.querySelectorAll(rawSelector));
     for (const element of elements) {
-      const rect = (element as Element).getBoundingClientRect();
-      const style = window.getComputedStyle(element as Element);
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
       const visible =
         (rect.width > 0 || rect.height > 0) &&
         style.visibility !== "hidden" &&
@@ -197,12 +197,12 @@ export async function waitForActiveFigure(
   await expect(figureButton).toBeVisible({ timeout: 60_000 });
 
   const currentActiveFigureId = await readActiveFigureId(page);
-  if (currentActiveFigureId !== target.activeFigureId) {
+  if (currentActiveFigureId !== target.activeRootId) {
     await figureButton.click();
   }
 
   await expect.poll(async () => readActiveFigureId(page), {
     timeout: 60_000,
     message: "waiting for target active figure"
-  }).toBe(target.activeFigureId);
+  }).toBe(target.activeRootId);
 }

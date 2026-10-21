@@ -1,21 +1,34 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type { PathOptionItem } from "../../ast/types.js";
+import type { DocumentGraphicsResolver } from "../../graphics/types.js";
 import type {
   NodeTextEngine,
+  NodeTextColorResolver,
   NodeTextLayoutKind,
   NodeTextParagraphAlignment,
   NodeTextRenderInfo
 } from "../../text/types.js";
+import {
+  projectSimpleTexSourceByPolicy,
+  simpleTexSourceHasLineBreak,
+  splitSimpleTexSourceAtLineBreaks,
+} from "../../text/tex/ir.js";
+import {
+  concatMappedText,
+  createGeneratedMappedText,
+  mapTransformedTextWithFallback,
+  projectInputOffset,
+  type TextSourceMap,
+  type TextSourceRange
+} from "../../text/source-map.js";
 import { parseLength } from "../coords/parse-length.js";
 import type { ResolvedStyle } from "../types.js";
 import type { NodeLayout, NodeShape } from "./types.js";
 import { normalizeOptionValue } from "./utils.js";
 
-const EXPLICIT_LINE_BREAK_PATTERN = /[ \t\r\n]*\\\\(?:\[[^\]]*\])?[ \t\r\n]*/g;
-const EXPLICIT_LINE_BREAK_CANONICAL_PATTERN = /[ \t\r\n]*(\\\\(?:\[[^\]]*\])?)[ \t\r\n]*/g;
-const EXPLICIT_LINE_BREAK_TOKEN_PATTERN = /\\\\(?:\[[^\]]*\])?/;
-const PLAIN_TEXT_SERIF_FONT_STACK = "MJX-NCM, CMU Serif, Latin Modern Roman, Times New Roman, serif";
-const PLAIN_TEXT_SANS_FONT_STACK = "MJX-NCM-Sans, CMU Sans Serif, Latin Modern Sans, Helvetica, Arial, sans-serif";
-const PLAIN_TEXT_MONO_FONT_STACK = "MJX-NCM-Monospace, Latin Modern Mono, CMU Typewriter Text, Courier New, monospace";
+const PLAIN_TEXT_SERIF_FONT_STACK = "Latin Modern Roman, CMU Serif, Times New Roman, serif";
+const PLAIN_TEXT_SANS_FONT_STACK = "Latin Modern Sans, CMU Sans Serif, Helvetica, Arial, sans-serif";
+const PLAIN_TEXT_MONO_FONT_STACK = "Latin Modern Mono, CMU Typewriter Text, Courier New, monospace";
 
 let plainTextMeasureContext: CanvasRenderingContext2D | null | undefined;
 
@@ -32,19 +45,24 @@ export function resolveNodeLayout(
   style: ResolvedStyle,
   _transformScale = 1,
   textEngine: NodeTextEngine | null = null,
-  textMode: "text" | "math" = "text"
+  textMode: "text" | "math" = "text",
+  textSourceMap?: TextSourceMap,
+  graphicsResolver?: DocumentGraphicsResolver,
+  colorResolver?: NodeTextColorResolver
 ): NodeLayout {
   void _transformScale;
   const fontSize = style.fontSize;
   const charWidth = fontSize * 0.7;
   const lineHeight = fontSize * 1.05;
+  const parseNodeLength = (raw: string): number | null =>
+    parseLength(raw, "pt", { unitFactors: { em: fontSize } });
 
-  const defaultInner = parseLength(".3333em", "pt")!;
+  const defaultInner = requireDefined(parseNodeLength(".3333em"), "Expected an internal layout value");
   let innerXSep = defaultInner;
   let innerYSep = defaultInner;
   let textWidth: number | null = null;
-  let minWidth = parseLength("1pt", "pt")!;
-  let minHeight = parseLength("1pt", "pt")!;
+  let minWidth = requireDefined(parseNodeLength("1pt"), "Expected an internal layout value");
+  let minHeight = requireDefined(parseNodeLength("1pt"), "Expected an internal layout value");
   let minSize: number | null = null;
   let textHeightOverride: number | null = null;
   let textDepthOverride: number | null = null;
@@ -62,23 +80,23 @@ export function resolveNodeLayout(
       }
 
       if (entry.key === "inner sep") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           innerXSep = parsed;
           innerYSep = parsed;
         }
       } else if (entry.key === "inner xsep") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           innerXSep = parsed;
         }
       } else if (entry.key === "inner ysep") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           innerYSep = parsed;
         }
       } else if (entry.key === "text width") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           textWidth = Math.max(0, parsed);
         }
@@ -90,27 +108,27 @@ export function resolveNodeLayout(
       } else if (entry.key === "node halign header") {
         hasNoWidthHalignHeader = normalizeOptionValue(entry.valueRaw).trim().length > 0;
       } else if (entry.key === "minimum width") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           minWidth = Math.max(0, parsed);
         }
       } else if (entry.key === "minimum height") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           minHeight = Math.max(0, parsed);
         }
       } else if (entry.key === "minimum size") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           minSize = Math.max(0, parsed);
         }
       } else if (entry.key === "text height") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           textHeightOverride = Math.max(0, parsed);
         }
       } else if (entry.key === "text depth") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           textDepthOverride = Math.max(0, parsed);
         }
@@ -119,18 +137,18 @@ export function resolveNodeLayout(
         if (normalized === "auto") {
           outerSep = style.stroke && style.stroke !== "none" ? style.lineWidth / 2 : 0;
         } else {
-          const parsed = parseLength(entry.valueRaw, "pt");
+          const parsed = parseNodeLength(entry.valueRaw);
           if (parsed != null) {
             outerSep = parsed;
           }
         }
       } else if (entry.key === "outer xsep") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           outerXSep = parsed;
         }
       } else if (entry.key === "outer ysep") {
-        const parsed = parseLength(entry.valueRaw, "pt");
+        const parsed = parseNodeLength(entry.valueRaw);
         if (parsed != null) {
           outerYSep = parsed;
         }
@@ -141,6 +159,24 @@ export function resolveNodeLayout(
   const noWidthHalignEnabled = (explicitAlign != null && explicitAlign !== "none") || hasNoWidthHalignHeader;
   const explicitLineBreaksActive = textWidth != null || noWidthHalignEnabled;
   const normalizedText = normalizeTextForLineBreakPolicy(text, explicitLineBreaksActive);
+  const normalizedTextSourceMap = textSourceMap
+    ? mapTransformedTextWithFallback(
+        { text, sourceMap: textSourceMap },
+        normalizedText,
+        "node line-break policy normalization"
+      ).sourceMap
+    : undefined;
+
+  // TikZ's `matrix of math nodes` implements math-mode cells as
+  // `execute at begin node=$` / `execute at end node=$` (tikzlibrarymatrix.code.tex),
+  // i.e. plain `$` toggles around the node text — so a cell that contains its own
+  // `$...$` escapes back to text. Mirror that desugaring here and measure the
+  // wrapped text through the native TeX engine.
+  const mathModeWrap = textMode === "math" && normalizedText.trim().length > 0;
+  const measureText = mathModeWrap ? `$${normalizedText}$` : normalizedText;
+  const measureSourceMap = mathModeWrap
+    ? wrapMathModeSourceMap(normalizedText, normalizedTextSourceMap)
+    : normalizedTextSourceMap;
 
   let textRenderInfo: NodeTextRenderInfo = { mode: "plain" };
   let textLines = computeNodeTextLines(normalizedText, textWidth, charWidth);
@@ -153,35 +189,41 @@ export function resolveNodeLayout(
 
   const measuredText = (() => {
     try {
-      return textEngine?.measure({
-        text: normalizedText,
-        mode: textMode,
+      return normalizedText.trim().length > 0 ? textEngine?.measure({
+        text: measureText,
         textWidthPt: textWidth,
-        alignment: paragraphAlignment,
+        ...(paragraphAlignment === undefined ? {} : { alignment: paragraphAlignment }),
         fontStyle: style.fontStyle,
         fontWeight: style.fontWeight,
         fontFamily: style.fontFamily,
-        fontSizePt: style.fontSize
-      }) ?? null;
+        fontSizePt: style.fontSize,
+        ...(measureSourceMap ? { sourceMap: measureSourceMap } : {}),
+        ...(graphicsResolver ? { graphicsResolver } : {}),
+        ...(colorResolver ? { colorResolver } : {})
+      }) ?? null : null;
     } catch {
       return null;
     }
   })();
 
   if (measuredText) {
-    // We trust MathJax for block metrics/wrapping; line-level alignment inside the block is best-effort for now.
+    // The native TeX engine owns block metrics and wrapping.
     textLines = splitNodeLines(normalizedText);
     textNaturalWidth = measuredText.width;
     textNaturalHeight = measuredText.height;
     baseLineY = measuredText.baselineY;
     midLineY = measuredText.midLineY;
     textRenderInfo = {
-      mode: "mathjax",
+      mode: "tex",
       cacheKey: measuredText.cacheKey,
+      ...(measuredText.renderKey && { renderKey: measuredText.renderKey }),
       paragraphId: measuredText.paragraphId,
       renderSourceText: measuredText.renderSourceText,
       layoutKind,
-      paragraphAlignment
+      ...(paragraphAlignment === undefined ? {} : { paragraphAlignment }),
+      ...(measuredText.graphicsPlacements?.length
+        ? { graphicsPlacements: measuredText.graphicsPlacements }
+        : {})
     };
   } else {
     const plainMetrics = measurePlainTextBlock(textLines, style, charWidth, lineHeight, baseLineY, midLineY);
@@ -236,6 +278,40 @@ export function resolveNodeLayout(
     baseLineY,
     midLineY
   };
+}
+
+const MATH_MODE_DELIMITER_REASON = "math-mode node delimiter";
+
+/**
+ * Extends the node's source map across the synthetic `$` delimiters so caret
+ * and hit mapping keep pointing at the user's cell text rather than shifting
+ * by one for the generated dollars.
+ */
+function wrapMathModeSourceMap(
+  text: string,
+  sourceMap: TextSourceMap | undefined
+): TextSourceMap | undefined {
+  if (!sourceMap) {
+    return undefined;
+  }
+  const openOwner = zeroLengthOwnerAt(sourceMap, 0);
+  const closeOwner = zeroLengthOwnerAt(sourceMap, text.length);
+  return concatMappedText([
+    createGeneratedMappedText("$", MATH_MODE_DELIMITER_REASON, openOwner),
+    { text, sourceMap },
+    createGeneratedMappedText("$", MATH_MODE_DELIMITER_REASON, closeOwner)
+  ]).sourceMap;
+}
+
+function zeroLengthOwnerAt(sourceMap: TextSourceMap, inputOffset: number): TextSourceRange | undefined {
+  const hit = projectInputOffset(sourceMap, inputOffset);
+  if (hit.kind === "source-offset") {
+    return { from: hit.offset, to: hit.offset };
+  }
+  if (hit.kind === "source-range") {
+    return { from: hit.from, to: hit.to };
+  }
+  return undefined;
 }
 
 function resolveTextLayoutKind(text: string, textWidth: number | null, explicitLineBreaksActive: boolean): NodeTextLayoutKind {
@@ -296,7 +372,7 @@ export function adjustNodeLayoutForShape(layout: NodeLayout, shape: NodeShape): 
 }
 
 function splitNodeLines(text: string): string[] {
-  const parts = text.replace(EXPLICIT_LINE_BREAK_PATTERN, "\n").split("\n");
+  const parts = splitSimpleTexSourceAtLineBreaks(text);
   if (parts.length === 0) {
     return [""];
   }
@@ -394,14 +470,13 @@ function getPlainTextMeasureContext(): CanvasRenderingContext2D | null {
     return plainTextMeasureContext;
   }
 
-  const documentLike = (globalThis as { document?: { createElement?: (tagName: string) => unknown } }).document;
-  if (typeof documentLike?.createElement !== "function") {
+  if (typeof document === "undefined" || typeof document.createElement !== "function") {
     return null;
   }
 
-  const canvas = documentLike.createElement("canvas") as { getContext?: (contextId: "2d") => CanvasRenderingContext2D | null };
+  const canvas = document.createElement("canvas");
   try {
-    plainTextMeasureContext = typeof canvas?.getContext === "function" ? canvas.getContext("2d") : null;
+    plainTextMeasureContext = typeof canvas.getContext === "function" ? canvas.getContext("2d") : null;
   } catch {
     plainTextMeasureContext = null;
   }
@@ -450,10 +525,7 @@ function resolveParagraphAlignment(
   if (explicitAlign === "left" || explicitAlign === "flush left") {
     return "ragged-right";
   }
-  if (explicitAlign === "center" || explicitAlign === "flush center") {
-    return "center";
-  }
-  return "ragged-right";
+  return "center";
 }
 
 function parseAlignOption(valueRaw: string): ResolvedStyle["textAlign"] | null {
@@ -474,14 +546,14 @@ function parseAlignOption(valueRaw: string): ResolvedStyle["textAlign"] | null {
 }
 
 function hasExplicitLineBreakTokens(text: string): boolean {
-  return EXPLICIT_LINE_BREAK_TOKEN_PATTERN.test(text);
+  return simpleTexSourceHasLineBreak(text);
 }
 
 function normalizeTextForLineBreakPolicy(text: string, explicitLineBreaksActive: boolean): string {
   if (explicitLineBreaksActive) {
-    return text.replace(EXPLICIT_LINE_BREAK_CANONICAL_PATTERN, "$1");
+    return text;
   }
-  return text.replace(EXPLICIT_LINE_BREAK_PATTERN, "");
+  return projectSimpleTexSourceByPolicy(text, { removeLineBreaks: true });
 }
 
 function wrapLine(line: string, maxChars: number): string[] {

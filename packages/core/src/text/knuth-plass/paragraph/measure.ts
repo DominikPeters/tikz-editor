@@ -10,10 +10,41 @@ export interface MeasurementService {
   measureText(text: string, mtextWrapper: AnyWrapper | null | undefined): number;
   measureWord(word: string, mtextWrapper: AnyWrapper | null | undefined): number;
   measurePrefix(word: string, n: number, mtextWrapper: AnyWrapper | null | undefined): number;
+  measureSlice?(
+    word: string,
+    start: number,
+    end: number,
+    mtextWrapper: AnyWrapper | null | undefined
+  ): number;
+  measureHyphenatedPrefix?(
+    word: string,
+    start: number,
+    end: number,
+    hyphen: string,
+    mtextWrapper: AnyWrapper | null | undefined
+  ): number;
+  measureDiscretionary?(
+    word: string,
+    start: number,
+    end: number,
+    hyphen: string,
+    mtextWrapper: AnyWrapper | null | undefined
+  ): DiscretionaryMeasurement;
   measureMath(wrapper: AnyWrapper | null | undefined): number;
   precomputeWord(word: string, mtextWrapper: AnyWrapper | null | undefined): void;
   primeRuns(runs: ParagraphRun[]): void;
   getStats(): MeasurementStats;
+}
+
+export interface DiscretionaryMeasurement {
+  preBreakText: string;
+  postBreakText: string;
+  replaceText: string;
+  replaceStart: number;
+  replaceEnd: number;
+  preBreakWidth: number;
+  sourcePrefixWidth: number;
+  insertedWidth: number;
 }
 
 interface InternalStats {
@@ -32,10 +63,11 @@ export function createMeasurementService(): MeasurementService {
 
   const getWrapperId = (wrapper: AnyWrapper | null | undefined): number => {
     if (!wrapper || typeof wrapper !== 'object') return 0;
-    if (!wrapperIds.has(wrapper)) {
-      wrapperIds.set(wrapper, nextWrapperId++);
-    }
-    return wrapperIds.get(wrapper) as number;
+    const existing = wrapperIds.get(wrapper);
+    if (existing !== undefined) return existing;
+    const id = nextWrapperId++;
+    wrapperIds.set(wrapper, id);
+    return id;
   };
 
   const textKey = (text: string, wrapper: AnyWrapper | null | undefined): string => {
@@ -93,7 +125,50 @@ export function createMeasurementService(): MeasurementService {
   ): number => {
     const widths = buildPrefixWidths(word, mtextWrapper);
     const clamped = Math.max(0, Math.min(n, word.length));
-    return widths[clamped] || 0;
+    const width = widths[clamped] ?? 0;
+    return width || 0;
+  };
+
+  const measureHyphenatedPrefix = (
+    word: string,
+    start: number,
+    end: number,
+    hyphen: string,
+    mtextWrapper: AnyWrapper | null | undefined
+  ): number => {
+    const clampedStart = Math.max(0, Math.min(start, word.length));
+    const clampedEnd = Math.max(clampedStart, Math.min(end, word.length));
+    const prefix = word.slice(clampedStart, clampedEnd);
+    return measureText(prefix + hyphen, mtextWrapper) - measureText(prefix, mtextWrapper);
+  };
+
+  const measureDiscretionary = (
+    word: string,
+    start: number,
+    end: number,
+    hyphen: string,
+    mtextWrapper: AnyWrapper | null | undefined
+  ): DiscretionaryMeasurement => {
+    const clampedStart = Math.max(0, Math.min(start, word.length));
+    const clampedEnd = Math.max(clampedStart, Math.min(end, word.length));
+    const sourcePrefix = word.slice(clampedStart, clampedEnd);
+    const insertedWidth = measureHyphenatedPrefix(
+      word,
+      clampedStart,
+      clampedEnd,
+      hyphen,
+      mtextWrapper
+    );
+    return {
+      preBreakText: hyphen,
+      postBreakText: '',
+      replaceText: '',
+      replaceStart: clampedEnd,
+      replaceEnd: clampedEnd,
+      preBreakWidth: insertedWidth,
+      sourcePrefixWidth: measureText(sourcePrefix, mtextWrapper),
+      insertedWidth,
+    };
   };
 
   const measureMath = (wrapper: AnyWrapper | null | undefined): number => {
@@ -129,6 +204,8 @@ export function createMeasurementService(): MeasurementService {
         } else {
           measureText(' ', run.wrapper);
         }
+      } else if (run.kind === 'penalty') {
+        continue;
       } else {
         measureMath(run.wrapper);
       }
@@ -147,6 +224,8 @@ export function createMeasurementService(): MeasurementService {
     measureText,
     measureWord,
     measurePrefix,
+    measureHyphenatedPrefix,
+    measureDiscretionary,
     measureMath,
     precomputeWord,
     primeRuns,

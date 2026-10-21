@@ -1,0 +1,6 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  // CI rejects unused value exports; there is no remaining issue allowance.
+  "include": ["exports"],
+  "ignoreExportsUsedInFile": true
+}

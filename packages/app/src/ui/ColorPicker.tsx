@@ -1,6 +1,9 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { hexToRgb, rgbToHex } from "@tikz-editor/core/utils/color-convert";
+import { clamp01 } from "@tikz-editor/core/utils/math";
 import { rgbToXcolorExpression, type RgbColor, type RgbToXcolorMode } from "xcolor-rgb-convert";
-import { normalizeColor } from "tikz-editor/semantic/style/colors";
+import { normalizeColor } from "@tikz-editor/core/semantic/style/colors";
 import { BASIC_PICKER_COLORS, BASIC_PICKER_COLOR_SET } from "../colors/color-palette";
 import type { NamedColorSwatch } from "../colors/project-named-colors";
 import { useSettingsStore } from "../settings/useSettingsStore";
@@ -86,7 +89,7 @@ export function ColorPickerField({
     }
 
     function onPointerDown(event: PointerEvent): void {
-      const target = event.target as Node | null;
+      const target = event.target instanceof Node ? event.target : null;
       if (!target) {
         return;
       }
@@ -1007,12 +1010,12 @@ function isStandardTabColorSupported(
   }
 
   const darkMatch = driverValue.match(DARK_MIX_RE);
-  if (darkMatch && toneSelectableTokens.has(darkMatch[1])) {
+  if (darkMatch && toneSelectableTokens.has(requireArrayValue(darkMatch, 1))) {
     return true;
   }
 
   const lightMatch = driverValue.match(LIGHT_MIX_RE);
-  if (lightMatch && toneSelectableTokens.has(lightMatch[1])) {
+  if (lightMatch && toneSelectableTokens.has(requireArrayValue(lightMatch, 1))) {
     return true;
   }
 
@@ -1134,12 +1137,12 @@ function baseColorFromValue(driverValue: string | null, toneSelectableTokens: Re
   }
 
   const darkMatch = driverValue.match(DARK_MIX_RE);
-  if (darkMatch && toneSelectableTokens.has(darkMatch[1])) {
-    return darkMatch[1];
+  if (darkMatch && toneSelectableTokens.has(requireArrayValue(darkMatch, 1))) {
+    return requireArrayValue(darkMatch, 1);
   }
   const lightMatch = driverValue.match(LIGHT_MIX_RE);
-  if (lightMatch && toneSelectableTokens.has(lightMatch[1])) {
-    return lightMatch[1];
+  if (lightMatch && toneSelectableTokens.has(requireArrayValue(lightMatch, 1))) {
+    return requireArrayValue(lightMatch, 1);
   }
   return null;
 }
@@ -1165,15 +1168,15 @@ function deriveToneState(
   }
 
   const darkMatch = driverValue.match(DARK_MIX_RE);
-  if (darkMatch && toneSelectableTokens.has(darkMatch[1])) {
-    const baseColor = isToneBaseColor(darkMatch[1]) ? darkMatch[1] : fallbackBaseColor;
+  if (darkMatch && toneSelectableTokens.has(requireArrayValue(darkMatch, 1))) {
+    const baseColor = isToneBaseColor(requireArrayValue(darkMatch, 1)) ? requireArrayValue(darkMatch, 1) : fallbackBaseColor;
     const percent = clampPercent(Number(darkMatch[2]));
     return { baseColor, position: percent };
   }
 
   const lightMatch = driverValue.match(LIGHT_MIX_RE);
-  if (lightMatch && toneSelectableTokens.has(lightMatch[1])) {
-    const baseColor = isToneBaseColor(lightMatch[1]) ? lightMatch[1] : fallbackBaseColor;
+  if (lightMatch && toneSelectableTokens.has(requireArrayValue(lightMatch, 1))) {
+    const baseColor = isToneBaseColor(requireArrayValue(lightMatch, 1)) ? requireArrayValue(lightMatch, 1) : fallbackBaseColor;
     const percent = clampPercent(Number(lightMatch[2]));
     return { baseColor, position: TONE_MAX - percent };
   }
@@ -1199,12 +1202,12 @@ function resolveSelectedSwatchColor(
     return driverValue;
   }
   const darkMatch = driverValue.match(DARK_MIX_RE);
-  if (darkMatch && toneSelectableTokens.has(darkMatch[1])) {
-    return darkMatch[1];
+  if (darkMatch && toneSelectableTokens.has(requireArrayValue(darkMatch, 1))) {
+    return requireArrayValue(darkMatch, 1);
   }
   const lightMatch = driverValue.match(LIGHT_MIX_RE);
-  if (lightMatch && toneSelectableTokens.has(lightMatch[1])) {
-    return lightMatch[1];
+  if (lightMatch && toneSelectableTokens.has(requireArrayValue(lightMatch, 1))) {
+    return requireArrayValue(lightMatch, 1);
   }
   return null;
 }
@@ -1333,8 +1336,9 @@ function resolveMixedColorForPicker(
     }
     cursor += 1;
 
-    const mixToken = parts[cursor] && parts[cursor].length > 0 ? parts[cursor] : "white";
-    if (parts[cursor] && parts[cursor].length > 0) {
+    const nextToken = parts[cursor];
+    const mixToken = nextToken && nextToken.length > 0 ? nextToken : "white";
+    if (nextToken && nextToken.length > 0) {
       cursor += 1;
     }
 
@@ -1379,37 +1383,6 @@ function resolveColorTokenToRgbForPicker(
 
 function isHexColor(input: string): boolean {
   return /^#[0-9a-f]{3}$/iu.test(input) || /^#[0-9a-f]{6}$/iu.test(input);
-}
-
-function normalizeHex(input: string): string {
-  const raw = input.trim().toLowerCase().replace(/^#/, "");
-  if (raw.length === 3) {
-    return `#${raw
-      .split("")
-      .map((char) => `${char}${char}`)
-      .join("")}`;
-  }
-  return `#${raw}`;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const normalized = normalizeHex(hex).replace(/^#/, "");
-  const parsed = Number.parseInt(normalized, 16);
-  return {
-    r: (parsed >> 16) & 255,
-    g: (parsed >> 8) & 255,
-    b: parsed & 255
-  };
-}
-
-function rgbToHex(rgb: { r: number; g: number; b: number }): string {
-  return (
-    "#" +
-    [rgb.r, rgb.g, rgb.b]
-      .map((component) => Math.round(Math.max(0, Math.min(255, component))))
-      .map((component) => component.toString(16).padStart(2, "0"))
-      .join("")
-  );
 }
 
 function hsvToRgb(hueDegrees: number, saturationRaw: number, valueRaw: number): RgbColor {
@@ -1510,7 +1483,7 @@ function buildToneHitBuckets(): ToneHitBucket[] {
   const buckets: ToneHitBucket[] = [];
   let cursor = 0;
   for (let index = 0; index < weights.length; index += 1) {
-    const weight = weights[index];
+    const weight = requireArrayValue(weights, index);
     const start = cursor / totalWeight;
     cursor += weight;
     const end = cursor / totalWeight;
@@ -1538,14 +1511,4 @@ function tonePositionFromHitRatio(ratio: number): number {
     }
   }
   return TONE_MAX;
-}
-
-function clamp01(value: number): number {
-  if (value <= 0) {
-    return 0;
-  }
-  if (value >= 1) {
-    return 1;
-  }
-  return value;
 }

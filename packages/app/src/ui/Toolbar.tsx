@@ -3,7 +3,7 @@ import { RiDownloadCloudLine } from "@remixicon/react";
 import { useProjectNamedColorSwatches } from "../colors/project-named-colors";
 import { useEditorStore } from "../store/store";
 import { getActiveEditorPlatform } from "../platform/current";
-import { NODE_SHAPE_OPTIONS } from "tikz-editor/edit/inspector";
+import { NODE_SHAPE_OPTIONS } from "@tikz-editor/core/edit/inspector";
 import { ColorPicker, cssColorForToken } from "./ColorPicker";
 import { getToolCapabilityStatus } from "./capabilities";
 import { RenderedTooltip } from "./RenderedTooltip";
@@ -18,7 +18,11 @@ import { GENERATED_NODE_SHAPE_PREVIEWS } from "./generated-node-shape-previews";
 import { ToolbarToolPopup, ToolbarPopupSection, ToolbarPopupVisualChoiceGrid } from "./ToolbarToolPopup";
 import popupCss from "./ToolbarToolPopup.module.css";
 import type { ToolMode } from "../store/types";
+import { isMacLikePlatform } from "./key-labels";
 import css from "./Toolbar.module.css";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { NewSlideButton } from "../presentation/NewSlideButton";
+import { PresentationToolbar } from "../presentation/PresentationToolbar";
 
 const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
   id: option.value,
@@ -27,13 +31,16 @@ const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
 }));
 
 type ToolbarProps = {
+  onPresentationOptions: () => void;
   updateChip?: {
     version: string;
     onClick: () => void;
   } | null;
 };
 
-export function Toolbar({ updateChip = null }: ToolbarProps) {
+export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarProps) {
+  const documentId = useEditorStore(s => s.activeDocumentId);
+  const drawingSurface = useEditorStore(s => s.documentKind !== "beamer" || parseDocumentRootId(s.activeRootId ?? "") != null);
   const toolMode = useEditorStore((s) => s.toolMode);
   const bucketFillColor = useEditorStore((s) => s.bucketFillColor);
   const selectedAddShape = useEditorStore((s) => s.selectedAddShape);
@@ -51,11 +58,13 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
   const matrixPreviewRows = matrixHoverSize?.rows ?? selectedAddMatrixRows;
   const matrixPreviewColumns = matrixHoverSize?.columns ?? selectedAddMatrixColumns;
   const isDesktop = getActiveEditorPlatform().id.startsWith("desktop");
-  const isMacDesktop =
-    isDesktop &&
-    typeof navigator !== "undefined" &&
-    /(mac|iphone|ipad)/i.test(navigator.platform);
+  const isMacDesktop = isDesktop && isMacLikePlatform();
   const showAppTitle = !isDesktop;
+  // Drawing tools operate directly on slides and on standalone pictures.
+  useEffect(() => {
+    if (!drawingSurface && toolMode !== "select" && toolMode !== "magnify") dispatch({ type: "SET_TOOL_MODE", mode: "select" });
+  }, [drawingSurface, toolMode, dispatch]);
+  useEffect(() => { setOpenPopupMode(null); }, [documentId]);
 
   // Close popup when tool mode changes (unless it's a popup that can be used independently)
   useEffect(() => {
@@ -116,7 +125,9 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
             choices={SHAPE_POPUP_CHOICES}
             selectedId={selectedAddShape}
             onSelect={(id) => {
-              dispatch({ type: "SET_ADD_SHAPE_PRESET", value: id as typeof selectedAddShape });
+              const shape = NODE_SHAPE_OPTIONS.find(option => option.value === id);
+              if (!shape) return;
+              dispatch({ type: "SET_ADD_SHAPE_PRESET", value: shape.value });
               // Activate the shape tool and close popup
               dispatch({ type: "SET_TOOL_MODE", mode: "addShape" });
               setOpenPopupMode(null);
@@ -126,7 +137,7 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
         </ToolbarPopupSection>
       );
     }
-    if (popupKind === "matrix-picker") {
+    {
       const maxColumns = 10;
       const maxRows = 8;
       const isSelected = (row: number, column: number): boolean =>
@@ -167,12 +178,12 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
         </ToolbarPopupSection>
       );
     }
-    return null;
   };
 
   const renderBucketButton = () => {
     const mode = "addBucket" as const;
-    const toolDef = TOOL_BUTTONS.find((b) => b.mode === mode)!;
+    const toolDef = TOOL_BUTTONS.find((b) => b.mode === mode);
+    if (!toolDef) throw new Error(`Missing tool definition for ${mode}`);
     const capability = getToolCapabilityStatus(mode);
     const unsupported = capability.status === "unsupported";
     const buttonTitle = unsupported
@@ -190,7 +201,7 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
         onClose={closeBucketPopup}
         popup={renderPopup("bucket-color")}
         popupTestId="toolbar-tool-popup-addBucket"
-        popupClassName={popupCss.bucketColorPopup}
+        popupClassName={popupCss.bucketColorPopup ?? ""}
       >
         <div className={css.splitButton}>
           <RenderedTooltip content={buttonTitle}>
@@ -235,7 +246,8 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
 
   const renderShapeButton = () => {
     const mode = "addShape" as const;
-    const toolDef = TOOL_BUTTONS.find((b) => b.mode === mode)!;
+    const toolDef = TOOL_BUTTONS.find((b) => b.mode === mode);
+    if (!toolDef) throw new Error(`Missing tool definition for ${mode}`);
     const capability = getToolCapabilityStatus(mode);
     const unsupported = capability.status === "unsupported";
     const buttonTitle = unsupported
@@ -274,7 +286,8 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
 
   const renderMatrixButton = () => {
     const mode = "addMatrix" as const;
-    const toolDef = TOOL_BUTTONS.find((b) => b.mode === mode)!;
+    const toolDef = TOOL_BUTTONS.find((b) => b.mode === mode);
+    if (!toolDef) throw new Error(`Missing tool definition for ${mode}`);
     const capability = getToolCapabilityStatus(mode);
     const unsupported = capability.status === "unsupported";
     const buttonTitle = unsupported
@@ -354,6 +367,7 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
       ) : null}
 
       <div className={css.group}>
+        <NewSlideButton />
         {TOOL_BUTTONS.flatMap((toolDef) => {
           const separator = toolDef.separatorBefore ? <div key={`sep-${toolDef.mode}`} className={css.separator} /> : null;
           // Special handling for bucket and shape buttons
@@ -371,8 +385,9 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
         })}
       </div>
       <div className={css.spacer} />
+      <PresentationToolbar onOptions={onPresentationOptions} />
       {updateChip ? (
-        <RenderedTooltip content={`Install update ${updateChip.version}`}>
+        <RenderedTooltip content={`View update ${updateChip.version}`}>
           <button
             type="button"
             className={css.updateChip}

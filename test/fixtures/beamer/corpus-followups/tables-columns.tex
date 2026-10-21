@@ -1,0 +1,47 @@
+\documentclass[aspectratio=169]{beamer}
+
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+% Original reduction: tables-command-columns-totalwidth.
+\begin{frame}[plain,t]
+\begin{columns}[T,totalwidth=\textwidth]
+\column{0.4\textwidth}
+\begin{tabular}{lr}
+Alpha & 12 \\
+Beta & 345 \\
+\end{tabular}
+\column{0.4\textwidth}
+An ordinary second column.
+\end{columns}
+\end{frame}
+
+% Original reduction: tables-totalwidth-columns-control.
+\begin{frame}[plain,t]
+\begin{columns}[T,totalwidth=\textwidth]
+\begin{column}{0.4\textwidth}
+\begin{tabular}{lr}
+Alpha & 12 \\
+Beta & 345 \\
+\end{tabular}
+\end{column}
+\begin{column}{0.4\textwidth}
+An ordinary second column.
+\end{column}
+\end{columns}
+\end{frame}
+
+% Original reduction: tables-default-columns-width.
+\begin{frame}[plain,t]
+\begin{columns}[T]
+\begin{column}{0.4\textwidth}
+\begin{tabular}{lr}
+Alpha & 12 \\
+Beta & 345 \\
+\end{tabular}
+\end{column}
+\begin{column}{0.4\textwidth}
+An ordinary second column.
+\end{column}
+\end{columns}
+\end{frame}
+\end{document}

@@ -1,4 +1,7 @@
-import { worldPoint } from "../../coords/points.js";
+import { requireDefined } from "../../utils/invariants.js";
+import { requireArrayValue } from "../../utils/collections.js";
+import { createBoundsIndex, createMutableBoundsIndex, createPointIndex } from "./spatial-index.js";
+import { worldPoint, worldBounds } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldBounds, WorldPoint } from "../../coords/points.js";
 import { roundSnapValue } from "./point-snaps.js";
@@ -28,20 +31,22 @@ export function buildVisibleGaps(
   // box would both spawn its own gaps and fail the adjacency test below.
   const mergedBounds = mergeIntersectingBounds(referenceBounds);
 
+  const query = createBoundsIndex(mergedBounds);
   const horizontal: Gap[] = [];
   const vertical: Gap[] = [];
 
   const sortedX = [...mergedBounds].sort((a, b) => a.minX - b.minX);
   let pairs = 0;
 
-  horizontalLoop: for (let i = 0; i < sortedX.length; i += 1) {
-    const start = sortedX[i];
-    for (let j = i + 1; j < sortedX.length; j += 1) {
-      if (++pairs > maxPairsPerAxis) {
-        break horizontalLoop;
-      }
-
-      const end = sortedX[j];
+  const xIndices = new Map(sortedX.map((bounds, index) => [bounds, index]));
+  for (let i = 0; i < sortedX.length && pairs < maxPairsPerAxis; i += 1) {
+    const start = requireArrayValue(sortedX, i);
+    const last = Math.min(sortedX.length - 1, i + maxPairsPerAxis - pairs);
+    pairs += sortedX.length - i - 1;
+    const candidates = query(worldBounds(start.maxX, start.minY, pt(Infinity), start.maxY))
+      .filter(end => requireDefined(xIndices.get(end), "Missing required xIndices.get(end)") > i && requireDefined(xIndices.get(end), "Missing required xIndices.get(end)") <= last)
+      .sort((a, b) => requireDefined(xIndices.get(a), "Missing required xIndices.get(a)") - requireDefined(xIndices.get(b), "Missing required xIndices.get(b)"));
+    for (const end of candidates) {
       if (start.maxX >= end.minX) {
         continue;
       }
@@ -51,7 +56,7 @@ export function buildVisibleGaps(
         continue;
       }
 
-      if (gapIsBlocked(mergedBounds, start, end, overlap, "x")) {
+      if (gapIsBlocked(query(worldBounds(start.maxX, pt(overlap[0]), end.minX, pt(overlap[1]))), start, end, overlap, "x")) {
         continue;
       }
 
@@ -75,14 +80,15 @@ export function buildVisibleGaps(
   const sortedY = [...mergedBounds].sort((a, b) => a.minY - b.minY);
   pairs = 0;
 
-  verticalLoop: for (let i = 0; i < sortedY.length; i += 1) {
-    const start = sortedY[i];
-    for (let j = i + 1; j < sortedY.length; j += 1) {
-      if (++pairs > maxPairsPerAxis) {
-        break verticalLoop;
-      }
-
-      const end = sortedY[j];
+  const yIndices = new Map(sortedY.map((bounds, index) => [bounds, index]));
+  for (let i = 0; i < sortedY.length && pairs < maxPairsPerAxis; i += 1) {
+    const start = requireArrayValue(sortedY, i);
+    const last = Math.min(sortedY.length - 1, i + maxPairsPerAxis - pairs);
+    pairs += sortedY.length - i - 1;
+    const candidates = query(worldBounds(start.minX, start.maxY, start.maxX, pt(Infinity)))
+      .filter(end => requireDefined(yIndices.get(end), "Missing required yIndices.get(end)") > i && requireDefined(yIndices.get(end), "Missing required yIndices.get(end)") <= last)
+      .sort((a, b) => requireDefined(yIndices.get(a), "Missing required yIndices.get(a)") - requireDefined(yIndices.get(b), "Missing required yIndices.get(b)"));
+    for (const end of candidates) {
       if (start.maxY >= end.minY) {
         continue;
       }
@@ -92,7 +98,7 @@ export function buildVisibleGaps(
         continue;
       }
 
-      if (gapIsBlocked(mergedBounds, start, end, overlap, "y")) {
+      if (gapIsBlocked(query(worldBounds(pt(overlap[0]), start.maxY, pt(overlap[1]), end.minY)), start, end, overlap, "y")) {
         continue;
       }
 
@@ -117,20 +123,22 @@ export function buildVisibleGaps(
 }
 
 function mergeIntersectingBounds(referenceBounds: readonly SnapBounds[]): SnapBounds[] {
-  const merged: SnapBounds[] = [];
-
-  for (const bounds of referenceBounds) {
+  const sizes = referenceBounds.map(bounds => Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY)).sort((a, b) => a - b);
+  const index = createMutableBoundsIndex<SnapBounds>(Math.max(1, sizes[Math.floor(sizes.length / 2)] ?? 1));
+  const order = new Map<SnapBounds, number>();
+  for (const [position, bounds] of referenceBounds.entries()) {
     let current = bounds;
-    let intersecting = merged.findIndex((other) => boundsIntersect(other, current));
-    while (intersecting !== -1) {
-      const [other] = merged.splice(intersecting, 1);
-      current = { ...mergeBounds(other, current), sourceId: other.sourceId };
-      intersecting = merged.findIndex((candidate) => boundsIntersect(candidate, current));
+    for (;;) {
+      const other = index.query(current).filter(candidate => boundsIntersect(candidate, current))
+        .sort((a, b) => requireDefined(order.get(a), "Missing required order.get(a)") - requireDefined(order.get(b), "Missing required order.get(b)"))[0];
+      if (!other) break;
+      index.delete(other); order.delete(other);
+      current = { ...mergeBounds(other, current), sourceId: other.sourceId,
+        sourceIds: [...new Set([...(other.sourceIds ?? [other.sourceId]), ...(current.sourceIds ?? [current.sourceId])])] };
     }
-    merged.push(current);
+    order.set(current, position); index.add(current);
   }
-
-  return merged;
+  return [...order.keys()];
 }
 
 function gapIsBlocked(
@@ -188,7 +196,7 @@ export function collectGapSnaps({
   const height = selectionBounds.maxY - selectionBounds.minY;
 
   if (enabledAxis !== "y") {
-    for (const gap of visibleGaps.horizontal) {
+    for (const gap of queryGaps(visibleGaps.horizontal, selectionBounds, minOffset.x, "x")) {
       if (!rangesOverlap([selectionBounds.minY, selectionBounds.maxY], gap.overlap)) {
         continue;
       }
@@ -231,7 +239,7 @@ export function collectGapSnaps({
   }
 
   if (enabledAxis !== "x") {
-    for (const gap of visibleGaps.vertical) {
+    for (const gap of queryGaps(visibleGaps.vertical, selectionBounds, minOffset.y, "y")) {
       if (!rangesOverlap([selectionBounds.minX, selectionBounds.maxX], gap.overlap)) {
         continue;
       }
@@ -288,6 +296,8 @@ export function createGapSnapLines(
 
     lines.push({
       type: "gap",
+      sourceIds: [...new Set([...(candidate.gap.startBounds.sourceIds ?? [candidate.gap.startBounds.sourceId]), ...(candidate.gap.endBounds.sourceIds ?? [candidate.gap.endBounds.sourceId])])],
+      referenceBounds: [candidate.gap.startBounds, candidate.gap.endBounds],
       direction: candidate.axis === "x" ? "horizontal" : "vertical",
       gapKind: candidate.direction.startsWith("center_") ? "center" : "equal",
       segments
@@ -480,12 +490,12 @@ function dedupeGapLines(lines: SnapLine[]): SnapLine[] {
     deduped.push({
       ...line,
       segments: normalizedSegments.map((entry) => {
-        const [a, b] = entry.split(";");
-        const [ax, ay] = a.split(",").map(Number);
-        const [bx, by] = b.split(",").map(Number);
+        const endpoints = entry.split(";");
+        const a = requireArrayValue(endpoints, 0).split(",").map(Number);
+        const b = requireArrayValue(endpoints, 1).split(",").map(Number);
         return [
-          worldPoint(pt(ax), pt(ay)),
-          worldPoint(pt(bx), pt(by))
+          worldPoint(pt(requireArrayValue(a, 0)), pt(requireArrayValue(a, 1))),
+          worldPoint(pt(requireArrayValue(b, 0)), pt(requireArrayValue(b, 1)))
         ];
       })
     });
@@ -498,4 +508,20 @@ function normalizeSegment(segment: [WorldPoint, WorldPoint]): string {
   const a = `${roundSnapValue(segment[0].x)},${roundSnapValue(segment[0].y)}`;
   const b = `${roundSnapValue(segment[1].x)},${roundSnapValue(segment[1].y)}`;
   return a <= b ? `${a};${b}` : `${b};${a}`;
+}
+
+const gapIndexes = new WeakMap<readonly Gap[], { axis: Axis; queries: Array<ReturnType<typeof createPointIndex<WorldPoint & { gap: Gap }>>>; order: Map<Gap, number> }>();
+function queryGaps(gaps: readonly Gap[], bounds: WorldBounds, radius: number, axis: Axis): Gap[] {
+  let index = gapIndexes.get(gaps);
+  if (index?.axis !== axis) {
+    const positions = (g: Gap) => axis === "x"
+      ? [g.startSide[0].x + g.length / 2, g.endBounds.maxX + g.length, g.startBounds.minX - g.length]
+      : [g.startSide[0].y + g.length / 2, g.startBounds.minY - g.length, g.endBounds.maxY + g.length];
+    index = { axis, order: new Map(gaps.map((gap, i) => [gap, i])), queries: [0, 1, 2].map(i => createPointIndex(gaps.map(gap => ({ ...worldPoint(pt(requireArrayValue(positions(gap), i)), pt(0)), gap })))) };
+    gapIndexes.set(gaps, index);
+  }
+  const coordinates = axis === "x" ? [(bounds.minX + bounds.maxX) / 2, bounds.minX, bounds.maxX] : [(bounds.minY + bounds.maxY) / 2, bounds.maxY, bounds.minY];
+  const found = new Set<Gap>();
+  index.queries.forEach((query, i) => { for (const candidate of query(worldPoint(pt(requireArrayValue(coordinates, i)), pt(0)), radius + SNAP_EPSILON, -1)) found.add(candidate.gap); });
+  return [...found].sort((a, b) => requireDefined(index.order.get(a), "Missing required index.order.get(a)") - requireDefined(index.order.get(b), "Missing required index.order.get(b)"));
 }

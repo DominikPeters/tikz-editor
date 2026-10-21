@@ -177,6 +177,36 @@
   cursor: default;
 }
 
+/* A drawing layer's slide, under the layer's own transparent SVG. */
+.layerBackdrop {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+  user-select: none;
+}
+
+.layerBackdrop :global(svg) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.svgLayerOverBackdrop {
+  background: transparent;
+  box-shadow: none;
+}
+
+:global([data-canvas-invert]) .layerBackdrop {
+  background: #e8e8e8;
+  filter: invert(1) hue-rotate(180deg);
+}
+
+:global([data-canvas-invert]) .svgLayer.svgLayerOverBackdrop {
+  background: transparent;
+}
+
 .svgLayer,
 .svgLayer * {
   -webkit-user-select: none;
@@ -313,16 +343,13 @@
   opacity: 0.85;
 }
 
-.snapGapArrowHead {
-  fill: var(--color-snap);
-}
-
 .snapGapLabelRect {
-  fill: var(--color-snap);
+  fill: var(--bg-pane);
+  stroke: var(--border);
 }
 
 .snapGapLabelText {
-  fill: #fff;
+  fill: var(--text-muted);
   font-family: var(--font-ui, sans-serif);
   pointer-events: none;
   user-select: none;
@@ -450,11 +477,78 @@
   background: rgba(63, 136, 227, 0.28);
 }
 
+/* macOS active/inactive convention: the surface that lost the keyboard keeps
+   its selection visible, in gray. */
+.textSelectionViewportRectInactive {
+  background: rgba(120, 128, 140, 0.26);
+}
+
 .textSelectionViewportCaret {
   position: absolute;
   width: 1.5px;
   background: var(--accent-dark);
   animation: textCaretBlink 1s steps(1, end) infinite;
+}
+
+.textSelectionViewportCaretInactive {
+  background: color-mix(in srgb, var(--text-muted) 75%, transparent 25%);
+}
+
+/* PowerPoint-style dashed edit outline around the scope container while a
+   deck session is open; also visualizes where arrow keys will clamp. */
+.scopeEditBorder {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  outline: 1.5px dashed color-mix(in srgb, var(--accent) 65%, var(--text-muted) 35%);
+  outline-offset: 5px;
+  border-radius: 1px;
+}
+
+.scopeEditBorderFaint {
+  outline-color: color-mix(in srgb, var(--text-muted) 45%, transparent 55%);
+}
+
+/* R8 context outlines: the construct around the caret (focus, with its
+   tag) and the one around that (parent, fainter). They make the inside and
+   outside of a construct's edge visibly different caret stops. */
+.contextOutlineFocus,
+.contextOutlineParent {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  border-radius: 2px;
+}
+
+.contextOutlineFocus {
+  /* Above the caret and the ghosts: its tag's menu opens over them. */
+  z-index: 7;
+  outline: 1.25px solid color-mix(in srgb, var(--accent) 70%, transparent 30%);
+}
+
+.contextOutlineParent {
+  outline: 1px solid color-mix(in srgb, var(--accent) 28%, transparent 72%);
+}
+
+/* Hidden input capturing keyboard/IME while the canvas surface owns focus.
+   Kept 1x1 near the canvas caret so IME candidate windows open in place;
+   never display:none, which would make it unfocusable. */
+.canvasFocusInput {
+  position: absolute;
+  z-index: 2;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: none;
+  margin: 0;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  caret-color: transparent;
+  background: transparent;
+  color: transparent;
 }
 
 .textEditPopup {
@@ -476,6 +570,42 @@
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border) 50%);
 }
 
+.textEditBar {
+  position: absolute;
+  z-index: 5;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent 30%);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-pane) 82%, transparent 18%);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.10);
+  pointer-events: auto;
+}
+
+.textEditBar:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border) 50%);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent 70%),
+    0 3px 10px rgba(15, 23, 42, 0.10);
+}
+
+/* Bar/popup chrome while the canvas surface owns the keyboard: slightly
+   dimmed, no focus ring. */
+.textEditSurfaceUnfocused {
+  opacity: 0.92;
+}
+
+.textEditBar .textEditTextareaLayer {
+  display: block;
+  max-width: none;
+}
+
 .textEditPopupTag {
   align-self: center;
   margin: -1px 0 2px;
@@ -484,6 +614,137 @@
   line-height: 1;
   letter-spacing: 0;
   user-select: none;
+}
+
+.textEditToolbar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  align-self: center;
+  margin: -1px 0 3px;
+  user-select: none;
+}
+
+.textEditToolbarSlot {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.textEditToolbarDivider {
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: color-mix(in srgb, var(--border) 80%, transparent 20%);
+}
+
+.textEditToolbarButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+  cursor: default;
+}
+
+.textEditToolbarButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent 92%);
+}
+
+.textEditToolbarButton:disabled {
+  color: var(--muted);
+  opacity: 0.55;
+}
+
+.textEditToolbarButtonActive {
+  background: color-mix(in srgb, var(--accent) 18%, transparent 82%);
+  color: var(--accent);
+}
+
+.textEditToolbarButtonActive:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 26%, transparent 74%);
+}
+
+.textEditToolbarGlyphBold {
+  font-weight: 700;
+}
+
+.textEditToolbarGlyphItalic {
+  font-style: italic;
+  font-family: var(--font-serif, Georgia, serif);
+}
+
+.textEditToolbarGlyphUnderline {
+  text-decoration: underline;
+}
+
+.textEditToolbarGlyphMono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.textEditToolbarGlyphAlert {
+  font-weight: 700;
+  color: #d03030;
+}
+
+.textEditToolbarColorWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.textEditToolbarColorGlyph {
+  border-bottom: 2px solid currentcolor;
+  line-height: 1.1;
+}
+
+.textEditToolbarColorMenu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  gap: 3px;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent 30%);
+  border-radius: 6px;
+  background: var(--bg-pane);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.14);
+}
+
+.textEditToolbarSwatch {
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.25);
+  border-radius: 3px;
+  padding: 0;
+  cursor: default;
+}
+
+.textEditToolbarSwatchActive {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.textEditToolbarSwatchNone {
+  width: 16px;
+  height: 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent 20%);
+  border-radius: 3px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: default;
 }
 
 .textEditTextarea {
@@ -512,6 +773,25 @@
   max-width: 100%;
 }
 
+.textEditTextareaInlineTypo {
+  field-sizing: fixed;
+  white-space: pre;
+  text-align: left;
+}
+
+/* Scope buffers are structural source, not centered node labels. */
+.textEditTextareaScope {
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.textEditTextareaBar {
+  width: 100%;
+  max-height: 180px;
+  overflow-y: auto;
+  text-align: left;
+}
+
 .textEditTextareaHideNativeCaret {
   caret-color: transparent;
 }
@@ -526,6 +806,18 @@
   background: var(--accent-dark);
   pointer-events: none;
   animation: textCaretBlink 1s steps(1, end) infinite;
+}
+
+.textEditViewportCaretInactive {
+  background: color-mix(in srgb, var(--text-muted) 75%, transparent 25%);
+}
+
+/* Selection drawn by the bar itself while it is unfocused (the native
+   textarea selection hides without focus). */
+.textEditSelectionRectInactive {
+  position: absolute;
+  background: rgba(120, 128, 140, 0.26);
+  pointer-events: none;
 }
 
 .textCaretNoBlink {
@@ -715,6 +1007,94 @@
   user-select: text;
 }
 
+.nestedFigureBreadcrumb {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-pane) 88%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  user-select: none;
+}
+
+.nestedFigureBreadcrumbLink {
+  appearance: none;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.nestedFigureBreadcrumbLink:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.nestedFigureBreadcrumbSeparator {
+  color: var(--muted);
+  font-size: calc(var(--app-ui-scale, 1) * 9px);
+}
+
+.nestedFigureBreadcrumbCurrent {
+  color: var(--text);
+}
+
+.deckStepper {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-pane) 88%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.deckStepperButton {
+  appearance: none;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: calc(var(--app-ui-scale, 1) * 9px);
+  line-height: 1;
+  padding: 4px 7px;
+  cursor: pointer;
+}
+
+.deckStepperButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.deckStepperButton:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.deckStepperLabel {
+  color: var(--text);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+  user-select: none;
+}
+
 .selectionHint {
   position: absolute;
   right: 12px;
@@ -760,75 +1140,6 @@
 
 .dragTooltipValue {
   font-family: inherit;
-}
-
-.snapDebugOverlay {
-  position: absolute;
-  z-index: 6;
-  display: flex;
-  flex-direction: column;
-  min-width: 280px;
-  min-height: 140px;
-  border: 1px solid rgba(55, 120, 145, 0.52);
-  background: var(--tooltip-dark-bg);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
-  color: var(--tooltip-dark-text);
-  font-family: var(--font-mono);
-  font-size: calc(var(--app-ui-scale, 1) * 10px);
-  pointer-events: auto;
-  user-select: text;
-}
-
-.snapDebugTitle {
-  padding: 4px 7px;
-  border-bottom: 1px solid var(--tooltip-dark-border);
-  color: var(--tooltip-dark-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 700;
-  cursor: move;
-  touch-action: none;
-}
-
-.snapDebugBody {
-  margin: 0;
-  padding: 6px 7px;
-  overflow: auto;
-  flex: 1;
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.35;
-}
-
-.snapDebugResizeHandle {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
-  touch-action: none;
-}
-
-.snapDebugResizeHandle::after {
-  content: "";
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid rgba(159, 208, 229, 0.75);
-  border-bottom: 2px solid rgba(159, 208, 229, 0.75);
-}
-
-:global(body.is-dragging-snap-debug) {
-  cursor: move !important;
-  user-select: none !important;
-}
-
-:global(body.is-resizing-snap-debug) {
-  cursor: nwse-resize !important;
-  user-select: none !important;
 }
 
 :global(body.is-dragging-guide-horizontal) {
@@ -885,7 +1196,6 @@
   .topRuler,
   .leftRuler,
   .warningBar,
-  .snapDebugOverlay,
   .interactionLayer,
   .noSvg {
     display: none !important;
@@ -940,4 +1250,447 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+}
+
+.snapReference {
+  fill: none;
+  stroke: var(--color-snap);
+  stroke-dasharray: 3 3;
+  opacity: .45;
+  vector-effect: non-scaling-stroke;
+}
+.snapReferencePoint {
+  fill: var(--bg-pane);
+  stroke: var(--color-snap);
+  vector-effect: non-scaling-stroke;
+}
+
+.deckColumnDivider {
+  cursor: col-resize;
+  outline: none;
+  touch-action: none;
+}
+.deckDividerHit { stroke: transparent; pointer-events: stroke; }
+.deckDividerLine {
+  stroke: var(--accent-dark);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  opacity: 0;
+}
+.deckDividerGrip { fill: var(--accent-dark); pointer-events: none; opacity: 0; }
+.deckColumnDivider:hover .deckDividerLine,
+.deckColumnDivider[data-visible="true"] .deckDividerLine { opacity: 0.35; }
+.deckColumnDivider:hover .deckDividerGrip,
+.deckColumnDivider[data-visible="true"] .deckDividerGrip,
+.deckColumnDivider:focus-visible .deckDividerGrip,
+.deckColumnDivider:focus-visible .deckDividerLine { opacity: 1; }
+.deckImageCorner { outline: none; touch-action: none; }
+.deckImageCorner:focus-visible .handle { stroke-width: 2px; vector-effect: non-scaling-stroke; }
+
+.deckSpacingHandle { cursor: ns-resize; outline: none; touch-action: none; }
+.deckSpacingBand { fill: var(--accent-dark); opacity: 0; pointer-events: none; }
+.deckSpacingEdges {
+  fill: none;
+  stroke: var(--accent-dark);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+  pointer-events: none;
+}
+.deckSpacingGrip { fill: var(--accent-dark); opacity: 0; pointer-events: none; }
+.deckSpacingHandle:hover .deckSpacingBand,
+.deckSpacingHandle:focus-visible .deckSpacingBand,
+.deckSpacingHandle[data-active="true"] .deckSpacingBand { opacity: 0.08; }
+.deckSpacingHandle:hover .deckSpacingEdges,
+.deckSpacingHandle:focus-visible .deckSpacingEdges,
+.deckSpacingHandle[data-active="true"] .deckSpacingEdges { opacity: 0.35; }
+.deckSpacingHandle:hover .deckSpacingGrip,
+.deckSpacingHandle:focus-visible .deckSpacingGrip,
+.deckSpacingHandle[data-active="true"] .deckSpacingGrip { opacity: 1; }
+
+/* The command chip (R4): the name typed after a backslash, below the caret,
+   with its completions. Outside the source until committed. */
+.commandChip {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  min-width: 120px;
+  font: 12px/18px var(--font-mono);
+  color: var(--text);
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+  overflow: hidden;
+}
+
+.commandChipName {
+  padding: 1px 6px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.commandChipGhost {
+  color: var(--text-faint);
+}
+
+.commandChipList {
+  margin: 0;
+  padding: 2px 0;
+  list-style: none;
+}
+
+.commandChipOption,
+.commandChipOptionSelected {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.commandChipOptionSelected {
+  color: #fff;
+  background: var(--accent-dark);
+}
+
+.commandChipList {
+  pointer-events: auto;
+}
+
+.commandChipOption {
+  cursor: pointer;
+}
+
+.commandChipOption:hover {
+  background: var(--btn-hover-bg);
+}
+
+/* A math completion as the engine sets it: 1em is 14px, a little larger than the name. */
+.commandChipPreview {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  margin-left: auto;
+  font-size: 14px;
+}
+
+.commandChipPreview svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.commandChipDetail {
+  font: 10px/18px var(--font-ui);
+  color: var(--text-muted);
+}
+
+.commandChipOptionSelected .commandChipDetail {
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* The value editor (O8): a command in source form with a field per value.
+   Above the lines it keeps clear, its colour picker goes on top, the
+   command next to them. */
+.valueEditor,
+.valueEditorAbove {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  z-index: 7;
+  font: 12px/20px var(--font-mono);
+  color: var(--text);
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+}
+
+.valueEditorSyntax {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  padding: 2px 6px;
+  white-space: pre;
+}
+
+.valueEditorFixed {
+  color: var(--text-muted);
+}
+
+.valueEditorInput,
+.valueEditorInputProblem {
+  min-width: 4ch;
+  padding: 0 2px;
+  font: inherit;
+  color: inherit;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 0;
+  outline: none;
+}
+
+.valueEditorInput:focus {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.valueEditorInputProblem {
+  border-bottom-color: var(--danger, #d33);
+}
+
+.valueEditorProblem {
+  padding: 0 6px 2px;
+  font: 11px/16px var(--font-ui);
+  color: var(--danger, #d33);
+}
+
+.valueEditorAbove {
+  flex-direction: column-reverse;
+}
+
+.valueEditorColor {
+  border-top: 1px solid var(--border);
+}
+
+.valueEditorAbove .valueEditorColor {
+  border-top: none;
+  border-bottom: 1px solid var(--border);
+}
+
+/* The source lens (R13): a construct's raw source, edited in place. */
+.sourceLens {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  z-index: 7;
+  width: min(480px, calc(100% - 8px));
+  color: var(--text);
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+}
+
+.sourceLensField {
+  padding: 3px 6px;
+  font: 12px/18px var(--font-mono);
+  color: inherit;
+  white-space: pre-wrap;
+  resize: none;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.sourceLensHint,
+.sourceLensProblem {
+  padding: 1px 6px 2px;
+  font: 11px/16px var(--font-ui);
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+
+.sourceLensProblem {
+  color: var(--danger, #d33);
+}
+
+/* A closer TeX recovery put in virtually (T2): faint, where it belongs. */
+.recoveryGhost {
+  position: absolute;
+  z-index: 6;
+  font-family: var(--font-mono);
+  color: var(--danger, #d33);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* The quick fix that writes the missing closers in (T6). */
+.recoveryFix {
+  position: absolute;
+  z-index: 7;
+  padding: 1px 8px;
+  font: 11px/16px var(--font-ui);
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 14%);
+}
+
+.recoveryFix:hover {
+  border-color: var(--accent);
+}
+
+/* Where an empty math slot puts its content (V3): \frac{}{}, x^{}, ${}$. */
+.slotPlaceholder {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  pointer-events: none;
+  border: 1px dashed var(--accent);
+  border-radius: 1px;
+  opacity: 0.7;
+}
+
+/* Reveal codes (R14): invisible syntax as a small gray chip above its place. */
+.revealedCode {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 3px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  line-height: 1;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-pane) 88%, transparent);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.revealedCodeSelected {
+  color: #fff;
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+}
+
+/* The source of the item under the pointer (V5). */
+.hoverSource {
+  position: absolute;
+  z-index: 8;
+  pointer-events: none;
+  padding: 1px 6px;
+  font: 12px/18px var(--font-mono);
+  color: var(--text);
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+  white-space: nowrap;
+}
+
+/* An optional slot the focus construct lacks (V3): fainter than a placeholder, solid on hover. */
+.ghostSlot {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  cursor: pointer;
+  border: 1px dotted var(--accent);
+  border-radius: 1px;
+  opacity: 0.55;
+}
+
+.ghostSlot:hover {
+  opacity: 0.9;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* How to accept a pending \right (M14): "tab \right)" below its faint glyph. */
+.pendingCloserHint {
+  position: absolute;
+  z-index: 7;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 1px 6px;
+  font: 11px/16px var(--font-ui);
+  color: var(--text-muted, var(--text));
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 14%);
+}
+
+.pendingCloserHint kbd {
+  padding: 0 4px;
+  font: 10px/14px var(--font-ui);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+}
+
+.pendingCloserHint code {
+  font-family: var(--font-mono);
+}
+
+/* A construct's values on its outline tag, clickable to edit them. */
+.contextOutlineValueTag {
+  font-family: var(--font-mono);
+}
+
+/* The focus tag as a handle (V4): the tag, and its menu below it. */
+.contextOutlineTagGroup {
+  position: absolute;
+  left: -1px;
+  bottom: 100%;
+  margin-bottom: 2px;
+  display: flex;
+  gap: 1px;
+  pointer-events: auto;
+}
+
+.contextOutlineTagButton {
+  padding: 0 3px;
+  border: none;
+  border-radius: 2px;
+  font: 500 9px/13px var(--font-ui);
+  color: #fff;
+  background: var(--accent-dark);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.contextOutlineTagButton.contextOutlineValueTag {
+  font-family: var(--font-mono);
+}
+
+/* Above the tag, clear of the construct and of the format bar below it. */
+.contextOutlineMenu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  margin-bottom: 2px;
+  padding: 3px 0;
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+}
+
+.contextOutlineMenuItem {
+  padding: 1px 10px;
+  border: none;
+  font: 12px/18px var(--font-ui);
+  text-align: left;
+  color: var(--text);
+  background: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.contextOutlineMenuItem:hover {
+  color: #fff;
+  background: var(--accent-dark);
+}
+
+.contextOutlineMenuVariant {
+  font-family: var(--font-mono);
+}
+
+.contextOutlineMenuSeparator {
+  margin: 3px 0;
+  border-top: 1px solid var(--border);
 }

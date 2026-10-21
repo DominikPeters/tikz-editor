@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
-import type { EmitSvgResult } from "tikz-editor/svg/index";
+import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
 import {
   copySvgText,
   downloadSvgMarkup,
@@ -64,7 +64,7 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
         setBaselineMarkup(text);
         setLoadingMarkup(false);
       },
-      (error) => {
+      (error: unknown) => {
         if (!active) {
           return;
         }
@@ -79,7 +79,7 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
           setOptimizerState({ status: "ready" });
         }
       },
-      (error) => {
+      (error: unknown) => {
         if (active) {
           setOptimizerState({
             status: "error",
@@ -166,7 +166,7 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
       size="xl"
       labelledBy="svg-export-title"
       dataTestId="svg-export-modal"
-      className={css.dialog}
+      className={css.dialog ?? ""}
     >
       <Modal.Header
         title="Export SVG"

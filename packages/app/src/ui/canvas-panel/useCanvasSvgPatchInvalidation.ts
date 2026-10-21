@@ -1,7 +1,7 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 
-import { collectGeometryInvalidation } from "tikz-editor/semantic/index";
-import type { SceneElement } from "tikz-editor/semantic/types";
+import { collectGeometryInvalidation } from "@tikz-editor/core/semantic/index";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
 
 import type { CanvasDragKind } from "../../store/types";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
@@ -123,12 +123,12 @@ function collectMatrixDescendantSourceIdsForChangedSources(
   const changed = new Set(changedSourceIds);
   const descendantSourceIds = new Set<string>();
   for (const element of elements) {
-    const matrixSourceId = element.matrixCell?.matrixSourceId?.trim();
+    const matrixSourceId = element.matrixCell?.matrixSourceId.trim();
     if (!matrixSourceId || !changed.has(matrixSourceId)) {
       continue;
     }
     descendantSourceIds.add(element.sourceRef.sourceId);
-    const cellSourceId = element.matrixCell?.cellSourceId?.trim();
+    const cellSourceId = element.matrixCell?.cellSourceId.trim();
     if (cellSourceId) {
       descendantSourceIds.add(cellSourceId);
     }

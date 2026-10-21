@@ -13,9 +13,6 @@ export function readSafeAreaBottom(): number {
   if (direct != null) {
     return direct;
   }
-  if (!document.body) {
-    return 0;
-  }
   const probe = document.createElement("div");
   probe.style.position = "fixed";
   probe.style.visibility = "hidden";

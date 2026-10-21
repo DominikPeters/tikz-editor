@@ -1,0 +1,737 @@
+import type {
+  SimpleTexFontCommandName,
+  SimpleTexInlineNode,
+  SimpleTexTextBoxAlignment,
+  SimpleTexTextBoxCommandName,
+} from "../ir.js";
+import type {
+  TexHBoxOffsetY,
+  TexLength,
+  TexMuLength,
+} from "../coordinates.js";
+
+export interface TexMathSourceSpan {
+  readonly start: number;
+  readonly end: number;
+}
+
+export type TexMathDiagnosticSeverity = "warning" | "error";
+
+export type TexMathStyle =
+  | "display"
+  | "text"
+  | "script"
+  | "scriptscript";
+
+export type TexMathDiagnosticCode =
+  | "ambiguous-infix-fraction"
+  | "duplicate-script"
+  | "empty-script"
+  | "extra-alignment-tab"
+  /** The formula ends mid-construct, as while it is typed (T3): what is missing is left empty. */
+  | "incomplete-input"
+  | "invalid-environment-nesting"
+  | "invalid-environment-argument"
+  | "invalid-math-style"
+  | "invalid-tex-dimension"
+  | "missing-environment-end"
+  | "missing-command"
+  | "missing-delimiter"
+  | "missing-group"
+  | "missing-right"
+  | "missing-script-target"
+  | "unexpected-group-close"
+  | "unsupported-command";
+
+export interface TexMathDiagnostic {
+  readonly severity: TexMathDiagnosticSeverity;
+  readonly code: TexMathDiagnosticCode;
+  readonly message: string;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathTokenKind =
+  | "character"
+  | "command"
+  | "group-open"
+  | "group-close"
+  | "space"
+  | "subscript"
+  | "superscript";
+
+export interface TexMathToken {
+  readonly kind: TexMathTokenKind;
+  readonly text: string;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathAtomClass =
+  | "ord"
+  | "op"
+  | "bin"
+  | "rel"
+  | "open"
+  | "close"
+  | "punct"
+  | "inner";
+
+export type TexMathSpacingCommand =
+  | ","
+  | ":"
+  | ";"
+  | "!"
+  | "nobreakspace"
+  | "negmedspace"
+  | "negthickspace"
+  | "quad"
+  | "qquad";
+
+export type TexMathNucleus =
+  | TexMathGlyphNucleus
+  | TexMathSizedDelimiterNucleus
+  | TexMathListNucleus
+  | TexMathFractionNucleus
+  | TexMathRadicalNucleus
+  | TexMathBoxedNucleus
+  | TexMathSmashNucleus
+  | TexMathPhantomNucleus
+  | TexMathShiftBoxNucleus
+  | TexMathVCenterNucleus
+  | TexMathRuleNucleus
+  | TexMathLineNucleus
+  | TexMathVarLimitNucleus
+  | TexMathBraceNucleus
+  | TexMathDotsNucleus
+  | TexMathAccentNucleus
+  | TexMathAlphabetNucleus
+  | TexMathTextNucleus
+  | TexMathOperatorNucleus
+  | TexMathOperatorNameNucleus
+  | TexMathExtensibleArrowNucleus
+  | TexMathLeftRightNucleus
+  | TexMathAlignedNucleus
+  | TexMathSubstackNucleus
+  | TexMathSubarrayNucleus
+  | TexMathSidesetNucleus
+  | TexMathArrayNucleus
+  | TexMathCasesNucleus
+  | TexMathSmallMatrixNucleus
+  | TexMathMatrixNucleus
+  | TexMathUnsupportedNucleus;
+
+export type TexMathDelimiter =
+  | "."
+  | "("
+  | ")"
+  | "["
+  | "]"
+  | "lbrace"
+  | "rbrace"
+  | "vert"
+  | "Vert"
+  | "slash"
+  | "backslash"
+  | "langle"
+  | "rangle"
+  | "lfloor"
+  | "rfloor"
+  | "lceil"
+  | "rceil"
+  | "ulcorner"
+  | "urcorner"
+  | "llcorner"
+  | "lrcorner";
+
+export interface TexMathGlyphNucleus {
+  readonly kind: "glyph";
+  readonly text: string;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathDelimiterSizeCommand =
+  | "big"
+  | "Big"
+  | "bigg"
+  | "Bigg";
+
+export interface TexMathSizedDelimiterNucleus {
+  readonly kind: "sized-delimiter";
+  readonly command: TexMathDelimiterSizeCommand;
+  readonly delimiter: TexMathDelimiter;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly delimiterSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathListNucleus {
+  readonly kind: "list";
+  readonly list: TexMathList;
+  readonly role?: "ellipsis";
+  readonly ellipsisCommand?: "ldots" | "cdots" | "dots" | "dotsc" | "dotsb" | "dotsm" | "dotsi" | "dotso";
+  readonly leadingKern?: TexLength;
+  /** A single-character math operator, as used by LaTeX's stackrel. */
+  readonly operator?: boolean;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathFractionNucleus {
+  readonly kind: "fraction";
+  readonly numerator: TexMathList;
+  readonly denominator: TexMathList;
+  readonly leftDelimiter?: TexMathDelimiter;
+  readonly rightDelimiter?: TexMathDelimiter;
+  readonly ruleThickness?: TexLength;
+  readonly style?: TexMathStyle;
+  readonly continued?: {
+    readonly numeratorAlignment: "left" | "center" | "right";
+  };
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathRadicalNucleus {
+  readonly kind: "radical";
+  readonly degree?: TexMathList;
+  readonly radicand: TexMathList;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathBoxedNucleus {
+  readonly kind: "boxed";
+  readonly body: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathSmashNucleus {
+  readonly kind: "smash";
+  readonly body: TexMathList;
+  readonly smashHeight: boolean;
+  readonly smashDepth: boolean;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly optionSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathPhantomNucleus {
+  readonly kind: "phantom";
+  readonly body: TexMathList;
+  readonly preserveWidth: boolean;
+  readonly preserveVertical: boolean;
+  readonly command: "phantom" | "hphantom" | "vphantom";
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathShiftBoxNucleus {
+  readonly kind: "shift-box";
+  readonly direction: "raise" | "lower";
+  readonly amount: TexLength;
+  readonly body: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly amountSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathVCenterNucleus {
+  readonly kind: "vcenter";
+  readonly body: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathRuleNucleus {
+  readonly kind: "rule";
+  readonly width: TexLength;
+  readonly height: TexLength;
+  readonly raise: TexHBoxOffsetY;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathLineCommand =
+  | "overline"
+  | "underline";
+
+export interface TexMathLineNucleus {
+  readonly kind: "line";
+  readonly command: TexMathLineCommand;
+  readonly body: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathVarLimitCommand =
+  | "varinjlim"
+  | "varprojlim"
+  | "varliminf"
+  | "varlimsup";
+
+export interface TexMathVarLimitNucleus {
+  readonly kind: "var-limit";
+  readonly command: TexMathVarLimitCommand;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathBraceNucleus {
+  readonly kind: "brace";
+  readonly command: "overbrace" | "underbrace";
+  readonly body: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathDotsNucleus {
+  readonly kind: "vertical-dots" | "diagonal-dots";
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathAccentCommand =
+  | "bar"
+  | "dot"
+  | "ddot"
+  | "dddot"
+  | "ddddot"
+  | "hat"
+  | "mathring"
+  | "tilde"
+  | "vec"
+  | "widehat"
+  | "widetilde";
+
+export interface TexMathAccentNucleus {
+  readonly kind: "accent";
+  readonly command: TexMathAccentCommand;
+  readonly base: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathAlphabetCommand =
+  /** Internal effective alphabet for \mathcal inside a bold math version. */
+  | "boldmathcal"
+  /** Internal effective alphabet for \mathfrak inside a bold math version. */
+  | "boldmathfrak"
+  /** Internal effective alphabet for \mathrm inside a bold math version. */
+  | "boldmathrm"
+  | "bm"
+  | "boldsymbol"
+  | "mathbf"
+  | "mathbb"
+  | "mathcal"
+  | "mathfrak"
+  | "mathscr"
+  | "mathit"
+  | "mathrm"
+  | "mathsf"
+  | "mathtt";
+
+export interface TexMathAlphabetNucleus {
+  readonly kind: "alphabet";
+  readonly alphabet: TexMathAlphabetCommand;
+  readonly list: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathTextPart =
+  | {
+      readonly kind: "text";
+      readonly text: string;
+      readonly sourceSpan: TexMathSourceSpan;
+    }
+  | {
+      readonly kind: "math";
+      readonly content: string;
+      readonly list: TexMathList;
+      readonly sourceSpan: TexMathSourceSpan;
+      readonly contentSourceSpan: TexMathSourceSpan;
+    };
+
+export interface TexMathTextNucleus {
+  readonly kind: "text";
+  readonly command?: "text" | "hbox" | SimpleTexTextBoxCommandName | SimpleTexFontCommandName;
+  readonly text: string;
+  readonly nodes?: readonly SimpleTexInlineNode[];
+  readonly parts?: readonly TexMathTextPart[];
+  readonly boxWidth?: TexLength;
+  readonly boxAlign?: SimpleTexTextBoxAlignment;
+  readonly textSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathOperatorCommand =
+  | "bigcap"
+  | "bigcup"
+  | "coprod"
+  | "idotsint"
+  | "iint"
+  | "iiint"
+  | "iiiint"
+  | "int"
+  | "lim"
+  | "oint"
+  | "prod"
+  | "sum";
+
+export type TexMathOperatorLimits =
+  | "display"
+  | "limits"
+  | "nolimits";
+
+export interface TexMathOperatorNucleus {
+  readonly kind: "operator";
+  readonly command: TexMathOperatorCommand;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathOperatorNamePart =
+  | {
+      readonly kind: "text";
+      readonly text: string;
+      readonly sourceSpan: TexMathSourceSpan;
+    }
+  | {
+      readonly kind: "spacing";
+      readonly command: TexMathSpacingCommand;
+      readonly sourceSpan: TexMathSourceSpan;
+    };
+
+export interface TexMathOperatorNameNucleus {
+  readonly kind: "operator-name";
+  readonly parts: readonly TexMathOperatorNamePart[];
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly nameSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathExtensibleArrowCommand =
+  | "xleftarrow"
+  | "xrightarrow";
+
+export interface TexMathExtensibleArrowNucleus {
+  readonly kind: "extensible-arrow";
+  readonly command: TexMathExtensibleArrowCommand;
+  readonly above: TexMathList;
+  readonly below?: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly aboveSourceSpan: TexMathSourceSpan;
+  readonly belowSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathLeftRightNucleus {
+  readonly kind: "left-right";
+  readonly leftDelimiter: TexMathDelimiter;
+  readonly rightDelimiter: TexMathDelimiter;
+  readonly body: TexMathList;
+  readonly leftDelimiterSourceSpan: TexMathSourceSpan;
+  readonly rightDelimiterSourceSpan: TexMathSourceSpan;
+  /** No `\right` yet (still being typed): closed where the formula ends, its delimiters at their natural size. */
+  readonly open?: true;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathMiddleDelimiter {
+  readonly kind: "middle-delimiter";
+  readonly delimiter: TexMathDelimiter;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly delimiterSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathAlignedCell {
+  readonly list: TexMathList;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathAlignedRow {
+  readonly cells: readonly TexMathAlignedCell[];
+  readonly sourceSpan: TexMathSourceSpan;
+  readonly rowBreakSourceSpan?: TexMathSourceSpan;
+  readonly intertextsBefore?: readonly TexMathAlignedIntertext[];
+  readonly suppressTag?: boolean;
+  readonly labels?: readonly TexMathAlignedRowLabel[];
+  readonly multlineShove?: "left" | "right";
+}
+
+export interface TexMathAlignedIntertext {
+  readonly text: string;
+  readonly parts: readonly TexMathTextPart[];
+  readonly sourceSpan: TexMathSourceSpan;
+  readonly textSourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathAlignedRowLabel {
+  readonly text: string;
+  readonly sourceSpan: TexMathSourceSpan;
+  readonly textSourceSpan: TexMathSourceSpan;
+  readonly explicit?: boolean;
+}
+
+export interface TexMathAlignedNucleus {
+  readonly kind: "aligned";
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly columnSeparation?: "align" | "none" | "gather" | "multline" | "eqnarray" | "xalignat" | "xxalignat" | "flalign";
+  readonly maxFields?: number;
+  readonly beginSourceSpan: TexMathSourceSpan;
+  readonly preambleSourceSpan?: TexMathSourceSpan;
+  readonly endSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathSubstackNucleus {
+  readonly kind: "substack";
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathSubarrayNucleus {
+  readonly kind: "subarray";
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly columnAlignment: "left" | "center";
+  readonly beginSourceSpan: TexMathSourceSpan;
+  readonly preambleSourceSpan: TexMathSourceSpan;
+  readonly endSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathSidesetNucleus {
+  readonly kind: "sideset";
+  readonly prescript: TexMathList;
+  readonly postscript: TexMathList;
+  readonly base: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathArrayColumnAlignment =
+  | "left"
+  | "center"
+  | "right";
+
+export interface TexMathArrayVerticalRule {
+  readonly beforeColumn: number;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathArrayPreambleItem =
+  | TexMathArrayVerticalRuleItem
+  | TexMathArrayPreambleInsert;
+
+export interface TexMathArrayVerticalRuleItem {
+  readonly kind: "vertical-rule";
+  readonly beforeColumn: number;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathArrayPreambleInsert {
+  readonly kind: "insert";
+  readonly beforeColumn: number;
+  readonly mode: "replace-spacing" | "add-spacing";
+  readonly list: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathArrayCellInsert {
+  readonly columnIndex: number;
+  readonly position: "before" | "after";
+  readonly list: TexMathList;
+  readonly commandSourceSpan: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathArrayRowRule {
+  readonly beforeRow: number;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathArrayNucleus {
+  readonly kind: "array";
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly columnAlignments: readonly TexMathArrayColumnAlignment[];
+  readonly verticalRules?: readonly TexMathArrayVerticalRule[];
+  readonly preambleItems?: readonly TexMathArrayPreambleItem[];
+  readonly cellInserts?: readonly TexMathArrayCellInsert[];
+  readonly rowRules?: readonly TexMathArrayRowRule[];
+  readonly beginSourceSpan: TexMathSourceSpan;
+  readonly preambleSourceSpan: TexMathSourceSpan;
+  readonly endSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathCasesNucleus {
+  readonly kind: "cases";
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly displayStyle?: boolean;
+  readonly beginSourceSpan: TexMathSourceSpan;
+  readonly endSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathSmallMatrixNucleus {
+  readonly kind: "smallmatrix";
+  readonly environment?: TexMathSmallMatrixEnvironment;
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly columnAlignment?: TexMathArrayColumnAlignment;
+  readonly beginSourceSpan: TexMathSourceSpan;
+  readonly endSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathSmallMatrixEnvironment =
+  | "smallmatrix"
+  | "psmallmatrix"
+  | "bsmallmatrix"
+  | "Bsmallmatrix"
+  | "vsmallmatrix"
+  | "Vsmallmatrix";
+
+export type TexMathMatrixEnvironment =
+  | "matrix"
+  | "pmatrix"
+  | "bmatrix"
+  | "Bmatrix"
+  | "vmatrix"
+  | "Vmatrix";
+
+export interface TexMathMatrixNucleus {
+  readonly kind: "matrix";
+  readonly environment: TexMathMatrixEnvironment;
+  readonly rows: readonly TexMathAlignedRow[];
+  readonly columnAlignment?: TexMathArrayColumnAlignment;
+  readonly beginSourceSpan: TexMathSourceSpan;
+  readonly endSourceSpan?: TexMathSourceSpan;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathUnsupportedNucleus {
+  readonly kind: "unsupported";
+  readonly command: string;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathScript {
+  readonly list: TexMathList;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathAtom {
+  readonly kind: "atom";
+  readonly atomClass: TexMathAtomClass;
+  readonly nucleus: TexMathNucleus;
+  readonly subscript?: TexMathScript;
+  readonly superscript?: TexMathScript;
+  readonly limits?: TexMathOperatorLimits;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathGlue {
+  readonly kind: "glue";
+  readonly command: TexMathSpacingCommand;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathMuGlue {
+  readonly kind: "mu-glue";
+  readonly mu: TexMuLength;
+  readonly displayMu?: TexMuLength;
+  readonly stretchMu?: TexMuLength;
+  readonly shrinkMu?: TexMuLength;
+  readonly omitInScript?: boolean;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathKern =
+  | {
+      readonly kind: "kern";
+      readonly command: "kern";
+      readonly widthPt: TexLength;
+      readonly commandSourceSpan: TexMathSourceSpan;
+      readonly amountSourceSpan: TexMathSourceSpan;
+      readonly sourceSpan: TexMathSourceSpan;
+    }
+  | {
+      readonly kind: "kern";
+      readonly command: "mkern";
+      readonly mu: TexMuLength;
+      readonly commandSourceSpan: TexMathSourceSpan;
+      readonly amountSourceSpan: TexMathSourceSpan;
+      readonly sourceSpan: TexMathSourceSpan;
+    };
+
+export type TexMathSkipGlue =
+  | {
+      readonly kind: "skip-glue";
+      readonly command: "hskip";
+      readonly widthPt: TexLength;
+      readonly stretchPt?: TexLength;
+      readonly shrinkPt?: TexLength;
+      readonly commandSourceSpan: TexMathSourceSpan;
+      readonly amountSourceSpan: TexMathSourceSpan;
+      readonly sourceSpan: TexMathSourceSpan;
+    }
+  | {
+      readonly kind: "skip-glue";
+      readonly command: "mskip";
+      readonly mu: TexMuLength;
+      readonly stretchMu?: TexMuLength;
+      readonly shrinkMu?: TexMuLength;
+      readonly commandSourceSpan: TexMathSourceSpan;
+      readonly amountSourceSpan: TexMathSourceSpan;
+      readonly sourceSpan: TexMathSourceSpan;
+    };
+
+export interface TexMathStyleChange {
+  readonly kind: "style-change";
+  readonly style: TexMathStyle;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathAlphabetChange {
+  readonly kind: "alphabet-change";
+  readonly alphabet: TexMathAlphabetCommand;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathPenalty {
+  readonly kind: "penalty";
+  readonly command: "allowbreak" | "break" | "nobreak" | "penalty";
+  readonly penalty: number;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export interface TexMathUnsupportedItem {
+  readonly kind: "unsupported";
+  readonly command: string;
+  readonly sourceSpan: TexMathSourceSpan;
+}
+
+export type TexMathItem =
+  | TexMathAtom
+  | TexMathGlue
+  | TexMathMuGlue
+  | TexMathKern
+  | TexMathSkipGlue
+  | TexMathStyleChange
+  | TexMathAlphabetChange
+  | TexMathMiddleDelimiter
+  | TexMathPenalty
+  | TexMathUnsupportedItem;
+
+export interface TexMathList {
+  readonly kind: "math-list";
+  readonly items: readonly TexMathItem[];
+  readonly sourceSpan: TexMathSourceSpan;
+  readonly displayLabels?: readonly TexMathAlignedRowLabel[];
+  readonly suppressDisplayTag?: boolean;
+}
+
+export interface TexMathParseResult {
+  readonly list: TexMathList;
+  readonly tokens: readonly TexMathToken[];
+  readonly diagnostics: readonly TexMathDiagnostic[];
+}

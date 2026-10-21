@@ -1,30 +1,38 @@
-import { applyEditAction, type ReorderDirection } from "tikz-editor/edit/actions";
-import { getEditActionAvailability } from "tikz-editor/edit/action-availability";
-import { pt, worldPoint } from "tikz-editor/coords/index";
-import { PT_PER_CM } from "tikz-editor/edit/format";
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import type { EditAction } from "@tikz-editor/core/edit/actions";
+import { applyEditAction, type ReorderDirection } from "@tikz-editor/core/edit/actions";
+import { getEditActionAvailability } from "@tikz-editor/core/edit/action-availability";
+import { pt, worldPoint } from "@tikz-editor/core/coords/index";
+import { PT_PER_CM } from "@tikz-editor/core/edit/format";
 import type {
-  resolveTransformInspectorValues} from "tikz-editor/edit/property-write-builders";
+  resolveTransformInspectorValues
+} from "@tikz-editor/core/edit/property-write-builders";
 import {
   buildTransformSetPropertyMutations,
   resolveTransformInspectorMutationContext,
   type TransformInspectorKey
-} from "tikz-editor/edit/property-write-builders";
-import { propertyIdForWriteKey } from "tikz-editor/edit/property-registry";
+} from "@tikz-editor/core/edit/property-write-builders";
+import { propertyIdForWriteKey } from "@tikz-editor/core/edit/property-registry";
 import {
   parseStatementSnapshot,
   resolveStatementRefs,
   statementSnippet
-} from "tikz-editor/edit/statement-ops";
-import { parseTikzForEdit } from "tikz-editor/edit/parse-options";
-import { parseEditableTargetId } from "tikz-editor/edit/editable-targets";
-import type { EditParseOptions } from "tikz-editor/edit/parse-options";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import { parseMatrixRowsForEdit, resolveMatrixMode } from "tikz-editor/semantic/nodes/matrix";
-import type { OptionListAst } from "tikz-editor/options/types";
-import type { EditHandle, SceneElement, SceneFigure } from "tikz-editor/semantic/types";
-import type { ForeachOriginFrame } from "tikz-editor/semantic/types";
-import type { PathStatement, Statement } from "tikz-editor/ast/types";
-import type { EditorAction } from "../store/types";
+} from "@tikz-editor/core/edit/statement-ops";
+import { parseTikzForEdit } from "@tikz-editor/core/edit/parse-options";
+import { parseEditableTargetId } from "@tikz-editor/core/edit/editable-targets";
+import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import { parseMatrixRowsForEdit, resolveMatrixMode } from "@tikz-editor/core/semantic/nodes/matrix";
+import type { OptionListAst } from "@tikz-editor/core/options/types";
+import type { EditHandle, SceneElement, SceneFigure } from "@tikz-editor/core/semantic/types";
+import type { ForeachOriginFrame } from "@tikz-editor/core/semantic/types";
+import type { PathStatement, Statement } from "@tikz-editor/core/ast/types";
+import type { EditorAction, EditorState } from "../store/types";
+import { beginDocumentEdit, canContinueDocumentEdit, type DocumentEditSession } from "../edit-session";
+import { executeDocumentEdit, nestedEditBaseSource, resolveNestedEditSpan, type EditExecutionContext } from "../edit-execution";
+import { buildEditParseOptions, type BuildEditParseOptionsInput } from "../edit-parse-options";
+import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
+import { useEditorStore } from "../store/store";
 import {
   buildSelectionPngBase64,
   buildSelectionSvgSync,
@@ -39,12 +47,15 @@ import {
   writeClipboardPayload
 } from "./editor-clipboard";
 import { getActiveEditorPlatform } from "../platform/current";
+import { parseWindowRootId } from "../root-inventory";
 
 type Dispatch = (action: EditorAction) => void;
 
 type SelectionCommandContext = {
   source: string;
-  activeFigureId?: string | null;
+  documentId?: string;
+  sourceRevision?: number;
+  activeRootId?: string | null;
   parseOptions?: EditParseOptions;
   figureCount?: number;
   snapshotSource: string | null;
@@ -53,6 +64,10 @@ type SelectionCommandContext = {
   selectedElementIds: ReadonlySet<string>;
   activeHandleId?: string | null;
   dispatch: Dispatch;
+  getState?: () => Pick<EditorState, "documents" | "activeDocumentId">;
+  clipboardSession?: DocumentEditSession;
+  clipboardEditContext?: EditExecutionContext;
+  parseSource?: string;
 };
 
 type PasteCommandContext = SelectionCommandContext;
@@ -75,11 +90,63 @@ const matrixActionCache = new WeakMap<SelectionCommandContext, Map<string, boole
 
 export type PasteSelectionResult =
   | { kind: "success" }
+  | { kind: "cancelled" }
   | { kind: "failure"; reason: ClipboardReadFailureReason | "unsupported" };
 
+/** Capture one clipboard operation before its first await, including its root. */
+export function beginClipboardEdit(context: SelectionCommandContext): SelectionCommandContext | null {
+  if (context.clipboardSession) return isClipboardEditCurrent(context) ? context : null;
+  const getState = context.getState ?? useEditorStore.getState;
+  const state = getState();
+  const session = beginDocumentEdit(state);
+  if (context.source !== session.latestSource ||
+    (context.documentId !== undefined && context.documentId !== session.documentId) ||
+    (context.sourceRevision !== undefined && context.sourceRevision !== session.latestRevision) ||
+    (context.activeRootId !== undefined && context.activeRootId !== session.activeRootId)) return null;
+  const document = state.documents[session.documentId];
+  if (!document) return null;
+  const editContext: EditExecutionContext = {
+    documentId: session.documentId, source: session.latestSource, sourceRevision: session.latestRevision,
+    activeRootId: session.activeRootId, snapshot: document.snapshot,
+    ...(document.drawingLayerRootId === undefined ? {} : { drawingLayerRootId: document.drawingLayerRootId })
+  };
+  const nestedSpan = resolveNestedEditSpan(editContext);
+  const parseSource = nestedSpan ? maskTikzPictureSource(nestedEditBaseSource(context.source, document.snapshot), nestedSpan) : context.source;
+  const parseRootId = nestedSpan ? document.snapshot.parseResult?.activeFigureId : session.activeRootId;
+  const parseInput: BuildEditParseOptionsInput & { analysis: "none" } = {
+    ...editContext, source: parseSource, analysis: "none",
+    overrides: { ...(context.parseOptions?.indentSize === undefined ? {} : { indentSize: context.parseOptions.indentSize }) }
+  };
+  if (parseRootId === undefined) delete parseInput.activeRootId;
+  else parseInput.activeRootId = parseRootId;
+  return {
+    ...context,
+    getState,
+    clipboardSession: session,
+    clipboardEditContext: editContext,
+    parseSource,
+    activeRootId: session.activeRootId,
+    parseOptions: buildEditParseOptions(parseInput),
+    dispatch: action => {
+      if (!canContinueDocumentEdit(session, getState())) return;
+      context.dispatch(action.type === "APPLY_EDIT_ACTION" ? {
+        ...action,
+        documentId: session.documentId,
+        precomputedSource: session.latestSource,
+        expectedDocumentRevision: { documentId: session.documentId, sourceRevision: session.latestRevision }
+      } : action);
+    }
+  };
+}
+
+export function isClipboardEditCurrent(context: SelectionCommandContext): boolean {
+  return !context.clipboardSession || canContinueDocumentEdit(context.clipboardSession, (context.getState ?? useEditorStore.getState)());
+}
+
 export function isCodeMirrorEventTarget(target: EventTarget | null): boolean {
-  const element = target as { closest?: (selector: string) => unknown } | null;
-  return element?.closest?.(".cm-editor") != null;
+  if (!target || !("closest" in target) || typeof target.closest !== "function") return false;
+  const match: unknown = Reflect.apply(target.closest, target, [".cm-editor"]);
+  return match != null;
 }
 
 export async function copySelection(
@@ -164,17 +231,17 @@ export function deleteSelection(context: SelectionCommandContext): boolean {
       type: "APPLY_EDIT_ACTION",
       action: {
         kind: "removeTreeChild",
-        childSourceId: ids[0]
+        childSourceId: requireArrayValue(ids, 0)
       }
     });
     return true;
   }
-  if (ids.length === 1 && parseEditableTargetId(ids[0]).kind === "node-adornment") {
+  if (ids.length === 1 && parseEditableTargetId(requireArrayValue(ids, 0)).kind === "node-adornment") {
     context.dispatch({
       type: "APPLY_EDIT_ACTION",
       action: {
         kind: "deleteAdornment",
-        targetId: ids[0]
+        targetId: requireArrayValue(ids, 0)
       }
     });
     return true;
@@ -184,7 +251,7 @@ export function deleteSelection(context: SelectionCommandContext): boolean {
     action: ids.length === 1
       ? {
           kind: "deleteElement",
-          elementId: ids[0]
+          elementId: requireArrayValue(ids, 0)
         }
       : {
           kind: "deleteElements",
@@ -199,11 +266,13 @@ export async function cutSelection(context: SelectionCommandContext): Promise<bo
     return false;
   }
 
-  const didCopy = await copySelection(context, { pasteBehavior: "preserve" });
-  if (!didCopy) {
+  const ownedContext = beginClipboardEdit(context);
+  if (!ownedContext) return false;
+  const didCopy = await copySelection(ownedContext, { pasteBehavior: "preserve" });
+  if (!didCopy || !isClipboardEditCurrent(ownedContext)) {
     return false;
   }
-  return deleteSelection(context);
+  return deleteSelection(ownedContext);
 }
 
 export function cutSelectionToClipboardData(
@@ -232,11 +301,14 @@ export function pasteSelectionFromClipboardData(
 export async function pasteSelectionFromSystemClipboard(
   context: PasteCommandContext
 ): Promise<PasteSelectionResult> {
+  const ownedContext = beginClipboardEdit(context);
+  if (!ownedContext) return { kind: "cancelled" };
   const readResult = await readClipboardPayloadFromSystemClipboard();
+  if (!isClipboardEditCurrent(ownedContext)) return { kind: "cancelled" };
   if (readResult.kind === "failure") {
     return readResult;
   }
-  const didPaste = runPasteFromPayload(context, readResult.payload);
+  const didPaste = runPasteFromPayload(ownedContext, readResult.payload);
   return didPaste ? { kind: "success" } : { kind: "failure", reason: "unsupported" };
 }
 
@@ -261,7 +333,7 @@ export function pasteSnippetsWithOffset(
 }
 
 function runPasteFromPayload(context: PasteCommandContext, payload: TikzClipboardPayload): boolean {
-  if (!canPasteSelection(context)) {
+  if (!isClipboardEditCurrent(context) || !canPasteSelection(context)) {
     return false;
   }
 
@@ -275,14 +347,16 @@ function runPasteFromPayload(context: PasteCommandContext, payload: TikzClipboar
   const action = {
     kind: "pasteStatements" as const,
     snippets: [...payload.snippets],
-    anchorElementId: anchor?.id,
+    ...(anchor === null || anchor === undefined ? {} : { anchorElementId: anchor.id }),
     delta
   };
-  const parseActiveFigureId = resolvedContextActiveFigureId(context);
-  const precomputedResult = applyEditAction(context.source, context.editHandles as EditHandle[], action, {
+  const activeFigureId = resolvedContextActiveFigureId(context);
+  const precomputedResult = context.clipboardEditContext
+    ? executeDocumentEdit(context.clipboardEditContext, action, { parseOptions: { ...((context.parseOptions?.indentSize) === undefined ? {} : { indentSize: context.parseOptions.indentSize }) } })
+    : applyEditAction(context.source, context.editHandles, action, {
     parseOptions: {
-      activeFigureId: parseActiveFigureId,
-      sourceFingerprint: context.parseOptions?.sourceFingerprint
+      ...(activeFigureId === undefined ? {} : { activeFigureId }),
+      ...((context.parseOptions?.sourceFingerprint) === undefined ? {} : { sourceFingerprint: context.parseOptions.sourceFingerprint })
     }
   });
   if (precomputedResult.kind !== "success" && precomputedResult.kind !== "partial") {
@@ -340,12 +414,12 @@ export function duplicateSelection(context: SelectionCommandContext): boolean {
   }
 
   const ids = [...context.selectedElementIds];
-  if (ids.length === 1 && parseEditableTargetId(ids[0]).kind === "node-adornment") {
+  if (ids.length === 1 && parseEditableTargetId(requireArrayValue(ids, 0)).kind === "node-adornment") {
     context.dispatch({
       type: "APPLY_EDIT_ACTION",
       action: {
         kind: "duplicateAdornment",
-        targetId: ids[0]
+        targetId: requireArrayValue(ids, 0)
       }
     });
     return true;
@@ -382,7 +456,7 @@ export function flattenForeachSelection(context: SelectionCommandContext): boole
     target: { kind: "span" as const, span: target.loopSpan },
     recursive: true
   };
-  const precomputedResult = applyEditAction(context.source, context.editHandles as EditHandle[], action, {
+  const precomputedResult = applyEditAction(context.source, context.editHandles, action, {
     parseOptions: parseOptionsForContext(context)
   });
   if (precomputedResult.kind !== "success" && precomputedResult.kind !== "partial") {
@@ -406,18 +480,7 @@ export function groupSelection(context: SelectionCommandContext): boolean {
     kind: "groupElements" as const,
     elementIds: [...context.selectedElementIds]
   };
-  const precomputedResult = applyEditAction(context.source, context.editHandles as EditHandle[], action, {
-    parseOptions: parseOptionsForContext(context)
-  });
-  if (precomputedResult.kind !== "success" && precomputedResult.kind !== "partial") {
-    return false;
-  }
-
-  context.dispatch({
-    type: "APPLY_EDIT_ACTION",
-    action,
-    precomputedResult
-  });
+  context.dispatch({ type: "APPLY_EDIT_ACTION", action, parseOptions: { ...((context.parseOptions?.indentSize) === undefined ? {} : { indentSize: context.parseOptions.indentSize }) } });
   return true;
 }
 
@@ -430,7 +493,7 @@ export function ungroupSelection(context: SelectionCommandContext): boolean {
     kind: "ungroupElements" as const,
     elementIds: [...context.selectedElementIds]
   };
-  const precomputedResult = applyEditAction(context.source, context.editHandles as EditHandle[], action, {
+  const precomputedResult = applyEditAction(context.source, context.editHandles, action, {
     parseOptions: parseOptionsForContext(context)
   });
   if (precomputedResult.kind !== "success" && precomputedResult.kind !== "partial") {
@@ -554,7 +617,7 @@ export function canFlattenForeachSelection(context: SelectionCommandContext): bo
   if (!target) {
     return false;
   }
-  const result = applyEditAction(context.source, context.editHandles as EditHandle[], {
+  const result = applyEditAction(context.source, context.editHandles, {
     kind: "flattenForeach",
     target: { kind: "span", span: target.loopSpan },
     recursive: true
@@ -624,7 +687,7 @@ export function canAddTreeChild(context: SelectionCommandContext): boolean {
   if (target.kind === "child") {
     return !target.foreach;
   }
-  return target.kind === "root";
+  return true;
 }
 
 export function canAddMatrixRowAtEnd(context: SelectionCommandContext): boolean {
@@ -942,37 +1005,6 @@ export function removeMatrixColumn(context: SelectionCommandContext): boolean {
   return true;
 }
 
-export function canAlignSelection(context: SelectionCommandContext, mode: AlignMode): boolean {
-  const actionId =
-    mode === "left"
-      ? "align-left"
-      : mode === "center"
-        ? "align-center"
-        : mode === "right"
-          ? "align-right"
-          : mode === "top"
-            ? "align-top"
-            : mode === "middle"
-              ? "align-middle"
-              : "align-bottom";
-  return availabilityFor(context)[actionId].enabled;
-}
-
-export function canDistributeSelection(context: SelectionCommandContext, axis: DistributeAxis): boolean {
-  const actionId = axis === "horizontal" ? "distribute-horizontal" : "distribute-vertical";
-  return availabilityFor(context)[actionId].enabled;
-}
-
-export function canRotateSelection(context: SelectionCommandContext, direction: "left" | "right"): boolean {
-  const actionId = direction === "left" ? "transform-rotateLeft90" : "transform-rotateRight90";
-  return availabilityFor(context)[actionId].enabled;
-}
-
-export function canFlipSelection(context: SelectionCommandContext, axis: "horizontal" | "vertical"): boolean {
-  const actionId = axis === "horizontal" ? "transform-flipHorizontal" : "transform-flipVertical";
-  return availabilityFor(context)[actionId].enabled;
-}
-
 export function splitSelectedPath(context: SelectionCommandContext): boolean {
   const ids = [...context.selectedElementIds];
   if (ids.length !== 1 || !availabilityFor(context)["path-split"].enabled || !context.activeHandleId) {
@@ -982,7 +1014,7 @@ export function splitSelectedPath(context: SelectionCommandContext): boolean {
     type: "APPLY_EDIT_ACTION",
     action: {
       kind: "splitPath",
-      elementId: ids[0],
+      elementId: requireArrayValue(ids, 0),
       handleId: context.activeHandleId
     }
   });
@@ -998,7 +1030,7 @@ export function joinSelectedPaths(context: SelectionCommandContext): boolean {
     type: "APPLY_EDIT_ACTION",
     action: {
       kind: "joinPaths",
-      elementIds: [ids[0], ids[1]]
+      elementIds: [requireArrayValue(ids, 0), requireArrayValue(ids, 1)]
     }
   });
   return true;
@@ -1013,7 +1045,7 @@ export function reverseSelectedPath(context: SelectionCommandContext): boolean {
     type: "APPLY_EDIT_ACTION",
     action: {
       kind: "reversePath",
-      elementId: ids[0]
+      elementId: requireArrayValue(ids, 0)
     }
   });
   return true;
@@ -1029,7 +1061,7 @@ export function setSelectedPathClosed(context: SelectionCommandContext, closed: 
     type: "APPLY_EDIT_ACTION",
     action: {
       kind: "toggleClosedPath",
-      elementId: ids[0],
+      elementId: requireArrayValue(ids, 0),
       closed
     }
   });
@@ -1045,7 +1077,7 @@ export function deleteSelectedPathPoint(context: SelectionCommandContext): boole
     type: "APPLY_EDIT_ACTION",
     action: {
       kind: "deletePathPoint",
-      elementId: ids[0],
+      elementId: requireArrayValue(ids, 0),
       handleId: context.activeHandleId
     }
   });
@@ -1062,7 +1094,7 @@ export function setSelectedPathPointKind(context: SelectionCommandContext, point
     type: "APPLY_EDIT_ACTION",
     action: {
       kind: "setPathPointKind",
-      elementId: ids[0],
+      elementId: requireArrayValue(ids, 0),
       handleId: context.activeHandleId,
       pointKind
     }
@@ -1088,7 +1120,7 @@ function selectedSnippets(context: SelectionCommandContext): string[] {
   for (const id of selectedElementIds) {
     const parsed = parseEditableTargetId(id);
     if (parsed.kind === "node-adornment") {
-      const resolved = resolvePropertyTarget(source, id, parseOptions);
+      const resolved = resolvePropertyTarget(context.parseSource ?? source, id, parseOptions);
       if (resolved.kind === "found" && resolved.target.optionSpan) {
         const snippet = source.slice(resolved.target.optionSpan.from, resolved.target.optionSpan.to).trim();
         if (snippet.length > 0) {
@@ -1101,7 +1133,7 @@ function selectedSnippets(context: SelectionCommandContext): string[] {
   }
 
   if (statementIds.length > 0) {
-    const snapshot = parseStatementSnapshot(source, parseOptions);
+    const snapshot = parseStatementSnapshot(context.parseSource ?? source, parseOptions);
     const refs = resolveStatementRefs(snapshot, statementIds);
     refs.sort((left, right) => {
       if (left.span.from !== right.span.from) {
@@ -1191,7 +1223,7 @@ function selectedStatementRefs(context: SelectionCommandContext) {
   }
 
   const statementIds = [...selectedElementIds].filter((id) => parseEditableTargetId(id).kind === "statement");
-  const snapshot = parseStatementSnapshot(source, parseOptionsForContext(context));
+  const snapshot = parseStatementSnapshot(context.parseSource ?? source, parseOptionsForContext(context));
   const refs = resolveStatementRefs(snapshot, statementIds);
   refs.sort((left, right) => {
     if (left.span.from !== right.span.from) {
@@ -1469,7 +1501,7 @@ function canApplyMatrixAction(
   if (cached != null) {
     return cached;
   }
-  const result = applyEditAction(context.source, context.editHandles as EditHandle[], action, {
+  const result = applyEditAction(context.source, context.editHandles, action, {
     parseOptions: parseOptionsForContext(context)
   });
   const canApply = result.kind === "success" || result.kind === "partial";
@@ -1482,9 +1514,10 @@ function availabilityFor(context: SelectionCommandContext) {
   if (cached) {
     return cached;
   }
+  const activeFigureId = resolvedContextActiveFigureId(context);
   const availability = getEditActionAvailability({
     source: context.source,
-    activeFigureId: resolvedContextActiveFigureId(context),
+    ...(activeFigureId === undefined ? {} : { activeFigureId }),
     parseOptions: parseOptionsForContext(context),
     snapshotSource: context.snapshotSource,
     selectedSourceIds: [...context.selectedElementIds],
@@ -1545,8 +1578,7 @@ function transformSelection(
   }
 
   const elementIds = [...context.selectedElementIds];
-  const mergeKey = `transform:${Date.now().toString(36)}`;
-  let dispatched = false;
+  const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
   const parseOptions = parseOptionsForContext(context);
 
   for (const elementId of elementIds) {
@@ -1561,24 +1593,22 @@ function transformSelection(
       resolveNextValue(transformContext.values, key)
     );
     for (const mutation of mutations) {
-      context.dispatch({
-        type: "APPLY_EDIT_ACTION",
-        historyMergeKey: mergeKey,
-        action: {
-          kind: "setProperty",
-          elementId: targetId,
-          level: "command",
-          key: mutation.key,
-          value: mutation.value,
-          propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
-          clearKeys: mutation.clearKeys
-        }
+      const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
+      actions.push({
+        kind: "setProperty",
+        elementId: targetId,
+        level: "command",
+        key: mutation.key,
+        value: mutation.value,
+        ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
+        clearKeys: mutation.clearKeys
       });
-      dispatched = true;
     }
   }
 
-  return dispatched;
+  if (actions.length === 0) return false;
+  context.dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "setProperties", actions } });
+  return true;
 }
 
 function normalizeSignedDeg(degrees: number): number {
@@ -1655,23 +1685,23 @@ function resolveFlattenForeachTarget(context: SelectionCommandContext): ForeachO
 }
 
 function resolvedContextActiveFigureId(context: SelectionCommandContext): string | null | undefined {
-  if (context.activeFigureId != null) {
-    return context.activeFigureId;
-  }
-  if ((context.figureCount ?? 0) > 1) {
-    return null;
-  }
-  return undefined;
+  if (context.parseOptions?.activeFigureId !== undefined) return context.parseOptions.activeFigureId;
+  return parseWindowRootId(context.activeRootId, context.figureCount ?? 0);
 }
 
 function parseOptionsForContext(context: SelectionCommandContext): EditParseOptions {
-  return {
-    activeFigureId: resolvedContextActiveFigureId(context),
-    analysisView: context.parseOptions?.analysisView,
-    analysisSession: context.parseOptions?.analysisSession,
-    indentSize: context.parseOptions?.indentSize,
-    sourceFingerprint: context.parseOptions?.sourceFingerprint
-  };
+  const options = context.parseOptions;
+  const activeFigureId = resolvedContextActiveFigureId(context);
+  // The analysis stays lazy (see buildEditParseOptions): reading it here would
+  // analyse the document whenever availability is computed.
+  return Object.defineProperties({
+    ...(activeFigureId === undefined ? {} : { activeFigureId }),
+    ...(options?.indentSize === undefined ? {} : { indentSize: options.indentSize }),
+    ...(options?.sourceFingerprint === undefined ? {} : { sourceFingerprint: options.sourceFingerprint })
+  }, {
+    analysisView: { enumerable: true, get: () => options?.analysisView },
+    analysisSession: { enumerable: true, get: () => options?.analysisSession }
+  });
 }
 
 function findSelectedSceneElement(scene: SceneFigure | null, selectedId: string): SceneElement | null {

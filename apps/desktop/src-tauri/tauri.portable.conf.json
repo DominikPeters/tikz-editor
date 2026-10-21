@@ -1,0 +1,12 @@
+{
+  "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
+  "identifier": "com.tikz.editor.portable",
+  "app": {
+    "appDirectoriesOverride": "./tikz-editor-data"
+  },
+  "bundle": {
+    "active": false,
+    "createUpdaterArtifacts": false,
+    "fileAssociations": []
+  }
+}

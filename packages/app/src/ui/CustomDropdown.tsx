@@ -114,7 +114,7 @@ export function CustomDropdown<TValue extends string>({
     }
 
     function onPointerDown(event: PointerEvent): void {
-      const target = event.target as Node | null;
+      const target = event.target instanceof Node ? event.target : null;
       if (!target) {
         return;
       }
@@ -367,5 +367,5 @@ export function CustomDropdown<TValue extends string>({
 function isCustomDropdownOption<TValue extends string>(
   item: CustomDropdownItem<TValue>
 ): item is CustomDropdownOption<TValue> {
-  return !("kind" in item) || item.kind !== "separator";
+  return !("kind" in item);
 }

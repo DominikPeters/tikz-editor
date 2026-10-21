@@ -1,0 +1,43 @@
+\documentclass{beamer}
+\usepackage{tikz}
+\newenvironment{tikzlayer}[1][]
+  {\par\nointerlineskip\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}, #1]}
+  {\end{tikzpicture}}
+\begin{document}
+\begin{frame}{After a list}
+\begin{itemize}
+\item First
+\item Second
+\end{itemize}
+
+\begin{tikzlayer}
+  \node at (2,3) {Added};
+  \draw (1,1) rectangle (3,2);
+\end{tikzlayer}
+\end{frame}
+\begin{frame}{After text}
+Some text here.
+
+\begin{tikzlayer}
+  \node at (2,3) {Added};
+  \draw (1,1) rectangle (3,2);
+\end{tikzlayer}
+\end{frame}
+\begin{frame}{After a display}
+Text
+\[ x^2 \]
+
+\begin{tikzlayer}
+  \node at (2,3) {Added};
+  \draw (1,1) rectangle (3,2);
+\end{tikzlayer}
+\end{frame}
+\begin{frame}{After a pause}
+First.\pause Second.
+
+\onslide<1->%
+\begin{tikzlayer}[blue]
+  \node at (2,3) {Added};
+\end{tikzlayer}
+\end{frame}
+\end{document}

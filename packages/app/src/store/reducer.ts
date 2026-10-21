@@ -1,7 +1,11 @@
-import { applyEditAction, PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "tikz-editor/edit/actions";
-import type { EditActionResult } from "tikz-editor/edit/actions";
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import { editingIdentityRootId, reconcileEditingIdentities, updateDocumentIdentities, withEditingHandleIdentities } from "../editing-identities";
+import { executeDocumentEdit } from "../edit-execution";
+import type { EditActionResult } from "@tikz-editor/core/edit/actions";
+import { editBeamerSlides, isDeckEditAction } from "@tikz-editor/core/beamer/index";
 import type {
   DocumentSession,
+  DocumentSessions,
   EditorAction,
   EditorState,
   HistoryEntry,
@@ -9,20 +13,25 @@ import type {
   WorkspacePersistedState
 } from "./types";
 import type { AssistantItem } from "../platform/types";
-import { buildSnapshotEditSourceFingerprint } from "../source-identity";
 import { deriveSingleSourcePatch } from "./source-patch-diff";
+import { applySourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
+import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { deckDrawingLayerRootId } from "../drawing-layer";
 import {
   createDocumentSession,
   createInitialWorkspaceState,
   createUntitledDocumentSession,
   DEFAULT_CANVAS_TRANSFORM,
   DEFAULT_SOURCE,
+  documentKindForSource,
   hydrateWorkspaceStateFromSeed,
   projectState,
   uiStateFromEditorState,
   workspaceStateFromEditorState,
   type WorkspaceSeed
 } from "./workspace-state";
+import { reconcileActiveRootSelection, snapshotRoots } from "../root-inventory";
+import { deckStepRootKey, rootKey } from "../root-key";
 export { DEFAULT_SOURCE, WORKSPACE_VERSION } from "./workspace-state";
 const FREEHAND_SMOOTHING_MIN_PX = 4;
 const FREEHAND_SMOOTHING_MAX_PX = 32;
@@ -47,7 +56,9 @@ function initialUiState(): WorkspaceEphemeralState {
     hoveredElementId: null,
     activeCanvasDragKind: null,
     activeSourceScrubSourceId: null,
+    activeInspectorEditDocumentId: null,
     activeCanvasTextEditSourceId: null,
+    canvasTextEditMask: null,
     showGrid: true,
     showTransparencyGrid: false,
     snapModes: {
@@ -66,6 +77,11 @@ function initialUiState(): WorkspaceEphemeralState {
     selectedAddMatrixColumns: DEFAULT_ADD_MATRIX_COLUMNS,
     creationStrokeColor: DEFAULT_CREATION_STROKE_COLOR,
     creationFillColor: DEFAULT_CREATION_FILL_COLOR,
+    deckStepByRootKey: {},
+    deckObjectSelection: null,
+    deckBuildSelection: null,
+    sourceReveal: null,
+    deckPlaceholderSelection: null,
     fitToContentRequestToken: 0,
     fitToContentModeActive: true,
     canvasFitToContentScale: null,
@@ -79,6 +95,8 @@ function initialUiState(): WorkspaceEphemeralState {
     showObjectsPanel: true,
     showStylesPanel: true,
     showFiguresPanel: false,
+    showBuildsPanel: false,
+    showNotesPanel: false,
     showAssistantPanel: false,
     rightSidebarTab: "inspector",
     showDevPanel: false,
@@ -100,6 +118,7 @@ function actionLabel(kind: HistoryEntry["kind"]): string {
     case "align": return "Aligned elements";
     case "distribute": return "Distributed elements";
     case "flatten-foreach": return "Flattened foreach";
+    case "text-edit": return "Edited text";
   }
 }
 
@@ -152,7 +171,7 @@ function compactDeveloperLogData(value: unknown, depth: number): unknown {
     return compactDeveloperLogData([...value].slice(0, MAX_DEVELOPER_LOG_ARRAY_ITEMS), depth + 1);
   }
   const output: Record<string, unknown> = {};
-  const entries = Object.entries(value as Record<string, unknown>);
+  const entries = Object.entries(value);
   for (const [key, nested] of entries.slice(0, MAX_DEVELOPER_LOG_OBJECT_KEYS)) {
     output[key] = compactDeveloperLogData(nested, depth + 1);
   }
@@ -180,14 +199,33 @@ function applyEditWarningToDocument(doc: DocumentSession, message: string | null
 }
 
 function readDocument(
-  documents: Record<string, DocumentSession>,
+  documents: DocumentSessions,
   documentId: string
 ): DocumentSession | undefined {
-  return (documents as Partial<Record<string, DocumentSession>>)[documentId];
+  return documents[documentId];
 }
 
-function hasDocument(documents: Record<string, DocumentSession>, documentId: string): boolean {
+function hasDocument(documents: DocumentSessions, documentId: string): boolean {
   return readDocument(documents, documentId) !== undefined;
+}
+
+// Each undo step keeps its full source (consecutive steps share strings), so a
+// long session on a large document is bounded by the oldest steps' bytes.
+const MAX_HISTORY_ENTRIES = 1000;
+const MAX_HISTORY_SOURCE_BYTES = 64 * 1024 * 1024;
+
+function boundHistory(doc: DocumentSession): DocumentSession {
+  let bytes = 0;
+  let keepFrom = doc.history.length;
+  while (keepFrom > 0 && doc.history.length - keepFrom < MAX_HISTORY_ENTRIES) {
+    bytes += requireArrayValue(doc.history, keepFrom - 1).sourceAfter.length * 2;
+    if (bytes > MAX_HISTORY_SOURCE_BYTES && keepFrom < doc.history.length) break;
+    keepFrom -= 1;
+  }
+  // Only undoable steps go: redo steps after the current one stay replayable.
+  keepFrom = Math.min(keepFrom, doc.historyIndex + 1);
+  if (keepFrom <= 0) return doc;
+  return { ...doc, history: doc.history.slice(keepFrom), historyIndex: doc.historyIndex - keepFrom };
 }
 
 function updateDocument(
@@ -199,10 +237,11 @@ function updateDocument(
   if (!current) {
     return workspace;
   }
-  const next = updater(current);
-  if (next === current) {
+  const updated = updateDocumentIdentities(current, updater(current));
+  if (updated === current) {
     return workspace;
   }
+  const next = updated.history === current.history ? updated : boundHistory(updated);
   return {
     ...workspace,
     documents: {
@@ -273,6 +312,12 @@ export function makeInitialState(seed?: WorkspaceSeed): EditorState {
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   const previousWorkspace = workspaceStateFromEditorState(state);
   const previousUi = uiStateFromEditorState(state);
+  if (action.type === "ASSISTANT_THREAD_READY" || action.type === "ASSISTANT_THREAD_LOADED" || action.type === "ASSISTANT_TURN_STATUS" || action.type === "ASSISTANT_ITEM_STARTED" || action.type === "ASSISTANT_ITEM_UPDATED" || action.type === "ASSISTANT_ITEM_COMPLETED" || action.type === "ASSISTANT_ITEM_DELTA" || action.type === "ASSISTANT_APPROVAL_REQUESTED" || action.type === "ASSISTANT_APPROVAL_CLEARED" || action.type === "ASSISTANT_SOURCE_UPDATED" || action.type === "ASSISTANT_SET_ERROR") {
+    const assistantAction = action;
+    const documentId = assistantAction.documentId ?? state.activeDocumentId;
+    const generation = "sessionGeneration" in assistantAction ? assistantAction.sessionGeneration ?? 0 : 0;
+    if (readDocument(state.documents, documentId)?.assistantSessionGeneration !== generation) return state;
+  }
   let workspace = previousWorkspace;
   let ui = previousUi;
   const activeId = state.activeDocumentId;
@@ -283,7 +328,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     (
       projectedActive.source !== state.source ||
       projectedActive.sourceRevision !== state.sourceRevision ||
-      projectedActive.activeFigureId !== state.activeFigureId ||
+      projectedActive.activeRootId !== state.activeRootId ||
       projectedActive.snapshot !== state.snapshot ||
       projectedActive.pendingRequestId !== state.pendingRequestId ||
       projectedActive.lastEditChangedSourceIds !== state.lastEditChangedSourceIds ||
@@ -303,7 +348,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       ...doc,
       source: state.source,
       sourceRevision: state.sourceRevision,
-      activeFigureId: state.activeFigureId,
+      activeRootId: state.activeRootId,
       snapshot: state.snapshot,
       pendingRequestId: state.pendingRequestId,
       lastEditChangedSourceIds: state.lastEditChangedSourceIds,
@@ -322,7 +367,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
 
   switch (action.type) {
     case "NEW_DOCUMENT": {
-      const untitledCount = Object.values(workspace.documents).filter((doc) => doc.fileRef == null).length + 1;
+      const untitledCount = Object.values(workspace.documents).filter((doc) => doc != null && doc.fileRef == null).length + 1;
       const next = createDocumentSession({
         source: action.source ?? DEFAULT_SOURCE,
         title: action.title ?? `Untitled ${untitledCount}`
@@ -349,17 +394,28 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       break;
     }
 
-    case "SET_ACTIVE_FIGURE": {
+    case "SET_ACTIVE_ROOT": {
       const documentId = activeDocumentIdFromAction(state, action.documentId);
+      const ref = parseDocumentRootId(action.rootId ?? "");
+      const layer = ref?.kind === "beamer-frame-tikz" && ref.layer ? ref : null;
+      const rootId = layer ? formatDocumentRootId({ kind: "beamer-frame", index: layer.frameIndex }) : action.rootId;
       workspace = updateDocument(workspace, documentId, (doc) =>
-        doc.activeFigureId === action.figureId
+        doc.activeRootId === rootId && (!layer || doc.drawingLayerRootId === action.rootId)
           ? doc
           : {
-              ...doc,
-              activeFigureId: action.figureId,
-              hasInitializedFigureSelection: true
+              ...withoutDeckSlideSelection(doc),
+              activeRootId: rootId,
+              drawingLayerRootId: layer ? action.rootId : null,
+              selectedElementIds: new Set(),
+              hasInitializedRootSelection: true
             }
       );
+      break;
+    }
+
+    case "SET_DRAWING_LAYER": {
+      workspace = updateDocument(workspace, activeId, doc => ({ ...doc, drawingLayerRootId: action.rootId,
+        selectedElementIds: new Set(), focusedScopeId: null }));
       break;
     }
 
@@ -395,7 +451,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       }
       const nextActiveId =
         workspace.activeDocumentId === closeId
-          ? nextOrder[Math.max(0, workspace.tabOrder.indexOf(closeId) - 1)] ?? nextOrder[0]
+          ? nextOrder[Math.max(0, workspace.tabOrder.indexOf(closeId) - 1)] ?? requireArrayValue(nextOrder, 0)
           : workspace.activeDocumentId;
       workspace = {
         ...workspace,
@@ -424,8 +480,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const documentId = activeDocumentIdFromAction(state, action.documentId);
       workspace = updateDocument(workspace, documentId, (doc) => ({
         ...doc,
-        savedSource: doc.source,
-        dirty: false,
+        savedSource: action.savedSource ?? doc.source,
+        dirty: doc.source !== (action.savedSource ?? doc.source),
         fileRef: action.fileRef ?? doc.fileRef,
         title: (action.fileRef ?? doc.fileRef)?.name ?? doc.title,
         diskRevision: action.diskRevision !== undefined ? action.diskRevision : doc.diskRevision,
@@ -441,6 +497,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         ...doc,
         source: action.source,
         sourceRevision: doc.source === action.source ? doc.sourceRevision : doc.sourceRevision + 1,
+        lastSourceChangeOrigin: "disk",
         savedSource: action.source,
         dirty: false,
         fileRef: action.fileRef ?? doc.fileRef,
@@ -488,7 +545,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           ...doc,
           source: action.source,
           sourceRevision: doc.sourceRevision + 1,
-          activeFigureId: doc.activeFigureId,
+          lastSourceChangeOrigin: "source-editor",
+          activeRootId: doc.activeRootId,
           lastEditChangedSourceIds: scrubChangedSourceIds,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
           lastEditPatches: scrubPatches,
@@ -525,29 +583,68 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         if (!isCurrentPendingRequest && !canApplyIntermediateDragSnapshot) {
           return doc;
         }
-        const previousFigureCount = doc.snapshot.figures.length;
-        const validFigureIds = new Set(action.snapshot.figures.map((figure) => figure.id));
-        let nextActiveFigureId = doc.activeFigureId;
-        let hasInitializedFigureSelection = doc.hasInitializedFigureSelection;
-        if (nextActiveFigureId && !validFigureIds.has(nextActiveFigureId)) {
-          nextActiveFigureId = null;
-          hasInitializedFigureSelection = true;
+        if (action.snapshot.overlayLayer?.pageCoordinates &&
+          (doc.drawingLayerRootId ?? null) !== (action.snapshot.overlayLayer.requestedRootId ?? null)) return doc;
+        const page = action.snapshot.deck?.activeFrame;
+        if (page) {
+          const expected = action.snapshot.deck?.frames.find(frame => frame.id === doc.activeRootId);
+          const step = Math.min(Math.max(1, ui.deckStepByRootKey[deckStepRootKey(documentId, doc.activeRootId)] ?? 1), Math.max(1, page.stepCount));
+          if (action.snapshot.source !== doc.source || page.layout.frameId !== page.frameId || page.layout.step !== page.step ||
+            (expected && (page.frameId !== expected.id || page.step !== step))) return doc;
         }
-        const shouldAutoSelectFirst =
-          (!hasInitializedFigureSelection && !nextActiveFigureId && action.snapshot.figures.length > 0) ||
-          (!nextActiveFigureId && previousFigureCount === 0 && action.snapshot.figures.length > 0) ||
-          (!nextActiveFigureId &&
-            action.snapshot.figures.length >= 2 &&
-            action.snapshot.figures.length > previousFigureCount);
-        if (shouldAutoSelectFirst) {
-          nextActiveFigureId = action.snapshot.figures[0].id;
-          hasInitializedFigureSelection = true;
+        // A nested-figure snapshot (beamer document, tikz-shaped result)
+        // publishes the parsed picture as its only root; the store's
+        // nested root id is deliberately absent from that inventory, so
+        // reconciliation must not drop it. When the picture disappears,
+        // compute falls back to a deck snapshot and reconciliation then
+        // recovers to a frame root as usual.
+        const keepsNestedFigureRoot =
+          action.snapshot.deck == null &&
+          parseDocumentRootId(doc.activeRootId ?? "")?.kind === "beamer-frame-tikz" &&
+          documentKindForSource(action.snapshot.source) === "beamer";
+        const rootSelection = keepsNestedFigureRoot
+          ? {
+              activeRootId: doc.activeRootId,
+              hasInitializedRootSelection: doc.hasInitializedRootSelection
+            }
+          : reconcileActiveRootSelection({
+              activeRootId: doc.activeRootId,
+              hasInitializedRootSelection: doc.hasInitializedRootSelection,
+              previousRootCount: snapshotRoots(doc.snapshot).length,
+              roots: snapshotRoots(action.snapshot)
+            });
+        const matchesCurrent = action.snapshot.source === doc.source;
+        const identities = matchesCurrent ? reconcileEditingIdentities(doc.editingIdentityRoots?.[editingIdentityRootId(action.snapshot) ?? ""] ?? doc.editingIdentities, action.snapshot, doc.id, doc.nextEditingIdentityId) : undefined;
+        const byIdentity = new Map(identities?.entries.map(entry => [entry.id, entry.sourceId]));
+        const roots = identities ? { ...doc.editingIdentityRoots, [identities.rootId ?? ""]: { ...identities, selection: null } } : doc.editingIdentityRoots;
+        const history = [...doc.history];
+        if (identities) {
+          const currentEntry = history.at(doc.historyIndex < 0 ? history.length : doc.historyIndex);
+          if (currentEntry?.sourceAfter === doc.source) history[doc.historyIndex] = { ...currentEntry, identitiesAfter: identities, ...(roots !== undefined ? { identityRootsAfter: roots } : {}) };
+          const undoneEntry = history.at(doc.historyIndex + 1);
+          if (undoneEntry?.sourceBefore === doc.source) history[doc.historyIndex + 1] = { ...undoneEntry, identitiesBefore: identities, ...(roots !== undefined ? { identityRootsBefore: roots } : {}) };
         }
+        const recoveredSelection = identities?.selection?.flatMap(id => byIdentity.get(id) ?? []);
+        const selectedElementIds = recoveredSelection && (recoveredSelection.length !== doc.selectedElementIds.size ||
+          recoveredSelection.some(id => !doc.selectedElementIds.has(id)))
+          ? new Set(recoveredSelection) : doc.selectedElementIds;
+        const nextEditingIdentityId = identities?.nextId ?? doc.nextEditingIdentityId;
+        const editingIdentities = identities ? { ...identities, selection: null } : doc.editingIdentities;
+        const drawingLayerRootId = action.snapshot.overlayLayer?.pageCoordinates ? action.snapshot.overlayLayer.rootId : doc.drawingLayerRootId;
         return {
           ...doc,
-          snapshot: action.snapshot,
-          activeFigureId: nextActiveFigureId,
-          hasInitializedFigureSelection,
+          history: identities ? history : doc.history,
+          ...(roots !== undefined ? { editingIdentityRoots: roots } : {}),
+          ...(nextEditingIdentityId !== undefined ? { nextEditingIdentityId } : {}),
+          ...(matchesCurrent ? { editingTargetsStale: false } : {}),
+          ...(editingIdentities !== undefined ? { editingIdentities } : {}),
+          selectedElementIds,
+          focusedScopeId: identities && doc.editingIdentities?.focused
+            ? byIdentity.get(doc.editingIdentities.focused) ?? null : doc.focusedScopeId,
+          snapshot: identities ? withEditingHandleIdentities(action.snapshot, identities) : action.snapshot,
+          activeRootId: rootSelection.activeRootId,
+          ...(drawingLayerRootId !== undefined ? { drawingLayerRootId } : {}),
+          hasInitializedRootSelection: rootSelection.hasInitializedRootSelection,
           pendingRequestId: isCurrentPendingRequest ? null : doc.pendingRequestId,
           activeHandleId:
             doc.activeHandleId && action.snapshot.editHandles.some((handle) => handle.id === doc.activeHandleId)
@@ -596,6 +693,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const documentId = activeDocumentIdFromAction(state, action.documentId);
       workspace = updateDocument(workspace, documentId, (doc) => ({
         ...doc,
+        assistantSessionGeneration: doc.assistantSessionGeneration + 1,
         assistantThreadId: null,
         assistantWorkspacePath: null,
         assistantFigurePath: null,
@@ -651,7 +749,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           return doc;
         }
         const nextItems = [...doc.assistantItems];
-        nextItems[index] = appendAssistantDelta(nextItems[index], action.deltaType, action.delta);
+        nextItems[index] = appendAssistantDelta(requireArrayValue(nextItems, index), action.deltaType, action.delta);
         return {
           ...doc,
           assistantItems: nextItems
@@ -699,7 +797,6 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           label: "AI assistant edit",
           mergeKey,
           forward: [],
-          backward: [],
           sourceBefore: lastEntry?.mergeKey === mergeKey ? lastEntry.sourceBefore : doc.source,
           sourceAfter: action.source
         };
@@ -711,6 +808,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           ...doc,
           source: action.source,
           sourceRevision: doc.sourceRevision + 1,
+          lastSourceChangeOrigin: "assistant",
           lastEditChangedSourceIds: null,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
           lastEditPatches: null,
@@ -741,12 +839,41 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     }
 
     case "APPLY_EDIT_ACTION": {
-      const documentId = activeId;
+      const documentId = action.documentId ?? activeId;
       const activeDoc = readDocument(workspace.documents, documentId);
       if (!activeDoc) {
         return state;
       }
+      if (action.expectedDocumentRevision && (
+        action.expectedDocumentRevision.documentId !== documentId ||
+        action.expectedDocumentRevision.sourceRevision !== activeDoc.sourceRevision ||
+        action.precomputedSource !== activeDoc.source
+      )) return state;
+      const resultOwnsGesture = documentId === state.activeDocumentId && state.activeCanvasDragKind != null && action.precomputedSource === activeDoc.source &&
+        action.precomputedResult?.geometryBaseSource != null && action.precomputedResult.identityMoves != null;
+      if (activeDoc.editingIdentities && activeDoc.editingTargetsStale && activeDoc.snapshot.source !== activeDoc.source && !resultOwnsGesture) {
+        workspace = updateDocument(workspace, documentId, doc => applyEditWarningToDocument(doc, "The figure is still catching up with the source edit."));
+        break;
+      }
       if (activeDoc.assistantLockReason) {
+        return state;
+      }
+      const isBeamerDocument = documentKindForSource(activeDoc.source) === "beamer";
+      // Mode is a function of (document kind, active root): a beamer
+      // document with a nested tikzpicture root active behaves as a tikz
+      // editor over the masked snapshot, not as a deck.
+      const nestedTikzRootActive =
+        isBeamerDocument &&
+        parseDocumentRootId(activeDoc.activeRootId ?? "")?.kind === "beamer-frame-tikz";
+      const isDeckMode = isBeamerDocument && !nestedTikzRootActive;
+      if (isDeckMode && !isDeckEditAction(action.action) && !activeDoc.snapshot.overlayLayer) {
+        // Tikz edit actions would corrupt the deck source; decks accept only
+        // the deck action family.
+        workspace = updateDocument(workspace, documentId, (doc) =>
+          applyEditWarningToDocument(doc, "Slide editing is not available yet — edit the source panel instead."));
+        break;
+      }
+      if (!isDeckMode && isDeckEditAction(action.action)) {
         return state;
       }
       let result: EditActionResult;
@@ -756,33 +883,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       ) {
         result = action.precomputedResult;
       } else {
-        const sourceFingerprint = buildSnapshotEditSourceFingerprint({
-          documentId,
-          sourceRevision: activeDoc.sourceRevision,
-          sourceLength: activeDoc.source.length,
-          sourceRefs: activeDoc.snapshot.editHandles.map((handle) => handle.sourceRef)
+        result = executeDocumentEdit({ ...activeDoc, documentId }, action.action, {
+          parseOptions: { ...action.parseOptions,
+            propertyWriteMode: action.parseOptions?.propertyWriteMode ?? (action.recordInHistory === false ? "preview" : "commit") }
         });
-        result = applyEditAction(
-          activeDoc.source,
-          activeDoc.snapshot.editHandles,
-          action.action,
-          {
-            evaluateOptions: { sourceFingerprint },
-            parseOptions: {
-              activeFigureId:
-                activeDoc.activeFigureId ?? (activeDoc.snapshot.figures.length > 1 ? null : undefined),
-              indentSize: action.parseOptions?.indentSize,
-              propertyWriteMode: action.parseOptions?.propertyWriteMode ?? (action.recordInHistory === false ? "preview" : "commit"),
-              sourceFingerprint
-            }
-          }
-        );
       }
 
       if (result.kind !== "success" && result.kind !== "partial") {
-        if (action.action.kind === "cleanupPropertyWrites" && result.kind === "unsupported" && result.reason === PROPERTY_WRITE_CLEANUP_NOOP_REASON) {
-          return state;
-        }
         const message =
           result.kind === "unsupported"
             ? `Edit action skipped: ${result.reason}`
@@ -791,11 +898,18 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         break;
       }
 
+      const editingTargetsStale = ![
+        "moveElement", "moveElements", "moveHandle", "resizeElement", "rotateElement", "setProperty", "setProperties",
+        "alignElements", "distributeElements", "updateNodeText", "movePathAttachedNode"
+      ].includes(action.action.kind);
       const actionWarning = result.kind === "partial" ? result.reason : null;
       const incrementalChangedSourceIds =
-        action.action.kind === "movePathAttachedNode"
-          ? null
-          : (result.changedSourceIds ?? null);
+        isDeckEditAction(action.action)
+            // Deck edits reconcile immediately (like session text edits):
+            // an empty list skips the typing debounce without claiming an
+            // incremental hint.
+            ? (result.changedSourceIds ?? [])
+            : (result.changedSourceIds ?? null);
       const incrementalPatches = result.patches;
 
       if (result.newSource === activeDoc.source) {
@@ -804,6 +918,26 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           break;
         }
         return state;
+      }
+
+      if (
+        action.action.kind === "deckDeleteObject" &&
+        ui.deckObjectSelection?.objectId === action.action.objectId &&
+        ui.deckObjectSelection.documentId === documentId
+      ) {
+        ui = { ...ui, deckObjectSelection: null };
+      }
+
+      if (action.canvasTextEditMask) {
+        ui = {
+          ...ui,
+          canvasTextEditMask: {
+            documentId,
+            elementId: action.canvasTextEditMask.elementId,
+            span: action.canvasTextEditMask.span,
+            sourceRevision: activeDoc.sourceRevision + 1
+          }
+        };
       }
 
       const nextSelection: ReadonlySet<string> = result.selectedSourceIds
@@ -820,9 +954,12 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
 
       if (!recordInHistory) {
         workspace = updateDocument(workspace, documentId, (doc) => ({
-          ...doc,
+          ...withoutPendingIdentityMoves(doc),
           source: result.newSource,
+          ...(result.identityMoves !== undefined ? { pendingIdentityMoves: result.identityMoves } : {}),
+          editingTargetsStale,
           sourceRevision: doc.sourceRevision + 1,
+          lastSourceChangeOrigin: "edit-command",
           lastEditChangedSourceIds: incrementalChangedSourceIds,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
           lastEditPatches: incrementalPatches,
@@ -841,11 +978,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       }
 
       const historyKind: HistoryEntry["kind"] =
+        action.action.kind === "deckDeleteObject" ? "delete" :
+        action.action.kind === "deckDuplicateObject" ? "add-element" :
+        isDeckEditAction(action.action) ? "set-property" :
         action.action.kind === "moveElement" || action.action.kind === "moveElements" ? "move" :
         action.action.kind === "moveHandle" || action.action.kind === "connectHandle" || action.action.kind === "moveAdornment" ? "move-handle" :
         action.action.kind === "splitPath" || action.action.kind === "joinPaths" || action.action.kind === "toggleClosedPath" ||
         action.action.kind === "deletePathPoint" || action.action.kind === "setPathPointKind" ? "path-edit" :
-        action.action.kind === "setProperty" || action.action.kind === "rotateElement" || action.action.kind === "updateNodeText" || action.action.kind === "cleanupPropertyWrites" ||
+        action.action.kind === "setProperty" || action.action.kind === "setProperties" || action.action.kind === "rotateElement" || action.action.kind === "updateNodeText" ||
         action.action.kind === "positionNodeRelativeTo" || action.action.kind === "convertNodePositionToAbsolute" ? "set-property" :
         action.action.kind === "alignElements" ? "align" :
         action.action.kind === "distributeElements" ? "distribute" :
@@ -859,7 +999,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         "resize";
 
       const truncated = activeDoc.history.slice(0, activeDoc.historyIndex + 1);
-      const mergeKey = action.historyMergeKey;
+      const properties = action.action.kind === "setProperty" ? [action.action]
+        : action.action.kind === "setProperties" ? action.action.actions : undefined;
+      const mergeKey = action.historyMergeKey ?? (properties ? `property:${documentId}:${activeDoc.sourceRevision + 1}` : undefined);
       const lastIndex = truncated.length - 1;
       const lastEntry = truncated.at(lastIndex);
 
@@ -871,15 +1013,18 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         const nextHistory = [...truncated];
         nextHistory[lastIndex] = {
           ...lastEntry,
-          label: actionLabel(historyKind),
+          label: lastEntry.label,
           forward: result.patches,
           sourceAfter: result.newSource,
           selectedElementIdsAfter: [...nextSelection]
         };
         workspace = updateDocument(workspace, documentId, (doc) => ({
-          ...doc,
+          ...withoutPendingIdentityMoves(doc),
           source: result.newSource,
+          ...(result.identityMoves !== undefined ? { pendingIdentityMoves: result.identityMoves } : {}),
+          editingTargetsStale,
           sourceRevision: doc.sourceRevision + 1,
+          lastSourceChangeOrigin: "edit-command",
           lastEditChangedSourceIds: incrementalChangedSourceIds,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
           lastEditPatches: incrementalPatches,
@@ -902,9 +1047,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const entry: HistoryEntry = {
         kind: historyKind,
         label: actionLabel(historyKind),
-        mergeKey,
+        ...(mergeKey !== undefined ? { mergeKey } : {}),
         forward: result.patches,
-        backward: result.patches,
         sourceBefore: activeDoc.source,
         sourceAfter: result.newSource,
         selectedElementIdsBefore: [...activeDoc.selectedElementIds],
@@ -912,9 +1056,12 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       };
 
       workspace = updateDocument(workspace, documentId, (doc) => ({
-        ...doc,
+        ...withoutPendingIdentityMoves(doc),
         source: result.newSource,
+        ...(result.identityMoves !== undefined ? { pendingIdentityMoves: result.identityMoves } : {}),
+        editingTargetsStale,
         sourceRevision: doc.sourceRevision + 1,
+        lastSourceChangeOrigin: "edit-command",
         lastEditChangedSourceIds: incrementalChangedSourceIds,
         lastEditChangeToken: doc.lastEditChangeToken + 1,
         lastEditPatches: incrementalPatches,
@@ -934,22 +1081,190 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       break;
     }
 
+    case "SELECT_DECK_SLIDES": {
+      workspace = updateDocument(workspace, action.documentId, doc => doc.sourceRevision !== action.baseRevision ? doc : ({
+        ...doc,
+        deckSlideSelection: { source: doc.source, frameIds: action.frameIds, anchorId: action.anchorId },
+        activeRootId: action.activeFrameId ?? doc.activeRootId,
+        hasInitializedRootSelection: true,
+      }));
+      break;
+    }
+
+    case "EDIT_DECK_SLIDES": {
+      const doc = readDocument(workspace.documents, action.documentId);
+      if (doc?.sourceRevision !== action.baseRevision || doc.assistantLockReason ||
+        ui.activeCanvasTextEditSourceId || ui.activeInspectorEditDocumentId || action.documentId !== activeId) return state;
+      const result = editBeamerSlides(doc.source, action.edit, { ...(action.allowWarnings !== undefined ? { allowWarnings: action.allowWarnings } : {}) });
+      if (!result) return state;
+      const prefix = `${doc.id}::`;
+      const stepsBefore = Object.fromEntries(Object.entries(ui.deckStepByRootKey).filter(([key]) => key.startsWith(prefix)));
+      const previousSteps = new Map(Object.entries(stepsBefore));
+      const stepsAfter: Record<string, number> = {};
+      for (const [oldId, newId] of Object.entries(result.frameIds)) {
+        const step = previousSteps.get(rootKey(doc.id, oldId));
+        if (step != null && newId != null) stepsAfter[rootKey(doc.id, newId)] = step;
+      }
+      const activeRoot = parseDocumentRootId(doc.activeRootId ?? "");
+      const activeFrameId = activeRoot?.kind === "beamer-frame-tikz" ? formatDocumentRootId({ kind: "beamer-frame", index: activeRoot.frameIndex }) : doc.activeRootId;
+      const before = {
+        selection: doc.deckSlideSelection?.source === doc.source ? doc.deckSlideSelection :
+          { source: doc.source, frameIds: activeFrameId ? [activeFrameId] : [], anchorId: activeFrameId },
+        activeRootId: doc.activeRootId, steps: stepsBefore,
+      };
+      const after = {
+        selection: { source: result.source, frameIds: result.selectedFrameIds, anchorId: result.selectedFrameIds.at(0) ?? null },
+        activeRootId: (action.edit.kind === "move" || action.edit.kind === "delete") && activeFrameId ?
+          result.frameIds[activeFrameId] ?? result.selectedFrameIds.at(0) ?? null : result.selectedFrameIds.at(0) ?? null,
+        steps: stepsAfter,
+      };
+      const kind = action.edit.kind;
+      const entry: HistoryEntry = {
+        kind: kind === "move" ? "reorder" : kind === "delete" ? "delete" : "add-element",
+        label: kind === "move" ? "Move slides" : kind === "duplicate" ? "Duplicate slides" : kind === "paste" ? "Paste slides" : kind === "delete" ? "Delete slides" : "New slide",
+        sourceBefore: doc.source, sourceAfter: result.source, forward: result.patches,
+        deckSlidesBefore: before, deckSlidesAfter: after,
+      };
+      const history = [...doc.history.slice(0, doc.historyIndex + 1), entry];
+      workspace = updateDocument(workspace, doc.id, current => ({
+        ...current, source: result.source, sourceRevision: current.sourceRevision + 1,
+        lastSourceChangeOrigin: "edit-command",
+        activeRootId: after.activeRootId, hasInitializedRootSelection: true, deckSlideSelection: after.selection,
+        lastEditPatches: result.patches, lastEditPatchBaseRevision: current.sourceRevision,
+        lastEditChangedSourceIds: [], lastEditChangeToken: current.lastEditChangeToken + 1,
+        lastEditWarningMessage: null, history, historyIndex: history.length - 1,
+        selectedElementIds: new Set(), activeHandleId: null, dirty: result.source !== current.savedSource,
+      }));
+      ui = { ...ui, deckObjectSelection: null, deckBuildSelection: null,
+        deckPlaceholderSelection: result.placeholder ? { documentId: doc.id, sourceRevision: doc.sourceRevision + 1, span: result.placeholder } : null,
+        deckStepByRootKey: { ...Object.fromEntries(Object.entries(ui.deckStepByRootKey).filter(([key]) => !key.startsWith(prefix))), ...stepsAfter } };
+      break;
+    }
+
+    case "APPLY_SOURCE_PATCHES": {
+      const documentId = activeDocumentIdFromAction(state, action.documentId);
+      const activeDoc = readDocument(workspace.documents, documentId);
+      if (!activeDoc || activeDoc.assistantLockReason) {
+        return state;
+      }
+      if (action.baseRevision !== activeDoc.sourceRevision) {
+        workspace = updateDocument(workspace, documentId, (doc) =>
+          applyEditWarningToDocument(
+            doc,
+            "Text edit skipped because the source changed."
+          ));
+        break;
+      }
+      const applied = applySourcePatches(activeDoc.source, action.patches);
+      if (applied.kind !== "success") {
+        workspace = updateDocument(workspace, documentId, (doc) =>
+          applyEditWarningToDocument(
+            doc,
+            `Text edit failed: ${applied.reason}.`
+          ));
+        break;
+      }
+      if (applied.source === activeDoc.source) {
+        return state;
+      }
+
+      if (action.canvasTextEditMask) {
+        ui = {
+          ...ui,
+          canvasTextEditMask: {
+            documentId,
+            elementId: action.canvasTextEditMask.elementId,
+            span: action.canvasTextEditMask.span,
+            sourceRevision: activeDoc.sourceRevision + 1
+          }
+        };
+      }
+
+      const truncated = activeDoc.history.slice(0, activeDoc.historyIndex + 1);
+      const lastIndex = truncated.length - 1;
+      const lastEntry = truncated.at(lastIndex);
+      let history: HistoryEntry[];
+      let historyIndex: number;
+      if (
+        action.historyMergeKey &&
+        lastEntry?.mergeKey === action.historyMergeKey &&
+        lastEntry.kind === "text-edit"
+      ) {
+        history = [...truncated];
+        history[lastIndex] = {
+          ...lastEntry,
+          label: actionLabel("text-edit"),
+          forward: action.patches,
+          sourceAfter: applied.source,
+          selectedElementIdsAfter: [...activeDoc.selectedElementIds]
+        };
+        historyIndex = lastIndex;
+      } else {
+        history = [
+          ...truncated,
+          {
+            kind: "text-edit",
+            label: actionLabel("text-edit"),
+            ...(action.historyMergeKey !== undefined ? { mergeKey: action.historyMergeKey } : {}),
+            forward: action.patches,
+            sourceBefore: activeDoc.source,
+            sourceAfter: applied.source,
+            selectedElementIdsBefore: [...activeDoc.selectedElementIds],
+            selectedElementIdsAfter: [...activeDoc.selectedElementIds]
+          }
+        ];
+        historyIndex = truncated.length;
+      }
+
+      workspace = updateDocument(workspace, documentId, (doc) => ({
+        ...doc,
+        source: applied.source,
+        sourceRevision: doc.sourceRevision + 1,
+        lastSourceChangeOrigin: "edit-command",
+        lastEditChangedSourceIds: [...action.changedSourceIds],
+        lastEditChangeToken: doc.lastEditChangeToken + 1,
+        lastEditPatches: action.patches,
+        lastEditPatchBaseRevision:
+          action.patches.length > 0 ? doc.sourceRevision : null,
+        lastEditWarningMessage: null,
+        lastEditWarningToken:
+          doc.lastEditWarningMessage != null
+            ? doc.lastEditWarningToken + 1
+            : doc.lastEditWarningToken,
+        activeHandleId: null,
+        history,
+        historyIndex,
+        dirty: applied.source !== doc.savedSource
+      }));
+      break;
+    }
+
     case "SET_SOURCE_TRANSIENT": {
-      workspace = updateDocument(workspace, activeId, (doc) => {
-        if (doc.assistantLockReason) {
+      const documentId = activeDocumentIdFromAction(state, action.documentId);
+      workspace = updateDocument(workspace, documentId, (doc) => {
+        if (doc.assistantLockReason ||
+          (action.expectedSourceRevision != null && doc.sourceRevision !== action.expectedSourceRevision) ||
+          (action.expectedSource != null && doc.source !== action.expectedSource)) {
           return doc;
         }
         if (action.source === doc.source) {
           return doc;
         }
+        if ((action.patches || action.identityMoves) && (
+          !action.patches || action.expectedSource == null || action.expectedSourceRevision == null ||
+          !patchesMatchSourceTransition(doc.source, action.source, action.patches)
+        )) return doc;
+        const patches = action.patches ?? deriveSingleSourcePatch(doc.source, action.source);
         return {
-          ...doc,
+          ...withoutPendingIdentityMoves(doc),
           source: action.source,
+          ...(action.identityMoves !== undefined ? { pendingIdentityMoves: action.identityMoves } : {}),
           sourceRevision: doc.sourceRevision + 1,
+          lastSourceChangeOrigin: "edit-command",
           lastEditChangedSourceIds: action.changedSourceIds ?? null,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
-          lastEditPatches: null,
-          lastEditPatchBaseRevision: null,
+          lastEditPatches: patches,
+          lastEditPatchBaseRevision: patches?.length ? doc.sourceRevision : null,
           lastEditWarningMessage: null,
           lastEditWarningToken:
             doc.lastEditWarningMessage != null
@@ -972,9 +1287,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         return state;
       }
       workspace = updateDocument(workspace, activeId, (current) => ({
-        ...current,
+        ...withoutEditingIdentities(current),
         source: entry.sourceBefore,
+        ...(entry.deckSlidesBefore ? { activeRootId: entry.deckSlidesBefore.activeRootId, deckSlideSelection: entry.deckSlidesBefore.selection } : {}),
+        ...(entry.identityRootsBefore !== undefined ? { editingIdentityRoots: entry.identityRootsBefore } : {}),
+        ...(entry.identitiesBefore ? { editingIdentities: { ...entry.identitiesBefore, nextId: Math.max(entry.identitiesBefore.nextId, current.editingIdentities?.nextId ?? 0) } } : {}),
         sourceRevision: current.sourceRevision + 1,
+        lastSourceChangeOrigin: "history",
         lastEditChangedSourceIds: null,
         lastEditChangeToken: current.lastEditChangeToken + 1,
         lastEditPatches: null,
@@ -991,6 +1310,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         activeHandleId: null,
         dirty: entry.sourceBefore !== current.savedSource
       }));
+      if (entry.deckSlidesBefore) ui = { ...ui, deckObjectSelection: null, deckBuildSelection: null,
+        deckStepByRootKey: { ...Object.fromEntries(Object.entries(ui.deckStepByRootKey).filter(([key]) => !key.startsWith(`${activeId}::`))), ...entry.deckSlidesBefore.steps } };
       break;
     }
 
@@ -1004,9 +1325,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         return state;
       }
       workspace = updateDocument(workspace, activeId, (current) => ({
-        ...current,
+        ...withoutEditingIdentities(current),
         source: entry.sourceAfter,
+        ...(entry.deckSlidesAfter ? { activeRootId: entry.deckSlidesAfter.activeRootId, deckSlideSelection: entry.deckSlidesAfter.selection } : {}),
+        ...(entry.identityRootsAfter !== undefined ? { editingIdentityRoots: entry.identityRootsAfter } : {}),
+        ...(entry.identitiesAfter ? { editingIdentities: { ...entry.identitiesAfter, nextId: Math.max(entry.identitiesAfter.nextId, current.editingIdentities?.nextId ?? 0) } } : {}),
         sourceRevision: current.sourceRevision + 1,
+        lastSourceChangeOrigin: "history",
         lastEditChangedSourceIds: null,
         lastEditChangeToken: current.lastEditChangeToken + 1,
         lastEditPatches: null,
@@ -1023,6 +1348,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         activeHandleId: null,
         dirty: entry.sourceAfter !== current.savedSource
       }));
+      if (entry.deckSlidesAfter) ui = { ...ui, deckObjectSelection: null, deckBuildSelection: null,
+        deckStepByRootKey: { ...Object.fromEntries(Object.entries(ui.deckStepByRootKey).filter(([key]) => !key.startsWith(`${activeId}::`))), ...entry.deckSlidesAfter.steps } };
       break;
     }
 
@@ -1087,11 +1414,25 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       break;
     }
 
-    case "SET_TOOL_MODE":
-      if (readDocument(workspace.documents, activeId)?.assistantLockReason) return state;
-      if (ui.toolMode === action.mode) return state;
+    case "SET_TOOL_MODE": {
+      const doc = readDocument(workspace.documents, activeId);
+      if (doc?.assistantLockReason) return state;
+      // A drawing tool on a slide opens the slide's drawing layer.
+      const layerRootId = doc && action.mode !== "select" && action.mode !== "magnify" && documentKindForSource(doc.source) === "beamer"
+        ? deckDrawingLayerRootId(doc.activeRootId, doc.snapshot, doc.source)
+        : null;
+      if (ui.toolMode === action.mode && !layerRootId) return state;
       ui = { ...ui, toolMode: action.mode };
+      if (layerRootId) {
+        workspace = updateDocument(workspace, activeId, (current) => ({
+          ...withoutDeckSlideSelection(current), drawingLayerRootId: layerRootId
+        }));
+      } else if (doc?.snapshot.overlayLayer?.insertion) {
+        // Putting the tool down drops a layer still to come.
+        workspace = updateDocument(workspace, activeId, (current) => ({ ...current, drawingLayerRootId: null }));
+      }
       break;
+    }
 
     case "SET_CANVAS_TRANSFORM":
       ui = { ...ui, canvasTransform: action.transform };
@@ -1157,15 +1498,84 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       break;
     }
 
+    case "SET_ACTIVE_INSPECTOR_EDIT":
+      if (ui.activeInspectorEditDocumentId === action.documentId) return state;
+      ui = { ...ui, activeInspectorEditDocumentId: action.documentId };
+      break;
+
     case "SET_ACTIVE_SOURCE_SCRUB":
       if (ui.activeSourceScrubSourceId === action.sourceId) return state;
       ui = { ...ui, activeSourceScrubSourceId: action.sourceId };
       break;
 
+    case "REVEAL_SOURCE": {
+      const doc = workspace.documents[workspace.activeDocumentId];
+      if (action.documentId !== doc?.id || action.sourceRevision !== doc.sourceRevision ||
+        action.span.from < 0 || action.span.to > doc.source.length || action.span.from > action.span.to) return state;
+      ui = { ...ui, sourceReveal: { documentId: action.documentId, sourceRevision: action.sourceRevision, span: action.span }, deckBuildSelection: null };
+      break;
+    }
+
+    case "SET_DECK_BUILD_SELECTION": {
+      const doc = workspace.documents[workspace.activeDocumentId];
+      if (action.selection && (
+        !doc || action.selection.documentId !== workspace.activeDocumentId ||
+        action.selection.frameId !== doc.activeRootId ||
+        action.selection.sourceRevision !== doc.sourceRevision
+      )) return state;
+      if (!action.selection && !ui.deckBuildSelection) return state;
+      ui = { ...ui, deckBuildSelection: action.selection,
+        deckObjectSelection: action.selection ? null : ui.deckObjectSelection };
+      break;
+    }
+
+    case "SET_DECK_STEP": {
+      const key = deckStepRootKey(workspace.activeDocumentId, action.rootId);
+      const step = Math.max(1, Math.round(action.step));
+      if (ui.deckStepByRootKey[key] === step) return state;
+      ui = {
+        ...ui,
+        deckStepByRootKey: { ...ui.deckStepByRootKey, [key]: step }
+      };
+      break;
+    }
+
     case "SET_ACTIVE_CANVAS_TEXT_EDIT":
       if (ui.activeCanvasTextEditSourceId === action.sourceId) return state;
-      ui = { ...ui, activeCanvasTextEditSourceId: action.sourceId };
+      // The structural mask is scoped to one session; starting or ending a
+      // session drops it (the next session keystroke reinstalls it). A text
+      // session and a deck object selection are mutually exclusive.
+      ui = {
+        ...ui,
+        activeCanvasTextEditSourceId: action.sourceId,
+        deckBuildSelection: action.sourceId != null ? null : ui.deckBuildSelection,
+        canvasTextEditMask: null,
+        deckObjectSelection:
+          action.sourceId != null ? null : ui.deckObjectSelection
+      };
       break;
+
+    case "SET_DECK_OBJECT_SELECTION": {
+      const selection =
+        action.objectId == null
+          ? null
+          : {
+              documentId: workspace.activeDocumentId,
+              frameId: action.frameId,
+              objectId: action.objectId
+            };
+      if (
+        ui.deckBuildSelection == null && ((ui.deckObjectSelection == null && selection == null) ||
+        (ui.deckObjectSelection != null &&
+          ui.deckObjectSelection.documentId === selection?.documentId &&
+          ui.deckObjectSelection.frameId === selection.frameId &&
+          ui.deckObjectSelection.objectId === selection.objectId))
+      ) {
+        return state;
+      }
+      ui = { ...ui, deckObjectSelection: selection, deckBuildSelection: null };
+      break;
+    }
 
     case "TOGGLE_CANVAS_AID":
       if (action.aid === "grid") {
@@ -1239,6 +1649,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         showObjectsPanel: action.objectsVisible,
         showStylesPanel: action.stylesVisible,
         showFiguresPanel: action.figuresVisible,
+        showBuildsPanel: action.buildsVisible ?? ui.showBuildsPanel,
+        showNotesPanel: action.notesVisible ?? ui.showNotesPanel,
         showAssistantPanel: action.assistantVisible,
         rightSidebarTab: action.activeRightTab,
       };
@@ -1279,4 +1691,23 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     return state;
   }
   return projectState(workspace, ui);
+}
+
+function withoutPendingIdentityMoves(doc: DocumentSession): DocumentSession {
+  const next = { ...doc };
+  delete next.pendingIdentityMoves;
+  return next;
+}
+
+function withoutEditingIdentities(doc: DocumentSession): DocumentSession {
+  const next = { ...doc };
+  delete next.editingIdentityRoots;
+  delete next.editingIdentities;
+  return next;
+}
+
+function withoutDeckSlideSelection(doc: DocumentSession): DocumentSession {
+  const next = { ...doc };
+  delete next.deckSlideSelection;
+  return next;
 }

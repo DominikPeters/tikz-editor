@@ -4,27 +4,8 @@ import type { CommandBindings } from "./editor-command-runtime";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
 import { BUILT_IN_WORKSPACES } from "./DockLayout";
 import { applyWorkspace, findActiveWorkspaceId } from "./workspace-apply";
+import { formatAccelerator } from "./key-labels";
 import css from "./AppMenuBar.module.css";
-
-const IS_MAC_PLATFORM =
-  typeof navigator !== "undefined" &&
-  /(mac|iphone|ipad)/i.test(navigator.platform);
-
-function formatAccelerator(accelerator: string | undefined): string {
-  if (!accelerator) {
-    return "";
-  }
-
-  return accelerator
-    .split("+")
-    .map((part) => {
-      if (part === "CmdOrCtrl") {
-        return IS_MAC_PLATFORM ? "Cmd" : "Ctrl";
-      }
-      return part;
-    })
-    .join(IS_MAC_PLATFORM ? " " : "+");
-}
 
 function MenuPopup({
   items,
@@ -44,7 +25,7 @@ function MenuPopup({
   const hasWorkspaceList = items.some((item) => item.kind === "workspace-list");
   const hasCheckItems =
     hasWorkspaceList ||
-    items.some((item) => item.kind === "command" && bindings[item.commandId].checked != null);
+    items.some((item) => item.kind === "command" && bindings[item.commandId]?.checked != null);
 
   return (
     <div className={[css.popup, nested ? css.popupNested : ""].filter(Boolean).join(" ")} role="menu" data-select="chrome">
@@ -129,18 +110,18 @@ function MenuPopup({
         }
 
         const binding = bindings[item.commandId];
-        const role = binding.checked == null ? "menuitem" : "menuitemcheckbox";
+        const role = binding?.checked == null ? "menuitem" : "menuitemcheckbox";
         return (
           <button
             key={`${itemKey}-${item.commandId}`}
             type="button"
             role={role}
-            aria-checked={binding.checked}
-            disabled={!binding.enabled}
+            aria-checked={binding?.checked}
+            disabled={!binding?.enabled}
             className={[css.item, hasCheckItems ? "" : css.itemNoCheck].filter(Boolean).join(" ")}
             data-testid={`menu-cmd-${item.commandId}`}
             onClick={() => {
-              if (!binding.enabled) {
+              if (!binding?.enabled) {
                 return;
               }
               void Promise.resolve(binding.run("menu")).then(() => {
@@ -148,7 +129,7 @@ function MenuPopup({
               });
             }}
           >
-            {hasCheckItems ? <span className={css.check}>{binding.checked ? "✓" : ""}</span> : null}
+            {hasCheckItems ? <span className={css.check}>{binding?.checked ? "✓" : ""}</span> : null}
             <span className={css.label}>{item.label}</span>
             <span className={css.shortcut}>{formatAccelerator(item.accelerator)}</span>
           </button>
@@ -170,7 +151,7 @@ export function AppMenuBar({
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
-      const target = event.target as Node | null;
+      const target = event.target instanceof Node ? event.target : null;
       if (!target) {
         return;
       }

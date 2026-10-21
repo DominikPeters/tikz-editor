@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 import type {
   BreakDecision,
   GreedyLine,
@@ -7,7 +8,7 @@ import type {
 } from './types.js';
 import type { ParagraphAlignment } from '../alignment.js';
 import { TEX_INTERWORD_SPACE_EM } from '../alignment.js';
-import type { WrappedTextGap } from '../install.js';
+import type { WrappedTextGap } from '../layout-options.js';
 
 export interface AppliedBreak extends BreakDecision {
   lineIndex: number;
@@ -43,20 +44,22 @@ interface TextMutationToken {
   text: string;
 }
 
-interface MtextBreakAction {
+interface MtextBreakActionBase {
   lineIndex: number;
-  kind: 'space' | 'hyphen';
   runIndex: number;
   sourceOffset: number;
   visibleHyphen: boolean;
   wrapper: AnyWrapper;
   childIndex: number;
   wordIndex: number;
-  splitOffset?: number;
 }
 
-const MTEXT_INDENT_PATCHED = Symbol('kp-mtext-indent-patched');
-const MTEXT_INDENT_PATCH_ORIGINAL = Symbol('kp-mtext-indent-original');
+type MtextBreakAction = MtextBreakActionBase & (
+  | { kind: 'space'; splitOffset?: never }
+  | { kind: 'hyphen'; splitOffset: number }
+);
+
+const indentPatchedWrappers = new WeakSet<object>();
 function alignmentToHorizontalAlign(alignment: ParagraphAlignment): 'left' | 'right' | 'center' {
   if (alignment === 'ragged-left') {
     return 'right';
@@ -198,7 +201,7 @@ function applyWrappedTextGapWidths(
       width: widthEm,
       stretch: gap?.stretchEm ?? 0,
       shrink: gap?.shrinkEm ?? 0,
-      spaceFactor: gap?.spaceFactor,
+      ...(gap?.spaceFactor !== undefined ? { spaceFactor: gap.spaceFactor } : {}),
     };
     const wrapper = (run.breakRef as { wrapper?: AnyWrapper | null }).wrapper;
     if (!wrapper) {
@@ -298,7 +301,7 @@ function patchMtextIndentBehavior(wrapper: AnyWrapper | null | undefined): void 
   if (!wrapper || typeof wrapper !== 'object') {
     return;
   }
-  if ((wrapper as Record<symbol, unknown>)[MTEXT_INDENT_PATCHED]) {
+  if (indentPatchedWrappers.has(wrapper)) {
     return;
   }
   if (typeof wrapper.computeLineBBox !== 'function') {
@@ -306,8 +309,7 @@ function patchMtextIndentBehavior(wrapper: AnyWrapper | null | undefined): void 
   }
 
   const original = wrapper.computeLineBBox.bind(wrapper);
-  (wrapper as Record<symbol, unknown>)[MTEXT_INDENT_PATCH_ORIGINAL] = original;
-  (wrapper as Record<symbol, unknown>)[MTEXT_INDENT_PATCHED] = true;
+  indentPatchedWrappers.add(wrapper);
 
   wrapper.computeLineBBox = function patchedComputeLineBBox(this: AnyWrapper, i: number) {
     const bbox = original(i);
@@ -360,7 +362,7 @@ function tokenizeForMutation(text: string): TextMutationToken[] {
 function wordTokenIndices(tokens: TextMutationToken[]): number[] {
   const indices: number[] = [];
   for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i].kind === 'word') {
+    if (requireArrayValue(tokens, i).kind === 'word') {
       indices.push(i);
     }
   }
@@ -415,15 +417,15 @@ function mutateWrapperText(
         return false;
       }
 
-      const tokenIndex = wordIndices[wordIndex];
-      const word = tokens[tokenIndex].text;
+      const tokenIndex = requireArrayValue(wordIndices, wordIndex);
+      const word = requireArrayValue(tokens, tokenIndex).text;
       if (consumed > word.length) {
         errors.push(
           `Mutation failed: line-leading trim length ${consumed} exceeds word '${word}'.`
         );
         return false;
       }
-      tokens[tokenIndex].text = word.slice(consumed);
+      requireArrayValue(tokens, tokenIndex).text = word.slice(consumed);
     }
 
     for (const [wordIndex, splitsAscending] of wordSplits.entries()) {
@@ -434,8 +436,8 @@ function mutateWrapperText(
         return false;
       }
 
-      const tokenIndex = wordIndices[wordIndex];
-      let word = tokens[tokenIndex].text;
+      const tokenIndex = requireArrayValue(wordIndices, wordIndex);
+      let word = requireArrayValue(tokens, tokenIndex).text;
       const splitsDescending = [...splitsAscending].sort(
         (a, b) => b.splitOffset - a.splitOffset
       );
@@ -451,7 +453,7 @@ function mutateWrapperText(
         word = `${word.slice(0, split)}${insertion}${word.slice(split)}`;
       }
 
-      tokens[tokenIndex].text = word;
+      requireArrayValue(tokens, tokenIndex).text = word;
     }
 
     child.node.setText(
@@ -661,6 +663,17 @@ export function applyBreaks(
     }
 
     const run = runs.at(breakDecision.runIndex);
+    if (run?.kind === 'penalty') {
+      appliedBreaks.push({
+        lineIndex: line.lineIndex,
+        kind: 'space',
+        runIndex: run.runIndex,
+        sourceOffset: breakDecision.sourceOffset,
+        visibleHyphen: false,
+      });
+      continue;
+    }
+
     if (run?.kind !== 'space') {
       appliedBreaks.push({
         lineIndex: line.lineIndex,
@@ -668,7 +681,7 @@ export function applyBreaks(
         runIndex: breakDecision.runIndex,
         sourceOffset: breakDecision.sourceOffset,
         visibleHyphen: false,
-        lineLeading: breakDecision.lineLeading,
+        ...(breakDecision.lineLeading !== undefined ? { lineLeading: breakDecision.lineLeading } : {}),
       });
       continue;
     }
@@ -722,7 +735,7 @@ export function applyBreaks(
       runIndex: run.runIndex,
       sourceOffset: run.sourceEnd,
       visibleHyphen: false,
-      lineLeading: run.breakRef.lineLeading,
+      ...(run.breakRef.lineLeading !== undefined ? { lineLeading: run.breakRef.lineLeading } : {}),
     });
   }
 
@@ -754,7 +767,7 @@ export function applyBreaks(
         : mappedIndexForHyphen(
           childSplits,
           action.wordIndex,
-          action.splitOffset as number
+          action.splitOffset
         );
 
       if (mutatedWordIndex === null) {
@@ -780,7 +793,7 @@ export function applyBreaks(
         runIndex: action.runIndex,
         sourceOffset: action.sourceOffset,
         visibleHyphen: action.visibleHyphen,
-        splitOffset: action.splitOffset,
+        ...(action.splitOffset !== undefined ? { splitOffset: action.splitOffset } : {}),
       });
     }
   }

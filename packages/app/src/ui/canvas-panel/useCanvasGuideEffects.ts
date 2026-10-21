@@ -1,5 +1,5 @@
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { clientPoint as makeClientPoint, px } from "tikz-editor/coords/index";
+import { clientPoint as makeClientPoint, px } from "@tikz-editor/core/coords/index";
 import { addGuide, moveGuide, removeGuide } from "./panel-helpers";
 import type { ClientPoint } from "../coords/types";
 import type { GuideDragState, GuideOrientation, GuidePreview, GuidesState } from "./types";
@@ -56,7 +56,7 @@ export function useCanvasGuideEffects(args: UseCanvasGuideEffectsArgs) {
             ? {
                 orientation: drag.orientation,
                 value: drag.value,
-                hideValue: drag.sourceValue,
+                ...(drag.sourceValue !== undefined ? { hideValue: drag.sourceValue } : {}),
                 visible: false
               }
             : null
@@ -71,7 +71,7 @@ export function useCanvasGuideEffects(args: UseCanvasGuideEffectsArgs) {
           ? {
               orientation: drag.orientation,
               value: guide.value,
-              hideValue: drag.sourceValue,
+              ...(drag.sourceValue !== undefined ? { hideValue: drag.sourceValue } : {}),
               visible: guide.overViewport && !drag.overDeleteZone
             }
           : guide.overViewport
@@ -103,7 +103,7 @@ export function useCanvasGuideEffects(args: UseCanvasGuideEffectsArgs) {
         if (drag.overViewport) {
           setGuides((current) => addGuide(current, drag.orientation, drag.value));
         }
-      } else if (drag.source === "guide" && drag.sourceValue != null) {
+      } else if (drag.sourceValue !== undefined) {
         const sourceValue = drag.sourceValue;
         if (drag.overDeleteZone) {
           setGuides((current) => removeGuide(current, drag.orientation, sourceValue));

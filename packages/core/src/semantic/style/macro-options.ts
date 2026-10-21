@@ -12,16 +12,8 @@ export function expandOptionListMacros(
   }
 
   return optionLists.map((list) => {
-    let changed = false;
-    const entries = list.entries.map((entry) => {
-      const expanded = expandOptionEntryMacro(entry, macroBindings, trace);
-      if (expanded !== entry) {
-        changed = true;
-      }
-      return expanded;
-    });
-
-    if (!changed) {
+    const entries = list.entries.map(entry => expandOptionEntryMacro(entry, macroBindings, trace));
+    if (entries.every((entry, index) => entry === list.entries[index])) {
       return list;
     }
 
@@ -41,7 +33,7 @@ function expandOptionEntryMacro(
   if (entry.kind === "kv") {
     const valueRaw = expandMacroBindings(entry.valueRaw, macroBindings, {
       maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-      trace
+      ...(trace === undefined ? {} : { trace: trace })
     });
     if (valueRaw === entry.valueRaw) {
       return entry;
@@ -56,7 +48,7 @@ function expandOptionEntryMacro(
   if (entry.kind === "unknown") {
     const raw = expandMacroBindings(entry.raw, macroBindings, {
       maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-      trace
+      ...(trace === undefined ? {} : { trace: trace })
     });
     if (raw === entry.raw) {
       return entry;

@@ -6,17 +6,20 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
-  type RefObject,
-  type SyntheticEvent as ReactSyntheticEvent
+  type ReactNode,
+  type RefObject
 } from "react";
+import { CanvasValueEditor } from "./CanvasValueEditor";
+import { CanvasSourceLens } from "./CanvasSourceLens";
+import { ContextOutlineTag } from "./CanvasContextOutlineTag";
 import type { AppMenuCommandId } from "../../app-menu";
 import type { CanvasContextMenuDefinition } from "../../context-menu";
 import type { EditorPlatform } from "../../platform/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
-import type { ResizeRole } from "tikz-editor/edit/actions";
-import type { EditHandle } from "tikz-editor/semantic/types";
-import type { SvgDiffHints, SvgRenderModel } from "tikz-editor/svg/index";
-import type { SnapLine } from "tikz-editor/edit/snapping";
+import type { ResizeRole } from "@tikz-editor/core/edit/actions";
+import type { EditHandle } from "@tikz-editor/core/semantic/types";
+import type { SvgDiffHints, SvgRenderModel } from "@tikz-editor/core/svg/index";
+import type { SnapLine } from "@tikz-editor/core/edit/snapping";
 import { CanvasSVGLayer } from "./CanvasSVGLayer";
 import {
   CurveControlOverlay,
@@ -41,7 +44,6 @@ import type {
   NodeAnchorOverlayState,
   NodePositionLinkDisplay,
   SelectionBoxDisplay,
-  TextEditingSession,
   TextSelectionOverlay,
   TextSelectionOverlayBox
 } from "./types";
@@ -54,15 +56,20 @@ import type { GridLines } from "./useCanvasGuidesAndRulers";
 import type { GuideOrientation } from "./types";
 import type { HitRegion } from "./hit-regions";
 import type { CurveControlLine } from "./curve-controls";
+import { CanvasTextEditPopup, type CanvasTextEditViewModel } from "./CanvasTextEditPopup";
 import css from "./CanvasPanel.module.css";
+import type { BeamerLinkDestination, BeamerLinkRegion } from "@tikz-editor/core/beamer";
 
 const MAGNIFIER_DIAMETER_PX = 300;
+const GHOST_SLOT_TITLES = { index: "Add a root index", sup: "Add a superscript", sub: "Add a subscript", label: "Add a label" } as const;
 const MAGNIFIER_SCALE = 2.25;
 const TEXT_CARET_BLINK_PERIOD_MS = 1000;
 const TEXT_CARET_BLINK_VISIBLE_MS = TEXT_CARET_BLINK_PERIOD_MS / 2;
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 type CanvasPanelViewProps = {
+  beamerLinks: readonly BeamerLinkRegion[];
+  onBeamerLinkActivate: (destination: BeamerLinkDestination) => void;
   prefersNonBlinkingTextInsertionIndicator: boolean;
   showRulers: boolean;
   viewportSize: { width: number; height: number };
@@ -133,6 +140,18 @@ type CanvasPanelViewProps = {
   nodePositionLinks: readonly NodePositionLinkDisplay[];
   marqueeBounds: SvgBounds | null;
   selectionBoxes: readonly SelectionBoxDisplay[];
+  /** Visible geometry for the selected build, in world coordinates. */
+  deckBuildSelectionRects?: readonly { x: number; y: number; width: number; height: number }[];
+  /** Selected deck object outline (object layer), in world coordinates. */
+  deckResizeOverlay: ReactNode;
+  deckObjectSelectionBox: {
+    objectId: string;
+    kind: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null;
   adornmentHighlightBoxes: readonly AdornmentHighlightBox[];
   selectedAdornmentConnectors: readonly AdornmentConnectorDisplay[];
   selectionStrokeWidth: number;
@@ -168,27 +187,22 @@ type CanvasPanelViewProps = {
   warning: string | null;
   copyWarningToClipboard: () => void;
   onWarningBarKeyDown: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
-  textEditingSession: TextEditingSession | null;
-  textEditPopup: { centerX: number; top: number; maxWidth: number; textareaWidth: number } | null;
-  textEditPopupHeight: number | null;
-  textEditPopupRef: RefObject<HTMLDivElement | null>;
-  textEditTextareaSizing: { rows: number } | null;
-  textEditTextareaRef: RefObject<HTMLTextAreaElement | null>;
-  textEditCaretOverlay: { left: number; top: number; height: number } | null;
-  hideNativeTextEditCaret: boolean;
-  onTextEditPopupPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onTextEditTextareaSelect: (event: ReactSyntheticEvent<HTMLTextAreaElement>) => void;
-  onTextEditTextareaCopy: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
-  onTextEditTextareaCut: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
-  onTextEditTextareaPaste: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
-  onTextEditTextareaDrop: (event: ReactDragEvent<HTMLTextAreaElement>) => void;
-  onTextEditTextareaKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
+  canvasTextEdit: CanvasTextEditViewModel;
   selectionHint: string | null;
-  showDevPanel: boolean;
-  snapDebugRect: { left: number; top: number; width: number; height: number };
-  onSnapDebugMovePointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  snapDebug: unknown;
-  onSnapDebugResizePointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  /** Overlay-step scrubber for deck mode; null hides it. */
+  deckStepper: {
+    step: number;
+    stepCount: number;
+    onStepChange: (step: number) => void;
+  } | null;
+  /** "Slide N ▸ Figure M" bar while a nested figure is being edited. */
+  nestedFigureBreadcrumb: {
+    slideLabel: string;
+    figureLabel: string;
+    onExit: () => void;
+  } | null;
+  /** While a drawing layer is edited: its slide without it, an SVG of the page under the picture. */
+  layerBackdropSvg: string | null;
   RULER_SIZE: number;
   magnifierState: MagnifierState | null;
 };
@@ -214,6 +228,8 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     onViewportDrop,
     onBackgroundClick,
     onViewportPointerDown,
+    beamerLinks,
+    onBeamerLinkActivate,
     onViewportPointerUp,
     svgResult,
     noActiveFigure,
@@ -264,6 +280,9 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     nodePositionLinks,
     marqueeBounds,
     selectionBoxes,
+    deckObjectSelectionBox,
+    deckResizeOverlay,
+    deckBuildSelectionRects,
     adornmentHighlightBoxes,
     selectedAdornmentConnectors,
     selectionStrokeWidth,
@@ -293,26 +312,11 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     warning,
     copyWarningToClipboard,
     onWarningBarKeyDown,
-    textEditingSession,
-    textEditPopup,
-    textEditPopupHeight,
-    textEditTextareaSizing,
-    textEditTextareaRef,
-    textEditCaretOverlay,
-    hideNativeTextEditCaret,
-    onTextEditPopupPointerDown,
-    onTextEditTextareaSelect,
-    onTextEditTextareaCopy,
-    onTextEditTextareaCut,
-    onTextEditTextareaPaste,
-    onTextEditTextareaDrop,
-    onTextEditTextareaKeyDown,
+    canvasTextEdit,
     selectionHint,
-    showDevPanel,
-    snapDebugRect,
-    onSnapDebugMovePointerDown,
-    snapDebug,
-    onSnapDebugResizePointerDown,
+    deckStepper,
+    nestedFigureBreadcrumb,
+    layerBackdropSvg,
     RULER_SIZE,
     magnifierState
   } = props;
@@ -327,6 +331,11 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
   const magnifierTop = magnifierVisible
     ? Math.max(0, Math.min(viewportSize.height - MAGNIFIER_DIAMETER_PX, magnifierState.center.y - magnifierRadius))
     : 0;
+  const textEditingSession = canvasTextEdit.session;
+  // Focus-surface indication only applies to scope (deck) sessions; node
+  // sessions keep the canvas and popup carets blinking in unison.
+  const canvasSurfaceInactive =
+    textEditingSession?.isScopeSession === true && canvasTextEdit.focusSurface === "bar";
   const textCaretBlinkKey =
     textEditingSession && textEditingSession.selectionStart === textEditingSession.selectionEnd
       ? `${textEditingSession.sourceId}:${textEditingSession.selectionStart}:${textEditingSession.selectionEnd}:${textEditingSession.text}`
@@ -390,6 +399,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             <svg
               ref={topRulerRef}
               className={css.topRuler}
+              data-testid="canvas-top-ruler"
               data-select="chrome"
               viewBox={`0 0 ${Math.max(1, viewportSize.width)} ${RULER_SIZE}`}
               preserveAspectRatio="none"
@@ -422,6 +432,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             <svg
               ref={leftRulerRef}
               className={css.leftRuler}
+              data-testid="canvas-left-ruler"
               data-select="chrome"
               viewBox={`0 0 ${RULER_SIZE} ${Math.max(1, viewportSize.height)}`}
               preserveAspectRatio="none"
@@ -500,10 +511,18 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                 transform: `translate(${canvasTransform.translateX}px, ${canvasTransform.translateY}px)`
               }}
             >
+              {layerBackdropSvg != null ? (
+                <div
+                  className={css.layerBackdrop}
+                  data-testid="canvas-layer-backdrop"
+                  dangerouslySetInnerHTML={{ __html: layerBackdropSvg }}
+                />
+              ) : null}
               <CanvasSVGLayer
                 model={svgModel}
-                diffHints={svgDiffHints}
+                {...(svgDiffHints !== undefined ? { diffHints: svgDiffHints } : {})}
                 forceReplaceAll={forceSvgReplaceAll}
+                overBackdrop={layerBackdropSvg != null}
                 showTransparencyGrid={showTransparencyGrid}
                 showDocumentBounds={showDocumentBounds}
                 onFallback={onSvgPatchFallback}
@@ -616,6 +635,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                     {renderedGuides.vertical.map((x: number) => (
                       <g key={`guide-v-${fmt(x)}`}>
                         <line
+                          data-testid="canvas-guide-vertical"
                           x1={x}
                           x2={x}
                           y1={visibleRanges?.svgMinY ?? svgResult.viewBox.y}
@@ -639,6 +659,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                       return (
                         <g key={`guide-h-${fmt(worldY)}`}>
                           <line
+                            data-testid="canvas-guide-horizontal"
                             x1={visibleRanges?.worldMinX ?? svgResult.viewBox.x}
                             x2={visibleRanges?.worldMaxX ?? (svgResult.viewBox.x + svgResult.viewBox.width)}
                             y1={y}
@@ -683,12 +704,38 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   toolMode={toolMode}
                   editableTextRegionKeys={editableTextRegionKeys}
                   draggableSourceIds={draggableSourceIds}
-                  cursorByTargetId={hitRegionCursorByTargetId}
+                  {...(hitRegionCursorByTargetId !== undefined ? { cursorByTargetId: hitRegionCursorByTargetId } : {})}
                   onElementPointerDown={onElementPointerDown}
                   onElementContextMenu={onElementContextMenu}
                   onElementDoubleClick={onElementDoubleClick}
                   onHoverChange={onHoverChange}
                 />
+
+                <g data-testid="beamer-link-overlay">
+                  {beamerLinks.map((link) => (
+                    <rect
+                      key={`${link.label}:${link.bounds.x}:${link.bounds.y}`}
+                      data-beamer-link={link.label}
+                      {...link.bounds}
+                      fill="transparent"
+                      pointerEvents="all"
+                      style={{ cursor: "pointer" }}
+                      role="link"
+                      tabIndex={0}
+                      aria-label={link.label}
+                      onPointerDown={(event) => { event.stopPropagation(); }}
+                      onPointerUp={(event) => { event.stopPropagation(); }}
+                      onClick={(event) => { event.preventDefault(); event.stopPropagation(); onBeamerLinkActivate(link.destination); }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onBeamerLinkActivate(link.destination);
+                        }
+                      }}
+                    ><title>{link.label}</title></rect>
+                  ))}
+                </g>
 
                 <NodePositionLinkOverlay
                   links={nodePositionLinks}
@@ -702,6 +749,34 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   adornmentConnectors={selectedAdornmentConnectors}
                   selectionStrokeWidth={selectionStrokeWidth}
                 />
+
+                {deckObjectSelectionBox ? (
+                  <g className={css.selectionOverlay} data-testid="deck-object-selection">
+                    <rect
+                      className={[css.selectionRect, css.selectionRectDashed].join(" ")}
+                      x={deckObjectSelectionBox.x}
+                      y={deckObjectSelectionBox.y}
+                      width={Math.max(0.001, deckObjectSelectionBox.width)}
+                      height={Math.max(0.001, deckObjectSelectionBox.height)}
+                      strokeWidth={selectionStrokeWidth}
+                      data-deck-object-id={deckObjectSelectionBox.objectId}
+                      data-deck-object-kind={deckObjectSelectionBox.kind}
+                    />
+                  </g>
+                ) : null}
+
+                {deckResizeOverlay}
+
+                {deckBuildSelectionRects?.length ? (
+                  <g className={css.selectionOverlay} data-testid="deck-build-selection" pointerEvents="none">
+                    {deckBuildSelectionRects.map((rect, index) => <rect
+                      key={`${index}:${rect.x}:${rect.y}`}
+                      className={css.selectionRect}
+                      x={rect.x - 1} y={rect.y - 1} width={rect.width + 2} height={rect.height + 2}
+                      strokeWidth={selectionStrokeWidth}
+                    />)}
+                  </g>
+                ) : null}
 
                 <SelectionDragLayer
                   toolMode={toolMode}
@@ -724,29 +799,17 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   viewBox={svgResult.viewBox}
                   strokeWidth={handleStrokeWidth}
                   radius={handleHalfSize}
-                  onAnchorPointerDown={
-                    onNodeAnchorPointerDown
-                      ? (event, anchor) => {
+                  {...(onNodeAnchorPointerDown ? { onAnchorPointerDown: (event, anchor) => {
                           if (anchor.nodeSourceId) {
                             onNodeAnchorPointerDown(event, anchor.nodeSourceId);
                           }
-                        }
-                      : undefined
-                  }
-                  onAnchorClick={
-                    onNodeAnchorClick
-                      ? (event, anchor) => {
+                        } } : {})}
+                  {...(onNodeAnchorClick ? { onAnchorClick: (event, anchor) => {
                           if (anchor.nodeSourceId) {
                             onNodeAnchorClick(event, anchor.nodeSourceId);
                           }
-                        }
-                      : undefined
-                  }
-                  onAnchorHoverChange={
-                    onNodeAnchorHoverChange
-                      ? (anchor) => { onNodeAnchorHoverChange(anchor?.nodeSourceId ?? null); }
-                      : undefined
-                  }
+                        } } : {})}
+                  {...(onNodeAnchorHoverChange ? { onAnchorHoverChange: (anchor) => { onNodeAnchorHoverChange(anchor?.nodeSourceId ?? null); } } : {})}
                 />
 
                 {toolMode === "select" && (
@@ -765,23 +828,207 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             </div>
           )}
 
+          {canvasTextEdit.contextOutlines.map((outline) => (
+            <div
+              key={`${outline.role}:${outline.left}:${outline.top}:${outline.width}:${outline.height}`}
+              className={outline.role === "focus" ? css.contextOutlineFocus : css.contextOutlineParent}
+              aria-hidden={outline.role === "focus" && (outline.values || outline.tag) ? undefined : true}
+              data-testid={`canvas-context-outline-${outline.role}`}
+              style={{ left: outline.left, top: outline.top, width: outline.width, height: outline.height }}
+            >
+              {outline.role === "focus" && (outline.values || outline.tag) ? (
+                <ContextOutlineTag
+                  outline={outline}
+                  onPick={(id) => { canvasTextEdit.onConstructMenu(outline, id); }}
+                />
+              ) : null}
+            </div>
+          ))}
+
+          {canvasTextEdit.valueEditor ? (
+            <CanvasValueEditor key={canvasTextEdit.valueEditor.key} model={canvasTextEdit.valueEditor} />
+          ) : null}
+
+          {canvasTextEdit.recoveryGhosts.map((ghost) => (
+            <span
+              key={`${ghost.at}:${ghost.text}:${ghost.left}`}
+              className={css.recoveryGhost}
+              style={{ left: ghost.left, top: ghost.top, height: ghost.height, fontSize: ghost.height * 0.8, lineHeight: `${ghost.height}px` }}
+              data-testid="canvas-recovery-ghost"
+              aria-hidden="true"
+            >
+              {ghost.glyph}
+            </span>
+          ))}
+
+          {canvasTextEdit.recoveryFix ? (
+            <button
+              type="button"
+              className={css.recoveryFix}
+              style={{ left: canvasTextEdit.recoveryFix.left, top: canvasTextEdit.recoveryFix.top }}
+              data-testid="canvas-recovery-fix"
+              onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); }}
+              onClick={canvasTextEdit.recoveryFix.onApply}
+            >
+              {canvasTextEdit.recoveryFix.label}
+            </button>
+          ) : null}
+
+          {canvasTextEdit.slotPlaceholders.map((box) => (
+            <span
+              key={box.key}
+              className={css.slotPlaceholder}
+              style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+              data-testid="canvas-slot-placeholder"
+              aria-hidden="true"
+            />
+          ))}
+
+          {canvasTextEdit.ghostSlots.map((box) => (
+            <span
+              key={box.key}
+              className={css.ghostSlot}
+              style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+              data-testid="canvas-ghost-slot"
+              data-ghost-kind={box.kind}
+              title={GHOST_SLOT_TITLES[box.kind]}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                box.onCreate();
+              }}
+            />
+          ))}
+
+          {canvasTextEdit.revealedCodes.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              className={chip.selected ? `${css.revealedCode} ${css.revealedCodeSelected}` : css.revealedCode}
+              style={{ left: chip.left, top: chip.top, height: chip.height, fontSize: chip.height * 0.72 }}
+              data-testid="canvas-revealed-code"
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                chip.onSelect();
+              }}
+            >
+              {chip.label}
+            </button>
+          ))}
+
+          {canvasTextEdit.hoverSource ? (
+            <div
+              className={css.hoverSource}
+              style={{ left: canvasTextEdit.hoverSource.left, top: canvasTextEdit.hoverSource.top }}
+              data-testid="canvas-hover-source"
+              role="tooltip"
+            >
+              {canvasTextEdit.hoverSource.text}
+            </div>
+          ) : null}
+
+          {canvasTextEdit.pendingCloser ? (
+            <div
+              className={css.pendingCloserHint}
+              style={{ left: canvasTextEdit.pendingCloser.left, top: canvasTextEdit.pendingCloser.top }}
+              data-testid="canvas-pending-closer-hint"
+              aria-hidden="true"
+            >
+              <kbd>tab</kbd>
+              <code>{canvasTextEdit.pendingCloser.closer}</code>
+            </div>
+          ) : null}
+
+          {canvasTextEdit.sourceLens ? (
+            <CanvasSourceLens key={canvasTextEdit.sourceLens.key} model={canvasTextEdit.sourceLens} />
+          ) : null}
+
+          {canvasTextEdit.commandChip ? (
+            <div
+              className={css.commandChip}
+              style={{ left: canvasTextEdit.commandChip.left, top: canvasTextEdit.commandChip.top }}
+              data-testid="canvas-command-chip"
+              aria-live="polite"
+            >
+              <div className={css.commandChipName}>
+                <span>\{canvasTextEdit.commandChip.name}</span>
+                <span className={css.commandChipGhost}>{canvasTextEdit.commandChip.ghost}</span>
+              </div>
+              {canvasTextEdit.commandChip.candidates.length > 0 ? (
+                <ul className={css.commandChipList} role="listbox" aria-label="Command completions">
+                  {canvasTextEdit.commandChip.candidates.map((candidate, index) => (
+                    <li
+                      key={candidate.name}
+                      role="option"
+                      aria-selected={candidate.selected}
+                      className={candidate.selected ? css.commandChipOptionSelected : css.commandChipOption}
+                      // (On pointer down, so the canvas keeps the keyboard.)
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        canvasTextEdit.commandChip?.onPick(index);
+                      }}
+                    >
+                      <span>\{candidate.name}</span>
+                      {candidate.preview ? (
+                        <span
+                          className={css.commandChipPreview}
+                          style={{ width: `${candidate.preview.widthEm}em` }}
+                          aria-hidden="true"
+                          dangerouslySetInnerHTML={{ __html: candidate.preview.svg }}
+                        />
+                      ) : null}
+                      <span className={css.commandChipDetail}>{candidate.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+
+          {canvasTextEdit.scopeEditBorder ? (
+            <div
+              className={[
+                css.scopeEditBorder,
+                canvasSurfaceInactive ? css.scopeEditBorderFaint : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              aria-hidden="true"
+              data-testid="canvas-scope-edit-border"
+              style={{
+                left: canvasTextEdit.scopeEditBorder.left,
+                top: canvasTextEdit.scopeEditBorder.top,
+                width: canvasTextEdit.scopeEditBorder.width,
+                height: canvasTextEdit.scopeEditBorder.height
+              }}
+            />
+          ) : null}
+
           {textSelectionOverlay ? (
             <div className={css.textSelectionViewportOverlay} aria-hidden="true" data-testid="canvas-text-selection-overlay">
               {textSelectionOverlay.rects.map((rect: TextSelectionOverlayBox, index: number) => {
                 const width = rect.bounds.maxX - rect.bounds.minX;
                 const height = rect.bounds.maxY - rect.bounds.minY;
-                const hasRotatedPlacement = Number.isFinite(rect.rotationDeg) && rect.center != null;
+                const rotatedCenter = Number.isFinite(rect.rotationDeg) ? rect.center : null;
+                const hasRotatedPlacement = rotatedCenter != null;
                 return (
                   <div
                     key={`${textSelectionOverlay.sourceId}:rect:${index}:${rect.bounds.minX}:${rect.bounds.minY}:${rect.bounds.maxX}:${rect.bounds.maxY}:${rect.center?.x ?? ""}:${rect.center?.y ?? ""}:${rect.rotationDeg ?? ""}`}
-                    className={css.textSelectionViewportRect}
+                    className={[
+                      css.textSelectionViewportRect,
+                      canvasSurfaceInactive ? css.textSelectionViewportRectInactive : ""
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
                     data-testid="canvas-text-selection-rect"
                     style={{
-                      left: hasRotatedPlacement ? rect.center!.x : rect.bounds.minX,
-                      top: hasRotatedPlacement ? rect.center!.y : rect.bounds.minY,
+                      left: rotatedCenter ? rotatedCenter.x : rect.bounds.minX,
+                      top: rotatedCenter ? rotatedCenter.y : rect.bounds.minY,
                       width,
                       height,
-                      transform: hasRotatedPlacement ? `translate(-50%, -50%) rotate(${rect.rotationDeg}deg)` : undefined,
+                      ...(hasRotatedPlacement ? { transform: `translate(-50%, -50%) rotate(${rect.rotationDeg}deg)` } : {}),
                       transformOrigin: "center"
                     }}
                   />
@@ -790,26 +1037,28 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               {textSelectionOverlay.caret ? (
                 (() => {
                   const caret = textSelectionOverlay.caret;
-                  const hasRotatedPlacement = Number.isFinite(caret.rotationDeg) && caret.center != null;
+                  const rotatedCenter = Number.isFinite(caret.rotationDeg) ? caret.center : null;
+                const hasRotatedPlacement = rotatedCenter != null;
                   const height = caret.bounds.maxY - caret.bounds.minY;
                   return (
                     <div
                       className={[
                         css.textSelectionViewportCaret,
+                        canvasSurfaceInactive ? css.textSelectionViewportCaretInactive : "",
                         props.prefersNonBlinkingTextInsertionIndicator ? css.textCaretNoBlink : ""
                       ]
                         .filter(Boolean)
                         .join(" ")}
                       data-testid="canvas-text-selection-caret"
                       style={{
-                        left: hasRotatedPlacement ? caret.center!.x : caret.bounds.minX,
-                        top: hasRotatedPlacement ? caret.center!.y : caret.bounds.minY,
+                        left: rotatedCenter ? rotatedCenter.x : caret.bounds.minX,
+                        top: rotatedCenter ? rotatedCenter.y : caret.bounds.minY,
                         height,
                         animation: "none",
-                        opacity: textCaretBlinkVisible ? 1 : 0,
-                        transform: hasRotatedPlacement
-                          ? `translate(-50%, -50%) rotate(${caret.rotationDeg}deg)`
-                          : undefined,
+                        // The unfocused surface holds a static, lower-contrast
+                        // caret; only the focused surface blinks.
+                        opacity: canvasSurfaceInactive ? 1 : textCaretBlinkVisible ? 1 : 0,
+                        ...(hasRotatedPlacement ? { transform: `translate(-50%, -50%) rotate(${caret.rotationDeg}deg)` } : {}),
                         transformOrigin: "center"
                       }}
                     />
@@ -819,60 +1068,41 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             </div>
           ) : null}
 
-          {textEditingSession && textEditPopup ? (
-            <div
-              ref={props.textEditPopupRef}
-              className={css.textEditPopup}
-              style={{
-                left: textEditPopup.centerX,
-                top: textEditPopup.top,
-                maxWidth: textEditPopup.maxWidth,
-                transform: "translateX(-50%)",
-                visibility: textEditPopupHeight == null ? "hidden" : "visible"
-              }}
-              onPointerDown={onTextEditPopupPointerDown}
-              data-testid="canvas-text-edit-popup"
-            >
-              {textEditingSession.isForeachTemplateEdit ? (
-                <div className={css.textEditPopupTag} data-testid="canvas-text-edit-foreach-tag">foreach</div>
-              ) : null}
-              <div className={css.textEditTextareaLayer}>
-                <textarea
-                  ref={textEditTextareaRef}
-                  className={[css.textEditTextarea, hideNativeTextEditCaret ? css.textEditTextareaHideNativeCaret : ""].filter(Boolean).join(" ")}
-                  value={textEditingSession.text}
-                  spellCheck={false}
-                  rows={textEditTextareaSizing?.rows}
-                  style={textEditTextareaSizing != null ? { width: textEditPopup.textareaWidth } : undefined}
-                  onSelect={onTextEditTextareaSelect}
-                  onCopy={onTextEditTextareaCopy}
-                  onCut={onTextEditTextareaCut}
-                  onPaste={onTextEditTextareaPaste}
-                  onDrop={onTextEditTextareaDrop}
-                  onKeyDown={onTextEditTextareaKeyDown}
-                  data-testid="canvas-text-edit-textarea"
-                  data-select="text"
-                />
-                {textEditCaretOverlay ? (
-                  <div
-                    className={[
-                      css.textEditViewportCaret,
-                      props.prefersNonBlinkingTextInsertionIndicator ? css.textCaretNoBlink : ""
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    aria-hidden="true"
-                    style={{
-                      left: textEditCaretOverlay.left,
-                      top: textEditCaretOverlay.top,
-                      height: textEditCaretOverlay.height,
-                      animation: "none",
-                      opacity: textCaretBlinkVisible ? 1 : 0
-                    }}
-                  />
-                ) : null}
-              </div>
-            </div>
+          {canvasTextEdit.popup ? (
+            <CanvasTextEditPopup
+              model={canvasTextEdit.popup}
+              prefersNonBlinkingTextInsertionIndicator={props.prefersNonBlinkingTextInsertionIndicator}
+              caretBlinkVisible={textCaretBlinkVisible}
+            />
+          ) : null}
+
+          {canvasTextEdit.canvasFocusInput ? (
+            // The session hook owns synchronization so React cannot reset an IME preview.
+            <textarea
+              ref={canvasTextEdit.canvasFocusInput.inputRef}
+              className={css.canvasFocusInput}
+              defaultValue={canvasTextEdit.canvasFocusInput.value}
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+              tabIndex={-1}
+              aria-hidden="true"
+              style={
+                canvasTextEdit.canvasFocusInput.position
+                  ? {
+                      left: canvasTextEdit.canvasFocusInput.position.left,
+                      top: canvasTextEdit.canvasFocusInput.position.top
+                    }
+                  : undefined
+              }
+              onKeyDown={canvasTextEdit.canvasFocusInput.onKeyDown}
+              onSelect={canvasTextEdit.canvasFocusInput.onSelect}
+              onCopy={canvasTextEdit.canvasFocusInput.onCopy}
+              onCut={canvasTextEdit.canvasFocusInput.onCut}
+              onPaste={canvasTextEdit.canvasFocusInput.onPaste}
+              onDrop={canvasTextEdit.canvasFocusInput.onDrop}
+              data-testid="canvas-focus-input"
+            />
           ) : null}
 
           {magnifierVisible ? (
@@ -904,7 +1134,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                 >
                   <CanvasSVGLayer
                     model={svgModel}
-                    diffHints={svgDiffHints}
+                    {...(svgDiffHints !== undefined ? { diffHints: svgDiffHints } : {})}
                     forceReplaceAll={forceSvgReplaceAll}
                     showTransparencyGrid={showTransparencyGrid}
                     showDocumentBounds={showDocumentBounds}
@@ -958,7 +1188,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   ))}
                 </div>
               }
-              className={css.dragTooltip}
+              className={css.dragTooltip ?? ""}
               data-testid="canvas-drag-tooltip-shell"
             />
           ) : null}
@@ -993,33 +1223,54 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               {selectionHint}
             </div>
           ) : null}
-          {showDevPanel && (
+          {nestedFigureBreadcrumb ? (
             <div
-              className={css.snapDebugOverlay}
-              data-testid="snap-debug-overlay"
-              style={{
-                left: snapDebugRect.left,
-                top: snapDebugRect.top,
-                width: snapDebugRect.width,
-                height: snapDebugRect.height
-              }}
+              className={css.nestedFigureBreadcrumb}
+              data-testid="nested-figure-breadcrumb"
+              data-select="chrome"
             >
-              <div className={css.snapDebugTitle} onPointerDown={onSnapDebugMovePointerDown}>
-                Snap Debug (drag to move)
-              </div>
-              <pre className={css.snapDebugBody} data-select="text">
-                {snapDebug
-                  ? JSON.stringify(snapDebug, null, 2)
-                  : "Trigger a snap interaction to populate diagnostics."}
-              </pre>
-              <RenderedTooltip content="Drag to resize">
-                <div
-                  className={css.snapDebugResizeHandle}
-                  onPointerDown={onSnapDebugResizePointerDown}
-                />
-              </RenderedTooltip>
+              <button
+                type="button"
+                className={css.nestedFigureBreadcrumbLink}
+                onClick={nestedFigureBreadcrumb.onExit}
+                aria-label={`Back to ${nestedFigureBreadcrumb.slideLabel}`}
+                data-testid="nested-figure-breadcrumb-exit"
+              >
+                {nestedFigureBreadcrumb.slideLabel}
+              </button>
+              <span className={css.nestedFigureBreadcrumbSeparator} aria-hidden="true">▸</span>
+              <span className={css.nestedFigureBreadcrumbCurrent}>
+                {nestedFigureBreadcrumb.figureLabel}
+              </span>
             </div>
-          )}
+          ) : null}
+          {deckStepper ? (
+            <div className={css.deckStepper} data-testid="deck-step-scrubber" data-select="chrome">
+              <button
+                type="button"
+                className={css.deckStepperButton}
+                disabled={deckStepper.step <= 1}
+                onClick={() => { deckStepper.onStepChange(deckStepper.step - 1); }}
+                aria-label="Previous overlay step"
+                data-testid="deck-step-prev"
+              >
+                ◀
+              </button>
+              <span className={css.deckStepperLabel} data-testid="deck-step-label">
+                {deckStepper.step} / {deckStepper.stepCount}
+              </span>
+              <button
+                type="button"
+                className={css.deckStepperButton}
+                disabled={deckStepper.step >= deckStepper.stepCount}
+                onClick={() => { deckStepper.onStepChange(deckStepper.step + 1); }}
+                aria-label="Next overlay step"
+                data-testid="deck-step-next"
+              >
+                ▶
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

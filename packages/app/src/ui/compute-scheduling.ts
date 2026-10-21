@@ -1,0 +1,70 @@
+import type { ComputeRequest, SessionSnapshot } from "../compute";
+import type { CanvasDragKind, SourceChangeOrigin } from "../store/types";
+
+export type ComputeSchedulingInput = {
+  request: Omit<ComputeRequest, "id" | "schedulingTrigger">;
+  sourceChangeOrigin: SourceChangeOrigin;
+  dragKind: CanvasDragKind | null;
+  sourceScrubActive: boolean;
+  inspectorEditActive: boolean;
+  canvasTextEditActive: boolean;
+  assetRefreshToken: number;
+  publishedDeckSnapshot?: SessionSnapshot | null;
+};
+
+export type ComputeSchedulingCause = "initial" | "document-switch" | "root-switch" | "overlay-step" |
+  "file-context" | "asset-refresh" | "source-typing" | "assistant-update" | "disk-update" |
+  "history" | "edit-command" | "canvas-text-edit" | "source-scrub" | "inspector-edit" |
+  "drag-element" | "drag-handle" | "text-edit-state" | "exact-parse" | "interaction-state";
+
+export type ComputeSchedulingPolicy = {
+  cause: ComputeSchedulingCause;
+  /**
+   * For a stream of text edits (typing, an assistant's streamed reply): render
+   * once the frame showing the change has been painted, so it shows first,
+   * and keep the render in flight, which shows the text so far, rather than
+   * aborting it at each edit. The latest source renders after it.
+   */
+  afterPaint?: boolean;
+};
+
+/** Classify the current transition, rather than metadata retained from an old edit. */
+export function computeSchedulingPolicy(
+  previous: ComputeSchedulingInput | null,
+  current: ComputeSchedulingInput
+): ComputeSchedulingPolicy {
+  const immediate = (cause: ComputeSchedulingCause): ComputeSchedulingPolicy => ({ cause });
+  if (!previous) return immediate("initial");
+  const before = previous.request, next = current.request;
+  // Navigation must flush pending typing, even if the new source is still
+  // unrendered or belongs to a different document with typing provenance.
+  if (before.documentId !== next.documentId) return immediate("document-switch");
+  if (before.activeRootId !== next.activeRootId) return immediate("root-switch");
+  if (before.drawingLayerRootId !== next.drawingLayerRootId) return immediate("root-switch");
+  if (before.deckStep !== next.deckStep) return immediate("overlay-step");
+  if (before.documentFileRef !== next.documentFileRef) return immediate("file-context");
+  if (previous.assetRefreshToken !== current.assetRefreshToken) return immediate("asset-refresh");
+
+  if (before.source !== next.source || before.sourceRevision !== next.sourceRevision) {
+    // These can arrive rapidly but need continuous visual feedback. The
+    // single-flight scheduler already coalesces superseded in-flight work.
+    if (current.dragKind === "handle") return immediate("drag-handle");
+    if (current.dragKind === "element" || current.dragKind === "resize" || current.dragKind === "rotate") {
+      return immediate("drag-element");
+    }
+    if (current.sourceScrubActive) return immediate("source-scrub");
+    if (current.inspectorEditActive) return immediate("inspector-edit");
+    if (current.canvasTextEditActive) return immediate("canvas-text-edit");
+    switch (current.sourceChangeOrigin) {
+      case "source-editor": return { cause: "source-typing", afterPaint: true };
+      case "assistant": return { cause: "assistant-update", afterPaint: true };
+      case "disk": return immediate("disk-update");
+      case "history": return immediate("history");
+      case "edit-command": return immediate("edit-command");
+    }
+  }
+  if (before.textEditMaskSpan?.from !== next.textEditMaskSpan?.from ||
+    before.textEditMaskSpan?.to !== next.textEditMaskSpan?.to) return immediate("text-edit-state");
+  if (next.exactParse && !before.exactParse) return immediate("exact-parse");
+  return immediate("interaction-state");
+}

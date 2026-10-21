@@ -17,8 +17,10 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     readCustomClipboardBytes: async () => null,
     writeClipboardBundle: async () => undefined,
     setWindowTitle: async () => undefined,
+    setTheme: async () => undefined,
     closeWindow: async () => undefined,
     confirmUnsavedChanges: async () => "cancel",
+    showAboutPanel: async () => undefined,
     openExternalUrl: async () => true,
     listRecentFiles: async () => [],
     clearRecentFiles: async () => undefined,
@@ -28,6 +30,10 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     onWindowCloseRequest: async () => () => undefined,
     showContextMenu: async () => undefined,
     onContextMenuCommand: async () => () => undefined,
+    checkLatexAvailable: async () => ({ available: false, details: "test bridge" }),
+    compileTikz: async () => "<svg />",
+    readLastCompileLog: async () => "",
+    compileLatexPdf: async () => ({ pdfBase64: "", marks: "", log: "", hadErrors: false }),
     ...overrides
   };
 }
@@ -57,6 +63,22 @@ function runPlatformContract(name: string, create: () => EditorPlatform) {
 }
 
 describe("platform adapter contracts", () => {
+  it("desktop adapter round-trips the native automatic-update preference", async () => {
+    let enabled = false;
+    const platform = createDesktopPlatformAdapter({
+      bridge: makeDesktopBridge({
+        getAutomaticUpdateChecks: async () => enabled,
+        setAutomaticUpdateChecks: async (value) => { enabled = value; },
+        resetAutomaticUpdateChecks: async () => { enabled = true; return enabled; }
+      })
+    });
+    expect(await platform.updates?.getAutomaticUpdateChecks?.()).toBe(false);
+    await platform.updates?.setAutomaticUpdateChecks?.(true);
+    expect(await platform.updates?.getAutomaticUpdateChecks?.()).toBe(true);
+    await platform.updates?.setAutomaticUpdateChecks?.(false);
+    expect(await platform.updates?.resetAutomaticUpdateChecks?.()).toBe(true);
+    expect(await platform.updates?.getAutomaticUpdateChecks?.()).toBe(true);
+  });
   runPlatformContract("web adapter", () => {
     const storageMap = new Map<string, string>();
     let clipboardText = "";

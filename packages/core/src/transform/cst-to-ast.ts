@@ -25,6 +25,18 @@ import { parseSyntax } from "@tikz-editor/lezer-tikz";
 import { collectParseErrorDiagnostics, collectStructuralDiagnostics } from "../diagnostics/collect.js";
 import { buildLineStarts, lineForOffset } from "../text/line-map.js";
 import { scanTikzFigures, type ScannedFigure } from "../parser/figure-scan.js";
+import {
+  readTexBalancedDelimited,
+  readTexControlSequence as readControlSequence,
+  readTexEnvironmentDelimiter,
+  skipTexComment as skipComment,
+  skipTexVerbatim,
+  skipTexWhitespaceAndComments as skipWhitespaceAndComments
+} from "../parser/tex-lexical.js";
+import {
+  formatDocumentRootId,
+  tikzFigureIndexFromRootId,
+} from "../document/root-id.js";
 
 export type CstToAstResult = {
   figure: TikzFigure;
@@ -58,15 +70,21 @@ export function fromCst(tree: Tree, source: string, opts: CstToAstOptions = {}):
     const inlineNode = findFirstNodeByName(tree.topNode, "TikzInline");
     if (inlineNode) {
       const state = { nextStatementIndex: 0 };
-      const inlineBody = mapBodyStatements(inlineNode, source, state);
       const optionsNode = findFirstChildByName(inlineNode, "OptionList");
+      const options = parseInlineTikzOptions(inlineNode, source);
+      let bodyNode = inlineNode;
+      if (optionsNode && !options) {
+        // A recovered OptionList can swallow drawing commands when its close
+        // is missing. Mask only the opener to recover the body at original offsets.
+        const recoverySource = source.slice(0, optionsNode.from) + " " + source.slice(optionsNode.from + 1);
+        bodyNode = findFirstNodeByName(parseSyntax(recoverySource).topNode, "TikzInline") ?? inlineNode;
+      }
+      const inlineBody = mapBodyStatements(bodyNode, source, state);
       return {
         figure: {
           kind: "Figure",
           span: { from: inlineNode.from, to: inlineNode.to },
-          options: optionsNode
-            ? parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
-            : recoverInlineTikzOptions(inlineNode, source),
+          ...(options !== undefined ? { options } : {}),
           body: inlineBody
         },
         figures: [],
@@ -129,9 +147,7 @@ export function fromCst(tree: Tree, source: string, opts: CstToAstOptions = {}):
     figure: {
       kind: "Figure",
       span: activeFigureEntry.inventory.span,
-      options: optionsNode
-        ? parseOptionListRaw(activeSyntax.parseSource.slice(optionsNode.from, optionsNode.to), optionsNode.from)
-        : undefined,
+      ...(optionsNode ? { options: parseOptionListRaw(activeSyntax.parseSource.slice(optionsNode.from, optionsNode.to), optionsNode.from) } : {}),
       body
     },
     figures: figureEntries.map((entry) => entry.inventory),
@@ -140,46 +156,15 @@ export function fromCst(tree: Tree, source: string, opts: CstToAstOptions = {}):
   };
 }
 
-function recoverInlineTikzOptions(node: SyntaxNode, source: string) {
+function parseInlineTikzOptions(node: SyntaxNode, source: string) {
   const commandNode = findFirstChildByName(node, "InlineTikzCmd");
   if (!commandNode) {
     return;
   }
 
-  const commandRaw = source.slice(commandNode.from, commandNode.to);
-  if (!commandRaw.endsWith("[")) {
-    return;
-  }
-
-  const optionStart = commandNode.to - 1;
-  const optionEnd = findMatchingInlineOptionBracket(source, optionStart);
-  if (optionEnd < 0) {
-    return;
-  }
-
-  return parseOptionListRaw(source.slice(optionStart, optionEnd + 1), optionStart);
-}
-
-function findMatchingInlineOptionBracket(source: string, from: number): number {
-  let depth = 0;
-  for (let index = from; index < source.length; index += 1) {
-    const char = source[index];
-    if (char === "\\") {
-      index += 1;
-      continue;
-    }
-    if (char === "[") {
-      depth += 1;
-      continue;
-    }
-    if (char === "]") {
-      depth -= 1;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
+  const optionStart = skipWhitespaceAndComments(source, commandNode.to, node.to);
+  const span = readTexBalancedDelimited(source, optionStart, "[", "]", node.to);
+  return span ? parseOptionListRaw(source.slice(span.from, span.to), span.from) : undefined;
 }
 
 function collectFigureNodes(
@@ -193,9 +178,8 @@ function collectFigureNodes(
     return nodes;
   }
   const parsedNodesBySpan = collectParsedFigureNodesBySpan(tree);
-  for (let index = 0; index < scanned.length; index += 1) {
-    const inventory = scanned[index];
-    const id = `figure:${index}`;
+  for (const [index, inventory] of scanned.entries()) {
+    const id = formatDocumentRootId({ kind: "tikz-figure", index });
     const parsedNode = parsedNodesBySpan.get(spanKey(inventory.span)) ?? null;
     nodes.push({
       id,
@@ -205,7 +189,7 @@ function collectFigureNodes(
         span: inventory.span,
         beginSpan: inventory.beginSpan,
         endSpan: inventory.endSpan,
-        optionsSpan: inventory.optionsSpan,
+        ...(inventory.optionsSpan !== undefined ? { optionsSpan: inventory.optionsSpan } : {}),
         startLine: inventory.startLine,
         endLine: inventory.endLine
       }
@@ -223,26 +207,17 @@ function resolveActiveFigureEntry(entries: FigureNodeEntry[], requestedId: strin
     return null;
   }
   if (requestedId === undefined || requestedId.length === 0) {
-    return entries[0];
+    return entries[0] ?? null;
   }
   const directMatch = entries.find((entry) => entry.id === requestedId);
   if (directMatch) {
     return directMatch;
   }
-  const requestedIndex = parseFigureIndexFromId(requestedId);
+  const requestedIndex = tikzFigureIndexFromRootId(requestedId);
   if (requestedIndex == null || requestedIndex < 0 || requestedIndex >= entries.length) {
-    return entries[0];
+    return entries[0] ?? null;
   }
-  return entries[requestedIndex];
-}
-
-function parseFigureIndexFromId(figureId: string): number | null {
-  const match = /^figure:(\d+)(?::|$)/u.exec(figureId.trim());
-  if (!match?.[1]) {
-    return null;
-  }
-  const parsed = Number.parseInt(match[1], 10);
-  return Number.isFinite(parsed) ? parsed : null;
+  return entries[requestedIndex] ?? null;
 }
 
 function collectPriorDefinitions(
@@ -294,7 +269,8 @@ export function collectContextDefinitions(source: string): Statement[] {
   );
   const scopedMacros = collectScopedMacroDefinitionsFromStream(source, parserMacros);
   const scopedColorDefs = collectScopedColorDefinitionsFromStream(source, parserColorDefs);
-  const merged = [...parserNonMacros, ...scopedMacros, ...scopedColorDefs];
+  const scopedNonMacros = filterScopedStyleDefinitions(source, parserNonMacros, [...collected, ...scopedMacros, ...scopedColorDefs]);
+  const merged = [...scopedNonMacros, ...scopedMacros, ...scopedColorDefs];
   const deduped = new Map<string, Statement>();
   for (const statement of merged) {
     deduped.set(`${statement.span.from}:${statement.span.to}:${statement.kind}`, statement);
@@ -373,7 +349,7 @@ function scanFigureInventories(
       span: { from: beginFrom, to: endTo },
       beginSpan: { from: beginFrom, to: beginTo },
       endSpan: { from: endFrom, to: endTo },
-      optionsSpan,
+      ...(optionsSpan !== undefined ? { optionsSpan } : {}),
       startLine: lineForOffset(beginFrom, lineStarts),
       endLine: lineForOffset(Math.max(beginFrom, endTo - 1), lineStarts)
     });
@@ -383,28 +359,71 @@ function scanFigureInventories(
 }
 
 function scanFigureOptionsSpan(source: string, cursor: number, figureEnd: number): { from: number; to: number } | undefined {
-  let index = cursor;
-  while (index < figureEnd && /\s/u.test(source[index] ?? "")) {
-    index += 1;
-  }
-  if ((source[index] ?? "") !== "[") {
-    return undefined;
-  }
-  let depth = 0;
-  for (let i = index; i < figureEnd; i += 1) {
-    const ch = source[i] ?? "";
-    if (ch === "[") {
-      depth += 1;
+  const index = skipWhitespaceAndComments(source, cursor, figureEnd);
+  return readTexBalancedDelimited(source, index, "[", "]", figureEnd) ?? undefined;
+}
+
+function filterScopedStyleDefinitions(
+  source: string,
+  statements: readonly Statement[],
+  definitionSpans: readonly Statement[]
+): Statement[] {
+  const styleByStart = new Map(statements
+    .filter((statement) => statement.kind === "TikzSet" || statement.kind === "TikzStyle" || statement.kind === "Pgfkeys")
+    .map((statement) => [statement.span.from, statement]));
+  const definitionEndByStart = new Map(definitionSpans.map((statement) => [statement.span.from, statement.span.to]));
+  const scopes: Statement[][] = [[]];
+  let cursor = 0;
+  while (cursor < source.length) {
+    // Definition arguments and macro bodies are data, not owning TeX groups.
+    const definitionEnd = definitionEndByStart.get(cursor);
+    if (definitionEnd !== undefined) {
+      const style = styleByStart.get(cursor);
+      if (style) {
+        scopes[scopes.length - 1]?.push(style);
+      }
+      cursor = Math.max(cursor + 1, definitionEnd);
       continue;
     }
-    if (ch === "]") {
-      depth -= 1;
-      if (depth === 0) {
-        return { from: index, to: i + 1 };
-      }
+    const char = source.charAt(cursor);
+    if (char === "%") {
+      cursor = skipComment(source, cursor);
+      continue;
     }
+    const command = readControlSequence(source, cursor);
+    if (command) {
+      const verbatimEnd = skipTexVerbatim(source, command, true);
+      if (verbatimEnd !== null) {
+        cursor = verbatimEnd;
+        continue;
+      }
+      cursor = command.to;
+      if (command.raw === "\\begingroup" || command.raw === "\\bgroup") {
+        scopes.push([]);
+      } else if (command.raw === "\\endgroup" || command.raw === "\\egroup") {
+        if (scopes.length > 1) scopes.pop();
+      } else if (command.raw === "\\begin" || command.raw === "\\end") {
+        const environment = readTexEnvironmentDelimiter(source, command.from, true);
+        if (environment) {
+          cursor = environment.to;
+          if (environment.kind === "begin") {
+            scopes.push([]);
+          } else if (scopes.length > 1) {
+            scopes.pop();
+          }
+        }
+      }
+      continue;
+    }
+    if (char === "{") {
+      scopes.push([]);
+    } else if (char === "}" && scopes.length > 1) {
+      scopes.pop();
+    }
+    cursor += 1;
   }
-  return undefined;
+  const visible = new Set(scopes.flat());
+  return statements.filter((statement) => !styleByStart.has(statement.span.from) || visible.has(statement));
 }
 
 function collectRelevantStatementsFromNode(
@@ -710,7 +729,7 @@ function tryParseNewCommandStatement(
     if (!parsedName) {
       return null;
     }
-    const nameFrom = (nameGroup.from + 1) + (parsedName.index ?? 0);
+    const nameFrom = (nameGroup.from + 1) + parsedName.index;
     nameRaw = parsedName[0];
     nameSpan = { from: nameFrom, to: nameFrom + nameRaw.length };
     cursor = nameGroup.to;
@@ -755,9 +774,9 @@ function tryParseNewCommandStatement(
       nameRaw,
       nameSpan,
       arity,
-      aritySpan,
-      optionalDefaultRaw,
-      optionalDefaultSpan,
+      ...(aritySpan !== undefined ? { aritySpan } : {}),
+      ...(optionalDefaultRaw !== undefined ? { optionalDefaultRaw } : {}),
+      ...(optionalDefaultSpan !== undefined ? { optionalDefaultSpan } : {}),
       bodyRaw: commandRaw === "\\DeclareMathOperator"
         ? `${starred ? "\\operatorname*" : "\\operatorname"}{${bodyGroup.content}}`
         : bodyGroup.content,
@@ -963,92 +982,12 @@ function tryParseDefineColorStatement(
   };
 }
 
-function skipWhitespaceAndComments(source: string, from: number): number {
-  let cursor = from;
-  while (cursor < source.length) {
-    const char = source[cursor] ?? "";
-    if (/\s/u.test(char)) {
-      cursor += 1;
-      continue;
-    }
-    if (char === "%") {
-      cursor = skipComment(source, cursor);
-      continue;
-    }
-    break;
-  }
-  return cursor;
-}
-
-function skipComment(source: string, from: number): number {
-  let cursor = from;
-  while (cursor < source.length) {
-    const char = source[cursor] ?? "";
-    cursor += 1;
-    if (char === "\n" || char === "\r") {
-      break;
-    }
-  }
-  return cursor;
-}
-
-function readControlSequence(source: string, from: number): { from: number; to: number; raw: string } | null {
-  if ((source[from] ?? "") !== "\\") {
-    return null;
-  }
-  let cursor = from + 1;
-  while (cursor < source.length && /[A-Za-z@]/u.test(source[cursor] ?? "")) {
-    cursor += 1;
-  }
-  if (cursor === from + 1) {
-    cursor = Math.min(source.length, from + 2);
-  }
-  return {
-    from,
-    to: cursor,
-    raw: source.slice(from, cursor)
-  };
-}
-
 function readBalancedDelimited(
   source: string,
   from: number,
   openChar: "{" | "[",
   closeChar: "}" | "]"
 ): { from: number; to: number; content: string } | null {
-  if ((source[from] ?? "") !== openChar) {
-    return null;
-  }
-  let depth = 0;
-  let cursor = from;
-  while (cursor < source.length) {
-    const char = source[cursor] ?? "";
-    if (char === "%") {
-      cursor = skipComment(source, cursor);
-      continue;
-    }
-    if (char === "\\") {
-      cursor += 2;
-      continue;
-    }
-    if (char === openChar) {
-      depth += 1;
-      cursor += 1;
-      continue;
-    }
-    if (char === closeChar) {
-      depth -= 1;
-      cursor += 1;
-      if (depth === 0) {
-        return {
-          from,
-          to: cursor,
-          content: source.slice(from + 1, cursor - 1)
-        };
-      }
-      continue;
-    }
-    cursor += 1;
-  }
-  return null;
+  const span = readTexBalancedDelimited(source, from, openChar, closeChar);
+  return span ? { ...span, content: source.slice(span.from + 1, span.to - 1) } : null;
 }

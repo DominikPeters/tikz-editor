@@ -1,6 +1,8 @@
-import type { Span, Statement, PathStatement, PathItem, NodeItem, ChildOperationItem } from "../ast/types.js";
+import { requireDefined } from "../utils/invariants.js";
+import { requireArrayValue } from "../utils/collections.js";
+import type { Span, Statement, PathStatement, PathItem, NodeItem, PicOperationItem, ChildOperationItem } from "../ast/types.js";
 import type { ParseTikzResult } from "../parser/index.js";
-import { parseStatementsFromBodyWithMapping } from "../foreach/snippet-parse.js";
+import { parseStatementsFromBodyWithMapping, type ForeachStatementBodyParseResult } from "../foreach/snippet-parse.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
 import { normalizeOptionKey } from "./option-key.js";
 import type { OptionEntry, OptionListAst } from "../options/types.js";
@@ -15,6 +17,54 @@ import { readBalancedBlock } from "../semantic/style/option-utils.js";
 import { resolveMatrixCellEditTarget, resolveMatrixMode } from "../semantic/nodes/matrix.js";
 import { incrementProfilingCounter } from "../profiling.js";
 import { findPathStatementById } from "./statement-find.js";
+import { walkPathItems } from "../ast/walk.js";
+
+// Every foreach-template target reparses its loop's body, and the canvas
+// resolves the targets of all text in a figure on each render, most of them in
+// the same few loops: keep recent body parses. Callers only read them.
+const LOOP_BODY_PARSE_LIMIT = 64;
+const loopBodyParses = new Map<string, ForeachStatementBodyParseResult>();
+
+function parseLoopBody(bodyRaw: string, bodySpan: Span): ForeachStatementBodyParseResult {
+  const key = `${bodySpan.from}:${bodySpan.to}:${bodyRaw}`;
+  let parsed = loopBodyParses.get(key);
+  if (parsed) {
+    loopBodyParses.delete(key);
+  } else {
+    parsed = parseStatementsFromBodyWithMapping(bodyRaw, bodySpan);
+    if (loopBodyParses.size >= LOOP_BODY_PARSE_LIMIT) loopBodyParses.delete(requireDefined(loopBodyParses.keys().next().value, "Missing required loopBodyParses.keys().next().value"));
+  }
+  loopBodyParses.set(key, parsed);
+  return parsed;
+}
+
+// A parse result owns its target index. Normal targets no longer walk every
+// preceding path (and all their items) for each object in the scene.
+const targetStatementsByParse = new WeakMap<ParseTikzResult, Map<string, Statement>>();
+
+function targetStatements(parse: ParseTikzResult): Map<string, Statement> {
+  let index = targetStatementsByParse.get(parse);
+  if (index) return index;
+  index = new Map();
+  const visit = (statements: readonly Statement[]) => {
+    for (const statement of statements) {
+      index.set(statement.id, statement);
+      if (statement.kind === "Scope") visit(statement.body);
+      if (statement.kind === "Path") {
+        const add = (item: { id?: string }) => { if (item.id) index.set(item.id, statement); };
+        walkPathItems(statement.items, { onPathItem: add, onNode: add });
+      }
+    }
+  };
+  visit(parse.figure.body);
+  targetStatementsByParse.set(parse, index);
+  return index;
+}
+
+export function findPathStatementInParseResult(parse: ParseTikzResult, sourceId: string): PathStatement | null {
+  const statement = targetStatements(parse).get(sourceId);
+  return statement?.kind === "Path" && statement.id === sourceId ? statement : null;
+}
 
 export type PropertyTargetKind =
   | "figure"
@@ -95,6 +145,15 @@ export type PropertyTargetResolution =
   | { kind: "found"; target: PropertyTarget }
   | { kind: "not-found"; reason: string };
 
+/** Incremental parsing reparses statements, while selection may identify a child target. */
+export function changedSourceIdsForPropertyTarget(
+  target: Pick<PropertyTarget, "id" | "ownerSourceId" | "matrixSourceId" | "treeRootSourceId">
+): string[] {
+  const sourceId = target.ownerSourceId ?? target.matrixSourceId ?? target.treeRootSourceId ?? target.id;
+  const normalized = sourceId.trim();
+  return normalized.length > 0 ? [normalized] : [];
+}
+
 export function resolvePropertyTarget(source: string, elementId: string, parseOptions: EditParseOptions = {}): PropertyTargetResolution {
   incrementProfilingCounter("resolvePropertyTargetCalls");
   if (
@@ -107,40 +166,11 @@ export function resolvePropertyTarget(source: string, elementId: string, parseOp
   if (normalizedId.length === 0) {
     return { kind: "not-found", reason: "Missing element id" };
   }
-
-  if (normalizedId === TIKZPICTURE_GLOBAL_TARGET_ID) {
-    return resolveFigurePropertyTarget(source, parseOptions);
-  }
-
-  if (normalizedId.startsWith(STYLE_SOURCE_TARGET_PREFIX)) {
-    return resolveStyleSourceTarget(source, normalizedId);
-  }
-
-  const parseResult = parseTikzForEdit(source, {
-    ...parseOptions,
+  let parseResult: ParseTikzResult | undefined;
+  return resolveNormalizedPropertyTarget(source, normalizedId, () => {
+    parseResult ??= parseTikzForEdit(source, parseOptions);
+    return parseResult;
   });
-  const picTemplateTarget = resolvePicTemplateTargetFromParseResult(parseResult, normalizedId);
-  if (picTemplateTarget) {
-    return { kind: "found", target: picTemplateTarget };
-  }
-  const foreachTemplateTarget = resolveForeachTemplateTargetFromParseResult(parseResult, normalizedId);
-  if (foreachTemplateTarget) {
-    return { kind: "found", target: foreachTemplateTarget };
-  }
-  const matrixCellTarget = resolveMatrixCellTargetInStatements(parseResult.figure.body, source, normalizedId);
-  if (matrixCellTarget) {
-    return { kind: "found", target: matrixCellTarget };
-  }
-  const treeChildTarget = resolveTreeChildTargetInStatements(parseResult.figure.body, source, normalizedId);
-  if (treeChildTarget) {
-    return { kind: "found", target: treeChildTarget };
-  }
-  const target = findTargetInStatements(parseResult.figure.body, source, normalizedId);
-  if (!target) {
-    return { kind: "not-found", reason: `No editable source target found for ${normalizedId}` };
-  }
-
-  return { kind: "found", target };
 }
 
 export function resolvePropertyTargetFromParseResult(
@@ -153,15 +183,23 @@ export function resolvePropertyTargetFromParseResult(
   if (normalizedId.length === 0) {
     return { kind: "not-found", reason: "Missing element id" };
   }
+  return resolveNormalizedPropertyTarget(parseSource, normalizedId, () => parseResult);
+}
 
+function resolveNormalizedPropertyTarget(
+  source: string,
+  normalizedId: string,
+  getParseResult: () => ParseTikzResult
+): PropertyTargetResolution {
   if (normalizedId === TIKZPICTURE_GLOBAL_TARGET_ID) {
-    return resolveFigurePropertyTargetFromParseResult(parseSource, parseResult);
+    return resolveFigurePropertyTargetFromParseResult(source, getParseResult());
   }
 
   if (normalizedId.startsWith(STYLE_SOURCE_TARGET_PREFIX)) {
-    return resolveStyleSourceTarget(parseSource, normalizedId);
+    return resolveStyleSourceTarget(source, normalizedId);
   }
 
+  const parseResult = getParseResult();
   const picTemplateTarget = resolvePicTemplateTargetFromParseResult(parseResult, normalizedId);
   if (picTemplateTarget) {
     return { kind: "found", target: picTemplateTarget };
@@ -172,27 +210,21 @@ export function resolvePropertyTargetFromParseResult(
     return { kind: "found", target: foreachTemplateTarget };
   }
 
-  const matrixCellTarget = resolveMatrixCellTargetInStatements(parseResult.figure.body, parseSource, normalizedId);
+  const matrixCellTarget = resolveMatrixCellTargetInStatements(parseResult.figure.body, source, normalizedId);
   if (matrixCellTarget) {
     return { kind: "found", target: matrixCellTarget };
   }
-  const treeChildTarget = resolveTreeChildTargetInStatements(parseResult.figure.body, parseSource, normalizedId);
+  const treeChildTarget = resolveTreeChildTargetInStatements(parseResult.figure.body, source, normalizedId);
   if (treeChildTarget) {
     return { kind: "found", target: treeChildTarget };
   }
 
-  const target = findTargetInStatements(parseResult.figure.body, parseSource, normalizedId);
+  const owner = targetStatements(parseResult).get(normalizedId);
+  const target = findTargetInStatements(owner ? [owner] : parseResult.figure.body, source, normalizedId);
   if (!target) {
     return { kind: "not-found", reason: `No editable source target found for ${normalizedId}` };
   }
   return { kind: "found", target };
-}
-
-function resolveFigurePropertyTarget(source: string, parseOptions: EditParseOptions): PropertyTargetResolution {
-  const parseResult = parseTikzForEdit(source, {
-    ...parseOptions,
-  });
-  return resolveFigurePropertyTargetFromParseResult(source, parseResult);
 }
 
 export function resolveFigurePropertyTargetFromParseResult(
@@ -214,8 +246,8 @@ export function resolveFigurePropertyTargetFromParseResult(
         id: TIKZPICTURE_GLOBAL_TARGET_ID,
         kind: "figure",
         span: figure.span,
-        options: figure.options,
-        optionsSpan: figure.options?.span,
+        ...(figure.options === undefined ? {} : { options: figure.options }),
+        ...(figure.options?.span === undefined ? {} : { optionsSpan: figure.options.span }),
         optionsFormat: "bracketed",
         insertOffset
       }
@@ -535,11 +567,12 @@ function resolvePicTemplateTargetFromParseResult(
   const templateNodeTextSpan = resolvePathStatementNodeTextSpan(reparsedBody.parseResult.figure.body, parsed.localTargetId);
   const remappedTemplateNodeTextSpan = templateNodeTextSpan ? reparsedBody.sourceMapper.mapSpan(templateNodeTextSpan) : null;
 
+  const textSpan = remapped.textSpan ?? remappedTemplateNodeTextSpan;
   return {
     ...remapped,
     id: targetId,
     kind: "pic-template",
-    textSpan: remapped.textSpan ?? remappedTemplateNodeTextSpan ?? undefined,
+    ...(textSpan == null ? {} : { textSpan }),
     picCodeSpan: parsed.codeSpan,
     picLocalTargetId: parsed.localTargetId
   };
@@ -568,7 +601,8 @@ function parseForeachTemplateTargetId(
   if (loopPath.length === 0) {
     return null;
   }
-  const [loopId, ...nestedLoopLocalIds] = loopPath;
+  const loopId = requireArrayValue(loopPath, 0);
+  const nestedLoopLocalIds = loopPath.slice(1);
   return { loopId, nestedLoopLocalIds, localTargetId };
 }
 
@@ -590,7 +624,7 @@ function resolveForeachTemplateTargetFromParseResult(
     return null;
   }
 
-  const reparsedBody = parseStatementsFromBodyWithMapping(loopBody.bodyRaw, loopBody.bodySpan);
+  const reparsedBody = parseLoopBody(loopBody.bodyRaw, loopBody.bodySpan);
   const resolved = resolvePropertyTargetFromParseResult(
     reparsedBody.parseResult.source,
     reparsedBody.parseResult,
@@ -607,11 +641,12 @@ function resolveForeachTemplateTargetFromParseResult(
   const templateNodeTextSpan = resolvePathStatementNodeTextSpan(reparsedBody.parseResult.figure.body, parsed.localTargetId);
   const remappedTemplateNodeTextSpan = templateNodeTextSpan ? reparsedBody.sourceMapper.mapSpan(templateNodeTextSpan) : null;
 
+  const textSpan = remapped.textSpan ?? remappedTemplateNodeTextSpan;
   return {
     ...remapped,
     id: targetId,
     kind: "foreach-template",
-    textSpan: remapped.textSpan ?? remappedTemplateNodeTextSpan ?? undefined,
+    ...(textSpan == null ? {} : { textSpan }),
     foreachLoopId: parsed.loopId,
     foreachLocalTargetId: parsed.localTargetId
   };
@@ -628,7 +663,7 @@ function resolveNestedForeachBody(
   }
 
   for (const nestedLoopLocalId of nestedLoopLocalIds) {
-    const reparsedBody = parseStatementsFromBodyWithMapping(currentLoop.bodyRaw, currentBodySpan);
+    const reparsedBody = parseLoopBody(currentLoop.bodyRaw, currentBodySpan);
     const nestedLoop = findForeachStatementById(reparsedBody.parseResult.figure.body, nestedLoopLocalId);
     if (!nestedLoop?.bodySpan) {
       return null;
@@ -701,11 +736,8 @@ function findTargetInPathItems(
   ownerSourceId: string,
   context: { statementCommand?: string; statementSpan?: Span } = {}
 ): PropertyTarget | null {
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
-    if (!item) {
-      continue;
-    }
+  for (const [index, item] of items.entries()) {
+
 
     if (item.kind === "PathKeyword" && item.id === elementId) {
       return makePathKeywordTarget(item, items, index);
@@ -798,21 +830,43 @@ function makePathStatementTarget(statement: PathStatement, source: string): Prop
   if (matrixTarget) {
     return matrixTarget;
   }
+  const head = statementHeadItem(statement);
   const commandRegex =
-    statement.command === "node"
-      ? /\\?(?:node|matrix)\b/
-      : new RegExp(String.raw`\\?${escapeRegex(statement.command)}\b`);
+    head?.kind === "PicOperation"
+      ? /\\pic\b/
+      : statement.command === "node"
+        ? /\\?(?:node|matrix)\b/
+        : new RegExp(String.raw`\\?${escapeRegex(statement.command)}\b`);
   const insertOffset = resolveInsertOffset(source, statement.span, commandRegex);
+  // `\node` and `\pic` are `\path node` and `\path pic`: their option lists
+  // belong to that node or pic. A fresh list in front of one would be read
+  // first, so the node's own keys would override what was just written.
+  const options = statement.options ?? head?.options;
+  const optionsSpan = statement.options?.span ?? head?.optionsSpan ?? head?.options?.span;
 
   return {
     id: statement.id,
     kind: "path-statement",
     pathCommand: statement.command,
     span: statement.span,
-    options: statement.options,
-    optionsSpan: statement.options?.span,
+    ...(options === undefined ? {} : { options }),
+    ...(optionsSpan === undefined ? {} : { optionsSpan }),
     insertOffset
   };
+}
+
+function statementHeadItem(statement: PathStatement): NodeItem | PicOperationItem | null {
+  if (statement.options) {
+    return null;
+  }
+  const first = statement.items[0];
+  if (first?.kind === "PicOperation" && statement.items.length === 1) {
+    return first;
+  }
+  if (statement.command !== "node") {
+    return null;
+  }
+  return statement.items.find((item): item is NodeItem => item.kind === "Node") ?? null;
 }
 
 function makeMatrixStatementTarget(statement: PathStatement, source: string): PropertyTarget | null {
@@ -826,13 +880,14 @@ function makeMatrixStatementTarget(statement: PathStatement, source: string): Pr
   }
   const insertOffset = resolveInsertOffset(source, statement.span, /\\?(?:node|matrix)\b/);
   const bodyOpenOffset = resolveMatrixBodyOpenOffset(source, matrixNode.textSpan);
+  const options = normalizeMatrixStatementOptions(matrixNode.options);
   return {
     id: statement.id,
     kind: "matrix-statement",
     pathCommand: statement.command,
     span: statement.span,
-    options: normalizeMatrixStatementOptions(matrixNode.options),
-    optionsSpan: matrixNode.options?.span,
+    ...(options === undefined ? {} : { options }),
+    ...(matrixNode.options?.span === undefined ? {} : { optionsSpan: matrixNode.options.span }),
     optionsFormat: "bracketed",
     insertOffset,
     matrixSourceId: statement.id,
@@ -840,7 +895,7 @@ function makeMatrixStatementTarget(statement: PathStatement, source: string): Pr
     matrixTextMode: matrixMode.textMode,
     matrixOfNodes: matrixMode.matrixOfNodes,
     matrixTextSpan: matrixNode.textSpan,
-    matrixBodyOpenOffset: bodyOpenOffset
+    ...(bodyOpenOffset === undefined ? {} : { matrixBodyOpenOffset: bodyOpenOffset })
   };
 }
 
@@ -892,7 +947,8 @@ function resolveMatrixCellTargetInStatements(
     ref.node.textSpan,
     matrixMode,
     parsedId.row,
-    parsedId.column
+    parsedId.column,
+    ref.node.structuralText
   );
   if (!resolvedCell) {
     return null;
@@ -907,11 +963,11 @@ function resolveMatrixCellTargetInStatements(
     id: elementId,
     kind: "matrix-cell",
     span: resolvedCell.cellSpan,
-    options: matrixCellOptions,
-    optionsSpan: resolvedCell.optionSpan,
+    ...(matrixCellOptions === undefined ? {} : { options: matrixCellOptions }),
+    ...(resolvedCell.optionSpan === undefined ? {} : { optionsSpan: resolvedCell.optionSpan }),
     optionsFormat: "bracketed",
     textSpan: resolvedCell.textSpan,
-    optionSpan: resolvedCell.optionSpan,
+    ...(resolvedCell.optionSpan === undefined ? {} : { optionSpan: resolvedCell.optionSpan }),
     insertOffset,
     matrixSourceId: ref.statement.id,
     matrixKind: matrixMode.matrixKind,
@@ -986,19 +1042,22 @@ function remapPropertyTargetToOriginalSource(
   if (target.options && !options) {
     return null;
   }
-  remapped.options = options ?? undefined;
+  if (options == null) delete remapped.options;
+  else remapped.options = options;
 
   const treeChildOptions = remapOptionList(target.treeChildOptions, mapper);
   if (target.treeChildOptions && !treeChildOptions) {
     return null;
   }
-  remapped.treeChildOptions = treeChildOptions ?? undefined;
+  if (treeChildOptions == null) delete remapped.treeChildOptions;
+  else remapped.treeChildOptions = treeChildOptions;
 
   const treeNodeOptions = remapOptionList(target.treeNodeOptions, mapper);
   if (target.treeNodeOptions && !treeNodeOptions) {
     return null;
   }
-  remapped.treeNodeOptions = treeNodeOptions ?? undefined;
+  if (treeNodeOptions == null) delete remapped.treeNodeOptions;
+  else remapped.treeNodeOptions = treeNodeOptions;
 
   const spanKeys: Array<keyof PropertyTarget> = [
     "optionsSpan",
@@ -1098,7 +1157,7 @@ function remapOptionEntry(
     return {
       ...entry,
       span,
-      keySpan
+      ...(keySpan === undefined ? {} : { keySpan })
     };
   }
 
@@ -1113,8 +1172,8 @@ function remapOptionEntry(
   return {
     ...entry,
     span,
-    keySpan,
-    valueSpan
+    ...(keySpan === undefined ? {} : { keySpan }),
+    ...(valueSpan === undefined ? {} : { valueSpan })
   };
 }
 
@@ -1167,29 +1226,30 @@ function resolveTreeChildTargetInStatements(
   const nodeTextSpan = nodeSpanInfo?.textSpan;
   const treeChildInsertOffset = resolveInsertOffset(source, child.span, /\bchild\b/);
   const treeNodeInsertOffset = nodeSpanInfo?.insertOffset;
+  const treeChildOptionsSpan = child.optionsSpan ?? child.options?.span;
 
   return {
     id: elementId,
     kind: "tree-child",
     span: child.span,
-    options: nodeOptions,
-    optionsSpan: nodeOptionsSpan,
-    optionSpan: nodeOptionsSpan,
+    ...(nodeOptions === undefined ? {} : { options: nodeOptions }),
+    ...(nodeOptionsSpan === undefined ? {} : { optionsSpan: nodeOptionsSpan }),
+    ...(nodeOptionsSpan === undefined ? {} : { optionSpan: nodeOptionsSpan }),
     optionsFormat: "bracketed",
-    textSpan: nodeTextSpan,
+    ...(nodeTextSpan === undefined ? {} : { textSpan: nodeTextSpan }),
     insertOffset: treeNodeInsertOffset ?? treeChildInsertOffset,
     treeRootSourceId: parsedId.treeRootSourceId,
     treeChildSourceId: parsedId.treeChildSourceId,
     childOperationId: child.id,
-    treeChildOptions: child.options,
-    treeChildOptionsSpan: child.optionsSpan ?? child.options?.span,
-    treeChildBodySpan: child.bodySpan,
+    ...(child.options === undefined ? {} : { treeChildOptions: child.options }),
+    ...(treeChildOptionsSpan === undefined ? {} : { treeChildOptionsSpan }),
+    ...(child.bodySpan === undefined ? {} : { treeChildBodySpan: child.bodySpan }),
     treeChildInsertOffset,
-    treeNodeId: node?.id,
-    treeNodeTextSpan: nodeTextSpan,
-    treeNodeOptions: nodeOptions,
-    treeNodeOptionsSpan: nodeOptionsSpan,
-    treeNodeInsertOffset,
+    ...(node?.id === undefined ? {} : { treeNodeId: node.id }),
+    ...(nodeTextSpan === undefined ? {} : { treeNodeTextSpan: nodeTextSpan }),
+    ...(nodeOptions === undefined ? {} : { treeNodeOptions: nodeOptions }),
+    ...(nodeOptionsSpan === undefined ? {} : { treeNodeOptionsSpan: nodeOptionsSpan }),
+    ...(treeNodeInsertOffset === undefined ? {} : { treeNodeInsertOffset }),
     treeChildForeach: (child.foreachClauses?.length ?? 0) > 0,
     treeChildNodeSpanFallbackUsed: nodeSpanInfo?.fallbackUsed ?? false
   };
@@ -1315,12 +1375,14 @@ function absolutizeChildOperationSpans(
     }
     return relativeSpan;
   };
-  return {
-    ...child,
-    span: absolutize(child.span, child.raw)!,
-    optionsSpan: absolutize(child.optionsSpan, child.options?.raw ?? ""),
-    bodySpan: absolutize(child.bodySpan, child.bodyRaw)
-  };
+  const mapped = { ...child, span: requireDefined(absolutize(child.span, child.raw), "Missing required absolutize(child.span, child.raw)") };
+  const optionsSpan = absolutize(child.optionsSpan, child.options?.raw ?? "");
+  const bodySpan = absolutize(child.bodySpan, child.bodyRaw);
+  if (optionsSpan === undefined) delete mapped.optionsSpan;
+  else mapped.optionsSpan = optionsSpan;
+  if (bodySpan === undefined) delete mapped.bodySpan;
+  else mapped.bodySpan = bodySpan;
+  return mapped;
 }
 
 function resolveFirstEditableTreeNode(items: PathItem[]): NodeItem | null {
@@ -1417,8 +1479,8 @@ function resolveTreeChildNodeSpanInfo(
   }
 
   return {
-    optionsSpan,
-    textSpan,
+    ...(optionsSpan === undefined ? {} : { optionsSpan }),
+    ...(textSpan === undefined ? {} : { textSpan }),
     insertOffset,
     fallbackUsed
   };
@@ -1429,8 +1491,8 @@ function makeScopeTarget(statement: Extract<Statement, { kind: "Scope" }>, sourc
     id: statement.id,
     kind: "style-source",
     span: statement.span,
-    options: statement.options,
-    optionsSpan: statement.options?.span,
+    ...(statement.options === undefined ? {} : { options: statement.options }),
+    ...(statement.options?.span === undefined ? {} : { optionsSpan: statement.options.span }),
     optionsFormat: "bracketed",
     insertOffset: resolveInsertOffset(source, statement.span, /\\begin\{scope\*?\}/)
   };
@@ -1442,12 +1504,13 @@ function makeNodeTarget(
   ownerSourceId: string,
   context: { statementCommand?: string; statementSpan?: Span } = {}
 ): PropertyTarget {
+  const optionsSpan = node.optionsSpan ?? node.options?.span;
   return {
     id: node.id,
     kind: "node-item",
     span: node.span,
-    options: node.options,
-    optionsSpan: node.optionsSpan ?? node.options?.span,
+    ...(node.options === undefined ? {} : { options: node.options }),
+    ...(optionsSpan === undefined ? {} : { optionsSpan }),
     insertOffset: resolveNodeInsertOffset(source, node, context),
     ownerSourceId
   };
@@ -1484,27 +1547,25 @@ function makeNodeAdornmentTarget(
     return null;
   }
 
-  for (let index = 0; index < plan.adornments.length; index += 1) {
-    const adornment = plan.adornments[index];
-    if (!adornment) {
-      continue;
-    }
+  for (const [index, adornment] of plan.adornments.entries()) {
+
     const expectedId = makeNodeAdornmentTargetId(node.id, index, adornment.kind);
     if (expectedId !== elementId) {
       continue;
     }
 
+    const options = stripAdornmentInternalStyleOptions(adornment.options);
     return {
       id: elementId,
       kind: "node-adornment",
       span: adornment.span,
-      options: stripAdornmentInternalStyleOptions(adornment.options),
+      ...(options === undefined ? {} : { options }),
       optionsSpan: adornment.valueSpan,
       optionSpan: adornment.span,
       valueSpan: adornment.valueSpan,
       textSpan: adornment.textSpan,
       angleRaw: adornment.angleRaw,
-      angleSpan: adornment.angleSpan,
+      ...(adornment.angleSpan === undefined ? {} : { angleSpan: adornment.angleSpan }),
       distancePt: adornment.distancePt,
       defaultDistancePt: adornment.defaultDistancePt,
       distanceExplicit: adornment.distanceExplicit,
@@ -1523,12 +1584,13 @@ function makeNodeAdornmentTarget(
 function makePathKeywordTarget(item: Extract<PathItem, { kind: "PathKeyword" }>, items: PathItem[], index: number): PropertyTarget {
   const maybeOption = items[index + 1];
   const optionItem = maybeOption?.kind === "PathOption" ? maybeOption : null;
+  const optionsSpan = optionItem?.span;
   return {
     id: item.id,
     kind: "path-keyword",
     span: item.span,
-    options: optionItem?.options,
-    optionsSpan: optionItem?.span ?? optionItem?.options?.span,
+    ...(optionItem?.options === undefined ? {} : { options: optionItem.options }),
+    ...(optionsSpan === undefined ? {} : { optionsSpan }),
     insertOffset: item.span.to
   };
 }
@@ -1542,12 +1604,13 @@ function makeToLikeOperationTarget(
   keywordRegex: RegExp,
   source: string
 ): PropertyTarget {
+  const resolvedOptionsSpan = optionsSpan ?? options?.span;
   return {
     id,
     kind,
     span,
-    options,
-    optionsSpan: optionsSpan ?? options?.span,
+    ...(options === undefined ? {} : { options }),
+    ...(resolvedOptionsSpan === undefined ? {} : { optionsSpan: resolvedOptionsSpan }),
     insertOffset: resolveInsertOffset(source, span, keywordRegex)
   };
 }
@@ -1562,7 +1625,7 @@ function resolveInsertOffset(source: string, span: Span, tokenRegex: RegExp): nu
 }
 
 function resolveFigureInsertOffset(source: string, span: Span): number | null {
-  const figureEnvOffset = resolveInsertOffset(source, span, /\\begin\{tikzpicture\*?\}/);
+  const figureEnvOffset = resolveInsertOffset(source, span, /\\begin\{(?:tikzpicture\*?|tikzlayer)\}/);
   if (figureEnvOffset !== span.from) {
     return figureEnvOffset;
   }

@@ -1,0 +1,312 @@
+{
+  "formatVersion": 1,
+  "generatedAt": "2026-10-03T16:56:15.345Z",
+  "method": "Manual selected source, native SVG/PNG, author-context TeX PDF/PNG review; original default-Beamer reductions; production renderer unchanged.",
+  "counts": {
+    "newCorpusFrames": 4,
+    "nativeCorpusSvgStates": 5,
+    "validCorpusReferenceFrames": 2,
+    "remainingReferenceFailures": 2
+  },
+  "reviewed": [
+    {
+      "id": "r3-root-00",
+      "repository": "MarcToussaint/AI-lectures",
+      "path": "ArtificialIntelligence/25-firstOrderLogic.tex",
+      "frame": 1,
+      "title": "",
+      "sourceSpan": {
+        "from": 26810,
+        "to": 27738
+      },
+      "sourceSha256": "297d066ff978a9ff44a1e3ee0202fb3ff5ec9734a0fab6c52a3c34097448b275",
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-00",
+      "native": [
+        {
+          "step": 1,
+          "stepCount": 1,
+          "error": null,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-00/native-1.svg",
+          "png": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-00/native-1.png"
+        }
+      ],
+      "reference": {
+        "engine": "pdflatex",
+        "status": "failed",
+        "error": "! LaTeX Error: File `LIS-26-text-long' not found.\n\nSee the LaTeX manual or LaTeX Companion for explanation.\nType  H <return>  for immediate help.\n ...                                              \n                                                  \nl.147 }"
+      },
+      "contextWarnings": [
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "observation": "Native recognizes opaque code but the private LIS-26-text-long input is unavailable. The author slidecore wrapper is not a basis for a general-purpose regression fixture.",
+      "commit": "a35e565832bbe7ac9b73404636de5c56047f4aaf",
+      "license": null,
+      "sourceUrl": "https://github.com/MarcToussaint/AI-lectures/blob/a35e565832bbe7ac9b73404636de5c56047f4aaf/ArtificialIntelligence/25-firstOrderLogic.tex"
+    },
+    {
+      "id": "r3-root-01",
+      "repository": "MarcToussaint/AI-lectures",
+      "path": "ArtificialIntelligence/25-firstOrderLogic.tex",
+      "frame": 2,
+      "title": "",
+      "sourceSpan": {
+        "from": 27812,
+        "to": 28414
+      },
+      "sourceSha256": "297d066ff978a9ff44a1e3ee0202fb3ff5ec9734a0fab6c52a3c34097448b275",
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-01",
+      "native": [
+        {
+          "step": 1,
+          "stepCount": 1,
+          "error": null,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-01/native-1.svg",
+          "png": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-01/native-1.png"
+        }
+      ],
+      "reference": {
+        "engine": "pdflatex",
+        "status": "failed",
+        "error": "! LaTeX Error: File `LIS-26-text-long' not found.\n\nSee the LaTeX manual or LaTeX Companion for explanation.\nType  H <return>  for immediate help.\n ...                                              \n                                                  \nl.147 }"
+      },
+      "contextWarnings": [
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "observation": "Native recognizes opaque code but the private LIS-26-text-long input is unavailable. The author slidecore wrapper is not a basis for a general-purpose regression fixture.",
+      "commit": "a35e565832bbe7ac9b73404636de5c56047f4aaf",
+      "license": null,
+      "sourceUrl": "https://github.com/MarcToussaint/AI-lectures/blob/a35e565832bbe7ac9b73404636de5c56047f4aaf/ArtificialIntelligence/25-firstOrderLogic.tex"
+    },
+    {
+      "id": "r3-root-02",
+      "repository": "leeper/lectures",
+      "path": "2018-03-01-Presentations/slides.tex",
+      "frame": 1,
+      "title": "",
+      "sourceSpan": {
+        "from": 4458,
+        "to": 4656
+      },
+      "sourceSha256": "4f7dc774c6cd5173f8556b527b5cf259ab8879d1052ed80167f6627aed688043",
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-02",
+      "native": [
+        {
+          "step": 1,
+          "stepCount": 2,
+          "error": null,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-02/native-1.svg",
+          "png": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-02/native-1.png"
+        },
+        {
+          "step": 2,
+          "stepCount": 2,
+          "error": null,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-02/native-2.svg",
+          "png": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-02/native-2.png"
+        }
+      ],
+      "reference": {
+        "engine": "pdflatex",
+        "pdf": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-02/reference.pdf",
+        "pageCount": 2,
+        "pages": [
+          {
+            "page": 1,
+            "png": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-02/reference-1.png"
+          },
+          {
+            "page": 2,
+            "png": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-02/reference-2.png"
+          }
+        ],
+        "status": "compiled"
+      },
+      "contextWarnings": [
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score."
+      ],
+      "observation": "TeX paints the dark normal-text background and uses the requested 14pt class font ladder. Native leaves the canvas white and renders Huge text too small.",
+      "commit": "0b3f2a338d39fb1e3e4191e6959c42e6b15b0568",
+      "license": "CC-BY-SA-3.0",
+      "sourceUrl": "https://github.com/leeper/lectures/blob/0b3f2a338d39fb1e3e4191e6959c42e6b15b0568/2018-03-01-Presentations/slides.tex"
+    },
+    {
+      "id": "r3-root-03",
+      "repository": "leeper/lectures",
+      "path": "2019-05-09-LSE-VAM/slides.tex",
+      "frame": 5,
+      "title": "",
+      "sourceSpan": {
+        "from": 13169,
+        "to": 13376
+      },
+      "sourceSha256": "4369bc0003d7472549fba10cc689562c54c3eaaca9f31210e079acd5792dd31b",
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-03",
+      "native": [
+        {
+          "step": 1,
+          "stepCount": 1,
+          "error": null,
+          "svg": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-03/native-1.svg",
+          "png": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-03/native-1.png"
+        }
+      ],
+      "reference": {
+        "engine": "pdflatex",
+        "pdf": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-03/reference-context.pdf",
+        "pageCount": 1,
+        "pages": [
+          {
+            "page": 1,
+            "png": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/r3-root-03/reference-context-1.png"
+          }
+        ],
+        "status": "compiled",
+        "contextRestored": true
+      },
+      "contextWarnings": [
+        "Isolated current-source frame. No bibliography processing or document-wide .toc; local settings outside the frame may be absent. Native uses the current built renderer. Author-engine PDF references are for semantic visual review, not a strict LuaLaTeX metric score.",
+        "Restored the exact surrounding author group: begingroup, setbeamercolor{background canvas}{bg=black}, endgroup. Original isolated reference kept as reference.pdf; it omitted this setting and was visually vacuous."
+      ],
+      "observation": "Native loses the black background set in the enclosing author group, leaving white text invisible. The first isolated TeX reference also omitted this group; reference-context.pdf restores the exact author setting and paints the white content on black. No strict fixture promoted until isolated oracle preserves document-body settings.",
+      "commit": "0b3f2a338d39fb1e3e4191e6959c42e6b15b0568",
+      "license": "CC-BY-SA-3.0",
+      "sourceUrl": "https://github.com/leeper/lectures/blob/0b3f2a338d39fb1e3e4191e6959c42e6b15b0568/2019-05-09-LSE-VAM/slides.tex"
+    }
+  ],
+  "findings": [
+    {
+      "id": "class-font-14pt",
+      "fixtureIds": [
+        "root-font-14pt",
+        "root-font-11pt-control"
+      ],
+      "corpusFrames": [
+        "r3-root-02"
+      ],
+      "expected": "Honor the documented Beamer 14pt class size and associated size ladder.",
+      "primarySource": "/usr/local/texlive/2025/texmf-dist/tex/latex/beamer/beamerbasefont.sty",
+      "witness": "14pt reduction: fontMatch=false, max glyph dx 19.885288pt and dy 8.107933pt; otherwise-identical 11pt control passes."
+    },
+    {
+      "id": "normal-text-background-inheritance",
+      "fixtureIds": [
+        "root-normal-text-background"
+      ],
+      "corpusFrames": [
+        "r3-root-02"
+      ],
+      "expected": "Default background canvas inherits the normal text background.",
+      "primarySource": "/usr/local/texlive/2025/texmf-dist/tex/latex/beamer/beamercolorthemedefault.sty",
+      "witness": "Glyph/rule geometry passes; explicit canvas RGB probe differs by 26, tolerance 2."
+    }
+  ],
+  "deferred": [
+    {
+      "id": "document-body-scoped-background",
+      "corpusFrames": [
+        "r3-root-03"
+      ],
+      "reason": "A confirmed visual gap with context-restored author reference, but the strict single-frame oracle currently omits the enclosing group. Preserve generic document-body settings in the oracle before promoting an exact fixture."
+    }
+  ],
+  "manifestEntries": [
+    {
+      "id": "root-font-14pt",
+      "file": "root-font-14pt.tex",
+      "frame": 1,
+      "family": "class-font-size",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "root-font-11pt-control",
+      "file": "root-font-11pt-control.tex",
+      "frame": 1,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "root-normal-text-background",
+      "file": "root-normal-text-background.tex",
+      "frame": 1,
+      "family": "color-inheritance",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ],
+      "paintProbes": [
+        {
+          "id": "canvas",
+          "x": 2,
+          "y": 100
+        }
+      ]
+    }
+  ],
+  "reductions": [
+    {
+      "id": "root-font-14pt",
+      "referencePageCount": 1,
+      "strictFailures": [
+        "fontMatch=false",
+        "maxAbsoluteGlyphDxPt=19.885288 (maximum 0.02)",
+        "maxAbsoluteGlyphDyPt=8.107933 (maximum 0.01)"
+      ],
+      "report": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/reductions/root-font-14pt/report.json"
+    },
+    {
+      "id": "root-font-11pt-control",
+      "referencePageCount": 1,
+      "strictFailures": [],
+      "report": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/reductions/root-font-11pt-control/report.json"
+    },
+    {
+      "id": "root-normal-text-background",
+      "referencePageCount": 1,
+      "strictFailures": [
+        "Block paint canvas: RGB delta 26 exceeds 2"
+      ],
+      "report": "artifacts/beamer-corpus-renderer/manual-review-round3/root-review/reductions/root-normal-text-background/report.json"
+    }
+  ],
+  "initialStrictSuite": {
+    "completedAt": "2026-10-03T17:07:08.489Z",
+    "rendererFingerprint": "a9d884ddef821eec64195b5b39ae1a4faa775b1dc295174582c2334ce05c83c8",
+    "cases": 3,
+    "snapshots": 3,
+    "passed": 1,
+    "mismatches": 2,
+    "invalidOracles": 0,
+    "exceptions": 0,
+    "results": [
+      {
+        "id": "root-font-14pt",
+        "status": "mismatch",
+        "failures": [
+          "State 1: fontMatch=false",
+          "State 1: maxAbsoluteGlyphDxPt=19.885288 (maximum 0.02)",
+          "State 1: maxAbsoluteGlyphDyPt=8.107933 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "root-font-11pt-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "root-normal-text-background",
+        "status": "mismatch",
+        "failures": [
+          "State 1: Block paint canvas: RGB delta 26 exceeds 2"
+        ]
+      }
+    ]
+  }
+}

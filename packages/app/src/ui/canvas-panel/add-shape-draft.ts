@@ -1,7 +1,7 @@
-import type { ScenePathCommand } from "tikz-editor/semantic/types";
-import { worldBounds, worldPoint, pt } from "tikz-editor/coords/index";
+import type { ScenePathCommand } from "@tikz-editor/core/semantic/types";
+import { worldBounds, worldPoint, pt } from "@tikz-editor/core/coords/index";
 import type { WorldBounds, WorldPoint } from "../coords/types";
-import type { NodeShape } from "tikz-editor/semantic/nodes/types";
+import type { NodeShape } from "@tikz-editor/core/semantic/nodes/types";
 import {
   makeCircularSector,
   makeCloud,
@@ -24,7 +24,7 @@ import {
   makeTrapeziumPolygon,
   resolveCalloutPointerOffset,
   resolveNodeShapeGeometryParams
-} from "tikz-editor/semantic/nodes/shape-geometry";
+} from "@tikz-editor/core/semantic/nodes/shape-geometry";
 
 const DEFAULT_NODE_MINIMUM_DIMENSION_PT = 1;
 const PREVIEW_CONSTRAINT_PENALTY = 0.01;
@@ -79,10 +79,13 @@ export function resolveAddShapeDraft(
   const shape = normalizeNodeShape(shapeRaw);
   const safeRequestedWidth = Math.max(requestedWidthPt, DEFAULT_NODE_MINIMUM_DIMENSION_PT);
   const safeRequestedHeight = Math.max(requestedHeightPt, DEFAULT_NODE_MINIMUM_DIMENSION_PT);
+  // PGF double arrows use minimum height for length and minimum width for head span.
+  const minimumWidth = shape === "double arrow" ? safeRequestedHeight : safeRequestedWidth;
+  const minimumHeight = shape === "double arrow" ? safeRequestedWidth : safeRequestedHeight;
   const candidates = dedupeConstraintCandidates([
-    buildConstraintCandidate(shape, safeRequestedWidth, safeRequestedHeight),
-    buildConstraintCandidate(shape, safeRequestedWidth),
-    buildConstraintCandidate(shape, undefined, safeRequestedHeight)
+    buildConstraintCandidate(shape, minimumWidth, minimumHeight),
+    buildConstraintCandidate(shape, minimumWidth),
+    buildConstraintCandidate(shape, undefined, minimumHeight)
   ]);
 
   let best = candidates[0] ?? buildConstraintCandidate(shape);
@@ -101,8 +104,8 @@ export function resolveAddShapeDraft(
   }
 
   return {
-    minimumWidthPt: best.minimumWidthPt,
-    minimumHeightPt: best.minimumHeightPt,
+    ...(best.minimumWidthPt !== undefined ? { minimumWidthPt: best.minimumWidthPt } : {}),
+    ...(best.minimumHeightPt !== undefined ? { minimumHeightPt: best.minimumHeightPt } : {}),
     preview: best.preview
   };
 }
@@ -139,8 +142,8 @@ function buildConstraintCandidate(
   minimumHeightPt?: number
 ): ShapeConstraintCandidate {
   return {
-    minimumWidthPt,
-    minimumHeightPt,
+    ...(minimumWidthPt !== undefined ? { minimumWidthPt: minimumWidthPt } : {}),
+    ...(minimumHeightPt !== undefined ? { minimumHeightPt: minimumHeightPt } : {}),
     preview: buildPreviewGeometry(shape, minimumWidthPt, minimumHeightPt),
     explicitConstraintCount: (minimumWidthPt != null ? 1 : 0) + (minimumHeightPt != null ? 1 : 0)
   };
@@ -412,5 +415,42 @@ function expandBounds(bounds: DraftPreviewBounds | null, point: DraftPreviewPoin
 }
 
 function normalizeNodeShape(shapeRaw: string): NodeShape {
-  return (shapeRaw || "rectangle") as NodeShape;
+  switch (shapeRaw) {
+    case "rectangle":
+    case "rounded rectangle":
+    case "chamfered rectangle":
+    case "cross out":
+    case "strike out":
+    case "circle":
+    case "magnifying glass":
+    case "circle split":
+    case "circle solidus":
+    case "ellipse split":
+    case "diamond split":
+    case "rectangle split":
+    case "ellipse":
+    case "diamond":
+    case "trapezium":
+    case "semicircle":
+    case "regular polygon":
+    case "star":
+    case "isosceles triangle":
+    case "kite":
+    case "dart":
+    case "circular sector":
+    case "cylinder":
+    case "cloud":
+    case "starburst":
+    case "signal":
+    case "tape":
+    case "rectangle callout":
+    case "ellipse callout":
+    case "cloud callout":
+    case "single arrow":
+    case "double arrow":
+    case "coordinate":
+      return shapeRaw;
+    default:
+      return "rectangle";
+  }
 }

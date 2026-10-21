@@ -1,6 +1,6 @@
 export function mountRenderedScene(group: SVGGElement, innerSvg: string): void {
   group.innerHTML = innerSvg;
-  replaceMathJaxSvgsWithImages(group);
+  replaceTexSvgsWithImages(group);
 }
 
 export function wrapRenderedElements(elements: Element[], className?: string): SVGGElement | null {
@@ -9,8 +9,8 @@ export function wrapRenderedElements(elements: Element[], className?: string): S
     return null;
   }
 
-  const namespace = first.namespaceURI ?? "http://www.w3.org/2000/svg";
-  const wrapper = document.createElementNS(namespace, "g") as SVGGElement;
+  if (first.namespaceURI !== null && first.namespaceURI !== "http://www.w3.org/2000/svg") return null;
+  const wrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
   if (className) {
     wrapper.setAttribute("class", className);
   }
@@ -22,8 +22,8 @@ export function wrapRenderedElements(elements: Element[], className?: string): S
   return wrapper;
 }
 
-function replaceMathJaxSvgsWithImages(root: ParentNode): void {
-  const labels = Array.from(root.querySelectorAll<SVGSVGElement>('svg[data-text-renderer="mathjax"]'));
+function replaceTexSvgsWithImages(root: ParentNode): void {
+  const labels = Array.from(root.querySelectorAll<SVGSVGElement>('svg[data-text-renderer="tex"]'));
   labels.forEach((label) => {
     const parent = label.parentNode;
     if (!parent) {
@@ -32,7 +32,7 @@ function replaceMathJaxSvgsWithImages(root: ParentNode): void {
 
     const image = document.createElementNS("http://www.w3.org/2000/svg", "image");
     copyImagePresentationAttributes(label, image);
-    image.setAttribute("href", mathJaxSvgDataUrl(label));
+    image.setAttribute("href", texSvgDataUrl(label));
     parent.replaceChild(image, label);
   });
 }
@@ -52,8 +52,9 @@ function copyImagePresentationAttributes(source: SVGSVGElement, target: SVGImage
   });
 }
 
-function mathJaxSvgDataUrl(source: SVGSVGElement): string {
-  const clone = source.cloneNode(true) as SVGSVGElement;
+function texSvgDataUrl(source: SVGSVGElement): string {
+  const clone = source.cloneNode(true);
+  if (!(clone instanceof SVGSVGElement)) throw new Error("SVG root clone changed element type");
   clone.removeAttribute("x");
   clone.removeAttribute("y");
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");

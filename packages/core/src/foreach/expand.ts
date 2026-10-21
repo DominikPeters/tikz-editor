@@ -35,15 +35,15 @@ import {
   unknownStatementId
 } from "../ast/ids.js";
 import type {
+  ChildForeachClause,
   ChildOperationItem,
   ForeachStatement,
-  MacroAliasStatement,
-  MacroCommandDefinitionStatement,
-  MacroDefinitionStatement,
+  NodeForeachClause,
   NodeItem,
   PathForeachItem,
   PathItem,
   PathStatement,
+  PicForeachClause,
   PicOperationItem,
   ScopeStatement,
   Span,
@@ -51,16 +51,28 @@ import type {
   TikzFigure,
   UnknownStatement
 } from "../ast/types.js";
-import { expandMacroBindings, isControlSequenceToken } from "../macros/expand.js";
-import type { MacroBinding, MacroOriginFrame as MacroOriginFrameType } from "../macros/types.js";
+import {
+  collectMacroAlias,
+  collectMacroBindings,
+  collectMacroCommandDefinition,
+  collectMacroDefinition,
+  expandMacroBindings,
+} from "../macros/index.js";
+import type {
+  MacroBinding,
+  MacroOriginFrame as MacroOriginFrameType,
+} from "../macros/types.js";
 import { buildForeachIterations } from "./options.js";
 import {
   parsePathItemsFromFragmentWithSyntheticMapping,
   parseStatementsFromBody,
-  parseStatementsFromBodyWithMapping
+  parseStatementsFromBodyWithMapping,
+  type ForeachStatementBodyParseResult,
+  type PathFragmentParseResult
 } from "./snippet-parse.js";
 import { expandTexConditionals } from "../conditionals/expand.js";
 import { substituteForeachBindingsWithMap } from "./substitute.js";
+import { readTexControlSequence, skipTexWhitespaceAndComments } from "../parser/tex-lexical.js";
 import type {
   ExpansionSourceMap,
   ForeachExpansionDiagnostic,
@@ -88,6 +100,22 @@ type ExpandContext = {
 type TemplateSource = {
   sourceId: string;
   sourceSpan: { from: number; to: number };
+};
+
+type ClauseForeach = ChildForeachClause | NodeForeachClause | PicForeachClause;
+
+type ClauseVariant = {
+  bindings: Record<string, string>;
+  stack: ForeachOriginFrame[];
+};
+
+type FragmentParseResult = {
+  hasParseError: boolean;
+};
+
+type ExpandedSubstitutedFragment<T extends FragmentParseResult> = {
+  parsed: T;
+  mapSpan: (span: Span) => Span | null;
 };
 
 export function expandForeachFigure(
@@ -254,28 +282,14 @@ function expandForeachStatement(
     };
     const nextStack = [...stack, frame];
 
-    const substituted = substituteForeachBindingsWithMap(statement.bodyRaw, combinedBindings);
-    const macroExpandedSourceRaw =
-      context.macroBindings.size === 0
-        ? substituted.output
-        : expandMacroBindings(substituted.output, context.macroBindings);
-    const macroExpandedBodyRaw = expandTexConditionals(macroExpandedSourceRaw);
-    const parsedMacroExpandedBody = parseStatementsFromBodyWithMapping(macroExpandedBodyRaw, { from: 0, to: macroExpandedBodyRaw.length });
-    let parsedBody = parsedMacroExpandedBody;
-    let mappedBodyRaw = macroExpandedBodyRaw;
-    if (parsedMacroExpandedBody.hasParseError) {
-      const substitutedBodyRaw = macroExpandedSourceRaw === substituted.output
-        ? macroExpandedBodyRaw
-        : expandTexConditionals(substituted.output);
-      const parsedSubstitutedBody = substitutedBodyRaw === macroExpandedBodyRaw
-        ? parsedMacroExpandedBody
-        : parseStatementsFromBodyWithMapping(substitutedBodyRaw, { from: 0, to: substitutedBodyRaw.length });
-      if (!parsedSubstitutedBody.hasParseError) {
-        parsedBody = parsedSubstitutedBody;
-        mappedBodyRaw = substitutedBodyRaw;
-      }
-    }
-    const canMapSubstitutedBody = mappedBodyRaw === substituted.output;
+    const fragment = expandSubstitutedFragment(
+      statement.bodyRaw,
+      combinedBindings,
+      context,
+      parseLoopStatementBody,
+      { retryWithoutMacroExpansionOnParseError: true }
+    );
+    const parsedBody = fragment.parsed;
     if (parsedBody.hasParseError) {
       context.diagnostics.push({
         severity: "warning",
@@ -301,8 +315,8 @@ function expandForeachStatement(
         if (!generatedSpan) {
           return null;
         }
-        return canMapSubstitutedBody && statement.bodySpan
-          ? offsetSpan(substituted.mapSpan(generatedSpan), statement.bodySpan.from)
+        return statement.bodySpan
+          ? offsetSpan(fragment.mapSpan(generatedSpan), statement.bodySpan.from)
           : null;
       }
     }, context);
@@ -436,6 +450,81 @@ function offsetSpan(span: { from: number; to: number } | null, offset: number): 
   return span ? { from: span.from + offset, to: span.to + offset } : null;
 }
 
+/**
+ * Each evaluation expands every loop again, parsing its body once per
+ * iteration, almost always from text an earlier evaluation parsed already.
+ * Keep recent parses and hand out copies: expansion renumbers statement ids
+ * in place and keys its maps by node identity, so no two uses may share nodes.
+ */
+const FRAGMENT_PARSE_CACHE_LIMIT = 4096;
+const statementBodyParses = new Map<string, ForeachStatementBodyParseResult>();
+const pathFragmentParses = new Map<string, PathFragmentParseResult>();
+
+function cachedFragmentParse<T>(cache: Map<string, T>, raw: string, span: Span, parse: () => T): T {
+  const key = `${span.from}:${span.to}:${raw}`;
+  let parsed = cache.get(key);
+  if (parsed) {
+    cache.delete(key);
+  } else {
+    parsed = parse();
+    if (cache.size >= FRAGMENT_PARSE_CACHE_LIMIT) {
+      const oldest = cache.keys().next();
+      if (!oldest.done) cache.delete(oldest.value);
+    }
+  }
+  cache.set(key, parsed);
+  return parsed;
+}
+
+function parseLoopStatementBody(raw: string, span: Span): ForeachStatementBodyParseResult {
+  const parsed = cachedFragmentParse(statementBodyParses, raw, span, () => parseStatementsFromBodyWithMapping(raw, span));
+  const figure = parsed.parseResult.figure;
+  return { ...parsed, parseResult: { ...parsed.parseResult, figure: { ...figure, body: structuredClone(figure.body) } } };
+}
+
+function parseLoopPathFragment(raw: string, span: Span): PathFragmentParseResult {
+  const parsed = cachedFragmentParse(pathFragmentParses, raw, span, () => parsePathItemsFromFragmentWithSyntheticMapping(raw, span));
+  return { ...parsed, value: structuredClone(parsed.value) };
+}
+
+function expandSubstitutedFragment<T extends FragmentParseResult>(
+  templateRaw: string,
+  bindings: Record<string, string>,
+  context: ExpandContext,
+  parse: (raw: string, span: Span) => T,
+  options: { retryWithoutMacroExpansionOnParseError?: boolean } = {}
+): ExpandedSubstitutedFragment<T> {
+  const substituted = substituteForeachBindingsWithMap(templateRaw, bindings);
+  const macroExpandedRaw = context.macroBindings.size === 0
+    ? substituted.output
+    : expandMacroBindings(substituted.output, context.macroBindings);
+  const expandedRaw = expandTexConditionals(macroExpandedRaw);
+  let selectedRaw = expandedRaw;
+  let parsed = parse(expandedRaw, { from: 0, to: expandedRaw.length });
+
+  if (
+    options.retryWithoutMacroExpansionOnParseError === true
+    && parsed.hasParseError
+    && macroExpandedRaw !== substituted.output
+  ) {
+    const fallbackRaw = expandTexConditionals(substituted.output);
+    if (fallbackRaw !== expandedRaw) {
+      const fallbackParsed = parse(fallbackRaw, { from: 0, to: fallbackRaw.length });
+      if (!fallbackParsed.hasParseError) {
+        selectedRaw = fallbackRaw;
+        parsed = fallbackParsed;
+      }
+    }
+  }
+
+  return {
+    parsed,
+    mapSpan: selectedRaw === substituted.output
+      ? substituted.mapSpan
+      : () => null
+  };
+}
+
 function expandPathItems(
   items: PathItem[],
   stack: ForeachOriginFrame[],
@@ -483,11 +572,13 @@ function expandPathItems(
           bindings: { ...iteration.bindings }
         };
         const nextStack = [...stack, frame];
-        const substituted = substituteForeachBindingsWithMap(item.bodyRaw, combinedBindings);
-        const macroExpandedBodyRaw = expandMacroBindings(substituted.output, context.macroBindings);
-        const bodyRaw = expandTexConditionals(macroExpandedBodyRaw);
-        const canMapBody = bodyRaw === substituted.output;
-        const parsedItems = parsePathItemsFromFragmentWithSyntheticMapping(bodyRaw, { from: 0, to: bodyRaw.length });
+        const fragment = expandSubstitutedFragment(
+          item.bodyRaw,
+          combinedBindings,
+          context,
+          parseLoopPathFragment
+        );
+        const parsedItems = fragment.parsed;
         if (parsedItems.hasParseError) {
           context.diagnostics.push({
             severity: "warning",
@@ -504,10 +595,14 @@ function expandPathItems(
           sourceKind: "foreach",
           mapSpan: (span) => {
             const generatedSpan = parsedItems.sourceMapper.mapSpan(span);
-            if (!generatedSpan || !canMapBody) {
+            if (!generatedSpan) {
               return null;
             }
-            return mapSubstitutedFragmentSpan(generatedSpan, substituted.mapSpan, createContiguousTemplateMapper(resolvePathForeachBodySpan(item)));
+            return mapSubstitutedFragmentSpan(
+              generatedSpan,
+              fragment.mapSpan,
+              createContiguousTemplateMapper(resolvePathForeachBodySpan(item))
+            );
           }
         }, context);
         for (const expandedItem of expandedItems) {
@@ -546,32 +641,28 @@ function expandPathItems(
   return expanded;
 }
 
-function expandChildOperationItem(
-  item: ChildOperationItem,
-  stack: ForeachOriginFrame[],
-  inheritedBindings: Record<string, string>,
-  context: ExpandContext
-): PathItem[] {
-  const clauses = item.foreachClauses ?? [];
-
-  if (clauses.length === 0) {
-    const expandedBody = expandPathItems(item.body, stack, inheritedBindings, context);
-    const expandedChild: ChildOperationItem = {
-      ...item,
-      body: expandedBody
-    };
-    if (stack.length > 0) {
-      markPathItemForeachStack(expandedChild, stack, context);
-    }
-    return [expandedChild];
-  }
-
-  let variants: Array<{ bindings: Record<string, string>; stack: ForeachOriginFrame[] }> = [
+function buildClauseVariants(args: {
+  clauses: readonly ClauseForeach[];
+  stack: ForeachOriginFrame[];
+  inheritedBindings: Record<string, string>;
+  context: ExpandContext;
+  diagnosticSubject: "child" | "node" | "pic";
+  breakforeachBodyRaw?: string;
+}): ClauseVariant[] {
+  const {
+    clauses,
+    stack,
+    inheritedBindings,
+    context,
+    diagnosticSubject,
+    breakforeachBodyRaw
+  } = args;
+  let variants: ClauseVariant[] = [
     { bindings: { ...inheritedBindings }, stack: [...stack] }
   ];
 
   for (const clause of clauses) {
-    const nextVariants: Array<{ bindings: Record<string, string>; stack: ForeachOriginFrame[] }> = [];
+    const nextVariants: ClauseVariant[] = [];
     for (const variant of variants) {
       const variablesRaw = clause.variablesRaw?.trim() ?? "";
       const listRaw = clause.listRaw?.trim() ?? "";
@@ -579,7 +670,7 @@ function expandChildOperationItem(
         context.diagnostics.push({
           severity: "warning",
           code: "invalid-foreach-header",
-          message: "Could not parse child foreach loop header.",
+          message: `Could not parse ${diagnosticSubject} foreach loop header.`,
           span: clause.span
         });
         continue;
@@ -593,7 +684,14 @@ function expandChildOperationItem(
         loopSpan: clause.span
       });
       context.diagnostics.push(...diagnostics);
-      maybeWarnUnsupportedBreakforeach(clause.id, item.bodyRaw, clause.span, context);
+      if (breakforeachBodyRaw !== undefined) {
+        maybeWarnUnsupportedBreakforeach(
+          clause.id,
+          breakforeachBodyRaw,
+          clause.span,
+          context
+        );
+      }
 
       for (const iteration of iterations) {
         if (!consumeExpansionBudget(context, clause.span)) {
@@ -619,13 +717,47 @@ function expandChildOperationItem(
     variants = nextVariants;
   }
 
+  return variants;
+}
+
+function expandChildOperationItem(
+  item: ChildOperationItem,
+  stack: ForeachOriginFrame[],
+  inheritedBindings: Record<string, string>,
+  context: ExpandContext
+): PathItem[] {
+  const clauses = item.foreachClauses ?? [];
+
+  if (clauses.length === 0) {
+    const expandedBody = expandPathItems(item.body, stack, inheritedBindings, context);
+    const expandedChild: ChildOperationItem = {
+      ...item,
+      body: expandedBody
+    };
+    if (stack.length > 0) {
+      markPathItemForeachStack(expandedChild, stack, context);
+    }
+    return [expandedChild];
+  }
+
+  const variants = buildClauseVariants({
+    clauses,
+    stack,
+    inheritedBindings,
+    context,
+    diagnosticSubject: "child",
+    breakforeachBodyRaw: item.bodyRaw
+  });
+
   const expanded: PathItem[] = [];
   for (const variant of variants) {
-    const substituted = substituteForeachBindingsWithMap(item.templateRaw, variant.bindings);
-    const macroExpandedChildRaw = expandMacroBindings(substituted.output, context.macroBindings);
-    const childRaw = expandTexConditionals(macroExpandedChildRaw);
-    const canMapChild = childRaw === substituted.output;
-    const parsed = parsePathItemsFromFragmentWithSyntheticMapping(childRaw, { from: 0, to: childRaw.length });
+    const fragment = expandSubstitutedFragment(
+      item.templateRaw,
+      variant.bindings,
+      context,
+      parseLoopPathFragment
+    );
+    const parsed = fragment.parsed;
     if (parsed.hasParseError) {
       context.diagnostics.push({
         severity: "warning",
@@ -652,10 +784,14 @@ function expandChildOperationItem(
         sourceKind: "foreach",
         mapSpan: (span) => {
           const generatedSpan = parsed.sourceMapper.mapSpan(span);
-          if (!generatedSpan || !canMapChild) {
+          if (!generatedSpan) {
             return null;
           }
-          return mapSubstitutedFragmentSpan(generatedSpan, substituted.mapSpan, createTemplateMapper(item));
+          return mapSubstitutedFragmentSpan(
+            generatedSpan,
+            fragment.mapSpan,
+            createTemplateMapper(item)
+          );
         }
       };
       recordPathItemSourceMaps([expandedChild], sourceMap, context);
@@ -702,65 +838,23 @@ function expandNodeForeachItem(
     return [item];
   }
 
-  let variants: Array<{ bindings: Record<string, string>; stack: ForeachOriginFrame[] }> = [
-    { bindings: { ...inheritedBindings }, stack: [...stack] }
-  ];
-
-  for (const clause of clauses) {
-    const nextVariants: Array<{ bindings: Record<string, string>; stack: ForeachOriginFrame[] }> = [];
-    for (const variant of variants) {
-      const variablesRaw = clause.variablesRaw?.trim() ?? "";
-      const listRaw = clause.listRaw?.trim() ?? "";
-      if (variablesRaw.length === 0 || listRaw.length === 0) {
-        context.diagnostics.push({
-          severity: "warning",
-          code: "invalid-foreach-header",
-          message: "Could not parse node foreach loop header.",
-          span: clause.span
-        });
-        continue;
-      }
-
-      const { iterations, diagnostics } = buildForeachIterations({
-        variablesRaw,
-        listRaw,
-        options: clause.options,
-        baseBindings: variant.bindings,
-        loopSpan: clause.span
-      });
-      context.diagnostics.push(...diagnostics);
-
-      for (const iteration of iterations) {
-        if (!consumeExpansionBudget(context, clause.span)) {
-          break;
-        }
-
-        const combinedBindings = {
-          ...variant.bindings,
-          ...iteration.bindings
-        };
-        const frame: ForeachOriginFrame = {
-          loopId: clause.id,
-          loopSpan: clause.span,
-          iterationIndex: iteration.index,
-          bindings: { ...iteration.bindings }
-        };
-        nextVariants.push({
-          bindings: combinedBindings,
-          stack: [...variant.stack, frame]
-        });
-      }
-    }
-    variants = nextVariants;
-  }
+  const variants = buildClauseVariants({
+    clauses,
+    stack,
+    inheritedBindings,
+    context,
+    diagnosticSubject: "node"
+  });
 
   const expanded: PathItem[] = [];
   for (const variant of variants) {
-    const substituted = substituteForeachBindingsWithMap(item.templateRaw, variant.bindings);
-    const macroExpandedNodeRaw = expandMacroBindings(substituted.output, context.macroBindings);
-    const nodeRaw = expandTexConditionals(macroExpandedNodeRaw);
-    const canMapNode = nodeRaw === substituted.output;
-    const parsed = parsePathItemsFromFragmentWithSyntheticMapping(nodeRaw, { from: 0, to: nodeRaw.length });
+    const fragment = expandSubstitutedFragment(
+      item.templateRaw,
+      variant.bindings,
+      context,
+      parseLoopPathFragment
+    );
+    const parsed = fragment.parsed;
     if (parsed.hasParseError) {
       context.diagnostics.push({
         severity: "warning",
@@ -777,10 +871,14 @@ function expandNodeForeachItem(
       sourceKind: "foreach",
       mapSpan: (span) => {
         const generatedSpan = parsed.sourceMapper.mapSpan(span);
-        if (!generatedSpan || !canMapNode) {
+        if (!generatedSpan) {
           return null;
         }
-        return mapSubstitutedFragmentSpan(generatedSpan, substituted.mapSpan, createTemplateMapper(item));
+        return mapSubstitutedFragmentSpan(
+          generatedSpan,
+          fragment.mapSpan,
+          createTemplateMapper(item)
+        );
       }
     }, context);
     for (const expandedItem of expandedItems) {
@@ -806,66 +904,24 @@ function expandPicForeachItem(
     return [item];
   }
 
-  let variants: Array<{ bindings: Record<string, string>; stack: ForeachOriginFrame[] }> = [
-    { bindings: { ...inheritedBindings }, stack: [...stack] }
-  ];
-
-  for (const clause of clauses) {
-    const nextVariants: Array<{ bindings: Record<string, string>; stack: ForeachOriginFrame[] }> = [];
-    for (const variant of variants) {
-      const variablesRaw = clause.variablesRaw?.trim() ?? "";
-      const listRaw = clause.listRaw?.trim() ?? "";
-      if (variablesRaw.length === 0 || listRaw.length === 0) {
-        context.diagnostics.push({
-          severity: "warning",
-          code: "invalid-foreach-header",
-          message: "Could not parse pic foreach loop header.",
-          span: clause.span
-        });
-        continue;
-      }
-
-      const { iterations, diagnostics } = buildForeachIterations({
-        variablesRaw,
-        listRaw,
-        options: clause.options,
-        baseBindings: variant.bindings,
-        loopSpan: clause.span
-      });
-      context.diagnostics.push(...diagnostics);
-
-      for (const iteration of iterations) {
-        if (!consumeExpansionBudget(context, clause.span)) {
-          break;
-        }
-
-        const combinedBindings = {
-          ...variant.bindings,
-          ...iteration.bindings
-        };
-        const frame: ForeachOriginFrame = {
-          loopId: clause.id,
-          loopSpan: clause.span,
-          iterationIndex: iteration.index,
-          bindings: { ...iteration.bindings }
-        };
-        nextVariants.push({
-          bindings: combinedBindings,
-          stack: [...variant.stack, frame]
-        });
-      }
-    }
-    variants = nextVariants;
-  }
+  const variants = buildClauseVariants({
+    clauses,
+    stack,
+    inheritedBindings,
+    context,
+    diagnosticSubject: "pic"
+  });
 
   const expanded: PathItem[] = [];
   for (const variant of variants) {
     const template = normalizePicForeachTemplateRaw(item.templateRaw);
-    const substituted = substituteForeachBindingsWithMap(template.raw, variant.bindings);
-    const macroExpandedPicRaw = expandMacroBindings(substituted.output, context.macroBindings);
-    const picRaw = expandTexConditionals(macroExpandedPicRaw);
-    const canMapPic = picRaw === substituted.output;
-    const parsed = parsePathItemsFromFragmentWithSyntheticMapping(picRaw, { from: 0, to: picRaw.length });
+    const fragment = expandSubstitutedFragment(
+      template.raw,
+      variant.bindings,
+      context,
+      parseLoopPathFragment
+    );
+    const parsed = fragment.parsed;
     if (parsed.hasParseError) {
       context.diagnostics.push({
         severity: "warning",
@@ -883,13 +939,13 @@ function expandPicForeachItem(
       sourceKind: "foreach",
       mapSpan: (span) => {
         const generatedSpan = parsed.sourceMapper.mapSpan(span);
-        if (!generatedSpan || !canMapPic) {
+        if (!generatedSpan) {
           return null;
         }
         return mapSubstitutedFragmentSpan(
           generatedSpan,
-          (substitutedSpan) => {
-            const normalizedTemplateSpan = substituted.mapSpan(substitutedSpan);
+          (fragmentSpan) => {
+            const normalizedTemplateSpan = fragment.mapSpan(fragmentSpan);
             return normalizedTemplateSpan ? template.mapSpan(normalizedTemplateSpan) : null;
           },
           createTemplateMapper(item)
@@ -992,84 +1048,6 @@ function cloneForeachStack(stack: ForeachOriginFrame[]): ForeachOriginFrame[] {
 
 const CONTROL_SEQUENCE_REGEX_MACRO = /^\\[A-Za-z@]+/;
 
-function normalizeMacroName(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!isControlSequenceToken(trimmed)) {
-    return null;
-  }
-  return trimmed;
-}
-
-function collectMacroDefinition(statement: MacroDefinitionStatement, bindings: Map<string, MacroBinding>): void {
-  const name = normalizeMacroName(statement.nameRaw);
-  if (!name) return;
-  bindings.set(name, {
-    kind: "text",
-    value: statement.valueRaw,
-    provenance: [{ macroName: name, definitionId: statement.id, definitionSpan: statement.span, commandRaw: statement.commandRaw }]
-  });
-}
-
-function collectMacroCommandDefinition(statement: MacroCommandDefinitionStatement, bindings: Map<string, MacroBinding>): void {
-  const name = normalizeMacroName(statement.nameRaw);
-  if (!name) return;
-  if (statement.commandRaw === "\\providecommand" && bindings.has(name)) return;
-  const parameterCount = Math.min(Math.max(0, statement.arity), 9);
-  const origin: MacroOriginFrameType = { macroName: name, definitionId: statement.id, definitionSpan: statement.span, commandRaw: statement.commandRaw };
-  if (parameterCount === 0) {
-    bindings.set(name, { kind: "text", value: statement.bodyRaw, provenance: [origin] });
-  } else {
-    bindings.set(name, {
-      kind: "callable",
-      parameterCount,
-      optionalFirstArgDefault: statement.optionalDefaultRaw,
-      body: statement.bodyRaw,
-      provenance: [origin]
-    });
-  }
-}
-
-function collectMacroAlias(statement: MacroAliasStatement, bindings: Map<string, MacroBinding>): void {
-  const name = normalizeMacroName(statement.nameRaw);
-  if (!name) return;
-  const targetRaw = statement.targetRaw.trim();
-  if (targetRaw.length === 0) return;
-  const origin: MacroOriginFrameType = { macroName: name, definitionId: statement.id, definitionSpan: statement.span, commandRaw: statement.commandRaw };
-  if (isControlSequenceToken(targetRaw)) {
-    const existing = bindings.get(targetRaw);
-    if (existing) {
-      const cloned: MacroBinding = existing.kind === "text"
-        ? { kind: "text", value: existing.value, provenance: [...existing.provenance, origin] }
-        : { kind: "callable", parameterCount: existing.parameterCount, optionalFirstArgDefault: existing.optionalFirstArgDefault, body: existing.body, provenance: [...existing.provenance, origin] };
-      bindings.set(name, cloned);
-    } else {
-      bindings.set(name, { kind: "text", value: targetRaw, provenance: [origin] });
-    }
-  } else {
-    bindings.set(name, { kind: "text", value: targetRaw, provenance: [origin] });
-  }
-}
-
-function collectMacroBindings(statements: Statement[]): Map<string, MacroBinding> {
-  const bindings = new Map<string, MacroBinding>();
-  for (const statement of statements) {
-    if (statement.kind === "MacroDefinition") {
-      collectMacroDefinition(statement, bindings);
-    } else if (statement.kind === "MacroCommandDefinition") {
-      collectMacroCommandDefinition(statement, bindings);
-    } else if (statement.kind === "MacroAlias") {
-      collectMacroAlias(statement, bindings);
-    } else if (statement.kind === "Scope") {
-      // Collect from scope bodies too (though scoping is approximate in pre-pass)
-      const scopeBindings = collectMacroBindings((statement).body);
-      for (const [key, value] of scopeBindings) {
-        bindings.set(key, value);
-      }
-    }
-  }
-  return bindings;
-}
-
 function tryExpandMacroStatement(
   statement: UnknownStatement,
   stack: ForeachOriginFrame[],
@@ -1151,9 +1129,22 @@ function tryExpandMacroStatement(
 function normalizeExpandedMacroStatement(expanded: string, raw: string): string {
   const rawTrimmed = raw.trimEnd();
   const expandedTrimmed = expanded.trimEnd();
-  if (!rawTrimmed.endsWith(";") || !expandedTrimmed.endsWith(";;")) {
+  if (!rawTrimmed.endsWith(";") || !expandedTrimmed.endsWith(";")) {
     return expanded;
   }
+
+  const finalSemicolon = expandedTrimmed.length - 1;
+  // A macro body's terminator and the call's terminator can be separated by
+  // TeX whitespace or comments; escaped control symbols are not terminators.
+  let precedingSemicolon = false;
+  for (let cursor = 0; cursor < finalSemicolon;) {
+    cursor = skipTexWhitespaceAndComments(expanded, cursor, finalSemicolon);
+    if (cursor === finalSemicolon) break;
+    const command = readTexControlSequence(expanded, cursor);
+    precedingSemicolon = command == null && expanded[cursor] === ";";
+    cursor = command?.to ?? cursor + 1;
+  }
+  if (!precedingSemicolon) return expanded;
 
   return `${expandedTrimmed.slice(0, -1)}${expanded.slice(expandedTrimmed.length)}`;
 }
@@ -1344,8 +1335,7 @@ function reindexPathItems(
   statementIndex: number,
   templateLocalIdByExpandedId: Map<string, string>
 ): void {
-  for (let itemIndex = 0; itemIndex < statement.items.length; itemIndex += 1) {
-    const item = statement.items[itemIndex];
+  for (const [itemIndex, item] of statement.items.entries()) {
     const previousId = item.id;
     if (item.kind === "Coordinate") {
       item.id = coordinateItemId(statementIndex, itemIndex);
@@ -1365,8 +1355,8 @@ function reindexPathItems(
       item.id = picOperationItemId(statementIndex, itemIndex);
       templateLocalIdByExpandedId.set(item.id, previousId);
       if (item.foreachClauses) {
-        for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
-          item.foreachClauses[clauseIndex].id = picForeachClauseId(statementIndex, itemIndex, clauseIndex);
+        for (const [clauseIndex, clause] of item.foreachClauses.entries()) {
+          clause.id = picForeachClauseId(statementIndex, itemIndex, clauseIndex);
         }
       }
       continue;
@@ -1412,8 +1402,8 @@ function reindexPathItems(
       item.id = childOperationItemId(statementIndex, itemIndex);
       templateLocalIdByExpandedId.set(item.id, previousId);
       if (item.foreachClauses) {
-        for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
-          item.foreachClauses[clauseIndex].id = childForeachClauseId(statementIndex, itemIndex, clauseIndex);
+        for (const [clauseIndex, clause] of item.foreachClauses.entries()) {
+          clause.id = childForeachClauseId(statementIndex, itemIndex, clauseIndex);
         }
       }
       reindexNestedPathItems(item.body, statementIndex, `${item.id}:body`, templateLocalIdByExpandedId);
@@ -1466,8 +1456,8 @@ function reindexTopLevelNodeItem(
   item.id = nodeItemId(statementIndex, itemIndex);
   templateLocalIdByExpandedId.set(item.id, previousId);
   if (item.foreachClauses) {
-    for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
-      item.foreachClauses[clauseIndex].id = nodeForeachClauseId(statementIndex, itemIndex, clauseIndex);
+    for (const [clauseIndex, clause] of item.foreachClauses.entries()) {
+      clause.id = nodeForeachClauseId(statementIndex, itemIndex, clauseIndex);
     }
   }
 }
@@ -1478,8 +1468,7 @@ function reindexNestedPathItems(
   parentPrefix: string,
   templateLocalIdByExpandedId: Map<string, string>
 ): void {
-  for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
-    const item = items[itemIndex];
+  for (const [itemIndex, item] of items.entries()) {
     const nestedPrefix = `${parentPrefix}:${itemIndex}`;
     const previousId = item.id;
 
@@ -1492,8 +1481,8 @@ function reindexNestedPathItems(
       item.id = `node:${statementIndex}:${nestedPrefix}`;
       templateLocalIdByExpandedId.set(item.id, previousId);
       if (item.foreachClauses) {
-        for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
-          item.foreachClauses[clauseIndex].id = `${item.id}:foreach:${clauseIndex}`;
+        for (const [clauseIndex, clause] of item.foreachClauses.entries()) {
+          clause.id = `${item.id}:foreach:${clauseIndex}`;
         }
       }
       continue;
@@ -1507,8 +1496,8 @@ function reindexNestedPathItems(
       item.id = `pic-operation:${statementIndex}:${nestedPrefix}`;
       templateLocalIdByExpandedId.set(item.id, previousId);
       if (item.foreachClauses) {
-        for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
-          item.foreachClauses[clauseIndex].id = `${item.id}:foreach:${clauseIndex}`;
+        for (const [clauseIndex, clause] of item.foreachClauses.entries()) {
+          clause.id = `${item.id}:foreach:${clauseIndex}`;
         }
       }
       continue;
@@ -1559,8 +1548,8 @@ function reindexNestedPathItems(
       item.id = `child-operation:${statementIndex}:${nestedPrefix}`;
       templateLocalIdByExpandedId.set(item.id, previousId);
       if (item.foreachClauses) {
-        for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
-          item.foreachClauses[clauseIndex].id = `${item.id}:foreach:${clauseIndex}`;
+        for (const [clauseIndex, clause] of item.foreachClauses.entries()) {
+          clause.id = `${item.id}:foreach:${clauseIndex}`;
         }
       }
       reindexNestedPathItems(item.body, statementIndex, `${item.id}:body`, templateLocalIdByExpandedId);

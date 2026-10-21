@@ -1,3 +1,4 @@
+import { currentFrame } from "../context.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
 import { pt } from "../../coords/scalars.js";
 import type { CoordinateItem, PathItem } from "../../ast/types.js";
@@ -64,9 +65,9 @@ export function shouldCaptureStandaloneNodeNameCoordinate(items: PathItem[], coo
 }
 
 export function applyNameScope(name: string, context: SemanticContext): string {
-  const frame = context.stack[context.stack.length - 1];
-  const prefix = frame?.namePrefix ?? "";
-  const suffix = frame?.nameSuffix ?? "";
+  const frame = currentFrame(context);
+  const prefix = frame.namePrefix;
+  const suffix = frame.nameSuffix;
   if (prefix.length === 0 && suffix.length === 0) {
     return name.trim();
   }

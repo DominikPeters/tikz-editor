@@ -1,0 +1,1255 @@
+{
+  "reviewedAt": "2026-10-02T22:04:22.869Z",
+  "purpose": "Candidate Beamer renderer work derived from manual real-world review; observed gaps and integration tasks, not a declaration that all primitives are unimplemented.",
+  "policy": [
+    "Built-in Beamer and defined interfaces of established packages qualify even when concentrated in one author collection.",
+    "Source frequency helps prioritize broad mechanisms; this corpus is not a package-popularity survey.",
+    "Expand supported author definitions generically; do not hardcode macro/environment names.",
+    "A mixed-case failure does not prove each nested primitive is unsupported. Isolate causes before implementation."
+  ],
+  "summary": {
+    "newSourceFrames": 34,
+    "repositories": 8,
+    "framesWithCompiledReference": 33,
+    "framesWithMissingReference": 1,
+    "nativeSnapshots": 39,
+    "referencePages": 62,
+    "selection": "Purposive feature-diverse manual sample, not a corpus pass-rate estimate. Source excerpts, native rasters and corresponding TeX rasters inspected; continuation and overprint strips inspected separately.",
+    "directImagePositiveControl": "r2-45",
+    "silentPaintLossControl": "r2-43"
+  },
+  "corpusSummary": {
+    "entryPoints": 211,
+    "frames": 3936,
+    "distinctSourceForms": 3681,
+    "completeDistinctSourceForms": 3666,
+    "selected": 48,
+    "renderedSnapshots": 53,
+    "flaggedSnapshots": 51
+  },
+  "countLimitations": [
+    "Frequency counts only complete scanner-discovered environment frames. Command/macro-generated and recovery spans can be missed.",
+    "Frequency is source usage, not rendering support. Package presence alone does not count as use.",
+    "Exact repeated frame source is deduplicated per repository; semantic duplicates and generated variants can remain.",
+    "Inputs are expanded conservatively; conditionals, package definitions and custom build wrappers are not executed.",
+    "Repository diversity here covers eight source collections, not population-wide package popularity."
+  ],
+  "gallery": "artifacts/beamer-corpus-renderer/manual-review-round2/index.html",
+  "firstGallery": "artifacts/beamer-corpus-renderer/manual-review/index.html",
+  "todos": [
+    {
+      "id": "B01",
+      "priority": "high",
+      "kind": "integration",
+      "title": "Preserve nested flow and block bodies",
+      "origin": [
+        "Beamer",
+        "LaTeX"
+      ],
+      "references": [
+        "https://texdoc.org/serve/beamer/0"
+      ],
+      "task": "Keep supported prose, lists, equations and assets inside columns/blocks/lists. Confine an unsupported child to its smallest source-backed boundary; do not drop siblings or silently keep only a block heading.",
+      "observedFamilyFrequency": {
+        "family": "blocks-theorems",
+        "repositories": 6,
+        "completeDistinctSourceForms": 478
+      },
+      "evidence": [
+        {
+          "case": "r2-16",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "16_fourier.tex",
+          "frame": 5,
+          "observation": "Native resolves and paints the picture, but splits the containing enumerate/columns sequence into placeholders and loses the matrix block/table. The block title group is omitted in this source; use the valid block examples elsewhere for a general block-body regression."
+        },
+        {
+          "case": "r2-17",
+          "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+          "path": "latex/lecture01/dl4nlp2023-lecture01.tex",
+          "frame": 14,
+          "observation": "A leading footnote with a URL is followed by two ordinary lists. Native replaces all of this with one unsupported box. TeX renders the lists and email footnote. Fallback should be confined to the unsupported leaf."
+        },
+        {
+          "case": "r2-29",
+          "repository": "montreso/asd-lectures",
+          "path": "02-analisi.tex",
+          "frame": 23,
+          "observation": "This valid empty-title exampleblock contains a formula, followed by built-in overprint with five unbraced onslide alternatives including handout selectors. TeX renders five states; native discovers one, loses the block formula and substitutes an overprint placeholder."
+        },
+        {
+          "case": "r2-34",
+          "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+          "path": "latex/lecture04/dl4nlp2023-lecture04.tex",
+          "frame": 10,
+          "observation": "Native discovers both pause states but replaces the initial prose/list with one unsupported box on each. At step two the block heading appears without its aligned one-hot vectors. TeX renders both prose and matrix block."
+        },
+        {
+          "case": "r2-41",
+          "repository": "paulgp/applied-methods-phd",
+          "path": "lectures/18_bartik_sim_iv.tex",
+          "frame": 64,
+          "observation": "An ordinary nested list contains equations, cases and a source-declared diag operator. Native replaces the whole body with a placeholder. Test declared math operators and nested flow separately before assigning a precise cause; do not add a hardcoded diag shortcut."
+        },
+        {
+          "case": "r2-43",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "2_arytmetyka_komputerowa.tex",
+          "frame": 32,
+          "observation": "The exampleblock title survives, but both its explanatory inline math and lstlisting with math escapes disappear. Native records zero literal fallbacks and zero unsupported layout items. TeX renders the complete body. This demonstrates a paint/content-coverage blind spot in automatic triage."
+        }
+      ],
+      "carriedForwardEvidence": [],
+      "reproductions": [
+        "nested-block-list-columns",
+        "block-inline-math",
+        "block-aligned-matrix",
+        "list-cases",
+        "footnote-lists"
+      ]
+    },
+    {
+      "id": "B02",
+      "priority": "high",
+      "kind": "standard/package",
+      "title": "Render tables in slide flow",
+      "origin": [
+        "LaTeX",
+        "array",
+        "booktabs"
+      ],
+      "references": [
+        "https://ctan.org/pkg/array",
+        "https://ctan.org/pkg/booktabs"
+      ],
+      "task": "Start with tabular alignment, row breaks, rules and booktabs, then paragraph columns, multicolumn and mixed math/text. Exercise direct, column-contained and scaled tables.",
+      "observedFamilyFrequency": {
+        "family": "tables",
+        "repositories": 7,
+        "completeDistinctSourceForms": 178
+      },
+      "evidence": [
+        {
+          "case": "r2-01",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/TransfomerAndPF/main.tex",
+          "frame": 27,
+          "observation": "TeX splits this source frame into three continuation pages: diagram, table, then reduction formula and links. Native flattens them into one clipped slide. Basic TikZ geometry survives; node fonts and positioning need calibration after flow is fixed."
+        },
+        {
+          "case": "r2-02",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "16_fourier.tex",
+          "frame": 12,
+          "observation": "TeX has three continuation pages, including nested/scaled tables and matrices; native shows five placeholders on one slide. Some block environments omit the required title group: do not make that source irregularity a supported syntax requirement. The ordinary tables and allowframebreaks still provide clear general evidence."
+        },
+        {
+          "case": "r2-15",
+          "repository": "paulgp/applied-methods-phd",
+          "path": "lectures/09_discrete_choice_1.tex",
+          "frame": 9,
+          "observation": "The center column uses basic tabular and booktabs; native prints its syntax instead of laying out rows. The wideitemize wrapper on the left is an author macro/environment and should be addressed through generic definition expansion."
+        },
+        {
+          "case": "r2-21",
+          "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+          "path": "latex/lecture01/dl4nlp2023-lecture01.tex",
+          "frame": 47,
+          "observation": "A standard confusion matrix uses tabular, rules and rotatebox for a header. Native replaces the whole table with a placeholder; TeX renders rows and the rotated label. No author-specific construct is needed to explain this gap."
+        },
+        {
+          "case": "r2-32",
+          "repository": "leeper/lectures",
+          "path": "2015-07-01-useR/slides.tex",
+          "frame": 7,
+          "observation": "The heading and texttt call survive. A simple two-column tabular becomes a placeholder and def arraystretch is printed literally. TeX renders the rows with larger spacing and typography."
+        },
+        {
+          "case": "r2-40",
+          "repository": "Naereen/slides",
+          "path": "2019_11__PhD_Defense__Multi-players_Bandit_Algorithms_for_Internet_of_Things_Networks/slides.tex",
+          "frame": 2,
+          "observation": "The dense table uses array m columns, parbox, small text and shrink. Native replaces it and the references with placeholders. The mytitle and emoji aliases are author constructs; supporting table/paragraph/scale mechanisms has general value. Shrink itself needs a minimal fixture once body layout works."
+        }
+      ],
+      "carriedForwardEvidence": [],
+      "reproductions": [
+        "basic-tabular",
+        "booktabs-column"
+      ]
+    },
+    {
+      "id": "B03",
+      "priority": "high",
+      "kind": "standard/package",
+      "title": "Compose figures and captions with supported content",
+      "origin": [
+        "Beamer",
+        "LaTeX",
+        "caption"
+      ],
+      "references": [
+        "https://texdoc.org/serve/beamer/0",
+        "https://ctan.org/pkg/caption"
+      ],
+      "task": "Lay out figure contents and caption/caption* inside columns, lists and overlays. A wrapper must not prevent an otherwise supported local image or TikZ picture from painting.",
+      "observedFamilyFrequency": {
+        "family": "figures-captions",
+        "repositories": 6,
+        "completeDistinctSourceForms": 455
+      },
+      "evidence": [
+        {
+          "case": "r2-03",
+          "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+          "path": "latex/lecture04/dl4nlp2023-lecture04.tex",
+          "frame": 27,
+          "observation": "A cases display in the left column and a pgfplots axis with figure caption in the right column both become placeholders. The plot itself cannot yet be evaluated separately from the unsupported figure wrapper. Empty flags.tex restored the presentation mode requested by the source preamble."
+        },
+        {
+          "case": "r2-12",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/Introduction/main.tex",
+          "frame": 10,
+          "observation": "The photograph inside figure is not emitted, although its local JPG exists. The adjacent ordinary tcolorbox also becomes a placeholder. TeX renders both and a starred caption containing a link."
+        },
+        {
+          "case": "r2-18",
+          "repository": "Naereen/slides",
+          "path": "2018_10__Seminaire_CMAP__Multi-Player_Bandits__Theory_Applications_and_Simulations/slides.tex",
+          "frame": 15,
+          "observation": "On step one, the figure inside only/itemize is replaced by a placeholder and its screenshot disappears. On step three, the absence of that earlier image is correct, while most prose survives. Pandoc list definitions, author macro names, footnotesize and vfill still leak or fall back."
+        },
+        {
+          "case": "r2-31",
+          "repository": "Naereen/slides",
+          "path": "2017_12__Presentation_Inria_Lille_SequeL_Seminar/slides_169.tex",
+          "frame": 23,
+          "observation": "A figure/scalebox/minipage wraps a normal TikZ state graph. Native replaces the complete figure with a placeholder. The visible failure does not establish that its bent arrows or loops are unsupported in the TikZ renderer. Expand custom math labels generically."
+        }
+      ],
+      "carriedForwardEvidence": [],
+      "reproductions": [
+        "figure-image-caption"
+      ]
+    },
+    {
+      "id": "B04",
+      "priority": "high",
+      "kind": "standard/package",
+      "title": "Support reusable graphics and paragraph wrappers",
+      "origin": [
+        "LaTeX",
+        "graphics",
+        "graphicx"
+      ],
+      "references": [
+        "https://ctan.org/pkg/graphics"
+      ],
+      "task": "Apply resizebox/scalebox/rotatebox transforms and minipage/parbox/makebox dimensions to child layout rather than print their syntax. Preserve editable source mappings.",
+      "observedFamilyFrequency": {
+        "family": "graphics-wrappers",
+        "repositories": 7,
+        "completeDistinctSourceForms": 104
+      },
+      "evidence": [
+        {
+          "case": "r2-02",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "16_fourier.tex",
+          "frame": 12,
+          "observation": "TeX has three continuation pages, including nested/scaled tables and matrices; native shows five placeholders on one slide. Some block environments omit the required title group: do not make that source irregularity a supported syntax requirement. The ordinary tables and allowframebreaks still provide clear general evidence."
+        },
+        {
+          "case": "r2-21",
+          "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+          "path": "latex/lecture01/dl4nlp2023-lecture01.tex",
+          "frame": 47,
+          "observation": "A standard confusion matrix uses tabular, rules and rotatebox for a header. Native replaces the whole table with a placeholder; TeX renders rows and the rotated label. No author-specific construct is needed to explain this gap."
+        },
+        {
+          "case": "r2-31",
+          "repository": "Naereen/slides",
+          "path": "2017_12__Presentation_Inria_Lille_SequeL_Seminar/slides_169.tex",
+          "frame": 23,
+          "observation": "A figure/scalebox/minipage wraps a normal TikZ state graph. Native replaces the complete figure with a placeholder. The visible failure does not establish that its bent arrows or loops are unsupported in the TikZ renderer. Expand custom math labels generically."
+        },
+        {
+          "case": "r2-40",
+          "repository": "Naereen/slides",
+          "path": "2019_11__PhD_Defense__Multi-players_Bandit_Algorithms_for_Internet_of_Things_Networks/slides.tex",
+          "frame": 2,
+          "observation": "The dense table uses array m columns, parbox, small text and shrink. Native replaces it and the references with placeholders. The mytitle and emoji aliases are author constructs; supporting table/paragraph/scale mechanisms has general value. Shrink itself needs a minimal fixture once body layout works."
+        }
+      ],
+      "carriedForwardEvidence": [
+        {
+          "case": "case-14",
+          "repository": "paulgp/applied-methods-phd",
+          "path": "lectures/00_intro.tex",
+          "frame": 7,
+          "observation": "Silent literal fallback; image lost"
+        }
+      ],
+      "reproductions": [
+        "rotatebox",
+        "scalebox-minipage"
+      ]
+    },
+    {
+      "id": "B05",
+      "priority": "high",
+      "kind": "standard/package",
+      "title": "Keep display math intact in nested flow",
+      "origin": [
+        "LaTeX",
+        "amsmath"
+      ],
+      "references": [
+        "https://ctan.org/pkg/amsmath"
+      ],
+      "task": "Test equation+split, align/aligned, cases and matrices both directly and in block/list/column bodies. Ensure a number or heading cannot survive while its equation disappears; calibrate spacing and delimiters separately.",
+      "observedFamilyFrequency": {
+        "family": "math-alignment",
+        "repositories": 6,
+        "completeDistinctSourceForms": 231
+      },
+      "evidence": [
+        {
+          "case": "r2-03",
+          "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+          "path": "latex/lecture04/dl4nlp2023-lecture04.tex",
+          "frame": 27,
+          "observation": "A cases display in the left column and a pgfplots axis with figure caption in the right column both become placeholders. The plot itself cannot yet be evaluated separately from the unsupported figure wrapper. Empty flags.tex restored the presentation mode requested by the source preamble."
+        },
+        {
+          "case": "r2-13",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/TransfomerAndPF/main.tex",
+          "frame": 25,
+          "observation": "TeX splits matrices, stamping equations, an alertblock and later bullets across four pages. Native emits one clipped slide, prints newpage, and turns absolute-value bars into double bars. Initial matrix content is substantially present; later pages are not represented."
+        },
+        {
+          "case": "r2-28",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "23_rozwiazywanie_rownan_rozniczkowych_czastkowych.tex",
+          "frame": 18,
+          "observation": "Native shows only the number of the first equation/split display, although much of the second display survives. The inline ref is literal. Equation numbering differences alone are inconclusive because the isolated probe does not seed every preceding counter/label. Missing equation paint is unambiguous."
+        },
+        {
+          "case": "r2-29",
+          "repository": "montreso/asd-lectures",
+          "path": "02-analisi.tex",
+          "frame": 23,
+          "observation": "This valid empty-title exampleblock contains a formula, followed by built-in overprint with five unbraced onslide alternatives including handout selectors. TeX renders five states; native discovers one, loses the block formula and substitutes an overprint placeholder."
+        },
+        {
+          "case": "r2-34",
+          "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+          "path": "latex/lecture04/dl4nlp2023-lecture04.tex",
+          "frame": 10,
+          "observation": "Native discovers both pause states but replaces the initial prose/list with one unsupported box on each. At step two the block heading appears without its aligned one-hot vectors. TeX renders both prose and matrix block."
+        },
+        {
+          "case": "r2-41",
+          "repository": "paulgp/applied-methods-phd",
+          "path": "lectures/18_bartik_sim_iv.tex",
+          "frame": 64,
+          "observation": "An ordinary nested list contains equations, cases and a source-declared diag operator. Native replaces the whole body with a placeholder. Test declared math operators and nested flow separately before assigning a precise cause; do not add a hardcoded diag shortcut."
+        },
+        {
+          "case": "r2-43",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "2_arytmetyka_komputerowa.tex",
+          "frame": 32,
+          "observation": "The exampleblock title survives, but both its explanatory inline math and lstlisting with math escapes disappear. Native records zero literal fallbacks and zero unsupported layout items. TeX renders the complete body. This demonstrates a paint/content-coverage blind spot in automatic triage."
+        }
+      ],
+      "carriedForwardEvidence": [],
+      "reproductions": [
+        "block-inline-math",
+        "block-aligned-matrix",
+        "list-cases",
+        "equation-split-ref",
+        "column-cases"
+      ]
+    },
+    {
+      "id": "B06",
+      "priority": "high",
+      "kind": "built-in Beamer",
+      "title": "Handle declaration-form overlays and overprint",
+      "origin": [
+        "Beamer"
+      ],
+      "references": [
+        "https://texdoc.org/serve/beamer/0"
+      ],
+      "task": "Discover and render all states for unbraced onslide and overprint, including mode/handout selectors and the reserved maximum-height region. Keep explicit item overlay endpoint controls.",
+      "observedFamilyFrequency": {
+        "family": "overlay-containers",
+        "repositories": 1,
+        "completeDistinctSourceForms": 107
+      },
+      "evidence": [
+        {
+          "case": "r2-00",
+          "repository": "montreso/asd-lectures",
+          "path": "17-prob.tex",
+          "frame": 4,
+          "observation": "TeX has five distinct overprint states with algorithms and a table. Native discovers one, shows a placeholder, and loses the other column. The myboxtitle and Procedure names are author definitions; overprint and unbraced onslide are built-in Beamer."
+        },
+        {
+          "case": "r2-29",
+          "repository": "montreso/asd-lectures",
+          "path": "02-analisi.tex",
+          "frame": 23,
+          "observation": "This valid empty-title exampleblock contains a formula, followed by built-in overprint with five unbraced onslide alternatives including handout selectors. TeX renders five states; native discovers one, loses the block formula and substitutes an overprint placeholder."
+        }
+      ],
+      "carriedForwardEvidence": [
+        {
+          "case": "leeper-overlays",
+          "repository": "leeper/lectures",
+          "path": "2018-03-01-Presentations/slides.tex",
+          "frame": 1,
+          "observation": "Wrong overlay visibility and geometry"
+        }
+      ],
+      "reproductions": [
+        "declaration-onslide",
+        "overprint-handout-selectors"
+      ]
+    },
+    {
+      "id": "B07",
+      "priority": "high",
+      "kind": "built-in Beamer",
+      "title": "Represent continuation pages separately from overlay states",
+      "origin": [
+        "Beamer"
+      ],
+      "references": [
+        "https://texdoc.org/serve/beamer/0"
+      ],
+      "task": "Implement allowframebreaks and forced newpage/framebreak continuation layout, including continuation titles and numbering. Give the render API and corpus oracle an explicit frame/state/continuation-page mapping.",
+      "observedFamilyFrequency": {
+        "family": "frame-sizing-breaks",
+        "repositories": 6,
+        "completeDistinctSourceForms": 199
+      },
+      "evidence": [
+        {
+          "case": "r2-01",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/TransfomerAndPF/main.tex",
+          "frame": 27,
+          "observation": "TeX splits this source frame into three continuation pages: diagram, table, then reduction formula and links. Native flattens them into one clipped slide. Basic TikZ geometry survives; node fonts and positioning need calibration after flow is fixed."
+        },
+        {
+          "case": "r2-02",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "16_fourier.tex",
+          "frame": 12,
+          "observation": "TeX has three continuation pages, including nested/scaled tables and matrices; native shows five placeholders on one slide. Some block environments omit the required title group: do not make that source irregularity a supported syntax requirement. The ordinary tables and allowframebreaks still provide clear general evidence."
+        },
+        {
+          "case": "r2-04",
+          "repository": "Naereen/slides",
+          "path": "2017_09__Presentation_article_CrownCom_Conference/slides.tex",
+          "frame": 7,
+          "observation": "TeX has two continuation pages; native clips the lower material into one slide. Pandoc tightlist expands to visible setlength/label definitions; begin/end small leak into text. Several equations remain readable, but conditional bars and custom probability macros differ."
+        },
+        {
+          "case": "r2-13",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/TransfomerAndPF/main.tex",
+          "frame": 25,
+          "observation": "TeX splits matrices, stamping equations, an alertblock and later bullets across four pages. Native emits one clipped slide, prints newpage, and turns absolute-value bars into double bars. Initial matrix content is substantially present; later pages are not represented."
+        },
+        {
+          "case": "r2-23",
+          "repository": "Naereen/slides",
+          "path": "2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex",
+          "frame": 19,
+          "observation": "TeX renders two continuation pages with aligned math and three blocks. Native prints small/list setup commands and custom macro spellings, loses the main formula and clips later blocks. Body font and title contrast also differ."
+        },
+        {
+          "case": "r2-33",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/HVDC/main.tex",
+          "frame": 3,
+          "observation": "Native flattens four continuation pages, prints SI commands at the lower edge and clips the remaining history. TeX pages two through four contain formatted units and a final image/columns layout. Only the first native page exists, so this is not a one-to-one page pair."
+        }
+      ],
+      "carriedForwardEvidence": [],
+      "reproductions": [
+        "forced-continuations",
+        "automatic-continuations"
+      ]
+    },
+    {
+      "id": "B08",
+      "priority": "high",
+      "kind": "unsupported recognition",
+      "title": "Recognize opaque code environments without losing supported siblings",
+      "origin": [
+        "LaTeX",
+        "Beamer",
+        "alltt",
+        "listings"
+      ],
+      "references": [
+        "https://texdoc.org/serve/beamer/0",
+        "https://ctan.org/pkg/alltt",
+        "https://ctan.org/pkg/listings"
+      ],
+      "task": "Recognize alltt/lstlisting as unsupported environments with a visible bounded source placeholder and an explicit diagnostic spanning the complete environment. Preserve supported prose and math around them in normal flow, columns and blocks. Ignore code contents for frame and overlay discovery. Full code typesetting is a separate feature decision.",
+      "observedFamilyFrequency": {
+        "family": "code-listings",
+        "repositories": 6,
+        "completeDistinctSourceForms": 100
+      },
+      "evidence": [
+        {
+          "case": "r2-06",
+          "repository": "MarcToussaint/AI-lectures",
+          "path": "ArtificialIntelligence/01-computationGraphs.tex",
+          "frame": 1,
+          "observation": "The slidecore/items wrappers and minipage/verbatim content become one placeholder. The TeX reference cannot compile because private package LIS-26-text-long is absent. This case supports an input/build-context TODO, not a visual fidelity judgment or a dedicated slidecore implementation."
+        },
+        {
+          "case": "r2-22",
+          "repository": "leeper/lectures",
+          "path": "2019-05-09-LSE-VAM/slides.tex",
+          "frame": 3,
+          "observation": "Five plain shell command lines in alltt become an unsupported box. TeX preserves their monospaced text and line endings. This is a small, well-isolated code fixture."
+        },
+        {
+          "case": "r2-39",
+          "repository": "montreso/asd-lectures",
+          "path": "03-strutture.tex",
+          "frame": 22,
+          "observation": "A fragile frame contains a short Java lstlisting with keyword/comment styles. Native replaces it with a placeholder; TeX preserves syntax, indentation and lines. Shrink is present, but this case does not isolate the correctness of shrinking."
+        },
+        {
+          "case": "r2-43",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "2_arytmetyka_komputerowa.tex",
+          "frame": 32,
+          "observation": "The exampleblock title survives, but both its explanatory inline math and lstlisting with math escapes disappear. Native records zero literal fallbacks and zero unsupported layout items. TeX renders the complete body. This demonstrates a paint/content-coverage blind spot in automatic triage."
+        }
+      ],
+      "carriedForwardEvidence": [],
+      "reproductions": [
+        "alltt-top-level",
+        "lstlisting-top-level",
+        "alltt-column",
+        "lstlisting-column",
+        "alltt-block",
+        "lstlisting-block"
+      ]
+    },
+    {
+      "id": "B09",
+      "priority": "medium",
+      "kind": "standard LaTeX / Beamer",
+      "title": "Honor scoped text sizing and common spacing",
+      "origin": [
+        "LaTeX",
+        "Beamer"
+      ],
+      "references": [
+        "https://texdoc.org/serve/beamer/0"
+      ],
+      "task": "Support size declarations and size environments, itemsep/parsep settings, paragraph glue and hfill/vfill without literal leakage. Check inherited sizes in embedded TikZ using PGF font/node-font semantics.",
+      "observedFamilyFrequency": {
+        "family": "text-formatting",
+        "repositories": 8,
+        "completeDistinctSourceForms": 2452
+      },
+      "evidence": [
+        {
+          "case": "r2-04",
+          "repository": "Naereen/slides",
+          "path": "2017_09__Presentation_article_CrownCom_Conference/slides.tex",
+          "frame": 7,
+          "observation": "TeX has two continuation pages; native clips the lower material into one slide. Pandoc tightlist expands to visible setlength/label definitions; begin/end small leak into text. Several equations remain readable, but conditional bars and custom probability macros differ."
+        },
+        {
+          "case": "r2-08",
+          "repository": "Naereen/slides",
+          "path": "2018_01__ENSAI_Seminar_BrownBag__Article_ALT2018/slides_169.tex",
+          "frame": 19,
+          "observation": "TeX renders a three-state algorithm2e listing. Native finds three states but prints wrapper commands, comment text and algorithm source, then clips it. Preserve algorithm2e semantics and generic wrapper expansion; do not special-case the author algorithm names or removelatexerror hack."
+        },
+        {
+          "case": "r2-09",
+          "repository": "leeper/lectures",
+          "path": "2019-05-09-LSE-VAM/slides.tex",
+          "frame": 17,
+          "observation": "Nested item overlay specifications produce the expected first and fourth endpoint contents in both renderers. Native prints itemsep, uses smaller text and different block/list spacing. This is a useful positive control for explicit item overlays."
+        },
+        {
+          "case": "r2-23",
+          "repository": "Naereen/slides",
+          "path": "2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex",
+          "frame": 19,
+          "observation": "TeX renders two continuation pages with aligned math and three blocks. Native prints small/list setup commands and custom macro spellings, loses the main formula and clips later blocks. Body font and title contrast also differ."
+        },
+        {
+          "case": "r2-24",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "22_metody_calkowania.tex",
+          "frame": 34,
+          "observation": "The fbox label, ordinary display equations/array and titled prose block all survive. Native prints a qquad between paragraphs and changes vertical spacing and chrome. This is a useful positive control for basic boxes, arrays and plain block bodies."
+        },
+        {
+          "case": "r2-32",
+          "repository": "leeper/lectures",
+          "path": "2015-07-01-useR/slides.tex",
+          "frame": 7,
+          "observation": "The heading and texttt call survive. A simple two-column tabular becomes a placeholder and def arraystretch is printed literally. TeX renders the rows with larger spacing and typography."
+        },
+        {
+          "case": "r2-36",
+          "repository": "leeper/lectures",
+          "path": "2015-07-01-useR/slides.tex",
+          "frame": 3,
+          "observation": "Native draws the two overlapping translucent circles and curved arrow. A leading large declaration becomes a separate unsupported box, shifting the diagram, and node text is smaller. Prefer flow/font calibration over inventing a special diagram feature."
+        }
+      ],
+      "carriedForwardEvidence": [],
+      "reproductions": [
+        "size-and-list-spacing"
+      ]
+    },
+    {
+      "id": "B10",
+      "priority": "medium",
+      "kind": "standard LaTeX / Beamer",
+      "title": "Lay out footnotes without swallowing surrounding flow",
+      "origin": [
+        "LaTeX",
+        "Beamer"
+      ],
+      "references": [
+        "https://texdoc.org/serve/beamer/0"
+      ],
+      "task": "Render footnote text, marks, links and frame/block placement while keeping unrelated lists visible. Exercise direct footnotes before custom box wrappers.",
+      "observedFamilyFrequency": {
+        "family": "footnotes",
+        "repositories": 5,
+        "completeDistinctSourceForms": 10
+      },
+      "evidence": [
+        {
+          "case": "r2-17",
+          "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+          "path": "latex/lecture01/dl4nlp2023-lecture01.tex",
+          "frame": 14,
+          "observation": "A leading footnote with a URL is followed by two ordinary lists. Native replaces all of this with one unsupported box. TeX renders the lists and email footnote. Fallback should be confined to the unsupported leaf."
+        },
+        {
+          "case": "r2-23",
+          "repository": "Naereen/slides",
+          "path": "2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex",
+          "frame": 19,
+          "observation": "TeX renders two continuation pages with aligned math and three blocks. Native prints small/list setup commands and custom macro spellings, loses the main formula and clips later blocks. Body font and title contrast also differ."
+        },
+        {
+          "case": "r2-44",
+          "repository": "montreso/asd-lectures",
+          "path": "16-backtrack.tex",
+          "frame": 18,
+          "observation": "The source-defined myboxtitle and BI/BIL wrappers hide a nested list with two footnotes and links. TeX renders the mdframed-style box. Expand supported source definitions rather than add these particular macro names; use case 17 to isolate plain footnotes."
+        }
+      ],
+      "carriedForwardEvidence": [],
+      "reproductions": [
+        "footnote-lists"
+      ]
+    },
+    {
+      "id": "B11",
+      "priority": "high",
+      "kind": "generic TeX mechanism",
+      "title": "Expand supported source-defined macros and environments",
+      "origin": [
+        "LaTeX definitions"
+      ],
+      "references": [
+        "https://texdoc.org/serve/beamer/0"
+      ],
+      "task": "Use declaration-backed expansion for newcommand/def/newenvironment and DeclareMathOperator, including simple optional arguments and scope. Keep comments out of paint. Implement the expansion mechanism, not an allowlist of author names.",
+      "observedFamilyFrequency": null,
+      "evidence": [
+        {
+          "case": "r2-00",
+          "repository": "montreso/asd-lectures",
+          "path": "17-prob.tex",
+          "frame": 4,
+          "observation": "TeX has five distinct overprint states with algorithms and a table. Native discovers one, shows a placeholder, and loses the other column. The myboxtitle and Procedure names are author definitions; overprint and unbraced onslide are built-in Beamer."
+        },
+        {
+          "case": "r2-04",
+          "repository": "Naereen/slides",
+          "path": "2017_09__Presentation_article_CrownCom_Conference/slides.tex",
+          "frame": 7,
+          "observation": "TeX has two continuation pages; native clips the lower material into one slide. Pandoc tightlist expands to visible setlength/label definitions; begin/end small leak into text. Several equations remain readable, but conditional bars and custom probability macros differ."
+        },
+        {
+          "case": "r2-08",
+          "repository": "Naereen/slides",
+          "path": "2018_01__ENSAI_Seminar_BrownBag__Article_ALT2018/slides_169.tex",
+          "frame": 19,
+          "observation": "TeX renders a three-state algorithm2e listing. Native finds three states but prints wrapper commands, comment text and algorithm source, then clips it. Preserve algorithm2e semantics and generic wrapper expansion; do not special-case the author algorithm names or removelatexerror hack."
+        },
+        {
+          "case": "r2-15",
+          "repository": "paulgp/applied-methods-phd",
+          "path": "lectures/09_discrete_choice_1.tex",
+          "frame": 9,
+          "observation": "The center column uses basic tabular and booktabs; native prints its syntax instead of laying out rows. The wideitemize wrapper on the left is an author macro/environment and should be addressed through generic definition expansion."
+        },
+        {
+          "case": "r2-18",
+          "repository": "Naereen/slides",
+          "path": "2018_10__Seminaire_CMAP__Multi-Player_Bandits__Theory_Applications_and_Simulations/slides.tex",
+          "frame": 15,
+          "observation": "On step one, the figure inside only/itemize is replaced by a placeholder and its screenshot disappears. On step three, the absence of that earlier image is correct, while most prose survives. Pandoc list definitions, author macro names, footnotesize and vfill still leak or fall back."
+        },
+        {
+          "case": "r2-31",
+          "repository": "Naereen/slides",
+          "path": "2017_12__Presentation_Inria_Lille_SequeL_Seminar/slides_169.tex",
+          "frame": 23,
+          "observation": "A figure/scalebox/minipage wraps a normal TikZ state graph. Native replaces the complete figure with a placeholder. The visible failure does not establish that its bent arrows or loops are unsupported in the TikZ renderer. Expand custom math labels generically."
+        },
+        {
+          "case": "r2-32",
+          "repository": "leeper/lectures",
+          "path": "2015-07-01-useR/slides.tex",
+          "frame": 7,
+          "observation": "The heading and texttt call survive. A simple two-column tabular becomes a placeholder and def arraystretch is printed literally. TeX renders the rows with larger spacing and typography."
+        },
+        {
+          "case": "r2-35",
+          "repository": "paulgp/applied-methods-phd",
+          "path": "lectures/13a_dind_foundations.tex",
+          "frame": 28,
+          "observation": "Both native endpoints replace wideitemize with a placeholder; TeX renders prose plus different only-selected screenshots. This is evidence for expanding the source-defined list wrapper, not proof that only or image overlay selection itself is broken."
+        },
+        {
+          "case": "r2-40",
+          "repository": "Naereen/slides",
+          "path": "2019_11__PhD_Defense__Multi-players_Bandit_Algorithms_for_Internet_of_Things_Networks/slides.tex",
+          "frame": 2,
+          "observation": "The dense table uses array m columns, parbox, small text and shrink. Native replaces it and the references with placeholders. The mytitle and emoji aliases are author constructs; supporting table/paragraph/scale mechanisms has general value. Shrink itself needs a minimal fixture once body layout works."
+        },
+        {
+          "case": "r2-41",
+          "repository": "paulgp/applied-methods-phd",
+          "path": "lectures/18_bartik_sim_iv.tex",
+          "frame": 64,
+          "observation": "An ordinary nested list contains equations, cases and a source-declared diag operator. Native replaces the whole body with a placeholder. Test declared math operators and nested flow separately before assigning a precise cause; do not add a hardcoded diag shortcut."
+        },
+        {
+          "case": "r2-44",
+          "repository": "montreso/asd-lectures",
+          "path": "16-backtrack.tex",
+          "frame": 18,
+          "observation": "The source-defined myboxtitle and BI/BIL wrappers hide a nested list with two footnotes and links. TeX renders the mdframed-style box. Expand supported source definitions rather than add these particular macro names; use case 17 to isolate plain footnotes."
+        }
+      ],
+      "carriedForwardEvidence": [
+        {
+          "case": "marc-macros",
+          "repository": "MarcToussaint/AI-lectures",
+          "path": "ArtificialIntelligence/00-introduction.tex",
+          "frame": null,
+          "observation": "Macro-generated frames are not discovered"
+        },
+        {
+          "case": "case-13",
+          "repository": "paulgp/applied-methods-phd",
+          "path": "lectures/00_intro.tex",
+          "frame": 4,
+          "observation": "Major content loss"
+        }
+      ]
+    },
+    {
+      "id": "B12",
+      "priority": "medium",
+      "kind": "standard/package",
+      "title": "Resolve document references and bibliography state",
+      "origin": [
+        "LaTeX",
+        "Beamer",
+        "hyperref",
+        "BibTeX"
+      ],
+      "references": [
+        "https://texdoc.org/serve/beamer/0",
+        "https://ctan.org/pkg/hyperref"
+      ],
+      "task": "Use document-wide labels/counters and bibliography data for ref/eqref and reference frames; render Beamer buttons and links as supported visual content. Distinguish state-resolution gaps from math paint failures.",
+      "observedFamilyFrequency": {
+        "family": "links-references",
+        "repositories": 8,
+        "completeDistinctSourceForms": 205
+      },
+      "evidence": [
+        {
+          "case": "r2-01",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/TransfomerAndPF/main.tex",
+          "frame": 27,
+          "observation": "TeX splits this source frame into three continuation pages: diagram, table, then reduction formula and links. Native flattens them into one clipped slide. Basic TikZ geometry survives; node fonts and positioning need calibration after flow is fixed."
+        },
+        {
+          "case": "r2-28",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "23_rozwiazywanie_rownan_rozniczkowych_czastkowych.tex",
+          "frame": 18,
+          "observation": "Native shows only the number of the first equation/split display, although much of the second display survives. The inline ref is literal. Equation numbering differences alone are inconclusive because the isolated probe does not seed every preceding counter/label. Missing equation paint is unambiguous."
+        },
+        {
+          "case": "r2-38",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/IntroPowerFlow/main.tex",
+          "frame": 31,
+          "observation": "Native prints bibliographystyle and bibliography. The initial isolated TeX reference was empty because it had no prior citations or BibTeX pass. A repaired reference seeds the citation key found in the preceding expanded source and runs BibTeX plus two TeX passes; inspect that populated version."
+        }
+      ],
+      "carriedForwardEvidence": [],
+      "reproductions": [
+        "equation-split-ref"
+      ]
+    },
+    {
+      "id": "B13",
+      "priority": "high",
+      "kind": "built-in Beamer",
+      "title": "Finish frame discovery and title aliases",
+      "origin": [
+        "Beamer"
+      ],
+      "references": [
+        "https://texdoc.org/serve/beamer/0"
+      ],
+      "task": "Handle ordinary command-form frame syntax and maketitle/titlepage, including title graphics without renderer exceptions. Generic source-defined slide wrappers belong to B11. This carries forward the first manual review; it is not a new round-two observation.",
+      "observedFamilyFrequency": {
+        "family": "toc-title",
+        "repositories": 4,
+        "completeDistinctSourceForms": 18
+      },
+      "evidence": [],
+      "carriedForwardEvidence": [
+        {
+          "case": "case-12",
+          "repository": "paulgp/applied-methods-phd",
+          "path": "lectures/00_intro.tex",
+          "frame": 1,
+          "observation": "Silent literal fallback"
+        },
+        {
+          "case": "leeper-command",
+          "repository": "leeper/lectures",
+          "path": "2014-10-28-InteractingMinds/slides.tex",
+          "frame": null,
+          "observation": "Ordinary command-form frames are not discovered"
+        },
+        {
+          "case": "naereen",
+          "repository": "Naereen/slides",
+          "path": "2017_09__Presentation_article_CrownCom_Conference/slides.tex",
+          "frame": 1,
+          "observation": "Native renderer exception; valid author-engine reference"
+        }
+      ]
+    },
+    {
+      "id": "B14",
+      "priority": "medium",
+      "kind": "built-in Beamer / common theme configuration",
+      "title": "Calibrate fonts, colors and theme configuration",
+      "origin": [
+        "Beamer",
+        "Metropolis"
+      ],
+      "references": [
+        "https://texdoc.org/serve/beamer/0",
+        "https://ctan.org/pkg/beamertheme-metropolis"
+      ],
+      "task": "Honor stock font themes such as serif and data-like setbeamerfont/setbeamercolor overrides; check margins, title contrast, block colors and navigation under a fixed engine/font profile. Avoid arbitrary author template execution.",
+      "observedFamilyFrequency": {
+        "family": "text-formatting",
+        "repositories": 8,
+        "completeDistinctSourceForms": 2452
+      },
+      "evidence": [
+        {
+          "case": "r2-04",
+          "repository": "Naereen/slides",
+          "path": "2017_09__Presentation_article_CrownCom_Conference/slides.tex",
+          "frame": 7,
+          "observation": "TeX has two continuation pages; native clips the lower material into one slide. Pandoc tightlist expands to visible setlength/label definitions; begin/end small leak into text. Several equations remain readable, but conditional bars and custom probability macros differ."
+        },
+        {
+          "case": "r2-09",
+          "repository": "leeper/lectures",
+          "path": "2019-05-09-LSE-VAM/slides.tex",
+          "frame": 17,
+          "observation": "Nested item overlay specifications produce the expected first and fourth endpoint contents in both renderers. Native prints itemsep, uses smaller text and different block/list spacing. This is a useful positive control for explicit item overlays."
+        },
+        {
+          "case": "r2-23",
+          "repository": "Naereen/slides",
+          "path": "2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex",
+          "frame": 19,
+          "observation": "TeX renders two continuation pages with aligned math and three blocks. Native prints small/list setup commands and custom macro spellings, loses the main formula and clips later blocks. Body font and title contrast also differ."
+        },
+        {
+          "case": "r2-24",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "22_metody_calkowania.tex",
+          "frame": 34,
+          "observation": "The fbox label, ordinary display equations/array and titled prose block all survive. Native prints a qquad between paragraphs and changes vertical spacing and chrome. This is a useful positive control for basic boxes, arrays and plain block bodies."
+        },
+        {
+          "case": "r2-36",
+          "repository": "leeper/lectures",
+          "path": "2015-07-01-useR/slides.tex",
+          "frame": 3,
+          "observation": "Native draws the two overlapping translucent circles and curved arrow. A leading large declaration becomes a separate unsupported box, shifting the diagram, and node text is smaller. Prefer flow/font calibration over inventing a special diagram feature."
+        }
+      ],
+      "carriedForwardEvidence": [
+        {
+          "case": "case-00",
+          "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+          "path": "latex/lecture01/dl4nlp2023-lecture01.tex",
+          "frame": 1,
+          "observation": "Readable content, substantial layout/style mismatch"
+        },
+        {
+          "case": "case-16",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/HVDC/main.tex",
+          "frame": 20,
+          "observation": "Major content loss"
+        }
+      ]
+    },
+    {
+      "id": "B15",
+      "priority": "medium",
+      "kind": "package integration",
+      "title": "Render common algorithm environments",
+      "origin": [
+        "algorithmicx / algpseudocode",
+        "algorithm2e"
+      ],
+      "references": [
+        "https://ctan.org/pkg/algorithmicx",
+        "https://ctan.org/pkg/algorithm2e"
+      ],
+      "task": "Treat the packages as distinct APIs. Start with indentation, numbered lines, keyword/control blocks and math; compose with figures/scale wrappers. Do not hardcode author Procedure or algorithm-name aliases.",
+      "observedFamilyFrequency": {
+        "family": "algorithms",
+        "repositories": 3,
+        "completeDistinctSourceForms": 110
+      },
+      "evidence": [
+        {
+          "case": "r2-00",
+          "repository": "montreso/asd-lectures",
+          "path": "17-prob.tex",
+          "frame": 4,
+          "observation": "TeX has five distinct overprint states with algorithms and a table. Native discovers one, shows a placeholder, and loses the other column. The myboxtitle and Procedure names are author definitions; overprint and unbraced onslide are built-in Beamer."
+        },
+        {
+          "case": "r2-08",
+          "repository": "Naereen/slides",
+          "path": "2018_01__ENSAI_Seminar_BrownBag__Article_ALT2018/slides_169.tex",
+          "frame": 19,
+          "observation": "TeX renders a three-state algorithm2e listing. Native finds three states but prints wrapper commands, comment text and algorithm source, then clips it. Preserve algorithm2e semantics and generic wrapper expansion; do not special-case the author algorithm names or removelatexerror hack."
+        },
+        {
+          "case": "r2-47",
+          "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+          "path": "latex/lecture03/dl4nlp2023-lecture03.tex",
+          "frame": 40,
+          "observation": "A standard algorithmic environment with Function, While, For and State becomes a placeholder. TeX renders line numbers, indentation, keywords and inline math. The frame has no author-defined surrounding wrapper."
+        }
+      ],
+      "carriedForwardEvidence": []
+    },
+    {
+      "id": "B16",
+      "priority": "medium",
+      "kind": "package integration",
+      "title": "Add or validate pgfplots axis support",
+      "origin": [
+        "pgfplots"
+      ],
+      "references": [
+        "https://ctan.org/pkg/pgfplots"
+      ],
+      "task": "Start with a basic axis, ticks/grid and function plot. First remove the figure-wrapper failure so the plot backend can be assessed independently; current visual evidence does not isolate axis support.",
+      "observedFamilyFrequency": {
+        "family": "pgfplots",
+        "repositories": 2,
+        "completeDistinctSourceForms": 3
+      },
+      "evidence": [
+        {
+          "case": "r2-03",
+          "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+          "path": "latex/lecture04/dl4nlp2023-lecture04.tex",
+          "frame": 27,
+          "observation": "A cases display in the left column and a pgfplots axis with figure caption in the right column both become placeholders. The plot itself cannot yet be evaluated separately from the unsupported figure wrapper. Empty flags.tex restored the presentation mode requested by the source preamble."
+        }
+      ],
+      "carriedForwardEvidence": []
+    },
+    {
+      "id": "B17",
+      "priority": "medium",
+      "kind": "package integration",
+      "title": "Provide a useful tcolorbox/mdframed subset",
+      "origin": [
+        "tcolorbox",
+        "mdframed"
+      ],
+      "references": [
+        "https://ctan.org/pkg/tcolorbox",
+        "https://ctan.org/pkg/mdframed"
+      ],
+      "task": "Render ordinary title/body, border/fill and padding options before arbitrary skins. Expand simple source-defined wrappers into this subset; keep unsupported custom styling local.",
+      "observedFamilyFrequency": {
+        "family": "color-boxes",
+        "repositories": 3,
+        "completeDistinctSourceForms": 34
+      },
+      "evidence": [
+        {
+          "case": "r2-12",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/Introduction/main.tex",
+          "frame": 10,
+          "observation": "The photograph inside figure is not emitted, although its local JPG exists. The adjacent ordinary tcolorbox also becomes a placeholder. TeX renders both and a starred caption containing a link."
+        },
+        {
+          "case": "r2-44",
+          "repository": "montreso/asd-lectures",
+          "path": "16-backtrack.tex",
+          "frame": 18,
+          "observation": "The source-defined myboxtitle and BI/BIL wrappers hide a nested list with two footnotes and links. TeX renders the mdframed-style box. Expand supported source definitions rather than add these particular macro names; use case 17 to isolate plain footnotes."
+        }
+      ],
+      "carriedForwardEvidence": []
+    },
+    {
+      "id": "B18",
+      "priority": "medium",
+      "kind": "package integration",
+      "title": "Support siunitx number and unit formatting",
+      "origin": [
+        "siunitx"
+      ],
+      "references": [
+        "https://ctan.org/pkg/siunitx"
+      ],
+      "task": "Render SI/si and contemporary qty/unit/num forms with correct spacing and math/text units. This is a defined package API even though observed use here is concentrated in one collection.",
+      "observedFamilyFrequency": {
+        "family": "units",
+        "repositories": 1,
+        "completeDistinctSourceForms": 13
+      },
+      "evidence": [
+        {
+          "case": "r2-33",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/HVDC/main.tex",
+          "frame": 3,
+          "observation": "Native flattens four continuation pages, prints SI commands at the lower edge and clips the remaining history. TeX pages two through four contain formatted units and a final image/columns layout. Only the first native page exists, so this is not a one-to-one page pair."
+        }
+      ],
+      "carriedForwardEvidence": []
+    },
+    {
+      "id": "B19",
+      "priority": "verify",
+      "kind": "built-in Beamer",
+      "title": "Isolate shrink and squeeze behavior",
+      "origin": [
+        "Beamer"
+      ],
+      "references": [
+        "https://texdoc.org/serve/beamer/0"
+      ],
+      "task": "After ordinary body layout works, compare minimal over-height content with shrink percentage/minimum and squeeze list spacing. Source usage is established; these mixed cases do not yet prove a separate shrink bug.",
+      "observedFamilyFrequency": {
+        "family": "frame-sizing-breaks",
+        "repositories": 6,
+        "completeDistinctSourceForms": 199
+      },
+      "evidence": [
+        {
+          "case": "r2-39",
+          "repository": "montreso/asd-lectures",
+          "path": "03-strutture.tex",
+          "frame": 22,
+          "observation": "A fragile frame contains a short Java lstlisting with keyword/comment styles. Native replaces it with a placeholder; TeX preserves syntax, indentation and lines. Shrink is present, but this case does not isolate the correctness of shrinking."
+        },
+        {
+          "case": "r2-40",
+          "repository": "Naereen/slides",
+          "path": "2019_11__PhD_Defense__Multi-players_Bandit_Algorithms_for_Internet_of_Things_Networks/slides.tex",
+          "frame": 2,
+          "observation": "The dense table uses array m columns, parbox, small text and shrink. Native replaces it and the references with placeholders. The mytitle and emoji aliases are author constructs; supporting table/paragraph/scale mechanisms has general value. Shrink itself needs a minimal fixture once body layout works."
+        }
+      ],
+      "carriedForwardEvidence": []
+    },
+    {
+      "id": "B20",
+      "priority": "high",
+      "kind": "evaluation / diagnostics",
+      "title": "Detect silent literal and missing paint failures",
+      "origin": [
+        "renderer contract"
+      ],
+      "references": [],
+      "task": "Record text-engine literal reasons and source spans, then add source-to-painted-content accounting for block bodies, equations, code and assets. Keep a clean diagnostic result distinct from a fidelity pass.",
+      "observedFamilyFrequency": null,
+      "evidence": [
+        {
+          "case": "r2-08",
+          "repository": "Naereen/slides",
+          "path": "2018_01__ENSAI_Seminar_BrownBag__Article_ALT2018/slides_169.tex",
+          "frame": 19,
+          "observation": "TeX renders a three-state algorithm2e listing. Native finds three states but prints wrapper commands, comment text and algorithm source, then clips it. Preserve algorithm2e semantics and generic wrapper expansion; do not special-case the author algorithm names or removelatexerror hack."
+        },
+        {
+          "case": "r2-28",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "23_rozwiazywanie_rownan_rozniczkowych_czastkowych.tex",
+          "frame": 18,
+          "observation": "Native shows only the number of the first equation/split display, although much of the second display survives. The inline ref is literal. Equation numbering differences alone are inconclusive because the isolated probe does not seed every preceding counter/label. Missing equation paint is unambiguous."
+        },
+        {
+          "case": "r2-29",
+          "repository": "montreso/asd-lectures",
+          "path": "02-analisi.tex",
+          "frame": 23,
+          "observation": "This valid empty-title exampleblock contains a formula, followed by built-in overprint with five unbraced onslide alternatives including handout selectors. TeX renders five states; native discovers one, loses the block formula and substitutes an overprint placeholder."
+        },
+        {
+          "case": "r2-34",
+          "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+          "path": "latex/lecture04/dl4nlp2023-lecture04.tex",
+          "frame": 10,
+          "observation": "Native discovers both pause states but replaces the initial prose/list with one unsupported box on each. At step two the block heading appears without its aligned one-hot vectors. TeX renders both prose and matrix block."
+        },
+        {
+          "case": "r2-43",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "2_arytmetyka_komputerowa.tex",
+          "frame": 32,
+          "observation": "The exampleblock title survives, but both its explanatory inline math and lstlisting with math escapes disappear. Native records zero literal fallbacks and zero unsupported layout items. TeX renders the complete body. This demonstrates a paint/content-coverage blind spot in automatic triage."
+        }
+      ],
+      "carriedForwardEvidence": [
+        {
+          "case": "euler",
+          "repository": "AGH-MOwNiT-2017/lectures",
+          "path": "19_rozniczkowe.tex",
+          "frame": 10,
+          "observation": "Silent block-body loss"
+        },
+        {
+          "case": "case-12",
+          "repository": "paulgp/applied-methods-phd",
+          "path": "lectures/00_intro.tex",
+          "frame": 1,
+          "observation": "Silent literal fallback"
+        },
+        {
+          "case": "case-14",
+          "repository": "paulgp/applied-methods-phd",
+          "path": "lectures/00_intro.tex",
+          "frame": 7,
+          "observation": "Silent literal fallback; image lost"
+        }
+      ]
+    },
+    {
+      "id": "B21",
+      "priority": "high",
+      "kind": "evaluation harness",
+      "title": "Require valid build context before scoring",
+      "origin": [
+        "corpus oracle"
+      ],
+      "references": [],
+      "task": "Preserve engine/flags, included definitions, labels/TOC and BibTeX/Biber state. Separate missing private dependencies from renderer failures and map reference pages to states/continuations instead of equating a PDF page with a source frame.",
+      "observedFamilyFrequency": null,
+      "evidence": [
+        {
+          "case": "r2-06",
+          "repository": "MarcToussaint/AI-lectures",
+          "path": "ArtificialIntelligence/01-computationGraphs.tex",
+          "frame": 1,
+          "observation": "The slidecore/items wrappers and minipage/verbatim content become one placeholder. The TeX reference cannot compile because private package LIS-26-text-long is absent. This case supports an input/build-context TODO, not a visual fidelity judgment or a dedicated slidecore implementation."
+        },
+        {
+          "case": "r2-38",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/IntroPowerFlow/main.tex",
+          "frame": 31,
+          "observation": "Native prints bibliographystyle and bibliography. The initial isolated TeX reference was empty because it had no prior citations or BibTeX pass. A repaired reference seeds the citation key found in the preceding expanded source and runs BibTeX plus two TeX passes; inspect that populated version."
+        }
+      ],
+      "carriedForwardEvidence": [
+        {
+          "case": "case-15",
+          "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+          "path": "Lectures/HVDC/main.tex",
+          "frame": 1,
+          "observation": "Reference context gap plus renderer failure"
+        },
+        {
+          "case": "naereen",
+          "repository": "Naereen/slides",
+          "path": "2017_09__Presentation_article_CrownCom_Conference/slides.tex",
+          "frame": 1,
+          "observation": "Native renderer exception; valid author-engine reference"
+        }
+      ]
+    }
+  ],
+  "avoidAuthorSpecificFeatures": [
+    "Dedicated wideitemize, BI/BIL, myboxtitle, Procedure, slidecore or items implementations. Use source-defined expansion or preserve a local fallback.",
+    "Custom mytitle/emoji/math-name aliases and removelatexerror hacks.",
+    "Custom bus-system, confusion-matrix or crowdsourcing-diagram special cases; fix common flow/graphics/math mechanisms.",
+    "Unbounded author theme/template execution and private institutional style packages."
+  ],
+  "automaticFollowups": [
+    "Current shortlist uses token-aware family detection, exact-source deduplication and repository/deck diversity caps. Optional rendering reports text-engine literals, unsupported flow, missing-asset suspicions and diagnostic omissions.",
+    "Add paint-aware source coverage so an empty block body such as r2-43 is flagged. A layout record alone does not prove paint.",
+    "Compare state and continuation-page counts after valid reference compilation; gate numerical comparisons on explicit correspondence.",
+    "Use component-level or ink-weighted raster comparisons once fonts/context are controlled; whole-slide white-space RMSE can hide missing material.",
+    "Keep direct-asset, ordinary block/math and item-overlay controls alongside failure candidates; some clean results must remain in manual sampling."
+  ],
+  "conformanceSuite": {
+    "command": "npm run compare:beamer-priorities",
+    "manifest": "test/fixtures/beamer/corpus-priorities/cases.json",
+    "fidelityFrames": 20,
+    "unsupportedRecognitionFrames": 6,
+    "policy": "Use the existing exact glyph/font/geometry gates. Current failures remain red; count mismatches withhold glyph comparisons. alltt/lstlisting require recognition and supported sibling preservation, not code typesetting."
+  }
+}

@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { applyOptionMutationsToTarget, normalizeOptionKey, type OptionMutation } from "../option-mutations.js";
 import { resolvePropertyTarget } from "../property-target.js";
@@ -26,6 +27,7 @@ export type MovePathAttachedNodeAction = {
   hostPathSourceId: string;
   segmentLocator?: string;
   pos: number;
+  snapToPreset?: boolean;
   preserveRegime: true;
   sideUpdate?: {
     kind: "explicit-direction";
@@ -73,6 +75,9 @@ export function applyMovePathAttachedNodeAction(
   action: MovePathAttachedNodeAction,
   parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
+  if (!Number.isFinite(action.pos)) {
+    return { kind: "error", message: "Path-attached node position must be a finite number." };
+  }
   const resolved = resolvePropertyTarget(source, action.nodeId, parseOptions);
   if (resolved.kind !== "found" || resolved.target.kind !== "node-item") {
     return { kind: "unsupported", reason: "Selected path-attached node could not be resolved for drag editing." };
@@ -81,7 +86,7 @@ export function applyMovePathAttachedNodeAction(
   const regime = resolvePathAttachedNodeRegime(resolved.target.options);
 
   const mutations = new Map<string, OptionMutation>();
-  applyPositionMutations(mutations, normalizePathPosition(action.pos));
+  applyPositionMutations(mutations, normalizePathPosition(action.pos), action.snapToPreset);
   applySideMutations(mutations, regime, action.sideUpdate);
   applyDistanceMutations(mutations, regime, action);
 
@@ -124,7 +129,7 @@ export function applyPathAttachedNodeInspectorAction(
       return { kind: "error", message: "Path-attached node position must be a finite number." };
     }
     applyPositionMutations(mutations, parsed);
-  } else if (action.key === PATH_ATTACHED_NODE_SIDE_KEY) {
+  } else {
     if (regime.kind === "neutral") {
       return { kind: "unsupported", reason: "Path-attached neutral placement does not support side editing." };
     }
@@ -171,10 +176,11 @@ export function resolveDraggedPathAttachedNodeDirection(
 
 function applyPositionMutations(
   mutations: Map<string, OptionMutation>,
-  rawPosition: number
+  rawPosition: number,
+  snapToPreset = true
 ): void {
   const position = normalizePathPosition(rawPosition);
-  const snapped = resolvePathPositionPreset(position, null);
+  const snapped = snapToPreset ? resolvePathPositionPreset(position, null) : { preset: null };
   for (const key of POSITION_OPTION_KEYS) {
     mutations.set(key, { kind: "remove" });
   }
@@ -185,7 +191,7 @@ function applyPositionMutations(
     mutations.set(snapped.preset, { kind: "set", value: "" });
     return;
   }
-  mutations.set("pos", { kind: "set", value: formatNumber(position) });
+  mutations.set("pos", { kind: "set", value: formatNumber(position, { fractionDigits: 6 }) });
 }
 
 function applySideMutations(
@@ -232,7 +238,7 @@ function applyDistanceMutations(
   if (!Number.isFinite(action.distanceUpdatePt)) {
     return;
   }
-  const resolvedDistance = Math.max(0, action.distanceUpdatePt!);
+  const resolvedDistance = Math.max(0, requireDefined(action.distanceUpdatePt, "Missing required action.distanceUpdatePt"));
   const resolvedDirection =
     action.sideUpdate?.kind === "explicit-direction"
       ? action.sideUpdate.direction

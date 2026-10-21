@@ -1,9 +1,10 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 import type { ParagraphModel } from './items.js';
 import type { GreedyLine, GreedyResult } from './types.js';
 
 function skipLeadingSpaces(model: ParagraphModel, index: number): number {
   let i = index;
-  while (i < model.runs.length && model.runs[i].kind === 'space') {
+  while (i < model.runs.length && requireArrayValue(model.runs, i).kind === 'space') {
     i++;
   }
   return i;
@@ -58,7 +59,7 @@ export function greedyBreakParagraph(
     let widthBeforeBreak = 0;
 
     while (index < model.runs.length) {
-      const run = model.runs[index];
+      const run = requireArrayValue(model.runs, index);
       const nextWidth = width + runWidth(model, run.runIndex);
 
       if (nextWidth > targetWidth && index > lineStart) {

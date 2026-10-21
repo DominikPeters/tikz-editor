@@ -1,0 +1,542 @@
+import type {
+  MacroAliasStatement,
+  MacroCommandDefinitionStatement,
+  MacroDefinitionStatement,
+  Span,
+} from "../ast/types.js";
+import type { Diagnostic } from "../diagnostics/types.js";
+import type { TexVirtualCloser } from "../text/tex/recovery.js";
+import type { BeamerLinkRegion } from "./references.js";
+import type {
+  DocumentGraphicsAsset,
+  DocumentGraphicsResolver,
+} from "../graphics/types.js";
+import type { SvgRenderModel, SvgViewBox } from "../svg/types.js";
+import type { ParagraphLayoutReport } from "../text/knuth-plass/paragraph/report.js";
+import type { TexVListLayout } from "../text/tex/index.js";
+import type { SimpleTexGraphicsOptions } from "../text/tex/ir.js";
+import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
+import type { SvgRect } from "../coords/index.js";
+import type { CooperativeWorkOptions } from "../semantic/cooperative-work.js";
+import type { SceneElement } from "../semantic/types.js";
+
+export type BeamerDelimitedSourceValue = {
+  /** Span including the delimiters. */
+  span: Span;
+  /** Span of the source between the delimiters. */
+  contentSpan: Span;
+  value: string;
+};
+
+export type BeamerFrameOption = {
+  span: Span;
+  keySpan: Span;
+  valueSpan?: Span;
+  key: string;
+  value?: string;
+};
+
+export type BeamerFrameOptions = {
+  source: BeamerDelimitedSourceValue;
+  entries: BeamerFrameOption[];
+  alignment: "top" | "center" | "bottom";
+  fragile: boolean;
+  plain: boolean;
+  /** Fraction of textheight used by TeX's continuation \vsplit; default .95. */
+  allowFrameBreaks?: number;
+  noFrameNumbering?: boolean;
+  label?: string;
+};
+
+export type BeamerTikzPictureRoot = {
+  kind: "tikzpicture";
+  id: string;
+  span: Span;
+  beginSpan: Span;
+  endSpan: Span;
+};
+
+export type BeamerFrameModel = {
+  kind: "frame";
+  id: string;
+  sourceOrder: number;
+  span: Span;
+  beginSpan: Span;
+  endSpan: Span | null;
+  /** Header arguments after `\begin{frame}` and before the body. */
+  headerSpan: Span;
+  bodySpan: Span;
+  overlay?: BeamerDelimitedSourceValue;
+  options?: BeamerFrameOptions;
+  title?: BeamerDelimitedSourceValue;
+  subtitle?: BeamerDelimitedSourceValue;
+  sectionId: string | null;
+  subsectionId: string | null;
+  children: BeamerTikzPictureRoot[];
+};
+
+export type BeamerSectionModel = {
+  kind: "section";
+  id: string;
+  sourceOrder: number;
+  level: 1 | 2;
+  starred: boolean;
+  span: Span;
+  commandSpan: Span;
+  shortTitle?: BeamerDelimitedSourceValue;
+  title: BeamerDelimitedSourceValue;
+  parentSectionId: string | null;
+};
+
+export type BeamerDocumentClassModel = {
+  span: Span;
+  commandSpan: Span;
+  options?: BeamerDelimitedSourceValue;
+  className: BeamerDelimitedSourceValue;
+};
+
+export type BeamerThemeKind =
+  | "theme"
+  | "color-theme"
+  | "font-theme"
+  | "inner-theme"
+  | "outer-theme";
+
+export type BeamerThemeUseModel = {
+  kind: BeamerThemeKind;
+  span: Span;
+  commandSpan: Span;
+  options?: BeamerDelimitedSourceValue;
+  name: BeamerDelimitedSourceValue;
+};
+
+export type BeamerMetadataFieldName =
+  | "title"
+  | "subtitle"
+  | "author"
+  | "institute"
+  | "date"
+  | "titlegraphic";
+
+export type BeamerMetadataFieldModel = {
+  name: BeamerMetadataFieldName;
+  span: Span;
+  commandSpan: Span;
+  shortValue?: BeamerDelimitedSourceValue;
+  value: BeamerDelimitedSourceValue;
+};
+
+export type BeamerTheoremStyle =
+  | "plain"
+  | "definition"
+  | "example"
+  | "remark";
+
+export type BeamerTheoremDeclarationModel = {
+  kind: "theorem-declaration";
+  /** Environment name without delimiters. */
+  name: string;
+  span: Span;
+  commandSpan: Span;
+  nameSource: BeamerDelimitedSourceValue;
+  displayName: BeamerDelimitedSourceValue;
+  style: BeamerTheoremStyle;
+  /** Null for `\newtheorem*` declarations. */
+  counter: string | null;
+  /** Counter whose value this declaration shares, when applicable. */
+  sharedCounter?: string;
+  /** Counter that resets this declaration, currently `section` when present. */
+  within?: string;
+  starred: boolean;
+  builtIn: boolean;
+};
+
+export type BeamerTheoremTemplateVariant =
+  | "default"
+  | "numbered"
+  | "ams-style"
+  | "normal-font";
+
+export type BeamerPreambleModel = {
+  span: Span;
+  documentClass: BeamerDocumentClassModel | null;
+  themes: BeamerThemeUseModel[];
+  metadata: Partial<Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>>;
+  atBeginSectionSpans: Span[];
+  theoremDeclarations: BeamerTheoremDeclarationModel[];
+  theoremTemplate: BeamerTheoremTemplateVariant;
+  macroDefinitions: Array<
+    | MacroDefinitionStatement
+    | MacroAliasStatement
+    | MacroCommandDefinitionStatement
+  >;
+};
+
+export type BeamerDocumentRoot = BeamerSectionModel | BeamerFrameModel;
+
+export type BeamerDocumentModel = {
+  source: string;
+  documentSpan: Span | null;
+  documentBodySpan: Span;
+  preamble: BeamerPreambleModel;
+  sections: BeamerSectionModel[];
+  frames: BeamerFrameModel[];
+  roots: BeamerDocumentRoot[];
+  diagnostics: Diagnostic[];
+};
+
+/**
+ * Beamer page coordinates use TeX points and a top-left, y-down origin.
+ *
+ * This is deliberately distinct from both PDF points and TikZ's y-up scene
+ * coordinates. Keeping the unit and orientation explicit lets callers place
+ * native text reports, embedded TikZ renderings, and future editor hit maps in
+ * one stable document-space contract.
+ */
+export type BeamerRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+/** SVG affine matrix in the page's TeX-point, y-down coordinates. */
+export type BeamerPaintTransform = readonly [number, number, number, number, number, number];
+
+export type BeamerTransformedLayout = {
+  /** Intrinsic geometry before the frame body's outer paint transform. */
+  intrinsicBounds: BeamerRect;
+  /** Compose this with local glyph transforms when painting or hit testing. */
+  paintTransform: BeamerPaintTransform;
+};
+
+export type BeamerPageGeometry = {
+  /** The documentclass aspectratio option, or Beamer's default `43`. */
+  aspectRatio: string;
+  /** Physical page bounds in TeX points. */
+  page: BeamerRect;
+  /** Frame canvas after subtracting theme-owned left/right sidebars. */
+  frameArea: BeamerRect;
+  /** Theme-defined body text box, before frame-local layout. */
+  textArea: BeamerRect;
+  /** Identifier of the fully resolved theme supplying the dimensions. */
+  themeId: string;
+};
+
+export type BeamerFrameLayoutItemKind =
+  | "background"
+  | "title-page"
+  | "frame-title"
+  | "frame-subtitle"
+  | "text"
+  | "navigation-symbols"
+  | "mini-frame-navigation"
+  | "headline-decoration"
+  | "list-marker"
+  | "block"
+  | "columns"
+  | "column"
+  | "graphics"
+  | "tikzpicture"
+  | "unsupported";
+
+export type BeamerFrameLayoutItem = {
+  id: string;
+  kind: BeamerFrameLayoutItemKind;
+  sourceSpan: Span;
+  bounds: BeamerRect;
+  parentId: string | null;
+  /** Hidden overlay material retains geometry but contributes no paint. */
+  visibility?: "visible" | "hidden";
+  paragraphId?: string;
+  /** Document root id for embedded tikzpictures (`frame:i:tikzpicture:j`). */
+  rootId?: string;
+  /** A TikZ `overlay` picture: drawn where it is on the page, taking no room in the text. */
+  overlayPicture?: true;
+  childIds?: string[];
+  message?: string;
+  /** The marker is already represented by a glyph in its paragraph VList. */
+  traceAsGlyph?: boolean;
+  /** Explicit node-rule correspondence for template paint (PGF paths are not TeX rules). */
+  traceAsRule?: boolean;
+};
+
+export type BeamerParagraphLayout = {
+  transformedLayout?: BeamerTransformedLayout;
+  /** Link hit regions in paragraph-local coordinates, after overlay filtering. */
+  links?: readonly BeamerLinkRegion[];
+  paragraphId: string;
+  role:
+    | "title"
+    | "subtitle"
+    | "author"
+    | "institute"
+    | "date"
+    | "titlegraphic"
+    | "frame-title"
+    | "frame-subtitle"
+    | "body"
+    | "block-title"
+    | "block-body"
+    | "headline"
+    | "footnote"
+    | "footline";
+  sourceSpan: Span;
+  bounds: BeamerRect;
+  report: ParagraphLayoutReport<"document">;
+  vlistLayout: TexVListLayout<"document">;
+  /**
+   * Visible, directly-authored prose ranges that canvas typo editing may
+   * patch independently. Generated, macro-owned, math, graphics, labels, and
+   * hidden overlay material are intentionally absent.
+   */
+  editableTextSpans: BeamerEditableTextSpan[];
+  /**
+   * Rendered output whose source is not directly editable — macro
+   * invocations rendering their expansion. Clicking such output selects
+   * the atom's full source span in the enclosing scope session.
+   */
+  atomicRenderSpans: BeamerAtomicRenderSpan[];
+  /** Source ranges laid out for covered overlays but omitted from paint. */
+  hiddenSourceSpans?: readonly Span[];
+  /** Source-backed but non-direct ranges, such as explicit custom-macro arguments. */
+  readOnlySourceSpans?: readonly Span[];
+  /**
+   * Rendered macro-argument ranges paired with the invocation each one came
+   * from. Clicking argument output selects the invocation atom.
+   */
+  macroArgumentRuns?: readonly { span: Span; invocationSpan: Span }[];
+  /**
+   * List-environment topology the text engine retained while parsing this
+   * chunk (design/beamer-canvas-editing.md, "Item topology comes from the
+   * text engine"). Structural key patches derive from these spans; absent
+   * when the chunk has no lists or failed to parse, in which case
+   * structural keys degrade to plain source behavior.
+   */
+  listStructure?: readonly BeamerListTopology[];
+};
+
+export type BeamerListItemTopology = {
+  /** The `\item` token, including an optional `[label]` and trailing spaces. */
+  commandSpan: Span;
+  /** Content of the optional `[label]` argument, when present. */
+  labelSpan?: Span;
+  /**
+   * Item body: first content offset through the next structural token
+   * (`\item` or `\end`) of the owning environment. Empty items have
+   * `from === to`.
+   */
+  contentSpan: Span;
+  /** One-based ordinal within the owning environment. */
+  itemIndex: number;
+};
+
+export type BeamerListTopology = {
+  environment: "itemize" | "enumerate" | "description";
+  /** The `\begin{...}` boundary token. */
+  beginSpan: Span;
+  /** The `\end{...}` boundary token. */
+  endSpan: Span;
+  /** One-based nesting depth among list environments in the chunk. */
+  depth: number;
+  items: readonly BeamerListItemTopology[];
+};
+
+export type BeamerEditableTextSpan = {
+  id: string;
+  span: Span;
+  /**
+   * Directly-authored prose ("text") or a rendered math island ("math").
+   * Text spans are structure-free and safe to mask during edits; math
+   * spans are click-into targets whose caret mapping runs through the
+   * math caret entries.
+   */
+  kind: "text" | "math";
+  /** Final document/SVG-space geometry; never paragraph-local geometry. */
+  hitBounds: SvgRect[];
+};
+
+export type BeamerAtomicRenderSpan = {
+  id: string;
+  /** Full source span of the rendered atom (e.g. the macro invocation). */
+  span: Span;
+  /** Final document/SVG-space geometry; never paragraph-local geometry. */
+  hitBounds: SvgRect[];
+};
+
+export type BeamerEditScopeKind =
+  | "frame-title"
+  | "column"
+  | "frame-body"
+  | "preamble-field";
+
+/**
+ * A canvas editing session's buffer unit: the nearest container of the
+ * edited text (design/beamer-canvas-editing.md). Column scopes nest inside
+ * the frame-body scope; the smallest containing span wins.
+ */
+export type BeamerEditScope = {
+  kind: BeamerEditScopeKind;
+  id: string;
+  /** Full session buffer span in document coordinates. */
+  span: Span;
+};
+
+export type PrepareBeamerDocumentOptions = {
+  /**
+   * Source ranges neutralized only for the document-structure CST. Text
+   * layout still consumes the real source.
+   */
+  structuralMasks?: readonly Span[];
+  /** An earlier syntax index of the document to reparse from incrementally. */
+  previousSyntax?: TexSyntaxIndex;
+  /** Parse afresh, so that the syntax tree is exact even if it has errors. */
+  exactSyntax?: boolean;
+};
+
+export type BeamerEmbeddedTikzLayout = {
+  transformedLayout?: BeamerTransformedLayout;
+  itemId: string;
+  sourceSpan: Span;
+  bounds: BeamerRect;
+  viewBox: SvgViewBox;
+  model: SvgRenderModel;
+  /** A TikZ `overlay` picture: drawn where it is on the page, taking no room in the text. */
+  overlay?: BeamerOverlayPictureLayout;
+};
+
+/** An overlay picture on the page: a drawing layer the slide edits in place. */
+export type BeamerOverlayPictureLayout = {
+  /** Its layer root id, `frame:i:overlay:j`. */
+  rootId: string;
+  /** Its origin, TikZ's (0,0), on the page (pt, y down). */
+  origin: { x: number; y: number };
+  rememberPicture: boolean;
+  /** What it draws; normally in picture coordinates, unless `pageCoordinates` is set. Source spans are relative to `sourceOffset`. */
+  elements: readonly SceneElement[];
+  sourceOffset: number;
+  /** Incrementally edited layers may expose geometry directly in page coordinates. */
+  pageCoordinates?: true;
+};
+
+export type BeamerGraphicsLayout = {
+  itemId: string;
+  paragraphId: string;
+  lineIndex: number;
+  sourceSpan: Span;
+  filenameSpan: Span;
+  bounds: BeamerRect;
+  baselineY: number;
+  asset: DocumentGraphicsAsset;
+  options: SimpleTexGraphicsOptions;
+  caretPolicy: "filename-linear";
+  visibility: "visible" | "hidden";
+  crop?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    clip: boolean;
+  };
+};
+
+/** Explicit source-owned vertical material; no paint is added to the slide. */
+export type BeamerSpacingLayout = {
+  sourceSpan: Span;
+  command: "vspace" | "smallskip" | "medskip" | "bigskip";
+  bounds: BeamerRect;
+  /** Signed space in points; negative space overlaps surrounding content. */
+  sizePt: number;
+  relativeUnitPt?: number;
+  horizontal?: boolean;
+};
+
+export type BeamerFrameLayout = {
+  /** Body-only transform; frame title and theme chrome are outside it. */
+  bodyTransform?: BeamerPaintTransform;
+  coordinateSystem: {
+    unit: "tex-pt";
+    origin: "top-left";
+    yAxis: "down";
+  };
+  frameId: string;
+  frameIndex: number;
+  step: number;
+  stepCount: number;
+  /** Continuation pages are separate from overlay steps. */
+  continuation?: { index: number; count: number };
+  page: BeamerPageGeometry;
+  contentBounds: BeamerRect;
+  items: BeamerFrameLayoutItem[];
+  paragraphs: BeamerParagraphLayout[];
+  graphics: BeamerGraphicsLayout[];
+  spacing: BeamerSpacingLayout[];
+  embeddedTikz: BeamerEmbeddedTikzLayout[];
+  /** Source-owned overlay arguments and their visibility on this step, including empty branches. */
+  overlayBranches?: readonly { readonly span: Span; readonly visible: boolean }[];
+  editScopes: BeamerEditScope[];
+  /** What TeX recovery closed or dropped in the edit scopes; absent when the source is balanced. */
+  recovery?: BeamerRecovery;
+};
+
+/** Recovery from unbalanced source (T5), in document coordinates. */
+export type BeamerRecovery = {
+  /** Openers closed virtually where their run ends. */
+  readonly closers: readonly TexVirtualCloser[];
+  /** Closers with no opener, and openers with nothing to close, shown as source. */
+  readonly strays: readonly Span[];
+};
+
+export type BeamerFrameSvgResult = {
+  svg: string;
+  viewBox: SvgViewBox;
+  model: SvgRenderModel;
+  diagnostics: Array<{
+    code: string;
+    message: string;
+  }>;
+};
+
+export type RenderBeamerFrameResult = {
+  document: BeamerDocumentModel;
+  frame: BeamerFrameModel;
+  layout: BeamerFrameLayout;
+  svg: BeamerFrameSvgResult;
+  diagnostics: Diagnostic[];
+};
+
+export type RenderBeamerFrameOptions = {
+  /** Yield between body/column units and during embedded TikZ evaluation. */
+  cooperative?: CooperativeWorkOptions;
+  /** Zero-based frame index. */
+  frameIndex?: number;
+  /** One-based overlay step. */
+  step?: number;
+  /** One-based continuation page of an allowframebreaks frame; default 1. */
+  continuation?: number;
+  /** Resolves document-local graphics for frame text and embedded TikZ. */
+  graphicsResolver?: DocumentGraphicsResolver;
+  /**
+   * A drawing layer (`frame:i:overlay:j`) its editor paints itself: laid out
+   * as TeX sets it, with its origin, but its picture left undrawn.
+   */
+  drawingLayer?: string;
+};
+
+export type RenderBeamerFramePagesOptions = {
+  /** Applies to every overlay page, including its embedded TikZ evaluation. */
+  cooperative?: CooperativeWorkOptions;
+  /** Zero-based frame index. */
+  frameIndex?: number;
+  /** Resolves document-local graphics for every overlay page. */
+  graphicsResolver?: DocumentGraphicsResolver;
+};
+
+export type RenderBeamerFramePagesResult = {
+  document: BeamerDocumentModel;
+  frame: BeamerFrameModel;
+  stepCount: number;
+  pageCount: number;
+  pages: RenderBeamerFrameResult[];
+  diagnostics: Diagnostic[];
+};

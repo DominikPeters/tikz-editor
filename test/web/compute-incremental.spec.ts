@@ -12,12 +12,82 @@ function normalizeForSceneComparison<T>(value: T): T {
       if (key === "id" || key === "runtimeId" || key === "sourceId") {
         return undefined;
       }
+      // Native text cache keys are anchored to the node's source-map position
+      // (`|sm:<identity>`), with an engine-local paragraph id.
+      // Allocation histories may differ from a canonical recompute; compare
+      // mode/text/width/font identity here and source projections in the SVG.
+      if (key === "cacheKey" && typeof currentValue === "string") {
+        return currentValue.replace(/\|sm:[a-z0-9]+$/, "");
+      }
+      if (key === "paragraphId" && typeof currentValue === "string" && currentValue.startsWith("tex:")) {
+        return "tex:<anchor-normalized>";
+      }
       return currentValue;
     })
   ) as T;
 }
 
 describe("computeSnapshot incremental parser integration", () => {
+  it("rebases the next edit from the committed revision after cancellation", async () => {
+    const documentId = "cancelled-compute";
+    const source = String.raw`\begin{tikzpicture}
+\draw (0,0) -- (1,0);
+\node at (3,0) {Later};
+\end{tikzpicture}`;
+    const seed = await computeSnapshot({ id: "seed", documentId, source, sourceRevision: 0 });
+    const previous = JSON.stringify(seed.snapshot);
+    const abandoned = source.replace("(1,0)", "(12345,0)");
+    const controller = new AbortController();
+    await expect(computeSnapshot({ id: "cancelled", documentId, source: abandoned, sourceRevision: 1, inferSourceChanges: true }, {
+      signal: controller.signal, budgetMs: 0, yieldControl: async () => controller.abort()
+    })).rejects.toMatchObject({ name: "AbortError" });
+    const latest = source.replace("(1,0)", "(12,0)");
+    const result = await computeSnapshot({ id: "latest", documentId, source: latest, sourceRevision: 2,
+      patches: deriveSingleSourcePatch(abandoned, latest), patchBaseRevision: 1, changedSourceIds: ["path:0"] });
+    expect(result.snapshot.incremental?.parseStrategy).toBe("incremental");
+    expect(result.snapshot.incremental?.parsePatchApplication).toBe("rebased");
+    expect(result.snapshot.incremental?.strategy).toBe("incremental");
+    const canonical = await computeSnapshot({ id: "canonical", documentId, source: latest, sourceRevision: 2 });
+    expect(result.snapshot.svg?.svg).toBe(canonical.snapshot.svg?.svg);
+    expect(JSON.stringify(seed.snapshot)).toBe(previous);
+  });
+
+  it("incrementally renders ordinary source edits with unchanged dependent geometry", async () => {
+    const source = String.raw`\begin{tikzpicture}
+      \node[draw] (a) at (0,0) {Alpha};
+      \node[draw] (b) at (3,0) {Beta};
+      \draw (a) -- (b);
+      \node at (6,0) {Unrelated};
+    \end{tikzpicture}`;
+    const documentId = "typing-incremental";
+    await computeSnapshot({ id: "seed", documentId, source, sourceRevision: 0, activeRootId: "figure:0" });
+    const next = source.replace("Alpha", "A much longer label");
+    const incremental = await computeSnapshot({ id: "typed", documentId, source: next, sourceRevision: 10, activeRootId: "figure:0", inferSourceChanges: true });
+    const canonical = await computeSnapshot({ id: "canonical", documentId, source: next, sourceRevision: 10, activeRootId: "figure:0" });
+    expect(incremental.snapshot.incremental?.parseStrategy).toBe("incremental");
+    expect(incremental.snapshot.incremental?.reparsedStatementCount).toBe(1);
+    expect(incremental.snapshot.incremental?.recomputedStatementCount).toBeLessThan(4);
+    expect(normalizeForSceneComparison(incremental.snapshot.scene)).toEqual(normalizeForSceneComparison(canonical.snapshot.scene));
+    expect(incremental.snapshot.parseResult?.diagnostics).toEqual(canonical.snapshot.parseResult?.diagnostics);
+    expect(incremental.snapshot.svg?.svg).toBe(canonical.snapshot.svg?.svg);
+  });
+
+  it("rebases semantic source spans across dropped source revisions", async () => {
+    const source = String.raw`\begin{tikzpicture}
+      \draw (0,0) rectangle (1,1);
+      \node at (3,0) {Later};
+    \end{tikzpicture}`;
+    const documentId = "typing-coalesced";
+    await computeSnapshot({ id: "seed", documentId, source, sourceRevision: 0, activeRootId: "figure:0" });
+    const skipped = source.replace("(1,1)", "(1.25,1)");
+    const next = skipped.replace("(1.25,1)", "(1.345,1)");
+    const result = await computeSnapshot({ id: "typed", documentId, source: next, sourceRevision: 2, activeRootId: "figure:0", changedSourceIds: ["path:0"], patches: deriveSingleSourcePatch(skipped, next), patchBaseRevision: 1 });
+    const canonical = await computeSnapshot({ id: "canonical", documentId, source: next, sourceRevision: 2, activeRootId: "figure:0" });
+    expect(result.snapshot.incremental?.parsePatchApplication).toBe("rebased");
+    expect(normalizeForSceneComparison(result.snapshot.scene)).toEqual(normalizeForSceneComparison(canonical.snapshot.scene));
+    expect(result.snapshot.editHandles).toEqual(canonical.snapshot.editHandles);
+  });
+
   it("keeps path endpoint handles rewritable across consecutive incremental drag frames", async () => {
     const documentId = "consecutive-handle-drag-doc";
     const source = String.raw`\begin{tikzpicture}
@@ -29,7 +99,7 @@ describe("computeSnapshot incremental parser integration", () => {
       kind: "render",
       source,
       sourceRevision: 0,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
     const endpoint = seeded.snapshot.editHandles.find(
       (handle) => handle.kind === "path-point" && handle.sourceRef.sourceId === "path:0" && handle.sourceText === "(3,2)"
@@ -59,7 +129,7 @@ describe("computeSnapshot incremental parser integration", () => {
       kind: "render",
       source: first.newSource,
       sourceRevision: 1,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: first.changedSourceIds,
       patches: first.patches,
       trigger: "drag-handle"
@@ -100,7 +170,7 @@ describe("computeSnapshot incremental parser integration", () => {
       kind: "render",
       source,
       sourceRevision: 7,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
     const expected = `source-revision:doc-a:7:${source.length}`;
 
@@ -120,14 +190,14 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "drag-move-seed",
       kind: "render",
       source,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     const incremental = await computeSnapshot({
       id: "drag-move-incremental",
       kind: "render",
       source: nextSource,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: ["path:1"],
       patches: [computeSinglePatch(source, nextSource)],
       trigger: "drag-element"
@@ -136,7 +206,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "drag-move-canonical",
       kind: "render",
       source: nextSource,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     expect(incremental.snapshot.incremental?.parseStrategy).toBe("incremental");
@@ -156,7 +226,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "resize-seed",
       kind: "render",
       source,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
     const action = applyEditAction(source, seeded.snapshot.editHandles, {
       kind: "resizeElement",
@@ -173,7 +243,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "resize-incremental",
       kind: "render",
       source: action.newSource,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: action.changedSourceIds ?? ["path:0"],
       patches: action.patches,
       trigger: "drag-element"
@@ -182,7 +252,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "resize-canonical",
       kind: "render",
       source: action.newSource,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     expect(incremental.snapshot.incremental?.parseStrategy).toBe("incremental");
@@ -204,14 +274,14 @@ describe("computeSnapshot incremental parser integration", () => {
       kind: "render",
       source,
       sourceRevision: 0,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
     const incremental = await computeSnapshot({
       id: "coalesced-drag-incremental",
       kind: "render",
       source: nextSource,
       sourceRevision: 2,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: ["path:0"],
       patches: [computeSinglePatch(skippedSource, nextSource)],
       patchBaseRevision: 1,
@@ -221,7 +291,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "coalesced-drag-canonical",
       kind: "render",
       source: nextSource,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     expect(incremental.snapshot.incremental?.parseStrategy).toBe("incremental");
@@ -241,14 +311,14 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "closure-seed",
       kind: "render",
       source,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     const incremental = await computeSnapshot({
       id: "closure-incremental",
       kind: "render",
       source: nextSource,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: ["path:1"],
       patches: [computeSinglePatch(source, nextSource)],
       trigger: "drag-element"
@@ -257,7 +327,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "closure-canonical",
       kind: "render",
       source: nextSource,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     expect(incremental.snapshot.incremental?.replayMode).toBe("selective");
@@ -285,14 +355,14 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scope-seed",
       kind: "render",
       source,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     const incremental = await computeSnapshot({
       id: "scope-incremental",
       kind: "render",
       source: nextSource,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: ["path:1"],
       patches: [computeSinglePatch(source, nextSource)],
       trigger: "drag-element"
@@ -301,7 +371,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scope-canonical",
       kind: "render",
       source: nextSource,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     expect(incremental.snapshot.incremental?.replayMode).toBe("selective");
@@ -325,14 +395,14 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "foreach-seed",
       kind: "render",
       source,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     const incremental = await computeSnapshot({
       id: "foreach-incremental",
       kind: "render",
       source: nextSource,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: ["path:1"],
       patches: [computeSinglePatch(source, nextSource)],
       trigger: "drag-element"
@@ -341,7 +411,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "foreach-canonical",
       kind: "render",
       source: nextSource,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     expect(incremental.snapshot.incremental?.replayMode).toBe("selective");
@@ -360,14 +430,14 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "handle-seed",
       kind: "render",
       source,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     const incremental = await computeSnapshot({
       id: "handle-incremental",
       kind: "render",
       source: nextSource,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: ["path:0"],
       patches: [computeSinglePatch(source, nextSource)],
       trigger: "drag-handle"
@@ -376,7 +446,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "handle-canonical",
       kind: "render",
       source: nextSource,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     expect(incremental.snapshot.incremental?.parseStrategy).toBe("incremental");
@@ -398,7 +468,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scope-move-seed",
       kind: "render",
       source,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     const action = applyEditAction(source, seeded.snapshot.editHandles, {
@@ -415,7 +485,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scope-move-incremental",
       kind: "render",
       source: action.newSource,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: action.changedSourceIds ?? ["scope:0"],
       patches: action.patches,
       trigger: "drag-element"
@@ -424,7 +494,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scope-move-canonical",
       kind: "render",
       source: action.newSource,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     expect(incremental.snapshot.incremental?.parseStrategy).toBe("incremental");
@@ -447,7 +517,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scope-resize-seed",
       kind: "render",
       source,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     const action = applyEditAction(source, seeded.snapshot.editHandles, {
@@ -465,7 +535,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scope-resize-incremental",
       kind: "render",
       source: action.newSource,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: action.changedSourceIds ?? ["scope:0"],
       patches: action.patches,
       trigger: "drag-element"
@@ -474,7 +544,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scope-resize-canonical",
       kind: "render",
       source: action.newSource,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     expect(incremental.snapshot.incremental?.parseStrategy).toBe("incremental");
@@ -498,7 +568,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scope-resize-mixed-seed",
       kind: "render",
       source,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     const action = applyEditAction(source, seeded.snapshot.editHandles, {
@@ -516,7 +586,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scope-resize-mixed-incremental",
       kind: "render",
       source: action.newSource,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: action.changedSourceIds ?? ["scope:0"],
       patches: action.patches,
       trigger: "drag-element"
@@ -525,7 +595,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scope-resize-mixed-canonical",
       kind: "render",
       source: action.newSource,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     expect(incremental.snapshot.incremental?.parseStrategy).toBe("incremental");
@@ -545,7 +615,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "prewarm-seed",
       kind: "render",
       source,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
     const prewarm = await computeSnapshot({
       id: "prewarm-reuse",
@@ -568,13 +638,13 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "canonical-seed",
       kind: "render",
       source,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
     const dragFrame = await computeSnapshot({
       id: "canonical-drag",
       kind: "render",
       source: nextSource,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: ["path:0"],
       patches: [computeSinglePatch(source, nextSource)],
       trigger: "drag-element"
@@ -583,7 +653,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "canonical-refresh",
       kind: "render",
       source: nextSource,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     expect(dragFrame.snapshot.incremental?.parseStrategy).toBe("incremental");
@@ -600,7 +670,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scrub-seed",
       kind: "render",
       source,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
     const patches = deriveSingleSourcePatch(source, nextSource);
     expect(patches).not.toBeNull();
@@ -612,7 +682,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scrub-incremental",
       kind: "render",
       source: nextSource,
-      activeFigureId: seeded.snapshot.activeFigureId,
+      activeRootId: seeded.snapshot.activeRootId,
       changedSourceIds: ["path:0"],
       patches,
       trigger: "drag-element"
@@ -621,7 +691,7 @@ describe("computeSnapshot incremental parser integration", () => {
       id: "scrub-canonical",
       kind: "render",
       source: nextSource,
-      activeFigureId: "figure:0"
+      activeRootId: "figure:0"
     });
 
     expect(incremental.snapshot.incremental?.parseStrategy).toBe("incremental");

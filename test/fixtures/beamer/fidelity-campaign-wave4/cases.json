@@ -1,0 +1,128 @@
+{
+  "formatVersion": 1,
+  "title": "Beamer bounded package frontends",
+  "fidelity": [
+    {
+      "id": "braket",
+      "file": "braket.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "braket",
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "siunitx",
+      "file": "siunitx.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "siunitx",
+      "oracleText": [
+        "Alpha",
+        "Text"
+      ]
+    },
+    {
+      "id": "listings",
+      "file": "listings.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "listings",
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "alltt",
+      "file": "alltt.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "alltt",
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "subfigures",
+      "file": "subfigures.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "subfigures",
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "notation-nested",
+      "file": "notation-nested.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "notation-nested",
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "listings-literal",
+      "file": "listings-literal.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "listings-literal",
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "subfigures-top",
+      "file": "subfigures-top.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "subfigures",
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "alltt-top-level",
+      "file": "alltt-top-level.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "alltt",
+      "oracleText": [
+        "BeforeOpaque",
+        "AfterOpaque",
+        "hello"
+      ]
+    },
+    {
+      "id": "alltt-column",
+      "file": "alltt-column.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "alltt",
+      "oracleText": [
+        "BeforeOpaque",
+        "AfterOpaque",
+        "hello"
+      ]
+    },
+    {
+      "id": "alltt-block",
+      "file": "alltt-block.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "alltt",
+      "oracleText": [
+        "BeforeOpaque",
+        "AfterOpaque",
+        "hello"
+      ]
+    }
+  ],
+  "recognition": []
+}

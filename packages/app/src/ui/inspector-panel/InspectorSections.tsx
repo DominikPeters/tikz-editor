@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import type { InspectorDescriptor, InspectorProperty } from "tikz-editor/edit/inspector";
+import type { InspectorDescriptor, InspectorProperty } from "@tikz-editor/core/edit/inspector";
 import {
   type MultiInspectorProperty,
   type MultiInspectorSection,

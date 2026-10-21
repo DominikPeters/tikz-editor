@@ -200,7 +200,7 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
         document.title = dirty ? `• ${baseTitle}` : baseTitle;
       },
       showMessage: async ({ title, message: body, kind }) => {
-        await message(body, { title, kind });
+        await message(body, { title, ...(kind === undefined ? {} : { kind }) });
       },
       openExternalUrl: async (url) => {
         try {

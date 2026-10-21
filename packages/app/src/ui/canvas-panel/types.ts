@@ -1,12 +1,15 @@
-import type { AdornmentOwnerGeometry, Span, Statement } from "tikz-editor/ast/types";
-import type { ComplexPathSegment } from "tikz-editor/edit/element-templates";
-import type { EditAction, ResizeRole } from "tikz-editor/edit/actions";
-import type { EditParseOptions } from "tikz-editor/edit/parse-options";
-import type { SelectionGeometry, SnapContext, SnapLine } from "tikz-editor/edit/snapping";
-import type { EditHandle, NodeAnchorTarget, SceneElement, SceneText } from "tikz-editor/semantic/types";
-import type { SvgViewBox } from "tikz-editor/svg/index";
-import type { NodeTextLayoutKind } from "tikz-editor/text/types";
-import type { FrameTransform } from "tikz-editor/coords/index";
+import type { DocumentEditSession } from "../../edit-session";
+import type { EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
+import type { AdornmentOwnerGeometry, Span, Statement } from "@tikz-editor/core/ast/types";
+import type { ComplexPathSegment } from "@tikz-editor/core/edit/element-templates";
+import type { EditAction, EditActionResult, MoveElementsBaseline, ResizeRole } from "@tikz-editor/core/edit/actions";
+import type { PathRectangleResizeBaseline } from "@tikz-editor/core/edit/actions/resize-element";
+import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
+import type { AxisSnapBuckets, SelectionGeometry, SnapContext, SnapLine } from "@tikz-editor/core/edit/snapping";
+import type { EditHandle, NodeAnchorTarget, SceneElement, SceneText } from "@tikz-editor/core/semantic/types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/index";
+import type { NodeTextLayoutKind } from "@tikz-editor/core/text/types";
+import type { FrameTransform } from "@tikz-editor/core/coords/index";
 import type { Dispatch, SetStateAction } from "react";
 
 import type { SessionSnapshot } from "../../compute";
@@ -16,6 +19,7 @@ import type { ToolCreateMode } from "../tool-config";
 import type { ClientPoint, SvgBounds, SvgPoint, ViewportBounds, ViewportPoint, WorldBounds, WorldPoint, WorldVector } from "../coords/types";
 import type { HitRegion } from "./hit-regions";
 import type { ResizeFrame } from "./resize-frames";
+import type { MatrixCellAnchorHint } from "./endpoint-anchor-snap";
 
 export type GuideOrientation = "vertical" | "horizontal";
 
@@ -36,7 +40,9 @@ export type CanvasEditParseOptions = EditParseOptions;
 export type ApplyActionWithFeedbackFn = (
   action: EditAction,
   historyMergeKey?: string,
-  sourceOverride?: string
+  sourceOverride?: string,
+  geometry?: EditGeometrySession,
+  recordInHistory?: boolean
 ) => ApplyActionFeedback;
 
 export type CanvasContextMenuState = {
@@ -116,11 +122,17 @@ export type MagnifierState = {
 export type DragState =
   | {
       kind: "element";
+      geometry?: EditGeometrySession;
+      didEdit?: boolean;
       pointerId: number;
       elementIds: string[];
       startWorld: WorldPoint;
       adornmentDragFromText?: boolean;
       lastAppliedTotalDelta: WorldVector;
+      baseline: MoveElementsBaseline;
+      latestSource: string;
+      editSession?: DocumentEditSession;
+      snapTargets?: AxisSnapBuckets;
       adornmentDrag?: {
         ownerPoint: WorldPoint;
         ownerGeometry?: AdornmentOwnerGeometry;
@@ -141,6 +153,7 @@ export type DragState =
         initialAnchorOffset: WorldVector;
         initialDistancePt: number;
         initialDirectionalAnchorPt: number;
+        position: number;
         segment: NonNullable<EditHandle["pathAttachmentContext"]>["segment"];
         regime: NonNullable<EditHandle["pathAttachmentContext"]>["regime"];
         lastPreviewDelta?: WorldVector;
@@ -153,9 +166,18 @@ export type DragState =
     }
   | {
       kind: "resize";
+      geometry?: EditGeometrySession;
+      didEdit?: boolean;
+      rectangleBaseline: PathRectangleResizeBaseline | null;
+      latestSource: string;
+      editSession?: DocumentEditSession;
+      snapContext: SnapContext | null;
+      snapTargets?: AxisSnapBuckets;
+      snapPoint?: WorldPoint;
       pointerId: number;
       elementId: string;
       role: ResizeRole;
+      movingCornerRole?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
       cursor: string;
       preserveAspectRatio: number | null;
       initialFrame: ResizeFrame;
@@ -173,6 +195,8 @@ export type DragState =
     }
   | {
       kind: "rotate";
+      geometry?: EditGeometrySession;
+      didEdit?: boolean;
       pointerId: number;
       elementId: string;
       sourceId: string;
@@ -189,12 +213,19 @@ export type DragState =
       lastPointerWorld: WorldPoint;
       preEditBaselineSource: string;
       latestSource: string;
+      editSession?: DocumentEditSession;
       historyMergeKey: string;
     }
   | {
       kind: "handle";
+      geometry?: EditGeometrySession;
+      didEdit?: boolean;
+      latestSource: string;
+      editSession?: DocumentEditSession;
+      snapTargets?: AxisSnapBuckets;
       pointerId: number;
       handleId: string;
+      handleEditingId?: string;
       sourceId: string;
       handleKind: EditHandle["kind"];
       cursor: string;
@@ -203,6 +234,8 @@ export type DragState =
       gridResizeSnap: GridResizeSnapConfig | null;
       historyMergeKey: string;
       activeEndpointAnchor: NodeAnchorTarget | null;
+      nodeAnchorTargets: readonly NodeAnchorTarget[];
+      matrixCellAnchorHints: readonly MatrixCellAnchorHint[];
     }
   | {
       kind: "pan";
@@ -228,6 +261,7 @@ export type DragState =
       currentWorld: WorldPoint;
       activeEndpointAnchor: NodeAnchorTarget | null;
       snapContext: SnapContext | null;
+      previousToolTargets?: AxisSnapBuckets;
     }
   | {
       kind: "tool-bezier-bend";
@@ -237,6 +271,7 @@ export type DragState =
       rawCurrentWorld: WorldPoint;
       currentWorld: WorldPoint;
       snapContext: SnapContext | null;
+      previousToolTargets?: AxisSnapBuckets;
     }
   | {
       kind: "tool-path-segment";
@@ -249,6 +284,7 @@ export type DragState =
       bendWorld: WorldPoint;
       isBending: boolean;
       snapContext: SnapContext | null;
+      previousToolTargets?: AxisSnapBuckets;
     }
   | {
       kind: "tool-freehand";
@@ -299,22 +335,44 @@ export type TextSelectionOverlayBox = {
   rotationDeg?: number;
 };
 
+/**
+ * One rendered paragraph inside a scope-wide editing session, in flow
+ * order: enough to route document offsets and pointer positions to the
+ * paragraph that renders them.
+ */
+export type ScopeParagraphRef = {
+  paragraphId: string;
+  /** Paragraph layout span in document coordinates. */
+  sourceSpan: Span;
+  /** Paragraph bounds in SVG/page coordinates. */
+  bounds: { x: number; y: number; width: number; height: number };
+};
+
 export type TextEditingSession = {
   sourceId: string;
   sceneTextId: string;
   sourceSpan: Span;
   workingSource: string;
+  /**
+   * Structure-free document spans inside the buffer that may be masked for
+   * the structural parse while their content is transiently invalid.
+   * Null means the whole buffer is structure-free (TikZ node sessions).
+   */
+  maskRanges: readonly Span[] | null;
   text: string;
   selectionStart: number;
   selectionEnd: number;
   historyMergeKey: string;
-  usesMathJax: boolean;
+  usesTex: boolean;
   paragraphId: string | null;
   renderSourceText: string;
   layoutKind: NodeTextLayoutKind;
   region: Extract<HitRegion, { shape: "rect" }>;
   popupAnchorBox?: SvgBounds;
   isForeachTemplateEdit: boolean;
+  editMode: "default" | "inline-typo";
+  /** True when the buffer is a Beamer edit scope spanning many paragraphs. */
+  isScopeSession: boolean;
 };
 
 export type NodeAnchorOverlayState = {
@@ -337,15 +395,41 @@ export type EditableTextTarget = {
   sceneTextId: string;
   sourceSpan: Span;
   text: string;
+  /**
+   * Structure-free document spans inside the buffer (e.g. Beamer editable
+   * runs). When present, only the range containing an edit is masked for
+   * structural parsing; when absent the whole buffer is masked.
+   */
+  structuralMaskRanges?: readonly Span[];
+  /**
+   * Rendered paragraphs covered by the buffer, in flow order. Present on
+   * Beamer scope targets; hit-testing and selection overlays resolve
+   * against the paragraph containing the pointer or offset.
+   */
+  scopeParagraphs?: readonly ScopeParagraphRef[];
+  /**
+   * When the clicked region renders an atomic construct (macro output,
+   * embedded tikzpicture, graphics), the session opens with this document
+   * span selected instead of resolving a caret from the pointer.
+   */
+  atomicSelectionSpan?: Span;
+  /** Complete paragraph source used by report-driven hit testing. */
+  layoutSourceSpan?: Span;
+  /** Complete paragraph text used by report-driven hit testing. */
+  layoutSourceText?: string;
   renderSourceText: string;
-  usesMathJax: boolean;
+  usesTex: boolean;
   paragraphId: string | null;
   layoutKind: NodeTextLayoutKind;
-  style: SceneText["style"];
+  style: Pick<
+    SceneText["style"],
+    "fontSize" | "fontStyle" | "fontWeight" | "fontFamily" | "textAlign"
+  >;
   totalWidth: number;
   region: Extract<HitRegion, { shape: "rect" }>;
   popupAnchorBox?: SvgBounds;
   isForeachTemplateEdit?: boolean;
+  editMode?: "default" | "inline-typo";
 };
 
 export type SnapDebugLogInput = {
@@ -365,6 +449,7 @@ export type SnapDebugLogInput = {
 export type ApplyActionFeedback = {
   sourceChanged: boolean;
   newSource?: string;
+  result?: Extract<EditActionResult, { kind: "success" | "partial" }>;
 };
 
 export type SelectionBounds = {

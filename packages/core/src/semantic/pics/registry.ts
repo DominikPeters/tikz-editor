@@ -1,20 +1,23 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type { PicOperationItem, Span } from "../../ast/types.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { stripWrappingBraces } from "../../utils/braces.js";
 import type { StyleSourceRef } from "../style-chain.js";
 import { cloneStyleSourceRef } from "../style-chain.js";
 import { parseStyleValueAsOptionList } from "../style/option-utils.js";
+import { PersistentMap } from "../persistent-map.js";
 
 type PicCodeLayer = "normal" | "background" | "foreground";
 
-export type PicDefinition = {
-  name: string;
+type PicCodeBody = {
   codeRaw: string;
   codeSpan?: Span;
   sourceRef: StyleSourceRef;
   parameterized: boolean;
   codeLayer: PicCodeLayer;
 };
+
+export type PicDefinition = { name: string; codes: PicCodeBody[] };
 
 export type PicDefinitionRegistry = Map<string, PicDefinition>;
 
@@ -35,11 +38,18 @@ export type ResolvedPicCode =
     };
 
 export function createDefaultPicDefinitionRegistry(): PicDefinitionRegistry {
-  return new Map();
+  return new PersistentMap();
 }
 
 export function clonePicDefinitionRegistry(registry: PicDefinitionRegistry): PicDefinitionRegistry {
-  return new Map(registry);
+  if (registry instanceof PersistentMap) {
+    return registry.fork();
+  }
+  const imported = new PersistentMap<string, PicDefinition>();
+  for (const [name, definition] of registry) {
+    imported.set(name, definition);
+  }
+  return imported;
 }
 
 export function applyPicDefinitionsFromOptionLists(
@@ -65,93 +75,64 @@ export function applyPicDefinitionsFromOptionLists(
       if (styleName) {
         const valueStart = resolveValueStartOffset(entry);
         const nested = parseStyleValueAsOptionList(entry.valueRaw, valueStart);
-        const codeEntry = nested ? findPicCodeEntry(nested.entries) : null;
-        if (codeEntry) {
-          registerPicDefinition(
-            registry,
-            styleName,
-            codeEntry.entry.valueRaw,
-            codeEntry.entry.valueSpan ?? codeEntry.entry.span,
-            sourceRef,
-            codeEntry.layer
-          );
+        if (nested) {
+          registry.set(styleName, {
+            name: styleName,
+            codes: findPicCodeEntries(nested.entries).map(({ entry: codeEntry, layer }) =>
+              makePicCodeBody(codeEntry.valueRaw, codeEntry.valueSpan ?? codeEntry.span, sourceRef, layer)
+            )
+          });
         }
       }
     }
   }
 }
 
-export function resolvePicCode(item: PicOperationItem, registry: PicDefinitionRegistry): ResolvedPicCode {
-  const inlineFromOptions = item.options ? findPicCodeEntry(item.options.entries) : null;
-  if (inlineFromOptions) {
-    const code = normalizePicCodeRawAndSpan(inlineFromOptions.entry.valueRaw, inlineFromOptions.entry.valueSpan ?? inlineFromOptions.entry.span);
-    const parameterized = containsParameterPlaceholder(inlineFromOptions.entry.valueRaw);
-    return {
-      kind: "found",
-      codeRaw: code.raw,
-      codeSpan: code.span,
-      sourceRef: {
-        sourceId: item.id,
-        sourceSpan: code.span,
-        sourceKind: "pic-inline-code",
-        label: "pics/code"
-      },
-      source: "inline",
-      parameterized,
-      unresolvedParameters: parameterized,
-      codeLayer: inlineFromOptions.layer
-    };
-  }
-
-  const typeRaw = item.typeRaw.trim();
-  if (typeRaw.length === 0) {
-    return { kind: "not-found", reason: "Pic type is empty." };
-  }
-
-  const typeOptionList = parseStyleValueAsOptionList(typeRaw, item.typeSpan?.from ?? item.span.from);
-  const inlineFromType = typeOptionList ? findPicCodeEntry(typeOptionList.entries) : null;
-  if (inlineFromType) {
-    const code = normalizePicCodeRawAndSpan(inlineFromType.entry.valueRaw, inlineFromType.entry.valueSpan ?? inlineFromType.entry.span);
-    const parameterized = containsParameterPlaceholder(inlineFromType.entry.valueRaw);
-    return {
-      kind: "found",
-      codeRaw: code.raw,
-      codeSpan: code.span,
-      sourceRef: {
-        sourceId: item.id,
-        sourceSpan: code.span,
-        sourceKind: "pic-inline-code",
-        label: "pic code"
-      },
-      source: "inline",
-      parameterized,
-      unresolvedParameters: parameterized,
-      codeLayer: inlineFromType.layer
-    };
-  }
-
-  const lookup = resolveDefinitionLookup(typeRaw, typeOptionList, registry);
-  const definition = lookup?.definition ?? null;
-  if (!definition) {
-    return { kind: "not-found", reason: `Unknown pic type '${typeRaw}'.` };
-  }
-
-  const substitutedCode =
-    definition.parameterized && lookup?.parameterRaw != null
-      ? substitutePicParameter(definition.codeRaw, lookup.parameterRaw)
-      : definition.codeRaw;
-  const unresolvedParameters = containsParameterPlaceholder(substitutedCode);
-
-  return {
-    kind: "found",
-    codeRaw: substitutedCode,
-    codeSpan: substitutedCode === definition.codeRaw ? definition.codeSpan : undefined,
-    sourceRef: definition.sourceRef,
-    source: "definition",
-    parameterized: definition.parameterized,
-    unresolvedParameters,
-    codeLayer: definition.codeLayer
+export function resolvePicCode(item: PicOperationItem, registry: PicDefinitionRegistry): ResolvedPicCode[] {
+  const codes = new Map<PicCodeLayer, Extract<ResolvedPicCode, { kind: "found" }>>();
+  const assignInline = (entry: Extract<OptionEntry, { kind: "kv" }>): void => {
+    const layer = picCodeLayerForKey(entry.key);
+    const code = makePicCodeBody(entry.valueRaw, entry.valueSpan ?? entry.span, {
+      sourceId: item.id,
+      sourceKind: "pic-inline-code",
+      label: entry.key
+    }, layer);
+    codes.set(layer, { kind: "found", ...code, source: "inline", unresolvedParameters: code.parameterized });
   };
+  for (const { entry } of findPicCodeEntries(item.options?.entries ?? [])) assignInline(entry);
+
+  // Pic options execute first; the type body may assign or replace individual
+  // stored keys afterwards. Each code key keeps its own final assignment.
+  const typeRaw = item.typeRaw.trim();
+  const typeOptions = parseStyleValueAsOptionList(typeRaw, item.typeSpan?.from ?? item.span.from);
+  let foundDefinition = false;
+  for (const entry of typeOptions?.entries ?? []) {
+    if (entry.kind === "unknown") continue;
+    if (entry.kind === "kv" && isPicCodeOptionKey(entry.key)) {
+      assignInline(entry);
+      continue;
+    }
+    const definition = registry.get(normalizePicName(entry.key));
+    if (!definition) continue;
+    foundDefinition = true;
+    for (const code of definition.codes) {
+      const substitutedCode = code.parameterized && entry.kind === "kv"
+        ? substitutePicParameter(code.codeRaw, stripWrappingBraces(entry.valueRaw.trim()))
+        : code.codeRaw;
+      const optionalCodeSpan1 = substitutedCode === code.codeRaw ? code.codeSpan : undefined;
+      codes.set(code.codeLayer, {
+        kind: "found", ...code,
+        codeRaw: substitutedCode,
+        ...(optionalCodeSpan1 === undefined ? {} : { codeSpan: optionalCodeSpan1 }),
+        source: "definition",
+        unresolvedParameters: containsParameterPlaceholder(substitutedCode)
+      });
+    }
+  }
+  if (codes.size === 0 && !foundDefinition) {
+    return [{ kind: "not-found", reason: typeRaw.length === 0 ? "Pic type is empty." : `Unknown pic type '${typeRaw}'.` }];
+  }
+  return PIC_CODE_EXECUTION_ORDER.flatMap((layer) => codes.has(layer) ? [requireDefined(codes.get(layer), "Expected an internal registry value")] : []);
 }
 
 export function isPicDefinitionOptionKey(key: string): boolean {
@@ -187,21 +168,24 @@ function registerPicDefinition(
   sourceRef: StyleSourceRef,
   codeLayer: PicCodeLayer = "normal"
 ): void {
+  registry.set(name, { name, codes: [makePicCodeBody(rawCode, codeSpan, sourceRef, codeLayer)] });
+}
+
+function makePicCodeBody(
+  rawCode: string,
+  codeSpan: Span | null | undefined,
+  sourceRef: StyleSourceRef,
+  codeLayer: PicCodeLayer
+): PicCodeBody {
   const code = normalizePicCodeRawAndSpan(rawCode, codeSpan);
-  registry.set(name, {
-    name,
+  const optionalSourceSpan2 = code.span ?? sourceRef.sourceSpan;
+  return {
     codeRaw: code.raw,
-    codeSpan: code.span,
-    sourceRef:
-      cloneStyleSourceRef(sourceRef) ??
-      ({
-        sourceId: `pic-definition:${name}:unknown`,
-        sourceKind: "pic-definition",
-        label: name
-      } satisfies StyleSourceRef),
+    ...(code.span === undefined ? {} : { codeSpan: code.span }),
+    sourceRef: { ...requireDefined(cloneStyleSourceRef(sourceRef), "Expected an internal registry value"), ...(optionalSourceSpan2 === undefined ? {} : { sourceSpan: optionalSourceSpan2 }) },
     parameterized: containsParameterPlaceholder(code.raw),
     codeLayer
-  });
+  };
 }
 
 function parsePicsStyleDefinitionName(normalizedKey: string): string | null {
@@ -212,16 +196,14 @@ function parsePicsStyleDefinitionName(normalizedKey: string): string | null {
   return name.length > 0 ? name : null;
 }
 
-function findPicCodeEntry(entries: readonly OptionEntry[]): { entry: Extract<OptionEntry, { kind: "kv" }>; layer: PicCodeLayer } | null {
+const PIC_CODE_EXECUTION_ORDER = ["normal", "foreground", "background"] as const;
+
+function findPicCodeEntries(entries: readonly OptionEntry[]): Array<{ entry: Extract<OptionEntry, { kind: "kv" }>; layer: PicCodeLayer }> {
+  const byLayer = new Map<PicCodeLayer, Extract<OptionEntry, { kind: "kv" }>>();
   for (const entry of entries) {
-    if (entry.kind !== "kv") {
-      continue;
-    }
-    if (isPicCodeOptionKey(entry.key)) {
-      return { entry, layer: picCodeLayerForKey(entry.key) };
-    }
+    if (entry.kind === "kv" && isPicCodeOptionKey(entry.key)) byLayer.set(picCodeLayerForKey(entry.key), entry);
   }
-  return null;
+  return PIC_CODE_EXECUTION_ORDER.flatMap((layer) => byLayer.has(layer) ? [{ entry: requireDefined(byLayer.get(layer), "Expected an internal registry value"), layer }] : []);
 }
 
 function picCodeLayerForKey(key: string): PicCodeLayer {
@@ -235,32 +217,6 @@ function picCodeLayerForKey(key: string): PicCodeLayer {
   return "normal";
 }
 
-function resolveDefinitionLookup(
-  typeRaw: string,
-  typeOptionList: OptionListAst | null,
-  registry: PicDefinitionRegistry
-): { definition: PicDefinition; parameterRaw?: string } | null {
-  const direct = registry.get(normalizePicName(typeRaw));
-  if (direct) {
-    return { definition: direct };
-  }
-
-  for (const entry of typeOptionList?.entries ?? []) {
-    if (entry.kind !== "kv") {
-      continue;
-    }
-
-    const definition = registry.get(normalizePicName(entry.key));
-    if (definition) {
-      return {
-        definition,
-        parameterRaw: stripWrappingBraces(entry.valueRaw.trim())
-      };
-    }
-  }
-
-  return null;
-}
 
 function substitutePicParameter(raw: string, parameterRaw: string): string {
   return raw.replace(/(^|[^\\])#1/g, `$1${parameterRaw}`);
@@ -294,10 +250,10 @@ function normalizePicCodeRawAndSpan(rawCode: string, span?: Span | null): { raw:
     };
   }
   let trimmedEnd = rawCode.length;
-  while (trimmedEnd > trimmedStart && /\s/u.test(rawCode[trimmedEnd - 1] ?? "")) {
+  while (trimmedEnd > trimmedStart && /\s/u.test(rawCode.charAt(trimmedEnd - 1))) {
     trimmedEnd -= 1;
   }
-  if (rawCode[trimmedStart] === "{" && rawCode[trimmedEnd - 1] === "}") {
+  if (rawCode.charAt(trimmedStart) === "{" && rawCode.charAt(trimmedEnd - 1) === "}") {
     return {
       raw,
       span: {

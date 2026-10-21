@@ -1,4 +1,11 @@
 export const capabilityFixtures: Record<string, string> = {
+  text_dirac_notation: String.raw`\begin{tikzpicture}\node {$\bra{a}\ket\psi+\braket{a|b}$};\end{tikzpicture}`,
+  beamer_scientific_notation: String.raw`\documentclass{beamer}\usepackage{siunitx}\begin{document}\begin{frame}$\SI{6.67e-5}{\metre\squared\per\second}$\end{frame}\end{document}`,
+  beamer_preformatted: String.raw`\documentclass{beamer}\usepackage{listings}\lstset{columns=fullflexible,basicstyle=\ttfamily}\begin{document}\begin{frame}[fragile]
+\begin{lstlisting}
+  code(x)
+\end{lstlisting}
+\end{frame}\end{document}`,
   basic_draw: String.raw`\begin{tikzpicture}
   \draw[thick, ->] (0,0) -- (1,1) -| (2,0) |- (3,1);
 \end{tikzpicture}`,
@@ -193,6 +200,10 @@ export const capabilityFixtures: Record<string, string> = {
   \path coordinate (p1) at (1,0);
   \draw (0,0) -- (p1);
 \end{tikzpicture}`,
+  calc_coordinates: String.raw`\begin{tikzpicture}
+  \coordinate (C) at (1,2);
+  \node at ($(C)+(.33,.11)$) {Label};
+\end{tikzpicture}`,
   graph_operation: String.raw`\begin{tikzpicture}
   \graph [nodes={draw,circle}] { a -> b -> {c, d} };
 \end{tikzpicture}`,
@@ -295,6 +306,76 @@ export const capabilityFixtures: Record<string, string> = {
   node_text: String.raw`\begin{tikzpicture}
   \node at (1,1) {Hello};
 \end{tikzpicture}`,
+  node_text_includegraphics: String.raw`\begin{tikzpicture}
+  \node at (0,0) {A \includegraphics[width=1cm]{missing-image} B};
+\end{tikzpicture}`,
+  text_tabular: String.raw`\begin{tikzpicture}\node {\begin{tabular}{lr}\toprule Alpha & Value\\ \midrule Beta & 2\\ \bottomrule\end{tabular}};\end{tikzpicture}`,
+  text_math_fonts: String.raw`\begin{tikzpicture}\node {$\bm{x}_i+\boldsymbol{\alpha}+5\%+|X|+\|X\|+\vert X\vert+\Vert X\Vert+a/b+n!;x?$};\end{tikzpicture}`,
+  text_transform_boxes: String.raw`\begin{tikzpicture}\node {Before \rotatebox{90}{Alpha} \scalebox{.8}{Beta} After};\end{tikzpicture}`,
+  beamer_frame_shrink: String.raw`\documentclass{beamer}\begin{document}\begin{frame}[shrink=20]{Title}\begin{enumerate}\item Alpha\item Beta\end{enumerate}\end{frame}\end{document}`,
+  beamer_titlepages: String.raw`\documentclass{beamer}\usetheme{moloch}\title{Title}\subtitle{Subtitle}\author{Author}\date{}\titlegraphic{\rule{20pt}{10pt}}\begin{document}\maketitle\end{document}`,
+  beamer_frame_flow: String.raw`\documentclass[14pt]{beamer}\begin{document}\begin{frame}{Title}\framesubtitle{Subtitle}\begin{columns}[T,onlytextwidth]\column{.4\textwidth}Left\column{.5\textwidth}Right\end{columns}\end{frame}\end{document}`,
+  beamer_theme_colors: String.raw`\documentclass{beamer}\setbeamercolor{normal text}{fg=black,bg=blue!10}\begin{document}\begin{frame}Alpha\end{frame}\end{document}`,
+  beamer_tcolorbox: String.raw`\documentclass{beamer}\usepackage{tcolorbox}\begin{document}\begin{frame}\begin{tcolorbox}[title=Check]\begin{itemize}\item Alpha\end{itemize}\end{tcolorbox}\end{frame}\end{document}`,
+  beamer_source_placeholders: String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}Before.\begin{tcolorbox}Unsupported body\end{tcolorbox}After.\end{frame}
+\end{document}`,
+  beamer_slide_manager: String.raw`\documentclass{beamer}
+\begin{document}
+\section{Start}
+\begin{frame}[label=first]{First}One\end{frame}
+\section{Next}
+\begin{frame}{Second}\hyperlink{first}{Back}\end{frame}
+\end{document}`,
+  beamer_direct_resize: String.raw`\documentclass{beamer}
+\begin{document}\begin{frame}
+\begin{columns}
+\begin{column}{.55\textwidth}Left\par\medskip Below\end{column}
+\begin{column}{.42\textwidth}\includegraphics[width=.8\linewidth]{demo.png}\end{column}
+\end{columns}
+\vspace{3pt}
+\end{frame}\end{document}`,
+  beamer_builds: String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}
+\begin{itemize}[<+->]\item First\item Second\end{itemize}
+\only<2->{\begin{block}{Result}Proof.\end{block}}
+\uncover<2-4>{Finite interval}
+\alt<2>{During}{Otherwise}
+\end{frame}
+\end{document}`,
+  beamer_frame_continuations: String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}[allowframebreaks]{Continued}
+Alpha.\newpage Beta.\par\framebreak Gamma.
+\end{frame}
+\end{document}`,
+  beamer_speaker_notes: String.raw`\documentclass{beamer}\begin{document}\begin{frame}Public\note<2>{Private}\end{frame}\end{document}`,
+  beamer_footnotes: String.raw`\documentclass{beamer}
+\begin{document}\begin{frame}Alpha\footnote{A frame note.}\end{frame}\end{document}`,
+  beamer_overlay_pictures: String.raw`\documentclass{beamer}\usepackage{tikz}
+\begin{document}\begin{frame}Text.
+\begin{tikzpicture}[remember picture, overlay]\node[anchor=north east] at (current page.north east) {Corner};\end{tikzpicture}
+\end{frame}\end{document}`,
+  beamer_float_captions: String.raw`\documentclass{beamer}
+\begin{document}\begin{frame}Before.\begin{figure}\rule{20pt}{10pt}\caption{Alpha}\end{figure}After.\end{frame}\end{document}`,
+  beamer_references: String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}See \hyperlink{refs}{references} and \cite{example}.\end{frame}
+\begin{frame}[label=refs]\begin{thebibliography}{9}
+\bibitem{example} Author. Title.
+\end{thebibliography}\end{frame}
+\end{document}`,
+  beamer_document_scan: String.raw`\documentclass{beamer}
+\begin{document}
+\section{Introduction}
+\begin{frame}[t]{A frame}
+  \begin{tikzpicture}
+    \node {Nested figure};
+  \end{tikzpicture}
+\end{frame}
+\end{document}`,
   matrix_basic: String.raw`\begin{tikzpicture}
   \matrix[matrix of nodes,row sep=4mm,column sep=6mm] (m) {
     A & B \\

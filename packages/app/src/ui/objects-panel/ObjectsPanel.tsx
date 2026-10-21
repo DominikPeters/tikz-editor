@@ -18,7 +18,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent
 } from "react";
-import { getSharedEditAnalysisView } from "../../edit-analysis-manager";
+import { buildEditParseOptions } from "../../edit-parse-options";
 import { useEditorStore } from "../../store/store";
 import { SidePanel } from "../SidePanel";
 import {
@@ -54,7 +54,7 @@ type ObjectsAction = {
 
 export function ObjectsPanel() {
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
-  const activeFigureId = useEditorStore((s) => s.activeFigureId);
+  const activeRootId = useEditorStore((s) => s.activeRootId);
   const activeHandleId = useEditorStore((s) => s.activeHandleId);
   const sourceRevision = useEditorStore((s) => s.sourceRevision);
   const source = useEditorStore((s) => s.source);
@@ -62,16 +62,19 @@ export function ObjectsPanel() {
   const selectedIds = useEditorStore((s) => s.selectedElementIds);
   const dispatch = useEditorStore((s) => s.dispatch);
 
-  const analysisView = useMemo(
-    () => getSharedEditAnalysisView({
-      documentId: activeDocumentId,
-      sourceRevision,
-      source,
-      activeFigureId,
-      snapshot
-    }),
-    [activeDocumentId, activeFigureId, snapshot, source, sourceRevision]
+  const parseOptions = useMemo(
+    () =>
+      buildEditParseOptions({
+        documentId: activeDocumentId,
+        sourceRevision,
+        source,
+        activeRootId,
+        snapshot,
+        analysis: "shared"
+      }),
+    [activeDocumentId, activeRootId, snapshot, source, sourceRevision]
   );
+  const { analysisView } = parseOptions;
   const model = useMemo(
     () => buildObjectsPanelModel({ analysisView, scene: snapshot.scene, selectedIds }),
     [analysisView, selectedIds, snapshot.scene]
@@ -104,11 +107,8 @@ export function ObjectsPanel() {
   const commandContext = useMemo<Parameters<typeof actionAvailability>[0]>(
     () => ({
       source,
-      activeFigureId,
-      parseOptions: {
-        activeFigureId,
-        analysisView
-      },
+      activeRootId,
+      parseOptions,
       figureCount: snapshot.figures.length,
       snapshotSource: snapshot.source,
       scene: snapshot.scene,
@@ -118,10 +118,10 @@ export function ObjectsPanel() {
       dispatch
     }),
     [
-      activeFigureId,
-      analysisView,
+      activeRootId,
       activeHandleId,
       dispatch,
+      parseOptions,
       selectedIds,
       snapshot.editHandles,
       snapshot.figures.length,
@@ -260,9 +260,9 @@ export function ObjectsPanel() {
 
   if (rows.length === 0) {
     return (
-      <SidePanel className={css.panel}>
+      <SidePanel className={css.panel ?? ""}>
         <SidePanel.Header>Objects</SidePanel.Header>
-        <SidePanel.Content className={css.content}>
+        <SidePanel.Content className={css.content ?? ""}>
           <div className={css.empty}>No scene objects in the current figure.</div>
         </SidePanel.Content>
       </SidePanel>
@@ -270,9 +270,9 @@ export function ObjectsPanel() {
   }
 
   return (
-    <SidePanel className={css.panel} data-testid="objects-panel">
+    <SidePanel className={css.panel ?? ""} data-testid="objects-panel">
       <SidePanel.Header>Objects</SidePanel.Header>
-      <SidePanel.Content className={css.content}>
+      <SidePanel.Content className={css.content ?? ""}>
         <div className={css.toolbar}>
           <div className={css.multiArrangeGroup} role="group" aria-label="Group selection actions">
             {groupActions.map((action) => renderActionButton(action))}

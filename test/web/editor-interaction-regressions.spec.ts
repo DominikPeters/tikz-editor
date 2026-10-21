@@ -137,7 +137,7 @@ describe("cutover regressions", () => {
       id: "grouped-drag-next",
       kind: "render",
       source: moved.newSource,
-      activeFigureId: initial.snapshot.activeFigureId,
+      activeRootId: initial.snapshot.activeRootId,
       trigger: "drag-element",
       changedSourceIds: moved.changedSourceIds ?? null,
       patches: moved.patches

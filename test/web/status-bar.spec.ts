@@ -5,7 +5,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CanvasDragKind, EditorAction, ToolMode } from "../../packages/app/src/store/types.js";
-import { getModifierKeyLabels } from "../../packages/app/src/ui/key-labels.js";
+import { formatAccelerator, getModifierKeyLabels } from "../../packages/app/src/ui/key-labels.js";
 
 type MockStatusBarState = {
   snapshot: {
@@ -79,6 +79,11 @@ import { StatusBar } from "../../packages/app/src/ui/StatusBar";
 describe("StatusBar", () => {
   let container: HTMLDivElement;
   let root: Root;
+
+  it("formats cross-platform accelerators from the shared platform helper", () => {
+    expect(formatAccelerator("CmdOrCtrl+Shift+S", "MacIntel")).toBe("Cmd Shift S");
+    expect(formatAccelerator("CmdOrCtrl+Shift+S", "Win32")).toBe("Ctrl+Shift+S");
+  });
 
   beforeEach(() => {
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

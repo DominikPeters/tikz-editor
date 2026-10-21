@@ -1,7 +1,8 @@
 import { px } from "../../coords/scalars.js";
 import type { Px } from "../../coords/scalars.js";
-import type { WorldBounds, WorldPoint } from "../../coords/points.js";
+import type { WorldBounds, WorldPoint, WorldVector } from "../../coords/points.js";
 import type { SceneElement } from "../../semantic/types.js";
+import type { SemanticDependencyGraph } from "../../semantic/dependencies.js";
 
 export type Axis = "x" | "y";
 
@@ -72,6 +73,7 @@ export type SelectionSnapPoint = WorldPoint & {
 
 export type SnapBounds = WorldBounds & {
   sourceId: string;
+  sourceIds?: string[];
 };
 
 export type Gap = {
@@ -98,8 +100,9 @@ export type SnapContext = {
   viewportWorld: WorldBounds | null;
   selectedSourceIds: string[];
   guides: SnapGuides;
-  referencePoints: SnapPoint[];
-  referenceBounds: SnapBounds[];
+  /** Immutable arrays let candidate indexes be reused for the whole gesture. */
+  referencePoints: readonly SnapPoint[];
+  referenceBounds: readonly SnapBounds[];
   visibleGaps: {
     horizontal: Gap[];
     vertical: Gap[];
@@ -117,6 +120,8 @@ export type SnapLine =
        * the distinct reference elements on the line, for labelling.
        */
       type: "points";
+      primary?: { from: WorldPoint; to: WorldPoint; sourceId?: string };
+      referenceBounds?: SnapBounds[];
       axis: Axis;
       role?: SnapPointRole;
       points: WorldPoint[];
@@ -126,15 +131,19 @@ export type SnapLine =
       type: "gap";
       direction: "horizontal" | "vertical";
       gapKind: "center" | "equal";
+      sourceIds?: string[];
+      referenceBounds?: SnapBounds[];
       segments: Array<[WorldPoint, WorldPoint]>;
     }
-  | { type: "pointer"; axis: Axis; from: WorldPoint; to: WorldPoint; sourceIds?: string[] };
+  | { type: "pointer"; referenceBounds?: SnapBounds[]; axis: Axis; from: WorldPoint; to: WorldPoint; sourceIds?: string[] };
 
 export type SnapResult = {
   offset: WorldPoint;
   snappedPoint?: WorldPoint;
   snappedDelta?: WorldPoint;
   lines: SnapLine[];
+  /** Candidates that caused this snap, retained for guide validation. */
+  targets?: AxisSnapBuckets;
 };
 
 export type SelectionGeometry = {
@@ -145,6 +154,7 @@ export type SelectionGeometry = {
 export type BuildSnapContextInput = {
   sceneElements: SceneElement[];
   selectedSourceIds: readonly string[];
+  dependencies?: SemanticDependencyGraph;
   zoom: number;
   viewportWorld?: WorldBounds | null;
   guides?: SnapGuideInput;
@@ -152,6 +162,7 @@ export type BuildSnapContextInput = {
 };
 
 export type SnapSelectionTranslationInput = {
+  previousTargets?: AxisSnapBuckets;
   context: SnapContext;
   selection: SelectionGeometry;
   rawDelta: WorldPoint;
@@ -161,8 +172,11 @@ export type SnapSelectionTranslationInput = {
 };
 
 export type SnapHandlePositionInput = {
+  previousTargets?: AxisSnapBuckets;
   context: SnapContext;
-  point: WorldPoint;
+  point: SelectionSnapPoint;
+  /** Optional permitted direction through point (for edges and aspect-locked corners). */
+  direction?: WorldVector | null;
   sourceId?: string;
   allowSelfSnap?: boolean;
   modifiers?: SnapModifiers;
@@ -179,6 +193,7 @@ export type SnapKeyboardNudgeInput = {
 export type SnapToolPointerKind = "node" | "line-end" | "rect-corner" | "circle-edge";
 
 export type SnapToolPointerInput = {
+  previousTargets?: AxisSnapBuckets;
   context: SnapContext;
   pointer: WorldPoint;
   kind: SnapToolPointerKind;
@@ -188,6 +203,7 @@ export type SnapToolPointerInput = {
 };
 
 export type PointSnapCandidate = {
+  selectionIndex?: number;
   kind: "point" | "grid" | "guide";
   axis: Axis;
   from: WorldPoint;

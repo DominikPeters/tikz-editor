@@ -1,0 +1,224 @@
+% Original minimal reproductions derived from the corpus review.
+% Each frame is isolated by scripts/probe-beamer-frame.mjs. Keep all settings
+% needed by the oracle in the preamble or within the selected frame.
+\documentclass[aspectratio=169]{beamer}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usetheme{Madrid}
+\usecolortheme{seahorse}
+\title{Corpus priorities}
+\author{}
+\date{}
+
+\begin{document}
+
+% 1: positive control, identical flow shape to hello_world_beamer.tex.
+\begin{frame}{Plain control}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \begin{column}{\textwidth}Baseline body text.\end{column}
+  \end{columns}
+\end{frame}
+
+% 2: supported siblings and nested lists within a block/column.
+\begin{frame}{Nested flow}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \begin{column}{.47\textwidth}
+      Before the block.
+      \begin{block}{Result}
+        \begin{itemize}
+          \item Alpha
+          \begin{itemize}\item Beta\end{itemize}
+          \item Gamma
+        \end{itemize}
+      \end{block}
+      After the block.
+    \end{column}
+    \begin{column}{.47\textwidth}Other column.\end{column}
+  \end{columns}
+\end{frame}
+
+% 3: remove the unsupported listing from r2-43 to isolate the block's math.
+\begin{frame}{Block inline math}
+  \begin{exampleblock}{Result}
+    Alpha $a\cdot b=\sum_{i=1}^{n}a_i b_i$.
+  \end{exampleblock}
+\end{frame}
+
+% 4: r2-34's block body, with neither custom macros nor theme overrides.
+\begin{frame}{Block aligned matrix}
+  Before the block.
+  \begin{block}{Encoding}
+    \begin{align*}
+      \mathrm{Alpha}&=\begin{pmatrix}1&0&0\end{pmatrix}\\
+      \mathrm{Beta}&=\begin{pmatrix}0&1&0\end{pmatrix}
+    \end{align*}
+  \end{block}
+  After the block.
+\end{frame}
+
+% 5: display math must not swallow the surrounding list.
+\begin{frame}{List with cases}
+  \begin{itemize}
+    \item Alpha
+    \item The function is
+      \[f(x)=\begin{cases}0&x<0\\x&x\geq0\end{cases}\]
+    \item Beta
+  \end{itemize}
+\end{frame}
+
+% 6: r2-17's leading footnote plus two ordinary lists.
+\begin{frame}{Footnote and lists}
+  \footnote{Contact: \url{https://example.org}.}
+  Alpha
+  \begin{itemize}\item Beta\item Gamma\end{itemize}
+  Delta
+  \begin{itemize}\item Epsilon\end{itemize}
+\end{frame}
+
+% 7/8: same asset through a figure wrapper and directly. Keep its natural
+% TeX size (64bp = 64.24pt) so the Lua node trace needs no PDF image matrix.
+\begin{frame}{Figure caption}
+  Before the figure.
+  \begin{figure}
+    \centering
+    \includegraphics[width=64.24pt]{test-image.png}
+    \caption{Alpha image}
+  \end{figure}
+  After the figure.
+\end{frame}
+
+\begin{frame}{Direct image control}
+  \includegraphics[width=64.24pt]{test-image.png}
+
+  Alpha image.
+\end{frame}
+
+% 9: simplest table, no package-specific column types or wrapper.
+\begin{frame}{Basic table}
+  \begin{tabular}{lr}
+    Alpha & 1\\
+    Beta & 2\\
+    Gamma & 3
+  \end{tabular}
+\end{frame}
+
+% 10: booktabs rules and a table wrapper in a column.
+\begin{frame}{Table in columns}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \begin{column}{.47\textwidth}
+      \begin{table}
+        \begin{tabular}{lr}
+          \toprule
+          Alpha & Value\\
+          \midrule
+          Beta & 2\\
+          Gamma & 3\\
+          \bottomrule
+        \end{tabular}
+      \end{table}
+    \end{column}
+    \begin{column}{.47\textwidth}Other column.\end{column}
+  \end{columns}
+\end{frame}
+
+% 11: isolate rotation from the table in r2-21.
+\begin{frame}{Rotated text}
+  Before.
+  \rotatebox{90}{Alpha}
+  After.
+\end{frame}
+
+% 12: scaling and minipage composition, without a table or author macro.
+\begin{frame}{Scaled minipage}
+  \scalebox{.8}{\begin{minipage}{160pt}
+    Alpha paragraph.
+
+    Beta paragraph.
+  \end{minipage}}
+\end{frame}
+
+% 13: declaration-form onslide scope extends until the next declaration.
+\begin{frame}{Declaration overlays}
+  \onslide<1->Alpha\par
+  \onslide<2->Beta\par
+  \onslide<3->Gamma\par
+\end{frame}
+
+% 14: built-in overprint and handout selectors from r2-29.
+\begin{frame}{Overprint states}
+  \begin{overprint}
+    \onslide<1|handout:0>Alpha.
+    \onslide<2|handout:0>Beta.\par Second line.
+    \onslide<3|handout:1>Gamma.
+  \end{overprint}
+\end{frame}
+
+% 15: positive control for explicit list overlays, including the hidden state.
+\begin{frame}{Item overlay control}
+  \begin{itemize}
+    \item<1-> Alpha
+    \item<2-> Beta
+  \end{itemize}
+\end{frame}
+
+% 16: three continuation pages are not three overlay states.
+\begin{frame}[allowframebreaks]{Forced continuations}
+  Alpha.
+  \newpage
+  Beta.\par
+  \framebreak
+  Gamma.
+\end{frame}
+
+% 17: automatic continuation without a forced page break.
+\begin{frame}[allowframebreaks=1]{Automatic continuations}
+  \begin{itemize}
+    \item \rule{0pt}{30pt}Alpha
+    \item \rule{0pt}{30pt}Beta
+    \item \rule{0pt}{30pt}Gamma
+    \item \rule{0pt}{30pt}Delta
+    \item \rule{0pt}{30pt}Epsilon
+    \item \rule{0pt}{30pt}Zeta
+    \item \rule{0pt}{30pt}Eta
+    \item \rule{0pt}{30pt}Theta
+  \end{itemize}
+\end{frame}
+
+% 18: equation+split with a local reference, all inside the isolated frame.
+\begin{frame}{Split equation and reference}
+  \begin{equation}\label{eq:priority}
+    \begin{split}
+      a+b&=c\\
+      d+e&=f
+    \end{split}
+  \end{equation}
+  Alpha equation \ref{eq:priority}.
+  \begin{equation}\begin{split}x+y&=z\\u+v&=w\end{split}\end{equation}
+\end{frame}
+
+% 19: cases in a column, r2-03 with the unrelated plot removed.
+\begin{frame}{Cases in columns}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \begin{column}{.47\textwidth}
+      \[f(x)=\begin{cases}0&\text{if }x<0\\x&\text{if }x\geq0\end{cases}\]
+      Alpha.
+    \end{column}
+    \begin{column}{.47\textwidth}Other column.\end{column}
+  \end{columns}
+\end{frame}
+
+% 20: ordinary scoped sizing and list spacing, not opaque code syntax.
+\begin{frame}{Scoped size and list spacing}
+  \begin{small}
+    Alpha paragraph.
+    \begin{itemize}
+      \setlength{\itemsep}{1em}
+      \item Beta
+      \item Gamma
+    \end{itemize}
+  \end{small}
+  Delta paragraph.
+\end{frame}
+
+\end{document}

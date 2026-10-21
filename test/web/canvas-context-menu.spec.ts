@@ -68,7 +68,7 @@ describe("CanvasContextMenu", () => {
       width: 800,
       height: 600,
       toJSON: () => ({})
-    }) as DOMRect);
+    }));
 
     renderMenu(makeBindings(), false);
 
@@ -117,5 +117,5 @@ function makeBindings(): CommandBindings {
         run: () => undefined
       }
     ])
-  ) as unknown as CommandBindings;
+  );
 }

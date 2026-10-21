@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { OptionListAst } from "../../options/types.js";
 import {
   resolveNodeShapeGeometryParams,
@@ -456,7 +457,7 @@ function signalDirectionsToEnumValue(sides: SignalDirection[]): string {
   }
   const unique = Array.from(new Set(sides));
   if (unique.length === 1) {
-    return unique[0];
+    return requireArrayValue(unique, 0);
   }
   const sorted = [...unique].sort();
   if (sorted.length === 2 && sorted[0] === "east" && sorted[1] === "west") {
@@ -465,5 +466,5 @@ function signalDirectionsToEnumValue(sides: SignalDirection[]): string {
   if (sorted.length === 2 && sorted[0] === "north" && sorted[1] === "south") {
     return "north and south";
   }
-  return unique[0];
+  return requireArrayValue(unique, 0);
 }

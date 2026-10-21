@@ -1,10 +1,10 @@
-import { applyMatrix } from "tikz-editor/semantic/transform";
-import type { SvgTransform, WorldBounds, WorldPoint, WorldTransform } from "tikz-editor/coords/index";
-import { mapWorldTransformToSvgTransform, worldPoint, worldToSvgTransform, pt } from "tikz-editor/coords/index";
-import type { SceneClipPath, SceneElement, ScenePathCommand, SceneText } from "tikz-editor/semantic/types";
+import { applyMatrix } from "@tikz-editor/core/semantic/transform";
+import type { SvgTransform, WorldBounds, WorldPoint, WorldTransform } from "@tikz-editor/core/coords/index";
+import { mapWorldTransformToSvgTransform, worldPoint, worldToSvgTransform, pt } from "@tikz-editor/core/coords/index";
+import type { SceneClipPath, SceneElement, ScenePathCommand, SceneText } from "@tikz-editor/core/semantic/types";
 import type { SvgPoint } from "../coords/types";
-import type { SvgViewBox } from "tikz-editor/svg/types";
-import { worldToSvgPoint } from "./geometry";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
+import { fmt, worldToSvgPoint } from "./geometry";
 
 const HIT_STROKE_PX = 18;
 const ADORNMENT_TEXT_HIT_PADDING_PX = 8;
@@ -15,7 +15,15 @@ export type HitRegionClipPath = {
   fillRule: "nonzero" | "evenodd";
 };
 
-export type HitRegion =
+/** What every region may carry besides its shape. */
+type HitRegionPlacement = {
+  /** Drawn shifted by this much: a drawing layer's shapes, in its own SVG coordinates, on its slide. */
+  offset?: { x: number; y: number };
+  /** On a slide: pressing it opens this drawing layer with the shape selected. */
+  layerEntry?: { rootId: string; sourceId: string };
+};
+
+export type HitRegion = HitRegionPlacement & (
   | {
       shape: "path";
       key: string;
@@ -73,13 +81,15 @@ export type HitRegion =
       sceneTextKey?: string;
       contentWidth?: number;
       contentHeight?: number;
+      /** Deck object-layer target: clicking selects this object. */
+      deckObjectId?: string;
       matrixEdgeSelection?: {
         kind: "row" | "column";
         matrixSourceId: string;
         selectionIds: string[];
         cursor: "e-resize" | "s-resize";
       };
-    };
+    });
 
 export type ScopeHitBounds = {
   scopeId: string;
@@ -115,9 +125,9 @@ export function buildHitRegions(
         key: `hit:${element.id}`,
         sourceId,
         targetId: element.adornment?.targetId ?? sourceId,
-        clipChain,
+        ...(clipChain !== undefined ? { clipChain } : {}),
         d,
-        transform,
+        ...(transform !== undefined ? { transform: transform } : {}),
         pointerMode,
         strokeWidth
       });
@@ -133,7 +143,7 @@ export function buildHitRegions(
         key: `hit:${element.id}`,
         sourceId,
         targetId: element.adornment?.targetId ?? sourceId,
-        clipChain,
+        ...(clipChain !== undefined ? { clipChain } : {}),
         cx: center.x,
         cy: center.y,
         r: element.radius,
@@ -152,7 +162,7 @@ export function buildHitRegions(
         key: `hit:${element.id}`,
         sourceId,
         targetId: element.adornment?.targetId ?? sourceId,
-        clipChain,
+        ...(clipChain !== undefined ? { clipChain } : {}),
         cx: center.x,
         cy: center.y,
         rx: element.rx,
@@ -173,7 +183,7 @@ export function buildHitRegions(
         key: `${sceneTextKey}:halo`,
         sourceId,
         targetId: element.adornment.targetId,
-        clipChain,
+        ...(clipChain !== undefined ? { clipChain } : {}),
         x: textGeometry.cx - textGeometry.width / 2 - hitPadding,
         y: textGeometry.cy - textGeometry.height / 2 - hitPadding,
         width: textGeometry.width + 2 * hitPadding,
@@ -181,13 +191,15 @@ export function buildHitRegions(
         cx: textGeometry.cx,
         cy: textGeometry.cy,
         rotation: textGeometry.rotation,
-        transform: textGeometry.transform,
+        ...(textGeometry.transform !== undefined ? { transform: textGeometry.transform } : {}),
         interactionMode: "move",
         sceneTextKey,
         contentWidth: textGeometry.width,
         contentHeight: textGeometry.height
       });
     }
+    const nodeWidth = element.nodeVisualWidth;
+    const nodeHeight = element.nodeVisualHeight;
     const hasNodeVisualBounds =
       Number.isFinite(element.nodeVisualWidth) &&
       Number.isFinite(element.nodeVisualHeight) &&
@@ -197,9 +209,7 @@ export function buildHitRegions(
       !element.adornment &&
       !element.matrixCell &&
       !sourceHasNonAdornmentNonText.has(sourceId);
-    if (isTextOnlyNodeSource && hasNodeVisualBounds) {
-      const nodeWidth = element.nodeVisualWidth!;
-      const nodeHeight = element.nodeVisualHeight!;
+    if (isTextOnlyNodeSource && hasNodeVisualBounds && nodeWidth !== undefined && nodeHeight !== undefined) {
       const hasExtraNodeArea =
         nodeWidth > textGeometry.width + 1e-6 ||
         nodeHeight > textGeometry.height + 1e-6;
@@ -209,7 +219,7 @@ export function buildHitRegions(
           key: `${sceneTextKey}:node-area`,
           sourceId,
           targetId: sourceId,
-          clipChain,
+          ...(clipChain !== undefined ? { clipChain } : {}),
           x: textGeometry.cx - nodeWidth / 2,
           y: textGeometry.cy - nodeHeight / 2,
           width: nodeWidth,
@@ -217,7 +227,7 @@ export function buildHitRegions(
           cx: textGeometry.cx,
           cy: textGeometry.cy,
           rotation: textGeometry.rotation,
-          transform: textGeometry.transform,
+          ...(textGeometry.transform !== undefined ? { transform: textGeometry.transform } : {}),
           interactionMode: "move",
           sceneTextKey,
           contentWidth: textGeometry.width,
@@ -230,7 +240,7 @@ export function buildHitRegions(
       key: sceneTextKey,
       sourceId,
       targetId: element.adornment?.targetId ?? sourceId,
-      clipChain,
+      ...(clipChain !== undefined ? { clipChain } : {}),
       x: textGeometry.cx - textGeometry.width / 2,
       y: textGeometry.cy - textGeometry.height / 2,
       width: textGeometry.width,
@@ -238,7 +248,7 @@ export function buildHitRegions(
       cx: textGeometry.cx,
       cy: textGeometry.cy,
       rotation: textGeometry.rotation,
-      transform: textGeometry.transform,
+      ...(textGeometry.transform !== undefined ? { transform: textGeometry.transform } : {}),
       interactionMode: "text",
       pointerMode: "fill",
       sceneTextKey,
@@ -336,7 +346,7 @@ function textGeometryInSvg(
     width,
     height,
     rotation: 0,
-    transform
+    ...(transform !== undefined ? { transform: transform } : {})
   };
 }
 
@@ -456,10 +466,6 @@ function encodePathData(commands: ScenePathCommand[], viewBox: Pick<SvgViewBox, 
   }
 
   return chunks.join(" ");
-}
-
-function fmt(value: number): string {
-  return Number(value.toFixed(4)).toString();
 }
 
 function worldTransformToSvgTransform(

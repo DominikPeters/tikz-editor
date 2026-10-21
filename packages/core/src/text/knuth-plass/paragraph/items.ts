@@ -1,6 +1,6 @@
 import { englishDefaults } from '../languages/en.js';
 import type { Hyphenator } from './hyphenate.js';
-import type { MeasurementService } from './measure.js';
+import type { DiscretionaryMeasurement, MeasurementService } from './measure.js';
 import type { BreakRef, ParagraphRun, TextRun } from './types.js';
 
 export interface BoxItem {
@@ -37,6 +37,7 @@ export interface PenaltyItem {
     visibleHyphen: boolean;
     splitOffset?: number;
     hyphenSource?: 'automatic' | 'explicit';
+    discretionary?: DiscretionaryMeasurement;
   };
 }
 
@@ -81,6 +82,10 @@ function itemWidthForRun(
     return measurement.measureText(run.text, run.wrapper);
   }
 
+  if (run.kind === 'penalty') {
+    return 0;
+  }
+
   return measurement.measureMath(run.wrapper);
 }
 
@@ -94,7 +99,7 @@ function addExplicitHyphenPenaltiesForTextRun(
   }
 
   for (let i = 0; i < run.text.length - 1; i++) {
-    const char = run.text[i];
+    const char = run.text.charAt(i);
     if (!EXPLICIT_HYPHEN_CHARS.has(char)) {
       continue;
     }
@@ -124,32 +129,55 @@ function addAutomaticHyphenPenaltiesForTextRun(
   hyphenator: Hyphenator,
   hyphenpenalty: number
 ): void {
-  const splits = hyphenator.hyphenate(run.text);
-  if (!splits.length) {
-    return;
-  }
-
   const hyphenWidth = measurement.measureText('-', run.wrapper);
+  const wordPattern = /[A-Za-z]+/g;
+  let match = wordPattern.exec(run.text);
 
-  for (const splitOffset of splits) {
-    if (splitOffset <= 0 || splitOffset >= run.text.length) {
-      continue;
-    }
+  while (match) {
+    const word = match[0];
+    const wordStart = match.index;
+    const splits = hyphenator.hyphenate(word);
+    for (const split of splits) {
+      const splitOffset = wordStart + split;
+      if (split <= 0 || split >= word.length || splitOffset <= 0 || splitOffset >= run.text.length) {
+        continue;
+      }
 
-    items.push({
-      kind: 'penalty',
-      width: hyphenWidth,
-      penalty: hyphenpenalty,
-      flagged: true,
-      payload: {
-        runIndex: run.runIndex,
-        breakKind: 'hyphen',
-        sourceOffset: run.sourceStart + splitOffset,
-        visibleHyphen: true,
+      const discretionary = measurement.measureDiscretionary?.(
+        run.text,
+        wordStart,
         splitOffset,
-        hyphenSource: 'automatic',
-      },
-    });
+        '-',
+        run.wrapper
+      );
+      const penaltyWidth = discretionary?.insertedWidth
+        ?? (measurement.measureHyphenatedPrefix
+          ? measurement.measureHyphenatedPrefix(
+              run.text,
+              wordStart,
+              splitOffset,
+              '-',
+              run.wrapper
+            )
+          : hyphenWidth);
+
+      items.push({
+        kind: 'penalty',
+        width: penaltyWidth,
+        penalty: hyphenpenalty,
+        flagged: true,
+        payload: {
+          runIndex: run.runIndex,
+          breakKind: 'hyphen',
+          sourceOffset: run.sourceStart + splitOffset,
+          visibleHyphen: true,
+          splitOffset,
+          hyphenSource: 'automatic',
+          ...(discretionary !== undefined ? { discretionary: discretionary } : {}),
+        },
+      });
+    }
+    match = wordPattern.exec(run.text);
   }
 }
 
@@ -184,7 +212,7 @@ export function runsToItems(
 
       addExplicitHyphenPenaltiesForTextRun(run, items, exhyphenpenalty);
 
-      if (enableAutomaticHyphenation) {
+      if (enableAutomaticHyphenation && run.allowAutomaticHyphenation !== false) {
         if (!hyphenator) {
           errors.push(
             'Automatic hyphenation requested but no hyphenator instance is configured.'
@@ -238,10 +266,25 @@ export function runsToItems(
       items.push({
         kind: 'penalty',
         width: 0,
-        penalty: 0,
+        penalty: run.texGlue?.breakPenalty ?? 0,
         payload: {
           runIndex: run.runIndex,
           breakRef: run.breakRef,
+          breakKind: 'space',
+          sourceOffset: run.sourceEnd,
+          visibleHyphen: false,
+        },
+      });
+      continue;
+    }
+
+    if (run.kind === 'penalty') {
+      items.push({
+        kind: 'penalty',
+        width: 0,
+        penalty: run.penalty,
+        payload: {
+          runIndex: run.runIndex,
           breakKind: 'space',
           sourceOffset: run.sourceEnd,
           visibleHyphen: false,

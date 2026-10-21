@@ -1,7 +1,7 @@
 import type { Tree } from "@lezer/common";
 import { useEffect, useMemo, useState } from "react";
 import { BASIC_PICKER_COLOR_SET } from "./color-palette";
-import { resolveDeclaredColorAnalysis } from "./source-color-detection";
+import { resolveDeclaredColorAnalysis, sourceMayContainDeclaredColors } from "./source-color-detection";
 import { useEditorStore } from "../store/store";
 
 export type NamedColorSwatch = {
@@ -53,8 +53,10 @@ export function resolveProjectNamedColorSwatches(
 export function useProjectNamedColorSwatches(): NamedColorSwatch[] {
   const activeCanvasDragKind = useEditorStore((s) => s.activeCanvasDragKind);
   const activeSourceScrubSourceId = useEditorStore((s) => s.activeSourceScrubSourceId);
-  const source = useEditorStore((s) => s.source);
-  const parseTree = useEditorStore((s) => s.snapshot?.parseResult?.tree ?? null);
+  const parseResult = useEditorStore((s) => s.snapshot.parseResult);
+  // A syntax tree and the source sliced through it must describe one revision.
+  const source = parseResult?.source ?? "";
+  const parseTree = sourceMayContainDeclaredColors(source) ? parseResult?.tree ?? null : null;
   const shouldFreeze =
     activeSourceScrubSourceId != null ||
     activeCanvasDragKind === "element" ||

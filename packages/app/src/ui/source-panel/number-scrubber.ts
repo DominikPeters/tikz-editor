@@ -1,5 +1,6 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { syntaxTree } from "@codemirror/language";
-import type { Extension } from "@codemirror/state";
+import { Annotation, type Extension } from "@codemirror/state";
 import type { EditorView} from "@codemirror/view";
 import { ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
@@ -13,6 +14,8 @@ import {
 interface NumberScrubberOptions {
   onScrubStateChange?: (state: { isActive: boolean; from: number | null; to: number | null }) => void;
 }
+
+const numberScrubTransaction = Annotation.define<boolean>();
 
 type ScrubKind = "coordinate" | "length" | "angle" | "scale" | "opacity" | "numeric";
 
@@ -138,7 +141,7 @@ export function numberScrubber(options: NumberScrubberOptions = {}): Extension {
       }
 
       update(update: ViewUpdate): void {
-        if (this.active && update.docChanged) {
+        if (this.active && update.docChanged && !update.transactions.some(transaction => transaction.annotation(numberScrubTransaction))) {
           this.active.from = update.changes.mapPos(this.active.from, 1);
           this.active.to = update.changes.mapPos(this.active.to, -1);
         }
@@ -202,6 +205,7 @@ export function numberScrubber(options: NumberScrubberOptions = {}): Extension {
 
         this.pending = null;
         event.preventDefault();
+        this.view.focus();
         this.active = {
           from: pending.target.from,
           to: pending.target.to,
@@ -210,8 +214,8 @@ export function numberScrubber(options: NumberScrubberOptions = {}): Extension {
           step: pending.target.step,
           precision: pending.target.precision,
           minDisplayPrecision: pending.target.minDisplayPrecision,
-          min: pending.target.min,
-          max: pending.target.max,
+          ...(pending.target.min === undefined ? {} : { min: pending.target.min }),
+          ...(pending.target.max === undefined ? {} : { max: pending.target.max }),
           lastText: this.view.state.doc.sliceString(pending.target.from, pending.target.to)
         };
 
@@ -237,8 +241,8 @@ export function numberScrubber(options: NumberScrubberOptions = {}): Extension {
           currentX: event.clientX,
           startValue: active.startValue,
           step: active.step,
-          min: active.min,
-          max: active.max,
+          ...(active.min === undefined ? {} : { min: active.min }),
+          ...(active.max === undefined ? {} : { max: active.max }),
           modifiers: {
             shiftKey: event.shiftKey,
             altKey: event.altKey
@@ -250,7 +254,8 @@ export function numberScrubber(options: NumberScrubberOptions = {}): Extension {
         }
 
         this.view.dispatch({
-          changes: { from: active.from, to: active.to, insert: nextText }
+          changes: { from: active.from, to: active.to, insert: nextText },
+          annotations: numberScrubTransaction.of(true)
         });
         active.to = active.from + nextText.length;
         active.lastText = nextText;
@@ -372,7 +377,7 @@ function findNumberNode(view: EditorView, position: number): SyntaxNode | null {
 function buildScrubTarget(view: EditorView, numberNode: SyntaxNode): ScrubTarget | null {
   const doc = view.state.doc;
   const rawText = doc.sliceString(numberNode.from, numberNode.to);
-  if (!/^\d+(?:\.\d+)?$/u.test(rawText)) {
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/u.test(rawText)) {
     return null;
   }
 
@@ -399,8 +404,8 @@ function buildScrubTarget(view: EditorView, numberNode: SyntaxNode): ScrubTarget
     step: context.step,
     precision,
     minDisplayPrecision: sourcePrecision,
-    min: context.min,
-    max: context.max
+    ...(context.min === undefined ? {} : { min: context.min }),
+    ...(context.max === undefined ? {} : { max: context.max })
   };
 }
 
@@ -424,10 +429,10 @@ function classifyScrubContext(doc: EditorView["state"]["doc"], numberNode: Synta
   }
   if (unit) {
     const unitStep = lengthStepForUnit(unit);
-    return { kind: "length", step: unitStep.step, minPrecision: unitStep.minPrecision, min: nonNegative ? 0 : undefined };
+    return { kind: "length", step: unitStep.step, minPrecision: unitStep.minPrecision, ...(nonNegative ? { min: 0 } : {}) };
   }
   if (optionKey && LENGTH_KEYS.has(optionKey)) {
-    return { kind: "length", step: 0.05, minPrecision: 2, min: nonNegative ? 0 : undefined };
+    return { kind: "length", step: 0.05, minPrecision: 2, ...(nonNegative ? { min: 0 } : {}) };
   }
   if (insideCoordinate) {
     if (!isNumericCoordinateValue(doc, numberNode, signedFrom, unit)) {
@@ -451,7 +456,7 @@ function extractUnitAfterNumber(doc: EditorView["state"]["doc"], numberEnd: numb
   if (!LENGTH_UNITS.test(match[0].trim())) {
     return null;
   }
-  return match[1].toLowerCase();
+  return requireArrayValue(match, 1).toLowerCase();
 }
 
 function isXcolorMixPercentage(doc: EditorView["state"]["doc"], numberNode: SyntaxNode): boolean {
@@ -564,7 +569,7 @@ function extractOptionKey(doc: EditorView["state"]["doc"], numberStart: number):
   if (!match) {
     return null;
   }
-  return match[1].trim().replace(/\s+/gu, " ").toLowerCase();
+  return requireArrayValue(match, 1).trim().replace(/\s+/gu, " ").toLowerCase();
 }
 
 function hasAncestor(node: SyntaxNode, name: string): boolean {

@@ -42,23 +42,6 @@ const BACKGROUND_STYLE_BY_HOOK: Record<SemanticBackgroundHookKind, string> = {
   right: "background right"
 };
 
-export const BACKGROUND_CONFIG_KEYS = new Set([
-  "on background layer",
-  "every on background layer",
-  "show background rectangle",
-  "show background grid",
-  "show background top",
-  "show background bottom",
-  "show background left",
-  "show background right",
-  "inner frame sep",
-  "inner frame xsep",
-  "inner frame ysep",
-  "outer frame sep",
-  "outer frame xsep",
-  "outer frame ysep"
-]);
-
 export function collectBackgroundOptionEffects(
   context: SemanticContext,
   optionLists: readonly OptionListAst[],
@@ -180,7 +163,7 @@ export function makeEveryOnBackgroundLayerOptionLayer(sourceRef: StyleSourceRef)
     rawOptions: options ? [options] : [],
     sourceRef: {
       sourceId: sourceRef.sourceId,
-      sourceSpan: sourceRef.sourceSpan,
+      ...(sourceRef.sourceSpan === undefined ? {} : { sourceSpan: sourceRef.sourceSpan }),
       sourceKind: sourceRef.sourceKind,
       label: "every on background layer"
     }
@@ -189,8 +172,7 @@ export function makeEveryOnBackgroundLayerOptionLayer(sourceRef: StyleSourceRef)
 
 export function generateBackgroundHookElements(
   context: SemanticContext,
-  contentBounds: WorldBounds | null,
-  sourceFingerprint: string
+  contentBounds: WorldBounds | null
 ): { elements: SceneElement[]; diagnostics: Diagnostic[] } {
   const hooks = [...context.backgroundState.hooks].sort((left, right) => left.sequence - right.sequence);
   if (hooks.length === 0 || !contentBounds) {
@@ -238,8 +220,7 @@ export function generateBackgroundHookElements(
             resolved.style,
             resolved.styleChain,
             span
-          ),
-          sourceFingerprint
+          )
         )
       );
       continue;
@@ -257,7 +238,7 @@ export function generateBackgroundHookElements(
           });
         },
         currentFrame(context).macroBindings,
-        identityMatrix()
+        currentFrame(context).axisBasis
       );
       const stepX = steps?.stepX ?? DEFAULT_GRID_STEP;
       const stepY = steps?.stepY ?? DEFAULT_GRID_STEP;
@@ -272,7 +253,7 @@ export function generateBackgroundHookElements(
           resolved.style,
           resolved.styleChain,
           span
-        ).map((element) => withBackgroundLayer(element, sourceFingerprint))
+        ).map((element) => withBackgroundLayer(element))
       );
       continue;
     }
@@ -287,8 +268,7 @@ export function generateBackgroundHookElements(
           resolved.style,
           resolved.styleChain,
           span
-        ),
-        sourceFingerprint
+        )
       )
     );
   }
@@ -326,7 +306,7 @@ function resolveBackgroundHookStyle(
     kind: "command",
     sourceRef: {
       sourceId: sourceRef.sourceId,
-      sourceSpan: sourceRef.sourceSpan,
+      ...(sourceRef.sourceSpan === undefined ? {} : { sourceSpan: sourceRef.sourceSpan }),
       sourceKind: "background-command-default",
       label: "path"
     },
@@ -345,7 +325,7 @@ function resolveBackgroundHookStyle(
         kind: "scope",
         sourceRef: {
           sourceId: sourceRef.sourceId,
-          sourceSpan: sourceRef.sourceSpan,
+          ...(sourceRef.sourceSpan === undefined ? {} : { sourceSpan: sourceRef.sourceSpan }),
           sourceKind: "background-hook",
           label: styleName
         },
@@ -355,7 +335,8 @@ function resolveBackgroundHookStyle(
     currentFrame(context).customStyles,
     undefined,
     [commandEntry],
-    (raw) => resolveContextColorAliasValue(context, raw)
+    (raw) => resolveContextColorAliasValue(context, raw),
+    currentFrame(context).axisBasis
   );
 
   return {
@@ -382,8 +363,7 @@ function makeBackgroundLineElement(
     layer: BACKGROUND_SCENE_LAYER,
     sourceRef: {
       sourceId,
-      sourceSpan: span,
-      sourceFingerprint: ""
+      sourceSpan: span
     },
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
@@ -395,15 +375,11 @@ function makeBackgroundLineElement(
   };
 }
 
-function withBackgroundLayer<T extends SceneElement>(element: T, sourceFingerprint: string): T {
+function withBackgroundLayer<T extends SceneElement>(element: T): T {
   return {
     ...element,
     layer: BACKGROUND_SCENE_LAYER,
-    runtimeId: element.runtimeId ?? element.id,
-    sourceRef: {
-      ...element.sourceRef,
-      sourceFingerprint
-    }
+    runtimeId: element.runtimeId
   };
 }
 

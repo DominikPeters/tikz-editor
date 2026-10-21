@@ -13,6 +13,35 @@ import type { Statement } from "../../packages/core/src/ast/types.js";
 import { wp } from "../coords-helpers.js";
 
 describe("semantic incremental evaluation", () => {
+  it.each(["overlay", "overlay=false", "/tikz/overlay={true}"])("replays a constant picture flag incrementally (%s)", flag => {
+    const source = `\\begin{tikzpicture}[${flag}]\n` +
+      Array.from({ length: 24 }, (_, index) => `\\draw (${index},0) -- (${index},1);`).join("\n") + "\n\\end{tikzpicture}";
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ source, figure: parseTikz(source).figure });
+    const next = source.replace("(0,1)", "(0,2)");
+    const parsed = parseTikz(next);
+    const result = session.evaluate({ source: next, figure: parsed.figure, hints: { trigger: "drag-element", changedSourceIds: ["path:0"] } });
+    expect(result.stats.strategy).toBe("incremental");
+    expect(result.stats.reusedStatementCount).toBeGreaterThan(8);
+    const full = evaluateTikzFigure(parsed.figure, next);
+    expect(result.semantic.scene).toEqual(full.scene);
+  });
+
+  it.each(["\\draw[overlay=false] (2,2) -- (3,3);", "\\begin{scope}[overlay=false]\\draw (2,2) -- (3,3);\\end{scope}",
+    "\\draw[clip] (2,2) rectangle (3,3);"])("keeps stateful per-statement graphics on the full path: %s", body => {
+    const source = String.raw`\begin{tikzpicture}[overlay]
+\draw (0,0) -- (1,1);
+${body}
+\end{tikzpicture}`;
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ source, figure: parseTikz(source).figure });
+    const next = source.replace("(1,1)", "(1,2)");
+    const parsed = parseTikz(next);
+    const result = session.evaluate({ source: next, figure: parsed.figure, hints: { trigger: "drag-element", changedSourceIds: ["path:0"] } });
+    expect(result.stats).toMatchObject({ strategy: "full", fallbackReason: "stateful-graphics-state" });
+    expect(result.semantic.scene).toEqual(evaluateTikzFigure(parsed.figure, next).scene);
+  });
+
   it("rejects direct statement evaluation indexes outside the expanded body", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);
@@ -66,8 +95,7 @@ describe("semantic incremental evaluation", () => {
       }
     });
     expect(nonDragResult.stats).toMatchObject({
-      strategy: "full",
-      fallbackReason: "non-drag-trigger"
+      strategy: "incremental"
     });
 
     const structure = createIncrementalSemanticSession();
@@ -86,6 +114,55 @@ describe("semantic incremental evaluation", () => {
       strategy: "full",
       fallbackReason: "statement-structure-changed"
     });
+  });
+
+  it("captures bounded checkpoints during rendering and reuses them from the first drag", () => {
+    let source = makeIsolatedNodeFigure();
+    const session = createIncrementalSemanticSession();
+    const seededParsed = parseTikz(source, { recover: true });
+    const changedSourceId = seededParsed.figure.body[8]?.id;
+    expect(changedSourceId).toBeDefined();
+    if (!changedSourceId) {
+      throw new Error("Expected isolated node statement");
+    }
+
+    const seeded = session.evaluate({
+      figure: seededParsed.figure,
+      source,
+      hints: { trigger: "other" }
+    });
+    expect(seeded.stats.checkpointPreparation).toBe("captured-during-evaluation");
+    expect(seeded.stats.checkpointCount).toBeGreaterThan(0);
+
+    source = source.replace("(10,10)", "(10.4,10.2)");
+    const firstParsed = parseTikz(source, { recover: true });
+    const firstDrag = session.evaluate({
+      figure: firstParsed.figure,
+      source,
+      hints: {
+        trigger: "drag-element",
+        changedSourceIds: [changedSourceId]
+      }
+    });
+    expect(firstDrag.semantic).toEqual(evaluateTikzFigure(firstParsed.figure, source));
+    expect(firstDrag.stats.strategy).toBe("incremental");
+    expect(firstDrag.stats.checkpointPreparation).toBe("reused");
+    expect(firstDrag.stats.checkpointCount).toBeGreaterThan(0);
+
+    source = source.replace("(10.4,10.2)", "(10.8,10.4)");
+    const secondParsed = parseTikz(source, { recover: true });
+    const secondDrag = session.evaluate({
+      figure: secondParsed.figure,
+      source,
+      hints: {
+        trigger: "drag-element",
+        changedSourceIds: [changedSourceId]
+      }
+    });
+    expect(secondDrag.semantic).toEqual(evaluateTikzFigure(secondParsed.figure, source));
+    expect(secondDrag.stats.strategy).toBe("incremental");
+    expect(secondDrag.stats.checkpointPreparation).toBe("reused");
+    expect(secondDrag.stats.checkpointCount).toBe(firstDrag.stats.checkpointCount);
   });
 
   it("keeps stateful graphics on the full-evaluation path", () => {
@@ -639,6 +716,95 @@ describe("semantic incremental evaluation", () => {
     }
   });
 
+  it("keeps foreign style-chain provenance spans intact during selective drag replay", () => {
+    let source = String.raw`\begin{tikzpicture}
+\tikzset{box/.style={draw=red}}
+\node (target) at (5,5) {T};
+\node[box] (c) at (1,1) {C};
+\end{tikzpicture}`;
+    const session = createIncrementalSemanticSession();
+    const seededParsed = parseTikz(source, { recover: true });
+    const target = seededParsed.figure.body.find((statement) =>
+      source.slice(statement.span.from, statement.span.to).includes("(target)")
+    );
+    expect(target).toBeDefined();
+
+    session.evaluate({
+      figure: seededParsed.figure,
+      source,
+      hints: { trigger: "other" }
+    });
+
+    // Each drag frame lengthens the dragged statement, so the reused
+    // trailing statement is span-shifted while the \tikzset it references
+    // stays put.
+    let previous = "(5,5)";
+    for (const next of ["(5.2,5.1)", "(5.45,5.15)", "(4.9,4.95)"]) {
+      source = source.replace(previous, next);
+      previous = next;
+      const parsed = parseTikz(source, { recover: true });
+      const result = session.evaluate({
+        figure: parsed.figure,
+        source,
+        hints: {
+          trigger: "drag-element",
+          changedSourceIds: [target!.id]
+        }
+      });
+      const full = evaluateTikzFigure(parsed.figure, source);
+      expect(result.semantic.scene.elements).toEqual(full.scene.elements);
+      expect(result.semantic.editHandles).toEqual(full.editHandles);
+    }
+  });
+
+  it("replays drags identically to full evaluation with registry writes across checkpoints", () => {
+    let source = String.raw`\begin{tikzpicture}
+\tikzset{mystyle/.style={draw=red}}
+\colorlet{mycol}{blue}
+\tikzset{pics/mypic/.style={code={\draw (0,0) circle (0.2);}}}
+\node[mystyle, fill=mycol] (a) at (0,0) {A};
+\tikzset{mystyle/.append style={fill=green}}
+\colorlet{mycol}{red}
+\node[mystyle] (b) at (1,1) {B};
+\pic at (2,0) {mypic};
+\node[mystyle, fill=mycol] (target) at (10,10) {T};
+\tikzset{mystyle/.style={draw=purple}}
+\node[mystyle] (c) at (3,3) {C};
+\node[fill=mycol] (d) at (4,4) {D};
+\end{tikzpicture}`;
+    const session = createIncrementalSemanticSession();
+    const seededParsed = parseTikz(source, { recover: true });
+    const target = seededParsed.figure.body.find((statement) =>
+      source.slice(statement.span.from, statement.span.to).includes("(target)")
+    );
+    expect(target).toBeDefined();
+
+    session.evaluate({
+      figure: seededParsed.figure,
+      source,
+      hints: { trigger: "other" }
+    });
+
+    let previous = "(10,10)";
+    for (const next of ["(10.2,10.1)", "(10.4,10.2)", "(9.8,9.9)"]) {
+      source = source.replace(previous, next);
+      previous = next;
+      const parsed = parseTikz(source, { recover: true });
+      const result = session.evaluate({
+        figure: parsed.figure,
+        source,
+        hints: {
+          trigger: "drag-element",
+          changedSourceIds: [target!.id]
+        }
+      });
+      const full = evaluateTikzFigure(parsed.figure, source);
+      expect(result.semantic.scene.elements).toEqual(full.scene.elements);
+      expect(result.semantic.editHandles).toEqual(full.editHandles);
+      expect(new Map(result.semantic.colorAliases)).toEqual(new Map(full.colorAliases));
+    }
+  });
+
   it("does not shift generated identity spans when original source moves before generated content", () => {
     const source = String.raw`\begin{tikzpicture}
   \foreach \x in {0,1} \draw[red] (\x,0) -- ++(1,0);
@@ -658,6 +824,112 @@ describe("semantic incremental evaluation", () => {
     ].filter(Boolean);
 
     expect(afterIdentitySpans).toEqual(beforeIdentitySpans);
+  });
+});
+
+describe("selective replay past an unchanged corridor", () => {
+  // Named nodes early on, then a long run of plain shapes and edges between nodes.
+  const picture = (shape: string) => [
+    "\\begin{tikzpicture}",
+    "  \\colorlet{accent}{blue!30}",
+    "  \\node[draw] (a) at (0,0) {A};",
+    ...Array.from({ length: 7 }, (_, index) => `  \\draw (${index},1) -- (${index},2);`),
+    `  ${shape}`,
+    ...Array.from({ length: 40 }, (_, index) => index % 4 === 0
+      ? `  \\node[draw] (n${index}) at (${index},3) {${index}};`
+      : `  \\draw[->] (a) -- (${index},4);`),
+    "\\end{tikzpicture}"
+  ].join("\n");
+  const shapeId = (source: string) => parseTikz(source).figure.body[9].id;
+
+  function edit(session: ReturnType<typeof createIncrementalSemanticSession>, source: string, changedSourceIds: string[]) {
+    const parsed = parseTikz(source, { recover: true });
+    const incremental = session.evaluate({ figure: parsed.figure, source, hints: { trigger: "drag-element", changedSourceIds } });
+    expect(incremental.semantic).toEqual(evaluateTikzFigure(parsed.figure, source));
+    return incremental.stats;
+  }
+
+  it("takes the previous state after the corridor when a shape moves without changing what it names or uses", () => {
+    const source = picture("\\draw[fill=red] (0,0) rectangle (1,1);");
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ figure: parseTikz(source).figure, source });
+    const stats = edit(session, source.replace("rectangle (1,1)", "rectangle (60,-9)"), [shapeId(source)]);
+    expect(stats).toMatchObject({ replayMode: "selective", suffixReplay: "skipped" });
+  });
+
+  it("keeps the elements whose source does not move, and rebinds those after an edit that changes its length", () => {
+    let source = picture("\\draw[fill=red] (0,0) rectangle (1,1);");
+    const id = shapeId(source);
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ figure: parseTikz(source).figure, source });
+    source = source.replace("rectangle (1,1)", "rectangle (2,1)");
+    const before = session.evaluate({ figure: parseTikz(source).figure, source, hints: { trigger: "drag-element", changedSourceIds: [id] } }).semantic.scene.elements;
+    source = source.replace("rectangle (2,1)", "rectangle (3,1)");
+    const kept = session.evaluate({ figure: parseTikz(source).figure, source, hints: { trigger: "drag-element", changedSourceIds: [id] } });
+    expect(kept.semantic).toEqual(evaluateTikzFigure(parseTikz(source).figure, source));
+    // The statements from the checkpoint before the shape to the shape are evaluated again.
+    const evaluated = new Set(parseTikz(source).figure.body.slice(kept.stats.recomputeFromStatementIndex!, 10).map((statement) => statement.id));
+    const reused = before.filter((element) => !evaluated.has(element.sourceRef.sourceId));
+    expect(reused.length).toBeGreaterThan(40);
+    expect(reused.every((element) => kept.semantic.scene.elements.includes(element))).toBe(true);
+    expect(edit(session, source.replace("rectangle (3,1)", "rectangle (3.5,1)"), [id]).suffixReplay).toBe("skipped");
+  });
+
+  it("keeps the bounds the corridor drew in the checkpoints past it, for a later edit that restores one", () => {
+    let source = picture("\\draw[fill=red] (0,0) rectangle (1,1);");
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ figure: parseTikz(source).figure, source });
+    source = source.replace("rectangle (1,1)", "rectangle (60,-9)");
+    expect(edit(session, source, [shapeId(source)]).suffixReplay).toBe("skipped");
+    // Shrinking a late shape restores a checkpoint past the first corridor.
+    const late = parseTikz(source).figure.body.find((statement) => source.slice(statement.span.from, statement.span.to).includes("(37,4)"))!.id;
+    source = source.replace("(37,4);", "(37,5);");
+    expect(edit(session, source, [late]).recomputeFromStatementIndex).toBeGreaterThan(9);
+  });
+
+  it.each([
+    ["starts using a colour", "\\draw[fill=red] (0,0) rectangle (1,1);", "\\draw[fill=accent] (0,0) rectangle (1,1);"],
+    ["stops using a colour", "\\draw[fill=accent] (0,0) rectangle (1,1);", "\\draw[fill=red] (0,0) rectangle (1,1);"]
+  ])("replays the statements after a corridor that %s", (_, before, after) => {
+    const source = picture(before);
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ figure: parseTikz(source).figure, source });
+    expect(edit(session, picture(after), [shapeId(source)])).toMatchObject({ replayMode: "selective", suffixReplay: "replayed" });
+  });
+
+  describe("random numbers", () => {
+    const randomPicture = (shape: string) => [
+      "\\begin{tikzpicture}",
+      ...Array.from({ length: 9 }, (_, index) => `  \\draw (${index},1) -- (${index},2);`),
+      `  ${shape}`,
+      ...Array.from({ length: 30 }, (_, index) => `  \\draw (${index},3) -- (rand,4);`),
+      "\\end{tikzpicture}"
+    ].join("\n");
+
+    it("evaluates the statements after a corridor that draws a different count of random numbers", () => {
+      const source = randomPicture("\\draw (0,0) -- (1,1);");
+      const session = createIncrementalSemanticSession();
+      session.evaluate({ figure: parseTikz(source).figure, source });
+      edit(session, randomPicture("\\draw (rand,0) -- (1,1);"), [parseTikz(source).figure.body[9].id]);
+    });
+
+    it("keeps the random seed in the checkpoints past a replayed corridor", () => {
+      let source = randomPicture("\\node (b) at (1,1) {B};");
+      const session = createIncrementalSemanticSession();
+      session.evaluate({ figure: parseTikz(source).figure, source });
+      source = source.replace("at (1,1)", "at (2,1)");
+      expect(edit(session, source, [parseTikz(source).figure.body[9].id]).suffixReplay).toBe("replayed");
+      const late = parseTikz(source).figure.body[35];
+      source = source.slice(0, late.span.from) + source.slice(late.span.from, late.span.to).replace("(rand,4)", "(rand,5)") + source.slice(late.span.to);
+      expect(edit(session, source, [late.id]).recomputeFromStatementIndex).toBeGreaterThan(9);
+    });
+  });
+
+  it("replays the statements after a corridor that moves a named node", () => {
+    const source = picture("\\node[draw] (b) at (1,1) {B};");
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ figure: parseTikz(source).figure, source });
+    expect(edit(session, source.replace("at (1,1)", "at (2,1)"), [shapeId(source)]).suffixReplay).toBe("replayed");
   });
 });
 

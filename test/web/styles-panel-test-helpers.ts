@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import { requireDocumentSession } from "../../packages/app/src/store/document-sessions";
 import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -11,11 +12,11 @@ import { renderTikzToSvg } from "../../packages/core/src/render";
 
 export function seedStylesPanelState(source: string, selectedSourceIds: string[]): void {
   const rendered = renderTikzToSvg(source, { parse: { recover: true } });
-  const activeFigureId = rendered.parse.activeFigureId;
+  const activeRootId = rendered.parse.activeFigureId;
   const snapshot = {
     ...makeEmptySnapshot(source),
     source,
-    activeFigureId,
+    activeRootId,
     figures: rendered.parse.figures,
     editHandles: rendered.semantic.editHandles,
     scene: rendered.semantic.scene,
@@ -28,14 +29,14 @@ export function seedStylesPanelState(source: string, selectedSourceIds: string[]
   const base = makeInitialState();
   const dispatch = useEditorStore.getState().dispatch;
   const activeDocumentId = base.activeDocumentId;
-  const doc = base.documents[activeDocumentId];
+  const doc = requireDocumentSession(base.documents, activeDocumentId);
   const selected = new Set(selectedSourceIds);
 
   useEditorStore.setState({
     ...base,
     source,
     sourceRevision: 1,
-    activeFigureId,
+    activeRootId,
     snapshot,
     selectedElementIds: selected,
     documents: {
@@ -44,7 +45,7 @@ export function seedStylesPanelState(source: string, selectedSourceIds: string[]
         ...doc,
         source,
         sourceRevision: 1,
-        activeFigureId,
+        activeRootId,
         snapshot,
         selectedElementIds: selected,
         history: [],

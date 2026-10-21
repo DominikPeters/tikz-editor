@@ -5,8 +5,8 @@ import { performance } from "node:perf_hooks";
 import { chromium } from "@playwright/test";
 
 import { renderTikzToSvgAsync } from "../../../packages/core/src/render/index.js";
-import { getActiveMathJaxOutputJax } from "../../../packages/core/src/text/mathjax-engine.js";
-import { getKnuthPlassReportsFromOutputJax } from "../../../packages/core/src/text/knuth-plass/index.js";
+import { getActiveTextLayoutContext } from "../../../packages/core/src/text/layout-context.js";
+import { getParagraphLayoutReports } from "../../../packages/core/src/text/knuth-plass/index.js";
 import { type NodeTextRenderInfo } from "../../../packages/core/src/text/types.js";
 
 type DebugCase = {
@@ -343,25 +343,25 @@ async function renderDebugCase(params: {
 
 function resolveReportsForResult(
   result: Awaited<ReturnType<typeof renderTikzToSvgAsync>>
-): ReturnType<typeof getKnuthPlassReportsFromOutputJax> {
+): ReturnType<typeof getParagraphLayoutReports> {
   const paragraphIds = new Set<string>();
   for (const element of result.semantic.scene.elements) {
     if (element.kind !== "Text") {
       continue;
     }
     const renderInfo = element.textRenderInfo as NodeTextRenderInfo | undefined;
-    if (renderInfo?.mode !== "mathjax" || !renderInfo.paragraphId) {
+    if (renderInfo?.mode !== "tex" || !renderInfo.paragraphId) {
       continue;
     }
     paragraphIds.add(renderInfo.paragraphId);
   }
 
-  const allReports = getKnuthPlassReportsFromOutputJax(getActiveMathJaxOutputJax());
+  const allReports = getParagraphLayoutReports(getActiveTextLayoutContext());
   return allReports.filter((report) => paragraphIds.has(report.paragraphId));
 }
 
 function summarizeReports(
-  reports: ReturnType<typeof getKnuthPlassReportsFromOutputJax>
+  reports: ReturnType<typeof getParagraphLayoutReports>
 ): {
   spaceStats: CaseArtifact["spaceStats"];
   paragraphSummaries: CaseArtifact["paragraphSummaries"];

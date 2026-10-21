@@ -1,9 +1,10 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { worldPoint, worldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldPoint, WorldVector } from "../../coords/points.js";
 import type { EditHandle } from "../../semantic/types.js";
-import type { PathStatement, Span } from "../../ast/types.js";
+import type { Span } from "../../ast/types.js";
 import { rewriteCoordinate } from "../rewrite.js";
 import { replaceSpan } from "../patch.js";
 import { CM_PER_PT, formatNumber } from "../format.js";
@@ -51,7 +52,7 @@ function wv(x: number, y: number): WorldVector {
 
 export function applySplitPathAction(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: SplitPathAction,
   parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
@@ -139,8 +140,13 @@ export function applyJoinPathsAction(
     return { kind: "unsupported", reason: "Join requires two path statements in the same scope." };
   }
 
-  const firstResolved = analyzeExplicitPathStatement(source, refs[0].statement as PathStatement);
-  const secondResolved = analyzeExplicitPathStatement(source, refs[1].statement as PathStatement);
+  const firstStatement = requireArrayValue(refs, 0).statement;
+  const secondStatement = requireArrayValue(refs, 1).statement;
+  if (firstStatement.kind !== "Path" || secondStatement.kind !== "Path") {
+    return { kind: "unsupported", reason: "Join requires two path statements in the same scope." };
+  }
+  const firstResolved = analyzeExplicitPathStatement(source, firstStatement);
+  const secondResolved = analyzeExplicitPathStatement(source, secondStatement);
   if (firstResolved.kind !== "eligible") {
     return { kind: "unsupported", reason: firstResolved.reason };
   }
@@ -272,7 +278,7 @@ export function applyToggleClosedPathAction(
 
 export function applyDeletePathPointAction(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: DeletePathPointAction,
   parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
@@ -334,7 +340,7 @@ export function applyDeletePathPointAction(
 
 export function applySetPathPointKindAction(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: SetPathPointKindAction,
   parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
@@ -358,8 +364,8 @@ export function applySetPathPointKindAction(
     return { kind: "unsupported", reason: "The selected anchor is missing adjacent editable segments." };
   }
 
-  const beforeAnchor = resolveAnchorWorld(editHandles, action.elementId, analysis.anchors[anchorIndex - 1], source);
-  const afterAnchor = resolveAnchorWorld(editHandles, action.elementId, analysis.anchors[anchorIndex + 1], source);
+  const beforeAnchor = resolveAnchorWorld(editHandles, action.elementId, requireArrayValue(analysis.anchors, anchorIndex - 1), source);
+  const afterAnchor = resolveAnchorWorld(editHandles, action.elementId, requireArrayValue(analysis.anchors, anchorIndex + 1), source);
   if (!beforeAnchor || !afterAnchor) {
     return { kind: "unsupported", reason: "Neighboring anchors could not be resolved for point editing." };
   }
@@ -369,7 +375,7 @@ export function applySetPathPointKindAction(
     if (!replacementSegments) {
       return { kind: "unsupported", reason: "Could not rewrite this polyline corner into a Bezier bend." };
     }
-    const bodyParts = [analysis.anchors[0].raw];
+    const bodyParts = [requireArrayValue(analysis.anchors, 0).raw];
     for (const segment of analysis.segments) {
       if (segment === previousSegment) {
         bodyParts.push(...replacementSegments);
@@ -473,11 +479,11 @@ function orderedOpenSegmentsFromClosedPath(analysis: ExplicitPathAnalysis, ancho
       (segment) => segment.startAnchorIndex === currentAnchor && !segment.closesPath
     );
     if (nextSegmentIndex >= 0) {
-      if (analysis.segments[nextSegmentIndex].endAnchorIndex === anchorIndex) {
+      if (requireArrayValue(analysis.segments, nextSegmentIndex).endAnchorIndex === anchorIndex) {
         break;
       }
       ordered.push(nextSegmentIndex);
-      currentAnchor = analysis.segments[nextSegmentIndex].endAnchorIndex;
+      currentAnchor = requireArrayValue(analysis.segments, nextSegmentIndex).endAnchorIndex;
       continue;
     }
     const closingIndex = analysis.segments.findIndex(
@@ -486,7 +492,7 @@ function orderedOpenSegmentsFromClosedPath(analysis: ExplicitPathAnalysis, ancho
     if (closingIndex < 0) {
       break;
     }
-    currentAnchor = analysis.segments[closingIndex].endAnchorIndex;
+    currentAnchor = requireArrayValue(analysis.segments, closingIndex).endAnchorIndex;
   }
   return ordered;
 }
@@ -500,13 +506,13 @@ function buildOpenedClosedPathBody(
   if (orderedSegments.length === 0) {
     return null;
   }
-  const parts = [analysis.anchors[anchorIndex].raw];
+  const parts = [requireArrayValue(analysis.anchors, anchorIndex).raw];
   for (const segmentIndex of orderedSegments) {
-    const segment = analysis.segments[segmentIndex];
+    const segment = requireArrayValue(analysis.segments, segmentIndex);
     parts.push(segment.raw);
   }
   const closingSegment = analysis.segments.find(
-    (segment) => segment.closesPath && segment.startAnchorIndex === analysis.segments[orderedSegments[orderedSegments.length - 1]].endAnchorIndex
+    (segment) => segment.closesPath && segment.startAnchorIndex === requireArrayValue(analysis.segments, requireArrayValue(orderedSegments, orderedSegments.length - 1)).endAnchorIndex
   );
   if (closingSegment) {
     parts.push(explicitSegmentText(source, analysis, closingSegment));
@@ -520,10 +526,10 @@ function buildReversedPathBody(source: string, analysis: ExplicitPathAnalysis): 
   }
 
   if (!analysis.closed) {
-    const lastAnchor = analysis.anchors[analysis.anchors.length - 1];
+    const lastAnchor = requireArrayValue(analysis.anchors, analysis.anchors.length - 1);
     const parts = [lastAnchor.raw];
     for (let index = analysis.segments.length - 1; index >= 0; index -= 1) {
-      const segment = analysis.segments[index];
+      const segment = requireArrayValue(analysis.segments, index);
       if (segment.closesPath) {
         continue;
       }
@@ -550,7 +556,7 @@ function buildReversedPathBody(source: string, analysis: ExplicitPathAnalysis): 
   parts.push(reversedClosing);
 
   for (let index = analysis.segments.length - 1; index >= 0; index -= 1) {
-    const segment = analysis.segments[index];
+    const segment = requireArrayValue(analysis.segments, index);
     if (segment.closesPath) {
       continue;
     }
@@ -571,7 +577,7 @@ function buildDeletedWorldPointReplacement(
   nextSegment: ExplicitPathAnalysis["segments"][number],
   targetRawOverride?: string
 ): string | null {
-  const targetRaw = targetRawOverride ?? analysis.anchors[nextSegment.endAnchorIndex].raw;
+  const targetRaw = targetRawOverride ?? requireArrayValue(analysis.anchors, nextSegment.endAnchorIndex).raw;
   if (previousSegment.kind === "line" && nextSegment.kind === "line") {
     return `-- ${targetRaw}`;
   }
@@ -597,7 +603,7 @@ function buildOpenPathBodyAfterDeletedPoint(
   nextSegment: ExplicitPathAnalysis["segments"][number],
   replacementSegment: string
 ): string {
-  const bodyParts = [analysis.anchors[0].raw];
+  const bodyParts = [requireArrayValue(analysis.anchors, 0).raw];
   for (const segment of analysis.segments) {
     if (segment === previousSegment) {
       bodyParts.push(replacementSegment);
@@ -619,7 +625,7 @@ function buildClosedPathBodyAfterDeletedPoint(
   replacementSegment: string
 ): string | null {
   if (anchorIndex !== 0) {
-    const bodyParts = [analysis.anchors[0].raw];
+    const bodyParts = [requireArrayValue(analysis.anchors, 0).raw];
     for (const segment of analysis.segments) {
       if (segment === previousSegment) {
         bodyParts.push(replacementSegment);
@@ -633,7 +639,7 @@ function buildClosedPathBodyAfterDeletedPoint(
     return bodyParts.join(" ");
   }
 
-  const bodyParts = [analysis.anchors[1].raw];
+  const bodyParts = [requireArrayValue(analysis.anchors, 1).raw];
   for (const segment of analysis.segments) {
     if (segment === previousSegment || segment === nextSegment) {
       continue;
@@ -653,8 +659,8 @@ function buildLineSegmentsSmoothReplacement(
   anchor: WorldPoint,
   afterAnchor: WorldPoint
 ): [string, string] | null {
-  const firstTargetRaw = analysis.anchors[previousSegment.endAnchorIndex].raw;
-  const secondTargetRaw = analysis.anchors[nextSegment.endAnchorIndex].raw;
+  const firstTargetRaw = requireArrayValue(analysis.anchors, previousSegment.endAnchorIndex).raw;
+  const secondTargetRaw = requireArrayValue(analysis.anchors, nextSegment.endAnchorIndex).raw;
 
   const prevLength = Math.hypot(anchor.x - beforeAnchor.x, anchor.y - beforeAnchor.y);
   const nextLength = Math.hypot(afterAnchor.x - anchor.x, afterAnchor.y - anchor.y);
@@ -690,7 +696,7 @@ function buildLineSegmentsSmoothReplacement(
 }
 
 function sourceSliceForItem(source: string, analysis: ExplicitPathAnalysis, itemIndex: number): string {
-  const item = analysis.statement.items[itemIndex];
+  const item = requireArrayValue(analysis.statement.items, itemIndex);
   return source.slice(item.span.from, item.span.to);
 }
 
@@ -722,13 +728,13 @@ function explicitSegmentText(source: string, analysis: ExplicitPathAnalysis, seg
   if (!segment.closesPath) {
     return segment.raw;
   }
-  const targetRaw = analysis.anchors[segment.endAnchorIndex].raw;
+  const targetRaw = requireArrayValue(analysis.anchors, segment.endAnchorIndex).raw;
   if (segment.kind === "line") {
     return `-- ${targetRaw}`;
   }
   const raw = source.slice(
-    analysis.statement.items[segment.operatorIndex].span.from,
-    analysis.statement.items[segment.targetIndex].span.to
+    requireArrayValue(analysis.statement.items, segment.operatorIndex).span.from,
+    requireArrayValue(analysis.statement.items, segment.targetIndex).span.to
   );
   return raw.replace(/\bcycle\b/u, targetRaw);
 }
@@ -832,7 +838,7 @@ export function applyAppendToPathAction(
 
 export function applyInsertPathPointAction(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: InsertPathPointAction,
   parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
@@ -846,8 +852,8 @@ export function applyInsertPathPointAction(
     return { kind: "unsupported", reason: "Invalid segment index." };
   }
 
-  const startWorld = resolveAnchorWorld(editHandles, action.elementId, analysis.anchors[segment.startAnchorIndex], source);
-  const endWorld = resolveAnchorWorld(editHandles, action.elementId, analysis.anchors[segment.endAnchorIndex], source);
+  const startWorld = resolveAnchorWorld(editHandles, action.elementId, requireArrayValue(analysis.anchors, segment.startAnchorIndex), source);
+  const endWorld = resolveAnchorWorld(editHandles, action.elementId, requireArrayValue(analysis.anchors, segment.endAnchorIndex), source);
   if (!startWorld || !endWorld) {
     return { kind: "unsupported", reason: "Could not resolve segment endpoint positions." };
   }
@@ -860,9 +866,9 @@ export function applyInsertPathPointAction(
   if (segment.kind === "line") {
     const closest = closestPointOnLine(action.point, startWorld, endWorld);
     const newPt = closest.point;
-    const endAnchorRaw = segment.closesPath ? "cycle" : analysis.anchors[segment.endAnchorIndex].raw;
+    const endAnchorRaw = segment.closesPath ? "cycle" : requireArrayValue(analysis.anchors, segment.endAnchorIndex).raw;
     replacementSegments = `-- ${formatPt(newPt)} -- ${endAnchorRaw}`;
-  } else if (segment.kind === "cubic") {
+  } else {
     const control1Item = analysis.statement.items[segment.control1Index];
     const control2Item = analysis.statement.items[segment.control2Index];
     if (control1Item?.kind !== "Coordinate" || control2Item?.kind !== "Coordinate") {
@@ -879,18 +885,16 @@ export function applyInsertPathPointAction(
     const closest = closestPointOnCubic(action.point, startWorld, control1World, control2World, endWorld);
     const { left, right } = subdivideCubicAt(closest.t, startWorld, control1World, control2World, endWorld);
 
-    const endAnchorRaw = segment.closesPath ? "cycle" : analysis.anchors[segment.endAnchorIndex].raw;
+    const endAnchorRaw = segment.closesPath ? "cycle" : requireArrayValue(analysis.anchors, segment.endAnchorIndex).raw;
     replacementSegments =
       `.. controls ${formatPt(left[1])} and ${formatPt(left[2])} .. ${formatPt(left[3])}` +
       ` .. controls ${formatPt(right[1])} and ${formatPt(right[2])} .. ${endAnchorRaw}`;
-  } else {
-    return { kind: "unsupported", reason: "Unsupported segment kind for point insertion." };
   }
 
   // Rebuild the path body with the segment replaced
-  const bodyParts = [analysis.anchors[0].raw];
-  for (let i = 0; i < analysis.segments.length; i++) {
-    const seg = analysis.segments[i];
+  const bodyParts = [requireArrayValue(analysis.anchors, 0).raw];
+  for (const [i, seg] of analysis.segments.entries()) {
+
     if (i === action.segmentIndex) {
       bodyParts.push(replacementSegments);
     } else if (!seg.closesPath) {

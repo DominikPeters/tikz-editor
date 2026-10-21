@@ -3,7 +3,9 @@ import { pt } from "../../coords/scalars.js";
 import type { ArrowTip } from "../../semantic/types.js";
 import { buildArrowTipMetrics, normalizeArrowTip } from "./metrics.js";
 import { buildLocalTipPaths } from "./shapes.js";
-import type { ArrowLocalPathCommand, NormalizedArrowTip } from "./types.js";
+import { resolveTipPaint } from "./paint.js";
+import type { ArrowLocalPathCommand } from "./types.js";
+import { formatSvgNumber as fmt } from "../format.js";
 
 export type ArrowTipPreviewPath = {
   d: string;
@@ -12,6 +14,7 @@ export type ArrowTipPreviewPath = {
   strokeWidth: number;
   lineCap: "butt" | "round" | "square";
   lineJoin: "miter" | "round" | "bevel";
+  miterLimit: number;
 };
 
 export type ArrowTipPreviewRender = {
@@ -30,7 +33,7 @@ export function renderArrowTipPreviewPaths(
   const anchor = options.anchor ?? "line-end";
   const anchorShift = anchor === "back" ? metrics.lineEnd : 0;
   const paths = buildLocalTipPaths(normalized, metrics).map((path) => shiftPath(path, anchorShift));
-  const paint = resolveTipPaint(normalized, contextLineWidth, markerColor);
+  const paint = resolveTipPaint(normalized, markerColor);
 
   return {
     paths: paths.map((commands) => ({
@@ -39,54 +42,10 @@ export function renderArrowTipPreviewPaths(
       fill: paint.fill,
       strokeWidth: paint.strokeWidth,
       lineCap: paint.lineCap,
-      lineJoin: paint.lineJoin
+      lineJoin: paint.lineJoin,
+      miterLimit: paint.miterLimit
     })),
     xBounds: collectPathXBounds(paths)
-  };
-}
-
-function resolveTipPaint(
-  tip: NormalizedArrowTip,
-  contextLineWidth: number,
-  markerColor: string
-): {
-  stroke: string;
-  fill: string;
-  strokeWidth: number;
-  lineCap: "butt" | "round" | "square";
-  lineJoin: "miter" | "round" | "bevel";
-} {
-  const color = tip.color ?? markerColor;
-  const strokeOnlyKinds = new Set([
-    "bar",
-    "hooks",
-    "cm-rightarrow",
-    "straight-barb",
-    "arc-barb",
-    "tee-barb",
-    "rays"
-  ]);
-  const fillDefault = tip.open || strokeOnlyKinds.has(tip.kind) ? "none" : color;
-  const fill = tip.fill ?? fillDefault;
-
-  const explicitStrokeOnly = strokeOnlyKinds.has(tip.kind);
-  const shouldStroke = explicitStrokeOnly || tip.open || tip.lineWidth > 0;
-  const stroke = shouldStroke ? color : "none";
-  const fallbackWidth = Number.isFinite(contextLineWidth) && contextLineWidth > 0 ? contextLineWidth : 0.4;
-  const strokeWidth = stroke === "none" ? 0 : Math.max(tip.lineWidth, fallbackWidth);
-
-  const rounded =
-    tip.round ||
-    tip.kind === "cm-rightarrow" ||
-    tip.kind === "hooks" ||
-    tip.kind === "circle" ||
-    tip.kind === "round-cap";
-  return {
-    stroke,
-    fill,
-    strokeWidth,
-    lineCap: rounded ? "round" : "butt",
-    lineJoin: rounded ? "round" : "miter"
   };
 }
 
@@ -164,12 +123,4 @@ function collectPathXBounds(paths: ArrowLocalPathCommand[][]): { min: number; ma
     return { min: 0, max: 0 };
   }
   return { min, max };
-}
-
-function fmt(value: number): string {
-  if (!Number.isFinite(value)) {
-    return "0";
-  }
-  const rounded = Math.abs(value) < 1e-9 ? 0 : value;
-  return Number(rounded.toFixed(4)).toString();
 }

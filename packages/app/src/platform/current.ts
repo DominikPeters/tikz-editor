@@ -16,10 +16,14 @@ function createFallbackPlatform(): EditorPlatform {
 }
 
 let activePlatform: EditorPlatform = createFallbackPlatform();
+let platformGeneration = 0;
 
 export function setActiveEditorPlatform(platform: EditorPlatform): void {
+  if (activePlatform !== platform) platformGeneration++;
   activePlatform = platform;
 }
+
+export function getActiveEditorPlatformGeneration(): number { return platformGeneration; }
 
 export function getActiveEditorPlatform(): EditorPlatform {
   return activePlatform;

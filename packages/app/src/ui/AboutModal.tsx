@@ -1,7 +1,8 @@
 import { Modal } from "./Modal";
 import css from "./AboutModal.module.css";
 
-const APP_VERSION = (import.meta.env.TIKZ_EDITOR_VERSION as string | undefined) ?? "0.1.0";
+const appVersion: unknown = import.meta.env.TIKZ_EDITOR_VERSION;
+const APP_VERSION = typeof appVersion === "string" ? appVersion : "0.1.0";
 const APP_AUTHOR = "Dominik Peters";
 const APP_LICENSE = "MIT";
 const APP_WEBSITE = "https://tikz.dev/editor/";

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "./Modal";
 import type { PlatformLatex } from "../platform/types";
-import { createStandaloneLatexExportArtifact } from "tikz-editor/export/index";
+import type { DocumentFileRef } from "../store/types";
+import { createStandaloneLatexExportArtifact } from "@tikz-editor/core/export/index";
 import css from "./TikzJaxModal.module.css";
 
 const TIKZJAX_FONTS_CSS = "https://cdn.jsdelivr.net/npm/@drgrice1/tikzjax@1.0.0-beta24/dist/fonts.css";
@@ -42,6 +43,18 @@ function ensureTikzJaxLoaded(): Promise<void> {
   return _libPromise;
 }
 
+function latexSourceDirectoryFromFileRef(fileRef: DocumentFileRef | null | undefined): string | null {
+  if (fileRef?.provider !== "desktop-fs" || typeof fileRef.path !== "string") {
+    return null;
+  }
+  const path = fileRef.path.trim();
+  if (!path) {
+    return null;
+  }
+  const separatorIndex = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return separatorIndex > 0 ? path.slice(0, separatorIndex) : null;
+}
+
 type Phase =
   | "checking-native"
   | "compiling-native"
@@ -53,7 +66,8 @@ type Phase =
 
 type TikzJaxModalProps = {
   source: string;
-  activeFigureId: string | null;
+  activeRootId: string | null;
+  documentFileRef?: DocumentFileRef | null;
   onClose: () => void;
   latex?: PlatformLatex;
   showOpenInNewTab?: boolean;
@@ -62,7 +76,8 @@ type TikzJaxModalProps = {
 
 export function TikzJaxModal({
   source,
-  activeFigureId,
+  activeRootId,
+  documentFileRef = null,
   onClose,
   latex,
   showOpenInNewTab = true,
@@ -115,7 +130,7 @@ export function TikzJaxModal({
       setPhase("compiling-native");
       const latexDocument = createStandaloneLatexExportArtifact({
         source,
-        activeFigureId,
+        activeFigureId: activeRootId,
         documentClassOptions: ["dvisvgm", "border=2pt"]
       }).text;
       const readLastCompileLog = latex.readLastCompileLog;
@@ -134,7 +149,9 @@ export function TikzJaxModal({
           });
         }, 120);
       }
-      const compilePromise = latex.compileTikzToSvg(latexDocument);
+      const compilePromise = latex.compileTikzToSvg(latexDocument, {
+        sourceDirectory: latexSourceDirectoryFromFileRef(documentFileRef)
+      });
       const timeoutPromise = new Promise<string>((_resolve, reject) => {
         const timeoutId = window.setTimeout(() => {
           reject(new Error(`Native compile did not return within ${NATIVE_COMPILE_TIMEOUT_MS}ms.`));
@@ -150,7 +167,7 @@ export function TikzJaxModal({
         renderSvgIntoOutput(svg);
         setPhase("done");
       });
-    }).catch((error) => {
+    }).catch((error: unknown) => {
       if (cancelled) return;
       if (pollId != null) {
         window.clearInterval(pollId);
@@ -166,7 +183,7 @@ export function TikzJaxModal({
         window.clearInterval(pollId);
       }
     };
-  }, [activeFigureId, latex, source]);
+  }, [activeRootId, documentFileRef, latex, source]);
 
   // TikZJax fallback path
   useEffect(() => {
@@ -194,7 +211,7 @@ export function TikzJaxModal({
     output.appendChild(container);
 
     const onFinished = (e: Event) => {
-      if (output.contains(e.target as Node)) {
+      if (output.contains(e.target instanceof Node ? e.target : null)) {
         const svg = output.querySelector("svg");
         if (svg) {
           svg.removeAttribute("width");
@@ -217,7 +234,7 @@ export function TikzJaxModal({
     if (!output) return;
     if (phase === "done" || phase === "rendering" || phase === "loading-lib") return;
     const pre = document.createElement("pre");
-    pre.className = css.outputLog;
+    pre.className = css.outputLog ?? "";
     pre.textContent = nativeLog.length > 0 ? nativeLog : nativeError !== null && nativeError.length > 0 ? nativeError : "No diagnostic output.";
     output.innerHTML = "";
     output.appendChild(pre);
@@ -230,7 +247,7 @@ export function TikzJaxModal({
     if (!output) return;
     if (showLogView) {
       const pre = document.createElement("pre");
-      pre.className = css.outputLog;
+      pre.className = css.outputLog ?? "";
       pre.textContent = nativeLog || "No diagnostic output.";
       output.innerHTML = "";
       output.appendChild(pre);
@@ -287,7 +304,7 @@ export function TikzJaxModal({
       closeOnBackdrop
       initialWidth={760}
       initialHeight={560}
-      className={css.dialog}
+      className={css.dialog ?? ""}
     >
       <Modal.Header
         title="Compiled Picture"

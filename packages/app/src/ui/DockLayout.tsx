@@ -1,20 +1,28 @@
-import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isRecord } from "../validation";
+import { Activity, Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Layout, Model, Actions, DockLocation, type IJsonModel, type TabNode } from "flexlayout-react";
 import { useEditorStore } from "../store/store";
 import type { EditorAction } from "../store/types";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { getActiveEditorPlatform } from "../platform/current";
 import { loadDockLayout, saveDockLayout } from "../store/workspace-storage";
 import { SourcePanel } from "./source-panel/SourcePanel";
 import { CanvasPanel } from "./canvas-panel/CanvasPanel";
-import { FigureNavigator } from "./FigureNavigator";
+import { RootNavigator } from "./RootNavigator";
 import { InspectorPanel } from "./inspector-panel/InspectorPanel";
+import { BuildsPanel } from "./builds-panel/BuildsPanel";
+import { NotesPanel } from "./notes-panel/NotesPanel";
+import { DeckInspectorPanel } from "./inspector-panel/DeckInspectorPanel";
 import { ObjectsPanel } from "./objects-panel/ObjectsPanel";
 import { StylesPanel } from "./StylesPanel";
 import { AssistantPanel } from "./AssistantPanel";
 import type { AssistantComposerImageAttachment } from "./assistant-image-attachments";
-import type { SvgRenderModel } from "tikz-editor/svg";
+import type { SvgRenderModel } from "@tikz-editor/core/svg";
 import "flexlayout-react/style/gray.css";
 import "./DockLayout.css";
+import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
+import { isDockLayoutJson } from "./dock-layout-validation";
+import type { DocumentKind } from "@tikz-editor/core/document/kind";
 
 // ── Panel IDs ─────────────────────────────────────────────────────────────────
 
@@ -23,6 +31,8 @@ export const PANEL_IDS = {
   canvas: "canvas",
   figureNavigator: "figure-navigator",
   inspector: "inspector",
+  builds: "builds",
+  notes: "notes",
   objects: "objects",
   styles: "styles",
   assistant: "assistant",
@@ -52,6 +62,9 @@ const PANEL_HOMES: Record<string, PanelHome> = {
     dockLocation: DockLocation.CENTER,
     edgeLocation: DockLocation.RIGHT,
   },
+  [PANEL_IDS.builds]: { tabsetId: "right-tabset", dockLocation: DockLocation.CENTER, edgeLocation: DockLocation.RIGHT },
+  // Under the slide, as presentation software shows its notes.
+  [PANEL_IDS.notes]: { tabsetId: "canvas-tabset", dockLocation: DockLocation.BOTTOM, edgeLocation: DockLocation.BOTTOM },
   [PANEL_IDS.objects]: {
     tabsetId: "right-tabset",
     dockLocation: DockLocation.CENTER,
@@ -74,13 +87,6 @@ const PANEL_HOMES: Record<string, PanelHome> = {
 function isAssistantAvailable(): boolean {
   return typeof getActiveEditorPlatform().assistant?.startTurn === "function";
 }
-
-type LayoutJsonNode = {
-  type: string;
-  component?: string;
-  children?: LayoutJsonNode[];
-  [key: string]: unknown;
-};
 
 type FlexLayoutSelectionParent = {
   getSelectedNode(): { getId(): string } | null;
@@ -157,30 +163,29 @@ function sanitizeLayout(json: IJsonModel): IJsonModel {
     global: normalizedGlobal
   };
 
-  function transform(node: LayoutJsonNode | null): LayoutJsonNode | null {
-    if (!node) return null;
+  function transform(node: unknown): unknown {
+    if (!isRecord(node)) return null;
     if (!isAssistantAvailable() && node.type === "tab" && node.component === "assistant") {
       return null;
     }
-    let next = node;
+    let next = node.type === "tab" && node.component === "builds" ? { ...node, name: "Overlays" } : node;
     if (node.type === "tabset" && typeof node.id === "string" && (HOME_TABSET_IDS as readonly string[]).includes(node.id)) {
       next = { ...next, enableDeleteWhenEmpty: false };
     }
-    if (next.children) {
+    if (Array.isArray(next.children)) {
       next = {
         ...next,
         children: next.children
           .map(transform)
-          .filter((child): child is LayoutJsonNode => child != null)
+          .filter((child) => child != null)
       };
     }
     return next;
   }
 
-  return {
-    ...jsonWithNormalizedGlobal,
-    layout: transform(jsonWithNormalizedGlobal.layout as LayoutJsonNode) as IJsonModel["layout"]
-  };
+  const transformed: unknown = { ...jsonWithNormalizedGlobal, layout: transform(jsonWithNormalizedGlobal.layout) };
+  if (!isDockLayoutJson(transformed)) throw new Error("Invalid sanitized dock layout");
+  return transformed;
 }
 
 // ── Preset layouts ────────────────────────────────────────────────────────────
@@ -196,7 +201,7 @@ function buildSourceOnTopLayout(): IJsonModel {
   }
 
   return {
-    global: buildDefaultLayout().global,
+    ...((buildDefaultLayout().global) === undefined ? {} : { global: buildDefaultLayout().global }),
     layout: {
       type: "row",
       children: [
@@ -239,7 +244,7 @@ function buildSourceOnTopLayout(): IJsonModel {
 
 function buildCanvasOnlyLayout(): IJsonModel {
   return {
-    global: buildDefaultLayout().global,
+    ...((buildDefaultLayout().global) === undefined ? {} : { global: buildDefaultLayout().global }),
     layout: {
       type: "row",
       children: [
@@ -268,7 +273,7 @@ function buildWideInspectorLayout(): IJsonModel {
   }
 
   return {
-    global: buildDefaultLayout().global,
+    ...((buildDefaultLayout().global) === undefined ? {} : { global: buildDefaultLayout().global }),
     layout: {
       type: "row",
       children: [
@@ -324,16 +329,18 @@ function syncLayoutStateToStore(model: Model, dispatch: (action: EditorAction) =
   const inspectorVisible = model.getNodeById(PANEL_IDS.inspector) != null;
   const objectsVisible = model.getNodeById(PANEL_IDS.objects) != null;
   const stylesVisible = model.getNodeById(PANEL_IDS.styles) != null;
+  const buildsVisible = model.getNodeById(PANEL_IDS.builds) != null;
+  const notesVisible = model.getNodeById(PANEL_IDS.notes) != null;
   const figuresVisible = model.getNodeById(PANEL_IDS.figureNavigator) != null;
   const assistantVisible = model.getNodeById(PANEL_IDS.assistant) != null;
 
   // Determine active right sidebar tab
-  let activeRightTab: "inspector" | "objects" | "styles" | "assistant" = "inspector";
-  const rightPanelIds = ["inspector", "objects", "styles", "assistant"] as const;
+  let activeRightTab: "inspector" | "objects" | "styles" | "assistant" | "builds" = "inspector";
+  const rightPanelIds = ["inspector", "objects", "styles", "assistant", "builds"] as const;
   for (const id of rightPanelIds) {
     const node = model.getNodeById(id);
-    if (node?.getParent()) {
-      const parent = node.getParent()!;
+    const parent = node?.getParent();
+    if (parent) {
       if (isLayoutSelectionParent(parent)) {
         const selected = parent.getSelectedNode();
         if (selected?.getId() === id) {
@@ -351,6 +358,8 @@ function syncLayoutStateToStore(model: Model, dispatch: (action: EditorAction) =
     objectsVisible,
     stylesVisible,
     figuresVisible,
+    buildsVisible,
+    notesVisible,
     assistantVisible,
     activeRightTab,
   });
@@ -382,10 +391,45 @@ export type DockLayoutHandle = {
 // Module-level ref so editor commands can access the handle without prop drilling.
 let activeDockHandle: DockLayoutHandle | null = null;
 
+/**
+ * flexlayout keeps a tab mounted once shown. While another tab of its set is
+ * selected, the panel keeps its state but stops following the store (its
+ * subscriptions are effects, which a hidden Activity cleans up); it catches up
+ * when shown again.
+ */
+function WhileTabVisible({ node, children }: { node: TabNode; children: ReactNode }) {
+  const [visible, setVisible] = useState(() => node.isVisible());
+  useEffect(() => {
+    node.setEventListener("visibility", (event: { visible: boolean }) => { setVisible(event.visible); });
+    setVisible(node.isVisible());
+    return () => { node.removeEventListener("visibility"); };
+  }, [node]);
+  return <Activity mode={visible ? "visible" : "hidden"}>{children}</Activity>;
+}
+
 const MemoSourcePanel = memo(SourcePanel);
 const MemoCanvasPanel = memo(CanvasPanel);
-const MemoFigureNavigator = memo(FigureNavigator);
+const MemoRootNavigator = memo(RootNavigator);
 const MemoInspectorPanel = memo(InspectorPanel);
+const MemoDeckInspectorPanel = memo(DeckInspectorPanel);
+const MemoBuildsPanel = memo(BuildsPanel);
+const MemoNotesPanel = memo(NotesPanel);
+
+/**
+ * Deck mode gets the deck object/frame inspector, tikz the full one.
+ * Mode is a function of (document kind, active root): a beamer document
+ * editing a nested tikzpicture root behaves as a tikz editor.
+ */
+function InspectorPanelSwitch() {
+  const documentKind = useEditorStore((s) => s.documentKind);
+  const nestedFigureActive = useEditorStore(
+    (s) => parseDocumentRootId(s.activeRootId ?? "")?.kind === "beamer-frame-tikz" ||
+      (s.snapshot.overlayLayer != null && (s.selectedElementIds.size > 0 || (s.toolMode !== "select" && s.toolMode !== "magnify")))
+  );
+  return documentKind === "beamer" && !nestedFigureActive
+    ? <MemoDeckInspectorPanel />
+    : <MemoInspectorPanel />;
+}
 const MemoObjectsPanel = memo(ObjectsPanel);
 const MemoStylesPanel = memo(StylesPanel);
 const MemoAssistantPanel = memo(AssistantPanel);
@@ -394,19 +438,49 @@ export function getDockLayoutHandle(): DockLayoutHandle | null {
   return activeDockHandle;
 }
 
-function createInitialModel(): Model {
-  const persisted = loadDockLayout();
-  const json = persisted ? sanitizeLayout(persisted) : buildDefaultLayout();
+function defaultLayoutForKind(kind: DocumentKind): IJsonModel {
+  const model = Model.fromJson(buildDefaultLayout());
+  if (kind === "beamer") {
+    model.doAction(Actions.addNode({ type: "tab", id: PANEL_IDS.builds, name: "Overlays", component: "builds" }, "right-tabset", DockLocation.CENTER, -1, false));
+    model.doAction(Actions.addNode({ type: "tab", id: PANEL_IDS.figureNavigator, name: "Slides", component: "figure-navigator" }, "canvas-tabset", DockLocation.BOTTOM, -1, false));
+    const navigatorHome = model.getNodeById(PANEL_IDS.figureNavigator)?.getParent();
+    if (navigatorHome) model.doAction(Actions.updateNodeAttributes(navigatorHome.getId(), { weight: 15 }));
+    model.doAction(Actions.updateNodeAttributes("canvas-tabset", { weight: 85 }));
+  }
+  return model.toJson();
+}
+
+function createLayoutModel(json: unknown, kind: DocumentKind = "tikz"): { model: Model; recovered: boolean } {
   try {
-    return Model.fromJson(json);
-  } catch {
-    return Model.fromJson(buildDefaultLayout());
+    if (!isDockLayoutJson(json)) throw new Error("Invalid dock layout structure.");
+    return { model: Model.fromJson(sanitizeLayout(json)), recovered: false };
+  } catch (error) {
+    console.info("[tikz-editor] Failed to apply dock layout; using the default layout.", error);
+    return { model: Model.fromJson(defaultLayoutForKind(kind)), recovered: true };
   }
 }
 
-export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn, onNewChat }: DockLayoutProps) {
+function createInitialModel(kind: DocumentKind): Model {
+  const persisted = loadDockLayout(kind);
+  const { model, recovered } = persisted
+    ? createLayoutModel(persisted, kind)
+    : { model: Model.fromJson(defaultLayoutForKind(kind)), recovered: true };
+  // Replace rejected payloads too, so a writable store does not retry them on every mount.
+  if (recovered) saveDockLayout(model.toJson(), kind);
+  return model;
+}
+
+// Memoized: the app re-renders on each edit, and re-rendering the dock makes
+// flexlayout measure every panel (a forced layout) though none has moved.
+export const DockLayout = memo(function DockLayout(props: DockLayoutProps) {
+  const kind = useEditorStore(s => s.documentKind);
+  // A nested TikZ picture keeps its parent deck's panel arrangement.
+  return <DocumentDockLayout key={kind} {...props} kind={kind} />;
+});
+
+function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn, onNewChat, kind }: DockLayoutProps & { kind: DocumentKind }) {
   const dispatch = useEditorStore((s) => s.dispatch);
-  const [model, setModel] = useState(createInitialModel);
+  const [model, setModel] = useState(() => createInitialModel(kind));
 
   // Factory — renders panel content for each tab
   const factory = useCallback(
@@ -427,16 +501,22 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
           );
         case "figure-navigator":
           return (
-            <Suspense fallback={null}>
-              <MemoFigureNavigator />
-            </Suspense>
+            <WhileTabVisible node={node}>
+              <Suspense fallback={null}>
+                <MemoRootNavigator />
+              </Suspense>
+            </WhileTabVisible>
           );
         case "inspector":
-          return <MemoInspectorPanel />;
+          return <WhileTabVisible node={node}><InspectorPanelSwitch /></WhileTabVisible>;
+        case "builds":
+          return <WhileTabVisible node={node}><MemoBuildsPanel /></WhileTabVisible>;
+        case "notes":
+          return <WhileTabVisible node={node}><MemoNotesPanel /></WhileTabVisible>;
         case "objects":
-          return <MemoObjectsPanel />;
+          return <WhileTabVisible node={node}><MemoObjectsPanel /></WhileTabVisible>;
         case "styles":
-          return <MemoStylesPanel />;
+          return <WhileTabVisible node={node}><MemoStylesPanel /></WhileTabVisible>;
         case "assistant":
           return <MemoAssistantPanel onSubmitPrompt={onSubmitPrompt} onInterruptTurn={onInterruptTurn} onNewChat={onNewChat} />;
         case undefined:
@@ -451,10 +531,10 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
   // On model change: persist + sync to Zustand
   const onModelChange = useCallback(
     (_model: Model) => {
-      saveDockLayout(_model.toJson());
+      saveDockLayout(_model.toJson(), kind);
       syncLayoutStateToStore(_model, dispatch);
     },
-    [dispatch]
+    [dispatch, kind]
   );
 
   // Expose handle. We use a ref to always point to the latest model via closure,
@@ -481,8 +561,10 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
         const nameMap: Record<string, string> = {
           source: "Source",
           canvas: "Canvas",
-          "figure-navigator": "Figures",
+          "figure-navigator": useEditorStore.getState().documentKind === "beamer" ? "Slides" : "Figures",
           inspector: "Inspector",
+          builds: "Overlays",
+          notes: "Notes",
           objects: "Objects",
           styles: "Styles",
           assistant: "Assistant",
@@ -509,17 +591,18 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
           m.doAction(Actions.addNode(tabJson, m.getFirstTabSet().getId(), DockLocation.CENTER, -1));
         }
 
-        // For figure-navigator docked below canvas, use a small weight
-        if (panelId === PANEL_IDS.figureNavigator) {
-          const figTabset = m.getNodeById(PANEL_IDS.figureNavigator)?.getParent();
-          if (figTabset) {
-            m.doAction(Actions.updateNodeAttributes(figTabset.getId(), { weight: 15 }));
+        // Panels docked below the canvas take a small part of its height.
+        const belowCanvasWeight = { [PANEL_IDS.figureNavigator]: 15, [PANEL_IDS.notes]: 20 }[panelId];
+        if (belowCanvasWeight !== undefined) {
+          const belowTabset = m.getNodeById(panelId)?.getParent();
+          if (belowTabset) {
+            m.doAction(Actions.updateNodeAttributes(belowTabset.getId(), { weight: belowCanvasWeight }));
             const canvasTs = m.getNodeById("canvas-tabset");
-            if (canvasTs) m.doAction(Actions.updateNodeAttributes("canvas-tabset", { weight: 85 }));
+            if (canvasTs) m.doAction(Actions.updateNodeAttributes("canvas-tabset", { weight: 100 - belowCanvasWeight }));
           }
         }
       }
-      saveDockLayout(m.toJson());
+      saveDockLayout(m.toJson(), kind);
       syncLayoutStateToStore(m, dispatchRef.current);
     },
     applyPreset(preset: keyof typeof LAYOUT_PRESETS) {
@@ -527,16 +610,15 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
       this.applyLayoutJson(builder());
     },
     applyLayoutJson(json: IJsonModel) {
-      const sanitized = sanitizeLayout(json);
-      const newModel = Model.fromJson(sanitized);
-      saveDockLayout(sanitized);
+      const { model: newModel } = createLayoutModel(json, kind);
+      saveDockLayout(newModel.toJson(), kind);
       syncLayoutStateToStore(newModel, dispatchRef.current);
       setModelRef.current(newModel);
     },
     resetLayout() {
-      this.applyPreset("default");
+      this.applyLayoutJson(defaultLayoutForKind(kind));
     },
-  }), []); // stable — uses refs internally
+  }), [kind]);
 
   useEffect(() => {
     activeDockHandle = handle;
@@ -546,16 +628,19 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
     };
   }, [handle, model, dispatch]);
 
-  // Auto-show/hide FigureNavigator based on figure count
-  const figureCount = useEditorStore((s) => s.snapshot.figures.length);
-  const prevFigureCountRef = useRef(figureCount);
+  const deckMode = kind === "beamer";
+
+  // Auto-show/hide RootNavigator based on figure count
+  const figureCount = useEditorStore((s) => snapshotRoots(s.snapshot).length);
+  // From none, as at startup: a layout mounted for a multi-figure document opens the list too.
+  const prevFigureCountRef = useRef(0);
   useEffect(() => {
     const prev = prevFigureCountRef.current;
     prevFigureCountRef.current = figureCount;
     const m = modelRef.current;
     const figTabExists = m.getNodeById(PANEL_IDS.figureNavigator) != null;
 
-    if (figureCount > 1 && !figTabExists && prev <= 1) {
+    if (!figTabExists && !deckMode && hasMultipleRoots(figureCount) && !hasMultipleRoots(prev)) {
       // Multi-figure document — auto-open below canvas with small height
       const canvasTabset = m.getNodeById("canvas-tabset");
       const firstTabSetId = m.getFirstTabSet().getId();
@@ -579,15 +664,17 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
           }
         }
       }
-      saveDockLayout(m.toJson());
+      saveDockLayout(m.toJson(), kind);
       syncLayoutStateToStore(m, dispatchRef.current);
-    } else if (figureCount <= 1 && figTabExists) {
+    } else if (!deckMode && !hasMultipleRoots(figureCount) && figTabExists) {
       // Single-figure — auto-close, including startup with a persisted/open figures tab
       m.doAction(Actions.deleteTab(PANEL_IDS.figureNavigator));
-      saveDockLayout(m.toJson());
+      saveDockLayout(m.toJson(), kind);
       syncLayoutStateToStore(m, dispatchRef.current);
     }
-  }, [figureCount]);
+    const tab = m.getNodeById(PANEL_IDS.figureNavigator);
+    if (tab) m.doAction(Actions.renameTab(PANEL_IDS.figureNavigator, deckMode ? "Slides" : "Figures"));
+  }, [figureCount, deckMode, model, kind]);
 
   return (
     <Layout

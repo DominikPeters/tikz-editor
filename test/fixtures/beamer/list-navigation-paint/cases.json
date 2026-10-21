@@ -1,0 +1,44 @@
+[
+  {
+    "id": "stock-enumerate",
+    "preamble": "\\setbeamertemplate{navigation symbols}{}",
+    "body": "\\begin{enumerate}\\item Alpha\\item Beta\\item Gamma\\end{enumerate}"
+  },
+  {
+    "id": "colored-nested-enumerate",
+    "preamble": "\\setbeamertemplate{navigation symbols}{}\\setbeamercolor{enumerate item}{fg=red}\\setbeamercolor{enumerate subitem}{fg=green}\\setbeamercolor{enumerate subsubitem}{fg=blue}",
+    "body": "\\begin{enumerate}\\item Alpha\\begin{enumerate}\\item Beta\\begin{enumerate}\\item Gamma\\end{enumerate}\\end{enumerate}\\end{enumerate}"
+  },
+  {
+    "id": "mixed-list-depth",
+    "preamble": "\\setbeamertemplate{navigation symbols}{}\\setbeamercolor{itemize item}{fg=red}\\setbeamercolor{enumerate subitem}{fg=green}",
+    "body": "\\begin{itemize}\\item Alpha\\begin{enumerate}\\item Beta\\end{enumerate}\\end{itemize}"
+  },
+  {
+    "id": "colored-nested-itemize",
+    "preamble": "\\setbeamertemplate{navigation symbols}{}\\setbeamercolor{itemize item}{fg=red}\\setbeamercolor{itemize subitem}{fg=green}\\setbeamercolor{itemize subsubitem}{fg=blue}",
+    "body": "\\begin{itemize}\\item Alpha\\begin{itemize}\\item Beta\\begin{itemize}\\item Gamma\\end{itemize}\\end{itemize}\\end{itemize}"
+  },
+  {
+    "id": "navigation-default",
+    "preamble": "",
+    "body": "Alpha"
+  },
+  {
+    "id": "navigation-restored",
+    "preamble": "\\setbeamertemplate{navigation symbols}{}\\setbeamertemplate{navigation symbols}[default]",
+    "body": "Alpha"
+  },
+  {
+    "id": "navigation-comment-empty",
+    "preamble": "\\setbeamertemplate{navigation symbols}{% empty\n}",
+    "body": "Alpha"
+  },
+  {
+    "id": "custom-enumerate-labels",
+    "preamble": "\\setbeamertemplate{navigation symbols}{}\\setbeamercolor{enumerate item}{fg=red}",
+    "body": "\\begin{enumerate}\\item[Custom] Alpha\\item[\\textcolor{green}{Green}] Beta\\item Gamma\\end{enumerate}",
+    "generatedOnly": true,
+    "recordCounter": true
+  }
+]

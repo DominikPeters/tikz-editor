@@ -1,3 +1,4 @@
+import type { AxisBasis } from "./coords/axis-basis.js";
 import type { WorldTransform } from "../coords/transforms.js";
 import type { Span } from "../ast/types.js";
 import type { OptionListAst } from "../options/types.js";
@@ -56,6 +57,7 @@ export type StyleTraceLayerInput =
     };
 
 export type ResolvedStyleTrace = {
+  axisBasis: AxisBasis;
   style: ResolvedStyle;
   transform: WorldTransform;
   diagnostics: StyleDiagnostic[];
@@ -67,28 +69,17 @@ export function cloneStyleSourceRef(sourceRef: StyleSourceRef | undefined): Styl
   if (!sourceRef) {
     return undefined;
   }
+  const identityRef = sourceRef.identityRef;
   return {
     sourceId: sourceRef.sourceId,
-    sourceSpan: sourceRef.sourceSpan
-      ? {
-          from: sourceRef.sourceSpan.from,
-          to: sourceRef.sourceSpan.to
-        }
-      : undefined,
+    ...(sourceRef.sourceSpan === undefined ? {} : { sourceSpan: { ...sourceRef.sourceSpan } }),
     sourceKind: sourceRef.sourceKind,
-    label: sourceRef.label,
-    identityRef: sourceRef.identityRef
-      ? {
-          sourceId: sourceRef.identityRef.sourceId,
-          sourceSpan: sourceRef.identityRef.sourceSpan
-            ? {
-                from: sourceRef.identityRef.sourceSpan.from,
-                to: sourceRef.identityRef.sourceSpan.to
-              }
-            : undefined,
-          sourceKind: sourceRef.identityRef.sourceKind
-        }
-      : undefined
+    ...(sourceRef.label === undefined ? {} : { label: sourceRef.label }),
+    ...(identityRef === undefined ? {} : { identityRef: {
+      sourceId: identityRef.sourceId,
+      ...(identityRef.sourceSpan === undefined ? {} : { sourceSpan: { ...identityRef.sourceSpan } }),
+      ...(identityRef.sourceKind === undefined ? {} : { sourceKind: identityRef.sourceKind })
+    } })
   };
 }
 
@@ -119,9 +110,10 @@ export function cloneStyleChainEntry(entry: StyleChainEntry): StyleChainEntry {
 }
 
 function cloneStyleChainEntryBase(entry: StyleChainEntryBase): StyleChainEntryBase {
+  const optionalSourceRef3 = cloneStyleSourceRef(entry.sourceRef);
   return {
     kind: entry.kind,
-    sourceRef: cloneStyleSourceRef(entry.sourceRef),
+    ...(optionalSourceRef3 === undefined ? {} : { sourceRef: optionalSourceRef3 }),
     // Copy only the outer list; option AST nodes are treated as immutable.
     rawOptions: entry.rawOptions.slice(),
     before: cloneResolvedStyle(entry.before),
@@ -130,13 +122,85 @@ function cloneStyleChainEntryBase(entry: StyleChainEntryBase): StyleChainEntryBa
   };
 }
 
+const STYLE_PROPERTY_KEYS: { [K in keyof ResolvedStyle]: K } = {
+  stroke: "stroke",
+  fill: "fill",
+  fillPattern: "fillPattern",
+  patternColor: "patternColor",
+  fillRule: "fillRule",
+  clip: "clip",
+  useAsBoundingBox: "useAsBoundingBox",
+  overlay: "overlay",
+  textColor: "textColor",
+  textOpacity: "textOpacity",
+  fontSize: "fontSize",
+  fontStyle: "fontStyle",
+  fontWeight: "fontWeight",
+  fontFamily: "fontFamily",
+  doubleStroke: "doubleStroke",
+  doubleDistance: "doubleDistance",
+  doubleLineCenterDistance: "doubleLineCenterDistance",
+  doubleColor: "doubleColor",
+  textAlign: "textAlign",
+  drawExplicit: "drawExplicit",
+  radius: "radius",
+  radiusUsesBasis: "radiusUsesBasis",
+  xRadiusUsesBasis: "xRadiusUsesBasis",
+  yRadiusUsesBasis: "yRadiusUsesBasis",
+  xRadius: "xRadius",
+  yRadius: "yRadius",
+  roundedCorners: "roundedCorners",
+  lineWidth: "lineWidth",
+  dashArray: "dashArray",
+  dashOffset: "dashOffset",
+  lineCap: "lineCap",
+  lineJoin: "lineJoin",
+  shortenStart: "shortenStart",
+  shortenEnd: "shortenEnd",
+  markerStart: "markerStart",
+  markerEnd: "markerEnd",
+  arrowShorthandStart: "arrowShorthandStart",
+  arrowShorthandEnd: "arrowShorthandEnd",
+  tipsMode: "tipsMode",
+  opacity: "opacity",
+  strokeOpacity: "strokeOpacity",
+  fillOpacity: "fillOpacity",
+  shadeEnabled: "shadeEnabled",
+  shading: "shading",
+  shadingAngle: "shadingAngle",
+  axisTopColor: "axisTopColor",
+  axisMiddleColor: "axisMiddleColor",
+  axisBottomColor: "axisBottomColor",
+  radialInnerColor: "radialInnerColor",
+  radialOuterColor: "radialOuterColor",
+  ballColor: "ballColor",
+  bilinearLowerLeft: "bilinearLowerLeft",
+  bilinearLowerRight: "bilinearLowerRight",
+  bilinearUpperLeft: "bilinearUpperLeft",
+  bilinearUpperRight: "bilinearUpperRight",
+  shadowScale: "shadowScale",
+  shadowXShift: "shadowXShift",
+  shadowYShift: "shadowYShift",
+  shadowFade: "shadowFade",
+  everyShadowStyles: "everyShadowStyles",
+  shadowLayers: "shadowLayers",
+  decoration: "decoration",
+  decorationPreActions: "decorationPreActions",
+  decorationPostActions: "decorationPostActions",
+};
+
+export const RESOLVED_STYLE_KEYS: readonly (keyof ResolvedStyle)[] = Object.values(STYLE_PROPERTY_KEYS);
+
+function setStyleValue<K extends keyof ResolvedStyle>(target: Partial<ResolvedStyle>, key: K, value: ResolvedStyle[K]): void {
+  target[key] = value;
+}
+
 function cloneResolvedStyleContributions(contributions: Partial<ResolvedStyle>): Partial<ResolvedStyle> {
   const cloned: Partial<ResolvedStyle> = {};
-  const clonedRecord = cloned as Record<keyof ResolvedStyle, ResolvedStyle[keyof ResolvedStyle]>;
-  for (const key of Object.keys(contributions) as Array<keyof ResolvedStyle>) {
+  for (const key of RESOLVED_STYLE_KEYS) {
     const value = contributions[key];
     if (value !== undefined) {
-      clonedRecord[key] = value;
+      setStyleValue(cloned, key, value);
     }
   }
   return cloned;
@@ -149,11 +213,10 @@ export function cloneResolvedStyle(style: ResolvedStyle): ResolvedStyle {
 
 export function diffResolvedStyle(before: ResolvedStyle, after: ResolvedStyle): Partial<ResolvedStyle> {
   const diff: Partial<ResolvedStyle> = {};
-  const diffRecord = diff as Record<keyof ResolvedStyle, ResolvedStyle[keyof ResolvedStyle]>;
-  for (const key of Object.keys(after) as Array<keyof ResolvedStyle>) {
+  for (const key of RESOLVED_STYLE_KEYS) {
     const nextValue = after[key];
     if (nextValue !== undefined && !resolvedStyleValueEquals(before[key], nextValue)) {
-      diffRecord[key] = nextValue;
+      setStyleValue(diff, key, nextValue);
     }
   }
   return diff;

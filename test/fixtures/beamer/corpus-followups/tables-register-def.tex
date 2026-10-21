@@ -1,0 +1,24 @@
+\documentclass[aspectratio=169]{beamer}
+
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+% Original reduction: tables-def-arraystretch.
+\begin{frame}[plain,t]
+\def\arraystretch{1.5}
+\begin{tabular}{lr}
+Alpha & 12 \\
+Beta & 345 \\
+Gamma & 6 \\
+\end{tabular}
+\end{frame}
+
+% Original reduction: tables-renewcommand-arraystretch-control.
+\begin{frame}[plain,t]
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{lr}
+Alpha & 12 \\
+Beta & 345 \\
+Gamma & 6 \\
+\end{tabular}
+\end{frame}
+\end{document}

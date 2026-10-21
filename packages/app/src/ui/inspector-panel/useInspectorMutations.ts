@@ -1,3 +1,4 @@
+import type { EditAction } from "@tikz-editor/core/edit/actions";
 import { useCallback } from "react";
 import type {
   ArrowTipPresetId,
@@ -14,7 +15,7 @@ import type {
   NodeShapePresetId,
   PathMorphingDecorationPresetId,
   SetPropertyWriteTarget
-} from "tikz-editor/edit/inspector";
+} from "@tikz-editor/core/edit/inspector";
 import {
   buildArrowTipSetPropertyMutation,
   buildDashStyleSetPropertyMutation,
@@ -32,8 +33,8 @@ import {
   type ArrowTipWriteTarget,
   type FillPatternOptionMutationContext,
   type NodeFontMutationContext
-} from "tikz-editor/edit/property-write-builders";
-import { buildPropertyMutations, propertyIdForWriteKey } from "tikz-editor/edit/property-registry";
+} from "@tikz-editor/core/edit/property-write-builders";
+import { buildPropertyMutations, propertyIdForWriteKey } from "@tikz-editor/core/edit/property-registry";
 import type { EditorAction } from "../../store/types";
 
 export type ApplySetPropertyOptions = {
@@ -51,24 +52,25 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
       options: ApplySetPropertyOptions = {}
     ): void => {
       if (!write.writable || write.elementId.length === 0) return;
+      const resolvedPropertyId = options.propertyId ?? (options.key ? propertyIdForWriteKey(options.key) ?? undefined : write.propertyId);
       const [mutation] = buildPropertyMutations({
-        propertyId: options.propertyId ?? (options.key ? propertyIdForWriteKey(options.key) ?? undefined : write.propertyId),
+        ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
         key: options.key ?? write.key,
         value,
-        clearKeys: options.clearKeys
+        ...(options.clearKeys === undefined ? {} : { clearKeys: options.clearKeys })
       });
       if (!mutation) return;
       dispatch({
         type: "APPLY_EDIT_ACTION",
-        recordInHistory: options.recordInHistory,
+        ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }),
         action: {
           kind: "setProperty",
           elementId: write.elementId,
           level: write.level,
           key: mutation.key,
           value: mutation.value,
-          propertyId: mutation.propertyId,
-          clearKeys: mutation.clearKeys
+          ...(mutation.propertyId === undefined ? {} : { propertyId: mutation.propertyId }),
+          ...(mutation.clearKeys === undefined ? {} : { clearKeys: mutation.clearKeys })
         }
       });
     },
@@ -86,32 +88,29 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
         return;
       }
 
-      const mergeKey = options.recordInHistory === false ? undefined : `multi-set:${Date.now().toString(36)}`;
+      const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
       for (const write of writable) {
+        const resolvedPropertyId = options.propertyId ?? (options.key ? propertyIdForWriteKey(options.key) ?? undefined : write.propertyId);
         const [mutation] = buildPropertyMutations({
-          propertyId: options.propertyId ?? (options.key ? propertyIdForWriteKey(options.key) ?? undefined : write.propertyId),
+          ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
           key: options.key ?? write.key,
           value,
-          clearKeys: options.clearKeys
+          ...(options.clearKeys === undefined ? {} : { clearKeys: options.clearKeys })
         });
         if (!mutation) {
           continue;
         }
-        dispatch({
-          type: "APPLY_EDIT_ACTION",
-          historyMergeKey: mergeKey,
-          recordInHistory: options.recordInHistory,
-          action: {
-            kind: "setProperty",
-            elementId: write.elementId,
-            level: write.level,
-            key: mutation.key,
-            value: mutation.value,
-            propertyId: mutation.propertyId,
-            clearKeys: mutation.clearKeys
-          }
+        actions.push({
+          kind: "setProperty",
+          elementId: write.elementId,
+          level: write.level,
+          key: mutation.key,
+          value: mutation.value,
+          ...(mutation.propertyId === undefined ? {} : { propertyId: mutation.propertyId }),
+          ...(mutation.clearKeys === undefined ? {} : { clearKeys: mutation.clearKeys })
         });
       }
+      if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
     },
     [dispatch]
   );
@@ -143,10 +142,8 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
       };
     }
 
-    return {
-      value: nextValue,
-      clearKeys: colorSyntaxClearKeys(syntaxValue)
-    };
+    const clearKeys = colorSyntaxClearKeys(syntaxValue);
+    return { value: nextValue, ...(clearKeys === undefined ? {} : { clearKeys }) };
   }, [colorSyntaxClearKeys]);
 
   const applyArrowTipValue = useCallback((
@@ -159,7 +156,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetProperty(write, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetProperty]);
 
@@ -174,23 +171,19 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
       return;
     }
 
-    const mergeKey = options.recordInHistory === false ? undefined : `multi-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const write of writable) {
       const mutation = buildArrowTipSetPropertyMutation(write.arrowContext, side, value);
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        historyMergeKey: mergeKey,
-        recordInHistory: options.recordInHistory,
-        action: {
-          kind: "setProperty",
-          elementId: write.elementId,
-          level: write.level,
-          key: mutation.key,
-          value: mutation.value,
-          clearKeys: mutation.clearKeys
-        }
+      actions.push({
+        kind: "setProperty",
+        elementId: write.elementId,
+        level: write.level,
+        key: mutation.key,
+        value: mutation.value,
+        clearKeys: mutation.clearKeys
       });
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }, [dispatch]);
 
   const applyDashStyleValue = useCallback((
@@ -202,7 +195,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetProperty(write, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetProperty]);
 
@@ -215,7 +208,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetPropertyMany(writes, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetPropertyMany]);
 
@@ -228,7 +221,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetProperty(write, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetProperty]);
 
@@ -241,7 +234,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetPropertyMany(writes, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetPropertyMany]);
 
@@ -254,7 +247,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetProperty(write, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetProperty]);
 
@@ -267,7 +260,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetPropertyMany(writes, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetPropertyMany]);
 
@@ -291,22 +284,18 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
       return;
     }
 
-    const mergeKey = options.recordInHistory === false ? undefined : `multi-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const mutation of mutations) {
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        historyMergeKey: mergeKey,
-        recordInHistory: options.recordInHistory,
-        action: {
-          kind: "setProperty",
-          elementId: write.elementId,
-          level: write.level,
-          key: mutation.key,
-          value: mutation.value,
-          clearKeys: mutation.clearKeys
-        }
+      actions.push({
+        kind: "setProperty",
+        elementId: write.elementId,
+        level: write.level,
+        key: mutation.key,
+        value: mutation.value,
+        clearKeys: mutation.clearKeys
       });
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }, [dispatch]);
 
   const applyFillModeValueMany = useCallback((
@@ -331,25 +320,21 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
       return;
     }
 
-    const mergeKey = options.recordInHistory === false ? undefined : `multi-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const { write, context } of writableWrites) {
       const mutations = buildFillModeSetPropertyMutations(value, context);
       for (const mutation of mutations) {
-        dispatch({
-          type: "APPLY_EDIT_ACTION",
-          historyMergeKey: mergeKey,
-          recordInHistory: options.recordInHistory,
-          action: {
-            kind: "setProperty",
-            elementId: write.elementId,
-            level: write.level,
-            key: mutation.key,
-            value: mutation.value,
-            clearKeys: mutation.clearKeys
-          }
+        actions.push({
+          kind: "setProperty",
+          elementId: write.elementId,
+          level: write.level,
+          key: mutation.key,
+          value: mutation.value,
+          clearKeys: mutation.clearKeys
         });
       }
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }, [dispatch]);
 
   const applyFillShadingValue = useCallback((
@@ -364,22 +349,18 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     if (mutations.length === 0) {
       return;
     }
-    const mergeKey = options.recordInHistory === false ? undefined : `multi-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const mutation of mutations) {
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        historyMergeKey: mergeKey,
-        recordInHistory: options.recordInHistory,
-        action: {
-          kind: "setProperty",
-          elementId: write.elementId,
-          level: write.level,
-          key: mutation.key,
-          value: mutation.value,
-          clearKeys: mutation.clearKeys
-        }
+      actions.push({
+        kind: "setProperty",
+        elementId: write.elementId,
+        level: write.level,
+        key: mutation.key,
+        value: mutation.value,
+        clearKeys: mutation.clearKeys
       });
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }, [dispatch]);
 
   const applyFillShadingValueMany = useCallback((
@@ -396,24 +377,20 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
       return;
     }
 
-    const mergeKey = options.recordInHistory === false ? undefined : `multi-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const write of writable) {
       for (const mutation of mutations) {
-        dispatch({
-          type: "APPLY_EDIT_ACTION",
-          historyMergeKey: mergeKey,
-          recordInHistory: options.recordInHistory,
-          action: {
-            kind: "setProperty",
-            elementId: write.elementId,
-            level: write.level,
-            key: mutation.key,
-            value: mutation.value,
-            clearKeys: mutation.clearKeys
-          }
+        actions.push({
+          kind: "setProperty",
+          elementId: write.elementId,
+          level: write.level,
+          key: mutation.key,
+          value: mutation.value,
+          clearKeys: mutation.clearKeys
         });
       }
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }, [dispatch]);
 
   const applyFillPatternValue = useCallback((
@@ -425,7 +402,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetProperty(write, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetProperty]);
 
@@ -438,7 +415,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetPropertyMany(writes, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetPropertyMany]);
 
@@ -453,7 +430,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetProperty(write, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetProperty]);
 
@@ -477,23 +454,19 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
       return;
     }
 
-    const mergeKey = options.recordInHistory === false ? undefined : `multi-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const entry of writableEntries) {
       const mutation = buildFillPatternOptionSetPropertyMutation(entry.context, option, value);
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        historyMergeKey: mergeKey,
-        recordInHistory: options.recordInHistory,
-        action: {
-          kind: "setProperty",
-          elementId: entry.write.elementId,
-          level: entry.write.level,
-          key: mutation.key,
-          value: mutation.value,
-          clearKeys: mutation.clearKeys
-        }
+      actions.push({
+        kind: "setProperty",
+        elementId: entry.write.elementId,
+        level: entry.write.level,
+        key: mutation.key,
+        value: mutation.value,
+        clearKeys: mutation.clearKeys
       });
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }, [dispatch]);
 
   const applyPathMorphingDecorationValue = useCallback((
@@ -509,22 +482,18 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
       return;
     }
 
-    const mergeKey = options.recordInHistory === false ? undefined : `multi-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const mutation of mutations) {
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        historyMergeKey: mergeKey,
-        recordInHistory: options.recordInHistory,
-        action: {
-          kind: "setProperty",
-          elementId: write.elementId,
-          level: write.level,
-          key: mutation.key,
-          value: mutation.value,
-          clearKeys: mutation.clearKeys
-        }
+      actions.push({
+        kind: "setProperty",
+        elementId: write.elementId,
+        level: write.level,
+        key: mutation.key,
+        value: mutation.value,
+        clearKeys: mutation.clearKeys
       });
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }, [dispatch]);
 
   const applyPathMorphingDecorationValueMany = useCallback((
@@ -542,24 +511,20 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
       return;
     }
 
-    const mergeKey = options.recordInHistory === false ? undefined : `multi-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const write of writable) {
       for (const mutation of mutations) {
-        dispatch({
-          type: "APPLY_EDIT_ACTION",
-          historyMergeKey: mergeKey,
-          recordInHistory: options.recordInHistory,
-          action: {
-            kind: "setProperty",
-            elementId: write.elementId,
-            level: write.level,
-            key: mutation.key,
-            value: mutation.value,
-            clearKeys: mutation.clearKeys
-          }
+        actions.push({
+          kind: "setProperty",
+          elementId: write.elementId,
+          level: write.level,
+          key: mutation.key,
+          value: mutation.value,
+          clearKeys: mutation.clearKeys
         });
       }
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }, [dispatch]);
 
   const applyRoundedCornersValue = useCallback((
@@ -573,7 +538,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetProperty(write, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetProperty]);
 
@@ -588,7 +553,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetPropertyMany(writes, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetPropertyMany]);
 
@@ -601,7 +566,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetProperty(write, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetProperty]);
 
@@ -614,7 +579,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetPropertyMany(writes, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetPropertyMany]);
 
@@ -627,7 +592,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetProperty(write, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetProperty]);
 
@@ -640,7 +605,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetPropertyMany(writes, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetPropertyMany]);
 
@@ -660,7 +625,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     applySetProperty(write, mutation.value, {
       key: mutation.key,
       clearKeys: mutation.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }, [applySetProperty]);
 
@@ -712,26 +677,22 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
       return;
     }
 
-    const mergeKey = options.recordInHistory === false ? undefined : `multi-set:${Date.now().toString(36)}`;
+    const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const entry of writableEntries) {
       const mutation = buildNodeFontSetPropertyMutation(entry.context.context, {
         ...entry.context.values,
         ...nextValues
       });
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        historyMergeKey: mergeKey,
-        recordInHistory: options.recordInHistory,
-        action: {
-          kind: "setProperty",
-          elementId: entry.write.elementId,
-          level: entry.write.level,
-          key: mutation.key,
-          value: mutation.value,
-          clearKeys: mutation.clearKeys
-        }
+      actions.push({
+        kind: "setProperty",
+        elementId: entry.write.elementId,
+        level: entry.write.level,
+        key: mutation.key,
+        value: mutation.value,
+        clearKeys: mutation.clearKeys
       });
     }
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }, [dispatch]);
 
   return {

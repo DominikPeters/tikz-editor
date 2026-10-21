@@ -1,62 +1,32 @@
-import { renderTikzToSvgAsync } from "tikz-editor/render/index";
-import { setWorkerFontLoader } from "tikz-editor/text/mathjax-engine";
-
-// Map MathJax bare-specifier font names to Vite lazy chunks.
-// Each entry becomes a separate chunk — zero upfront cost, loaded on demand.
-const FONT_CHUNKS: Record<string, () => Promise<unknown>> = {
-  "sans-serif":    () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/sans-serif.js"),
-  "sans-serif-b":  () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/sans-serif-b.js"),
-  "sans-serif-i":  () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/sans-serif-i.js"),
-  "sans-serif-bi": () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/sans-serif-bi.js"),
-  "sans-serif-r":  () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/sans-serif-r.js"),
-  "sans-serif-ex": () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/sans-serif-ex.js"),
-  "monospace":     () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/monospace.js"),
-  "monospace-l":   () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/monospace-l.js"),
-  "monospace-ex":  () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/monospace-ex.js"),
-  "latin":         () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/latin.js"),
-  "latin-b":       () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/latin-b.js"),
-  "latin-i":       () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/latin-i.js"),
-  "latin-bi":      () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/latin-bi.js"),
-  "math":          () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/math.js"),
-  "symbols":       () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/symbols.js"),
-  "arrows":        () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/arrows.js"),
-  "greek":         () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/greek.js"),
-  "greek-ss":      () => import("@mathjax/mathjax-newcm-font/js/svg/dynamic/greek-ss.js"),
-};
-
-setWorkerFontLoader((name: string) => {
-  const key = name.match(/\/svg\/dynamic\/(.+?)\.js$/)?.[1];
-  const loader = key ? FONT_CHUNKS[key] : null;
-  if (loader) return loader();
-  return Promise.reject(new Error(`MathJax dynamic font not available in worker: ${name}`));
-});
+import { renderTikzToSvgAsync } from "@tikz-editor/core/render/index";
+import { withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
+import { prepareBeamerDocument, type PreparedBeamerDocument } from "@tikz-editor/core/beamer/index";
+import {
+  createDocumentGraphicsResolverFromPreviewBundle,
+  type DocumentGraphicsResolver
+} from "@tikz-editor/core/graphics/index";
 import type {
   ThumbnailRenderRequest,
   ThumbnailWorkerRequestMessage,
   ThumbnailWorkerResponseMessage
 } from "./thumbnail-worker-types";
 
-type ThumbnailWorkerGlobalScope = {
-  onmessage: ((event: MessageEvent<ThumbnailWorkerRequestMessage>) => void) | null;
-  postMessage: (message: ThumbnailWorkerResponseMessage) => void;
-};
-
-const workerContext = self as unknown as ThumbnailWorkerGlobalScope;
-
 const queue: ThumbnailRenderRequest[] = [];
-const cancelledRequestIds = new Set<string>();
 const cancelledGroupIds = new Set<string>();
+const graphicsResolvers = new Map<string, DocumentGraphicsResolver>();
 let busy = false;
 
-workerContext.onmessage = (event: MessageEvent<ThumbnailWorkerRequestMessage>) => {
+self.onmessage = (event: MessageEvent<ThumbnailWorkerRequestMessage | null>) => {
   const message = event.data;
   if (!message) {
     return;
   }
 
-  if (message.type === "cancelRequest") {
-    cancelledRequestIds.add(message.requestId);
-    removeQueuedRequest((entry) => entry.requestId === message.requestId);
+  if (message.type === "registerGraphics") {
+    rememberGraphicsResolver(
+      message.bundle.cacheKey,
+      createDocumentGraphicsResolverFromPreviewBundle(message.bundle)
+    );
     return;
   }
 
@@ -66,7 +36,7 @@ workerContext.onmessage = (event: MessageEvent<ThumbnailWorkerRequestMessage>) =
     return;
   }
 
-  if (cancelledRequestIds.has(message.requestId) || cancelledGroupIds.has(message.groupId)) {
+  if (cancelledGroupIds.has(message.groupId)) {
     return;
   }
   queue.push(message);
@@ -85,16 +55,20 @@ async function pumpQueue(): Promise<void> {
 
   busy = true;
   try {
-    const rendered = await renderTikzToSvgAsync(next.source, {
-      parse: {
-        recover: next.parseOptions.recover ?? true,
-        activeFigureId: next.parseOptions.activeFigureId,
-        includeContextDefinitions: next.parseOptions.includeContextDefinitions
-      },
-      svg: {
-        padding: next.svgOptions?.padding
-      }
-    });
+    const graphicsResolver = resolveGraphicsResolver(next.graphicsPreviewBundleKey);
+    const svg = await withTexGlyphOutlines(async () => next.deckFrameIndex != null
+      ? await renderDeckFrameThumbnail(next.source, next.deckFrameIndex, graphicsResolver)
+      : (await renderTikzToSvgAsync(next.source, {
+          parse: {
+            recover: next.parseOptions.recover ?? true,
+            activeFigureId: next.parseOptions.activeRootId,
+            includeContextDefinitions: next.parseOptions.includeContextDefinitions
+          },
+          evaluate: { ...(graphicsResolver === undefined ? {} : { graphicsResolver }) },
+          svg: {
+            ...((next.svgOptions?.padding) === undefined ? {} : { padding: next.svgOptions.padding })
+          }
+        })).svg.svg);
 
     if (isCancelled(next)) {
       return;
@@ -107,9 +81,9 @@ async function pumpQueue(): Promise<void> {
       groupId: next.groupId,
       figureId: next.figureId,
       figureSignature: next.figureSignature,
-      svg: rendered.svg.svg
+      svg
     };
-    workerContext.postMessage(response);
+    self.postMessage(response);
   } catch (error) {
     if (isCancelled(next)) {
       return;
@@ -123,7 +97,7 @@ async function pumpQueue(): Promise<void> {
       figureSignature: next.figureSignature,
       error: error instanceof Error ? error.message : String(error)
     };
-    workerContext.postMessage(response);
+    self.postMessage(response);
   } finally {
     busy = false;
     cleanupCancellationMarks();
@@ -147,8 +121,8 @@ function shiftNextRenderable(): ThumbnailRenderRequest | null {
   return null;
 }
 
-function isCancelled(request: { requestId: string; groupId: string }): boolean {
-  return cancelledRequestIds.has(request.requestId) || cancelledGroupIds.has(request.groupId);
+function isCancelled(request: { groupId: string }): boolean {
+  return cancelledGroupIds.has(request.groupId);
 }
 
 function removeQueuedRequest(predicate: (entry: ThumbnailRenderRequest) => boolean): void {
@@ -162,18 +136,53 @@ function removeQueuedRequest(predicate: (entry: ThumbnailRenderRequest) => boole
 }
 
 function cleanupCancellationMarks(): void {
-  // Keep sets bounded; remove marks no longer relevant for queued work.
-  const queuedRequestIds = new Set(queue.map((entry) => entry.requestId));
+  // Keep the set bounded; remove marks no longer relevant for queued work.
   const queuedGroupIds = new Set(queue.map((entry) => entry.groupId));
 
-  for (const requestId of cancelledRequestIds) {
-    if (!queuedRequestIds.has(requestId)) {
-      cancelledRequestIds.delete(requestId);
-    }
-  }
   for (const groupId of cancelledGroupIds) {
     if (!queuedGroupIds.has(groupId)) {
       cancelledGroupIds.delete(groupId);
     }
   }
+}
+
+// Document-level Beamer passes are shared across the whole thumbnail sweep.
+let deckPrepared: { source: string; prepared: PreparedBeamerDocument } | null = null;
+
+async function renderDeckFrameThumbnail(
+  source: string,
+  frameIndex: number,
+  graphicsResolver: DocumentGraphicsResolver | undefined
+): Promise<string> {
+  if (deckPrepared?.source !== source) {
+    deckPrepared = { source, prepared: prepareBeamerDocument(source) };
+  }
+  // Sorter thumbnails show the frame's final overlay step (handout view).
+  const step = Math.max(1, deckPrepared.prepared.frameStepCount(frameIndex));
+  const result = await deckPrepared.prepared.renderFrame({
+    frameIndex,
+    step,
+    ...(graphicsResolver === undefined ? {} : { graphicsResolver })
+  });
+  return result.svg.svg;
+}
+
+function rememberGraphicsResolver(
+  cacheKey: string,
+  resolver: DocumentGraphicsResolver
+): void {
+  graphicsResolvers.set(cacheKey, resolver);
+}
+
+function resolveGraphicsResolver(
+  cacheKey: string | undefined
+): DocumentGraphicsResolver | undefined {
+  if (!cacheKey) {
+    return undefined;
+  }
+  const resolver = graphicsResolvers.get(cacheKey);
+  if (!resolver) {
+    return undefined;
+  }
+  return resolver;
 }

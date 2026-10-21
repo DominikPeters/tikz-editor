@@ -88,10 +88,34 @@ describe("workspace storage migration", () => {
 
     const seed = loadWorkspaceSeed();
     expect(seed).not.toBeNull();
-    expect(seed?.workspaceVersion).toBe(3);
+    expect(seed?.workspaceVersion).toBe(4);
     expect(seed?.documents[0]?.fileRef?.kind).toBe("file");
     expect(seed?.documents[0]?.fileRef?.name).toBe("old.tex");
     expect(seed?.documents[0]?.assistantThreadId).toBe("thr_123");
+  });
+
+  it("validates unknown workspace documents and nested metadata before restoring them", () => {
+    setupMemoryPersistence(JSON.stringify({
+      workspaceVersion: 4,
+      documents: [null, [], "invalid", { id: 42, source: "invalid" }, {
+        id: "valid", source: "unsaved source", title: { text: "untrusted" },
+        fileRef: ["file"], diskRevision: { hash: 12 },
+        assistantSessionGeneration: "2", assistantThreadId: {},
+        activeRootId: 42, savedSource: false
+      }],
+      tabOrder: [null, "valid", 42], activeDocumentId: {}, recentDocumentIds: [null, "valid", 42]
+    }));
+    expect(loadWorkspaceSeed()).toMatchObject({
+      documents: [{ id: "valid", title: "Untitled", source: "unsaved source", savedSource: "unsaved source",
+        fileRef: null, diskRevision: null, activeRootId: null,
+        assistantSessionGeneration: 0, assistantThreadId: null }],
+      tabOrder: ["valid"], activeDocumentId: "valid", recentDocumentIds: ["valid"]
+    });
+  });
+
+  it.each([null, [], true, 42, "workspace"])("rejects non-object workspace JSON: %j", (payload) => {
+    setupMemoryPersistence(JSON.stringify(payload));
+    expect(loadWorkspaceSeed()).toBeNull();
   });
 
   it("normalizes invalid optional document metadata while migrating", () => {
@@ -129,12 +153,12 @@ describe("workspace storage migration", () => {
 
     const seed = loadWorkspaceSeed();
     expect(seed?.activeDocumentId).toBe("doc-2");
-    expect(seed?.tabOrder).toEqual(["doc-2"]);
+    expect(seed?.tabOrder).toEqual(["doc-2", "doc-1"]);
     expect(seed?.recentDocumentIds).toEqual(["doc-2"]);
     expect(seed?.documents[0]).toMatchObject({
       id: "doc-1",
       title: "Untitled",
-      activeFigureId: null,
+      activeRootId: null,
       savedSource: "\\draw (0,0)--(1,1);",
       diskRevision: null,
       lastKnownDiskSource: null,
@@ -182,23 +206,45 @@ describe("workspace storage migration", () => {
 
     const seed = loadWorkspaceSeed();
     expect(seed).toMatchObject({
-      workspaceVersion: 3,
+      workspaceVersion: 4,
       tabOrder: ["doc-1"],
       activeDocumentId: "doc-1",
       recentDocumentIds: []
     });
     expect(seed?.documents[0]).toMatchObject({
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       fileRef: {
         kind: "file",
         name: "legacy.tex",
         path: "/tmp/legacy.tex",
         provider: "desktop-fs"
       },
-      diskRevision: { hash: "abc", mtimeMs: undefined, size: undefined },
+      diskRevision: { hash: "abc" },
       lastKnownDiskSource: "\\draw (0,0)--(1,1);",
       externalChangeStatus: "changed"
     });
+    expect(seed?.documents[0]?.diskRevision).toStrictEqual({ hash: "abc" });
+  });
+
+  it("migrates v3 activeFigureId payloads to activeRootId", () => {
+    setupMemoryPersistence(JSON.stringify({
+      workspaceVersion: 3,
+      documents: [
+        {
+          id: "doc-1",
+          title: "Doc",
+          source: "\\begin{tikzpicture}\\end{tikzpicture}",
+          activeFigureId: "figure:1"
+        }
+      ],
+      tabOrder: ["doc-1"],
+      activeDocumentId: "doc-1",
+      recentDocumentIds: ["doc-1"]
+    }));
+
+    const seed = loadWorkspaceSeed();
+    expect(seed?.workspaceVersion).toBe(4);
+    expect(seed?.documents[0]?.activeRootId).toBe("figure:1");
   });
 
   it("returns null without logging when console info is unavailable", () => {
@@ -225,7 +271,7 @@ describe("workspace storage migration", () => {
           id: "doc-1",
           title: "Doc",
           source: "\\draw (0,0)--(1,1);",
-          activeFigureId: null,
+          activeRootId: null,
           savedSource: "\\draw (0,0)--(1,1);",
           fileRef: {
             kind: "browser-file",
@@ -264,7 +310,7 @@ describe("workspace storage migration", () => {
           id: "doc-1",
           title: "Doc",
           source: "\\draw (0,0)--(1,1);",
-          activeFigureId: "figure:0",
+          activeRootId: "figure:0",
           savedSource: "\\draw (0,0)--(1,1);",
           fileRef: null,
           diskRevision: undefined,
@@ -285,7 +331,7 @@ describe("workspace storage migration", () => {
     expect(saved.documents).toHaveLength(1);
     expect(saved.documents[0]).toMatchObject({
       id: "doc-1",
-      activeFigureId: "figure:0",
+      activeRootId: "figure:0",
       diskRevision: null,
       lastKnownDiskSource: null,
       externalChangeStatus: "none"

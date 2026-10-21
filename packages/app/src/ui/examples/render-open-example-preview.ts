@@ -1,5 +1,6 @@
 import type { TikzOpenExample } from "./open-example-catalog";
-import type { renderTikzToSvgAsync as renderTikzToSvgAsyncType } from "tikz-editor/render/index";
+import type { renderTikzToSvgAsync as renderTikzToSvgAsyncType } from "@tikz-editor/core/render/index";
+import { withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
 
 export type OpenExamplePreview = {
   exampleId: string;
@@ -11,15 +12,15 @@ export type OpenExamplePreview = {
 
 type RenderTikzToSvgAsync = typeof renderTikzToSvgAsyncType;
 
-async function renderOpenExamplePreviewWithRenderer(
+export async function renderOpenExamplePreviewWithRenderer(
   example: TikzOpenExample,
   renderTikzToSvgAsync: RenderTikzToSvgAsync
 ): Promise<OpenExamplePreview> {
   try {
-    const result = await renderTikzToSvgAsync(example.source, {
+    const result = await withTexGlyphOutlines(() => renderTikzToSvgAsync(example.source, {
       parse: { recover: true },
       svg: { padding: 18 }
-    });
+    }));
     const parseErrors = result.parse.diagnostics.filter((diagnostic) => diagnostic.severity === "error");
     const semanticErrors = result.semantic.diagnostics.filter((diagnostic) => diagnostic.severity === "error");
     const renderErrors = result.renderDiagnostics.filter((diagnostic) => diagnostic.severity === "error");
@@ -37,7 +38,9 @@ async function renderOpenExamplePreviewWithRenderer(
 
     return {
       exampleId: example.id,
-      svg: result.svg.svg,
+      // Paragraph ids name live layout-cache entries and vary with render
+      // order; a static preview has no use for them.
+      svg: result.svg.svg.replace(/ data-paragraph-id="[^"]*"/gu, ""),
       warningCount,
       errorCount,
       errorMessage
@@ -53,15 +56,10 @@ async function renderOpenExamplePreviewWithRenderer(
   }
 }
 
-export async function renderOpenExamplePreview(example: TikzOpenExample): Promise<OpenExamplePreview> {
-  const { renderTikzToSvgAsync } = await import("tikz-editor/render/index");
-  return renderOpenExamplePreviewWithRenderer(example, renderTikzToSvgAsync);
-}
-
 export async function renderOpenExamplePreviews(
   examples: readonly TikzOpenExample[]
 ): Promise<OpenExamplePreview[]> {
-  const { renderTikzToSvgAsync } = await import("tikz-editor/render/index");
+  const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
   return Promise.all(
     examples.map((example) => renderOpenExamplePreviewWithRenderer(example, renderTikzToSvgAsync))
   );

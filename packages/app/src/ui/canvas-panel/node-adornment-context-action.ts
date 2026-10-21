@@ -1,11 +1,11 @@
-import { parseTikzForEdit, type EditParseOptions } from "tikz-editor/edit/parse-options";
-import type { PathStatement, Statement } from "tikz-editor/ast/types";
-import type { EditAction } from "tikz-editor/edit/actions";
-import { resolvePropertyTarget } from "tikz-editor/edit/property-target";
-import { extractNodeAdornmentPlan } from "tikz-editor/semantic/path/label-quotes";
-import type { SceneElement } from "tikz-editor/semantic/types";
+import { parseTikzForEdit, type EditParseOptions } from "@tikz-editor/core/edit/parse-options";
+import type { PathStatement, Statement } from "@tikz-editor/core/ast/types";
+import type { EditAction } from "@tikz-editor/core/edit/actions";
+import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import { extractNodeAdornmentPlan } from "@tikz-editor/core/semantic/path/label-quotes";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
 import type { WorldPoint } from "../coords/types";
-import type { SvgViewBox } from "tikz-editor/svg/index";
+import type { SvgViewBox } from "@tikz-editor/core/svg/index";
 import { collectSourceBounds } from "./panel-helpers";
 import { worldToSvgPoint } from "./geometry";
 

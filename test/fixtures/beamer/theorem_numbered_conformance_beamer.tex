@@ -1,0 +1,40 @@
+\documentclass[aspectratio=169,envcountsect]{beamer}
+\usetheme{Madrid}
+\setbeamertemplate{theorems}[numbered]
+
+\title{Numbered theorem conformance}
+\date{}
+
+\newtheorem{proposition}[theorem]{Proposition}
+\theoremstyle{definition}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+
+\section{First section}
+
+\begin{frame}{Numbered theorem}
+  \begin{theorem}[Named result]
+    The first theorem uses the section counter.
+  \end{theorem}
+\end{frame}
+
+\begin{frame}{Shared theorem counter}
+  \begin{proposition}
+    A custom declaration can share the theorem counter.
+  \end{proposition}
+\end{frame}
+
+\section{Second section}
+
+\begin{frame}{Reset and starred declaration}
+  \begin{lemma}
+    The shared counter resets with the section.
+  \end{lemma}
+
+  \begin{remark}
+    A starred declaration has no displayed number.
+  \end{remark}
+\end{frame}
+
+\end{document}

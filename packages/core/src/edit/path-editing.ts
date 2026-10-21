@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { CoordinateItem, PathItem, PathKeywordItem, PathStatement } from "../ast/types.js";
 import type { EditHandle } from "../semantic/types.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
@@ -129,7 +130,7 @@ export function buildPathBodyFromSegments(
   startAnchorIndex: number,
   segmentIndices: readonly number[]
 ): string {
-  const parts = [analysis.anchors[startAnchorIndex].raw];
+  const parts = [requireArrayValue(analysis.anchors, startAnchorIndex).raw];
   for (const segmentIndex of segmentIndices) {
     const segment = analysis.segments[segmentIndex];
     if (!segment || segment.closesPath) {

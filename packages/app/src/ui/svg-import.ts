@@ -1,4 +1,7 @@
+type ClipboardTransfer = Pick<DataTransfer, "getData"> & Partial<Pick<DataTransfer, "files" | "items" | "types">>;
 import type { DocumentFileRef } from "../store/types.js";
+import { parseSvgForImport } from "./svg-path-validation.js";
+import { convertSvgWithClipping } from "./svg-import-clipping.js";
 
 type OpenedTextFile = {
   source: string;
@@ -79,8 +82,9 @@ export function extractTikzPictureBody(tikzSource: string): string {
 }
 
 async function convertSvgToTikzSource(svgSource: string): Promise<string> {
+  const svgElement = parseSvgForImport(svgSource);
   const { svgToTikz } = await import("svg2tikz");
-  return svgToTikz(svgSource, { standalone: false });
+  return convertSvgWithClipping(svgElement, svgToTikz);
 }
 
 async function convertIpeToTikzSource(ipeSource: string): Promise<string> {
@@ -253,7 +257,7 @@ export async function convertPowerPointClipboardToScopeSnippet(
     const { parseClipboardGVML, convertSlideToTikZ } = await import("pptx2tikz");
     const inputBytes = rawClipboardBytes instanceof Uint8Array ? rawClipboardBytes : new Uint8Array(rawClipboardBytes);
     const parsed = await parseClipboardGVML(normalizeBytesToArrayBuffer(inputBytes));
-    const slide = parsed.slides?.[0];
+    const slide = parsed.slides[0];
     if (!slide) {
       throw new Error("GVML clipboard payload did not contain a slide.");
     }
@@ -275,7 +279,7 @@ export async function convertPowerPointClipboardToScopeSnippet(
   }
 }
 
-export function findSvgFileInDataTransfer(dataTransfer: DataTransfer | null): File | null {
+export function findSvgFileInDataTransfer(dataTransfer: ClipboardTransfer | null): File | null {
   if (!dataTransfer) {
     return null;
   }
@@ -309,15 +313,16 @@ export function findSvgFileInDataTransfer(dataTransfer: DataTransfer | null): Fi
   return null;
 }
 
-export function dataTransferHasFilePayload(dataTransfer: DataTransfer | null): boolean {
+export function dataTransferHasFilePayload(dataTransfer: ClipboardTransfer | null): boolean {
   if (!dataTransfer) {
     return false;
   }
   if ((dataTransfer.files?.length ?? 0) > 0) {
     return true;
   }
-  if ((dataTransfer.items?.length ?? 0) > 0) {
-    for (const item of Array.from(dataTransfer.items)) {
+  const items = dataTransfer.items;
+  if (items && items.length > 0) {
+    for (const item of Array.from(items)) {
       if (item.kind === "file") {
         return true;
       }

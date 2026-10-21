@@ -1,4 +1,8 @@
+import { isRecord } from "../../validation";
+import { createDocumentGraphicsResolverFromPreviewBundle } from "@tikz-editor/core/graphics/index";
+import { getDocumentGraphicsPreviewBundle } from "../../image-asset-cache";
 import type {
+  ThumbnailRegisterGraphicsMessage,
   ThumbnailRenderFailure,
   ThumbnailRenderRequest,
   ThumbnailRenderSuccess,
@@ -15,6 +19,7 @@ let sharedWorker: Worker | null = null;
 let workerInitFailed = false;
 const pendingRequests = new Map<string, PendingRequest>();
 const requestIdsByGroup = new Map<string, Set<string>>();
+const registeredGraphicsBundleKeys = new Set<string>();
 
 function getWorker(): Worker | null {
   if (workerInitFailed) {
@@ -25,8 +30,8 @@ function getWorker(): Worker | null {
   }
   try {
     sharedWorker = new Worker(new URL("./thumbnail-render.worker.ts", import.meta.url), { type: "module" });
-    sharedWorker.addEventListener("message", onWorkerMessage as EventListener);
-    sharedWorker.addEventListener("error", onWorkerError as EventListener);
+    sharedWorker.addEventListener("message", onWorkerMessage);
+    sharedWorker.addEventListener("error", onWorkerError);
     return sharedWorker;
   } catch {
     workerInitFailed = true;
@@ -49,26 +54,9 @@ export async function requestThumbnail(request: ThumbnailRenderRequest): Promise
     const idsForGroup = requestIdsByGroup.get(request.groupId) ?? new Set<string>();
     idsForGroup.add(request.requestId);
     requestIdsByGroup.set(request.groupId, idsForGroup);
+    registerGraphicsBundleIfNeeded(worker, request.graphicsPreviewBundleKey);
     worker.postMessage(request);
   });
-}
-
-export function cancelThumbnail(requestId: string): void {
-  if (!requestId) {
-    return;
-  }
-  const worker = getWorker();
-  const pending = pendingRequests.get(requestId);
-  if (pending) {
-    pending.reject(new Error("thumbnail-request-cancelled"));
-    dropPending(requestId, pending.groupId);
-  }
-  if (worker) {
-    worker.postMessage({
-      type: "cancelRequest",
-      requestId
-    });
-  }
 }
 
 export function cancelGroup(groupId: string): void {
@@ -96,9 +84,10 @@ export function cancelGroup(groupId: string): void {
   }
 }
 
-function onWorkerMessage(event: MessageEvent<ThumbnailWorkerResponseMessage>): void {
-  const message = event.data;
-  if (message?.type !== "result") {
+function onWorkerMessage(event: MessageEvent<unknown>): void {
+  const value = event.data;
+  const message = parseWorkerResponse(value);
+  if (!message) {
     return;
   }
   const pending = pendingRequests.get(message.requestId);
@@ -111,16 +100,36 @@ function onWorkerMessage(event: MessageEvent<ThumbnailWorkerResponseMessage>): v
 
 async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise<ThumbnailRenderSuccess | ThumbnailRenderFailure> {
   try {
-    const { renderTikzToSvgAsync } = await import("tikz-editor/render/index");
-    const rendered = await renderTikzToSvgAsync(request.source, {
-      parse: {
-        recover: request.parseOptions.recover ?? true,
-        activeFigureId: request.parseOptions.activeFigureId,
-        includeContextDefinitions: request.parseOptions.includeContextDefinitions
-      },
-      svg: {
-        padding: request.svgOptions?.padding
+    const previewBundle = request.graphicsPreviewBundleKey
+      ? getDocumentGraphicsPreviewBundle(request.graphicsPreviewBundleKey)
+      : null;
+    const graphicsResolver = previewBundle
+      ? createDocumentGraphicsResolverFromPreviewBundle(previewBundle)
+      : undefined;
+    const { withTexGlyphOutlines } = await import("@tikz-editor/core/text/tex/fonts/glyph-outlines");
+    const svg = await withTexGlyphOutlines(async () => {
+      if (request.deckFrameIndex != null) {
+        const { prepareBeamerDocument } = await import("@tikz-editor/core/beamer/index");
+        const prepared = prepareBeamerDocument(request.source);
+        const step = Math.max(1, prepared.frameStepCount(request.deckFrameIndex));
+        return (await prepared.renderFrame({
+          frameIndex: request.deckFrameIndex,
+          step,
+          ...(graphicsResolver === undefined ? {} : { graphicsResolver })
+        })).svg.svg;
       }
+      const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
+      return (await renderTikzToSvgAsync(request.source, {
+        parse: {
+          recover: request.parseOptions.recover ?? true,
+          activeFigureId: request.parseOptions.activeRootId,
+          includeContextDefinitions: request.parseOptions.includeContextDefinitions
+        },
+        evaluate: { ...(graphicsResolver === undefined ? {} : { graphicsResolver }) },
+        svg: {
+          ...((request.svgOptions?.padding) === undefined ? {} : { padding: request.svgOptions.padding })
+        }
+      })).svg.svg;
     });
     return {
       type: "result",
@@ -129,7 +138,7 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise
       groupId: request.groupId,
       figureId: request.figureId,
       figureSignature: request.figureSignature,
-      svg: rendered.svg.svg
+      svg
     };
   } catch (error) {
     return {
@@ -152,6 +161,7 @@ function onWorkerError(): void {
   workerInitFailed = true;
   sharedWorker.terminate();
   sharedWorker = null;
+  registeredGraphicsBundleKeys.clear();
   const pendingIds = [...pendingRequests.keys()];
   for (const requestId of pendingIds) {
     const pending = pendingRequests.get(requestId);
@@ -161,6 +171,22 @@ function onWorkerError(): void {
     pending.reject(new Error("thumbnail-worker-error"));
     dropPending(requestId, pending.groupId);
   }
+}
+
+function registerGraphicsBundleIfNeeded(worker: Worker, cacheKey: string | undefined): void {
+  if (!cacheKey || registeredGraphicsBundleKeys.has(cacheKey)) {
+    return;
+  }
+  const bundle = getDocumentGraphicsPreviewBundle(cacheKey);
+  if (!bundle) {
+    return;
+  }
+  const message: ThumbnailRegisterGraphicsMessage = {
+    type: "registerGraphics",
+    bundle
+  };
+  worker.postMessage(message);
+  registeredGraphicsBundleKeys.add(cacheKey);
 }
 
 function dropPending(requestId: string, groupId: string): void {
@@ -173,4 +199,14 @@ function dropPending(requestId: string, groupId: string): void {
   if (ids.size === 0) {
     requestIdsByGroup.delete(groupId);
   }
+}
+
+function parseWorkerResponse(value: unknown): ThumbnailWorkerResponseMessage | null {
+  if (!isRecord(value) || value.type !== "result" || typeof value.requestId !== "string" ||
+    typeof value.groupId !== "string" || typeof value.figureId !== "string" || typeof value.figureSignature !== "string") return null;
+  const identity = { type: "result" as const, requestId: value.requestId, groupId: value.groupId,
+    figureId: value.figureId, figureSignature: value.figureSignature };
+  if (value.ok === true && typeof value.svg === "string") return { ...identity, ok: true, svg: value.svg };
+  if (value.ok === false && typeof value.error === "string") return { ...identity, ok: false, error: value.error };
+  return null;
 }

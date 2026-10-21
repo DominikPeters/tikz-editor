@@ -5,11 +5,16 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { renderTikzToSvg } from "../../packages/core/src/render/index.js";
+import { scanBeamerDocument } from "../../packages/core/src/beamer/index.js";
 import { makeInitialState } from "../../packages/app/src/store/reducer.js";
 import { useEditorStore } from "../../packages/app/src/store/store.js";
-import type { SessionSnapshot } from "../../packages/app/src/compute.js";
+import {
+  makeEmptySnapshot,
+  type SessionSnapshot
+} from "../../packages/app/src/compute.js";
 import {
   prioritizeDiagnosticsForDisplay,
+  sourcePanelDiagnostics,
   SourcePanel,
   type DiagnosticInput
 } from "../../packages/app/src/ui/source-panel/SourcePanel.js";
@@ -85,6 +90,42 @@ describe("SourcePanel diagnostics", () => {
     expect(container.textContent).toContain("Ln 2");
     expect(container.textContent).not.toContain("Statement is missing a trailing semicolon");
   });
+
+  it("adapts source-backed Beamer diagnostics for the source panel", () => {
+    const source = "\\documentclass{beamer}\n\\begin{frame}\nBroken\n";
+    const diagnosticStart = source.indexOf("\\begin{frame}");
+    const snapshot: SessionSnapshot = {
+      ...makeEmptySnapshot(source),
+      revision: 1,
+      deck: {
+        frames: [],
+        document: scanBeamerDocument(source),
+        activeFrame: null,
+        diagnostics: [
+          {
+            severity: "error",
+            code: "beamer-unclosed-frame",
+            message: "Frame is not closed.",
+            span: {
+              from: diagnosticStart,
+              to: diagnosticStart + "\\begin{frame}".length
+            }
+          }
+        ]
+      }
+    };
+
+    expect(sourcePanelDiagnostics(snapshot, source)).toEqual([
+      expect.objectContaining({
+        source: "beamer",
+        code: "beamer-unclosed-frame",
+        message: "Frame is not closed.",
+        from: diagnosticStart,
+        to: diagnosticStart + "\\begin{frame}".length
+      })
+    ]);
+    expect(sourcePanelDiagnostics(snapshot, `${source}% stale`)).toEqual([]);
+  });
 });
 
 function resetEditorStore(source: string): void {
@@ -102,7 +143,7 @@ function resetEditorStore(source: string): void {
     ...base,
     source,
     sourceRevision: 1,
-    activeFigureId: rendered.parse.activeFigureId,
+    activeRootId: rendered.parse.activeFigureId,
     snapshot,
     documents: {
       ...base.documents,
@@ -110,7 +151,7 @@ function resetEditorStore(source: string): void {
         ...doc,
         source,
         sourceRevision: 1,
-        activeFigureId: rendered.parse.activeFigureId,
+        activeRootId: rendered.parse.activeFigureId,
         snapshot
       }
     },
@@ -126,14 +167,15 @@ function makeSnapshot(
     source,
     revision: 1,
     figures: rendered.parse.figures,
-    activeFigureId: rendered.parse.activeFigureId,
+    activeRootId: rendered.parse.activeFigureId,
     editHandles: rendered.semantic.editHandles,
     scene: rendered.semantic.scene,
     svg: rendered.svg,
     svgModel: rendered.svg.model,
     parseResult: rendered.parse,
     semanticResult: rendered.semantic,
-    incremental: null
+    incremental: null,
+    deck: null
   };
 }
 

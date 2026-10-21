@@ -1,5 +1,5 @@
-import type { Span } from "tikz-editor/ast/types";
-import type { SceneElement, SceneFigure } from "tikz-editor/semantic/types";
+import type { Span } from "@tikz-editor/core/ast/types";
+import type { SceneElement, SceneFigure } from "@tikz-editor/core/semantic/types";
 
 export function buildRepeatPreviewScene(
   scene: SceneFigure | null,

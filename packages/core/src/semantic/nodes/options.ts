@@ -1,3 +1,4 @@
+import { currentFrame } from "../context.js";
 import type { PathOptionItem } from "../../ast/types.js";
 import type { OptionListAst } from "../../options/types.js";
 import { resolveContextColorAliasValue, type ProvenanceOptionList, type SemanticContext } from "../context.js";
@@ -68,7 +69,7 @@ export function resolveNodeStyle(
 ): ResolvedStyle {
   let resolvedStyle = { ...baseStyle };
   if (options) {
-    const frame = context.stack[context.stack.length - 1];
+    const frame = currentFrame(context);
     const expanded = expandOptionListMacros([options], frame.macroBindings, context.macroTraceCollector ?? undefined);
     const layers: StyleTraceLayerInput[] =
       expanded.length > 0
@@ -92,7 +93,8 @@ export function resolveNodeStyle(
       cloneCustomStyleRegistry(frame.customStyles),
       undefined,
       [],
-      (raw) => resolveContextColorAliasValue(context, raw)
+      (raw) => resolveContextColorAliasValue(context, raw),
+      frame.axisBasis
     );
     resolvedStyle = resolved.style;
   }
@@ -120,7 +122,7 @@ export function resolveNodeOptionScale(
     return 1;
   }
 
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const expanded = expandOptionListMacros([options], frame.macroBindings, context.macroTraceCollector ?? undefined);
   const layers: StyleTraceLayerInput[] =
     expanded.length > 0
@@ -144,9 +146,24 @@ export function resolveNodeOptionScale(
     cloneCustomStyleRegistry(frame.customStyles),
     undefined,
     [],
-    (raw) => resolveContextColorAliasValue(context, raw)
+    (raw) => resolveContextColorAliasValue(context, raw),
+    frame.axisBasis
   );
   return computeRelativeTransformScale(frame.transform, resolved.transform);
+}
+
+export function resolveNodeTransformShape(options: OptionListAst | undefined, inherited: boolean): boolean {
+  let transformShape = inherited;
+  for (const entry of options?.entries ?? []) {
+    if (entry.kind === "unknown" || entry.key !== "transform shape") continue;
+    if (entry.kind === "flag") {
+      transformShape = true;
+    } else {
+      const parsed = parseBooleanishNormalized(normalizeOptionValue(entry.valueRaw));
+      if (parsed != null) transformShape = parsed;
+    }
+  }
+  return transformShape;
 }
 
 export function resolveNodeOptionTransform(
@@ -158,7 +175,7 @@ export function resolveNodeOptionTransform(
     return identityMatrix();
   }
 
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const expanded = expandOptionListMacros([options], frame.macroBindings, context.macroTraceCollector ?? undefined);
   const layers: StyleTraceLayerInput[] =
     expanded.length > 0
@@ -182,71 +199,59 @@ export function resolveNodeOptionTransform(
     cloneCustomStyleRegistry(frame.customStyles),
     undefined,
     [],
-    (raw) => resolveContextColorAliasValue(context, raw)
+    (raw) => resolveContextColorAliasValue(context, raw),
+    frame.axisBasis
   );
 
   return computeRelativeTransformMatrix(frame.transform, resolved.transform);
 }
 
-export type EveryShapeNodeStyleBucketKey =
-  | "everyRectangleNodeStyles"
-  | "everyCircleNodeStyles"
-  | "everyDiamondNodeStyles"
-  | "everyTrapeziumNodeStyles"
-  | "everyIsoscelesTriangleNodeStyles"
-  | "everyKiteNodeStyles"
-  | "everyDartNodeStyles"
-  | "everyCircularSectorNodeStyles"
-  | "everyCylinderNodeStyles"
-  | "everyCloudNodeStyles"
-  | "everyStarburstNodeStyles"
-  | "everySignalNodeStyles"
-  | "everyTapeNodeStyles"
-  | "everyRectangleCalloutNodeStyles"
-  | "everyEllipseCalloutNodeStyles"
-  | "everyCloudCalloutNodeStyles"
-  | "everySingleArrowNodeStyles"
-  | "everyDoubleArrowNodeStyles";
-
-export type EveryShapeNodeStyleBuckets<T> = Record<EveryShapeNodeStyleBucketKey, T[]>;
-
-const EVERY_SHAPE_NODE_STYLE_BUCKET_BY_SHAPE: Partial<Record<NodeShape, EveryShapeNodeStyleBucketKey>> = {
-  circle: "everyCircleNodeStyles",
-  rectangle: "everyRectangleNodeStyles",
-  "rounded rectangle": "everyRectangleNodeStyles",
-  "chamfered rectangle": "everyRectangleNodeStyles",
-  "cross out": "everyRectangleNodeStyles",
-  "strike out": "everyRectangleNodeStyles",
-  "rectangle split": "everyRectangleNodeStyles",
-  "magnifying glass": "everyCircleNodeStyles",
-  "circle split": "everyCircleNodeStyles",
-  "circle solidus": "everyCircleNodeStyles",
-  "ellipse split": "everyCircleNodeStyles",
-  "diamond split": "everyDiamondNodeStyles",
-  diamond: "everyDiamondNodeStyles",
-  trapezium: "everyTrapeziumNodeStyles",
-  "isosceles triangle": "everyIsoscelesTriangleNodeStyles",
-  kite: "everyKiteNodeStyles",
-  dart: "everyDartNodeStyles",
-  "circular sector": "everyCircularSectorNodeStyles",
-  cylinder: "everyCylinderNodeStyles",
-  cloud: "everyCloudNodeStyles",
-  starburst: "everyStarburstNodeStyles",
-  signal: "everySignalNodeStyles",
-  tape: "everyTapeNodeStyles",
-  "rectangle callout": "everyRectangleCalloutNodeStyles",
-  "ellipse callout": "everyEllipseCalloutNodeStyles",
-  "cloud callout": "everyCloudCalloutNodeStyles",
-  "single arrow": "everySingleArrowNodeStyles",
-  "double arrow": "everyDoubleArrowNodeStyles"
+const EVERY_SHAPE_NODE_STYLE_NAME_BY_SHAPE: Partial<Record<NodeShape, string>> = {
+  circle: "circle",
+  rectangle: "rectangle",
+  "rounded rectangle": "rectangle",
+  "chamfered rectangle": "rectangle",
+  "cross out": "rectangle",
+  "strike out": "rectangle",
+  "rectangle split": "rectangle",
+  "magnifying glass": "circle",
+  "circle split": "circle",
+  "circle solidus": "circle",
+  "ellipse split": "circle",
+  "diamond split": "diamond",
+  diamond: "diamond",
+  trapezium: "trapezium",
+  "isosceles triangle": "isosceles triangle",
+  kite: "kite",
+  dart: "dart",
+  "circular sector": "circular sector",
+  cylinder: "cylinder",
+  cloud: "cloud",
+  starburst: "starburst",
+  signal: "signal",
+  tape: "tape",
+  "rectangle callout": "rectangle callout",
+  "ellipse callout": "ellipse callout",
+  "cloud callout": "cloud callout",
+  "single arrow": "single arrow",
+  "double arrow": "double arrow"
 };
+
+const EVERY_SHAPE_NODE_STYLE_NAMES = new Set(
+  Object.values(EVERY_SHAPE_NODE_STYLE_NAME_BY_SHAPE).filter((name): name is string => Boolean(name))
+);
+
+export function normalizeEveryShapeNodeStyleName(raw: string): string | null {
+  const normalized = raw.trim().toLowerCase().replace(/\s+/g, " ");
+  return EVERY_SHAPE_NODE_STYLE_NAMES.has(normalized) ? normalized : null;
+}
 
 export function resolveEveryShapeNodeStyleLists<T>(
   shape: NodeShape,
-  buckets: EveryShapeNodeStyleBuckets<T>
-): T[] {
-  const bucket = EVERY_SHAPE_NODE_STYLE_BUCKET_BY_SHAPE[shape];
-  return bucket ? buckets[bucket] : [];
+  stylesByShape: ReadonlyMap<string, T[]>
+): readonly T[] {
+  const styleName = EVERY_SHAPE_NODE_STYLE_NAME_BY_SHAPE[shape];
+  return styleName ? (stylesByShape.get(styleName) ?? []) : [];
 }
 
 export function resolveEffectiveNodeOptions(params: {
@@ -256,7 +261,8 @@ export function resolveEffectiveNodeOptions(params: {
   everyFitStyles?: NodeStyleOptionList[];
   applyEveryFitStyles?: boolean;
   syntheticOptions?: OptionListAst[];
-} & EveryShapeNodeStyleBuckets<NodeStyleOptionList>): OptionListAst | undefined {
+  everyShapeNodeStyles: ReadonlyMap<string, NodeStyleOptionList[]>;
+}): OptionListAst | undefined {
   const everyFitStyles = params.applyEveryFitStyles ? (params.everyFitStyles ?? []) : [];
   const syntheticOptions = params.syntheticOptions ?? [];
   const base = mergeOptionLists([
@@ -267,7 +273,7 @@ export function resolveEffectiveNodeOptions(params: {
     ...syntheticOptions
   ]);
   const shape = resolveNodeShape(base);
-  const shapeStyles = resolveEveryShapeNodeStyleLists(shape, params);
+  const shapeStyles = resolveEveryShapeNodeStyleLists(shape, params.everyShapeNodeStyles);
 
   return mergeOptionLists([
     ...params.everyNodeStyles.map(optionListFromNodeStyleSource),
@@ -287,7 +293,7 @@ export function expandNodeOptionsForShape(
     return undefined;
   }
 
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const expanded = expandOptionListMacros([options], frame.macroBindings, context.macroTraceCollector ?? undefined);
   if (expanded.length === 0) {
     return options;
@@ -311,7 +317,8 @@ export function expandNodeOptionsForShape(
     cloneCustomStyleRegistry(frame.customStyles),
     undefined,
     [],
-    (raw) => resolveContextColorAliasValue(context, raw)
+    (raw) => resolveContextColorAliasValue(context, raw),
+    frame.axisBasis
   );
 
   return resolved.expandedOptionLists[0] ?? options;

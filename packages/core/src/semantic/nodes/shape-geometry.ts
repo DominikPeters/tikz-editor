@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { parseLength } from "../coords/parse-length.js";
 import { pt } from "../../coords/scalars.js";
 import { worldPoint as makeWorldPoint, worldVector as makeWorldVector, type WorldPoint, type WorldVector } from "../../coords/points.js";
@@ -7,6 +8,7 @@ import { evaluateRawCoordinate } from "../coords/evaluate.js";
 import type { SemanticContext } from "../context.js";
 import { normalizeOptionValue } from "./utils.js";
 import { parseBooleanishNormalized } from "../../utils/booleanish.js";
+import { clamp } from "../../utils/math.js";
 
 export type ShapeGeometryParams = {
   diamondAspect: number;
@@ -2218,9 +2220,8 @@ export function intersectRayWithPolygon(reference: WorldPoint, direction: WorldV
   );
 
   let best: { point: WorldPoint; t: number } | null = null;
-  for (let index = 0; index < polygon.length; index += 1) {
-    const edgeStart = polygon[index];
-    const edgeEnd = polygon[(index + 1) % polygon.length];
+  for (const [index, edgeStart] of polygon.entries()) {
+    const edgeEnd = requireArrayValue(polygon, (index + 1) % polygon.length);
     const hit = intersectSegments(reference, rayTarget, edgeStart, edgeEnd);
     if (!hit) {
       continue;
@@ -2979,10 +2980,6 @@ function clampFinite(value: number): number {
     return 0;
   }
   return Math.max(-1e6, Math.min(1e6, value));
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 function cross(left: Pick<WorldPoint | WorldVector, "x" | "y">, right: Pick<WorldPoint | WorldVector, "x" | "y">): number {

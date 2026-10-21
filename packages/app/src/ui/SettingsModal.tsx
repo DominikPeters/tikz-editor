@@ -1,24 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getActiveEditorPlatform } from "../platform/current";
 import { useSettingsStore } from "../settings/useSettingsStore";
-import { EDITOR_FONT_SIZE_OPTIONS, type ColorPickerAccuracy, type ColorScheme, type GridSize, type MathJaxFont } from "../settings/types";
+import {
+  CANVAS_HANDLE_SIZE_OPTIONS, CANVAS_ZOOM_SPEED_MIN, CANVAS_ZOOM_SPEED_MAX, CANVAS_ZOOM_SPEED_STEP,
+  EDITOR_FONT_SIZE_OPTIONS, UI_FONT_SIZE_OPTIONS, MIN_FORMATTER_MAX_LINE_LENGTH, MAX_FORMATTER_MAX_LINE_LENGTH,
+} from "../settings/types";
 import { Modal } from "./Modal";
 import css from "./SettingsModal.module.css";
 
 type CategoryId = "general" | "editor" | "canvas";
-
-const MATHJAX_FONTS: { value: MathJaxFont; label: string }[] = [
-  { value: "mathjax-newcm",   label: "New Computer Modern (default)" },
-  { value: "mathjax-asana",   label: "Asana Math" },
-  { value: "mathjax-bonum",   label: "Gyre Bonum" },
-  { value: "mathjax-dejavu",  label: "DejaVu" },
-  { value: "mathjax-fira",    label: "Fira / Fira Math" },
-  { value: "mathjax-modern",  label: "Latin Modern" },
-  { value: "mathjax-pagella", label: "Gyre Pagella" },
-  { value: "mathjax-schola",  label: "Gyre Schola" },
-  { value: "mathjax-stix2",   label: "STIX2" },
-  { value: "mathjax-termes",  label: "Gyre Termes" },
-  { value: "mathjax-tex",     label: "TeX (classic MathJax v3)" },
-];
 
 const CATEGORIES: { id: CategoryId; label: string }[] = [
   { id: "general", label: "General" },
@@ -27,8 +17,6 @@ const CATEGORIES: { id: CategoryId; label: string }[] = [
 ];
 
 let rememberedCategory: CategoryId = "general";
-const MIN_FORMATTER_MAX_LINE_LENGTH = 40;
-const MAX_FORMATTER_MAX_LINE_LENGTH = 240;
 
 type SettingsModalProps = {
   onClose: () => void;
@@ -37,6 +25,7 @@ type SettingsModalProps = {
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const [activeCategory, setActiveCategory] = useState<CategoryId>(rememberedCategory);
   const [formatterMaxLineLengthInput, setFormatterMaxLineLengthInput] = useState<string | null>(null);
+  const automaticUpdates = useAutomaticUpdateChecksSetting();
 
   const selectCategory = (id: CategoryId) => {
     rememberedCategory = id;
@@ -47,7 +36,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const updateEditorSettings = useSettingsStore((s) => s.updateEditorSettings);
   const updateCanvasSettings = useSettingsStore((s) => s.updateCanvasSettings);
   const updateColorPickerSettings = useSettingsStore((s) => s.updateColorPickerSettings);
-  const updateRenderingSettings = useSettingsStore((s) => s.updateRenderingSettings);
   const resetGeneralSettings = useSettingsStore((s) => s.resetGeneralSettings);
   const resetEditorSettings = useSettingsStore((s) => s.resetEditorSettings);
   const resetCanvasSettings = useSettingsStore((s) => s.resetCanvasSettings);
@@ -66,6 +54,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const resetActiveCategoryToDefaults = () => {
     if (activeCategory === "general") {
       resetGeneralSettings();
+      void automaticUpdates.reset();
       return;
     }
     if (activeCategory === "editor") {
@@ -82,7 +71,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       size="lg"
       labelledBy="settings-title"
       dataTestId="settings-modal"
-      className={css.dialog}
+      className={css.dialog ?? ""}
     >
       <Modal.Header
         title="Settings"
@@ -124,7 +113,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       value={settings.general.uiFontSizePx}
                       onChange={(e) => { updateGeneralSettings({ uiFontSizePx: Number(e.target.value) }); }}
                     >
-                      {[10, 11, 12, 13, 14].map((size) => (
+                      {UI_FONT_SIZE_OPTIONS.map((size) => (
                         <option key={size} value={size}>{size}px</option>
                       ))}
                     </select>
@@ -139,7 +128,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       id="setting-color-scheme"
                       className={css.select}
                       value={settings.general.colorScheme}
-                      onChange={(e) => { updateGeneralSettings({ colorScheme: e.target.value as ColorScheme }); }}
+                      onChange={(e) => { const colorScheme = e.target.value; if (colorScheme === "system" || colorScheme === "light" || colorScheme === "dark") updateGeneralSettings({ colorScheme }); }}
                     >
                       <option value="system">System (default)</option>
                       <option value="light">Light</option>
@@ -174,18 +163,20 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       id="setting-color-picker-accuracy"
                       className={css.select}
                       value={settings.colorPicker.accuracy}
-                      onChange={(e) => { updateColorPickerSettings({ accuracy: e.target.value as ColorPickerAccuracy }); }}
+                      onChange={(e) => { const accuracy = e.target.value; if (accuracy === "approximate" || accuracy === "exact") updateColorPickerSettings({ accuracy }); }}
                     >
                       <option value="approximate">Approximate (default)</option>
                       <option value="exact">Exact</option>
                     </select>
                   </div>
+                  <AutomaticUpdateChecksSetting preference={automaticUpdates} />
                 </div>
                 <div className={css.resetRow}>
                   <button
                     type="button"
                     className={css.resetButton}
                     data-testid="settings-reset-general"
+                    disabled={automaticUpdates.busy || (automaticUpdates.available && automaticUpdates.enabled === null)}
                     onClick={resetActiveCategoryToDefaults}
                   >
                     Reset to Defaults
@@ -252,7 +243,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       id="setting-indent-size"
                       className={css.select}
                       value={settings.editor.indentSize}
-                      onChange={(e) => { updateEditorSettings({ indentSize: Number(e.target.value) as 2 | 4 }); }}
+                      onChange={(e) => { const indentSize = Number(e.target.value); if (indentSize === 2 || indentSize === 4) updateEditorSettings({ indentSize }); }}
                     >
                       <option value={2}>2 spaces</option>
                       <option value={4}>4 spaces</option>
@@ -324,7 +315,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       id="setting-grid-size"
                       className={css.select}
                       value={settings.canvas.gridSize}
-                      onChange={(e) => { updateCanvasSettings({ gridSize: e.target.value as GridSize }); }}
+                      onChange={(e) => { const gridSize = e.target.value; if (gridSize === "fine" || gridSize === "standard" || gridSize === "coarse") updateCanvasSettings({ gridSize }); }}
                     >
                       <option value="fine">Fine</option>
                       <option value="standard">Standard</option>
@@ -343,9 +334,30 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       value={settings.canvas.handleSizePx}
                       onChange={(e) => { updateCanvasSettings({ handleSizePx: Number(e.target.value) }); }}
                     >
-                      <option value={7}>Small</option>
-                      <option value={9}>Medium</option>
-                      <option value={11}>Large</option>
+                      {CANVAS_HANDLE_SIZE_OPTIONS.map((size, index) => (
+                        <option key={size} value={size}>{["Small", "Medium", "Large"][index]}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className={css.settingRow}>
+                    <label className={css.settingLabel} htmlFor="setting-text-edit-placement">
+                      Text Editing Surface
+                      <span className={css.settingDesc}>
+                        Where canvas text editing shows the source. Long buffers always use the docked bar.
+                      </span>
+                    </label>
+                    <select
+                      id="setting-text-edit-placement"
+                      className={css.select}
+                      value={settings.canvas.textEditPlacement}
+                      onChange={(e) => {
+                        const textEditPlacement = e.target.value;
+                        if (textEditPlacement === "popup" || textEditPlacement === "bar") updateCanvasSettings({ textEditPlacement });
+                      }}
+                    >
+                      <option value="popup">Floating popup</option>
+                      <option value="bar">Docked bar</option>
                     </select>
                   </div>
 
@@ -360,9 +372,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       id="setting-zoom-speed"
                       className={css.range}
                       type="range"
-                      min={0.0015}
-                      max={0.009}
-                      step={0.0005}
+                      min={CANVAS_ZOOM_SPEED_MIN}
+                      max={CANVAS_ZOOM_SPEED_MAX}
+                      step={CANVAS_ZOOM_SPEED_STEP}
                       list="zoom-speed-ticks"
                       value={settings.canvas.zoomSpeed}
                       onChange={(e) => { updateCanvasSettings({ zoomSpeed: Number(e.target.value) }); }}
@@ -370,34 +382,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     <datalist id="zoom-speed-ticks">
                       <option value={0.0045} />
                     </datalist>
-                  </div>
-                </div>
-
-                <div className={css.panelTitle}>Rendering</div>
-                <div className={css.settingsGroup}>
-                  <div className={css.settingRow}>
-                    <label className={css.settingLabel} htmlFor="setting-mathjax-font">
-                      Math Font
-                      <span className={css.settingDesc}>Font used to render math in text nodes.</span>
-                    </label>
-                    <select
-                      id="setting-mathjax-font"
-                      className={css.select}
-                      value={settings.rendering.mathJaxFont}
-                      onChange={(e) => { updateRenderingSettings({ mathJaxFont: e.target.value as MathJaxFont }); }}
-                    >
-                      {MATHJAX_FONTS.map(({ value, label }) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className={css.fontPreviewRow}>
-                    <img
-                      key={settings.rendering.mathJaxFont}
-                      className={css.fontPreviewImg}
-                      src={`${import.meta.env.BASE_URL}font-previews/${settings.rendering.mathJaxFont}.svg`}
-                      alt={`Preview of ${settings.rendering.mathJaxFont}`}
-                    />
                   </div>
                 </div>
 
@@ -417,5 +401,77 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         </div>
       </Modal.Body>
     </Modal>
+  );
+}
+
+function useAutomaticUpdateChecksSetting() {
+  const updates = getActiveEditorPlatform().updates;
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+    if (updates?.getAutomaticUpdateChecks) {
+      void updates.getAutomaticUpdateChecks().then((value) => {
+        if (!disposed) setEnabled(value);
+      }).catch(() => {
+        if (!disposed) setError("Could not load update preferences.");
+      });
+    }
+    return () => { disposed = true; };
+  }, [updates]);
+
+  const save = async (value: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await updates?.setAutomaticUpdateChecks?.(value);
+      setEnabled(value);
+    } catch {
+      setError("Could not save update preferences.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reset = async () => {
+    if (!updates?.resetAutomaticUpdateChecks) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setEnabled(await updates.resetAutomaticUpdateChecks());
+    } catch {
+      setError("Could not reset update preferences.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return {
+    available: Boolean(updates?.getAutomaticUpdateChecks && updates.setAutomaticUpdateChecks),
+    enabled, busy, error, save, reset
+  };
+}
+
+function AutomaticUpdateChecksSetting({ preference }: { preference: ReturnType<typeof useAutomaticUpdateChecksSetting> }) {
+  const { available, enabled, busy, error, save } = preference;
+  if (!available) return null;
+
+  return (
+    <div className={css.settingRow}>
+      <label className={css.settingLabel} htmlFor="setting-automatic-update-checks">
+        Automatically Check for Updates on Startup
+        {error ? <span className={css.settingDesc} role="alert">{error}</span> : null}
+      </label>
+      <input
+        id="setting-automatic-update-checks"
+        type="checkbox"
+        className={css.checkbox}
+        checked={enabled ?? false}
+        disabled={enabled === null || busy}
+        onChange={(event) => { void save(event.target.checked); }}
+      />
+    </div>
   );
 }

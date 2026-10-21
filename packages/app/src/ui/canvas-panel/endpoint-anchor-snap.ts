@@ -1,6 +1,7 @@
-import { worldBounds, pt } from "tikz-editor/coords/index";
-import type { NodeAnchorTarget } from "tikz-editor/semantic/types";
+import { worldBounds, pt } from "@tikz-editor/core/coords/index";
+import type { NodeAnchorTarget } from "@tikz-editor/core/semantic/types";
 import type { WorldBounds, WorldPoint } from "../coords/types";
+import { distanceSquared } from "./geometry";
 
 const NODE_REVEAL_RADIUS_PX = 44;
 const SNAP_RADIUS_PX = 12;
@@ -19,13 +20,14 @@ export type MatrixCellAnchorHint = {
 };
 
 export function resolveEndpointAnchorSnap(input: {
+  bypass?: boolean;
   pointerWorld: WorldPoint;
   zoom: number;
   nodeAnchorTargets: readonly NodeAnchorTarget[];
   matrixCellAnchorHints?: readonly MatrixCellAnchorHint[];
 }): EndpointAnchorSnapResult {
   const zoom = Math.max(input.zoom, 1e-6);
-  if (input.nodeAnchorTargets.length === 0) {
+  if (input.bypass || input.nodeAnchorTargets.length === 0) {
     return {
       visibleAnchors: [],
       snappedAnchor: null
@@ -226,12 +228,6 @@ function parseTrailingMatrixCellIndices(nodeName: string): { row: number; column
     return null;
   }
   return { row, column, suffixStart: match.index };
-}
-
-function distanceSquared(a: WorldPoint, b: WorldPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
 }
 
 function deriveNodeExtent(

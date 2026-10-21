@@ -1,3 +1,6 @@
+import { requireDefined } from "../../utils/invariants.js";
+import { requireArrayValue } from "../../utils/collections.js";
+import type { EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { OptionListAst } from "../../options/types.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
@@ -19,7 +22,8 @@ import { parseTikzForEdit } from "../parse-options.js";
 export function applyGroupElementsAction(
   source: string,
   elementIds: readonly string[],
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  geometry?: EditGeometrySession
 ): EditActionResultLike {
   const statementIds = normalizeStatementIds(elementIds);
   if (statementIds.length < 2) {
@@ -37,18 +41,25 @@ export function applyGroupElementsAction(
     return { kind: "unsupported", reason: "Group currently requires all selected statements to share the same parent scope." };
   }
 
-  const parentKey = selectedRefs[0].parentKey;
-  const parentRefs = snapshot.byParentKey.get(parentKey)!.slice().sort((left, right) => left.index - right.index);
+  const parentKey = requireArrayValue(selectedRefs, 0).parentKey;
+  const parentRefList = snapshot.byParentKey.get(parentKey);
+  if (!parentRefList) {
+    return {
+      kind: "error",
+      message: `Grouping invariant failed: parent statement list ${parentKey} is missing.`
+    };
+  }
+  const parentRefs = parentRefList.slice().sort((left, right) => left.index - right.index);
 
   const selectedIdSet = new Set(selectedRefs.map((ref) => ref.id));
   const selectedOrdered = parentRefs.filter((ref) => selectedIdSet.has(ref.id));
 
   const siblingIds = parentRefs.map((ref) => ref.id);
-  const constraints = collectSiblingDependencyConstraints(source, siblingIds, parseOptions);
+  const constraints = collectSiblingDependencyConstraints(source, siblingIds, parseOptions, geometry);
   const unselectedIds = siblingIds.filter((id) => !selectedIdSet.has(id));
   const oldIndexById = new Map<string, number>();
   for (let index = 0; index < siblingIds.length; index += 1) {
-    oldIndexById.set(siblingIds[index], index);
+    oldIndexById.set(requireArrayValue(siblingIds, index), index);
   }
 
   const candidates = buildGroupingCandidates(unselectedIds, selectedOrdered.map((ref) => ref.id));
@@ -76,7 +87,7 @@ export function applyGroupElementsAction(
     };
   }
 
-  const chosen = safeCandidates[0];
+  const chosen = requireArrayValue(safeCandidates, 0);
   const replacement = buildGroupReplacement({
     source,
     parentRefs,
@@ -85,13 +96,19 @@ export function applyGroupElementsAction(
     parseOptions
   });
   const applied = applyTextReplacements(source, [{ span: replacement.span, text: replacement.text }]);
-  const appliedReplacement = applied.applied[0];
+  const appliedReplacement = requireArrayValue(applied.applied, 0);
 
   const scopeSpan: Span = {
     from: appliedReplacement.newSpan.from + replacement.scopeLocalSpan.from,
     to: appliedReplacement.newSpan.from + replacement.scopeLocalSpan.to
   };
-  const groupedScopeId = resolveStatementIdBySpan(applied.source, scopeSpan, parseOptions)!;
+  const groupedScopeId = resolveStatementIdBySpan(applied.source, scopeSpan, parseOptions);
+  if (!groupedScopeId) {
+    return {
+      kind: "error",
+      message: "Grouping invariant failed: the new scope could not be resolved after rewriting the source."
+    };
+  }
 
   return {
     kind: "success",
@@ -113,7 +130,7 @@ export function applyUngroupElementsAction(
     return { kind: "unsupported", reason: "Ungroup currently requires exactly one selected scope." };
   }
 
-  const scopeId = statementIds[0];
+  const scopeId = requireArrayValue(statementIds, 0);
   const snapshot = parseStatementSnapshot(source, parseOptions);
   const ref = snapshot.byId.get(scopeId);
   if (ref?.statement.kind !== "Scope") {
@@ -126,7 +143,13 @@ export function applyUngroupElementsAction(
     return { kind: "unsupported", reason: optionCheck.reason };
   }
 
-  const parentRefs = snapshot.byParentKey.get(ref.parentKey)!;
+  const parentRefs = snapshot.byParentKey.get(ref.parentKey);
+  if (!parentRefs) {
+    return {
+      kind: "error",
+      message: `Ungrouping invariant failed: parent statement list ${ref.parentKey} is missing.`
+    };
+  }
   const indent = lineIndentAtOffset(source, ref.span.from);
   const newline = detectPreferredNewline(source, ref.span.from);
   const separator = resolveStatementSeparator(source, parentRefs, indent, newline);
@@ -136,12 +159,12 @@ export function applyUngroupElementsAction(
     .join(separator);
 
   const applied = applyTextReplacements(source, [{ span: ref.span, text: replacementText }]);
-  const appliedReplacement = applied.applied[0];
+  const appliedReplacement = requireArrayValue(applied.applied, 0);
 
   let selectedSourceIds: string[] | undefined;
   if (replacementText.length > 0) {
     const nextSnapshot = parseStatementSnapshot(applied.source, parseOptions);
-    const selectedRefs = nextSnapshot.byParentKey.get(ref.parentKey)!
+    const selectedRefs = (nextSnapshot.byParentKey.get(ref.parentKey) ?? [])
       .filter((candidate) =>
         candidate.span.from >= appliedReplacement.newSpan.from &&
         candidate.span.to <= appliedReplacement.newSpan.to
@@ -156,7 +179,7 @@ export function applyUngroupElementsAction(
     kind: "success",
     newSource: applied.source,
     patches: applied.patches,
-    selectedSourceIds,
+    ...(selectedSourceIds === undefined ? {} : { selectedSourceIds }),
     // Ungrouping can renumber statement ids; force full recompute path.
     changedSourceIds: []
   };
@@ -190,7 +213,7 @@ function buildGroupingCandidates(
       if (index === slot) {
         orderedItems.push("__group__");
       }
-      orderedItems.push(unselectedIds[index]);
+      orderedItems.push(requireArrayValue(unselectedIds, index));
     }
     if (slot === unselectedIds.length) {
       orderedItems.push("__group__");
@@ -230,9 +253,9 @@ function totalSiblingMovement(
   oldIndexById: ReadonlyMap<string, number>
 ): number {
   let movement = 0;
-  for (let index = 0; index < expandedOrder.length; index += 1) {
-    const id = expandedOrder[index];
-    const oldIndex = oldIndexById.get(id)!;
+  for (const [index, id] of expandedOrder.entries()) {
+
+    const oldIndex = requireDefined(oldIndexById.get(id), "Missing required oldIndexById.get(id)");
     movement += Math.abs(index - oldIndex);
   }
   return movement;
@@ -247,11 +270,11 @@ function preservesDependencyOrder(
   }
   const indexById = new Map<string, number>();
   for (let index = 0; index < expandedOrder.length; index += 1) {
-    indexById.set(expandedOrder[index], index);
+    indexById.set(requireArrayValue(expandedOrder, index), index);
   }
   for (const constraint of constraints) {
-    const beforeIndex = indexById.get(constraint.before)!;
-    const afterIndex = indexById.get(constraint.after)!;
+    const beforeIndex = requireDefined(indexById.get(constraint.before), "Missing required indexById.get(constraint.before)");
+    const afterIndex = requireDefined(indexById.get(constraint.after), "Missing required indexById.get(constraint.after)");
     if (beforeIndex >= afterIndex) {
       return false;
     }
@@ -262,13 +285,14 @@ function preservesDependencyOrder(
 function collectSiblingDependencyConstraints(
   source: string,
   siblingIds: readonly string[],
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): DependencyConstraint[] {
   const siblingIdSet = new Set(siblingIds);
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
   });
-  const semantic = evaluateTikzFigure(parsed.figure, source);
+  const semantic = geometry?.semantic ?? evaluateTikzFigure(parsed.figure, source);
   return collectConstraintsFromDependencyGraph(semantic.dependencies, siblingIdSet);
 }
 
@@ -281,9 +305,6 @@ function collectConstraintsFromDependencyGraph(
   const consumersByResourceId = new Map<string, Set<string>>();
 
   for (const edge of graph.edges) {
-    if (edge.category !== "geometry") {
-      continue;
-    }
     if (edge.relation === "producer") {
       const fromNode = nodesById.get(edge.from);
       const toNode = nodesById.get(edge.to);
@@ -299,18 +320,16 @@ function collectConstraintsFromDependencyGraph(
       continue;
     }
 
-    if (edge.relation === "consumer") {
-      const fromNode = nodesById.get(edge.from);
-      const toNode = nodesById.get(edge.to);
-      if (!fromNode || !toNode || fromNode.kind !== "resource" || toNode.kind !== "source") {
-        continue;
-      }
-      const consumers = consumersByResourceId.get(edge.from);
-      if (consumers) {
-        consumers.add(toNode.sourceId);
-      } else {
-        consumersByResourceId.set(edge.from, new Set([toNode.sourceId]));
-      }
+    const fromNode = nodesById.get(edge.from);
+    const toNode = nodesById.get(edge.to);
+    if (!fromNode || !toNode || fromNode.kind !== "resource" || toNode.kind !== "source") {
+      continue;
+    }
+    const consumers = consumersByResourceId.get(edge.from);
+    if (consumers) {
+      consumers.add(toNode.sourceId);
+    } else {
+      consumersByResourceId.set(edge.from, new Set([toNode.sourceId]));
     }
   }
 
@@ -355,8 +374,8 @@ function buildGroupReplacement(input: {
 }): GroupReplacement {
   const { source, parentRefs, selectedRefs, orderedItems, parseOptions } = input;
   const replacementSpan: Span = {
-    from: parentRefs[0].span.from,
-    to: parentRefs[parentRefs.length - 1].span.to
+    from: requireArrayValue(parentRefs, 0).span.from,
+    to: requireArrayValue(parentRefs, parentRefs.length - 1).span.to
   };
   const newline = detectPreferredNewline(source, replacementSpan.from);
   const indent = lineIndentAtOffset(source, replacementSpan.from);
@@ -378,14 +397,14 @@ function buildGroupReplacement(input: {
     if (index > 0) {
       text += separator;
     }
-    const item = orderedItems[index];
+    const item = requireArrayValue(orderedItems, index);
     if (item === "__group__") {
       scopeLocalFrom = text.length;
       text += scopeText;
       scopeLocalTo = text.length;
       continue;
     }
-    text += snippetsById.get(item)!;
+    text += requireDefined(snippetsById.get(item), "Missing required snippetsById.get(item)");
   }
 
   return {
@@ -469,8 +488,8 @@ function resolveStatementSeparator(
   newline: string
 ): string {
   for (let index = 0; index < parentRefs.length - 1; index += 1) {
-    const left = parentRefs[index];
-    const right = parentRefs[index + 1];
+    const left = requireArrayValue(parentRefs, index);
+    const right = requireArrayValue(parentRefs, index + 1);
 
     const gap = source.slice(left.span.to, right.span.from);
     if (gap.includes("\n")) {
@@ -495,7 +514,7 @@ function reindentBlock(snippet: string, indent: string): string {
   const lines = normalized.split("\n");
   const nonEmpty = lines.filter((line) => line.trim().length > 0);
   const minIndent = nonEmpty.reduce((minimum, line) => {
-    const current = line.match(/^[ \t]*/u)![0].length;
+    const current = requireDefined(line.match(/^[ \t]*/u), "Missing required line.match(/^[ \\t]*/u)")[0].length;
     return Math.min(minimum, current);
   }, Number.POSITIVE_INFINITY);
   const trimIndent = minIndent;

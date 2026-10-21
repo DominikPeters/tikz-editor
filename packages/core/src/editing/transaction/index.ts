@@ -1,0 +1,25 @@
+export {
+  applyPatches,
+  applyTransaction,
+  assertDisjointPatches,
+  mapOffset,
+  replacementPatches,
+  type AppliedTransaction,
+  type BufferPatch,
+  type BufferRange,
+  type MappedPosition,
+  type Transaction,
+  type TransactionSelection,
+  type UndoGrouping,
+  type VerticalGoal,
+} from "./transaction.js";
+export {
+  EMPTY_UNDO_HISTORY,
+  TYPING_RUN_PAUSE_MS,
+  breakTypingRun,
+  recordTransaction,
+  redoStep,
+  undoStep,
+  type HistorySnapshot,
+  type UndoHistory,
+} from "./history.js";

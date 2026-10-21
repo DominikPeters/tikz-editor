@@ -2,6 +2,12 @@ import type { ProfilingScenarioManifest } from "./framework";
 
 export const PROFILING_SCENARIOS: ProfilingScenarioManifest[] = [
   {
+    id: "scale",
+    category: "canvas-edit",
+    description: "Open, select all, hover, zoom, pan, commit, undo, type and memory on pictures of 100 and 500 statements, a long paper with an image and a 40-frame deck.",
+    specPath: "profiling/profile-scale.spec.ts"
+  },
+  {
     id: "actions",
     category: "actions",
     description: "Menu and keyboard action profiling for editor commands.",
@@ -66,6 +72,18 @@ export const PROFILING_SCENARIOS: ProfilingScenarioManifest[] = [
     category: "canvas-edit",
     description: "One-keystroke canvas node text latency from textarea event through SVG patch.",
     specPath: "profiling/profile-node-text-latency.spec.ts"
+  },
+  {
+    id: "beamer-canvas-text-latency",
+    category: "canvas-edit",
+    description: "Thirty paced direct-text edits on a warmed KKT Beamer frame.",
+    specPath: "profiling/profile-beamer-canvas-text-latency.spec.ts"
+  },
+  {
+    id: "beamer-slide-switch",
+    category: "canvas-edit",
+    description: "KKT slide clicks through computation, SVG commit, and the next paint opportunity, on first and repeat visits.",
+    specPath: "profiling/profile-beamer-slide-switch.spec.ts"
   },
   {
     id: "source-typing",

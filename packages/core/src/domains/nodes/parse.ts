@@ -18,6 +18,7 @@ export function mapNodeItem(node: SyntaxNode, source: string, statementIndex: nu
   const mappedText = mapNodeText(groupNode, source, node.to, options.options);
   const explicitName = extractExplicitNodeName(node, source);
   const optionName = extractNodeNameFromOptions(options.options);
+  const name = explicitName ?? optionName;
   const aliases = extractNodeAliasesFromOptions(options.options);
 
   return {
@@ -26,14 +27,14 @@ export function mapNodeItem(node: SyntaxNode, source: string, statementIndex: nu
     span: { from: node.from, to: node.to },
     raw,
     templateRaw,
-    name: explicitName ?? optionName,
-    aliases: aliases.length > 0 ? aliases : undefined,
-    optionsSpan: options.span,
-    options: options.options,
-    foreachClauses: foreachClauses.length > 0 ? foreachClauses : undefined,
-    atSpan: placement?.span,
-    atRaw: placement?.raw,
-    atRelativePrefix: placement?.relativePrefix,
+    ...(name !== undefined ? { name } : {}),
+    ...(aliases.length > 0 ? { aliases } : {}),
+    ...(options.span !== undefined ? { optionsSpan: options.span } : {}),
+    ...(options.options !== undefined ? { options: options.options } : {}),
+    ...(foreachClauses.length > 0 ? { foreachClauses } : {}),
+    ...(placement?.span !== undefined ? { atSpan: placement.span } : {}),
+    ...(placement?.raw !== undefined ? { atRaw: placement.raw } : {}),
+    ...(placement?.relativePrefix !== undefined ? { atRelativePrefix: placement.relativePrefix } : {}),
     textSource: mappedText.textSource,
     textSpan: mappedText.textSpan,
     text: mappedText.text
@@ -65,13 +66,13 @@ export function mapSyntheticNodeItem(
     span: { from: spanFrom, to: spanTo },
     raw: source.slice(spanFrom, spanTo),
     templateRaw: source.slice(spanFrom, spanTo),
-    name: optionName,
-    aliases: aliases.length > 0 ? aliases : undefined,
-    optionsSpan: options.span,
-    options: options.options,
-    atSpan: placement?.span,
-    atRaw: placement?.raw,
-    atRelativePrefix: placement?.relativePrefix,
+    ...(optionName !== undefined ? { name: optionName } : {}),
+    ...(aliases.length > 0 ? { aliases } : {}),
+    ...(options.span !== undefined ? { optionsSpan: options.span } : {}),
+    ...(options.options !== undefined ? { options: options.options } : {}),
+    ...(placement?.span !== undefined ? { atSpan: placement.span } : {}),
+    ...(placement?.raw !== undefined ? { atRaw: placement.raw } : {}),
+    ...(placement?.relativePrefix !== undefined ? { atRelativePrefix: placement.relativePrefix } : {}),
     textSource: mappedText.textSource,
     textSpan: mappedText.textSpan,
     text: mappedText.text
@@ -209,8 +210,8 @@ function mapNodeForeachClauses(
       headerRaw: parsed.headerRaw,
       variablesRaw: parsed.variablesRaw,
       listRaw: parsed.listRaw,
-      options,
-      optionsSpan
+      ...(options !== undefined ? { options } : {}),
+      ...(optionsSpan !== undefined ? { optionsSpan } : {})
     });
     clauseIndex += 1;
   });
@@ -275,23 +276,24 @@ function mergeNodeOptionLists(
   span?: Span;
   options?: OptionListAst;
 } {
-  if (optionNodes.length === 0) {
+  const first = optionNodes[0];
+  const last = optionNodes.at(-1);
+  if (!first || !last) {
     return appendImplicitFlags({}, implicitFlags);
   }
 
   const parsed = optionNodes.map((node) => parseOptionListRaw(source.slice(node.from, node.to), node.from));
-  if (parsed.length === 1) {
+  const onlyOptions = parsed[0];
+  if (parsed.length === 1 && onlyOptions) {
     return appendImplicitFlags(
       {
-        span: { from: optionNodes[0].from, to: optionNodes[0].to },
-        options: parsed[0]
+        span: { from: first.from, to: first.to },
+        options: onlyOptions
       },
       implicitFlags
     );
   }
 
-  const first = optionNodes[0];
-  const last = optionNodes[optionNodes.length - 1];
   return appendImplicitFlags(
     {
       span: { from: first.from, to: last.to },
@@ -350,7 +352,7 @@ function appendImplicitFlags(
   }
 
   return {
-    span: merged.span,
+    ...(merged.span !== undefined ? { span: merged.span } : {}),
     options: {
       span: merged.options.span,
       raw: `${merged.options.raw}, ${flagsToAdd.join(", ")}`,
@@ -473,7 +475,7 @@ function extractPlacementFromNode(
       return {
         span: { from: coordinate.from, to: coordinate.to },
         raw: source.slice(coordinate.from, coordinate.to),
-        relativePrefix: prefix
+        ...(prefix !== undefined ? { relativePrefix: prefix } : {})
       };
     }
 
@@ -520,7 +522,7 @@ function extractPlacementFromOptions(
     return {
       span: entry.span,
       raw: value,
-      relativePrefix
+      ...(relativePrefix !== undefined ? { relativePrefix } : {})
     };
   }
 

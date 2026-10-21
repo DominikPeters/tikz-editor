@@ -20,20 +20,17 @@ export function mapCoordinateItem(
     kind: "Coordinate",
     id: coordinateItemId(statementIndex, itemIndex),
     span: { from: node.from, to: node.to },
-    optionsSpan: parsed.optionsSpan
-      ? {
-          from: node.from + parsed.optionsSpan.from,
-          to: node.from + parsed.optionsSpan.to
-        }
-      : undefined,
-    options:
-      parsed.optionsSpan && parsed.optionsRaw
-        ? parseOptionListRaw(parsed.optionsRaw, node.from + parsed.optionsSpan.from)
-        : undefined,
-    relativePrefix,
+    ...(parsed.optionsSpan ? {
+      optionsSpan: {
+        from: node.from + parsed.optionsSpan.from,
+        to: node.from + parsed.optionsSpan.to
+      }
+    } : {}),
+    ...(parsed.optionsSpan && parsed.optionsRaw ? { options: parseOptionListRaw(parsed.optionsRaw, node.from + parsed.optionsSpan.from) } : {}),
+    ...(relativePrefix !== undefined ? { relativePrefix } : {}),
     x: parsed.x,
     y: parsed.y,
-    z: parsed.z,
+    ...(parsed.z !== undefined ? { z: parsed.z } : {}),
     raw,
     form: parsed.form
   };
@@ -95,11 +92,11 @@ export function parseCoordinate(raw: string): ParsedCoordinate & { optionsSpan?:
     : undefined;
 
   if (isCalcCoordinate(core)) {
-    return { x: core, y: "", form: "calc", isWellFormed: true, optionsSpan, optionsRaw: extracted.optionsRaw };
+    return { x: core, y: "", form: "calc", isWellFormed: true, ...(optionsSpan !== undefined ? { optionsSpan } : {}), optionsRaw: extracted.optionsRaw };
   }
 
   if (/\bcs\s*:/i.test(core)) {
-    return { x: core, y: "", form: "explicit", isWellFormed: true, optionsSpan, optionsRaw: extracted.optionsRaw };
+    return { x: core, y: "", form: "explicit", isWellFormed: true, ...(optionsSpan !== undefined ? { optionsSpan } : {}), optionsRaw: extracted.optionsRaw };
   }
 
   if (isIntersectionCoordinateExpression(core)) {
@@ -108,26 +105,26 @@ export function parseCoordinate(raw: string): ParsedCoordinate & { optionsSpan?:
       y: "",
       form: "named",
       isWellFormed: true,
-      optionsSpan,
+      ...(optionsSpan !== undefined ? { optionsSpan } : {}),
       optionsRaw: extracted.optionsRaw
     };
   }
 
   const commaParts = splitAllAtTopLevel(core, ",").map((part) => part.trim());
   if (commaParts.length === 2) {
-    const [x, y] = commaParts;
+    const [x = "", y = ""] = commaParts;
     return {
       x,
       y,
       form: "cartesian",
       isWellFormed: x.length > 0 && y.length > 0,
-      optionsSpan,
+      ...(optionsSpan !== undefined ? { optionsSpan } : {}),
       optionsRaw: extracted.optionsRaw
     };
   }
 
   if (commaParts.length >= 3) {
-    const [x, y, ...rest] = commaParts;
+    const [x = "", y = "", ...rest] = commaParts;
     const z = rest.join(",").trim();
     return {
       x,
@@ -135,7 +132,7 @@ export function parseCoordinate(raw: string): ParsedCoordinate & { optionsSpan?:
       z,
       form: "xyz",
       isWellFormed: x.length > 0 && y.length > 0 && z.length > 0,
-      optionsSpan,
+      ...(optionsSpan !== undefined ? { optionsSpan } : {}),
       optionsRaw: extracted.optionsRaw
     };
   }
@@ -149,7 +146,7 @@ export function parseCoordinate(raw: string): ParsedCoordinate & { optionsSpan?:
       y: radius,
       form: "polar",
       isWellFormed: angle.length > 0 && radius.length > 0,
-      optionsSpan,
+      ...(optionsSpan !== undefined ? { optionsSpan } : {}),
       optionsRaw: extracted.optionsRaw
     };
   }
@@ -159,7 +156,7 @@ export function parseCoordinate(raw: string): ParsedCoordinate & { optionsSpan?:
     y: "",
     form: "named",
     isWellFormed: true,
-    optionsSpan,
+    ...(optionsSpan !== undefined ? { optionsSpan } : {}),
     optionsRaw: extracted.optionsRaw
   };
 }
@@ -207,7 +204,7 @@ function extractLeadingCoordinateOptions(inner: string): ExtractedOptions {
   const optionsRaw = inner.slice(cursor, optionEnd + 1);
   cursor = optionEnd + 1;
 
-  while (cursor < inner.length && /\s/.test(inner[cursor])) {
+  while (cursor < inner.length && /\s/.test(inner.charAt(cursor))) {
     cursor += 1;
   }
 
@@ -220,7 +217,7 @@ function extractLeadingCoordinateOptions(inner: string): ExtractedOptions {
 
 function leadingWhitespace(input: string): number {
   let i = 0;
-  while (i < input.length && /\s/.test(input[i])) {
+  while (i < input.length && /\s/.test(input.charAt(i))) {
     i += 1;
   }
   return i;
@@ -311,7 +308,7 @@ export function splitAtTopLevel(input: string, separator: string): { left: strin
   }
 
   return {
-    left: parts[0],
+    left: parts[0] ?? "",
     right: parts.slice(1).join(separator)
   };
 }

@@ -1,11 +1,10 @@
-export const PT_PER_CM = 28.4527559055;
-export const CM_PER_PT = 1 / PT_PER_CM;
+export { PT_PER_CM, CM_PER_PT } from "../coords/source.js";
 
 export type NumberFormatOptions = {
   fractionDigits?: number;
 };
 
-export type DragFormatPrecision = "default" | "fine";
+export type DragFormatPrecision = "default" | "fine" | "snapped";
 
 export const NUMBER_FORMAT_PRESETS = {
   pointDimension: { fractionDigits: 0 },
@@ -15,10 +14,12 @@ export const NUMBER_FORMAT_PRESETS = {
 } as const satisfies Record<string, NumberFormatOptions>;
 
 export function pointDimensionFormatOptions(precision: DragFormatPrecision | undefined): NumberFormatOptions {
+  if (precision === "snapped") return { fractionDigits: 7 };
   return precision === "fine" ? NUMBER_FORMAT_PRESETS.pointDimensionFine : NUMBER_FORMAT_PRESETS.pointDimension;
 }
 
 export function pointDistanceFormatOptions(precision: DragFormatPrecision | undefined): NumberFormatOptions {
+  if (precision === "snapped") return { fractionDigits: 7 };
   return precision === "fine" ? NUMBER_FORMAT_PRESETS.pointDistanceFine : NUMBER_FORMAT_PRESETS.pointDistance;
 }
 

@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type PointerEvent as ReactPointerEvent
 } from "react";
 import {
@@ -16,13 +15,14 @@ import {
   RiSubtractLine
 } from "@remixicon/react";
 import { useShallow } from "zustand/react/shallow";
-import type { SvgRenderModel } from "tikz-editor/svg";
+import type { SvgRenderModel } from "@tikz-editor/core/svg";
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../app-menu";
 import { useEditorStore } from "../store/store";
 import type { ToolMode } from "../store/types";
 import { CanvasPanel } from "./canvas-panel/CanvasPanel";
 import type { EditorCommandRuntime } from "./editor-command-runtime";
-import { FigureNavigator } from "./FigureNavigator";
+import { RootNavigator } from "./RootNavigator";
+import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
 import { InspectorPanel } from "./inspector-panel/InspectorPanel";
 import { ObjectsPanel } from "./objects-panel/ObjectsPanel";
 import { SourcePanel } from "./source-panel/SourcePanel";
@@ -81,8 +81,9 @@ const IPAD_NUMBERED_TOOL_SHORTCUTS: Record<string, ToolMode> = {
   "0": "addCircle"
 };
 
-function coerceRightSidebarTab(tab: RightSidebarTab | "assistant"): RightSidebarTab {
-  return tab === "assistant" ? "inspector" : tab;
+// The iPad shell has no assistant or Beamer builds panel yet.
+function coerceRightSidebarTab(tab: RightSidebarTab | "assistant" | "builds"): RightSidebarTab {
+  return tab === "assistant" || tab === "builds" ? "inspector" : tab;
 }
 
 function readStoredSourceWidth(): number {
@@ -281,8 +282,7 @@ export function IpadEditorShell({
   const activeRightTab = coerceRightSidebarTab(rightSidebarTab);
   const rightPanelOpen = showInspectorPanel || showObjectsPanel || showStylesPanel;
   const activeRightPanelLabel = RIGHT_PANEL_LABELS[activeRightTab];
-  const figureCount = snapshot.figures.length;
-  const hasMultipleFigures = figureCount > 1;
+  const hasMultipleFigures = hasMultipleRoots(snapshotRoots(snapshot).length);
   const showFigureStrip = hasMultipleFigures && showFiguresPanel;
   const zoomPercent = canvasFitToContentScale ? `${Math.round(canvasFitToContentScale * 100)}%` : "Fit";
   const statusText = pendingRequestId ? "Rendering…" : canvasStatusHint;
@@ -542,13 +542,13 @@ export function IpadEditorShell({
         onShowDocuments={() => { setDocumentGalleryOpen(true); }}
         showSourcePanel={showSourcePanel}
         onToggleSource={toggleSourcePanel}
-        sourceToggleEnabled={commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_SOURCE_PANEL]?.enabled === true}
+        sourceToggleEnabled={commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_SOURCE_PANEL].enabled === true}
         inspectorOpen={rightPanelOpen}
         onToggleInspector={toggleRightPanel}
         inspectorToggleEnabled={
-          commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_INSPECTOR_PANEL]?.enabled === true ||
-          commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_OBJECTS_PANEL]?.enabled === true ||
-          commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL]?.enabled === true
+          commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_INSPECTOR_PANEL].enabled === true ||
+          commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_OBJECTS_PANEL].enabled === true ||
+          commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL].enabled === true
         }
         hasMultipleFigures={hasMultipleFigures}
         showFiguresPanel={showFiguresPanel}
@@ -559,7 +559,7 @@ export function IpadEditorShell({
       <div
         ref={workspaceRef}
         className={css.workspace}
-        style={{ "--ipad-source-col": `${Math.round(sourceColumnWidth)}px` } as CSSProperties}
+        style={{ ["--ipad-source-col" as string]: `${Math.round(sourceColumnWidth)}px` }}
         data-source-visible={showSourcePanel ? "true" : "false"}
         data-source-pinned={sourcePinned ? "true" : "false"}
         data-right-panel-visible={rightPanelOpen ? "true" : "false"}
@@ -567,7 +567,7 @@ export function IpadEditorShell({
       >
         {showFigureStrip ? (
           <div className={css.figureStrip} data-select="chrome">
-            <FigureNavigator />
+            <RootNavigator />
           </div>
         ) : null}
 
@@ -656,7 +656,7 @@ export function IpadEditorShell({
                     role="tab"
                     className={[css.segment, activeRightTab === tab ? css.segmentActive : ""].filter(Boolean).join(" ")}
                     aria-selected={activeRightTab === tab}
-                    disabled={!commandRuntime.bindings[RIGHT_PANEL_TAB_COMMANDS[tab]]?.enabled}
+                    disabled={!commandRuntime.bindings[RIGHT_PANEL_TAB_COMMANDS[tab]].enabled}
                     onClick={() => { setRightPanelTab(tab); }}
                     data-testid={`ipad-panel-tab-${tab}`}
                   >
@@ -729,19 +729,19 @@ export function IpadEditorShell({
               <IpadMenuItem
                 label="Zoom In"
                 icon={<RiAddLine size={18} />}
-                disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.ZOOM_IN]?.enabled}
+                disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.ZOOM_IN].enabled}
                 onSelect={() => { runZoomCommand(APP_MENU_COMMAND_IDS.ZOOM_IN); }}
               />
               <IpadMenuItem
                 label="Zoom Out"
                 icon={<RiSubtractLine size={18} />}
-                disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.ZOOM_OUT]?.enabled}
+                disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.ZOOM_OUT].enabled}
                 onSelect={() => { runZoomCommand(APP_MENU_COMMAND_IDS.ZOOM_OUT); }}
               />
               <IpadMenuItem
                 label="Fit to Content"
                 icon={<RiAspectRatioLine size={18} />}
-                disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.FIT_TO_CONTENT]?.enabled}
+                disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.FIT_TO_CONTENT].enabled}
                 onSelect={() => { runZoomCommand(APP_MENU_COMMAND_IDS.FIT_TO_CONTENT); }}
               />
             </IpadMenu>

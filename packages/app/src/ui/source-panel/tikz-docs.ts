@@ -1,3 +1,4 @@
+import { isRecord } from "../../validation";
 export type TikzDocEntryType = "key" | "command" | "style";
 
 export type TikzDocEntry = {
@@ -72,7 +73,15 @@ function normalizeCandidates(candidates: readonly string[]): string[] {
 }
 
 async function loadDocIndex(): Promise<DocIndex | null> {
-  indexPromise ??= fetchJson<DocIndex>("docs/keys/index.json");
+  indexPromise ??= fetchJson("docs/keys/index.json").then(value => {
+    if (!isRecord(value)) return null;
+    const index: DocIndex = {};
+    for (const [key, chunk] of Object.entries(value)) {
+      if (typeof chunk !== "string") return null;
+      index[key] = chunk;
+    }
+    return index;
+  });
   return indexPromise;
 }
 
@@ -81,12 +90,24 @@ async function loadChunk(chunkName: string): Promise<DocChunk | null> {
   if (existing) {
     return existing;
   }
-  const pending = fetchJson<DocChunk>(`docs/keys/${chunkName}.json`);
+  const pending = fetchJson(`docs/keys/${chunkName}.json`).then(value => {
+    if (!isRecord(value)) return null;
+    const chunk: DocChunk = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (!isRecord(entry) || (entry.type !== "key" && entry.type !== "command" && entry.type !== "style") ||
+        typeof entry.signatureHtml !== "string" || typeof entry.defaultHtml !== "string" ||
+        typeof entry.snippetHtml !== "string" || typeof entry.page !== "string" ||
+        typeof entry.anchor !== "string" || typeof entry.href !== "string") return null;
+      chunk[key] = { type: entry.type, signatureHtml: entry.signatureHtml, defaultHtml: entry.defaultHtml,
+        snippetHtml: entry.snippetHtml, page: entry.page, anchor: entry.anchor, href: entry.href };
+    }
+    return chunk;
+  });
   chunkPromises.set(chunkName, pending);
   return pending;
 }
 
-async function fetchJson<T>(assetPath: string): Promise<T | null> {
+async function fetchJson(assetPath: string): Promise<unknown> {
   try {
     const base = resolveBaseUrl();
     const url = new URL(assetPath, base).toString();
@@ -94,7 +115,8 @@ async function fetchJson<T>(assetPath: string): Promise<T | null> {
     if (!response.ok) {
       return null;
     }
-    return (await response.json()) as T;
+    const value: unknown = await response.json();
+    return value;
   } catch {
     return null;
   }
@@ -104,7 +126,7 @@ function resolveBaseUrl(): string {
   if (typeof document !== "undefined" && typeof document.baseURI === "string" && document.baseURI.length > 0) {
     return document.baseURI;
   }
-  if (typeof window !== "undefined" && typeof window.location?.href === "string" && window.location.href.length > 0) {
+  if (typeof window !== "undefined" && typeof window.location.href === "string" && window.location.href.length > 0) {
     return window.location.href;
   }
   return "http://localhost/";

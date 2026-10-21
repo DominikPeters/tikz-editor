@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { useEffect, useRef, useState } from "react";
 import type { CanvasDragKind } from "../store/types";
 
@@ -61,7 +62,7 @@ export function useFrameTimingStats(activeDragKind: CanvasDragKind | null, enabl
         });
 
         const cutoffTs = nowTs - SAMPLE_WINDOW_MS;
-        while (samples.length > 0 && samples[0].atMs < cutoffTs) {
+        while (samples.length > 0 && requireArrayValue(samples, 0).atMs < cutoffTs) {
           samples.shift();
         }
 

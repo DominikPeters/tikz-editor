@@ -1,0 +1,416 @@
+{
+  "formatVersion": 1,
+  "description": "Original table fidelity matrix. Exact glyphs, fonts and rules; no mismatches are accepted as goldens.",
+  "fidelity": [
+    {
+      "id": "alignments-fonts-math",
+      "file": "tables.tex",
+      "frame": 1,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Middle",
+        "Gamma"
+      ]
+    },
+    {
+      "id": "outer-padding",
+      "file": "tables.tex",
+      "frame": 2,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "intercolumn-text",
+      "file": "tables.tex",
+      "frame": 3,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "repeated-columns",
+      "file": "tables.tex",
+      "frame": 4,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "Delta"
+      ]
+    },
+    {
+      "id": "multicolumn-width",
+      "file": "tables.tex",
+      "frame": 5,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "heading",
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "kernel-rules",
+      "file": "tables.tex",
+      "frame": 6,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma"
+      ]
+    },
+    {
+      "id": "booktabs-basic",
+      "file": "tables.tex",
+      "frame": 7,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Value",
+        "Gamma"
+      ]
+    },
+    {
+      "id": "booktabs-cmidrules",
+      "file": "tables.tex",
+      "frame": 8,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Three"
+      ]
+    },
+    {
+      "id": "booktabs-addlinespace",
+      "file": "tables.tex",
+      "frame": 9,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma"
+      ]
+    },
+    {
+      "id": "booktabs-custom-rules",
+      "file": "tables.tex",
+      "frame": 10,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma"
+      ]
+    },
+    {
+      "id": "paragraph-column",
+      "file": "tables.tex",
+      "frame": 11,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "Delta",
+        "Epsilon"
+      ]
+    },
+    {
+      "id": "inline-alignment",
+      "file": "tables.tex",
+      "frame": 12,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Before",
+        "Alpha",
+        "after"
+      ]
+    },
+    {
+      "id": "scoped-size-spacing",
+      "file": "tables.tex",
+      "frame": 13,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma"
+      ]
+    },
+    {
+      "id": "column-table-wrapper",
+      "file": "tables.tex",
+      "frame": 14,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Value",
+        "Gamma",
+        "Other"
+      ]
+    },
+    {
+      "id": "block-table",
+      "file": "tables.tex",
+      "frame": 15,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Result",
+        "Alpha",
+        "Gamma",
+        "After"
+      ]
+    },
+    {
+      "id": "ruled-multicolumn",
+      "file": "tables.tex",
+      "frame": 16,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Long",
+        "heading",
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "nested-tabular",
+      "file": "tables.tex",
+      "frame": 17,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma"
+      ]
+    },
+    {
+      "id": "column-font-declarations",
+      "file": "array.tex",
+      "frame": 1,
+      "family": "tables-array",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Middle",
+        "100"
+      ]
+    },
+    {
+      "id": "styled-paragraph-column",
+      "file": "array.tex",
+      "frame": 2,
+      "family": "tables-array",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "Epsilon"
+      ]
+    },
+    {
+      "id": "intercolumn-retained-glue",
+      "file": "array.tex",
+      "frame": 3,
+      "family": "tables-array",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "array-vertical-double-rules",
+      "file": "array.tex",
+      "frame": 4,
+      "family": "tables-array",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Middle",
+        "Beta"
+      ]
+    },
+    {
+      "id": "array-ruled-multicolumn",
+      "file": "array.tex",
+      "frame": 5,
+      "family": "tables-array",
+      "pages": 1,
+      "oracleText": [
+        "Long",
+        "heading",
+        "Alpha"
+      ]
+    },
+    {
+      "id": "paragraph-vertical-alignment",
+      "file": "array.tex",
+      "frame": 6,
+      "family": "tables-array",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Delta",
+        "Epsilon",
+        "Zeta",
+        "Eta"
+      ]
+    },
+    {
+      "id": "array-extrarowheight-stretch",
+      "file": "array.tex",
+      "frame": 7,
+      "family": "tables-array",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Gamma",
+        "Epsilon",
+        "Eta"
+      ]
+    },
+    {
+      "id": "paragraph-column-suffix",
+      "file": "array.tex",
+      "frame": 8,
+      "family": "tables-array",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma"
+      ]
+    },
+    {
+      "id": "math-column-declarations",
+      "file": "array.tex",
+      "frame": 9,
+      "family": "tables-array",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "booktabs-compact-partial-rules",
+      "file": "tables.tex",
+      "frame": 18,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "Three"
+      ]
+    },
+    {
+      "id": "preamble-registers",
+      "file": "preamble.tex",
+      "frame": 1,
+      "family": "tables-preamble",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "local-register-override",
+      "file": "preamble.tex",
+      "frame": 2,
+      "family": "tables-preamble",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "rule-vertical-alignment",
+      "file": "tables.tex",
+      "frame": 19,
+      "family": "tables",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "length-before-small",
+      "file": "assignments.tex",
+      "frame": 1,
+      "family": "tables-assignment",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "length-before-normal",
+      "file": "assignments.tex",
+      "frame": 2,
+      "family": "tables-assignment",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "ex-length-before-small",
+      "file": "assignments.tex",
+      "frame": 3,
+      "family": "tables-assignment",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "preamble-font-lengths",
+      "file": "assignment-preamble.tex",
+      "frame": 1,
+      "family": "tables-assignment",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    }
+  ],
+  "recognition": [],
+  "title": "Tabular and booktabs fidelity"
+}

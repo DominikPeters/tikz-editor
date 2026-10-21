@@ -1,7 +1,7 @@
-import type { Statement } from "tikz-editor/ast/types";
-import { pt, svgBounds } from "tikz-editor/coords/index";
-import type { SceneElement } from "tikz-editor/semantic/types";
-import type { SvgBounds, SvgPoint } from "../coords/types";
+import type { Statement } from "@tikz-editor/core/ast/types";
+import { pt, svgBounds, worldBounds } from "@tikz-editor/core/coords/index";
+import type { SceneElement } from "@tikz-editor/core/semantic/types";
+import type { SvgBounds, SvgPoint, WorldBounds } from "../coords/types";
 import type { SourceBoundsMap } from "./types";
 
 export type ScopeOverlayNode = {
@@ -83,6 +83,35 @@ export function buildScopeOverlayIndex(
   };
 }
 
+/**
+ * World bounds of a scope: the union of its members' bounds, recursing into
+ * nested scopes. Element bounds are keyed by source id and never include
+ * scopes, which draw nothing of their own.
+ */
+export function scopeWorldBounds(
+  scopeOverlay: ScopeOverlayIndex,
+  scopeId: string,
+  boundsBySourceId: ReadonlyMap<string, WorldBounds>
+): WorldBounds | null {
+  const scope = scopeOverlay.scopesById.get(scopeId);
+  if (!scope) return null;
+  let merged: WorldBounds | null = null;
+  for (const childId of scope.childStatementIds) {
+    const bounds = boundsBySourceId.get(childId)
+      ?? (scopeOverlay.scopesById.has(childId) ? scopeWorldBounds(scopeOverlay, childId, boundsBySourceId) : null);
+    if (!bounds) continue;
+    merged = merged
+      ? worldBounds(
+        pt(Math.min(merged.minX, bounds.minX)),
+        pt(Math.min(merged.minY, bounds.minY)),
+        pt(Math.max(merged.maxX, bounds.maxX)),
+        pt(Math.max(merged.maxY, bounds.maxY))
+      )
+      : bounds;
+  }
+  return merged;
+}
+
 export function augmentScopeOverlayWithMatrices(
   baseOverlay: ScopeOverlayIndex,
   sceneElements: readonly SceneElement[] | undefined,
@@ -158,12 +187,6 @@ export function augmentScopeOverlayWithMatrices(
     ancestorScopeIdsBySourceId,
     boundsByScopeId
   };
-}
-
-export function resolveScopeAwareSelectionTarget(
-  input: ResolveScopeAwareSelectionTargetInput
-): string {
-  return resolveScopeAwarePointerDownTarget(input);
 }
 
 export function resolveScopeAwarePointerDownTarget(
@@ -269,7 +292,7 @@ export function resolveFocusedScopeIdForSelection(
     return selectedScope.parentScopeId;
   }
   const ancestors = scopeOverlay.ancestorScopeIdsBySourceId.get(selectedSourceId) ?? [];
-  return ancestors.length > 0 ? ancestors[ancestors.length - 1] : null;
+  return ancestors.at(-1) ?? null;
 }
 
 export function isSourceWithinScope(

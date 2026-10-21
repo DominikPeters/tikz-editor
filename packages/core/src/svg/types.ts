@@ -20,6 +20,8 @@ export type SvgRenderPart = {
   order: number;
   markup: string;
   fingerprint: string;
+  /** Text source projections can change while geometry remains reusable. */
+  textRenderKey?: string;
 };
 
 export type SvgRenderModel = {
@@ -62,6 +64,8 @@ export type SvgPatchOp =
     };
 
 export type EmitSvgOptions = {
+  /** Canvas previews can retain paragraph-local SVG and resolve source through their layout context. */
+  textSourceCoordinates?: "document" | "layout";
   padding?: number;
   includeXmlns?: boolean;
   textEngine?: NodeTextEngine | null;

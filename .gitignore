@@ -49,6 +49,9 @@ web_modules/
 *.tsbuildinfo
 .DS_Store
 
+# Office lock files
+~$*
+
 # Optional npm cache directory
 .npm
 
@@ -169,3 +172,6 @@ MATRIX_PLAN.md
 /apps/ipad/src-tauri/gen/apple/Externals/arm64/debug
 /apps/ipad/src-tauri/gen/apple/tikz-editor-ipad.xcodeproj
 scripts/report-editor-latest-json-hits.sh
+
+# Local quality campaign notes and discovery reproductions
+/quality/
