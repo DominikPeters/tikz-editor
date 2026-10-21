@@ -30,6 +30,9 @@ jobs:
       - name: Deterministic adversarial TeX fuzz smoke
         run: npm run fuzz:tex-adversarial:pr
       - run: npm test
+        env:
+          # Every frame of the pointer-invariant fuzzer; local runs take a quick subset.
+          POINTER_FUZZ_FULL: "1"
       - run: npm run -w @tikz-editor/desktop test:e2e:mock
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:ci
