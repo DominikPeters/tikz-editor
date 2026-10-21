@@ -14,6 +14,13 @@ import { clamp, viewportToSvgPoint } from "./geometry";
 import { documentIdFromRootKey, rootKey } from "../../root-key";
 import type { CanvasDispatch, CanvasSnapshot, ValueSetter } from "./types";
 
+/** Viewport edges covered by floating chrome; fitting centers content in the rest. */
+export type CanvasFitInsets = { top: number; right: number; bottom: number; left: number };
+
+const NO_FIT_INSETS: CanvasFitInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+// Fitted content keeps this gap from covering chrome (fitPadding from bare edges).
+const FIT_INSET_GAP = 12;
+
 type FigureViewportState = {
   transform: CanvasTransform;
   fitToContentModeActive: boolean;
@@ -24,6 +31,7 @@ export type UseCanvasViewportPersistenceArgs = {
   svgResult: CanvasSnapshot["svg"];
   viewportSize: { width: number; height: number };
   fitPadding?: number;
+  fitInsets?: CanvasFitInsets;
   dispatch: CanvasDispatch;
   dispatchCanvasTransform: (transform: CanvasTransform) => void;
   activeDocumentId: string;
@@ -57,6 +65,7 @@ export function useCanvasViewportPersistence({
   svgResult,
   viewportSize,
   fitPadding = 44,
+  fitInsets = NO_FIT_INSETS,
   dispatch,
   dispatchCanvasTransform,
   activeDocumentId,
@@ -93,6 +102,10 @@ export function useCanvasViewportPersistence({
   const pendingCommitRenderTransformRef = useRef<CanvasTransform | null>(null);
   const viewportStateReadyRef = useRef(false);
   const snapshotMatchesActive = snapshotActiveRootId === activeRootId && snapshotSource === source;
+  const marginTop = fitMargin(fitPadding, fitInsets.top);
+  const marginRight = fitMargin(fitPadding, fitInsets.right);
+  const marginBottom = fitMargin(fitPadding, fitInsets.bottom);
+  const marginLeft = fitMargin(fitPadding, fitInsets.left);
 
   const fitToContentScale = useMemo(
     () => computeFitToContentScale(
@@ -101,9 +114,9 @@ export function useCanvasViewportPersistence({
       viewportSize.height,
       MIN_SCALE,
       MAX_SCALE,
-      fitPadding
+      { top: marginTop, right: marginRight, bottom: marginBottom, left: marginLeft }
     ),
-    [baseSvgResult, fitPadding, MAX_SCALE, MIN_SCALE, svgResult, viewportSize.height, viewportSize.width]
+    [baseSvgResult, marginBottom, marginLeft, marginRight, marginTop, MAX_SCALE, MIN_SCALE, svgResult, viewportSize.height, viewportSize.width]
   );
 
   useEffect(() => {
@@ -132,14 +145,15 @@ export function useCanvasViewportPersistence({
     }
     const viewportWidth = clientSize.width;
     const viewportHeight = clientSize.height;
+    const margins = { top: marginTop, right: marginRight, bottom: marginBottom, left: marginLeft };
 
-    const scale = computeFitToContentScale(fitViewBox, viewportWidth, viewportHeight, MIN_SCALE, MAX_SCALE, fitPadding);
+    const scale = computeFitToContentScale(fitViewBox, viewportWidth, viewportHeight, MIN_SCALE, MAX_SCALE, margins);
     if (scale == null) {
       return false;
     }
 
-    const fitLeft = (viewportWidth - fitViewBox.width * scale) / 2;
-    const fitTop = (viewportHeight - fitViewBox.height * scale) / 2;
+    const fitLeft = marginLeft + (viewportWidth - marginLeft - marginRight - fitViewBox.width * scale) / 2;
+    const fitTop = marginTop + (viewportHeight - marginTop - marginBottom - fitViewBox.height * scale) / 2;
     const translateX = fitLeft - (fitViewBox.x - renderViewBox.x) * scale;
     const translateY = fitTop - (fitViewBox.y - renderViewBox.y) * scale;
 
@@ -147,7 +161,7 @@ export function useCanvasViewportPersistence({
     dispatchCanvasTransform(next);
     canvasTransformRef.current = next;
     return true;
-  }, [baseSvgResult, canvasTransformRef, dispatchCanvasTransform, fitPadding, MAX_SCALE, measuredSize, MIN_SCALE, snapshotMatchesActive, svgResult, viewportRef]);
+  }, [baseSvgResult, canvasTransformRef, dispatchCanvasTransform, marginBottom, marginLeft, marginRight, marginTop, MAX_SCALE, measuredSize, MIN_SCALE, snapshotMatchesActive, svgResult, viewportRef]);
 
   const activeFigureViewportKey = useMemo(
     () => rootKey(activeDocumentId, viewportRootId),
@@ -468,6 +482,10 @@ export function useCanvasViewportPersistence({
   return { maxZoomScale, viewportStateReadyRef };
 }
 
+function fitMargin(fitPadding: number, inset: number): number {
+  return inset > 0 ? Math.max(fitPadding, inset + FIT_INSET_GAP) : fitPadding;
+}
+
 function sameTransform(left: CanvasTransform, right: CanvasTransform): boolean {
   return Math.abs(left.translateX - right.translateX) < 1e-9 &&
     Math.abs(left.translateY - right.translateY) < 1e-9 &&
@@ -480,7 +498,7 @@ function computeFitToContentScale(
   viewportHeight: number,
   minScale: number,
   maxScale: number,
-  padding: number
+  margins: CanvasFitInsets
 ): number | null {
   if (
     !fitViewBox ||
@@ -491,8 +509,8 @@ function computeFitToContentScale(
   ) {
     return null;
   }
-  const availableWidth = Math.max(1, viewportWidth - padding * 2);
-  const availableHeight = Math.max(1, viewportHeight - padding * 2);
+  const availableWidth = Math.max(1, viewportWidth - margins.left - margins.right);
+  const availableHeight = Math.max(1, viewportHeight - margins.top - margins.bottom);
   return clamp(
     Math.min(availableWidth / fitViewBox.width, availableHeight / fitViewBox.height),
     minScale,

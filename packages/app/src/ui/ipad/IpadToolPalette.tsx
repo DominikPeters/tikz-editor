@@ -141,6 +141,18 @@ function restRect(dock: PaletteDock, parentWidth: number, parentHeight: number, 
   return { x, y, width, height };
 }
 
+/** Space the docked palette covers along the workspace's right and bottom edges. */
+export function paletteFitInsets(dock: PaletteDock): { right: number; bottom: number } {
+  if (dock.kind !== "edge") {
+    return { right: 0, bottom: 0 };
+  }
+  const extent = EXPANDED_CROSS + EDGE_MARGIN;
+  return {
+    right: dock.edge === "right" ? extent : 0,
+    bottom: dock.edge === "bottom" ? extent + readSafeAreaBottom() : 0
+  };
+}
+
 function dockForProjectedPoint(
   x: number,
   y: number,

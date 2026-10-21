@@ -4,12 +4,18 @@ import {
   useMemo,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode
 } from "react";
 import {
   RiAddLine,
+  RiArrowGoBackLine,
+  RiArrowGoForwardLine,
   RiAspectRatioLine,
   RiCloseLine,
+  RiFullscreenExitLine,
+  RiIndentDecrease,
+  RiIndentIncrease,
   RiPushpinFill,
   RiPushpinLine,
   RiSubtractLine
@@ -30,11 +36,12 @@ import { StylesPanel } from "./StylesPanel";
 import { IpadDocumentGallery } from "./ipad/IpadDocumentGallery";
 import { IpadNavBar } from "./ipad/IpadNavBar";
 import { IpadMenu, IpadMenuItem, IpadPopover } from "./ipad/IpadPopover";
-import { IpadToolPalette, type PaletteDock } from "./ipad/IpadToolPalette";
+import { IpadToolPalette, paletteFitInsets, type PaletteDock } from "./ipad/IpadToolPalette";
 import { useSourceFloat } from "./ipad/useSourceFloat";
 import { isCodeMirrorEventTarget } from "./editor-commands";
 import { requestSourceAccessoryCommand, type SourceAccessoryCommandDetail } from "./source-sync";
 import { resolveToolbarToolMode } from "./tool-config";
+import { ACTUAL_SIZE_SCALE, zoomPercentForScale } from "./canvas-zoom";
 import css from "./IpadEditorShell.module.css";
 
 type RightSidebarTab = "inspector" | "objects" | "styles";
@@ -152,11 +159,11 @@ export function IpadEditorShell({
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
   const [documentGalleryOpen, setDocumentGalleryOpen] = useState(false);
   const [paletteDock, setPaletteDock] = useState<PaletteDock>({ kind: "edge", edge: "bottom" });
+  const [rightPanelInset, setRightPanelInset] = useState(0);
   const {
     toolMode,
     pendingRequestId,
     snapshot,
-    canvasFitToContentScale,
     canvasStatusHint,
     showSourcePanel,
     showInspectorPanel,
@@ -165,12 +172,12 @@ export function IpadEditorShell({
     showFiguresPanel,
     showAssistantPanel,
     rightSidebarTab,
+    showRulers,
     dispatch
   } = useEditorStore(useShallow((s) => ({
     toolMode: s.toolMode,
     pendingRequestId: s.pendingRequestId,
     snapshot: s.snapshot,
-    canvasFitToContentScale: s.canvasFitToContentScale,
     canvasStatusHint: s.canvasStatusHint,
     showSourcePanel: s.showSourcePanel,
     showInspectorPanel: s.showInspectorPanel,
@@ -179,6 +186,7 @@ export function IpadEditorShell({
     showFiguresPanel: s.showFiguresPanel,
     showAssistantPanel: s.showAssistantPanel,
     rightSidebarTab: s.rightSidebarTab,
+    showRulers: s.showRulers,
     dispatch: s.dispatch
   })));
 
@@ -229,6 +237,10 @@ export function IpadEditorShell({
       assistantVisible: false,
       activeRightTab: "inspector"
     });
+    // Rulers read as desktop chrome on a touch canvas; the ⋯ menu brings them back.
+    if (showRulers) {
+      dispatch({ type: "TOGGLE_CANVAS_AID", aid: "rulers" });
+    }
   }, [
     dispatch,
     rightSidebarTab,
@@ -236,6 +248,7 @@ export function IpadEditorShell({
     showFiguresPanel,
     showInspectorPanel,
     showObjectsPanel,
+    showRulers,
     showSourcePanel,
     showStylesPanel
   ]);
@@ -278,13 +291,16 @@ export function IpadEditorShell({
     setZoomMenuOpen(false);
     commandRuntime.runCommand(commandId, "platform");
   }, [commandRuntime]);
+  const zoomToActualSize = useCallback(() => {
+    setZoomMenuOpen(false);
+    dispatch({ type: "REQUEST_ZOOM_SCALE", scale: ACTUAL_SIZE_SCALE });
+  }, [dispatch]);
 
   const activeRightTab = coerceRightSidebarTab(rightSidebarTab);
   const rightPanelOpen = showInspectorPanel || showObjectsPanel || showStylesPanel;
   const activeRightPanelLabel = RIGHT_PANEL_LABELS[activeRightTab];
   const hasMultipleFigures = hasMultipleRoots(snapshotRoots(snapshot).length);
   const showFigureStrip = hasMultipleFigures && showFiguresPanel;
-  const zoomPercent = canvasFitToContentScale ? `${Math.round(canvasFitToContentScale * 100)}%` : "Fit";
   const statusText = pendingRequestId ? "Rendering…" : canvasStatusHint;
 
   const toggleSourcePanel = useCallback(() => {
@@ -482,14 +498,43 @@ export function IpadEditorShell({
     return () => { window.removeEventListener("keydown", onKeyDown); };
   }, [dispatch, hasMultipleFigures, toggleFigures, toggleRightPanel, toggleSourcePanel]);
 
+  // How far the floating right panel reaches into the workspace from its right edge.
+  const measureRightPanel = useCallback((panel: HTMLElement | null) => {
+    if (!panel) {
+      return;
+    }
+    const measure = () => {
+      const workspace = workspaceRef.current;
+      if (!workspace) {
+        return;
+      }
+      setRightPanelInset(Math.max(0, workspace.getBoundingClientRect().right - panel.getBoundingClientRect().left));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    return () => {
+      observer.disconnect();
+      setRightPanelInset(0);
+    };
+  }, []);
+
+  const paletteInsets = useMemo(() => paletteFitInsets(paletteDock), [paletteDock]);
+  const fitInsetRight = Math.max(rightPanelOpen ? rightPanelInset : 0, paletteInsets.right);
+  const fitInsetBottom = paletteInsets.bottom;
+  const fitInsets = useMemo(
+    () => ({ top: 0, right: fitInsetRight, bottom: fitInsetBottom, left: 0 }),
+    [fitInsetBottom, fitInsetRight]
+  );
+
   const sourceDocked = showSourcePanel && sourcePinned;
   const sourceOverlay = showSourcePanel && !sourcePinned;
 
   // Stable elements so per-frame drag re-renders of the shell skip these subtrees.
   const sourcePanelElement = useMemo(() => <SourcePanel />, []);
   const canvasPanelElement = useMemo(
-    () => <CanvasPanel repeatPreviewModel={repeatPreviewModel} />,
-    [repeatPreviewModel]
+    () => <CanvasPanel repeatPreviewModel={repeatPreviewModel} fitInsets={fitInsets} />,
+    [fitInsets, repeatPreviewModel]
   );
 
   const sourceSurface = (
@@ -564,6 +609,7 @@ export function IpadEditorShell({
         data-source-pinned={sourcePinned ? "true" : "false"}
         data-right-panel-visible={rightPanelOpen ? "true" : "false"}
         data-figures-visible={showFigureStrip ? "true" : "false"}
+        data-palette-dock={paletteDock.kind === "edge" ? paletteDock.edge : "corner"}
       >
         {showFigureStrip ? (
           <div className={css.figureStrip} data-select="chrome">
@@ -646,7 +692,12 @@ export function IpadEditorShell({
         ) : null}
 
         {rightPanelOpen ? (
-          <aside className={css.floatingPanel} aria-label={activeRightPanelLabel} data-testid="ipad-floating-panel">
+          <aside
+            ref={measureRightPanel}
+            className={css.floatingPanel}
+            aria-label={activeRightPanelLabel}
+            data-testid="ipad-floating-panel"
+          >
             <div className={css.floatingPanelHeader} data-select="chrome">
               <div className={css.segmentedControl} role="tablist" aria-label="Right panel">
                 {RIGHT_PANEL_TABS.map((tab) => (
@@ -721,7 +772,7 @@ export function IpadEditorShell({
                 onClick={toggleZoomMenu}
                 data-testid="ipad-zoom-button"
               >
-                {zoomPercent}
+                <ZoomChipLabel />
               </button>
             }
           >
@@ -737,6 +788,11 @@ export function IpadEditorShell({
                 icon={<RiSubtractLine size={18} />}
                 disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.ZOOM_OUT].enabled}
                 onSelect={() => { runZoomCommand(APP_MENU_COMMAND_IDS.ZOOM_OUT); }}
+              />
+              <IpadMenuItem
+                label="Actual Size"
+                icon={<RiFullscreenExitLine size={18} />}
+                onSelect={zoomToActualSize}
               />
               <IpadMenuItem
                 label="Fit to Content"
@@ -765,35 +821,64 @@ const RIGHT_PANEL_TAB_COMMANDS: Record<RightSidebarTab, AppMenuCommandId> = {
   styles: APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL
 };
 
-const SOURCE_ACCESSORY_ITEMS: Array<{ label: string; detail: SourceAccessoryCommandDetail }> = [
-  { label: "Undo", detail: { command: "undo" } },
-  { label: "Redo", detail: { command: "redo" } },
-  { label: "Outdent", detail: { command: "outdent" } },
-  { label: "Indent", detail: { command: "indent" } },
-  { label: "\\", detail: { command: "insert", text: "\\" } },
-  { label: "{ }", detail: { command: "insert", text: "{}", cursorOffset: 1 } },
-  { label: ";", detail: { command: "insert", text: ";" } },
-  { label: "$ $", detail: { command: "insert", text: "$$", cursorOffset: 1 } },
-  { label: "%", detail: { command: "comment" } }
+type SourceAccessoryItem = {
+  label: string;
+  detail: SourceAccessoryCommandDetail;
+  icon?: ReactNode;
+  keycap?: string;
+};
+
+// Undo and Redo act on the source editor's own history, which the nav bar's
+// document-level undo does not cover while typing.
+const SOURCE_ACCESSORY_GROUPS: ReadonlyArray<readonly SourceAccessoryItem[]> = [
+  [
+    { label: "Undo", detail: { command: "undo" }, icon: <RiArrowGoBackLine size={18} aria-hidden /> },
+    { label: "Redo", detail: { command: "redo" }, icon: <RiArrowGoForwardLine size={18} aria-hidden /> }
+  ],
+  [
+    { label: "Outdent", detail: { command: "outdent" }, icon: <RiIndentDecrease size={18} aria-hidden /> },
+    { label: "Indent", detail: { command: "indent" }, icon: <RiIndentIncrease size={18} aria-hidden /> },
+    { label: "Toggle comment", detail: { command: "comment" }, keycap: "%" }
+  ],
+  [
+    { label: "Backslash", detail: { command: "insert", text: "\\" }, keycap: "\\" },
+    { label: "Braces", detail: { command: "insert", text: "{}", cursorOffset: 1 }, keycap: "{ }" },
+    { label: "Brackets", detail: { command: "insert", text: "[]", cursorOffset: 1 }, keycap: "[ ]" },
+    { label: "Parentheses", detail: { command: "insert", text: "()", cursorOffset: 1 }, keycap: "( )" },
+    { label: "Math", detail: { command: "insert", text: "$$", cursorOffset: 1 }, keycap: "$ $" },
+    { label: "Semicolon", detail: { command: "insert", text: ";" }, keycap: ";" }
+  ]
 ];
 
 function SourceAccessoryBar() {
   return (
     <div className={css.sourceAccessoryBar} data-select="chrome" aria-label="Source editing controls">
-      {SOURCE_ACCESSORY_ITEMS.map((item) => (
-        <button
-          key={`${item.label}-${item.detail.command}`}
-          type="button"
-          className={css.sourceAccessoryButton}
-          onClick={() => { requestSourceAccessoryCommand(item.detail); }}
-          aria-label={item.label}
-          title={item.label}
-        >
-          {item.label}
-        </button>
+      {SOURCE_ACCESSORY_GROUPS.map((group, groupIndex) => (
+        <div key={groupIndex} className={css.sourceAccessoryGroup}>
+          {group.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              className={[css.sourceAccessoryButton, item.keycap ? css.sourceAccessoryKeycap : ""].filter(Boolean).join(" ")}
+              // Keep focus (and the software keyboard) in the editor.
+              onMouseDown={(event) => { event.preventDefault(); }}
+              onClick={() => { requestSourceAccessoryCommand(item.detail); }}
+              aria-label={item.label}
+              title={item.label}
+            >
+              {item.icon ?? item.keycap}
+            </button>
+          ))}
+        </div>
       ))}
     </div>
   );
+}
+
+// Subscribes on its own so pinch and pan frames re-render only the label.
+function ZoomChipLabel() {
+  const scale = useEditorStore((s) => s.canvasTransform.scale);
+  return <>{zoomPercentForScale(scale)}%</>;
 }
 
 function RightPanel({ activeTab }: { activeTab: RightSidebarTab }) {

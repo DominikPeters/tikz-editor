@@ -18,11 +18,8 @@ import {
   subscribeCanvasTextContext
 } from "./canvas-panel/canvas-text-context";
 import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
+import { ACTUAL_SIZE_SCALE, zoomPercentForScale } from "./canvas-zoom";
 
-const TEX_PT_PER_IN = 72.27;
-const CSS_SCREEN_DPI = 96;
-// Canvas transforms use CSS pixels, whose reference inch is 96 px.
-const ACTUAL_SIZE_SCALE = CSS_SCREEN_DPI / TEX_PT_PER_IN;
 const ZOOM_LEVELS = [25, 50, 75, 100, 125, 150, 200, 300, 400] as const;
 const MIN_ZOOM_PERCENT = 25;
 const MAX_ZOOM_PERCENT = 400;
@@ -85,7 +82,7 @@ export function StatusBar() {
   const figures = snapshotRoots(snapshot);
   const activeFigureIndex = activeRootId ? figures.findIndex((figure) => figure.id === activeRootId) : -1;
   const showFigureContext = hasMultipleRoots(figures.length) && activeFigureIndex >= 0;
-  const zoomPercent = Math.round((canvasTransform.scale / ACTUAL_SIZE_SCALE) * 100);
+  const zoomPercent = zoomPercentForScale(canvasTransform.scale);
   const fitToContentDoubleZoomPercent = canvasFitToContentScale == null
     ? MAX_ZOOM_PERCENT
     : Math.ceil((canvasFitToContentScale / ACTUAL_SIZE_SCALE) * 200);

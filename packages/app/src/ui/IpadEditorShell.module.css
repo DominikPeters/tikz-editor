@@ -251,20 +251,30 @@
 .sourceAccessoryBar {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 10px;
   min-height: 44px;
-  padding: 5px;
+  padding: 5px 8px;
   border-top: 1px solid var(--border);
   overflow-x: auto;
   overflow-y: hidden;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+
+.sourceAccessoryGroup {
+  display: flex;
+  gap: 4px;
   flex-shrink: 0;
 }
 
 .sourceAccessoryButton {
   appearance: none;
-  min-width: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
   height: 34px;
-  padding: 0 9px;
+  padding: 0 6px;
   border: 1px solid var(--border-light);
   border-radius: 8px;
   background: var(--bg-pane);
@@ -273,6 +283,12 @@
   font-size: 12px;
   font-weight: 650;
   white-space: nowrap;
+}
+
+.sourceAccessoryKeycap {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .sourceAccessoryButton:active {
@@ -466,6 +482,16 @@
 
 .zoomChipRaised {
   bottom: 80px;
+}
+
+/* Keep the right panel clear of a palette docked along the top or bottom edge
+   (12px margin + 56px palette + 10px gap). */
+.workspace[data-palette-dock="top"] .floatingPanel {
+  top: 78px;
+}
+
+.workspace[data-palette-dock="bottom"] .floatingPanel {
+  bottom: calc(78px + var(--ipad-bottom-touch-inset));
 }
 
 .workspace[data-source-visible="true"][data-source-pinned="true"] .zoomChip {

@@ -151,7 +151,7 @@ import { useCanvasTextEditSession } from "./useCanvasTextEditSession";
 import { useCanvasToolInteractions } from "./useCanvasToolInteractions";
 import { useCanvasTouchLongPress } from "./useCanvasTouchLongPress";
 import { useCanvasViewportEffects } from "./useCanvasViewportEffects";
-import { useCanvasViewportPersistence } from "./useCanvasViewportPersistence";
+import { useCanvasViewportPersistence, type CanvasFitInsets } from "./useCanvasViewportPersistence";
 import { expandSvgViewBox } from "./viewport-view-box";
 import { useBucketFillPreview,type BucketPreviewSession } from "./useBucketFillPreview";
 import type { ClientPoint,SvgBounds,ViewportPoint,WorldPoint } from "../coords/types";
@@ -409,9 +409,12 @@ type DeckEditingTopology = {
 const deckEditingKey = new DeckPageDerivedKey<DeckEditingTopology>();
 
 export const CanvasPanel = memo(function CanvasPanel({
-  repeatPreviewModel = null
+  repeatPreviewModel = null,
+  fitInsets
 }: {
   repeatPreviewModel?: SvgRenderModel | null;
+  /** Viewport edges covered by floating chrome (the iPad inspector and tool palette). */
+  fitInsets?: CanvasFitInsets;
 }) {
   const platform = getActiveEditorPlatform();
   const [prefersNonBlinkingTextInsertionIndicator, setPrefersNonBlinkingTextInsertionIndicator] = useState(false);
@@ -1783,28 +1786,33 @@ export const CanvasPanel = memo(function CanvasPanel({
   const pendingRevealRef = useRef(false);
   const panelShiftRef = useRef(0);
 
+  const armCanvasPanAnimation = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+    viewport.dataset.canvasPanAnimate = "true";
+    // Flush styles so the transition is armed before the transform changes.
+    void viewport.offsetWidth;
+    const stage = viewport.querySelector('[data-testid="canvas-world-stage"]');
+    const clear = () => { delete viewport.dataset.canvasPanAnimate; };
+    const timeout = window.setTimeout(clear, 800);
+    stage?.addEventListener("transitionend", () => {
+      window.clearTimeout(timeout);
+      clear();
+    }, { once: true });
+  }, []);
+
   const animateCanvasPanBy = useCallback((dx: number) => {
     if (Math.abs(dx) < 1) {
       return;
     }
-    const viewport = viewportRef.current;
-    if (viewport) {
-      viewport.dataset.canvasPanAnimate = "true";
-      // Flush styles so the transition is armed before the transform changes.
-      void viewport.offsetWidth;
-      const stage = viewport.querySelector('[data-testid="canvas-world-stage"]');
-      const clear = () => { delete viewport.dataset.canvasPanAnimate; };
-      const timeout = window.setTimeout(clear, 800);
-      stage?.addEventListener("transitionend", () => {
-        window.clearTimeout(timeout);
-        clear();
-      }, { once: true });
-    }
+    armCanvasPanAnimation();
     // Fit-to-content mode would immediately re-fit and revert the pan.
     setFitToContentModeActive(false);
     const { translateX, translateY, scale } = canvasTransformRef.current;
     dispatchCanvasTransform({ translateX: translateX - dx, translateY, scale });
-  }, [dispatchCanvasTransform, setFitToContentModeActive]);
+  }, [armCanvasPanAnimation, dispatchCanvasTransform, setFitToContentModeActive]);
 
   useEffect(() => {
     const wasOpen = wasInspectorOverlayOpenRef.current;
@@ -1837,6 +1845,15 @@ export const CanvasPanel = memo(function CanvasPanel({
         right: translateX + (merged.maxX - viewBox.x) * scale
       };
     };
+
+    // In fit-to-content mode the refit around the panel's inset replaces the
+    // pan; only animate it.
+    if (inspectorOverlayOpen !== wasOpen && fitToContentModeActiveRef.current) {
+      pendingRevealRef.current = false;
+      panelShiftRef.current = 0;
+      armCanvasPanAnimation();
+      return;
+    }
 
     // Panel just closed: undo the shift applied when it opened.
     if (!inspectorOverlayOpen) {
@@ -1908,7 +1925,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     // beat so we only reveal for taps, never under an active drag.
     const timer = window.setTimeout(revealSelection, 220);
     return () => { window.clearTimeout(timer); };
-  }, [animateCanvasPanBy, inspectorOverlayOpen, selectionBoundsBySource, selectionRevealKey]);
+  }, [animateCanvasPanBy, armCanvasPanAnimation, inspectorOverlayOpen, selectionBoundsBySource, selectionRevealKey]);
 
   const { toolPreview } = useCanvasDerivedState({
     svgResult,
@@ -1930,6 +1947,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     svgResult,
     viewportSize,
     fitPadding: deckActiveFrame || overlayLayer ? 12 : 44,
+    ...(fitInsets ? { fitInsets } : {}),
     dispatch,
     dispatchCanvasTransform,
     activeDocumentId,
