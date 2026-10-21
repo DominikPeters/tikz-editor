@@ -633,6 +633,8 @@ export type RelativeCoordinateEditHandle = CoordinateEditHandleBase & {
 export type WorldCoordinateEditHandle = CoordinateEditHandleBase & {
   coordinateSpace: "world-only";
   rewriteMode: "unsupported";
+  /** Frame for a numeric replacement; the named reference itself remains world-valued. */
+  detachFrame?: FrameTransform;
   local?: never;
   frame?: never;
   relativeBase?: never;

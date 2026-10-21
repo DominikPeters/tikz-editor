@@ -83,6 +83,14 @@ function rewriteUnsupportedCoordinate(
     return null;
   }
 
+  if (handle.rewriteMode === "unsupported" && handle.detachFrame) {
+    const local = worldToLocal(newWorld, handle.detachFrame);
+    if (!local) return null;
+    const sourcePoint = localToSourceUnits(local);
+    const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
+    return formatCoordinate(oldRaw, formatNumber(sourcePoint.x), formatNumber(sourcePoint.y));
+  }
+
   const cmPoint = {
     x: ptToCm(newWorld.x),
     y: ptToCm(newWorld.y)

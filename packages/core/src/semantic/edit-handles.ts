@@ -5,7 +5,8 @@ import type { SemanticContext } from "./context.js";
 import type { EvaluatedCoordinate } from "./coords/evaluate.js";
 import type { EditHandle } from "./types.js";
 import { identityMatrix } from "./transform.js";
-import { worldTransform } from "../coords/transforms.js";
+import { frameTransform, worldTransform } from "../coords/transforms.js";
+import { coordinateTransform } from "./coords/axis-basis.js";
 
 export function createEditHandle(
   evaluated: EvaluatedCoordinate,
@@ -87,11 +88,16 @@ export function createEditHandle(
     };
   }
 
+  const activeFrame = currentFrame(context);
+  const numericFrame = coordinateTransform(activeFrame.transform, activeFrame.axisBasis);
   return {
     ...base,
     transform: identityMatrix(),
     handleType: "coordinate",
     coordinateSpace: "world-only",
+    ...(evaluated.coordinateForm === "named" ? {
+      detachFrame: frameTransform(numericFrame.a, numericFrame.b, numericFrame.c, numericFrame.d, numericFrame.e, numericFrame.f)
+    } : {}),
     rewriteMode: "unsupported"
   };
 }
