@@ -47,3 +47,12 @@ export function formatCanvasCoordinate(oldRaw: string, x: string, y: string, uni
   });
   return count === 2 ? result : null;
 }
+
+/**
+ * The two components of an authored cartesian coordinate. Null for any
+ * other form, and for coordinate options, which change how it is read.
+ */
+export function cartesianComponents(raw: string): { x: string; y: string } | null {
+  const exact = raw.match(/^\(\s*([^,()[\]$:]*?)\s*,\s*([^,()[\]$:]*?)\s*\)$/s);
+  return exact ? { x: requireArrayValue(exact, 1), y: requireArrayValue(exact, 2) } : null;
+}

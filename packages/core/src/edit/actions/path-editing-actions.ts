@@ -1,14 +1,15 @@
-import { EMPTY_FRAGMENT, layout, legacyText, sourceSlice, tikz, type EditedSource, type TikzFragment } from "../fragment.js";
+import { EMPTY_FRAGMENT, layout, legacyText, sourceSlice, tikz, type CoordinateText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { worldPoint, worldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldPoint, WorldVector } from "../../coords/points.js";
-import type { EditHandle } from "../../semantic/types.js";
+import { isCoordinateEditHandle, type EditHandle } from "../../semantic/types.js";
+import { sameSiteContext } from "../../semantic/site-context.js";
+import { createCoordinateWriter, type WriterResult } from "../writer/index.js";
 import type { Span } from "../../ast/types.js";
 import { rewriteCoordinate } from "../rewrite.js";
 import { replaceSpan } from "../patch.js";
-import { CM_PER_PT, formatNumber } from "../format.js";
 import { closestPointOnLine, closestPointOnCubic, subdivideCubicAt } from "../curve-math.js";
 import {
   applyTextReplacements,
@@ -373,7 +374,9 @@ export function applySetPathPointKindAction(
   }
 
   if (action.pointKind === "smooth" && previousSegment.kind === "line" && nextSegment.kind === "line") {
-    const replacementSegments = buildLineSegmentsSmoothReplacement(source, analysis, previousSegment, nextSegment, beforeAnchor, handleResolution.handle.world, afterAnchor);
+    const writePoint = newPathPointWriter(editHandles, analysis.statement.id, source);
+    const replacementSegments = writePoint &&
+      buildLineSegmentsSmoothReplacement(writePoint, analysis, previousSegment, nextSegment, beforeAnchor, handleResolution.handle.world, afterAnchor);
     if (!replacementSegments) {
       return { kind: "unsupported", reason: "Could not rewrite this polyline corner into a Bezier bend." };
     }
@@ -653,7 +656,7 @@ function buildClosedPathBodyAfterDeletedPoint(
 }
 
 function buildLineSegmentsSmoothReplacement(
-  source: string,
+  writePoint: (point: WorldPoint) => WriterResult<CoordinateText>,
   analysis: ExplicitPathAnalysis,
   previousSegment: ExplicitPathAnalysis["segments"][number],
   nextSegment: ExplicitPathAnalysis["segments"][number],
@@ -688,13 +691,30 @@ function buildLineSegmentsSmoothReplacement(
     afterAnchor.y - (afterAnchor.y - anchor.y) / 3
   );
 
-  const formatRawCoordinate = (world: WorldPoint): TikzFragment =>
-    legacyText(`(${formatNumber(world.x * CM_PER_PT)},${formatNumber(world.y * CM_PER_PT)})`);
-
+  const written = [control1, control2, control3, control4].map(writePoint);
+  const [c1, c2, c3, c4] = written;
+  if (c1?.kind !== "ok" || c2?.kind !== "ok" || c3?.kind !== "ok" || c4?.kind !== "ok") return null;
   return [
-    tikz`.. controls ${formatRawCoordinate(control1)} and ${formatRawCoordinate(control2)} .. ${firstTargetRaw}`,
-    tikz`.. controls ${formatRawCoordinate(control3)} and ${formatRawCoordinate(control4)} .. ${secondTargetRaw}`
+    tikz`.. controls ${c1.fragment} and ${c2.fragment} .. ${firstTargetRaw}`,
+    tikz`.. controls ${c3.fragment} and ${c4.fragment} .. ${secondTargetRaw}`
   ];
+}
+
+/**
+ * Writes new points where the path's own points are read. Null when the
+ * path's points are read in different frames (mid-path options).
+ */
+function newPathPointWriter(
+  editHandles: readonly EditHandle[],
+  sourceId: string,
+  source: string
+): ((point: WorldPoint) => WriterResult<CoordinateText>) | null {
+  const contexts = editHandles.filter(handle => handle.sourceRef.sourceId === sourceId)
+    .flatMap(handle => isCoordinateEditHandle(handle) ? [handle.siteContext] : []);
+  const context = contexts[0];
+  if (!context || contexts.some(other => !sameSiteContext(other, context))) return null;
+  const writer = createCoordinateWriter(source);
+  return point => writer.point({ kind: "context", context }, point);
 }
 
 function sourceSliceForItem(source: string, analysis: ExplicitPathAnalysis, itemIndex: number): TikzFragment {
@@ -862,8 +882,17 @@ export function applyInsertPathPointAction(
     return { kind: "unsupported", reason: "Could not resolve segment endpoint positions." };
   }
 
-  const formatPt = (pt: WorldPoint): TikzFragment =>
-    legacyText(`(${formatNumber(pt.x * CM_PER_PT)},${formatNumber(pt.y * CM_PER_PT)})`);
+  const writePoint = newPathPointWriter(editHandles, action.elementId, source);
+  if (!writePoint) {
+    return { kind: "unsupported", reason: "Inserting a point needs a path whose points share one coordinate frame." };
+  }
+  const refusals: string[] = [];
+  const formatPt = (point: WorldPoint): TikzFragment => {
+    const written = writePoint(point);
+    if (written.kind === "ok") return written.fragment;
+    refusals.push(written.reason);
+    return EMPTY_FRAGMENT;
+  };
 
   let replacementSegments: TikzFragment;
 
@@ -893,6 +922,8 @@ export function applyInsertPathPointAction(
     replacementSegments =
       tikz`.. controls ${formatPt(left[1])} and ${formatPt(left[2])} .. ${formatPt(left[3])} .. controls ${formatPt(right[1])} and ${formatPt(right[2])} .. ${endAnchorRaw}`;
   }
+
+  if (refusals.length > 0) return { kind: "unsupported", reason: `Cannot write the new point: ${refusals.join("; ")}.` };
 
   // Rebuild the path body with the segment replaced
   const bodyParts = [requireArrayValue(analysis.anchors, 0).raw];

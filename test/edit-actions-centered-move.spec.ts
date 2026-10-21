@@ -49,7 +49,7 @@ describe("element movement keeps centered pivots and coordinates in one new fram
       const fresh = evaluate(result.newSource);
       const plan = planCenteredPivotMoves(result.newSource, fresh.semantic.editHandles, new Map([[id, wp(1, 1)]]));
       expect(plan.kind).toBe("success");
-      if (plan.kind === "success") expect(plan.framesBySource.has(id)).toBe(true);
+      if (plan.kind === "success") expect(plan.contextsBySource.has(id)).toBe(true);
       const noAngleChange = applyEditAction(result.newSource, fresh.semantic.editHandles,
         { kind: "rotateElement", elementId: id, mode: "center-pivot", angleDeg: angle, baselineSource: result.newSource });
       if (noAngleChange.kind === "success") expectTranslation(geometryPoints(result.newSource)[0], geometryPoints(noAngleChange.newSource)[0], wp(0, 0));

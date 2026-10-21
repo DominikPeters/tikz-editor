@@ -336,7 +336,7 @@ export function applyEditAction(
       case "updateNodeText":
         return applyUpdateNodeText(source, action, parseOptions);
       case "setFigureBounds":
-        return applySetFigureBoundsAction(source, action, parseOptions);
+        return applySetFigureBoundsAction(source, action, parseOptions, evaluateOptions, geometry);
       case "addElement":
         return applyAddElement(source, action.template, action.at, parseOptions);
       case "deleteElement":

@@ -86,7 +86,8 @@ frame).
 
 ### Failure classes (328 cases)
 
-1. **World cm written as source units, no frame** (63: `insertPathPoint`,
+1. **World cm written as source units, no frame** (fixed in phase 4, see
+   coordinate-writer.md; 63 at this inventory: `insertPathPoint`,
    `convertNodePositionToAbsolute`, `setFigureBounds`, center-pivot
    `rotateElement`). Each converts world points with `* CM_PER_PT` and writes
    them unitless.

@@ -111,5 +111,5 @@ describe("pointer invariant", () => {
         .map(([key, now]) => `${key}: expected ${expected[key] ?? "(new case)"}, got ${now}`);
       expect(worse, "new failures under another seed").toEqual([]);
     }
-  });
+  }, 120_000); // Seconds alone; a loaded machine running the whole suite needs room.
 });

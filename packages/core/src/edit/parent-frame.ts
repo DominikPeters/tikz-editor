@@ -19,12 +19,15 @@ import { cloneCustomStyleRegistry } from "../semantic/style/custom-styles.js";
 import { expandOptionListMacros } from "../semantic/style/macro-options.js";
 import { resolveContextDelta } from "../semantic/style/resolve.js";
 import type { EvaluateOptions } from "../semantic/types.js";
+import { captureSiteContext, type SiteContext } from "../semantic/site-context.js";
 import type { EditGeometrySession } from "./geometry-session.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
 
 export type StatementFrameResolver = {
   parent: FrameTransform;
   options: (entries?: readonly OptionEntry[], includeScopeFinalOptions?: boolean) => FrameTransform | undefined;
+  /** The full state the options produce (CTM and axis vectors), where the statement's coordinates are read. */
+  optionContext: (entries?: readonly OptionEntry[], includeScopeFinalOptions?: boolean) => SiteContext | undefined;
 };
 
 /** Capture the actual entry frame, including ordered picture/scopes/styles. */
@@ -33,9 +36,13 @@ export function createStatementFrameResolver(context: SemanticContext, statement
   const handles = context.editHandles.slice();
   const transform = currentFrame(context).transform;
   const parent = asFrame(transform);
-  return {
+  const resolver: StatementFrameResolver = {
     parent,
     options(entries, includeScopeFinalOptions = entries == null) {
+      const context = resolver.optionContext(entries, includeScopeFinalOptions);
+      return context && asFrame(context.ctm);
+    },
+    optionContext(entries, includeScopeFinalOptions = entries == null) {
       if (statement.kind !== "Path" && statement.kind !== "Scope") return;
       restoreSemanticContext(context, checkpoint, { editHandleSource: handles });
       const original = statement.options;
@@ -47,9 +54,10 @@ export function createStatementFrameResolver(context: SemanticContext, statement
       const resolved = resolveStatementOptionState(context, statement.kind === "Path"
         ? { kind: "path", command: statement.command, options, sourceRef }
         : { kind: "scope", options, sourceRef }, includeScopeFinalOptions);
-      return asFrame(resolved.transform);
+      return captureSiteContext(resolved);
     }
   };
+  return resolver;
 }
 
 /** A statement's options, as the evaluator resolves them against the current context. */
@@ -123,6 +131,20 @@ export function resolveStatementParentFrame(
 ): FrameTransform | undefined {
   if (geometry?.source === source) return geometry.parentFrame(sourceId);
   return resolveStatementFrameResolver(source, sourceId, parseOptions, evaluateOptions)?.parent;
+}
+
+/** The state an authored option prefix produces in its entry context: CTM and axis vectors. */
+export function resolveStatementOptionContext(
+  source: string,
+  sourceId: string,
+  entries?: readonly OptionEntry[],
+  parseOptions: EditParseOptions = {},
+  geometry?: EditGeometrySession,
+  evaluateOptions: EvaluateOptions = {},
+  includeScopeFinalOptions = entries == null
+): SiteContext | undefined {
+  if (geometry?.source === source) return geometry.optionContext(sourceId, entries, includeScopeFinalOptions);
+  return resolveStatementFrameResolver(source, sourceId, parseOptions, evaluateOptions)?.optionContext(entries, includeScopeFinalOptions);
 }
 
 /** Resolve an authored option prefix in its entry context, without rendering the statement. */

@@ -1,29 +1,29 @@
-import { legacyText, type TikzFragment } from "./fragment.js";
+import { sourceSlice, tikz, type TikzFragment } from "./fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { PathItem, PathStatement, Span } from "../ast/types.js";
 import type { OptionEntry } from "../options/types.js";
 import type { WorldPoint } from "../coords/points.js";
 import { worldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
-import type { FrameTransform } from "../coords/transforms.js";
-import { applyFrameToWorldPoint, invertFrameToWorldTransform, worldVectorToFrameLocal } from "../coords/frame.js";
-import { frameLocalPoint, worldVector } from "../coords/points.js";
+import { invertFrameToWorldTransform } from "../coords/frame.js";
 import { splitAllAtTopLevel } from "../domains/coordinates/parse.js";
-import { parseRotateAroundValue, stripEnclosingBraces } from "../semantic/style/option-utils.js";
+import { stripEnclosingBraces } from "../semantic/style/option-utils.js";
+import { sameSiteContext, spelledCoordinateFrame, type SiteContext } from "../semantic/site-context.js";
 import { isFrameLocalCoordinateEditHandle, type EditHandle } from "../semantic/types.js";
 import type { EditGeometrySession } from "./geometry-session.js";
-import { CM_PER_PT, formatNumber } from "./format.js";
 import { normalizeOptionKey, type OptionMutation } from "./option-mutations.js";
-import { resolveStatementOptionFrame } from "./parent-frame.js";
+import { resolveStatementOptionContext } from "./parent-frame.js";
 import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } from "./parse-options.js";
 import { findPathStatementById } from "./statement-find.js";
+import { createCoordinateWriter, readContextPoint } from "./writer/index.js";
 
 const CENTER_EPSILON = 1e-3;
 const MOVE_EPSILON = 1e-6;
 
 export type CenteredPivotMovePlan = {
   kind: "success";
-  framesBySource: ReadonlyMap<string, FrameTransform>;
+  /** The context each moved statement's coordinates are read in after its pivot moves. */
+  contextsBySource: ReadonlyMap<string, SiteContext>;
   mutationsBySource: ReadonlyMap<string, ReadonlyMap<string, OptionMutation>>;
   replacements: Array<{ span: Span; text: TikzFragment }>;
 } | { kind: "unsupported"; reason: string };
@@ -36,7 +36,7 @@ export function planCenteredPivotMoves(
   parseOptions: EditParseOptions = {},
   geometry?: EditGeometrySession
 ): CenteredPivotMovePlan {
-  const framesBySource = new Map<string, FrameTransform>();
+  const contextsBySource = new Map<string, SiteContext>();
   const mutationsBySource = new Map<string, ReadonlyMap<string, OptionMutation>>();
   const replacements: Array<{ span: Span; text: TikzFragment }> = [];
   const parsed = parseTikzForEdit(source, parseOptions);
@@ -61,13 +61,15 @@ export function planCenteredPivotMoves(
     const pivots = entries.filter(isRotateAroundEntry);
     if (pivots.length !== 1) continue;
     const rotation = requireArrayValue(pivots, 0);
-    const parsedRotation = parseRotateAroundValue(rotation.valueRaw);
-    if (!parsedRotation) continue;
-    const prefix = resolveStatementOptionFrame(source, sourceId, entries.slice(0, entries.indexOf(rotation)), parseOptions, geometry);
-    if (!prefix) continue;
-    const originalFrame = resolveStatementOptionFrame(source, sourceId, undefined, parseOptions, geometry);
-    if (!originalFrame || handles.some(handle => !isFrameLocalCoordinateEditHandle(handle) || !framesMatch(handle.frame, originalFrame))) continue;
-    const pivotWorld = applyFrameToWorldPoint(prefix, frameLocalPoint(parsedRotation.pivot.x, parsedRotation.pivot.y));
+    // The pivot is a coordinate read in the state of the options before it:
+    // its plain numbers go through the axis vectors there, then the CTM.
+    const pivotText = rotateAroundPivot(source, rotation);
+    if (!pivotText) continue;
+    const prefix = resolveStatementOptionContext(source, sourceId, entries.slice(0, entries.indexOf(rotation)), parseOptions, geometry);
+    const pivotWorld = prefix && readContextPoint(prefix, pivotText.raw);
+    if (!prefix || !pivotWorld) continue;
+    const originalContext = resolveStatementOptionContext(source, sourceId, undefined, parseOptions, geometry);
+    if (!originalContext || handles.some(handle => !isFrameLocalCoordinateEditHandle(handle) || !sameSiteContext(handle.siteContext, originalContext))) continue;
     // An external authored pivot keeps its current semantics; only a pivot
     // already at the visual center follows that center during movement.
     if (Math.hypot(pivotWorld.x - center.x, pivotWorld.y - center.y) > CENTER_EPSILON) continue;
@@ -78,31 +80,51 @@ export function planCenteredPivotMoves(
     if (handles.some(handle => (spans.get(spanKey(handle.sourceRef.sourceSpan)) ?? 0) > 1)) {
       return { kind: "unsupported", reason: "Handle span is shared by expanded statements (foreach/macro), cannot move safely." };
     }
-    const localDelta = worldVectorToFrameLocal(worldVector(delta.x, delta.y), prefix);
-    if (!localDelta) return { kind: "unsupported", reason: "Centered-pivot move requires an invertible coordinate frame." };
-    const nextPivot = worldPoint(pt(parsedRotation.pivot.x + localDelta.x), pt(parsedRotation.pivot.y + localDelta.y));
-    // Preserve the angle expression and the actual key/option position.
-    const angleRaw = requireArrayValue(splitAllAtTopLevel(stripEnclosingBraces(rotation.valueRaw), ":"), 0).trim();
-    const nextValue = `{${angleRaw}:(${formatNumber(nextPivot.x * CM_PER_PT, { fractionDigits: 6 })},${formatNumber(nextPivot.y * CM_PER_PT, { fractionDigits: 6 })})}`;
-    const nextEntry = { ...rotation, valueRaw: nextValue, raw: `${rotation.key}=${nextValue}` };
+    const nextPivot = createCoordinateWriter(source).point({ kind: "context", context: prefix, replaces: pivotText.raw },
+      worldPoint(pt(pivotWorld.x + delta.x), pt(pivotWorld.y + delta.y)), { precision: "reparameterize" });
+    if (nextPivot.kind !== "ok") return { kind: "unsupported", reason: `Cannot move the rotation pivot: ${nextPivot.reason}.` };
+    // Preserve the key, the angle expression and the option's position.
+    const nextValue = tikz`${pivotText.before}${nextPivot.fragment}${pivotText.after}`;
+    const nextRaw = tikz`${pivotText.key}${pivotText.equals}${nextValue}`;
+    const nextEntry = { ...rotation, valueRaw: nextValue, raw: nextRaw };
     const nextEntries = entries.map(entry => entry === rotation ? nextEntry : entry);
-    const frame = resolveStatementOptionFrame(source, sourceId, nextEntries, parseOptions, geometry);
-    if (!frame || !invertFrameToWorldTransform(frame)) {
+    const context = resolveStatementOptionContext(source, sourceId, nextEntries, parseOptions, geometry);
+    if (!context || !invertFrameToWorldTransform(spelledCoordinateFrame(context, { unitlessX: true, unitlessY: true }))) {
       return { kind: "unsupported", reason: "Centered-pivot move requires an invertible complete coordinate frame." };
     }
-    framesBySource.set(sourceId, frame);
-    mutationsBySource.set(sourceId, new Map([[normalizeOptionKey(rotation.key), { kind: "set", value: legacyText(nextValue) }]]));
-    replacements.push({ span: rotation.span, text: legacyText(nextEntry.raw) });
+    contextsBySource.set(sourceId, context);
+    mutationsBySource.set(sourceId, new Map([[normalizeOptionKey(rotation.key), { kind: "set", value: nextValue }]]));
+    replacements.push({ span: rotation.span, text: nextRaw });
   }
-  return { kind: "success", framesBySource, mutationsBySource, replacements };
+  return { kind: "success", contextsBySource, mutationsBySource, replacements };
+}
+
+/**
+ * The pivot coordinate of `rotate around={angle:(x,y)}`, with the text
+ * around it copied from the source: the key and `=`, and the value before
+ * and after the coordinate (braces, the angle expression).
+ */
+function rotateAroundPivot(source: string, entry: Extract<OptionEntry, { kind: "kv" }>):
+  { raw: string; key: TikzFragment; equals: TikzFragment; before: TikzFragment; after: TikzFragment } | null {
+  const { keySpan, valueSpan } = entry;
+  if (!keySpan || !valueSpan) return null;
+  const value = source.slice(valueSpan.from, valueSpan.to);
+  const colon = splitAllAtTopLevel(stripEnclosingBraces(value), ":");
+  if (colon.length !== 2) return null;
+  const raw = requireArrayValue(colon, 1).trim();
+  const at = value.lastIndexOf(raw);
+  if (at < 0 || !raw.startsWith("(")) return null;
+  return {
+    raw,
+    key: sourceSlice(source, keySpan),
+    equals: sourceSlice(source, { from: keySpan.to, to: valueSpan.from }),
+    before: sourceSlice(source, { from: valueSpan.from, to: valueSpan.from + at }),
+    after: sourceSlice(source, { from: valueSpan.from + at + raw.length, to: valueSpan.to })
+  };
 }
 
 function spanKey(span: Span): string {
   return `${span.from}:${span.to}`;
-}
-
-function framesMatch(left: FrameTransform, right: FrameTransform): boolean {
-  return (["a", "b", "c", "d", "e", "f"] as const).every(key => Math.abs(left[key] - right[key]) < 1e-9);
 }
 
 function isRotateAroundEntry(entry: OptionEntry): entry is Extract<OptionEntry, { kind: "kv" }> {

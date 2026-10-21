@@ -1,24 +1,28 @@
-import { EMPTY_FRAGMENT, layout, legacyText, tikz, type EditedSource, type TikzFragment } from "./fragment.js";
-import type { PathStatement, Span, Statement, TikzFigure } from "../ast/types.js";
-import { CM_PER_PT, formatNumber } from "./format.js";
+import { EMPTY_FRAGMENT, layout, tikz, type EditedSource, type TikzFragment } from "./fragment.js";
+import type { PathItem, PathStatement, Span, Statement, TikzFigure } from "../ast/types.js";
+import { worldBounds, type WorldBounds } from "../coords/points.js";
+import { pt } from "../coords/scalars.js";
+import { PT_PER_CM } from "./format.js";
 import { replaceSpan } from "./patch.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
-import { parseLength } from "../semantic/coords/parse-length.js";
 import { normalizeOptionKey } from "./option-key.js";
 import type { EditActionResult } from "./actions.js";
+import type { EditGeometrySnapshot } from "./geometry-session.js";
+import { prepareInsertion, type InsertionGap } from "./insertion-context.js";
+import { createCoordinateWriter } from "./writer/index.js";
+import { evaluateTikzFigure } from "../semantic/evaluate.js";
+import type { EditHandle, EvaluateOptions } from "../semantic/types.js";
 
+/**
+ * Whether the picture's first statement fixes its bounding box: a
+ * `\useasboundingbox` (or `use as bounding box` path) that is a rectangle, or
+ * the four corners and `cycle` the writer uses under a rotated frame.
+ */
 export type FigureBoundsState =
   | { mode: "auto" }
-  | {
-      mode: "fixed";
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      sourceId: string;
-      span: Span;
-    };
+  | { mode: "fixed"; sourceId: string; span: Span };
 
+/** Bounds in world centimetres, as the inspector shows the rendered picture. */
 export type SetFigureBoundsAction =
   | { kind: "setFigureBounds"; mode: "auto" }
   | { kind: "setFigureBounds"; mode: "fixed"; x: number; y: number; width: number; height: number };
@@ -36,10 +40,24 @@ export function resolveFigureBoundsFromFigure(figure: TikzFigure): FigureBoundsS
   return resolveSimpleBoundingBoxStatement(statement) ?? { mode: "auto" };
 }
 
+/**
+ * The world box a fixed bounding-box statement makes, as the evaluator places
+ * its coordinates: the hull of the statement's points.
+ */
+export function resolveFigureBoundsWorld(state: FigureBoundsState, editHandles: readonly EditHandle[]): WorldBounds | null {
+  if (state.mode !== "fixed") return null;
+  const points = editHandles.filter(handle => handle.sourceRef.sourceId === state.sourceId).map(handle => handle.world);
+  if (points.length < 2) return null;
+  const xs = points.map(point => point.x), ys = points.map(point => point.y);
+  return worldBounds(pt(Math.min(...xs)), pt(Math.min(...ys)), pt(Math.max(...xs)), pt(Math.max(...ys)));
+}
+
 export function applySetFigureBoundsAction(
   source: string,
   action: SetFigureBoundsAction,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  evaluateOptions: EvaluateOptions = {},
+  geometry?: EditGeometrySnapshot
 ): EditActionResult {
   const parsed = parseTikzForEdit(source, parseOptions);
   const current = resolveFigureBoundsFromFigure(parsed.figure);
@@ -52,7 +70,20 @@ export function applySetFigureBoundsAction(
     return successResult(source, removed.source, current.span, removed.changedSpan, EMPTY_FRAGMENT, [current.sourceId]);
   }
 
-  const replacement = formatUseAsBoundingBoxStatement(action);
+  // The statement is read where it stands (or will stand), with the styles
+  // a `\useasboundingbox` path picks up there.
+  const snapshot = geometry?.source === source ? geometry : { source, parsed, semantic: evaluateTikzFigure(parsed.figure, source, evaluateOptions) };
+  const existingIndex = current.mode === "fixed"
+    ? snapshot.semantic.siteContexts.statementEntries.findIndex(entry => entry.statementId === current.sourceId)
+    : -1;
+  const gap: InsertionGap = existingIndex >= 0 ? { kind: "before", statementIndex: existingIndex }
+    : parsed.figure.body.length > 0 ? { kind: "before", statementIndex: 0 } : { kind: "end" };
+  const context = prepareInsertion(snapshot, gap, { kind: "path", command: "useasboundingbox" }, evaluateOptions);
+  const box = worldBounds(pt(action.x * PT_PER_CM), pt(action.y * PT_PER_CM),
+    pt((action.x + Math.max(0, action.width)) * PT_PER_CM), pt((action.y + Math.max(0, action.height)) * PT_PER_CM));
+  const body = createCoordinateWriter(source).bounds(context, box);
+  if (body.kind !== "ok") return { kind: "unsupported", reason: `Cannot fix the figure bounds here: ${body.reason}.` };
+  const replacement = tikz`\useasboundingbox ${body.fragment};`;
   if (current.mode === "fixed") {
     const updated = replaceSpan(source, current.span, replacement);
     return successResult(source, updated.source, current.span, updated.changedSpan, replacement, [current.sourceId]);
@@ -83,34 +114,21 @@ function resolveSimpleBoundingBoxStatement(statement: PathStatement): FigureBoun
     return null;
   }
   const items = statement.items.filter((item) => item.kind !== "PathComment" && item.kind !== "PathOption");
-  if (items.length !== 3) {
-    return null;
-  }
+  return isRectangle(items) || isClosedQuadrilateral(items) ? { mode: "fixed", sourceId: statement.id, span: statement.span } : null;
+}
+
+function isRectangle(items: readonly PathItem[]): boolean {
   const [start, keyword, end] = items;
-  if (start?.kind !== "Coordinate" || keyword?.kind !== "PathKeyword" || end?.kind !== "Coordinate") {
-    return null;
-  }
-  if (normalizeOptionKey(keyword.keyword) !== "rectangle") {
-    return null;
-  }
-  const startX = parseCoordinateComponentCm(start.x);
-  const startY = parseCoordinateComponentCm(start.y);
-  const endX = parseCoordinateComponentCm(end.x);
-  const endY = parseCoordinateComponentCm(end.y);
-  if (startX == null || startY == null || endX == null || endY == null) {
-    return null;
-  }
-  const minX = Math.min(startX, endX);
-  const minY = Math.min(startY, endY);
-  return {
-    mode: "fixed",
-    x: minX,
-    y: minY,
-    width: Math.abs(endX - startX),
-    height: Math.abs(endY - startY),
-    sourceId: statement.id,
-    span: statement.span
-  };
+  return items.length === 3 && start?.kind === "Coordinate" && keyword?.kind === "PathKeyword" &&
+    normalizeOptionKey(keyword.keyword) === "rectangle" && end?.kind === "Coordinate";
+}
+
+/** `(p1) -- (p2) -- (p3) -- (p4) -- cycle`. */
+function isClosedQuadrilateral(items: readonly PathItem[]): boolean {
+  if (items.length !== 9) return false;
+  return items.every((item, index) => index % 2 === 0
+    ? index === 8 ? item.kind === "PathKeyword" && item.keyword === "cycle" : item.kind === "Coordinate"
+    : item.kind === "PathKeyword" && item.keyword === "--");
 }
 
 function isBoundingBoxCommand(statement: PathStatement): boolean {
@@ -134,15 +152,6 @@ function isPathUseAsBoundingBox(statement: PathStatement): boolean {
   ));
 }
 
-function parseCoordinateComponentCm(raw: string): number | null {
-  const trimmed = raw.trim();
-  if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(trimmed)) {
-    return Number(trimmed);
-  }
-  const pt = parseLength(trimmed, "pt");
-  return pt == null ? null : pt * CM_PER_PT;
-}
-
 function resolveFigureBoundsInsertOffset(source: string, figure: TikzFigure): number {
   if (figure.body[0]) {
     return source.lastIndexOf("\n", figure.body[0].span.from - 1) + 1;
@@ -163,14 +172,6 @@ function resolveFigureBodyIndent(source: string, figure: TikzFigure): string {
     return source.slice(lineStart, firstStatement.span.from).match(/^[ \t]*/)?.[0] ?? "  ";
   }
   return "  ";
-}
-
-function formatUseAsBoundingBoxStatement(bounds: Extract<SetFigureBoundsAction, { mode: "fixed" }>): TikzFragment {
-  const x1 = bounds.x;
-  const y1 = bounds.y;
-  const x2 = bounds.x + Math.max(0, bounds.width);
-  const y2 = bounds.y + Math.max(0, bounds.height);
-  return legacyText(`\\useasboundingbox (${formatNumber(x1)},${formatNumber(y1)}) rectangle (${formatNumber(x2)},${formatNumber(y2)});`);
 }
 
 function removeBoundingBoxStatement(source: string, span: Span): { source: EditedSource; changedSpan: Span } {

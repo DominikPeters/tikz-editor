@@ -7,8 +7,7 @@
 //     and the writer;
 // F2  calls of the constructors that take anything (`userText`,
 //     `sourceSlice`, `unchangedSource`, and the migration escapes
-//     `legacyText`, `legacyEditedSource`, `legacyCtmSiteContext`): every
-//     call site is listed;
+//     `legacyText`, `legacyEditedSource`): every call site is listed;
 // F3  writer internals used outside the writer, resolved by symbol so
 //     aliases and re-exports count; `ptToCm` only on point components;
 // F4  `tikz` used other than as a template tag;
@@ -40,17 +39,16 @@ export const EXCEPTIONS_FILE = "scripts/coordinate-write-exceptions.json";
 /**
  * Constructors that accept anything, by defining file: string-taking
  * fragment constructors (the first three reviewed for good, the rest
- * migration debt) and the writer's legacy site context.
+ * migration debt).
  */
 const LISTED_CONSTRUCTORS = new Map([
   ["userText", "reviewed"],
   ["sourceSlice", "reviewed"],
   ["unchangedSource", "reviewed"],
   ["legacyText", "migration"],
-  ["legacyEditedSource", "migration"],
-  ["legacyCtmSiteContext", "migration"]
+  ["legacyEditedSource", "migration"]
 ]);
-const LISTED_FILES = new Set([FRAGMENT_FILE, "packages/core/src/edit/writer/index.ts"]);
+const LISTED_FILES = new Set([FRAGMENT_FILE]);
 
 /** Writer internals by defining file, all inside the writer. */
 const WRITER_INTERNALS = new Map([

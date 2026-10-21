@@ -36,7 +36,6 @@ import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } fro
 import { normalizeOptionKey } from "../option-key.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "../fit.js";
 import { findPathStatementById, normalizeElementIds, uniqueStrings } from "../statement-find.js";
-import { legacyCtmSiteContext } from "../writer/index.js";
 import type { SiteContext } from "../../semantic/site-context.js";
 
 const ARRANGE_EPSILON = 1e-6;
@@ -350,7 +349,7 @@ function applyMoveElementsUsingHandleRewrites(
   for (const handle of rewritable) {
     const actualText = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
     if (actualText !== handle.sourceText) {
-      if (centerPlan?.framesBySource.has(handle.sourceRef.sourceId)) return { kind: "unsupported", reason: "Some selected handles are stale. Wait for recompute and try again." };
+      if (centerPlan?.contextsBySource.has(handle.sourceRef.sourceId)) return { kind: "unsupported", reason: "Some selected handles are stale. Wait for recompute and try again." };
       skippedHandles.push(handle.id);
       continue;
     }
@@ -363,13 +362,13 @@ function applyMoveElementsUsingHandleRewrites(
     }
 
     const newWorld: WorldPoint = worldPoint(pt(handle.world.x + delta.x), pt(handle.world.y + delta.y));
-    const frame = centerPlan?.framesBySource.get(handle.sourceRef.sourceId);
-    const text = frame ? rewritePreciseFrameCoordinate(newWorld, handle, source, parseOptions.bypassSnapping, contextForFrame(handle, frame))
+    const context = centerPlan?.contextsBySource.get(handle.sourceRef.sourceId);
+    const text = context ? rewritePreciseFrameCoordinate(newWorld, handle, source, parseOptions.bypassSnapping, contextFor(handle, context))
       : rewriteCoordinate(newWorld, handle, source, parseOptions.bypassSnapping);
     if (text != null) {
       pending.push({ span: handle.sourceRef.sourceSpan, text });
     } else {
-      if (frame) return { kind: "unsupported", reason: "Could not rewrite every coordinate together with the moved center pivot." };
+      if (context) return { kind: "unsupported", reason: "Could not rewrite every coordinate together with the moved center pivot." };
       skippedHandles.push(handle.id);
     }
   }
@@ -931,8 +930,8 @@ function applyElementDeltaMapStrict(
     if (handle.rewriteMode === "delta" || handle.handleType === "node-positioning") continue;
 
     const next = worldPoint(pt(handle.world.x + delta.x), pt(handle.world.y + delta.y));
-    const frame = centerPlan.framesBySource.get(handle.sourceRef.sourceId);
-    const text = frame ? rewritePreciseFrameCoordinate(next, handle, source, false, contextForFrame(handle, frame)) : rewriteCoordinate(next, handle, source);
+    const context = centerPlan.contextsBySource.get(handle.sourceRef.sourceId);
+    const text = context ? rewritePreciseFrameCoordinate(next, handle, source, false, contextFor(handle, context)) : rewriteCoordinate(next, handle, source);
     if (text == null) {
       return {
         kind: "unsupported",
@@ -1001,9 +1000,9 @@ function applyElementDeltaMapStrict(
   };
 }
 
-/** The moved pivot's frame for a coordinate read in it; named references keep their own. */
-function contextForFrame(handle: EditHandle, frame: FrameTransform): SiteContext | undefined {
-  return isFrameLocalCoordinateEditHandle(handle) ? legacyCtmSiteContext(frame) : undefined;
+/** The moved pivot's context for a coordinate read in it; named references keep their own. */
+function contextFor(handle: EditHandle, context: SiteContext): SiteContext | undefined {
+  return isFrameLocalCoordinateEditHandle(handle) ? context : undefined;
 }
 
 function parseRotateAroundPivotRaw(raw: string): WorldPoint | null {

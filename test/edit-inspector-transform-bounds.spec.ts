@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 import { applyEditAction } from "../packages/core/src/edit/actions.js";
 import { getInspectorDescriptor, TIKZPICTURE_GLOBAL_TARGET_ID } from "../packages/core/src/edit/inspector.js";
-import { resolveFigureBoundsState } from "../packages/core/src/edit/figure-bounds.js";
+import { resolveFigureBoundsState, resolveFigureBoundsWorld } from "../packages/core/src/edit/figure-bounds.js";
+import { CM_PER_PT } from "../packages/core/src/edit/format.js";
 import { buildTransformSetPropertyMutations, resolveTransformInspectorMutationContext, resolveTransformInspectorValues } from "../packages/core/src/edit/property-write-builders.js";
 import { resolvePropertyTarget } from "../packages/core/src/edit/property-target.js";
 
@@ -149,11 +150,32 @@ describe("getInspectorDescriptor – transform and bounds", () => {
   \draw (0.2,0.8) rectangle (0.8,0.2);
 \end{tikzpicture}`;
 
-    const commandBounds = resolveFigureBoundsState(commandSource);
-    const optionBounds = resolveFigureBoundsState(optionSource);
+    // The fixed box is where the evaluator puts the statement's points, in world cm.
+    const worldCm = (source: string) => {
+      const state = resolveFigureBoundsState(source);
+      const bounds = resolveFigureBoundsWorld(state, renderTikzToSvg(source).semantic.editHandles);
+      return bounds && [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY].map(value => Math.round(value * CM_PER_PT * 1e6) / 1e6);
+    };
 
-    expect(commandBounds).toMatchObject({ mode: "fixed", x: 0, y: 0, width: 2, height: 3 });
-    expect(optionBounds).toMatchObject({ mode: "fixed", x: -1, y: -2, width: 3, height: 5 });
+    expect(resolveFigureBoundsState(commandSource)).toMatchObject({ mode: "fixed" });
+    expect(worldCm(commandSource)).toEqual([0, 0, 2, 3]);
+    expect(worldCm(optionSource)).toEqual([-1, -2, 2, 3]);
+    // Under x=2cm the same numbers make a box twice as wide.
+    expect(worldCm(commandSource.replace("\\begin{tikzpicture}", "\\begin{tikzpicture}[x=2cm]"))).toEqual([0, 0, 4, 3]);
+  });
+
+  it("writes fixed bounds where the picture reads them, rotated frames as four corners", () => {
+    const write = (picture: string) => {
+      const source = `\\begin{tikzpicture}${picture}\n  \\draw (0,0) -- (1,0);\n\\end{tikzpicture}`;
+      const result = applyEditAction(source, [], { kind: "setFigureBounds", mode: "fixed", x: -1, y: -1, width: 4, height: 2 });
+      if (result.kind !== "success") throw new Error(JSON.stringify(result));
+      return /\\useasboundingbox [^;]*;/u.exec(result.newSource)?.[0];
+    };
+    expect(write("")).toBe("\\useasboundingbox (-1,-1) rectangle (3,1);");
+    expect(write("[x=2cm,yscale=-1]")).toBe("\\useasboundingbox (-0.5,1) rectangle (1.5,-1);");
+    expect(write("[rotate=90]")).toBe("\\useasboundingbox (-1,1) rectangle (1,-3);");
+    expect(write("[rotate=30]")).toMatch(/^\\useasboundingbox \([^)]*\) -- \([^)]*\) -- \([^)]*\) -- \([^)]*\) -- cycle;$/u);
+    expect(write("[every path/.style={xshift=1cm}]")).toBe("\\useasboundingbox (-2,-1) rectangle (2,1);");
   });
 
   it("treats bounding-box directives after earlier geometry as automatic for empty-state inspector", () => {

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { frameTransform } from "../../packages/core/src/coords/transforms.js";
-import { createCoordinateWriter, legacyCtmSiteContext } from "../../packages/core/src/edit/writer/index.js";
+import { createCoordinateWriter } from "../../packages/core/src/edit/writer/index.js";
 import { isCoordinateEditHandle, type CoordinateEditHandle } from "../../packages/core/src/semantic/types.js";
 import { FRAMES, evaluate, frameTolerance, pictureSource } from "../pointer-invariant/pointer-fuzz.js";
-import { wp } from "../coords-helpers.js";
+import { testSiteContext, wp } from "../coords-helpers.js";
 
 /** Every spelling the writer preserves, in one path. */
 const SPELLINGS = String.raw`\draw[P] (0,0) -- (1cm,.5) -- (60:1.5) -- (30:8mm) -- ++(1,.5) -- +(10pt,1) -- ([turn]45:1) -- ([turn]-20:6mm) -- (canvas cs:x=1cm,y=2mm) -- (A.north) -- (2,3mm);`;
@@ -61,7 +61,7 @@ describe("coordinate writer", () => {
     const xyz = handles.find(handle => handle.sourceText === "(1,2,0)");
     const plain = handles.find(handle => handle.sourceText === "(2,1)");
     expect(xyz && writer.point({ kind: "coordinate", handle: xyz }, wp(0, 0))).toEqual({ kind: "unsupported", reason: "xyz coordinates are not rewritten" });
-    expect(plain && writer.point({ kind: "coordinate", handle: plain, context: legacyCtmSiteContext(frameTransform(0, 0, 0, 0, 0, 0)) }, wp(0, 0)))
+    expect(plain && writer.point({ kind: "coordinate", handle: plain, context: testSiteContext(frameTransform(0, 0, 0, 0, 0, 0)) }, wp(0, 0)))
       .toEqual({ kind: "unsupported", reason: "the coordinate's frame is not invertible" });
   });
 });

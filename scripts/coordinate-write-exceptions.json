@@ -363,6 +363,42 @@
     },
     {
       "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/center-pivot-move.ts",
+      "declaration": "rotateAroundPivot.after",
+      "hash": "3594d878b1fb",
+      "count": 1,
+      "expression": "sourceSlice(source, { from: valueSpan.from + at + raw.length, to: valueSpan.to })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/center-pivot-move.ts",
+      "declaration": "rotateAroundPivot.before",
+      "hash": "cb7349bfd4e9",
+      "count": 1,
+      "expression": "sourceSlice(source, { from: valueSpan.from, to: valueSpan.from + at })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/center-pivot-move.ts",
+      "declaration": "rotateAroundPivot.equals",
+      "hash": "ed189a057fa2",
+      "count": 1,
+      "expression": "sourceSlice(source, { from: keySpan.to, to: valueSpan.from })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/center-pivot-move.ts",
+      "declaration": "rotateAroundPivot.key",
+      "hash": "7d78635dbe84",
+      "count": 1,
+      "expression": "sourceSlice(source, keySpan)"
+    },
+    {
+      "rule": "F2",
       "symbol": "unchangedSource",
       "file": "packages/core/src/edit/element-templates.ts",
       "declaration": "insertElementIntoSource",
@@ -680,15 +716,6 @@
     },
     {
       "rule": "F2",
-      "symbol": "legacyCtmSiteContext",
-      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
-      "declaration": "contextForFrame",
-      "hash": "ff6e80e30bec",
-      "count": 1,
-      "expression": "legacyCtmSiteContext(frame)"
-    },
-    {
-      "rule": "F2",
       "symbol": "legacyText",
       "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
       "declaration": "formatPlacementCoordinateFromWorld",
@@ -736,24 +763,6 @@
       "rule": "F2",
       "symbol": "legacyText",
       "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
-      "declaration": "formatPlacementCoordinateFromWorld",
-      "hash": "aff0cec86ea3",
-      "count": 1,
-      "expression": "legacyText(`(${formatNumber(world.x * CM_PER_PT)},${formatNumber(world.y * CM_PER_PT)})`)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
-      "declaration": "formatPlacementCoordinateFromWorld",
-      "hash": "ddd9e33ec3c5",
-      "count": 1,
-      "expression": "legacyText(`(${formatNumber(inSourceUnits.x)},${formatNumber(inSourceUnits.y)})`)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
       "declaration": "preflightPositionNodeRelativeToAction.positioningEntry",
       "hash": "b9a220710b81",
       "count": 1,
@@ -767,15 +776,6 @@
       "hash": "605fbd2adb5f",
       "count": 1,
       "expression": "legacyText(wrapSerializedOptions(input.placementEntry, input.target.optionsFormat ?? \"bracketed\"))"
-    },
-    {
-      "rule": "F3",
-      "symbol": "localToSourceUnits",
-      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
-      "declaration": "formatPlacementCoordinateFromWorld.inSourceUnits",
-      "hash": "1a6a9d3b338e",
-      "count": 1,
-      "expression": "localToSourceUnits(local)"
     },
     {
       "rule": "F2",
@@ -812,24 +812,6 @@
       "hash": "f64df26c2142",
       "count": 1,
       "expression": "legacyText(action.segmentSource)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/actions/path-editing-actions.ts",
-      "declaration": "applyInsertPathPointAction.formatPt",
-      "hash": "8fc3c739a533",
-      "count": 1,
-      "expression": "legacyText(`(${formatNumber(pt.x * CM_PER_PT)},${formatNumber(pt.y * CM_PER_PT)})`)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/actions/path-editing-actions.ts",
-      "declaration": "buildLineSegmentsSmoothReplacement.formatRawCoordinate",
-      "hash": "aff0cec86ea3",
-      "count": 1,
-      "expression": "legacyText(`(${formatNumber(world.x * CM_PER_PT)},${formatNumber(world.y * CM_PER_PT)})`)"
     },
     {
       "rule": "F2",
@@ -943,37 +925,10 @@
       "rule": "F2",
       "symbol": "legacyText",
       "file": "packages/core/src/edit/actions/rotate-element.ts",
-      "declaration": "buildCenterPivotRotateMutations.value",
-      "hash": "ee8b1b1ac207",
-      "count": 1,
-      "expression": "legacyText(`{${formatNumber(normalizedAngle, { fractionDigits: 6 })}:${formatWorldPointCoordinateRaw(pivot)}}`)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/actions/rotate-element.ts",
       "declaration": "buildOriginRotateMutations.value",
       "hash": "296ed13668a5",
       "count": 1,
       "expression": "legacyText(formatNumber(normalizedAngle))"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyCtmSiteContext",
-      "file": "packages/core/src/edit/actions/rotate-element.ts",
-      "declaration": "contextForFrame",
-      "hash": "fe01dd1640fc",
-      "count": 1,
-      "expression": "legacyCtmSiteContext(transform)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/actions/rotate-element.ts",
-      "declaration": "replaceRotationOption.replacement",
-      "hash": "d491b244d838",
-      "count": 1,
-      "expression": "legacyText(nextRotation.raw)"
     },
     {
       "rule": "F2",
@@ -1040,42 +995,6 @@
     },
     {
       "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/center-pivot-move.ts",
-      "declaration": "planCenteredPivotMoves.text",
-      "hash": "97455dcd1793",
-      "count": 1,
-      "expression": "legacyText(nextEntry.raw)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/center-pivot-move.ts",
-      "declaration": "planCenteredPivotMoves.value",
-      "hash": "b620c30096a9",
-      "count": 1,
-      "expression": "legacyText(nextValue)"
-    },
-    {
-      "rule": "F5",
-      "symbol": "worldPoint",
-      "file": "packages/core/src/edit/center-pivot-move.ts",
-      "declaration": "planCenteredPivotMoves.nextPivot",
-      "hash": "2687139b4138",
-      "count": 1,
-      "expression": "worldPoint(pt(parsedRotation.pivot.x + localDelta.x), pt(parsedRotation.pivot.y + localDelta.y))"
-    },
-    {
-      "rule": "F5",
-      "symbol": "frameLocalPoint",
-      "file": "packages/core/src/edit/center-pivot-move.ts",
-      "declaration": "planCenteredPivotMoves.pivotWorld",
-      "hash": "2dabb30703d0",
-      "count": 1,
-      "expression": "frameLocalPoint(parsedRotation.pivot.x, parsedRotation.pivot.y)"
-    },
-    {
-      "rule": "F2",
       "symbol": "legacyEditedSource",
       "file": "packages/core/src/edit/element-templates.ts",
       "declaration": "insertElementIntoSource",
@@ -1100,15 +1019,6 @@
       "hash": "e85ef1527829",
       "count": 1,
       "expression": "legacyEditedSource(source.endsWith(\"\\n\") ? `${source}${normalizedSnippet}` : `${source}\\n${normalizedSnippet}`)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/figure-bounds.ts",
-      "declaration": "formatUseAsBoundingBoxStatement",
-      "hash": "ad6f651b5285",
-      "count": 1,
-      "expression": "legacyText(`\\\\useasboundingbox (${formatNumber(x1)},${formatNumber(y1)}) rectangle (${formatNumber(x2)},${formatNumber(y"
     },
     {
       "rule": "F2",

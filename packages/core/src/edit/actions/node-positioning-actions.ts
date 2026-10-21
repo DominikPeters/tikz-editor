@@ -4,16 +4,12 @@ import type { EditGeometrySession } from "../geometry-session.js";
 import type { NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import { worldPoint, type WorldPoint } from "../../coords/points.js";
-import { frameTransform, type FrameTransform } from "../../coords/transforms.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { resolveMatrixMode } from "../../semantic/nodes/matrix.js";
 import { parseDirectionalKey } from "../../semantic/path/node-positioning.js";
 import { normalizeOptionValue } from "../../semantic/path/shared.js";
 import type { EditHandlePositioningContext, EvaluateOptions, NodeAnchorTarget } from "../../semantic/types.js";
-import { worldToLocal } from "../coords.js";
-import { localToSourceUnits } from "../writer/source-units.js";
-import { CM_PER_PT, formatNumber } from "../format.js";
 import { normalizeOptionKey } from "../option-key.js";
 import { rewriteSourceBackedOptionListMutations, type OptionMutation } from "../option-mutations.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
@@ -22,6 +18,7 @@ import { rewritePositioningFromContext } from "../rewrite.js";
 import { collectSourceWorldBounds } from "../snapping/index.js";
 import { applyTextReplacements, parseStatementSnapshot, type TextReplacement } from "../statement-ops.js";
 import type { EditActionResult } from "../actions.js";
+import { createCoordinateWriter } from "../writer/index.js";
 
 export type PositionNodeRelativeToAction = {
   kind: "positionNodeRelativeTo";
@@ -225,11 +222,10 @@ export function applyConvertNodePositionToAbsoluteAction(
     return { kind: "unsupported", reason: absolutePoint.reason };
   }
 
-  const { a, b, c, d, e, f } = positioningHandle.transform;
-  const coordinate = formatPlacementCoordinateFromWorld(
-    absolutePoint.world,
-    frameTransform(a, b, c, d, e, f)
-  );
+  // A new `at` is read where the node's placement is.
+  const written = createCoordinateWriter(source).point({ kind: "context", context: positioningHandle.siteContext }, absolutePoint.world);
+  if (written.kind !== "ok") return { kind: "unsupported", reason: `Cannot write the node's position: ${written.reason}.` };
+  const coordinate = written.fragment;
   const rewritten = rewriteNodePlacementSource({
     source,
     nodeRef: nodeResolution.nodeRef,
@@ -780,17 +776,6 @@ function resolveInlineAtInsertionOffset(source: string, node: NodeItem): number 
     return node.textSpan.from - 1;
   }
   return node.textSpan.from;
-}
-
-function formatPlacementCoordinateFromWorld(world: WorldPoint, transform?: FrameTransform): TikzFragment {
-  if (transform) {
-    const local = worldToLocal(world, transform);
-    if (local) {
-      const inSourceUnits = localToSourceUnits(local);
-      return legacyText(`(${formatNumber(inSourceUnits.x)},${formatNumber(inSourceUnits.y)})`);
-    }
-  }
-  return legacyText(`(${formatNumber(world.x * CM_PER_PT)},${formatNumber(world.y * CM_PER_PT)})`);
 }
 
 function hasPathAttachment(elements: ReturnType<typeof evaluateTikzFigure>["scene"]["elements"], sourceId: string): boolean {

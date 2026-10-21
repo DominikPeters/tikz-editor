@@ -1,8 +1,9 @@
 # Coordinate writer
 
-Status: phases 0–3 built (harness, site contexts, fragment layer and
-checker, writer core); the remaining writer operations and later phases
-are a draft, second revision after review. Inventory, fuzzer and failure classes are in
+Status: phases 0–3 and class 1 of phase 4 built (harness, site contexts,
+fragment layer and checker, writer core, world points written in source
+units); the remaining classes and writer operations are a draft, second
+revision after review. Inventory, fuzzer and failure classes are in
 [coordinate-writes.md](coordinate-writes.md); this document designs the
 writer from those failures.
 
@@ -352,21 +353,39 @@ then `\pgf@protocolsizes`). A `rectangle` between two inverse-mapped corners
 is therefore a rotated rectangle under a rotated or skewed frame, and its
 canvas hull is larger than the requested box. So:
 
-- if the context's linear part is diagonal (identity, scale, flip, axis
-  lengths), write `(x₁,y₁) rectangle (x₂,y₂)`;
+- if the context's unitless map keeps axes axis-aligned (identity, scale,
+  flip, axis lengths, quarter turns), write `(x₁,y₁) rectangle (x₂,y₂)`;
 - otherwise write the four inverse-mapped corners,
   `(p₁) -- (p₂) -- (p₃) -- (p₄) -- cycle`, whose canvas hull is the box;
-- `readBounds` parses both forms through the same context, replacing
-  `parseCoordinateComponentCm`, which reads unitless numbers as centimetres.
+- reading needs no parser of its own: `resolveFigureBoundsWorld` takes the
+  hull of the statement's handles, where the evaluator put them. This
+  replaced `parseCoordinateComponentCm`, which read unitless numbers as
+  centimetres.
+
+Built: `writer.bounds(context, world)`. The context comes from
+`prepareInsertion` at the gap the statement takes (before its own entry
+when it is replaced, else before the first statement), as a
+`\useasboundingbox` path, so `every path` styles apply as in TikZ.
 
 ### Rotation
 
 A path option `rotate` multiplies onto the CTM after the axes: canvas =
-parent · R · axes · c. That is a world rotation when the parent's linear part
-is conformal; under a reflection the angle flips sign. Under a non-conformal
-parent (`xscale=2` scope) the writer refuses with a reason. Baking the
-rotation into coordinates instead needs its own design (curves, shapes, node
-text, dependencies).
+parent · R · axes · c. That is a world rotation when the parent's CTM is
+conformal; under a reflection the angle flips sign. Under a non-conformal
+parent (`xscale=2` scope) no angle is a world rotation. Baking the rotation
+into coordinates instead needs its own design (curves, shapes, node text,
+dependencies).
+
+Built: `writer.rotation(context, angle, pivot)` writes a `rotate around`
+value at the options before it, with the pivot as a coordinate there (its
+plain numbers through the axis vectors, as the evaluator reads
+`rotate around`). `angle` is `{ world }`, refused under stretch or skew, or
+`{ authored }`, the option's own angle. Center-pivot rotation turns the
+world by the gesture's change where the CTM is conformal (flipped under a
+reflection) and keeps its tested behavior elsewhere: the change goes to the
+authored angle, which TikZ composes with the parent. Refusing there, as the
+product table first said, would have removed that behavior; it is a product
+call still open.
 
 ### Positioning
 
@@ -393,7 +412,7 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
 |---|---|
 | spelling of new coordinates | preserve when editing; new coordinates unitless, always |
 | paste across scopes | two intents. Canvas copy/paste keeps the visual geometry, then applies the paste offset (`offsetStatement` into the destination gap). Pasting raw TikZ keeps its text (`userText`) |
-| rotation in non-conformal frames | refuse with a reason for now |
+| rotation in non-conformal frames | for now the gesture changes the authored angle (existing, tested behavior); refusing instead is still open |
 | assistant coordinates | structured placement tools state world units explicitly; raw TikZ from the assistant is source text. Check the existing tool contracts before changing behavior |
 
 ## Gates
@@ -457,6 +476,21 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
    pre-mapping), then **class 2**, then **classes 4 and 5**. Each phase
    records its improvements with the fuzzer update and shrinks the
    exception list.
+   - Class 1 done: all 71 recorded failures pass (328 → 257 fuzzer
+     failures), no other outcome changed. The writer gained `context`
+     sites (a coordinate at a context the evaluator resolved, keeping the
+     spelling of text it replaces), `readContextPoint`, `bounds` and
+     `rotation`; statement option states come as site contexts
+     (`resolveStatementOptionContext`, `geometry.optionContext`); node
+     positioning handles record where an `at` would be read.
+     `insertPathPoint` and smoothing a corner write at the path's own
+     context (refused when its points are read in different frames);
+     convert-to-absolute at the node's placement; figure bounds as above,
+     read back from handles; center-pivot moves read and write the pivot
+     at the prefix options' context and give the moved coordinates the
+     full option state, which removed `legacyCtmSiteContext`.
+     Exceptions: 139 → 129 (migration 80 → 66; four reviewed
+     `sourceSlice` calls copy the `rotate around` text around the pivot).
 5. **Remaining writers.** Radii and other frame-dependent lengths (after
    adding circle/ellipse resize cases), SVG import, assistant handlers,
    semantic-internal source (`fit`, `tree-child`, `label-quotes`) or audited

@@ -1,23 +1,24 @@
-import type { WorldPoint } from "../../coords/points.js";
+import { frameLocalPoint, worldPoint, worldVector, type FrameLocalPoint, type WorldBounds, type WorldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
-import { worldVector } from "../../coords/points.js";
-import { worldTransform, type FrameTransform } from "../../coords/transforms.js";
-import { defaultAxisBasis } from "../../semantic/coords/axis-basis.js";
-import { captureSiteContext, spelledCoordinateFrame, type CoordinateSpelling, type SiteContext } from "../../semantic/site-context.js";
+import { requireArrayValue } from "../../utils/collections.js";
+import { applyFrameToWorldPoint } from "../../coords/frame.js";
+import { parseLengthWithInfo } from "../../semantic/coords/parse-length.js";
+import { spelledCoordinateFrame, type CoordinateSpelling, type SiteContext } from "../../semantic/site-context.js";
 import { isFrameLocalCoordinateEditHandle, isRelativeCoordinateEditHandle, type CoordinateEditHandle } from "../../semantic/types.js";
 import { worldDeltaToLocalDelta, worldToLocal } from "../coords.js";
 import { formatNumber, type NumberFormatOptions } from "../format.js";
-import type { CoordinateText } from "../fragment.js";
+import { joinFragments, tikz, type CoordinateText, type TikzFragment } from "../fragment.js";
 import { coordinateText } from "./coordinate-text.js";
-import { formatCanvasCoordinate, formatCoordinate, formatPolarCoordinate } from "./format.js";
+import { cartesianComponents, formatCanvasCoordinate, formatCoordinate, formatPolarCoordinate } from "./format.js";
 import { localToSourceUnits } from "./source-units.js";
 
 /**
- * Where a coordinate is written. Phase 3 has existing coordinates only;
- * insertion gaps, statements, node placement and picture bounds come with
- * the failure classes that need them (design/coordinate-writer.md).
+ * Where a coordinate is written: an existing coordinate, or a place whose
+ * context the evaluator resolved (a gap, a statement's options, a node's
+ * placement). Node placement and offsets come with the failure classes that
+ * need them (design/coordinate-writer.md).
  */
-export type WriteSite = CoordinateSite;
+export type WriteSite = CoordinateSite | ContextSite;
 
 export type CoordinateSite = Readonly<{
   kind: "coordinate";
@@ -27,6 +28,17 @@ export type CoordinateSite = Readonly<{
    * changes it (the options before it); else the handle's own.
    */
   context?: SiteContext;
+}>;
+
+export type ContextSite = Readonly<{
+  kind: "context";
+  /** From the evaluator: a handle's, a gap's, or a statement's option state. */
+  context: SiteContext;
+  /**
+   * Authored cartesian text the coordinate replaces, whose units and spacing
+   * are kept. Without it the coordinate is new, and unitless.
+   */
+  replaces?: string;
 }>;
 
 export type WriterResult<T> = { kind: "ok"; fragment: T } | { kind: "unsupported"; reason: string };
@@ -43,6 +55,21 @@ export type PointWriteOptions = Readonly<{ precision?: PointPrecision }>;
 export interface CoordinateWriter {
   /** The text that puts `site`'s coordinate at `world`, in its own spelling. */
   point(site: WriteSite, world: WorldPoint, options?: PointWriteOptions): WriterResult<CoordinateText>;
+  /**
+   * A path body read in `context` whose canvas hull is `world`. PGF grows the
+   * picture by canvas-transformed points, so a `rectangle` serves only where
+   * the map keeps axes axis-aligned; elsewhere the four corners and `cycle`.
+   */
+  bounds(context: SiteContext, world: WorldBounds): WriterResult<TikzFragment>;
+  /**
+   * A `rotate around` value at `context` (the options before it) about the
+   * world point `pivot`. The option multiplies onto the CTM, so an angle is a
+   * world angle only where the CTM is conformal: `world` turns what follows
+   * by that much (the sense flips under a reflection) and is refused under
+   * stretch or skew; `authored` is the option's own angle, which TikZ
+   * composes with whatever the parent does.
+   */
+  rotation(context: SiteContext, angle: Readonly<{ world: number } | { authored: number }>, pivot: WorldPoint): WriterResult<CoordinateText>;
 }
 
 const UNITLESS: CoordinateSpelling = Object.freeze({ unitlessX: true, unitlessY: true });
@@ -52,9 +79,80 @@ const REPARAMETERIZE: NumberFormatOptions = Object.freeze({ fractionDigits: 6 })
 export function createCoordinateWriter(source: string): CoordinateWriter {
   return {
     point(site, world, options = {}) {
-      return writeCoordinatePoint(source, site, world, options.precision ?? "drag");
+      return site.kind === "context"
+        ? writeContextPoint(site, world, options.precision ?? "drag")
+        : writeCoordinatePoint(source, site, world, options.precision ?? "drag");
+    },
+    rotation(context, angle, pivot) {
+      let authored: number;
+      if ("authored" in angle) authored = angle.authored;
+      else {
+        const sense = rotationSense(context);
+        if (sense === null) return unsupported("a world rotation cannot be expressed in a stretched or skewed frame");
+        authored = sense * angle.world;
+      }
+      const written = writeContextPoint({ kind: "context", context }, pivot, "reparameterize");
+      if (written.kind !== "ok") return written;
+      return ok(`{${formatNumber(authored, REPARAMETERIZE)}:${written.fragment}}`);
+    },
+    bounds(context, world) {
+      const frame = spelledCoordinateFrame(context, UNITLESS);
+      const corner = (x: number, y: number) => writeContextPoint({ kind: "context", context }, worldPoint(pt(x), pt(y)), "drag");
+      const axisAligned = (Math.abs(frame.b) < 1e-9 && Math.abs(frame.c) < 1e-9) || (Math.abs(frame.a) < 1e-9 && Math.abs(frame.d) < 1e-9);
+      const corners = axisAligned
+        ? [corner(world.minX, world.minY), corner(world.maxX, world.maxY)]
+        : [corner(world.minX, world.minY), corner(world.maxX, world.minY), corner(world.maxX, world.maxY), corner(world.minX, world.maxY)];
+      const texts: CoordinateText[] = [];
+      for (const written of corners) {
+        if (written.kind !== "ok") return written;
+        texts.push(written.fragment);
+      }
+      return { kind: "ok", fragment: axisAligned
+        ? tikz`${requireArrayValue(texts, 0)} rectangle ${requireArrayValue(texts, 1)}`
+        : tikz`${joinFragments(texts, tikz` -- `)} -- cycle` };
     }
   };
+}
+
+/**
+ * How a rotation option at `context` turns the world: 1 where the CTM's
+ * linear part is a rotation and scaling, -1 where it also reflects, null
+ * where it stretches or skews.
+ */
+export function rotationSense(context: SiteContext): 1 | -1 | null {
+  const { a, b, c, d } = context.ctm;
+  const tolerance = 1e-9 * Math.max(1, Math.hypot(a, b, c, d));
+  if (Math.abs(a - d) <= tolerance && Math.abs(b + c) <= tolerance) return 1;
+  if (Math.abs(a + d) <= tolerance && Math.abs(b - c) <= tolerance) return -1;
+  return null;
+}
+
+/**
+ * Where authored cartesian text read in `context` puts its point, as the
+ * evaluator reads it: each plain number through its axis vector, each length
+ * through the CTM alone. Null for any other form.
+ */
+export function readContextPoint(context: SiteContext, raw: string): WorldPoint | null {
+  const read = readCartesian(raw);
+  return read && applyFrameToWorldPoint(spelledCoordinateFrame(context, read.spelling), read.local);
+}
+
+function readCartesian(raw: string): { spelling: CoordinateSpelling; local: FrameLocalPoint } | null {
+  const components = cartesianComponents(raw);
+  const x = components && parseLengthWithInfo(components.x, "cm");
+  const y = components && parseLengthWithInfo(components.y, "cm");
+  if (!x || !y) return null;
+  return { spelling: { unitlessX: !x.hasExplicitUnit, unitlessY: !y.hasExplicitUnit }, local: frameLocalPoint(pt(x.value), pt(y.value)) };
+}
+
+function writeContextPoint(site: ContextSite, world: WorldPoint, precision: PointPrecision): WriterResult<CoordinateText> {
+  const spelling = site.replaces === undefined ? UNITLESS : readCartesian(site.replaces)?.spelling;
+  if (!spelling) return unsupported("only cartesian coordinates are rewritten at a context");
+  const local = worldToLocal(world, spelledCoordinateFrame(site.context, spelling));
+  if (!local) return singular();
+  const units = localToSourceUnits(local);
+  const digits = precision === "reparameterize" ? REPARAMETERIZE : {};
+  return ok(formatCoordinate(site.replaces ?? "", formatNumber(units.x, digits), formatNumber(units.y, digits)));
 }
 
 function writeCoordinatePoint(source: string, site: CoordinateSite, world: WorldPoint, precision: PointPrecision): WriterResult<CoordinateText> {
@@ -135,15 +233,4 @@ function unsupported(reason: string): WriterResult<CoordinateText> {
 
 function singular(): WriterResult<CoordinateText> {
   return unsupported("the coordinate's frame is not invertible");
-}
-
-/**
- * Migration only (listed, checker rule F2): the context for a frame an
- * action computed as a bare CTM, without PGF's axis vectors. Center-pivot
- * moves and rotations resolve the frame after their option edit that way;
- * under `x=`/`y=` it misplaces unitless coordinates (failure class 1). It
- * goes when they resolve the full option state.
- */
-export function legacyCtmSiteContext(frame: FrameTransform): SiteContext {
-  return captureSiteContext({ transform: worldTransform(frame.a, frame.b, frame.c, frame.d, frame.e, frame.f), axisBasis: defaultAxisBasis() });
 }

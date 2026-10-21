@@ -58,6 +58,7 @@ import { useInspectorModel } from "./useInspectorModel";
 import { useInspectorMutations } from "./useInspectorMutations";
 import { useInspectorPreviewScrub } from "./useInspectorPreviewScrub";
 import css from "./InspectorPanel.module.css";
+import { resolveFigureBoundsWorld } from "@tikz-editor/core/edit/figure-bounds";
 import { RenderedTooltip } from "../RenderedTooltip";
 import { SidePanel } from "../SidePanel";
 import {
@@ -1669,8 +1670,9 @@ export function InspectorPanel() {
     };
   }
 
-  function currentAutoFigureBoundsCm(): { x: number; y: number; width: number; height: number } {
-    const bounds = snapshot.scene?.bounds;
+  /** The fixed box where the picture fixes one, else the rendered bounds, in world cm. */
+  function currentFigureBoundsCm(): { x: number; y: number; width: number; height: number } {
+    const bounds = resolveFigureBoundsWorld(figureBoundsState, snapshot.editHandles) ?? snapshot.scene?.bounds;
     if (!bounds) {
       return { x: 0, y: 0, width: 1, height: 1 };
     }
@@ -1680,10 +1682,6 @@ export function InspectorPanel() {
       width: Math.max(0, (bounds.maxX - bounds.minX) * CM_PER_PT),
       height: Math.max(0, (bounds.maxY - bounds.minY) * CM_PER_PT)
     };
-  }
-
-  function currentFigureBoundsControlsValue(): { x: number; y: number; width: number; height: number } {
-    return figureBoundsState.mode === "fixed" ? figureBoundsState : currentAutoFigureBoundsCm();
   }
 
   function applyFigureBoundsValue(next: { x: number; y: number; width: number; height: number }): void {
@@ -1723,7 +1721,7 @@ export function InspectorPanel() {
                 return;
               }
               applyFigureBoundsValue({
-                ...currentFigureBoundsControlsValue(),
+                ...currentFigureBoundsCm(),
                 [key]: parsed
               });
             }}
@@ -1735,7 +1733,7 @@ export function InspectorPanel() {
   }
 
   function renderFigureBoundsControls(): JSX.Element {
-    const values = currentFigureBoundsControlsValue();
+    const values = currentFigureBoundsCm();
     const fixed = figureBoundsState.mode === "fixed";
     return (
       <>

@@ -89,6 +89,7 @@ import {
 import { emitNodeShape } from "./shape-emission.js";
 import { splitTopLevelCommas } from "./raw-list.js";
 import { applyMatrixToVector, identityMatrix, multiplyMatrix, rotationMatrix } from "../transform.js";
+import { captureSiteContext } from "../site-context.js";
 
 function wp(x: number, y: number): WorldPoint {
   return worldPoint(pt(x), pt(y));
@@ -389,6 +390,8 @@ export function evaluateNodeItem(
   const nodeHandleSourceId = item.adornment
     ? makeNodeAdornmentTargetId(item.adornment.ownerNodeId, item.adornment.adornmentIndex, item.adornment.kind)
     : nodeSourceId;
+  // Where an `at` coordinate of this node is read, for writing one later.
+  const placementContext = captureSiteContext(currentFrame(context));
   const target = resolveNodeTargetPoint(
     item,
     context,
@@ -608,6 +611,7 @@ export function evaluateNodeItem(
         kind: "node-position",
         world: center,
         transform: frame.transform,
+        siteContext: placementContext,
         sourceText,
         coordinateForm: "cartesian",
         rewriteMode: "positioning",

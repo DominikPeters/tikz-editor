@@ -679,6 +679,8 @@ export type CurveControlEditHandle = EditHandleBase & {
 export type NodePositionEditHandle = EditHandleBase & {
   handleType: "node-positioning";
   kind: "node-position";
+  /** Where an `at` coordinate of this node would be read. */
+  siteContext: SiteContext;
   rewriteMode: "positioning";
   positioningContext: EditHandlePositioningContext;
   local?: never;
