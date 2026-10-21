@@ -304,12 +304,11 @@ describe("drawing layer snapshots", () => {
     expect(layer.insertion?.text).toBe("\n\n" + BEAMER_TIKZ_LAYER);
     expect(layer.insertion?.preamble).toBeNull();
     expect(layer.evaluate.pictureOptions).toBe("remember picture, overlay, shift={(current page.south west)}");
-    // A rectangle from (2,3) to (4,4) cm on the page, given in the picture's world.
+    // A rectangle from (2,3) to (4,4) cm on the page, given in the world the layer renders in.
     const world = (x: number, y: number) => worldPoint(pt(x * PT_PER_CM + layer.evaluate.currentPage.minX), pt(y * PT_PER_CM + layer.evaluate.currentPage.minY));
-    const toPicture = (point: ReturnType<typeof world>) => worldPoint(pt(point.x - layer.evaluate.currentPage.minX), pt(point.y - layer.evaluate.currentPage.minY));
     const result = executeDocumentEdit(
       { documentId: "doc-layer", source: DEFINED, sourceRevision: 1, activeRootId: "frame:1:overlay:0", snapshot },
-      { kind: "addElement", at: toPicture(world(2, 3)), template: { kind: "rectangle", corner: toPicture(world(4, 4)) } }
+      { kind: "addElement", at: world(2, 3), template: { kind: "rectangle", corner: world(4, 4) } }
     );
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;

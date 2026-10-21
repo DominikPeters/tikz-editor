@@ -1,6 +1,5 @@
 import { applyEditAction, type EditAction, type ElementTemplate } from "../../packages/core/src/edit/actions.js";
 import { createEditGeometrySession } from "../../packages/core/src/edit/geometry-session.js";
-import { generateComplexPathSource } from "../../packages/core/src/edit/element-templates.js";
 import { PT_PER_CM } from "../../packages/core/src/edit/format.js";
 import { collectSourceWorldBounds } from "../../packages/core/src/edit/snapping/geometry.js";
 import { parseTikz } from "../../packages/core/src/parser/index.js";
@@ -8,9 +7,8 @@ import { evaluateTikzFigure } from "../../packages/core/src/semantic/evaluate.js
 import { applyMatrix } from "../../packages/core/src/semantic/transform.js";
 import type { EditHandle } from "../../packages/core/src/semantic/types.js";
 import type { WorldPoint } from "../../packages/core/src/coords/points.js";
-import { generateFreehandToolSource } from "../../packages/app/src/ui/canvas-panel/freehand-tool.js";
-import { generateAppendSegmentSource } from "../../packages/app/src/ui/canvas-panel/path-tool.js";
-import { pathDraftInPictureCoordinates, templateInPictureCoordinates, worldToPictureCoordinates, freehandDraftInPictureCoordinates } from "../../packages/app/src/ui/canvas-panel/picture-coordinates.js";
+import { freehandToolPath } from "../../packages/app/src/ui/canvas-panel/freehand-tool.js";
+import { pathToolAddPathAction, pathToolAppendAction } from "../../packages/app/src/ui/canvas-panel/path-tool.js";
 import { wp } from "../coords-helpers.js";
 
 /**
@@ -442,10 +440,9 @@ function appendToPathCase({ context, frame, body, before, handles, elementId }: 
   const key = `appendToPath|${frame.label}|${body.label}`;
   const last = points[points.length - 1].world;
   const target = add(last, randomDelta(caseRandom(key, context.seed)));
-  const toPicture = worldToPictureCoordinates(before.semantic.scene);
-  const segmentSource = generateAppendSegmentSource(pathDraftInPictureCoordinates({ startWorld: last, segments: [{ kind: "line", to: target }], appendTarget: { elementId, end: "end" } }, toPicture));
-  if (!segmentSource) return [{ key, action: "appendToPath", outcome: { kind: "unsupported", reason: "no segment source" } }];
-  return [runCase(context, frame, key, before, { kind: "appendToPath", elementId, end: "end", segmentSource }, next => ({
+  const append = pathToolAppendAction({ startWorld: last, segments: [{ kind: "line", to: target }], appendTarget: { elementId, end: "end" } });
+  if (!append) return [{ key, action: "appendToPath", outcome: { kind: "unsupported", reason: "no segments" } }];
+  return [runCase(context, frame, key, before, append, next => ({
     expected: [...points.map(h => h.world), target],
     actual: next.handles.filter(h => h.sourceRef.sourceId === elementId).map(h => h.world)
   }))];
@@ -460,62 +457,59 @@ const TEMPLATES: { label: string; template: (at: WorldPoint, other: WorldPoint) 
   { label: "circle", template: (_at, other) => ({ kind: "circle", edge: other }), expected: at => [at] }
 ];
 
-/** A picture-level case: the app writes new statements in picture coordinates. */
-function pictureCase(frame: FrameStack): { before: Snapshot; toPicture: (point: WorldPoint) => WorldPoint; known: Set<string> } | null {
+/** A picture-level case: new statements are appended to the picture. */
+function pictureCase(frame: FrameStack): { before: Snapshot; known: Set<string> } | null {
   if (frame.scope || frame.path) return null;
   const before = evaluate(pictureSource(frame, String.raw`\draw (0,0) -- (1,0);`).source);
-  return { before, toPicture: worldToPictureCoordinates(before.semantic.scene), known: sourceIdsOf(before.handles) };
+  return { before, known: sourceIdsOf(before.handles) };
 }
 
-/**
- * Adding an element puts it where the user clicked. The app maps the click
- * into picture coordinates first, so the case goes through the same mapping.
- */
+/** Adding an element puts it where the user clicked: the action takes world points, as the app sends them. */
 function addElementCases(context: FuzzContext, frame: FrameStack): CaseResult[] {
   const picture = pictureCase(frame);
   if (!picture) return [];
-  const { before, toPicture, known } = picture;
+  const { before, known } = picture;
   return TEMPLATES.map(({ label, template, expected }): CaseResult => {
     const key = `addElement|${frame.label}|${label}`;
     const random = caseRandom(key, context.seed);
     const at = add(wp(PT_PER_CM, PT_PER_CM), randomDelta(random));
     const other = add(at, randomDelta(random));
-    return runCase(context, frame, key, before, { kind: "addElement", at: toPicture(at), template: templateInPictureCoordinates(template(at, other), toPicture) }, next => ({
+    return runCase(context, frame, key, before, { kind: "addElement", at, template: template(at, other) }, next => ({
       expected: expected(at, other), actual: next.handles.filter(h => !known.has(h.sourceRef.sourceId)).map(h => h.world)
     }));
   });
 }
 
-/** The path tool writes its draft (mapped into picture coordinates) as a pasted statement. */
+/** The path tool sends its draft as a new path in world points. */
 function pathToolCase(context: FuzzContext, frame: FrameStack): CaseResult[] {
   const picture = pictureCase(frame);
   if (!picture) return [];
-  const { before, toPicture, known } = picture;
+  const { before, known } = picture;
   const key = `pathTool|${frame.label}`;
   const random = caseRandom(key, context.seed);
   const start = add(wp(PT_PER_CM, PT_PER_CM), randomDelta(random));
   const middle = add(start, randomDelta(random));
   const end = add(middle, randomDelta(random));
-  const snippet = generateComplexPathSource(toPicture(start), [{ kind: "line", to: toPicture(middle) }, { kind: "line", to: toPicture(end) }]);
-  if (!snippet) return [{ key, action: "pathTool", outcome: { kind: "unsupported", reason: "no snippet" } }];
-  return [runCase(context, frame, key, before, { kind: "pasteStatements", snippets: [snippet], delta: wp(0, 0) }, next => ({
+  const addPath = pathToolAddPathAction({ startWorld: start, segments: [{ kind: "line", to: middle }, { kind: "line", to: end }] }, { closed: false });
+  if (!addPath) return [{ key, action: "pathTool", outcome: { kind: "unsupported", reason: "no segments" } }];
+  return [runCase(context, frame, key, before, addPath, next => ({
     expected: [start, middle, end], actual: next.handles.filter(h => !known.has(h.sourceRef.sourceId)).map(h => h.world)
   }))];
 }
 
-/** A freehand stroke starts and ends where the pointer did. */
+/** A freehand stroke, sent as a new path in world points, starts and ends where the pointer did. */
 function freehandCase(context: FuzzContext, frame: FrameStack): CaseResult[] {
   const picture = pictureCase(frame);
   if (!picture) return [];
-  const { before, toPicture, known } = picture;
+  const { before, known } = picture;
   const key = `freehand|${frame.label}`;
   const random = caseRandom(key, context.seed);
   const start = add(wp(PT_PER_CM, PT_PER_CM), randomDelta(random));
   const bend = 1 + random();
   const points = Array.from({ length: 12 }, (_, i) => wp(start.x + i * 4, start.y + bend * 20 * Math.sin(i / 11 * Math.PI)));
-  const snippet = generateFreehandToolSource(freehandDraftInPictureCoordinates({ points, minSampleDistanceWorld: 1 }, toPicture), 1);
-  if (!snippet) return [{ key, action: "freehand", outcome: { kind: "unsupported", reason: "no snippet" } }];
-  return [runCase(context, frame, key, before, { kind: "pasteStatements", snippets: [snippet], delta: wp(0, 0) }, next => ({
+  const path = freehandToolPath({ points, minSampleDistanceWorld: 1 }, 1);
+  if (!path) return [{ key, action: "freehand", outcome: { kind: "unsupported", reason: "no path" } }];
+  return [runCase(context, frame, key, before, { kind: "addPath", start: path.start, segments: path.segments }, next => ({
     expected: [points[0], points[points.length - 1]], actual: next.handles.filter(h => !known.has(h.sourceRef.sourceId)).map(h => h.world)
   }))];
 }

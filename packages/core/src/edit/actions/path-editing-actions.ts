@@ -7,6 +7,14 @@ import type { WorldPoint, WorldVector } from "../../coords/points.js";
 import { isCoordinateEditHandle, type EditHandle } from "../../semantic/types.js";
 import { sameSiteContext } from "../../semantic/site-context.js";
 import { createCoordinateWriter, type WriterResult } from "../writer/index.js";
+import { CoordinateWriteRefused } from "../new-statement.js";
+import {
+  generateComplexPathPrependSource,
+  generateComplexPathSegmentSource,
+  reverseComplexPathSegments,
+  type AnchorReference,
+  type ComplexPathSegment
+} from "../element-templates.js";
 import type { Span } from "../../ast/types.js";
 import { rewriteCoordinate } from "../rewrite.js";
 import { replaceSpan } from "../patch.js";
@@ -38,7 +46,17 @@ export type ReversePathAction = { elementId: string };
 export type ToggleClosedPathAction = { elementId: string; closed: boolean };
 export type DeletePathPointAction = { elementId: string; handleId: string };
 export type SetPathPointKindAction = { elementId: string; handleId: string; pointKind: PathPointKind };
-export type AppendToPathAction = { elementId: string; end: "start" | "end"; segmentSource: string };
+/**
+ * Segments drawn on from one end of a path, in world points. `start` is
+ * where they begin: the end (or start) point the tool continued from.
+ */
+export type AppendToPathAction = {
+  elementId: string;
+  end: "start" | "end";
+  start: WorldPoint;
+  startAnchor?: AnchorReference;
+  segments: readonly ComplexPathSegment[];
+};
 export type InsertPathPointAction = { elementId: string; segmentIndex: number; point: WorldPoint };
 
 type PathEditingDeps = {
@@ -818,6 +836,7 @@ function cornerControlPositions(
 
 export function applyAppendToPathAction(
   source: string,
+  editHandles: readonly EditHandle[],
   action: AppendToPathAction,
   parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
@@ -830,9 +849,32 @@ export function applyAppendToPathAction(
     return { kind: "unsupported", reason: "Cannot append to a closed path." };
   }
 
+  // New segments are read where the path's own points are.
+  const writePoint = newPathPointWriter(editHandles, action.elementId, source);
+  if (!writePoint) {
+    return { kind: "unsupported", reason: "Appending needs a path whose points share one coordinate frame." };
+  }
+  const point = (world: WorldPoint): CoordinateText => {
+    const written = writePoint(world);
+    if (written.kind !== "ok") throw new CoordinateWriteRefused(written.reason);
+    return written.fragment;
+  };
+  let segmentSource: TikzFragment | null;
+  try {
+    if (action.end === "end") {
+      segmentSource = generateComplexPathSegmentSource(action.segments, point);
+    } else {
+      // Prepend: the drawn segments, reversed, run from the new far end back to the old start.
+      const reversed = reverseComplexPathSegments(action.start, action.segments, action.startAnchor);
+      segmentSource = generateComplexPathPrependSource(reversed.startWorld, reversed.segments, reversed.startAnchor, point);
+    }
+  } catch (error) {
+    if (error instanceof CoordinateWriteRefused) return { kind: "unsupported", reason: `Cannot write the new segments: ${error.message}.` };
+    throw error;
+  }
+  if (!segmentSource) return { kind: "unsupported", reason: "Nothing to append." };
+
   let newBody: TikzFragment;
-  // The path tool builds the segment text in the app; it moves to world segments with the writer.
-  const segmentSource = legacyText(action.segmentSource);
   const allSegmentIndices = analysis.segments.map((_, i) => i);
   const existingBody = buildPathBodyFromSegments(analysis, source, 0, allSegmentIndices);
 

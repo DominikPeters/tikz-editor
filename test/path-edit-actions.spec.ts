@@ -904,11 +904,12 @@ describe("path edit actions", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0) -- (2,0);
 \end{tikzpicture}`;
-    const result = applyEditAction(source, [], {
+    const result = applyEditAction(source, renderTikzToSvg(source).semantic.editHandles, {
       kind: "appendToPath",
       elementId: "path:0",
       end: "end",
-      segmentSource: "-- (3,0) -- (4,0)"
+      start: wp(2 * PT_PER_CM, 0),
+      segments: [{ kind: "line", to: wp(3 * PT_PER_CM, 0) }, { kind: "line", to: wp(4 * PT_PER_CM, 0) }]
     });
 
     expect(result.kind).toBe("success");
@@ -920,11 +921,13 @@ describe("path edit actions", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0) -- (2,0);
 \end{tikzpicture}`;
-    const result = applyEditAction(source, [], {
+    // Drawn from the path's start outwards: (0,0) to (-1,0) to (-2,0).
+    const result = applyEditAction(source, renderTikzToSvg(source).semantic.editHandles, {
       kind: "appendToPath",
       elementId: "path:0",
       end: "start",
-      segmentSource: "(-2,0) -- (-1,0) --"
+      start: wp(0, 0),
+      segments: [{ kind: "line", to: wp(-1 * PT_PER_CM, 0) }, { kind: "line", to: wp(-2 * PT_PER_CM, 0) }]
     });
 
     expect(result.kind).toBe("success");
@@ -936,20 +939,23 @@ describe("path edit actions", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0) -- (1,1) -- cycle;
 \end{tikzpicture}`;
-    const result = applyEditAction(source, [], {
+    const handles = renderTikzToSvg(source).semantic.editHandles;
+    const result = applyEditAction(source, handles, {
       kind: "appendToPath",
       elementId: "path:0",
       end: "end",
-      segmentSource: "-- (2,0)"
+      start: wp(0, 0),
+      segments: [{ kind: "line", to: wp(2 * PT_PER_CM, 0) }]
     });
 
     expect(result.kind).toBe("unsupported");
 
-    const missing = applyEditAction(source, [], {
+    const missing = applyEditAction(source, handles, {
       kind: "appendToPath",
       elementId: "path:missing",
       end: "end",
-      segmentSource: "-- (2,0)"
+      start: wp(0, 0),
+      segments: [{ kind: "line", to: wp(2 * PT_PER_CM, 0) }]
     });
     expect(missing.kind).toBe("unsupported");
   });

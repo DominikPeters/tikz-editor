@@ -1,7 +1,6 @@
 import { requireArrayValue } from "@tikz-editor/core/utils/collections";
-import { CM_PER_PT, formatNumber } from "@tikz-editor/core/edit/format";
 import { pt, worldPoint } from "@tikz-editor/core/coords/index";
-import { buildDrawOptions } from "@tikz-editor/core/edit/element-templates";
+import type { ComplexPathSegment } from "@tikz-editor/core/edit/element-templates";
 import type { WorldPoint } from "../coords/types";
 import { distanceSquared } from "./geometry";
 
@@ -135,12 +134,15 @@ export function resolveFreehandPreviewSegments(
   return previewSegments;
 }
 
-export function generateFreehandToolSource(
+/**
+ * The stroke as a path through world points: simplified to the smoothing
+ * tolerance, then fitted with curves. The core writes it where it is read.
+ */
+export function freehandToolPath(
   draft: FreehandToolDraft,
   zoom: number,
-  smoothingTolerancePx = FREEHAND_SMOOTHING_DEFAULT_PX,
-  options: { strokeColor?: string } = {}
-): string | null {
+  smoothingTolerancePx = FREEHAND_SMOOTHING_DEFAULT_PX
+): { start: WorldPoint; segments: ComplexPathSegment[] } | null {
   const toleranceWorld = clampSmoothingTolerancePx(smoothingTolerancePx) / Math.max(zoom, 1e-3);
   const simplified = simplifyFreehandPoints(draft.points, toleranceWorld);
   if (simplified.length < FREEHAND_MIN_POINTS) {
@@ -155,15 +157,7 @@ export function generateFreehandToolSource(
   if (segments.length === 0) {
     return null;
   }
-
-  const parts: string[] = [formatPointCm(requireArrayValue(simplified, 0))];
-  for (const segment of segments) {
-    parts.push(
-      `.. controls ${formatPointCm(segment.control1)} and ${formatPointCm(segment.control2)} .. ${formatPointCm(segment.to)}`
-    );
-  }
-  const drawOptions = buildDrawOptions(options.strokeColor, undefined, false);
-  return `\\draw${drawOptions} ${parts.join(" ")};`;
+  return { start: requireArrayValue(simplified, 0), segments: segments.map(segment => ({ kind: "bezier", ...segment })) };
 }
 
 function polylineLength(points: readonly WorldPoint[]): number {
@@ -172,10 +166,6 @@ function polylineLength(points: readonly WorldPoint[]): number {
     length += Math.sqrt(distanceSquared(requireArrayValue(points, i - 1), requireArrayValue(points, i)));
   }
   return length;
-}
-
-function formatPointCm(point: WorldPoint): string {
-  return `(${formatNumber(point.x * CM_PER_PT)},${formatNumber(point.y * CM_PER_PT)})`;
 }
 
 function clampSmoothingTolerancePx(value: number): number {

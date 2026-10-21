@@ -399,6 +399,96 @@
     },
     {
       "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "buildDrawOptions",
+      "hash": "130204a494ce",
+      "count": 1,
+      "expression": "userText(fillColor, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "buildDrawOptions",
+      "hash": "d116cd7eb27c",
+      "count": 1,
+      "expression": "userText(strokeColor, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "buildNodeOptions",
+      "hash": "130204a494ce",
+      "count": 1,
+      "expression": "userText(fillColor, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "buildNodeOptions",
+      "hash": "d116cd7eb27c",
+      "count": 1,
+      "expression": "userText(strokeColor, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "endpoint",
+      "hash": "1b242ba135cb",
+      "count": 1,
+      "expression": "userText(normalizedAnchor, \"node-reference\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "endpoint",
+      "hash": "4aecb4716dba",
+      "count": 2,
+      "expression": "userText(nodeName, \"node-reference\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "formatNodeName",
+      "hash": "0c29de9256ca",
+      "count": 1,
+      "expression": "userText(trimmed, \"node-reference\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "generateElementSource",
+      "hash": "9b6b12a1281b",
+      "count": 1,
+      "expression": "userText(template.shape, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "generateElementSource",
+      "hash": "a2801e03e6bb",
+      "count": 1,
+      "expression": "userText(sanitizeMatrixCellText(explicit ?? spreadsheetLabel(flatIndex)), \"node-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "generateElementSource.text",
+      "hash": "c8fde864d9dd",
+      "count": 1,
+      "expression": "userText(template.text == null ? DEFAULT_NODE_TEXT : sanitizeNodeText(template.text), \"node-text\")"
+    },
+    {
+      "rule": "F2",
       "symbol": "unchangedSource",
       "file": "packages/core/src/edit/element-templates.ts",
       "declaration": "insertElementIntoSource",
@@ -808,15 +898,6 @@
       "rule": "F2",
       "symbol": "legacyText",
       "file": "packages/core/src/edit/actions/path-editing-actions.ts",
-      "declaration": "applyAppendToPathAction.segmentSource",
-      "hash": "f64df26c2142",
-      "count": 1,
-      "expression": "legacyText(action.segmentSource)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/actions/path-editing-actions.ts",
       "declaration": "explicitSegmentText",
       "hash": "57e7d81490d5",
       "count": 1,
@@ -995,30 +1076,21 @@
     },
     {
       "rule": "F2",
-      "symbol": "legacyEditedSource",
+      "symbol": "legacyText",
       "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "insertElementIntoSource",
-      "hash": "57ba6f9d299a",
+      "declaration": "circleRadius",
+      "hash": "9b92d0668546",
       "count": 1,
-      "expression": "legacyEditedSource(`\\\\begin{tikzpicture}\\n ${normalizedSnippet}\\n\\\\end{tikzpicture}`)"
+      "expression": "legacyText(`${formatNumber(circleRadiusPt(at, edge) * CM_PER_PT)}cm`)"
     },
     {
       "rule": "F2",
-      "symbol": "legacyEditedSource",
+      "symbol": "legacyText",
       "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "insertElementIntoSource",
-      "hash": "683fcfcc1532",
+      "declaration": "generateElementSource.radii",
+      "hash": "7292d7f13eef",
       "count": 1,
-      "expression": "legacyEditedSource(`${before}${prefix}${bodyIndent}${normalizedSnippet}\\n${after}`)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyEditedSource",
-      "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "insertElementIntoSource",
-      "hash": "e85ef1527829",
-      "count": 1,
-      "expression": "legacyEditedSource(source.endsWith(\"\\n\") ? `${source}${normalizedSnippet}` : `${source}\\n${normalizedSnippet}`)"
+      "expression": "legacyText(`x radius=${formatNumber(xRadiusPt * CM_PER_PT)}cm, y radius=${formatNumber(yRadiusPt * CM_PER_PT)}cm`)"
     },
     {
       "rule": "F2",

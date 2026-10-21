@@ -1,4 +1,8 @@
-import { legacyEditedSource, unchangedSource, type EditedSource } from "./fragment.js";
+import {
+  applyFragments, canvasLength, EMPTY_FRAGMENT, joinFragments, layout, legacyText, option, optionList, tikz, unchangedSource, userText,
+  type CoordinateText, type EditedSource, type TikzFragment
+} from "./fragment.js";
+import type { NewStatementPoints } from "./new-statement.js";
 import { requireArrayValue } from "../utils/collections.js";
 import { worldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
@@ -40,113 +44,120 @@ function wp(x: number, y: number): WorldPoint {
   return worldPoint(pt(x), pt(y));
 }
 
-export function generateElementSource(template: ElementTemplate, at: WorldPoint): string {
-  const atCoord = formatPointCm(at);
-
+/**
+ * The statement for a new element at the world point `at`. Every coordinate
+ * is written where the statement will be read (`points`); radii are still
+ * written as canvas lengths (phase 5).
+ */
+export function generateElementSource(template: ElementTemplate, at: WorldPoint, points: NewStatementPoints): TikzFragment {
   switch (template.kind) {
     case "node": {
-      const text = template.text == null ? DEFAULT_NODE_TEXT : sanitizeNodeText(template.text);
+      const point = points({ command: "node", options: "" });
+      const text = userText(template.text == null ? DEFAULT_NODE_TEXT : sanitizeNodeText(template.text), "node-text");
       const namePart = formatNodeName(template.name);
       if (template.shape) {
         const hasExplicitShapeSize = template.minimumWidthPt != null || template.minimumHeightPt != null;
         const optionParts = buildNodeOptions(template.strokeColor, template.fillColor, true);
-        optionParts.push(`shape=${template.shape}`);
+        optionParts.push(option("shape", userText(template.shape, "inspector-value")));
         if (hasExplicitShapeSize) {
-          if (template.minimumWidthPt != null) {
-            optionParts.push(`minimum width=${formatNumber(template.minimumWidthPt * CM_PER_PT)}cm`);
-          }
-          if (template.minimumHeightPt != null) {
-            optionParts.push(`minimum height=${formatNumber(template.minimumHeightPt * CM_PER_PT)}cm`);
-          }
+          if (template.minimumWidthPt != null) optionParts.push(option("minimum width", canvasLength(pt(template.minimumWidthPt), "cm")));
+          if (template.minimumHeightPt != null) optionParts.push(option("minimum height", canvasLength(pt(template.minimumHeightPt), "cm")));
         } else {
           // PGF double arrows measure head span with width and arrow length with height.
           const swapDimensions = template.shape === "double arrow";
           const minimumWidth = swapDimensions ? SHAPE_TOOL_DEFAULT_MINIMUM_HEIGHT_CM : SHAPE_TOOL_DEFAULT_MINIMUM_WIDTH_CM;
           const minimumHeight = swapDimensions ? SHAPE_TOOL_DEFAULT_MINIMUM_WIDTH_CM : SHAPE_TOOL_DEFAULT_MINIMUM_HEIGHT_CM;
-          optionParts.push(`minimum width=${minimumWidth}cm`);
-          optionParts.push(`minimum height=${minimumHeight}cm`);
+          optionParts.push(option("minimum width", canvasLength(pt(minimumWidth * PT_PER_CM), "cm")));
+          optionParts.push(option("minimum height", canvasLength(pt(minimumHeight * PT_PER_CM), "cm")));
         }
-        return `\\node[${optionParts.join(", ")}]${namePart} at ${atCoord} {${text}};`;
+        return tikz`\node[${joinFragments(optionParts, tikz`, `)}]${namePart} at ${point(at)} {${text}};`;
       }
       const nodeOptions = buildNodeOptions(template.strokeColor, template.fillColor, false);
-      const optionText = nodeOptions.length > 0 ? `[${nodeOptions.join(", ")}]` : "";
-      return `\\node${optionText}${namePart} at ${atCoord} {${text}};`;
+      return tikz`\node${optionList(nodeOptions)}${namePart} at ${point(at)} {${text}};`;
     }
 
     case "matrix": {
+      const point = points({ command: "node", options: "" });
       const rows = Math.max(1, Math.floor(template.rows ?? 2));
       const columns = Math.max(1, Math.floor(template.columns ?? 2));
       const matrixKind = template.matrixKind ?? "nodes";
       const matrixOption = matrixKind === "math-nodes"
-        ? "matrix of math nodes"
+        ? tikz`matrix of math nodes`
         : matrixKind === "plain"
-          ? "matrix"
-          : "matrix of nodes";
-      const bodyRows: string[] = [];
+          ? tikz`matrix`
+          : tikz`matrix of nodes`;
+      const bodyRows: TikzFragment[] = [];
       for (let row = 0; row < rows; row += 1) {
-        const cells: string[] = [];
+        const cells: TikzFragment[] = [];
         for (let column = 0; column < columns; column += 1) {
           const flatIndex = row * columns + column;
           const explicit = template.cells?.[row]?.[column];
-          cells.push(sanitizeMatrixCellText(explicit ?? spreadsheetLabel(flatIndex)));
+          cells.push(userText(sanitizeMatrixCellText(explicit ?? spreadsheetLabel(flatIndex)), "node-text"));
         }
-        const rowBody = cells.join(" & ");
-        bodyRows.push(`${rowBody} \\\\`);
+        bodyRows.push(tikz`${joinFragments(cells, tikz` & `)} \\`);
       }
-      return `\\matrix [${matrixOption}] at ${atCoord} {\n  ${bodyRows.join("\n  ")}\n};`;
+      return tikz`\matrix [${matrixOption}] at ${point(at)} {${layout("\n  ")}${joinFragments(bodyRows, layout("\n  "))}${layout("\n")}};`;
     }
 
     case "line": {
-      const fromCoord = formatLineEndpoint(template.fromAnchor, atCoord);
-      const to = template.to ?? wp(at.x + DEFAULT_LINE_LENGTH_PT, at.y);
-      const toCoord = formatLineEndpoint(template.toAnchor, formatPointCm(to));
       const lineOptions = buildDrawOptions(template.strokeColor, undefined, template.hasArrow ?? false);
-      return `\\draw${lineOptions} ${fromCoord} -- ${toCoord};`;
+      const point = points({ command: "draw", options: lineOptions.slice(1, -1) });
+      const to = template.to ?? wp(at.x + DEFAULT_LINE_LENGTH_PT, at.y);
+      return tikz`\draw${lineOptions} ${endpoint(template.fromAnchor, at, point)} -- ${endpoint(template.toAnchor, to, point)};`;
     }
 
     case "bezier": {
       const to = template.to ?? wp(at.x + DEFAULT_LINE_LENGTH_PT, at.y);
       const controls = resolveBezierControls(at, to, template.control1, template.control2);
       const bezierOptions = buildDrawOptions(template.strokeColor, undefined, false);
-      return `\\draw${bezierOptions} ${atCoord} .. controls ${formatPointCm(controls.control1)} and ${formatPointCm(controls.control2)} .. ${formatPointCm(to)};`;
+      const point = points({ command: "draw", options: bezierOptions.slice(1, -1) });
+      return tikz`\draw${bezierOptions} ${point(at)} .. controls ${point(controls.control1)} and ${point(controls.control2)} .. ${point(to)};`;
     }
 
     case "grid": {
       const corner = template.corner ?? wp(at.x + DEFAULT_RECT_WIDTH_PT, at.y + DEFAULT_RECT_HEIGHT_PT);
       const gridOptions = buildDrawOptions(template.strokeColor, undefined, false);
-      return `\\draw${gridOptions} ${atCoord} grid ${formatPointCm(corner)};`;
+      const point = points({ command: "draw", options: gridOptions.slice(1, -1) });
+      return tikz`\draw${gridOptions} ${point(at)} grid ${point(corner)};`;
     }
 
     case "rectangle": {
       const corner = template.corner ?? wp(at.x + DEFAULT_RECT_WIDTH_PT, at.y + DEFAULT_RECT_HEIGHT_PT);
       const rectOptions = buildDrawOptions(template.strokeColor, template.fillColor, false);
-      return `\\draw${rectOptions} ${atCoord} rectangle ${formatPointCm(corner)};`;
+      const point = points({ command: "draw", options: rectOptions.slice(1, -1) });
+      return tikz`\draw${rectOptions} ${point(at)} rectangle ${point(corner)};`;
     }
 
     case "ellipse": {
       const { center, xRadiusPt, yRadiusPt } = ellipseFromCorner(at, template.corner);
-      const xRadiusCm = formatNumber(xRadiusPt * CM_PER_PT);
-      const yRadiusCm = formatNumber(yRadiusPt * CM_PER_PT);
       const ellipseOptions = buildDrawOptions(template.strokeColor, template.fillColor, false);
-      return `\\draw${ellipseOptions} ${formatPointCm(center)} ellipse [x radius=${xRadiusCm}cm, y radius=${yRadiusCm}cm];`;
+      const point = points({ command: "draw", options: ellipseOptions.slice(1, -1) });
+      // Radii are lengths in the frame; the writer takes them over in phase 5.
+      const radii = legacyText(`x radius=${formatNumber(xRadiusPt * CM_PER_PT)}cm, y radius=${formatNumber(yRadiusPt * CM_PER_PT)}cm`);
+      return tikz`\draw${ellipseOptions} ${point(center)} ellipse [${radii}];`;
     }
 
     case "circle": {
-      const radiusPt = circleRadiusPt(at, template.edge);
       const circleOptions = buildDrawOptions(template.strokeColor, template.fillColor, false);
-      return `\\draw${circleOptions} ${atCoord} circle (${formatNumber(radiusPt * CM_PER_PT)}cm);`;
+      const point = points({ command: "draw", options: circleOptions.slice(1, -1) });
+      return tikz`\draw${circleOptions} ${point(at)} circle (${circleRadius(at, template.edge)});`;
     }
 
     case "filledCircle": {
-      const radiusPt = circleRadiusPt(at, template.edge);
-      return `\\fill ${atCoord} circle (${formatNumber(radiusPt * CM_PER_PT)}cm);`;
+      const point = points({ command: "fill", options: "" });
+      return tikz`\fill ${point(at)} circle (${circleRadius(at, template.edge)});`;
     }
   }
 }
 
-export function insertElementIntoSource(source: string, snippet: string, figureSpan?: Span): EditedSource {
-  const normalizedSnippet = snippet.trim();
-  if (normalizedSnippet.length === 0) {
+/** A circle's radius as a length in the frame; the writer takes it over in phase 5. */
+function circleRadius(at: WorldPoint, edge: WorldPoint | undefined): TikzFragment {
+  return legacyText(`${formatNumber(circleRadiusPt(at, edge) * CM_PER_PT)}cm`);
+}
+
+/** Inserts a statement before the figure's end, indented like its body. */
+export function insertElementIntoSource(source: string, snippet: TikzFragment, figureSpan?: Span): EditedSource {
+  if (snippet.length === 0) {
     return unchangedSource(source);
   }
 
@@ -155,23 +166,18 @@ export function insertElementIntoSource(source: string, snippet: string, figureS
   const endIndex = resolvedEnd?.from ?? source.lastIndexOf(endToken);
   if (endIndex < 0) {
     if (source.trim().length === 0) {
-      return legacyEditedSource(`\\begin{tikzpicture}\n  ${normalizedSnippet}\n\\end{tikzpicture}`);
+      return applyFragments(source, [{ span: { from: 0, to: source.length },
+        fragment: tikz`\begin{tikzpicture}${layout("\n  ")}${snippet}${layout("\n")}\end{tikzpicture}` }]);
     }
-    return legacyEditedSource(source.endsWith("\n")
-      ? `${source}${normalizedSnippet}`
-      : `${source}\n${normalizedSnippet}`);
+    return applyFragments(source, [{ span: { from: source.length, to: source.length },
+      fragment: tikz`${layout(source.endsWith("\n") ? "" : "\n")}${snippet}` }]);
   }
 
   const endLineStart = source.lastIndexOf("\n", endIndex - 1) + 1;
   const endIndent = source.slice(endLineStart, endIndex).match(/^[ \t]*/)?.[0] ?? "";
-  const bodyIndent = `${endIndent}  `;
-
-  const before = source.slice(0, endLineStart);
-  const after = source.slice(endLineStart);
-  const needsLeadingNewline = before.length > 0 && !before.endsWith("\n");
-  const prefix = needsLeadingNewline ? "\n" : "";
-
-  return legacyEditedSource(`${before}${prefix}${bodyIndent}${normalizedSnippet}\n${after}`);
+  const needsLeadingNewline = endLineStart > 0 && !source.slice(0, endLineStart).endsWith("\n");
+  return applyFragments(source, [{ span: { from: endLineStart, to: endLineStart },
+    fragment: tikz`${layout(`${needsLeadingNewline ? "\n" : ""}${endIndent}  `)}${snippet}${layout("\n")}` }]);
 }
 
 function resolveTikzpictureEndToken(source: string, figureSpan: Span | undefined): { from: number; token: string } | null {
@@ -195,56 +201,43 @@ function resolveTikzpictureEndToken(source: string, figureSpan: Span | undefined
   };
 }
 
+/** A new path statement through world points, written where it will be read. */
 export function generateComplexPathSource(
   start: WorldPoint,
   segments: readonly ComplexPathSegment[],
-  options: { closed?: boolean; startAnchor?: AnchorReference; strokeColor?: string } = {}
-): string | null {
+  options: { closed?: boolean; startAnchor?: AnchorReference; strokeColor?: string },
+  points: NewStatementPoints
+): TikzFragment | null {
   if (segments.length === 0) {
     return null;
   }
-
-  const parts: string[] = [formatPathEndpoint(options.startAnchor, start)];
-  for (const segment of segments) {
-    if (segment.kind === "line") {
-      parts.push(`-- ${formatPathEndpoint(segment.toAnchor, segment.to)}`);
-      continue;
-    }
-
-    parts.push(
-      `.. controls ${formatPointCm(segment.control1)} and ${formatPointCm(segment.control2)} .. ${formatPathEndpoint(segment.toAnchor, segment.to)}`
-    );
-  }
-
-  if (options.closed) {
-    parts.push("-- cycle");
-  }
-
   const drawOptions = buildDrawOptions(options.strokeColor, undefined, false);
-  return `\\draw${drawOptions} ${parts.join(" ")};`;
+  const point = points({ command: "draw", options: drawOptions.slice(1, -1) });
+  const parts: TikzFragment[] = [endpoint(options.startAnchor, start, point), ...segments.map(segment => segmentSource(segment, point))];
+  if (options.closed) {
+    parts.push(tikz`-- cycle`);
+  }
+  return tikz`\draw${drawOptions} ${joinFragments(parts, tikz` `)};`;
 }
 
 /**
- * Generate just the segment operators (e.g. `-- (x,y) .. controls ... .. (x2,y2)`)
- * without the `\draw`, start coordinate, or `;`.
+ * Just the segment operators (e.g. `-- (x,y) .. controls ... .. (x2,y2)`),
+ * without the `\draw`, start coordinate, or `;`, for appending to a path.
  */
 export function generateComplexPathSegmentSource(
-  segments: readonly ComplexPathSegment[]
-): string | null {
+  segments: readonly ComplexPathSegment[],
+  point: (point: WorldPoint) => CoordinateText
+): TikzFragment | null {
   if (segments.length === 0) {
     return null;
   }
-  const parts: string[] = [];
-  for (const segment of segments) {
-    if (segment.kind === "line") {
-      parts.push(`-- ${formatPathEndpoint(segment.toAnchor, segment.to)}`);
-    } else {
-      parts.push(
-        `.. controls ${formatPointCm(segment.control1)} and ${formatPointCm(segment.control2)} .. ${formatPathEndpoint(segment.toAnchor, segment.to)}`
-      );
-    }
-  }
-  return parts.join(" ");
+  return joinFragments(segments.map(segment => segmentSource(segment, point)), tikz` `);
+}
+
+function segmentSource(segment: ComplexPathSegment, point: (point: WorldPoint) => CoordinateText): TikzFragment {
+  return segment.kind === "line"
+    ? tikz`-- ${endpoint(segment.toAnchor, segment.to, point)}`
+    : tikz`.. controls ${point(segment.control1)} and ${point(segment.control2)} .. ${endpoint(segment.toAnchor, segment.to, point)}`;
 }
 
 /**
@@ -302,64 +295,39 @@ export function reverseComplexPathSegments(
 export function generateComplexPathPrependSource(
   startWorld: WorldPoint,
   segments: readonly ComplexPathSegment[],
-  startAnchor?: AnchorReference
-): string | null {
+  startAnchor: AnchorReference | undefined,
+  point: (point: WorldPoint) => CoordinateText
+): TikzFragment | null {
   if (segments.length === 0) return null;
 
-  const parts: string[] = [formatPathEndpoint(startAnchor, startWorld)];
+  const parts: TikzFragment[] = [endpoint(startAnchor, startWorld, point)];
 
   // All segments except the last: include full operator + target
   for (let i = 0; i < segments.length - 1; i++) {
-    const seg = requireArrayValue(segments, i);
-    if (seg.kind === "line") {
-      parts.push(`-- ${formatPathEndpoint(seg.toAnchor, seg.to)}`);
-    } else {
-      parts.push(`.. controls ${formatPointCm(seg.control1)} and ${formatPointCm(seg.control2)} .. ${formatPathEndpoint(seg.toAnchor, seg.to)}`);
-    }
+    parts.push(segmentSource(requireArrayValue(segments, i), point));
   }
 
   // Last segment: operator only, no target (existing body provides it)
   const last = requireArrayValue(segments, segments.length - 1);
-  if (last.kind === "line") {
-    parts.push("--");
-  } else {
-    parts.push(`.. controls ${formatPointCm(last.control1)} and ${formatPointCm(last.control2)} ..`);
-  }
-
-  return parts.join(" ");
+  parts.push(last.kind === "line" ? tikz`--` : tikz`.. controls ${point(last.control1)} and ${point(last.control2)} ..`);
+  return joinFragments(parts, tikz` `);
 }
 
-function formatPointCm(point: WorldPoint): string {
-  const x = formatNumber(point.x * CM_PER_PT);
-  const y = formatNumber(point.y * CM_PER_PT);
-  return `(${x},${y})`;
-}
-
-function formatNodeName(name: string | undefined): string {
+function formatNodeName(name: string | undefined): TikzFragment {
   const trimmed = name?.trim() ?? "";
-  return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(trimmed) ? ` (${trimmed})` : "";
+  return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(trimmed) ? tikz` (${userText(trimmed, "node-reference")})` : EMPTY_FRAGMENT;
 }
 
-function formatLineEndpoint(anchor: AnchorReference | undefined, fallbackCoord: string): string {
-  return formatAnchorReference(anchor, fallbackCoord);
-}
-
-function formatPathEndpoint(anchor: AnchorReference | undefined, fallbackPoint: WorldPoint): string {
-  return formatAnchorReference(anchor, formatPointCm(fallbackPoint));
-}
-
-function formatAnchorReference(anchor: AnchorReference | undefined, fallbackCoord: string): string {
-  if (!anchor) {
-    return fallbackCoord;
-  }
-  const nodeName = anchor.nodeName.trim();
-  if (nodeName.length === 0) {
-    return fallbackCoord;
+/** A path endpoint: a node anchor when there is one, else the point. */
+function endpoint(anchor: AnchorReference | undefined, fallback: WorldPoint, point: (point: WorldPoint) => CoordinateText): TikzFragment {
+  const nodeName = anchor?.nodeName.trim() ?? "";
+  if (!anchor || nodeName.length === 0) {
+    return point(fallback);
   }
   const normalizedAnchor = anchor.anchor.trim().toLowerCase();
   return normalizedAnchor === "center" || normalizedAnchor.length === 0
-    ? `(${nodeName})`
-    : `(${nodeName}.${normalizedAnchor})`;
+    ? tikz`(${userText(nodeName, "node-reference")})`
+    : tikz`(${userText(nodeName, "node-reference")}.${userText(normalizedAnchor, "node-reference")})`;
 }
 
 function circleRadiusPt(center: WorldPoint, edge: WorldPoint | undefined): number {
@@ -436,39 +404,39 @@ export function buildDrawOptions(
   strokeColor: string | undefined,
   fillColor: string | undefined,
   hasArrow: boolean
-): string {
-  const parts: string[] = [];
+): TikzFragment {
+  const parts: TikzFragment[] = [];
 
   if (hasArrow) {
-    parts.push("->");
+    parts.push(option("->"));
   }
 
   if (strokeColor && strokeColor !== "black") {
-    parts.push(`draw=${strokeColor}`);
+    parts.push(option("draw", userText(strokeColor, "inspector-value")));
   }
 
   if (fillColor && fillColor !== "none") {
-    parts.push(`fill=${fillColor}`);
+    parts.push(option("fill", userText(fillColor, "inspector-value")));
   }
 
-  return parts.length > 0 ? `[${parts.join(", ")}]` : "";
+  return optionList(parts);
 }
 
 function buildNodeOptions(
   strokeColor: string | undefined,
   fillColor: string | undefined,
   defaultDraw: boolean
-): string[] {
-  const parts: string[] = [];
+): TikzFragment[] {
+  const parts: TikzFragment[] = [];
 
   if (strokeColor) {
-    parts.push(strokeColor === "black" ? "draw" : `draw=${strokeColor}`);
+    parts.push(strokeColor === "black" ? option("draw") : option("draw", userText(strokeColor, "inspector-value")));
   } else if (defaultDraw) {
-    parts.push("draw");
+    parts.push(option("draw"));
   }
 
   if (fillColor && fillColor !== "none") {
-    parts.push(`fill=${fillColor}`);
+    parts.push(option("fill", userText(fillColor, "inspector-value")));
   }
 
   return parts;

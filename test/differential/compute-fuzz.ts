@@ -28,7 +28,6 @@ import { formatDocumentRootId, parseDocumentRootId } from "../../packages/core/s
 import { executeDocumentEdit } from "../../packages/app/src/edit-execution.js";
 import { beamerOverlayPicturesIn, scanBeamerDocument } from "../../packages/core/src/beamer/index.js";
 import { createBeamerSyntaxContext } from "../../packages/core/src/beamer/syntax.js";
-import { worldToPictureCoordinates } from "../../packages/app/src/ui/canvas-panel/picture-coordinates.js";
 import { freshComputeModule, type ComputeModule } from "./compute-instances.js";
 import { diffValues } from "./snapshot-diff.js";
 import { fragment } from "../fragment-helpers.js";
@@ -718,11 +717,10 @@ function layerEditCommand(doc: DocState, view: GeneratorState["docs"][number], r
     }
   }
   const actions: { action: EditAction; drag: boolean }[] = [];
-  const toPicture = worldToPictureCoordinates(snapshot.scene);
   const at = worldPoint(pt(cm(1 + rng() * 10)), pt(cm(1 + rng() * 7)));
   actions.push(
-    { action: { kind: "addElement", at: toPicture(at), template: { kind: "rectangle", corner: toPicture(worldPoint(pt(at.x + cm(1.5)), pt(at.y + cm(0.8)))) } }, drag: false },
-    { action: { kind: "addElement", at: toPicture(at), template: { kind: "node", text: pick(["Note", "$x^2$", "Two words"], rng) } }, drag: false }
+    { action: { kind: "addElement", at, template: { kind: "rectangle", corner: worldPoint(pt(at.x + cm(1.5)), pt(at.y + cm(0.8))) } }, drag: false },
+    { action: { kind: "addElement", at, template: { kind: "node", text: pick(["Note", "$x^2$", "Two words"], rng) } }, drag: false }
   );
   if (!snapshot.overlayLayer.insertion && view.sceneIds.length > 0) {
     const elementId = pick(view.sceneIds, rng);

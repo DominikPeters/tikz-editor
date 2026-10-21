@@ -1,4 +1,4 @@
-import { editedSlice, legacyText, tikz, unchangedSource, userText, type EditedSource } from "./fragment.js";
+import { editedSlice, legacyText, tikz, unchangedSource, userText, type EditedSource, type TikzFragment } from "./fragment.js";
 import { requireDefined } from "../utils/invariants.js";
 import { ADORNMENT_EDIT_NOOP_REASON } from "./actions/adornment-set-property.js";
 import { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-node-actions.js";
@@ -15,11 +15,14 @@ import { applyEditIntent } from "./apply.js";
 import { computeMinimalReplacementPatch, replaceSpan } from "./patch.js";
 import { PT_PER_CM, type DragFormatPrecision } from "./format.js";
 import {
+  generateComplexPathSource,
   generateElementSource,
   insertElementIntoSource,
   type AnchorReference,
+  type ComplexPathSegment,
   type ElementTemplate
 } from "./element-templates.js";
+import { appendedStatementPoints, CoordinateWriteRefused } from "./new-statement.js";
 import { changedSourceIdsForPropertyTarget, resolvePropertyTarget } from "./property-target.js";
 import type { AlignMode, DistributeAxis } from "./arrange.js";
 import {
@@ -50,7 +53,8 @@ import {
   applyReversePathAction,
   applySetPathPointKindAction,
   applySplitPathAction,
-  applyToggleClosedPathAction
+  applyToggleClosedPathAction,
+  type AppendToPathAction
 } from "./actions/path-editing-actions.js";
 import {
   applyAlignElementsAction,
@@ -136,13 +140,15 @@ export type EditAction =
   | { kind: "toggleClosedPath"; elementId: string; closed: boolean }
   | { kind: "deletePathPoint"; elementId: string; handleId: string }
   | { kind: "setPathPointKind"; elementId: string; handleId: string; pointKind: PathPointKind }
-  | { kind: "appendToPath"; elementId: string; end: "start" | "end"; segmentSource: string }
+  | ({ kind: "appendToPath" } & AppendToPathAction)
   | { kind: "insertPathPoint"; elementId: string; segmentIndex: number; point: WorldPoint }
   | SetPropertyEditAction
   | RotateElementAction
   | { kind: "updateNodeText"; elementId: string; text: string }
   | SetFigureBoundsAction
   | { kind: "addElement"; template: ElementTemplate; at: WorldPoint }
+  /** A new path through world points: what the path and freehand tools draw. */
+  | { kind: "addPath"; start: WorldPoint; startAnchor?: AnchorReference; segments: readonly ComplexPathSegment[]; closed?: boolean; strokeColor?: string }
   | { kind: "deleteElement"; elementId: string }
   | { kind: "deleteElements"; elementIds: string[] }
   | { kind: "deleteAdornment"; targetId: string }
@@ -288,7 +294,7 @@ export function applyEditAction(
       case "setPathPointKind":
         return applySetPathPointKind(source, editHandles, action, parseOptions);
       case "appendToPath":
-        return applyAppendToPathAction(source, action, parseOptions);
+        return applyAppendToPathAction(source, editHandles, action, parseOptions);
       case "insertPathPoint":
         return applyInsertPathPointAction(source, editHandles, action, parseOptions);
       case "moveElement":
@@ -338,7 +344,9 @@ export function applyEditAction(
       case "setFigureBounds":
         return applySetFigureBoundsAction(source, action, parseOptions, evaluateOptions, geometry);
       case "addElement":
-        return applyAddElement(source, action.template, action.at, parseOptions);
+        return applyAddElement(source, action.template, action.at, parseOptions, evaluateOptions, geometry);
+      case "addPath":
+        return applyAddPath(source, action, parseOptions, evaluateOptions, geometry);
       case "deleteElement":
         return applyDeleteElementsAction(source, [action.elementId], parseOptions);
       case "deleteElements":
@@ -1170,14 +1178,49 @@ function applyAddElement(
   source: string,
   template: ElementTemplate,
   at: WorldPoint,
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined,
+  geometry: EditGeometrySession | undefined
+): EditActionResult {
+  // Naming anchored nodes leaves the end of the figure, where the element goes, as it is.
+  const points = appendedStatementPoints(source, parseOptions, evaluateOptions, geometry);
+  const resolved = resolveElementTemplateAnchorNames(source, template, parseOptions);
+  return appendStatement(source, resolved.source, () => generateElementSource(resolved.template, at, points), parseOptions);
+}
+
+function applyAddPath(
+  source: string,
+  action: Extract<EditAction, { kind: "addPath" }>,
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined,
+  geometry: EditGeometrySession | undefined
+): EditActionResult {
+  const points = appendedStatementPoints(source, parseOptions, evaluateOptions, geometry);
+  return appendStatement(source, source, () => generateComplexPathSource(action.start, action.segments, {
+    ...(action.closed === undefined ? {} : { closed: action.closed }),
+    ...(action.startAnchor === undefined ? {} : { startAnchor: action.startAnchor }),
+    ...(action.strokeColor === undefined ? {} : { strokeColor: action.strokeColor })
+  }, points), parseOptions);
+}
+
+/** Appends a new statement to the figure of `working` and selects it. */
+function appendStatement(
+  source: string,
+  working: string,
+  build: () => TikzFragment | null,
   parseOptions: EditParseOptions
 ): EditActionResult {
+  let snippet: TikzFragment | null;
+  try {
+    snippet = build();
+  } catch (error) {
+    if (error instanceof CoordinateWriteRefused) return { kind: "unsupported", reason: `Cannot write the new element here: ${error.message}.` };
+    throw error;
+  }
+  if (!snippet) return { kind: "unsupported", reason: "Nothing to add." };
   const beforeStatements = parseStatementSnapshot(source, parseOptions);
-  const resolved = resolveElementTemplateAnchorNames(source, template, parseOptions);
-  const snippet = generateElementSource(resolved.template, at);
-  const parsedForInsertion = parseTikzForEdit(resolved.source, parseOptions);
-
-  const newSource = insertElementIntoSource(resolved.source, snippet, parsedForInsertion.figure.span);
+  const parsedForInsertion = parseTikzForEdit(working, parseOptions);
+  const newSource = insertElementIntoSource(working, snippet, parsedForInsertion.figure.span);
 
   const afterStatements = parseStatementSnapshot(newSource, parseOptions);
   const insertedStatementId = afterStatements.all.find((ref) => !beforeStatements.byId.has(ref.id))?.id;

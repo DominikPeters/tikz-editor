@@ -383,9 +383,9 @@ plain numbers through the axis vectors, as the evaluator reads
 `{ authored }`, the option's own angle. Center-pivot rotation turns the
 world by the gesture's change where the CTM is conformal (flipped under a
 reflection) and keeps its tested behavior elsewhere: the change goes to the
-authored angle, which TikZ composes with the parent. Refusing there, as the
-product table first said, would have removed that behavior; it is a product
-call still open.
+authored angle, which TikZ composes with the parent. The product table
+first said to refuse there; that would have removed a tested feature, so
+it was decided to keep it.
 
 ### Positioning
 
@@ -402,7 +402,7 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
 |---|---|
 | 1. world cm as source units | insertPathPoint, convert-to-absolute: `writer.point` at an `in-statement` site; figure bounds: `writer.bounds`/`readBounds`; center-pivot rotation: corners via `writer.point`, angle via `writer.rotation` |
 | 2. offsets in a bare picture | `writer.offsetStatement` replaces `getOffsetPreparation` and `translateSingleStatementSnippet`: the copy's gap context, not a fresh picture; the original's handles plan the offset only when the contexts match. Repeat steps go through `writer.vector`; positioned nodes through `writer.positioning` |
-| 3. new coordinates ignore axes and scopes | insertion actions take world points, written at the gap or target-statement context. A core `addPath { start, segments, closed, style }` replaces app-side path and freehand string generation; `appendToPath` takes world segments. The app's `*InPictureCoordinates` mappings are deleted |
+| 3. new coordinates ignore axes and scopes (done) | insertion actions take world points, written at the gap or target-statement context. A core `addPath { start, segments, closed, style }` replaces app-side path and freehand string generation; `appendToPath` takes world segments. The app's `*InPictureCoordinates` mappings are deleted |
 | 4. positioning | drags and `positionNodeRelativeTo` use `writer.positioning`, choosing the direction from the local delta. Aligning `A` with a node positioned from `A` is a move-planning bug (dependents move with `A`), tracked separately |
 | 5. relative coordinates in rewritten paths | restructuring actions compute anchors' world positions and re-spell each one at its new place: `writer.point` for absolute, `writer.vector` from the new predecessor for `+`/`++` |
 
@@ -412,7 +412,7 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
 |---|---|
 | spelling of new coordinates | preserve when editing; new coordinates unitless, always |
 | paste across scopes | two intents. Canvas copy/paste keeps the visual geometry, then applies the paste offset (`offsetStatement` into the destination gap). Pasting raw TikZ keeps its text (`userText`) |
-| rotation in non-conformal frames | for now the gesture changes the authored angle (existing, tested behavior); refusing instead is still open |
+| rotation in non-conformal frames | the gesture changes the authored angle, which TikZ composes with the parent (existing, tested behavior; decided to keep) |
 | assistant coordinates | structured placement tools state world units explicitly; raw TikZ from the assistant is source text. Check the existing tool contracts before changing behavior |
 
 ## Gates
@@ -491,6 +491,23 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
      full option state, which removed `legacyCtmSiteContext`.
      Exceptions: 139 → 129 (migration 80 → 66; four reviewed
      `sourceSlice` calls copy the `rotate around` text around the pivot).
+   - Class 3 done: 49 recorded failures pass (257 → 208), no other outcome
+     changed. Insertion actions take world points. A new statement is
+     appended at the end gap, `prepareInsertion` gives the context there
+     (options included, so `[x=2cm]` and scopes count), and the points are
+     written with a `context` site (`edit/new-statement.ts`; it reuses the
+     geometry snapshot when its source is the edited one, which keeps a
+     drawing layer's page shift). `generateElementSource` and the complex
+     path generators take such a point writer; `addPath { start, segments,
+     closed, strokeColor }` replaces the app's path and freehand string
+     generation, and `appendToPath` takes world segments, written in the
+     frame its path's points share (refused when they differ). The app's
+     `picture-coordinates.ts` and its mappings are deleted. A refusal is an
+     `unsupported` result, never a guess. Names and text values entered in
+     templates are `userText`, with a new `node-reference` origin. Circle
+     and ellipse radii stay `legacyText` until phase 5 (`writer.radius`).
+     Exception entries: reviewed 58 → 68 (the template text values),
+     migration 64 → 62.
 5. **Remaining writers.** Radii and other frame-dependent lengths (after
    adding circle/ellipse resize cases), SVG import, assistant handlers,
    semantic-internal source (`fit`, `tree-child`, `label-quotes`) or audited

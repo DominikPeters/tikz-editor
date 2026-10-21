@@ -146,12 +146,12 @@ frame).
 | distributeElements | `move-arrange-actions.ts` → moveElements | as moveElements | not fuzzed (same machinery as align) |
 | resizeElement | `resize-element.ts` (7 raw `CM_PER_PT`) | local transform for rectangles | pass for rectangle corners; edges, circles, ellipses, node sizes not checked |
 | rotateElement | `rotate-element.ts` | `rewritePreciseFrameCoordinate`; recentered corners in cm | fails (class 1); only rectangles/circles/ellipses supported |
-| addElement | `element-templates.ts` `generateElementSource` | none in core; app inverts `rootTransform` | fails (class 3) |
+| addElement | `element-templates.ts` `generateElementSource` | world points written at the end-gap context (`new-statement.ts`) | pass (class 3 done); radii still `legacyText` |
 | pasteStatements / duplicateElements | `paste-duplicate.ts` | offset planned in identity frame | fails (classes 2, 4) |
 | repeatElements | `repeat.ts` | step planned in identity frame | fails (class 2) |
 | insertPathPoint | `path-editing-actions.ts` | none | fails (class 1); refuses scoped paths and paths with options |
 | reversePath / setPathPointKind | `path-editing-actions.ts` | n/a (rewrites existing text) | fail on relative (class 5); refuse scoped paths and paths with options |
-| appendToPath | `path-editing-actions.ts`, source from the app path tool | app inverts `rootTransform` only | fails (class 3); refuses paths with options |
+| appendToPath | `path-editing-actions.ts`, world segments from the app path tool | written in the path's shared frame | pass (class 3 done) |
 | positionNodeRelativeTo | `node-positioning-actions.ts` | world anchors, direction from source | fails (class 4) |
 | convertNodePositionToAbsolute | `node-positioning-actions.ts:783` | `worldToLocal` + `localToSourceUnits` without axis vectors | fails (class 1) |
 | setFigureBounds | `figure-bounds.ts` | none | fails (class 1) |
@@ -164,9 +164,8 @@ frame).
 
 | site | what it writes | status |
 |---|---|---|
-| `canvas-panel/freehand-tool.ts` `formatPointCm` | freehand curves | fails (class 3) |
-| `canvas-panel/path-tool.ts` → core `generateComplexPathSource` | path tool statements and appended segments | fails (class 3) |
-| `CanvasPanel.tsx` → `templateInPictureCoordinates` | addElement preprocessing | fails (class 3) |
+| `canvas-panel/freehand-tool.ts` | freehand curves | world segments sent as `addPath` (class 3 done) |
+| `canvas-panel/path-tool.ts` | path tool statements and appended segments | world segments, `addPath` / `appendToPath` (class 3 done) |
 | `svg-import-clipping.ts` | coordinates from imported SVG | not fuzzed |
 | `assistant-tool-handlers.ts` (27 raw pt/cm constants) | assistant-generated statements | not fuzzed; intended semantics (world or source units) to decide first |
 

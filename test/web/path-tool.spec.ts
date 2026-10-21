@@ -3,15 +3,35 @@ import { PT_PER_CM } from "../../packages/core/src/edit/format.js";
 import {
   appendPathToolSegmentFromGesture,
   createPathToolDraft,
-  generateAppendSegmentSource,
-  generatePathToolSource,
+  pathToolAppendAction,
+  pathToolAddPathAction,
   pathToolCloseRadiusWorld,
   pathToolShouldClose,
   undoLastPathToolSegment
 } from "../../packages/app/src/ui/canvas-panel/path-tool.js";
-import { wp } from "../coords-helpers.js";
+import { identityPoint, identityPoints, wp } from "../coords-helpers.js";
+import { generateComplexPathPrependSource, generateComplexPathSegmentSource, generateComplexPathSource, reverseComplexPathSegments } from "../../packages/core/src/edit/element-templates.js";
 
 const cm = (value: number): number => value * PT_PER_CM;
+
+/** The draft's new path as the core writes it in a picture without options. */
+function generatePathToolSource(draft: Parameters<typeof pathToolAddPathAction>[0], options: { closed: boolean; strokeColor?: string }): string | null {
+  const action = pathToolAddPathAction(draft, options);
+  return action && generateComplexPathSource(action.start, action.segments, {
+    ...(action.closed === undefined ? {} : { closed: action.closed }),
+    ...(action.startAnchor === undefined ? {} : { startAnchor: action.startAnchor }),
+    ...(action.strokeColor === undefined ? {} : { strokeColor: action.strokeColor })
+  }, identityPoints);
+}
+
+/** The draft's segments as `appendToPath` writes them onto either end of a path. */
+function generateAppendSegmentSource(draft: Parameters<typeof pathToolAppendAction>[0]): string | null {
+  const action = pathToolAppendAction(draft);
+  if (!action) return null;
+  if (action.end === "end") return generateComplexPathSegmentSource(action.segments, identityPoint);
+  const reversed = reverseComplexPathSegments(action.start, action.segments, action.startAnchor);
+  return generateComplexPathPrependSource(reversed.startWorld, reversed.segments, reversed.startAnchor, identityPoint);
+}
 
 describe("path-tool state machine", () => {
   it("starts a draft on first click", () => {

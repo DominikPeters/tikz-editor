@@ -35,7 +35,8 @@ export type UserTextOrigin =
   | "assistant-tikz"
   | "imported-svg"
   | "source-editor"
-  | "beamer-text";
+  | "beamer-text"
+  | "node-reference";
 
 function asFragment(text: string): TikzFragment {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This module is the fragment constructor boundary.

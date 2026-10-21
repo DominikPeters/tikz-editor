@@ -73,7 +73,7 @@ import { useDeckOverlayContextMenu } from "./useDeckOverlayContextMenu";
 import { useCanvasContextMenuController,useCanvasContextMenuState } from "./useCanvasContextMenus";
 import {
 appendFreehandToolPoint,
-generateFreehandToolSource
+freehandToolPath
 } from "./freehand-tool";
 import {
 clamp,
@@ -82,7 +82,6 @@ worldToSvgPoint
 } from "./geometry";
 import type { Span } from "@tikz-editor/core/ast/types";
 import { buildHitRegions, type HitRegion } from "./hit-regions";
-import { freehandDraftInPictureCoordinates, pathDraftInPictureCoordinates, templateInPictureCoordinates, worldToPictureCoordinates } from "./picture-coordinates";
 import {
 pickClosestSourceId
 } from "./interaction-helpers";
@@ -99,8 +98,8 @@ rectHitRegionsForTargetId
 } from "./panel-helpers";
 import {
 appendPathToolSegmentFromGesture,
-generateAppendSegmentSource,
-generatePathToolSource,
+pathToolAppendAction,
+pathToolAddPathAction,
 pathToolCurrentPoint,
 pathToolHasDrawableSegments,
 undoLastPathToolSegment,
@@ -1839,11 +1838,6 @@ export const CanvasPanel = memo(function CanvasPanel({
   const applyActionWithFeedback = useCallback(
     (action: EditAction, historyMergeKey?: string, sourceOverride?: string, geometry?: EditGeometrySession, recordInHistory?: boolean): ApplyActionFeedback => {
       const sourceForEdit = sourceOverride ?? source;
-      // A new shape is written in the picture's own coordinates.
-      if (action.kind === "addElement" && snapshot.scene?.rootTransform) {
-        const toPicture = worldToPictureCoordinates(snapshot.scene);
-        action = { ...action, at: toPicture(action.at), template: templateInPictureCoordinates(action.template, toPicture) };
-      }
       const drawingLayerRootId = useEditorStore.getState().documents[activeDocumentId]?.drawingLayerRootId;
       const result = executeDocumentEdit({ documentId: activeDocumentId, source: sourceForEdit, sourceRevision, activeRootId, snapshot,
         ...(drawingLayerRootId !== undefined ? { drawingLayerRootId } : {}) }, action, {
@@ -2010,10 +2004,8 @@ export const CanvasPanel = memo(function CanvasPanel({
       return;
     }
 
-    const snippet = generateFreehandToolSource(freehandDraftInPictureCoordinates(draft, worldToPictureCoordinates(snapshot.scene)), canvasTransform.scale, freehandSmoothingPx, {
-      strokeColor: creationStrokeColor
-    });
-    if (snippet) {
+    const path = freehandToolPath(draft, canvasTransform.scale, freehandSmoothingPx);
+    if (path) {
       const firstPoint = requireArrayValue(draft.points, 0);
       const lastPoint = requireArrayValue(draft.points, draft.points.length - 1);
       queueSelectionForAddedElement(
@@ -2023,9 +2015,10 @@ export const CanvasPanel = memo(function CanvasPanel({
         )
       );
       const ok = applyActionWithFeedback({
-        kind: "pasteStatements",
-        snippets: [snippet],
-        delta: makeWorldPoint(pt(0), pt(0))
+        kind: "addPath",
+        start: path.start,
+        segments: path.segments,
+        strokeColor: creationStrokeColor
       });
       if (!ok.sourceChanged) {
         pendingAddedSelectionRef.current = null;
@@ -2037,7 +2030,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     setFreehandDraft(null);
     setToolCursorWorld(null);
     dispatch({ type: "SET_TOOL_MODE", mode: "select" });
-  }, [applyActionWithFeedback, canvasTransform.scale, creationStrokeColor, dispatch, freehandSmoothingPx, queueSelectionForAddedElement, setDragState, snapshot.scene]);
+  }, [applyActionWithFeedback, canvasTransform.scale, creationStrokeColor, dispatch, freehandSmoothingPx, queueSelectionForAddedElement, setDragState]);
 
   const finalizePathDraft = useCallback(
     (closed: boolean) => {
@@ -2057,35 +2050,26 @@ export const CanvasPanel = memo(function CanvasPanel({
       }
 
       if (draft.appendTarget) {
-        const segSource = generateAppendSegmentSource(pathDraftInPictureCoordinates(draft, worldToPictureCoordinates(snapshot.scene)));
-        if (!segSource) {
+        const append = pathToolAppendAction(draft);
+        if (!append) {
           setPathDraft(null);
           setToolCursorWorld(null);
           dispatch({ type: "SET_TOOL_MODE", mode: "select" });
           return;
         }
-        const ok = applyActionWithFeedback({
-          kind: "appendToPath",
-          elementId: draft.appendTarget.elementId,
-          end: draft.appendTarget.end,
-          segmentSource: segSource
-        });
+        const ok = applyActionWithFeedback(append);
         if (!ok.sourceChanged) {
           pendingAddedSelectionRef.current = null;
         }
       } else {
-        const snippet = generatePathToolSource(pathDraftInPictureCoordinates(draft, worldToPictureCoordinates(snapshot.scene)), { closed, strokeColor: creationStrokeColor });
-        if (!snippet) {
+        const addPath = pathToolAddPathAction(draft, { closed, strokeColor: creationStrokeColor });
+        if (!addPath) {
           setPathDraft(null);
           setToolCursorWorld(null);
           dispatch({ type: "SET_TOOL_MODE", mode: "select" });
           return;
         }
-        const ok = applyActionWithFeedback({
-          kind: "pasteStatements",
-          snippets: [snippet],
-          delta: makeWorldPoint(pt(0), pt(0))
-        });
+        const ok = applyActionWithFeedback(addPath);
         if (!ok.sourceChanged) {
           pendingAddedSelectionRef.current = null;
         }
@@ -2095,7 +2079,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       setToolCursorWorld(null);
       dispatch({ type: "SET_TOOL_MODE", mode: "select" });
     },
-    [applyActionWithFeedback, creationStrokeColor, dispatch, setDragState, snapshot.scene]
+    [applyActionWithFeedback, creationStrokeColor, dispatch, setDragState]
   );
 
   

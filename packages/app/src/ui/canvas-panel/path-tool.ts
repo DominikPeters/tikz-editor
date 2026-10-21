@@ -1,11 +1,5 @@
-import {
-  generateComplexPathSource,
-  generateComplexPathSegmentSource,
-  generateComplexPathPrependSource,
-  reverseComplexPathSegments,
-  type AnchorReference,
-  type ComplexPathSegment
-} from "@tikz-editor/core/edit/element-templates";
+import type { AnchorReference, ComplexPathSegment } from "@tikz-editor/core/edit/element-templates";
+import type { EditAction } from "@tikz-editor/core/edit/actions";
 import type { WorldPoint } from "../coords/types";
 
 import { distanceSquared } from "./geometry";
@@ -151,35 +145,28 @@ export function undoLastPathToolSegment(draft: PathToolDraft): PathToolDraft {
   };
 }
 
-export function generatePathToolSource(draft: PathToolDraft, options: { closed: boolean; strokeColor?: string }): string | null {
-  return generateComplexPathSource(draft.startWorld, draft.segments, {
+/** The finished draft as a new path, in world points. */
+export function pathToolAddPathAction(draft: PathToolDraft, options: { closed: boolean; strokeColor?: string }): Extract<EditAction, { kind: "addPath" }> | null {
+  if (draft.segments.length === 0) return null;
+  return {
+    kind: "addPath",
+    start: draft.startWorld,
+    segments: draft.segments,
     closed: options.closed,
     ...(draft.startAnchor !== undefined ? { startAnchor: draft.startAnchor } : {}),
     ...(options.strokeColor !== undefined ? { strokeColor: options.strokeColor } : {})
-  });
+  };
 }
 
-/**
- * Generate the segment source for appending/prepending to an existing path.
- * For "end": returns segment operators like `-- (x,y) -- (x2,y2)`.
- * For "start": reverses segments and returns `(newStart) -- ... --`
- * (ending with an operator, no final coordinate, since the existing body provides it).
- */
-export function generateAppendSegmentSource(draft: PathToolDraft): string | null {
-  if (draft.segments.length === 0) return null;
-  const end = draft.appendTarget?.end ?? "end";
-
-  if (end === "end") {
-    return generateComplexPathSegmentSource(draft.segments);
-  }
-
-  // Prepend to start: reverse the drawn segments so they go from the
-  // new far end back to the old start point.
-  const { startWorld: newStart, startAnchor: newStartAnchor, segments: revSegs } = reverseComplexPathSegments(
-    draft.startWorld,
-    draft.segments,
-    draft.startAnchor
-  );
-
-  return generateComplexPathPrependSource(newStart, revSegs, newStartAnchor);
+/** The draft as segments drawn on from the end of an existing path. */
+export function pathToolAppendAction(draft: PathToolDraft): Extract<EditAction, { kind: "appendToPath" }> | null {
+  if (draft.segments.length === 0 || !draft.appendTarget) return null;
+  return {
+    kind: "appendToPath",
+    elementId: draft.appendTarget.elementId,
+    end: draft.appendTarget.end,
+    start: draft.startWorld,
+    segments: draft.segments,
+    ...(draft.startAnchor !== undefined ? { startAnchor: draft.startAnchor } : {})
+  };
 }
