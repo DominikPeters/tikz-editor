@@ -36,6 +36,8 @@ import {
 import { findPathStatementById } from "../statement-find.js";
 import { applyMatrix, inverseMatrix } from "../../semantic/transform.js";
 import { replaceSpan } from "../patch.js";
+import { legacyCtmSiteContext } from "../writer/index.js";
+import type { SiteContext } from "../../semantic/site-context.js";
 
 const ROTATE_EPSILON = 1e-6;
 
@@ -467,15 +469,15 @@ function buildRectangleCoordinateRewrites(
     rotateWorldPointAroundCenter(applyMatrix(inversePrefix, point), pivot, deltaDeg));
   const targetStart = rotateLocalPoint(context.startHandle.world);
   const targetOpposite = rotateLocalPoint(context.oppositeHandle.world);
-  const startRewriteHandle = withFrameTransform(context.startHandle, nextTransform);
-  const oppositeRewriteHandle = withFrameTransform(context.oppositeHandle, nextTransform);
   const replacements = [
     {
-      handle: startRewriteHandle,
+      handle: context.startHandle,
+      context: contextForFrame(context.startHandle, nextTransform),
       newWorld: targetStart
     },
     {
-      handle: oppositeRewriteHandle,
+      handle: context.oppositeHandle,
+      context: contextForFrame(context.oppositeHandle, nextTransform),
       newWorld: targetOpposite
     }
   ];
@@ -490,7 +492,8 @@ function buildEllipseLikeCoordinateRewrites(
 ): { kind: "success"; replacements: Array<{ span: Span; text: TikzFragment }> } | { kind: "unsupported"; reason: string } {
   return rewriteHandleTargets(source, [
     {
-      handle: withFrameTransform(context.centerHandle, nextTransform),
+      handle: context.centerHandle,
+      context: contextForFrame(context.centerHandle, nextTransform),
       newWorld: context.center
     }
   ]);
@@ -498,7 +501,7 @@ function buildEllipseLikeCoordinateRewrites(
 
 function rewriteHandleTargets(
   source: string,
-  targets: Array<{ handle: EditHandle; newWorld: WorldPoint }>
+  targets: Array<{ handle: EditHandle; context: SiteContext | undefined; newWorld: WorldPoint }>
 ): { kind: "success"; replacements: Array<{ span: Span; text: TikzFragment }> } | { kind: "unsupported"; reason: string } {
   const replacementBySpan = new Map<string, { span: Span; text: TikzFragment }>();
   for (const target of targets) {
@@ -508,7 +511,7 @@ function rewriteHandleTargets(
       return { kind: "unsupported", reason: "Some selected handles are stale. Wait for recompute and try again." };
     }
 
-    const text = rewritePreciseFrameCoordinate(target.newWorld, handle, source);
+    const text = rewritePreciseFrameCoordinate(target.newWorld, handle, source, false, target.context);
     if (text == null) {
       return { kind: "unsupported", reason: "Could not rewrite one or more coordinates for center-pivot rotate." };
     }
@@ -531,15 +534,9 @@ function rewriteHandleTargets(
   return { kind: "success", replacements: [...replacementBySpan.values()] };
 }
 
-function withFrameTransform(handle: EditHandle, transform: FrameTransform): EditHandle {
-  if (!isDirectFrameLocalHandle(handle)) {
-    return handle;
-  }
-  return {
-    ...handle,
-    frame: transform,
-    transform: worldTransform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f)
-  };
+/** The frame after the rotation edit, for a direct coordinate read in it. */
+function contextForFrame(handle: EditHandle, transform: FrameTransform): SiteContext | undefined {
+  return isDirectFrameLocalHandle(handle) ? legacyCtmSiteContext(transform) : undefined;
 }
 
 function resolveCenterPivot(context: CenterPivotRotateContext): WorldPoint {

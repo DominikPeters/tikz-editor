@@ -12,6 +12,7 @@ import type { DiagnosticPushFn, PlacementSegment } from "../path/types.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { normalizeOptionValue } from "./utils.js";
 import { pointAtPlacementSegment, resolvePathPositionFraction } from "../path/path-attached.js";
+import { captureSiteContext } from "../site-context.js";
 
 export { pointAtPlacementSegment };
 
@@ -98,6 +99,8 @@ export function resolveNodeTargetPoint(
       frame: frameTransform(coordinateFrame.a, coordinateFrame.b, coordinateFrame.c, coordinateFrame.d, coordinateFrame.e, coordinateFrame.f),
       transform: coordinateFrame,
       axisBasis: frame.axisBasis,
+      siteContext: captureSiteContext(frame),
+      spelling: { unitlessX: true, unitlessY: true },
       sourceText: "",
       coordinateForm: "cartesian",
       rewriteMode: "direct",

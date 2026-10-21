@@ -1,5 +1,6 @@
 import { requireArrayValue } from "../../utils/collections.js";
 import { coordinateTransform, type AxisBasis } from "./axis-basis.js";
+import type { CoordinateSpelling } from "../site-context.js";
 import type { CoordinateForm, CoordinateItem } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
@@ -27,6 +28,8 @@ export type EvaluatedCoordinate = {
   world: WorldPoint | null;
   local?: FrameLocalPoint;
   frame?: FrameTransform;
+  /** What `frame` was composed for, from the site context (transformed coordinates). */
+  spelling?: CoordinateSpelling;
   sourceUnits?: CoordinateSourceUnits;
   origin?: "named" | "calc" | "perpendicular" | "intersection" | "numeric-anchor" | "turn";
   /** Turn coordinates depend on the current logical point even without +/++. */
@@ -36,6 +39,9 @@ export type EvaluatedCoordinate = {
   diagnostics: string[];
   advancesCurrentPoint: boolean;
 };
+
+const CANVAS_SPELLING: CoordinateSpelling = Object.freeze({ unitlessX: false, unitlessY: false });
+const UNITLESS_SPELLING: CoordinateSpelling = Object.freeze({ unitlessX: true, unitlessY: true });
 
 function asFrameTransform(transform: { a: number; b: number; c: number; d: number; e: number; f: number }): FrameTransform {
   return frameTransform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f);
@@ -133,6 +139,7 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
         localPt,
         coordinateWorld(localPt, frameMatrix, item, context),
         frameMatrix,
+        CANVAS_SPELLING,
         diagnostics,
         item.relativePrefix === "++",
         item.relativePrefix,
@@ -204,6 +211,7 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
       localPt,
       applyFrameTransform(frameMatrix, localPt),
       frameMatrix,
+      UNITLESS_SPELLING,
       diagnostics,
       item.relativePrefix === "++"
     );
@@ -269,6 +277,7 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
       localPoint,
       worldPoint(pt(current.x + delta.x), pt(current.y + delta.y)),
       frameMatrix,
+      { unitlessX: scalarX, unitlessY: scalarY },
       diagnostics,
       item.relativePrefix === "++",
       item.relativePrefix,
@@ -283,6 +292,7 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
     localPoint,
     applyFrameTransform(frameMatrix, localPoint),
     frameMatrix,
+    { unitlessX: scalarX, unitlessY: scalarY },
     diagnostics,
     true,
     undefined,
@@ -301,6 +311,7 @@ function transformedCoordinate(
   local: FrameLocalPoint,
   world: WorldPoint,
   frame: FrameTransform,
+  spelling: CoordinateSpelling,
   diagnostics: string[],
   advancesCurrentPoint: boolean,
   relativePrefix?: "+" | "++",
@@ -313,6 +324,7 @@ function transformedCoordinate(
     local,
     world,
     frame,
+    spelling,
     diagnostics,
     advancesCurrentPoint,
     ...(relativePrefix === undefined ? {} : { relativePrefix: relativePrefix })

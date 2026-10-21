@@ -1,73 +1,47 @@
-import { legacyText, type TikzFragment } from "./fragment.js";
-import {
-  isCoordinateEditHandle,
-  isFrameLocalCoordinateEditHandle,
-  isRelativeCoordinateEditHandle,
-  type EditHandle,
-  type EditHandlePositioningContext
-} from "../semantic/types.js";
+import { layout, legacyText, tikz, type TikzFragment } from "./fragment.js";
+import { isCoordinateEditHandle, type EditHandle, type EditHandlePositioningContext } from "../semantic/types.js";
+import type { SiteContext } from "../semantic/site-context.js";
 import { pt } from "../coords/scalars.js";
-import { worldPoint, worldVector } from "../coords/points.js";
+import { worldPoint } from "../coords/points.js";
 import type { WorldPoint } from "../coords/points.js";
-import { ptToCm } from "../coords/source.js";
-import { worldToLocal, worldDeltaToLocalDelta, localToSourceUnits } from "./coords.js";
 import { CM_PER_PT, formatNumber, type NumberFormatOptions } from "./format.js";
-import { formatCanvasCoordinate, formatCoordinate, formatPolarCoordinate } from "./style.js";
 import { rewriteCalcCoordinate } from "./rewrite-calc.js";
+import { createCoordinateWriter, type PointWriteOptions } from "./writer/index.js";
 
 /**
- * Compute a replacement source string for moving a handle to a new world position.
- * Returns null if the rewrite cannot be performed.
- */
-/**
- * The coordinate writer's predecessor: every coordinate a drag writes leaves
- * through here, so its output is the one marked migration exception.
+ * The text that moves a handle's coordinate to `newWorld`, or null when it
+ * cannot be rewritten. Coordinates go through the writer; calc offsets and
+ * positioning keep their own rewrites until their phases (migration).
+ * `context` replaces the handle's site context when the edit changes the
+ * options the coordinate is read under.
  */
 export function rewriteCoordinate(
   newWorld: WorldPoint,
   handle: EditHandle,
   source: string,
-  bypassSnapping = false
+  bypassSnapping = false,
+  context?: SiteContext,
+  options?: PointWriteOptions
 ): TikzFragment | null {
-  const text = rewriteCoordinateText(newWorld, handle, source, bypassSnapping);
-  return text === null ? null : legacyText(text);
-}
-
-function rewriteCoordinateText(
-  newWorld: WorldPoint,
-  handle: EditHandle,
-  source: string,
-  bypassSnapping = false
-): string | null {
   if (handle.rewriteMode === "calc") {
-    return rewriteCalcCoordinate(newWorld, handle, source);
+    const text = rewriteCalcCoordinate(newWorld, handle, source);
+    return text === null ? null : legacyText(text);
   }
-
   if (handle.rewriteMode === "positioning") {
-    return rewritePositioning(newWorld, handle, bypassSnapping);
+    const text = rewritePositioning(newWorld, handle, bypassSnapping);
+    return text === null ? null : legacyText(text);
   }
-
-  if (handle.rewriteMode === "unsupported") {
-    return rewriteUnsupportedCoordinate(newWorld, handle, source);
-  }
-
-  if (handle.rewriteMode === "delta") {
-    return rewriteDelta(newWorld, handle, source);
-  }
-
-  switch (handle.coordinateForm) {
-    case "cartesian":
-      return rewriteCartesian(newWorld, handle, source);
-    case "polar":
-      return rewritePolar(newWorld, handle, source);
-    case "explicit":
-      return rewriteCanvas(newWorld, handle, source);
-    case "xyz":
-    case "calc":
-    case "named":
-    case "unknown":
-      return null;
-  }
+  if (!isCoordinateEditHandle(handle)) return null;
+  const written = createCoordinateWriter(source).point({ kind: "coordinate", handle, ...(context && { context }) }, newWorld, options);
+  if (written.kind !== "ok") return null;
+  if (!handle.insertion) return written.fragment;
+  // A node placed implicitly gets an `at` of its own.
+  const offset = handle.sourceRef.sourceSpan.from;
+  const previousChar = source.charAt(offset - 1);
+  const nextChar = source.charAt(offset);
+  const leading = previousChar.length > 0 && !/\s/.test(previousChar) ? " " : "";
+  const trailing = nextChar.length > 0 && !/\s/.test(nextChar) && nextChar !== ";" ? " " : "";
+  return tikz`${layout(leading)}at ${written.fragment}${layout(trailing)}`;
 }
 
 export function supportsUnsupportedCoordinateDetach(handle: EditHandle): boolean {
@@ -76,141 +50,6 @@ export function supportsUnsupportedCoordinateDetach(handle: EditHandle): boolean
 
 function wp(x: number, y: number): WorldPoint {
   return worldPoint(pt(x), pt(y));
-}
-
-function rewriteUnsupportedCoordinate(
-  newWorld: WorldPoint,
-  handle: EditHandle,
-  source: string
-): string | null {
-  if (!supportsUnsupportedCoordinateDetach(handle)) {
-    return null;
-  }
-
-  if (isFrameLocalCoordinateEditHandle(handle)) {
-    return rewriteCartesian(newWorld, {
-      ...handle,
-      coordinateForm: "cartesian"
-    }, source);
-  }
-
-  if (!isCoordinateEditHandle(handle)) {
-    return null;
-  }
-
-  if (handle.rewriteMode === "unsupported" && handle.detachFrame) {
-    const local = worldToLocal(newWorld, handle.detachFrame);
-    if (!local) return null;
-    const sourcePoint = localToSourceUnits(local);
-    const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
-    return formatCoordinate(oldRaw, formatNumber(sourcePoint.x), formatNumber(sourcePoint.y));
-  }
-
-  const cmPoint = {
-    x: ptToCm(newWorld.x),
-    y: ptToCm(newWorld.y)
-  };
-  const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
-  return formatCoordinate(oldRaw, formatNumber(cmPoint.x), formatNumber(cmPoint.y));
-}
-
-function rewriteCartesian(
-  newWorld: WorldPoint,
-  handle: EditHandle,
-  source: string
-): string | null {
-  if (!isFrameLocalCoordinateEditHandle(handle)) {
-    return null;
-  }
-  const local = worldToLocal(newWorld, handle.frame);
-  if (!local) {
-    return null;
-  }
-  const cm = localToSourceUnits(local);
-  const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
-  const coordinate = formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits);
-  return applyInsertionSyntax(source, handle, coordinate);
-}
-
-function rewriteCanvas(newWorld: WorldPoint, handle: EditHandle, source: string): string | null {
-  if (!isFrameLocalCoordinateEditHandle(handle)) return null;
-  const local = worldToLocal(newWorld, handle.frame);
-  if (!local) return null;
-  const cm = localToSourceUnits(local);
-  return formatCanvasCoordinate(source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to), formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits);
-}
-
-function rewritePolar(
-  newWorld: WorldPoint,
-  handle: EditHandle,
-  source: string
-): string | null {
-  if (!isFrameLocalCoordinateEditHandle(handle)) {
-    return null;
-  }
-  const local = worldToLocal(newWorld, handle.frame);
-  if (!local) {
-    return null;
-  }
-  const cm = localToSourceUnits(local);
-  const { angleDeg, radius } = toPolar(cm);
-  const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
-  const coordinate = formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius), handle.sourceUnits);
-  return applyInsertionSyntax(source, handle, coordinate);
-}
-
-function rewriteDelta(
-  newWorld: WorldPoint,
-  handle: EditHandle,
-  source: string
-): string | null {
-  if (!isRelativeCoordinateEditHandle(handle)) {
-    return null;
-  }
-  const base = handle.relativeBase;
-  const delta = worldVector(pt(newWorld.x - base.x), pt(newWorld.y - base.y));
-  const localDelta = worldDeltaToLocalDelta(delta, handle.frame);
-  if (!localDelta) {
-    return null;
-  }
-  const cm = localToSourceUnits(localDelta);
-  const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
-  if (handle.coordinateForm === "polar") {
-    const { angleDeg, radius } = toPolar(cm);
-    const coordinate = formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius), handle.sourceUnits);
-    return applyInsertionSyntax(source, handle, coordinate);
-  }
-  if (handle.coordinateForm === "explicit") {
-    const coordinate = formatCanvasCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits);
-    return coordinate ? applyInsertionSyntax(source, handle, coordinate) : null;
-  }
-  if (handle.coordinateForm === "xyz") {
-    return null;
-  }
-  const coordinate = formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits);
-  return applyInsertionSyntax(source, handle, coordinate);
-}
-
-function applyInsertionSyntax(source: string, handle: EditHandle, coordinate: string): string {
-  if (!handle.insertion) {
-    return coordinate;
-  }
-
-  const offset = handle.sourceRef.sourceSpan.from;
-  const previousChar = source.charAt(offset - 1);
-  const nextChar = source.charAt(offset);
-  const leading = previousChar.length > 0 && !/\s/.test(previousChar) ? " " : "";
-  const trailing = nextChar.length > 0 && !/\s/.test(nextChar) && nextChar !== ";" ? " " : "";
-  return `${leading}at ${coordinate}${trailing}`;
-}
-
-function toPolar(point: { x: number; y: number }): { angleDeg: number; radius: number } {
-  const radius = Math.sqrt(point.x * point.x + point.y * point.y);
-  let angleDeg = (Math.atan2(point.y, point.x) * 180) / Math.PI;
-  if (angleDeg < 0) {
-    angleDeg += 360;
-  }
-  return { angleDeg, radius };
 }
 
 /** Snap threshold: if one component is less than this fraction of the other, use a cardinal direction. */

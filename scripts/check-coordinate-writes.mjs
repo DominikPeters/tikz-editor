@@ -5,9 +5,10 @@
 //
 // F1  assertions and type predicates to a fragment type, outside fragment.ts
 //     and the writer;
-// F2  calls of the constructors that take any string (`userText`,
+// F2  calls of the constructors that take anything (`userText`,
 //     `sourceSlice`, `unchangedSource`, and the migration escapes
-//     `legacyText`, `legacyEditedSource`): every call site is listed;
+//     `legacyText`, `legacyEditedSource`, `legacyCtmSiteContext`): every
+//     call site is listed;
 // F3  writer internals used outside the writer, resolved by symbol so
 //     aliases and re-exports count; `ptToCm` only on point components;
 // F4  `tikz` used other than as a template tag;
@@ -36,19 +37,26 @@ const POINTS_FILE = "packages/core/src/coords/points.ts";
 const TRANSFORM_DIRS = ["packages/core/src/coords/", "packages/app/src/ui/coords/"];
 export const EXCEPTIONS_FILE = "scripts/coordinate-write-exceptions.json";
 
-/** Constructors that accept any string. The first three are reviewed for good; the rest are migration debt. */
+/**
+ * Constructors that accept anything, by defining file: string-taking
+ * fragment constructors (the first three reviewed for good, the rest
+ * migration debt) and the writer's legacy site context.
+ */
 const LISTED_CONSTRUCTORS = new Map([
   ["userText", "reviewed"],
   ["sourceSlice", "reviewed"],
   ["unchangedSource", "reviewed"],
   ["legacyText", "migration"],
-  ["legacyEditedSource", "migration"]
+  ["legacyEditedSource", "migration"],
+  ["legacyCtmSiteContext", "migration"]
 ]);
+const LISTED_FILES = new Set([FRAGMENT_FILE, "packages/core/src/edit/writer/index.ts"]);
 
-/** Writer internals by defining file. The defining files move into the writer, so they are exempt. */
+/** Writer internals by defining file, all inside the writer. */
 const WRITER_INTERNALS = new Map([
-  ["packages/core/src/edit/style.ts", ["formatCoordinate", "formatPolarCoordinate", "formatCanvasCoordinate"]],
-  ["packages/core/src/edit/coords.ts", ["localToSourceUnits"]]
+  ["packages/core/src/edit/writer/format.ts", ["formatCoordinate", "formatPolarCoordinate", "formatCanvasCoordinate"]],
+  ["packages/core/src/edit/writer/source-units.ts", ["localToSourceUnits"]],
+  ["packages/core/src/edit/writer/coordinate-text.ts", ["coordinateText"]]
 ]);
 const PT_TO_CM_FILE = "packages/core/src/coords/source.ts";
 
@@ -93,6 +101,7 @@ export function collectViolations(program, root, files) {
   const pointsFile = normalizePath(join(root, POINTS_FILE));
   const ptToCmFile = normalizePath(join(root, PT_TO_CM_FILE));
   const internalFiles = new Map([...WRITER_INTERNALS].map(([file, names]) => [normalizePath(join(root, file)), new Set(names)]));
+  const listedFiles = new Set([...LISTED_FILES].map((file) => normalizePath(join(root, file))));
   const pointsModule = program.getSourceFile(join(root, POINTS_FILE));
   const pointConstructors = pointsModule
     ? checker.getExportsOfModule(checker.getSymbolAtLocation(pointsModule)).map((symbol) => symbol.getName())
@@ -111,7 +120,7 @@ export function collectViolations(program, root, files) {
     const inFragment = fileName === fragmentFile;
     const inWriter = path.startsWith(WRITER_DIR);
     const inTransforms = TRANSFORM_DIRS.some((dir) => path.startsWith(dir));
-    const definesInternals = internalFiles.has(fileName) || fileName === ptToCmFile;
+    const definesPtToCm = fileName === ptToCmFile;
     const names = new Set(watchedNames);
     collectRenames(sourceFile);
     visit(sourceFile);
@@ -180,17 +189,17 @@ export function collectViolations(program, root, files) {
       if (!target) return;
       const { name, file } = target;
 
-      if (file === fragmentFile && !inFragment) {
+      if (listedFiles.has(file) && file !== fileName) {
         const listed = LISTED_CONSTRUCTORS.get(name);
         if (listed) {
           report("F2", useSite(node), `${name} call site (${listed}); list it with --update --accept-new after review`, name);
         }
-        if (name === "tikz" && !(ts.isTaggedTemplateExpression(parent) && parent.tag === node) && !ts.isExportSpecifier(parent)) {
+        if (file === fragmentFile && name === "tikz" && !(ts.isTaggedTemplateExpression(parent) && parent.tag === node) && !ts.isExportSpecifier(parent)) {
           report("F4", useSite(node), "tikz used other than as a template tag; its literal parts must be fixed at compile time", name);
         }
         return;
       }
-      if (inWriter || definesInternals) return;
+      if (inWriter || definesPtToCm) return;
       if (internalFiles.get(file)?.has(name)) {
         report("F3", useSite(node), `writer internal ${name} outside the writer`, name);
         return;

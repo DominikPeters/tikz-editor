@@ -1,8 +1,8 @@
 # Coordinate writer
 
-Status: phases 0–2 built (harness, site contexts, fragment layer and
-checker); the writer and later phases are a draft, second revision after
-review. Inventory, fuzzer and failure classes are in
+Status: phases 0–3 built (harness, site contexts, fragment layer and
+checker, writer core); the remaining writer operations and later phases
+are a draft, second revision after review. Inventory, fuzzer and failure classes are in
 [coordinate-writes.md](coordinate-writes.md); this document designs the
 writer from those failures.
 
@@ -96,8 +96,8 @@ export function option<K extends string>(key: OtherKey<K>, value?: TikzFragment)
   opacities, …) take option values; any other key must be a literal (a key
   typed `string` could hide a frame key) and takes a fragment. `in`, `out`,
   `bend`, `rounded corners` and tree distances are in neither table until
-  their frame semantics are checked in PGF. No `CoordinateText` constructor
-  exists yet: the writer (phase 3) is the first.
+  their frame semantics are checked in PGF. The writer's `coordinateText`
+  is the only `CoordinateText` constructor (writer-internal, F3).
 - Lengths that live in a frame are not frame-free: a circle radius `(.5)`
   goes through the x vector, and `radius=1cm` is scaled by the CTM. They go
   through the writer (`writer.radius`). `resize-element.ts` writes radii as
@@ -125,7 +125,7 @@ production sources of `packages/` and `apps/`):
 |---|---|
 | F1 | type assertions and type predicates to a type carrying a fragment brand (`TikzFragment`, `CoordinateText`, `EditedSource`, `OptionValue`, also inside unions and arrays) only in `fragment.ts` and `edit/writer/` |
 | F2 | every call of a constructor that takes any string (`userText`, `sourceSlice`, `unchangedSource`; `legacyText`, `legacyEditedSource`) is listed |
-| F3 | writer internals (`formatCoordinate`, `formatPolarCoordinate`, `formatCanvasCoordinate`, `localToSourceUnits`) used only in `edit/writer/` and their defining files, resolved by symbol so aliases and re-exports count; `ptToCm` not on a point's `x`/`y` there either |
+| F3 | writer internals (`formatCoordinate`, `formatPolarCoordinate`, `formatCanvasCoordinate` in `writer/format.ts`, `localToSourceUnits`, `coordinateText`) used only in `edit/writer/`, resolved by symbol so aliases and re-exports count; `ptToCm` not on a point's `x`/`y` outside the writer either |
 | F4 | `tikz` only as a template tag |
 | F5 | a point, vector or bounds constructor of `coords/points.ts` not fed the `x`/`y` of a point in another space (directly, or through `+`, `-`, and one-argument calls such as `pt(…)`), except in the transform modules (`core/src/coords/`, `app/src/ui/coords/`) and the writer |
 
@@ -280,6 +280,9 @@ Spelling policy:
 
 ## Writer API
 
+Built in phase 3: `point` at a `coordinate` site. The rest of this section
+is the target; each operation comes with the failure class that needs it.
+
 ```ts
 // packages/core/src/edit/writer/index.ts
 export type WriteSite =
@@ -309,6 +312,34 @@ export function createCoordinateWriter(snapshot: EditGeometrySnapshot | EditGeom
 
 - Inputs are world-space types only, so "picture coordinates" cannot be
   handed in.
+- What phase 3 built (`edit/writer/`): `createCoordinateWriter(source)` and
+  `point({ kind: "coordinate", handle, context? }, world, { precision })`.
+  The map comes from the handle's site context and its **spelling**, which
+  the evaluator now records on every frame-local handle
+  (`CoordinateSpelling`: unitless per component, and the heading of a
+  `turn` coordinate), through `spelledCoordinateFrame` in
+  `semantic/site-context.ts`; the handle's `frame` is no longer read. The
+  capture oracle checks that this composition equals the evaluator's own
+  frame for every handle, turn coordinates after mid-path options included
+  (linear part for relative ones). `precision` is `drag` (two decimals,
+  polar angles in [0, 360)) or `reparameterize` (six decimals, angle as
+  computed), which center-pivot moves and rotations use. `context`
+  replaces the site context when an edit changes the options a coordinate
+  is read under.
+- `rewriteCoordinate` dispatches: coordinates to the writer (adding `at`
+  for implicitly placed nodes), calc offsets and positioning to their old
+  rewrites, now two `legacyText` exceptions until classes 4 and 5.
+  `rewritePreciseFrameCoordinate` is the writer at `reparameterize`.
+- Two actions resolve the frame after their option edit as a bare CTM
+  (`resolveStatementOptionFrame`), without the axis vectors: center-pivot
+  moves and center-pivot rotation. Phase 3 keeps that behavior through
+  `legacyCtmSiteContext`, a listed migration escape; under `x=`/`y=` it
+  misplaces unitless coordinates (class 1), so the fix belongs there, with
+  the full option state from `resolveStatementOptionState`.
+- Tests: a write-then-read-back round trip for every fuzzer frame and every
+  preserved spelling (mixed units, polar with and without units, relative,
+  turn, `canvas cs:`, a detached named endpoint), a spelling snapshot, and
+  refusals. Forcing unitless spelling in the writer fails five frames.
 - Refusals carry a reason, which actions pass through: singular axes, a
   rotation the frame cannot express, a loop-dependent context.
 
@@ -413,8 +444,15 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
    the connect action sliced a document it had built by concatenation. New
    code cannot add a raw coordinate write without a listed exception. No
    behavior change.
-3. **Writer core.** On site contexts; port `rewrite.ts`/`frame-coordinate.ts`
-   (already correct) with no behavior change.
+3. **Writer core.** Done: the evaluator records each coordinate's
+   spelling, and `edit/writer/` writes existing coordinates from the site
+   context and that spelling; `rewrite.ts` and `frame-coordinate.ts` are
+   ported with no behavior change (unchanged rewrite tests and fuzzer
+   outcomes). The formatters and `localToSourceUnits` moved into the writer;
+   the exception list went from 156 to 139 violations: 18 writer-internal
+   uses and the precise rewrite's two `legacyText` calls left, the old
+   rewrite exception split into calc and positioning, and two
+   `legacyCtmSiteContext` calls were added.
 4. **Class 1**, then **class 3** (world insertion, `addPath`, delete the app
    pre-mapping), then **class 2**, then **classes 4 and 5**. Each phase
    records its improvements with the fuzzer update and shrinks the

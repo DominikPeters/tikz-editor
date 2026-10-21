@@ -9,7 +9,7 @@ import type { OptionEntry } from "../../options/types.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { worldPoint } from "../../coords/points.js";
 import type { WorldPoint } from "../../coords/points.js";
-import { worldTransform, type FrameTransform } from "../../coords/transforms.js";
+import type { FrameTransform } from "../../coords/transforms.js";
 import { isFrameLocalCoordinateEditHandle } from "../../semantic/types.js";
 import { planCenteredPivotMoves, type CenteredPivotMovePlan } from "../center-pivot-move.js";
 import { rewritePreciseFrameCoordinate } from "../frame-coordinate.js";
@@ -17,7 +17,8 @@ import { resolveStatementOptionFrame } from "../parent-frame.js";
 import type { EditHandle } from "../../semantic/types.js";
 import { parseCoordinateLike, parseLength } from "../../semantic/coords/parse-length.js";
 import { collectSourceWorldBounds } from "../snapping/index.js";
-import { localToSourceUnits, worldToLocal } from "../coords.js";
+import { worldToLocal } from "../coords.js";
+import { localToSourceUnits } from "../writer/source-units.js";
 import { CM_PER_PT, formatNumber, pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
 import { computeMinimalReplacementPatch, replaceSpan } from "../patch.js";
 import { correctMovedCoordinateDependencies } from "../calc-move.js";
@@ -35,6 +36,8 @@ import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } fro
 import { normalizeOptionKey } from "../option-key.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "../fit.js";
 import { findPathStatementById, normalizeElementIds, uniqueStrings } from "../statement-find.js";
+import { legacyCtmSiteContext } from "../writer/index.js";
+import type { SiteContext } from "../../semantic/site-context.js";
 
 const ARRANGE_EPSILON = 1e-6;
 
@@ -361,7 +364,7 @@ function applyMoveElementsUsingHandleRewrites(
 
     const newWorld: WorldPoint = worldPoint(pt(handle.world.x + delta.x), pt(handle.world.y + delta.y));
     const frame = centerPlan?.framesBySource.get(handle.sourceRef.sourceId);
-    const text = frame ? rewritePreciseFrameCoordinate(newWorld, handleWithFrame(handle, frame), source, parseOptions.bypassSnapping)
+    const text = frame ? rewritePreciseFrameCoordinate(newWorld, handle, source, parseOptions.bypassSnapping, contextForFrame(handle, frame))
       : rewriteCoordinate(newWorld, handle, source, parseOptions.bypassSnapping);
     if (text != null) {
       pending.push({ span: handle.sourceRef.sourceSpan, text });
@@ -929,7 +932,7 @@ function applyElementDeltaMapStrict(
 
     const next = worldPoint(pt(handle.world.x + delta.x), pt(handle.world.y + delta.y));
     const frame = centerPlan.framesBySource.get(handle.sourceRef.sourceId);
-    const text = frame ? rewritePreciseFrameCoordinate(next, handleWithFrame(handle, frame), source) : rewriteCoordinate(next, handle, source);
+    const text = frame ? rewritePreciseFrameCoordinate(next, handle, source, false, contextForFrame(handle, frame)) : rewriteCoordinate(next, handle, source);
     if (text == null) {
       return {
         kind: "unsupported",
@@ -998,9 +1001,9 @@ function applyElementDeltaMapStrict(
   };
 }
 
-function handleWithFrame(handle: EditHandle, frame: FrameTransform): EditHandle {
-  return isFrameLocalCoordinateEditHandle(handle) ? { ...handle, frame,
-    transform: worldTransform(frame.a, frame.b, frame.c, frame.d, frame.e, frame.f) } : handle;
+/** The moved pivot's frame for a coordinate read in it; named references keep their own. */
+function contextForFrame(handle: EditHandle, frame: FrameTransform): SiteContext | undefined {
+  return isFrameLocalCoordinateEditHandle(handle) ? legacyCtmSiteContext(frame) : undefined;
 }
 
 function parseRotateAroundPivotRaw(raw: string): WorldPoint | null {

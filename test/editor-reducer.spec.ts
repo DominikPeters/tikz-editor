@@ -11,7 +11,7 @@ import { computeSourceFingerprint } from "../packages/core/src/utils/source-fing
 import { PT_PER_CM } from "../packages/core/src/edit/format.js";
 import { prepareBeamerDocument, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
 import { buildBeamerObjectIndex } from "../packages/core/src/beamer/object-index.js";
-import { wp } from "./coords-helpers.js";
+import { wp, testSiteContext, UNITLESS_SPELLING } from "./coords-helpers.js";
 import { editedSource, fragment } from "./fragment-helpers.js";
 
 // Helper to dispatch a sequence of actions
@@ -60,6 +60,8 @@ function makeHandle(
     world: world,
     local: rest.local ?? world,
     frame: rest.frame ?? transform,
+    siteContext: testSiteContext(rest.frame ?? transform),
+    spelling: UNITLESS_SPELLING,
     transform,
     sourceText: source.slice(span.from, span.to),
     coordinateForm: overrides.coordinateForm ?? "cartesian",

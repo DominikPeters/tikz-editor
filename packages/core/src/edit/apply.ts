@@ -5,7 +5,7 @@ import type { EditHandle } from "../semantic/types.js";
 import type { WorldPoint } from "../coords/points.js";
 import type { ApplyEditResult, EditIntent, EditIntentResult, TikzEdit } from "./types.js";
 import { replaceSpan } from "./patch.js";
-import { formatCoordinate } from "./style.js";
+import { formatCoordinate } from "./writer/format.js";
 import { rewriteCoordinate, supportsUnsupportedCoordinateDetach } from "./rewrite.js";
 import { sourceFingerprintForEdit } from "./parse-options.js";
 import { formatNumber } from "./format.js";

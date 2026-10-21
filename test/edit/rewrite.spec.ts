@@ -7,7 +7,7 @@ import { identityMatrix, scaleMatrix, rotationMatrix, multiplyMatrix, translatio
 import { rewriteCoordinate, supportsUnsupportedCoordinateDetach } from "../../packages/core/src/edit/rewrite.js";
 import { PT_PER_CM } from "../../packages/core/src/edit/format.js";
 import type { EditHandleSourceRef } from "../../packages/core/src/semantic/types.js";
-import { flp, wp } from "../coords-helpers.js";
+import { flp, wp, testSiteContext, UNITLESS_SPELLING } from "../coords-helpers.js";
 
 const cm = (value: number): number => value * PT_PER_CM;
 
@@ -90,6 +90,8 @@ function makeHandle(
     rewriteMode,
     local: coordinateSpace === "frame-local" ? (rest.local ?? rest.world) : undefined,
     frame: coordinateSpace === "frame-local" ? (rest.frame ?? transform) : undefined,
+    siteContext: testSiteContext(rest.frame ?? transform),
+    spelling: UNITLESS_SPELLING,
     ...rest,
     sourceRef: mergedSourceRef
   } as EditHandle;

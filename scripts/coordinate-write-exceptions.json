@@ -680,6 +680,15 @@
     },
     {
       "rule": "F2",
+      "symbol": "legacyCtmSiteContext",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "contextForFrame",
+      "hash": "ff6e80e30bec",
+      "count": 1,
+      "expression": "legacyCtmSiteContext(frame)"
+    },
+    {
+      "rule": "F2",
       "symbol": "legacyText",
       "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
       "declaration": "formatPlacementCoordinateFromWorld",
@@ -950,6 +959,15 @@
     },
     {
       "rule": "F2",
+      "symbol": "legacyCtmSiteContext",
+      "file": "packages/core/src/edit/actions/rotate-element.ts",
+      "declaration": "contextForFrame",
+      "hash": "fe01dd1640fc",
+      "count": 1,
+      "expression": "legacyCtmSiteContext(transform)"
+    },
+    {
+      "rule": "F2",
       "symbol": "legacyText",
       "file": "packages/core/src/edit/actions/rotate-element.ts",
       "declaration": "replaceRotationOption.replacement",
@@ -1095,51 +1113,6 @@
     {
       "rule": "F2",
       "symbol": "legacyText",
-      "file": "packages/core/src/edit/frame-coordinate.ts",
-      "declaration": "rewritePreciseFrameCoordinate",
-      "hash": "39b9ccd2ea03",
-      "count": 1,
-      "expression": "legacyText(formatPolarCoordinate(oldRaw, formatNumber(Math.atan2(point.y, point.x) * 180 / Math.PI, fine), formatNumber("
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/frame-coordinate.ts",
-      "declaration": "rewritePreciseFrameCoordinate",
-      "hash": "a9542f3c3a32",
-      "count": 1,
-      "expression": "legacyText(formatCoordinate(oldRaw, formatNumber(point.x, fine), formatNumber(point.y, fine), handle.sourceUnits))"
-    },
-    {
-      "rule": "F3",
-      "symbol": "formatCoordinate",
-      "file": "packages/core/src/edit/frame-coordinate.ts",
-      "declaration": "rewritePreciseFrameCoordinate",
-      "hash": "4cb5dcaa0619",
-      "count": 1,
-      "expression": "formatCoordinate(oldRaw, formatNumber(point.x, fine), formatNumber(point.y, fine), handle.sourceUnits)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "formatPolarCoordinate",
-      "file": "packages/core/src/edit/frame-coordinate.ts",
-      "declaration": "rewritePreciseFrameCoordinate",
-      "hash": "d304169058d7",
-      "count": 1,
-      "expression": "formatPolarCoordinate(oldRaw, formatNumber(Math.atan2(point.y, point.x) * 180 / Math.PI, fine), formatNumber(Math.hypot("
-    },
-    {
-      "rule": "F3",
-      "symbol": "localToSourceUnits",
-      "file": "packages/core/src/edit/frame-coordinate.ts",
-      "declaration": "rewritePreciseFrameCoordinate.point",
-      "hash": "1a6a9d3b338e",
-      "count": 1,
-      "expression": "localToSourceUnits(local)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
       "file": "packages/core/src/edit/option-mutations.ts",
       "declaration": "applyOptionMutationsToTarget.patch.replacement",
       "hash": "561e7fc740d4",
@@ -1206,143 +1179,8 @@
       "file": "packages/core/src/edit/rewrite.ts",
       "declaration": "rewriteCoordinate",
       "hash": "73492e66680e",
-      "count": 1,
+      "count": 2,
       "expression": "legacyText(text)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "formatCanvasCoordinate",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteCanvas",
-      "hash": "a8ecdb2eaa22",
-      "count": 1,
-      "expression": "formatCanvasCoordinate(source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to), formatNumber(cm.x"
-    },
-    {
-      "rule": "F3",
-      "symbol": "localToSourceUnits",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteCanvas.cm",
-      "hash": "1a6a9d3b338e",
-      "count": 1,
-      "expression": "localToSourceUnits(local)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "localToSourceUnits",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteCartesian.cm",
-      "hash": "1a6a9d3b338e",
-      "count": 1,
-      "expression": "localToSourceUnits(local)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "formatCoordinate",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteCartesian.coordinate",
-      "hash": "98c55da99fd5",
-      "count": 1,
-      "expression": "formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "localToSourceUnits",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteDelta.cm",
-      "hash": "a0877d6405b5",
-      "count": 1,
-      "expression": "localToSourceUnits(localDelta)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "formatCoordinate",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteDelta.coordinate",
-      "hash": "98c55da99fd5",
-      "count": 1,
-      "expression": "formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "formatCanvasCoordinate",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteDelta.coordinate",
-      "hash": "a43f65b68055",
-      "count": 1,
-      "expression": "formatCanvasCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "formatPolarCoordinate",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteDelta.coordinate",
-      "hash": "ff346ac5adda",
-      "count": 1,
-      "expression": "formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius), handle.sourceUnits)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "localToSourceUnits",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewritePolar.cm",
-      "hash": "1a6a9d3b338e",
-      "count": 1,
-      "expression": "localToSourceUnits(local)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "formatPolarCoordinate",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewritePolar.coordinate",
-      "hash": "ff346ac5adda",
-      "count": 1,
-      "expression": "formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius), handle.sourceUnits)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "formatCoordinate",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteUnsupportedCoordinate",
-      "hash": "4f4b4160ded7",
-      "count": 1,
-      "expression": "formatCoordinate(oldRaw, formatNumber(cmPoint.x), formatNumber(cmPoint.y))"
-    },
-    {
-      "rule": "F3",
-      "symbol": "formatCoordinate",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteUnsupportedCoordinate",
-      "hash": "e7908b4e1104",
-      "count": 1,
-      "expression": "formatCoordinate(oldRaw, formatNumber(sourcePoint.x), formatNumber(sourcePoint.y))"
-    },
-    {
-      "rule": "F3",
-      "symbol": "ptToCm",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteUnsupportedCoordinate.cmPoint.x",
-      "hash": "530aefaa9750",
-      "count": 1,
-      "expression": "ptToCm(newWorld.x)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "ptToCm",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteUnsupportedCoordinate.cmPoint.y",
-      "hash": "392b1628bca5",
-      "count": 1,
-      "expression": "ptToCm(newWorld.y)"
-    },
-    {
-      "rule": "F3",
-      "symbol": "localToSourceUnits",
-      "file": "packages/core/src/edit/rewrite.ts",
-      "declaration": "rewriteUnsupportedCoordinate.sourcePoint",
-      "hash": "1a6a9d3b338e",
-      "count": 1,
-      "expression": "localToSourceUnits(local)"
     },
     {
       "rule": "F2",

@@ -58,8 +58,38 @@ export function captureSiteContext(frame: Pick<SemanticContextFrame, "transform"
  * components use the axis vectors, dimensioned ones only the CTM.
  */
 export function siteCoordinateFrame(context: SiteContext, unitlessX = true, unitlessY = true): FrameToWorldTransform {
-  const { a, b, c, d, e, f } = context.ctm;
-  const composed = coordinateTransform(worldTransform(a, b, c, d, e, f), context.axes, unitlessX, unitlessY);
+  return spelledCoordinateFrame(context, { unitlessX, unitlessY });
+}
+
+/**
+ * How a coordinate is written, as far as that selects its map from the site
+ * context. The evaluator records it on every frame-local handle; the writer
+ * composes the same map from it.
+ */
+export type CoordinateSpelling = Readonly<{
+  /**
+   * A plain number goes through PGF's x/y vectors, a length only through the
+   * CTM. Polar components follow the radius; `canvas cs:` is never unitless.
+   */
+  unitlessX: boolean;
+  unitlessY: boolean;
+  /** `turn`: the CTM's linear part is rotated to the path's heading there, in degrees. */
+  headingDeg?: number;
+}>;
+
+/**
+ * The map a coordinate with this spelling goes through at this site. For a
+ * turn coordinate only the linear part is meaningful: PGF places it from the
+ * current point.
+ */
+export function spelledCoordinateFrame(context: SiteContext, spelling: CoordinateSpelling): FrameToWorldTransform {
+  let { a, b, c, d } = context.ctm;
+  if (spelling.headingDeg !== undefined) {
+    const radians = (spelling.headingDeg * Math.PI) / 180;
+    const cos = Math.cos(radians), sin = Math.sin(radians);
+    [a, b, c, d] = [a * cos + c * sin, b * cos + d * sin, c * cos - a * sin, d * cos - b * sin];
+  }
+  const composed = coordinateTransform(worldTransform(a, b, c, d, context.ctm.e, context.ctm.f), context.axes, spelling.unitlessX, spelling.unitlessY);
   return frameTransform(composed.a, composed.b, composed.c, composed.d, composed.e, composed.f);
 }
 

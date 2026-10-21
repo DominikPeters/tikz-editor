@@ -4,15 +4,15 @@ import * as evaluator from "../packages/core/src/semantic/evaluate.js";
 import { planCenteredPivotMoves } from "../packages/core/src/edit/center-pivot-move.js";
 import { createEditGeometrySession } from "../packages/core/src/edit/geometry-session.js";
 import { rewritePreciseFrameCoordinate } from "../packages/core/src/edit/frame-coordinate.js";
+import { legacyCtmSiteContext } from "../packages/core/src/edit/writer/index.js";
 import { applyTextReplacements } from "../packages/core/src/edit/statement-ops.js";
 import { findPathStatementById } from "../packages/core/src/edit/statement-find.js";
 import { resolveStatementOptionFrame } from "../packages/core/src/edit/parent-frame.js";
 import { applyFrameToWorldPoint } from "../packages/core/src/coords/frame.js";
 import { frameLocalPoint } from "../packages/core/src/coords/points.js";
-import { worldTransform } from "../packages/core/src/coords/transforms.js";
 import { parseRotateAroundValue } from "../packages/core/src/semantic/style/option-utils.js";
 import { applyMatrix } from "../packages/core/src/semantic/transform.js";
-import type { EditHandle, SceneElement } from "../packages/core/src/semantic/types.js";
+import { isFrameLocalCoordinateEditHandle, type SceneElement } from "../packages/core/src/semantic/types.js";
 import type { EditGeometrySession } from "../packages/core/src/edit/geometry-session.js";
 import { cm } from "./edit-actions-helpers.js";
 import { wp } from "./coords-helpers.js";
@@ -34,9 +34,8 @@ function plannedMove(source: string, delta: ReturnType<typeof wp>, geometry?: Ed
   const replacements = [...plan.replacements];
   for (const handle of baseline.semantic.editHandles) {
     const frame = plan.framesBySource.get(handle.sourceRef.sourceId);
-    const rewrittenHandle = frame ? { ...handle, frame,
-      transform: worldTransform(frame.a, frame.b, frame.c, frame.d, frame.e, frame.f) } as EditHandle : handle;
-    const text = rewritePreciseFrameCoordinate(wp(handle.world.x + delta.x, handle.world.y + delta.y), rewrittenHandle, source);
+    const context = frame && isFrameLocalCoordinateEditHandle(handle) ? legacyCtmSiteContext(frame) : undefined;
+    const text = rewritePreciseFrameCoordinate(wp(handle.world.x + delta.x, handle.world.y + delta.y), handle, source, false, context);
     if (text == null) throw new Error("Cannot rewrite explicit coordinate");
     replacements.push({ span: handle.sourceRef.sourceSpan, text });
   }

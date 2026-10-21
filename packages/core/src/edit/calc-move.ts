@@ -10,7 +10,8 @@ import type { EditGeometrySession } from "./geometry-session.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
 import { replaceSpan } from "./patch.js";
 import { rewriteCoordinate } from "./rewrite.js";
-import { localToSourceUnits, worldDeltaToLocalDelta } from "./coords.js";
+import { worldDeltaToLocalDelta } from "./coords.js";
+import { localToSourceUnits } from "./writer/source-units.js";
 import { PT_PER_CM } from "./format.js";
 
 /** Resolve dependent coordinates against the already moved bases in the batch. */

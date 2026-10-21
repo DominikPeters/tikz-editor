@@ -1,8 +1,12 @@
-import { requireArrayValue } from "../utils/collections.js";
-import type { CoordinateSourceUnits } from "../semantic/types.js";
-import { coordinateSourceUnit, parseLength } from "../semantic/coords/parse-length.js";
-import { PT_PER_CM } from "../coords/source.js";
-import { formatNumber } from "./format.js";
+import { requireArrayValue } from "../../utils/collections.js";
+import type { CoordinateSourceUnits } from "../../semantic/types.js";
+import { coordinateSourceUnit, parseLength } from "../../semantic/coords/parse-length.js";
+import { PT_PER_CM } from "../../coords/source.js";
+import { formatNumber } from "../format.js";
+
+// Writer-internal (checker rule F3): authored spelling around new numbers.
+// Each keeps the old coordinate's whitespace, coordinate options and units;
+// numbers come in cm-equivalent and are converted to a component's unit.
 
 function componentWithUnit(value: string, oldComponent: string, unit?: string): string {
   // Public format helpers also accept already-authored lengths or expressions.

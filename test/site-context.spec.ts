@@ -6,7 +6,7 @@ import { pt } from "../packages/core/src/coords/scalars.js";
 import { PT_PER_CM } from "../packages/core/src/coords/source.js";
 import type { FrameToWorldTransform } from "../packages/core/src/coords/transforms.js";
 import { gapPathContext, prepareInsertion, type InsertionDescription } from "../packages/core/src/edit/insertion-context.js";
-import { sameSiteContext, siteCoordinateFrame, type SiteContext } from "../packages/core/src/semantic/site-context.js";
+import { sameSiteContext, siteCoordinateFrame, spelledCoordinateFrame, type SiteContext } from "../packages/core/src/semantic/site-context.js";
 import { isCoordinateEditHandle, type EditHandle } from "../packages/core/src/semantic/types.js";
 import { FRAMES, evaluate, pictureSource } from "./pointer-invariant/pointer-fuzz.js";
 
@@ -39,11 +39,15 @@ const SPECIAL_PICTURES: Record<string, string> = {
   "transforming style": String.raw`\begin{tikzpicture}
 \tikzset{tilted/.style={rotate=45,x=2cm}}
 \draw (0,0) -- (1,0);
+\end{tikzpicture}`,
+  "mid-path options before a turn": String.raw`\begin{tikzpicture}[x=1.5cm]
+\draw (0,0) -- (1,0) [rotate=30] -- ([turn]45:1) -- ++(1,0) [xshift=2mm] -- ([turn]-30:5mm);
 \end{tikzpicture}`
 };
 
 function pictures(): [string, string][] {
-  const body = String.raw`\draw[P] (0,0) -- (1,.5);` + "\n" + String.raw`\node[draw,P] at (1,1) {N};`;
+  const body = String.raw`\draw[P] (0,0) -- (1,.5);` + "\n" + String.raw`\node[draw,P] at (1,1) {N};` + "\n" +
+    String.raw`\draw[P] (0,0) -- ++(1,.5) -- +(30:1) -- (1cm,.5) -- (2,3mm) -- ([turn]45:1) -- (canvas cs:x=1cm,y=2mm) -- (60:1.5) -- ([turn]-30:5mm);`;
   return [...FRAMES.map(frame => [frame.label, pictureSource(frame, body).source] as [string, string]), ...Object.entries(SPECIAL_PICTURES)];
 }
 
@@ -84,15 +88,16 @@ function spelledFrame(handle: EditHandle, context: SiteContext): FrameToWorldTra
   if (!isCoordinateEditHandle(handle)) return null;
   if (handle.rewriteMode === "calc") return siteCoordinateFrame(context, false, false);
   if (handle.coordinateSpace === "world-only") return handle.detachFrame ? siteCoordinateFrame(context) : null;
-  if (handle.coordinateForm === "explicit") return siteCoordinateFrame(context, false, false);
-  const units = handle.sourceUnits;
-  return siteCoordinateFrame(context, !(units?.x ?? units?.radius), !(units?.y ?? units?.radius));
+  return spelledCoordinateFrame(context, handle.spelling);
 }
+
+const sameLinearPart = (l: FrameToWorldTransform, r: FrameToWorldTransform) =>
+  close(l.a, r.a) && close(l.b, r.b) && close(l.c, r.c) && close(l.d, r.d);
 
 describe("site context capture", () => {
   it("records on every coordinate handle the raw frame its `frame` is composed from", () => {
     const problems: string[] = [];
-    let checked = 0;
+    let checked = 0, relatives = 0;
     for (const [label, source] of pictures()) {
       for (const handle of evaluate(source).handles) {
         if (!isCoordinateEditHandle(handle)) continue;
@@ -103,11 +108,15 @@ describe("site context capture", () => {
           : handle.coordinateSpace === "world-only" ? handle.detachFrame : handle.frame;
         if (!expected || !actual) continue;
         checked++;
-        if (!sameFrame(expected, actual)) problems.push(`${label} ${handle.sourceText}: frame differs from its context`);
+        // A relative or turn coordinate is placed from the current point: only its linear part is a frame.
+        const relative = handle.rewriteMode === "delta";
+        if (relative) relatives++;
+        if (!(relative ? sameLinearPart : sameFrame)(expected, actual)) problems.push(`${label} ${handle.sourceText}: frame differs from its context`);
       }
     }
     expect(problems).toEqual([]);
     expect(checked).toBeGreaterThan(40);
+    expect(relatives).toBeGreaterThan(40);
   });
 
   it("resolves at every statement and at the end the frame a new path there is read in", () => {
