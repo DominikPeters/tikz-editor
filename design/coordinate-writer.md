@@ -49,12 +49,27 @@ export function applyFragments(source: string, edits: readonly { span: Span; fra
   compile time, so they can hold keywords and authored constants but no
   runtime value. A number cannot be concatenated, `.join()`ed or formatted
   into a fragment; `formatNumber` returns a plain `string`, which no
-  fragment-accepting function takes.
-- Frame-free values have typed writers next to `fragment.ts`: `count(n)`
-  (matrix rows, foreach bounds), `angle(deg)` for angles that are not
-  geometry (label directions), `canvasLength(pt, unit)` for lengths PGF does
-  not transform (node `minimum width` without `transform shape`, line
-  widths), `ratio(x)` (`pos=`, opacity).
+  fragment-accepting function takes. The checker requires `tikz` to be used
+  as a tagged literal (rule F4); called as a function it would accept a
+  built `TemplateStringsArray`.
+- Fragments have two roles, so a valid constructor cannot be used in the
+  wrong place:
+  - **source fragments** (`TikzFragment`): writer output (points, vectors,
+    radii, rotations, positioning, bounds, offset statements), option lists,
+    statements, `sourceSlice`, `userText`. Only these fill `tikz` holes;
+  - **option values** (`OptionValue`): `count(n)` (matrix rows, foreach
+    bounds), `angle(deg)` for angles that are not geometry (label
+    directions), `canvasLength(pt, unit)` for lengths PGF does not transform
+    (node `minimum width` without `transform shape`, line widths),
+    `ratio(x)` (`pos=`, opacity). They are not fragments, so
+    ``tikz`(${canvasLength(p.x, "cm")},…)` `` does not compile. They enter
+    source only through `option(key, value)`.
+- `option(key, value)` checks the key against a table: transform keys
+  (`xshift`, `yshift`, `shift`, `rotate`, `rotate around`, `scale`, `x`, `y`,
+  …) take only writer output, because their values are read in the frame;
+  canvas keys (`minimum width`, `inner sep`, `line width`, `label distance`,
+  …) take option values; any other key takes `userText` or a fixed literal.
+  That is the whole role system: no general grammar of TikZ positions.
 - Lengths that live in a frame are not frame-free: a circle radius `(.5)`
   goes through the x vector, and `radius=1cm` is scaled by the CTM. They go
   through the writer (`writer.radius`). `resize-element.ts` writes radii as
@@ -73,6 +88,7 @@ in `npm run typecheck`):
 | F1 | assertions to `TikzFragment`, `EditedSource`, `CoordinateText` and the writer's frame types only in `fragment.ts` and the writer |
 | F2 | `userText` and `sourceSlice` called only from listed call sites (each one fingerprinted and reviewed) |
 | F3 | writer internals (`formatCoordinate`, `formatPolarCoordinate`, `formatCanvasCoordinate`, `localToSourceUnits`, `ptToCm` on points) imported only inside `edit/writer/`, resolved by symbol so aliases and re-exports count |
+| F4 | `tikz` only as a tagged template literal |
 
 The pattern rules of the first draft (coordinate-shaped template literals,
 `formatNumber` with branded operands, unbranded point parameters) stay as
@@ -82,8 +98,9 @@ Negative fixtures in `test/fixtures/coordinate-checker/`, each expecting its
 diagnostic: string concatenation into a patch, `.join()` of formatted
 numbers, `formatNumber(x) + "," + formatNumber(y)` split formatting, a helper
 that returns a coordinate string, an alias import of `formatCoordinate`, a
-re-export, a cast to `TikzFragment`, `userText` from an unlisted module, and
-a `WorldPoint` built from picture-local numbers.
+re-export, a cast to `TikzFragment`, `userText` from an unlisted module, a
+`WorldPoint` built from picture-local numbers, a `canvasLength` in a `tikz`
+hole, `option("xshift", canvasLength(…))`, and `tikz` called as a function.
 
 ## Evaluator-owned site contexts
 
@@ -103,49 +120,87 @@ evaluator, but it is the wrong mechanism:
 The evaluator already holds every context while it evaluates. Recording it
 is the right architecture.
 
-### What the evaluator records
+### What the evaluator records (phase 1, built)
+
+`packages/core/src/semantic/site-context.ts`:
 
 ```ts
 /** What TikZ applies at one place, as the evaluator had it. */
 type SiteContext = Readonly<{
   ctm: FrameToWorldTransform;   // raw CTM, before any coordinate's own spelling
   axes: AxisBasis;              // PGF x/y vectors
-  currentPoint?: WorldPoint;    // for relative coordinates inside a path
   [siteContextBrand]: true;
 }>;
 ```
 
-Capture points, stored in the semantic result:
+The evaluator's frames are mutable (options and `\tikzset` reassign their
+fields), so a capture is a frozen value copy, never a reference to live
+state. Frames reassign their transform and axis objects rather than mutating
+them, so one capture is memoized per pair and shared by every handle and
+statement of that frame.
 
-| capture | when | serves |
+| capture | where | status |
 |---|---|---|
-| gap context | before each statement and at the end of each container body (picture, scope) | new statements, copies placed after an original, figure bounds |
-| statement context | after a statement's own options | `in-statement` writes: inserted points, appended segments, re-spelled coordinates |
-| path position | per path item, where path options or transforms change the CTM midway | points inserted mid-path |
-| node placement | for each node: canvas orientation (non-translations reset unless `transform shape`) composed with `every node` and the node's own options, in PGF order | positioning distances, node `at` |
-| coordinate context | on every coordinate edit handle, the raw `SiteContext` beside today's `frame` | drags, re-spelling a detached named coordinate |
+| coordinate context | `siteContext` on every coordinate edit handle, beside its composed `frame` | built |
+| statement entries | `semantic.siteContexts.statementEntries`, one per evaluated statement in order; a scope's `:leave` step holds the state at the end of its body; `\foreach` copies give one entry per iteration | built |
+| figure end | `semantic.siteContexts.figureEnd` | built |
+| node placement | canvas orientation (non-translations reset unless `transform shape`) composed with `every node` and the node's own options, in PGF order | with class 4 |
+| current point | for re-spelling relative coordinates | with class 5 |
 
-A context is a reference to the evaluator's immutable frame state, so
-recording costs memory, not time. New statements whose options transform
-(a new node with a style, a path with `[rotate=…]`) are resolved by calling
-the evaluator's option resolution on the gap context, the same code path
-`StatementFrameResolver.options` uses today. Nothing in edit code combines
-transforms.
+Incremental evaluation keeps each statement's entry context on its reused
+fragment: it is valid exactly as long as the reused elements are, since both
+depend on the state the statement starts from. The figure end is captured
+from the run's final state, replayed or restored from the previous run.
 
-`StatementFrameResolver.parent`, which drops the axes, is deleted.
+### Preparing an insertion
 
-Consistency requirements:
+The rich state a new statement needs (styles, macros, `every path`,
+`every node`) is not stored. It is re-derived on demand:
 
-- **Incremental evaluation and checkpoints** must produce the same contexts
-  as a cold evaluation. The compute differential fuzzer compares warm and
-  cold results; the contexts become part of what it compares.
-- **Loops and macros:** a site inside a `\foreach` body has one context per
-  iteration. The writer accepts it only if every iteration has the same
-  context, and refuses otherwise.
-- **Capture oracle:** a test inserts a probe statement of the right kind
-  (node or path, with the destination's options) at each capture point of
-  the fuzzer's pictures, evaluates cold, and compares its frame with the
-  recorded context. Probes are kept as this oracle, not as the mechanism.
+```ts
+// packages/core/src/edit/insertion-context.ts
+prepareInsertion(snapshot, gap: { kind: "before"; statementIndex } | { kind: "end" },
+  description: { kind: "path"; command; options?: string } | { kind: "scope"; options?: string }): SiteContext
+```
+
+It replays the evaluator from the nearest geometry checkpoint to the gap,
+then resolves the statement with the evaluator's own steps: a path through
+`resolvePathBoundary` (`every path` styles, then its options), a scope by
+running the scope's `enter` step and then a plain path's boundary inside it,
+since a scope's coordinates are only read by its paths. Nothing in edit code
+combines transforms.
+
+Finding from the capture oracle: the recorded state at a gap is not the
+frame a new path there reads coordinates in when `every path` styles
+transform (`every path/.style={xshift=5mm}`). So writes of new statements
+always go through `prepareInsertion`; recorded entries serve comparisons
+(does a copy's gap match its original's?) and loop-invariance checks.
+
+`StatementFrameResolver.options` now resolves paths through the same
+`resolvePathBoundary`. It used to skip `every path` styles: under
+`every path/.style={rotate=20,xshift=5mm}`, a center-pivot rotation of a
+rectangle by 30° landed up to 22pt off; it is now exact. Rectangle resize
+was unaffected in that case.
+`StatementFrameResolver.parent`, which drops the axes, is deleted when its
+callers move to the writer.
+
+Consistency checks:
+
+- **Capture oracle** (`test/site-context.spec.ts`): over the fuzzer's frames
+  plus nested scopes, a mid-picture `\tikzset{x=…}`, `every path` and a
+  transforming style, (a) every coordinate handle's `frame` equals its raw
+  context composed for its spelling, (b) a probe `\path` inserted at every
+  gap lands where `prepareInsertion` predicts, and the recorded entry equals
+  the replayed state unless `every path` transforms, (c) paths and scopes
+  with transforming options match `prepareInsertion`. Mutation-checked:
+  dropping the axes from captures fails all three, ignoring path options
+  fails (c).
+- **Incremental evaluation:** handles, entry contexts and the figure end are
+  part of what the incremental tests and the compute differential fuzzer
+  compare warm against cold. They caught the one gap in phase 1: the suffix
+  replay fallback reused prefix statements without their entry contexts.
+- **Loops:** a site inside a `\foreach` body has one entry per iteration;
+  the writer accepts it only if they agree.
 
 ### Spelling selects the mapping
 
@@ -261,11 +316,13 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
 ## Gates
 
 - **Fuzzer, per case.** `expected-outcomes.json` records the outcome of all
-  1650 cases (`ok`, `partial`, `unsupported: reason`, `error`, `fail: class`).
+  1788 cases (`ok`, `partial`, `unsupported: reason`, `error`, `fail: class`).
   Any difference fails the test. Recording (`POINTER_FUZZ_UPDATE=1`, full
   run, seed 1) prints every transition and refuses regressions unless
   `POINTER_FUZZ_ACCEPT_REGRESSIONS=1`. Partial results are checked like full
-  ones; errors are failures. CI runs every frame (`POINTER_FUZZ_FULL=1` on
+  ones; errors are failures. A full run must generate every recorded case,
+  and recording refuses removed cases and new failing cases too. CI runs
+  every frame (`POINTER_FUZZ_FULL=1` on
   the `npm test` step); local `npm test` runs the quick subset. Other seeds
   may change refusals but not add failures.
 - **Checker exceptions, fingerprinted.** One entry per violation: rule id,
@@ -280,9 +337,12 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
 
 0. **Harness hardening.** Done: real node-resize checks, partial and error
    results, per-case outcomes, full run in CI.
-1. **Site contexts in the evaluator.** Capture points, raw context on
-   handles, option resolution on a gap context; capture oracle; contexts in
-   the differential comparison. No behavior change.
+1. **Site contexts in the evaluator.** Done: raw context on handles,
+   statement entries and figure end in the semantic result, carried through
+   incremental fragments; `prepareInsertion` for paths and scopes; capture
+   oracle. Node placement and current point come with classes 4 and 5. The
+   only behavior change: `StatementFrameResolver.options` now applies
+   `every path` styles.
 2. **Fragment layer and checker.** `TikzFragment`, `EditedSource`,
    constructors, typed scalar writers; F1–F3 with every current violator in
    the fingerprinted exception list; negative fixtures. From here on, new

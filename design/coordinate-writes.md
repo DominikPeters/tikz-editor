@@ -17,7 +17,7 @@ a space, and the formatters take plain `number`/`string`.
 `test/pointer-invariant/`. `npm test` runs a quick subset (5 frames, one per
 mechanism: identity, picture axis units, picture scale, scope rotation,
 everything stacked; under a second). `npm run test:pointer-fuzz` (or
-`POINTER_FUZZ_FULL=1`) runs all 12 frames, 1650 cases, under two seconds.
+`POINTER_FUZZ_FULL=1`) runs all 13 frames, 1788 cases, in about two seconds.
 
 - Every case renders a picture, applies one edit, re-renders, and checks
   where the edited geometry is:
@@ -28,9 +28,9 @@ everything stacked; under a second). `npm run test:pointer-fuzz` (or
   - no edit except align may move the untouched node `A`.
 - Frames: picture `x=`/`y=` lengths, skewed axis vectors, `scale`,
   `yscale=-1`, `shift`; scope rotate+shift, scope units; path
-  `xscale/yscale`, path `x=`, path rotate+shift (a node's own transform); all
-  stacked. An empty scope is left out of the source, because some actions
-  refuse scoped paths.
+  `xscale/yscale`, path `x=`, path rotate+shift (a node's own transform),
+  a transforming `every path` style; all stacked. An empty scope is left out
+  of the source, because some actions refuse scoped paths.
 - Bodies: cartesian, dimensioned, mixed units, polar, relative (`++`/`+`),
   curve, rectangle, circle, node, named endpoint, calc, `to[bend]`,
   positioning (`right=of A`).
@@ -61,30 +61,30 @@ frame).
 
 ## Results (full run, seed 1)
 
-1646 cases: 1056 ok, 29 partial (checked, passed), 286 fail, 275 unsupported,
+1788 cases: 1140 ok, 31 partial (checked, passed), 328 fail, 289 unsupported,
 0 errors.
 
 | action | ok | partial | fail | unsupported |
 |---|---|---|---|---|
-| moveHandle | 358 | 0 | 2 | 0 |
-| moveElement(s) | 130 | 24 | 2 | 0 |
-| resizeElement (top-right, bottom-left) | 44 | 0 | 0 | 0 |
-| alignElements (left, top) | 255 | 0 | 13 | 44 |
-| duplicateElements | 58 | 5 | 93 | 0 |
-| repeatElements | 38 | 0 | 58 | 0 |
-| insertPathPoint | 7 | 0 | 49 | 28 |
-| reversePath | 56 | 0 | 8 | 68 |
-| setPathPointKind | 32 | 0 | 8 | 20 |
-| rotateElement (center pivot) | 9 | 0 | 5 | 94 |
-| positionNodeRelativeTo | 8 | 0 | 3 | 1 |
-| convertNodePositionToAbsolute | 8 | 0 | 4 | 0 |
-| appendToPath | 20 | 0 | 20 | 20 |
-| addElement | 24 | 0 | 12 | 0 |
-| path tool | 4 | 0 | 2 | 0 |
-| freehand | 4 | 0 | 2 | 0 |
-| setFigureBounds | 1 | 0 | 5 | 0 |
+| moveHandle | 388 | 0 | 2 | 0 |
+| moveElement(s) | 141 | 26 | 2 | 0 |
+| resizeElement (top-right, bottom-left) | 48 | 0 | 0 | 0 |
+| alignElements (left, top) | 277 | 0 | 14 | 47 |
+| duplicateElements | 58 | 5 | 106 | 0 |
+| repeatElements | 41 | 0 | 63 | 0 |
+| insertPathPoint | 7 | 0 | 56 | 28 |
+| reversePath | 63 | 0 | 9 | 71 |
+| setPathPointKind | 36 | 0 | 9 | 20 |
+| rotateElement (center pivot) | 11 | 0 | 5 | 101 |
+| positionNodeRelativeTo | 8 | 0 | 3 | 2 |
+| convertNodePositionToAbsolute | 9 | 0 | 4 | 0 |
+| appendToPath | 20 | 0 | 25 | 20 |
+| addElement | 24 | 0 | 18 | 0 |
+| path tool | 4 | 0 | 3 | 0 |
+| freehand | 4 | 0 | 3 | 0 |
+| setFigureBounds | 1 | 0 | 6 | 0 |
 
-### Failure classes (286 cases)
+### Failure classes (328 cases)
 
 1. **World cm written as source units, no frame** (63: `insertPathPoint`,
    `convertNodePositionToAbsolute`, `setFigureBounds`, center-pivot
