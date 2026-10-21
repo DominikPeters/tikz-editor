@@ -5,8 +5,9 @@ import { FRAMES, QUICK_FRAME_LABELS, runPointerFuzz, type CaseOutcome, type Case
 // `npm test` runs one frame per mechanism; POINTER_FUZZ_FULL=1 (CI, and
 // `npm run test:pointer-fuzz`) runs every frame. POINTER_FUZZ_SEED picks other
 // deltas. POINTER_FUZZ_UPDATE=1 rewrites the expected outcomes from a full run
-// with the default seed, and refuses if any case got worse unless
-// POINTER_FUZZ_ACCEPT_REGRESSIONS=1. POINTER_FUZZ_VERBOSE=1 prints every failure.
+// with the default seed, and refuses if any case got worse, disappeared, or
+// arrived failing, unless POINTER_FUZZ_ACCEPT_REGRESSIONS=1.
+// POINTER_FUZZ_VERBOSE=1 prints every failure.
 const FULL = Boolean(process.env.POINTER_FUZZ_FULL);
 const SEED = Number(process.env.POINTER_FUZZ_SEED ?? 1);
 const EXPECTED_PATH = "test/pointer-invariant/expected-outcomes.json";
@@ -74,9 +75,15 @@ describe("pointer invariant", () => {
         if (before === now) continue;
         const line = `${key}: ${before ?? "(new case)"} → ${now}`;
         changes.push(line);
-        if (before !== undefined && rank(now) < rank(before)) regressions.push(line);
+        // A new case may arrive refused, but a new failure is a decision to record.
+        if (before === undefined ? rank(now) === 0 : rank(now) < rank(before)) regressions.push(line);
       }
-      for (const key of Object.keys(expected)) if (!actual.has(key)) changes.push(`${key}: ${expected[key]} → (case removed)`);
+      for (const key of Object.keys(expected)) {
+        if (actual.has(key)) continue;
+        const line = `${key}: ${expected[key]} → (case removed)`;
+        changes.push(line);
+        regressions.push(line);
+      }
       console.log(changes.length === 0 ? "No outcome changes." : `Outcome changes:\n${changes.join("\n")}`);
       if (regressions.length > 0 && !process.env.POINTER_FUZZ_ACCEPT_REGRESSIONS) {
         throw new Error(`Refusing to record regressions (set POINTER_FUZZ_ACCEPT_REGRESSIONS=1 to accept):\n${regressions.join("\n")}`);
@@ -93,6 +100,11 @@ describe("pointer invariant", () => {
         return `${key}: expected ${expected[key] ?? "(new case)"}, got ${now}${why}`;
       });
       expect(mismatches, `outcomes differ from ${EXPECTED_PATH}; rerun with POINTER_FUZZ_FULL=1 POINTER_FUZZ_UPDATE=1 to record improvements`).toEqual([]);
+      if (FULL) {
+        // A full run must still generate every recorded case, or coverage silently shrinks.
+        const missing = Object.keys(expected).filter(key => !actual.has(key));
+        expect(missing, "recorded cases no longer generated").toEqual([]);
+      }
     } else {
       // Other deltas may change which edits are refused, but must not write wrong geometry where seed 1 did not.
       const worse = [...actual].filter(([key, now]) => rank(now) === 0 && rank(expected[key] ?? "ok") > 0)
