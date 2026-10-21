@@ -5,6 +5,7 @@ import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { createIdentitySpanMapper, type IdentityMove } from "@tikz-editor/core/edit/identity-provenance";
 import type { SessionSnapshot } from "./compute";
 import type { DocumentSession } from "./store/types";
+import { sourceSlice } from "@tikz-editor/core/edit/fragment";
 import { deriveSingleSourcePatch } from "./store/source-patch-diff";
 
 export type { IdentityMove } from "@tikz-editor/core/edit/identity-provenance";
@@ -170,5 +171,5 @@ export function updateDocumentIdentities(before: DocumentSession, after: Documen
 }
 
 function identityPatches(before: string, after: string): SourcePatch[] {
-  return deriveSingleSourcePatch(before, after) ?? [{ oldSpan: { from: 0, to: before.length }, newSpan: { from: 0, to: after.length }, replacement: after }];
+  return deriveSingleSourcePatch(before, after) ?? [{ oldSpan: { from: 0, to: before.length }, newSpan: { from: 0, to: after.length }, replacement: sourceSlice(after, { from: 0, to: after.length }) }];
 }

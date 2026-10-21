@@ -1,5 +1,6 @@
 import type { Span } from "@tikz-editor/core/ast/types";
 import { computeMinimalReplacementPatch, replaceSpan } from "@tikz-editor/core/edit/patch";
+import { userText, type TikzFragment } from "@tikz-editor/core/edit/fragment";
 import {
   EMPTY_UNDO_HISTORY,
   applyTransaction,
@@ -202,7 +203,7 @@ export type CanvasTextEditEffect =
       /** Minimal changed range in post-edit document coordinates. */
       changedSpan: Span;
       /** Replacement for `previousSpan` only, not the whole session buffer. */
-      replacement: string;
+      replacement: TikzFragment;
       /** The session's full buffer span after the edit. */
       sessionSpan: Span;
       /**
@@ -436,11 +437,12 @@ function applySessionTextUpdate(
   const currentSpan = currentSlice === current.text
     ? current.sourceSpan
     : resolveCurrentTextSpan(current.workingSource, current.text, current.sourceSpan);
-  const updated = replaceSpan(current.workingSource, currentSpan, nextText);
+  const typed = userText(nextText, "node-text");
+  const updated = replaceSpan(current.workingSource, currentSpan, typed);
   // The dispatched patch covers only the changed characters inside the
   // buffer, so a keystroke in a scope-sized session stays a keystroke-sized
   // source change for incremental parsing and history.
-  const bufferDiff = computeMinimalReplacementPatch(current.text, nextText);
+  const bufferDiff = computeMinimalReplacementPatch(current.text, typed);
   const editOldSpan: Span = {
     from: currentSpan.from + bufferDiff.oldSpan.from,
     to: currentSpan.from + bufferDiff.oldSpan.to

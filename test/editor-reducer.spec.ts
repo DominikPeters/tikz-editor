@@ -12,6 +12,7 @@ import { PT_PER_CM } from "../packages/core/src/edit/format.js";
 import { prepareBeamerDocument, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
 import { buildBeamerObjectIndex } from "../packages/core/src/beamer/object-index.js";
 import { wp } from "./coords-helpers.js";
+import { editedSource, fragment } from "./fragment-helpers.js";
 
 // Helper to dispatch a sequence of actions
 function applyActions(actions: EditorAction[], initial?: EditorState): EditorState {
@@ -466,7 +467,7 @@ describe("editorReducer – UNDO / REDO", () => {
       },
       precomputedResult: {
         kind: "success",
-        newSource: "after",
+        newSource: editedSource("after"),
         patches: [],
         selectedSourceIds: ["path:2"]
       }
@@ -584,12 +585,12 @@ describe("editorReducer – APPLY_EDIT_ACTION", () => {
       },
       precomputedResult: {
         kind: "success",
-        newSource: "\\draw (5,6) -- (3,4);",
+        newSource: editedSource("\\draw (5,6) -- (3,4);"),
         patches: [
           {
             oldSpan: { from: 6, to: 11 },
             newSpan: { from: 6, to: 11 },
-            replacement: "(5,6)"
+            replacement: fragment("(5,6)")
           }
         ],
         changedSourceIds: ["elem-1"]
@@ -624,12 +625,12 @@ describe("editorReducer – APPLY_EDIT_ACTION", () => {
       },
       precomputedResult: {
         kind: "success",
-        newSource: "\\draw (0,0) -- node[pos=0.6,above] {r} (1,0);",
+        newSource: editedSource("\\draw (0,0) -- node[pos=0.6,above] {r} (1,0);"),
         patches: [
           {
             oldSpan: { from: oldNodeFrom, to: oldNodeTo },
             newSpan: { from: oldNodeFrom, to: oldNodeFrom + "node[pos=0.6,above]".length },
-            replacement: "node[pos=0.6,above]"
+            replacement: fragment("node[pos=0.6,above]")
           }
         ],
         changedSourceIds: ["path:0"]
@@ -813,12 +814,12 @@ describe("editorReducer – APPLY_EDIT_ACTION", () => {
       },
       precomputedResult: {
         kind: "success",
-        newSource: "\\draw (7,8) -- (3,4);",
+        newSource: editedSource("\\draw (7,8) -- (3,4);"),
         patches: [
           {
             oldSpan: { from: 6, to: 11 },
             newSpan: { from: 6, to: 11 },
-            replacement: "(7,8)"
+            replacement: fragment("(7,8)")
           }
         ],
         changedSourceIds: ["elem-1"]
@@ -845,12 +846,12 @@ describe("editorReducer – APPLY_EDIT_ACTION", () => {
       },
       precomputedResult: {
         kind: "partial",
-        newSource: "\\draw (5,6) -- (3,4);",
+        newSource: editedSource("\\draw (5,6) -- (3,4);"),
         patches: [
           {
             oldSpan: { from: 6, to: 11 },
             newSpan: { from: 6, to: 11 },
-            replacement: "(5,6)"
+            replacement: fragment("(5,6)")
           }
         ],
         skippedHandles: [],
@@ -1373,11 +1374,11 @@ describe("editorReducer – branch edge cases", () => {
         precomputedSource: previousSource,
         precomputedResult: {
           kind: "success",
-          newSource: nextSource,
+          newSource: editedSource(nextSource),
           patches: [{
             oldSpan: { from: previousSource.length, to: previousSource.length },
             newSpan: { from: nextSource.length, to: nextSource.length },
-            replacement: `\n% ${kind}`
+            replacement: fragment(`\n% ${kind}`)
           }]
         }
       });
@@ -1854,7 +1855,7 @@ describe("undo history bounds", () => {
         type: "APPLY_EDIT_ACTION",
         action: { kind: "setProperty", elementId: "path:0", level: "command", key: "draw", value: index % 2 ? "red" : "blue" },
         precomputedSource: state.source,
-        precomputedResult: { kind: "success", newSource: `${state.source.split("\n%")[0]}\n% ${index}`, patches: [] }
+        precomputedResult: { kind: "success", newSource: editedSource(`${state.source.split("\n%")[0]}\n% ${index}`), patches: [] }
       });
     }
     expect(state.history).toHaveLength(1000);

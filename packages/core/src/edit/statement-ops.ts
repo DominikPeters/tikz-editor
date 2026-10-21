@@ -1,3 +1,4 @@
+import { applyFragments, unchangedSource, type EditedSource, type FragmentEdit, type TikzFragment } from "./fragment.js";
 import type { Statement, Span, TikzFigureInventoryItem } from "../ast/types.js";
 import type { SourcePatch } from "./types.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
@@ -26,7 +27,7 @@ export type StatementParentGroup = {
 
 export type TextReplacement = {
   span: Span;
-  text: string;
+  text: TikzFragment;
 };
 
 export type AppliedTextReplacement = {
@@ -231,13 +232,13 @@ export function applyTextReplacements(
   source: string,
   replacements: readonly TextReplacement[]
 ): {
-  source: string;
+  source: EditedSource;
   patches: SourcePatch[];
   applied: AppliedTextReplacement[];
 } {
   if (replacements.length === 0) {
     return {
-      source,
+      source: unchangedSource(source),
       patches: [],
       applied: []
     };
@@ -254,7 +255,7 @@ export function applyTextReplacements(
   const applied: AppliedTextReplacement[] = [];
   let cursor = 0;
   let delta = 0;
-  let output = "";
+  const edits: FragmentEdit[] = [];
 
   for (const replacement of sorted) {
     const oldFrom = clampOffset(replacement.span.from, source.length);
@@ -263,8 +264,7 @@ export function applyTextReplacements(
       throw new Error("Overlapping replacements are not allowed");
     }
 
-    output += source.slice(cursor, oldFrom);
-    output += replacement.text;
+    edits.push({ span: { from: oldFrom, to: oldTo }, fragment: replacement.text });
 
     const newFrom = oldFrom + delta;
     const newTo = newFrom + replacement.text.length;
@@ -281,9 +281,8 @@ export function applyTextReplacements(
     cursor = oldTo;
   }
 
-  output += source.slice(cursor);
   return {
-    source: output,
+    source: applyFragments(source, edits),
     patches,
     applied
   };

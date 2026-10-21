@@ -1,3 +1,4 @@
+import { legacyEditedSource, unchangedSource, type EditedSource } from "./fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import { worldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
@@ -143,10 +144,10 @@ export function generateElementSource(template: ElementTemplate, at: WorldPoint)
   }
 }
 
-export function insertElementIntoSource(source: string, snippet: string, figureSpan?: Span): string {
+export function insertElementIntoSource(source: string, snippet: string, figureSpan?: Span): EditedSource {
   const normalizedSnippet = snippet.trim();
   if (normalizedSnippet.length === 0) {
-    return source;
+    return unchangedSource(source);
   }
 
   const resolvedEnd = resolveTikzpictureEndToken(source, figureSpan);
@@ -154,11 +155,11 @@ export function insertElementIntoSource(source: string, snippet: string, figureS
   const endIndex = resolvedEnd?.from ?? source.lastIndexOf(endToken);
   if (endIndex < 0) {
     if (source.trim().length === 0) {
-      return `\\begin{tikzpicture}\n  ${normalizedSnippet}\n\\end{tikzpicture}`;
+      return legacyEditedSource(`\\begin{tikzpicture}\n  ${normalizedSnippet}\n\\end{tikzpicture}`);
     }
-    return source.endsWith("\n")
+    return legacyEditedSource(source.endsWith("\n")
       ? `${source}${normalizedSnippet}`
-      : `${source}\n${normalizedSnippet}`;
+      : `${source}\n${normalizedSnippet}`);
   }
 
   const endLineStart = source.lastIndexOf("\n", endIndex - 1) + 1;
@@ -170,7 +171,7 @@ export function insertElementIntoSource(source: string, snippet: string, figureS
   const needsLeadingNewline = before.length > 0 && !before.endsWith("\n");
   const prefix = needsLeadingNewline ? "\n" : "";
 
-  return `${before}${prefix}${bodyIndent}${normalizedSnippet}\n${after}`;
+  return legacyEditedSource(`${before}${prefix}${bodyIndent}${normalizedSnippet}\n${after}`);
 }
 
 function resolveTikzpictureEndToken(source: string, figureSpan: Span | undefined): { from: number; token: string } | null {

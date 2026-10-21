@@ -1,3 +1,4 @@
+import type { EditedSource, TikzFragment } from "./fragment.js";
 import type { Span } from "../ast/types.js";
 import type { WorldPoint } from "../coords/points.js";
 
@@ -15,7 +16,7 @@ export type EditIntent = { kind: "move"; handleId: string; newWorld: WorldPoint 
 
 /** Result of applying an edit intent. */
 export type EditIntentResult =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; changedSourceIds?: string[] }
+  | { kind: "success"; newSource: EditedSource; patches: SourcePatch[]; changedSourceIds?: string[] }
   | { kind: "unsupported"; reason: string; handleId: string }
   | { kind: "error"; message: string };
 
@@ -27,5 +28,5 @@ export type EditIntentResult =
 export type SourcePatch = {
   oldSpan: Span;
   newSpan: Span;
-  replacement: string;
+  replacement: TikzFragment;
 };

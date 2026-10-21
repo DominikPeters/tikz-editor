@@ -1,3 +1,4 @@
+import { sourceSlice, tikz, userText } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { WorldPoint } from "../../coords/points.js";
@@ -35,11 +36,11 @@ export function applyDuplicateAdornmentAction(
     return { kind: "unsupported", reason: "Selected adornment could not be resolved for duplication." };
   }
 
-  const snippet = source.slice(resolved.target.optionSpan.from, resolved.target.optionSpan.to);
+  const snippet = tikz`, ${sourceSlice(source, resolved.target.optionSpan)}`;
   const insertion = replaceSpan(
     source,
     { from: resolved.target.optionSpan.to, to: resolved.target.optionSpan.to },
-    `, ${snippet}`
+    snippet
   );
   return {
     kind: "success",
@@ -48,7 +49,7 @@ export function applyDuplicateAdornmentAction(
       {
         oldSpan: { from: resolved.target.optionSpan.to, to: resolved.target.optionSpan.to },
         newSpan: insertion.changedSpan,
-        replacement: `, ${snippet}`
+        replacement: snippet
       }
     ],
     selectedSourceIds: [targetId],
@@ -91,12 +92,11 @@ export function applyAddNodeAdornmentAction(
   }
 
   const key = action.adornmentKind;
-  const value = `${action.angle}:${action.text}`;
-  const snippet = `${key}=${value}`;
+  const snippet = tikz`${userText(key, "inspector-value")}=${userText(action.angle, "inspector-value")}:${userText(action.text, "node-text")}`;
   const insertionOffset = resolved.target.optionsSpan
     ? resolveOptionListAppendOffset(source, resolved.target.optionsSpan)
     : resolved.target.insertOffset;
-  const insertionText = resolved.target.optionsSpan ? `, ${snippet}` : `[${snippet}]`;
+  const insertionText = resolved.target.optionsSpan ? tikz`, ${snippet}` : tikz`[${snippet}]`;
   const updated = replaceSpan(source, { from: insertionOffset, to: insertionOffset }, insertionText);
   const adornmentIndex = extractNodeAdornmentPlan(resolved.target.options).adornments.length;
   const adornmentTargetId = `node-adornment:${action.nodeId}:${action.adornmentKind}:${adornmentIndex}`;

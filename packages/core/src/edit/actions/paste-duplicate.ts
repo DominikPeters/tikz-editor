@@ -1,3 +1,4 @@
+import { legacyText, unchangedSource } from "../fragment.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { worldPoint } from "../../coords/points.js";
@@ -110,7 +111,7 @@ export function applyPasteStatementsAction(
   const applied = applyTextReplacements(source, [
     {
       span: { from: insertionWorldPoint.offset, to: insertionWorldPoint.offset },
-      text: insertion.text
+      text: legacyText(insertion.text)
     }
   ]);
   const appliedInsertion = requireArrayValue(applied.applied, 0);
@@ -165,7 +166,7 @@ export function applyDuplicateElementsAction(
   }
 
   const groups = groupStatementRefsByParent(initialRefs);
-  let currentSource = source;
+  let currentSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
   let insertedSpans: Span[] = [];
   const partialReasons: string[] = [];
@@ -200,7 +201,7 @@ export function applyDuplicateElementsAction(
       const applied = applyTextReplacements(currentSource, [
         {
           span: { from: anchor.span.to, to: anchor.span.to },
-          text: insertion.text
+          text: legacyText(insertion.text)
         }
       ]);
       const appliedInsertion = requireArrayValue(applied.applied, 0);

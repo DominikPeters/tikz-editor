@@ -1,3 +1,4 @@
+import { sourceSlice } from "@tikz-editor/core/edit/fragment";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 
 export function deriveSingleSourcePatch(previous: string, next: string): SourcePatch[] | null {
@@ -32,7 +33,7 @@ export function deriveSingleSourcePatch(previous: string, next: string): SourceP
     {
       oldSpan: { from: prefix, to: previousSuffix },
       newSpan: { from: prefix, to: nextSuffix },
-      replacement: next.slice(prefix, nextSuffix)
+      replacement: sourceSlice(next, { from: prefix, to: nextSuffix })
     }
   ];
 }

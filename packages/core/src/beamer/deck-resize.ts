@@ -1,3 +1,4 @@
+import { legacyText } from "../edit/fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
@@ -105,7 +106,7 @@ function numericPatches(source: string, edits: { span: Span; replacement: string
     .sort((a, b) => a.span.from - b.span.from).map((edit) => {
       const from = edit.span.from + delta;
       delta += edit.replacement.length - (edit.span.to - edit.span.from);
-      return { oldSpan: edit.span, newSpan: { from, to: from + edit.replacement.length }, replacement: edit.replacement };
+      return { oldSpan: edit.span, newSpan: { from, to: from + edit.replacement.length }, replacement: legacyText(edit.replacement) };
     });
 }
 function formatValue(source: string, numeric: NumericValue, value: number): string {

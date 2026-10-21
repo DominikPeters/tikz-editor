@@ -1,3 +1,4 @@
+import { editedSlice, legacyText, type EditedSource } from "./fragment.js";
 import { isObjectRecord } from "../utils/records.js";
 import type { EditActionResultLike } from "./result-types.js";
 import type { Span } from "../ast/types.js";
@@ -48,7 +49,7 @@ export type PropertyWritePlan = {
 };
 
 type CleanupCandidate = {
-  source: string;
+  source: EditedSource;
   reason: string;
 };
 
@@ -179,7 +180,7 @@ function buildDefaultOmissionCandidate(
   source: string,
   action: SetPropertyAction,
   parseOptions: EditParseOptions
-): string | null {
+): EditedSource | null {
   if (action.value.trim().length === 0 || !shouldOmitDefaultWhenEquivalent(action.propertyId ?? propertyIdForWriteKey(action.key))) {
     return null;
   }
@@ -286,7 +287,7 @@ function rewritePaintCommand(
   nextCommand: "path" | "draw" | "fill",
   paint: PaintOptions,
   parseOptions: EditParseOptions
-): string | null {
+): EditedSource | null {
   let current = rewritePathCommandToken(source, elementId, nextCommand, parseOptions);
   if (!current) {
     return null;
@@ -327,7 +328,7 @@ function applyOptionalPropertyMutation(
   key: string,
   value: string,
   parseOptions: EditParseOptions
-): string | null {
+): EditedSource | null {
   const result = applySetPropertyActionRaw(
     source,
     {
@@ -345,7 +346,7 @@ function rewritePathCommandToken(
   elementId: string,
   nextCommand: "path" | "draw" | "fill",
   parseOptions: EditParseOptions
-): string | null {
+): EditedSource | null {
   const resolved = resolvePropertyTarget(source, elementId, parseOptions);
   if (resolved.kind !== "found" || resolved.target.kind !== "path-statement" || !resolved.target.pathCommand) {
     return null;
@@ -354,7 +355,7 @@ function rewritePathCommandToken(
   if (!commandSpan) {
     return null;
   }
-  return replaceSpan(source, commandSpan, `\\${nextCommand}`).source;
+  return replaceSpan(source, commandSpan, legacyText(`\\${nextCommand}`)).source;
 }
 
 function findPathCommandTokenSpan(source: string, statementSpan: Span, command: string): Span | null {
@@ -673,7 +674,7 @@ function countOccurrences(source: string, needle: string): number {
   return count;
 }
 
-function deriveSingleSourcePatch(previous: string, next: string): SourcePatch[] {
+function deriveSingleSourcePatch(previous: string, next: EditedSource): SourcePatch[] {
   let prefix = 0;
   while (prefix < previous.length && prefix < next.length && previous[prefix] === next[prefix]) {
     prefix += 1;
@@ -692,7 +693,7 @@ function deriveSingleSourcePatch(previous: string, next: string): SourcePatch[] 
     {
       oldSpan: { from: prefix, to: previousSuffix },
       newSpan: { from: prefix, to: nextSuffix },
-      replacement: next.slice(prefix, nextSuffix)
+      replacement: editedSlice(next, prefix, nextSuffix)
     }
   ];
 }

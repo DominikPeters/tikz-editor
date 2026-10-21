@@ -1,3 +1,4 @@
+import { sourceSlice } from "../edit/fragment.js";
 import { isObjectRecord } from "../utils/records.js";
 import type { Tree } from "@lezer/common";
 import { parseSyntax } from "@tikz-editor/lezer-tikz";
@@ -1049,7 +1050,7 @@ function deriveSingleSourcePatch(previous: string, next: string): SourcePatch[] 
     {
       oldSpan: { from: prefix, to: previousSuffix },
       newSpan: { from: prefix, to: nextSuffix },
-      replacement: next.slice(prefix, nextSuffix)
+      replacement: sourceSlice(next, { from: prefix, to: nextSuffix })
     }
   ];
 }

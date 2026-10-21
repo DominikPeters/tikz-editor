@@ -1,0 +1,1357 @@
+{
+  "comment": "Fingerprinted coordinate-write exceptions (scripts/check-coordinate-writes.mjs). Reviewed: string constructors whose call sites were checked. Migration: violations the writer phases remove; the list only shrinks.",
+  "reviewed": [
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/app/src/editing-identities.ts",
+      "declaration": "identityPatches.replacement",
+      "hash": "4e0b0d9a5214",
+      "count": 1,
+      "expression": "sourceSlice(after, { from: 0, to: after.length })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/app/src/store/source-patch-diff.ts",
+      "declaration": "deriveSingleSourcePatch.replacement",
+      "hash": "3554d0f380f7",
+      "count": 1,
+      "expression": "sourceSlice(next, { from: prefix, to: nextSuffix })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/app/src/ui/canvas-panel/canvas-text-edit-machine.ts",
+      "declaration": "applySessionTextUpdate.typed",
+      "hash": "ebb2571de716",
+      "count": 1,
+      "expression": "userText(nextText, \"node-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/builds.ts",
+      "declaration": "beamerBuildSpecPatch.replacement",
+      "hash": "34b4b439b0ec",
+      "count": 1,
+      "expression": "userText(value.trim(), \"beamer-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/object-overlays.ts",
+      "declaration": "beamerObjectOverlayTarget.setSpec",
+      "hash": "86d073da169f",
+      "count": 1,
+      "expression": "sourceSlice(source, node.sourceSpan)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/object-overlays.ts",
+      "declaration": "beamerObjectOverlayTarget.setSpec",
+      "hash": "a988f61a7876",
+      "count": 3,
+      "expression": "userText(spec, \"beamer-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions.ts",
+      "declaration": "applyEditAction.rawResult.newSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions.ts",
+      "declaration": "applyEditAction.rawResult.nextSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions.ts",
+      "declaration": "applyEditAction.result.newSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/actions.ts",
+      "declaration": "applyUpdateNodeText.text",
+      "hash": "c1c517652f5c",
+      "count": 1,
+      "expression": "userText(action.text, \"node-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions.ts",
+      "declaration": "ensureNodeSourceHasName.source",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions.ts",
+      "declaration": "resolveAnchorNodeName.source",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/actions/adornment-actions.ts",
+      "declaration": "applyAddNodeAdornmentAction.snippet",
+      "hash": "18ddfd7aa779",
+      "count": 1,
+      "expression": "userText(key, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/actions/adornment-actions.ts",
+      "declaration": "applyAddNodeAdornmentAction.snippet",
+      "hash": "63b6672813ab",
+      "count": 1,
+      "expression": "userText(action.angle, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/actions/adornment-actions.ts",
+      "declaration": "applyAddNodeAdornmentAction.snippet",
+      "hash": "c1c517652f5c",
+      "count": 1,
+      "expression": "userText(action.text, \"node-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/actions/adornment-actions.ts",
+      "declaration": "applyDuplicateAdornmentAction.snippet",
+      "hash": "7cd7f00ad8e9",
+      "count": 1,
+      "expression": "sourceSlice(source, resolved.target.optionSpan)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/actions/adornment-set-property.ts",
+      "declaration": "applyAdornmentSetProperty.value",
+      "hash": "5bd162385032",
+      "count": 1,
+      "expression": "userText(action.value, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/actions/adornment-set-property.ts",
+      "declaration": "buildPinEdgeMutations.value",
+      "hash": "b22fcc7004ea",
+      "count": 1,
+      "expression": "userText(value, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/delete-elements.ts",
+      "declaration": "applyDeleteElementsAction.currentSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/delete-elements.ts",
+      "declaration": "pruneFitReferencesAfterDelete.currentSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/delete-elements.ts",
+      "declaration": "pruneFitReferencesAfterDelete.source",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "applyElementDeltaMapStrict.currentSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "applyMoveElementsAction.currentSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "applyMoveElementsAction.newSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "applyMoveElementsUsingHandleRewrites.currentSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "applyMoveMatrixElementsWithPlacementRewrite.currentSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "applyMoveScopeElementsWithTransformRewrite.currentSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "applyMoveTreeRootElementsWithPlacementRewrite.currentSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/paste-duplicate.ts",
+      "declaration": "applyDuplicateElementsAction.currentSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/actions/path-editing-actions.ts",
+      "declaration": "sourceSliceForItem",
+      "hash": "d0db4788f74c",
+      "count": 1,
+      "expression": "sourceSlice(source, item.span)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/reorder-elements.ts",
+      "declaration": "applyReorderElementsAction.currentSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/actions/reorder-elements.ts",
+      "declaration": "buildParentReorderReplacement.statementText",
+      "hash": "3707371ee9df",
+      "count": 1,
+      "expression": "sourceSlice(source, ref.span)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "applyResizeElementAction.newSource",
+      "hash": "49e7e7594a9d",
+      "count": 2,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "applyResizePathRectangle.newSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "restoreResizeBaselineOnNoop.newSource",
+      "hash": "3428e2d48560",
+      "count": 1,
+      "expression": "unchangedSource(geometry.source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/actions/rotate-element.ts",
+      "declaration": "applyCenterPivotRotate.nextSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/actions/set-property.ts",
+      "declaration": "applySetPropertyActionRaw.value",
+      "hash": "5bd162385032",
+      "count": 1,
+      "expression": "userText(action.value, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/actions/set-property.ts",
+      "declaration": "createOptionMutationsFromSetProperty.value",
+      "hash": "5bd162385032",
+      "count": 1,
+      "expression": "userText(action.value, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/apply.ts",
+      "declaration": "applyCurveEditMoveIntent.newSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/edit/apply.ts",
+      "declaration": "applyEdit.updated",
+      "hash": "d53711d30e73",
+      "count": 1,
+      "expression": "userText(edit.text, \"node-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "insertElementIntoSource",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/patch.ts",
+      "declaration": "documentDiffPatch.patch",
+      "hash": "abb19ec115f8",
+      "count": 1,
+      "expression": "unchangedSource(next)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/patch.ts",
+      "declaration": "documentDiffPatch.replacement",
+      "hash": "febbd10370ac",
+      "count": 1,
+      "expression": "sourceSlice(next, patch.newSpan)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/path-editing.ts",
+      "declaration": "analyzeExplicitPathStatement.analysis.prefix",
+      "hash": "9956493236f9",
+      "count": 1,
+      "expression": "sourceSlice(source, { from: statement.span.from, to: firstItem.span.from })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/path-editing.ts",
+      "declaration": "analyzeExplicitPathStatement.analysis.suffix",
+      "hash": "7e12caf5c9e1",
+      "count": 1,
+      "expression": "sourceSlice(source, { from: lastItem.span.to, to: statement.span.to })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/path-editing.ts",
+      "declaration": "analyzeExplicitPathStatement.anchors.raw",
+      "hash": "ea2e143f5b27",
+      "count": 1,
+      "expression": "sourceSlice(source, { from: firstItem.span.from, to: firstItem.span.to })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/path-editing.ts",
+      "declaration": "analyzeExplicitPathStatement.raw",
+      "hash": "23878444c535",
+      "count": 2,
+      "expression": "sourceSlice(source, { from: operator.span.from, to: parsedCurve.target.span.to })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/path-editing.ts",
+      "declaration": "analyzeExplicitPathStatement.raw",
+      "hash": "9e7e27f2e1ff",
+      "count": 2,
+      "expression": "sourceSlice(source, { from: operator.span.from, to: target.span.to })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/path-editing.ts",
+      "declaration": "analyzeExplicitPathStatement.raw",
+      "hash": "ef6d671e2ad1",
+      "count": 1,
+      "expression": "sourceSlice(source, { from: target.span.from, to: target.span.to })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/path-editing.ts",
+      "declaration": "analyzeExplicitPathStatement.raw",
+      "hash": "fdf7da68373c",
+      "count": 1,
+      "expression": "sourceSlice(source, { from: parsedCurve.target.span.from, to: parsedCurve.target.span.to })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/source-patches.ts",
+      "declaration": "applySourcePatches.source",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/source-patches.ts",
+      "declaration": "invertSourcePatches.replacement",
+      "hash": "d0c603b6c742",
+      "count": 1,
+      "expression": "sourceSlice(previous, patch.oldSpan)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "unchangedSource",
+      "file": "packages/core/src/edit/statement-ops.ts",
+      "declaration": "applyTextReplacements.source",
+      "hash": "49e7e7594a9d",
+      "count": 1,
+      "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/parser/incremental.ts",
+      "declaration": "deriveSingleSourcePatch.replacement",
+      "hash": "3554d0f380f7",
+      "count": 1,
+      "expression": "sourceSlice(next, { from: prefix, to: nextSuffix })"
+    }
+  ],
+  "migration": [
+    {
+      "rule": "F5",
+      "symbol": "worldVector",
+      "file": "packages/app/src/ui/canvas-panel/panel-helpers.ts",
+      "declaration": "resolveBoundsEdgePointToward.vector",
+      "hash": "9a5cca96b30d",
+      "count": 1,
+      "expression": "worldVector(pt(from.x - center.x), pt(from.y - center.y))"
+    },
+    {
+      "rule": "F5",
+      "symbol": "viewportPoint",
+      "file": "packages/app/src/ui/canvas-panel/useCanvasGuidesAndRulers.ts",
+      "declaration": "useCanvasGuidesAndRulers.resolveGuideFromClient.viewportPoint",
+      "hash": "1d1b6d4a0048",
+      "count": 1,
+      "expression": "makeViewportPoint(px(clientPoint.x - rect.left), px(clientPoint.y - rect.top))"
+    },
+    {
+      "rule": "F5",
+      "symbol": "viewportBounds",
+      "file": "packages/app/src/ui/canvas-panel/useCanvasTextEditingEffects.ts",
+      "declaration": "useCanvasTextEditingEffects.caret.bounds",
+      "hash": "9c7df227037b",
+      "count": 1,
+      "expression": "viewportBounds( px(point.clientPoint.x - viewportRect.left), px(point.clientPoint.y - viewportRect.top - height / 2), px"
+    },
+    {
+      "rule": "F5",
+      "symbol": "viewportBounds",
+      "file": "packages/app/src/ui/canvas-panel/useCanvasTextEditingEffects.ts",
+      "declaration": "useCanvasTextEditingEffects.caret.bounds",
+      "hash": "aeff12b61d3b",
+      "count": 1,
+      "expression": "viewportBounds( px(caretCenter.x - viewportRect.left), px(caretCenter.y - viewportRect.top - height / 2), px(caretCenter"
+    },
+    {
+      "rule": "F5",
+      "symbol": "svgPoint",
+      "file": "packages/app/src/ui/canvas-panel/useCanvasTextEditSession.ts",
+      "declaration": "estimateTextLineRangeFromClient.svgPoint",
+      "hash": "155ce160154b",
+      "count": 1,
+      "expression": "makeSvgPoint(pt(clientPoint.x), pt(clientPoint.y))"
+    },
+    {
+      "rule": "F5",
+      "symbol": "svgPoint",
+      "file": "packages/app/src/ui/canvas-panel/useCanvasTextEditSession.ts",
+      "declaration": "estimateTextOffsetFromClient.svgPoint",
+      "hash": "155ce160154b",
+      "count": 1,
+      "expression": "makeSvgPoint(pt(clientPoint.x), pt(clientPoint.y))"
+    },
+    {
+      "rule": "F5",
+      "symbol": "viewportPoint",
+      "file": "packages/app/src/ui/canvas-panel/useCanvasToolInteractions.ts",
+      "declaration": "useCanvasToolInteractions.onInteractionPointerDown.center",
+      "hash": "22a9a27bbd14",
+      "count": 1,
+      "expression": "viewportPoint(px(clientPoint.x - rect.left), px(clientPoint.y - rect.top))"
+    },
+    {
+      "rule": "F5",
+      "symbol": "viewportPoint",
+      "file": "packages/app/src/ui/canvas-panel/useCanvasToolInteractions.ts",
+      "declaration": "useCanvasToolInteractions.onInteractionPointerMove.center",
+      "hash": "22a9a27bbd14",
+      "count": 1,
+      "expression": "viewportPoint(px(clientPoint.x - rect.left), px(clientPoint.y - rect.top))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/beamer/deck-edit-actions.ts",
+      "declaration": "finishEdits.inserts",
+      "hash": "a3bd212e0ac4",
+      "count": 1,
+      "expression": "legacyText(edit.insert)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/beamer/deck-resize.ts",
+      "declaration": "numericPatches.replacement",
+      "hash": "f5970b5fb460",
+      "count": 1,
+      "expression": "legacyText(edit.replacement)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/beamer/deck-spacing.ts",
+      "declaration": "beamerSpacingResizePatches.replacement",
+      "hash": "489106c13804",
+      "count": 1,
+      "expression": "legacyText(target.numericSpan ? number : `\\\\vspace{${number}pt}`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyEditedSource",
+      "file": "packages/core/src/beamer/note-editing.ts",
+      "declaration": "editBeamerFrameNote.edited",
+      "hash": "52e8c25e5da5",
+      "count": 1,
+      "expression": "legacyEditedSource(next)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/beamer/slide-manager.ts",
+      "declaration": "editBeamerSlides.patches.replacement",
+      "hash": "1985bc165f3e",
+      "count": 1,
+      "expression": "legacyText(item.text)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions.ts",
+      "declaration": "applyConnectHandle.replacement",
+      "hash": "5c46fd130961",
+      "count": 1,
+      "expression": "legacyText( trimmedAnchor === \"center\" ? `(${trimmedNodeName})` : `(${trimmedNodeName}.${trimmedAnchor})`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions.ts",
+      "declaration": "ensureNodeSourceHasName.insertion",
+      "hash": "0351c78564e4",
+      "count": 1,
+      "expression": "legacyText(name)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/adornment-set-property.ts",
+      "declaration": "applyAdornmentValueRewrite.replacement",
+      "hash": "f6cda986fa4a",
+      "count": 1,
+      "expression": "legacyText(serializeAdornmentValue( kind, overrides?.angleRaw ?? target.angleRaw ?? \"center\", overrides?.textRaw ?? (tar"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/adornment-set-property.ts",
+      "declaration": "applyAdornmentValueRewrite.value",
+      "hash": "5d0dee7db838",
+      "count": 1,
+      "expression": "legacyText(formatPinEdgeOptionValue(rewrittenPinEdge))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/delete-elements.ts",
+      "declaration": "pruneFitReferencesAfterDelete.value",
+      "hash": "476b6cf29e5a",
+      "count": 1,
+      "expression": "legacyText(nextFitValue.value)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
+      "declaration": "applyUngroupElementsAction.applied.text",
+      "hash": "6f3ed5cbd992",
+      "count": 1,
+      "expression": "legacyText(replacementText)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
+      "declaration": "buildGroupReplacement.text",
+      "hash": "73492e66680e",
+      "count": 1,
+      "expression": "legacyText(text)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/matrix-structure-actions.ts",
+      "declaration": "serializeMatrixRows",
+      "hash": "6617e8e41aef",
+      "count": 1,
+      "expression": "legacyText(rows .map((row) => [...row].join(joiner)) .join(\" \\\\\\\\\\n\"))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "formatPlacementCoordinateFromWorld",
+      "hash": "aff0cec86ea3",
+      "count": 1,
+      "expression": "legacyText(`(${formatNumber(world.x * CM_PER_PT)},${formatNumber(world.y * CM_PER_PT)})`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "formatPlacementCoordinateFromWorld",
+      "hash": "ddd9e33ec3c5",
+      "count": 1,
+      "expression": "legacyText(`(${formatNumber(inSourceUnits.x)},${formatNumber(inSourceUnits.y)})`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "planOrderedScopeTranslation.value",
+      "hash": "72b348784461",
+      "count": 1,
+      "expression": "legacyText(formatted)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "planOrderedScopeTranslation.value",
+      "hash": "c30a65a1856a",
+      "count": 1,
+      "expression": "legacyText(`(${x},${y})`)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "localToSourceUnits",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "formatPlacementCoordinateFromWorld.inSourceUnits",
+      "hash": "1a6a9d3b338e",
+      "count": 1,
+      "expression": "localToSourceUnits(local)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
+      "declaration": "formatPlacementCoordinateFromWorld",
+      "hash": "aff0cec86ea3",
+      "count": 1,
+      "expression": "legacyText(`(${formatNumber(world.x * CM_PER_PT)},${formatNumber(world.y * CM_PER_PT)})`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
+      "declaration": "formatPlacementCoordinateFromWorld",
+      "hash": "ddd9e33ec3c5",
+      "count": 1,
+      "expression": "legacyText(`(${formatNumber(inSourceUnits.x)},${formatNumber(inSourceUnits.y)})`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
+      "declaration": "preflightPositionNodeRelativeToAction.positioningEntry",
+      "hash": "b9a220710b81",
+      "count": 1,
+      "expression": "legacyText(positioningText)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
+      "declaration": "rewriteNodePlacementSource.text",
+      "hash": "605fbd2adb5f",
+      "count": 1,
+      "expression": "legacyText(wrapSerializedOptions(input.placementEntry, input.target.optionsFormat ?? \"bracketed\"))"
+    },
+    {
+      "rule": "F3",
+      "symbol": "localToSourceUnits",
+      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
+      "declaration": "formatPlacementCoordinateFromWorld.inSourceUnits",
+      "hash": "1a6a9d3b338e",
+      "count": 1,
+      "expression": "localToSourceUnits(local)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/paste-duplicate.ts",
+      "declaration": "applyDuplicateElementsAction.applied.text",
+      "hash": "24f00efa7801",
+      "count": 1,
+      "expression": "legacyText(insertion.text)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/paste-duplicate.ts",
+      "declaration": "applyPasteStatementsAction.applied.text",
+      "hash": "24f00efa7801",
+      "count": 1,
+      "expression": "legacyText(insertion.text)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/path-attached-node-actions.ts",
+      "declaration": "applyDistanceMutations.value",
+      "hash": "9915621a3a4f",
+      "count": 1,
+      "expression": "legacyText(`${formatNumber(resolvedDistance, pointDistanceFormatOptions(action.formatPrecision))}pt`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/path-editing-actions.ts",
+      "declaration": "applyAppendToPathAction.segmentSource",
+      "hash": "f64df26c2142",
+      "count": 1,
+      "expression": "legacyText(action.segmentSource)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/path-editing-actions.ts",
+      "declaration": "applyInsertPathPointAction.formatPt",
+      "hash": "8fc3c739a533",
+      "count": 1,
+      "expression": "legacyText(`(${formatNumber(pt.x * CM_PER_PT)},${formatNumber(pt.y * CM_PER_PT)})`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/path-editing-actions.ts",
+      "declaration": "buildLineSegmentsSmoothReplacement.formatRawCoordinate",
+      "hash": "aff0cec86ea3",
+      "count": 1,
+      "expression": "legacyText(`(${formatNumber(world.x * CM_PER_PT)},${formatNumber(world.y * CM_PER_PT)})`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/path-editing-actions.ts",
+      "declaration": "explicitSegmentText",
+      "hash": "57e7d81490d5",
+      "count": 1,
+      "expression": "legacyText(raw.replace(/\\bcycle\\b/u, targetRaw))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/repeat.ts",
+      "declaration": "applyRepeatElementsAction.applied.text",
+      "hash": "6f3ed5cbd992",
+      "count": 1,
+      "expression": "legacyText(replacementText)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/repeat.ts",
+      "declaration": "rewritePathStatementCoordinates.onNode.text",
+      "hash": "846a82b2f196",
+      "count": 1,
+      "expression": "legacyText(translated)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/repeat.ts",
+      "declaration": "rewritePathStatementCoordinates.onPathItem.text",
+      "hash": "846a82b2f196",
+      "count": 2,
+      "expression": "legacyText(translated)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "applyResizePathCircleOrEllipse.inserted",
+      "hash": "3a0bf63e200f",
+      "count": 1,
+      "expression": "legacyText(`[${entries.join(\", \")}]`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "applyResizeScope.value",
+      "hash": "72b348784461",
+      "count": 1,
+      "expression": "legacyText(formatted)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "buildShapeRadiusMutations.radiusValue",
+      "hash": "8a0a7a33971a",
+      "count": 1,
+      "expression": "legacyText(`${formatNumber(nextRxLocal * CM_PER_PT)}cm`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "buildShapeRadiusMutations.value",
+      "hash": "89f73269d0cc",
+      "count": 1,
+      "expression": "legacyText(`${formatNumber(nextRyLocal * CM_PER_PT)}cm`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "buildShapeRadiusMutations.value",
+      "hash": "8a0a7a33971a",
+      "count": 1,
+      "expression": "legacyText(`${formatNumber(nextRxLocal * CM_PER_PT)}cm`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "rewriteShapePayloadCoordinate.text",
+      "hash": "7ffeaa2b183c",
+      "count": 1,
+      "expression": "legacyText(formatCircleRadiusCoordinateRaw(syntax.payloadCoordinate.raw, nextRxLocal))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "rewriteShapePayloadCoordinate.text",
+      "hash": "f1a482f06add",
+      "count": 1,
+      "expression": "legacyText(formatEllipseRadiiCoordinateRaw(syntax.payloadCoordinate.raw, nextRxLocal, nextRyLocal))"
+    },
+    {
+      "rule": "F5",
+      "symbol": "frameLocalPoint",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "worldVectorToLocal",
+      "hash": "664825d2410b",
+      "count": 1,
+      "expression": "frameLocalPoint(pt(vector.x), pt(vector.y))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/rotate-element.ts",
+      "declaration": "buildCenterPivotRotateMutations.value",
+      "hash": "ee8b1b1ac207",
+      "count": 1,
+      "expression": "legacyText(`{${formatNumber(normalizedAngle, { fractionDigits: 6 })}:${formatWorldPointCoordinateRaw(pivot)}}`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/rotate-element.ts",
+      "declaration": "buildOriginRotateMutations.value",
+      "hash": "296ed13668a5",
+      "count": 1,
+      "expression": "legacyText(formatNumber(normalizedAngle))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/rotate-element.ts",
+      "declaration": "replaceRotationOption.replacement",
+      "hash": "d491b244d838",
+      "count": 1,
+      "expression": "legacyText(nextRotation.raw)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/rotate-element.ts",
+      "declaration": "transformMutationsToOptionMutations.value",
+      "hash": "a27c6edee8e1",
+      "count": 1,
+      "expression": "legacyText(mutation.value)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/actions/set-property.ts",
+      "declaration": "applySetPropertyCommentToggle.replacement",
+      "hash": "1288ef790faa",
+      "count": 1,
+      "expression": "legacyText(serializeCommentToggleItems( replacementItems, format, resolveCommentToggleSerializationContext(rawSite, form"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/apply.ts",
+      "declaration": "applyEdit.replacement",
+      "hash": "a92e0a8bec0e",
+      "count": 1,
+      "expression": "legacyText(formatCoordinate(oldRaw, edit.x, edit.y))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/apply.ts",
+      "declaration": "buildCurveEditMutations.value",
+      "hash": "5522550671c8",
+      "count": 1,
+      "expression": "legacyText(formatInteger(Math.abs(signedBendAngle)))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/apply.ts",
+      "declaration": "buildCurveEditMutations.value",
+      "hash": "6fa38017b857",
+      "count": 1,
+      "expression": "legacyText(formatInteger(optionValue))"
+    },
+    {
+      "rule": "F3",
+      "symbol": "formatCoordinate",
+      "file": "packages/core/src/edit/apply.ts",
+      "declaration": "applyEdit.replacement",
+      "hash": "e271be42bb93",
+      "count": 1,
+      "expression": "formatCoordinate(oldRaw, edit.x, edit.y)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "localToSourceUnits",
+      "file": "packages/core/src/edit/calc-move.ts",
+      "declaration": "correctMovedCoordinateDependencies.cm",
+      "hash": "777125a83a11",
+      "count": 1,
+      "expression": "localToSourceUnits(residual)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/center-pivot-move.ts",
+      "declaration": "planCenteredPivotMoves.text",
+      "hash": "97455dcd1793",
+      "count": 1,
+      "expression": "legacyText(nextEntry.raw)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/center-pivot-move.ts",
+      "declaration": "planCenteredPivotMoves.value",
+      "hash": "b620c30096a9",
+      "count": 1,
+      "expression": "legacyText(nextValue)"
+    },
+    {
+      "rule": "F5",
+      "symbol": "worldPoint",
+      "file": "packages/core/src/edit/center-pivot-move.ts",
+      "declaration": "planCenteredPivotMoves.nextPivot",
+      "hash": "2687139b4138",
+      "count": 1,
+      "expression": "worldPoint(pt(parsedRotation.pivot.x + localDelta.x), pt(parsedRotation.pivot.y + localDelta.y))"
+    },
+    {
+      "rule": "F5",
+      "symbol": "frameLocalPoint",
+      "file": "packages/core/src/edit/center-pivot-move.ts",
+      "declaration": "planCenteredPivotMoves.pivotWorld",
+      "hash": "2dabb30703d0",
+      "count": 1,
+      "expression": "frameLocalPoint(parsedRotation.pivot.x, parsedRotation.pivot.y)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyEditedSource",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "insertElementIntoSource",
+      "hash": "57ba6f9d299a",
+      "count": 1,
+      "expression": "legacyEditedSource(`\\\\begin{tikzpicture}\\n ${normalizedSnippet}\\n\\\\end{tikzpicture}`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyEditedSource",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "insertElementIntoSource",
+      "hash": "683fcfcc1532",
+      "count": 1,
+      "expression": "legacyEditedSource(`${before}${prefix}${bodyIndent}${normalizedSnippet}\\n${after}`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyEditedSource",
+      "file": "packages/core/src/edit/element-templates.ts",
+      "declaration": "insertElementIntoSource",
+      "hash": "e85ef1527829",
+      "count": 1,
+      "expression": "legacyEditedSource(source.endsWith(\"\\n\") ? `${source}${normalizedSnippet}` : `${source}\\n${normalizedSnippet}`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/figure-bounds.ts",
+      "declaration": "formatUseAsBoundingBoxStatement",
+      "hash": "ad6f651b5285",
+      "count": 1,
+      "expression": "legacyText(`\\\\useasboundingbox (${formatNumber(x1)},${formatNumber(y1)}) rectangle (${formatNumber(x2)},${formatNumber(y"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/frame-coordinate.ts",
+      "declaration": "rewritePreciseFrameCoordinate",
+      "hash": "39b9ccd2ea03",
+      "count": 1,
+      "expression": "legacyText(formatPolarCoordinate(oldRaw, formatNumber(Math.atan2(point.y, point.x) * 180 / Math.PI, fine), formatNumber("
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/frame-coordinate.ts",
+      "declaration": "rewritePreciseFrameCoordinate",
+      "hash": "a9542f3c3a32",
+      "count": 1,
+      "expression": "legacyText(formatCoordinate(oldRaw, formatNumber(point.x, fine), formatNumber(point.y, fine), handle.sourceUnits))"
+    },
+    {
+      "rule": "F3",
+      "symbol": "formatCoordinate",
+      "file": "packages/core/src/edit/frame-coordinate.ts",
+      "declaration": "rewritePreciseFrameCoordinate",
+      "hash": "4cb5dcaa0619",
+      "count": 1,
+      "expression": "formatCoordinate(oldRaw, formatNumber(point.x, fine), formatNumber(point.y, fine), handle.sourceUnits)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "formatPolarCoordinate",
+      "file": "packages/core/src/edit/frame-coordinate.ts",
+      "declaration": "rewritePreciseFrameCoordinate",
+      "hash": "d304169058d7",
+      "count": 1,
+      "expression": "formatPolarCoordinate(oldRaw, formatNumber(Math.atan2(point.y, point.x) * 180 / Math.PI, fine), formatNumber(Math.hypot("
+    },
+    {
+      "rule": "F3",
+      "symbol": "localToSourceUnits",
+      "file": "packages/core/src/edit/frame-coordinate.ts",
+      "declaration": "rewritePreciseFrameCoordinate.point",
+      "hash": "1a6a9d3b338e",
+      "count": 1,
+      "expression": "localToSourceUnits(local)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/option-mutations.ts",
+      "declaration": "applyOptionMutationsToTarget.patch.replacement",
+      "hash": "561e7fc740d4",
+      "count": 1,
+      "expression": "legacyText(replacement)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/option-mutations.ts",
+      "declaration": "applyOptionMutationsToTarget.replacement",
+      "hash": "19f3381233a5",
+      "count": 1,
+      "expression": "legacyText(wrapSerializedOptions(entriesToInsert.join(\", \"), target.optionsFormat ?? \"bracketed\"))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/option-mutations.ts",
+      "declaration": "applyOptionMutationsToTarget.updated",
+      "hash": "561e7fc740d4",
+      "count": 1,
+      "expression": "legacyText(replacement)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/option-mutations.ts",
+      "declaration": "rewriteOptionListMutations",
+      "hash": "61fdfa5678c1",
+      "count": 1,
+      "expression": "legacyText(wrapSerializedOptions(parts.join(\", \"), format))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/option-mutations.ts",
+      "declaration": "rewriteOptionListMutations",
+      "hash": "800afbe8e82f",
+      "count": 1,
+      "expression": "legacyText(wrapSerializedOptions(\"\", format))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/option-mutations.ts",
+      "declaration": "rewriteSourceBackedOptionListMutations",
+      "hash": "df49d78cf574",
+      "count": 1,
+      "expression": "legacyText(rewriteOptionListMutationsPreservingSourceInternal( source, optionsSpan, options, mutations, DEFAULT_OPTION_S"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/property-write-planner.ts",
+      "declaration": "rewritePathCommandToken",
+      "hash": "9fd9eaa53e16",
+      "count": 1,
+      "expression": "legacyText(`\\\\${nextCommand}`)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteCoordinate",
+      "hash": "73492e66680e",
+      "count": 1,
+      "expression": "legacyText(text)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "formatCanvasCoordinate",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteCanvas",
+      "hash": "a8ecdb2eaa22",
+      "count": 1,
+      "expression": "formatCanvasCoordinate(source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to), formatNumber(cm.x"
+    },
+    {
+      "rule": "F3",
+      "symbol": "localToSourceUnits",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteCanvas.cm",
+      "hash": "1a6a9d3b338e",
+      "count": 1,
+      "expression": "localToSourceUnits(local)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "localToSourceUnits",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteCartesian.cm",
+      "hash": "1a6a9d3b338e",
+      "count": 1,
+      "expression": "localToSourceUnits(local)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "formatCoordinate",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteCartesian.coordinate",
+      "hash": "98c55da99fd5",
+      "count": 1,
+      "expression": "formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "localToSourceUnits",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteDelta.cm",
+      "hash": "a0877d6405b5",
+      "count": 1,
+      "expression": "localToSourceUnits(localDelta)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "formatCoordinate",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteDelta.coordinate",
+      "hash": "98c55da99fd5",
+      "count": 1,
+      "expression": "formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "formatCanvasCoordinate",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteDelta.coordinate",
+      "hash": "a43f65b68055",
+      "count": 1,
+      "expression": "formatCanvasCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "formatPolarCoordinate",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteDelta.coordinate",
+      "hash": "ff346ac5adda",
+      "count": 1,
+      "expression": "formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius), handle.sourceUnits)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "localToSourceUnits",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewritePolar.cm",
+      "hash": "1a6a9d3b338e",
+      "count": 1,
+      "expression": "localToSourceUnits(local)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "formatPolarCoordinate",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewritePolar.coordinate",
+      "hash": "ff346ac5adda",
+      "count": 1,
+      "expression": "formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius), handle.sourceUnits)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "formatCoordinate",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteUnsupportedCoordinate",
+      "hash": "4f4b4160ded7",
+      "count": 1,
+      "expression": "formatCoordinate(oldRaw, formatNumber(cmPoint.x), formatNumber(cmPoint.y))"
+    },
+    {
+      "rule": "F3",
+      "symbol": "formatCoordinate",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteUnsupportedCoordinate",
+      "hash": "e7908b4e1104",
+      "count": 1,
+      "expression": "formatCoordinate(oldRaw, formatNumber(sourcePoint.x), formatNumber(sourcePoint.y))"
+    },
+    {
+      "rule": "F3",
+      "symbol": "ptToCm",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteUnsupportedCoordinate.cmPoint.x",
+      "hash": "530aefaa9750",
+      "count": 1,
+      "expression": "ptToCm(newWorld.x)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "ptToCm",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteUnsupportedCoordinate.cmPoint.y",
+      "hash": "392b1628bca5",
+      "count": 1,
+      "expression": "ptToCm(newWorld.y)"
+    },
+    {
+      "rule": "F3",
+      "symbol": "localToSourceUnits",
+      "file": "packages/core/src/edit/rewrite.ts",
+      "declaration": "rewriteUnsupportedCoordinate.sourcePoint",
+      "hash": "1a6a9d3b338e",
+      "count": 1,
+      "expression": "localToSourceUnits(local)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "legacyText",
+      "file": "packages/core/src/foreach/flatten.ts",
+      "declaration": "flattenForeachInSourceWithContext.replacement",
+      "hash": "471ab999d0f5",
+      "count": 1,
+      "expression": "legacyText(flattened.replacement)"
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { legacyText } from "../edit/fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
@@ -61,6 +62,6 @@ export function beamerSpacingResizePatches(source: string, target: BeamerSpacing
   let number = String(value);
   const previous = source.slice(span.from, span.to);
   if (/^[+-]?\./u.test(previous)) number = number.replace(/^(-?)0\./u, "$1.");
-  const replacement = target.numericSpan ? number : `\\vspace{${number}pt}`;
+  const replacement = legacyText(target.numericSpan ? number : `\\vspace{${number}pt}`);
   return [{ oldSpan: span, newSpan: { from: span.from, to: span.from + replacement.length }, replacement }];
 }

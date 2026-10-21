@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createIncrementalParseSession, parseTikz } from "../packages/core/src/parser/index.js";
-import { computeMinimalReplacementPatch } from "../packages/core/src/edit/patch.js";
+import { documentDiffPatch } from "../packages/core/src/edit/patch.js";
 
 const PICTURE_PREFIX = "\\begin{tikzpicture}\n";
 
@@ -155,7 +155,7 @@ describe("incremental structural masks", () => {
       const masks = [nodeTextSpan(next, text)];
       const result = session.evaluate({ source: next, sourceRevision: index + 1,
         structuralMasks: masks, changedSourceIds: ["path:0"],
-        patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: index });
+        patches: [documentDiffPatch(source, next)], patchBaseRevision: index });
       const cold = parseTikz(next, { recover: true, structuralMasks: masks });
       expect(result.stats).toMatchObject({ strategy: "incremental", reparsedStatementCount: 1, reusedStatementCount: 2 });
       expect(result.parse.figure).toEqual(cold.figure);
@@ -182,7 +182,7 @@ describe("incremental structural masks", () => {
     const source = initial.replace("hello", "longer");
     const masks = [nodeTextSpan(source, "world")];
     const result = session.evaluate({ source, sourceRevision: 1, structuralMasks: masks,
-      changedSourceIds: ["path:0"], patches: [computeMinimalReplacementPatch(initial, source)], patchBaseRevision: 0 });
+      changedSourceIds: ["path:0"], patches: [documentDiffPatch(initial, source)], patchBaseRevision: 0 });
     expect(result.stats).toMatchObject({ strategy: "full", fallbackReason: "structural-mask-changed" });
     expect(result.parse.figure).toEqual(parseTikz(source, { recover: true, structuralMasks: masks }).figure);
   });
@@ -194,7 +194,7 @@ describe("incremental structural masks", () => {
     const next = source.replace("hello", "a much longer first label");
     const masks = [nodeTextSpan(next, "world \\textbf{")];
     const result = session.evaluate({ source: next, sourceRevision: 1, structuralMasks: masks,
-      changedSourceIds: ["path:0"], patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: 0 });
+      changedSourceIds: ["path:0"], patches: [documentDiffPatch(source, next)], patchBaseRevision: 0 });
     expect(result.stats.strategy).toBe("incremental");
     expect(result.parse.figure).toEqual(parseTikz(next, { recover: true, structuralMasks: masks }).figure);
   });

@@ -5,6 +5,7 @@ import type { ComputeRequest } from "../../packages/app/src/compute.js";
 import { applyEditAction } from "../../packages/core/src/edit/actions.js";
 import { coldCompute, compareResponses, longDeck, longFigure } from "./compute-fuzz.js";
 import { freshComputeModule } from "./compute-instances.js";
+import { fragment } from "../fragment-helpers.js";
 
 // Minimal request sequences the compute differential fuzzer found: in each, a
 // render that took a shortcut differed from a cold render of the same request.
@@ -63,7 +64,7 @@ describe("compute shortcuts match cold renders", () => {
   it("renders no figure for a null root even when the parse is cached", async () => {
     const edited = picture.replace("(0,0) --", "(0.19,0) --");
     const patch = { oldSpan: { from: picture.indexOf("(0,0) --") + 1, to: picture.indexOf("(0,0) --") + 2 },
-      newSpan: { from: picture.indexOf("(0,0) --") + 1, to: picture.indexOf("(0,0) --") + 5 }, replacement: "0.19" };
+      newSpan: { from: picture.indexOf("(0,0) --") + 1, to: picture.indexOf("(0,0) --") + 5 }, replacement: fragment("0.19") };
     await expectLastMatchesCold([
       { id: "a", documentId: "d", source: picture, sourceRevision: 0, activeRootId: "figure:0" },
       { id: "b", documentId: "d", source: edited, sourceRevision: 1, activeRootId: "figure:0", patches: [patch], patchBaseRevision: 0, changedSourceIds: ["path:0"] },
@@ -95,7 +96,7 @@ describe("compute shortcuts match cold renders", () => {
     const source = readFileSync("test/fixtures/multi-figure-paper.tex", "utf8");
     const insert = "draw[helperGrid] (0.2,-0.5) grid (4.6,1.9);\n  \\";
     const request: ComputeRequest = { id: "b", documentId: "d", source: insertAt(source, 742, insert), sourceRevision: 1, activeRootId: "figure:0",
-      changedSourceIds: ["path:4"], patches: [{ oldSpan: { from: 742, to: 742 }, newSpan: { from: 742, to: 742 + insert.length }, replacement: insert }],
+      changedSourceIds: ["path:4"], patches: [{ oldSpan: { from: 742, to: 742 }, newSpan: { from: 742, to: 742 + insert.length }, replacement: fragment(insert) }],
       patchBaseRevision: 0, trigger: "other" };
     await expectLastMatchesCold([
       { id: "a", documentId: "d", source, sourceRevision: 0, activeRootId: "figure:0" },
@@ -109,7 +110,7 @@ describe("compute shortcuts match cold renders", () => {
     const source = readFileSync("test/fixtures/multi-figure-paper.tex", "utf8");
     const insert = "  \\draw[->] (0.2,-0.4) -- (2.3,0.9);\n";
     const request: ComputeRequest = { id: "b", documentId: "d", source: insertAt(source, 975, insert), sourceRevision: 1, activeRootId: "figure:0",
-      changedSourceIds: ["path:10"], patches: [{ oldSpan: { from: 975, to: 975 }, newSpan: { from: 975, to: 975 + insert.length }, replacement: insert }],
+      changedSourceIds: ["path:10"], patches: [{ oldSpan: { from: 975, to: 975 }, newSpan: { from: 975, to: 975 + insert.length }, replacement: fragment(insert) }],
       patchBaseRevision: 0, trigger: "other" };
     await expectLastMatchesCold([
       { id: "a", documentId: "d", source, sourceRevision: 0, activeRootId: "figure:0" },
@@ -141,7 +142,7 @@ describe("compute shortcuts match cold renders", () => {
       { id: "a", documentId: "d", source, sourceRevision: 0, activeRootId: "figure:0" },
       { id: "b", documentId: "d", source: typed, sourceRevision: 1, activeRootId: "figure:0", inferSourceChanges: true },
       { id: "c", documentId: "d", source: typed.replace(grid, moved), sourceRevision: 2, activeRootId: "figure:0", changedSourceIds: ["path:4"],
-        patches: [{ oldSpan: { from: at, to: at + grid.length }, newSpan: { from: at, to: at + moved.length }, replacement: moved }], patchBaseRevision: 1, trigger: "other" }
+        patches: [{ oldSpan: { from: at, to: at + grid.length }, newSpan: { from: at, to: at + moved.length }, replacement: fragment(moved) }], patchBaseRevision: 1, trigger: "other" }
     ]);
   });
 
@@ -187,7 +188,7 @@ describe("compute shortcuts match cold renders", () => {
     const edited = picture.replace("(3,0.4)", "(3,0.9)");
     const at = picture.indexOf("(3,0.4)") + 3;
     const request = { documentId: "d", source: edited, sourceRevision: 1, activeRootId: "figure:0", changedSourceIds: ["path:0"], trigger: "other" as const,
-      patches: [{ oldSpan: { from: at, to: at + 1 }, newSpan: { from: at, to: at + 1 }, replacement: "9" }], patchBaseRevision: 0 };
+      patches: [{ oldSpan: { from: at, to: at + 1 }, newSpan: { from: at, to: at + 1 }, replacement: fragment("9") }], patchBaseRevision: 0 };
     const options = edited.indexOf("[draw,circle]");
     await expectLastMatchesCold([
       { id: "a", documentId: "d", source: picture, sourceRevision: 0, activeRootId: "figure:0" },
@@ -208,7 +209,7 @@ describe("compute shortcuts match cold renders", () => {
     await expectLastMatchesCold([
       { id: "a", documentId: "d", source: deck, sourceRevision: 0, activeRootId: "frame:0" },
       { id: "b", documentId: "d", source: edited, sourceRevision: 1, activeRootId: "frame:0", changedSourceIds: [], trigger: "other",
-        patches: [{ oldSpan: { from: at, to: at }, newSpan: { from: at, to: at + 1 }, replacement: "k" }], patchBaseRevision: 0,
+        patches: [{ oldSpan: { from: at, to: at }, newSpan: { from: at, to: at + 1 }, replacement: fragment("k") }], patchBaseRevision: 0,
         textEditMaskSpan: { from: masked + 1, to: masked + 1 + item.length } }
     ]);
   });

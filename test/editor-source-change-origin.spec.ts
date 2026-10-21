@@ -2,6 +2,7 @@ import { getActiveDocument } from "../packages/app/src/store/document-sessions.j
 import { describe, expect, it } from "vitest";
 import { editorReducer, makeInitialState } from "../packages/app/src/store/reducer";
 import type { EditorState } from "../packages/app/src/store/types";
+import { fragment } from "./fragment-helpers.js";
 
 const origin = (state: EditorState) => getActiveDocument(state).lastSourceChangeOrigin;
 
@@ -35,7 +36,7 @@ describe("source revision provenance", () => {
   it("keeps canvas source patches as commands even when they have no affected IDs", () => {
     let state = editorReducer(makeInitialState(), { type: "CODE_EDITED", source: "text" });
     state = editorReducer(state, { type: "APPLY_SOURCE_PATCHES", baseRevision: state.sourceRevision, changedSourceIds: [],
-      patches: [{ oldSpan: { from: 0, to: 4 }, newSpan: { from: 0, to: 5 }, replacement: "text!" }] });
+      patches: [{ oldSpan: { from: 0, to: 4 }, newSpan: { from: 0, to: 5 }, replacement: fragment("text!") }] });
     expect(state.source).toBe("text!");
     expect(origin(state)).toBe("edit-command");
   });

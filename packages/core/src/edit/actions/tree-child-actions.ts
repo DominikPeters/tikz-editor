@@ -1,3 +1,4 @@
+import { EMPTY_FRAGMENT, layout, tikz, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
@@ -23,7 +24,7 @@ type AddTreeSiblingAction = {
   position: "before" | "after";
 };
 
-const NEW_CHILD_SNIPPET = "child { node {New} }";
+const NEW_CHILD_SNIPPET = tikz`child { node {New} }`;
 
 export function applyAddTreeChildAction(
   source: string,
@@ -49,7 +50,7 @@ export function applyAddTreeChildAction(
     const newline = detectPreferredNewline(source, insertOffset);
     const parentIndent = lineIndentAtOffset(source, resolvedParent.target.span.from);
     const childIndent = `${parentIndent}  `;
-    return applyInsertion(source, insertOffset, `${newline}${childIndent}${NEW_CHILD_SNIPPET}`, [parentSourceId]);
+    return applyInsertion(source, insertOffset, tikz`${layout(`${newline}${childIndent}`)}${NEW_CHILD_SNIPPET}`, [parentSourceId]);
   }
 
   if (resolvedParent.target.kind !== "path-statement") {
@@ -71,7 +72,7 @@ export function applyAddTreeChildAction(
 
   const newline = detectPreferredNewline(source, insertionAnchor.offset);
   const childIndent = insertionAnchor.childIndent;
-  return applyInsertion(source, insertionAnchor.offset, `${newline}${childIndent}${NEW_CHILD_SNIPPET}`, [parentSourceId]);
+  return applyInsertion(source, insertionAnchor.offset, tikz`${layout(`${newline}${childIndent}`)}${NEW_CHILD_SNIPPET}`, [parentSourceId]);
 }
 
 export function applyAddTreeSiblingAction(
@@ -96,11 +97,11 @@ export function applyAddTreeSiblingAction(
   const siblingIndent = lineIndentAtOffset(source, siblingSpan.from);
   const newline = detectPreferredNewline(source, siblingSpan.from);
   if (action.position === "before") {
-    return applyInsertion(source, siblingSpan.from, `${siblingIndent}${NEW_CHILD_SNIPPET}${newline}`, [siblingSourceId]);
+    return applyInsertion(source, siblingSpan.from, tikz`${layout(siblingIndent)}${NEW_CHILD_SNIPPET}${layout(newline)}`, [siblingSourceId]);
   }
 
   const insertOffset = skipHorizontalWhitespace(source, siblingSpan.to);
-  return applyInsertion(source, insertOffset, `${newline}${siblingIndent}${NEW_CHILD_SNIPPET}`, [siblingSourceId]);
+  return applyInsertion(source, insertOffset, tikz`${layout(`${newline}${siblingIndent}`)}${NEW_CHILD_SNIPPET}`, [siblingSourceId]);
 }
 
 export function applyRemoveTreeChildAction(
@@ -122,7 +123,7 @@ export function applyRemoveTreeChildAction(
   }
 
   const deleteSpan = normalizeTreeChildDeleteSpan(source, resolvedChild.target.span);
-  const updated = replaceSpan(source, deleteSpan, "");
+  const updated = replaceSpan(source, deleteSpan, EMPTY_FRAGMENT);
   return {
     kind: "success",
     newSource: updated.source,
@@ -130,7 +131,7 @@ export function applyRemoveTreeChildAction(
       {
         oldSpan: deleteSpan,
         newSpan: updated.changedSpan,
-        replacement: ""
+        replacement: EMPTY_FRAGMENT
       }
     ],
     selectedSourceIds: [requireDefined(resolvedChild.target.treeRootSourceId, "Missing required resolvedChild.target.treeRootSourceId")],
@@ -141,7 +142,7 @@ export function applyRemoveTreeChildAction(
 function applyInsertion(
   source: string,
   offset: number,
-  insertion: string,
+  insertion: TikzFragment,
   changedSourceIds: string[]
 ): EditActionResultLike {
   const updated = replaceSpan(source, { from: offset, to: offset }, insertion);

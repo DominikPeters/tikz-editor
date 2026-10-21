@@ -1,3 +1,4 @@
+import { joinFragments, layout, sourceSlice, tikz, type TikzFragment } from "./fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { CoordinateItem, PathItem, PathKeywordItem, PathStatement } from "../ast/types.js";
 import type { EditHandle } from "../semantic/types.js";
@@ -11,7 +12,7 @@ type ExplicitPathSegmentBase = {
   endAnchorIndex: number;
   operatorIndex: number;
   targetIndex: number;
-  raw: string;
+  raw: TikzFragment;
   closesPath: boolean;
 };
 
@@ -28,13 +29,13 @@ export type ExplicitPathAnchor = {
   index: number;
   coordinateIndex: number;
   item: CoordinateItem;
-  raw: string;
+  raw: TikzFragment;
 };
 
 export type ExplicitPathAnalysis = {
   statement: PathStatement;
-  prefix: string;
-  suffix: string;
+  prefix: TikzFragment;
+  suffix: TikzFragment;
   anchors: ExplicitPathAnchor[];
   segments: ExplicitPathSegment[];
   closed: boolean;
@@ -120,8 +121,13 @@ export function resolvePathControlHandle(
   return currentSourceText === handle.sourceText ? handle : null;
 }
 
-export function buildStatementText(source: string, analysis: ExplicitPathAnalysis, body: string): string {
-  return `${analysis.prefix}${body}${analysis.suffix}`;
+export function buildStatementText(source: string, analysis: ExplicitPathAnalysis, body: TikzFragment): TikzFragment {
+  return tikz`${analysis.prefix}${body}${analysis.suffix}`;
+}
+
+/** Path items separated by single spaces. */
+export function joinPathParts(parts: readonly TikzFragment[]): TikzFragment {
+  return joinFragments(parts, layout(" "));
 }
 
 export function buildPathBodyFromSegments(
@@ -129,7 +135,7 @@ export function buildPathBodyFromSegments(
   source: string,
   startAnchorIndex: number,
   segmentIndices: readonly number[]
-): string {
+): TikzFragment {
   const parts = [requireArrayValue(analysis.anchors, startAnchorIndex).raw];
   for (const segmentIndex of segmentIndices) {
     const segment = analysis.segments[segmentIndex];
@@ -138,7 +144,7 @@ export function buildPathBodyFromSegments(
     }
     parts.push(segment.raw);
   }
-  return parts.join(" ");
+  return joinPathParts(parts);
 }
 
 export function analyzeExplicitPathStatement(source: string, statement: PathStatement): PathEditEligibility {
@@ -155,7 +161,7 @@ export function analyzeExplicitPathStatement(source: string, statement: PathStat
     index: 0,
     coordinateIndex: 0,
     item: firstItem,
-    raw: source.slice(firstItem.span.from, firstItem.span.to)
+    raw: sourceSlice(source, { from: firstItem.span.from, to: firstItem.span.to })
   }];
   const segments: ExplicitPathSegment[] = [];
   let cursor = 0;
@@ -185,7 +191,7 @@ export function analyzeExplicitPathStatement(source: string, statement: PathStat
           endAnchorIndex: 0,
           operatorIndex: cursor + 1,
           targetIndex: cursor + 2,
-          raw: source.slice(operator.span.from, target.span.to),
+          raw: sourceSlice(source, { from: operator.span.from, to: target.span.to }),
           closesPath: true
         });
         closed = true;
@@ -200,7 +206,7 @@ export function analyzeExplicitPathStatement(source: string, statement: PathStat
         index: anchorIndex,
         coordinateIndex: cursor + 2,
         item: target,
-        raw: source.slice(target.span.from, target.span.to)
+        raw: sourceSlice(source, { from: target.span.from, to: target.span.to })
       });
       segments.push({
         kind: "line",
@@ -208,7 +214,7 @@ export function analyzeExplicitPathStatement(source: string, statement: PathStat
         endAnchorIndex: anchorIndex,
         operatorIndex: cursor + 1,
         targetIndex: cursor + 2,
-        raw: source.slice(operator.span.from, target.span.to),
+        raw: sourceSlice(source, { from: operator.span.from, to: target.span.to }),
         closesPath: false
       });
       cursor = cursor + 2;
@@ -229,7 +235,7 @@ export function analyzeExplicitPathStatement(source: string, statement: PathStat
           endAnchorIndex: 0,
           operatorIndex: cursor + 1,
           targetIndex: parsedCurve.targetIndex,
-          raw: source.slice(operator.span.from, parsedCurve.target.span.to),
+          raw: sourceSlice(source, { from: operator.span.from, to: parsedCurve.target.span.to }),
           closesPath: true,
           control1Index: parsedCurve.control1Index,
           control2Index: parsedCurve.control2Index,
@@ -244,7 +250,7 @@ export function analyzeExplicitPathStatement(source: string, statement: PathStat
         index: anchorIndex,
         coordinateIndex: parsedCurve.targetIndex,
         item: parsedCurve.target,
-        raw: source.slice(parsedCurve.target.span.from, parsedCurve.target.span.to)
+        raw: sourceSlice(source, { from: parsedCurve.target.span.from, to: parsedCurve.target.span.to })
       });
       segments.push({
         kind: "cubic",
@@ -252,7 +258,7 @@ export function analyzeExplicitPathStatement(source: string, statement: PathStat
         endAnchorIndex: anchorIndex,
         operatorIndex: cursor + 1,
         targetIndex: parsedCurve.targetIndex,
-        raw: source.slice(operator.span.from, parsedCurve.target.span.to),
+        raw: sourceSlice(source, { from: operator.span.from, to: parsedCurve.target.span.to }),
         closesPath: false,
         control1Index: parsedCurve.control1Index,
         control2Index: parsedCurve.control2Index,
@@ -272,8 +278,8 @@ export function analyzeExplicitPathStatement(source: string, statement: PathStat
     kind: "eligible",
     analysis: {
       statement,
-      prefix: source.slice(statement.span.from, firstItem.span.from),
-      suffix: source.slice(lastItem.span.to, statement.span.to),
+      prefix: sourceSlice(source, { from: statement.span.from, to: firstItem.span.from }),
+      suffix: sourceSlice(source, { from: lastItem.span.to, to: statement.span.to }),
       anchors,
       segments,
       closed,

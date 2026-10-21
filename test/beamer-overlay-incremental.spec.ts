@@ -4,7 +4,7 @@ import { buildEditParseOptions } from "../packages/app/src/edit-parse-options";
 import { resetSharedEditAnalysisManager } from "../packages/app/src/edit-analysis-manager";
 import { executeDocumentEdit } from "../packages/app/src/edit-execution";
 import { getInspectorDescriptor } from "../packages/core/src/edit/inspector";
-import { computeMinimalReplacementPatch } from "../packages/core/src/edit/patch";
+import { documentDiffPatch } from "../packages/core/src/edit/patch";
 import { resolvePropertyTarget } from "../packages/core/src/edit/property-target";
 
 const paths = Array.from({ length: 32 }, (_, index) => `\\draw[fill=orange!20] (${index / 10},1) rectangle (${index / 10 + .2},2);`).join("\n");
@@ -69,7 +69,7 @@ describe("overlay editing on a slide", () => {
         activeRootId: "frame:0", includeDrawingLayer: true, drawingLayerRootId: "frame:0:overlay:0" });
       for (let revision = 1; revision <= 3; revision++) {
         const next = source.replace(/\([\d.]+,1\) rectangle/u, `(${revision / 8},1) rectangle`);
-        const patch = computeMinimalReplacementPatch(source, next);
+        const patch = documentDiffPatch(source, next);
         const before = snapshot;
         const result = await computeSnapshot({ id: `drag-${revision}`, documentId, source: next, sourceRevision: revision,
           activeRootId: "frame:0", includeDrawingLayer: true, drawingLayerRootId: "frame:0:overlay:0",
@@ -106,7 +106,7 @@ describe("overlay editing on a slide", () => {
       const next = source.replace(/fill=[^\]]+/u, `fill=red!${revision * 10}`);
       const result = await computeSnapshot({ ...request, id: `inspector-${revision}`, source: next, sourceRevision: revision,
         trigger: "other", schedulingTrigger: "inspector-edit", changedSourceIds: ["path:0"],
-        patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: revision - 1 });
+        patches: [documentDiffPatch(source, next)], patchBaseRevision: revision - 1 });
       expect(result.snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: keepsLength(source, next) });
       snapshot = result.snapshot;
       source = next;
@@ -130,7 +130,7 @@ describe("overlay editing on a slide", () => {
       const mask = { from: span.from, to: span.from + text.length };
       const result = await computeSnapshot({ ...request, id: `typing-${index}`, source: next, sourceRevision: index + 1,
         trigger: "other", schedulingTrigger: "canvas-text-edit", changedSourceIds: ["path:32"], textEditMaskSpan: mask,
-        patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: index });
+        patches: [documentDiffPatch(source, next)], patchBaseRevision: index });
       expect(result.snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: keepsLength(source, next) });
       expect(result.snapshot.scene!.elements.some(element => element.kind === "Text" && element.text === text)).toBe(true);
       snapshot = result.snapshot;
@@ -160,7 +160,7 @@ describe("overlay editing on a slide", () => {
       const next = source.replace(/\([\d.]+,0\) rectangle/u, `(${revision / 8},0) rectangle`);
       const result = await computeSnapshot({ ...request, id: `stress-drag-${revision}`, source: next, sourceRevision: revision,
         trigger: "drag-element", changedSourceIds: ["path:0"],
-        patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: revision - 1 });
+        patches: [documentDiffPatch(source, next)], patchBaseRevision: revision - 1 });
       expect(result.snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: keepsLength(source, next) });
       expect(result.snapshot.incremental!.reusedStatementCount).toBe(499);
       expect(result.snapshot.svgModel!.parts.find(part => part.sourceId === "path:499")).toEqual(untouched);
@@ -182,7 +182,7 @@ describe("overlay editing on a slide", () => {
     const results: Array<{ source: string; snapshot: SessionSnapshot }> = [];
     for (const [index, next] of [inserted, SOURCE].entries()) {
       const result = await computeSnapshot({ ...request, id: `structure-${index}`, source: next, sourceRevision: index + 1,
-        patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: index });
+        patches: [documentDiffPatch(source, next)], patchBaseRevision: index });
       expect(result.snapshot.deck!.activeFrame!.layout.paragraphs[0].bounds).toEqual(unchangedBounds);
       results.push({ source: next, snapshot: result.snapshot });
       source = next;
@@ -204,7 +204,7 @@ describe("overlay editing on a slide", () => {
     await computeSnapshot(request);
     const next = source.replace("(0,1)", "(0.125,1)");
     const result = await computeSnapshot({ ...request, id: "rich-drag", source: next, sourceRevision: 1,
-      trigger: "drag-element", changedSourceIds: ["path:0"], patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: 0 });
+      trigger: "drag-element", changedSourceIds: ["path:0"], patches: [documentDiffPatch(source, next)], patchBaseRevision: 0 });
     const canonical = await computeSnapshot({ ...request, id: "rich-cold", source: next, documentId: "overlay-rich-cold" });
     expect(result.snapshot.incremental?.deckLayoutReused).toBe(false);
     const normalize = (value: unknown) => JSON.parse(JSON.stringify(value, (key, entry: unknown) =>
@@ -222,7 +222,7 @@ describe("overlay editing on a slide", () => {
     const source = SOURCE.replace("(0,1)", "(0.125,1)");
     const controller = new AbortController();
     const drag = { ...request, id: "canceled", source, sourceRevision: 1, trigger: "drag-element" as const,
-      changedSourceIds: ["path:0"], patches: [computeMinimalReplacementPatch(SOURCE, source)], patchBaseRevision: 0 };
+      changedSourceIds: ["path:0"], patches: [documentDiffPatch(SOURCE, source)], patchBaseRevision: 0 };
     await expect(computeSnapshot(drag, { budgetMs: 0, signal: controller.signal,
       yieldControl: async () => { controller.abort(); } })).rejects.toMatchObject({ name: "AbortError" });
     expect(claimCachedDeckSnapshot(drag)).toBeNull();

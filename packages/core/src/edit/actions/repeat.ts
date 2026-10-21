@@ -1,3 +1,4 @@
+import { legacyText, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
@@ -123,7 +124,7 @@ export function applyRepeatElementsAction(
   const applied = applyTextReplacements(source, [
     {
       span: eligibility.replaceSpan,
-      text: replacementText
+      text: legacyText(replacementText)
     }
   ]);
   const inserted = requireArrayValue(applied.applied, 0);
@@ -285,7 +286,7 @@ function rewritePathStatementCoordinates(
   xLoop: RepeatLoop | null,
   yLoop: RepeatLoop | null
 ): string | null {
-  const replacements: Array<{ span: Span; text: string }> = [];
+  const replacements: Array<{ span: Span; text: TikzFragment }> = [];
   const status = { failed: false };
   const nodeNameCoordinateIds = collectNodeNameCoordinateIds(statement.items);
 
@@ -304,7 +305,7 @@ function rewritePathStatementCoordinates(
           status.failed = true;
           return;
         }
-        replacements.push({ span: item.span, text: translated });
+        replacements.push({ span: item.span, text: legacyText(translated) });
         return;
       }
 
@@ -319,7 +320,7 @@ function rewritePathStatementCoordinates(
           status.failed = true;
           return;
         }
-        replacements.push({ span: item.target.span, text: translated });
+        replacements.push({ span: item.target.span, text: legacyText(translated) });
       }
     },
     onNode: (node) => {
@@ -331,7 +332,7 @@ function rewritePathStatementCoordinates(
         status.failed = true;
         return;
       }
-      replacements.push({ span: node.atSpan, text: translated });
+      replacements.push({ span: node.atSpan, text: legacyText(translated) });
     }
   });
 

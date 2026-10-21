@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { editorReducer, makeInitialState } from "../packages/app/src/store/reducer.js";
 import type { EditorAction } from "../packages/app/src/store/types.js";
+import { editedSource, fragment } from "./fragment-helpers.js";
 
 function precomputed(state: ReturnType<typeof makeInitialState>): EditorAction {
   return {
@@ -10,9 +11,9 @@ function precomputed(state: ReturnType<typeof makeInitialState>): EditorAction {
     expectedDocumentRevision: { documentId: state.activeDocumentId, sourceRevision: state.sourceRevision },
     precomputedSource: state.source,
     precomputedResult: {
-      kind: "success", newSource: `${state.source}\n% edited`,
+      kind: "success", newSource: editedSource(`${state.source}\n% edited`),
       patches: [{ oldSpan: { from: state.source.length, to: state.source.length },
-        newSpan: { from: state.source.length, to: state.source.length + 10 }, replacement: "\n% edited" }]
+        newSpan: { from: state.source.length, to: state.source.length + 10 }, replacement: fragment("\n% edited") }]
     }
   };
 }

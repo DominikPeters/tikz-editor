@@ -5,6 +5,7 @@ import { deriveSingleSourcePatch } from "../../packages/app/src/store/source-pat
 import { applyEditAction } from "../../packages/core/src/edit/actions.js";
 import { PT_PER_CM } from "../../packages/core/src/edit/format.js";
 import { wp } from "../coords-helpers.js";
+import { fragment } from "../fragment-helpers.js";
 
 function normalizeForSceneComparison<T>(value: T): T {
   return JSON.parse(
@@ -722,7 +723,7 @@ function computeSinglePatch(oldSource: string, newSource: string) {
   return {
     oldSpan: { from: prefix, to: oldSuffix },
     newSpan: { from: prefix, to: newSuffix },
-    replacement: newSource.slice(prefix, newSuffix)
+    replacement: fragment(newSource.slice(prefix, newSuffix))
   };
 }
 

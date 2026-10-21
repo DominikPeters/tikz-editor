@@ -14,6 +14,7 @@ import {
   shiftSpansAfterReplacement,
   statementSnippet
 } from "../packages/core/src/edit/statement-ops.js";
+import { fragment } from "./fragment-helpers.js";
 
 describe("statement ops", () => {
   it("builds nested snapshots and resolves deduplicated statement refs", () => {
@@ -117,8 +118,8 @@ describe("statement ops", () => {
 
   it("applies sorted replacements, rejects overlaps, and shifts spans by replacement shape", () => {
     const applied = applyTextReplacements("abcdef", [
-      { span: { from: 4, to: 99 }, text: "Z" },
-      { span: { from: 0, to: 1 }, text: "A" }
+      { span: { from: 4, to: 99 }, text: fragment("Z") },
+      { span: { from: 0, to: 1 }, text: fragment("A") }
     ]);
     expect(applied.source).toBe("AbcdZ");
     expect(applied.applied).toEqual([
@@ -126,15 +127,15 @@ describe("statement ops", () => {
       { oldSpan: { from: 4, to: 6 }, newSpan: { from: 4, to: 5 } }
     ]);
     expect(applyTextReplacements("abc", [
-      { span: { from: Number.NaN, to: Number.NaN }, text: "!" }
+      { span: { from: Number.NaN, to: Number.NaN }, text: fragment("!") }
     ])).toMatchObject({
       source: "!abc",
       applied: [{ oldSpan: { from: 0, to: 0 }, newSpan: { from: 0, to: 1 } }]
     });
     expect(applyTextReplacements("abc", [])).toEqual({ source: "abc", patches: [], applied: [] });
     expect(() => applyTextReplacements("abcdef", [
-      { span: { from: 1, to: 4 }, text: "X" },
-      { span: { from: 3, to: 5 }, text: "Y" }
+      { span: { from: 1, to: 4 }, text: fragment("X") },
+      { span: { from: 3, to: 5 }, text: fragment("Y") }
     ])).toThrow("Overlapping replacements");
 
     expect(shiftSpansAfterReplacement([], { from: 1, to: 3 }, { from: 1, to: 2 })).toEqual([]);

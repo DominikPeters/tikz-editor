@@ -1,8 +1,10 @@
 # Coordinate writer
 
-Status: draft, second revision after review. Inventory, fuzzer and failure
-classes are in [coordinate-writes.md](coordinate-writes.md); this document
-designs the writer from those failures.
+Status: phases 0–2 built (harness, site contexts, fragment layer and
+checker); the writer and later phases are a draft, second revision after
+review. Inventory, fuzzer and failure classes are in
+[coordinate-writes.md](coordinate-writes.md); this document designs the
+writer from those failures.
 
 Changes from the first draft:
 
@@ -29,78 +31,128 @@ the contexts the writer relies on.
 
 ## Fragments
 
-```ts
-// packages/core/src/edit/fragment.ts
-export type TikzFragment = Brand<string, "TikzFragment">;
-/** Source produced by applying fragments; the only type an edit result's newSource accepts. */
-export type EditedSource = Brand<string, "EditedSource">;
+Built in phase 2 (`packages/core/src/edit/fragment.ts`):
 
-/** Literal text with fragment holes: `tikz\`\\draw${options} ${a} -- ${b};\``. */
-export function tikz(strings: TemplateStringsArray, ...parts: TikzFragment[]): TikzFragment;
-export function joinFragments(parts: readonly TikzFragment[], separator: TikzFragment): TikzFragment;
-/** Existing source copied verbatim. */
-export function sourceSlice(source: string, span: Span): TikzFragment;
-/** Text the user typed or pasted: inspector raw values, node text, raw TikZ paste. */
-export function userText(text: string, origin: UserTextOrigin): TikzFragment;
+```ts
+export type TikzFragment = string & Brand<"fragment">;
+/** Coordinate-writer output: the only value a frame key accepts. */
+export type CoordinateText = TikzFragment & Brand<"coordinate">;
+/** A document after fragments were applied: the only source an edit result carries. */
+export type EditedSource = string & Brand<"edited">;
+/** A frame-free option value; an object, so it is neither a string nor a fragment. */
+export type OptionValue = Readonly<{ [brand]: true; text: string }>;
+
+/** Raw literal text with fragment holes: tikz`\draw${options} ${a} -- ${b};`. */
+export function tikz(strings: TemplateStringsArray, ...parts: readonly TikzFragment[]): TikzFragment;
+export function joinFragments(parts: readonly TikzFragment[], separator?: TikzFragment): TikzFragment;
+/** Newlines and indentation; throws on anything else. */
+export function layout(text: string): TikzFragment;
+/** Slices of what typed constructors produced. */
+export function sliceFragment(fragment: TikzFragment, from: number, to?: number): TikzFragment;
+export function editedSlice(source: EditedSource | TikzFragment, from: number, to: number): TikzFragment;
 export function applyFragments(source: string, edits: readonly { span: Span; fragment: TikzFragment }[]): EditedSource;
+
+// Take any string; every call site is listed and reviewed (F2).
+export function sourceSlice(source: string, span: Span): TikzFragment;
+export function userText(text: string, origin: UserTextOrigin): TikzFragment;
+export function unchangedSource(source: string): EditedSource;
+// Migration escapes (F2): every call site is debt the writer phases remove.
+export function legacyText(text: string): TikzFragment;
+export function legacyEditedSource(text: string): EditedSource;
+
+// Option values, and the key table.
+export function count(n: number): OptionValue;
+export function angle(value: Deg): OptionValue;
+export function canvasLength(value: Pt, unit?: CanvasLengthUnit): OptionValue;
+export function ratio(value: number): OptionValue;
+export function option(key: FrameKey, value: CoordinateText): TikzFragment;
+export function option(key: CanvasKey, value: OptionValue): TikzFragment;
+export function option<K extends string>(key: OtherKey<K>, value?: TikzFragment): TikzFragment;
 ```
 
 - `tikz` takes only fragments in its holes. Its literal parts are fixed at
   compile time, so they can hold keywords and authored constants but no
-  runtime value. A number cannot be concatenated, `.join()`ed or formatted
-  into a fragment; `formatNumber` returns a plain `string`, which no
-  fragment-accepting function takes. The checker requires `tikz` to be used
-  as a tagged literal (rule F4); called as a function it would accept a
-  built `TemplateStringsArray`.
+  runtime value; they are read raw, so TeX is written as TeX
+  (``tikz`\begin{tikzlayer}` ``) and a line break is a real one. A number
+  cannot be concatenated, `.join()`ed or formatted into a fragment:
+  `formatNumber` returns a plain `string`, which no fragment-accepting
+  function takes. The checker requires `tikz` to be used as a tag (F4).
 - Fragments have two roles, so a valid constructor cannot be used in the
   wrong place:
-  - **source fragments** (`TikzFragment`): writer output (points, vectors,
-    radii, rotations, positioning, bounds, offset statements), option lists,
+  - **source fragments** (`TikzFragment`): writer output, option lists,
     statements, `sourceSlice`, `userText`. Only these fill `tikz` holes;
-  - **option values** (`OptionValue`): `count(n)` (matrix rows, foreach
-    bounds), `angle(deg)` for angles that are not geometry (label
-    directions), `canvasLength(pt, unit)` for lengths PGF does not transform
-    (node `minimum width` without `transform shape`, line widths),
-    `ratio(x)` (`pos=`, opacity). They are not fragments, so
+  - **option values** (`OptionValue`): `count`, `angle` for angles that are
+    not geometry (label directions), `canvasLength` for lengths PGF does not
+    transform (node sizes without `transform shape`, line widths),
+    `ratio` (`pos=`, opacity). They are objects, so
     ``tikz`(${canvasLength(p.x, "cm")},…)` `` does not compile. They enter
-    source only through `option(key, value)`.
-- `option(key, value)` checks the key against a table: transform keys
-  (`xshift`, `yshift`, `shift`, `rotate`, `rotate around`, `scale`, `x`, `y`,
-  …) take only writer output, because their values are read in the frame;
-  canvas keys (`minimum width`, `inner sep`, `line width`, `label distance`,
-  …) take option values; any other key takes `userText` or a fixed literal.
-  That is the whole role system: no general grammar of TikZ positions.
+    source only through `option(key, value)` or `optionValueFor` (the value
+    alone, for option mutations).
+- `option` checks the key against two tables. `FRAME_KEYS` (`shift`,
+  `xshift`, `rotate`, `rotate around`, `scale`, `x`, `y`, `at`, `radius`,
+  angles of arcs, `node distance`, …) take only `CoordinateText`, because
+  their values are read in the frame; `CANVAS_KEYS` (`minimum width`,
+  `inner sep`, `line width`, `label distance`, `shorten`, `pos`,
+  opacities, …) take option values; any other key must be a literal (a key
+  typed `string` could hide a frame key) and takes a fragment. `in`, `out`,
+  `bend`, `rounded corners` and tree distances are in neither table until
+  their frame semantics are checked in PGF. No `CoordinateText` constructor
+  exists yet: the writer (phase 3) is the first.
 - Lengths that live in a frame are not frame-free: a circle radius `(.5)`
   goes through the x vector, and `radius=1cm` is scaled by the CTM. They go
   through the writer (`writer.radius`). `resize-element.ts` writes radii as
-  `radiusPt * CM_PER_PT cm` today; circle and ellipse resize are not fuzzed
-  yet, so this is likely a sixth failure class.
-- `SourcePatch.replacement`, `replaceSpan` and every result's `newSource`
-  take fragments and `EditedSource`, so no string-built source gets into a
-  result. Patch rebasing and composition (`composeSourcePatches`) operate on
-  fragments too.
+  `radiusPt * CM_PER_PT cm` today (a `legacyText` site); circle and ellipse
+  resize are not fuzzed yet, so this is likely a sixth failure class.
+- `SourcePatch.replacement`, `replaceSpan`, `TextReplacement.text`,
+  `OptionMutation.value` and every result's `newSource` take fragments and
+  `EditedSource`, so no string-built source gets into a result. Patch
+  composition works on fragments; `documentDiffPatch` (two revisions of the
+  document) and `invertSourcePatches` (undo of a preview) copy verbatim text.
+- Wraps go where a string is created, never inside a helper: a helper that
+  wrapped its `string` parameter would launder whatever callers pass. The
+  drawing-layer text of Beamer decks, for instance, is built from `tikz`
+  constants in core, so the app's layer patch needs no escape.
+- Edit actions are a boundary: `setProperty.value`, adornment values and
+  node text arrive as strings and become `userText`. App code that computes
+  such a value (an inspector scrub of `xshift`, say) is outside the
+  guarantee until it sends a structured action instead.
 
-Checker rules (in `scripts/check-coordinate-typing.mjs`, type-aware, already
-in `npm run typecheck`):
+Checker rules (`scripts/check-coordinate-writes.mjs`, type-aware, run by
+`npm run typecheck` through `check-coordinate-typing.mjs`, over the
+production sources of `packages/` and `apps/`):
 
 | rule | checks |
 |---|---|
-| F1 | assertions to `TikzFragment`, `EditedSource`, `CoordinateText` and the writer's frame types only in `fragment.ts` and the writer |
-| F2 | `userText` and `sourceSlice` called only from listed call sites (each one fingerprinted and reviewed) |
-| F3 | writer internals (`formatCoordinate`, `formatPolarCoordinate`, `formatCanvasCoordinate`, `localToSourceUnits`, `ptToCm` on points) imported only inside `edit/writer/`, resolved by symbol so aliases and re-exports count |
-| F4 | `tikz` only as a tagged template literal |
+| F1 | type assertions and type predicates to a type carrying a fragment brand (`TikzFragment`, `CoordinateText`, `EditedSource`, `OptionValue`, also inside unions and arrays) only in `fragment.ts` and `edit/writer/` |
+| F2 | every call of a constructor that takes any string (`userText`, `sourceSlice`, `unchangedSource`; `legacyText`, `legacyEditedSource`) is listed |
+| F3 | writer internals (`formatCoordinate`, `formatPolarCoordinate`, `formatCanvasCoordinate`, `localToSourceUnits`) used only in `edit/writer/` and their defining files, resolved by symbol so aliases and re-exports count; `ptToCm` not on a point's `x`/`y` there either |
+| F4 | `tikz` only as a template tag |
+| F5 | a point, vector or bounds constructor of `coords/points.ts` not fed the `x`/`y` of a point in another space (directly, or through `+`, `-`, and one-argument calls such as `pt(…)`), except in the transform modules (`core/src/coords/`, `app/src/ui/coords/`) and the writer |
+
+F5 covers the fixture "a `WorldPoint` built from picture-local numbers",
+which the types alone accept (both are `Pt`). Its first run found the
+center-pivot move building its next pivot as a `WorldPoint` from the
+frame-local pivot plus a local delta; `parseRotateAroundValue` itself labels
+an authored pivot `WorldPoint`. Both are migration entries for class 1.
 
 The pattern rules of the first draft (coordinate-shaped template literals,
-`formatNumber` with branded operands, unbranded point parameters) stay as
-tripwires during migration only. They are not part of the guarantee.
+`formatNumber` with branded operands, unbranded point parameters) are not
+built; the type layer and F1–F5 replace them.
 
-Negative fixtures in `test/fixtures/coordinate-checker/`, each expecting its
-diagnostic: string concatenation into a patch, `.join()` of formatted
-numbers, `formatNumber(x) + "," + formatNumber(y)` split formatting, a helper
-that returns a coordinate string, an alias import of `formatCoordinate`, a
-re-export, a cast to `TikzFragment`, `userText` from an unlisted module, a
-`WorldPoint` built from picture-local numbers, a `canvasLength` in a `tikz`
-hole, `option("xshift", canvasLength(…))`, and `tikz` called as a function.
+Negative fixtures in `test/fixtures/coordinate-checker/` (excluded from the
+repository typecheck) each name the diagnostics they must produce, and only
+those, as TypeScript codes or rule ids; `coordinate-write-checker.spec.ts`
+compiles them with the repository's options and runs the rules without
+exceptions. Type errors: concatenation into a patch (TS2322), `.join()` of
+formatted numbers in a `tikz` hole (TS2345), split formatting into
+`replaceSpan` (TS2345), a helper returning a coordinate string (TS2322), a
+`canvasLength` in a `tikz` hole (TS2345), `option("xshift",
+canvasLength(…))` (TS2769), an option key typed `string` (TS2769). Checker:
+a cast (F1), a type predicate (F1), `userText` in an unlisted module (F2),
+an alias import of `formatCoordinate` and a re-export (F3), `tikz` called
+as a function (F4), a world point from frame-local components (F5). An
+`allowed.ts` fixture expects nothing. Disabling F1, F4 or F5 fails its
+fixtures.
 
 ## Evaluator-owned site contexts
 
@@ -325,11 +377,18 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
   every frame (`POINTER_FUZZ_FULL=1` on
   the `npm test` step); local `npm test` runs the quick subset. Other seeds
   may change refusals but not add failures.
-- **Checker exceptions, fingerprinted.** One entry per violation: rule id,
-  file, enclosing declaration, and a hash of the normalized offending
-  expression. Line moves don't change it; replacing one violation with
-  another does, and fails. The list only shrinks, with the same
-  print-and-refuse update as the fuzzer.
+- **Checker exceptions, fingerprinted.** `scripts/coordinate-write-exceptions.json`
+  has one entry per fingerprint: rule, file, enclosing declaration path,
+  and a hash of the offending expression without whitespace, with a count
+  and the expression for review. Line moves don't change it; replacing one
+  violation with another does, and fails. Two sections: `reviewed` (calls
+  of `userText`, `sourceSlice`, `unchangedSource` whose arguments were
+  checked to be user input or verbatim document text) and `migration`
+  (everything else; done when empty). A listed count the code no longer
+  reaches fails too, so the list shrinks with the code.
+  `node scripts/check-coordinate-writes.mjs --update` prints removals (`-`)
+  and additions (`+`), writes removals, and refuses additions unless
+  `--accept-new` is given after review.
 - **Capture oracle** and the **compute differential fuzzer** cover the
   contexts.
 
@@ -343,10 +402,17 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
    oracle. Node placement and current point come with classes 4 and 5. The
    only behavior change: `StatementFrameResolver.options` now applies
    `every path` styles.
-2. **Fragment layer and checker.** `TikzFragment`, `EditedSource`,
-   constructors, typed scalar writers; F1–F3 with every current violator in
-   the fingerprinted exception list; negative fixtures. From here on, new
-   code cannot add a raw coordinate write.
+2. **Fragment layer and checker.** Done: fragment types and constructors,
+   option values and the key table, every patch, replacement and result
+   typed; F1–F5 with the fingerprinted exception list; negative fixtures.
+   First list: 156 violations in 150 entries; 59 reviewed constructor
+   calls, and as migration 64 `legacyText`/`legacyEditedSource` calls,
+   22 writer-internal uses (F3) and 11 rebranded points (F5). Reviewing the
+   string-constructor calls found two launderings, now migration entries:
+   `rotate-element` passed computed rotation values as inspector text, and
+   the connect action sliced a document it had built by concatenation. New
+   code cannot add a raw coordinate write without a listed exception. No
+   behavior change.
 3. **Writer core.** On site contexts; port `rewrite.ts`/`frame-coordinate.ts`
    (already correct) with no behavior change.
 4. **Class 1**, then **class 3** (world insertion, `addPath`, delete the app

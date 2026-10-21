@@ -1,3 +1,4 @@
+import { legacyText, type TikzFragment } from "../fragment.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { replaceSpan } from "../patch.js";
@@ -213,17 +214,17 @@ function trimTrailingEmptyCells(row: string[]): string[] {
   return row.slice(0, lastNonEmpty + 1);
 }
 
-function serializeMatrixRows(rows: ReadonlyArray<ReadonlyArray<string>>, separator: string): string {
+function serializeMatrixRows(rows: ReadonlyArray<ReadonlyArray<string>>, separator: string): TikzFragment {
   const joiner = ` ${separator} `;
-  return rows
+  return legacyText(rows
     .map((row) => [...row].join(joiner))
-    .join(" \\\\\n");
+    .join(" \\\\\n"));
 }
 
 function rewriteMatrixText(
   source: string,
   matrixTextSpan: Span,
-  replacement: string,
+  replacement: TikzFragment,
   changedSourceIds: string[]
 ): EditActionResultLike {
   const updated = replaceSpan(source, matrixTextSpan, replacement);

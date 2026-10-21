@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseTikz } from "../../packages/core/src/parser/index.js";
-import { computeMinimalReplacementPatch } from "../../packages/core/src/edit/patch.js";
+import { documentDiffPatch } from "../../packages/core/src/edit/patch.js";
 import { evaluateTikzFigure } from "../../packages/core/src/semantic/evaluate.js";
 import { createIncrementalSemanticSession } from "../../packages/core/src/semantic/incremental.js";
 import { computeSnapshot } from "../../packages/app/src/compute.js";
@@ -14,7 +14,7 @@ function change(session: ReturnType<typeof createIncrementalSemanticSession>, so
   const oldParsed = parseTikz(source, { recover: true });
   const parsed = parseTikz(next, { recover: true });
   const actual = session.evaluate({ figure: parsed.figure, source: next,
-    hints: { changedSourceIds: [oldParsed.figure.body[index].id], sourcePatches: [computeMinimalReplacementPatch(source, next)] } });
+    hints: { changedSourceIds: [oldParsed.figure.body[index].id], sourcePatches: [documentDiffPatch(source, next)] } });
   const fresh = evaluateTikzFigure(parsed.figure, next);
   expect(actual.semantic.featureUsage).toEqual(fresh.featureUsage);
   expect(actual.semantic.scene.requiredTikzLibraries).toEqual(fresh.scene.requiredTikzLibraries);
@@ -111,7 +111,7 @@ describe("incremental feature and library contributions", () => {
     const next = source.replace("diamond", "rectangle");
     const nextParsed = parseTikz(next, { recover: true, includeContextDefinitions: true });
     const actual = session.evaluate({ figure: nextParsed.figure, source: next,
-      hints: { changedSourceIds: [parsed.figure.body.find(statement => statement.kind === "Path")!.id], sourcePatches: [computeMinimalReplacementPatch(source, next)] }
+      hints: { changedSourceIds: [parsed.figure.body.find(statement => statement.kind === "Path")!.id], sourcePatches: [documentDiffPatch(source, next)] }
     });
     const fresh = evaluateTikzFigure(nextParsed.figure, next);
     expect(actual.semantic.featureUsage).toEqual(fresh.featureUsage);
@@ -125,7 +125,7 @@ describe("incremental feature and library contributions", () => {
     const source = picture(body); const session = seed(source); body[17] = rectangle;
     const next = picture(body); const parsed = parseTikz(next, { recover: true }); const controller = new AbortController();
     await expect(session.evaluateAsync({ figure: parsed.figure, source: next,
-      hints: { changedSourceIds: [parseTikz(source, { recover: true }).figure.body[17].id], sourcePatches: [computeMinimalReplacementPatch(source, next)] }
+      hints: { changedSourceIds: [parseTikz(source, { recover: true }).figure.body[17].id], sourcePatches: [documentDiffPatch(source, next)] }
     }, { signal: controller.signal, budgetMs: 0, yieldControl: async () => { controller.abort(); } })).rejects.toMatchObject({ name: "AbortError" });
     const actual = change(session, source, source.replace("(0,0)", "(0.2,0)"), 0);
     expect(actual.semantic.featureUsage.shape_diamond).toBe("used-supported");
@@ -138,7 +138,7 @@ describe("incremental feature and library contributions", () => {
     const source = picture(body); const session = seed(source); body[9] = rectangle; const next = picture(body);
     const parsed = parseTikz(next, { recover: true });
     const actual = session.evaluate({ figure: parsed.figure, source: next,
-      hints: { changedSourceIds: [parseTikz(source, { recover: true }).figure.body[9].id], sourcePatches: [computeMinimalReplacementPatch(source, next)] }
+      hints: { changedSourceIds: [parseTikz(source, { recover: true }).figure.body[9].id], sourcePatches: [documentDiffPatch(source, next)] }
     });
     const fresh = evaluateTikzFigure(parsed.figure, next);
     expect(actual.stats.replayMode).toBe("suffix");

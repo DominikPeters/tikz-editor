@@ -7,6 +7,7 @@ import {
   ExternalSourceSyncManager,
   externalSourceSyncPlugin
 } from "../../packages/app/src/ui/source-panel/SourcePanel";
+import { fragment } from "../fragment-helpers.js";
 
 // The SourcePanel external-sync manager applies store-produced span patches to
 // the CodeMirror buffer. Invariant under test: after every sync, the buffer
@@ -39,7 +40,7 @@ const PATCHES = [
   {
     oldSpan: { from: COORD_FROM, to: COORD_FROM + OLD_COORD.length },
     newSpan: { from: COORD_FROM, to: COORD_FROM + NEW_COORD.length },
-    replacement: NEW_COORD
+    replacement: fragment(NEW_COORD)
   }
 ];
 
@@ -57,7 +58,7 @@ const CHAIN = [
       {
         oldSpan: { from: S1_END_FROM, to: S1_END_FROM + S1_OLD_END.length },
         newSpan: { from: S1_END_FROM, to: S1_END_FROM + S1_NEW_END.length },
-        replacement: S1_NEW_END
+        replacement: fragment(S1_NEW_END)
       }
     ]
   }
@@ -130,7 +131,7 @@ describe("SourcePanel external source sync", () => {
       {
         oldSpan: { from: 22, to: 27 },
         newSpan: { from: 22, to: 27 },
-        replacement: "(4,4)"
+        replacement: fragment("(4,4)")
       }
     ];
     sync.syncExternalSource(OTHER_DOC, 9, otherPatches, null, true);

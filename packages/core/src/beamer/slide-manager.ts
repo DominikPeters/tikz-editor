@@ -1,3 +1,4 @@
+import { legacyText } from "../edit/fragment.js";
 import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
@@ -236,7 +237,7 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
     if (item.text === payload && at === item.span.from) insertedAt = from;
     if (item === title) titleAt = from + item.text.indexOf("{") + 1;
     delta += item.text.length - (item.span.to - item.span.from);
-    return { oldSpan: item.span, newSpan: { from, to: from + item.text.length }, replacement: item.text };
+    return { oldSpan: item.span, newSpan: { from, to: from + item.text.length }, replacement: legacyText(item.text) };
   });
   const next = [...edits].reverse().reduce((text, item) => text.slice(0, item.span.from) + item.text + text.slice(item.span.to), source);
   if (next === source) return null;

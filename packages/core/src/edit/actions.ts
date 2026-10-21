@@ -1,3 +1,4 @@
+import { editedSlice, legacyText, tikz, unchangedSource, userText, type EditedSource } from "./fragment.js";
 import { requireDefined } from "../utils/invariants.js";
 import { ADORNMENT_EDIT_NOOP_REASON } from "./actions/adornment-set-property.js";
 import { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-node-actions.js";
@@ -230,7 +231,7 @@ export function preflightPositionNodeRelativeToAction(
 }
 
 type AnchorNameResolution = {
-  source: string;
+  source: EditedSource;
   anchor: AnchorReference;
   insertedSpan?: Span;
   insertedLength: number;
@@ -268,7 +269,7 @@ export function applyEditAction(
       case "moveHandle": {
         const initial = geometry?.semantic.editHandles.find(handle => handle.id === action.handleId);
         if (initial && Math.hypot(initial.world.x - action.newWorld.x, initial.world.y - action.newWorld.y) < 1e-9) {
-          return { kind: "success", newSource: source, patches: [], changedSourceIds: [initial.sourceRef.sourceId] };
+          return { kind: "success", newSource: unchangedSource(source), patches: [], changedSourceIds: [initial.sourceRef.sourceId] };
         }
         return applyMoveHandle(source, editHandles, action.handleId, action.newWorld, parseOptions);
       }
@@ -310,7 +311,7 @@ export function applyEditAction(
       case "setProperty":
         return applySetProperty(source, action, parseOptions, geometry);
       case "setProperties": {
-        let nextSource = source;
+        let nextSource = unchangedSource(source);
         const steps: SourcePatch[][] = [];
         const changedSourceIds = new Set<string>();
         const skippedHandles: string[] = [];
@@ -394,7 +395,7 @@ export function applyEditAction(
     rawResult.reason === ADORNMENT_EDIT_NOOP_REASON ||
     rawResult.reason === PATH_ATTACHED_NODE_EDIT_NOOP_REASON ||
     rawResult.reason === "rotateElement would not change the source."
-  ) ? { kind: "success" as const, newSource: source, patches: [] } : rawResult;
+  ) ? { kind: "success" as const, newSource: unchangedSource(source), patches: [] } : rawResult;
   if (geometry && (result.kind === "success" || result.kind === "partial") && (
     result.identityMoves || ["moveHandle", "connectHandle", "moveElement", "moveElements", "resizeElement", "rotateElement",
       "setProperty", "setProperties", "alignElements", "distributeElements", "updateNodeText", "movePathAttachedNode"].includes(action.kind)
@@ -602,10 +603,10 @@ function applyConnectHandle(
     return { kind: "error", message: "Anchor is required for endpoint connection." };
   }
 
-  const replacement =
+  const replacement = legacyText(
     trimmedAnchor === "center"
       ? `(${trimmedNodeName})`
-      : `(${trimmedNodeName}.${trimmedAnchor})`;
+      : `(${trimmedNodeName}.${trimmedAnchor})`);
   const adjustedHandleSpan = shiftSpan(handle.sourceRef.sourceSpan, nameResolution.insertedSpan, nameResolution.insertedLength);
   const updated = replaceSpan(nameResolution.source, adjustedHandleSpan, replacement);
   const reordered = moveStatementAfterNamedDefinition(
@@ -621,7 +622,7 @@ function applyConnectHandle(
     const from = nameResolution.insertedSpan.from;
     identityMoves = advanceIdentityMoves(identityMoves, [{ oldSpan: nameResolution.insertedSpan,
       newSpan: { from, to: from + nameResolution.insertedLength },
-      replacement: nameResolution.source.slice(from, from + nameResolution.insertedLength) }]);
+      replacement: editedSlice(nameResolution.source, from, from + nameResolution.insertedLength) }]);
   }
   identityMoves = advanceIdentityMoves(identityMoves, [{ oldSpan: adjustedHandleSpan, newSpan: updated.changedSpan, replacement }]);
   if (reordered) identityMoves = advanceIdentityMoves(identityMoves, reordered.patches, reordered.identityMoves);
@@ -698,7 +699,7 @@ function resolveAnchorNodeName(
   const nodeName = anchor.nodeName.trim();
   if (nodeName) {
     return {
-      source,
+      source: unchangedSource(source),
       anchor: { ...anchor, nodeName },
       insertedLength: 0
     };
@@ -724,7 +725,7 @@ function ensureNodeSourceHasName(
   source: string,
   nodeSourceId: string,
   parseOptions: EditParseOptions
-): { source: string; name: string; insertedSpan?: Span; insertedLength: number } | null {
+): { source: EditedSource; name: string; insertedSpan?: Span; insertedLength: number } | null {
   const snapshot = parseStatementSnapshot(source, parseOptions);
   const ref = snapshot.byId.get(nodeSourceId);
   if (ref?.statement.kind !== "Path") {
@@ -736,7 +737,7 @@ function ensureNodeSourceHasName(
   }
   const existingName = node.name?.trim();
   if (existingName) {
-    return { source, name: existingName, insertedLength: 0 };
+    return { source: unchangedSource(source), name: existingName, insertedLength: 0 };
   }
 
   const name = nextGeneratedNodeName(source);
@@ -744,9 +745,9 @@ function ensureNodeSourceHasName(
   if (insertAt == null) {
     return null;
   }
-  const insertion = ` (${name})`;
+  const insertion = tikz` (${legacyText(name)})`;
   return {
-    source: source.slice(0, insertAt) + insertion + source.slice(insertAt),
+    source: replaceSpan(source, { from: insertAt, to: insertAt }, insertion).source,
     name,
     insertedSpan: { from: insertAt, to: insertAt },
     insertedLength: insertion.length
@@ -1009,7 +1010,7 @@ function moveStatementAfterNamedDefinition(
   movingStatementId: string,
   name: string,
   parseOptions: EditParseOptions = {}
-): { source: string; patches: SourcePatch[]; identityMoves: IdentityMove[] } | null {
+): { source: EditedSource; patches: SourcePatch[]; identityMoves: IdentityMove[] } | null {
   const snapshot = parseStatementSnapshot(source, parseOptions);
   const movingRef = snapshot.byId.get(movingStatementId);
   if (!movingRef) {
@@ -1146,7 +1147,8 @@ function applyUpdateNodeText(
     return { kind: "unsupported", reason: `No editable node text target found for ${action.elementId}` };
   }
   const { textSpan } = target;
-  const updated = replaceSpan(source, textSpan, action.text);
+  const text = userText(action.text, "node-text");
+  const updated = replaceSpan(source, textSpan, text);
   if (updated.source === source) {
     return { kind: "unsupported", reason: "Node text update would not change the source." };
   }
@@ -1157,7 +1159,7 @@ function applyUpdateNodeText(
       {
         oldSpan: textSpan,
         newSpan: updated.changedSpan,
-        replacement: action.text
+        replacement: text
       }
     ],
     changedSourceIds: target.changedSourceIds

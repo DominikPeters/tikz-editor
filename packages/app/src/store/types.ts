@@ -156,7 +156,7 @@ export type DocumentSession = {
   lastEditChangedSourceIds: string[] | null;
   lastEditChangeToken: number;
   /** Source patches from the most recent WYSIWYG edit action (for surgical CodeMirror updates). */
-  lastEditPatches: ReadonlyArray<{ oldSpan: { from: number; to: number }; newSpan: { from: number; to: number }; replacement: string }> | null;
+  lastEditPatches: ReadonlyArray<SourcePatch> | null;
   /** Source revision that `lastEditPatches` are based on. */
   lastEditPatchBaseRevision: number | null;
   /** Last warning surfaced by edit-action dispatch (unsupported/error/partial fallback). */
@@ -316,7 +316,7 @@ export type EditorState = {
   /** Monotonic token incremented when `lastEditChangedSourceIds` is updated. */
   lastEditChangeToken: number;
   /** Source patches from the most recent WYSIWYG edit action (for surgical CodeMirror updates). */
-  lastEditPatches: ReadonlyArray<{ oldSpan: { from: number; to: number }; newSpan: { from: number; to: number }; replacement: string }> | null;
+  lastEditPatches: ReadonlyArray<SourcePatch> | null;
   /** Source revision that `lastEditPatches` are based on. */
   lastEditPatchBaseRevision: number | null;
   /** Last warning surfaced by edit-action dispatch (unsupported/error/partial fallback). */

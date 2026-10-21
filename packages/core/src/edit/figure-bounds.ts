@@ -1,3 +1,4 @@
+import { EMPTY_FRAGMENT, layout, legacyText, tikz, type EditedSource, type TikzFragment } from "./fragment.js";
 import type { PathStatement, Span, Statement, TikzFigure } from "../ast/types.js";
 import { CM_PER_PT, formatNumber } from "./format.js";
 import { replaceSpan } from "./patch.js";
@@ -48,7 +49,7 @@ export function applySetFigureBoundsAction(
       return { kind: "unsupported", reason: "Figure bounds are already automatic." };
     }
     const removed = removeBoundingBoxStatement(source, current.span);
-    return successResult(source, removed.source, current.span, removed.changedSpan, "", [current.sourceId]);
+    return successResult(source, removed.source, current.span, removed.changedSpan, EMPTY_FRAGMENT, [current.sourceId]);
   }
 
   const replacement = formatUseAsBoundingBoxStatement(action);
@@ -63,7 +64,7 @@ export function applySetFigureBoundsAction(
   const indent = resolveFigureBodyIndent(source, parsed.figure);
   const needsLeadingNewline = prefix.length > 0 && !prefix.endsWith("\n");
   const needsTrailingNewline = suffix.length > 0 && !suffix.startsWith("\n");
-  const insertion = `${needsLeadingNewline ? "\n" : ""}${indent}${replacement}${needsTrailingNewline ? "\n" : ""}`;
+  const insertion = tikz`${layout(`${needsLeadingNewline ? "\n" : ""}${indent}`)}${replacement}${layout(needsTrailingNewline ? "\n" : "")}`;
   const inserted = replaceSpan(source, { from: insertOffset, to: insertOffset }, insertion);
   return successResult(source, inserted.source, { from: insertOffset, to: insertOffset }, inserted.changedSpan, insertion);
 }
@@ -164,15 +165,15 @@ function resolveFigureBodyIndent(source: string, figure: TikzFigure): string {
   return "  ";
 }
 
-function formatUseAsBoundingBoxStatement(bounds: Extract<SetFigureBoundsAction, { mode: "fixed" }>): string {
+function formatUseAsBoundingBoxStatement(bounds: Extract<SetFigureBoundsAction, { mode: "fixed" }>): TikzFragment {
   const x1 = bounds.x;
   const y1 = bounds.y;
   const x2 = bounds.x + Math.max(0, bounds.width);
   const y2 = bounds.y + Math.max(0, bounds.height);
-  return `\\useasboundingbox (${formatNumber(x1)},${formatNumber(y1)}) rectangle (${formatNumber(x2)},${formatNumber(y2)});`;
+  return legacyText(`\\useasboundingbox (${formatNumber(x1)},${formatNumber(y1)}) rectangle (${formatNumber(x2)},${formatNumber(y2)});`);
 }
 
-function removeBoundingBoxStatement(source: string, span: Span): { source: string; changedSpan: Span } {
+function removeBoundingBoxStatement(source: string, span: Span): { source: EditedSource; changedSpan: Span } {
   const lineStart = source.lastIndexOf("\n", span.from - 1) + 1;
   const leading = source.slice(lineStart, span.from);
   let from = /^[ \t]*$/.test(leading) ? lineStart : span.from;
@@ -184,15 +185,15 @@ function removeBoundingBoxStatement(source: string, span: Span): { source: strin
       from -= 1;
     }
   }
-  return replaceSpan(source, { from, to }, "");
+  return replaceSpan(source, { from, to }, EMPTY_FRAGMENT);
 }
 
 function successResult(
   oldSource: string,
-  newSource: string,
+  newSource: EditedSource,
   oldSpan: Span,
   newSpan: Span,
-  replacement: string,
+  replacement: TikzFragment,
   changedSourceIds?: string[]
 ): EditActionResult {
   if (oldSource === newSource) {

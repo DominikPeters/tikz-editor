@@ -1,3 +1,4 @@
+import { EMPTY_FRAGMENT, legacyText, unchangedSource, type EditedSource } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { NodeItem, PathItem, Span, Statement } from "../../ast/types.js";
@@ -49,16 +50,16 @@ export function applyDeleteElementsAction(
     return b.span.to - a.span.to;
   });
 
-  let currentSource = source;
+  let currentSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
 
   for (const target of sorted) {
     const span = normalizeDeleteSpan(currentSource, target.span, target.scope);
-    const updated = replaceSpan(currentSource, span, "");
+    const updated = replaceSpan(currentSource, span, EMPTY_FRAGMENT);
     patches.push({
       oldSpan: span,
       newSpan: updated.changedSpan,
-      replacement: ""
+      replacement: EMPTY_FRAGMENT
     });
     currentSource = updated.source;
   }
@@ -87,7 +88,7 @@ export function applyDeleteAdornmentAction(
   }
 
   const deleteSpan = normalizeAdornmentDeleteSpan(source, resolved.target.optionSpan);
-  const updated = replaceSpan(source, deleteSpan, "");
+  const updated = replaceSpan(source, deleteSpan, EMPTY_FRAGMENT);
   return {
     kind: "success",
     newSource: updated.source,
@@ -96,7 +97,7 @@ export function applyDeleteAdornmentAction(
       {
         oldSpan: deleteSpan,
         newSpan: updated.changedSpan,
-        replacement: ""
+        replacement: EMPTY_FRAGMENT
       }
     ],
     changedSourceIds: [requireDefined(resolved.target.ownerSourceId, "Missing required resolved.target.ownerSourceId")]
@@ -271,9 +272,9 @@ function pruneFitReferencesAfterDelete(
   source: string,
   deletedNodeNames: ReadonlySet<string>,
   parseOptions: EditParseOptions
-): { source: string; patches: SourcePatch[]; changedSourceIds: string[] } {
+): { source: EditedSource; patches: SourcePatch[]; changedSourceIds: string[] } {
   if (deletedNodeNames.size === 0) {
-    return { source, patches: [], changedSourceIds: [] };
+    return { source: unchangedSource(source), patches: [], changedSourceIds: [] };
   }
 
   const parsed = parseTikzForEdit(source, {
@@ -287,7 +288,7 @@ function pruneFitReferencesAfterDelete(
     fitNodeIds.add(node.id);
   }
 
-  let currentSource = source;
+  let currentSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
   const changedSourceIds = new Set<string>();
   for (const fitNodeId of fitNodeIds) {
@@ -313,7 +314,7 @@ function pruneFitReferencesAfterDelete(
       mutations.set("fit", { kind: "remove" });
       mutations.set("rotate fit", { kind: "remove" });
     } else {
-      mutations.set("fit", { kind: "set", value: nextFitValue.value });
+      mutations.set("fit", { kind: "set", value: legacyText(nextFitValue.value) });
     }
     const rewritten = requireDefined(applyOptionMutationsToTarget(currentSource, resolved.target, mutations), "Missing required applyOptionMutationsToTarget(currentSource, resolved.target, mutations)");
     currentSource = rewritten.source;

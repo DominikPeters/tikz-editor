@@ -20,6 +20,7 @@ import { useCanvasDragController } from "../../packages/app/src/ui/canvas-panel/
 import type { ApplyActionWithFeedbackFn, DragState } from "../../packages/app/src/ui/canvas-panel/types";
 import type { ToolCreateMode } from "../../packages/app/src/ui/tool-config";
 import { canvasDragKindFromDragState } from "../../packages/app/src/ui/canvas-panel/panel-helpers";
+import { fragment } from "../fragment-helpers.js";
 
 const BASE = String.raw`\begin{tikzpicture}
 \draw (0,0) -- (1,0);
@@ -376,11 +377,11 @@ describe("canvas drag ownership and cancellation", () => {
     const action: Extract<EditorAction, { type: "SET_SOURCE_TRANSIENT" }> = {
       type: "SET_SOURCE_TRANSIENT", source, expectedSource: current.source, expectedSourceRevision: current.sourceRevision,
       patches: [{ oldSpan: { from: current.source.length, to: current.source.length },
-        newSpan: { from: current.source.length, to: source.length }, replacement: "\n% replacement" }]
+        newSpan: { from: current.source.length, to: source.length }, replacement: fragment("\n% replacement") }]
     };
     if (invalid === "revision") action.expectedSourceRevision! += 1;
     else if (invalid === "missing ownership") delete action.expectedSource;
-    else action.patches![0].replacement = "different source";
+    else action.patches![0].replacement = fragment("different source");
     await act(async () => dispatch(action));
     expect(state().source).toBe(current.source);
     expect(state().sourceRevision).toBe(current.sourceRevision);

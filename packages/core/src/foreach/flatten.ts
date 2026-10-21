@@ -1,3 +1,4 @@
+import { applyFragments, legacyText, type EditedSource } from "../edit/fragment.js";
 import type {
   ChildForeachClause,
   ChildOperationItem,
@@ -31,7 +32,7 @@ export type FlattenForeachPatch = SourcePatch;
 export type FlattenForeachResult =
   | {
       kind: "success";
-      newSource: string;
+      newSource: EditedSource;
       patches: FlattenForeachPatch[];
       flattenedLoopId: string;
       flattenedSpan: Span;
@@ -114,10 +115,11 @@ function flattenForeachInSourceWithContext(
   }
 
   const oldSpan = match.span;
-  const newSource = source.slice(0, oldSpan.from) + flattened.replacement + source.slice(oldSpan.to);
+  const replacement = legacyText(flattened.replacement);
+  const newSource = applyFragments(source, [{ span: oldSpan, fragment: replacement }]);
   const newSpan = {
     from: oldSpan.from,
-    to: oldSpan.from + flattened.replacement.length
+    to: oldSpan.from + replacement.length
   };
   return {
     kind: "success",
@@ -125,7 +127,7 @@ function flattenForeachInSourceWithContext(
     patches: [{
       oldSpan,
       newSpan,
-      replacement: flattened.replacement
+      replacement
     }],
     flattenedLoopId: match.id,
     flattenedSpan: newSpan,

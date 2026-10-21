@@ -1,3 +1,4 @@
+import { applyFragments, legacyText } from "../edit/fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { EditActionResult } from "../edit/actions.js";
 import type { SourcePatch } from "../edit/types.js";
@@ -13,7 +14,6 @@ import {
   type BeamerSyntaxContext,
 } from "./syntax.js";
 import {
-  applyBeamerStructuralEdits,
   beamerObjectDeletionPatch,
   beamerObjectDuplicationPatch,
   type BeamerStructuralEdit,
@@ -138,14 +138,15 @@ function finishEdits(
   const effective = sorted.filter(
     (edit) => source.slice(edit.span.from, edit.span.to) !== edit.insert
   );
-  const newSource = applyBeamerStructuralEdits(source, effective);
+  const inserts = effective.map(edit => legacyText(edit.insert));
+  const newSource = applyFragments(source, effective.map((edit, index) => ({ span: edit.span, fragment: requireArrayValue(inserts, index) })));
   let delta = 0;
-  const patches: SourcePatch[] = effective.map((edit) => {
+  const patches: SourcePatch[] = effective.map((edit, index) => {
     const from = edit.span.from + delta;
     const patch: SourcePatch = {
       oldSpan: edit.span,
       newSpan: { from, to: from + edit.insert.length },
-      replacement: edit.insert,
+      replacement: requireArrayValue(inserts, index),
     };
     delta += edit.insert.length - (edit.span.to - edit.span.from);
     return patch;

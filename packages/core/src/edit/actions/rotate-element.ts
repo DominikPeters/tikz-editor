@@ -1,3 +1,4 @@
+import { editedSlice, legacyText, unchangedSource, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { createEditGeometrySession, type EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
@@ -198,7 +199,7 @@ function applyCenterPivotRotate(
     return coordinateRewrites;
   }
 
-  let nextSource = source;
+  let nextSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
   // Replace the existing rotation in place: moving it past a named style
   // would change the linear part of an ellipse even at the same angle.
@@ -257,7 +258,7 @@ function centerRotationOption(angleDeg: number, pivot: WorldPoint, span: Span): 
 }
 
 function replaceRotationOption(source: string, rotation: OptionEntry, nextRotation: OptionEntry) {
-  const replacement = nextRotation.raw;
+  const replacement = legacyText(nextRotation.raw);
   const updated = replaceSpan(source, rotation.span, replacement);
   if (updated.source === source) return null;
   return {
@@ -284,7 +285,7 @@ function buildOriginRotateMutations(angleDeg: number): Map<string, OptionMutatio
   if (Math.abs(normalizedAngle) <= ROTATE_EPSILON) {
     mutations.set("rotate", { kind: "remove" });
   } else {
-    mutations.set("rotate", { kind: "set", value: formatNumber(normalizedAngle) });
+    mutations.set("rotate", { kind: "set", value: legacyText(formatNumber(normalizedAngle)) });
   }
   return mutations;
 }
@@ -301,7 +302,7 @@ function buildCenterPivotRotateMutations(angleDeg: number, pivot: WorldPoint): M
   } else {
     mutations.set("rotate around", {
       kind: "set",
-      value: `{${formatNumber(normalizedAngle, { fractionDigits: 6 })}:${formatWorldPointCoordinateRaw(pivot)}}`
+      value: legacyText(`{${formatNumber(normalizedAngle, { fractionDigits: 6 })}:${formatWorldPointCoordinateRaw(pivot)}}`)
     });
   }
   return mutations;
@@ -317,7 +318,7 @@ function transformMutationsToOptionMutations(
     }
     mutations.set(
       mutation.key,
-      mutation.value.length > 0 ? { kind: "set", value: mutation.value } : { kind: "remove" }
+      mutation.value.length > 0 ? { kind: "set", value: legacyText(mutation.value) } : { kind: "remove" }
     );
   }
   return mutations;
@@ -459,7 +460,7 @@ function buildRectangleCoordinateRewrites(
   deltaDeg: number,
   nextTransform: FrameTransform,
   prefixFrame: FrameTransform
-): { kind: "success"; replacements: Array<{ span: Span; text: string }> } | { kind: "unsupported"; reason: string } {
+): { kind: "success"; replacements: Array<{ span: Span; text: TikzFragment }> } | { kind: "unsupported"; reason: string } {
   const prefix = asWorldTransform(prefixFrame);
   const inversePrefix = requireDefined(inverseMatrix(prefix), "Missing required inverseMatrix(prefix)");
   const rotateLocalPoint = (point: WorldPoint) => applyMatrix(prefix,
@@ -486,7 +487,7 @@ function buildEllipseLikeCoordinateRewrites(
   source: string,
   context: EllipseLikeRotateContext,
   nextTransform: FrameTransform
-): { kind: "success"; replacements: Array<{ span: Span; text: string }> } | { kind: "unsupported"; reason: string } {
+): { kind: "success"; replacements: Array<{ span: Span; text: TikzFragment }> } | { kind: "unsupported"; reason: string } {
   return rewriteHandleTargets(source, [
     {
       handle: withFrameTransform(context.centerHandle, nextTransform),
@@ -498,8 +499,8 @@ function buildEllipseLikeCoordinateRewrites(
 function rewriteHandleTargets(
   source: string,
   targets: Array<{ handle: EditHandle; newWorld: WorldPoint }>
-): { kind: "success"; replacements: Array<{ span: Span; text: string }> } | { kind: "unsupported"; reason: string } {
-  const replacementBySpan = new Map<string, { span: Span; text: string }>();
+): { kind: "success"; replacements: Array<{ span: Span; text: TikzFragment }> } | { kind: "unsupported"; reason: string } {
+  const replacementBySpan = new Map<string, { span: Span; text: TikzFragment }>();
   for (const target of targets) {
     const handle = target.handle;
     const actualText = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
@@ -649,9 +650,9 @@ function formatWorldPointCoordinateRaw(point: WorldPoint): string {
 }
 
 function adjustReplacementsForPriorPatches(
-  replacements: Array<{ span: Span; text: string }>,
+  replacements: Array<{ span: Span; text: TikzFragment }>,
   patches: readonly SourcePatch[]
-): Array<{ span: Span; text: string }> {
+): Array<{ span: Span; text: TikzFragment }> {
   let adjusted = replacements;
   for (const patch of patches) {
     const delta = (patch.newSpan.to - patch.newSpan.from) - (patch.oldSpan.to - patch.oldSpan.from);
@@ -687,7 +688,7 @@ function normalizeSignedDeg(value: number): number {
   return normalized;
 }
 
-function computeReplacementPatch(oldSource: string, newSource: string): SourcePatch {
+function computeReplacementPatch(oldSource: string, newSource: EditedSource): SourcePatch {
   const oldLen = oldSource.length;
   const newLen = newSource.length;
   const minLen = Math.min(oldLen, newLen);
@@ -708,6 +709,6 @@ function computeReplacementPatch(oldSource: string, newSource: string): SourcePa
   return {
     oldSpan: { from: prefix, to: oldSuffix },
     newSpan: { from: prefix, to: newSuffix },
-    replacement: newSource.slice(prefix, newSuffix)
+    replacement: editedSlice(newSource, prefix, newSuffix)
   };
 }

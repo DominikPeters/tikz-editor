@@ -1,3 +1,4 @@
+import { legacyEditedSource } from "../edit/fragment.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import { computeMinimalReplacementPatch } from "../edit/patch.js";
@@ -113,7 +114,9 @@ export function editBeamerFrameNote(source: string, edit: BeamerNoteEdit): { sou
       next = withNewNote(source, edit.frameId, edit.text);
     }
   }
-  return next === source ? null : { source: next, patch: computeMinimalReplacementPatch(source, next) };
+  if (next === source) return null;
+  const edited = legacyEditedSource(next);
+  return { source: edited, patch: computeMinimalReplacementPatch(source, edited) };
 }
 
 /** The note on a line of its own before `\end{frame}`, indented as the frame's body; or, in a one-line frame, before `\end{frame}`. */

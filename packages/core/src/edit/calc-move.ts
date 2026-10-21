@@ -1,3 +1,4 @@
+import type { EditedSource } from "./fragment.js";
 import { requireDefined } from "../utils/invariants.js";
 import type { EditHandle } from "../semantic/types.js";
 import type { WorldPoint } from "../coords/points.js";
@@ -15,13 +16,13 @@ import { PT_PER_CM } from "./format.js";
 /** Resolve dependent coordinates against the already moved bases in the batch. */
 export function correctMovedCoordinateDependencies(
   source: string,
-  updatedSource: string,
+  updatedSource: EditedSource,
   handles: readonly EditHandle[],
   deltas: ReadonlyMap<string, WorldPoint>,
   parseOptions: EditParseOptions,
   geometry?: EditGeometrySession,
   inheritedSourceIds: ReadonlySet<string> = new Set()
-): string | null {
+): EditedSource | null {
   const selectedHandles = handles.filter(handle => deltas.has(handle.sourceRef.sourceId));
   const dependentHandles = selectedHandles.filter(isDependentCoordinate);
   if (dependentHandles.length === 0) return updatedSource;

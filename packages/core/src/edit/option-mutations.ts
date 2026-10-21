@@ -1,3 +1,4 @@
+import { EMPTY_FRAGMENT, legacyText, type EditedSource, type TikzFragment } from "./fragment.js";
 import type { Span } from "../ast/types.js";
 import type { OptionEntry, OptionListAst } from "../options/types.js";
 import { NAMED_COLORS } from "../semantic/style/constants.js";
@@ -6,12 +7,13 @@ import type { PropertyTarget, PropertyTargetOptionsFormat } from "./property-tar
 import type { SourcePatch } from "./types.js";
 import { normalizeOptionKey as normalizeSharedOptionKey } from "./option-key.js";
 
+/** A value to write: user text, an option value through `option`, or (until migrated) legacy text. */
 export type OptionMutation =
-  | { kind: "set"; value: string }
+  | { kind: "set"; value: TikzFragment }
   | { kind: "remove" };
 
 export type OptionMutationApplyResult = {
-  source: string;
+  source: EditedSource;
   patch: SourcePatch;
 };
 
@@ -51,7 +53,7 @@ export function applyOptionMutationsToTarget(
     );
     if (replacement.length === 0) {
       const oldSpan = target.optionsSpan;
-      const updated = replaceSpan(source, oldSpan, "");
+      const updated = replaceSpan(source, oldSpan, EMPTY_FRAGMENT);
       if (updated.source === source) {
         return null;
       }
@@ -60,7 +62,7 @@ export function applyOptionMutationsToTarget(
         patch: {
           oldSpan,
           newSpan: updated.changedSpan,
-          replacement: ""
+          replacement: EMPTY_FRAGMENT
         }
       };
     }
@@ -71,13 +73,14 @@ export function applyOptionMutationsToTarget(
       return null;
     }
 
-    const updated = replaceSpan(source, oldSpan, replacement);
+    // The serializer joins fragment values with authored keys; it composes plain strings until it builds fragments itself.
+    const updated = replaceSpan(source, oldSpan, legacyText(replacement));
     return {
       source: updated.source,
       patch: {
         oldSpan,
         newSpan: updated.changedSpan,
-        replacement
+        replacement: legacyText(replacement)
       }
     };
   }
@@ -92,7 +95,7 @@ export function applyOptionMutationsToTarget(
     return null;
   }
 
-  const replacement = wrapSerializedOptions(entriesToInsert.join(", "), target.optionsFormat ?? "bracketed");
+  const replacement = legacyText(wrapSerializedOptions(entriesToInsert.join(", "), target.optionsFormat ?? "bracketed"));
   const oldSpan: Span = {
     from: target.insertOffset,
     to: target.insertOffset
@@ -116,7 +119,7 @@ export function rewriteOptionListMutations(
   mutations: ReadonlyMap<string, OptionMutation>,
   serializationContext: OptionSerializationContext = DEFAULT_OPTION_SERIALIZATION_CONTEXT,
   format: PropertyTargetOptionsFormat = "bracketed"
-): string {
+): TikzFragment {
   const parts: string[] = [];
   const emitted = new Set<string>();
 
@@ -152,10 +155,10 @@ export function rewriteOptionListMutations(
   }
 
   if (parts.length === 0) {
-    return format === "bracketed" ? "" : wrapSerializedOptions("", format);
+    return format === "bracketed" ? EMPTY_FRAGMENT : legacyText(wrapSerializedOptions("", format));
   }
 
-  return wrapSerializedOptions(parts.join(", "), format);
+  return legacyText(wrapSerializedOptions(parts.join(", "), format));
 }
 
 /**
@@ -170,8 +173,8 @@ export function rewriteSourceBackedOptionListMutations(
   mutations: ReadonlyMap<string, OptionMutation>,
   format: PropertyTargetOptionsFormat = "bracketed",
   insert: { beforeKey: string } | null = null
-): string {
-  return rewriteOptionListMutationsPreservingSourceInternal(
+): TikzFragment {
+  return legacyText(rewriteOptionListMutationsPreservingSourceInternal(
     source,
     optionsSpan,
     options,
@@ -179,7 +182,7 @@ export function rewriteSourceBackedOptionListMutations(
     DEFAULT_OPTION_SERIALIZATION_CONTEXT,
     format,
     insert?.beforeKey ?? null
-  );
+  ));
 }
 
 export const normalizeOptionKey = normalizeSharedOptionKey;

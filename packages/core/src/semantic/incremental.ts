@@ -45,7 +45,7 @@ import type {
 import { MAIN_SCENE_LAYER } from "./types.js";
 import type { SourcePatch } from "../edit/types.js";
 import type { WorldBounds } from "../coords/points.js";
-import { computeMinimalReplacementPatch } from "../edit/patch.js";
+import { documentDiffPatch } from "../edit/patch.js";
 import { patchesMatchSourceTransition } from "../edit/source-patches.js";
 import { createSceneSourceBinder, createSourceSpanResolver, sceneSourceExtent } from "./source-bindings.js";
 
@@ -235,7 +235,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
     const suppliedPatches = hints.sourcePatches;
     const patches = suppliedPatches?.every((patch): patch is SourcePatch => patch.oldSpan !== undefined && patch.newSpan !== undefined) &&
       patchesMatchSourceTransition(previous.source, run.source, suppliedPatches)
-      ? suppliedPatches : [computeMinimalReplacementPatch(previous.source, run.source)];
+      ? suppliedPatches : [documentDiffPatch(previous.source, run.source)];
     const resolveSpan = createSourceSpanResolver(patches);
 
     const changedSourceIds = normalizeChangedSourceIds(hints.changedSourceIds ?? []);
@@ -978,7 +978,7 @@ function movedOnlyPatches(
   const supplied = input.hints?.sourcePatches;
   const patches = supplied?.length && supplied.every((patch): patch is SourcePatch => patch.oldSpan !== undefined && patch.newSpan !== undefined) &&
     patchesMatchSourceTransition(previous.source, input.source, supplied)
-    ? supplied : [computeMinimalReplacementPatch(previous.source, input.source)];
+    ? supplied : [documentDiffPatch(previous.source, input.source)];
   const touches = (left: Span, right: Span) => left.from <= right.to && right.from <= left.to;
   const spans = [input.figure.span, ...run.sourceStatementSpanById.values()];
   return patches.some(patch => spans.some(span => touches(patch.newSpan, span))) ? null : patches;

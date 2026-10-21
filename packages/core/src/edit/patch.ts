@@ -1,8 +1,9 @@
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "./types.js";
+import { applyFragments, editedSlice, sourceSlice, unchangedSource, type EditedSource, type TikzFragment } from "./fragment.js";
 
-export function replaceSpan(source: string, span: Span, replacement: string): { source: string; changedSpan: Span } {
-  const next = `${source.slice(0, span.from)}${replacement}${source.slice(span.to)}`;
+export function replaceSpan(source: string, span: Span, replacement: TikzFragment): { source: EditedSource; changedSpan: Span } {
+  const next = applyFragments(source, [{ span, fragment: replacement }]);
 
   return {
     source: next,
@@ -13,7 +14,13 @@ export function replaceSpan(source: string, span: Span, replacement: string): { 
   };
 }
 
-export function computeMinimalReplacementPatch(oldSource: string, newSource: string): SourcePatch {
+/** The patch between two revisions of the document: what changed is copied verbatim from the newer one. */
+export function documentDiffPatch(previous: string, next: string): SourcePatch {
+  const patch = computeMinimalReplacementPatch(previous, unchangedSource(next));
+  return { ...patch, replacement: sourceSlice(next, patch.newSpan) };
+}
+
+export function computeMinimalReplacementPatch(oldSource: string, newSource: EditedSource | TikzFragment): SourcePatch {
   const oldLen = oldSource.length;
   const newLen = newSource.length;
   const minLen = Math.min(oldLen, newLen);
@@ -37,6 +44,6 @@ export function computeMinimalReplacementPatch(oldSource: string, newSource: str
   return {
     oldSpan: { from: prefix, to: oldSuffix },
     newSpan: { from: prefix, to: newSuffix },
-    replacement: newSource.slice(prefix, newSuffix)
+    replacement: editedSlice(newSource, prefix, newSuffix)
   };
 }

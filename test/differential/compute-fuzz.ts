@@ -31,6 +31,7 @@ import { createBeamerSyntaxContext } from "../../packages/core/src/beamer/syntax
 import { worldToPictureCoordinates } from "../../packages/app/src/ui/canvas-panel/picture-coordinates.js";
 import { freshComputeModule, type ComputeModule } from "./compute-instances.js";
 import { diffValues } from "./snapshot-diff.js";
+import { fragment } from "../fragment-helpers.js";
 
 export type FuzzDocument = { label: string; source: string };
 
@@ -211,7 +212,7 @@ function applyEdit(doc: DocState, rawEdit: TextEdit, origin: EditOrigin, changed
   const patch: SourcePatch = {
     oldSpan: { from: edit.from, to: edit.to },
     newSpan: { from: edit.from, to: edit.from + edit.insert.length },
-    replacement: edit.insert
+    replacement: fragment(edit.insert)
   };
   doc.history.push(doc.source);
   if (doc.history.length > 12) doc.history.shift();
@@ -712,7 +713,7 @@ function layerEditCommand(doc: DocState, view: GeneratorState["docs"][number], r
     if (digits.length > 0) {
       const at = pick(digits, rng);
       const insert = String((Number(doc.source[at]) + 1 + Math.floor(rng() * 8)) % 10);
-      const patch: SourcePatch = { oldSpan: { from: at, to: at + 1 }, newSpan: { from: at, to: at + 1 }, replacement: insert };
+      const patch: SourcePatch = { oldSpan: { from: at, to: at + 1 }, newSpan: { from: at, to: at + 1 }, replacement: fragment(insert) };
       return { edit: { from: at, to: at + 1, insert }, layer: { patches: [patch], changedSourceIds: [statement.id] }, drag: true, note: "layer nudge" };
     }
   }

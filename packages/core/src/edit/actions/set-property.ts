@@ -1,3 +1,4 @@
+import { EMPTY_FRAGMENT, legacyText, tikz, userText } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { parseOptionListRaw } from "../../options/parse.js";
@@ -89,7 +90,7 @@ export function applySetPropertyActionRaw(
   if (removePrimaryKey) {
     mutations.set(key, { kind: "remove" });
   } else {
-    mutations.set(key, { kind: "set", value: action.value });
+    mutations.set(key, { kind: "set", value: userText(action.value, "inspector-value") });
   }
   const rewritten = applyOptionMutationsToTarget(source, resolved.target, mutations);
   if (!rewritten) {
@@ -160,11 +161,11 @@ function applySetPropertyCommentToggle(
     return { kind: "entry", text: toggleItem.text, normalizedKey: toggleItem.normalizedKey };
   });
 
-  const replacement = serializeCommentToggleItems(
+  const replacement = legacyText(serializeCommentToggleItems(
     replacementItems,
     format,
     resolveCommentToggleSerializationContext(rawSite, format, parseOptions.indentSize)
-  );
+  ));
 
   const updated = replaceSpan(source, target.optionsSpan, replacement);
   return {
@@ -571,11 +572,11 @@ function applyMatrixCellSetProperty(
     }
 
     const prefixSpan = resolveMatrixCellOptionPrefixSpan(source, optionSpan, cellSpan, textSpan);
-    const updated = replaceSpan(source, prefixSpan, "");
+    const updated = replaceSpan(source, prefixSpan, EMPTY_FRAGMENT);
     return {
       kind: "success",
       newSource: updated.source,
-      patches: [{ oldSpan: prefixSpan, newSpan: updated.changedSpan, replacement: "" }],
+      patches: [{ oldSpan: prefixSpan, newSpan: updated.changedSpan, replacement: EMPTY_FRAGMENT }],
       changedSourceIds: changedSourceIdsForPropertyTarget(target)
     };
   }
@@ -594,7 +595,7 @@ function applyMatrixCellSetProperty(
   // serialization cannot disturb authored trivia.
   const seedOptions = parseOptionListRaw("[]", textSpan.from);
   const serializedOptions = rewriteOptionListMutations(seedOptions, setMutations, undefined, "bracketed");
-  const insertion = `|${serializedOptions}| `;
+  const insertion = tikz`|${serializedOptions}| `;
   const insertionSpan: Span = { from: textSpan.from, to: textSpan.from };
   const updated = replaceSpan(source, insertionSpan, insertion);
   return {
@@ -641,7 +642,7 @@ function createOptionMutationsFromSetProperty(
   if (removePrimaryKey) {
     mutations.set(normalizedPrimaryKey, { kind: "remove" });
   } else {
-    mutations.set(normalizedPrimaryKey, { kind: "set", value: action.value });
+    mutations.set(normalizedPrimaryKey, { kind: "set", value: userText(action.value, "inspector-value") });
   }
   return mutations;
 }

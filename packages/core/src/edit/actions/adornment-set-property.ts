@@ -1,10 +1,12 @@
+import { pt } from "../../coords/scalars.js";
+import { canvasLength, legacyText, optionValueFor, tikz, userText } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { parseStyleValueAsOptionList } from "../../semantic/style/option-utils.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import type { Span } from "../../ast/types.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
-import { formatNumber, pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
+import { pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
 import { replaceSpan } from "../patch.js";
 import type { PropertyTarget } from "../property-target.js";
 import {
@@ -97,7 +99,7 @@ export function applyAdornmentSetProperty(
   if (removePrimaryKey) {
     mutations.set(key, { kind: "remove" });
   } else {
-    mutations.set(key, { kind: "set", value: action.value });
+    mutations.set(key, { kind: "set", value: userText(action.value, "inspector-value") });
   }
   return applyAdornmentValueRewrite(source, target, undefined, action.elementId, undefined, mutations);
 }
@@ -129,7 +131,7 @@ export function applyAdornmentValueRewrite(
   } else {
     baseOptionMutations.set(distanceKey, {
       kind: "set",
-      value: `${formatNumber(distancePt, pointDistanceFormatOptions(formatPrecision))}pt`
+      value: optionValueFor(distanceKey, canvasLength(pt(distancePt), "pt", pointDistanceFormatOptions(formatPrecision).fractionDigits))
     });
   }
 
@@ -144,7 +146,7 @@ export function applyAdornmentValueRewrite(
     if (rewrittenPinEdge == null) {
       baseOptionMutations.set("pin edge", { kind: "remove" });
     } else {
-      baseOptionMutations.set("pin edge", { kind: "set", value: formatPinEdgeOptionValue(rewrittenPinEdge) });
+      baseOptionMutations.set("pin edge", { kind: "set", value: legacyText(formatPinEdgeOptionValue(rewrittenPinEdge)) });
     }
   }
 
@@ -163,12 +165,12 @@ export function applyAdornmentValueRewrite(
         baseOptionMutations
       );
   const optionsRaw = unwrapOptionList(serializedOptions, "[", "]");
-  const replacement = serializeAdornmentValue(
+  const replacement = legacyText(serializeAdornmentValue(
     kind,
     overrides?.angleRaw ?? target.angleRaw ?? "center",
     overrides?.textRaw ?? (target.textSpan ? source.slice(target.textSpan.from, target.textSpan.to) : ""),
     optionsRaw
-  );
+  ));
   const updated = replaceSpan(source, target.valueSpan, replacement);
   if (updated.source === source) {
     return { kind: "unsupported", reason: ADORNMENT_EDIT_NOOP_REASON };
@@ -349,7 +351,7 @@ function buildPinEdgeMutations(
       mutations.set(dashKey, { kind: "remove" });
     }
     if (normalizedValue !== "solid" && normalizedValue.length > 0) {
-      mutations.set(normalizedValue, { kind: "set", value: "true" });
+      mutations.set(normalizedValue, { kind: "set", value: tikz`true` });
     }
     return mutations;
   }
@@ -360,7 +362,7 @@ function buildPinEdgeMutations(
     "";
   if (targetKey.length > 0) {
     const trimmedValue = value.trim();
-    mutations.set(targetKey, trimmedValue.length === 0 ? { kind: "remove" } : { kind: "set", value });
+    mutations.set(targetKey, trimmedValue.length === 0 ? { kind: "remove" } : { kind: "set", value: userText(value, "inspector-value") });
   }
   return mutations;
 }

@@ -1,3 +1,4 @@
+import { EMPTY_FRAGMENT, legacyText, optionValueFor, ratio, tikz } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { applyOptionMutationsToTarget, normalizeOptionKey, type OptionMutation } from "../option-mutations.js";
@@ -188,10 +189,10 @@ function applyPositionMutations(
     return;
   }
   if (snapped.preset) {
-    mutations.set(snapped.preset, { kind: "set", value: "" });
+    mutations.set(snapped.preset, { kind: "set", value: EMPTY_FRAGMENT });
     return;
   }
-  mutations.set("pos", { kind: "set", value: formatNumber(position, { fractionDigits: 6 }) });
+  mutations.set("pos", { kind: "set", value: optionValueFor("pos", ratio(position, 6)) });
 }
 
 function applySideMutations(
@@ -211,16 +212,16 @@ function applySideMutations(
     for (const key of clearKeys) {
       mutations.set(key, { kind: "remove" });
     }
-    mutations.set(sideUpdate.direction, { kind: "set", value: "" });
+    mutations.set(sideUpdate.direction, { kind: "set", value: EMPTY_FRAGMENT });
     return;
   }
 
   if (regime.kind === "auto-side" && sideUpdate.kind === "auto-side") {
     const baseSide = regime.swap ? (regime.side === "left" ? "right" : "left") : regime.side;
     const desiredSwap = sideUpdate.side !== baseSide;
-    mutations.set("auto", { kind: "set", value: baseSide === "left" ? "" : baseSide });
+    mutations.set("auto", { kind: "set", value: baseSide === "left" ? EMPTY_FRAGMENT : tikz`right` });
     if (desiredSwap) {
-      mutations.set("swap", { kind: "set", value: "" });
+      mutations.set("swap", { kind: "set", value: EMPTY_FRAGMENT });
     } else {
       mutations.set("swap", { kind: "remove" });
     }
@@ -244,11 +245,11 @@ function applyDistanceMutations(
       ? action.sideUpdate.direction
       : regime.direction;
   if (resolvedDistance <= PATH_ATTACHED_DISTANCE_EPSILON_PT) {
-    mutations.set(resolvedDirection, { kind: "set", value: "" });
+    mutations.set(resolvedDirection, { kind: "set", value: EMPTY_FRAGMENT });
     return;
   }
   mutations.set(resolvedDirection, {
     kind: "set",
-    value: `${formatNumber(resolvedDistance, pointDistanceFormatOptions(action.formatPrecision))}pt`
+    value: legacyText(`${formatNumber(resolvedDistance, pointDistanceFormatOptions(action.formatPrecision))}pt`)
   });
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { editorReducer, makeInitialState } from "../packages/app/src/store/reducer.js";
 import type { EditorAction, EditorState } from "../packages/app/src/store/types.js";
+import { editedSource, fragment } from "./fragment-helpers.js";
 
 const SOURCE = [
   "\\begin{tikzpicture}",
@@ -20,12 +21,12 @@ function canvasKeystroke(nextText: string, state: EditorState): EditorAction {
     historyMergeKey: "text-edit:elem-1",
     precomputedResult: {
       kind: "success",
-      newSource: nextSource,
+      newSource: editedSource(nextSource),
       patches: [
         {
           oldSpan: { from, to: from + currentText.length },
           newSpan: { from, to: from + nextText.length },
-          replacement: nextText
+          replacement: fragment(nextText)
         }
       ],
       changedSourceIds: ["elem-1"]
@@ -70,7 +71,7 @@ Hello
       patches: [{
         oldSpan: { from, to: from + 5 },
         newSpan: { from, to: from + 6 },
-        replacement: "Hello!"
+        replacement: fragment("Hello!")
       }],
       changedSourceIds: ["frame:0:paragraph:0:editable:0"],
       historyMergeKey: "text-edit:frame:0:paragraph:0:editable:0",
@@ -89,7 +90,7 @@ Hello
       patches: [{
         oldSpan: { from, to: from + 6 },
         newSpan: { from, to: from + 7 },
-        replacement: "Hello!!"
+        replacement: fragment("Hello!!")
       }],
       changedSourceIds: ["frame:0:paragraph:0:editable:0"],
       historyMergeKey: "text-edit:frame:0:paragraph:0:editable:0",
@@ -115,7 +116,7 @@ Hello
       patches: [{
         oldSpan: { from, to: from + 5 },
         newSpan: { from, to: from + 4 },
-        replacement: "nope"
+        replacement: fragment("nope")
       }],
       changedSourceIds: ["elem-1"]
     });

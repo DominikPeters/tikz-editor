@@ -1,3 +1,4 @@
+import { legacyText, unchangedSource, userText } from "./fragment.js";
 import type { ParseTikzResult } from "../parser/index.js";
 import type { PathItem, Statement } from "../ast/types.js";
 import type { EditHandle } from "../semantic/types.js";
@@ -25,7 +26,7 @@ export function applyEdit(parseResult: ParseTikzResult, edit: TikzEdit): ApplyEd
     }
 
     const oldRaw = parseResult.source.slice(target.span.from, target.span.to);
-    const replacement = formatCoordinate(oldRaw, edit.x, edit.y);
+    const replacement = legacyText(formatCoordinate(oldRaw, edit.x, edit.y));
     const updated = replaceSpan(parseResult.source, target.span, replacement);
 
     return {
@@ -38,7 +39,7 @@ export function applyEdit(parseResult: ParseTikzResult, edit: TikzEdit): ApplyEd
     throw new Error(`Target ${edit.targetId} is not a node.`);
   }
 
-  const updated = replaceSpan(parseResult.source, target.textSpan, edit.text);
+  const updated = replaceSpan(parseResult.source, target.textSpan, userText(edit.text, "node-text"));
 
   return {
     source: updated.source,
@@ -202,7 +203,7 @@ function applyCurveEditMoveIntent(
   if (!rewritten) {
     return {
       kind: "success",
-      newSource: source,
+      newSource: unchangedSource(source),
       changedSourceIds: [handle.sourceRef.sourceId],
       patches: []
     };
@@ -230,7 +231,7 @@ function buildCurveEditMutations(
     const mutations = new Map<string, OptionMutation>();
     mutations.set(normalizeOptionKey(curveEdit.role), {
       kind: "set",
-      value: formatInteger(optionValue)
+      value: legacyText(formatInteger(optionValue))
     });
     mutations.set(normalizeOptionKey("bend left"), { kind: "remove" });
     mutations.set(normalizeOptionKey("bend right"), { kind: "remove" });
@@ -247,7 +248,7 @@ function buildCurveEditMutations(
   const mutations = new Map<string, OptionMutation>();
   mutations.set(normalizeOptionKey(bendDirectionKey), {
     kind: "set",
-    value: formatInteger(Math.abs(signedBendAngle))
+    value: legacyText(formatInteger(Math.abs(signedBendAngle)))
   });
   mutations.set(normalizeOptionKey(oppositeDirectionKey), { kind: "remove" });
   mutations.set(normalizeOptionKey("out"), { kind: "remove" });

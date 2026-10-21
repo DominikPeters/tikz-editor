@@ -1,3 +1,4 @@
+import { legacyText, type TikzFragment } from "./fragment.js";
 import {
   isCoordinateEditHandle,
   isFrameLocalCoordinateEditHandle,
@@ -18,7 +19,21 @@ import { rewriteCalcCoordinate } from "./rewrite-calc.js";
  * Compute a replacement source string for moving a handle to a new world position.
  * Returns null if the rewrite cannot be performed.
  */
+/**
+ * The coordinate writer's predecessor: every coordinate a drag writes leaves
+ * through here, so its output is the one marked migration exception.
+ */
 export function rewriteCoordinate(
+  newWorld: WorldPoint,
+  handle: EditHandle,
+  source: string,
+  bypassSnapping = false
+): TikzFragment | null {
+  const text = rewriteCoordinateText(newWorld, handle, source, bypassSnapping);
+  return text === null ? null : legacyText(text);
+}
+
+function rewriteCoordinateText(
   newWorld: WorldPoint,
   handle: EditHandle,
   source: string,

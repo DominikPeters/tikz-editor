@@ -12,6 +12,7 @@ import {
   type TexFuzzEditAdapter,
   type TexFuzzEditSequence,
 } from "@tikz-editor/tex-fuzz";
+import { fragment } from "./fragment-helpers.js";
 
 function sourceAdapter(reuse = false): TexFuzzEditAdapter<string> {
   return {
@@ -47,7 +48,7 @@ function singleSourcePatch(oldSource: string, newSource: string): SourcePatch {
   return {
     oldSpan: { from: prefix, to: oldSuffix },
     newSpan: { from: prefix, to: newSuffix },
-    replacement: newSource.slice(prefix, newSuffix),
+    replacement: fragment(newSource.slice(prefix, newSuffix)),
   };
 }
 

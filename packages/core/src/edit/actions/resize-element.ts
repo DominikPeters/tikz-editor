@@ -1,3 +1,4 @@
+import { canvasLength, legacyText, optionValueFor, unchangedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
@@ -275,7 +276,7 @@ export function applyResizeElementAction(
   const baselineSize = requireDefined(resolveNodeResizeLocalSize(semantic.scene.elements, elementId), "Missing required resolveNodeResizeLocalSize(semantic.scene.elements, elementId)");
   if (geometry && (!affectsWidth || Math.abs(requestedWidth - baselineSize.width) < 1e-6) &&
       (!affectsHeight || Math.abs(requestedHeight - baselineSize.height) < 1e-6)) {
-    return { kind: "success", newSource: source, patches: [], changedSourceIds };
+    return { kind: "success", newSource: unchangedSource(source), patches: [], changedSourceIds };
   }
   const intrinsicWorldWidth = floorBounds.maxX - floorBounds.minX;
   const intrinsicLocal = requireDefined(resolveNodeResizeLocalSize(floorSemantic.scene.elements, elementId), "Missing required resolveNodeResizeLocalSize(floorSemantic.scene.elements, elementId)");
@@ -356,7 +357,7 @@ export function applyResizeElementAction(
     if (nodeLinearTransform && !preserveExplicitWidthFloor && !preserveExplicitHeightFloor) {
       return {
         kind: "success",
-        newSource: source,
+        newSource: unchangedSource(source),
         patches: [],
         changedSourceIds
       };
@@ -374,7 +375,7 @@ export function applyResizeElementAction(
 
 function restoreResizeBaselineOnNoop(result: EditActionResultLike, geometry: EditGeometrySession | undefined, elementId: string, changedSourceIds = [elementId]): EditActionResultLike {
   return geometry && result.kind === "unsupported" && result.reason === "Resize would not change node constraints."
-    ? { kind: "success", newSource: geometry.source, patches: [], changedSourceIds }
+    ? { kind: "success", newSource: unchangedSource(geometry.source), patches: [], changedSourceIds }
     : result;
 }
 
@@ -410,14 +411,11 @@ function buildNodeResizeMutationCandidates(args: {
     }
     const textWidthMutation: OptionMutation = {
       kind: "set",
-      value: `${formatNumber(
-        Math.max(RESIZE_EPSILON, requestedTextWidth),
-        pointDimensionFormatOptions(formatPrecision)
-      )}pt`
+      value: optionValueFor("text width", canvasLength(pt(Math.max(RESIZE_EPSILON, requestedTextWidth)), "pt", pointDimensionFormatOptions(formatPrecision).fractionDigits))
     };
     const heightMutation: OptionMutation =
       requestedHeight > intrinsicHeight + RESIZE_EPSILON
-        ? { kind: "set", value: `${formatNumber(requestedHeight, pointDimensionFormatOptions(formatPrecision))}pt` }
+        ? { kind: "set", value: optionValueFor("minimum height", canvasLength(pt(requestedHeight), "pt", pointDimensionFormatOptions(formatPrecision).fractionDigits)) }
         : { kind: "remove" };
     const candidates: Array<{ mutations: Map<string, OptionMutation>; explicitConstraintCount: number; removesOtherConstraint: boolean }> = [];
     if (!affectsHeight) {
@@ -439,11 +437,11 @@ function buildNodeResizeMutationCandidates(args: {
 
   const widthMutation: OptionMutation =
     requestedWidth > intrinsicWidth + RESIZE_EPSILON
-      ? { kind: "set", value: `${formatNumber(requestedWidth, pointDimensionFormatOptions(formatPrecision))}pt` }
+      ? { kind: "set", value: optionValueFor("minimum width", canvasLength(pt(requestedWidth), "pt", pointDimensionFormatOptions(formatPrecision).fractionDigits)) }
       : { kind: "remove" };
   const heightMutation: OptionMutation =
     requestedHeight > intrinsicHeight + RESIZE_EPSILON
-      ? { kind: "set", value: `${formatNumber(requestedHeight, pointDimensionFormatOptions(formatPrecision))}pt` }
+      ? { kind: "set", value: optionValueFor("minimum height", canvasLength(pt(requestedHeight), "pt", pointDimensionFormatOptions(formatPrecision).fractionDigits)) }
       : { kind: "remove" };
 
   const candidates: Array<{ mutations: Map<string, OptionMutation>; explicitConstraintCount: number; removesOtherConstraint: boolean }> = [];
@@ -654,7 +652,7 @@ function applyResizeScope(
     if (!Number.isFinite(current)) return unsupported("Scope resize requires numeric authored scale entries.");
     const formatted = formatNumber(current * ratio, action.formatPrecision === "snapped" ? { fractionDigits: 12 } : undefined);
     writtenRatios[axis] = Number(formatted) / current;
-    scaleMutations.set(candidates[0] ? normalizeOptionKey(candidates[0].key) : axis, { kind: "set", value: formatted });
+    scaleMutations.set(candidates[0] ? normalizeOptionKey(candidates[0].key) : axis, { kind: "set", value: legacyText(formatted) });
   }
   const scaledEntries = mutateOrderedOptionEntries(entries, scaleMutations);
   const scaledFrame = resolveStatementOptionFrame(source, action.elementId, scaledEntries, parseOptions, geometry, evaluateOptions, true);
@@ -982,7 +980,7 @@ function applyResizePathRectangle(
   const restoresBaseline = action.rectangleBaseline &&
     pointDistanceSquared(nextStartWorld, context.startHandle.world) <= 1e-12 &&
     pointDistanceSquared(nextOppositeWorld, context.oppositeHandle.world) <= 1e-12;
-  const replacementBySpan = new Map<string, { span: Span; text: string }>();
+  const replacementBySpan = new Map<string, { span: Span; text: TikzFragment }>();
   for (const target of rewriteTargets) {
     const handle = target.handle;
     const actualText = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
@@ -1018,7 +1016,7 @@ function applyResizePathRectangle(
   if (replacements.length === 0) {
     // A baseline no-op can restore the original source after previous updates.
     return action.rectangleBaseline
-      ? { kind: "success", newSource: source, patches: [], changedSourceIds: [action.elementId] }
+      ? { kind: "success", newSource: unchangedSource(source), patches: [], changedSourceIds: [action.elementId] }
       : { kind: "unsupported", reason: "Resize would not change node constraints." };
   }
 
@@ -1254,7 +1252,7 @@ function applyResizePathCircleOrEllipse(
     }
   }
 
-  const inserted = `[${entries.join(", ")}]`;
+  const inserted = legacyText(`[${entries.join(", ")}]`);
   const rewritten = requireDefined(applySpanTextReplacement(source, {
     from: context.syntax.keywordSpan.to,
     to: context.syntax.keywordSpan.to
@@ -1492,7 +1490,7 @@ function rewriteShapePayloadCoordinate(
   syntax: PathShapeResizeSyntax,
   nextRxLocal: number,
   nextRyLocal: number
-): { span: Span; text: string } | null {
+): { span: Span; text: TikzFragment } | null {
   if (!syntax.payloadCoordinate) {
     return null;
   }
@@ -1500,13 +1498,13 @@ function rewriteShapePayloadCoordinate(
   if (syntax.keyword === "circle") {
     return {
       span: syntax.payloadCoordinate.span,
-      text: formatCircleRadiusCoordinateRaw(syntax.payloadCoordinate.raw, nextRxLocal)
+      text: legacyText(formatCircleRadiusCoordinateRaw(syntax.payloadCoordinate.raw, nextRxLocal))
     };
   }
 
   return {
     span: syntax.payloadCoordinate.span,
-    text: formatEllipseRadiiCoordinateRaw(syntax.payloadCoordinate.raw, nextRxLocal, nextRyLocal)
+    text: legacyText(formatEllipseRadiiCoordinateRaw(syntax.payloadCoordinate.raw, nextRxLocal, nextRyLocal))
   };
 }
 
@@ -1536,15 +1534,15 @@ function buildShapeRadiusMutations(
 ): Map<string, OptionMutation> {
   const mutations = new Map<string, OptionMutation>();
   if (context.shapeKind === "circle") {
-    const radiusValue = `${formatNumber(nextRxLocal * CM_PER_PT)}cm`;
+    const radiusValue = legacyText(`${formatNumber(nextRxLocal * CM_PER_PT)}cm`);
     mutations.set("radius", { kind: "set", value: radiusValue });
     mutations.set("x radius", { kind: "remove" });
     mutations.set("y radius", { kind: "remove" });
     return mutations;
   }
 
-  mutations.set("x radius", { kind: "set", value: `${formatNumber(nextRxLocal * CM_PER_PT)}cm` });
-  mutations.set("y radius", { kind: "set", value: `${formatNumber(nextRyLocal * CM_PER_PT)}cm` });
+  mutations.set("x radius", { kind: "set", value: legacyText(`${formatNumber(nextRxLocal * CM_PER_PT)}cm`) });
+  mutations.set("y radius", { kind: "set", value: legacyText(`${formatNumber(nextRyLocal * CM_PER_PT)}cm`) });
   mutations.set("radius", { kind: "remove" });
   return mutations;
 }
@@ -1572,7 +1570,7 @@ function pickPathShapeResizeOptionTarget(
 function applySpanTextReplacement(
   source: string,
   span: Span,
-  replacement: string
+  replacement: TikzFragment
 ): OptionMutationApplyResult | null {
   const previous = source.slice(span.from, span.to);
   if (previous === replacement) {
@@ -1811,11 +1809,11 @@ function rewriteDiamondSideResize(args: {
     const nextMinimumHeight = Math.max(0, dimensions.minimumHeight * scale);
     mutations.set("minimum width", {
       kind: "set",
-      value: `${formatNumber(nextMinimumWidth, pointDimensionFormatOptions(formatPrecision))}pt`
+      value: optionValueFor("minimum width", canvasLength(pt(nextMinimumWidth), "pt", pointDimensionFormatOptions(formatPrecision).fractionDigits))
     });
     mutations.set("minimum height", {
       kind: "set",
-      value: `${formatNumber(nextMinimumHeight, pointDimensionFormatOptions(formatPrecision))}pt`
+      value: optionValueFor("minimum height", canvasLength(pt(nextMinimumHeight), "pt", pointDimensionFormatOptions(formatPrecision).fractionDigits))
     });
     return applyOptionMutationsToTarget(source, resizeTarget, mutations);
   }
@@ -1830,7 +1828,7 @@ function rewriteDiamondSideResize(args: {
     const nextMinimumWidth = Math.max(0, requestedWidth);
     mutations.set("minimum width", {
       kind: "set",
-      value: `${formatNumber(nextMinimumWidth, pointDimensionFormatOptions(formatPrecision))}pt`
+      value: optionValueFor("minimum width", canvasLength(pt(nextMinimumWidth), "pt", pointDimensionFormatOptions(formatPrecision).fractionDigits))
     });
     if (!dimensions.hasExplicitMinimumHeight && companionHeight <= RESIZE_EPSILON) {
       mutations.set("minimum height", { kind: "remove" });
@@ -1847,7 +1845,7 @@ function rewriteDiamondSideResize(args: {
   const nextMinimumHeight = Math.max(0, requestedHeight);
   mutations.set("minimum height", {
     kind: "set",
-    value: `${formatNumber(nextMinimumHeight, pointDimensionFormatOptions(formatPrecision))}pt`
+    value: optionValueFor("minimum height", canvasLength(pt(nextMinimumHeight), "pt", pointDimensionFormatOptions(formatPrecision).fractionDigits))
   });
   if (!dimensions.hasExplicitMinimumWidth && companionWidth <= RESIZE_EPSILON) {
     mutations.set("minimum width", { kind: "remove" });

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { computeSnapshot, type ComputeRequest } from "../packages/app/src/compute.js";
+import { fragment } from "./fragment-helpers.js";
 
 const KKT_SOURCE = readFileSync(
   new URL("./fixtures/beamer/kkt_theorem_beamer.tex", import.meta.url),
@@ -153,7 +154,7 @@ World
     const patch = {
       oldSpan: { from, to: from + 5 },
       newSpan: { from, to: from + 6 },
-      replacement: "Hello!"
+      replacement: fragment("Hello!")
     };
     const masked = await computeSnapshot(deckRequest({
       source: edited,

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
 import type { ToolMode } from "../../store/types";
 import { beginDocumentEdit, canContinueDocumentEdit, restoreDocumentEdit, trackDocumentEdit, type DocumentEditSession } from "../../edit-session";
 import { useEditorStore } from "../../store/store";
-import { composeSourcePatches } from "@tikz-editor/core/edit/source-patches";
+import { composeSourcePatches, invertSourcePatches } from "@tikz-editor/core/edit/source-patches";
 import { resolveBucketFillEdit, type BucketFillEditResolution } from "./bucket-fill";
 import type { CanvasDispatch, CanvasSnapshot } from "./types";
 
@@ -78,8 +78,7 @@ export function useBucketFillPreview({
     }
 
     const patches = current ? composeSourcePatches(current.edit.latestSource, [
-      current.result.patches.map(patch => ({ oldSpan: patch.newSpan, newSpan: patch.oldSpan,
-        replacement: baseSource.slice(patch.oldSpan.from, patch.oldSpan.to) })),
+      invertSourcePatches(baseSource, current.result.patches),
       resolution.result.patches
     ]) : resolution.result.patches;
     const edit = current?.edit ?? beginDocumentEdit(useEditorStore.getState());

@@ -1,4 +1,5 @@
 import type { SourcePatch } from "./types.js";
+import { applyFragments, joinFragments, sliceFragment, sourceSlice, unchangedSource, type EditedSource, type TikzFragment } from "./fragment.js";
 
 type PatchValidationFailure =
   | "invalid-span-order"
@@ -6,7 +7,7 @@ type PatchValidationFailure =
   | "overlapping";
 
 export type ApplySourcePatchesResult =
-  | { kind: "success"; source: string }
+  | { kind: "success"; source: EditedSource }
   | { kind: "invalid"; reason: PatchValidationFailure };
 
 /**
@@ -15,7 +16,7 @@ export type ApplySourcePatchesResult =
  */
 export function applySourcePatches(source: string, patches: readonly SourcePatch[]): ApplySourcePatchesResult {
   if (patches.length === 0) {
-    return { kind: "success", source };
+    return { kind: "success", source: unchangedSource(source) };
   }
 
   const sorted = [...patches].sort((left, right) => {
@@ -26,7 +27,6 @@ export function applySourcePatches(source: string, patches: readonly SourcePatch
   });
 
   let cursor = 0;
-  let output = "";
   for (const patch of sorted) {
     const from = patch.oldSpan.from;
     const to = patch.oldSpan.to;
@@ -39,12 +39,9 @@ export function applySourcePatches(source: string, patches: readonly SourcePatch
     if (from < cursor) {
       return { kind: "invalid", reason: "overlapping" };
     }
-    output += source.slice(cursor, from);
-    output += patch.replacement;
     cursor = to;
   }
-  output += source.slice(cursor);
-  return { kind: "success", source: output };
+  return { kind: "success", source: applyFragments(source, sorted.map(patch => ({ span: patch.oldSpan, fragment: patch.replacement }))) };
 }
 
 /**
@@ -60,9 +57,14 @@ export function patchesMatchSourceTransition(
   return applied.kind === "success" && applied.source === next;
 }
 
+/** The patches that undo `patches`, which were applied to `previous`. */
+export function invertSourcePatches(previous: string, patches: readonly SourcePatch[]): SourcePatch[] {
+  return patches.map(patch => ({ oldSpan: patch.newSpan, newSpan: patch.oldSpan, replacement: sourceSlice(previous, patch.oldSpan) }));
+}
+
 /** Compose sequential edit steps without turning separate changes into one broad replacement. */
 export function composeSourcePatches(source: string, steps: readonly (readonly SourcePatch[])[]): SourcePatch[] {
-  type Piece = { from: number; to: number } | { text: string };
+  type Piece = { from: number; to: number } | { text: TikzFragment };
   const pieces: Piece[] = [{ from: 0, to: source.length }];
   const length = (piece: Piece) => "text" in piece ? piece.text.length : piece.to - piece.from;
   const split = (offset: number): number => {
@@ -74,7 +76,7 @@ export function composeSourcePatches(source: string, steps: readonly (readonly S
       if (offset < position + size) {
         const cut = offset - position;
         pieces.splice(index, 1, ...("text" in piece
-          ? [{ text: piece.text.slice(0, cut) }, { text: piece.text.slice(cut) }]
+          ? [{ text: sliceFragment(piece.text, 0, cut) }, { text: sliceFragment(piece.text, cut) }]
           : [{ from: piece.from, to: piece.from + cut }, { from: piece.from + cut, to: piece.to }]));
         return index + 1;
       }
@@ -94,17 +96,18 @@ export function composeSourcePatches(source: string, steps: readonly (readonly S
   const result: SourcePatch[] = [];
   let oldFrom = 0;
   let newFrom = 0;
-  let replacement = "";
+  let replacementParts: TikzFragment[] = [];
   const flush = (oldTo: number) => {
+    const replacement = joinFragments(replacementParts);
     if (source.slice(oldFrom, oldTo) !== replacement) {
       result.push({ oldSpan: { from: oldFrom, to: oldTo },
         newSpan: { from: newFrom, to: newFrom + replacement.length }, replacement });
     }
     newFrom += replacement.length;
-    replacement = "";
+    replacementParts = [];
   };
   for (const piece of pieces) {
-    if ("text" in piece) replacement += piece.text;
+    if ("text" in piece) replacementParts.push(piece.text);
     else {
       flush(piece.from);
       oldFrom = piece.to;

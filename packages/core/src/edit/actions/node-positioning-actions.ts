@@ -1,3 +1,4 @@
+import { EMPTY_FRAGMENT, layout, legacyText, sliceFragment, tikz, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import type { NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
@@ -128,7 +129,8 @@ export function preflightPositionNodeRelativeToAction(
     return unsupportedPreflight(placement.reason);
   }
 
-  const positioningEntry = rewritePositioningFromContext(placement.currentCenter, placement.context);
+  const positioningText = rewritePositioningFromContext(placement.currentCenter, placement.context);
+  const positioningEntry = positioningText === null ? null : legacyText(positioningText);
   if (!positioningEntry) {
     return unsupportedPreflight("Could not serialize relative positioning option.");
   }
@@ -390,10 +392,10 @@ function rewriteNodePlacementSource(input: {
   source: string;
   nodeRef: NodeRef;
   target: PropertyTarget;
-  placementEntry: string | null;
-  insertAbsoluteAt: string | null;
+  placementEntry: TikzFragment | null;
+  insertAbsoluteAt: TikzFragment | null;
   removeInlineAt: boolean;
-}): { source: string; patches: ReturnType<typeof applyTextReplacements>["patches"] } | null {
+}): { source: EditedSource; patches: ReturnType<typeof applyTextReplacements>["patches"] } | null {
   const replacements: TextReplacement[] = [];
 
   const nodeOptions = input.nodeRef.node.options;
@@ -419,14 +421,14 @@ function rewriteNodePlacementSource(input: {
   } else if (input.placementEntry) {
     replacements.push({
       span: { from: input.target.insertOffset, to: input.target.insertOffset },
-      text: wrapSerializedOptions(input.placementEntry, input.target.optionsFormat ?? "bracketed")
+      text: legacyText(wrapSerializedOptions(input.placementEntry, input.target.optionsFormat ?? "bracketed"))
     });
   }
 
   if (input.removeInlineAt) {
     const removal = resolveInlineAtRemovalSpan(input.source, input.nodeRef);
     if (removal) {
-      replacements.push({ span: removal, text: "" });
+      replacements.push({ span: removal, text: EMPTY_FRAGMENT });
     }
   }
 
@@ -455,7 +457,7 @@ function rewriteNodePlacementSource(input: {
 
 function buildPlacementMutations(
   options: OptionListAst,
-  placementEntry: string | null
+  placementEntry: TikzFragment | null
 ): Map<string, OptionMutation> {
   const mutations = new Map<string, OptionMutation>();
   for (const entry of options.entries) {
@@ -467,7 +469,8 @@ function buildPlacementMutations(
   if (placementEntry) {
     const equalsIndex = placementEntry.indexOf("=");
     const key = normalizeOptionKey(equalsIndex >= 0 ? placementEntry.slice(0, equalsIndex) : placementEntry);
-    const value = equalsIndex >= 0 ? placementEntry.slice(equalsIndex + 1).trim() : "";
+    const raw = equalsIndex >= 0 ? sliceFragment(placementEntry, equalsIndex + 1) : EMPTY_FRAGMENT;
+    const value = sliceFragment(raw, raw.length - raw.trimStart().length, raw.trimEnd().length);
     mutations.set(key, { kind: "set", value });
   }
   return mutations;
@@ -763,12 +766,12 @@ function findPlacementOption(options: OptionListAst | undefined, key: string): O
   return null;
 }
 
-function buildInlineAtInsertion(source: string, offset: number, coordinate: string): string {
+function buildInlineAtInsertion(source: string, offset: number, coordinate: TikzFragment): TikzFragment {
   const previous = offset > 0 ? source[offset - 1] ?? "" : "";
   const next = offset < source.length ? source[offset] ?? "" : "";
   const leading = previous && !/\s/u.test(previous) ? " " : "";
   const trailing = next && !/\s/u.test(next) && next !== ";" ? " " : "";
-  return `${leading}at ${coordinate}${trailing}`;
+  return tikz`${layout(leading)}at ${coordinate}${layout(trailing)}`;
 }
 
 function resolveInlineAtInsertionOffset(source: string, node: NodeItem): number {
@@ -778,15 +781,15 @@ function resolveInlineAtInsertionOffset(source: string, node: NodeItem): number 
   return node.textSpan.from;
 }
 
-function formatPlacementCoordinateFromWorld(world: WorldPoint, transform?: FrameTransform): string {
+function formatPlacementCoordinateFromWorld(world: WorldPoint, transform?: FrameTransform): TikzFragment {
   if (transform) {
     const local = worldToLocal(world, transform);
     if (local) {
       const inSourceUnits = localToSourceUnits(local);
-      return `(${formatNumber(inSourceUnits.x)},${formatNumber(inSourceUnits.y)})`;
+      return legacyText(`(${formatNumber(inSourceUnits.x)},${formatNumber(inSourceUnits.y)})`);
     }
   }
-  return `(${formatNumber(world.x * CM_PER_PT)},${formatNumber(world.y * CM_PER_PT)})`;
+  return legacyText(`(${formatNumber(world.x * CM_PER_PT)},${formatNumber(world.y * CM_PER_PT)})`);
 }
 
 function hasPathAttachment(elements: ReturnType<typeof evaluateTikzFigure>["scene"]["elements"], sourceId: string): boolean {

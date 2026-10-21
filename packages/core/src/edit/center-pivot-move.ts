@@ -1,3 +1,4 @@
+import { legacyText, type TikzFragment } from "./fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { PathItem, PathStatement, Span } from "../ast/types.js";
 import type { OptionEntry } from "../options/types.js";
@@ -24,7 +25,7 @@ export type CenteredPivotMovePlan = {
   kind: "success";
   framesBySource: ReadonlyMap<string, FrameTransform>;
   mutationsBySource: ReadonlyMap<string, ReadonlyMap<string, OptionMutation>>;
-  replacements: Array<{ span: Span; text: string }>;
+  replacements: Array<{ span: Span; text: TikzFragment }>;
 } | { kind: "unsupported"; reason: string };
 
 /** Plan pivot and coordinate-frame changes together, against the gesture source. */
@@ -37,7 +38,7 @@ export function planCenteredPivotMoves(
 ): CenteredPivotMovePlan {
   const framesBySource = new Map<string, FrameTransform>();
   const mutationsBySource = new Map<string, ReadonlyMap<string, OptionMutation>>();
-  const replacements: Array<{ span: Span; text: string }> = [];
+  const replacements: Array<{ span: Span; text: TikzFragment }> = [];
   const parsed = parseTikzForEdit(source, parseOptions);
   const fingerprint = sourceFingerprintForEdit(source, parseOptions);
   const spans = new Map<string, number>();
@@ -90,8 +91,8 @@ export function planCenteredPivotMoves(
       return { kind: "unsupported", reason: "Centered-pivot move requires an invertible complete coordinate frame." };
     }
     framesBySource.set(sourceId, frame);
-    mutationsBySource.set(sourceId, new Map([[normalizeOptionKey(rotation.key), { kind: "set", value: nextValue }]]));
-    replacements.push({ span: rotation.span, text: nextEntry.raw });
+    mutationsBySource.set(sourceId, new Map([[normalizeOptionKey(rotation.key), { kind: "set", value: legacyText(nextValue) }]]));
+    replacements.push({ span: rotation.span, text: legacyText(nextEntry.raw) });
   }
   return { kind: "success", framesBySource, mutationsBySource, replacements };
 }

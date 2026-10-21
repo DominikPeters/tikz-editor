@@ -1,5 +1,6 @@
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
+import { EMPTY_FRAGMENT, layout, tikz, type TikzFragment } from "../edit/fragment.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import { normalizeOptionValue } from "../semantic/style/option-utils.js";
 import {
@@ -37,9 +38,9 @@ export type BeamerOverlayPicture = {
  * list or a block (checked against LuaLaTeX). Its optional argument adds
  * picture options.
  */
-export const BEAMER_TIKZ_LAYER_DEFINITION = String.raw`\newenvironment{tikzlayer}[1][]` + "\n" +
-  String.raw`  {\par\nointerlineskip\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}, #1]}` + "\n" +
-  String.raw`  {\end{tikzpicture}}`;
+export const BEAMER_TIKZ_LAYER_DEFINITION = tikz`\newenvironment{tikzlayer}[1][]
+  {\par\nointerlineskip\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}, #1]}
+  {\end{tikzpicture}}`;
 /** What a `tikzlayer` implies for the picture inside, before its own options. */
 export const BEAMER_TIKZ_LAYER_OPTIONS = "remember picture, overlay, shift={(current page.south west)}";
 
@@ -261,10 +262,22 @@ export function beamerOverlayPictureOrigin(
 }
 
 /** A new drawing layer: coordinates in cm from the page's lower-left corner. */
-export const BEAMER_TIKZ_LAYER = String.raw`\begin{tikzlayer}` + "\n" + String.raw`\end{tikzlayer}`;
+export const BEAMER_TIKZ_LAYER = tikz`\begin{tikzlayer}
+\end{tikzlayer}`;
 /** The same as a plain picture, where the document has a `tikzlayer` of its own. */
-export const BEAMER_DRAWING_LAYER = String.raw`\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}]` +
-  "\n" + String.raw`\end{tikzpicture}`;
+export const BEAMER_DRAWING_LAYER = tikz`\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}]
+\end{tikzpicture}`;
+/** After text, a `%` line keeps the layer's box in the last paragraph. */
+const COMMENT_JOIN = tikz`
+%
+`;
+/** After a list or block, the box starts a paragraph without its baseline glue. */
+const VERTICAL_JOIN = tikz`
+\nointerlineskip
+`;
+/** Shows the layer on every step of a frame with `\pause`. */
+const EVERY_STEP = tikz`\onslide<1->%
+`;
 
 /** Environments after whose end TeX is in vertical mode. */
 const VERTICAL_ENDS = new Set(["itemize", "enumerate", "description", "block", "alertblock", "exampleblock", "columns", "center", "quote", "quotation", "figure", "table"]);
@@ -284,7 +297,7 @@ const VERTICAL_ENDS = new Set(["itemize", "enumerate", "description", "block", "
 export function beamerDrawingLayerInsertions(
   context: BeamerSyntaxContext,
   bodySpan: Span
-): Array<{ at: number; text: string; definesLayer?: true }> {
+): Array<{ at: number; text: TikzFragment; definesLayer?: true }> {
   const source = context.source;
   let at = bodySpan.to;
   while (at > bodySpan.from && /\s/u.test(source.charAt(at - 1))) at -= 1;
@@ -298,15 +311,15 @@ export function beamerDrawingLayerInsertions(
   }
   const covered = context.syntax.controlsIn({ from: bodySpan.from, to: at })
     .some(control => control.name === "pause" || control.name === "onslide");
-  const reveal = covered ? "\\onslide<1->%\n" : "";
-  const paragraph = at === bodySpan.from ? "\n" : "\n\n";
+  const reveal = covered ? EVERY_STEP : EMPTY_FRAGMENT;
+  const paragraph = layout(at === bodySpan.from ? "\n" : "\n\n");
   const state = beamerTikzLayerState(source);
-  const layers = state === "theirs" ? [] : [{ at, text: paragraph + reveal + BEAMER_TIKZ_LAYER, ...(state === "none" && { definesLayer: true as const }) }];
-  const alone = { at, text: paragraph + reveal + BEAMER_DRAWING_LAYER };
+  const layers = state === "theirs" ? [] : [{ at, text: tikz`${paragraph}${reveal}${BEAMER_TIKZ_LAYER}`, ...(state === "none" && { definesLayer: true as const }) }];
+  const alone = { at, text: tikz`${paragraph}${reveal}${BEAMER_DRAWING_LAYER}` };
   if (last === bodySpan.from) return [...layers, alone];
   const vertical = beamerEnvironmentBoundariesIn(context, bodySpan)
     .some(token => token.kind === "end" && token.span.to === last && VERTICAL_ENDS.has(token.name));
-  return [...layers, { at, text: (vertical ? "\n\\nointerlineskip\n" : "\n%\n") + reveal + BEAMER_DRAWING_LAYER }, alone];
+  return [...layers, { at, text: tikz`${vertical ? VERTICAL_JOIN : COMMENT_JOIN}${reveal}${BEAMER_DRAWING_LAYER}` }, alone];
 }
 
 /** An empty generated layer with the glue that joined it to the frame. */

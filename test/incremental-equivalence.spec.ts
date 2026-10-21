@@ -5,6 +5,7 @@ import type { SourcePatch } from "../packages/core/src/edit/types.js";
 import { createIncrementalParseSession, parseTikz } from "../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
 import { createIncrementalSemanticSession } from "../packages/core/src/semantic/incremental.js";
+import { fragment } from "./fragment-helpers.js";
 
 type IncrementalFrame = {
   source: string;
@@ -196,7 +197,7 @@ function computeSinglePatch(oldSource: string, newSource: string): SourcePatch {
   return {
     oldSpan: { from: prefix, to: oldSuffix },
     newSpan: { from: prefix, to: newSuffix },
-    replacement: newSource.slice(prefix, newSuffix)
+    replacement: fragment(newSource.slice(prefix, newSuffix))
   };
 }
 

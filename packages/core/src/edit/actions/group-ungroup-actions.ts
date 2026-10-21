@@ -1,3 +1,4 @@
+import { legacyText, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
@@ -158,7 +159,7 @@ export function applyUngroupElementsAction(
     .map((snippet) => reindentInlineStatement(snippet, indent))
     .join(separator);
 
-  const applied = applyTextReplacements(source, [{ span: ref.span, text: replacementText }]);
+  const applied = applyTextReplacements(source, [{ span: ref.span, text: legacyText(replacementText) }]);
   const appliedReplacement = requireArrayValue(applied.applied, 0);
 
   let selectedSourceIds: string[] | undefined;
@@ -193,7 +194,7 @@ type GroupCandidate = {
 
 type GroupReplacement = {
   span: Span;
-  text: string;
+  text: TikzFragment;
   scopeLocalSpan: Span;
 };
 
@@ -409,7 +410,7 @@ function buildGroupReplacement(input: {
 
   return {
     span: replacementSpan,
-    text,
+    text: legacyText(text),
     scopeLocalSpan: {
       from: scopeLocalFrom,
       to: scopeLocalTo

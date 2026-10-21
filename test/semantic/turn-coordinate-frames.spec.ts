@@ -9,7 +9,7 @@ import { pointAtPlacementSegment, tangentAtPlacementSegment } from "../../packag
 import { createIncrementalSemanticSession } from "../../packages/core/src/semantic/incremental.js";
 import { evaluateTikzFigure, evaluateTikzFigureAsync } from "../../packages/core/src/semantic/evaluate.js";
 import { parseTikz } from "../../packages/core/src/parser/index.js";
-import { computeMinimalReplacementPatch } from "../../packages/core/src/edit/patch.js";
+import { documentDiffPatch } from "../../packages/core/src/edit/patch.js";
 import type { ScenePathCommand } from "../../packages/core/src/semantic/types.js";
 import { applyEditAction } from "../../packages/core/src/edit/actions.js";
 
@@ -182,7 +182,7 @@ describe("polar turn coordinate frames", () => {
     const nextParsed = parseTikz(next);
     const fresh = evaluateTikzFigure(nextParsed.figure, next);
     const actual = session.evaluate({ source: next, figure: nextParsed.figure, hints: {
-      changedSourceIds: [parsed.figure.body[0].id], sourcePatches: [computeMinimalReplacementPatch(source, next)],
+      changedSourceIds: [parsed.figure.body[0].id], sourcePatches: [documentDiffPatch(source, next)],
     } });
     expect(actual.semantic).toEqual(fresh);
     expect(actual.stats.reusedStatementCount).toBeGreaterThan(0);

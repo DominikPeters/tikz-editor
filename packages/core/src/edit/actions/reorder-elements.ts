@@ -1,3 +1,4 @@
+import { joinFragments, layout, sourceSlice, unchangedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
@@ -21,7 +22,7 @@ export type ReorderDirection = "sendToBack" | "sendBackward" | "bringForward" | 
 
 export type ReorderReplacement = {
   span: Span;
-  text: string;
+  text: TikzFragment;
   newSpansById: Map<string, Span>;
 };
 
@@ -49,7 +50,7 @@ export function applyReorderElementsAction(
   }
 
   const identitySpans = new Map(initialSnapshot.all.map(ref => [ref.id, { ...ref.span }]));
-  let currentSource = source;
+  let currentSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
 
   for (const group of groups) {
@@ -160,7 +161,7 @@ export function buildParentReorderReplacement(
   const indent = lineIndentAtOffset(source, requireArrayValue(sortedRefs, 0).span.from);
   const separator = resolveReorderStatementSeparator(source, sortedRefs, indent);
 
-  let text = "";
+  const parts: TikzFragment[] = [];
   let cursor = replacementSpan.from;
   const newSpansById = new Map<string, Span>();
   for (const [index, id] of orderedIds.entries()) {
@@ -170,24 +171,24 @@ export function buildParentReorderReplacement(
       continue;
     }
 
-    const statementText = source.slice(ref.span.from, ref.span.to);
+    const statementText = sourceSlice(source, ref.span);
     newSpansById.set(id, {
       from: cursor,
       to: cursor + statementText.length
     });
 
-    text += statementText;
+    parts.push(statementText);
     cursor += statementText.length;
 
     if (index < orderedIds.length - 1) {
-      text += separator;
+      parts.push(layout(separator));
       cursor += separator.length;
     }
   }
 
   return {
     span: replacementSpan,
-    text,
+    text: joinFragments(parts),
     newSpansById
   };
 }
