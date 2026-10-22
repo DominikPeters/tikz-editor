@@ -202,7 +202,7 @@ statement of that frame.
 | statement entries | `semantic.siteContexts.statementEntries`, one per evaluated statement in order; a scope's `:leave` step holds the state at the end of its body; `\foreach` copies give one entry per iteration | built |
 | figure end | `semantic.siteContexts.figureEnd` | built |
 | node placement | canvas orientation (non-translations reset unless `transform shape`) composed with `every node` and the node's own options, in PGF order | with class 4 |
-| current point | for re-spelling relative coordinates | with class 5 |
+| current point | not recorded: `path-pieces.ts` replays it from the handles' worlds, checked against each relative handle's `relativeBase` | class 5 done |
 
 Incremental evaluation keeps each statement's entry context on its reused
 fragment: it is valid exactly as long as the reused elements are, since both
@@ -431,7 +431,7 @@ an evaluator fidelity question, not a writer one.
 | 2. offsets in a bare picture (done) | a copy is inserted unmoved and offset in the document it landed in, by the move machinery (no `offsetStatement`: the copy's own handles carry its frame). Repeat steps are world vectors, written by `writer.translated`; positioned nodes through `writer.positioning` (class 4) |
 | 3. new coordinates ignore axes and scopes (done) | insertion actions take world points, written at the gap or target-statement context. A core `addPath { start, segments, closed, style }` replaces app-side path and freehand string generation; `appendToPath` takes world segments. The app's `*InPictureCoordinates` mappings are deleted |
 | 4. positioning (done) | drags and `positionNodeRelativeTo` use `writer.positioning` (world directions, canvas distances), against handles that stand where the positioning puts the node. Copies and alignments are exact: they bypass the cardinal snap |
-| 5. relative coordinates in rewritten paths | restructuring actions compute anchors' world positions and re-spell each one at its new place: `writer.point` for absolute, `writer.vector` from the new predecessor for `+`/`++` |
+| 5. relative coordinates in rewritten paths | restructuring actions build the path from pieces; `spellPath` keeps every coordinate's text unless it is relative and read from another point now, then `writer.point` with that point as `relativeBase` (absolute where nothing comes before it) |
 
 ## Product decisions
 
@@ -586,6 +586,25 @@ an evaluator fidelity question, not a writer one.
      it now refuses a node positioned relative to, or placed at, a node
      the copy does not declare (PGF reads anchors with the transformation
      undone).
+   - Class 5 done: the 18 recorded failures pass (18 → 0). Restructuring
+     actions (reverse, split, join, delete point, close/open, point kind,
+     insert point, prepend) build the new path from pieces: the start, the
+     path's own segments, and new lines and curves of its coordinates or of
+     points the writer wrote. `spellPath` replays how TikZ reads them
+     (`tikz.code.tex`: a coordinate is read from the current point, which a
+     `+` one does not update; a first control from where the curve starts,
+     the end from the current point, a second control from the end;
+     controls never update it), on the old path and on the new one. A
+     relative coordinate whose base changes is written again from the new
+     one (`CoordinateSite.relativeBase`), exactly, not rounded like a drag;
+     where nothing comes before it, it becomes absolute; every other
+     coordinate keeps its text, and a path without relative coordinates
+     comes out as before. The replayed bases are checked against the
+     evaluator's `relativeBase`, and a disagreement refuses. A `turn`
+     coordinate is refused once anything before it changes. Most of the
+     failures were the anchor text dropping its `++`: a coordinate's span
+     leaves the prefix out. `explicitSegmentText` and its `legacyText` are
+     gone. Exception entries: reviewed 78 → 80, migration 58 → 57.
 5. **Remaining writers.** Radii and other frame-dependent lengths (after
    adding circle/ellipse resize cases), SVG import, assistant handlers,
    semantic-internal source (`fit`, `tree-child`, `label-quotes`) or audited

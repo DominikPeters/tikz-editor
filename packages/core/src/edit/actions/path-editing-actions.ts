@@ -1,10 +1,11 @@
-import { EMPTY_FRAGMENT, layout, legacyText, sourceSlice, tikz, type CoordinateText, type EditedSource, type TikzFragment } from "../fragment.js";
+import { EMPTY_FRAGMENT, layout, tikz, type CoordinateText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { worldPoint, worldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldPoint, WorldVector } from "../../coords/points.js";
-import { isCoordinateEditHandle, type EditHandle } from "../../semantic/types.js";
+import { isCoordinateEditHandle, type EditHandle, type EvaluateOptions } from "../../semantic/types.js";
+import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { sameSiteContext } from "../../semantic/site-context.js";
 import { createCoordinateWriter, type WriterResult } from "../writer/index.js";
 import { CoordinateWriteRefused } from "../new-statement.js";
@@ -27,9 +28,7 @@ import {
 } from "../statement-ops.js";
 import {
   analyzeExplicitPathStatement,
-  buildPathBodyFromSegments,
   buildStatementText,
-  joinPathParts,
   resolveActivePathPointHandle,
   resolveEligibleExplicitPath,
   resolvePathControlHandle,
@@ -37,7 +36,8 @@ import {
   type PathPointKind
 } from "../path-editing.js";
 import type { SourcePatch } from "../types.js";
-import type { EditParseOptions } from "../parse-options.js";
+import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
+import { explicitPiece, itemPoint, pathEndState, segmentPieces, spellPath, type PathPiece, type PathPoint, type PathState } from "../path-pieces.js";
 
 
 export type SplitPathAction = { elementId: string; handleId: string };
@@ -71,11 +71,68 @@ function wv(x: number, y: number): WorldVector {
   return worldVector(pt(x), pt(y));
 }
 
+/**
+ * Where a rewritten path's points are: the caller's handles when they are
+ * this source's, else the source evaluated. Asked for only when a relative
+ * coordinate has to be written again.
+ */
+function pathHandles(
+  source: string,
+  editHandles: readonly EditHandle[],
+  sourceId: string,
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
+): () => readonly EditHandle[] {
+  let evaluated: readonly EditHandle[] | undefined;
+  return () => {
+    const own = editHandles.filter(handle => handle.sourceRef.sourceId === sourceId);
+    if (own.length > 0 && own.every(handle => source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to) === handle.sourceText)) {
+      return editHandles;
+    }
+    evaluated ??= evaluateTikzFigure(parseTikzForEdit(source, parseOptions).figure, source, evaluateOptions).editHandles;
+    return evaluated;
+  };
+}
+
+/** The path's statement with `pieces` as its body. */
+function spelledStatement(
+  source: string,
+  analysis: ExplicitPathAnalysis,
+  pieces: readonly PathPiece[],
+  handles: () => readonly EditHandle[],
+  continuesFrom?: () => PathState | null
+): { kind: "ok"; text: TikzFragment } | { kind: "unsupported"; reason: string } {
+  const body = spellPath({ source, analysis, pieces, handles, ...(continuesFrom ? { continuesFrom } : {}) });
+  if (body.kind !== "ok") return { kind: "unsupported", reason: `Cannot keep the path's relative coordinates: ${body.reason}.` };
+  return { kind: "ok", text: buildStatementText(source, analysis, body.fragment) };
+}
+
+function rewrittenPath(
+  source: string,
+  analysis: ExplicitPathAnalysis,
+  replacement: TikzFragment,
+  unchangedReason: string,
+  ids: { changed: readonly string[]; selected?: readonly string[] }
+): EditActionResultLike {
+  const rewritten = replaceSourceSpan(source, analysis.statement.span, replacement);
+  if (!rewritten) {
+    return { kind: "unsupported", reason: unchangedReason };
+  }
+  return {
+    kind: "success",
+    newSource: rewritten.source,
+    patches: [rewritten.patch],
+    ...(ids.selected ? { selectedSourceIds: [...ids.selected] } : {}),
+    changedSourceIds: [...ids.changed]
+  };
+}
+
 export function applySplitPathAction(
   source: string,
   editHandles: readonly EditHandle[],
   action: SplitPathAction,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  evaluateOptions?: EvaluateOptions
 ): EditActionResultLike {
   const resolved = resolveEligibleExplicitPath(source, action.elementId, parseOptions);
   if (resolved.kind !== "eligible") {
@@ -90,6 +147,7 @@ export function applySplitPathAction(
   if (anchorIndex <= 0 || (!analysis.closed && anchorIndex >= analysis.anchors.length - 1)) {
     return { kind: "unsupported", reason: "Only interior path points can split a path." };
   }
+  const handles = pathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions);
 
   if (!analysis.closed) {
     const firstSegments = analysis.segments
@@ -103,53 +161,31 @@ export function applySplitPathAction(
     if (firstSegments.length === 0 || secondSegments.length === 0) {
       return { kind: "unsupported", reason: "Split point must leave geometry on both sides." };
     }
-    const replacement = tikz`${buildStatementText(
-      source,
-      analysis,
-      buildPathBodyFromSegments(analysis, source, 0, firstSegments)
-    )}${layout(`\n${lineIndentAtOffset(source, analysis.statement.span.from)}`)}${buildStatementText(
-      source,
-      analysis,
-      buildPathBodyFromSegments(analysis, source, anchorIndex, secondSegments)
-    )}`;
-    const rewritten = replaceSourceSpan(source, analysis.statement.span, replacement);
-    if (!rewritten) {
-      return { kind: "unsupported", reason: "Split path would not change the source." };
-    }
-    return {
-      kind: "success",
-      newSource: rewritten.source,
-      patches: [rewritten.patch],
-      changedSourceIds: [action.elementId]
-    };
+    const first = spelledStatement(source, analysis, segmentPieces(analysis, 0, firstSegments), handles);
+    if (first.kind !== "ok") return first;
+    const second = spelledStatement(source, analysis, segmentPieces(analysis, anchorIndex, secondSegments), handles);
+    if (second.kind !== "ok") return second;
+    const replacement = tikz`${first.text}${layout(`\n${lineIndentAtOffset(source, analysis.statement.span.from)}`)}${second.text}`;
+    return rewrittenPath(source, analysis, replacement, "Split path would not change the source.", { changed: [action.elementId] });
   }
 
   const orderedSegments = orderedOpenSegmentsFromClosedPath(analysis, anchorIndex);
-  const openedBody = buildOpenedClosedPathBody(source, analysis, anchorIndex, orderedSegments);
-  if (!openedBody) {
+  const opened = openedClosedPathPieces(analysis, anchorIndex, orderedSegments);
+  if (!opened) {
     return { kind: "unsupported", reason: "Closed path could not be opened at that point." };
   }
-  const rewritten = replaceSourceSpan(
-    source,
-    analysis.statement.span,
-    buildStatementText(source, analysis, openedBody)
-  );
-  if (!rewritten) {
-    return { kind: "unsupported", reason: "Split path would not change the source." };
-  }
-  return {
-    kind: "success",
-    newSource: rewritten.source,
-    patches: [rewritten.patch],
-    changedSourceIds: [action.elementId]
-  };
+  const statement = spelledStatement(source, analysis, opened, handles);
+  if (statement.kind !== "ok") return statement;
+  return rewrittenPath(source, analysis, statement.text, "Split path would not change the source.", { changed: [action.elementId] });
 }
 
 export function applyJoinPathsAction(
   source: string,
+  editHandles: readonly EditHandle[],
   action: JoinPathsAction,
   deps: PathEditingDeps,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  evaluateOptions?: EvaluateOptions
 ): EditActionResultLike {
   const elementIds = deps.normalizeElementIds(action.elementIds);
   if (elementIds.length !== 2) {
@@ -178,97 +214,78 @@ export function applyJoinPathsAction(
     return { kind: "unsupported", reason: "Only open explicit paths can be joined." };
   }
 
-  const firstBody = buildPathBodyFromSegments(
-    firstResolved.analysis,
+  const first = firstResolved.analysis;
+  const second = secondResolved.analysis;
+  const allSegments = (analysis: ExplicitPathAnalysis) => analysis.segments.map((_, index) => index);
+  const firstHandles = pathHandles(source, editHandles, first.statement.id, parseOptions, evaluateOptions);
+  const secondHandles = pathHandles(source, editHandles, second.statement.id, parseOptions, evaluateOptions);
+  const firstBody = spellPath({ source, analysis: first, pieces: segmentPieces(first, 0, allSegments(first)), handles: firstHandles });
+  // The second path goes on from where the first one ends.
+  const secondBody = spellPath({
     source,
-    0,
-    analysisSegmentIndices(firstResolved.analysis)
-  );
-  const secondBody = buildPathBodyFromSegments(
-    secondResolved.analysis,
-    source,
-    0,
-    analysisSegmentIndices(secondResolved.analysis)
-  );
-  const merged = buildStatementText(source, firstResolved.analysis, tikz`${firstBody} -- ${secondBody}`);
+    analysis: second,
+    pieces: segmentPieces(second, 0, allSegments(second)),
+    handles: secondHandles,
+    continuesFrom: () => pathEndState(source, first, firstHandles())
+  });
+  if (firstBody.kind !== "ok") return { kind: "unsupported", reason: `Cannot keep the path's relative coordinates: ${firstBody.reason}.` };
+  if (secondBody.kind !== "ok") return { kind: "unsupported", reason: `Cannot keep the path's relative coordinates: ${secondBody.reason}.` };
+  const merged = buildStatementText(source, first, tikz`${firstBody.fragment} -- ${secondBody.fragment}`);
   const replacements = applyTextReplacements(source, [
-    { span: firstResolved.analysis.statement.span, text: merged },
-    { span: secondResolved.analysis.statement.span, text: EMPTY_FRAGMENT }
+    { span: first.statement.span, text: merged },
+    { span: second.statement.span, text: EMPTY_FRAGMENT }
   ]);
   return {
     kind: "success",
     newSource: replacements.source,
     patches: replacements.patches,
-    selectedSourceIds: [firstResolved.analysis.statement.id],
+    selectedSourceIds: [first.statement.id],
     changedSourceIds: elementIds
   };
 }
 
 export function applyReversePathAction(
   source: string,
+  editHandles: readonly EditHandle[],
   action: ReversePathAction,
-  parseOptions: EditParseOptions = {}
-): EditActionResultLike {
-  const resolved = resolveEligibleExplicitPath(source, action.elementId, parseOptions);
-  if (resolved.kind !== "eligible") {
-    return { kind: "unsupported", reason: resolved.reason };
-  }
-
-  const reversedBody = buildReversedPathBody(source, resolved.analysis);
-  if (!reversedBody) {
-    return { kind: "unsupported", reason: "Reverse path would not change the source." };
-  }
-
-  const rewritten = replaceSourceSpan(
-    source,
-    resolved.analysis.statement.span,
-    buildStatementText(source, resolved.analysis, reversedBody)
-  );
-  if (!rewritten) {
-    return { kind: "unsupported", reason: "Reverse path would not change the source." };
-  }
-
-  return {
-    kind: "success",
-    newSource: rewritten.source,
-    patches: [rewritten.patch],
-    selectedSourceIds: [action.elementId],
-    changedSourceIds: [action.elementId]
-  };
-}
-
-export function applyToggleClosedPathAction(
-  source: string,
-  action: ToggleClosedPathAction,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  evaluateOptions?: EvaluateOptions
 ): EditActionResultLike {
   const resolved = resolveEligibleExplicitPath(source, action.elementId, parseOptions);
   if (resolved.kind !== "eligible") {
     return { kind: "unsupported", reason: resolved.reason };
   }
   const analysis = resolved.analysis;
+  const reversed = reversedPathPieces(analysis);
+  if (!reversed) {
+    return { kind: "unsupported", reason: "Reverse path would not change the source." };
+  }
+  const statement = spelledStatement(source, analysis, reversed, pathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions));
+  if (statement.kind !== "ok") return statement;
+  return rewrittenPath(source, analysis, statement.text, "Reverse path would not change the source.", { changed: [action.elementId], selected: [action.elementId] });
+}
+
+export function applyToggleClosedPathAction(
+  source: string,
+  editHandles: readonly EditHandle[],
+  action: ToggleClosedPathAction,
+  parseOptions: EditParseOptions = {},
+  evaluateOptions?: EvaluateOptions
+): EditActionResultLike {
+  const resolved = resolveEligibleExplicitPath(source, action.elementId, parseOptions);
+  if (resolved.kind !== "eligible") {
+    return { kind: "unsupported", reason: resolved.reason };
+  }
+  const analysis = resolved.analysis;
+  const handles = pathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions);
+  const allSegments = analysisSegmentIndices(analysis);
   if (action.closed) {
     if (analysis.closed) {
       return { kind: "unsupported", reason: "The selected path is already closed." };
     }
-    const rewritten = replaceSourceSpan(
-      source,
-      analysis.statement.span,
-      buildStatementText(
-        source,
-        analysis,
-        tikz`${buildPathBodyFromSegments(analysis, source, 0, analysisSegmentIndices(analysis))} -- cycle`
-      )
-    );
-    if (!rewritten) {
-      return { kind: "unsupported", reason: "Close path would not change the source." };
-    }
-    return {
-      kind: "success",
-      newSource: rewritten.source,
-      patches: [rewritten.patch],
-      changedSourceIds: [action.elementId]
-    };
+    const statement = spelledStatement(source, analysis, [...segmentPieces(analysis, 0, allSegments), { kind: "line", target: "cycle" }], handles);
+    if (statement.kind !== "ok") return statement;
+    return rewrittenPath(source, analysis, statement.text, "Close path would not change the source.", { changed: [action.elementId] });
   }
 
   if (!analysis.closed) {
@@ -277,31 +294,18 @@ export function applyToggleClosedPathAction(
   if (analysis.closureKind == null) {
     return { kind: "unsupported", reason: "This closed path cannot be opened safely." };
   }
-  const segments =
-    analysis.closureKind === "curve-cycle"
-      ? analysis.segments.map((segment, index) => ({ segment, index })).filter(({ segment }) => !segment.closesPath).map(({ index }) => index)
-      : analysisSegmentIndices(analysis).slice(0, -1);
-  const rewritten = replaceSourceSpan(
-    source,
-    analysis.statement.span,
-    buildStatementText(source, analysis, buildPathBodyFromSegments(analysis, source, 0, segments))
-  );
-  if (!rewritten) {
-    return { kind: "unsupported", reason: "Open path would not change the source." };
-  }
-  return {
-    kind: "success",
-    newSource: rewritten.source,
-    patches: [rewritten.patch],
-    changedSourceIds: [action.elementId]
-  };
+  // Opening drops the closing segment.
+  const statement = spelledStatement(source, analysis, segmentPieces(analysis, 0, allSegments), handles);
+  if (statement.kind !== "ok") return statement;
+  return rewrittenPath(source, analysis, statement.text, "Open path would not change the source.", { changed: [action.elementId] });
 }
 
 export function applyDeletePathPointAction(
   source: string,
   editHandles: readonly EditHandle[],
   action: DeletePathPointAction,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  evaluateOptions?: EvaluateOptions
 ): EditActionResultLike {
   const resolved = resolveEligibleExplicitPath(source, action.elementId, parseOptions);
   if (resolved.kind !== "eligible") {
@@ -326,44 +330,28 @@ export function applyDeletePathPointAction(
   if (!previousSegment || !nextSegment) {
     return { kind: "unsupported", reason: "Could not resolve the segments around the selected point." };
   }
-  const replacementSegment = buildDeletedWorldPointReplacement(
-    source,
-    analysis,
-    previousSegment,
-    nextSegment,
-    nextSegment.closesPath || (analysis.closed && anchorIndex === 0) ? tikz`cycle` : undefined
-  );
-  if (!replacementSegment) {
+  const target: PathPoint | "cycle" = nextSegment.closesPath || (analysis.closed && anchorIndex === 0)
+    ? "cycle"
+    : itemPoint(requireArrayValue(analysis.anchors, nextSegment.endAnchorIndex).coordinateIndex);
+  const replacement = deletedPointReplacement(analysis, previousSegment, nextSegment, target);
+  if (!replacement) {
     return { kind: "unsupported", reason: "Deleting this point would require unsupported segment conversion." };
   }
 
-  const body = analysis.closed
-    ? buildClosedPathBodyAfterDeletedPoint(analysis, anchorIndex, previousSegment, nextSegment, replacementSegment)
-    : buildOpenPathBodyAfterDeletedPoint(analysis, previousSegment, nextSegment, replacementSegment);
-  if (!body) {
-    return { kind: "unsupported", reason: "Deleting this point would leave too few anchors." };
-  }
-  const rewritten = replaceSourceSpan(
-    source,
-    analysis.statement.span,
-    buildStatementText(source, analysis, body)
-  );
-  if (!rewritten) {
-    return { kind: "unsupported", reason: "Delete point would not change the source." };
-  }
-  return {
-    kind: "success",
-    newSource: rewritten.source,
-    patches: [rewritten.patch],
-    changedSourceIds: [action.elementId]
-  };
+  const pieces = analysis.closed
+    ? closedPathPiecesAfterDeletedPoint(analysis, anchorIndex, previousSegment, nextSegment, replacement)
+    : openPathPiecesAfterDeletedPoint(analysis, previousSegment, nextSegment, replacement);
+  const statement = spelledStatement(source, analysis, pieces, pathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions));
+  if (statement.kind !== "ok") return statement;
+  return rewrittenPath(source, analysis, statement.text, "Delete point would not change the source.", { changed: [action.elementId] });
 }
 
 export function applySetPathPointKindAction(
   source: string,
   editHandles: readonly EditHandle[],
   action: SetPathPointKindAction,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  evaluateOptions?: EvaluateOptions
 ): EditActionResultLike {
   const resolved = resolveEligibleExplicitPath(source, action.elementId, parseOptions);
   if (resolved.kind !== "eligible") {
@@ -394,35 +382,21 @@ export function applySetPathPointKindAction(
   if (action.pointKind === "smooth" && previousSegment.kind === "line" && nextSegment.kind === "line") {
     const writePoint = newPathPointWriter(editHandles, analysis.statement.id, source);
     const replacementSegments = writePoint &&
-      buildLineSegmentsSmoothReplacement(writePoint, analysis, previousSegment, nextSegment, beforeAnchor, handleResolution.handle.world, afterAnchor);
+      lineSegmentsSmoothReplacement(writePoint, analysis, previousSegment, nextSegment, beforeAnchor, handleResolution.handle.world, afterAnchor);
     if (!replacementSegments) {
       return { kind: "unsupported", reason: "Could not rewrite this polyline corner into a Bezier bend." };
     }
-    const bodyParts = [requireArrayValue(analysis.anchors, 0).raw];
+    const pieces: PathPiece[] = [{ kind: "start", point: itemPoint(requireArrayValue(analysis.anchors, 0).coordinateIndex) }];
     for (const segment of analysis.segments) {
       if (segment === previousSegment) {
-        bodyParts.push(...replacementSegments);
-        continue;
+        pieces.push(...replacementSegments);
+      } else if (segment !== nextSegment) {
+        pieces.push({ kind: "segment", segment });
       }
-      if (segment === nextSegment || segment.closesPath) {
-        continue;
-      }
-      bodyParts.push(segment.raw);
     }
-    const rewritten = replaceSourceSpan(
-      source,
-      analysis.statement.span,
-      buildStatementText(source, analysis, joinPathParts(bodyParts))
-    );
-    if (!rewritten) {
-      return { kind: "unsupported", reason: "Point is already using that handle configuration." };
-    }
-    return {
-      kind: "success",
-      newSource: rewritten.source,
-      patches: [rewritten.patch],
-      changedSourceIds: [action.elementId]
-    };
+    const statement = spelledStatement(source, analysis, pieces, pathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions));
+    if (statement.kind !== "ok") return statement;
+    return rewrittenPath(source, analysis, statement.text, "Point is already using that handle configuration.", { changed: [action.elementId] });
   }
 
   if (previousSegment.kind !== "cubic" || nextSegment.kind !== "cubic") {
@@ -520,160 +494,129 @@ function orderedOpenSegmentsFromClosedPath(analysis: ExplicitPathAnalysis, ancho
   return ordered;
 }
 
-function buildOpenedClosedPathBody(
-  source: string,
+function openedClosedPathPieces(
   analysis: ExplicitPathAnalysis,
   anchorIndex: number,
   orderedSegments: readonly number[]
-): TikzFragment | null {
+): PathPiece[] | null {
   if (orderedSegments.length === 0) {
     return null;
   }
-  const parts = [requireArrayValue(analysis.anchors, anchorIndex).raw];
+  const pieces: PathPiece[] = [{ kind: "start", point: itemPoint(requireArrayValue(analysis.anchors, anchorIndex).coordinateIndex) }];
   for (const segmentIndex of orderedSegments) {
-    const segment = requireArrayValue(analysis.segments, segmentIndex);
-    parts.push(segment.raw);
+    pieces.push({ kind: "segment", segment: requireArrayValue(analysis.segments, segmentIndex) });
   }
   const closingSegment = analysis.segments.find(
     (segment) => segment.closesPath && segment.startAnchorIndex === requireArrayValue(analysis.segments, requireArrayValue(orderedSegments, orderedSegments.length - 1)).endAnchorIndex
   );
   if (closingSegment) {
-    parts.push(explicitSegmentText(source, analysis, closingSegment));
+    pieces.push(explicitPiece(analysis, closingSegment));
   }
-  return joinPathParts(parts);
+  return pieces;
 }
 
-function buildReversedPathBody(source: string, analysis: ExplicitPathAnalysis): TikzFragment | null {
+function reversedPathPieces(analysis: ExplicitPathAnalysis): PathPiece[] | null {
   if (analysis.segments.length === 0) {
     return null;
   }
+  const anchorPoint = (index: number) => itemPoint(requireArrayValue(analysis.anchors, index).coordinateIndex);
+  const reversedSegment = (segment: ExplicitPathAnalysis["segments"][number], target: PathPoint | "cycle"): PathPiece => {
+    if (segment.kind === "line") return { kind: "line", target };
+    // Run backwards, a curve meets its controls in the other order.
+    return segment.usedAnd
+      ? { kind: "curve", control1: itemPoint(segment.control2Index), control2: itemPoint(segment.control1Index), target }
+      : { kind: "curve", control1: itemPoint(segment.control1Index), control2: null, target };
+  };
 
   if (!analysis.closed) {
-    const lastAnchor = requireArrayValue(analysis.anchors, analysis.anchors.length - 1);
-    const parts = [lastAnchor.raw];
+    const pieces: PathPiece[] = [{ kind: "start", point: anchorPoint(analysis.anchors.length - 1) }];
     for (let index = analysis.segments.length - 1; index >= 0; index -= 1) {
       const segment = requireArrayValue(analysis.segments, index);
-      if (segment.closesPath) {
-        continue;
-      }
-      const reversed = reversedSegmentText(source, analysis, segment);
-      if (!reversed) {
-        return null;
-      }
-      parts.push(reversed);
+      if (!segment.closesPath) pieces.push(reversedSegment(segment, anchorPoint(segment.startAnchorIndex)));
     }
-    return joinPathParts(parts);
+    return pieces;
   }
 
   const closingSegment = analysis.segments.find((segment) => segment.closesPath);
-  const firstAnchor = analysis.anchors[0];
-  if (!closingSegment || !firstAnchor) {
+  if (!closingSegment || analysis.anchors.length === 0) {
     return null;
   }
-
-  const parts = [firstAnchor.raw];
-  const reversedClosing = reversedSegmentText(source, analysis, closingSegment);
-  if (!reversedClosing) {
-    return null;
-  }
-  parts.push(reversedClosing);
-
+  const pieces: PathPiece[] = [{ kind: "start", point: anchorPoint(0) }, reversedSegment(closingSegment, anchorPoint(closingSegment.startAnchorIndex))];
   for (let index = analysis.segments.length - 1; index >= 0; index -= 1) {
     const segment = requireArrayValue(analysis.segments, index);
-    if (segment.closesPath) {
-      continue;
-    }
-    const reversed = reversedSegmentText(source, analysis, segment, { useCycleTarget: index === 0 });
-    if (!reversed) {
-      return null;
-    }
-    parts.push(reversed);
+    if (!segment.closesPath) pieces.push(reversedSegment(segment, index === 0 ? "cycle" : anchorPoint(segment.startAnchorIndex)));
   }
-
-  return joinPathParts(parts);
+  return pieces;
 }
 
-function buildDeletedWorldPointReplacement(
-  source: string,
+function deletedPointReplacement(
   analysis: ExplicitPathAnalysis,
   previousSegment: ExplicitPathAnalysis["segments"][number],
   nextSegment: ExplicitPathAnalysis["segments"][number],
-  targetRawOverride?: TikzFragment
-): TikzFragment | null {
-  const targetRaw = targetRawOverride ?? requireArrayValue(analysis.anchors, nextSegment.endAnchorIndex).raw;
+  target: PathPoint | "cycle"
+): PathPiece | null {
   if (previousSegment.kind === "line" && nextSegment.kind === "line") {
-    return tikz`-- ${targetRaw}`;
+    return { kind: "line", target };
   }
   if (previousSegment.kind === "cubic" && nextSegment.kind === "cubic") {
     const control1 = analysis.statement.items[previousSegment.control1Index];
     const control2 = analysis.statement.items[nextSegment.control2Index];
-    if (!control1 || !control2 || control1.kind !== "Coordinate" || control2.kind !== "Coordinate") {
+    if (control1?.kind !== "Coordinate" || control2?.kind !== "Coordinate") {
       return null;
     }
-    const control1Raw = sourceSliceForItem(source, analysis, previousSegment.control1Index);
-    const control2Raw = sourceSliceForItem(source, analysis, nextSegment.control2Index);
-    if (!control1Raw || !control2Raw) {
-      return null;
-    }
-    return tikz`.. controls ${control1Raw} and ${control2Raw} .. ${targetRaw}`;
+    return { kind: "curve", control1: itemPoint(previousSegment.control1Index), control2: itemPoint(nextSegment.control2Index), target };
   }
   return null;
 }
 
-function buildOpenPathBodyAfterDeletedPoint(
+function openPathPiecesAfterDeletedPoint(
   analysis: ExplicitPathAnalysis,
   previousSegment: ExplicitPathAnalysis["segments"][number],
   nextSegment: ExplicitPathAnalysis["segments"][number],
-  replacementSegment: TikzFragment
-): TikzFragment {
-  const bodyParts = [requireArrayValue(analysis.anchors, 0).raw];
+  replacement: PathPiece
+): PathPiece[] {
+  const pieces: PathPiece[] = [{ kind: "start", point: itemPoint(requireArrayValue(analysis.anchors, 0).coordinateIndex) }];
   for (const segment of analysis.segments) {
     if (segment === previousSegment) {
-      bodyParts.push(replacementSegment);
-      continue;
+      pieces.push(replacement);
+    } else if (segment !== nextSegment && !segment.closesPath) {
+      pieces.push({ kind: "segment", segment });
     }
-    if (segment === nextSegment || segment.closesPath) {
-      continue;
-    }
-    bodyParts.push(segment.raw);
   }
-  return joinPathParts(bodyParts);
+  return pieces;
 }
 
-function buildClosedPathBodyAfterDeletedPoint(
+function closedPathPiecesAfterDeletedPoint(
   analysis: ExplicitPathAnalysis,
   anchorIndex: number,
   previousSegment: ExplicitPathAnalysis["segments"][number],
   nextSegment: ExplicitPathAnalysis["segments"][number],
-  replacementSegment: TikzFragment
-): TikzFragment | null {
+  replacement: PathPiece
+): PathPiece[] {
   if (anchorIndex !== 0) {
-    const bodyParts = [requireArrayValue(analysis.anchors, 0).raw];
+    const pieces: PathPiece[] = [{ kind: "start", point: itemPoint(requireArrayValue(analysis.anchors, 0).coordinateIndex) }];
     for (const segment of analysis.segments) {
       if (segment === previousSegment) {
-        bodyParts.push(replacementSegment);
-        continue;
+        pieces.push(replacement);
+      } else if (segment !== nextSegment) {
+        pieces.push({ kind: "segment", segment });
       }
-      if (segment === nextSegment) {
-        continue;
-      }
-      bodyParts.push(segment.raw);
     }
-    return joinPathParts(bodyParts);
+    return pieces;
   }
 
-  const bodyParts = [requireArrayValue(analysis.anchors, 1).raw];
+  // Deleting the first point starts the path at the second, closing back to it.
+  const pieces: PathPiece[] = [{ kind: "start", point: itemPoint(requireArrayValue(analysis.anchors, 1).coordinateIndex) }];
   for (const segment of analysis.segments) {
-    if (segment === previousSegment || segment === nextSegment) {
-      continue;
+    if (segment !== previousSegment && segment !== nextSegment) {
+      pieces.push({ kind: "segment", segment });
     }
-    bodyParts.push(segment.raw);
   }
-  bodyParts.push(replacementSegment);
-  return joinPathParts(bodyParts);
+  pieces.push(replacement);
+  return pieces;
 }
 
-function buildLineSegmentsSmoothReplacement(
+function lineSegmentsSmoothReplacement(
   writePoint: (point: WorldPoint) => WriterResult<CoordinateText>,
   analysis: ExplicitPathAnalysis,
   previousSegment: ExplicitPathAnalysis["segments"][number],
@@ -681,10 +624,7 @@ function buildLineSegmentsSmoothReplacement(
   beforeAnchor: WorldPoint,
   anchor: WorldPoint,
   afterAnchor: WorldPoint
-): [TikzFragment, TikzFragment] | null {
-  const firstTargetRaw = requireArrayValue(analysis.anchors, previousSegment.endAnchorIndex).raw;
-  const secondTargetRaw = requireArrayValue(analysis.anchors, nextSegment.endAnchorIndex).raw;
-
+): [PathPiece, PathPiece] | null {
   const prevLength = Math.hypot(anchor.x - beforeAnchor.x, anchor.y - beforeAnchor.y);
   const nextLength = Math.hypot(afterAnchor.x - anchor.x, afterAnchor.y - anchor.y);
   const tangent = normalizeVector(wv(afterAnchor.x - beforeAnchor.x, afterAnchor.y - beforeAnchor.y));
@@ -692,29 +632,23 @@ function buildLineSegmentsSmoothReplacement(
     return null;
   }
 
-  const control1 = wp(
-    beforeAnchor.x + (anchor.x - beforeAnchor.x) / 3,
-    beforeAnchor.y + (anchor.y - beforeAnchor.y) / 3
-  );
-  const control2 = wp(
-    anchor.x - tangent.x * (prevLength / 3),
-    anchor.y - tangent.y * (prevLength / 3)
-  );
-  const control3 = wp(
-    anchor.x + tangent.x * (nextLength / 3),
-    anchor.y + tangent.y * (nextLength / 3)
-  );
-  const control4 = wp(
-    afterAnchor.x - (afterAnchor.x - anchor.x) / 3,
-    afterAnchor.y - (afterAnchor.y - anchor.y) / 3
-  );
-
-  const written = [control1, control2, control3, control4].map(writePoint);
+  const controls = [
+    wp(beforeAnchor.x + (anchor.x - beforeAnchor.x) / 3, beforeAnchor.y + (anchor.y - beforeAnchor.y) / 3),
+    wp(anchor.x - tangent.x * (prevLength / 3), anchor.y - tangent.y * (prevLength / 3)),
+    wp(anchor.x + tangent.x * (nextLength / 3), anchor.y + tangent.y * (nextLength / 3)),
+    wp(afterAnchor.x - (afterAnchor.x - anchor.x) / 3, afterAnchor.y - (afterAnchor.y - anchor.y) / 3)
+  ];
+  const written: PathPoint[] = [];
+  for (const world of controls) {
+    const text = writePoint(world);
+    if (text.kind !== "ok") return null;
+    written.push({ kind: "written", text: text.fragment, world });
+  }
   const [c1, c2, c3, c4] = written;
-  if (c1?.kind !== "ok" || c2?.kind !== "ok" || c3?.kind !== "ok" || c4?.kind !== "ok") return null;
+  if (!c1 || !c2 || !c3 || !c4) return null;
   return [
-    tikz`.. controls ${c1.fragment} and ${c2.fragment} .. ${firstTargetRaw}`,
-    tikz`.. controls ${c3.fragment} and ${c4.fragment} .. ${secondTargetRaw}`
+    { kind: "curve", control1: c1, control2: c2, target: itemPoint(requireArrayValue(analysis.anchors, previousSegment.endAnchorIndex).coordinateIndex) },
+    { kind: "curve", control1: c3, control2: c4, target: itemPoint(requireArrayValue(analysis.anchors, nextSegment.endAnchorIndex).coordinateIndex) }
   ];
 }
 
@@ -733,50 +667,6 @@ function newPathPointWriter(
   if (!context || contexts.some(other => !sameSiteContext(other, context))) return null;
   const writer = createCoordinateWriter(source);
   return point => writer.point({ kind: "context", context }, point);
-}
-
-function sourceSliceForItem(source: string, analysis: ExplicitPathAnalysis, itemIndex: number): TikzFragment {
-  const item = requireArrayValue(analysis.statement.items, itemIndex);
-  return sourceSlice(source, item.span);
-}
-
-function reversedSegmentText(
-  source: string,
-  analysis: ExplicitPathAnalysis,
-  segment: ExplicitPathAnalysis["segments"][number],
-  options: { useCycleTarget?: boolean } = {}
-): TikzFragment | null {
-  const targetRaw = options.useCycleTarget ? tikz`cycle` : analysis.anchors[segment.startAnchorIndex]?.raw;
-  if (!targetRaw) {
-    return null;
-  }
-
-  if (segment.kind === "line") {
-    return tikz`-- ${targetRaw}`;
-  }
-
-  const control1Raw = sourceSliceForItem(source, analysis, segment.control1Index);
-  const control2Raw = sourceSliceForItem(source, analysis, segment.control2Index);
-
-  if (segment.usedAnd) {
-    return tikz`.. controls ${control2Raw} and ${control1Raw} .. ${targetRaw}`;
-  }
-  return tikz`.. controls ${control2Raw} .. ${targetRaw}`;
-}
-
-function explicitSegmentText(source: string, analysis: ExplicitPathAnalysis, segment: ExplicitPathAnalysis["segments"][number]): TikzFragment {
-  if (!segment.closesPath) {
-    return segment.raw;
-  }
-  const targetRaw = requireArrayValue(analysis.anchors, segment.endAnchorIndex).raw;
-  if (segment.kind === "line") {
-    return tikz`-- ${targetRaw}`;
-  }
-  const raw = source.slice(
-    requireArrayValue(analysis.statement.items, segment.operatorIndex).span.from,
-    requireArrayValue(analysis.statement.items, segment.targetIndex).span.to
-  );
-  return legacyText(raw.replace(/\bcycle\b/u, targetRaw));
 }
 
 function resolveAnchorWorld(
@@ -838,7 +728,8 @@ export function applyAppendToPathAction(
   source: string,
   editHandles: readonly EditHandle[],
   action: AppendToPathAction,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  evaluateOptions?: EvaluateOptions
 ): EditActionResultLike {
   const resolved = resolveEligibleExplicitPath(source, action.elementId, parseOptions);
   if (resolved.kind !== "eligible") {
@@ -860,6 +751,7 @@ export function applyAppendToPathAction(
     return written.fragment;
   };
   let segmentSource: TikzFragment | null;
+  let prependedEnd: WorldPoint | null = null;
   try {
     if (action.end === "end") {
       segmentSource = generateComplexPathSegmentSource(action.segments, point);
@@ -867,6 +759,7 @@ export function applyAppendToPathAction(
       // Prepend: the drawn segments, reversed, run from the new far end back to the old start.
       const reversed = reverseComplexPathSegments(action.start, action.segments, action.startAnchor);
       segmentSource = generateComplexPathPrependSource(reversed.startWorld, reversed.segments, reversed.startAnchor, point);
+      prependedEnd = reversed.segments.length > 1 ? requireArrayValue(reversed.segments, reversed.segments.length - 2).to : reversed.startWorld;
     }
   } catch (error) {
     if (error instanceof CoordinateWriteRefused) return { kind: "unsupported", reason: `Cannot write the new segments: ${error.message}.` };
@@ -874,39 +767,27 @@ export function applyAppendToPathAction(
   }
   if (!segmentSource) return { kind: "unsupported", reason: "Nothing to append." };
 
-  let newBody: TikzFragment;
-  const allSegmentIndices = analysis.segments.map((_, i) => i);
-  const existingBody = buildPathBodyFromSegments(analysis, source, 0, allSegmentIndices);
-
-  if (action.end === "end") {
-    newBody = tikz`${existingBody} ${segmentSource}`;
-  } else {
-    // Prepend: new segments go before the existing first anchor
-    newBody = tikz`${segmentSource} ${existingBody}`;
-  }
-
-  const rewritten = replaceSourceSpan(
+  // Prepended segments end where the path started, which its first point is then read from.
+  const reachedFrom = prependedEnd;
+  const existing = spellPath({
     source,
-    analysis.statement.span,
-    buildStatementText(source, analysis, newBody)
-  );
-  if (!rewritten) {
-    return { kind: "unsupported", reason: "Append would not change the source." };
-  }
-  return {
-    kind: "success",
-    newSource: rewritten.source,
-    patches: [rewritten.patch],
-    selectedSourceIds: [action.elementId],
-    changedSourceIds: [action.elementId]
-  };
+    analysis,
+    pieces: segmentPieces(analysis, 0, analysisSegmentIndices(analysis)),
+    handles: pathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions),
+    ...(reachedFrom ? { continuesFrom: () => ({ drawn: reachedFrom, current: reachedFrom }) } : {})
+  });
+  if (existing.kind !== "ok") return { kind: "unsupported", reason: `Cannot keep the path's relative coordinates: ${existing.reason}.` };
+  const newBody = action.end === "end" ? tikz`${existing.fragment} ${segmentSource}` : tikz`${segmentSource} ${existing.fragment}`;
+  return rewrittenPath(source, analysis, buildStatementText(source, analysis, newBody), "Append would not change the source.",
+    { changed: [action.elementId], selected: [action.elementId] });
 }
 
 export function applyInsertPathPointAction(
   source: string,
   editHandles: readonly EditHandle[],
   action: InsertPathPointAction,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  evaluateOptions?: EvaluateOptions
 ): EditActionResultLike {
   const resolved = resolveEligibleExplicitPath(source, action.elementId, parseOptions);
   if (resolved.kind !== "eligible") {
@@ -928,73 +809,52 @@ export function applyInsertPathPointAction(
   if (!writePoint) {
     return { kind: "unsupported", reason: "Inserting a point needs a path whose points share one coordinate frame." };
   }
-  const refusals: string[] = [];
-  const formatPt = (point: WorldPoint): TikzFragment => {
-    const written = writePoint(point);
-    if (written.kind === "ok") return written.fragment;
-    refusals.push(written.reason);
-    return EMPTY_FRAGMENT;
+  const written = (world: WorldPoint): PathPoint => {
+    const text = writePoint(world);
+    if (text.kind !== "ok") throw new CoordinateWriteRefused(text.reason);
+    return { kind: "written", text: text.fragment, world };
   };
+  const target: PathPoint | "cycle" = segment.closesPath ? "cycle" : itemPoint(requireArrayValue(analysis.anchors, segment.endAnchorIndex).coordinateIndex);
 
-  let replacementSegments: TikzFragment;
-
-  if (segment.kind === "line") {
-    const closest = closestPointOnLine(action.point, startWorld, endWorld);
-    const newPt = closest.point;
-    const endAnchorRaw = segment.closesPath ? tikz`cycle` : requireArrayValue(analysis.anchors, segment.endAnchorIndex).raw;
-    replacementSegments = tikz`-- ${formatPt(newPt)} -- ${endAnchorRaw}`;
-  } else {
-    const control1Item = analysis.statement.items[segment.control1Index];
-    const control2Item = analysis.statement.items[segment.control2Index];
-    if (control1Item?.kind !== "Coordinate" || control2Item?.kind !== "Coordinate") {
-      return { kind: "unsupported", reason: "Could not resolve cubic control points." };
-    }
-    const control1World = resolveControlWorld(editHandles, action.elementId, control1Item, source);
-    const control2World = segment.usedAnd
-      ? resolveControlWorld(editHandles, action.elementId, control2Item, source)
-      : control1World;
-    if (!control1World || !control2World) {
-      return { kind: "unsupported", reason: "Could not resolve cubic control point positions." };
-    }
-
-    const closest = closestPointOnCubic(action.point, startWorld, control1World, control2World, endWorld);
-    const { left, right } = subdivideCubicAt(closest.t, startWorld, control1World, control2World, endWorld);
-
-    const endAnchorRaw = segment.closesPath ? tikz`cycle` : requireArrayValue(analysis.anchors, segment.endAnchorIndex).raw;
-    replacementSegments =
-      tikz`.. controls ${formatPt(left[1])} and ${formatPt(left[2])} .. ${formatPt(left[3])} .. controls ${formatPt(right[1])} and ${formatPt(right[2])} .. ${endAnchorRaw}`;
-  }
-
-  if (refusals.length > 0) return { kind: "unsupported", reason: `Cannot write the new point: ${refusals.join("; ")}.` };
-
-  // Rebuild the path body with the segment replaced
-  const bodyParts = [requireArrayValue(analysis.anchors, 0).raw];
-  for (const [i, seg] of analysis.segments.entries()) {
-
-    if (i === action.segmentIndex) {
-      bodyParts.push(replacementSegments);
-    } else if (!seg.closesPath) {
-      bodyParts.push(seg.raw);
+  let replacement: PathPiece[];
+  try {
+    if (segment.kind === "line") {
+      const closest = closestPointOnLine(action.point, startWorld, endWorld);
+      replacement = [{ kind: "line", target: written(closest.point) }, { kind: "line", target }];
     } else {
-      // Closing segment not being replaced — keep it
-      bodyParts.push(seg.raw);
+      const control1Item = analysis.statement.items[segment.control1Index];
+      const control2Item = analysis.statement.items[segment.control2Index];
+      if (control1Item?.kind !== "Coordinate" || control2Item?.kind !== "Coordinate") {
+        return { kind: "unsupported", reason: "Could not resolve cubic control points." };
+      }
+      const control1World = resolveControlWorld(editHandles, action.elementId, control1Item, source);
+      const control2World = segment.usedAnd
+        ? resolveControlWorld(editHandles, action.elementId, control2Item, source)
+        : control1World;
+      if (!control1World || !control2World) {
+        return { kind: "unsupported", reason: "Could not resolve cubic control point positions." };
+      }
+
+      const closest = closestPointOnCubic(action.point, startWorld, control1World, control2World, endWorld);
+      const { left, right } = subdivideCubicAt(closest.t, startWorld, control1World, control2World, endWorld);
+      replacement = [
+        { kind: "curve", control1: written(left[1]), control2: written(left[2]), target: written(left[3]) },
+        { kind: "curve", control1: written(right[1]), control2: written(right[2]), target }
+      ];
     }
+  } catch (error) {
+    if (error instanceof CoordinateWriteRefused) return { kind: "unsupported", reason: `Cannot write the new point: ${error.message}.` };
+    throw error;
   }
 
-  const rewritten = replaceSourceSpan(
-    source,
-    analysis.statement.span,
-    buildStatementText(source, analysis, joinPathParts(bodyParts))
-  );
-  if (!rewritten) {
-    return { kind: "unsupported", reason: "Insert point would not change the source." };
+  const pieces: PathPiece[] = [{ kind: "start", point: itemPoint(requireArrayValue(analysis.anchors, 0).coordinateIndex) }];
+  for (const [index, own] of analysis.segments.entries()) {
+    if (index === action.segmentIndex) pieces.push(...replacement);
+    else pieces.push({ kind: "segment", segment: own });
   }
-  return {
-    kind: "success",
-    newSource: rewritten.source,
-    patches: [rewritten.patch],
-    changedSourceIds: [action.elementId]
-  };
+  const statement = spelledStatement(source, analysis, pieces, pathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions));
+  if (statement.kind !== "ok") return statement;
+  return rewrittenPath(source, analysis, statement.text, "Insert point would not change the source.", { changed: [action.elementId] });
 }
 
 function resolveControlWorld(

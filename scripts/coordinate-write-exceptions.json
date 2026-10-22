@@ -300,15 +300,6 @@
     },
     {
       "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/path-editing-actions.ts",
-      "declaration": "sourceSliceForItem",
-      "hash": "d0db4788f74c",
-      "count": 1,
-      "expression": "sourceSlice(source, item.span)"
-    },
-    {
-      "rule": "F2",
       "symbol": "unchangedSource",
       "file": "packages/core/src/edit/actions/reorder-elements.ts",
       "declaration": "applyReorderElementsAction.currentSource",
@@ -642,6 +633,33 @@
     },
     {
       "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/path-pieces.ts",
+      "declaration": "segmentText",
+      "hash": "58dd032e877d",
+      "count": 1,
+      "expression": "sourceSlice(source, { from: cursor, to })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/path-pieces.ts",
+      "declaration": "segmentText",
+      "hash": "a760bc3f0e92",
+      "count": 1,
+      "expression": "sourceSlice(source, { from: cursor, to: span.from })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/path-pieces.ts",
+      "declaration": "spellPath.pointText.text",
+      "hash": "416270cf9c73",
+      "count": 1,
+      "expression": "sourceSlice(source, coordinateAt(analysis, point.index).span)"
+    },
+    {
+      "rule": "F2",
       "symbol": "editedSlice",
       "file": "packages/core/src/edit/property-write-planner.ts",
       "declaration": "deriveSingleSourcePatch.replacement",
@@ -965,15 +983,6 @@
       "hash": "9915621a3a4f",
       "count": 1,
       "expression": "legacyText(`${formatNumber(resolvedDistance, pointDistanceFormatOptions(action.formatPrecision))}pt`)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/actions/path-editing-actions.ts",
-      "declaration": "explicitSegmentText",
-      "hash": "57e7d81490d5",
-      "count": 1,
-      "expression": "legacyText(raw.replace(/\\bcycle\\b/u, targetRaw))"
     },
     {
       "rule": "F2",

@@ -282,21 +282,21 @@ export function applyEditAction(
       case "connectHandle":
         return applyConnectHandle(source, editHandles, action.handleId, action.nodeName, action.nodeSourceId, action.anchor, parseOptions);
       case "splitPath":
-        return applySplitPath(source, editHandles, action, parseOptions);
+        return applySplitPath(source, editHandles, action, parseOptions, evaluateOptions);
       case "joinPaths":
-        return applyJoinPaths(source, action, parseOptions);
+        return applyJoinPaths(source, editHandles, action, parseOptions, evaluateOptions);
       case "reversePath":
-        return applyReversePath(source, action, parseOptions);
+        return applyReversePath(source, editHandles, action, parseOptions, evaluateOptions);
       case "toggleClosedPath":
-        return applyToggleClosedPath(source, action, parseOptions);
+        return applyToggleClosedPath(source, editHandles, action, parseOptions, evaluateOptions);
       case "deletePathPoint":
-        return applyDeletePathPoint(source, editHandles, action, parseOptions);
+        return applyDeletePathPoint(source, editHandles, action, parseOptions, evaluateOptions);
       case "setPathPointKind":
-        return applySetPathPointKind(source, editHandles, action, parseOptions);
+        return applySetPathPointKind(source, editHandles, action, parseOptions, evaluateOptions);
       case "appendToPath":
-        return applyAppendToPathAction(source, editHandles, action, parseOptions);
+        return applyAppendToPathAction(source, editHandles, action, parseOptions, evaluateOptions);
       case "insertPathPoint":
-        return applyInsertPathPointAction(source, editHandles, action, parseOptions);
+        return applyInsertPathPointAction(source, editHandles, action, parseOptions, evaluateOptions);
       case "moveElement":
         return applyMoveElements(source, editHandles, [action.elementId], action.delta, parseOptions, action.formatPrecision, undefined, geometry);
       case "moveElements":
@@ -844,51 +844,60 @@ function applySplitPath(
   source: string,
   editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "splitPath" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
-  return applySplitPathAction(source, editHandles, action, parseOptions);
+  return applySplitPathAction(source, editHandles, action, parseOptions, evaluateOptions);
 }
 
 function applyJoinPaths(
   source: string,
+  editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "joinPaths" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
-  return applyJoinPathsAction(source, action, { normalizeElementIds }, parseOptions);
+  return applyJoinPathsAction(source, editHandles, action, { normalizeElementIds }, parseOptions, evaluateOptions);
 }
 
 function applyToggleClosedPath(
   source: string,
+  editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "toggleClosedPath" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
-  return applyToggleClosedPathAction(source, action, parseOptions);
+  return applyToggleClosedPathAction(source, editHandles, action, parseOptions, evaluateOptions);
 }
 
 function applyReversePath(
   source: string,
+  editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "reversePath" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
-  return applyReversePathAction(source, action, parseOptions);
+  return applyReversePathAction(source, editHandles, action, parseOptions, evaluateOptions);
 }
 
 function applyDeletePathPoint(
   source: string,
   editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "deletePathPoint" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
-  return applyDeletePathPointAction(source, editHandles, action, parseOptions);
+  return applyDeletePathPointAction(source, editHandles, action, parseOptions, evaluateOptions);
 }
 
 function applySetPathPointKind(
   source: string,
   editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "setPathPointKind" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
-  return applySetPathPointKindAction(source, editHandles, action, parseOptions);
+  return applySetPathPointKindAction(source, editHandles, action, parseOptions, evaluateOptions);
 }
 
 function applyMoveElements(

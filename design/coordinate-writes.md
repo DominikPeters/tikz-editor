@@ -150,12 +150,12 @@ frame).
 | pasteStatements / duplicateElements | `paste-duplicate.ts` | copy inserted, then offset in place by the move machinery | pass (class 2 done); `to` bends partial as for moveElement |
 | repeatElements | `repeat.ts` | loop steps as world vectors, `writer.translated` per coordinate or the scope's `shift` | pass (class 2 done) |
 | insertPathPoint | `path-editing-actions.ts` | none | fails (class 1); refuses scoped paths and paths with options |
-| reversePath / setPathPointKind | `path-editing-actions.ts` | n/a (rewrites existing text) | fail on relative (class 5); refuse scoped paths and paths with options |
+| reversePath / setPathPointKind | `path-editing-actions.ts` | path pieces spelled by `path-pieces.ts`: a relative coordinate after a new point is written again from it | pass (class 5 done); refuse scoped paths and paths with options |
 | appendToPath | `path-editing-actions.ts`, world segments from the app path tool | written in the path's shared frame | pass (class 3 done) |
 | positionNodeRelativeTo | `node-positioning-actions.ts` | `writer.positioning` against recorded anchors | pass (class 4 done); refuses where only a negative distance would fit |
 | convertNodePositionToAbsolute | `node-positioning-actions.ts:783` | `worldToLocal` + `localToSourceUnits` without axis vectors | fails (class 1) |
 | setFigureBounds | `figure-bounds.ts` | none | fails (class 1) |
-| splitPath / joinPaths / deletePathPoint / toggleClosedPath | `path-editing-actions.ts` | reorder existing text | not fuzzed (likely class 5 on relative coordinates) |
+| splitPath / joinPaths / deletePathPoint / toggleClosedPath | `path-editing-actions.ts` | path pieces, as reversePath | not fuzzed; unit-tested on relative coordinates (`test/edit/relative-path-rewrites.spec.ts`); a path starting at a relative coordinate has no handles and is refused. Splitting a closed path drops edges (predates class 5) |
 | moveAdornment | `adornment-actions.ts` | writes label angle/distance | not fuzzed: the expected label position under scaled/rotated frames needs a PGF check first |
 | movePathAttachedNode | `path-attached-node-actions.ts` | takes `pos`, not a world point | out of scope (the app converts pointer to `pos`) |
 | connectHandle | `actions.ts` | writes a node reference, no numbers | out of scope |

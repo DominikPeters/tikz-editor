@@ -30,6 +30,11 @@ export type CoordinateSite = Readonly<{
    * changes it (the options before it); else the handle's own.
    */
   context?: SiteContext;
+  /**
+   * For a relative coordinate an edit moves to another place in its path:
+   * the point it is read from there; else the handle's own base.
+   */
+  relativeBase?: WorldPoint;
 }>;
 
 export type ContextSite = Readonly<{
@@ -195,7 +200,8 @@ function writeCoordinatePoint(source: string, site: CoordinateSite, world: World
     // A relative or turn coordinate is a vector from where the path stands.
     if (!isRelativeCoordinateEditHandle(handle)) return unsupported("relative coordinate without its base point");
     const frame = spelledCoordinateFrame(context, handle.spelling);
-    const delta = worldVector(pt(world.x - handle.relativeBase.x), pt(world.y - handle.relativeBase.y));
+    const base = site.relativeBase ?? handle.relativeBase;
+    const delta = worldVector(pt(world.x - base.x), pt(world.y - base.y));
     const local = worldDeltaToLocalDelta(delta, frame);
     if (!local) return singular();
     const units = localToSourceUnits(local);
