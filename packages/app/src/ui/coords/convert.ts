@@ -39,12 +39,21 @@ export function worldToSvg(point: WorldPoint, viewBox: Pick<SvgViewBox, "y" | "h
   return coreWorldToSvgPoint(point, viewBox);
 }
 
+/** With no fallback context, conversion requires the live SVG screen CTM. */
+export function clientToSvg(point: ClientPoint, svgElement: SVGSVGElement | null): SvgPoint | null;
 export function clientToSvg(
   point: ClientPoint,
   svgElement: SVGSVGElement | null,
   viewportRect: DOMRect | null,
   transform: CanvasTransform,
   viewBox: SvgViewBox
+): SvgPoint | null;
+export function clientToSvg(
+  point: ClientPoint,
+  svgElement: SVGSVGElement | null,
+  viewportRect?: DOMRect | null,
+  transform?: CanvasTransform,
+  viewBox?: SvgViewBox
 ): SvgPoint | null {
   if (svgElement) {
     const ctm = svgElement.getScreenCTM();
@@ -53,10 +62,16 @@ export function clientToSvg(
       domPoint.x = point.x;
       domPoint.y = point.y;
       const result = domPoint.matrixTransform(ctm.inverse());
-      return svgPoint(pt(result.x), pt(result.y));
+      if (Number.isFinite(result.x) && Number.isFinite(result.y)) {
+        return svgPoint(pt(result.x), pt(result.y));
+      }
     }
   }
-  return viewportToSvg(clientToViewport(point, viewportRect), transform, viewBox);
+  // Client coordinates have no viewport origin without its actual rect.
+  // Missing context must not turn an identity map into a successful conversion.
+  return viewportRect && transform && viewBox
+    ? viewportToSvg(clientToViewport(point, viewportRect), transform, viewBox)
+    : null;
 }
 
 export function clientToWorld(
