@@ -1,11 +1,11 @@
 # Coordinate writer
 
-Status: phases 0–3 and class 1 of phase 4 built (harness, site contexts,
-fragment layer and checker, writer core, world points written in source
-units); the remaining classes and writer operations are a draft, second
-revision after review. Inventory, fuzzer and failure classes are in
-[coordinate-writes.md](coordinate-writes.md); this document designs the
-writer from those failures.
+Status: phases 0–5 implemented; migration exceptions are empty. The
+follow-up PGF oracle, expanded pointer fuzzer and cost measurement are now
+implemented too. Reviewed low-level constructors remain fingerprinted by
+the checker. Inventory and failure classes are in
+[coordinate-writes.md](coordinate-writes.md); measured costs and current
+limits are in [coordinate-writer-costs.md](coordinate-writer-costs.md).
 
 Changes from the first draft:
 
@@ -477,7 +477,7 @@ an evaluator fidelity question, not a writer one.
 ## Gates
 
 - **Fuzzer, per case.** `expected-outcomes.json` records the outcome of all
-  1788 cases (`ok`, `partial`, `unsupported: reason`, `error`, `fail: class`).
+  2728 cases (`ok`, `partial`, `unsupported: reason`, `error`, `fail: class`).
   Any difference fails the test. Recording (`POINTER_FUZZ_UPDATE=1`, full
   run, seed 1) prints every transition and refuses regressions unless
   `POINTER_FUZZ_ACCEPT_REGRESSIONS=1`. Partial results are checked like full
@@ -684,12 +684,47 @@ an evaluator fidelity question, not a writer one.
      deleted: a string can no longer become source text except through a
      listed constructor or the writer.
 
-Cost to measure before phase 4: memory of the recorded contexts, and the
-time of insertion, paste and repeat in large documents, including cold
-checkpoint preparation. Paper-drag profiling does not exercise these paths;
-add profiling specs for them in `apps/web/profiling/`.
+## Follow-up validation (2026-10-22)
 
-The fuzzer grows with the design: a singular frame expecting `unsupported`,
-a `transform shape` node, a mid-picture `\tikzset{x=2cm}` before the
-insertion site, points inserted after a mid-path `[rotate=…]`, paste into
-another scope, circle and ellipse resize.
+The deferred cost measurement is complete. See
+[coordinate-writer-costs.md](coordinate-writer-costs.md) for the method,
+raw data and limits. The Node core harness measures retained contexts and
+entries, cold/warm checkpoint preparation, insertion, paste and repeat on
+100, 1,000 and 5,000-statement documents. It does not measure UI latency.
+
+The pointer baseline now contains **2,728 cases across 14 frames**:
+2,183 `ok`, 70 checked `partial`, 475 safe `unsupported`, no failures or
+errors. New coverage includes singular frames (must refuse), `transform
+shape` nodes, a changed axis basis before the insertion gap, mid-path
+rotation, paste into another scope, circle/ellipse resizing and synthetic
+`to` angle/bend controls. Coverage assertions require these families in
+every frame. Synthetic controls are selected by statement ownership,
+since their source spans are empty. Leading-relative paths are also
+exercised, including restructuring. Seeds 7 and 42 check the same families
+without accepting geometry failures.
+
+Independent PGF probes in
+`test/fixtures/coordinate-oracles/coordinates.json` record 25 node/path
+cases, regenerated with `node scripts/capture-coordinate-oracles.mjs`
+(PGF 3.1.11, `pdflatex`). Normal tests need no TeX installation. They
+compare rendered geometry and handle/anchor placement within 0.02 TeX pt,
+covering option order, picture/node slants, node offsets with and without
+`transform shape`, axis-dependent shifts, transformed `to` curves,
+mid-path options and leading-relative paths. A separate regression checks
+that a mid-path transform cannot leak into the next statement.
+
+These probes confirmed and drove evaluator fixes: shifts compose in
+option order, slants are applied, plain `above=3pt` follows earlier node
+options (and inherits the parent linear map only with `transform shape`),
+mid-path options affect subsequent coordinates, and a leading `+`/`++`
+gets the path's local origin as its relative base. Rewrites keep that
+origin and do not duplicate the first coordinate's prefix. The fuzzer
+also caught radius resizing treating an authored circle as an ellipse
+merely because unequal axis vectors make it render as one.
+
+Some topology operations still refuse paths containing mid-path options,
+and existing restrictions on scoped paths remain. Their explicit
+`unsupported` outcomes are recorded; adding support must retain the
+pointer invariant. Performance work should next profile whole-document
+paste/repeat evaluation: the measurements show it dominates context
+capture/checkpoint preparation on the largest fixture.

@@ -2,6 +2,12 @@ import type { ProfilingScenarioManifest } from "./framework";
 
 export const PROFILING_SCENARIOS: ProfilingScenarioManifest[] = [
   {
+    id: "coordinate-writer",
+    category: "actions",
+    description: "Core-only cold/prepared insertion, paste, repeat, checkpoint and GC-retained context memory at increasing document sizes.",
+    specPath: "profiling/profile-coordinate-writer.spec.ts"
+  },
+  {
     id: "scale",
     category: "canvas-edit",
     description: "Open, select all, hover, zoom, pan, commit, undo, type and memory on pictures of 100 and 500 statements, a long paper with an image and a 40-frame deck.",
