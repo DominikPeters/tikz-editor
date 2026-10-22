@@ -136,7 +136,22 @@ describe("canvas drag ownership and cancellation", () => {
     nextFrame = 0; frames = new Map();
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { const id = ++nextFrame; frames.set(id, callback); return id; });
     vi.stubGlobal("cancelAnimationFrame", (id: number) => { frames.delete(id); });
-    dragRef = { current: null }; surfaceRef = { current: null }; selectedRef = { current: new Set() };
+    dragRef = { current: null };
+    const surface = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    // The harness places the SVG viewBox origin at client (0, 0), at unit zoom.
+    // A real screen mapping is required; missing SVGs now correctly refuse conversion.
+    Object.defineProperties(surface, {
+      getScreenCTM: { value: () => ({ inverse: () => ({
+        a: 1, b: 0, c: 0, d: 1, e: state().snapshot.svg!.viewBox.x, f: state().snapshot.svg!.viewBox.y
+      }) }) },
+      createSVGPoint: { value: () => ({ x: 0, y: 0,
+        matrixTransform(matrix: Pick<DOMMatrix, "a" | "b" | "c" | "d" | "e" | "f">) {
+          return { x: matrix.a * this.x + matrix.c * this.y + matrix.e,
+            y: matrix.b * this.x + matrix.d * this.y + matrix.f };
+        }
+      }) }
+    });
+    surfaceRef = { current: surface }; selectedRef = { current: new Set() };
     useEditorStore.setState({ ...makeInitialState(), dispatch });
     dispatch({ type: "CODE_EDITED", source: BASE }); ready(); dispatch({ type: "SELECT", id: "path:0", additive: false });
     for (const mock of [setToolDraft, setBezierDraft, setSegmentDraft, setFreehandDraft, setPendingBezier, setCursor, setSnapLines, setPreview, commitSegment, finalizeFreehand]) mock.mockClear();

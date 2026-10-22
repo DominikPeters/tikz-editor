@@ -628,7 +628,14 @@ function appendToCurve(
 ): PlacementSegment {
   // Distances and angles are those of the coordinates the curve is read in.
   const delta = frame.toLocal(to.x - from.x, to.y - from.y);
-  const baseDistance = Math.hypot(delta.x, delta.y) * 0.3915;
+  // PGF topaths normalises the chord, divides its largest component (in
+  // scaled points) by 255, then does two fixed-point multiplications by 16.
+  // Using the analytic length instead differs by .087pt even on a 2cm line.
+  const length = Math.hypot(delta.x, delta.y);
+  const largest = Math.max(Math.abs(delta.x), Math.abs(delta.y));
+  const divisor = length === 0 ? 0 : Math.trunc(Math.round(largest / length * 65536) / 255);
+  const pgfDistance = divisor === 0 ? 0 : 16 * Math.trunc(16 * Math.round(largest * 65536) / divisor) / 65536;
+  const baseDistance = pgfDistance * 0.3915;
 
   let outDistance = baseDistance * options.outLooseness;
   let inDistance = baseDistance * options.inLooseness;

@@ -1100,6 +1100,7 @@ describe("semantic node positioning helpers", () => {
   });
 
   it("resolves relative positioning targets, shifts, on-grid, and diagnostics", () => {
+    const transforms = { transform: worldTransform(1, 0, 0, 1, 0, 0), prefix: () => worldTransform(1, 0, 0, 1, 0, 0) };
     const context = createSemanticContext(defaultStyle(), worldTransform(2, 0, 0, 3, 0, 0));
     writeNamedCoordinate(context, "A", p(10, 20));
     writeNamedCoordinate(context, "A.north", p(10, 30));
@@ -1114,7 +1115,7 @@ describe("semantic node positioning helpers", () => {
         kv("above left", "of A")
       ),
       context,
-      p(0, 0)
+      p(0, 0), transforms
     );
     expect(resolved.diagnostics).toContain("invalid-xshift:bad");
     expect(resolved.anchorOverride).toBe("center");
@@ -1122,18 +1123,18 @@ describe("semantic node positioning helpers", () => {
     expect(resolved.anchorPoint.x).toBeLessThan(10);
     expect(resolved.anchorPoint.y).toBeGreaterThan(20);
 
-    const invalid = resolveNodePositioningTarget(options(kv("right", "bad of")), context, p(1, 2));
+    const invalid = resolveNodePositioningTarget(options(kv("right", "bad of")), context, p(1, 2), transforms);
     expect(invalid.diagnostics).toContain("invalid-positioning-shift:bad of");
     expect(invalid.anchorPoint).toMatchObject({ x: 1, y: 2 });
 
-    expect(resolveNodePositioningTarget(undefined, context, p(4, 5))).toMatchObject({
+    expect(resolveNodePositioningTarget(undefined, context, p(4, 5), transforms)).toMatchObject({
       anchorPoint: p(4, 5),
       diagnostics: []
     });
     const local = resolveNodePositioningTarget(
       options(flag("centered"), kv("on grid", "false"), kv("node distance", "bad"), kv("yshift", "bad"), kv("right", "2pt")),
       context,
-      p(0, 0)
+      p(0, 0), transforms
     );
     expect(local.diagnostics).toEqual(["invalid-node-distance:bad", "invalid-yshift:bad"]);
     expect(local.anchorPoint.x).toBeCloseTo(2, 6);

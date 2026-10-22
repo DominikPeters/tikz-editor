@@ -169,9 +169,12 @@ describe("rewritten paths keep their relative coordinates", () => {
     expect(anchors.slice(1)).toEqual(anchorsInOrder(source, "path:0"));
   });
 
-  it("refuses a path that starts at a relative coordinate, which has no position to read it from", () => {
-    const source = picture(String.raw`\draw (0,0) -- (1,0);`, String.raw`\draw ++(3,1) -- ++(1,0);`);
-    expect(apply(source, { kind: "joinPaths", elementIds: ["path:0", "path:1"] }).kind).toBe("unsupported");
+  it.each(["+", "++"])("joins a path starting with %s without moving its points", prefix => {
+    const source = picture(String.raw`\draw (0,0) -- (1,0);`, String.raw`\draw ${prefix}(3,1) -- ++(1,0);`);
+    const result = apply(source, { kind: "joinPaths", elementIds: ["path:0", "path:1"] });
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(drawnPoints(result.newSource)).toEqual(drawnPoints(source));
   });
 
   it("refuses to move a turn coordinate, whose tangent the rewrite changes", () => {

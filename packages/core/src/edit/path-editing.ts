@@ -274,11 +274,16 @@ export function analyzeExplicitPathStatement(source: string, statement: PathStat
     return { kind: "ineligible", reason: "Path needs at least two anchors." };
   }
 
+  // Coordinate spans omit the leading +/++. The path pieces own that
+  // prefix; retaining it in the statement header would duplicate it.
+  const prefixEnd = firstItem.relativePrefix
+    ? source.slice(statement.span.from, firstItem.span.from).replace(/\+{1,2}\s*$/, "").length + statement.span.from
+    : firstItem.span.from;
   return {
     kind: "eligible",
     analysis: {
       statement,
-      prefix: sourceSlice(source, { from: statement.span.from, to: firstItem.span.from }),
+      prefix: sourceSlice(source, { from: statement.span.from, to: prefixEnd }),
       suffix: sourceSlice(source, { from: lastItem.span.to, to: statement.span.to }),
       anchors,
       segments,

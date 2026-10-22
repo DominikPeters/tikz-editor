@@ -10,7 +10,7 @@ import type { OptionListAst } from "../../options/types.js";
 import type { NodeDistanceSpec, NodeDistanceValue, SemanticContext } from "../context.js";
 import { evaluateRawCoordinate } from "../coords/evaluate.js";
 import { parseLength, parseQuantityExpression } from "../coords/parse-length.js";
-import { applyMatrixToVector } from "../transform.js";
+import { applyMatrixToVector, identityMatrix } from "../transform.js";
 import { parseBooleanishNormalized } from "../../utils/booleanish.js";
 import { normalizeOptionValue } from "./shared.js";
 
@@ -169,7 +169,8 @@ export function parseNodeDistance(raw: string, opts: { allowNegative?: boolean }
 export function resolveNodePositioningTarget(
   options: OptionListAst | undefined,
   context: SemanticContext,
-  fallbackTarget: WorldPoint
+  fallbackTarget: WorldPoint,
+  nodeTransforms: { transform: WorldTransform; prefix: (index: number) => WorldTransform }
 ): NodePositioningResolution {
   if (!options) {
     return { anchorPoint: fallbackTarget, diagnostics: [] };
@@ -181,16 +182,14 @@ export function resolveNodePositioningTarget(
   let onGrid = frame.onGrid;
   let nodeDistance = frame.nodeDistance;
   let relativePlacement: RelativePlacementSpec | null = null;
-  let additiveOffset: WorldVector = makeWorldVector(pt(0), pt(0));
+  let additiveOffset: WorldVector = makeWorldVector(pt(nodeTransforms.transform.e), pt(nodeTransforms.transform.f));
   // An `anchor=` after the placement key overrides the anchor the placement
   // implies, as PGF sets both when it reads the options in order.
   let anchorAfterPlacement = false;
 
-  for (const entry of options.entries) {
+  for (const [index, entry] of options.entries.entries()) {
     if (entry.kind === "flag") {
-      if (entry.key === "centered") {
-        additiveOffset = makeWorldVector(pt(0), pt(0));
-      } else if (entry.key === "on grid") {
+      if (entry.key === "on grid") {
         onGrid = true;
       }
       continue;
@@ -223,23 +222,10 @@ export function resolveNodePositioningTarget(
       continue;
     }
 
-    if (entry.key === "xshift") {
+    if (entry.key === "xshift" || entry.key === "yshift") {
       const parsed = parseLength(entry.valueRaw, "pt");
-      if (parsed == null || !Number.isFinite(parsed)) {
-        diagnostics.push(`invalid-xshift:${entry.valueRaw}`);
-      } else {
-        additiveOffset = worldVector(additiveOffset.x + parsed, additiveOffset.y);
-      }
-      continue;
-    }
-
-    if (entry.key === "yshift") {
-      const parsed = parseLength(entry.valueRaw, "pt");
-      if (parsed == null || !Number.isFinite(parsed)) {
-        diagnostics.push(`invalid-yshift:${entry.valueRaw}`);
-      } else {
-        additiveOffset = worldVector(additiveOffset.x, additiveOffset.y + parsed);
-      }
+      if (parsed == null || !Number.isFinite(parsed)) diagnostics.push(`invalid-${entry.key}:${entry.valueRaw}`);
+      // Already composed, in order, into nodeTransforms.transform.
       continue;
     }
 
@@ -278,12 +264,13 @@ export function resolveNodePositioningTarget(
       continue;
     }
 
-    const parsedOffset = parseDirectionalOffset(directional.direction, entry.valueRaw, activeTransform);
+    const parsedOffset = parseDirectionalOffset(directional.direction, entry.valueRaw, identityMatrix());
     if (!parsedOffset) {
       diagnostics.push(`invalid-positioning-shift:${entry.valueRaw}`);
       continue;
     }
-    additiveOffset = worldVector(additiveOffset.x + parsedOffset.x, additiveOffset.y + parsedOffset.y);
+    const offset = applyMatrixToVector(nodeTransforms.prefix(index), parsedOffset);
+    additiveOffset = worldVector(additiveOffset.x + offset.x, additiveOffset.y + offset.y);
   }
 
   let anchorPoint = worldPoint(fallbackTarget.x + additiveOffset.x, fallbackTarget.y + additiveOffset.y);

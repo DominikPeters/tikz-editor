@@ -68,7 +68,7 @@ const DIRECTION_ANCHORS: Record<PositioningDirection, { target: string; current:
   "below right": { target: "south east", current: "north west" }
 };
 
-const PLACEMENT_OPTION_KEYS = new Set(["at", "xshift", "yshift"]);
+const PLACEMENT_OPTION_KEYS = new Set(["at", "xshift", "yshift", "shift"]);
 const CARDINAL_SNAP_RATIO = 0.25;
 
 type NodeRef = {

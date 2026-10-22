@@ -11,6 +11,7 @@ function featuresSupportedBy(layer: CapabilityLayer): readonly FeatureId[] {
   // Source-backed tabular and booktabs share the text alignment ID.
   // Literal mathcodes, scoped math alphabets and class font substitutions share one ID.
   // Graphicx text/paragraph transforms share the text transform box ID.
+  // Ordered xslant/yslant shorthands share the affine transform_cm contract.
   // Frame footnote projection and stock insertion share the footnote ID.
   // Speaker notes have a separate presenter-only extraction and audience exclusion contract.
   // Dirac math, default scientific quantities and preformatted source each have bounded contracts.

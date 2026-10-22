@@ -17,6 +17,9 @@ export const capabilityFixtures: Record<string, string> = {
   transform_cm: String.raw`\begin{tikzpicture}
   \draw[cm={0,1,1,0,(1cm,1cm)}] (0,0) -- (1,1) -- (1,0);
 \end{tikzpicture}`,
+  transform_slant: String.raw`\begin{tikzpicture}[xslant=.5,yslant=-.25]
+  \draw (0,0) -- (0,1) -- (1,1);
+\end{tikzpicture}`,
   foreach_basic: String.raw`\begin{tikzpicture}
   \foreach \x in {0,1} \draw (\x,0) -- ++(1,0);
 \end{tikzpicture}`,

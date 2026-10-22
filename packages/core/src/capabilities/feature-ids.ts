@@ -10,7 +10,7 @@ export const FEATURE_IDS = [
   "pgfmath_seed_commands",
   "pgfmath_random_functions",
   "options_structured",
-  "transform_cm",
+  "transform_cm", // Affine matrices and their xslant/yslant shorthands.
   "path_shading",
   "path_patterns",
   "path_shadows",

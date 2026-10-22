@@ -86,7 +86,8 @@ export const capabilityMatrix: CapabilityMatrix = {
     semantic: "stable",
     svg: "stable",
     edit: "partial",
-    fixtures: ["transform_cm"]
+    fixtures: ["transform_cm", "transform_slant"],
+    notes: "Affine cm matrices and ordered xslant/yslant shorthands apply in picture, scope, path and node options."
   },
   path_shading: {
     parser: "stable",

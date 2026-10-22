@@ -241,6 +241,24 @@ export function evaluatePathStatement(
   pushDiagnostic: DiagnosticPushFn,
   options: PathEvaluationOptions = {}
 ): SceneElement[] {
+  const frameIndex = context.stack.length - 1;
+  const originalFrame = currentFrame(context);
+  try {
+    return evaluatePathInFrame(statement, context, initialStyle, markFeature, pushDiagnostic, options);
+  } finally {
+    // Mid-path options affect subsequent coordinates, never the next path.
+    context.stack[frameIndex] = originalFrame;
+  }
+}
+
+function evaluatePathInFrame(
+  statement: PathStatement,
+  context: SemanticContext,
+  initialStyle: ResolvedStyle,
+  markFeature: FeatureMarkFn,
+  pushDiagnostic: DiagnosticPushFn,
+  options: PathEvaluationOptions
+): SceneElement[] {
   const geometryElements: SceneElement[] = [];
   const behindNodeElements: SceneElement[] = [];
   const frontNodeElements: SceneElement[] = [];
@@ -253,8 +271,8 @@ export function evaluatePathStatement(
     context.currentPoint = null;
     context.pathStartPoint = null;
   }
-  const frame = currentFrame(context);
-  const frameTransform = frame.transform;
+  let frame = currentFrame(context);
+  let frameTransform = frame.transform;
   const initialPlotSettings = applyPlotSettingsFromStyleChain(
     createDefaultPlotSettings(),
     frame.styleChain,
@@ -932,6 +950,9 @@ export function evaluatePathStatement(
               picDefinitions: optionPicDefinitions
             };
             builder.style = builder.treeFrameState.style;
+            frame = builder.treeFrameState;
+            frameTransform = frame.transform;
+            context.stack[context.stack.length - 1] = frame;
             builder.statementStyleChain = builder.treeFrameState.styleChain;
             if (builder.activePath) {
               builder.activePath.style = { ...builder.style };
@@ -1879,6 +1900,11 @@ export function evaluatePathStatement(
         }
       }
 
+      if (item.relativePrefix && !context.currentPoint) {
+        // TikZ resets its saved point to local (0,0) at each new path.
+        // Keep a leading `+` based there even after its drawn moveto.
+        context.currentPoint = applyMatrix(frameTransform, wp(0, 0));
+      }
       const evaluated: EvaluatedCoordinate =
         evaluateTurnCoordinate(item, builder.currentPointLogical ?? context.currentPoint, frameTransform, builder.lastPlacementSegment, frame.axisBasis) ??
         evaluateCoordinate(item, context);

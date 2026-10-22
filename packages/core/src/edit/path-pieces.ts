@@ -191,6 +191,7 @@ function respellRelative(input: SpellPathInput, steps: readonly Step[], respelle
   const located = locate(source, analysis, handles, [...stepPoints(ownSteps), ...stepPoints(steps)]);
   if (!located) return unsupported("a coordinate of the path has no position to rewrite it from");
   const { worldOf, handleOf } = located;
+  const initial = initialPathState(analysis, handleOf);
 
   // The points the path's coordinates were read from, checked against the evaluator's.
   const ownBases = new Map<number, Base>();
@@ -201,7 +202,7 @@ function respellRelative(input: SpellPathInput, steps: readonly Step[], respelle
     const handle = handleOf(point.index);
     if (base && handle && isRelativeCoordinateEditHandle(handle) && !samePoint(base, handle.relativeBase)) unknownBases.push(point.index);
     return coordinateAt(analysis, point.index).relativePrefix;
-  });
+  }, initial);
   if (unknownBases.length > 0) return unsupported("a relative coordinate is read from a point this rewrite does not know");
 
   const from = input.continuesFrom?.();
@@ -240,7 +241,7 @@ function respellRelative(input: SpellPathInput, steps: readonly Step[], respelle
     if (base !== null) return item.relativePrefix;
     absolute.add(key);
     return;
-  }, from);
+  }, from ?? initial);
   return refusals[0] ?? null;
 }
 
@@ -249,7 +250,15 @@ export function pathEndState(source: string, analysis: ExplicitPathAnalysis, han
   const steps = originalSteps(analysis);
   const located = locate(source, analysis, handles, stepPoints(steps));
   if (!located) return null;
-  return readPath(steps, located.worldOf, point => point.kind === "item" ? coordinateAt(analysis, point.index).relativePrefix : "");
+  return readPath(steps, located.worldOf, point => point.kind === "item" ? coordinateAt(analysis, point.index).relativePrefix : "",
+    initialPathState(analysis, located.handleOf));
+}
+
+/** A leading relative coordinate is read from TikZ's saved local origin. */
+function initialPathState(analysis: ExplicitPathAnalysis, handleOf: (index: number) => CoordinateEditHandle | undefined): PathState {
+  const first = analysis.anchors[0];
+  const handle = first ? handleOf(first.coordinateIndex) : undefined;
+  return { drawn: null, current: handle && isRelativeCoordinateEditHandle(handle) ? handle.relativeBase : null };
 }
 
 /** The path as it is written: its start, its segments, and the closing one last. */

@@ -1140,9 +1140,9 @@
       "symbol": "sourceSlice",
       "file": "packages/core/src/edit/path-editing.ts",
       "declaration": "analyzeExplicitPathStatement.analysis.prefix",
-      "hash": "9956493236f9",
+      "hash": "c091903cc73b",
       "count": 1,
-      "expression": "sourceSlice(source, { from: statement.span.from, to: firstItem.span.from })"
+      "expression": "sourceSlice(source, { from: statement.span.from, to: prefixEnd })"
     },
     {
       "rule": "F2",

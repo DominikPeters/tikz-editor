@@ -405,7 +405,20 @@ export function evaluateNodeItem(
     defaultTargetWorldPoint,
     placementOptions
   );
-  const resolvedPositioning = resolveNodePositioningTarget(expandedNodeOptions, context, target);
+  // PGF resets the parent's linear map unless transform shape is enabled,
+  // then composes the node's local options in order. Shifts must use that
+  // same map, rather than being collected as untransformed world offsets.
+  const inheritedNodeTransform: WorldTransform = resolveNodeTransformShape(expandedNodeLocalOptions, frame.transformShape)
+    ? worldTransform(frame.transform.a, frame.transform.b, frame.transform.c, frame.transform.d, 0, 0)
+    : identityMatrix();
+  const nodeOptionTransform = resolveNodeOptionTransform(expandedNodeLocalOptions, style, context);
+  const baseNodeTransform = multiplyMatrix(inheritedNodeTransform, nodeOptionTransform);
+  const resolvedPositioning = resolveNodePositioningTarget(expandedNodeLocalOptions, context, target, {
+    transform: baseNodeTransform,
+    prefix: index => multiplyMatrix(inheritedNodeTransform, resolveNodeOptionTransform(
+      expandedNodeLocalOptions ? { ...expandedNodeLocalOptions, entries: expandedNodeLocalOptions.entries.slice(0, index) } : undefined,
+      style, context))
+  });
   for (const code of resolvedPositioning.diagnostics) {
     pushDiagnostic(code, `Node positioning issue: ${code}`, item.span.from, item.span.to);
   }
@@ -566,11 +579,6 @@ export function evaluateNodeItem(
         }
     : adjustedNodeLayout;
   const slopedRotation = resolveSlopedNodeRotation(expandedNodeOptions, segment, effectiveBaseStyleChain);
-  const inheritedNodeTransform: WorldTransform = resolveNodeTransformShape(expandedNodeLocalOptions, frame.transformShape)
-    ? worldTransform(frame.transform.a, frame.transform.b, frame.transform.c, frame.transform.d, 0, 0)
-    : identityMatrix();
-  const nodeOptionTransform = resolveNodeOptionTransform(expandedNodeLocalOptions, style, context);
-  const baseNodeTransform = multiplyMatrix(inheritedNodeTransform, nodeOptionTransform);
   const nodeTransform =
     slopedRotation != null && Math.abs(slopedRotation) > 1e-6
       ? multiplyMatrix(baseNodeTransform, rotationMatrix(slopedRotation))
