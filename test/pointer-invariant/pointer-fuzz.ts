@@ -412,7 +412,7 @@ function alignCases({ context, frame, body, before, elementId }: BodyCase): Case
   });
 }
 
-/** Writing a node's position relative to `A`, or back to absolute, must not move it. */
+/** Writing a node's position relative to `A` must not move where it is drawn, nor back to absolute where it is placed. */
 function positioningCases({ context, frame, body, before, handles, elementId }: BodyCase): CaseResult[] {
   if (!elementId) return [];
   const position = handles.find(h => h.kind === "node-position");
@@ -426,8 +426,13 @@ function positioningCases({ context, frame, body, before, handles, elementId }: 
   }
   if (body.label === "node" && anchorId) {
     const key = `positionNodeRelativeTo|${frame.label}`;
+    // The node's own shifts give way to the positioning, so where it is drawn is what must stay.
+    const drawnCenter = (snapshot: Snapshot) => {
+      const bounds = collectSourceWorldBounds(snapshot.semantic.scene.elements).get(elementId);
+      return bounds ? [wp((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2)] : [];
+    };
     return [runCase(context, frame, key, before, { kind: "positionNodeRelativeTo", nodeId: elementId, targetNodeName: "A", targetNodeSourceId: anchorId, bypassSnapping: true }, next => ({
-      expected: [position.world], actual: next.handles.filter(h => h.sourceRef.sourceId === elementId && h.kind === "node-position").map(h => h.world)
+      expected: drawnCenter(before), actual: drawnCenter(next)
     }))];
   }
   return [];

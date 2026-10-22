@@ -182,6 +182,9 @@ export function resolveNodePositioningTarget(
   let nodeDistance = frame.nodeDistance;
   let relativePlacement: RelativePlacementSpec | null = null;
   let additiveOffset: WorldVector = makeWorldVector(pt(0), pt(0));
+  // An `anchor=` after the placement key overrides the anchor the placement
+  // implies, as PGF sets both when it reads the options in order.
+  let anchorAfterPlacement = false;
 
   for (const entry of options.entries) {
     if (entry.kind === "flag") {
@@ -202,6 +205,11 @@ export function resolveNodePositioningTarget(
       if (parsed != null) {
         onGrid = parsed;
       }
+      continue;
+    }
+
+    if (entry.key === "anchor") {
+      anchorAfterPlacement = relativePlacement != null;
       continue;
     }
 
@@ -246,6 +254,7 @@ export function resolveNodePositioningTarget(
         diagnostics.push("invalid-positioning-of-target");
         continue;
       }
+      anchorAfterPlacement = false;
       relativePlacement = {
         direction: directional.direction,
         legacyOf: true,
@@ -258,6 +267,7 @@ export function resolveNodePositioningTarget(
 
     const spec = parseOfPart(entry.valueRaw);
     if (spec) {
+      anchorAfterPlacement = false;
       relativePlacement = {
         direction: directional.direction,
         legacyOf: false,
@@ -290,7 +300,7 @@ export function resolveNodePositioningTarget(
         resolved.anchorPoint.y + additiveOffset.y
       );
     }
-    if (resolved.anchorOverride) {
+    if (resolved.anchorOverride && !anchorAfterPlacement) {
       anchorOverride = resolved.anchorOverride;
     }
     if (resolved.targetWorld) {
@@ -337,6 +347,30 @@ function parseOfPart(raw: string): { shiftRaw: string; targetRaw: string } | nul
     return null;
   }
   return { shiftRaw, targetRaw };
+}
+
+/**
+ * The name a placement option (`right=1cm of A`, `above left={1cm and 2cm} of A.north`,
+ * `right of=A`) places its node relative to, or null for an option that is not a
+ * placement relative to a named node. PGF reads that name as a point with the
+ * transformation undone, so an enclosing `shift` does not move the node.
+ */
+export function positioningTargetNodeName(key: string, valueRaw: string): string | null {
+  const directional = parseDirectionalKey(key);
+  if (!directional) {
+    return null;
+  }
+  const targetRaw = directional.legacyOf ? normalizeOptionValue(valueRaw) : parseOfPart(valueRaw)?.targetRaw;
+  if (!targetRaw) {
+    return null;
+  }
+  const parsed = parseCoordinate(toCoordinateRaw(targetRaw));
+  if (parsed.form !== "named") {
+    return null;
+  }
+  const name = parsed.x.trim();
+  const anchorDot = name.indexOf(".");
+  return anchorDot < 0 ? name : name.slice(0, anchorDot);
 }
 
 function resolveRelativePlacement(

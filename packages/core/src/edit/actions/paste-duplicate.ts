@@ -18,6 +18,7 @@ import {
   resolveRootInsertionPoint,
   resolveStatementRefs,
   statementSnippet,
+  type StatementRef,
   type StatementSnapshot
 } from "../statement-ops.js";
 import { renameSnippetDeclaredNames } from "../name-conflicts.js";
@@ -161,6 +162,7 @@ export function applyDuplicateElementsAction(
 
   // Ids count statements from the top, so a copy only shifts the ids after it: work from the end.
   const groups = groupStatementRefsByParent(initialRefs)
+    .flatMap((group) => adjacentRuns(source, group.refs).map((refs) => ({ ...group, refs })))
     .sort((left, right) => Math.max(...right.refs.map((ref) => ref.span.to)) - Math.max(...left.refs.map((ref) => ref.span.to)));
   let currentSource = unchangedSource(source);
   const steps: SourcePatch[][] = [];
@@ -310,6 +312,26 @@ function offsetInsertedStatements(
     }
   }
   return { source: moved.newSource, patches, skippedHandles: [] };
+}
+
+/**
+ * Siblings split where anything but layout lies between them. The copies of
+ * a run go after it, so nothing between an original and its copy (a
+ * `\tikzset`, a node redefining a name) changes how the copy reads.
+ */
+function adjacentRuns(source: string, refs: readonly StatementRef[]): StatementRef[][] {
+  const runs: StatementRef[][] = [];
+  for (const ref of [...refs].sort((left, right) => left.index - right.index)) {
+    const run = runs.at(-1);
+    const previous = run?.at(-1);
+    if (run && previous && isLayoutOnly(source.slice(previous.span.to, ref.span.from))) run.push(ref);
+    else runs.push([ref]);
+  }
+  return runs;
+}
+
+function isLayoutOnly(text: string): boolean {
+  return text.replace(/(?<!\\)%.*$/gmu, "").trim().length === 0;
 }
 
 function createPasteDuplicateCaches(): PasteDuplicateCaches {

@@ -76,6 +76,36 @@ describe("positioned nodes", () => {
     }
   });
 
+  it("take a later anchor= over the anchor the positioning implies", () => {
+    const anchorOf = (options: string, anchor: string) => evaluate(picture(A, String.raw`\node[draw,${options}] (B) {B};`)).nodeAnchorTargets.find(target => target.nodeName === "B" && target.anchor === anchor)!.world;
+    expect(anchorOf("anchor=north,right=1cm of A", "center")).toEqual(anchorOf("right=1cm of A", "center"));
+    // B's north sits where the implied anchor, its west, would.
+    const north = anchorOf("right=1cm of A,anchor=north", "north");
+    const west = anchorOf("right=1cm of A", "west");
+    expect([north.x, north.y].map(value => value.toFixed(3))).toEqual([west.x, west.y].map(value => value.toFixed(3)));
+  });
+
+  it("keep where they are drawn when positioned relative to another node", () => {
+    const drawnCenter = (source: string) => {
+      const center = evaluate(source).nodeAnchorTargets.find(target => target.nodeName === "B" && target.anchor === "center");
+      if (!center) throw new Error("no center for B");
+      return center.world;
+    };
+    for (const own of ["", "xshift=3mm", "yshift=-2mm", "xshift=3mm,anchor=north", "anchor=north west", "rotate=-35,xshift=3mm", "shift={(0.5,0.2)}", "xshift=3mm,shift={(0.5,0.2)}"]) {
+      for (const at of ["(2,2)", "(-2,-1)"]) {
+        const source = picture(A, String.raw`\node[draw${own ? `,${own}` : ""}] (B) at ${at} {B};`);
+        const before = drawnCenter(source);
+        const result = applyEditAction(source, evaluate(source).editHandles, { kind: "positionNodeRelativeTo", nodeId: "path:1", targetNodeName: "A", targetNodeSourceId: "path:0", bypassSnapping: true });
+        if (result.kind !== "success") {
+          expect([own, at, result.kind]).toEqual([own, at, "unsupported"]);
+          continue;
+        }
+        const after = drawnCenter(result.newSource);
+        expect([own, at, Math.hypot(after.x - before.x, after.y - before.y) < 0.3]).toEqual([own, at, true]);
+      }
+    }
+  });
+
   it("writes canvas distances, which carry no frame", () => {
     const source = picture(A, String.raw`\node[right=1cm of A] {B};`);
     const handle = evaluate(source).editHandles.find(candidate => candidate.sourceRef.sourceId === "path:1" && candidate.handleType === "node-positioning")!;

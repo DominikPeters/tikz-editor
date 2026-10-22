@@ -229,6 +229,40 @@ describe("applyEditAction – duplicateElements", () => {
     expect(pasted.kind === "success" && pasted.newSource).toContain(String.raw`\draw (0,-0.5) -- (1,0.5);`);
   });
 
+  it("inserts a copy where nothing but other originals lies between it and its original", () => {
+    // Copies after the last original would be read with x=2cm, or reach the second C.
+    const result = applyEditAction(String.raw`\begin{tikzpicture}
+  \node (C) at (0,0) {};
+  \draw (0,0) -- (1,0);
+  \draw (C) -- (1,1);
+  \tikzset{x=2cm}
+  \node (C) at (5,5) {};
+  \draw (0,2) -- (1,2);
+\end{tikzpicture}`, [], { kind: "duplicateElements", elementIds: ["path:1", "path:2", "path:5"], delta: wp(cm(1), 0) });
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toBe(String.raw`\begin{tikzpicture}
+  \node (C) at (0,0) {};
+  \draw (0,0) -- (1,0);
+  \draw (C) -- (1,1);
+  \draw (1,0) -- (2,0);
+  \draw (C) -- (2,1);
+  \tikzset{x=2cm}
+  \node (C) at (5,5) {};
+  \draw (0,2) -- (1,2);
+  \draw (0.5,2) -- (1.5,2);
+\end{tikzpicture}`);
+    expect(result.selectedSourceIds).toHaveLength(3);
+    expectPatchesReconstructSource(String.raw`\begin{tikzpicture}
+  \node (C) at (0,0) {};
+  \draw (0,0) -- (1,0);
+  \draw (C) -- (1,1);
+  \tikzset{x=2cm}
+  \node (C) at (5,5) {};
+  \draw (0,2) -- (1,2);
+\end{tikzpicture}`, result);
+  });
+
   it("offsets the copy when the caller prepared the original document's fingerprint, as the app does", () => {
     const source = String.raw`\begin{tikzpicture}[x=2cm,y=2cm]
   \draw (0,0) -- (1,0);

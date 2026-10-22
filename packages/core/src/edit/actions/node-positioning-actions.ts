@@ -343,8 +343,9 @@ function resolveRelativePlacementContext(input: {
     center: targetCenter,
     bounds: boundsBySource.get(input.targetNodeSourceId) ?? null
   });
-  // Offsets are measured from where the node is drawn; its handle stands where
-  // an `at` would put it, before the node's own `xshift` moves it on.
+  // The node's own `xshift`/`yshift` are removed with its placement, so the
+  // positioning has to put it where it is drawn, not where its `at` is; the
+  // anchor offsets are measured from there too.
   const drawnCenter = currentAnchors.get("center") ?? currentCenter;
   const anchorOffsetsByDirection = buildAnchorOffsetsByDirection({
     currentCenter: drawnCenter,
@@ -359,12 +360,12 @@ function resolveRelativePlacementContext(input: {
 
   return {
     kind: "found",
-    currentCenter,
+    currentCenter: drawnCenter,
     context: {
-      direction: initialDirectionFromCenters(currentCenter, targetCenter),
+      direction: initialDirectionFromCenters(drawnCenter, targetCenter),
       targetNodeName: input.targetNodeName,
       targetCenter,
-      currentCenter,
+      currentCenter: drawnCenter,
       legacyOf: false,
       anchorOffsetsByDirection,
       targetAnchorHW: halfWidth(targetAnchors, targetCenter),

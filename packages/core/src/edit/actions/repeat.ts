@@ -2,12 +2,14 @@ import { applyFragments, editedSlice, legacyText, type FragmentEdit } from "../f
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { PathItem, PathStatement, Span } from "../../ast/types.js";
-import { walkPathItems } from "../../ast/walk.js";
+import { walkPathItems, walkStatements } from "../../ast/walk.js";
 import { worldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { ParseTikzResult } from "../../parser/index.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { entryContextsForSource, sameSiteContext, type SiteContext } from "../../semantic/site-context.js";
+import { positioningTargetNodeName } from "../../semantic/path/node-positioning.js";
+import { parseCoordinate } from "../../domains/coordinates/parse.js";
 import { isCoordinateEditHandle, type CoordinateEditHandle } from "../../semantic/types.js";
 import { CoordinateWriteRefused } from "../new-statement.js";
 import { createCoordinateWriter, type CoordinateWriter, type LoopStep } from "../writer/index.js";
@@ -22,6 +24,7 @@ import {
 } from "../statement-ops.js";
 import { applySetPropertyAction } from "./set-property.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
+import { normalizeOptionKey } from "../option-key.js";
 import { normalizeElementIds, uniqueStrings } from "../statement-find.js";
 
 export type RepeatElementsAction = {
@@ -85,6 +88,10 @@ export function getRepeatSelectionEligibility(
     }
   }
 
+  if (positionsRelativeToOutsideNode(refs)) {
+    return { kind: "ineligible", reason: "Repeat cannot step what is placed at or relative to a node outside the copy." };
+  }
+
   return {
     kind: "eligible",
     snapshot,
@@ -92,6 +99,50 @@ export function getRepeatSelectionEligibility(
     replaceSpan: { from: first.span.from, to: last.span.to },
     indent: lineIndentAtOffset(source, first.span.from)
   };
+}
+
+/**
+ * Whether a copy of the block would land where the original does: a node
+ * placed relative to a node the block does not declare before it, or a
+ * statement whose every point is such a node (`\node at (A.east)`). PGF
+ * reads a node's anchor with the transformation undone, so a shift does not
+ * move it; a node declared in the block is read afresh on each pass, so
+ * those copies move together.
+ */
+function positionsRelativeToOutsideNode(refs: readonly StatementRef[]): boolean {
+  const declared = new Set<string>();
+  const outsideName = (raw: string) => {
+    const parsed = parseCoordinate(raw);
+    return parsed.form === "named" && !declared.has(parsed.x.trim().split(".")[0] ?? "");
+  };
+  let outside = false;
+  for (const ref of refs) {
+    let points = 0;
+    let fixedPoints = 0;
+    walkStatements([ref.statement], {
+      onPathItem: (item) => {
+        if (item.kind !== "Coordinate") return;
+        points += 1;
+        if (item.relativePrefix === undefined && outsideName(item.raw)) fixedPoints += 1;
+      },
+      onNode: (node) => {
+        for (const entry of node.options?.entries ?? []) {
+          if (entry.kind !== "kv") continue;
+          const target = positioningTargetNodeName(normalizeOptionKey(entry.key), entry.valueRaw);
+          if (target != null && !declared.has(target)) outside = true;
+        }
+        if (node.atRaw !== undefined) {
+          points += 1;
+          if (node.atRelativePrefix === undefined && outsideName(node.atRaw)) fixedPoints += 1;
+        }
+        for (const name of [node.name, ...(node.aliases ?? [])]) {
+          if (name) declared.add(name);
+        }
+      }
+    });
+    if (points > 0 && fixedPoints === points) outside = true;
+  }
+  return outside;
 }
 
 export function applyRepeatElementsAction(

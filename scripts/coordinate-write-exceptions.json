@@ -3,6 +3,15 @@
   "reviewed": [
     {
       "rule": "F2",
+      "symbol": "editedSlice",
+      "file": "packages/app/src/edit-execution.ts",
+      "declaration": "executeDocumentEdit.replacement",
+      "hash": "bb24ea5af287",
+      "count": 1,
+      "expression": "editedSlice(replay.source, layerAt, end + replay.source.length - working.length)"
+    },
+    {
+      "rule": "F2",
       "symbol": "sourceSlice",
       "file": "packages/app/src/editing-identities.ts",
       "declaration": "identityPatches.replacement",
@@ -54,6 +63,15 @@
       "hash": "a988f61a7876",
       "count": 3,
       "expression": "userText(spec, \"beamer-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "editedSlice",
+      "file": "packages/core/src/edit/actions.ts",
+      "declaration": "applyConnectHandle.replacement",
+      "hash": "933a83734ed8",
+      "count": 1,
+      "expression": "editedSlice(nameResolution.source, from, from + nameResolution.insertedLength)"
     },
     {
       "rule": "F2",
@@ -255,6 +273,24 @@
     },
     {
       "rule": "F2",
+      "symbol": "sliceFragment",
+      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
+      "declaration": "buildPlacementMutations.raw",
+      "hash": "82bff6f1c7bf",
+      "count": 1,
+      "expression": "sliceFragment(placementEntry, equalsIndex + 1)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sliceFragment",
+      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
+      "declaration": "buildPlacementMutations.value",
+      "hash": "3a15ecd27948",
+      "count": 1,
+      "expression": "sliceFragment(raw, raw.length - raw.trimStart().length, raw.trimEnd().length)"
+    },
+    {
+      "rule": "F2",
       "symbol": "unchangedSource",
       "file": "packages/core/src/edit/actions/paste-duplicate.ts",
       "declaration": "applyDuplicateElementsAction.currentSource",
@@ -291,6 +327,15 @@
     },
     {
       "rule": "F2",
+      "symbol": "editedSlice",
+      "file": "packages/core/src/edit/actions/repeat.ts",
+      "declaration": "rewritePathStatementCoordinates",
+      "hash": "a1fa0e15fe84",
+      "count": 1,
+      "expression": "editedSlice(rewritten, statement.span.from, statement.span.to + (rewritten.length - source.length))"
+    },
+    {
+      "rule": "F2",
       "symbol": "unchangedSource",
       "file": "packages/core/src/edit/actions/resize-element.ts",
       "declaration": "applyResizeElementAction.newSource",
@@ -324,6 +369,15 @@
       "hash": "49e7e7594a9d",
       "count": 1,
       "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "editedSlice",
+      "file": "packages/core/src/edit/actions/rotate-element.ts",
+      "declaration": "computeReplacementPatch.replacement",
+      "hash": "4d4b919e2873",
+      "count": 1,
+      "expression": "editedSlice(newSource, prefix, newSuffix)"
     },
     {
       "rule": "F2",
@@ -498,6 +552,15 @@
     },
     {
       "rule": "F2",
+      "symbol": "editedSlice",
+      "file": "packages/core/src/edit/patch.ts",
+      "declaration": "computeMinimalReplacementPatch.replacement",
+      "hash": "4d4b919e2873",
+      "count": 1,
+      "expression": "editedSlice(newSource, prefix, newSuffix)"
+    },
+    {
+      "rule": "F2",
       "symbol": "unchangedSource",
       "file": "packages/core/src/edit/patch.ts",
       "declaration": "documentDiffPatch.patch",
@@ -579,12 +642,39 @@
     },
     {
       "rule": "F2",
+      "symbol": "editedSlice",
+      "file": "packages/core/src/edit/property-write-planner.ts",
+      "declaration": "deriveSingleSourcePatch.replacement",
+      "hash": "8688fb713745",
+      "count": 1,
+      "expression": "editedSlice(next, prefix, nextSuffix)"
+    },
+    {
+      "rule": "F2",
       "symbol": "unchangedSource",
       "file": "packages/core/src/edit/source-patches.ts",
       "declaration": "applySourcePatches.source",
       "hash": "49e7e7594a9d",
       "count": 1,
       "expression": "unchangedSource(source)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sliceFragment",
+      "file": "packages/core/src/edit/source-patches.ts",
+      "declaration": "composeSourcePatches.split.text",
+      "hash": "692905598fb3",
+      "count": 1,
+      "expression": "sliceFragment(piece.text, cut)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sliceFragment",
+      "file": "packages/core/src/edit/source-patches.ts",
+      "declaration": "composeSourcePatches.split.text",
+      "hash": "c809986ee385",
+      "count": 1,
+      "expression": "sliceFragment(piece.text, 0, cut)"
     },
     {
       "rule": "F2",

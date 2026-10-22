@@ -1,4 +1,4 @@
-import { EMPTY_FRAGMENT, legacyText, type EditedSource, type TikzFragment } from "./fragment.js";
+import { EMPTY_FRAGMENT, legacyText, type EditedSource, type OptionValueText, type TikzFragment } from "./fragment.js";
 import type { Span } from "../ast/types.js";
 import type { OptionEntry, OptionListAst } from "../options/types.js";
 import { NAMED_COLORS } from "../semantic/style/constants.js";
@@ -9,7 +9,7 @@ import { normalizeOptionKey as normalizeSharedOptionKey } from "./option-key.js"
 
 /** A value to write: user text, an option value through `option`, or (until migrated) legacy text. */
 export type OptionMutation =
-  | { kind: "set"; value: TikzFragment }
+  | { kind: "set"; value: TikzFragment | OptionValueText }
   | { kind: "remove" };
 
 export type OptionMutationApplyResult = {

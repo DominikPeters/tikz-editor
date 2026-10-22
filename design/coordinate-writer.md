@@ -87,8 +87,12 @@ export function option<K extends string>(key: OtherKey<K>, value?: TikzFragment)
     transform (node sizes without `transform shape`, line widths),
     `ratio` (`pos=`, opacity). They are objects, so
     ``tikz`(${canvasLength(p.x, "cm")},…)` `` does not compile. They enter
-    source only through `option(key, value)` or `optionValueFor` (the value
-    alone, for option mutations).
+    source only through `option(key, value)` or `optionValueFor`. The
+    latter gives the value alone, for option mutations, as an
+    `OptionValueText`: a string that is not a fragment, so a value checked
+    against one key cannot be spliced into coordinate syntax either. The
+    slices that could cut a value back out of its option (`sliceFragment`,
+    `editedSlice`) are reviewed call sites under F2.
 - `option` checks the key against two tables. `FRAME_KEYS` (`shift`,
   `xshift`, `rotate`, `rotate around`, `scale`, `x`, `y`, `at`, `radius`,
   angles of arcs, `node distance`, …) take only `CoordinateText`, because
@@ -567,6 +571,21 @@ an evaluator fidelity question, not a writer one.
      `positioning`, returns typed text, and lost its `legacyText`; the
      wrapper that put the entry into a node's option brackets is typed too.
      Exception entries: migration 60 → 58.
+   - Review fixes after class 4. `positionNodeRelativeTo` aimed at the
+     handle (where the `at` is) while removing the node's own
+     `xshift`/`yshift`, so a shifted node moved by its shift; it now aims
+     at where the node is drawn. The evaluator let the anchor a placement
+     implies beat a later `anchor=`, while PGF reads options in order and
+     the later one wins. `optionValueFor` returned a fragment, so a value
+     checked against a canvas key could fill coordinate syntax; it now
+     returns `OptionValueText`, which only option mutations take, and the
+     slices are reviewed F2 sites. Duplicating siblings put every copy
+     after the last one, where a `\tikzset{x=2cm}` or a redefined node name
+     between them changed how a copy read; copies now go after each run of
+     adjacent originals. Repeat refused nothing that a `shift` cannot move:
+     it now refuses a node positioned relative to, or placed at, a node
+     the copy does not declare (PGF reads anchors with the transformation
+     undone).
 5. **Remaining writers.** Radii and other frame-dependent lengths (after
    adding circle/ellipse resize cases), SVG import, assistant handlers,
    semantic-internal source (`fit`, `tree-child`, `label-quotes`) or audited

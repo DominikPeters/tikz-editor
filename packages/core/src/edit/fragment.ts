@@ -6,6 +6,7 @@ declare const fragmentBrand: unique symbol;
 declare const editedSourceBrand: unique symbol;
 declare const coordinateTextBrand: unique symbol;
 declare const optionValueBrand: unique symbol;
+declare const optionValueTextBrand: unique symbol;
 
 /**
  * Source text an edit writes. Runtime values enter one only through a typed
@@ -201,12 +202,20 @@ export function option(key: string, value?: CoordinateText | OptionValue | TikzF
   return asFragment(`${key}=${braced}`);
 }
 
+/**
+ * The text of an option's value without its key, for option mutations that
+ * keep the key separately. Not a fragment: it cannot fill a `tikz` hole, so a
+ * value checked against one key cannot be spliced into coordinate syntax.
+ */
+export type OptionValueText = string & { readonly [optionValueTextBrand]: true };
+
 /** The value text alone, for option mutations that keep the key separately. Same key table as `option`. */
-export function optionValueFor(key: FrameKey, value: CoordinateText): TikzFragment;
-export function optionValueFor(key: CanvasKey, value: OptionValue): TikzFragment;
-export function optionValueFor(key: string, value: CoordinateText | OptionValue): TikzFragment {
+export function optionValueFor(key: FrameKey, value: CoordinateText): OptionValueText;
+export function optionValueFor(key: CanvasKey, value: OptionValue): OptionValueText;
+export function optionValueFor(key: string, value: CoordinateText | OptionValue): OptionValueText {
   void key;
-  return asFragment(typeof value === "string" ? value : value.text);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This module is the option value constructor boundary.
+  return (typeof value === "string" ? value : value.text) as OptionValueText;
 }
 
 /** `[a, b]`, or nothing when there are no options. */

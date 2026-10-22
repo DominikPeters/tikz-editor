@@ -6,8 +6,10 @@
 // F1  assertions and type predicates to a fragment type, outside fragment.ts
 //     and the writer;
 // F2  calls of the constructors that take anything (`userText`,
-//     `sourceSlice`, `unchangedSource`, and the migration escapes
-//     `legacyText`, `legacyEditedSource`): every call site is listed;
+//     `sourceSlice`, `unchangedSource`, the slices `sliceFragment` and
+//     `editedSlice`, which could cut a value out of its option, and the
+//     migration escapes `legacyText`, `legacyEditedSource`): every call
+//     site is listed;
 // F3  writer internals used outside the writer, resolved by symbol so
 //     aliases and re-exports count; `ptToCm` only on point components;
 // F4  `tikz` used other than as a template tag;
@@ -38,13 +40,15 @@ export const EXCEPTIONS_FILE = "scripts/coordinate-write-exceptions.json";
 
 /**
  * Constructors that accept anything, by defining file: string-taking
- * fragment constructors (the first three reviewed for good, the rest
- * migration debt).
+ * fragment constructors and slices (reviewed for good), and the migration
+ * debt.
  */
 const LISTED_CONSTRUCTORS = new Map([
   ["userText", "reviewed"],
   ["sourceSlice", "reviewed"],
   ["unchangedSource", "reviewed"],
+  ["sliceFragment", "reviewed"],
+  ["editedSlice", "reviewed"],
   ["legacyText", "migration"],
   ["legacyEditedSource", "migration"]
 ]);
