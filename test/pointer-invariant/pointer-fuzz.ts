@@ -426,7 +426,7 @@ function positioningCases({ context, frame, body, before, handles, elementId }: 
   }
   if (body.label === "node" && anchorId) {
     const key = `positionNodeRelativeTo|${frame.label}`;
-    return [runCase(context, frame, key, before, { kind: "positionNodeRelativeTo", nodeId: elementId, targetNodeName: "A", targetNodeSourceId: anchorId }, next => ({
+    return [runCase(context, frame, key, before, { kind: "positionNodeRelativeTo", nodeId: elementId, targetNodeName: "A", targetNodeSourceId: anchorId, bypassSnapping: true }, next => ({
       expected: [position.world], actual: next.handles.filter(h => h.sourceRef.sourceId === elementId && h.kind === "node-position").map(h => h.world)
     }))];
   }

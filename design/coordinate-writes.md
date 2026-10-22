@@ -140,19 +140,19 @@ frame).
 
 | action | implementation | frame handling | status |
 |---|---|---|---|
-| moveHandle | `rewrite.ts` `rewriteCoordinate` (+ `rewrite-calc.ts`, `frame-coordinate.ts`) | handle `frame` / `detachFrame`; positioning via `rewritePositioning` | pass, except positioning under node transforms (class 4) |
-| moveElement(s) | `move-arrange-actions.ts`, `center-pivot-move.ts`, `calc-move.ts` | per-handle frames via `rewritePreciseFrameCoordinate` | pass, except positioning under node transforms (class 4) |
-| alignElements | `move-arrange-actions.ts` → moveElements | as moveElements | pass, except positioning dependency (class 4) |
+| moveHandle | `rewrite.ts` `rewriteCoordinate` (+ `rewrite-calc.ts`, `frame-coordinate.ts`) | handle `frame` / `detachFrame`; positioning via `writer.positioning` | pass (class 4 done) |
+| moveElement(s) | `move-arrange-actions.ts`, `center-pivot-move.ts`, `calc-move.ts` | per-handle frames via `rewritePreciseFrameCoordinate` | pass (class 4 done) |
+| alignElements | `move-arrange-actions.ts` → moveElements | as moveElements | pass (class 4 done) |
 | distributeElements | `move-arrange-actions.ts` → moveElements | as moveElements | not fuzzed (same machinery as align) |
 | resizeElement | `resize-element.ts` (7 raw `CM_PER_PT`) | local transform for rectangles | pass for rectangle corners; edges, circles, ellipses, node sizes not checked |
 | rotateElement | `rotate-element.ts` | `rewritePreciseFrameCoordinate`; recentered corners in cm | fails (class 1); only rectangles/circles/ellipses supported |
 | addElement | `element-templates.ts` `generateElementSource` | world points written at the end-gap context (`new-statement.ts`) | pass (class 3 done); radii still `legacyText` |
-| pasteStatements / duplicateElements | `paste-duplicate.ts` | copy inserted, then offset in place by the move machinery | pass (class 2 done); positioning (class 4) and `to` bends partial/fail as for moveElement |
+| pasteStatements / duplicateElements | `paste-duplicate.ts` | copy inserted, then offset in place by the move machinery | pass (class 2 done); `to` bends partial as for moveElement |
 | repeatElements | `repeat.ts` | loop steps as world vectors, `writer.translated` per coordinate or the scope's `shift` | pass (class 2 done) |
 | insertPathPoint | `path-editing-actions.ts` | none | fails (class 1); refuses scoped paths and paths with options |
 | reversePath / setPathPointKind | `path-editing-actions.ts` | n/a (rewrites existing text) | fail on relative (class 5); refuse scoped paths and paths with options |
 | appendToPath | `path-editing-actions.ts`, world segments from the app path tool | written in the path's shared frame | pass (class 3 done) |
-| positionNodeRelativeTo | `node-positioning-actions.ts` | world anchors, direction from source | fails (class 4) |
+| positionNodeRelativeTo | `node-positioning-actions.ts` | `writer.positioning` against recorded anchors | pass (class 4 done); refuses where only a negative distance would fit |
 | convertNodePositionToAbsolute | `node-positioning-actions.ts:783` | `worldToLocal` + `localToSourceUnits` without axis vectors | fails (class 1) |
 | setFigureBounds | `figure-bounds.ts` | none | fails (class 1) |
 | splitPath / joinPaths / deletePathPoint / toggleClosedPath | `path-editing-actions.ts` | reorder existing text | not fuzzed (likely class 5 on relative coordinates) |

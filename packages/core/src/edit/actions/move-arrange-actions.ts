@@ -274,7 +274,8 @@ export function applyAlignElementsAction(
     return plan;
   }
 
-  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas, parseOptions, geometry);
+  // Aligning is exact: a positioned node is not snapped to a direction.
+  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas, { ...parseOptions, bypassSnapping: true }, geometry);
 }
 
 export function applyDistributeElementsAction(
@@ -298,7 +299,7 @@ export function applyDistributeElementsAction(
     return plan;
   }
 
-  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas, parseOptions, geometry);
+  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas, { ...parseOptions, bypassSnapping: true }, geometry);
 }
 
 function applyMoveElementsUsingHandleRewrites(

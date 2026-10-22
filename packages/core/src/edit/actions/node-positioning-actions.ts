@@ -1,4 +1,4 @@
-import { EMPTY_FRAGMENT, layout, legacyText, sliceFragment, tikz, type EditedSource, type TikzFragment } from "../fragment.js";
+import { EMPTY_FRAGMENT, layout, sliceFragment, tikz, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import type { NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
@@ -14,7 +14,6 @@ import { normalizeOptionKey } from "../option-key.js";
 import { rewriteSourceBackedOptionListMutations, type OptionMutation } from "../option-mutations.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import { resolvePropertyTarget, type PropertyTarget, type PropertyTargetOptionsFormat } from "../property-target.js";
-import { rewritePositioningFromContext } from "../rewrite.js";
 import { collectSourceWorldBounds } from "../snapping/index.js";
 import { applyTextReplacements, parseStatementSnapshot, type TextReplacement } from "../statement-ops.js";
 import type { EditActionResult } from "../actions.js";
@@ -25,6 +24,8 @@ export type PositionNodeRelativeToAction = {
   nodeId: string;
   targetNodeName: string;
   targetNodeSourceId: string;
+  /** Keep the node where it is instead of snapping to a cardinal direction. */
+  bypassSnapping?: boolean;
 };
 
 export type ConvertNodePositionToAbsoluteAction = {
@@ -127,11 +128,11 @@ export function preflightPositionNodeRelativeToAction(
     return unsupportedPreflight(placement.reason);
   }
 
-  const positioningText = rewritePositioningFromContext(placement.currentCenter, placement.context);
-  const positioningEntry = positioningText === null ? null : legacyText(positioningText);
-  if (!positioningEntry) {
+  const written = createCoordinateWriter(source).positioning(placement.context, placement.currentCenter, { bypassSnapping: parseOptions.bypassSnapping === true });
+  if (written.kind !== "ok") {
     return unsupportedPreflight("Could not serialize relative positioning option.");
   }
+  const positioningEntry = written.fragment;
   if (hasNegativePositioningDistance(positioningEntry)) {
     return unsupportedPreflight("Selected target would require a negative positioning distance.");
   }
@@ -327,14 +328,26 @@ function resolveRelativePlacementContext(input: {
     center: currentCenter,
     bounds: boundsBySource.get(input.nodeSourceId) ?? null
   });
+  // What the evaluator recorded where the node was drawn beats anchors read
+  // off its bounds, which a rotated or round node does not have there.
+  const placement = currentHandle?.handleType === "coordinate" ? currentHandle.nodePlacement : undefined;
+  if (placement) {
+    currentAnchors.set("center", placement.drawnCenter);
+    for (const [anchor, offset] of Object.entries(placement.anchorOffsets)) {
+      currentAnchors.set(anchor, worldPoint(pt(placement.drawnCenter.x + offset.x), pt(placement.drawnCenter.y + offset.y)));
+    }
+  }
   const targetAnchors = resolveAnchorMap({
     anchorTargets: input.semantic.nodeAnchorTargets,
     nodeSourceId: input.targetNodeSourceId,
     center: targetCenter,
     bounds: boundsBySource.get(input.targetNodeSourceId) ?? null
   });
+  // Offsets are measured from where the node is drawn; its handle stands where
+  // an `at` would put it, before the node's own `xshift` moves it on.
+  const drawnCenter = currentAnchors.get("center") ?? currentCenter;
   const anchorOffsetsByDirection = buildAnchorOffsetsByDirection({
-    currentCenter,
+    currentCenter: drawnCenter,
     targetCenter,
     currentAnchors,
     targetAnchors,
@@ -356,8 +369,8 @@ function resolveRelativePlacementContext(input: {
       anchorOffsetsByDirection,
       targetAnchorHW: halfWidth(targetAnchors, targetCenter),
       targetAnchorHH: halfHeight(targetAnchors, targetCenter),
-      currentAnchorHW: halfWidth(currentAnchors, currentCenter),
-      currentAnchorHH: halfHeight(currentAnchors, currentCenter)
+      currentAnchorHW: halfWidth(currentAnchors, drawnCenter),
+      currentAnchorHH: halfHeight(currentAnchors, drawnCenter)
     }
   };
 }
@@ -418,7 +431,7 @@ function rewriteNodePlacementSource(input: {
   } else if (input.placementEntry) {
     replacements.push({
       span: { from: input.target.insertOffset, to: input.target.insertOffset },
-      text: legacyText(wrapSerializedOptions(input.placementEntry, input.target.optionsFormat ?? "bracketed"))
+      text: wrapSerializedOptions(input.placementEntry, input.target.optionsFormat ?? "bracketed")
     });
   }
 
@@ -488,15 +501,15 @@ function optionEntryKey(entry: OptionEntry): string | null {
   return normalizeOptionKey(entry.key);
 }
 
-function wrapSerializedOptions(content: string, format: PropertyTargetOptionsFormat): string {
+function wrapSerializedOptions(content: TikzFragment, format: PropertyTargetOptionsFormat): TikzFragment {
   switch (format) {
     case "bare":
       return content;
     case "braced":
-      return `{${content}}`;
+      return tikz`{${content}}`;
     case "bracketed":
     default:
-      return `[${content}]`;
+      return tikz`[${content}]`;
   }
 }
 

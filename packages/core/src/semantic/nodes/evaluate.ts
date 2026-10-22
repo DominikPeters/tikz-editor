@@ -32,7 +32,7 @@ import {
 import type { DiagnosticPushFn, FeatureMarkFn, PlacementSegment } from "../path/types.js";
 import type { WorldPoint } from "../../coords/points.js";
 import type { WorldTransform } from "../../coords/transforms.js";
-import type { ResolvedStyle, SceneAdornment, SceneElement, ScenePathAttachment, ScenePathCommand } from "../types.js";
+import type { NodePlacementRecord, ResolvedStyle, SceneAdornment, SceneElement, ScenePathAttachment, ScenePathCommand } from "../types.js";
 import { cloneCustomStyleRegistry, walkOptionEntriesWithCustomStyles } from "../style/custom-styles.js";
 import { expandOptionListMacros } from "../style/macro-options.js";
 import { resolveContextDelta } from "../style/resolve.js";
@@ -105,6 +105,8 @@ const CONTINUOUS_POSITIONING_DIRECTIONS: PositioningDirection[] = [
   "below left",
   "below right"
 ];
+
+const PLACEMENT_RECORD_ANCHORS = ["north", "south", "east", "west", "north east", "north west", "south east", "south west"] as const;
 
 export type NodeAnchorExtents = {
   left: number;
@@ -581,6 +583,20 @@ export function evaluateNodeItem(
     expandedNodeOptions,
     nodeTransform
   );
+  // Where the node is drawn, for editing its placement later (positioning it relative to another).
+  if (!item.adornment) {
+    const record: NodePlacementRecord = {
+      drawnCenter: worldPoint(pt(center.x + nodeTransform.e), pt(center.y + nodeTransform.f)),
+      anchorOffsets: Object.fromEntries(
+        PLACEMENT_RECORD_ANCHORS.map((anchor) => [anchor, applyMatrixToVector(nodeTransform, nodeAnchorOffset(nodeShape, nodeLayout, anchor, expandedNodeOptions))])
+      )
+    };
+    for (const [index, handle] of context.editHandles.entries()) {
+      if (handle.sourceRef.sourceId === nodeHandleSourceId && handle.kind === "node-position" && handle.handleType === "coordinate") {
+        context.editHandles[index] = { ...handle, nodePlacement: record };
+      }
+    }
+  }
   // Create positioning handle now that we have center and nodeLayout for the current node (B)
   if (resolvedPositioning.relativePlacement) {
     const rp = resolvedPositioning.relativePlacement;
@@ -598,6 +614,13 @@ export function evaluateNodeItem(
       // Look up target node's geometry for anchor compensation
       const targetGeom = readNamedNodeGeometry(context, rp.targetNodeName);
 
+      // The handle stands for where the positioning puts the node. The node's
+      // own shifts (`xshift`, and the translation its transform carries)
+      // move the drawn node on top of that and are not the positioning's.
+      const placed = worldPoint(
+        pt(center.x - rp.additiveOffset.x + nodeTransform.e),
+        pt(center.y - rp.additiveOffset.y + nodeTransform.f)
+      );
       const sourceText = context.source.slice(rp.span.from, rp.span.to);
       context.editHandles.push({
         id: nextEditHandleId(context, nodeHandleSourceId, "node-position"),
@@ -609,7 +632,7 @@ export function evaluateNodeItem(
         },
         handleType: "node-positioning",
         kind: "node-position",
-        world: center,
+        world: placed,
         transform: frame.transform,
         siteContext: placementContext,
         sourceText,
@@ -619,7 +642,7 @@ export function evaluateNodeItem(
           direction: rp.direction,
           targetNodeName: rp.targetNodeName,
           targetCenter: rp.targetCenter,
-          currentCenter: center,
+          currentCenter: placed,
           legacyOf: rp.legacyOf,
           anchorOffsetsByDirection: computePositioningAnchorOffsetsByDirection({
             targetNodeName: rp.targetNodeName,

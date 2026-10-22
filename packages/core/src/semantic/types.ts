@@ -12,7 +12,8 @@ import type {
   SourceCmPoint,
   SvgPoint,
   WorldBounds,
-  WorldPoint
+  WorldPoint,
+  WorldVector
 } from "../coords/points.js";
 import type { AnchorTransform, FrameTransform, WorldTransform } from "../coords/transforms.js";
 import type { StyleChainEntry } from "./style-chain.js";
@@ -602,6 +603,16 @@ export type EditHandlePositioningContext = {
   currentAnchorHH: number;
 };
 
+/**
+ * Where a node was drawn, for editing its placement: the center it ended at
+ * (after its own shifts) and its anchors relative to that center, in world
+ * space (the node's own rotation and scale applied).
+ */
+export type NodePlacementRecord = {
+  drawnCenter: WorldPoint;
+  anchorOffsets: Readonly<Record<string, WorldVector>>;
+};
+
 export type CoordinateSourceUnits = { x?: string; y?: string; radius?: string };
 
 type CoordinateEditHandleBase = EditHandleBase & {
@@ -609,6 +620,8 @@ type CoordinateEditHandleBase = EditHandleBase & {
   /** The raw frame the coordinate was read in; `frame` is it composed for the coordinate's own spelling. */
   siteContext: SiteContext;
   sourceUnits?: CoordinateSourceUnits;
+  /** On a node's placement handle: where the node was drawn. */
+  nodePlacement?: NodePlacementRecord;
   handleType: "coordinate";
   kind: "node-position" | "path-point" | "path-control";
   insertion?: EditHandleInsertion;

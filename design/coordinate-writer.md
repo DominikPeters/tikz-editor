@@ -400,6 +400,25 @@ pdflatex: `right=1cm of A` leaves a 1cm canvas gap under `scale=2` and
 `rotate=90`, and the node's own `rotate=-35,xshift=3mm` moves it. Unitless
 distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
 
+What the code does with that (class 4, done): the writer needs no frame for a
+positioning option. `right=1.2cm of A` is a canvas distance, so
+`writer.positioning(context, world, { bypassSnapping })` writes cm from the
+node centers and the anchors the evaluator recorded; the direction is chosen
+in world space (PGF's directions are canvas directions, also under a
+reflected frame), snapped to a cardinal one unless `bypassSnapping`, and a
+direction whose distances are not negative is preferred. What was missing
+was the node's own part. A positioned node's handle now stands where the
+positioning puts it, before the node's own `xshift`/`yshift` and the
+translation its transform carries (the evaluator drew the node at the handle
+plus those, but its handle had them half subtracted when a rotation came
+first). A node's placement handle records where the node was drawn and its
+eight anchors relative to that (`nodePlacement`), so
+`positionNodeRelativeTo` measures an unnamed, rotated or round node from its
+real anchors, not from its bounds. Not done: the evaluator applies `xshift`
+in world space whatever its order against `rotate`; PGF composes them in
+option order (`rotate=-35,xshift=3mm` shifts along the rotated axis). That is
+an evaluator fidelity question, not a writer one.
+
 ## Failure classes, mapped
 
 | class | fix |
@@ -407,7 +426,7 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
 | 1. world cm as source units | insertPathPoint, convert-to-absolute: `writer.point` at an `in-statement` site; figure bounds: `writer.bounds`/`readBounds`; center-pivot rotation: corners via `writer.point`, angle via `writer.rotation` |
 | 2. offsets in a bare picture (done) | a copy is inserted unmoved and offset in the document it landed in, by the move machinery (no `offsetStatement`: the copy's own handles carry its frame). Repeat steps are world vectors, written by `writer.translated`; positioned nodes through `writer.positioning` (class 4) |
 | 3. new coordinates ignore axes and scopes (done) | insertion actions take world points, written at the gap or target-statement context. A core `addPath { start, segments, closed, style }` replaces app-side path and freehand string generation; `appendToPath` takes world segments. The app's `*InPictureCoordinates` mappings are deleted |
-| 4. positioning | drags and `positionNodeRelativeTo` use `writer.positioning`, choosing the direction from the local delta. Aligning `A` with a node positioned from `A` is a move-planning bug (dependents move with `A`), tracked separately |
+| 4. positioning (done) | drags and `positionNodeRelativeTo` use `writer.positioning` (world directions, canvas distances), against handles that stand where the positioning puts the node. Copies and alignments are exact: they bypass the cardinal snap |
 | 5. relative coordinates in rewritten paths | restructuring actions compute anchors' world positions and re-spell each one at its new place: `writer.point` for absolute, `writer.vector` from the new predecessor for `+`/`++` |
 
 ## Product decisions
@@ -535,6 +554,19 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
      enclosing loop is refused. Output in a plain picture changed: plain
      numbers stay plain (`(1+\i*2,0)`, not `(1cm+\i*2cm,0)`).
      Exception entries: migration 62 → 60.
+   - Class 4 done: the 27 positioning failures are gone (45 → 18, the rest
+     class 5), two `positionNodeRelativeTo` cases now refuse where they wrote
+     the wrong place (a rotated node whose centers would need a negative
+     distance). Causes, in order of cases: the positioned node's handle
+     included its own shifts (8 cases: drags, moves, duplicates, aligns of a
+     node with `rotate=…,xshift=…`); duplicates and aligns went through the
+     cardinal snap meant for drags and dropped the offset (16, including
+     `top` alignments in every frame); `positionNodeRelativeTo` took anchors
+     from bounds and offsets from a different center than the one it
+     preserved (3). `rewritePositioningFromContext` moved into the writer as
+     `positioning`, returns typed text, and lost its `legacyText`; the
+     wrapper that put the entry into a node's option brackets is typed too.
+     Exception entries: migration 60 → 58.
 5. **Remaining writers.** Radii and other frame-dependent lengths (after
    adding circle/ellipse resize cases), SVG import, assistant handlers,
    semantic-internal source (`fit`, `tree-child`, `label-quotes`) or audited

@@ -97,6 +97,8 @@ export type NodePositioningResolution = {
     targetWorld: WorldPoint;
     targetCenter: WorldPoint;
     legacyOf: boolean;
+    /** The node's own `xshift`/`yshift`, which move the drawn node after it is placed. */
+    additiveOffset: WorldVector;
     span: Span;
   };
 };
@@ -298,6 +300,7 @@ export function resolveNodePositioningTarget(
         targetWorld: resolved.targetWorld,
         targetCenter: resolved.targetCenter ?? resolved.targetWorld,
         legacyOf: relativePlacement.legacyOf,
+        additiveOffset,
         span: relativePlacement.span
       };
     }

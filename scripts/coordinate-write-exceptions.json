@@ -852,24 +852,6 @@
     {
       "rule": "F2",
       "symbol": "legacyText",
-      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
-      "declaration": "preflightPositionNodeRelativeToAction.positioningEntry",
-      "hash": "b9a220710b81",
-      "count": 1,
-      "expression": "legacyText(positioningText)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
-      "declaration": "rewriteNodePlacementSource.text",
-      "hash": "605fbd2adb5f",
-      "count": 1,
-      "expression": "legacyText(wrapSerializedOptions(input.placementEntry, input.target.optionsFormat ?? \"bracketed\"))"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
       "file": "packages/core/src/edit/actions/paste-duplicate.ts",
       "declaration": "applyDuplicateElementsAction.applied.text",
       "hash": "24f00efa7801",
@@ -1143,7 +1125,7 @@
       "file": "packages/core/src/edit/rewrite.ts",
       "declaration": "rewriteCoordinate",
       "hash": "73492e66680e",
-      "count": 2,
+      "count": 1,
       "expression": "legacyText(text)"
     },
     {

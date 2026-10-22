@@ -278,7 +278,8 @@ function offsetInsertedStatements(
   const parsed = parseTikzForEdit(inserted, current);
   const { sourceFingerprint: _previousFingerprint, ...evaluating } = evaluateOptions;
   const semantic = evaluateTikzFigure(parsed.figure, inserted, evaluating);
-  const moved = deps.applyMoveElements(inserted, semantic.editHandles, ids, delta, current);
+  // The offset is exact, not a drag: a positioned copy is not snapped to a direction.
+  const moved = deps.applyMoveElements(inserted, semantic.editHandles, ids, delta, { ...current, bypassSnapping: true });
 
   if (moved.kind !== "success" && moved.kind !== "partial") {
     return {

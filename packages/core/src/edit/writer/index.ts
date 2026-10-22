@@ -8,7 +8,9 @@ import { isFrameLocalCoordinateEditHandle, isRelativeCoordinateEditHandle, type 
 import { worldDeltaToLocalDelta, worldToLocal } from "../coords.js";
 import { formatNumber, type NumberFormatOptions } from "../format.js";
 import { joinFragments, tikz, type CoordinateText, type TikzFragment } from "../fragment.js";
+import type { EditHandlePositioningContext } from "../../semantic/types.js";
 import { coordinateText } from "./coordinate-text.js";
+import { writePositioning } from "./positioning.js";
 import { cartesianComponents, coordinateLayout, formatCanvasCoordinate, formatCoordinate, formatPolarCoordinate, translatedComponent } from "./format.js";
 import { localToSourceUnits } from "./source-units.js";
 
@@ -68,6 +70,13 @@ export interface CoordinateWriter {
    */
   translated(site: WriteSite, steps: readonly LoopStep[]): WriterResult<CoordinateText>;
   /**
+   * The positioning option (`right=1.2cm of A`) that puts a node positioned
+   * from another at `world`. Its distances are canvas lengths, so the context
+   * is the node's, not a frame's. `world` is where the positioning puts the
+   * node (the handle's point), before the node's own shifts.
+   */
+  positioning(context: EditHandlePositioningContext, world: WorldPoint, options?: Readonly<{ bypassSnapping?: boolean }>): WriterResult<CoordinateText>;
+  /**
    * A path body read in `context` whose canvas hull is `world`. PGF grows the
    * picture by canvas-transformed points, so a `rectangle` serves only where
    * the map keeps axes axis-aligned; elsewhere the four corners and `cycle`.
@@ -94,6 +103,10 @@ export function createCoordinateWriter(source: string): CoordinateWriter {
       return site.kind === "context"
         ? writeContextPoint(site, world, options.precision ?? "drag")
         : writeCoordinatePoint(source, site, world, options.precision ?? "drag");
+    },
+    positioning(context, world, options = {}) {
+      const text = writePositioning(world, context, options.bypassSnapping ?? false);
+      return text === null ? unsupported("this positioning cannot be written as one option") : ok(text);
     },
     translated(site, steps) {
       return writeTranslated(source, site, steps);
