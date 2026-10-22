@@ -1,6 +1,6 @@
 import type ts from "typescript";
 
-export type CoordinateWriteRule = "F1" | "F2" | "F3" | "F4" | "F5";
+export type CoordinateWriteRule = "F1" | "F2" | "F3" | "F4" | "F5" | "F6";
 
 export interface CoordinateWriteViolation {
   readonly rule: CoordinateWriteRule;

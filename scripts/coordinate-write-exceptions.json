@@ -1,5 +1,5 @@
 {
-  "comment": "Fingerprinted coordinate-write exceptions (scripts/check-coordinate-writes.mjs). Reviewed: string constructors whose call sites were checked. Migration: violations the writer phases remove; the list only shrinks.",
+  "comment": "Fingerprinted coordinate-write exceptions (scripts/check-coordinate-writes.mjs). Reviewed: fragment constructors and low-level authored-value serializers whose call sites were checked. Migration: violations the writer phases remove; the list only shrinks.",
   "reviewed": [
     {
       "rule": "F2",
@@ -578,6 +578,24 @@
       "expression": "unchangedSource(source)"
     },
     {
+      "rule": "F6",
+      "symbol": "writeLocalLength",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "planOrderedScopeTranslation.value",
+      "hash": "5137f3c9069a",
+      "count": 1,
+      "expression": "writeLocalLength(value, pointDistanceFormatOptions(formatPrecision))"
+    },
+    {
+      "rule": "F6",
+      "symbol": "writeShiftPair",
+      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+      "declaration": "planOrderedScopeTranslation.value",
+      "hash": "62b789c96d6d",
+      "count": 1,
+      "expression": "writeShiftPair(pair, { x: component(old.x + localDelta.x, localDelta.x), y: component(old.y + localDelta.y, localDelta.y"
+    },
+    {
       "rule": "F2",
       "symbol": "sliceFragment",
       "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
@@ -612,6 +630,15 @@
       "hash": "8e65050a675e",
       "count": 1,
       "expression": "userText(snippet, \"pasted-tikz\")"
+    },
+    {
+      "rule": "F6",
+      "symbol": "writeLocalLength",
+      "file": "packages/core/src/edit/actions/path-attached-node-actions.ts",
+      "declaration": "applyDistanceMutations.value",
+      "hash": "e226619243e6",
+      "count": 1,
+      "expression": "writeLocalLength(resolvedDistance, pointDistanceFormatOptions(action.formatPrecision))"
     },
     {
       "rule": "F2",
@@ -695,6 +722,24 @@
       "expression": "sourceSlice(source, { from: payload.span.from + offset, to: payload.span.from + offset + length })"
     },
     {
+      "rule": "F6",
+      "symbol": "writeRadii",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "applyResizePathCircleOrEllipse.radii",
+      "hash": "0ecaae0c98d8",
+      "count": 1,
+      "expression": "writeRadii({ ...reach, x: nextRxLocal, y: nextRyLocal }, { units: currentRadiusUnits(context.syntax) })"
+    },
+    {
+      "rule": "F6",
+      "symbol": "writeScaleFactor",
+      "file": "packages/core/src/edit/actions/resize-element.ts",
+      "declaration": "applyResizeScope.formatted",
+      "hash": "bdb3f851a9c7",
+      "count": 1,
+      "expression": "writeScaleFactor(current * ratio, action.formatPrecision === \"snapped\" ? { fractionDigits: 12 } : {})"
+    },
+    {
       "rule": "F2",
       "symbol": "unchangedSource",
       "file": "packages/core/src/edit/actions/rotate-element.ts",
@@ -720,6 +765,24 @@
       "hash": "9468d0c7211f",
       "count": 1,
       "expression": "sourceSlice(source, { from, to })"
+    },
+    {
+      "rule": "F6",
+      "symbol": "writeAuthoredAngle",
+      "file": "packages/core/src/edit/actions/rotate-element.ts",
+      "declaration": "buildOriginRotateMutations.value",
+      "hash": "ec2728c443d1",
+      "count": 1,
+      "expression": "writeAuthoredAngle(normalizedAngle)"
+    },
+    {
+      "rule": "F6",
+      "symbol": "writeAuthoredAngle",
+      "file": "packages/core/src/edit/actions/rotate-element.ts",
+      "declaration": "buildPropertyRotateMutations.angle",
+      "hash": "3a56ae1ff084",
+      "count": 1,
+      "expression": "writeAuthoredAngle(normalizeTinyNumber(angleDeg))"
     },
     {
       "rule": "F2",
@@ -783,6 +846,33 @@
       "hash": "d53711d30e73",
       "count": 1,
       "expression": "userText(edit.text, \"node-text\")"
+    },
+    {
+      "rule": "F6",
+      "symbol": "writeTypedComponents",
+      "file": "packages/core/src/edit/apply.ts",
+      "declaration": "applyEdit.replacement",
+      "hash": "07b88ff0ddec",
+      "count": 1,
+      "expression": "writeTypedComponents(oldRaw, userText(edit.x, \"inspector-value\"), userText(edit.y, \"inspector-value\"))"
+    },
+    {
+      "rule": "F6",
+      "symbol": "writeAuthoredAngle",
+      "file": "packages/core/src/edit/apply.ts",
+      "declaration": "buildCurveEditMutations.value",
+      "hash": "4378278462f2",
+      "count": 1,
+      "expression": "writeAuthoredAngle(Math.trunc(optionValue))"
+    },
+    {
+      "rule": "F6",
+      "symbol": "writeAuthoredAngle",
+      "file": "packages/core/src/edit/apply.ts",
+      "declaration": "buildCurveEditMutations.value",
+      "hash": "588270755bba",
+      "count": 1,
+      "expression": "writeAuthoredAngle(Math.trunc(Math.abs(signedBendAngle)))"
     },
     {
       "rule": "F2",
@@ -936,6 +1026,24 @@
       "hash": "14b483325208",
       "count": 1,
       "expression": "editedSlice(edited, 0, edited.length)"
+    },
+    {
+      "rule": "F6",
+      "symbol": "writeRadii",
+      "file": "packages/core/src/edit/new-statement.ts",
+      "declaration": "statementPointWriter.circleRadii.radii",
+      "hash": "250bdb7e4d87",
+      "count": 1,
+      "expression": "writeRadii(lengths)"
+    },
+    {
+      "rule": "F6",
+      "symbol": "writeRadii",
+      "file": "packages/core/src/edit/new-statement.ts",
+      "declaration": "statementPointWriter.ellipseRadii",
+      "hash": "250bdb7e4d87",
+      "count": 1,
+      "expression": "writeRadii(lengths)"
     },
     {
       "rule": "F2",

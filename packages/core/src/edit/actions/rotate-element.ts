@@ -1,3 +1,4 @@
+import { writeAuthoredAngle } from "../writer/authored-values.js";
 import { editedSlice, option, optionValueFor, sourceSlice, tikz, unchangedSource, type CoordinateText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { createEditGeometrySession, type EditGeometrySession } from "../geometry-session.js";
@@ -35,7 +36,7 @@ import {
 import { findPathStatementById } from "../statement-find.js";
 import { applyMatrix, inverseMatrix } from "../../semantic/transform.js";
 import { replaceSpan } from "../patch.js";
-import { createCoordinateWriter, rotationSense, type CoordinateWriter } from "../writer/index.js";
+import { createCoordinateWriter, rotationSense } from "../writer/index.js";
 import type { SiteContext } from "../../semantic/site-context.js";
 
 const ROTATE_EPSILON = 1e-6;
@@ -107,10 +108,9 @@ function applyPropertyRotate(
   const context = resolveTransformInspectorMutationContextFromOptionEntries(
     resolvedTarget.target.options?.entries
   );
-  const writer = createCoordinateWriter(source);
   const mutations = action.mode === "origin"
-    ? buildOriginRotateMutations(writer, action.angleDeg)
-    : buildPropertyRotateMutations(source, writer, resolvedTarget.target.options?.entries ?? [], context, action.angleDeg);
+    ? buildOriginRotateMutations(action.angleDeg)
+    : buildPropertyRotateMutations(source, resolvedTarget.target.options?.entries ?? [], context, action.angleDeg);
   if (!mutations) {
     return { kind: "unsupported", reason: "Could not find the pivot of the rotation to keep it." };
   }
@@ -291,7 +291,6 @@ function replaceRotationOption(source: string, rotation: OptionEntry, replacemen
  */
 function buildPropertyRotateMutations(
   source: string,
-  writer: CoordinateWriter,
   entries: readonly OptionEntry[],
   context: TransformInspectorMutationContext,
   angleDeg: number
@@ -305,7 +304,7 @@ function buildPropertyRotateMutations(
       mutations.set(mutation.key, { kind: "remove" });
       continue;
     }
-    const angle = writer.angle(normalizeTinyNumber(angleDeg));
+    const angle = writeAuthoredAngle(normalizeTinyNumber(angleDeg));
     if (mutation.key !== "rotate around") {
       mutations.set(mutation.key, { kind: "set", value: angle });
       continue;
@@ -330,7 +329,7 @@ function rotateAroundPivot(source: string, entries: readonly OptionEntry[]): Tik
   return source.slice(from, to).trim().length > 0 ? sourceSlice(source, { from, to }) : null;
 }
 
-function buildOriginRotateMutations(writer: CoordinateWriter, angleDeg: number): Map<string, OptionMutation> {
+function buildOriginRotateMutations(angleDeg: number): Map<string, OptionMutation> {
   const normalizedAngle = normalizeTinyNumber(angleDeg);
   const mutations = new Map<string, OptionMutation>();
   for (const key of ROTATE_CLEAR_KEYS) {
@@ -339,7 +338,7 @@ function buildOriginRotateMutations(writer: CoordinateWriter, angleDeg: number):
   if (Math.abs(normalizedAngle) <= ROTATE_EPSILON) {
     mutations.set("rotate", { kind: "remove" });
   } else {
-    mutations.set("rotate", { kind: "set", value: writer.angle(normalizedAngle) });
+    mutations.set("rotate", { kind: "set", value: writeAuthoredAngle(normalizedAngle) });
   }
   return mutations;
 }

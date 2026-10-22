@@ -1,5 +1,5 @@
+import { writeLocalLength } from "../writer/authored-values.js";
 import { EMPTY_FRAGMENT, optionValueFor, ratio, tikz } from "../fragment.js";
-import { createCoordinateWriter } from "../writer/index.js";
 import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { applyOptionMutationsToTarget, normalizeOptionKey, type OptionMutation } from "../option-mutations.js";
@@ -251,6 +251,6 @@ function applyDistanceMutations(
   }
   mutations.set(resolvedDirection, {
     kind: "set",
-    value: createCoordinateWriter("").length(resolvedDistance, pointDistanceFormatOptions(action.formatPrecision))
+    value: writeLocalLength(resolvedDistance, pointDistanceFormatOptions(action.formatPrecision))
   });
 }

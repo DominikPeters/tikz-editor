@@ -25,6 +25,12 @@ describe("coordinate-write checker", () => {
   const program = createProgram(root, files);
   const violations = collectViolations(program, root, files);
 
+  it("keeps all six raw serializers out of the ordinary writer API", () => {
+    const file = program.getSourceFile(join(fixtureDir, "raw-writer-methods-removed.ts"));
+    if (!file) throw new Error("missing ordinary writer API fixture");
+    expect(program.getSemanticDiagnostics(file).filter(diagnostic => diagnostic.code === 2339)).toHaveLength(6);
+  });
+
   it.each(fixtures)("%s produces exactly its expected diagnostics", (name) => {
     const file = join(fixtureDir, name);
     const sourceFile = program.getSourceFile(file);

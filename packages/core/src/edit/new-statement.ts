@@ -1,3 +1,4 @@
+import { writeRadii } from "./writer/authored-values.js";
 import type { PathCommand } from "../ast/types.js";
 import type { WorldPoint } from "../coords/points.js";
 import { evaluateTikzFigure } from "../semantic/evaluate.js";
@@ -42,13 +43,13 @@ export function statementPointWriter(source: string, context: SiteContext): Stat
     circleRadii(radius: number) {
       const lengths = circleRadiusLengths(context, NEW_RADIUS, radius);
       if (!lengths) throw new CoordinateWriteRefused("a circle cannot be drawn in a skewed frame");
-      const radii = writer.radii(lengths);
+      const radii = writeRadii(lengths);
       return { ...radii, even: radii.x === radii.y };
     },
     ellipseRadii(x: number, y: number) {
       const lengths = worldEllipseRadiusLengths(context, NEW_RADIUS, x, y);
       if (!lengths) throw new CoordinateWriteRefused("the frame turns an ellipse off the axes it was drawn along");
-      return writer.radii(lengths);
+      return writeRadii(lengths);
     }
   });
 }

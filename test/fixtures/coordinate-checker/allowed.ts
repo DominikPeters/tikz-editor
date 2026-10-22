@@ -10,3 +10,9 @@ export function offset(from: WorldPoint, to: WorldPoint) {
   return worldVector(pt(to.x - from.x), pt(to.y - from.y));
 }
 export const origin = worldPoint(pt(0), pt(0));
+
+import { createCoordinateWriter } from "../../../packages/core/src/edit/writer/index.js";
+import type { SiteContext } from "../../../packages/core/src/semantic/site-context.js";
+export function place(context: SiteContext, world: WorldPoint) {
+  return createCoordinateWriter("").point({ kind: "context", context }, world);
+}

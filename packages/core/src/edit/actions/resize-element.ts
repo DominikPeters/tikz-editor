@@ -1,3 +1,4 @@
+import { writeRadii, writeScaleFactor } from "../writer/authored-values.js";
 import { canvasLength, option, optionList, optionValueFor, sourceSlice, tikz, unchangedSource, type CoordinateText, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
@@ -17,7 +18,7 @@ import {
   isFrameLocalCoordinateEditHandle,
   isRelativeCoordinateEditHandle
 } from "../../semantic/types.js";
-import { createCoordinateWriter, radiusLengthsOf, type RadiusSpelling, type RadiusUnit } from "../writer/index.js";
+import { radiusLengthsOf, type RadiusSpelling, type RadiusUnit } from "../writer/index.js";
 import { pt } from "../../coords/scalars.js";
 import { applyFrameTransform, worldVectorToFrameLocal } from "../../coords/frame.js";
 import { frameLocalPoint, worldPoint, worldVector } from "../../coords/points.js";
@@ -652,7 +653,7 @@ function applyResizeScope(
     if (candidates.length > 1) return unsupported("Scope resize cannot safely rewrite repeated scale entries.");
     const current = candidates[0] ? Number(candidates[0].valueRaw.trim()) : 1;
     if (!Number.isFinite(current)) return unsupported("Scope resize requires numeric authored scale entries.");
-    const formatted = createCoordinateWriter(source).factor(current * ratio, action.formatPrecision === "snapped" ? { fractionDigits: 12 } : {});
+    const formatted = writeScaleFactor(current * ratio, action.formatPrecision === "snapped" ? { fractionDigits: 12 } : {});
     writtenRatios[axis] = Number(formatted) / current;
     scaleMutations.set(candidates[0] ? normalizeOptionKey(candidates[0].key) : axis, { kind: "set", value: formatted });
   }
@@ -1212,7 +1213,7 @@ function applyResizePathCircleOrEllipse(
   nextRxLocal = Math.max(nextRxLocal, RESIZE_EPSILON);
   nextRyLocal = Math.max(nextRyLocal, RESIZE_EPSILON);
 
-  const radii = createCoordinateWriter(source).radii({ ...reach, x: nextRxLocal, y: nextRyLocal }, { units: currentRadiusUnits(context.syntax) });
+  const radii = writeRadii({ ...reach, x: nextRxLocal, y: nextRyLocal }, { units: currentRadiusUnits(context.syntax) });
   const payloadRewrite = rewriteShapePayloadCoordinate(source, context.syntax, radii);
   if (payloadRewrite) {
     const rewritten = applySpanTextReplacement(source, payloadRewrite.span, payloadRewrite.text);

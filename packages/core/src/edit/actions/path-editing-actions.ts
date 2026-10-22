@@ -36,7 +36,7 @@ import {
   type PathPointKind
 } from "../path-editing.js";
 import type { SourcePatch } from "../types.js";
-import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
+import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } from "../parse-options.js";
 import { explicitPiece, itemPoint, pathEndState, segmentPieces, spellPath, type PathPiece, type PathPoint, type PathState } from "../path-pieces.js";
 
 
@@ -86,12 +86,36 @@ function pathHandles(
   let evaluated: readonly EditHandle[] | undefined;
   return () => {
     const own = editHandles.filter(handle => handle.sourceRef.sourceId === sourceId);
-    if (own.length > 0 && own.every(handle => source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to) === handle.sourceText)) {
+    // A named node or an enclosing transform can change without changing any
+    // coordinate in this path. Matching slices alone do not validate geometry.
+    const fingerprint = sourceFingerprintForEdit(source, parseOptions);
+    if (own.length > 0 && own.every(handle => handle.sourceRef.sourceFingerprint === fingerprint &&
+      source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to) === handle.sourceText)) {
       return editHandles;
     }
-    evaluated ??= evaluateTikzFigure(parseTikzForEdit(source, parseOptions).figure, source, evaluateOptions).editHandles;
+    evaluated ??= evaluateTikzFigure(parseTikzForEdit(source, parseOptions).figure, source,
+      { ...evaluateOptions, sourceFingerprint: fingerprint }).editHandles;
     return evaluated;
   };
+}
+
+/**
+ * Refresh geometry when only its dependencies changed. If the path itself
+ * changed, the selected point/segment may have changed meaning: keep the
+ * existing refusal for missing or invalid handles rather than retarget it.
+ */
+function currentPathHandles(
+  source: string,
+  editHandles: readonly EditHandle[],
+  sourceId: string,
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
+): readonly EditHandle[] {
+  const own = editHandles.filter(handle => handle.sourceRef.sourceId === sourceId);
+  const fingerprint = sourceFingerprintForEdit(source, parseOptions);
+  if (own.every(handle => handle.sourceRef.sourceFingerprint === fingerprint)) return editHandles;
+  if (own.some(handle => source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to) !== handle.sourceText)) return [];
+  return pathHandles(source, editHandles, sourceId, parseOptions, evaluateOptions)();
 }
 
 /** The path's statement with `pieces` as its body. */
@@ -357,7 +381,8 @@ export function applySetPathPointKindAction(
     return { kind: "unsupported", reason: resolved.reason };
   }
   const analysis = resolved.analysis;
-  const handleResolution = resolveActivePathPointHandle(editHandles, analysis, action.handleId, source);
+  const currentHandles = currentPathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions);
+  const handleResolution = resolveActivePathPointHandle(currentHandles, analysis, action.handleId, source);
   if (handleResolution.kind !== "found") {
     return { kind: "unsupported", reason: handleResolution.reason };
   }
@@ -372,14 +397,14 @@ export function applySetPathPointKindAction(
     return { kind: "unsupported", reason: "The selected anchor is missing adjacent editable segments." };
   }
 
-  const beforeAnchor = resolveAnchorWorld(editHandles, action.elementId, requireArrayValue(analysis.anchors, anchorIndex - 1), source);
-  const afterAnchor = resolveAnchorWorld(editHandles, action.elementId, requireArrayValue(analysis.anchors, anchorIndex + 1), source);
+  const beforeAnchor = resolveAnchorWorld(currentHandles, action.elementId, requireArrayValue(analysis.anchors, anchorIndex - 1), source);
+  const afterAnchor = resolveAnchorWorld(currentHandles, action.elementId, requireArrayValue(analysis.anchors, anchorIndex + 1), source);
   if (!beforeAnchor || !afterAnchor) {
     return { kind: "unsupported", reason: "Neighboring anchors could not be resolved for point editing." };
   }
 
   if (action.pointKind === "smooth" && previousSegment.kind === "line" && nextSegment.kind === "line") {
-    const writePoint = newPathPointWriter(editHandles, analysis.statement.id, source);
+    const writePoint = newPathPointWriter(currentHandles, analysis.statement.id, source);
     const replacementSegments = writePoint &&
       lineSegmentsSmoothReplacement(writePoint, analysis, previousSegment, nextSegment, beforeAnchor, handleResolution.handle.world, afterAnchor);
     if (!replacementSegments) {
@@ -393,7 +418,7 @@ export function applySetPathPointKindAction(
         pieces.push({ kind: "segment", segment });
       }
     }
-    const statement = spelledStatement(source, analysis, pieces, pathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions));
+    const statement = spelledStatement(source, analysis, pieces, pathHandles(source, currentHandles, analysis.statement.id, parseOptions, evaluateOptions));
     if (statement.kind !== "ok") return statement;
     return rewrittenPath(source, analysis, statement.text, "Point is already using that handle configuration.", { changed: [action.elementId] });
   }
@@ -414,8 +439,8 @@ export function applySetPathPointKindAction(
     return { kind: "unsupported", reason: "The selected cubic point is missing control coordinates." };
   }
 
-  const prevHandle = resolvePathControlHandle(editHandles, action.elementId, prevControl, source);
-  const nextHandle = resolvePathControlHandle(editHandles, action.elementId, nextControl, source);
+  const prevHandle = resolvePathControlHandle(currentHandles, action.elementId, prevControl, source);
+  const nextHandle = resolvePathControlHandle(currentHandles, action.elementId, nextControl, source);
   if (!prevHandle || !nextHandle) {
     return { kind: "unsupported", reason: "The selected cubic point could not be resolved for rewriting." };
   }
@@ -704,12 +729,13 @@ export function applyAppendToPathAction(
     return { kind: "unsupported", reason: resolved.reason };
   }
   const analysis = resolved.analysis;
+  const currentHandles = currentPathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions);
   if (analysis.closed) {
     return { kind: "unsupported", reason: "Cannot append to a closed path." };
   }
 
   // New segments are read where the path's own points are.
-  const writePoint = newPathPointWriter(editHandles, action.elementId, source);
+  const writePoint = newPathPointWriter(currentHandles, action.elementId, source);
   if (!writePoint) {
     return { kind: "unsupported", reason: "Appending needs a path whose points share one coordinate frame." };
   }
@@ -741,7 +767,7 @@ export function applyAppendToPathAction(
     source,
     analysis,
     pieces: segmentPieces(analysis, 0, analysisSegmentIndices(analysis)),
-    handles: pathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions),
+    handles: pathHandles(source, currentHandles, analysis.statement.id, parseOptions, evaluateOptions),
     ...(reachedFrom ? { continuesFrom: () => ({ drawn: reachedFrom, current: reachedFrom }) } : {})
   });
   if (existing.kind !== "ok") return { kind: "unsupported", reason: `Cannot keep the path's relative coordinates: ${existing.reason}.` };
@@ -762,18 +788,19 @@ export function applyInsertPathPointAction(
     return { kind: "unsupported", reason: resolved.reason };
   }
   const analysis = resolved.analysis;
+  const currentHandles = currentPathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions);
   const segment = analysis.segments[action.segmentIndex];
   if (!segment) {
     return { kind: "unsupported", reason: "Invalid segment index." };
   }
 
-  const startWorld = resolveAnchorWorld(editHandles, action.elementId, requireArrayValue(analysis.anchors, segment.startAnchorIndex), source);
-  const endWorld = resolveAnchorWorld(editHandles, action.elementId, requireArrayValue(analysis.anchors, segment.endAnchorIndex), source);
+  const startWorld = resolveAnchorWorld(currentHandles, action.elementId, requireArrayValue(analysis.anchors, segment.startAnchorIndex), source);
+  const endWorld = resolveAnchorWorld(currentHandles, action.elementId, requireArrayValue(analysis.anchors, segment.endAnchorIndex), source);
   if (!startWorld || !endWorld) {
     return { kind: "unsupported", reason: "Could not resolve segment endpoint positions." };
   }
 
-  const writePoint = newPathPointWriter(editHandles, action.elementId, source);
+  const writePoint = newPathPointWriter(currentHandles, action.elementId, source);
   if (!writePoint) {
     return { kind: "unsupported", reason: "Inserting a point needs a path whose points share one coordinate frame." };
   }
@@ -795,9 +822,9 @@ export function applyInsertPathPointAction(
       if (control1Item?.kind !== "Coordinate" || control2Item?.kind !== "Coordinate") {
         return { kind: "unsupported", reason: "Could not resolve cubic control points." };
       }
-      const control1World = resolveControlWorld(editHandles, action.elementId, control1Item, source);
+      const control1World = resolveControlWorld(currentHandles, action.elementId, control1Item, source);
       const control2World = segment.usedAnd
-        ? resolveControlWorld(editHandles, action.elementId, control2Item, source)
+        ? resolveControlWorld(currentHandles, action.elementId, control2Item, source)
         : control1World;
       if (!control1World || !control2World) {
         return { kind: "unsupported", reason: "Could not resolve cubic control point positions." };
@@ -820,7 +847,7 @@ export function applyInsertPathPointAction(
     if (index === action.segmentIndex) pieces.push(...replacement);
     else pieces.push({ kind: "segment", segment: own });
   }
-  const statement = spelledStatement(source, analysis, pieces, pathHandles(source, editHandles, analysis.statement.id, parseOptions, evaluateOptions));
+  const statement = spelledStatement(source, analysis, pieces, pathHandles(source, currentHandles, analysis.statement.id, parseOptions, evaluateOptions));
   if (statement.kind !== "ok") return statement;
   return rewrittenPath(source, analysis, statement.text, "Insert point would not change the source.", { changed: [action.elementId] });
 }

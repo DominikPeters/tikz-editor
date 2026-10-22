@@ -19,7 +19,9 @@ export type RadiusSpelling = Readonly<{ unitless: true } | { unitless: false; un
 /**
  * An `x radius` and a `y radius` in the local units of their radius frame
  * (frame-local pt, as for coordinates), from one of the functions below:
- * only those read the frame, so lengths and frame cannot be mismatched.
+ * The shape stays structural so resize can constrain the solved lengths.
+ * This does not prove provenance: writeRadii's callers are reviewed under F6
+ * to check that constraints and spelling still belong to that same frame.
  */
 export type RadiusLengths = Readonly<{ x: number; y: number; frameOf: RadiusSpelling }>;
 

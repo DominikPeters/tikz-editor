@@ -108,8 +108,8 @@ export function option<K extends string>(key: OtherKey<K>, value?: TikzFragment)
 - Lengths that live in a frame are not frame-free: a plain radius `(.5)`
   goes through the x and y vectors, a length `radius=1cm` along the canvas
   axes, and either then through the CTM (`\tikz@do@ellipse`; PGF refuses to
-  mix the two in one ellipse). They go through the writer (`writer.radii`,
-  phase 5).
+  mix the two in one ellipse). They go through radius-frame readers and the
+  reviewed `writeRadii` serializer in `writer/authored-values.ts` (F6).
 - `SourcePatch.replacement`, `replaceSpan`, `TextReplacement.text`,
   `OptionMutation.value` and every result's `newSource` take fragments and
   `EditedSource`, so no string-built source gets into a result. Patch
@@ -135,6 +135,34 @@ production sources of `packages/` and `apps/`):
 | F3 | writer internals (`formatCoordinate`, `formatPolarCoordinate`, `formatCanvasCoordinate` in `writer/format.ts`, `localToSourceUnits`, `coordinateText`) used only in `edit/writer/`, resolved by symbol so aliases and re-exports count; `ptToCm` not on a point's `x`/`y` outside the writer either |
 | F4 | `tikz` only as a template tag |
 | F5 | a point, vector or bounds constructor of `coords/points.ts` not fed the `x`/`y` of a point in another space (directly, or through `+`, `-`, and one-argument calls such as `pt(…)`), except in the transform modules (`core/src/coords/`, `app/src/ui/coords/`) and the writer |
+| F6 | every reference outside the writer to a serializer in `writer/authored-values.ts` is reviewed and fingerprinted; symbol/signature resolution covers renamed imports, aliases, destructuring, bracket/computed access, binding and re-exports, and guards namespace objects and dynamic imports before they can be narrowed or forwarded |
+
+`CoordinateWriter` exposes only operations that take evaluator-owned sites or
+contexts and world geometry. Raw authored angles, factors, local lengths,
+preserved shift components, typed components and radius lengths are serialized
+by separate functions in `writer/authored-values.ts`. These functions cannot
+prove the caller chose the right frame; they are audited exceptions, rather
+than unrestricted methods on every writer object. Keeping them separate also
+prevents narrowing a writer to a structural type from hiding a raw method.
+F6 is applied to references, not only calls, so moving a serializer to an alias
+requires review at the point it escapes.
+
+The twelve existing F6 sites were reviewed as follows:
+
+| caller | provenance checked |
+|---|---|
+| `statementPointWriter` (two sites) | circle/ellipse lengths solved through the insertion context's radius frame |
+| circle/ellipse resize | lengths solved in the radius frame, then constrained in that same frame |
+| scope resize | authored scale multiplied by the solved ratio; the resulting frame is evaluated |
+| `planOrderedScopeTranslation` (two sites) | shifts solved through the inverse ordered prefix; null components copy parsed document text |
+| path-attached node distance | clamped pt distance for an untransformed directional placement option |
+| property/origin rotation (two sites) | inspector/action angles already authored for the option; the pivot is preserved |
+| curve handle edits (two sites) | angles solved through the curve's inverse linear map |
+| `updateCoordinate` | components entered by the user and wrapped as `userText` |
+
+The current exception list has 147 reviewed entries and no migration entries.
+Adding or changing one of these expressions fails the normal typecheck gate
+until its new fingerprint is explicitly accepted after review.
 
 F5 covers the fixture "a `WorldPoint` built from picture-local numbers",
 which the types alone accept (both are `Pt`). Its first run found the
@@ -144,7 +172,7 @@ an authored pivot `WorldPoint`. Both are migration entries for class 1.
 
 The pattern rules of the first draft (coordinate-shaped template literals,
 `formatNumber` with branded operands, unbranded point parameters) are not
-built; the type layer and F1–F5 replace them.
+built; the type layer and F1–F6 replace them.
 
 Negative fixtures in `test/fixtures/coordinate-checker/` (excluded from the
 repository typecheck) each name the diagnostics they must produce, and only
@@ -157,8 +185,10 @@ formatted numbers in a `tikz` hole (TS2345), split formatting into
 canvasLength(…))` (TS2769), an option key typed `string` (TS2769). Checker:
 a cast (F1), a type predicate (F1), `userText` in an unlisted module (F2),
 an alias import of `formatCoordinate` and a re-export (F3), `tikz` called
-as a function (F4), a world point from frame-local components (F5). An
-`allowed.ts` fixture expects nothing. Disabling F1, F4 or F5 fails its
+as a function (F4), a world point from frame-local components (F5), and raw
+serializer calls and escapes (F6). All six former raw methods on
+`CoordinateWriter` must produce TS2339. An
+`allowed.ts` fixture expects nothing. Disabling F1, F4, F5 or F6 fails its
 fixtures.
 
 ## Evaluator-owned site contexts
@@ -433,7 +463,7 @@ an evaluator fidelity question, not a writer one.
 | 2. offsets in a bare picture (done) | a copy is inserted unmoved and offset in the document it landed in, by the move machinery (no `offsetStatement`: the copy's own handles carry its frame). Repeat steps are world vectors, written by `writer.translated`; positioned nodes through `writer.positioning` (class 4) |
 | 3. new coordinates ignore axes and scopes (done) | insertion actions take world points, written at the gap or target-statement context. A core `addPath { start, segments, closed, style }` replaces app-side path and freehand string generation; `appendToPath` takes world segments. The app's `*InPictureCoordinates` mappings are deleted |
 | 4. positioning (done) | drags and `positionNodeRelativeTo` use `writer.positioning` (world directions, canvas distances), against handles that stand where the positioning puts the node. Copies and alignments are exact: they bypass the cardinal snap |
-| 5. relative coordinates in rewritten paths | restructuring actions build the path from pieces; `spellPath` keeps every coordinate's text unless it is relative and read from another point now, then `writer.point` with that point as `relativeBase` (absolute where nothing comes before it) |
+| 5. relative coordinates in rewritten paths | restructuring actions build the path from pieces; `spellPath` keeps every coordinate's text unless it is relative and read from another point now, then `writer.point` with that point as `relativeBase` (absolute where nothing comes before it); cached handles require the current source fingerprint as well as matching coordinate slices, otherwise geometry is evaluated again before rewriting, inserting or smoothing |
 
 ## Product decisions
 
@@ -461,8 +491,9 @@ an evaluator fidelity question, not a writer one.
   and a hash of the offending expression without whitespace, with a count
   and the expression for review. Line moves don't change it; replacing one
   violation with another does, and fails. Two sections: `reviewed` (calls
-  of `userText`, `sourceSlice`, `unchangedSource` whose arguments were
-  checked to be user input or verbatim document text) and `migration`
+  of fragment constructors whose arguments were checked, and the low-level
+  authored-value serializers whose frame or text provenance was reviewed)
+  and `migration`
   (everything else; done when empty). A listed count the code no longer
   reaches fails too, so the list shrinks with the code.
   `node scripts/check-coordinate-writes.mjs --update` prints removals (`-`)
@@ -615,7 +646,7 @@ an evaluator fidelity question, not a writer one.
      radius is a plain number. Three readers give lengths in it
      (`radiusLengthsOf` for a drag's reach, `circleRadiusLengths` for a
      world circle, `worldEllipseRadiusLengths` for a world-axis ellipse) and
-     `writer.radii` writes them in their spelling, each radius keeping its
+     `writeRadii` writes them in their spelling, each radius keeping its
      own unit. Resize used to read the drag in the center's frame and write
      `cm`, so a plain radius under `x=2cm` came out half as large; new
      circles were written in `cm` whatever the CTM, so they doubled in a
@@ -624,9 +655,9 @@ an evaluator fidelity question, not a writer one.
      gets an `x radius` and a `y radius`.
    - Values that are frame keys but not points, solved by the action and
      checked against the frame it produces, are formatted by the writer:
-     `angle` (an authored `rotate=`), `factor` (`xscale`), `length` (a shift
+     `writeAuthoredAngle` (an authored `rotate=`), `writeScaleFactor` (`xscale`), `writeLocalLength` (a shift
      in its ordered prefix's frame, or a canvas distance such as a node's
-     `above=3pt`), `shiftPair`, and `typedComponents` (the public
+     `above=3pt`), `writeShiftPair`, and `writeTypedComponents` (the public
      `updateCoordinate` edit, whose components are user text). Matrix and
      tree placement write through `writer.point` at the node's own
      coordinate, in its spelling, or at the statement's entry context.
@@ -641,7 +672,7 @@ an evaluator fidelity question, not a writer one.
      under `xscale=2` (checked with `compare:renderers`). It now computes
      the curve in the CTM's coordinates; curve handles carry that linear
      map, and a dragged control or bend is read back into angles there and
-     written by `writer.angle`. `in`, `out` and the bends became frame
+     written by `writeAuthoredAngle`. `in`, `out` and the bends became frame
      keys.
    - Exception entries: migration 57 → 0; reviewed 80 → 135 (the
      structural text now typed at its origin, each copy, user value and

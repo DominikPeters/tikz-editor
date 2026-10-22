@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyEditAction, type EditAction } from "../../packages/core/src/edit/actions.js";
 import { parseTikz } from "../../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../../packages/core/src/semantic/evaluate.js";
-import type { EditHandle } from "../../packages/core/src/semantic/types.js";
+import type { EditHandle, EvaluateOptions } from "../../packages/core/src/semantic/types.js";
 import { PT_PER_CM } from "../../packages/core/src/edit/format.js";
 import { wp } from "../coords-helpers.js";
 
@@ -10,9 +10,9 @@ const picture = (...statements: string[]) => String.raw`\begin{tikzpicture}[x=1.
 ${statements.join("\n")}
 \end{tikzpicture}`;
 
-function handlesOf(source: string): EditHandle[] {
+function handlesOf(source: string, options?: EvaluateOptions): EditHandle[] {
   const parsed = parseTikz(source, { recover: true, includeContextDefinitions: true });
-  return evaluateTikzFigure(parsed.figure, source).editHandles;
+  return evaluateTikzFigure(parsed.figure, source, options).editHandles;
 }
 
 /** Every anchor and control the picture draws, rounded to 0.01pt, in a stable order. */
@@ -41,6 +41,43 @@ function pointHandle(handles: readonly EditHandle[], source: string, raw: string
 }
 
 describe("rewritten paths keep their relative coordinates", () => {
+  it.each([false, true])("refreshes unchanged path text when a named node moves (opaque identity: %s)", opaque => {
+    const original = picture(String.raw`\node (A) at (0,0) {A};`, String.raw`\draw (A) -- ++(1,0) -- ++(0,1);`);
+    const changed = original.replace("at (0,0)", "at (3,0)");
+    const stale = handlesOf(original, opaque ? { sourceFingerprint: "revision:before" } : undefined);
+    const parseOptions = opaque ? { sourceFingerprint: "revision:after" } : {};
+    const result = applyEditAction(changed, stale, { kind: "reversePath", elementId: "path:1" }, { parseOptions });
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain(String.raw`\draw (4,1) -- ++(0,-1) -- (A);`);
+    expect(anchorsInOrder(result.newSource, "path:1")).toEqual(anchorsInOrder(changed, "path:1").reverse());
+  });
+
+  it.each(["reversePath", "setPathPointKind", "insertPathPoint", "splitPath", "deletePathPoint", "toggleClosedPath", "appendToPath", "joinPaths"] as const)("refreshes the frame before %s when coordinate slices have not changed", kind => {
+    const original = picture(String.raw`\draw (0,0) -- ++(1,.5) -- ++(0,1);`, String.raw`\draw (3,1) -- ++(1,0);`);
+    const changed = original.replace("x=1.5cm,rotate=20", "x=2.5cm,rotate=50");
+    const stale = handlesOf(original);
+    const fresh = handlesOf(changed);
+    const middle = pointHandle(fresh, changed, "(1,.5)");
+    const action: EditAction = kind === "setPathPointKind"
+      ? { kind, elementId: "path:0", handleId: middle.id, pointKind: "smooth" }
+      : kind === "insertPathPoint"
+        ? { kind, elementId: "path:0", segmentIndex: 0, point: middle.world }
+        : kind === "splitPath" || kind === "deletePathPoint"
+          ? { kind, elementId: "path:0", handleId: middle.id }
+          : kind === "toggleClosedPath"
+            ? { kind, elementId: "path:0", closed: true }
+            : kind === "appendToPath"
+              ? { kind, elementId: "path:0", end: "end", start: middle.world, segments: [{ kind: "line", to: wp(300, 100) }] }
+              : kind === "joinPaths"
+                ? { kind, elementIds: ["path:0", "path:1"] }
+                : { kind, elementId: "path:0" };
+    const result = applyEditAction(changed, stale, action);
+    const expected = applyEditAction(changed, fresh, action);
+    expect(expected.kind).toBe("success");
+    expect(result).toEqual(expected);
+  });
+
   it("reverses a path, writing each relative coordinate from the point now before it", () => {
     const source = picture(String.raw`\draw (0,0) -- ++(1,.5) -- +(0,1);`);
     const result = apply(source, { kind: "reversePath", elementId: "path:0" });

@@ -16,6 +16,8 @@
 // F4  `tikz` used other than as a template tag;
 // F5  a point or vector constructor fed the components of a point in
 //     another space (rebranding without a transform).
+// F6  references to low-level authored-value serializers outside the writer:
+//     every use must be reviewed, including aliases and namespace escapes.
 //
 // Every current violation is a fingerprinted exception in
 // `scripts/coordinate-write-exceptions.json`: rule, file, enclosing
@@ -34,6 +36,7 @@ import ts from "typescript";
 
 const FRAGMENT_FILE = "packages/core/src/edit/fragment.ts";
 const WRITER_DIR = "packages/core/src/edit/writer/";
+const AUTHORED_VALUES_FILE = `${WRITER_DIR}authored-values.ts`;
 const POINTS_FILE = "packages/core/src/coords/points.ts";
 /** The coordinate transforms themselves, where rebranding through components is the conversion (F5). */
 const TRANSFORM_DIRS = ["packages/core/src/coords/", "packages/app/src/ui/coords/"];
@@ -104,6 +107,7 @@ export function collectViolations(program, root, files) {
   const violations = [];
 
   const fragmentFile = normalizePath(join(root, FRAGMENT_FILE));
+  const authoredValuesFile = normalizePath(join(root, AUTHORED_VALUES_FILE));
   const pointsFile = normalizePath(join(root, POINTS_FILE));
   const ptToCmFile = normalizePath(join(root, PT_TO_CM_FILE));
   const internalFiles = new Map([...WRITER_INTERNALS].map(([file, names]) => [normalizePath(join(root, file)), new Set(names)]));
@@ -140,9 +144,61 @@ export function collectViolations(program, root, files) {
 
     function visit(node) {
       if (!inFragment && !inWriter) checkFragmentAssertion(node);
+      if (!inWriter) checkAuthoredValueReference(node);
       if (ts.isIdentifier(node) && names.has(node.text)) checkReference(node);
       if (ts.isCallExpression(node)) checkPointConstructor(node);
       ts.forEachChild(node, visit);
+    }
+
+    // F6. The raw serializers live in their own module, so they cannot leak
+    // through a narrowed CoordinateWriter object. Resolve the function's
+    // declaration through its type too: destructuring, bracket access and
+    // forwarding an inferred alias must not hide its origin. Namespace values
+    // themselves are guarded when copied, spread, destructured or forwarded.
+    function checkAuthoredValueReference(node) {
+      if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+        const module = node.arguments[0] && checker.getSymbolAtLocation(node.arguments[0]);
+        if (module && checker.getExportsOfModule(module).some(symbol =>
+          checker.getTypeOfSymbolAtLocation(symbol, node).getCallSignatures().some(signature =>
+            signature.declaration && normalizePath(signature.declaration.getSourceFile().fileName) === authoredValuesFile))) {
+          report("F6", node, "dynamic import of low-level serializers; review the namespace before it can escape", "authored-values");
+        }
+        return;
+      }
+      if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
+        const module = checker.getSymbolAtLocation(node.moduleSpecifier);
+        if (module?.declarations?.some(declaration => normalizePath(declaration.getSourceFile().fileName) === authoredValuesFile) && !node.exportClause) {
+          report("F6", node, "re-export of low-level serializers; review every exposed reference", "authored-values");
+        }
+        return;
+      }
+      if (!ts.isIdentifier(node) && !ts.isPropertyAccessExpression(node) && !ts.isElementAccessExpression(node)) return;
+      const parent = node.parent;
+      if (ts.isImportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) return;
+      if (ts.isExportSpecifier(parent) && parent.propertyName && parent.name === node) return;
+      if ((ts.isVariableDeclaration(parent) || ts.isFunctionDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent)) && parent.name === node) return;
+      if ((ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+        ((ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === node)) return;
+      if (ts.isIdentifier(node) && ts.isPropertyAssignment(parent) && parent.name === node) return;
+
+      const target = resolvedDeclaration(node);
+      const type = checker.getTypeAtLocation(node);
+      const authoredSignature = type => type.getCallSignatures().find(signature =>
+        signature.declaration && normalizePath(signature.declaration.getSourceFile().fileName) === authoredValuesFile);
+      const signature = authoredSignature(type);
+      // A namespace imported through a barrel may be narrowed before a raw
+      // method is read. Guard that namespace escape as well as direct imports.
+      const namespace = type.getSymbol();
+      const exposesAuthoredValues = namespace && (namespace.flags & ts.SymbolFlags.Module) !== 0 &&
+        checker.getExportsOfModule(namespace).some(symbol => authoredSignature(checker.getTypeOfSymbolAtLocation(symbol, node)));
+      const access = ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node);
+      const receiver = access ? checker.getTypeAtLocation(node.expression) : undefined;
+      const authoredReceiver = receiver && (authoredSignature(receiver) ||
+        resolvedDeclaration(node.expression)?.file === authoredValuesFile &&
+        ((receiver.getSymbol()?.flags ?? 0) & ts.SymbolFlags.Module) !== 0);
+      if (!signature && !authoredReceiver && !exposesAuthoredValues) return;
+      const name = signature?.declaration?.name?.getText() ?? target?.name ?? "authored-values";
+      report("F6", useSite(node), `low-level serializer ${name}; list this reference with --update --accept-new after reviewing its authored frame or text provenance`, name);
     }
 
     function report(rule, node, message, symbol) {
@@ -368,10 +424,10 @@ export function readExceptions(root) {
 }
 
 function writeExceptions(root, entries) {
-  const reviewed = entries.filter((entry) => entry.rule === "F2" && LISTED_CONSTRUCTORS.get(entry.symbol) === "reviewed");
+  const reviewed = entries.filter((entry) => entry.rule === "F6" || entry.rule === "F2" && LISTED_CONSTRUCTORS.get(entry.symbol) === "reviewed");
   const migration = entries.filter((entry) => !reviewed.includes(entry));
   const data = {
-    comment: "Fingerprinted coordinate-write exceptions (scripts/check-coordinate-writes.mjs). Reviewed: string constructors whose call sites were checked. Migration: violations the writer phases remove; the list only shrinks.",
+    comment: "Fingerprinted coordinate-write exceptions (scripts/check-coordinate-writes.mjs). Reviewed: fragment constructors and low-level authored-value serializers whose call sites were checked. Migration: violations the writer phases remove; the list only shrinks.",
     reviewed,
     migration
   };

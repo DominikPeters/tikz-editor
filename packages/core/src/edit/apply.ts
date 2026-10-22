@@ -1,3 +1,4 @@
+import { writeAuthoredAngle, writeTypedComponents } from "./writer/authored-values.js";
 import { unchangedSource, userText } from "./fragment.js";
 import type { ParseTikzResult } from "../parser/index.js";
 import type { PathItem, Statement } from "../ast/types.js";
@@ -5,7 +6,6 @@ import type { EditHandle } from "../semantic/types.js";
 import type { WorldPoint } from "../coords/points.js";
 import type { ApplyEditResult, EditIntent, EditIntentResult, TikzEdit } from "./types.js";
 import { replaceSpan } from "./patch.js";
-import { createCoordinateWriter } from "./writer/index.js";
 import { rewriteCoordinate, supportsUnsupportedCoordinateDetach } from "./rewrite.js";
 import { sourceFingerprintForEdit } from "./parse-options.js";
 import { resolvePropertyTarget } from "./property-target.js";
@@ -25,8 +25,7 @@ export function applyEdit(parseResult: ParseTikzResult, edit: TikzEdit): ApplyEd
     }
 
     const oldRaw = parseResult.source.slice(target.span.from, target.span.to);
-    const replacement = createCoordinateWriter(parseResult.source)
-      .typedComponents(oldRaw, userText(edit.x, "inspector-value"), userText(edit.y, "inspector-value"));
+    const replacement = writeTypedComponents(oldRaw, userText(edit.x, "inspector-value"), userText(edit.y, "inspector-value"));
     const updated = replaceSpan(parseResult.source, target.span, replacement);
 
     return {
@@ -222,7 +221,6 @@ function buildCurveEditMutations(
   newWorld: WorldPoint
 ): Map<string, OptionMutation> {
   // The angles are read in the coordinates the curve is computed in, not in world space.
-  const writer = createCoordinateWriter("");
   const local = (x: number, y: number) => curveLocal(curveEdit.linear, x, y);
   if (curveEdit.kind === "to-angle") {
     const anchor = curveEdit.role === "out" ? curveEdit.startWorld : curveEdit.endWorld;
@@ -235,7 +233,7 @@ function buildCurveEditMutations(
     const mutations = new Map<string, OptionMutation>();
     mutations.set(normalizeOptionKey(curveEdit.role), {
       kind: "set",
-      value: writer.angle(Math.trunc(optionValue))
+      value: writeAuthoredAngle(Math.trunc(optionValue))
     });
     mutations.set(normalizeOptionKey("bend left"), { kind: "remove" });
     mutations.set(normalizeOptionKey("bend right"), { kind: "remove" });
@@ -254,7 +252,7 @@ function buildCurveEditMutations(
   const mutations = new Map<string, OptionMutation>();
   mutations.set(normalizeOptionKey(bendDirectionKey), {
     kind: "set",
-    value: writer.angle(Math.trunc(Math.abs(signedBendAngle)))
+    value: writeAuthoredAngle(Math.trunc(Math.abs(signedBendAngle)))
   });
   mutations.set(normalizeOptionKey(oppositeDirectionKey), { kind: "remove" });
   mutations.set(normalizeOptionKey("out"), { kind: "remove" });

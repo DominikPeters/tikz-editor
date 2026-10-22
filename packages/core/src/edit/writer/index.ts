@@ -14,7 +14,6 @@ import { writePositioning } from "./positioning.js";
 import { cartesianComponents, coordinateLayout, formatCanvasCoordinate, formatCoordinate, formatPolarCoordinate, translatedComponent } from "./format.js";
 import { localToSourceUnits } from "./source-units.js";
 import { writeCalcCoordinate } from "./calc.js";
-import { writeRadiusLength, type RadiusLengths, type RadiusSpelling, type RadiusUnit } from "./radius.js";
 
 export { circleRadiusLengths, radiusLengthsOf, worldEllipseRadiusLengths, type RadiusLengths, type RadiusSpelling, type RadiusUnit } from "./radius.js";
 
@@ -100,40 +99,6 @@ export interface CoordinateWriter {
    * composes with whatever the parent does.
    */
   rotation(context: SiteContext, angle: Readonly<{ world: number } | { authored: number }>, pivot: WorldPoint): WriterResult<CoordinateText>;
-  /**
-   * `x radius` and `y radius` text for lengths read in their radius frame
-   * (`radiusLengthsOf`, `circleRadiusLengths`, `worldEllipseRadiusLengths`),
-   * in the spelling that frame was read for.
-   */
-  radii(lengths: RadiusLengths, options?: PointWriteOptions & Readonly<{ units?: Readonly<{ x?: RadiusUnit; y?: RadiusUnit }> }>): { x: CoordinateText; y: CoordinateText };
-  /**
-   * An angle as `rotate=` reads it, given as authored: the caller already
-   * holds the option's own angle (an inspector value, a turn about the
-   * origin). A turn in world space goes through `rotation`.
-   */
-  angle(authoredDeg: number, options?: Readonly<{ fractionDigits?: number }>): CoordinateText;
-  /**
-   * A scale factor (`xscale`, `yscale`) the caller solved for and checks
-   * against the frame it produces.
-   */
-  factor(value: number, options?: Readonly<{ fractionDigits?: number }>): CoordinateText;
-  /**
-   * A length in pt the caller solved for where the option reads it: a shift
-   * (`xshift`) in the frame of its ordered prefix, or a distance PGF does not
-   * transform (a node's `above=3pt`, as the evaluator reads a dimension).
-   */
-  length(valuePt: number, options?: NumberFormatOptions): CoordinateText;
-  /**
-   * `shift={(x,y)}` with components solved like `length`: a null component
-   * keeps the authored one (`authored`, from the document).
-   */
-  shiftPair(authored: Readonly<{ x: string; y: string }> | null, next: Readonly<{ x: number | null; y: number | null }>, options?: NumberFormatOptions): CoordinateText;
-  /**
-   * Components the user typed as source text (`userText`), placed in the
-   * layout of the coordinate they replace: the user chose the numbers, so no
-   * frame is read.
-   */
-  typedComponents(oldRaw: string, x: TikzFragment, y: TikzFragment): CoordinateText;
 }
 
 const UNITLESS: CoordinateSpelling = Object.freeze({ unitlessX: true, unitlessY: true });
@@ -165,28 +130,6 @@ export function createCoordinateWriter(source: string): CoordinateWriter {
       const written = writeContextPoint({ kind: "context", context }, pivot, "reparameterize");
       if (written.kind !== "ok") return written;
       return ok(`{${formatNumber(authored, REPARAMETERIZE)}:${written.fragment}}`);
-    },
-    radii(lengths, options = {}) {
-      const digits = options.precision === "reparameterize" ? REPARAMETERIZE : {};
-      // Each radius keeps its own unit; plain or not is one choice, as PGF cannot mix them.
-      const spelled = (unit: RadiusUnit | undefined): RadiusSpelling => lengths.frameOf.unitless || unit === undefined ? lengths.frameOf : { unitless: false, unit };
-      return { x: writeRadiusLength(lengths.x, spelled(options.units?.x), digits), y: writeRadiusLength(lengths.y, spelled(options.units?.y), digits) };
-    },
-    angle(authoredDeg, options = {}) {
-      return coordinateText(formatNumber(authoredDeg, options.fractionDigits === undefined ? {} : { fractionDigits: options.fractionDigits }));
-    },
-    factor(value, options = {}) {
-      return coordinateText(formatNumber(value, options.fractionDigits === undefined ? {} : { fractionDigits: options.fractionDigits }));
-    },
-    length(valuePt, options = {}) {
-      return coordinateText(`${formatNumber(valuePt, options)}pt`);
-    },
-    shiftPair(authored, next, options = {}) {
-      const component = (value: number | null, kept: string | undefined) => value === null ? kept ?? "0pt" : `${formatNumber(value, options)}pt`;
-      return coordinateText(`(${component(next.x, authored?.x)},${component(next.y, authored?.y)})`);
-    },
-    typedComponents(oldRaw, x, y) {
-      return coordinateText(formatCoordinate(oldRaw, x, y));
     },
     bounds(context, world) {
       const frame = spelledCoordinateFrame(context, UNITLESS);

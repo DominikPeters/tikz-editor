@@ -1,3 +1,4 @@
+import { writeLocalLength, writeShiftPair } from "../writer/authored-values.js";
 import { layout, tikz, unchangedSource, type CoordinateText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
@@ -548,7 +549,6 @@ export function planOrderedScopeTranslation(
   appendIndex = entries.length
 ): Map<string, OptionMutation> | null {
   if (Math.abs(delta.x) < 1e-10 && Math.abs(delta.y) < 1e-10) return new Map();
-  const writer = createCoordinateWriter("");
   const keyed = entries.flatMap((entry, index) => entry.kind === "kv"
     ? [{ entry, index, key: normalizeOptionKey(entry.key).replace(/^\/tikz\//, "") }] : []);
   const shifts = keyed.filter(({ key }) => key === "shift");
@@ -560,7 +560,7 @@ export function planOrderedScopeTranslation(
     if (old && localDelta) {
       const pair = parseCoordinateLike(shift.entry.valueRaw.trim().replace(/^\{([\s\S]*)\}$/, "$1"));
       const component = (value: number, delta: number) => Math.abs(delta) < 1e-10 && pair ? null : isZeroShift(value, formatPrecision) ? 0 : value;
-      const value = writer.shiftPair(pair, { x: component(old.x + localDelta.x, localDelta.x), y: component(old.y + localDelta.y, localDelta.y) },
+      const value = writeShiftPair(pair, { x: component(old.x + localDelta.x, localDelta.x), y: component(old.y + localDelta.y, localDelta.y) },
         pointDistanceFormatOptions(formatPrecision));
       return new Map([[normalizeOptionKey(shift.entry.key), { kind: "set", value }]]);
     }
@@ -585,7 +585,7 @@ export function planOrderedScopeTranslation(
     if (Math.abs(correction) < 1e-10 && value !== 0) continue;
     mutations.set(key, isZeroShift(value, formatPrecision)
       ? { kind: "remove" }
-      : { kind: "set", value: writer.length(value, pointDistanceFormatOptions(formatPrecision)) });
+      : { kind: "set", value: writeLocalLength(value, pointDistanceFormatOptions(formatPrecision)) });
   }
   return mutations;
 }
