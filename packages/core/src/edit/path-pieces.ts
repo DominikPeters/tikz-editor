@@ -142,19 +142,22 @@ export type SpellPathInput = Readonly<{
 export function spellPath(input: SpellPathInput): WriterResult<TikzFragment> {
   const { source, analysis, pieces } = input;
   const steps = pieces.map(stepOf);
-  const respelled = new Map<number, CoordinateText>();
-  const absolute = new Set<number>();
+  // Keyed by occurrence: a path opened at a point starts and ends at it.
+  const respelled = new Map<string, CoordinateText>();
+  const absolute = new Set<string>();
   const relative = stepPoints(steps).some(point => point.kind === "item" && isRelativeItem(coordinateAt(analysis, point.index)));
   if (relative) {
     const refusal = respellRelative(input, steps, respelled, absolute);
     if (refusal) return refusal;
   }
 
+  const occurrence = occurrences();
   // A coordinate's span leaves out its `+`/`++`, which goes with it unless it became absolute.
   const pointText = (point: PathPoint): TikzFragment => {
     if (point.kind === "written") return point.text;
-    const text = respelled.get(point.index) ?? sourceSlice(source, coordinateAt(analysis, point.index).span);
-    if (absolute.has(point.index)) return text;
+    const key = occurrence(point.index);
+    const text = respelled.get(key) ?? sourceSlice(source, coordinateAt(analysis, point.index).span);
+    if (absolute.has(key)) return text;
     const prefix = coordinateAt(analysis, point.index).relativePrefix;
     return prefix === "++" ? tikz`++${text}` : prefix === "+" ? tikz`+${text}` : text;
   };
@@ -164,7 +167,7 @@ export function spellPath(input: SpellPathInput): WriterResult<TikzFragment> {
       case "start":
         return pointText(piece.point);
       case "segment":
-        return segmentText(source, analysis, piece.segment, respelled);
+        return segmentText(source, analysis, piece.segment, index => respelled.get(occurrence(index)));
       case "line":
         return tikz`-- ${targetText(piece.target)}`;
       case "curve":
@@ -181,7 +184,7 @@ export function spellPath(input: SpellPathInput): WriterResult<TikzFragment> {
  * than before, and `absolute` with those that became absolute; a refusal
  * when one cannot be written.
  */
-function respellRelative(input: SpellPathInput, steps: readonly Step[], respelled: Map<number, CoordinateText>, absolute: Set<number>): WriterResult<never> | null {
+function respellRelative(input: SpellPathInput, steps: readonly Step[], respelled: Map<string, CoordinateText>, absolute: Set<string>): WriterResult<never> | null {
   const { source, analysis, pieces } = input;
   const handles = input.handles();
   const ownSteps = originalSteps(analysis);
@@ -208,8 +211,10 @@ function respellRelative(input: SpellPathInput, steps: readonly Step[], respelle
     .flatMap(point => point.kind === "item" ? [point.index] : []));
   const writer = createCoordinateWriter(source);
   const refusals: WriterResult<never>[] = [];
+  const occurrence = occurrences();
   readPath(steps, worldOf, (point, base) => {
     if (point.kind !== "item") return;
+    const key = occurrence(point.index);
     const item = coordinateAt(analysis, point.index);
     if (!isRelativeItem(item) || refusals.length > 0) return item.relativePrefix;
     if (hasTurn(item)) {
@@ -231,9 +236,9 @@ function respellRelative(input: SpellPathInput, steps: readonly Step[], respelle
       refusals.push(written);
       return item.relativePrefix;
     }
-    respelled.set(point.index, written.fragment);
+    respelled.set(key, written.fragment);
     if (base !== null) return item.relativePrefix;
-    absolute.add(point.index);
+    absolute.add(key);
     return;
   }, from);
   return refusals[0] ?? null;
@@ -291,7 +296,7 @@ function coordinateHandle(source: string, analysis: ExplicitPathAnalysis, handle
 }
 
 /** A segment's own text, with the coordinates written again replaced in place. */
-function segmentText(source: string, analysis: ExplicitPathAnalysis, segment: ExplicitPathSegment, respelled: ReadonlyMap<number, CoordinateText>): TikzFragment {
+function segmentText(source: string, analysis: ExplicitPathAnalysis, segment: ExplicitPathSegment, respelled: (index: number) => CoordinateText | undefined): TikzFragment {
   const items = analysis.statement.items;
   const from = items[segment.operatorIndex]?.span.from;
   const to = items[segment.targetIndex]?.span.to;
@@ -300,7 +305,7 @@ function segmentText(source: string, analysis: ExplicitPathAnalysis, segment: Ex
   const parts: TikzFragment[] = [];
   let cursor = from;
   for (const index of indices) {
-    const replacement = respelled.get(index);
+    const replacement = respelled(index);
     const span = items[index]?.span;
     if (!replacement || !span) continue;
     parts.push(sourceSlice(source, { from: cursor, to: span.from }), replacement);
@@ -308,6 +313,16 @@ function segmentText(source: string, analysis: ExplicitPathAnalysis, segment: Ex
   }
   parts.push(sourceSlice(source, { from: cursor, to }));
   return joinFragments(parts);
+}
+
+/** Counts each item's occurrences, in the order they are met: `index#n`. */
+function occurrences(): (index: number) => string {
+  const seen = new Map<number, number>();
+  return index => {
+    const count = seen.get(index) ?? 0;
+    seen.set(index, count + 1);
+    return `${index}#${count}`;
+  };
 }
 
 /** How many of `pieces` repeat the path's own pieces from its start. */

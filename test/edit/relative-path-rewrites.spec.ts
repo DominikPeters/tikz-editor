@@ -89,6 +89,16 @@ describe("rewritten paths keep their relative coordinates", () => {
     }
   });
 
+  it("opens a closed path at a relative point, ending at it again", () => {
+    const source = picture(String.raw`\draw (0,0) -- ++(1,0) -- ++(0,1) -- +(-1,0) -- cycle;`);
+    const result = apply(source, handles => ({ kind: "splitPath", elementId: "path:0", handleId: pointHandle(handles, source, "(0,1)").id }));
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    const before = anchorsInOrder(source, "path:0");
+    expect(anchorsInOrder(result.newSource, "path:0")).toEqual([...before.slice(2), ...before.slice(0, 3)]);
+    expect(result.newSource).not.toContain("cycle");
+  });
+
   it("keeps the points around a corner made smooth, and a point inserted before a relative one", () => {
     const source = picture(String.raw`\draw (0,0) -- ++(1,.5) -- +(0,1);`);
     const smooth = apply(source, handles => ({ kind: "setPathPointKind", elementId: "path:0", handleId: pointHandle(handles, source, "(1,.5)").id, pointKind: "smooth" }));

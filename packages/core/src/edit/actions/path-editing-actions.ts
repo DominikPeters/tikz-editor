@@ -169,8 +169,7 @@ export function applySplitPathAction(
     return rewrittenPath(source, analysis, replacement, "Split path would not change the source.", { changed: [action.elementId] });
   }
 
-  const orderedSegments = orderedOpenSegmentsFromClosedPath(analysis, anchorIndex);
-  const opened = openedClosedPathPieces(analysis, anchorIndex, orderedSegments);
+  const opened = openedClosedPathPieces(analysis, anchorIndex);
   if (!opened) {
     return { kind: "unsupported", reason: "Closed path could not be opened at that point." };
   }
@@ -466,53 +465,22 @@ function analysisSegmentIndices(analysis: ExplicitPathAnalysis): number[] {
   return analysis.segments.map((_, index) => index);
 }
 
-function orderedOpenSegmentsFromClosedPath(analysis: ExplicitPathAnalysis, anchorIndex: number): number[] {
-  const ordered: number[] = [];
-  let currentAnchor = anchorIndex;
-  let guard = 0;
-  while (ordered.length < analysis.anchors.length - 1 && guard < analysis.segments.length * 3) {
-    guard += 1;
-    const nextSegmentIndex = analysis.segments.findIndex(
-      (segment) => segment.startAnchorIndex === currentAnchor && !segment.closesPath
-    );
-    if (nextSegmentIndex >= 0) {
-      if (requireArrayValue(analysis.segments, nextSegmentIndex).endAnchorIndex === anchorIndex) {
-        break;
-      }
-      ordered.push(nextSegmentIndex);
-      currentAnchor = requireArrayValue(analysis.segments, nextSegmentIndex).endAnchorIndex;
-      continue;
-    }
-    const closingIndex = analysis.segments.findIndex(
-      (segment) => segment.startAnchorIndex === currentAnchor && segment.closesPath
-    );
-    if (closingIndex < 0) {
-      break;
-    }
-    currentAnchor = requireArrayValue(analysis.segments, closingIndex).endAnchorIndex;
-  }
-  return ordered;
-}
-
-function openedClosedPathPieces(
-  analysis: ExplicitPathAnalysis,
-  anchorIndex: number,
-  orderedSegments: readonly number[]
-): PathPiece[] | null {
-  if (orderedSegments.length === 0) {
+/**
+ * A closed path opened at an anchor: from there round every edge, the
+ * closing one written out, back to the same anchor.
+ */
+function openedClosedPathPieces(analysis: ExplicitPathAnalysis, anchorIndex: number): PathPiece[] | null {
+  const closing = analysis.segments.find((segment) => segment.closesPath);
+  const open = analysis.segments.filter((segment) => !segment.closesPath);
+  if (!closing || open.some((segment, index) => segment.startAnchorIndex !== index || segment.endAnchorIndex !== index + 1)) {
     return null;
   }
-  const pieces: PathPiece[] = [{ kind: "start", point: itemPoint(requireArrayValue(analysis.anchors, anchorIndex).coordinateIndex) }];
-  for (const segmentIndex of orderedSegments) {
-    pieces.push({ kind: "segment", segment: requireArrayValue(analysis.segments, segmentIndex) });
-  }
-  const closingSegment = analysis.segments.find(
-    (segment) => segment.closesPath && segment.startAnchorIndex === requireArrayValue(analysis.segments, requireArrayValue(orderedSegments, orderedSegments.length - 1)).endAnchorIndex
-  );
-  if (closingSegment) {
-    pieces.push(explicitPiece(analysis, closingSegment));
-  }
-  return pieces;
+  return [
+    { kind: "start", point: itemPoint(requireArrayValue(analysis.anchors, anchorIndex).coordinateIndex) },
+    ...open.slice(anchorIndex).map((segment): PathPiece => ({ kind: "segment", segment })),
+    explicitPiece(analysis, closing),
+    ...open.slice(0, anchorIndex).map((segment): PathPiece => ({ kind: "segment", segment }))
+  ];
 }
 
 function reversedPathPieces(analysis: ExplicitPathAnalysis): PathPiece[] | null {

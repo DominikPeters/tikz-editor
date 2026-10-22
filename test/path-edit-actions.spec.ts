@@ -292,7 +292,7 @@ describe("path edit actions", () => {
     expect(missingPath.kind).toBe("unsupported");
   });
 
-  it("splits a cycle-closed polygon into one open path", () => {
+  it("splits a cycle-closed polygon into one open path that keeps every edge", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0) -- (1,1) -- cycle;
 \end{tikzpicture}`;
@@ -306,11 +306,11 @@ describe("path edit actions", () => {
 
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
-    expect(result.newSource).toContain("\\draw (1,0) -- (1,1) -- (0,0);");
+    expect(result.newSource).toContain("\\draw (1,0) -- (1,1) -- (0,0) -- (1,0);");
     expect(result.newSource).not.toContain("cycle");
   });
 
-  it("rejects splitting a curve-cycle path when the opened body cannot be ordered safely", () => {
+  it("splits a curve-cycle path, writing the closing curve out to the first point", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) .. controls (1,0) and (2,1) .. (3,1) .. controls (2,-1) and (1,-1) .. cycle;
 \end{tikzpicture}`;
@@ -322,10 +322,9 @@ describe("path edit actions", () => {
       handleId: handleIdFor(source, rendered, "(3,1)")
     });
 
-    expect(result.kind).toBe("unsupported");
-    if (result.kind === "unsupported") {
-      expect(result.reason).toContain("opened");
-    }
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain(String.raw`\draw (3,1) .. controls (2,-1) and (1,-1) .. (0,0) .. controls (1,0) and (2,1) .. (3,1);`);
   });
 
   it("joins two open paths", () => {
