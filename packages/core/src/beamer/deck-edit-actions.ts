@@ -1,4 +1,4 @@
-import { applyFragments, legacyText } from "../edit/fragment.js";
+import { applyFragments, EMPTY_FRAGMENT, joinFragments, sourceSlice, tikz, userText, type TikzFragment } from "../edit/fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { EditActionResult } from "../edit/actions.js";
 import type { SourcePatch } from "../edit/types.js";
@@ -138,15 +138,14 @@ function finishEdits(
   const effective = sorted.filter(
     (edit) => source.slice(edit.span.from, edit.span.to) !== edit.insert
   );
-  const inserts = effective.map(edit => legacyText(edit.insert));
-  const newSource = applyFragments(source, effective.map((edit, index) => ({ span: edit.span, fragment: requireArrayValue(inserts, index) })));
+  const newSource = applyFragments(source, effective.map((edit) => ({ span: edit.span, fragment: edit.insert })));
   let delta = 0;
-  const patches: SourcePatch[] = effective.map((edit, index) => {
+  const patches: SourcePatch[] = effective.map((edit) => {
     const from = edit.span.from + delta;
     const patch: SourcePatch = {
       oldSpan: edit.span,
       newSpan: { from, to: from + edit.insert.length },
-      replacement: requireArrayValue(inserts, index),
+      replacement: edit.insert,
     };
     delta += edit.insert.length - (edit.span.to - edit.span.from);
     return patch;
@@ -228,9 +227,11 @@ function applyRenameEnvironment(
       reason: `Cannot rename ${pair.begin.name} to ${name}.`,
     };
   }
+  // The name is one of the environments in the table above.
+  const renamed = userText(name, "beamer-text");
   return finishEdits(source, [
-    { span: pair.begin.nameSpan, insert: name },
-    { span: pair.end.nameSpan, insert: name },
+    { span: pair.begin.nameSpan, insert: renamed },
+    { span: pair.end.nameSpan, insert: renamed },
   ]);
 }
 
@@ -253,10 +254,11 @@ function applySetEnvironmentTitle(
   const overlay = beamerOverlayArgumentAfter(context, pair.begin.span.to, node.sourceSpan.to);
   const cursor = overlay?.span.to ?? pair.begin.span.to;
   const existing = beamerRequiredArgumentAfter(context, cursor, node.sourceSpan.to);
+  const typed = userText(title, "beamer-text");
   if (existing) {
-    return finishEdits(source, [{ span: existing.contentSpan, insert: title }]);
+    return finishEdits(source, [{ span: existing.contentSpan, insert: typed }]);
   }
-  return finishEdits(source, [{ span: { from: cursor, to: cursor }, insert: `{${title}}` }]);
+  return finishEdits(source, [{ span: { from: cursor, to: cursor }, insert: tikz`{${typed}}` }]);
 }
 
 function applySetOverlaySpec(
@@ -291,19 +293,19 @@ function applySetOverlaySpec(
     if (!existing) {
       return finishEdits(source, []);
     }
-    return finishEdits(source, [{ span: existing.span, insert: "" }]);
+    return finishEdits(source, [{ span: existing.span, insert: EMPTY_FRAGMENT }]);
   }
   if (existing) {
     return finishEdits(source, [{ span: existing.contentSpan, insert: normalized.spec }]);
   }
   return finishEdits(source, [
-    { span: { from: anchor, to: anchor }, insert: `<${normalized.spec}>` },
+    { span: { from: anchor, to: anchor }, insert: tikz`<${normalized.spec}>` },
   ]);
 }
 
 function normalizeOverlaySpec(
   spec: string | null
-): { kind: "remove" } | { kind: "set"; spec: string } | { kind: "invalid" } {
+): { kind: "remove" } | { kind: "set"; spec: TikzFragment } | { kind: "invalid" } {
   if (spec == null) {
     return { kind: "remove" };
   }
@@ -317,7 +319,7 @@ function normalizeOverlaySpec(
   if (!isSingleLine(trimmed) || trimmed.includes("<") || trimmed.includes(">")) {
     return { kind: "invalid" };
   }
-  return { kind: "set", spec: trimmed };
+  return { kind: "set", spec: userText(trimmed, "beamer-text") };
 }
 
 /** A parsed `[...]` option list with absolute entry spans. */
@@ -379,8 +381,9 @@ function buildOptionEdits(
   if (typeof value === "string" && !isValidOptionValue(value.trim())) {
     return { error: "Option values must be single-line with balanced braces." };
   }
-  const entryText =
-    value === true ? normalizedKey : value != null ? `${normalizedKey}=${value.trim()}` : null;
+  const typedKey = userText(normalizedKey, "beamer-text");
+  const entryText: TikzFragment | null =
+    value === true ? typedKey : value != null ? tikz`${typedKey}=${userText(value.trim(), "beamer-text")}` : null;
 
   const { list } = context;
   if (!list) {
@@ -389,7 +392,7 @@ function buildOptionEdits(
     }
     return {
       edits: [
-        { span: { from: context.insertAt, to: context.insertAt }, insert: `[${entryText}]` },
+        { span: { from: context.insertAt, to: context.insertAt }, insert: tikz`[${entryText}]` },
       ],
     };
   }
@@ -421,30 +424,25 @@ function buildOptionEdits(
       edits: [
         {
           span: { from: insertAt, to: insertAt },
-          insert: list.entries.length > 0 ? `, ${entryText}` : entryText,
+          insert: list.entries.length > 0 ? tikz`, ${entryText}` : entryText,
         },
       ],
     };
   }
 
   // Removals present: rebuild the surviving entry list in one edit.
-  const surviving = list.entries
-    .map((entry, index) => {
-      if (removedIndexes.has(index)) {
-        return null;
-      }
-      return index === targetIndex && entryText != null
-        ? entryText
-        : source.slice(entry.span.from, entry.span.to);
-    })
-    .filter((text): text is string => text != null);
+  const surviving: TikzFragment[] = [];
+  list.entries.forEach((entry, index) => {
+    if (removedIndexes.has(index)) return;
+    surviving.push(index === targetIndex && entryText != null ? entryText : sourceSlice(source, entry.span));
+  });
   if (entryText != null && targetIndex < 0) {
     surviving.push(entryText);
   }
   if (surviving.length === 0) {
-    return { edits: [{ span: list.span, insert: "" }] };
+    return { edits: [{ span: list.span, insert: EMPTY_FRAGMENT }] };
   }
-  return { edits: [{ span: list.contentSpan, insert: surviving.join(", ") }] };
+  return { edits: [{ span: list.contentSpan, insert: joinFragments(surviving, tikz`, `) }] };
 }
 
 function applySetGraphicsOption(
@@ -530,10 +528,11 @@ function applySetColumnWidth(
   const placement = beamerOptionalArgumentAfter(context, pair.begin.span.to, node.sourceSpan.to);
   const cursor = placement?.span.to ?? pair.begin.span.to;
   const existing = beamerRequiredArgumentAfter(context, cursor, node.sourceSpan.to);
+  const typed = userText(trimmed, "beamer-text");
   if (existing) {
-    return finishEdits(source, [{ span: existing.contentSpan, insert: trimmed }]);
+    return finishEdits(source, [{ span: existing.contentSpan, insert: typed }]);
   }
-  return finishEdits(source, [{ span: { from: cursor, to: cursor }, insert: `{${trimmed}}` }]);
+  return finishEdits(source, [{ span: { from: cursor, to: cursor }, insert: tikz`{${typed}}` }]);
 }
 
 function applySetFrameOption(

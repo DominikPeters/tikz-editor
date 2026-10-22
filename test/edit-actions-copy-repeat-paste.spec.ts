@@ -3,7 +3,9 @@ import { applyEditAction } from "../packages/core/src/edit/actions.js";
 import { applyPasteStatementsAction } from "../packages/core/src/edit/actions/paste-duplicate.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
 import { renameSnippetDeclaredNames } from "../packages/core/src/edit/name-conflicts.js";
-import { unchangedSource } from "../packages/core/src/edit/fragment.js";
+import { unchangedSource, userText } from "../packages/core/src/edit/fragment.js";
+
+const pasted = (snippets: readonly string[]) => snippets.map(snippet => userText(snippet, "pasted-tikz"));
 import { wp } from "./coords-helpers.js";
 import { computeSourceFingerprint } from "../packages/core/src/utils/source-fingerprint.js";
 import { cm, expectPatchesReconstructSource } from "./edit-actions-helpers.js";
@@ -94,11 +96,11 @@ describe("applyEditAction – duplicateElements", () => {
   \path[name path local=Local] (A) -- (A2);
 \end{tikzpicture}`;
 
-    expect(renameSnippetDeclaredNames(source, [])).toEqual([]);
-    expect(renameSnippetDeclaredNames(source, ["  \n  "])).toEqual(["  \n  "]);
-    expect(renameSnippetDeclaredNames(source, ["\\draw (0,0) -- (1,0);"])).toEqual(["\\draw (0,0) -- (1,0);"]);
+    expect(renameSnippetDeclaredNames(source, pasted([]))).toEqual([]);
+    expect(renameSnippetDeclaredNames(source, pasted(["  \n  "]))).toEqual(["  \n  "]);
+    expect(renameSnippetDeclaredNames(source, pasted(["\\draw (0,0) -- (1,0);"]))).toEqual(["\\draw (0,0) -- (1,0);"]);
 
-    const [renamed] = renameSnippetDeclaredNames(source, [
+    const [renamed] = renameSnippetDeclaredNames(source, pasted([
       String.raw`\begin{scope}[name path={Route}, alias=(Alias)]
   \node[alias={Alias}, name path local={(Local)}] (A) at (0,0) {A};
   \coordinate (A2) at (1,0);
@@ -107,7 +109,7 @@ describe("applyEditAction – duplicateElements", () => {
   \node (Placed) [right=of A, below=of Alias] {P};
   \draw[name path global=Trail] (A) -- (Alias);
 \end{scope}`
-    ]);
+    ]));
 
     expect(renamed).toContain("name path={Route2}");
     expect(renamed).toContain("alias=(Alias3)");
@@ -131,13 +133,13 @@ describe("applyEditAction – duplicateElements", () => {
   \tikzset{kept/.style={draw}}
 \end{tikzpicture}`;
 
-    expect(renameSnippetDeclaredNames(source, ["\\node (Fresh2) {fresh};"])).toEqual(["\\node (Fresh2) {fresh};"]);
+    expect(renameSnippetDeclaredNames(source, pasted(["\\node (Fresh2) {fresh};"]))).toEqual(["\\node (Fresh2) {fresh};"]);
 
-    const renamed = renameSnippetDeclaredNames(source, [
+    const renamed = renameSnippetDeclaredNames(source, pasted([
       "\\node (A) {one};\\node[alias={}] {empty alias};\\path (0,0) coordinate (Coord);\\node {anonymous};",
       "\\node (A) {two};\\node (My Node 2) {spaced};",
       `\\node (A${enormousSuffix}) {huge};`
-    ]);
+    ]));
 
     expect(renamed[0]).toContain("\\node (A2) {one};");
     expect(renamed[1]).toContain("\\node (A2) {two};");

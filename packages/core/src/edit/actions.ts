@@ -1,4 +1,4 @@
-import { editedSlice, legacyText, tikz, unchangedSource, userText, type EditedSource, type TikzFragment } from "./fragment.js";
+import { editedSlice, tikz, unchangedSource, userText, type EditedSource, type TikzFragment } from "./fragment.js";
 import { requireDefined } from "../utils/invariants.js";
 import { ADORNMENT_EDIT_NOOP_REASON } from "./actions/adornment-set-property.js";
 import { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-node-actions.js";
@@ -611,10 +611,10 @@ function applyConnectHandle(
     return { kind: "error", message: "Anchor is required for endpoint connection." };
   }
 
-  const replacement = legacyText(
-    trimmedAnchor === "center"
-      ? `(${trimmedNodeName})`
-      : `(${trimmedNodeName}.${trimmedAnchor})`);
+  const nodeReference = userText(trimmedNodeName, "node-reference");
+  const replacement = trimmedAnchor === "center"
+    ? tikz`(${nodeReference})`
+    : tikz`(${nodeReference}.${userText(trimmedAnchor, "node-reference")})`;
   const adjustedHandleSpan = shiftSpan(handle.sourceRef.sourceSpan, nameResolution.insertedSpan, nameResolution.insertedLength);
   const updated = replaceSpan(nameResolution.source, adjustedHandleSpan, replacement);
   const reordered = moveStatementAfterNamedDefinition(
@@ -753,7 +753,7 @@ function ensureNodeSourceHasName(
   if (insertAt == null) {
     return null;
   }
-  const insertion = tikz` (${legacyText(name)})`;
+  const insertion = tikz` (${userText(name, "node-reference")})`;
   return {
     source: replaceSpan(source, { from: insertAt, to: insertAt }, insertion).source,
     name,

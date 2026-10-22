@@ -1,4 +1,4 @@
-import { applyFragments, editedSlice, legacyText, type FragmentEdit } from "../fragment.js";
+import { applyFragments, EMPTY_FRAGMENT, editedSlice, joinFragments, layout, plainNumber, sourceSlice, tikz, type FragmentEdit, type TikzFragment } from "../fragment.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { PathItem, PathStatement, Span } from "../../ast/types.js";
@@ -17,7 +17,9 @@ import {
   applyTextReplacements,
   lineIndentAtOffset,
   parseStatementSnapshot,
+  reindentSnippet,
   resolveStatementRefs,
+  splitLines,
   statementSnippet,
   type StatementRef,
   type StatementSnapshot
@@ -37,7 +39,7 @@ export type RepeatElementsAction = {
 
 
 type RepeatLoop = {
-  variable: string;
+  variable: TikzFragment;
   count: number;
   stepPt: number;
 };
@@ -164,7 +166,7 @@ export function applyRepeatElementsAction(
     return { kind: "unsupported", reason: eligibility.reason };
   }
 
-  let replacement: { text: string };
+  let replacement: { text: TikzFragment };
   try {
     replacement = buildRepeatReplacement(source, eligibility.refs, {
       columns,
@@ -179,14 +181,11 @@ export function applyRepeatElementsAction(
   }
 
   const preferredNewline = detectPreferredNewline(source, eligibility.replaceSpan.from);
-  const replacementText = indentFollowingLines(
-    preferredNewline === "\n" ? replacement.text : replacement.text.replace(/\n/g, preferredNewline),
-    eligibility.indent
-  );
+  const replacementText = indentFollowingLines(replacement.text, preferredNewline, eligibility.indent);
   const applied = applyTextReplacements(source, [
     {
       span: eligibility.replaceSpan,
-      text: legacyText(replacementText)
+      text: replacementText
     }
   ]);
   const inserted = requireArrayValue(applied.applied, 0);
@@ -231,21 +230,21 @@ function buildRepeatReplacement(
     verticalStep: number;
     parseOptions: EditParseOptions;
   }
-): { text: string } {
+): { text: TikzFragment } {
   const snippet = refs.length === 1
     ? statementSnippet(source, requireArrayValue(refs, 0))
     : source.slice(requireArrayValue(refs, 0).span.from, requireArrayValue(refs, refs.length - 1).span.to);
   const usedLoopVars = new Set<string>();
   const xLoop = options.columns > 1
     ? {
-        variable: chooseLoopVariable(snippet, ["\\i", "\\col", "\\x", "\\dx", "\\xx"], usedLoopVars),
+        variable: chooseLoopVariable(snippet, [tikz`\i`, tikz`\col`, tikz`\x`, tikz`\dx`, tikz`\xx`], usedLoopVars),
         count: options.columns,
         stepPt: options.horizontalStep
       }
     : null;
   const yLoop = options.rows > 1
     ? {
-        variable: chooseLoopVariable(snippet, ["\\j", "\\row", "\\y", "\\dy", "\\yy"], usedLoopVars),
+        variable: chooseLoopVariable(snippet, [tikz`\j`, tikz`\row`, tikz`\y`, tikz`\dy`, tikz`\yy`], usedLoopVars),
         count: options.rows,
         stepPt: -options.verticalStep
       }
@@ -266,7 +265,7 @@ function buildRepeatReplacement(
     text: buildForeachChain(
       [yLoop, xLoop]
         .filter((loop): loop is RepeatLoop => loop != null)
-        .map((loop) => `\\foreach ${loop.variable} in {${buildIndexList(loop.count)}}`),
+        .map((loop) => tikz`\foreach ${loop.variable} in {${buildIndexList(loop.count)}}`),
       body
     )
   };
@@ -296,7 +295,7 @@ function translateSingleStatementSnippet(
   ref: StatementRef,
   steps: readonly LoopStep[],
   parseOptions: EditParseOptions
-): string {
+): TikzFragment {
   const { source } = geometry;
   const wrappedParseOptions = withoutActiveFigure(parseOptions);
   const statement = ref.statement;
@@ -329,45 +328,44 @@ function wrapRepeatedBlockInScope(
   geometry: RepeatGeometry,
   refs: readonly StatementRef[],
   steps: readonly LoopStep[]
-): string {
+): TikzFragment {
   const first = requireArrayValue(refs, 0);
   const last = requireArrayValue(refs, refs.length - 1);
-  const block = geometry.source.slice(first.span.from, last.span.to);
+  const block = sourceSlice(geometry.source, { from: first.span.from, to: last.span.to });
   const shift = geometry.writer.translated({ kind: "context", context: statementEntryContext(geometry, first.id) }, steps);
   if (shift.kind !== "ok") throw new CoordinateWriteRefused(shift.reason);
-  return `\\begin{scope}[shift={${shift.fragment}}]\n${reindentSnippet(block, "  ")}\n\\end{scope}`;
+  return tikz`\begin{scope}[shift={${shift.fragment}}]${layout("\n")}${reindentSnippet(block, "  ")}${layout("\n")}\end{scope}`;
 }
 
-function buildForeachChain(headers: readonly string[], body: string): string {
+function buildForeachChain(headers: readonly TikzFragment[], body: TikzFragment): TikzFragment {
   let output = body;
   for (let index = headers.length - 1; index >= 0; index -= 1) {
-    output = `${headers[index]} {\n${indentEveryLine(output, "  ")}\n}`;
+    output = tikz`${headers[index] ?? EMPTY_FRAGMENT} {${layout("\n")}${indentEveryLine(output, "  ")}${layout("\n")}}`;
   }
   return output;
 }
 
-function chooseLoopVariable(snippet: string, candidates: readonly string[], used: Set<string>): string {
-  for (const candidate of candidates) {
+/** Loop variables past the five a loop prefers, each a literal; a snippet using all of them has nothing left to repeat with. */
+const FALLBACK_LOOP_VARIABLES: readonly TikzFragment[] = [
+  tikz`\v1`, tikz`\v2`, tikz`\v3`, tikz`\v4`, tikz`\v5`, tikz`\v6`, tikz`\v7`, tikz`\v8`, tikz`\v9`
+];
+
+function chooseLoopVariable(snippet: string, candidates: readonly TikzFragment[], used: Set<string>): TikzFragment {
+  for (const candidate of [...candidates, ...FALLBACK_LOOP_VARIABLES]) {
     if (!used.has(candidate) && !snippet.includes(candidate)) {
       used.add(candidate);
       return candidate;
     }
   }
-
-  let index = 1;
-  while (used.has(`\\v${index}`) || snippet.includes(`\\v${index}`)) {
-    index += 1;
-  }
-  const fallback = `\\v${index}`;
-  used.add(fallback);
-  return fallback;
+  throw new CoordinateWriteRefused("no free loop variable is left in the selection");
 }
 
-function buildIndexList(count: number): string {
+/** The index list of a loop over the count the user asked for. */
+function buildIndexList(count: number): TikzFragment {
   if (count <= 1) {
-    return "0";
+    return tikz`0`;
   }
-  return `0, ..., ${count - 1}`;
+  return tikz`0, ..., ${plainNumber(count - 1, "loop-count")}`;
 }
 
 function collectNodeNameCoordinateIds(items: readonly PathItem[]): Set<string> {
@@ -403,7 +401,7 @@ function rewritePathStatementCoordinates(
   geometry: RepeatGeometry,
   statement: PathStatement,
   steps: readonly LoopStep[]
-): string | null {
+): TikzFragment | null {
   const { source, writer } = geometry;
   const handles = geometry.semantic.editHandles.filter(
     (handle): handle is CoordinateEditHandle => handle.sourceRef.sourceId === statement.id && isCoordinateEditHandle(handle)
@@ -466,38 +464,18 @@ function rewritePathStatementCoordinates(
   return editedSlice(rewritten, statement.span.from, statement.span.to + (rewritten.length - source.length));
 }
 
-function wrapSnippetInFigure(snippet: string): string {
-  return `\\begin{tikzpicture}\n${reindentSnippet(snippet, "  ")}\n\\end{tikzpicture}`;
+/** The snippet in a figure, to see whether it parses: never written. */
+function wrapSnippetInFigure(snippet: TikzFragment): string {
+  return tikz`\begin{tikzpicture}${layout("\n")}${reindentSnippet(snippet, "  ")}${layout("\n")}\end{tikzpicture}`;
 }
 
-function indentFollowingLines(text: string, indent: string): string {
-  if (indent.length === 0 || text.length === 0) {
-    return text;
-  }
-  return text.replace(/\n/g, `\n${indent}`);
+/** Every line break of the text becomes `newline` and the indent of the statement it replaces. */
+function indentFollowingLines(text: TikzFragment, newline: string, indent: string): TikzFragment {
+  return joinFragments(splitLines(text), layout(`${newline}${indent}`));
 }
 
-function indentEveryLine(text: string, indent: string): string {
-  return text
-    .split("\n")
-    .map((line) => `${indent}${line}`)
-    .join("\n");
-}
-
-function reindentSnippet(snippet: string, indent: string): string {
-  const lines = snippet.split("\n");
-  const nonEmpty = lines.filter((line) => line.trim().length > 0);
-  const minIndent = nonEmpty.reduce((minimum, line) => {
-    const current = line.match(/^[ \t]*/)?.[0].length ?? 0;
-    return Math.min(minimum, current);
-  }, Number.POSITIVE_INFINITY);
-  const trimIndent = Number.isFinite(minIndent) ? minIndent : 0;
-  return lines
-    .map((line) => {
-      const stripped = trimIndent > 0 ? line.slice(Math.min(trimIndent, line.length)) : line;
-      return `${indent}${stripped}`;
-    })
-    .join("\n");
+function indentEveryLine(text: TikzFragment, indent: string): TikzFragment {
+  return joinFragments(splitLines(text).map((line) => tikz`${layout(indent)}${line}`), layout("\n"));
 }
 
 function normalizeRepeatCount(value: number): number {

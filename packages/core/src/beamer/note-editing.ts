@@ -1,4 +1,4 @@
-import { legacyEditedSource } from "../edit/fragment.js";
+import { applyFragments, EMPTY_FRAGMENT, layout, tikz, userText, type EditedSource, type FragmentEdit, type TikzFragment } from "../edit/fragment.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import { computeMinimalReplacementPatch } from "../edit/patch.js";
@@ -92,42 +92,45 @@ export type BeamerNoteEdit =
  * with the frame. Null when the frame or note is missing, or when the
  * text cannot be a note's argument (checkBeamerNoteBody).
  */
-export function editBeamerFrameNote(source: string, edit: BeamerNoteEdit): { source: string; patch: SourcePatch } | null {
+export function editBeamerFrameNote(source: string, edit: BeamerNoteEdit): { source: EditedSource; patch: SourcePatch } | null {
   const notes = beamerFrameNotes(source, edit.frameId);
   if (!notes) return null;
   const note = notes[edit.index];
-  let next: string;
+  let change: FragmentEdit;
   if (edit.kind === "remove") {
     if (!note) return null;
     const lineFrom = source.lastIndexOf("\n", note.span.from - 1) + 1;
     const lineEnd = source.indexOf("\n", note.span.to);
     const lineTo = lineEnd < 0 ? source.length : lineEnd + 1;
     const alone = !source.slice(lineFrom, note.span.from).trim() && !source.slice(note.span.to, lineTo).trim();
-    next = alone ? source.slice(0, lineFrom) + source.slice(lineTo) : source.slice(0, note.span.from) + source.slice(note.span.to);
+    change = { span: alone ? { from: lineFrom, to: lineTo } : note.span, fragment: EMPTY_FRAGMENT };
   } else {
     if (checkBeamerNoteBody(edit.text).problem) return null;
+    const text = userText(edit.text, "beamer-text");
     if (note) {
       if (!note.editable) return null;
-      next = source.slice(0, note.bodySpan.from) + edit.text + source.slice(note.bodySpan.to);
+      change = { span: note.bodySpan, fragment: text };
     } else {
       if (edit.index !== 0 || notes.length) return null;
-      next = withNewNote(source, edit.frameId, edit.text);
+      const added = newNote(source, edit.frameId, text);
+      if (!added) return null;
+      change = added;
     }
   }
-  if (next === source) return null;
-  const edited = legacyEditedSource(next);
+  const edited = applyFragments(source, [change]);
+  if (edited === source) return null;
   return { source: edited, patch: computeMinimalReplacementPatch(source, edited) };
 }
 
 /** The note on a line of its own before `\end{frame}`, indented as the frame's body; or, in a one-line frame, before `\end{frame}`. */
-function withNewNote(source: string, frameId: string, text: string): string {
+function newNote(source: string, frameId: string, text: TikzFragment): FragmentEdit | null {
   const document = scanBeamerDocument(source);
   const frame = document.frames.find(candidate => candidate.id === frameId);
-  if (!frame) return source;
+  if (!frame) return null;
   const end = frame.bodySpan.to;
   const lineFrom = source.lastIndexOf("\n", end - 1) + 1;
-  const note = `\\note{${text}}`;
-  if (lineFrom <= frame.bodySpan.from || source.slice(lineFrom, end).trim()) return source.slice(0, end) + note + source.slice(end);
-  const indent = beamerFrameBodyIndent(source, frame) ?? beamerDeckConventions(document).indent;
-  return `${source.slice(0, lineFrom)}${indent}${note}\n${source.slice(lineFrom)}`;
+  const note = tikz`\note{${text}}`;
+  if (lineFrom <= frame.bodySpan.from || source.slice(lineFrom, end).trim()) return { span: { from: end, to: end }, fragment: note };
+  const indent = layout(beamerFrameBodyIndent(source, frame) ?? beamerDeckConventions(document).indent);
+  return { span: { from: lineFrom, to: lineFrom }, fragment: tikz`${indent}${note}${layout("\n")}` };
 }

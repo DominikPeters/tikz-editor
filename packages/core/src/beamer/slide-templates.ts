@@ -1,4 +1,5 @@
 import type { Span } from "../ast/types.js";
+import { EMPTY_FRAGMENT, layout, tikz, type TikzFragment } from "../edit/fragment.js";
 import type { BeamerDocumentModel, BeamerFrameModel } from "./types.js";
 
 export type BeamerSlideTemplateId =
@@ -7,7 +8,7 @@ export type BeamerSlideTemplateId =
 export type BeamerSlideTemplate = { id: BeamerSlideTemplateId; name: string };
 
 /** A new frame's text, and the placeholder in it to select once it is shown. */
-export type BeamerSlideTemplateFrame = { text: string; placeholder: Span | null };
+export type BeamerSlideTemplateFrame = { text: TikzFragment; placeholder: Span | null };
 
 export const BEAMER_SLIDE_TEMPLATES: readonly BeamerSlideTemplate[] = [
   { id: "title", name: "Title" },
@@ -27,7 +28,7 @@ export function beamerSlideTemplates(document: BeamerDocumentModel): BeamerSlide
 }
 
 // A body line, or one holding the placeholder to select.
-type Line = string | { text: string; select: string };
+type Line = TikzFragment | { text: TikzFragment; select: string };
 
 /**
  * A frame in the deck's own conventions: the title as `\begin{frame}{…}` or
@@ -35,36 +36,38 @@ type Line = string | { text: string; select: string };
  * most frames indent theirs.
  */
 export function beamerSlideTemplateFrame(document: BeamerDocumentModel, id: BeamerSlideTemplateId): BeamerSlideTemplateFrame {
-  const { indent, titleCommand } = beamerDeckConventions(document);
-  const title = "Slide title";
-  const titled = (...body: Line[]): Line[] => titleCommand ? [{ text: `\\frametitle{${title}}`, select: title }, ...body] : body;
+  const conventions = beamerDeckConventions(document);
+  const { titleCommand } = conventions;
+  const indent = layout(conventions.indent);
+  const title = tikz`Slide title`;
+  const titled = (...body: Line[]): Line[] => titleCommand ? [{ text: tikz`\frametitle{${title}}`, select: title }, ...body] : body;
   const lines: Line[] = {
-    "title": ["\\titlepage"],
-    "title-and-bullets": titled("\\begin{itemize}", `${indent}\\item First point`, `${indent}\\item Second point`, "\\end{itemize}"),
+    "title": [tikz`\titlepage`],
+    "title-and-bullets": titled(tikz`\begin{itemize}`, tikz`${indent}\item First point`, tikz`${indent}\item Second point`, tikz`\end{itemize}`),
     "title-only": titled(),
-    "two-columns": titled("\\begin{columns}[T]",
-      `${indent}\\begin{column}{0.48\\textwidth}`, `${indent}${indent}Left column`, `${indent}\\end{column}`,
-      `${indent}\\begin{column}{0.48\\textwidth}`, `${indent}${indent}Right column`, `${indent}\\end{column}`,
-      "\\end{columns}"),
-    "block": titled("\\begin{block}{Block title}", `${indent}Block text`, "\\end{block}"),
-    "theorem": titled("\\begin{theorem}", `${indent}Statement of the theorem.`, "\\end{theorem}"),
-    "statement": ["\\begin{center}", { text: `${indent}\\Large Statement`, select: "Statement" }, "\\end{center}"],
+    "two-columns": titled(tikz`\begin{columns}[T]`,
+      tikz`${indent}\begin{column}{0.48\textwidth}`, tikz`${indent}${indent}Left column`, tikz`${indent}\end{column}`,
+      tikz`${indent}\begin{column}{0.48\textwidth}`, tikz`${indent}${indent}Right column`, tikz`${indent}\end{column}`,
+      tikz`\end{columns}`),
+    "block": titled(tikz`\begin{block}{Block title}`, tikz`${indent}Block text`, tikz`\end{block}`),
+    "theorem": titled(tikz`\begin{theorem}`, tikz`${indent}Statement of the theorem.`, tikz`\end{theorem}`),
+    "statement": [tikz`\begin{center}`, { text: tikz`${indent}\Large Statement`, select: "Statement" }, tikz`\end{center}`],
     "blank": [],
   }[id];
   const header = !titleCommand && id !== "title" && id !== "statement" && id !== "blank";
-  let text = "\\begin{frame}";
+  let text = tikz`\begin{frame}`;
   let placeholder: Span | null = header ? { from: text.length + 1, to: text.length + 1 + title.length } : null;
-  text += (header ? `{${title}}` : "") + "\n";
+  text = tikz`${text}${header ? tikz`{${title}}` : EMPTY_FRAGMENT}${layout("\n")}`;
   for (const line of lines) {
     const content = typeof line === "string" ? line : line.text;
     if (typeof line !== "string" && !placeholder) {
       const from = text.length + indent.length + content.lastIndexOf(line.select);
       placeholder = { from, to: from + line.select.length };
     }
-    text += `${indent}${content}\n`;
+    text = tikz`${text}${indent}${content}${layout("\n")}`;
   }
-  if (!lines.length) text += "\n";
-  return { text: text + "\\end{frame}\n", placeholder };
+  if (!lines.length) text = tikz`${text}${layout("\n")}`;
+  return { text: tikz`${text}\end{frame}${layout("\n")}`, placeholder };
 }
 
 /** How most of the deck's frames are written: their body indentation and title form. */

@@ -1,14 +1,14 @@
 import {
-  applyFragments, canvasLength, EMPTY_FRAGMENT, joinFragments, layout, legacyText, option, optionList, tikz, unchangedSource, userText,
+  applyFragments, canvasLength, EMPTY_FRAGMENT, joinFragments, layout, option, optionList, tikz, unchangedSource, userText,
   type CoordinateText, type EditedSource, type TikzFragment
 } from "./fragment.js";
-import type { NewStatementPoints } from "./new-statement.js";
+import type { NewStatementPoints, StatementPointWriter } from "./new-statement.js";
 import { requireArrayValue } from "../utils/collections.js";
 import { worldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
 import type { WorldPoint } from "../coords/points.js";
 import type { Span } from "../ast/types.js";
-import { CM_PER_PT, PT_PER_CM, formatNumber } from "./format.js";
+import { PT_PER_CM } from "./format.js";
 
 export type AnchorReference = {
   nodeName: string;
@@ -132,27 +132,27 @@ export function generateElementSource(template: ElementTemplate, at: WorldPoint,
       const { center, xRadiusPt, yRadiusPt } = ellipseFromCorner(at, template.corner);
       const ellipseOptions = buildDrawOptions(template.strokeColor, template.fillColor, false);
       const point = points({ command: "draw", options: ellipseOptions.slice(1, -1) });
-      // Radii are lengths in the frame; the writer takes them over in phase 5.
-      const radii = legacyText(`x radius=${formatNumber(xRadiusPt * CM_PER_PT)}cm, y radius=${formatNumber(yRadiusPt * CM_PER_PT)}cm`);
-      return tikz`\draw${ellipseOptions} ${point(center)} ellipse [${radii}];`;
+      const radii = point.ellipseRadii(xRadiusPt, yRadiusPt);
+      return tikz`\draw${ellipseOptions} ${point(center)} ellipse [${option("x radius", radii.x)}, ${option("y radius", radii.y)}];`;
     }
 
     case "circle": {
       const circleOptions = buildDrawOptions(template.strokeColor, template.fillColor, false);
       const point = points({ command: "draw", options: circleOptions.slice(1, -1) });
-      return tikz`\draw${circleOptions} ${point(at)} circle (${circleRadius(at, template.edge)});`;
+      return tikz`\draw${circleOptions} ${point(at)} circle${circleRadius(point, at, template.edge)};`;
     }
 
     case "filledCircle": {
       const point = points({ command: "fill", options: "" });
-      return tikz`\fill ${point(at)} circle (${circleRadius(at, template.edge)});`;
+      return tikz`\fill ${point(at)} circle${circleRadius(point, at, template.edge)};`;
     }
   }
 }
 
-/** A circle's radius as a length in the frame; the writer takes it over in phase 5. */
-function circleRadius(at: WorldPoint, edge: WorldPoint | undefined): TikzFragment {
-  return legacyText(`${formatNumber(circleRadiusPt(at, edge) * CM_PER_PT)}cm`);
+/** A circle's radius, ` (r)`, or its two radii where the frame stretches it into an ellipse. */
+function circleRadius(point: StatementPointWriter, at: WorldPoint, edge: WorldPoint | undefined): TikzFragment {
+  const radii = point.circleRadii(circleRadiusPt(at, edge));
+  return radii.even ? tikz` (${radii.x})` : tikz` [${option("x radius", radii.x)}, ${option("y radius", radii.y)}]`;
 }
 
 /** Inserts a statement before the figure's end, indented like its body. */

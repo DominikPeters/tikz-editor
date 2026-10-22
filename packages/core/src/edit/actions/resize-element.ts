@@ -1,4 +1,4 @@
-import { canvasLength, legacyText, optionValueFor, unchangedSource, type TikzFragment } from "../fragment.js";
+import { canvasLength, option, optionList, optionValueFor, sourceSlice, tikz, unchangedSource, type CoordinateText, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
@@ -13,11 +13,13 @@ import type {
   ScenePathShapeHint
 } from "../../semantic/types.js";
 import {
+  isCoordinateEditHandle,
   isFrameLocalCoordinateEditHandle,
   isRelativeCoordinateEditHandle
 } from "../../semantic/types.js";
+import { createCoordinateWriter, radiusLengthsOf, type RadiusSpelling, type RadiusUnit } from "../writer/index.js";
 import { pt } from "../../coords/scalars.js";
-import { applyFrameTransform } from "../../coords/frame.js";
+import { applyFrameTransform, worldVectorToFrameLocal } from "../../coords/frame.js";
 import { frameLocalPoint, worldPoint, worldVector } from "../../coords/points.js";
 import type { FrameLocalPoint, WorldPoint, WorldVector } from "../../coords/points.js";
 import type { FrameTransform } from "../../coords/transforms.js";
@@ -27,7 +29,7 @@ import type { PropertyTarget } from "../property-target.js";
 import { changedSourceIdsForPropertyTarget, resolvePropertyTarget } from "../property-target.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { parseCircleRadiusFromCoordinateRaw, parseEllipseRadiiFromCoordinateRaw } from "../../semantic/path/parsers.js";
-import { parseLength } from "../../semantic/coords/parse-length.js";
+import { parseLength, parseLengthWithInfo } from "../../semantic/coords/parse-length.js";
 import { resolveNodeShape } from "../../semantic/nodes/options.js";
 import { applyMatrix, inverseMatrix, multiplyMatrix } from "../../semantic/transform.js";
 import { collectSourceWorldBounds } from "../snapping/index.js";
@@ -35,8 +37,6 @@ import { worldToLocal } from "../coords.js";
 import { replaceSpan } from "../patch.js";
 import { rewriteCoordinate } from "../rewrite.js";
 import {
-  CM_PER_PT,
-  formatNumber,
   pointDimensionFormatOptions,
   type DragFormatPrecision
 } from "../format.js";
@@ -49,7 +49,6 @@ import {
   applyOptionMutationsToTarget,
   normalizeOptionKey,
   rewriteSourceBackedOptionListMutations,
-  serializeOptionEntry,
   type OptionMutation,
   type OptionMutationApplyResult
 } from "../option-mutations.js";
@@ -259,10 +258,13 @@ export function applyResizeElementAction(
     return { kind: "unsupported", reason: "Could not resolve intrinsic node bounds for resize." };
   }
 
-  const pointerDelta = wp(action.newWorld.x - center.x, action.newWorld.y - center.y);
+  const pointerDelta = worldVector(pt(action.newWorld.x - center.x), pt(action.newWorld.y - center.y));
   const localPointerDelta = nodeLinearTransform
-    ? worldVectorToLocal(pointerDelta, nodeLinearTransform)
+    ? worldVectorToFrameLocal(pointerDelta, frameTransform(nodeLinearTransform.a, nodeLinearTransform.b, nodeLinearTransform.c, nodeLinearTransform.d, 0, 0))
     : pointerDelta;
+  if (!localPointerDelta) {
+    return { kind: "unsupported", reason: "The node's transform is singular." };
+  }
   let requestedWidth = 2 * Math.abs(localPointerDelta.x);
   let requestedHeight = 2 * Math.abs(localPointerDelta.y);
   if (action.preserveAspect && affectsWidth && affectsHeight) {
@@ -650,9 +652,9 @@ function applyResizeScope(
     if (candidates.length > 1) return unsupported("Scope resize cannot safely rewrite repeated scale entries.");
     const current = candidates[0] ? Number(candidates[0].valueRaw.trim()) : 1;
     if (!Number.isFinite(current)) return unsupported("Scope resize requires numeric authored scale entries.");
-    const formatted = formatNumber(current * ratio, action.formatPrecision === "snapped" ? { fractionDigits: 12 } : undefined);
+    const formatted = createCoordinateWriter(source).factor(current * ratio, action.formatPrecision === "snapped" ? { fractionDigits: 12 } : {});
     writtenRatios[axis] = Number(formatted) / current;
-    scaleMutations.set(candidates[0] ? normalizeOptionKey(candidates[0].key) : axis, { kind: "set", value: legacyText(formatted) });
+    scaleMutations.set(candidates[0] ? normalizeOptionKey(candidates[0].key) : axis, { kind: "set", value: formatted });
   }
   const scaledEntries = mutateOrderedOptionEntries(entries, scaleMutations);
   const scaledFrame = resolveStatementOptionFrame(source, action.elementId, scaledEntries, parseOptions, geometry, evaluateOptions, true);
@@ -1150,20 +1152,20 @@ function applyResizePathCircleOrEllipse(
     return { kind: "unsupported", reason: `Unsupported resize role: ${action.role}` };
   }
 
-  const centerTransform = isFrameLocalCoordinateEditHandle(context.centerHandle)
-    ? context.centerHandle.frame
-    : asFrameTransform(context.centerHandle.transform);
-  const localPointer = worldToLocal(action.newWorld, centerTransform);
-  const localCenter =
-    isFrameLocalCoordinateEditHandle(context.centerHandle)
-      ? context.centerHandle.local
-      : worldToLocal(context.center, centerTransform);
-  if (!localPointer || !localCenter) {
+  if (!isCoordinateEditHandle(context.centerHandle)) {
+    return { kind: "unsupported", reason: "Could not resolve local geometry for circle/ellipse resize." };
+  }
+  // The radii are read in their own frame (the CTM, through the axis vectors
+  // when unitless), not the center's, and written back in their spelling.
+  const spelling = currentRadiusSpelling(context.syntax);
+  const reach = radiusLengthsOf(context.centerHandle.siteContext, spelling,
+    worldVector(pt(action.newWorld.x - context.center.x), pt(action.newWorld.y - context.center.y)));
+  if (!reach) {
     return { kind: "unsupported", reason: "Could not resolve local geometry for circle/ellipse resize." };
   }
 
-  const localDx = Math.abs(localPointer.x - localCenter.x);
-  const localDy = Math.abs(localPointer.y - localCenter.y);
+  const localDx = reach.x;
+  const localDy = reach.y;
   const currentLocalRadii = resolveCurrentLocalShapeRadii(context.syntax);
   if ((!affectsWidth || !affectsHeight) && !currentLocalRadii) {
     return { kind: "unsupported", reason: "Resize requires explicit circle/ellipse radii for single-axis drags." };
@@ -1210,7 +1212,8 @@ function applyResizePathCircleOrEllipse(
   nextRxLocal = Math.max(nextRxLocal, RESIZE_EPSILON);
   nextRyLocal = Math.max(nextRyLocal, RESIZE_EPSILON);
 
-  const payloadRewrite = rewriteShapePayloadCoordinate(context.syntax, nextRxLocal, nextRyLocal);
+  const radii = createCoordinateWriter(source).radii({ ...reach, x: nextRxLocal, y: nextRyLocal }, { units: currentRadiusUnits(context.syntax) });
+  const payloadRewrite = rewriteShapePayloadCoordinate(source, context.syntax, radii);
   if (payloadRewrite) {
     const rewritten = applySpanTextReplacement(source, payloadRewrite.span, payloadRewrite.text);
     if (!rewritten) {
@@ -1224,7 +1227,7 @@ function applyResizePathCircleOrEllipse(
     };
   }
 
-  const radiusMutations = buildShapeRadiusMutations(context, nextRxLocal, nextRyLocal);
+  const radiusMutations = buildShapeRadiusMutations(context, radii);
   const optionTarget = pickPathShapeResizeOptionTarget(context.syntax.optionItems);
   if (optionTarget) {
     const replacement = rewriteSourceBackedOptionListMutations(
@@ -1245,14 +1248,9 @@ function applyResizePathCircleOrEllipse(
     };
   }
 
-  const entries: string[] = [];
-  for (const [key, mutation] of radiusMutations.entries()) {
-    if (mutation.kind === "set") {
-      entries.push(serializeOptionEntry(key, mutation.value));
-    }
-  }
-
-  const inserted = legacyText(`[${entries.join(", ")}]`);
+  const inserted = optionList(context.shapeKind === "circle"
+    ? [option("radius", radii.x)]
+    : [option("x radius", radii.x), option("y radius", radii.y)]);
   const rewritten = requireDefined(applySpanTextReplacement(source, {
     from: context.syntax.keywordSpan.to,
     to: context.syntax.keywordSpan.to
@@ -1487,62 +1485,95 @@ function parseEllipseRadiiFromOptionItem(item: PathOptionItem): { rx: number; ry
 }
 
 function rewriteShapePayloadCoordinate(
+  source: string,
   syntax: PathShapeResizeSyntax,
-  nextRxLocal: number,
-  nextRyLocal: number
+  radii: Readonly<{ x: CoordinateText; y: CoordinateText }>
 ): { span: Span; text: TikzFragment } | null {
-  if (!syntax.payloadCoordinate) {
+  const payload = syntax.payloadCoordinate;
+  if (!payload) {
     return null;
   }
+  const raw = source.slice(payload.span.from, payload.span.to);
+  const at = (offset: number, length: number) => sourceSlice(source, { from: payload.span.from + offset, to: payload.span.from + offset + length });
 
   if (syntax.keyword === "circle") {
+    // Keep the spacing inside the parentheses.
+    const exact = /^\((\s*)[^)]*?(\s*)\)$/s.exec(raw);
     return {
-      span: syntax.payloadCoordinate.span,
-      text: legacyText(formatCircleRadiusCoordinateRaw(syntax.payloadCoordinate.raw, nextRxLocal))
+      span: payload.span,
+      text: exact ? tikz`(${at(1, exact[1]?.length ?? 0)}${radii.x}${at(raw.length - 1 - (exact[2]?.length ?? 0), exact[2]?.length ?? 0)})` : tikz`(${radii.x})`
     };
   }
 
+  const exact = /^\((\s*)([^)]*?)(\s+and\s+)([^)]*?)(\s*)\)$/is.exec(raw);
+  if (!exact) {
+    return { span: payload.span, text: tikz`(${radii.x} and ${radii.y})` };
+  }
+  const [, leading = "", rx = "", and = "", , trailing = ""] = exact;
   return {
-    span: syntax.payloadCoordinate.span,
-    text: legacyText(formatEllipseRadiiCoordinateRaw(syntax.payloadCoordinate.raw, nextRxLocal, nextRyLocal))
+    span: payload.span,
+    text: tikz`(${at(1, leading.length)}${radii.x}${at(1 + leading.length + rx.length, and.length)}${radii.y}${at(raw.length - 1 - trailing.length, trailing.length)})`
   };
 }
 
-function formatCircleRadiusCoordinateRaw(oldRaw: string, radiusPt: number): string {
-  const value = `${formatNumber(radiusPt * CM_PER_PT)}cm`;
-  const exact = oldRaw.match(/^\((\s*)([^)]*)(\s*)\)$/s);
-  if (exact) {
-    return `(${exact[1]}${value}${exact[3]})`;
+/** The radii as written now: the payload's, else the last radius options'; the x one, or the y one. */
+function currentRadiusTexts(syntax: PathShapeResizeSyntax): { x?: string; y?: string } {
+  const payload = syntax.payloadCoordinate?.raw.replace(/^\s*\(|\)\s*$/g, "");
+  if (payload !== undefined && payload.trim().length > 0) {
+    const [x = payload, y = x] = payload.split(/\s+and\s+/i);
+    return { x, y };
   }
-  return `(${value})`;
+  const texts: { x?: string; y?: string } = {};
+  for (const item of syntax.optionItems) {
+    for (const entry of item.options.entries) {
+      if (entry.kind !== "kv") continue;
+      if (entry.key === "radius") {
+        texts.x = entry.valueRaw;
+        texts.y = entry.valueRaw;
+      } else if (entry.key === "x radius") {
+        texts.x = entry.valueRaw;
+      } else if (entry.key === "y radius") {
+        texts.y = entry.valueRaw;
+      }
+    }
+  }
+  return texts;
 }
 
-function formatEllipseRadiiCoordinateRaw(oldRaw: string, rxPt: number, ryPt: number): string {
-  const rx = `${formatNumber(rxPt * CM_PER_PT)}cm`;
-  const ry = `${formatNumber(ryPt * CM_PER_PT)}cm`;
-  const exact = oldRaw.match(/^\((\s*)([^)]*?)(\s+and\s+)([^)]*?)(\s*)\)$/is);
-  if (exact) {
-    return `(${exact[1]}${rx}${exact[3]}${ry}${exact[5]})`;
-  }
-  return `(${rx} and ${ry})`;
+/** Whether the radii are plain numbers, read through the axis vectors, or lengths; a new radius is a length in cm. */
+function currentRadiusSpelling(syntax: PathShapeResizeSyntax): RadiusSpelling {
+  const raw = currentRadiusTexts(syntax).x;
+  if (raw === undefined) return { unitless: false, unit: "cm" };
+  const parsed = parseLengthWithInfo(raw, "cm");
+  return parsed && !parsed.hasExplicitUnit ? { unitless: true } : { unitless: false, unit: radiusUnit(raw) ?? "cm" };
+}
+
+function currentRadiusUnits(syntax: PathShapeResizeSyntax): { x?: RadiusUnit; y?: RadiusUnit } {
+  const texts = currentRadiusTexts(syntax);
+  const x = texts.x === undefined ? undefined : radiusUnit(texts.x);
+  const y = texts.y === undefined ? undefined : radiusUnit(texts.y);
+  return { ...(x === undefined ? {} : { x }), ...(y === undefined ? {} : { y }) };
+}
+
+function radiusUnit(raw: string): RadiusUnit | undefined {
+  const unit = /(cm|mm|pt|in|bp)\s*\}?\s*$/u.exec(raw.trim())?.[1];
+  return unit === "cm" || unit === "mm" || unit === "pt" || unit === "in" || unit === "bp" ? unit : undefined;
 }
 
 function buildShapeRadiusMutations(
   context: PathShapeResizeContext,
-  nextRxLocal: number,
-  nextRyLocal: number
+  radii: Readonly<{ x: CoordinateText; y: CoordinateText }>
 ): Map<string, OptionMutation> {
   const mutations = new Map<string, OptionMutation>();
   if (context.shapeKind === "circle") {
-    const radiusValue = legacyText(`${formatNumber(nextRxLocal * CM_PER_PT)}cm`);
-    mutations.set("radius", { kind: "set", value: radiusValue });
+    mutations.set("radius", { kind: "set", value: radii.x });
     mutations.set("x radius", { kind: "remove" });
     mutations.set("y radius", { kind: "remove" });
     return mutations;
   }
 
-  mutations.set("x radius", { kind: "set", value: legacyText(`${formatNumber(nextRxLocal * CM_PER_PT)}cm`) });
-  mutations.set("y radius", { kind: "set", value: legacyText(`${formatNumber(nextRyLocal * CM_PER_PT)}cm`) });
+  mutations.set("x radius", { kind: "set", value: radii.x });
+  mutations.set("y radius", { kind: "set", value: radii.y });
   mutations.set("radius", { kind: "remove" });
   return mutations;
 }
@@ -1981,24 +2012,6 @@ function resolveTargetMinimumDimensions(target: PropertyTarget): {
   };
 }
 
-function worldVectorToLocal(
-  vector: WorldPoint,
-  linearTransform: { a: number; b: number; c: number; d: number }
-): FrameLocalPoint {
-  const matrix = {
-    ...linearTransform,
-    e: 0,
-    f: 0
-  };
-  const inverse = inverseMatrix(worldTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f));
-  if (!inverse) {
-    return frameLocalPoint(pt(vector.x), pt(vector.y));
-  }
-  return frameLocalPoint(
-    pt(inverse.a * vector.x + inverse.c * vector.y),
-    pt(inverse.b * vector.x + inverse.d * vector.y)
-  );
-}
 
 function worldSizeToLocalSize(
   size: { width: number; height: number },

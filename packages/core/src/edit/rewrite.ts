@@ -1,14 +1,13 @@
-import { layout, legacyText, tikz, type TikzFragment } from "./fragment.js";
+import { layout, tikz, type TikzFragment } from "./fragment.js";
 import { isCoordinateEditHandle, type EditHandle } from "../semantic/types.js";
 import type { SiteContext } from "../semantic/site-context.js";
 import type { WorldPoint } from "../coords/points.js";
-import { rewriteCalcCoordinate } from "./rewrite-calc.js";
 import { createCoordinateWriter, type PointWriteOptions } from "./writer/index.js";
 
 /**
  * The text that moves a handle's coordinate to `newWorld`, or null when it
- * cannot be rewritten. Coordinates go through the writer; calc offsets and
- * positioning keep their own rewrites until their phases (migration).
+ * cannot be rewritten: through the writer, calc offsets and positioning
+ * included.
  * `context` replaces the handle's site context when the edit changes the
  * options the coordinate is read under.
  */
@@ -20,10 +19,6 @@ export function rewriteCoordinate(
   context?: SiteContext,
   options?: PointWriteOptions
 ): TikzFragment | null {
-  if (handle.rewriteMode === "calc") {
-    const text = rewriteCalcCoordinate(newWorld, handle, source);
-    return text === null ? null : legacyText(text);
-  }
   if (handle.rewriteMode === "positioning") {
     if (handle.handleType !== "node-positioning") return null;
     const written = createCoordinateWriter(source).positioning(handle.positioningContext, newWorld, { bypassSnapping });

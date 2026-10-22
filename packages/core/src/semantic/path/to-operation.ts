@@ -212,17 +212,18 @@ function applyToLikeOperation(
   );
   let effectiveStartPoint = resolvedStartPoint ?? startPoint;
   let effectiveTargetPoint = resolvedTargetPoint;
-  const curved = effectiveStartPoint ? extractToCurveOptions(item.options, effectiveStartPoint, effectiveTargetPoint) : null;
+  const frame = curveFrame(context);
+  const curved = effectiveStartPoint ? extractToCurveOptions(item.options, effectiveStartPoint, effectiveTargetPoint, frame) : null;
   if (effectiveStartPoint && curved) {
     if (config.startCoordinateRaw) {
       effectiveStartPoint = maybeResolveNamedCoordinateBorderPointFromRawAlongAngle(
         config.startCoordinateRaw,
         effectiveStartPoint,
-        curved.out,
+        frame.worldAngle(curved.out),
         context
       );
     }
-    effectiveTargetPoint = maybeResolveNamedCoordinateBorderPointFromRawAlongAngle(target.raw, effectiveTargetPoint, curved.in, context);
+    effectiveTargetPoint = maybeResolveNamedCoordinateBorderPointFromRawAlongAngle(target.raw, effectiveTargetPoint, frame.worldAngle(curved.in), context);
   }
 
   let path = activePath;
@@ -254,7 +255,7 @@ function applyToLikeOperation(
   let segment: PlacementSegment | null;
   let nextRoundedCorners;
   if (start && curved) {
-    segment = appendToCurve(path.commands, start, effectiveTargetPoint, curved);
+    segment = appendToCurve(path.commands, start, effectiveTargetPoint, curved, frame);
     appendToLikeCurveEditHandles({
       itemId: item.id,
       statementId: statement.id,
@@ -262,6 +263,7 @@ function applyToLikeOperation(
       end: effectiveTargetPoint,
       curve: curved,
       segment,
+      frame,
       context
     });
     nextRoundedCorners = style.roundedCorners;
@@ -332,7 +334,8 @@ function parseToTarget(
 function extractToCurveOptions(
   options: ToOperationItem["options"],
   from: WorldPoint,
-  to: WorldPoint
+  to: WorldPoint,
+  frame: CurveFrame
 ): {
   out: number;
   in: number;
@@ -575,7 +578,8 @@ function extractToCurveOptions(
     return null;
   }
 
-  const baseHeading = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
+  const heading = frame.toLocal(to.x - from.x, to.y - from.y);
+  const baseHeading = (Math.atan2(heading.y, heading.x) * 180) / Math.PI;
   if (relative) {
     out += baseHeading;
     inAngle += baseHeading;
@@ -619,11 +623,12 @@ function appendToCurve(
     outMaxDistance: number;
     inMinDistance: number;
     inMaxDistance: number;
-  }
+  },
+  frame: CurveFrame
 ): PlacementSegment {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const baseDistance = Math.hypot(dx, dy) * 0.3915;
+  // Distances and angles are those of the coordinates the curve is read in.
+  const delta = frame.toLocal(to.x - from.x, to.y - from.y);
+  const baseDistance = Math.hypot(delta.x, delta.y) * 0.3915;
 
   let outDistance = baseDistance * options.outLooseness;
   let inDistance = baseDistance * options.inLooseness;
@@ -632,14 +637,10 @@ function appendToCurve(
 
   const outRadians = toRadians(options.out);
   const inRadians = toRadians(options.in);
-  const c1 = wp(
-    from.x + outDistance * Math.cos(outRadians),
-    from.y + outDistance * Math.sin(outRadians)
-  );
-  const c2 = wp(
-    to.x + inDistance * Math.cos(inRadians),
-    to.y + inDistance * Math.sin(inRadians)
-  );
+  const outVector = frame.toWorld(outDistance * Math.cos(outRadians), outDistance * Math.sin(outRadians));
+  const inVector = frame.toWorld(inDistance * Math.cos(inRadians), inDistance * Math.sin(inRadians));
+  const c1 = wp(from.x + outVector.x, from.y + outVector.y);
+  const c2 = wp(to.x + inVector.x, to.y + inVector.y);
 
   commands.push({
     kind: "C",
@@ -657,6 +658,38 @@ function appendToCurve(
   };
 }
 
+/**
+ * The coordinates a `to` curve is computed in. PGF's `topaths` takes the
+ * distance between the points, the `out` and `in` angles and the bend's turn
+ * in the coordinates they are read in, and the CTM maps the curve after; so
+ * `out=0` under `rotate=90` leaves upwards, and a bend flattens under
+ * `xscale=2`. A singular CTM falls back to world coordinates.
+ */
+type CurveFrame = Readonly<{
+  linear: Readonly<{ a: number; b: number; c: number; d: number }>;
+  toLocal(x: number, y: number): { x: number; y: number };
+  toWorld(x: number, y: number): { x: number; y: number };
+  /** The world direction of a local angle, in degrees. */
+  worldAngle(degrees: number): number;
+}>;
+
+function curveFrame(context: SemanticContext): CurveFrame {
+  const { a, b, c, d } = currentFrame(context).transform;
+  const det = a * d - b * c;
+  const linear = Math.abs(det) > 1e-12 && Number.isFinite(det) ? { a, b, c, d } : { a: 1, b: 0, c: 0, d: 1 };
+  const inverseDet = 1 / (linear.a * linear.d - linear.b * linear.c);
+  const toWorld = (x: number, y: number) => ({ x: linear.a * x + linear.c * y, y: linear.b * x + linear.d * y });
+  return {
+    linear,
+    toLocal: (x, y) => ({ x: (linear.d * x - linear.c * y) * inverseDet, y: (linear.a * y - linear.b * x) * inverseDet }),
+    toWorld,
+    worldAngle: degrees => {
+      const direction = toWorld(Math.cos(toRadians(degrees)), Math.sin(toRadians(degrees)));
+      return (Math.atan2(direction.y, direction.x) * 180) / Math.PI;
+    }
+  };
+}
+
 function appendToLikeCurveEditHandles(args: {
   itemId: string;
   statementId: string;
@@ -671,6 +704,7 @@ function appendToLikeCurveEditHandles(args: {
     bendSignedAngle: number;
   };
   segment: PlacementSegment | null;
+  frame: CurveFrame;
   context: SemanticContext;
 }): void {
   if (args.segment?.kind !== "cubic") {
@@ -678,7 +712,11 @@ function appendToLikeCurveEditHandles(args: {
   }
 
   if (args.curve.uiMode === "bend") {
-    const bendHandleWorld = bendHandlePoint(args.start, args.end, args.curve.bendSignedAngle);
+    // The handle stands where the bend puts it in the curve's coordinates.
+    const end = args.frame.toLocal(args.end.x - args.start.x, args.end.y - args.start.y);
+    const local = bendHandlePoint(wp(0, 0), wp(end.x, end.y), args.curve.bendSignedAngle);
+    const offset = args.frame.toWorld(local.x, local.y);
+    const bendHandleWorld = wp(args.start.x + offset.x, args.start.y + offset.y);
     pushSyntheticCurveHandle({
       context: args.context,
       statementId: args.statementId,
@@ -689,7 +727,8 @@ function appendToLikeCurveEditHandles(args: {
         operationItemId: args.itemId,
         startWorld: args.start,
         endWorld: args.end,
-        baseHeading: args.curve.baseHeading
+        baseHeading: args.curve.baseHeading,
+        linear: args.frame.linear
       }
     });
     return;
@@ -707,7 +746,8 @@ function appendToLikeCurveEditHandles(args: {
       startWorld: args.start,
       endWorld: args.end,
       relative: args.curve.relative,
-      baseHeading: args.curve.baseHeading
+      baseHeading: args.curve.baseHeading,
+      linear: args.frame.linear
     }
   });
   pushSyntheticCurveHandle({
@@ -722,7 +762,8 @@ function appendToLikeCurveEditHandles(args: {
       startWorld: args.start,
       endWorld: args.end,
       relative: args.curve.relative,
-      baseHeading: args.curve.baseHeading
+      baseHeading: args.curve.baseHeading,
+      linear: args.frame.linear
     }
   });
 }
@@ -741,6 +782,7 @@ function pushSyntheticCurveHandle(args: {
         endWorld: WorldPoint;
         relative: boolean;
         baseHeading: number;
+        linear: CurveFrame["linear"];
       }
     | {
         kind: "to-bend";
@@ -748,6 +790,7 @@ function pushSyntheticCurveHandle(args: {
         startWorld: WorldPoint;
         endWorld: WorldPoint;
         baseHeading: number;
+        linear: CurveFrame["linear"];
       };
 }): void {
   const syntheticSpan = makeSyntheticHandleSpan(args.context);

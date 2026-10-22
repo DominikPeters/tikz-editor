@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Statement } from "../packages/core/src/ast/types.js";
+import { userText } from "../packages/core/src/edit/fragment.js";
 import {
   applyTextReplacements,
   buildStatementSnapshotFromStatements,
@@ -15,6 +16,8 @@ import {
   statementSnippet
 } from "../packages/core/src/edit/statement-ops.js";
 import { fragment } from "./fragment-helpers.js";
+
+const pasted = (snippets: readonly string[]) => snippets.map(snippet => userText(snippet, "pasted-tikz"));
 
 describe("statement ops", () => {
   it("builds nested snapshots and resolves deduplicated statement refs", () => {
@@ -103,15 +106,15 @@ describe("statement ops", () => {
   it("formats snippets and insertion points across blank input and custom newlines", () => {
     expect(resolveRootInsertionPoint("\\draw (0,0);")).toEqual({ offset: 12, indent: "" });
     expect(resolveRootInsertionPoint("  \\end{tikzpicture}")).toEqual({ offset: 2, indent: "    " });
-    expect(formatSnippetsForInsertion(["   ", "\t\\draw (0,0);\n"], "  ", {
+    expect(formatSnippetsForInsertion(pasted(["   ", "\t\\draw (0,0);\n"]), "  ", {
       trailingNewline: true,
       newline: "\r\n"
     })).toEqual({
       text: "\n  \\draw (0,0);\r\n",
       snippetSpans: [{ from: 1, to: 15 }]
     });
-    expect(formatSnippetsForInsertion(["   "], "  ")).toEqual({ text: "", snippetSpans: [] });
-    expect(formatSnippetsForInsertion(["\\draw (0,0);"], "  ", {
+    expect(formatSnippetsForInsertion(pasted(["   "]), "  ")).toEqual({ text: "", snippetSpans: [] });
+    expect(formatSnippetsForInsertion(pasted(["\\draw (0,0);"]), "  ", {
       trailingNewline: true
     }).text).toBe("\n  \\draw (0,0);\n");
   });

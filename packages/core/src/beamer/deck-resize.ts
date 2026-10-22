@@ -1,4 +1,4 @@
-import { legacyText } from "../edit/fragment.js";
+import { plainNumber, sourceSlice, tikz, type TikzFragment } from "../edit/fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
@@ -28,7 +28,7 @@ export type BeamerImageResizeTarget = {
   bounds: BeamerRect;
   values: NumericValue[];
   /** A natural-size image gets a scale option; no pixel dimension is baked in. */
-  insertScale?: { at: number; prefix: string; suffix: string };
+  insertScale?: { at: number; prefix: TikzFragment; suffix: TikzFragment };
 };
 
 /** Keep whitespace, braces, units, comments, and unrelated options outside the patch. */
@@ -96,23 +96,22 @@ export function beamerImageResizeTarget(source: string, layout: BeamerFrameLayou
   }
   return { objectId, bounds: graphic.bounds, values,
     ...(values.length ? {} : { insertScale: list
-      ? { at: list.contentSpan.to, prefix: entries.length ? ", scale=" : "scale=", suffix: "" }
-      : { at: command.span.to, prefix: "[scale=", suffix: "]" } }) };
+      ? { at: list.contentSpan.to, prefix: entries.length ? tikz`, scale=` : tikz`scale=`, suffix: tikz`` }
+      : { at: command.span.to, prefix: tikz`[scale=`, suffix: tikz`]` } }) };
 }
 
-function numericPatches(source: string, edits: { span: Span; replacement: string }[]): SourcePatch[] {
+function numericPatches(source: string, edits: { span: Span; replacement: TikzFragment }[]): SourcePatch[] {
   let delta = 0;
   return edits.filter((edit) => source.slice(edit.span.from, edit.span.to) !== edit.replacement)
     .sort((a, b) => a.span.from - b.span.from).map((edit) => {
       const from = edit.span.from + delta;
       delta += edit.replacement.length - (edit.span.to - edit.span.from);
-      return { oldSpan: edit.span, newSpan: { from, to: from + edit.replacement.length }, replacement: legacyText(edit.replacement) };
+      return { oldSpan: edit.span, newSpan: { from, to: from + edit.replacement.length }, replacement: edit.replacement };
     });
 }
-function formatValue(source: string, numeric: NumericValue, value: number): string {
-  if (Math.abs(value - numeric.value) < 1e-9) return source.slice(numeric.span.from, numeric.span.to);
-  const formatted = String(Number(value.toFixed(6)));
-  return source[numeric.span.from] === "." && formatted.startsWith("0.") ? formatted.slice(1) : formatted;
+function formatValue(source: string, numeric: NumericValue, value: number): TikzFragment {
+  if (Math.abs(value - numeric.value) < 1e-9) return sourceSlice(source, numeric.span);
+  return plainNumber(Number(value.toFixed(6)), "beamer-length", source[numeric.span.from] === ".");
 }
 
 export function beamerColumnResizePatches(source: string, divider: BeamerColumnDivider, deltaPt: number): SourcePatch[] {
@@ -132,7 +131,7 @@ export function beamerImageResizePatches(source: string, target: BeamerImageResi
   const edits = target.values.map((value) => ({ span: value.span, replacement: formatValue(source, value, value.value * scale) }));
   if (target.insertScale) {
     const { at, prefix, suffix } = target.insertScale;
-    edits.push({ span: { from: at, to: at }, replacement: `${prefix}${Number(scale.toFixed(6))}${suffix}` });
+    edits.push({ span: { from: at, to: at }, replacement: tikz`${prefix}${plainNumber(Number(scale.toFixed(6)), "beamer-scale")}${suffix}` });
   }
   return numericPatches(source, edits);
 }

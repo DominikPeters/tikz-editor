@@ -1,4 +1,4 @@
-import { legacyText, unchangedSource, type EditedSource } from "../fragment.js";
+import { unchangedSource, userText, type EditedSource } from "../fragment.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { worldPoint } from "../../coords/points.js";
@@ -14,6 +14,7 @@ import {
   groupStatementRefsByParent,
   lineIndentAtOffset,
   mapSpansThroughPatches,
+  normalizeSnippet,
   parseStatementSnapshot,
   resolveRootInsertionPoint,
   resolveStatementRefs,
@@ -72,7 +73,7 @@ export function applyPasteStatementsAction(
 ): EditActionResultLike {
   const caches = createPasteDuplicateCaches();
   const snippets = action.snippets
-    .map((snippet) => snippet.replace(/\r\n?/g, "\n").trimEnd())
+    .map((snippet) => normalizeSnippet(userText(snippet, "pasted-tikz")))
     .filter((snippet) => snippet.trim().length > 0);
   if (snippets.length === 0) {
     return { kind: "unsupported", reason: "No snippets were provided for pasteStatements." };
@@ -102,7 +103,7 @@ export function applyPasteStatementsAction(
   const applied = applyTextReplacements(source, [
     {
       span: { from: insertionWorldPoint.offset, to: insertionWorldPoint.offset },
-      text: legacyText(insertion.text)
+      text: insertion.text
     }
   ]);
   const appliedInsertion = requireArrayValue(applied.applied, 0);
@@ -182,7 +183,7 @@ export function applyDuplicateElementsAction(
     for (const resolvedGroup of resolvedGroups) {
       const orderedRefs = [...resolvedGroup.refs].sort((left, right) => left.index - right.index);
       const snippets = orderedRefs
-        .map((ref) => statementSnippet(currentSource, ref).replace(/\r\n?/g, "\n").trimEnd())
+        .map((ref) => normalizeSnippet(statementSnippet(currentSource, ref)))
         .filter((snippet) => snippet.trim().length > 0);
       const renamedSnippets = renameSnippetDeclaredNames(currentSource, snippets, parseOptions);
 
@@ -196,7 +197,7 @@ export function applyDuplicateElementsAction(
       const applied = applyTextReplacements(currentSource, [
         {
           span: { from: anchor.span.to, to: anchor.span.to },
-          text: legacyText(insertion.text)
+          text: insertion.text
         }
       ]);
       const appliedInsertion = requireArrayValue(applied.applied, 0);

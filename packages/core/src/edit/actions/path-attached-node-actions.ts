@@ -1,9 +1,10 @@
-import { EMPTY_FRAGMENT, legacyText, optionValueFor, ratio, tikz } from "../fragment.js";
+import { EMPTY_FRAGMENT, optionValueFor, ratio, tikz } from "../fragment.js";
+import { createCoordinateWriter } from "../writer/index.js";
 import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { applyOptionMutationsToTarget, normalizeOptionKey, type OptionMutation } from "../option-mutations.js";
 import { resolvePropertyTarget } from "../property-target.js";
-import { formatNumber, pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
+import { pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
 import type { EditParseOptions } from "../parse-options.js";
 import {
   PATH_ATTACHED_NODE_POSITION_VALUE_KEY,
@@ -250,6 +251,6 @@ function applyDistanceMutations(
   }
   mutations.set(resolvedDirection, {
     kind: "set",
-    value: legacyText(`${formatNumber(resolvedDistance, pointDistanceFormatOptions(action.formatPrecision))}pt`)
+    value: createCoordinateWriter("").length(resolvedDistance, pointDistanceFormatOptions(action.formatPrecision))
   });
 }

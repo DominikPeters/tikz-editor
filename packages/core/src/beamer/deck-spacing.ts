@@ -1,4 +1,4 @@
-import { legacyText } from "../edit/fragment.js";
+import { plainNumber, tikz } from "../edit/fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
@@ -59,9 +59,8 @@ export function beamerSpacingResizePatches(source: string, target: BeamerSpacing
     const following = /^\s*/u.exec(source.slice(span.to))?.[0] ?? "";
     if (!/\n[ \t\r]*\n/u.test(following)) span = { ...span, to: span.to + following.length };
   }
-  let number = String(value);
-  const previous = source.slice(span.from, span.to);
-  if (/^[+-]?\./u.test(previous)) number = number.replace(/^(-?)0\./u, "$1.");
-  const replacement = legacyText(target.numericSpan ? number : `\\vspace{${number}pt}`);
+  // A number the author wrote without its leading zero stays that way.
+  const number = plainNumber(value, "beamer-length", /^[+-]?\./u.test(source.slice(span.from, span.to)));
+  const replacement = target.numericSpan ? number : tikz`\vspace{${number}pt}`;
   return [{ oldSpan: span, newSpan: { from: span.from, to: span.from + replacement.length }, replacement }];
 }

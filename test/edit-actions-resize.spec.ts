@@ -666,7 +666,7 @@ describe("applyEditAction – resizeElement", () => {
 
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
-    expect(result.newSource).toContain("circle ( 2cm)");
+    expect(result.newSource).toContain("circle ( 2cm )");
   });
 
   it("resizes circle syntax with comments between the keyword and payload", () => {

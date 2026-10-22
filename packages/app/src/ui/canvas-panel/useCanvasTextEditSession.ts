@@ -15,13 +15,7 @@ import {
   type SyntheticEvent as ReactSyntheticEvent
 } from "react";
 import { useStableCallback } from "../hooks/useStableCallback";
-import {
-  clientPoint as makeClientPoint,
-  svgPoint as makeSvgPoint,
-  pt,
-  px,
-  viewportPoint
-} from "@tikz-editor/core/coords/index";
+import { clientPoint as makeClientPoint, px } from "@tikz-editor/core/coords/index";
 import {
   getKnuthPlassCaretFromPoint,
   getKnuthPlassLineRangeFromPoint,
@@ -152,7 +146,9 @@ import {
 } from "@tikz-editor/core/text/format-commands";
 import type { CanvasTextEditPlacement } from "../../settings/types";
 import type { CanvasTransform, EditorAction, ToolMode } from "../../store/types";
-import type { ClientPoint, SvgBounds, ViewportPoint } from "../coords/types";
+import type { SvgViewBox } from "@tikz-editor/core/svg/types";
+import type { ClientPoint, SvgBounds, SvgPoint, ViewportPoint } from "../coords/types";
+import { clientToSvg, clientToViewport } from "../coords/convert";
 import { resolveRectHitRegionContentBox } from "../coords/regions";
 import {
   INITIAL_CANVAS_TEXT_EDIT_STATE,
@@ -678,6 +674,27 @@ function getFallbackTextMeasureContext(): CanvasRenderingContext2D | null {
   return fallbackTextMeasureContext;
 }
 
+const EMPTY_SVG_VIEW_BOX: SvgViewBox = { x: 0, y: 0, width: 0, height: 0 };
+
+/**
+ * A client point in SVG space: through the live SVG element's screen matrix
+ * when there is one, else through the viewport and the canvas transform.
+ */
+function textClientToSvg(
+  clientPoint: ClientPoint,
+  interactionSvgElement: SVGSVGElement | null,
+  viewport: HTMLDivElement | null,
+  svgResult: CanvasSnapshot["svg"],
+  canvasTransform: CanvasTransform
+): SvgPoint {
+  const viewportRect = viewport?.getBoundingClientRect() ?? null;
+  const viewBox = svgResult?.viewBox ?? EMPTY_SVG_VIEW_BOX;
+  return (
+    clientToSvg(clientPoint, interactionSvgElement, viewportRect, canvasTransform, viewBox) ??
+    viewportToSvgPoint(clientToViewport(clientPoint, viewportRect), canvasTransform, viewBox)
+  );
+}
+
 function estimateTextOffsetFromClient(
   target: EditableTextTarget,
   clientPoint: ClientPoint,
@@ -687,12 +704,7 @@ function estimateTextOffsetFromClient(
   canvasTransform: CanvasTransform
 ): number {
   const contentBox = resolveRectHitRegionContentBox(target.region);
-  const svgPoint = clientToSvgPoint(clientPoint, interactionSvgElement) ?? (() => {
-    const viewportPoint = viewportPointFromClient(clientPoint, viewport);
-    return svgResult
-      ? viewportToSvgPoint(viewportPoint, canvasTransform, svgResult.viewBox)
-      : makeSvgPoint(pt(clientPoint.x), pt(clientPoint.y));
-  })();
+  const svgPoint = textClientToSvg(clientPoint, interactionSvgElement, viewport, svgResult, canvasTransform);
   const localPoint = mapPointToRectRegionLocal(svgPoint, target.region);
   const ctx = getFallbackTextMeasureContext();
   applyTextMeasureFont(ctx, target.style);
@@ -734,12 +746,7 @@ function estimateTextLineRangeFromClient(
   }
 
   const contentBox = resolveRectHitRegionContentBox(target.region);
-  const svgPoint = clientToSvgPoint(clientPoint, interactionSvgElement) ?? (() => {
-    const viewportPoint = viewportPointFromClient(clientPoint, viewport);
-    return svgResult
-      ? viewportToSvgPoint(viewportPoint, canvasTransform, svgResult.viewBox)
-      : makeSvgPoint(pt(clientPoint.x), pt(clientPoint.y));
-  })();
+  const svgPoint = textClientToSvg(clientPoint, interactionSvgElement, viewport, svgResult, canvasTransform);
   const localPoint = mapPointToRectRegionLocal(svgPoint, target.region);
   const yRatio =
     contentBox.height <= 1e-6
@@ -750,11 +757,7 @@ function estimateTextLineRangeFromClient(
 }
 
 function viewportPointFromClient(clientPoint: ClientPoint, viewport: HTMLDivElement | null): ViewportPoint {
-  const rect = viewport?.getBoundingClientRect();
-  return viewportPoint(
-    px(rect ? clientPoint.x - rect.left : clientPoint.x),
-    px(rect ? clientPoint.y - rect.top : clientPoint.y)
-  );
+  return clientToViewport(clientPoint, viewport?.getBoundingClientRect() ?? null);
 }
 
 export function useCanvasTextEditSession(

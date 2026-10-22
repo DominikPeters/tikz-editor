@@ -19,6 +19,7 @@ import {
 } from "./panel-helpers";
 import type { CanvasTransform } from "../../store/types";
 import type { ClientPoint } from "../coords/types";
+import { clientToViewport } from "../coords/convert";
 import type { GuideDragState, GuideOrientation, GuidePreview, GuidesState } from "./types";
 import type { SvgViewBox } from "@tikz-editor/core/svg/index";
 
@@ -220,7 +221,7 @@ export function useCanvasGuidesAndRulers(args: UseCanvasGuidesAndRulersArgs) {
       }
 
       const rect = viewport.getBoundingClientRect();
-      const viewportPoint = makeViewportPoint(px(clientPoint.x - rect.left), px(clientPoint.y - rect.top));
+      const viewportPoint = clientToViewport(clientPoint, rect);
       const world = viewportToWorldPoint(viewportPoint, canvasTransformRef.current, currentSvg.viewBox);
       return {
         value: orientation === "vertical" ? world.x : world.y,

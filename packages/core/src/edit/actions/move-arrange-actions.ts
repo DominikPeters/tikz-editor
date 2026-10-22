@@ -1,4 +1,4 @@
-import { layout, legacyText, tikz, unchangedSource, type EditedSource, type TikzFragment } from "../fragment.js";
+import { layout, tikz, unchangedSource, type CoordinateText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
@@ -10,16 +10,16 @@ import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { worldPoint } from "../../coords/points.js";
 import type { WorldPoint } from "../../coords/points.js";
 import type { FrameTransform } from "../../coords/transforms.js";
-import { isFrameLocalCoordinateEditHandle } from "../../semantic/types.js";
+import { isCoordinateEditHandle, isFrameLocalCoordinateEditHandle } from "../../semantic/types.js";
 import { planCenteredPivotMoves, type CenteredPivotMovePlan } from "../center-pivot-move.js";
 import { rewritePreciseFrameCoordinate } from "../frame-coordinate.js";
 import { resolveStatementOptionFrame } from "../parent-frame.js";
 import type { EditHandle } from "../../semantic/types.js";
 import { parseCoordinateLike, parseLength } from "../../semantic/coords/parse-length.js";
 import { collectSourceWorldBounds } from "../snapping/index.js";
-import { worldToLocal } from "../coords.js";
-import { localToSourceUnits } from "../writer/source-units.js";
-import { CM_PER_PT, formatNumber, pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
+import { createCoordinateWriter, type WriterResult } from "../writer/index.js";
+import { entryContextsForSource, sameSiteContext } from "../../semantic/site-context.js";
+import { formatNumber, pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
 import { computeMinimalReplacementPatch, replaceSpan } from "../patch.js";
 import { correctMovedCoordinateDependencies } from "../calc-move.js";
 import { resolvePropertyTarget } from "../property-target.js";
@@ -548,6 +548,7 @@ export function planOrderedScopeTranslation(
   appendIndex = entries.length
 ): Map<string, OptionMutation> | null {
   if (Math.abs(delta.x) < 1e-10 && Math.abs(delta.y) < 1e-10) return new Map();
+  const writer = createCoordinateWriter("");
   const keyed = entries.flatMap((entry, index) => entry.kind === "kv"
     ? [{ entry, index, key: normalizeOptionKey(entry.key).replace(/^\/tikz\//, "") }] : []);
   const shifts = keyed.filter(({ key }) => key === "shift");
@@ -558,9 +559,10 @@ export function planOrderedScopeTranslation(
     const localDelta = prefix ? applyInverseLinear(prefix, delta) : null;
     if (old && localDelta) {
       const pair = parseCoordinateLike(shift.entry.valueRaw.trim().replace(/^\{([\s\S]*)\}$/, "$1"));
-      const x = Math.abs(localDelta.x) < 1e-10 && pair ? pair.x : formatScopeShiftValue(old.x + localDelta.x, formatPrecision) ?? "0pt";
-      const y = Math.abs(localDelta.y) < 1e-10 && pair ? pair.y : formatScopeShiftValue(old.y + localDelta.y, formatPrecision) ?? "0pt";
-      return new Map([[normalizeOptionKey(shift.entry.key), { kind: "set", value: legacyText(`(${x},${y})`) }]]);
+      const component = (value: number, delta: number) => Math.abs(delta) < 1e-10 && pair ? null : isZeroShift(value, formatPrecision) ? 0 : value;
+      const value = writer.shiftPair(pair, { x: component(old.x + localDelta.x, localDelta.x), y: component(old.y + localDelta.y, localDelta.y) },
+        pointDistanceFormatOptions(formatPrecision));
+      return new Map([[normalizeOptionKey(shift.entry.key), { kind: "set", value }]]);
     }
   }
   const xEntries = keyed.filter(({ key }) => key === "xshift");
@@ -581,8 +583,9 @@ export function planOrderedScopeTranslation(
     [yEntry ? normalizeOptionKey(yEntry.entry.key) : "yshift", oldY + localDelta.y, localDelta.y]
   ] as const) {
     if (Math.abs(correction) < 1e-10 && value !== 0) continue;
-    const formatted = formatScopeShiftValue(value, formatPrecision);
-    mutations.set(key, formatted == null ? { kind: "remove" } : { kind: "set", value: legacyText(formatted) });
+    mutations.set(key, isZeroShift(value, formatPrecision)
+      ? { kind: "remove" }
+      : { kind: "set", value: writer.length(value, pointDistanceFormatOptions(formatPrecision)) });
   }
   return mutations;
 }
@@ -610,9 +613,9 @@ export function mutateOrderedOptionEntries(
   return result;
 }
 
-function formatScopeShiftValue(value: number, formatPrecision: DragFormatPrecision | undefined): string | null {
-  const formatted = formatNumber(value, pointDistanceFormatOptions(formatPrecision));
-  return Number(formatted) === 0 ? null : `${formatted}pt`;
+/** A shift that rounds to nothing where it is written. */
+function isZeroShift(value: number, formatPrecision: DragFormatPrecision | undefined): boolean {
+  return Number(formatNumber(value, pointDistanceFormatOptions(formatPrecision))) === 0;
 }
 
 function applyInverseLinear(linear: Pick<FrameTransform, "a" | "b" | "c" | "d">, point: WorldPoint): WorldPoint | null {
@@ -704,12 +707,11 @@ function rewriteSingleMatrixPlacement(
     pt((bounds.minX + bounds.maxX) / 2 + delta.x),
     pt((bounds.minY + bounds.maxY) / 2 + delta.y)
   );
-  const nextCoordinate = formatPlacementCoordinateFromWorld(
-    nextCenterWorld,
-    placementHandle?.handleType === "coordinate" && placementHandle.coordinateSpace === "frame-local"
-      ? placementHandle.frame
-      : undefined
-  );
+  const written = placementCoordinate(source, nextCenterWorld, placementHandle, semantic, elementId);
+  if (written.kind !== "ok") {
+    return { kind: "unsupported", reason: `Cannot write the matrix position: ${written.reason}.` };
+  }
+  const nextCoordinate = written.fragment;
 
   const inlineAtCoordinate = findInlineAtCoordinateItem(statement);
   if (inlineAtCoordinate) {
@@ -820,12 +822,11 @@ function rewriteSingleTreeRootPlacement(
     pt(currentPlacementWorld.x + delta.x),
     pt(currentPlacementWorld.y + delta.y)
   );
-  const nextCoordinate = formatPlacementCoordinateFromWorld(
-    nextPlacementWorld,
-    placementHandle?.handleType === "coordinate" && placementHandle.coordinateSpace === "frame-local"
-      ? placementHandle.frame
-      : undefined
-  );
+  const written = placementCoordinate(source, nextPlacementWorld, placementHandle, semantic, elementId);
+  if (written.kind !== "ok") {
+    return { kind: "unsupported", reason: `Cannot write the tree root position: ${written.reason}.` };
+  }
+  const nextCoordinate = written.fragment;
 
   const atOptionEntry = rootNode.options?.entries
     .filter((entry): entry is Extract<typeof entry, { kind: "kv" }> => entry.kind === "kv")
@@ -1048,16 +1049,27 @@ function buildMatrixInlineAtInsertion(source: string, bodyOpenOffset: number, ne
   return tikz`${layout(needsLeadingSpace ? " " : "")}at ${nextCoordinate} `;
 }
 
-function formatPlacementCoordinateFromWorld(world: WorldPoint, transform?: EditHandle["frame"]): TikzFragment {
-  if (transform) {
-    const local = worldToLocal(world, transform);
-    if (local) {
-      const inSourceUnits = localToSourceUnits(local);
-      return legacyText(`(${formatNumber(inSourceUnits.x)},${formatNumber(inSourceUnits.y)})`);
-    }
+/**
+ * The `at` that places the node at `world`: its own coordinate rewritten in
+ * its spelling, else a new one read where the statement starts.
+ */
+function placementCoordinate(
+  source: string,
+  world: WorldPoint,
+  placementHandle: EditHandle | undefined,
+  semantic: ReturnType<typeof evaluateTikzFigure>,
+  elementId: string
+): WriterResult<CoordinateText> {
+  const writer = createCoordinateWriter(source);
+  if (placementHandle && isCoordinateEditHandle(placementHandle) && placementHandle.rewriteMode === "direct") {
+    return writer.point({ kind: "coordinate", handle: placementHandle }, world);
   }
-
-  return legacyText(`(${formatNumber(world.x * CM_PER_PT)},${formatNumber(world.y * CM_PER_PT)})`);
+  const contexts = entryContextsForSource(semantic.siteContexts, elementId);
+  const context = contexts[0];
+  if (!context || contexts.some(other => !sameSiteContext(other, context))) {
+    return { kind: "unsupported", reason: "the node is read in a different frame on each pass of a loop" };
+  }
+  return writer.point({ kind: "context", context }, world);
 }
 
 function findPrimaryMatrixNodeItem(statement: PathStatement): NodeItem | null {

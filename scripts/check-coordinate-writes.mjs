@@ -7,9 +7,10 @@
 //     and the writer;
 // F2  calls of the constructors that take anything (`userText`,
 //     `sourceSlice`, `unchangedSource`, the slices `sliceFragment` and
-//     `editedSlice`, which could cut a value out of its option, and the
-//     migration escapes `legacyText`, `legacyEditedSource`): every call
-//     site is listed;
+//     `editedSlice`, which could cut a value out of its option,
+//     `plainNumber` for numbers no frame reads, `macroExpansion` for a
+//     flattened loop, `optionEntry` for a mutation's key): every call site
+//     is listed;
 // F3  writer internals used outside the writer, resolved by symbol so
 //     aliases and re-exports count; `ptToCm` only on point components;
 // F4  `tikz` used other than as a template tag;
@@ -40,8 +41,8 @@ export const EXCEPTIONS_FILE = "scripts/coordinate-write-exceptions.json";
 
 /**
  * Constructors that accept anything, by defining file: string-taking
- * fragment constructors and slices (reviewed for good), and the migration
- * debt.
+ * fragment constructors and slices, each call site reviewed. (The migration
+ * escapes `legacyText` and `legacyEditedSource` are gone with phase 5.)
  */
 const LISTED_CONSTRUCTORS = new Map([
   ["userText", "reviewed"],
@@ -49,8 +50,9 @@ const LISTED_CONSTRUCTORS = new Map([
   ["unchangedSource", "reviewed"],
   ["sliceFragment", "reviewed"],
   ["editedSlice", "reviewed"],
-  ["legacyText", "migration"],
-  ["legacyEditedSource", "migration"]
+  ["plainNumber", "reviewed"],
+  ["macroExpansion", "reviewed"],
+  ["optionEntry", "reviewed"]
 ]);
 const LISTED_FILES = new Set([FRAGMENT_FILE]);
 
@@ -58,7 +60,9 @@ const LISTED_FILES = new Set([FRAGMENT_FILE]);
 const WRITER_INTERNALS = new Map([
   ["packages/core/src/edit/writer/format.ts", ["formatCoordinate", "formatPolarCoordinate", "formatCanvasCoordinate"]],
   ["packages/core/src/edit/writer/source-units.ts", ["localToSourceUnits"]],
-  ["packages/core/src/edit/writer/coordinate-text.ts", ["coordinateText"]]
+  ["packages/core/src/edit/writer/coordinate-text.ts", ["coordinateText"]],
+  ["packages/core/src/edit/writer/radius.ts", ["writeRadiusLength"]],
+  ["packages/core/src/edit/writer/calc.ts", ["writeCalcCoordinate"]]
 ]);
 const PT_TO_CM_FILE = "packages/core/src/coords/source.ts";
 

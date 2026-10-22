@@ -1,4 +1,4 @@
-import { legacyText, type TikzFragment } from "../fragment.js";
+import { EMPTY_FRAGMENT, joinFragments, sourceSlice, tikz, layout, userText, type TikzFragment } from "../fragment.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { replaceSpan } from "../patch.js";
@@ -10,9 +10,10 @@ import type { Span } from "../../ast/types.js";
 
 type MatrixStructureTarget = {
   matrixSourceId: string;
+  source: string;
   matrixText: string;
   matrixTextSpan: Span;
-  cellSeparator: string;
+  cellSeparator: TikzFragment;
 };
 
 export type AddMatrixRowAction = {
@@ -52,7 +53,7 @@ export function applyAddMatrixRowAction(
   if (!Number.isInteger(action.rowIndex) || action.rowIndex < 1 || action.rowIndex > rowCount + 1) {
     return { kind: "unsupported", reason: `addMatrixRow rowIndex must be in 1..${rowCount + 1}.` };
   }
-  rows.splice(action.rowIndex - 1, 0, Array.from<string>({ length: colCount }).fill(""));
+  rows.splice(action.rowIndex - 1, 0, Array.from<TikzFragment>({ length: colCount }).fill(EMPTY_FRAGMENT));
   return rewriteMatrixText(source, target.value.matrixTextSpan, serializeMatrixRows(rows, target.value.cellSeparator), [
     action.matrixSourceId
   ]);
@@ -94,7 +95,7 @@ export function applyAddMatrixColumnAction(
     return { kind: "unsupported", reason: `addMatrixColumn columnIndex must be in 1..${colCount + 1}.` };
   }
   for (const row of rows) {
-    row.splice(action.columnIndex - 1, 0, "");
+    row.splice(action.columnIndex - 1, 0, EMPTY_FRAGMENT);
   }
   return rewriteMatrixText(source, target.value.matrixTextSpan, serializeMatrixRows(rows, target.value.cellSeparator), [
     action.matrixSourceId
@@ -135,9 +136,9 @@ export function applyTransposeMatrixAction(
     return target;
   }
   const { rows, rowCount, colCount } = parseMatrixGrid(target.value);
-  const transposed: string[][] = [];
+  const transposed: TikzFragment[][] = [];
   for (let column = 0; column < colCount; column += 1) {
-    const nextRow: string[] = [];
+    const nextRow: TikzFragment[] = [];
     for (let row = 0; row < rowCount; row += 1) {
       nextRow.push(requireArrayValue(requireArrayValue(rows, row), column));
     }
@@ -173,14 +174,16 @@ function resolveMatrixStructureTarget(
     kind: "ok",
     value: {
       matrixSourceId,
+      source,
       matrixText: source.slice(matrixTextSpan.from, matrixTextSpan.to),
       matrixTextSpan,
-      cellSeparator: mode.cellSeparator
+      // The separator the matrix's own options chose (`&` unless the user replaced it).
+      cellSeparator: userText(mode.cellSeparator, "source-editor")
     }
   };
 }
 
-function parseMatrixGrid(target: MatrixStructureTarget): { rows: string[][]; rowCount: number; colCount: number } {
+function parseMatrixGrid(target: MatrixStructureTarget): { rows: TikzFragment[][]; rowCount: number; colCount: number } {
   const parsed = parseMatrixRowsForEdit(target.matrixText, target.cellSeparator, target.matrixTextSpan.from);
   const rowCount = Math.max(1, parsed.rows.length);
   const colCount = Math.max(
@@ -188,19 +191,20 @@ function parseMatrixGrid(target: MatrixStructureTarget): { rows: string[][]; row
     parsed.rows.reduce((max, row) => Math.max(max, row.cells.length), 0)
   );
   const rows = parsed.rows.map((row) => {
-    const values = row.cells.map((cell) => cell.raw);
+    // Each cell is the document text at its span.
+    const values = row.cells.map((cell) => sourceSlice(target.source, cell.span));
     while (values.length < colCount) {
-      values.push("");
+      values.push(EMPTY_FRAGMENT);
     }
     return values;
   });
   while (rows.length < rowCount) {
-    rows.push(Array.from<string>({ length: colCount }).fill(""));
+    rows.push(Array.from<TikzFragment>({ length: colCount }).fill(EMPTY_FRAGMENT));
   }
   return { rows, rowCount, colCount };
 }
 
-function trimTrailingEmptyCells(row: string[]): string[] {
+function trimTrailingEmptyCells(row: TikzFragment[]): TikzFragment[] {
   let lastNonEmpty = -1;
   for (let index = row.length - 1; index >= 0; index -= 1) {
     if ((row[index] ?? "").trim().length > 0) {
@@ -209,16 +213,17 @@ function trimTrailingEmptyCells(row: string[]): string[] {
     }
   }
   if (lastNonEmpty < 0) {
-    return [""];
+    return [EMPTY_FRAGMENT];
   }
   return row.slice(0, lastNonEmpty + 1);
 }
 
-function serializeMatrixRows(rows: ReadonlyArray<ReadonlyArray<string>>, separator: string): TikzFragment {
-  const joiner = ` ${separator} `;
-  return legacyText(rows
-    .map((row) => [...row].join(joiner))
-    .join(" \\\\\n"));
+function serializeMatrixRows(rows: ReadonlyArray<ReadonlyArray<TikzFragment>>, separator: TikzFragment): TikzFragment {
+  const joiner = tikz` ${separator} `;
+  return joinFragments(
+    rows.map((row) => joinFragments([...row], joiner)),
+    tikz` \\${layout("\n")}`
+  );
 }
 
 function rewriteMatrixText(

@@ -57,9 +57,10 @@ export function applyFragments(source: string, edits: readonly { span: Span; fra
 export function sourceSlice(source: string, span: Span): TikzFragment;
 export function userText(text: string, origin: UserTextOrigin): TikzFragment;
 export function unchangedSource(source: string): EditedSource;
-// Migration escapes (F2): every call site is debt the writer phases remove.
-export function legacyText(text: string): TikzFragment;
-export function legacyEditedSource(text: string): EditedSource;
+export function plainNumber(value: number, origin: PlainNumberOrigin, bare?: boolean): TikzFragment;
+export function macroExpansion(text: string): TikzFragment;
+export function optionEntry(key: string, value: TikzFragment | OptionValueText | null): TikzFragment;
+// (The migration escapes `legacyText` and `legacyEditedSource` were deleted in phase 5.)
 
 // Option values, and the key table.
 export function count(n: number): OptionValue;
@@ -99,15 +100,16 @@ export function option<K extends string>(key: OtherKey<K>, value?: TikzFragment)
   their values are read in the frame; `CANVAS_KEYS` (`minimum width`,
   `inner sep`, `line width`, `label distance`, `shorten`, `pos`,
   opacities, …) take option values; any other key must be a literal (a key
-  typed `string` could hide a frame key) and takes a fragment. `in`, `out`,
-  `bend`, `rounded corners` and tree distances are in neither table until
-  their frame semantics are checked in PGF. The writer's `coordinateText`
+  typed `string` could hide a frame key) and takes a fragment. `in`, `out`
+  and the bends are frame keys (phase 5); `rounded corners` and tree
+  distances are in neither table until their frame semantics are checked in
+  PGF. The writer's `coordinateText`
   is the only `CoordinateText` constructor (writer-internal, F3).
-- Lengths that live in a frame are not frame-free: a circle radius `(.5)`
-  goes through the x vector, and `radius=1cm` is scaled by the CTM. They go
-  through the writer (`writer.radius`). `resize-element.ts` writes radii as
-  `radiusPt * CM_PER_PT cm` today (a `legacyText` site); circle and ellipse
-  resize are not fuzzed yet, so this is likely a sixth failure class.
+- Lengths that live in a frame are not frame-free: a plain radius `(.5)`
+  goes through the x and y vectors, a length `radius=1cm` along the canvas
+  axes, and either then through the CTM (`\tikz@do@ellipse`; PGF refuses to
+  mix the two in one ellipse). They go through the writer (`writer.radii`,
+  phase 5).
 - `SourcePatch.replacement`, `replaceSpan`, `TextReplacement.text`,
   `OptionMutation.value` and every result's `newSource` take fragments and
   `EditedSource`, so no string-built source gets into a result. Patch
@@ -129,7 +131,7 @@ production sources of `packages/` and `apps/`):
 | rule | checks |
 |---|---|
 | F1 | type assertions and type predicates to a type carrying a fragment brand (`TikzFragment`, `CoordinateText`, `EditedSource`, `OptionValue`, also inside unions and arrays) only in `fragment.ts` and `edit/writer/` |
-| F2 | every call of a constructor that takes any string (`userText`, `sourceSlice`, `unchangedSource`; `legacyText`, `legacyEditedSource`) is listed |
+| F2 | every call of a constructor that takes any string (`userText`, `sourceSlice`, `unchangedSource`, the slices, `plainNumber`, `macroExpansion`, `optionEntry`; until phase 5 also `legacyText`, `legacyEditedSource`) is listed |
 | F3 | writer internals (`formatCoordinate`, `formatPolarCoordinate`, `formatCanvasCoordinate` in `writer/format.ts`, `localToSourceUnits`, `coordinateText`) used only in `edit/writer/`, resolved by symbol so aliases and re-exports count; `ptToCm` not on a point's `x`/`y` outside the writer either |
 | F4 | `tikz` only as a template tag |
 | F5 | a point, vector or bounds constructor of `coords/points.ts` not fed the `x`/`y` of a point in another space (directly, or through `+`, `-`, and one-argument calls such as `pt(…)`), except in the transform modules (`core/src/coords/`, `app/src/ui/coords/`) and the writer |
@@ -609,6 +611,47 @@ an evaluator fidelity question, not a writer one.
    adding circle/ellipse resize cases), SVG import, assistant handlers,
    semantic-internal source (`fit`, `tree-child`, `label-quotes`) or audited
    exceptions. Done when the exception list is empty.
+   - Radii: the radius frame is the CTM, through the axis vectors when the
+     radius is a plain number. Three readers give lengths in it
+     (`radiusLengthsOf` for a drag's reach, `circleRadiusLengths` for a
+     world circle, `worldEllipseRadiusLengths` for a world-axis ellipse) and
+     `writer.radii` writes them in their spelling, each radius keeping its
+     own unit. Resize used to read the drag in the center's frame and write
+     `cm`, so a plain radius under `x=2cm` came out half as large; new
+     circles were written in `cm` whatever the CTM, so they doubled in a
+     `scale=2` picture. A new circle in a skewed frame, and a new ellipse
+     the frame turns off the world axes, are refused; a stretched frame
+     gets an `x radius` and a `y radius`.
+   - Values that are frame keys but not points, solved by the action and
+     checked against the frame it produces, are formatted by the writer:
+     `angle` (an authored `rotate=`), `factor` (`xscale`), `length` (a shift
+     in its ordered prefix's frame, or a canvas distance such as a node's
+     `above=3pt`), `shiftPair`, and `typedComponents` (the public
+     `updateCoordinate` edit, whose components are user text). Matrix and
+     tree placement write through `writer.point` at the node's own
+     coordinate, in its spelling, or at the statement's entry context.
+   - `plainNumber(value, origin)` is the one constructor for numbers no frame
+     reads (Beamer lengths and scales, label counters); its call sites are
+     reviewed under F2, as a number that could fill coordinate syntax.
+   - `to` path angles: PGF's `topaths` computes the curve (the distance
+     between the points, `out`, `in`, a bend's turn) in the coordinates it
+     is read in, and the CTM maps it after. The evaluator read every angle
+     in world space, so `out=0` under `rotate=90` bulged sideways in the
+     editor where PGF draws a straight line, and a bend did not flatten
+     under `xscale=2` (checked with `compare:renderers`). It now computes
+     the curve in the CTM's coordinates; curve handles carry that linear
+     map, and a dragged control or bend is read back into angles there and
+     written by `writer.angle`. `in`, `out` and the bends became frame
+     keys.
+   - Exception entries: migration 57 → 0; reviewed 80 → 135 (the
+     structural text now typed at its origin, each copy, user value and
+     new constructor call a listed site). Three agents (Sonnet) did the
+     app-side rebranding, the Beamer text and the structural text; their
+     results were reviewed, and the structural one checked against HEAD on
+     164k edit scenarios with identical output.
+   - With no call site left, `legacyText` and `legacyEditedSource` are
+     deleted: a string can no longer become source text except through a
+     listed constructor or the writer.
 
 Cost to measure before phase 4: memory of the recorded contexts, and the
 time of insertion, paste and repeat in large documents, including cold

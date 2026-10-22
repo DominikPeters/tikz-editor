@@ -1,4 +1,16 @@
-import { EMPTY_FRAGMENT, legacyText, type EditedSource, type OptionValueText, type TikzFragment } from "./fragment.js";
+import {
+  EMPTY_FRAGMENT,
+  joinFragments,
+  layout,
+  optionEntry,
+  sliceFragment,
+  sourceSlice,
+  tikz,
+  userText,
+  type EditedSource,
+  type OptionValueText,
+  type TikzFragment
+} from "./fragment.js";
 import type { Span } from "../ast/types.js";
 import type { OptionEntry, OptionListAst } from "../options/types.js";
 import { NAMED_COLORS } from "../semantic/style/constants.js";
@@ -7,7 +19,7 @@ import type { PropertyTarget, PropertyTargetOptionsFormat } from "./property-tar
 import type { SourcePatch } from "./types.js";
 import { normalizeOptionKey as normalizeSharedOptionKey } from "./option-key.js";
 
-/** A value to write: user text, an option value through `option`, or (until migrated) legacy text. */
+/** A value to write: user text or another fragment, or an option value checked against its key by `optionValueFor`. */
 export type OptionMutation =
   | { kind: "set"; value: TikzFragment | OptionValueText }
   | { kind: "remove" };
@@ -24,7 +36,7 @@ type OptionSerializationContext = {
 type RelativeReplacement = {
   from: number;
   to: number;
-  text: string;
+  text: TikzFragment;
 };
 
 const DEFAULT_OPTION_SERIALIZATION_CONTEXT: OptionSerializationContext = {
@@ -73,19 +85,18 @@ export function applyOptionMutationsToTarget(
       return null;
     }
 
-    // The serializer joins fragment values with authored keys; it composes plain strings until it builds fragments itself.
-    const updated = replaceSpan(source, oldSpan, legacyText(replacement));
+    const updated = replaceSpan(source, oldSpan, replacement);
     return {
       source: updated.source,
       patch: {
         oldSpan,
         newSpan: updated.changedSpan,
-        replacement: legacyText(replacement)
+        replacement
       }
     };
   }
 
-  const entriesToInsert: string[] = [];
+  const entriesToInsert: TikzFragment[] = [];
   for (const [key, mutation] of mutations.entries()) {
     if (mutation.kind === "set") {
       entriesToInsert.push(serializeOptionEntry(key, mutation.value, serializationContext));
@@ -95,7 +106,7 @@ export function applyOptionMutationsToTarget(
     return null;
   }
 
-  const replacement = legacyText(wrapSerializedOptions(entriesToInsert.join(", "), target.optionsFormat ?? "bracketed"));
+  const replacement = wrapSerializedOptions(joinFragments(entriesToInsert, tikz`, `), target.optionsFormat ?? "bracketed");
   const oldSpan: Span = {
     from: target.insertOffset,
     to: target.insertOffset
@@ -120,7 +131,7 @@ export function rewriteOptionListMutations(
   serializationContext: OptionSerializationContext = DEFAULT_OPTION_SERIALIZATION_CONTEXT,
   format: PropertyTargetOptionsFormat = "bracketed"
 ): TikzFragment {
-  const parts: string[] = [];
+  const parts: TikzFragment[] = [];
   const emitted = new Set<string>();
 
   for (const entry of options.entries) {
@@ -155,10 +166,10 @@ export function rewriteOptionListMutations(
   }
 
   if (parts.length === 0) {
-    return format === "bracketed" ? EMPTY_FRAGMENT : legacyText(wrapSerializedOptions("", format));
+    return format === "bracketed" ? EMPTY_FRAGMENT : wrapSerializedOptions(EMPTY_FRAGMENT, format);
   }
 
-  return legacyText(wrapSerializedOptions(parts.join(", "), format));
+  return wrapSerializedOptions(joinFragments(parts, tikz`, `), format);
 }
 
 /**
@@ -174,7 +185,7 @@ export function rewriteSourceBackedOptionListMutations(
   format: PropertyTargetOptionsFormat = "bracketed",
   insert: { beforeKey: string } | null = null
 ): TikzFragment {
-  return legacyText(rewriteOptionListMutationsPreservingSourceInternal(
+  return rewriteOptionListMutationsPreservingSourceInternal(
     source,
     optionsSpan,
     options,
@@ -182,7 +193,7 @@ export function rewriteSourceBackedOptionListMutations(
     DEFAULT_OPTION_SERIALIZATION_CONTEXT,
     format,
     insert?.beforeKey ?? null
-  ));
+  );
 }
 
 export const normalizeOptionKey = normalizeSharedOptionKey;
@@ -195,10 +206,10 @@ function rewriteOptionListMutationsPreservingSourceInternal(
   serializationContext: OptionSerializationContext,
   format: PropertyTargetOptionsFormat,
   insertBeforeKey: string | null = null
-): string {
-  const original = source.slice(optionsSpan.from, optionsSpan.to);
+): TikzFragment {
+  const original = sourceSlice(source, optionsSpan);
   const emitted = new Set<string>();
-  const replacements: Array<{ from: number; to: number; text: string; removesEntry: boolean }> = [];
+  const replacements: Array<RelativeReplacement & { removesEntry: boolean }> = [];
   const sortedEntries = [...options.entries].sort((left, right) => left.span.from - right.span.from);
 
   for (const entry of sortedEntries) {
@@ -229,12 +240,12 @@ function rewriteOptionListMutationsPreservingSourceInternal(
 
     replacements.push({
       ...resolveEntryRemovalRange(original, entryFrom, entryTo),
-      text: "",
+      text: EMPTY_FRAGMENT,
       removesEntry: true
     });
   }
 
-  const entriesToInsert: string[] = [];
+  const entriesToInsert: TikzFragment[] = [];
   for (const [key, mutation] of mutations.entries()) {
     if (mutation.kind !== "set" || emitted.has(key)) {
       continue;
@@ -253,7 +264,7 @@ function rewriteOptionListMutationsPreservingSourceInternal(
     replacements.filter((replacement) => replacement.removesEntry).length === sortedEntries.length &&
     !containsLiveComment(original)
   ) {
-    return format === "bracketed" || format === "bare" ? "" : wrapSerializedOptions("", format);
+    return format === "bracketed" || format === "bare" ? EMPTY_FRAGMENT : wrapSerializedOptions(EMPTY_FRAGMENT, format);
   }
 
   if (entriesToInsert.length > 0 && insertBeforeKey) {
@@ -263,7 +274,7 @@ function rewriteOptionListMutationsPreservingSourceInternal(
       replacements.push({
         from: anchorFrom,
         to: anchorFrom,
-        text: `${entriesToInsert.join(", ")}, `,
+        text: tikz`${joinFragments(entriesToInsert, tikz`, `)}, `,
         removesEntry: false
       });
       entriesToInsert.length = 0;
@@ -309,9 +320,9 @@ function containsLiveComment(source: string): boolean {
 }
 
 function applyRelativeReplacements(
-  source: string,
+  source: TikzFragment,
   replacements: ReadonlyArray<RelativeReplacement>
-): string {
+): TikzFragment {
   if (replacements.length === 0) {
     return source;
   }
@@ -319,9 +330,14 @@ function applyRelativeReplacements(
   const sorted = normalizeRelativeReplacements(source, replacements)
     .sort((left, right) => right.from - left.from || right.to - left.to);
   for (const replacement of sorted) {
-    current = `${current.slice(0, replacement.from)}${replacement.text}${current.slice(replacement.to)}`;
+    current = joinFragments([cut(current, 0, replacement.from), replacement.text, cut(current, replacement.to)]);
   }
   return current;
+}
+
+/** Part of an option list fragment is still the text its constructors produced. */
+function cut(fragment: TikzFragment, from: number, to?: number): TikzFragment {
+  return sliceFragment(fragment, from, to);
 }
 
 function normalizeRelativeReplacements(
@@ -376,10 +392,10 @@ function subtractRange(removal: RelativeReplacement, protectedRange: RelativeRep
 
   const pieces: RelativeReplacement[] = [];
   if (removal.from < overlapFrom) {
-    pieces.push({ from: removal.from, to: overlapFrom, text: "" });
+    pieces.push({ from: removal.from, to: overlapFrom, text: EMPTY_FRAGMENT });
   }
   if (overlapTo < removal.to) {
-    pieces.push({ from: overlapTo, to: removal.to, text: "" });
+    pieces.push({ from: overlapTo, to: removal.to, text: EMPTY_FRAGMENT });
   }
   return pieces;
 }
@@ -465,25 +481,25 @@ function resolveEntryRemovalRange(source: string, from: number, to: number): { f
 }
 
 function insertSerializedOptionEntries(
-  source: string,
-  entries: readonly string[],
+  source: TikzFragment,
+  entries: readonly TikzFragment[],
   format: PropertyTargetOptionsFormat
-): string {
-  const content = entries.join(", ");
+): TikzFragment {
+  const content = joinFragments(entries, tikz`, `);
   if (format === "bare") {
     if (source.trim().length === 0) {
       return content;
     }
     const insertIndex = trailingHorizontalWhitespaceStart(source, source.length);
-    const beforeInsertion = source.slice(0, insertIndex);
-    const separator = endsWithLiveComma(beforeInsertion) ? " " : ", ";
-    return `${beforeInsertion}${separator}${content}${source.slice(insertIndex)}`;
+    const beforeInsertion = cut(source, 0, insertIndex);
+    const separator = endsWithLiveComma(beforeInsertion) ? tikz` ` : tikz`, `;
+    return joinFragments([beforeInsertion, separator, content, cut(source, insertIndex)]);
   }
 
   const closeChar = format === "braced" ? "}" : "]";
   const closeIndex = source.lastIndexOf(closeChar);
   if (closeIndex < 0) {
-    return source.trim().length === 0 ? wrapSerializedOptions(content, format) : `${source}, ${content}`;
+    return source.trim().length === 0 ? wrapSerializedOptions(content, format) : tikz`${source}, ${content}`;
   }
 
   if (source.includes("\n") && !hasOptionContent(source.slice(0, closeIndex), format)) {
@@ -492,17 +508,17 @@ function insertSerializedOptionEntries(
 
   if (!source.includes("\n")) {
     const insertIndex = trailingHorizontalWhitespaceStart(source, closeIndex);
-    const beforeInsertion = source.slice(0, insertIndex);
+    const beforeInsertion = cut(source, 0, insertIndex);
     const prefix = hasOptionContent(beforeInsertion, format)
       ? endsWithLiveComma(beforeInsertion)
-        ? ` ${content}`
-        : `, ${content}`
+        ? tikz` ${content}`
+        : tikz`, ${content}`
       : content;
-    return `${source.slice(0, insertIndex)}${prefix}${source.slice(insertIndex)}`;
+    return joinFragments([beforeInsertion, prefix, cut(source, insertIndex)]);
   }
 
   const insertion = multilineInsertion(source, closeIndex, content, format);
-  return `${source.slice(0, insertion.index)}${insertion.text}${source.slice(insertion.index)}`;
+  return joinFragments([cut(source, 0, insertion.index), insertion.text, cut(source, insertion.index)]);
 }
 
 function trailingHorizontalWhitespaceStart(source: string, end: number): number {
@@ -516,9 +532,9 @@ function trailingHorizontalWhitespaceStart(source: string, end: number): number 
 function multilineInsertion(
   source: string,
   closeIndex: number,
-  content: string,
+  content: TikzFragment,
   format: PropertyTargetOptionsFormat
-): { index: number; text: string } {
+): { index: number; text: TikzFragment } {
   const closeLineStart = source.lastIndexOf("\n", closeIndex - 1);
   const closingLineIsWhitespaceOnly =
     closeLineStart >= 0 && source.slice(closeLineStart + 1, closeIndex).trim().length === 0;
@@ -527,12 +543,12 @@ function multilineInsertion(
   const indent = inferOptionEntryIndent(source, closeIndex);
   const needsComma = hasOptionContent(beforeInsertion, format) && !endsWithLiveComma(beforeInsertion);
   const commaStartsInsertedLine = needsComma && trailingLineHasComment(beforeInsertion);
-  const separator = needsComma ? "," : "";
+  const lineStart = layout(`\n${indent}`);
   return {
     index: insertIndex,
     text: commaStartsInsertedLine
-      ? `\n${indent}, ${content}`
-      : `${separator}\n${indent}${content}`
+      ? tikz`${lineStart}, ${content}`
+      : tikz`${needsComma ? tikz`,` : EMPTY_FRAGMENT}${lineStart}${content}`
   };
 }
 
@@ -602,19 +618,24 @@ function hasOptionContent(source: string, format: PropertyTargetOptionsFormat): 
   return trimmed.length > 0;
 }
 
+/**
+ * One option entry: the key alone, the bare color, or `key=value`. The key is
+ * a literal of the calling action or the inspector's normalized key; the
+ * value is user text, a fragment, or an `OptionValueText` checked against its
+ * key. This is the one place a key meets its value, so it is the one place
+ * the entry text is trusted.
+ */
 export function serializeOptionEntry(
   key: string,
-  value: string,
+  value: TikzFragment | OptionValueText,
   serializationContext: OptionSerializationContext = DEFAULT_OPTION_SERIALIZATION_CONTEXT
-): string {
+): TikzFragment {
   const trimmed = value.trim();
-  if (trimmed.length === 0 || trimmed.toLowerCase() === "true") {
-    return key;
+  // `draw=red` is written `red` on a `\draw`: the color alone, as an entry.
+  if (trimmed.length > 0 && shouldSerializeAsBareColorOption(key, trimmed, serializationContext)) {
+    return optionEntry(trimmed, null);
   }
-  if (shouldSerializeAsBareColorOption(key, trimmed, serializationContext)) {
-    return trimmed;
-  }
-  return `${key}=${trimmed}`;
+  return optionEntry(key, value);
 }
 
 function optionEntryKey(entry: OptionEntry): string | null {
@@ -624,18 +645,19 @@ function optionEntryKey(entry: OptionEntry): string | null {
   return null;
 }
 
-function normalizeOptionEntryRaw(entry: OptionEntry): string {
+/** An entry of an option list parsed from the document: text the user authored there. */
+function normalizeOptionEntryRaw(entry: OptionEntry): TikzFragment {
   const raw = entry.raw.trim();
   if (raw.length > 0) {
-    return raw;
+    return userText(raw, "source-editor");
   }
   if (entry.kind === "kv") {
-    return `${entry.key}=${entry.valueRaw}`;
+    return userText(`${entry.key}=${entry.valueRaw}`, "source-editor");
   }
   if (entry.kind === "flag") {
-    return entry.key;
+    return userText(entry.key, "source-editor");
   }
-  return "";
+  return EMPTY_FRAGMENT;
 }
 
 function resolveOptionSerializationContext(target: PropertyTarget): OptionSerializationContext {
@@ -654,17 +676,17 @@ function resolveOptionSerializationContext(target: PropertyTarget): OptionSerial
 }
 
 function wrapSerializedOptions(
-  content: string,
+  content: TikzFragment,
   format: PropertyTargetOptionsFormat
-): string {
+): TikzFragment {
   switch (format) {
     case "bare":
       return content;
     case "braced":
-      return `{${content}}`;
+      return tikz`{${content}}`;
     case "bracketed":
     default:
-      return `[${content}]`;
+      return tikz`[${content}]`;
   }
 }
 

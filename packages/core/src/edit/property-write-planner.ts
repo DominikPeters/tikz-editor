@@ -1,4 +1,4 @@
-import { editedSlice, legacyText, type EditedSource } from "./fragment.js";
+import { editedSlice, tikz, type EditedSource } from "./fragment.js";
 import { isObjectRecord } from "../utils/records.js";
 import type { EditActionResultLike } from "./result-types.js";
 import type { Span } from "../ast/types.js";
@@ -355,7 +355,8 @@ function rewritePathCommandToken(
   if (!commandSpan) {
     return null;
   }
-  return replaceSpan(source, commandSpan, legacyText(`\\${nextCommand}`)).source;
+  const command = nextCommand === "path" ? tikz`\path` : nextCommand === "draw" ? tikz`\draw` : tikz`\fill`;
+  return replaceSpan(source, commandSpan, command).source;
 }
 
 function findPathCommandTokenSpan(source: string, statementSpan: Span, command: string): Span | null {

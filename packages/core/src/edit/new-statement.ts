@@ -7,15 +7,51 @@ import type { CoordinateText } from "./fragment.js";
 import type { EditGeometrySnapshot } from "./geometry-session.js";
 import { prepareInsertion } from "./insertion-context.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
-import { createCoordinateWriter } from "./writer/index.js";
+import { circleRadiusLengths, createCoordinateWriter, worldEllipseRadiusLengths, type RadiusSpelling } from "./writer/index.js";
 
 /** A statement about to be written: its command and the raw text of its options. */
 export type NewStatement = Readonly<{ command: PathCommand; options: string }>;
 
-/** Writes the coordinates of a new statement where it will be read. Throws `CoordinateWriteRefused`. */
-export type NewStatementPoints = (statement: NewStatement) => (point: WorldPoint) => CoordinateText;
+/**
+ * Writes a new statement's coordinates, and its radii, where they will be
+ * read. Throws `CoordinateWriteRefused`.
+ */
+export type StatementPointWriter = ((point: WorldPoint) => CoordinateText) & Readonly<{
+  /** A circle of this world radius: `even` where one radius draws it, else an `x radius` and a `y radius`. */
+  circleRadii(radius: number): Readonly<{ x: CoordinateText; y: CoordinateText; even: boolean }>;
+  /** An ellipse with these world half-axes along the world axes. */
+  ellipseRadii(x: number, y: number): Readonly<{ x: CoordinateText; y: CoordinateText }>;
+}>;
+
+export type NewStatementPoints = (statement: NewStatement) => StatementPointWriter;
 
 export class CoordinateWriteRefused extends Error {}
+
+/** New radii are lengths, which PGF reads through the CTM alone (not the axis vectors), as they always were. */
+const NEW_RADIUS: RadiusSpelling = { unitless: false, unit: "cm" };
+
+/** The writer for a new statement read in `context`. */
+export function statementPointWriter(source: string, context: SiteContext): StatementPointWriter {
+  const writer = createCoordinateWriter(source);
+  const point = (world: WorldPoint) => {
+    const written = writer.point({ kind: "context", context }, world);
+    if (written.kind !== "ok") throw new CoordinateWriteRefused(written.reason);
+    return written.fragment;
+  };
+  return Object.assign(point, {
+    circleRadii(radius: number) {
+      const lengths = circleRadiusLengths(context, NEW_RADIUS, radius);
+      if (!lengths) throw new CoordinateWriteRefused("a circle cannot be drawn in a skewed frame");
+      const radii = writer.radii(lengths);
+      return { ...radii, even: radii.x === radii.y };
+    },
+    ellipseRadii(x: number, y: number) {
+      const lengths = worldEllipseRadiusLengths(context, NEW_RADIUS, x, y);
+      if (!lengths) throw new CoordinateWriteRefused("the frame turns an ellipse off the axes it was drawn along");
+      return writer.radii(lengths);
+    }
+  });
+}
 
 /**
  * Coordinates for a statement appended at the end of the figure, where the
@@ -31,7 +67,6 @@ export function appendedStatementPoints(
 ): NewStatementPoints {
   let snapshot: EditGeometrySnapshot | null = geometry?.source === source ? geometry : null;
   const contexts = new Map<string, SiteContext>();
-  const writer = createCoordinateWriter(source);
   return statement => {
     const key = `${statement.command}\u0000${statement.options}`;
     let context = contexts.get(key);
@@ -43,11 +78,6 @@ export function appendedStatementPoints(
       context = prepareInsertion(snapshot, { kind: "end" }, { kind: "path", command: statement.command, options: statement.options }, evaluateOptions);
       contexts.set(key, context);
     }
-    const at = context;
-    return point => {
-      const written = writer.point({ kind: "context", context: at }, point);
-      if (written.kind !== "ok") throw new CoordinateWriteRefused(written.reason);
-      return written.fragment;
-    };
+    return statementPointWriter(source, context);
   };
 }

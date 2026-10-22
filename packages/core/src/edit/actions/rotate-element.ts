@@ -1,4 +1,4 @@
-import { editedSlice, legacyText, option, optionValueFor, unchangedSource, type CoordinateText, type EditedSource, type TikzFragment } from "../fragment.js";
+import { editedSlice, option, optionValueFor, sourceSlice, tikz, unchangedSource, type CoordinateText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { createEditGeometrySession, type EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
@@ -18,7 +18,6 @@ import type {
 import { isFrameLocalCoordinateEditHandle } from "../../semantic/types.js";
 import { applyTextReplacements } from "../statement-ops.js";
 import { rewritePreciseFrameCoordinate } from "../frame-coordinate.js";
-import { formatNumber } from "../format.js";
 import { normalizeOptionKey } from "../option-mutations.js";
 import {
   applyOptionMutationsToTarget,
@@ -36,7 +35,7 @@ import {
 import { findPathStatementById } from "../statement-find.js";
 import { applyMatrix, inverseMatrix } from "../../semantic/transform.js";
 import { replaceSpan } from "../patch.js";
-import { createCoordinateWriter, rotationSense } from "../writer/index.js";
+import { createCoordinateWriter, rotationSense, type CoordinateWriter } from "../writer/index.js";
 import type { SiteContext } from "../../semantic/site-context.js";
 
 const ROTATE_EPSILON = 1e-6;
@@ -108,9 +107,13 @@ function applyPropertyRotate(
   const context = resolveTransformInspectorMutationContextFromOptionEntries(
     resolvedTarget.target.options?.entries
   );
+  const writer = createCoordinateWriter(source);
   const mutations = action.mode === "origin"
-    ? buildOriginRotateMutations(action.angleDeg)
-    : buildPropertyRotateMutations(context, action.angleDeg);
+    ? buildOriginRotateMutations(writer, action.angleDeg)
+    : buildPropertyRotateMutations(source, writer, resolvedTarget.target.options?.entries ?? [], context, action.angleDeg);
+  if (!mutations) {
+    return { kind: "unsupported", reason: "Could not find the pivot of the rotation to keep it." };
+  }
   const applied = applyOptionMutationsToTarget(source, resolvedTarget.target, mutations);
   if (!applied) {
     return { kind: "unsupported", reason: "rotateElement would not change the source." };
@@ -282,16 +285,52 @@ function replaceRotationOption(source: string, rotation: OptionEntry, replacemen
   };
 }
 
+/**
+ * The inspector's rotation: the authored angle, about the pivot the option
+ * already names (copied from the source), with the keys it replaces cleared.
+ */
 function buildPropertyRotateMutations(
+  source: string,
+  writer: CoordinateWriter,
+  entries: readonly OptionEntry[],
   context: TransformInspectorMutationContext,
   angleDeg: number
-): Map<string, OptionMutation> {
-  return transformMutationsToOptionMutations(
-    buildTransformSetPropertyMutations(context, "rotate", angleDeg)
-  );
+): Map<string, OptionMutation> | null {
+  const mutations = new Map<string, OptionMutation>();
+  for (const mutation of buildTransformSetPropertyMutations(context, "rotate", angleDeg)) {
+    for (const clearKey of mutation.clearKeys) {
+      mutations.set(clearKey, { kind: "remove" });
+    }
+    if (mutation.value.length === 0) {
+      mutations.set(mutation.key, { kind: "remove" });
+      continue;
+    }
+    const angle = writer.angle(normalizeTinyNumber(angleDeg));
+    if (mutation.key !== "rotate around") {
+      mutations.set(mutation.key, { kind: "set", value: angle });
+      continue;
+    }
+    const pivot = rotateAroundPivot(source, entries);
+    if (!pivot) return null;
+    mutations.set(mutation.key, { kind: "set", value: tikz`{${angle}:${pivot}}` });
+  }
+  return mutations;
 }
 
-function buildOriginRotateMutations(angleDeg: number): Map<string, OptionMutation> {
+/** The pivot an existing `rotate around={angle:pivot}` names, as written. */
+function rotateAroundPivot(source: string, entries: readonly OptionEntry[]): TikzFragment | null {
+  const entry = [...entries].reverse().find(candidate => candidate.kind === "kv" && normalizeOptionKey(candidate.key) === "rotate around");
+  if (entry?.kind !== "kv") return null;
+  const raw = source.slice(entry.span.from, entry.span.to);
+  const colon = raw.indexOf(":");
+  const close = raw.lastIndexOf("}");
+  if (colon < 0 || close <= colon) return null;
+  const from = entry.span.from + colon + 1;
+  const to = entry.span.from + close;
+  return source.slice(from, to).trim().length > 0 ? sourceSlice(source, { from, to }) : null;
+}
+
+function buildOriginRotateMutations(writer: CoordinateWriter, angleDeg: number): Map<string, OptionMutation> {
   const normalizedAngle = normalizeTinyNumber(angleDeg);
   const mutations = new Map<string, OptionMutation>();
   for (const key of ROTATE_CLEAR_KEYS) {
@@ -300,7 +339,7 @@ function buildOriginRotateMutations(angleDeg: number): Map<string, OptionMutatio
   if (Math.abs(normalizedAngle) <= ROTATE_EPSILON) {
     mutations.set("rotate", { kind: "remove" });
   } else {
-    mutations.set("rotate", { kind: "set", value: legacyText(formatNumber(normalizedAngle)) });
+    mutations.set("rotate", { kind: "set", value: writer.angle(normalizedAngle) });
   }
   return mutations;
 }
@@ -312,22 +351,6 @@ function buildCenterPivotRotateMutations(value: CoordinateText | null): Map<stri
   }
   mutations.set("rotate", { kind: "remove" });
   mutations.set("rotate around", value === null ? { kind: "remove" } : { kind: "set", value: optionValueFor("rotate around", value) });
-  return mutations;
-}
-
-function transformMutationsToOptionMutations(
-  transformMutations: ReturnType<typeof buildTransformSetPropertyMutations>
-): Map<string, OptionMutation> {
-  const mutations = new Map<string, OptionMutation>();
-  for (const mutation of transformMutations) {
-    for (const clearKey of mutation.clearKeys) {
-      mutations.set(clearKey, { kind: "remove" });
-    }
-    mutations.set(
-      mutation.key,
-      mutation.value.length > 0 ? { kind: "set", value: legacyText(mutation.value) } : { kind: "remove" }
-    );
-  }
   return mutations;
 }
 

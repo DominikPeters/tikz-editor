@@ -1,4 +1,4 @@
-import { requireArrayValue } from "../utils/collections.js";
+import { applyFragments, EMPTY_FRAGMENT, layout, sourceSlice, tikz, type EditedSource, type TikzFragment } from "../edit/fragment.js";
 import type { Span } from "../ast/types.js";
 import {
   isBlank,
@@ -16,19 +16,14 @@ import type { BeamerObjectIndex, BeamerObjectNode } from "./object-index.js";
  */
 export type BeamerStructuralEdit = {
   readonly span: Span;
-  readonly insert: string;
+  readonly insert: TikzFragment;
 };
 
 export function applyBeamerStructuralEdits(
   source: string,
   edits: readonly BeamerStructuralEdit[]
-): string {
-  let result = source;
-  for (let index = edits.length - 1; index >= 0; index -= 1) {
-    const edit = requireArrayValue(edits, index);
-    result = result.slice(0, edit.span.from) + edit.insert + result.slice(edit.span.to);
-  }
-  return result;
+): EditedSource {
+  return applyFragments(source, edits.map((edit) => ({ span: edit.span, fragment: edit.insert })));
 }
 
 /**
@@ -83,7 +78,7 @@ export function beamerObjectDeletionPatch(
       const from = tokenRemovalSpan(source, list.beginSpan).from;
       const to = tokenRemovalSpan(source, list.endSpan).to;
       return {
-        edits: [{ span: { from, to }, insert: "" }],
+        edits: [{ span: { from, to }, insert: EMPTY_FRAGMENT }],
         selectSpan: null,
         caretOffset: from,
       };
@@ -100,7 +95,7 @@ export function beamerObjectDeletionPatch(
   }
   const removal = tokenRemovalSpan(source, objectTightSpan(source, target));
   return {
-    edits: [{ span: removal, insert: "" }],
+    edits: [{ span: removal, insert: EMPTY_FRAGMENT }],
     selectSpan: null,
     caretOffset: removal.from,
   };
@@ -121,8 +116,8 @@ export function beamerObjectDuplicationPatch(
   if (isBlank(source, lineFrom, span.from) && isBlank(source, span.to, lineTo)) {
     const hasNewline = lineTo < source.length;
     const blockTo = Math.min(source.length, lineTo + 1);
-    const copy = source.slice(lineFrom, blockTo);
-    const insert = hasNewline ? copy : `\n${copy}`;
+    const copy = sourceSlice(source, { from: lineFrom, to: blockTo });
+    const insert = hasNewline ? copy : tikz`${layout("\n")}${copy}`;
     const edits = [{ span: { from: blockTo, to: blockTo }, insert }];
     const copyFrom = blockTo + (hasNewline ? 0 : 1);
     return {
@@ -131,8 +126,8 @@ export function beamerObjectDuplicationPatch(
       caretOffset: copyFrom + (span.from - lineFrom),
     };
   }
-  const copy = source.slice(span.from, span.to);
-  const edits = [{ span: { from: span.to, to: span.to }, insert: ` ${copy}` }];
+  const copy = sourceSlice(source, span);
+  const edits = [{ span: { from: span.to, to: span.to }, insert: tikz`${layout(" ")}${copy}` }];
   return {
     edits,
     selectSpan: { from: span.to + 1, to: span.to + 1 + copy.length },

@@ -11,7 +11,6 @@ import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
 import { replaceSpan } from "./patch.js";
 import { rewriteCoordinate } from "./rewrite.js";
 import { worldDeltaToLocalDelta } from "./coords.js";
-import { localToSourceUnits } from "./writer/source-units.js";
 import { PT_PER_CM } from "./format.js";
 
 /** Resolve dependent coordinates against the already moved bases in the batch. */
@@ -91,10 +90,7 @@ export function correctMovedCoordinateDependencies(
       const residual = worldDeltaToLocalDelta(worldVector(
         pt(target.x - currentGeometry.world.x), pt(target.y - currentGeometry.world.y)
       ), currentGeometry.frame);
-      if (residual) {
-        const cm = localToSourceUnits(residual);
-        if (Math.abs(cm.x) < .005 + 1e-9 && Math.abs(cm.y) < .005 + 1e-9) continue;
-      }
+      if (residual && Math.abs(residual.x) < (.005 + 1e-9) * PT_PER_CM && Math.abs(residual.y) < (.005 + 1e-9) * PT_PER_CM) continue;
     }
     if (currentGeometry.handleType === "node-positioning" &&
       Math.abs(target.x - currentGeometry.world.x) < .005 * PT_PER_CM + 1e-8 &&

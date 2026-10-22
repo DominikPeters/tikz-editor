@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, type MouseEvent as ReactMouseEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
-import { viewportPoint, clientPoint as makeClientPoint, worldPoint, pt, px } from "@tikz-editor/core/coords/index";
+import { clientPoint as makeClientPoint, worldPoint, pt, px } from "@tikz-editor/core/coords/index";
 import { buildSnapContext, pointerSnapLines, resolveSnapSettings, snapToolPointer, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "@tikz-editor/core/edit/snapping";
 import type { NodeAnchorTarget } from "@tikz-editor/core/semantic/types";
 import type { ClientPoint, WorldBounds, WorldPoint } from "../coords/types";
+import { clientToViewport } from "../coords/convert";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { resolveEndpointAnchorSnap } from "./endpoint-anchor-snap";
 import { clientToWorldPoint, distanceSquared } from "./geometry";
@@ -268,7 +269,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
         const clientPoint = makeClientPoint(px(event.clientX), px(event.clientY));
         setMagnifierState({
           pointerId: event.pointerId,
-          center: viewportPoint(px(clientPoint.x - rect.left), px(clientPoint.y - rect.top))
+          center: clientToViewport(clientPoint, rect)
         });
         setDragCursorLock("none");
         event.preventDefault();
@@ -749,7 +750,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
         const clientPoint = makeClientPoint(px(event.clientX), px(event.clientY));
         setMagnifierState({
           pointerId: magnifier.pointerId,
-          center: viewportPoint(px(clientPoint.x - rect.left), px(clientPoint.y - rect.top))
+          center: clientToViewport(clientPoint, rect)
         });
         event.preventDefault();
         return;

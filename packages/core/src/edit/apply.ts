@@ -1,14 +1,13 @@
-import { legacyText, unchangedSource, userText } from "./fragment.js";
+import { unchangedSource, userText } from "./fragment.js";
 import type { ParseTikzResult } from "../parser/index.js";
 import type { PathItem, Statement } from "../ast/types.js";
 import type { EditHandle } from "../semantic/types.js";
 import type { WorldPoint } from "../coords/points.js";
 import type { ApplyEditResult, EditIntent, EditIntentResult, TikzEdit } from "./types.js";
 import { replaceSpan } from "./patch.js";
-import { formatCoordinate } from "./writer/format.js";
+import { createCoordinateWriter } from "./writer/index.js";
 import { rewriteCoordinate, supportsUnsupportedCoordinateDetach } from "./rewrite.js";
 import { sourceFingerprintForEdit } from "./parse-options.js";
-import { formatNumber } from "./format.js";
 import { resolvePropertyTarget } from "./property-target.js";
 import { applyOptionMutationsToTarget, normalizeOptionKey, type OptionMutation } from "./option-mutations.js";
 import type { EditParseOptions } from "./parse-options.js";
@@ -26,7 +25,8 @@ export function applyEdit(parseResult: ParseTikzResult, edit: TikzEdit): ApplyEd
     }
 
     const oldRaw = parseResult.source.slice(target.span.from, target.span.to);
-    const replacement = legacyText(formatCoordinate(oldRaw, edit.x, edit.y));
+    const replacement = createCoordinateWriter(parseResult.source)
+      .typedComponents(oldRaw, userText(edit.x, "inspector-value"), userText(edit.y, "inspector-value"));
     const updated = replaceSpan(parseResult.source, target.span, replacement);
 
     return {
@@ -221,9 +221,13 @@ function buildCurveEditMutations(
   curveEdit: NonNullable<EditHandle["curveEdit"]>,
   newWorld: WorldPoint
 ): Map<string, OptionMutation> {
+  // The angles are read in the coordinates the curve is computed in, not in world space.
+  const writer = createCoordinateWriter("");
+  const local = (x: number, y: number) => curveLocal(curveEdit.linear, x, y);
   if (curveEdit.kind === "to-angle") {
     const anchor = curveEdit.role === "out" ? curveEdit.startWorld : curveEdit.endWorld;
-    const absolute = angleDegrees(anchor, newWorld);
+    const direction = local(newWorld.x - anchor.x, newWorld.y - anchor.y);
+    const absolute = (Math.atan2(direction.y, direction.x) * 180) / Math.PI;
     const optionValue = curveEdit.relative
       ? normalizeSignedDegrees(Math.round(absolute - curveEdit.baseHeading))
       : normalizeAbsoluteDegrees(Math.round(absolute));
@@ -231,7 +235,7 @@ function buildCurveEditMutations(
     const mutations = new Map<string, OptionMutation>();
     mutations.set(normalizeOptionKey(curveEdit.role), {
       kind: "set",
-      value: legacyText(formatInteger(optionValue))
+      value: writer.angle(Math.trunc(optionValue))
     });
     mutations.set(normalizeOptionKey("bend left"), { kind: "remove" });
     mutations.set(normalizeOptionKey("bend right"), { kind: "remove" });
@@ -239,16 +243,18 @@ function buildCurveEditMutations(
     return mutations;
   }
 
-  const signedBendAngle = normalizeSignedDegrees(
-    Math.round(signedBendAngleFromHandle(curveEdit.startWorld, curveEdit.endWorld, newWorld))
-  );
+  const signedBendAngle = normalizeSignedDegrees(Math.round(signedBendAngleFromHandle(
+    { x: 0, y: 0 },
+    local(curveEdit.endWorld.x - curveEdit.startWorld.x, curveEdit.endWorld.y - curveEdit.startWorld.y),
+    local(newWorld.x - curveEdit.startWorld.x, newWorld.y - curveEdit.startWorld.y)
+  )));
   const bendDirectionKey = signedBendAngle >= 0 ? "bend left" : "bend right";
   const oppositeDirectionKey = signedBendAngle >= 0 ? "bend right" : "bend left";
 
   const mutations = new Map<string, OptionMutation>();
   mutations.set(normalizeOptionKey(bendDirectionKey), {
     kind: "set",
-    value: legacyText(formatInteger(Math.abs(signedBendAngle)))
+    value: writer.angle(Math.trunc(Math.abs(signedBendAngle)))
   });
   mutations.set(normalizeOptionKey(oppositeDirectionKey), { kind: "remove" });
   mutations.set(normalizeOptionKey("out"), { kind: "remove" });
@@ -257,15 +263,16 @@ function buildCurveEditMutations(
   return mutations;
 }
 
-function angleDegrees(from: WorldPoint, to: WorldPoint): number {
-  return (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
+/** A world vector in the coordinates a `to` curve is computed in; world itself when they are singular. */
+function curveLocal(linear: Readonly<{ a: number; b: number; c: number; d: number }>, x: number, y: number): { x: number; y: number } {
+  const det = linear.a * linear.d - linear.b * linear.c;
+  if (!Number.isFinite(det) || Math.abs(det) <= 1e-12) return { x, y };
+  return { x: (linear.d * x - linear.c * y) / det, y: (linear.a * y - linear.b * x) / det };
 }
 
-function formatInteger(value: number): string {
-  return formatNumber(Math.trunc(value));
-}
+type Planar = Readonly<{ x: number; y: number }>;
 
-function signedBendAngleFromHandle(start: WorldPoint, end: WorldPoint, handleWorld: WorldPoint): number {
+function signedBendAngleFromHandle(start: Planar, end: Planar, handleWorld: Planar): number {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const length = Math.hypot(dx, dy);

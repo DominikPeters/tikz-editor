@@ -543,6 +543,11 @@ export type EvaluateOptions = {
 
 export type { CoordinateForm };
 
+/**
+ * A `to` curve's angles are read in the coordinates the curve is computed
+ * in: `baseHeading` (degrees) is the heading from start to end there, and
+ * `linear` maps those coordinates to world (the CTM's linear part).
+ */
 export type CurveEditHandleData =
   | {
       kind: "to-angle";
@@ -552,6 +557,7 @@ export type CurveEditHandleData =
       endWorld: WorldPoint;
       relative: boolean;
       baseHeading: number;
+      linear: Readonly<{ a: number; b: number; c: number; d: number }>;
     }
   | {
       kind: "to-bend";
@@ -559,6 +565,7 @@ export type CurveEditHandleData =
       startWorld: WorldPoint;
       endWorld: WorldPoint;
       baseHeading: number;
+      linear: Readonly<{ a: number; b: number; c: number; d: number }>;
     };
 
 export type EditHandleInsertion = {

@@ -1,4 +1,4 @@
-import { EMPTY_FRAGMENT, legacyText, tikz, userText } from "../fragment.js";
+import { EMPTY_FRAGMENT, joinFragments, layout, tikz, userText, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { parseOptionListRaw } from "../../options/parse.js";
@@ -161,11 +161,11 @@ function applySetPropertyCommentToggle(
     return { kind: "entry", text: toggleItem.text, normalizedKey: toggleItem.normalizedKey };
   });
 
-  const replacement = legacyText(serializeCommentToggleItems(
+  const replacement = serializeCommentToggleItems(
     replacementItems,
     format,
     resolveCommentToggleSerializationContext(rawSite, format, parseOptions.indentSize)
-  ));
+  );
 
   const updated = replaceSpan(source, target.optionsSpan, replacement);
   return {
@@ -434,10 +434,10 @@ function serializeCommentToggleItems(
   items: readonly CommentToggleItem[],
   format: PropertyTargetOptionsFormat,
   context: CommentToggleSerializationContext
-): string {
-  const withIndent = (line: string): string =>
-    context.lineIndent.length > 0 ? `${context.lineIndent}${line}` : line;
-  const lines: string[] = [];
+): TikzFragment {
+  const withIndent = (line: TikzFragment): TikzFragment =>
+    context.lineIndent.length > 0 ? tikz`${layout(context.lineIndent)}${line}` : line;
+  const lines: TikzFragment[] = [];
   const entryIndexes = items
     .map((item, index) => ({ item, index }))
     .filter((entry) => entry.item.kind === "entry" || entry.item.kind === "disabled-entry")
@@ -447,7 +447,7 @@ function serializeCommentToggleItems(
   for (const [index, item] of items.entries()) {
 
     if (item.kind === "comment") {
-      lines.push(withIndent(normalizeCommentLine(item.text)));
+      lines.push(withIndent(authoredOptionText(normalizeCommentLine(item.text))));
       continue;
     }
 
@@ -456,25 +456,30 @@ function serializeCommentToggleItems(
       continue;
     }
     if (item.kind === "disabled-entry") {
-      lines.push(withIndent(`% ${token},`));
+      lines.push(withIndent(tikz`% ${authoredOptionText(token)},`));
       continue;
     }
 
-    const suffix = index === lastEntryIndex ? "" : ",";
-    lines.push(withIndent(`${token}${suffix}`));
+    const suffix = index === lastEntryIndex ? EMPTY_FRAGMENT : tikz`,`;
+    lines.push(withIndent(tikz`${authoredOptionText(token)}${suffix}`));
   }
 
   if (format === "bare") {
     if (lines.length === 0) {
-      return "";
+      return EMPTY_FRAGMENT;
     }
-    const serialized = lines.join("\n");
-    return `\n${serialized}\n`;
+    const serialized = joinFragments(lines, layout("\n"));
+    return tikz`${layout("\n")}${serialized}${layout("\n")}`;
   }
   if (lines.length === 0) {
-    return "[]";
+    return tikz`[]`;
   }
-  return `[\n${lines.join("\n")}\n]`;
+  return tikz`[${layout("\n")}${joinFragments(lines, layout("\n"))}${layout("\n")}]`;
+}
+
+/** An entry or comment of the option list as the user wrote it, moved to its own line. */
+function authoredOptionText(text: string): TikzFragment {
+  return userText(text, "source-editor");
 }
 
 function applyTreeChildSetProperty(

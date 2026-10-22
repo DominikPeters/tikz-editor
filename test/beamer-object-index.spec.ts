@@ -7,6 +7,7 @@ import {
   buildBeamerObjectIndex,
   prepareBeamerDocument,
   type BeamerObjectIndex,
+  type BeamerStructuralEdit,
   type BeamerObjectNode,
 } from "../packages/core/src/beamer/index.js";
 
@@ -77,7 +78,7 @@ function parentChainKinds(index: BeamerObjectIndex, node: BeamerObjectNode): str
 /** Applies a patch and asserts the edited document still renders. */
 async function applyAndRender(
   source: string,
-  edits: readonly { span: { from: number; to: number }; insert: string }[]
+  edits: readonly BeamerStructuralEdit[]
 ): Promise<string> {
   const next = applyBeamerStructuralEdits(source, edits);
   const page = await prepareBeamerDocument(next).renderFrame({

@@ -1,4 +1,4 @@
-import { applyFragments, legacyText, type EditedSource } from "../edit/fragment.js";
+import { applyFragments, macroExpansion, type EditedSource } from "../edit/fragment.js";
 import type {
   ChildForeachClause,
   ChildOperationItem,
@@ -115,7 +115,7 @@ function flattenForeachInSourceWithContext(
   }
 
   const oldSpan = match.span;
-  const replacement = legacyText(flattened.replacement);
+  const replacement = macroExpansion(flattened.replacement);
   const newSource = applyFragments(source, [{ span: oldSpan, fragment: replacement }]);
   const newSpan = {
     from: oldSpan.from,

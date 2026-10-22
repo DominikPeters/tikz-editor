@@ -78,18 +78,33 @@ export function userText(text: string, origin: UserTextOrigin): TikzFragment {
   return asFragment(text);
 }
 
+/** Why a number is written as plain text outside any frame. Each call site is reviewed (checker rule F2). */
+export type PlainNumberOrigin =
+  | "beamer-length"
+  | "beamer-scale"
+  | "label-counter"
+  | "loop-count";
+
 /**
- * Migration only: source text built before the fragment layer existed. Every
- * call site is a fingerprinted exception that may only be removed, never
- * added (checker rule F2).
+ * A number as a plain decimal (`0.4`, or `.4` when `bare`) in text no frame
+ * transforms: Beamer lengths and scales, a counter in a label. A number read
+ * in a frame goes through the coordinate writer instead.
  */
-export function legacyText(text: string): TikzFragment {
-  return asFragment(text);
+export function plainNumber(value: number, origin: PlainNumberOrigin, bare = false): TikzFragment {
+  void origin;
+  const decimal = String(value);
+  if (!/^-?\d+(\.\d+)?$/u.test(decimal)) throw new Error(`plainNumber needs a plain decimal, got ${decimal}`);
+  return asFragment(bare ? decimal.replace(/^(-?)0\./u, "$1.") : decimal);
 }
 
-/** Migration only: a whole edited document built from strings (checker rule F2). */
-export function legacyEditedSource(text: string): EditedSource {
-  return asEditedSource(text);
+/**
+ * Text TeX itself produces from the document by expanding its own loops:
+ * a flattened `\foreach`, its variables replaced by their values. It is read
+ * where the loop was, so no frame changes (checker rule F2 lists the call
+ * sites).
+ */
+export function macroExpansion(text: string): TikzFragment {
+  return asFragment(text);
 }
 
 /** The document unchanged, as an edit result's source. */
@@ -167,13 +182,15 @@ function optionValue(text: string): OptionValue {
 export const FRAME_KEYS = [
   "shift", "xshift", "yshift", "rotate", "rotate around", "scale", "xscale", "yscale",
   "xslant", "yslant", "x", "y", "z", "cm", "at", "radius", "x radius", "y radius",
-  "start angle", "end angle", "delta angle", "node distance", "shift only"
+  "start angle", "end angle", "delta angle", "node distance", "shift only",
+  "in", "out", "bend left", "bend right", "bend angle"
 ] as const;
 
 /**
  * Keys whose values PGF does not transform. They take option values. Keys
- * in neither table (`in`, `out`, `bend left`, `rounded corners`, tree
- * distances…) take user text until their frame semantics are checked in PGF.
+ * in neither table (`rounded corners`, tree distances…) take user text until
+ * their frame semantics are checked in PGF. (`in`, `out` and the bends are
+ * frame keys: `topaths` computes the curve in the coordinates it is read in.)
  */
 export const CANVAS_KEYS = [
   "minimum width", "minimum height", "minimum size", "inner sep", "inner xsep", "inner ysep",
@@ -216,6 +233,16 @@ export function optionValueFor(key: string, value: CoordinateText | OptionValue)
   void key;
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This module is the option value constructor boundary.
   return (typeof value === "string" ? value : value.text) as OptionValueText;
+}
+
+/**
+ * One entry an option mutation writes: `key=value`, or `key` alone for an
+ * empty or `true` value. The value is already typed; the key is a string a
+ * mutation names, so the call sites are reviewed (checker rule F2).
+ */
+export function optionEntry(key: string, value: TikzFragment | OptionValueText | null): TikzFragment {
+  const text = value?.trim() ?? "";
+  return asFragment(text.length === 0 || text.toLowerCase() === "true" ? key : `${key}=${text}`);
 }
 
 /** `[a, b]`, or nothing when there are no options. */

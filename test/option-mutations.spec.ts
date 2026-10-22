@@ -1,3 +1,4 @@
+import { userText } from "../packages/core/src/edit/fragment.js";
 import { describe, expect, it } from "vitest";
 
 import { parseOptionListRaw } from "../packages/core/src/options/parse.js";
@@ -104,11 +105,11 @@ bar
   it("serializes bare draw colors only for color-like values", () => {
     const drawContext = { bareColorKey: "draw" as const };
 
-    expect(serializeOptionEntry("draw", "{rgb,255:red,1;green,2;blue,3}", drawContext)).toBe(
+    expect(serializeOptionEntry("draw", userText("{rgb,255:red,1;green,2;blue,3}", "inspector-value"), drawContext)).toBe(
       "{rgb,255:red,1;green,2;blue,3}"
     );
-    expect(serializeOptionEntry("draw", "red!30!blue", drawContext)).toBe("red!30!blue");
-    expect(serializeOptionEntry("draw", "not a color expression", drawContext)).toBe(
+    expect(serializeOptionEntry("draw", userText("red!30!blue", "inspector-value"), drawContext)).toBe("red!30!blue");
+    expect(serializeOptionEntry("draw", userText("not a color expression", "inspector-value"), drawContext)).toBe(
       "draw=not a color expression"
     );
   });

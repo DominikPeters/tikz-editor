@@ -1,4 +1,4 @@
-import { EMPTY_FRAGMENT, legacyText, unchangedSource, type EditedSource } from "../fragment.js";
+import { EMPTY_FRAGMENT, joinFragments, sliceFragment, tikz, unchangedSource, userText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { NodeItem, PathItem, Span, Statement } from "../../ast/types.js";
@@ -304,7 +304,8 @@ function pruneFitReferencesAfterDelete(
       continue;
     }
 
-    const nextFitValue = pruneFitValueRaw(fitEntry.valueRaw, deletedNodeNames);
+    // The value is what the user authored in the node's `fit` option.
+    const nextFitValue = pruneFitValueRaw(userText(fitEntry.valueRaw, "source-editor"), deletedNodeNames);
     if (nextFitValue.kind === "unchanged") {
       continue;
     }
@@ -314,7 +315,7 @@ function pruneFitReferencesAfterDelete(
       mutations.set("fit", { kind: "remove" });
       mutations.set("rotate fit", { kind: "remove" });
     } else {
-      mutations.set("fit", { kind: "set", value: legacyText(nextFitValue.value) });
+      mutations.set("fit", { kind: "set", value: nextFitValue.value });
     }
     const rewritten = requireDefined(applyOptionMutationsToTarget(currentSource, resolved.target, mutations), "Missing required applyOptionMutationsToTarget(currentSource, resolved.target, mutations)");
     currentSource = rewritten.source;
@@ -326,9 +327,9 @@ function pruneFitReferencesAfterDelete(
 }
 
 function pruneFitValueRaw(
-  valueRaw: string,
+  valueRaw: TikzFragment,
   deletedNodeNames: ReadonlySet<string>
-): { kind: "unchanged" } | { kind: "changed"; value: string | null } {
+): { kind: "unchanged" } | { kind: "changed"; value: TikzFragment | null } {
   const trimmed = valueRaw.trim();
   if (trimmed.length === 0) {
     return { kind: "unchanged" };
@@ -339,7 +340,7 @@ function pruneFitValueRaw(
     return { kind: "unchanged" };
   }
 
-  const kept = tokens.filter((token) => !fitTokenReferencesDeletedNode(token, deletedNodeNames));
+  const kept = tokens.filter((token) => !fitTokenReferencesDeletedNode(wrapped.content.slice(token.from, token.to), deletedNodeNames));
   if (kept.length === tokens.length) {
     return { kind: "unchanged" };
   }
@@ -347,10 +348,15 @@ function pruneFitValueRaw(
     return { kind: "changed", value: null };
   }
 
-  const compact = kept.join(" ");
+  // The tokens are the value's own text, found by offset from where the trimmed content starts.
+  const contentStart = valueRaw.length - valueRaw.trimStart().length + (wrapped.hadOuterBraces ? 1 : 0);
+  const compact = joinFragments(
+    kept.map((token) => sliceFragment(valueRaw, contentStart + token.from, contentStart + token.to)),
+    tikz` `
+  );
   return {
     kind: "changed",
-    value: wrapped.hadOuterBraces ? `{${compact}}` : compact
+    value: wrapped.hadOuterBraces ? tikz`{${compact}}` : compact
   };
 }
 
@@ -368,8 +374,8 @@ function fitTokenReferencesDeletedNode(tokenRaw: string, deletedNodeNames: Reado
   return baseName.length > 0 && deletedNodeNames.has(baseName);
 }
 
-function extractTopLevelCoordinateTokens(raw: string): string[] {
-  const tokens: string[] = [];
+function extractTopLevelCoordinateTokens(raw: string): Span[] {
+  const tokens: Span[] = [];
   let start = -1;
   let depth = 0;
   for (let index = 0; index < raw.length; index += 1) {
@@ -392,7 +398,7 @@ function extractTopLevelCoordinateTokens(raw: string): string[] {
       }
       depth -= 1;
       if (depth === 0 && start >= 0) {
-        tokens.push(raw.slice(start, index + 1));
+        tokens.push({ from: start, to: index + 1 });
         start = -1;
       }
     }

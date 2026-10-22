@@ -42,7 +42,7 @@ export const BEAMER_TIKZ_LAYER_DEFINITION = tikz`\newenvironment{tikzlayer}[1][]
   {\par\nointerlineskip\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}, #1]}
   {\end{tikzpicture}}`;
 /** What a `tikzlayer` implies for the picture inside, before its own options. */
-export const BEAMER_TIKZ_LAYER_OPTIONS = "remember picture, overlay, shift={(current page.south west)}";
+export const BEAMER_TIKZ_LAYER_OPTIONS = tikz`remember picture, overlay, shift={(current page.south west)}`;
 
 const TIKZ_LAYER_DEFINITIONS = new RegExp([
   String.raw`\\(?:(?:re)?newenvironment|provideenvironment)\*?\s*\{\s*tikzlayer\s*\}`,

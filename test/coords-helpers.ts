@@ -12,7 +12,7 @@ import { defaultAxisBasis } from "../packages/core/src/semantic/coords/axis-basi
 import { captureSiteContext, type CoordinateSpelling, type SiteContext } from "../packages/core/src/semantic/site-context.js";
 import { createCoordinateWriter } from "../packages/core/src/edit/writer/index.js";
 import type { CoordinateText } from "../packages/core/src/edit/fragment.js";
-import type { NewStatementPoints } from "../packages/core/src/edit/new-statement.js";
+import { statementPointWriter, type NewStatementPoints } from "../packages/core/src/edit/new-statement.js";
 import type { WorldPoint } from "../packages/core/src/coords/points.js";
 
 export const wp = (x: number, y: number) => worldPoint(pt(x), pt(y));
@@ -49,4 +49,4 @@ export function identityPoint(point: WorldPoint): CoordinateText {
 }
 
 /** New statements in a picture without options. */
-export const identityPoints: NewStatementPoints = () => identityPoint;
+export const identityPoints: NewStatementPoints = () => statementPointWriter("", identityContext);
