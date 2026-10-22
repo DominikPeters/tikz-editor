@@ -1334,7 +1334,9 @@ function resolvePathShapeResizeContext(
 
   return {
     kind: "found",
-    shapeKind,
+    // The authored primitive determines which parameters can change. A
+    // circle under unequal axes renders as an ellipse but still has one radius.
+    shapeKind: syntax.keyword === "circle" && !syntax.optionItems.some(item => parseCircleRadiiFromOptionItem(item).kind === "radii") ? "circle" : "ellipse",
     center: center ?? centerHandle.world,
     syntax,
     centerHandle

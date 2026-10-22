@@ -22,6 +22,11 @@ const POSITIONING_BODY = "positioning";
 
 function classify(result: CaseResult): string {
   const [action, , body] = result.key.split("|");
+  if (action === "moveCurveHandle") return "curve handle angle written in the wrong frame";
+  if (action === "resizeElement" && (body === "circle" || body === "ellipse")) return "resized radius misses the pointer";
+  if (action === "singular") return "singular frame accepted a coordinate write";
+  if (action === "insertAfterTikzset") return "insertion ignored the state at the final gap";
+  if (action === "pasteAcrossScopes") return "paste offset used the original rather than destination frame";
   if (body === POSITIONING_BODY && action === "duplicateElements") return "offset written as `at`, which `right=of` overrides";
   if (body === POSITIONING_BODY) return "positioning offsets ignore the node's own transform or its dependency on A";
   if (action === "duplicateElements" || action === "repeatElements") return "offset planned in a bare identity-frame picture";
@@ -65,6 +70,16 @@ describe("pointer invariant", () => {
       for (const result of results) if (result.outcome.kind === "fail" || result.outcome.kind === "error") console.log(result.key, result.outcome);
     }
     const actual = new Map(results.map(result => [result.key, encode(result)]));
+    for (const frame of frames) {
+      for (const key of [
+        `singular|${frame.label}|moveHandle`, `singular|${frame.label}|addElement`,
+        `insertAfterTikzset|${frame.label}`, `pasteAcrossScopes|${frame.label}`,
+        `resizeElement|${frame.label}|circle|top`, `resizeElement|${frame.label}|ellipse|right`,
+        `insertPathPoint|${frame.label}|midpath-options`, `reversePath|${frame.label}|relative-start`
+      ]) expect(actual.has(key), `missing promised coverage: ${key}`).toBe(true);
+      expect(results.some(result => result.key.startsWith(`moveCurveHandle|${frame.label}|`)), "missing transformed curve handles").toBe(true);
+      expect(results.some(result => result.key.startsWith(`moveHandle|${frame.label}|transform-shape-node|`)), "missing transform shape node").toBe(true);
+    }
 
     if (process.env.POINTER_FUZZ_UPDATE) {
       if (!FULL || SEED !== 1) throw new Error("Record expected outcomes from a full run with the default seed.");

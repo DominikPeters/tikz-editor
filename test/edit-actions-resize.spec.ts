@@ -1197,7 +1197,7 @@ describe("applyEditAction – resizeElement", () => {
     expect(result.newSource).toContain("circle[radius=1.5cm]");
   });
 
-  it("adds radius entries to an existing circle option list without radius keys", () => {
+  it("adds a single radius to an existing circle option list without radius keys", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) circle [draw=blue];
 \end{tikzpicture}`;
@@ -1211,7 +1211,7 @@ describe("applyEditAction – resizeElement", () => {
 
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
-    expect(result.newSource).toContain("circle [draw=blue, x radius=1.25cm, y radius=1.25cm]");
+    expect(result.newSource).toContain("circle [draw=blue, radius=1.25cm]");
   });
 
   it("normalizes circle x/y radius options back to a single radius", () => {
