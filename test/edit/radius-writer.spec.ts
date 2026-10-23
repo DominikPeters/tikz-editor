@@ -27,7 +27,7 @@ function apply(source: string, action: EditAction) {
 
 /** Bounds carry half the line width, 0.2pt. */
 const close = (actual: [number, number], expected: [number, number]) =>
-  expect(actual.map((value, index) => Math.abs(value - expected[index]!) < 0.4)).toEqual([true, true]);
+  expect(actual.map((value, index) => Math.abs(value - expected[index]) < 0.4)).toEqual([true, true]);
 
 describe("radii are written in the frame they are read in", () => {
   it("draws a new circle with the world radius it was dragged to", () => {

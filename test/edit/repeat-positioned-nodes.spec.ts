@@ -66,7 +66,7 @@ describe("repeatElements with positioned nodes", () => {
     const passStep = step.horizontalStep;
     for (let pass = 0; pass < 3; pass += 1) {
       expect(xs[2 * pass]).toBeCloseTo(passStep * pass, 2);
-      expect(xs[2 * pass + 1]! - xs[2 * pass]!).toBeCloseTo(xs[1]! - xs[0]!, 2);
+      expect(xs[2 * pass + 1] - xs[2 * pass]).toBeCloseTo(xs[1] - xs[0], 2);
     }
   });
 

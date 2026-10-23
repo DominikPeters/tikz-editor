@@ -144,7 +144,7 @@ describe("rewritten paths keep their relative coordinates", () => {
 
     const straight = picture(String.raw`\draw (0,0) -- ++(2,0) -- +(0,1);`);
     const [start, end] = handlesOf(straight).filter(handle => handle.kind === "path-point");
-    const middle = wp((start!.world.x + end!.world.x) / 2, (start!.world.y + end!.world.y) / 2);
+    const middle = wp((start.world.x + end.world.x) / 2, (start.world.y + end.world.y) / 2);
     const inserted = apply(straight, { kind: "insertPathPoint", elementId: "path:0", segmentIndex: 0, point: middle });
     expect(inserted.kind).toBe("success");
     if (inserted.kind !== "success") return;
@@ -155,7 +155,7 @@ describe("rewritten paths keep their relative coordinates", () => {
   it("prepends segments to a path with relative coordinates", () => {
     const source = picture(String.raw`\draw (1,0) -- ++(1,0) -- +(0,1);`);
     const handles = handlesOf(source);
-    const first = handles.filter(handle => handle.kind === "path-point")[0]!;
+    const first = handles.filter(handle => handle.kind === "path-point")[0];
     const result = applyEditAction(source, handles, {
       kind: "appendToPath",
       elementId: "path:0",

@@ -1,13 +1,17 @@
 name: Build and Sign Windows Bundles
-description: Build the Tauri Windows app and sign it and its installers with SignPath.
+description: Build Windows installers and a portable ZIP, optionally signing them with SignPath.
 
 inputs:
+  signpath-enabled:
+    description: Sign Windows executables and installers with SignPath.
+    required: false
+    default: "true"
   api-token:
-    description: SignPath API token.
-    required: true
+    description: SignPath API token, required when SignPath is enabled.
+    required: false
   organization-id:
-    description: SignPath organization ID.
-    required: true
+    description: SignPath organization ID, required when SignPath is enabled.
+    required: false
   project-slug:
     description: SignPath project slug.
     required: false
@@ -31,8 +35,8 @@ inputs:
     required: false
 
 outputs:
-  signed-artifact-directory:
-    description: Directory containing signed installers, updater signatures, and the signed portable ZIP.
+  artifact-directory:
+    description: Directory containing Windows installers, updater signatures, and the portable ZIP.
     value: ${{ steps.collect.outputs.directory }}
 
 runs:
@@ -75,6 +79,7 @@ runs:
         "version=$version" >> $env:GITHUB_OUTPUT
 
     - name: Stage unsigned application executable
+      if: inputs.signpath-enabled == 'true'
       shell: pwsh
       run: |
         $source = Join-Path $env:GITHUB_WORKSPACE "apps\desktop\src-tauri\target\release\tikz-editor.exe"
@@ -83,6 +88,7 @@ runs:
         Copy-Item -LiteralPath $source -Destination (Join-Path $destination "tikz-editor.exe")
 
     - name: Upload unsigned application executable
+      if: inputs.signpath-enabled == 'true'
       id: upload-unsigned-app
       uses: actions/upload-artifact@v7
       with:
@@ -92,6 +98,7 @@ runs:
         if-no-files-found: error
 
     - name: Sign application executable
+      if: inputs.signpath-enabled == 'true'
       uses: signpath/github-action-submit-signing-request@v2
       with:
         api-token: ${{ inputs.api-token }}
@@ -107,6 +114,7 @@ runs:
           version: ${{ toJSON(steps.metadata.outputs.version) }}
 
     - name: Install signed application executable
+      if: inputs.signpath-enabled == 'true'
       shell: pwsh
       run: |
         $signed = Join-Path $env:RUNNER_TEMP "signpath-signed-app\tikz-editor.exe"
@@ -117,13 +125,20 @@ runs:
         }
         Copy-Item -LiteralPath $signed -Destination $target -Force
 
-    - name: Bundle installers around signed application
+    - name: Bundle Windows installers
       shell: pwsh
       env:
+        SIGNPATH_ENABLED: ${{ inputs.signpath-enabled }}
         TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.tauri-signing-private-key }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ inputs.tauri-signing-private-key-password }}
-      # Bundle type patching would invalidate the already-signed executable.
-      run: npm run -w @tikz-editor/desktop tauri -- bundle --ci --no-binary-patching
+      run: |
+        $bundleArguments = @("bundle", "--ci")
+        if ($env:SIGNPATH_ENABLED -eq "true") {
+          # Bundle type patching would invalidate the already-signed executable.
+          $bundleArguments += "--no-binary-patching"
+        }
+        npm run -w @tikz-editor/desktop tauri -- @bundleArguments
+        if ($LASTEXITCODE -ne 0) { throw "Failed to bundle Windows installers." }
 
     - name: Stage unsigned installers
       shell: pwsh
@@ -141,6 +156,7 @@ runs:
         Copy-Item -LiteralPath $msi[0].FullName -Destination $destination
 
     - name: Upload unsigned installers
+      if: inputs.signpath-enabled == 'true'
       id: upload-unsigned-installers
       uses: actions/upload-artifact@v7
       with:
@@ -150,6 +166,7 @@ runs:
         if-no-files-found: error
 
     - name: Sign Windows installers
+      if: inputs.signpath-enabled == 'true'
       uses: signpath/github-action-submit-signing-request@v2
       with:
         api-token: ${{ inputs.api-token }}
@@ -165,27 +182,33 @@ runs:
           version: ${{ toJSON(steps.metadata.outputs.version) }}
 
     - name: Regenerate Tauri updater signatures
+      id: installers
       shell: pwsh
       env:
+        SIGNPATH_ENABLED: ${{ inputs.signpath-enabled }}
         TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.tauri-signing-private-key }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ inputs.tauri-signing-private-key-password }}
       run: |
-        $directory = Join-Path $env:RUNNER_TEMP "signpath-signed-installers"
+        $installerDirectory = if ($env:SIGNPATH_ENABLED -eq "true") { "signpath-signed-installers" } else { "signpath-unsigned-installers" }
+        $directory = Join-Path $env:RUNNER_TEMP $installerDirectory
         $installers = @(Get-ChildItem -Path $directory -File | Where-Object { $_.Extension -in ".exe", ".msi" })
         if ($installers.Count -ne 2) {
-          throw "Expected two signed installers from SignPath; found $($installers.Count)."
+          throw "Expected two Windows installers; found $($installers.Count)."
         }
 
         foreach ($installer in $installers) {
-          $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
-          if ($null -eq $signature.SignerCertificate) {
-            throw "SignPath returned $($installer.Name) without an Authenticode signature."
+          if ($env:SIGNPATH_ENABLED -eq "true") {
+            $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+            if ($null -eq $signature.SignerCertificate) {
+              throw "SignPath returned $($installer.Name) without an Authenticode signature."
+            }
           }
           npm run -w @tikz-editor/desktop tauri -- signer sign "$($installer.FullName)"
           if ($LASTEXITCODE -ne 0) {
             throw "Failed to generate the Tauri updater signature for $($installer.Name)."
           }
         }
+        "directory=$directory" >> $env:GITHUB_OUTPUT
 
     - name: Build portable application executable
       shell: pwsh
@@ -204,6 +227,7 @@ runs:
         Copy-Item -LiteralPath $source -Destination (Join-Path $destination "tikz-editor.exe")
 
     - name: Upload unsigned portable executable
+      if: inputs.signpath-enabled == 'true'
       id: upload-unsigned-portable
       uses: actions/upload-artifact@v7
       with:
@@ -213,6 +237,7 @@ runs:
         if-no-files-found: error
 
     - name: Sign portable application executable
+      if: inputs.signpath-enabled == 'true'
       uses: signpath/github-action-submit-signing-request@v2
       with:
         api-token: ${{ inputs.api-token }}
@@ -227,20 +252,26 @@ runs:
         parameters: |
           version: ${{ toJSON(steps.metadata.outputs.version) }}
 
-    - name: Collect signed Windows artifacts
+    - name: Collect Windows artifacts
       id: collect
       shell: pwsh
+      env:
+        SIGNPATH_ENABLED: ${{ inputs.signpath-enabled }}
+        INSTALLER_ARTIFACT_DIRECTORY: ${{ steps.installers.outputs.directory }}
       run: |
-        $source = Join-Path $env:RUNNER_TEMP "signpath-signed-installers"
-        $destination = Join-Path $env:GITHUB_WORKSPACE "signpath-windows-output"
+        $source = $env:INSTALLER_ARTIFACT_DIRECTORY
+        $destination = Join-Path $env:GITHUB_WORKSPACE "windows-release-output"
         New-Item -ItemType Directory -Force -Path $destination | Out-Null
         Copy-Item -Path (Join-Path $source "*.exe") -Destination $destination
         Copy-Item -Path (Join-Path $source "*.msi") -Destination $destination
         Copy-Item -Path (Join-Path $source "*.sig") -Destination $destination
-        $portable = Join-Path $env:RUNNER_TEMP "signpath-signed-portable\tikz-editor.exe"
-        $signature = Get-AuthenticodeSignature -LiteralPath $portable
-        if ($null -eq $signature.SignerCertificate) {
-          throw "SignPath returned a portable executable without an Authenticode signature."
+        $portableDirectory = if ($env:SIGNPATH_ENABLED -eq "true") { "signpath-signed-portable" } else { "signpath-unsigned-portable" }
+        $portable = Join-Path (Join-Path $env:RUNNER_TEMP $portableDirectory) "tikz-editor.exe"
+        if ($env:SIGNPATH_ENABLED -eq "true") {
+          $signature = Get-AuthenticodeSignature -LiteralPath $portable
+          if ($null -eq $signature.SignerCertificate) {
+            throw "SignPath returned a portable executable without an Authenticode signature."
+          }
         }
         & ./apps/desktop/scripts/package-portable.ps1 -ExecutablePath $portable -OutputDirectory $destination
         "directory=$destination" >> $env:GITHUB_OUTPUT

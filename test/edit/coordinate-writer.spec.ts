@@ -41,7 +41,7 @@ describe("coordinate writer", () => {
   });
 
   it("keeps the authored spelling: units per component, polar, canvas, turn options, detached names", () => {
-    const { source, bodyFrom, bodyTo } = pictureSource(FRAMES[0]!, SPELLINGS);
+    const { source, bodyFrom, bodyTo } = pictureSource(FRAMES[0], SPELLINGS);
     const writer = createCoordinateWriter(source);
     const written = bodyHandles(source, bodyFrom, bodyTo).map(handle => {
       const result = writer.point({ kind: "coordinate", handle }, wp(handle.world.x + 28.45274, handle.world.y));
@@ -90,7 +90,7 @@ describe("coordinate writer", () => {
   });
 
   it("writes the loop terms in each component's unit and keeps the rest of the coordinate", () => {
-    const { source, bodyFrom, bodyTo } = pictureSource(FRAMES[0]!, String.raw`\draw[P] (0,0) -- (1cm,.5) -- (2,3mm) -- ( 0.5 , 1.5 ) -- (1,2,0);`);
+    const { source, bodyFrom, bodyTo } = pictureSource(FRAMES[0], String.raw`\draw[P] (0,0) -- (1cm,.5) -- (2,3mm) -- ( 0.5 , 1.5 ) -- (1,2,0);`);
     const writer = createCoordinateWriter(source);
     const steps = [{ variable: String.raw`\i`, world: wv(PT_PER_CM, 0) }, { variable: String.raw`\j`, world: wv(0, -PT_PER_CM / 2) }];
     const written = bodyHandles(source, bodyFrom, bodyTo).map(handle => {

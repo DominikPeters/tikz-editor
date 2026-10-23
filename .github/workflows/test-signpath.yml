@@ -28,6 +28,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-signed-windows-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ steps.sign.outputs.signed-artifact-directory }}
+          path: ${{ steps.sign.outputs.artifact-directory }}
           compression-level: 0
           if-no-files-found: error

@@ -58,5 +58,8 @@ It first launches the portable executable without WebDriver to verify that the
 app creates its own profile beside the executable. The WebDriver sessions then
 explicitly reuse that data folder: EdgeDriver otherwise overrides the app's
 profile with a [temporary directory for every session](https://learn.microsoft.com/en-us/microsoft-edge/webdriver/capabilities-edge-options#webviewoptions-object).
-The release and SignPath test workflows sign the portable executable separately
-and include its ZIP alongside the installers. CI artifacts are unsigned.
+The release workflow always includes NSIS/MSI installers and the portable ZIP.
+Its `sign_windows` input defaults to false, so Windows releases can build without
+SignPath access. Enable it to sign the installed executable, installers, and
+portable executable separately. Tauri updater signatures are generated in both
+modes. The SignPath test workflows keep signing enabled. CI artifacts are unsigned.

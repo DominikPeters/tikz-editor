@@ -3,14 +3,64 @@ name: Release desktop
 on:
   workflow_dispatch:
     inputs:
+      sign_windows:
+        description: Sign Windows executables and installers with SignPath
+        type: boolean
+        default: false
       signpath_test_only:
         description: Build and test-sign Windows bundles without creating a release
         type: boolean
         default: false
 
+concurrency:
+  group: release-desktop
+  cancel-in-progress: false
+
 jobs:
-  build:
+  prepare-release:
     if: ${{ !inputs.signpath_test_only }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release-id: ${{ steps.release.outputs.id }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create or reuse the release
+        id: release
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('node:fs');
+            const { version } = JSON.parse(fs.readFileSync('apps/desktop/src-tauri/tauri.conf.json', 'utf8'));
+            const tag = `app-v${version}`;
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              ...context.repo,
+              per_page: 100,
+            });
+            const matching = releases.filter(release => release.tag_name === tag);
+            if (matching.length > 1) {
+              throw new Error(`Multiple releases exist for ${tag}; consolidate them before retrying.`);
+            }
+            let release = matching[0];
+            if (!release) {
+              ({ data: release } = await github.rest.repos.createRelease({
+                ...context.repo,
+                tag_name: tag,
+                target_commitish: context.sha,
+                name: `TikZ Editor v${version}`,
+                body: 'See the assets to download this version and install.',
+                draft: true,
+                prerelease: false,
+              }));
+            }
+            core.setOutput('id', release.id);
+            core.setOutput('tag', tag);
+
+  build:
+    needs: prepare-release
     permissions:
       contents: write
     strategy:
@@ -96,14 +146,11 @@ jobs:
         with:
           projectPath: apps/desktop
           args: ${{ matrix.args }}
-          tagName: app-v__VERSION__
-          releaseName: TikZ Editor v__VERSION__
-          releaseBody: See the assets to download this version and install.
-          releaseDraft: true
-          prerelease: false
+          releaseId: ${{ needs.prepare-release.outputs.release-id }}
+          includeUpdaterJson: false
 
   build-windows:
-    needs: build
+    needs: prepare-release
     runs-on: windows-2022
     permissions:
       actions: read
@@ -111,10 +158,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build and release-sign Windows bundles
+      - name: Build Windows bundles with optional SignPath signing
         id: sign
         uses: ./.github/actions/build-sign-windows
         with:
+          signpath-enabled: ${{ inputs.sign_windows }}
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
           project-slug: tikz-editor
@@ -124,59 +172,19 @@ jobs:
           tauri-signing-private-key: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           tauri-signing-private-key-password: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-      - name: Upload signed Windows release assets
+      - name: Upload Windows release assets
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SIGNED_ARTIFACT_DIRECTORY: ${{ steps.sign.outputs.signed-artifact-directory }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+          ARTIFACT_DIRECTORY: ${{ steps.sign.outputs.artifact-directory }}
         run: |
-          $version = (Get-Content "apps/desktop/src-tauri/tauri.conf.json" | ConvertFrom-Json).version
-          $tag = "app-v$version"
-          Get-ChildItem -Path $env:SIGNED_ARTIFACT_DIRECTORY -File | ForEach-Object {
-            gh release upload $tag $_.FullName --repo $env:GITHUB_REPOSITORY --clobber
+          Get-ChildItem -Path $env:ARTIFACT_DIRECTORY -File | ForEach-Object {
+            gh release upload $env:RELEASE_TAG $_.FullName --repo $env:GITHUB_REPOSITORY --clobber
             if ($LASTEXITCODE -ne 0) {
-              throw "Failed to upload $($_.Name) to release $tag."
+              throw "Failed to upload $($_.Name) to release $env:RELEASE_TAG."
             }
           }
-
-      - name: Create Windows updater manifest fragment
-        shell: pwsh
-        env:
-          SIGNED_ARTIFACT_DIRECTORY: ${{ steps.sign.outputs.signed-artifact-directory }}
-        run: |
-          $version = (Get-Content "apps/desktop/src-tauri/tauri.conf.json" | ConvertFrom-Json).version
-          $tag = "app-v$version"
-          $baseUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag"
-          $msi = @(Get-ChildItem -Path $env:SIGNED_ARTIFACT_DIRECTORY -Filter "*.msi")
-          $nsis = @(Get-ChildItem -Path $env:SIGNED_ARTIFACT_DIRECTORY -Filter "*.exe")
-          if ($msi.Count -ne 1 -or $nsis.Count -ne 1) {
-            throw "Expected exactly one signed MSI and one signed NSIS installer."
-          }
-
-          $msiEntry = @{
-            signature = (Get-Content -LiteralPath "$($msi[0].FullName).sig" -Raw).Trim()
-            url = "$baseUrl/$($msi[0].Name)"
-          }
-          $nsisEntry = @{
-            signature = (Get-Content -LiteralPath "$($nsis[0].FullName).sig" -Raw).Trim()
-            url = "$baseUrl/$($nsis[0].Name)"
-          }
-          $fragment = @{
-            platforms = @{
-              "windows-x86_64" = $msiEntry
-              "windows-x86_64-msi" = $msiEntry
-              "windows-x86_64-nsis" = $nsisEntry
-            }
-          }
-          New-Item -ItemType Directory -Force -Path "windows-updater" | Out-Null
-          $fragment | ConvertTo-Json -Depth 5 | Set-Content -Path "windows-updater/windows.json" -Encoding utf8
-
-      - name: Upload Windows updater manifest fragment
-        uses: actions/upload-artifact@v7
-        with:
-          name: windows-updater-${{ github.run_id }}-${{ github.run_attempt }}
-          path: windows-updater/windows.json
-          if-no-files-found: error
 
   test-signpath-windows:
     if: ${{ inputs.signpath_test_only }}
@@ -203,60 +211,50 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-signed-windows-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ steps.sign.outputs.signed-artifact-directory }}
+          path: ${{ steps.sign.outputs.artifact-directory }}
           compression-level: 0
           if-no-files-found: error
 
   publish-updater-manifest:
-    needs: [build, build-windows]
+    needs: [prepare-release, build, build-windows]
     runs-on: ubuntu-latest
     permissions:
-      actions: read
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - id: version
-        name: Resolve release tag
-        run: |
-          VERSION="$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")"
-          echo "tag=app-v${VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Download generated updater manifest
+      - name: Download release metadata and updater signatures
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release-id }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
         run: |
-          mkdir -p updater-manifest
-          gh release download "${{ steps.version.outputs.tag }}" \
-            --pattern latest.json \
-            --dir updater-manifest \
+          mkdir -p updater-manifest updater-signatures
+          gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" > updater-manifest/release.json
+          gh release download "$RELEASE_TAG" \
+            --pattern '*.sig' \
+            --dir updater-signatures \
             --clobber
 
-      - name: Download Windows updater manifest fragment
-        uses: actions/download-artifact@v8
-        with:
-          name: windows-updater-${{ github.run_id }}-${{ github.run_attempt }}
-          path: windows-updater
-
-      - name: Add signed Windows artifacts to updater manifest
+      - name: Build complete updater manifest
         run: |
-          jq --slurpfile windows windows-updater/windows.json \
-            '.platforms += $windows[0].platforms' \
-            updater-manifest/latest.json > updater-manifest/latest.signed.json
-          mv updater-manifest/latest.signed.json updater-manifest/latest.json
+          node scripts/build-desktop-updater-manifest.mjs \
+            updater-manifest/release.json updater-signatures updater-manifest/latest.json
 
       - name: Re-upload completed updater manifest to GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
         run: |
-          gh release upload "${{ steps.version.outputs.tag }}" \
+          gh release upload "$RELEASE_TAG" \
             updater-manifest/latest.json \
             --clobber
 
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ steps.version.outputs.tag }}" --draft=false --latest
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: gh release edit "$RELEASE_TAG" --draft=false --latest
 
       - name: Upload updater manifest to FTP
         env:

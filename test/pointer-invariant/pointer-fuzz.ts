@@ -409,6 +409,7 @@ function resizeCases({ context, frame, body, before, handles, elementId }: BodyC
     });
   }
   if ((body.label !== "rectangle" && body.label !== "node") || !elementId || handles.length === 0) return [];
+  // eslint-disable-next-line vitest/no-conditional-tests -- This is RegExp.test, not a conditional test declaration.
   if (body.label === "node" && /rotate/.test(frame.path)) return [];
   const bounds = collectSourceWorldBounds(before.semantic.scene.elements).get(elementId);
   if (!bounds) return [];

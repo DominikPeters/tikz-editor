@@ -51,7 +51,7 @@ describe("positioned nodes", () => {
     const duplicated = applyEditAction(source, handles, { kind: "duplicateElements", elementIds: ["path:1"], delta: wp(10, -30) });
     expect(duplicated.kind).toBe("success");
     if (duplicated.kind !== "success") return;
-    const copy = evaluate(duplicated.newSource).editHandles.filter(handle => handle.kind === "node-position" && handle.sourceRef.sourceId === "path:2")[0]!;
+    const copy = evaluate(duplicated.newSource).editHandles.filter(handle => handle.kind === "node-position" && handle.sourceRef.sourceId === "path:2")[0];
     expect([copy.world.x, copy.world.y].map(Math.round)).toEqual([before.x + 10, before.y - 30].map(Math.round));
 
     const aligned = applyEditAction(source, handles, { kind: "alignElements", elementIds: ["path:0", "path:1"], mode: "top" });

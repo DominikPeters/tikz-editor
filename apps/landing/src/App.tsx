@@ -51,6 +51,7 @@ import { SnapGuidesCard } from "./feature-demos/cards/SnapGuidesCard";
 import { landingBuildDate } from "./generated/build-info";
 import { releaseDownloadMetadata } from "./generated/release-downloads";
 import { LANDING_TOOL_SVGS } from "./generated/tool-svgs";
+import type { DownloadArch as MacArch, DownloadPlatform, ReleaseDownload } from "./release-downloads";
 
 type CodeLine = {
   id: string;
@@ -62,9 +63,6 @@ type CodeLine = {
 };
 
 type ToolPreviewMode = keyof typeof LANDING_TOOL_SVGS;
-type ReleaseDownload = typeof releaseDownloadMetadata.downloads[number];
-type DownloadPlatform = ReleaseDownload["platform"];
-type MacArch = Extract<ReleaseDownload, { platform: "mac" }>["arch"];
 type DesktopDownloadSelection = {
   platform: DownloadPlatform;
   macArch: MacArch;
@@ -348,7 +346,9 @@ function Hero() {
               <span className="landingCtaContent">
                 <DesktopDownloadIcon className="landingCtaIcon" aria-hidden="true" size={17} />
                 <span className="landingCtaLabel">{desktopDownload.primary.label}</span>
-                <span className="landingDownloadSize">{formatDownloadSize(desktopDownload.primary.sizeBytes)}</span>
+                {desktopDownload.primary.sizeBytes > 0 ? (
+                  <span className="landingDownloadSize">{formatDownloadSize(desktopDownload.primary.sizeBytes)}</span>
+                ) : null}
               </span>
             </a>
             <div className="landingDownloadAlternates">
@@ -465,7 +465,7 @@ function getDesktopDownload(selection: DesktopDownloadSelection) {
   if (selection.platform === "windows") {
     return {
       icon: RiWindowsFill,
-      primary: downloadLink("Download for Windows", mustFindDownload((download) => download.platform === "windows" && download.format === "exe")),
+      primary: downloadLink("Download for Windows", findDownload((download) => download.platform === "windows" && download.format === "exe")),
       alternatePrefix: "",
       alternates: [
         releaseLink("Other platforms"),
@@ -477,11 +477,11 @@ function getDesktopDownload(selection: DesktopDownloadSelection) {
   if (selection.platform === "linux") {
     return {
       icon: RiUbuntuFill,
-      primary: downloadLink("Download AppImage for Linux", mustFindDownload((download) => download.platform === "linux" && download.format === "appimage")),
+      primary: downloadLink("Download AppImage for Linux", findDownload((download) => download.platform === "linux" && download.format === "appimage")),
       alternatePrefix: "or choose ",
       alternates: [
-        downloadLink("deb", mustFindDownload((download) => download.platform === "linux" && download.format === "deb")),
-        downloadLink("rpm", mustFindDownload((download) => download.platform === "linux" && download.format === "rpm")),
+        downloadLink("deb", findDownload((download) => download.platform === "linux" && download.format === "deb")),
+        downloadLink("rpm", findDownload((download) => download.platform === "linux" && download.format === "rpm")),
         releaseLink("other platforms")
       ]
     };
@@ -492,16 +492,19 @@ function getDesktopDownload(selection: DesktopDownloadSelection) {
 
   return {
     icon: RiAppleFill,
-    primary: downloadLink(`Download for Mac (${macArchLabel(primaryArch)})`, mustFindDownload((download) => download.platform === "mac" && download.arch === primaryArch)),
+    primary: downloadLink(`Download for Mac (${macArchLabel(primaryArch)})`, findDownload((download) => download.platform === "mac" && download.arch === primaryArch)),
     alternatePrefix: "or choose ",
     alternates: [
-      downloadLink(`Mac (${macArchLabel(alternateArch)})`, mustFindDownload((download) => download.platform === "mac" && download.arch === alternateArch)),
+      downloadLink(`Mac (${macArchLabel(alternateArch)})`, findDownload((download) => download.platform === "mac" && download.arch === alternateArch)),
       releaseLink("other platforms")
     ]
   };
 }
 
-function downloadLink(label: string, download: ReleaseDownload) {
+function downloadLink(label: string, download: ReleaseDownload | undefined) {
+  if (!download) {
+    return releaseLink("View desktop downloads");
+  }
   return {
     label,
     url: download.url,
@@ -517,12 +520,8 @@ function releaseLink(label: string) {
   };
 }
 
-function mustFindDownload(predicate: (download: ReleaseDownload) => boolean): ReleaseDownload {
-  const download = releaseDownloadMetadata.downloads.find(predicate);
-  if (!download) {
-    return releaseDownloadMetadata.downloads[0];
-  }
-  return download;
+function findDownload(predicate: (download: ReleaseDownload) => boolean): ReleaseDownload | undefined {
+  return releaseDownloadMetadata.downloads.find(predicate);
 }
 
 function macArchLabel(arch: MacArch): string {
@@ -746,7 +745,7 @@ function CodeSigningPolicy() {
       <div className="landingCodeSigningPolicyInner">
         <h2 id="code-signing-policy-title">Code signing policy</h2>
         <p>
-          Official Windows releases: Free code signing
+          Code signing for Windows releases is currently disabled. When enabled, free code signing is
           provided by <a href="https://signpath.io/">SignPath.io</a>, certificate by{" "}
           <a href="https://signpath.org/">SignPath Foundation</a>. Committer, reviewer, and release approver:{" "}
           <a href="https://dominik-peters.de/">Dominik Peters</a>.

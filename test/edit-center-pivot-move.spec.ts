@@ -5,11 +5,6 @@ import { planCenteredPivotMoves } from "../packages/core/src/edit/center-pivot-m
 import { createEditGeometrySession } from "../packages/core/src/edit/geometry-session.js";
 import { rewritePreciseFrameCoordinate } from "../packages/core/src/edit/frame-coordinate.js";
 import { applyTextReplacements } from "../packages/core/src/edit/statement-ops.js";
-import { findPathStatementById } from "../packages/core/src/edit/statement-find.js";
-import { resolveStatementOptionFrame } from "../packages/core/src/edit/parent-frame.js";
-import { applyFrameToWorldPoint } from "../packages/core/src/coords/frame.js";
-import { frameLocalPoint } from "../packages/core/src/coords/points.js";
-import { parseRotateAroundValue } from "../packages/core/src/semantic/style/option-utils.js";
 import { applyMatrix } from "../packages/core/src/semantic/transform.js";
 import { isFrameLocalCoordinateEditHandle, type SceneElement } from "../packages/core/src/semantic/types.js";
 import type { EditGeometrySession } from "../packages/core/src/edit/geometry-session.js";
@@ -86,7 +81,7 @@ function expectCentered(source: string) {
     wp(points.reduce((sum, point) => sum + point.x, 0) / points.length, points.reduce((sum, point) => sum + point.y, 0) / points.length);
   const original = pointsOf(source), rotated = pointsOf(turned);
   // The extra turn took effect (circles and ellipses are measured by their center alone).
-  if (source.includes("rectangle")) expect(Math.max(...rotated.map((point, i) => Math.hypot(point.x - original[i]!.x, point.y - original[i]!.y)))).toBeGreaterThan(1);
+  if (source.includes("rectangle")) expect(Math.max(...rotated.map((point, i) => Math.hypot(point.x - original[i].x, point.y - original[i].y)))).toBeGreaterThan(1);
   const before = center(original), after = center(rotated);
   expect(Math.hypot(after.x - before.x, after.y - before.y), turned).toBeLessThan(.001);
 }

@@ -21,9 +21,9 @@ describe("to curves are computed in the coordinates they are read in", () => {
     const [start] = all.filter(handle => handle.kind === "path-point");
     const [out, into] = all.filter(handle => handle.kind === "path-control");
     // `out=0` leaves along the rotated x axis, straight up, towards the target.
-    expect(Math.abs(out!.world.x - start!.world.x)).toBeLessThan(1e-6);
-    expect(out!.world.y).toBeGreaterThan(start!.world.y);
-    expect(Math.abs(into!.world.x - start!.world.x)).toBeLessThan(1e-6);
+    expect(Math.abs(out.world.x - start.world.x)).toBeLessThan(1e-6);
+    expect(out.world.y).toBeGreaterThan(start.world.y);
+    expect(Math.abs(into.world.x - start.world.x)).toBeLessThan(1e-6);
   });
 
   it("writes the angle a control is dragged to in the curve's own coordinates", () => {
