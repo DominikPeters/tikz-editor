@@ -3,7 +3,7 @@
 }
 
 .content {
-  padding: 8px 0;
+  padding: 6px 0;
 }
 
 .toolbar {
@@ -11,78 +11,59 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 10px 8px;
+  padding: 0 8px 6px;
 }
 
 .multiArrangeGroup {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--border-light);
-  border-radius: 3px;
-  overflow: hidden;
-  background: var(--btn-disabled-bg);
+  composes: segmented from "../controls.module.css";
 }
 
 .multiArrangeIconButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 22px;
-  border: 0;
-  border-right: 1px solid var(--border-light);
-  background: var(--btn-disabled-bg);
-  color: var(--text-faint);
-  cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.multiArrangeGroup .multiArrangeIconButton:last-child {
-  border-right: 0;
-}
-
-.multiArrangeIconButton:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bg-header) 64%, var(--btn-disabled-bg));
-  color: var(--text);
-}
-
-.multiArrangeIconButton:disabled {
-  cursor: default;
-  color: color-mix(in srgb, var(--text-faint) 52%, var(--btn-disabled-text));
-  background: var(--btn-disabled-bg);
-}
-
-.multiArrangeIconButton:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--text) 35%, transparent);
-  outline-offset: -1px;
+  composes: segment from "../controls.module.css";
+  flex: 0 0 auto;
+  width: calc(var(--app-ui-scale, 1) * 24px);
+  padding: 0;
 }
 
 .empty {
-  padding: 12px 14px;
-  color: var(--text-muted);
-  font-size: calc(var(--app-ui-scale, 1) * 12px);
+  padding: 10px 12px;
+  color: var(--label-secondary);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
 }
 
+/* A macOS outline view: 20px rows, inset selection. */
 .tree {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  padding: 0 6px;
+  outline: none;
 }
 
 .row {
   display: grid;
-  grid-template-columns: minmax(22px, auto) 22px minmax(0, 1fr);
+  grid-template-columns: minmax(18px, auto) 18px minmax(0, 1fr);
   align-items: center;
-  gap: 3px;
-  min-height: 30px;
-  padding: 0 10px;
+  gap: 2px;
+  min-height: calc(var(--app-ui-scale, 1) * 20px);
+  padding: 0 4px;
   color: var(--text);
   user-select: none;
-  border-radius: 6px;
+  border-radius: 5px;
 }
 
+/* Selected rows are accent-coloured while the outline has focus, grey otherwise. */
 .rowSelected {
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-pane));
+  background: var(--tab-selected-bg);
+}
+
+.tree:focus-within .rowSelected {
+  background: var(--control-accent);
+  color: #fff;
+}
+
+.tree:focus-within .rowSelected .iconButton,
+.tree:focus-within .rowSelected .labelMeta {
+  color: rgb(255 255 255 / 80%);
 }
 
 .treeCell {
@@ -103,19 +84,23 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: calc(var(--app-ui-scale, 1) * 18px);
+  height: calc(var(--app-ui-scale, 1) * 18px);
   border: none;
   background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
+  color: var(--label-secondary);
+  cursor: default;
   padding: 0;
   border-radius: 4px;
 }
 
+.iconButton svg {
+  width: calc(var(--app-ui-scale, 1) * 14px);
+  height: calc(var(--app-ui-scale, 1) * 14px);
+}
+
 .iconButton:hover {
   color: var(--text);
-  background: color-mix(in srgb, var(--btn-hover-bg) 45%, transparent);
 }
 
 .iconButtonDisabled {
@@ -129,18 +114,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: calc(var(--app-ui-scale, 1) * 12px);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
   line-height: 1.3;
 }
 
 .labelMeta {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border-light) 42%, transparent);
-  background: color-mix(in srgb, var(--bg-pane) 92%, var(--bg-header));
-  color: color-mix(in srgb, var(--text-subtle) 52%, transparent);
+  color: var(--label-secondary);
   font-size: calc(var(--app-ui-scale, 1) * 10px);
   line-height: 1.2;
 }
@@ -152,26 +131,22 @@
   min-width: 0;
   padding: 0;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
 }
 
 .titleInput {
+  composes: field from "../controls.module.css";
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
-  color: var(--text);
-  padding: 2px 6px;
-  font: inherit;
 }
 
 .dropBefore {
-  box-shadow: inset 0 2px 0 var(--accent), inset 2px 0 0 color-mix(in srgb, var(--accent) 25%, transparent);
+  box-shadow: inset 0 2px 0 var(--control-accent);
 }
 
 .dropAfter {
-  box-shadow: inset 0 -2px 0 var(--accent), inset 2px 0 0 color-mix(in srgb, var(--accent) 25%, transparent);
+  box-shadow: inset 0 -2px 0 var(--control-accent);
 }

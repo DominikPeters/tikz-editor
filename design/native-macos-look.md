@@ -368,6 +368,26 @@ rows to 20px with the new tokens:
 **Dark mode.** Fill in the dark column of the phase 1 tokens using Option C,
 then run a contrast pass on labels, captions and disabled states.
 
+**As built (differences from the above):**
+
+- The dark tokens were already filled in during phase 1. `--label-secondary`
+  is about 5.6:1 on `--bg-inspector` in light mode and 6.9:1 in dark mode.
+  Disabled text (`--text-dim`) stays low-contrast, which WCAG allows.
+- The Objects outline is focusable (`tabIndex={-1}`), so clicking a row
+  focuses it even in WebKit, which does not focus buttons on click.
+- Overlays timeline rows are 20px with 18px cells; the selected row is grey
+  (`--tab-selected-bg`); there is no focus state to switch it to accent.
+- Styles stays a dense monospaced cascade view; it only takes the field,
+  ring and label tokens and 20px declaration rows.
+- DevPanel is untouched (developer only).
+- The Source panel lost its `border-right`, which doubled the splitter
+  hairline. Assistant hovers used an undefined `--bg-hover`.
+- Fixed in passing: a dock panel was blank the first time its tab was
+  opened. `WhileTabVisible` trusted the payload of flexlayout's
+  `visibility` event, which can be stale (an unmounting Tab marks the node
+  hidden after the new one marked it visible). It now reads
+  `node.isSelected()` in a microtask.
+
 ## Phase 7 — Optional refinements
 
 - **Stroke/Fill header checkbox.** This is a semantic change: unchecking

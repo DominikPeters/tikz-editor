@@ -3,13 +3,13 @@
 }
 
 .content {
-  padding: 4px;
+  padding: 0;
 }
 
 .hint {
-  padding: 14px 12px;
-  color: var(--text-muted);
-  font-size: 12px;
+  padding: 10px 12px;
+  color: var(--label-secondary);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
 }
 
 .sectionTitleWrap {
@@ -24,7 +24,7 @@
 .sectionMeta {
   margin-top: 1px;
   font-size: calc(var(--app-ui-scale, 1) * 9px);
-  color: var(--text-muted);
+  color: var(--label-secondary);
   font-family: var(--font-mono);
 }
 
@@ -32,7 +32,7 @@
   margin-left: auto;
   text-align: right;
   font-size: calc(var(--app-ui-scale, 1) * 8px);
-  color: var(--text-faint);
+  color: var(--label-secondary);
   font-family: var(--font-mono);
   font-weight: normal;
   text-transform: none;
@@ -40,8 +40,7 @@
 }
 
 .ruleBody.ruleBody {
-  padding: 4px 6px 4px 6px;
-  padding-right: 2px;
+  padding: 3px 0 0;
   gap: 0;
 }
 
@@ -52,14 +51,14 @@
   grid-template-columns: 14px minmax(0, 1fr) minmax(100px, 140px) 14px;
   gap: 3px;
   align-items: center;
-  padding: 1px 0;
+  min-height: calc(var(--app-ui-scale, 1) * 20px);
   font-size: calc(var(--app-ui-scale, 1) * 10px);
 }
 
 .declarationDisabled {
   text-decoration: line-through;
   text-decoration-thickness: 1px;
-  color: var(--text-muted);
+  color: var(--label-secondary);
 }
 
 .declarationOverridden {
@@ -69,7 +68,7 @@
 
 .declarationInactive,
 .declarationUnsupported {
-  color: var(--text-muted);
+  color: var(--label-secondary);
 }
 
 .keyCell {
@@ -105,8 +104,8 @@
 }
 
 .keyInput:focus {
-  border-color: var(--border-light);
-  background: var(--bg-pane);
+  border-color: var(--control-ring);
+  background: var(--control-bg);
 }
 
 .valueInput {
@@ -122,7 +121,7 @@
   width: 100%;
   min-height: 18px;
   border: 1px solid transparent;
-  border-radius: 2px;
+  border-radius: var(--radius-field);
   background: transparent;
   color: var(--text);
   font-family: var(--font-mono);
@@ -136,7 +135,7 @@
 }
 
 .rawValueButton:hover:not(:disabled) {
-  border-color: var(--border-light);
+  border-color: var(--control-ring);
 }
 
 .rawValueButton:disabled {
@@ -145,26 +144,26 @@
 }
 
 .rawValueEmpty {
-  color: var(--text-faint);
+  color: var(--label-secondary);
   font-style: italic;
 }
 
 .rawInput {
   width: 100%;
   min-width: 0;
-  height: 18px;
-  border: 1px solid var(--border-light);
-  background: var(--bg-pane);
+  height: calc(var(--app-ui-scale, 1) * 18px);
+  border: 1px solid var(--control-ring);
+  background: var(--control-bg);
   color: var(--text);
   padding: 0 2px;
   font-family: var(--font-mono);
   font-size: calc(var(--app-ui-scale, 1) * 10px);
-  border-radius: 2px;
+  border-radius: var(--radius-field);
 }
 
 .rawInput:focus {
-  border-color: var(--border);
-  outline: none;
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 55%, transparent);
+  outline-offset: 0;
 }
 
 /* ── Delete button ─────────────────────────────────────────────────────── */
@@ -176,12 +175,12 @@
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 2px;
+  border-radius: 3px;
   background: transparent;
-  color: var(--text-faint);
+  color: var(--label-secondary);
   font-size: 11px;
   line-height: 1;
-  cursor: pointer;
+  cursor: default;
   padding: 0;
   opacity: 0;
   transition: opacity 0.1s;
@@ -193,7 +192,7 @@
 
 .deleteButton:hover {
   color: var(--text);
-  background: var(--btn-hover-bg);
+  background: var(--tab-selected-bg);
 }
 
 .deleteButtonPlaceholder {
@@ -218,20 +217,19 @@
   width: 14px;
   height: 14px;
   margin-top: 2px;
-  border: 1px solid var(--border-lighter);
-  border-radius: 2px;
+  border: 1px solid var(--control-ring);
+  border-radius: 3px;
   background: transparent;
-  color: var(--text-faint);
+  color: var(--label-secondary);
   font-size: 11px;
   line-height: 1;
-  cursor: pointer;
+  cursor: default;
   padding: 0;
 }
 
 .addButton:hover {
   color: var(--text);
-  border-color: var(--border-light);
-  background: var(--btn-hover-bg);
+  background: var(--tab-selected-bg);
 }
 
 .addRow {

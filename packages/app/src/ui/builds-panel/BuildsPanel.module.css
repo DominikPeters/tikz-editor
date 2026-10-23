@@ -1,4 +1,4 @@
-.content { padding: 6px; }
+.content { padding: 6px 8px; }
 
 .timeline {
   width: 100%;
@@ -12,7 +12,7 @@
 
 .timeline thead th {
   padding-bottom: 4px;
-  color: var(--text-muted);
+  color: var(--label-secondary);
   font-size: calc(var(--app-ui-scale, 1) * 10px);
 }
 
@@ -25,38 +25,38 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: calc(var(--app-ui-scale, 1) * 18px);
+  height: calc(var(--app-ui-scale, 1) * 18px);
   padding: 0;
   border: none;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
   color: inherit;
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 .timeline thead button:hover,
 .timeline td[data-state] button:hover {
-  background: color-mix(in srgb, var(--btn-hover-bg) 45%, transparent);
+  background: color-mix(in srgb, var(--tab-selected-bg) 60%, transparent);
   color: var(--text);
 }
 
 .timeline thead button[aria-pressed="true"] {
-  background: var(--toggle-active-bg);
+  background: var(--tab-selected-bg);
   color: var(--text);
 }
 
 .timeline tr[data-selected="true"] {
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-pane));
+  background: var(--tab-selected-bg);
 }
-.timeline tr[data-selected="true"] th { border-radius: 6px 0 0 6px; }
-.timeline tr[data-selected="true"] td:last-child { border-radius: 0 6px 6px 0; }
+.timeline tr[data-selected="true"] th { border-radius: 5px 0 0 5px; }
+.timeline tr[data-selected="true"] td:last-child { border-radius: 0 5px 5px 0; }
 
 .rowLabel {
   display: flex;
   align-items: center;
-  min-height: 30px;
+  min-height: calc(var(--app-ui-scale, 1) * 20px);
   min-width: 0;
 }
 
@@ -64,7 +64,7 @@
 
 .label {
   flex: 1;
-  min-height: 30px;
+  min-height: calc(var(--app-ui-scale, 1) * 20px);
   align-items: center;
   overflow: hidden;
   padding: 0 4px;
@@ -72,21 +72,21 @@
 
 .timeline td[data-state="visible"] { color: var(--text); }
 .timeline td[data-state="hidden"],
-.timeline td[data-state="removed"] { color: var(--text-muted); }
+.timeline td[data-state="removed"] { color: var(--label-secondary); }
 
 .timeline button:focus-visible {
-  outline: 1px solid var(--text-muted);
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 60%, transparent);
   outline-offset: -1px;
 }
 
 .timeline td[data-state] button.boundary {
   position: absolute;
-  top: 7px;
+  top: calc(50% - var(--app-ui-scale, 1) * 7px);
   width: 7px;
-  height: 16px;
-  border: 1px solid var(--text-muted);
+  height: calc(var(--app-ui-scale, 1) * 14px);
+  border: 1px solid var(--label-secondary);
   border-radius: 2px;
-  background: var(--bg-pane);
+  background: var(--control-bg);
   cursor: ew-resize;
   touch-action: none;
   z-index: 1;
@@ -95,8 +95,8 @@
 .boundary[data-boundary="end"] { right: -2px; }
 .timeline td[data-state] button.boundary:hover,
 .timeline td[data-state] button.boundary:focus-visible {
-  background: var(--toggle-active-bg);
-  border-color: var(--text-muted);
+  background: var(--tab-selected-bg);
+  border-color: var(--text);
 }
 
 .legend {
@@ -104,7 +104,7 @@
   flex-wrap: wrap;
   gap: 4px 10px;
   padding: 8px 4px 2px;
-  color: var(--text-muted);
+  color: var(--label-secondary);
   font-size: calc(var(--app-ui-scale, 1) * 10px);
 }
 

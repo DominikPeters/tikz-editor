@@ -4,7 +4,7 @@
 
 /* A toolbar row; the dock tab already names the panel. */
 .header {
-  background: var(--bg-pane);
+  background: transparent;
   height: auto;
   padding: 6px 10px;
   justify-content: flex-end;
@@ -322,7 +322,7 @@
 }
 
 .authButton:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--tab-selected-bg) 60%, transparent);
 }
 
 .authButton:disabled {
@@ -357,7 +357,7 @@
 }
 
 .authButtonLarge:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--tab-selected-bg) 60%, transparent);
 }
 
 .authButtonLarge:disabled {
@@ -430,7 +430,7 @@
 }
 
 .composerAction:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--tab-selected-bg) 60%, transparent);
 }
 
 .composerAction:disabled {
@@ -482,7 +482,7 @@
 }
 
 .installButton:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--tab-selected-bg) 60%, transparent);
 }
 
 .installButton:disabled {

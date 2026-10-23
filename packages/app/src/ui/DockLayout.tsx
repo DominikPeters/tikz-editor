@@ -391,13 +391,26 @@ let activeDockHandle: DockLayoutHandle | null = null;
  * selected, the panel keeps its state but stops following the store (its
  * subscriptions are effects, which a hidden Activity cleans up); it catches up
  * when shown again.
+ *
+ * A tab shows exactly when it is selected here (maximizing is off and there are
+ * no border docks), so the event only prompts a read of the selection: its
+ * payload can be stale. flexlayout's Tab marks itself visible while rendering,
+ * and an unmounting Tab's cleanup can mark it hidden again afterwards, which
+ * left a panel blank the first time it was opened. The event also fires during
+ * that render, so the update waits for a microtask.
  */
 function WhileTabVisible({ node, children }: { node: TabNode; children: ReactNode }) {
-  const [visible, setVisible] = useState(() => node.isVisible());
+  const [visible, setVisible] = useState(() => node.isSelected());
   useEffect(() => {
-    node.setEventListener("visibility", (event: { visible: boolean }) => { setVisible(event.visible); });
-    setVisible(node.isVisible());
-    return () => { node.removeEventListener("visibility"); };
+    let live = true;
+    node.setEventListener("visibility", () => {
+      queueMicrotask(() => { if (live) setVisible(node.isSelected()); });
+    });
+    setVisible(node.isSelected());
+    return () => {
+      live = false;
+      node.removeEventListener("visibility");
+    };
   }, [node]);
   return <Activity mode={visible ? "visible" : "hidden"}>{children}</Activity>;
 }

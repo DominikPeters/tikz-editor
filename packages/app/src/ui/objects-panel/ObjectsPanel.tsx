@@ -279,7 +279,9 @@ export function ObjectsPanel() {
             {reorderActions.map((action) => renderActionButton(action))}
           </div>
         </div>
-        <div className={css.tree}>
+        {/* Focusable so a click on a row focuses the outline (WebKit does not focus
+            buttons on click), which turns the selection from grey to accent. */}
+        <div className={css.tree} tabIndex={-1}>
           {rows.map(({ node, depth }) => {
             const isEditing = editingId === node.id;
             const rowClasses = [
