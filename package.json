@@ -114,7 +114,7 @@
     "predev:tex-paragraph-lab": "npm run -w @tikz-editor/core build",
     "dev:tex-paragraph-lab": "node tools/tex-paragraph-lab/server.mjs",
     "dev:landing": "npm run -w @tikz-editor/landing dev",
-    "dev:desktop": "npm run -w @tikz-editor/desktop tauri:dev",
+    "dev:desktop": "npm run -w @tikz-editor/desktop tauri:dev -- --release",
     "build:landing": "npm run -w @tikz-editor/landing build",
     "capture:landing-screenshots": "npm run -w @tikz-editor/landing capture:screenshots --",
     "build:desktop": "npm run -w @tikz-editor/desktop tauri:build",
