@@ -2,14 +2,12 @@
   background: var(--bg-pane);
 }
 
+/* A toolbar row; the dock tab already names the panel. */
 .header {
   background: var(--bg-pane);
   height: auto;
   padding: 6px 10px;
-}
-
-.title {
-  font-weight: 700;
+  justify-content: flex-end;
 }
 
 .headerButton {

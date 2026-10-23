@@ -22,21 +22,12 @@ import "flexlayout-react/style/gray.css";
 import "./DockLayout.css";
 import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
 import { isDockLayoutJson } from "./dock-layout-validation";
+import { DOCK_PANEL_IDS, panelTitle, useDockPanelMenus } from "./dock-panel-menus";
 import type { DocumentKind } from "@tikz-editor/core/document/kind";
 
 // ── Panel IDs ─────────────────────────────────────────────────────────────────
 
-export const PANEL_IDS = {
-  source: "source",
-  canvas: "canvas",
-  figureNavigator: "figure-navigator",
-  inspector: "inspector",
-  builds: "builds",
-  notes: "notes",
-  objects: "objects",
-  styles: "styles",
-  assistant: "assistant",
-} as const;
+export const PANEL_IDS = DOCK_PANEL_IDS;
 
 const HOME_TABSET_IDS = ["source-tabset", "canvas-tabset", "right-tabset"] as const;
 
@@ -111,7 +102,8 @@ function buildDefaultLayout(): IJsonModel {
       tabEnableClose: true,
       tabEnableRename: false,
       tabEnablePopout: false,
-      splitterSize: 4,
+      // A hairline with a 9px hit area.
+      splitterSize: 1,
       splitterExtra: 4,
       tabSetEnableMaximize: false,
       tabSetEnableSingleTabStretch: true,
@@ -156,7 +148,10 @@ function buildDefaultLayout(): IJsonModel {
 function sanitizeLayout(json: IJsonModel): IJsonModel {
   const normalizedGlobal = {
     ...json.global,
-    tabSetEnableMaximize: false
+    tabSetEnableMaximize: false,
+    // Layouts saved before the hairline splitters keep their 4px gutters otherwise.
+    splitterSize: 1,
+    splitterExtra: 4
   };
   const jsonWithNormalizedGlobal: IJsonModel = {
     ...json,
@@ -558,18 +553,7 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
         m.doAction(Actions.deleteTab(panelId));
       } else {
         const home = PANEL_HOMES[panelId];
-        const nameMap: Record<string, string> = {
-          source: "Source",
-          canvas: "Canvas",
-          "figure-navigator": useEditorStore.getState().documentKind === "beamer" ? "Slides" : "Figures",
-          inspector: "Inspector",
-          builds: "Overlays",
-          notes: "Notes",
-          objects: "Objects",
-          styles: "Styles",
-          assistant: "Assistant",
-        };
-        const tabJson = { type: "tab", id: panelId, name: nameMap[panelId] ?? panelId, component: panelId };
+        const tabJson = { type: "tab", id: panelId, name: panelTitle(panelId, useEditorStore.getState().documentKind), component: panelId };
 
         const homeTabset = home ? m.getNodeById(home.tabsetId) : null;
         if (home && homeTabset) {
@@ -676,12 +660,31 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
     if (tab) m.doAction(Actions.renameTab(PANEL_IDS.figureNavigator, deckMode ? "Slides" : "Figures"));
   }, [figureCount, deckMode, model, kind]);
 
+  const layoutRef = useRef<Layout>(null);
+  const menuHost = useMemo(() => ({
+    getModel: () => modelRef.current,
+    redraw: () => { layoutRef.current?.redraw(); },
+    togglePanel: (panelId: string) => { handle.togglePanel(panelId); },
+    persist: () => {
+      saveDockLayout(modelRef.current.toJson(), kind);
+      syncLayoutStateToStore(modelRef.current, dispatchRef.current);
+    },
+  }), [handle, kind]);
+  const { onContextMenu, onRenderTab, onRenderTabSet, menu } = useDockPanelMenus(menuHost, kind);
+
   return (
-    <Layout
-      model={model}
-      factory={factory}
-      onModelChange={onModelChange}
-      realtimeResize
-    />
+    <>
+      <Layout
+        ref={layoutRef}
+        model={model}
+        factory={factory}
+        onModelChange={onModelChange}
+        onContextMenu={onContextMenu}
+        onRenderTab={onRenderTab}
+        onRenderTabSet={onRenderTabSet}
+        realtimeResize
+      />
+      {menu}
+    </>
   );
 }

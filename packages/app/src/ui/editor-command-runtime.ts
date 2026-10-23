@@ -439,6 +439,11 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     [APP_MENU_COMMAND_IDS.OVERLAY_THROUGH]: { enabled: false, run: () => {} },
     [APP_MENU_COMMAND_IDS.OVERLAY_EDIT]: { enabled: false, run: () => {} },
     [APP_MENU_COMMAND_IDS.OVERLAY_REMOVE]: { enabled: false, run: () => {} },
+    // Panel tab commands bind to the tab whose menu opened (see dock-panel-menus).
+    [APP_MENU_COMMAND_IDS.PANEL_CLOSE]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.PANEL_MOVE_LEFT]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.PANEL_MOVE_BELOW_CANVAS]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.PANEL_MOVE_RIGHT]: { enabled: false, run: () => {} },
     [APP_MENU_COMMAND_IDS.NEW_DOCUMENT]: {
       enabled: true,
       run: () => { dispatch((input.documentKind ?? documentKindForSource(source)) === "beamer" ? { type: "NEW_DOCUMENT", source: NEW_BEAMER_SOURCE } : { type: "NEW_DOCUMENT" }); }

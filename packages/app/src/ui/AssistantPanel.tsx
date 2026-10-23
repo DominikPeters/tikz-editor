@@ -451,9 +451,6 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   if (authState.requiresAuth && !authState.isLoggedIn) {
     return (
       <SidePanel className={css.panel ?? ""} data-testid="assistant-panel">
-        <SidePanel.Header className={css.header ?? ""}>
-          <div className={css.title}>Assistant</div>
-        </SidePanel.Header>
         <SidePanel.Content className={css.authRequired ?? ""}>
           <div className={css.authRequiredContent}>
             <p data-select="text">Sign in to use the assistant.</p>
@@ -478,9 +475,6 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   return (
     <SidePanel className={css.panel ?? ""} data-testid="assistant-panel">
       <SidePanel.Header className={css.header ?? ""}>
-        <div>
-          <div className={css.title}>Assistant</div>
-        </div>
         <button
           type="button"
           className={css.headerButton}

@@ -237,6 +237,39 @@ label and captions through.
   a narrow right dock at 220px.
 - Run `npm run test:e2e`.
 
+**As built (differences from the above):**
+
+- The tab code lives in `dock-panel-menus.tsx`; `PANEL_IDS` moved there
+  (re-exported from `DockLayout.tsx`) to avoid a circular import.
+- `onRenderTab` cannot set attributes on the tab element, so the label is a
+  `span.dock-tab-label[data-label]` inside the content. In icon mode the icon
+  sits inside the content too, which keeps `.flexlayout__tab_button_content`
+  visible and clickable for the e2e specs. Icon-only tabs drop their close
+  button; their context menu still has Close.
+- A strip has three modes: all labels, the selected tab's label beside the
+  others' icons, and icons only. Overflowing must be avoided rather than
+  corrected, because flexlayout's overflow button takes room and stays
+  unless the tabs fit beside it. So a strip whose width is not yet known
+  (its first render) shows icons only, then calls `Layout.redraw()` once
+  measured; a parent re-render does not reach the tab strips.
+- Hairline splitters made the default canvas about 6px wider, enough to give
+  the e2e rectangle side resize handles. That exposed a bug: the rotate
+  handle's stem was drawn over the top-middle resize handle, so pressing it
+  rotated. The rotate handle is now drawn first.
+- The ▾ menu lists the panels docked there and those whose home dock it is,
+  as checkable Show/Hide items reusing the `view.toggle-*-panel` commands. It
+  has no Move to… items; those are in the tab context menu, which uses new
+  context-only commands `panel.close` and `panel.move-{left,below-canvas,right}`.
+- The overflow menu stays flexlayout's (restyled) on desktop too: native
+  context menus take command ids, not arbitrary tabs, and icon collapse makes
+  overflow rare.
+- In-panel headers removed: Objects, Overlays (now a "Steps" header only when
+  paging is needed) and Assistant (the New chat button stays). Styles keeps its
+  header because it names the selection, not the panel.
+- Fixed in passing: `CanvasContextMenu` reset its position to the raw anchor
+  after mount, undoing the edge clamp, so menus opened near the right or
+  bottom edge ran off-screen.
+
 ## Phase 4 — Window chrome: toolbar, document tabs, status bar (S–M)
 
 **`Toolbar.module.css`:**

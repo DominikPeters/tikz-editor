@@ -13,91 +13,39 @@
   --color-5: var(--accent);
   --color-6: var(--border);
 
-  --color-splitter: var(--border);
-  --color-splitter-hover: var(--accent);
-  --color-splitter-drag: var(--accent);
+  --color-splitter: var(--separator);
+  --color-splitter-hover: color-mix(in srgb, var(--separator), var(--text) 28%);
+  --color-splitter-drag: color-mix(in srgb, var(--separator), var(--text) 28%);
 
-  --color-tabset-background: var(--bg-header);
-  --color-tabset-background-selected: var(--bg-header);
-  --color-tabset-header-background: var(--bg-header);
+  --color-tabset-background: var(--bg-inspector);
+  --color-tabset-background-selected: var(--bg-inspector);
+  --color-tabset-header-background: var(--bg-inspector);
   --color-tabset-header: var(--text);
-  --color-tabset-divider-line: var(--border);
+  --color-tabset-divider-line: var(--separator);
 
   --color-tab-selected: var(--text);
-  --color-tab-selected-background: var(--bg-pane);
-  --color-tab-unselected: var(--text-muted);
+  --color-tab-selected-background: var(--tab-selected-bg);
+  --color-tab-unselected: var(--label-secondary);
   --color-tab-unselected-background: transparent;
   --color-tab-content: var(--bg-pane);
 
-  --color-border-background: var(--bg-header);
-  --color-border-divider-line: var(--border);
+  --color-border-background: var(--bg-inspector);
+  --color-border-divider-line: var(--separator);
+  --color-toolbar-button-hover: color-mix(in srgb, var(--tab-selected-bg) 70%, transparent);
 
-  --font-size: 11px;
+  --font-size: calc(var(--app-ui-scale, 1) * 11px);
   --font-family: var(--font-ui);
 }
 
-/* Compact tab strip */
+/* ── Tab strip: recessed tabs, as in a macOS inspector header ───────────────── */
+
 .flexlayout__tabset_tabbar_outer {
-  height: 24px !important;
-  min-height: 24px !important;
-  background: var(--bg-app) !important;
+  height: calc(var(--app-ui-scale, 1) * 26px) !important;
+  min-height: calc(var(--app-ui-scale, 1) * 26px) !important;
+  background: var(--bg-inspector) !important;
+  align-items: center;
   -webkit-user-select: none;
   user-select: none;
-}
-
-.flexlayout__tab_button {
-  padding: 2px 6px !important;
-  font-size: 11px !important;
-  border: 1px solid transparent !important;
-  border-bottom: none !important;
-  border-radius: 0 !important;
-  margin-bottom: -1px;
-  background: transparent !important;
-  box-shadow: none !important;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.flexlayout__tab_button_content {
-  gap: 2px !important;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.flexlayout__tab_button:hover {
-  background: color-mix(in srgb, var(--btn-hover-bg) 40%, transparent) !important;
-}
-
-.flexlayout__tab_button--selected {
-  background: var(--bg-pane) !important;
-  border-color: var(--border) !important;
-  border-bottom: 1px solid var(--bg-pane) !important;
-}
-
-.flexlayout__tab_button--selected:hover {
-  background: var(--bg-pane) !important;
-  border-color: var(--border) !important;
-  border-bottom: 1px solid var(--bg-pane) !important;
-}
-
-.flexlayout__tab_button--unselected {
-  background: transparent !important;
-}
-
-.flexlayout__tab_button_top,
-.flexlayout__tab_button_bottom {
-  box-shadow: none !important;
-  border-radius: 0 !important;
-}
-
-.flexlayout__tabset_tabbar_inner_tab_container_top,
-.flexlayout__tabset_tabbar_inner_tab_container_bottom {
-  border: none !important;
-}
-
-.flexlayout__tabset_tabbar_inner_tab_container {
-  padding-left: 2px !important;
-  padding-right: 2px !important;
 }
 
 .flexlayout__tabset_tabbar_outer_top,
@@ -105,14 +53,227 @@
   padding: 0 4px !important;
 }
 
-/* Splitter styling */
-.flexlayout__splitter {
-  background-color: var(--border) !important;
+.flexlayout__tabset_tabbar_inner_tab_container {
+  align-items: center;
+  gap: 2px;
+  padding-left: 1px !important;
+  padding-right: 1px !important;
 }
 
-.flexlayout__splitter:hover {
-  background-color: var(--accent) !important;
+.flexlayout__tabset_tabbar_inner_tab_container_top,
+.flexlayout__tabset_tabbar_inner_tab_container_bottom {
+  border: none !important;
 }
+
+.flexlayout__tabset_tab_divider {
+  display: none;
+}
+
+.flexlayout__tab_button {
+  height: calc(var(--app-ui-scale, 1) * 19px);
+  gap: 3px;
+  padding: 0 7px !important;
+  border: 0 !important;
+  border-radius: 5px !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: var(--label-secondary);
+  font-size: calc(var(--app-ui-scale, 1) * 11px) !important;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.flexlayout__tab_button:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--tab-selected-bg) 55%, transparent) !important;
+}
+
+.flexlayout__tab_button--selected,
+.flexlayout__tab_button--selected:hover {
+  color: var(--text);
+  background: var(--tab-selected-bg) !important;
+}
+
+.flexlayout__tab_button_content {
+  align-items: center;
+  gap: 4px !important;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* The label reserves its semibold width, so selecting a tab moves nothing. */
+.dock-tab-label {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.dock-tab-label::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.flexlayout__tab_button--selected .dock-tab-label {
+  font-weight: 600;
+}
+
+.dock-tab-labelHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.dock-tab-iconOnly {
+  display: inline-flex;
+  align-items: center;
+}
+
+.dock-tab-icon {
+  flex-shrink: 0;
+  width: calc(var(--app-ui-scale, 1) * 13px);
+  height: calc(var(--app-ui-scale, 1) * 13px);
+}
+
+/* Close buttons appear on hover and on the selected tab (gray.css). */
+.flexlayout__tab_button_trailing {
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--app-ui-scale, 1) * 13px);
+  height: calc(var(--app-ui-scale, 1) * 13px);
+  margin-right: -3px;
+  border-radius: 3px !important;
+  color: var(--label-secondary);
+}
+
+.flexlayout__tab_button_trailing svg {
+  width: calc(var(--app-ui-scale, 1) * 9px);
+  height: calc(var(--app-ui-scale, 1) * 9px);
+}
+
+.flexlayout__tab_button_trailing:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 12%, transparent) !important;
+}
+
+/* Icon-only tabs stay compact; their context menu still offers Close. */
+.flexlayout__tab_button:has(.dock-tab-iconOnly) .flexlayout__tab_button_trailing {
+  display: none;
+}
+
+.flexlayout__tab_button_top,
+.flexlayout__tab_button_bottom {
+  box-shadow: none !important;
+}
+
+/* A dock with one panel shows its name as a plain title. */
+.flexlayout__tab_button_stretch {
+  padding: 0 6px !important;
+  color: var(--text);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  font-weight: 600;
+  cursor: default;
+}
+
+/* ── Strip buttons: the ▾ dock menu and the overflow button ────────────────── */
+
+.flexlayout__tab_toolbar_button,
+.flexlayout__tab_button_overflow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(var(--app-ui-scale, 1) * 19px);
+  min-width: calc(var(--app-ui-scale, 1) * 19px);
+  padding: 0 2px !important;
+  border-radius: 5px !important;
+  color: var(--label-secondary) !important;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.flexlayout__tab_toolbar_button:hover,
+.flexlayout__tab_button_overflow:hover {
+  color: var(--text) !important;
+  background: color-mix(in srgb, var(--tab-selected-bg) 70%, transparent) !important;
+}
+
+.flexlayout__tab_toolbar_button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 60%, transparent);
+  outline-offset: -1px;
+}
+
+.flexlayout__tab_toolbar_sticky_buttons_container {
+  padding-left: 2px !important;
+}
+
+.flexlayout__tab_button_overflow_count {
+  font-size: calc(var(--app-ui-scale, 1) * 10px);
+}
+
+/* ── Splitters: hairlines with a wider invisible hit area ──────────────────── */
+
+.flexlayout__splitter,
+.flexlayout__splitter:hover,
+.flexlayout__splitter_drag {
+  border-radius: 0 !important;
+}
+
+/* ── Drop zones ─────────────────────────────────────────────────────────────── */
+
+.flexlayout__outline_rect,
+.flexlayout__outline_rect_edge {
+  border: 0 !important;
+  border-radius: 7px !important;
+  background: color-mix(in srgb, var(--control-accent) 13%, transparent) !important;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--control-accent) 75%, transparent);
+}
+
+.flexlayout__edge_rect {
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--control-accent) 30%, transparent) !important;
+  border-color: var(--control-accent) !important;
+}
+
+/* ── Overflow menu (web; desktop shows tabs it cannot fit as icons) ───────── */
+
+.flexlayout__popup_menu_container {
+  min-width: 140px;
+  padding: 5px !important;
+  border: 0.5px solid var(--control-ring) !important;
+  border-radius: 8px !important;
+  background: var(--control-popup-bg) !important;
+  color: var(--text) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.06) !important;
+}
+
+.flexlayout__popup_menu_item {
+  display: flex;
+  align-items: center;
+  height: calc(var(--app-ui-scale, 1) * 22px);
+  padding: 0 10px !important;
+  border-radius: 4px !important;
+  cursor: default !important;
+}
+
+.flexlayout__popup_menu_item:hover {
+  background: var(--control-accent) !important;
+  color: #fff !important;
+}
+
+.flexlayout__popup_menu_item--selected {
+  background: transparent !important;
+  color: inherit !important;
+  font-weight: 600 !important;
+}
+
+/* ── Content ────────────────────────────────────────────────────────────────── */
 
 /* Tab content fills its container */
 .flexlayout__tab {
@@ -127,18 +288,6 @@
 /* Ensure panels fill their tab area */
 .flexlayout__tab > div:first-child {
   height: 100%;
-}
-
-/* Maximize/close button styling */
-.flexlayout__tab_toolbar_button {
-  color: var(--text-muted) !important;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.flexlayout__tab_toolbar_button:hover {
-  color: var(--text) !important;
-  background: var(--btn-hover-bg) !important;
 }
 
 .flexlayout__tabset_header,
@@ -158,11 +307,6 @@
 
 .flexlayout__tabset_header {
   box-shadow: none !important;
-}
-
-/* Edge dock indicators */
-.flexlayout__edge_rect {
-  border-color: var(--accent) !important;
 }
 
 /* Dark mode support — FlexLayout variables automatically inherit from
