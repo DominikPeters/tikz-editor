@@ -1,4 +1,19 @@
-import { APP_MENU_COMMAND_IDS, type AppMenuDefinition } from "./types.js";
+import { APP_MENU_COMMAND_IDS, type AppMenuCommandId, type AppMenuDefinition, type AppMenuItem, type AppMenuPlatformTarget } from "./types.js";
+
+/**
+ * A View menu panel toggle. Option-Command-digit is offered on macOS only:
+ * elsewhere Ctrl+Alt is how AltGr arrives, and AltGr+7/8 type { and [ on
+ * German and other keyboard layouts.
+ */
+function panelItem(commandId: AppMenuCommandId, label: string, digit: number, platforms?: readonly AppMenuPlatformTarget[]): AppMenuItem[] {
+  const elsewhere = (["web", "desktop-windows", "desktop-linux"] as const)
+    .filter(target => !platforms || platforms.includes(target) || (target !== "web" && platforms.includes("desktop")));
+  const onMac = !platforms || platforms.includes("desktop") || platforms.includes("desktop-macos");
+  return [
+    ...(onMac ? [{ kind: "command", commandId, label, accelerator: `Alt+CmdOrCtrl+${digit}`, platforms: ["desktop-macos"] } as const] : []),
+    ...(elsewhere.length ? [{ kind: "command", commandId, label, platforms: elsewhere } as const] : []),
+  ];
+}
 
 export const APP_MENU_DEFINITION = [
   {
@@ -549,39 +564,19 @@ export const APP_MENU_DEFINITION = [
         ]
       },
       { kind: "separator" },
-      {
-        kind: "command",
-        commandId: APP_MENU_COMMAND_IDS.TOGGLE_SOURCE_PANEL,
-        label: "Source Panel"
-      },
-      {
-        kind: "command",
-        commandId: APP_MENU_COMMAND_IDS.TOGGLE_INSPECTOR_PANEL,
-        label: "Inspector Panel"
-      },
-      {
-        kind: "command",
-        commandId: APP_MENU_COMMAND_IDS.TOGGLE_OBJECTS_PANEL,
-        label: "Objects Panel"
-      },
-      {
-        kind: "command",
-        commandId: APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL,
-        label: "Styles Panel"
-      },
-      { kind: "command", commandId: APP_MENU_COMMAND_IDS.TOGGLE_BUILDS_PANEL, label: "Overlays Panel" },
-      { kind: "command", commandId: APP_MENU_COMMAND_IDS.TOGGLE_NOTES_PANEL, label: "Notes Panel" },
-      {
-        kind: "command",
-        commandId: APP_MENU_COMMAND_IDS.TOGGLE_FIGURES_PANEL,
-        label: "Figures Panel"
-      },
-      {
-        kind: "command",
-        commandId: APP_MENU_COMMAND_IDS.TOGGLE_ASSISTANT_PANEL,
-        label: "Assistant Panel",
-        platforms: ["desktop"]
-      },
+      // Panels, grouped by the dock each lives in: left, below the canvas, right.
+      ...panelItem(APP_MENU_COMMAND_IDS.TOGGLE_SOURCE_PANEL, "Source", 1),
+      { kind: "separator" },
+      ...panelItem(APP_MENU_COMMAND_IDS.TOGGLE_FIGURES_PANEL, "Figures", 2),
+      ...panelItem(APP_MENU_COMMAND_IDS.TOGGLE_NOTES_PANEL, "Notes", 3),
+      { kind: "separator" },
+      ...panelItem(APP_MENU_COMMAND_IDS.TOGGLE_INSPECTOR_PANEL, "Inspector", 4),
+      ...panelItem(APP_MENU_COMMAND_IDS.TOGGLE_OBJECTS_PANEL, "Objects", 5),
+      ...panelItem(APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL, "Styles", 6),
+      ...panelItem(APP_MENU_COMMAND_IDS.TOGGLE_BUILDS_PANEL, "Overlays", 7),
+      ...panelItem(APP_MENU_COMMAND_IDS.TOGGLE_ASSISTANT_PANEL, "Assistant", 8, ["desktop"]),
+      { kind: "separator" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.RESET_PANEL_LAYOUT, label: "Reset Panel Layout" },
       { kind: "separator" },
       {
         kind: "submenu",

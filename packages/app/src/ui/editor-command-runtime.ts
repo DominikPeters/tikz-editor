@@ -1093,6 +1093,10 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
       enabled: onOpenManageWorkspaces != null,
       run: () => onOpenManageWorkspaces?.()
     },
+    [APP_MENU_COMMAND_IDS.RESET_PANEL_LAYOUT]: {
+      enabled: true,
+      run: () => { getDockLayoutHandle()?.resetLayout(); }
+    },
     [APP_MENU_COMMAND_IDS.OPEN_SETTINGS]: {
       enabled: onOpenSettings != null,
       run: () => onOpenSettings?.()

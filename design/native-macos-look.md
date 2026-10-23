@@ -340,6 +340,18 @@ Checked states already work: `editor-command-runtime.ts` sets `checked`, and
   existing accelerators and CodeMirror keymaps first.
 - Add "Reset Panel Layout", wired to `DockLayoutHandle.resetLayout()`.
 
+**As built (differences from the above):**
+
+- The shortcuts are macOS only. On Windows and Linux, Ctrl+Alt is how AltGr
+  arrives, and AltGr+7/8 type `{` and `[` on German and other layouts, so
+  Ctrl+Alt+digit would hijack typing in the source editor. `panelItem()` in
+  `default-menu.ts` emits a macOS-desktop item with the accelerator and a
+  plain item for the other targets.
+- On web, `App.tsx` handles Option-Command-digit (by `event.code`, since
+  Option changes `event.key`) when there is no native menu bar.
+- Order: Source 1; Figures/Slides 2, Notes 3; Inspector 4, Objects 5,
+  Styles 6, Overlays 7, Assistant 8.
+
 ## Phase 6 — Other panels and dark mode (M)
 
 **Audit the modules that inherit the new SidePanel look,** and align their own

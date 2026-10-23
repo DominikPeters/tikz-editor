@@ -9,6 +9,7 @@ import {
   APP_MENU_DEFINITION,
   filterAppMenuDefinitionForTarget,
   appMenuForDocument,
+  type AppMenuCommandId,
   type AppMenuPlatformTarget
 } from "../app-menu";
 import { flushPendingWorkspaceSave, useEditorStore } from "../store/store";
@@ -163,6 +164,18 @@ function menuTargetFromPlatformId(platformId: string): AppMenuPlatformTarget {
   }
   return "web";
 }
+
+/** View › Panels order; keep in step with the accelerators in default-menu.ts. */
+const PANEL_SHORTCUT_COMMANDS: Partial<Record<string, AppMenuCommandId>> = {
+  Digit1: APP_MENU_COMMAND_IDS.TOGGLE_SOURCE_PANEL,
+  Digit2: APP_MENU_COMMAND_IDS.TOGGLE_FIGURES_PANEL,
+  Digit3: APP_MENU_COMMAND_IDS.TOGGLE_NOTES_PANEL,
+  Digit4: APP_MENU_COMMAND_IDS.TOGGLE_INSPECTOR_PANEL,
+  Digit5: APP_MENU_COMMAND_IDS.TOGGLE_OBJECTS_PANEL,
+  Digit6: APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL,
+  Digit7: APP_MENU_COMMAND_IDS.TOGGLE_BUILDS_PANEL,
+  Digit8: APP_MENU_COMMAND_IDS.TOGGLE_ASSISTANT_PANEL,
+};
 
 function desktopOsFromPlatformId(platformId: string): "windows" | "macos" | "other" | null {
   if (!platformId.startsWith("desktop")) {
@@ -1750,6 +1763,16 @@ function EditorApp() {
           e.preventDefault();
         }
         return;
+      }
+
+      // Option-Command-1…8 toggle panels (View menu order). On a Mac only: Ctrl+Alt elsewhere
+      // is AltGr, which types characters. With a native menu bar the menu handles the key.
+      if (e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey && !getActiveEditorPlatform().menu?.usesNativeMenuBar) {
+        const panelCommand = PANEL_SHORTCUT_COMMANDS[e.code];
+        if (panelCommand && runtime.runCommand(panelCommand, "shortcut")) {
+          e.preventDefault();
+          return;
+        }
       }
 
       // Ctrl+Shift+D: toggle dev panel

@@ -129,6 +129,7 @@ export const APP_MENU_COMMAND_IDS = {
   TOGGLE_DEV_PANEL: "view.toggle-dev-panel",
   SAVE_WORKSPACE_AS: "view.save-workspace-as",
   MANAGE_WORKSPACES: "view.manage-workspaces",
+  RESET_PANEL_LAYOUT: "view.reset-panel-layout",
   OPEN_PGF_TIKZ_MANUAL: "help.open-pgf-tikz-manual",
   OPEN_GITHUB_REPOSITORY: "help.open-github-repository",
   OPEN_GITHUB_ISSUES: "help.open-github-issues",
