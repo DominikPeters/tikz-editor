@@ -1,6 +1,6 @@
 [package]
 name = "tikz-editor"
-version = "0.6.0"
+version = "1.0.0"
 description = "A WYSIWYG editor foundation for TikZ"
 authors = ["Dominik Peters"]
 license = "MIT"

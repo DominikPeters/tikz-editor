@@ -1,6 +1,6 @@
 {
   "name": "@tikz-editor/core",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "description": "Reusable TikZ parser/semantic/SVG engine",
   "type": "module",
   "main": "dist/index.js",
@@ -61,8 +61,8 @@
   "dependencies": {
     "@lezer/common": "^1.5.3",
     "@lezer/lr": "^1.4.11",
-    "@tikz-editor/lezer-tex": "0.6.0",
-    "@tikz-editor/lezer-tikz": "0.6.0",
+    "@tikz-editor/lezer-tex": "1.0.0",
+    "@tikz-editor/lezer-tikz": "1.0.0",
     "xml-formatter": "^3.6.7"
   },
   "devDependencies": {

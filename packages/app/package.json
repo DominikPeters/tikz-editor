@@ -1,6 +1,6 @@
 {
   "name": "@tikz-editor/app",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
@@ -59,8 +59,8 @@
     "@lezer/common": "^1.5.3",
     "@lezer/highlight": "^1.2.3",
     "@remixicon/react": "^4.9.0",
-    "@tikz-editor/core": "0.6.0",
-    "@tikz-editor/lang-tikz": "0.6.0",
+    "@tikz-editor/core": "1.0.0",
+    "@tikz-editor/lang-tikz": "1.0.0",
     "flexlayout-react": "^0.8.19",
     "ipe2tikz": "^1.0.0",
     "jspdf": "^4.2.0",
