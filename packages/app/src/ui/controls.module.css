@@ -1,0 +1,195 @@
+/* ── Shared native controls ───────────────────────────────────────────────── */
+/* AppKit-style small controls. Pull them into a module class with
+   `composes: popUp from "../controls.module.css";` (composes goes first). */
+
+/* ── Pop-up button ──────────────────────────────────────────────────────── */
+
+.popUp {
+  width: 100%;
+  min-height: calc(var(--app-ui-scale, 1) * var(--control-h));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  padding: 0 2px 0 7px;
+  border: 0;
+  border-radius: var(--radius-popup);
+  background: var(--control-popup-bg);
+  box-shadow: 0 0 0 0.5px var(--control-ring), var(--control-shadow);
+  color: var(--text);
+  font-family: inherit;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  line-height: 1.2;
+  text-align: left;
+  cursor: default;
+}
+
+.popUp:disabled {
+  color: var(--text-dim);
+  box-shadow: 0 0 0 0.5px var(--control-ring);
+}
+
+.popUp:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--control-accent) 45%, transparent);
+  outline-offset: 0;
+}
+
+.popUpIndicator {
+  width: calc(var(--app-ui-scale, 1) * 15px);
+  height: calc(var(--app-ui-scale, 1) * 15px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: var(--control-accent);
+  color: #ffffff;
+}
+
+.popUp:disabled .popUpIndicator {
+  background: color-mix(in srgb, var(--text) 25%, transparent);
+}
+
+.popUpIndicatorIcon {
+  width: calc(var(--app-ui-scale, 1) * 8px);
+  height: calc(var(--app-ui-scale, 1) * 11px);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── Text and number fields ─────────────────────────────────────────────── */
+
+.field {
+  min-width: 0;
+  min-height: calc(var(--app-ui-scale, 1) * var(--control-h));
+  box-sizing: border-box;
+  padding: 0 5px;
+  border: 0;
+  border-radius: var(--radius-field);
+  background: var(--control-bg);
+  box-shadow: 0 0 0 0.5px var(--control-ring), inset 0 0.5px 0 rgba(0, 0, 0, 0.05);
+  color: var(--text);
+  font-family: inherit;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  font-variant-numeric: tabular-nums;
+}
+
+.field:focus {
+  outline: none;
+  box-shadow:
+    0 0 0 0.5px var(--control-ring),
+    0 0 0 3px color-mix(in srgb, var(--control-accent) 45%, transparent);
+}
+
+.field:disabled {
+  color: var(--text-dim);
+  background: var(--btn-disabled-bg);
+}
+
+.field::placeholder {
+  color: var(--text-dim);
+}
+
+.fieldNumeric {
+  text-align: right;
+}
+
+.fieldUnit {
+  flex-shrink: 0;
+  font-size: calc(var(--app-ui-scale, 1) * 10px);
+  color: var(--label-secondary);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ── Segmented control ──────────────────────────────────────────────────── */
+
+.segmented {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 1px;
+  padding: 1px;
+  border-radius: var(--radius-popup);
+  background: var(--segment-track);
+}
+
+.segment {
+  flex: 1 1 0;
+  min-width: calc(var(--app-ui-scale, 1) * 20px);
+  min-height: calc(var(--app-ui-scale, 1) * 17px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.segment:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.segmentOn,
+.segmentOn:hover:not(:disabled) {
+  background: var(--segment-on-bg);
+  box-shadow: var(--segment-on-shadow);
+}
+
+.segmentMixed {
+  background: color-mix(in srgb, var(--segment-on-bg) 45%, transparent);
+}
+
+.segment:disabled {
+  color: var(--text-dim);
+}
+
+.segment:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 60%, transparent);
+  outline-offset: -1px;
+}
+
+/* ── Checkbox ───────────────────────────────────────────────────────────── */
+
+.checkbox {
+  margin: 0;
+  accent-color: var(--control-accent);
+}
+
+/* ── Recessed tab (dock tab strips, toolbar on-state) ───────────────────── */
+
+.recessedTab {
+  min-height: calc(var(--app-ui-scale, 1) * var(--control-h));
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-popup);
+  background: transparent;
+  color: var(--label-secondary);
+  font-family: inherit;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.recessedTab:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.recessedTabOn,
+.recessedTabOn:hover {
+  background: var(--tab-selected-bg);
+  color: var(--text);
+  font-weight: 600;
+}

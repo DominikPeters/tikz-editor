@@ -18,7 +18,7 @@ type LineWidthDropdownValue
 import {
 renderArrowTipDropdown,
 renderDashStyleDropdown,
-renderFillModeDropdown,
+renderFillModeSegments,
 renderFillPatternDropdown,
 renderFillShadingDropdown,
 renderLineCapDropdown,
@@ -168,34 +168,35 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
       const readoutText = property.displayLabel ?? property.value.toFixed(2);
       return (
         <div key={property.id} className={propertyClassName}>
-          <div className={css.sliderHeaderRow}>
-            <div className={css.propertyLabel}>{property.label}</div>
-            <div className={`${css.sliderReadout} ${valueClassName}`}>{readoutText}</div>
+          <div className={css.propertyLabel}>{property.label}</div>
+          <div className={css.sliderRow}>
+            {maybeWrapWithProvenanceTooltip(
+              provenance,
+              <input
+                className={css.sliderInput}
+                type="range"
+                aria-label={property.label}
+                min={property.min}
+                max={property.max}
+                step={property.step}
+                value={property.value}
+                disabled={!writable}
+                list={property.ticks && property.ticks.length > 0 ? datalistId : undefined}
+                onInput={(event) => {
+                  const next = Number(event.currentTarget.value);
+                  if (!Number.isFinite(next)) return;
+                  applySetProperty(property.write, String(next), { recordInHistory: false });
+                }}
+                onChange={(event) => {
+                  const next = Number(event.currentTarget.value);
+                  if (!Number.isFinite(next)) return;
+                  applySetProperty(property.write, String(next));
+                }}
+              />,
+              true
+            )}
+            <div className={`${css.sliderReadout} ${valueClassName ?? ""}`}>{readoutText}</div>
           </div>
-          {maybeWrapWithProvenanceTooltip(
-            provenance,
-            <input
-              className={css.sliderInput}
-              type="range"
-              min={property.min}
-              max={property.max}
-              step={property.step}
-              value={property.value}
-              disabled={!writable}
-              list={property.ticks && property.ticks.length > 0 ? datalistId : undefined}
-              onInput={(event) => {
-                const next = Number(event.currentTarget.value);
-                if (!Number.isFinite(next)) return;
-                applySetProperty(property.write, String(next), { recordInHistory: false });
-              }}
-              onChange={(event) => {
-                const next = Number(event.currentTarget.value);
-                if (!Number.isFinite(next)) return;
-                applySetProperty(property.write, String(next));
-              }}
-            />,
-            true
-          )}
           {property.ticks && property.ticks.length > 0 ? (
             <datalist id={datalistId}>
               {property.ticks.map((tick) => (
@@ -219,7 +220,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
     if (property.kind === "optionalLength") {
       return (
         <div key={property.id} className={propertyClassName}>
-          {renderSingleOptionalLengthField(property, true, provenance)}
+          {renderSingleOptionalLengthField(property, false, provenance)}
         </div>
       );
     }
@@ -407,7 +408,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
           <div className={css.propertyLabel}>{property.label}</div>
           {maybeWrapWithProvenanceTooltip(
             provenance,
-            renderFillModeDropdown(
+            renderFillModeSegments(
               {
                 label: property.label,
                 value: property.value,
@@ -417,9 +418,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
               (nextValue) => {
                 applyFillModeValue(property.write, nextValue, property.context);
                 setFillAdvancedOptionsOpen(nextValue !== "solid");
-              },
-              undefined,
-              valueClassName
+              }
             ),
             true
           )}

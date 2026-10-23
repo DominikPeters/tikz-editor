@@ -62,6 +62,28 @@
   --scrollbar-track: #f0f0f0;
   --scrollbar-thumb: #c6c6c6;
   --scrollbar-thumb-hover: #a8a8a8;
+
+  /* Native controls (AppKit-style small controls, see controls.module.css).
+     Sizes are unscaled; multiply by --app-ui-scale where they are used,
+     because the scale is set on the app root, not on :root. */
+  --bg-window:        #f6f6f6;   /* toolbar, tab bar, status bar */
+  --bg-inspector:     #f5f5f5;   /* side-panel background */
+  --separator:        #dedede;   /* section hairlines */
+  --label-secondary:  #636366;   /* row labels and captions */
+  --control-bg:       #ffffff;   /* fields and pop-up buttons */
+  --control-popup-bg: #ffffff;
+  --control-ring:     rgba(0, 0, 0, 0.22);
+  --control-shadow:   0 1px 1.5px rgba(0, 0, 0, 0.1);
+  --control-accent:   #007aff;
+  --segment-track:    rgba(0, 0, 0, 0.07);
+  --segment-on-bg:    #ffffff;
+  --segment-on-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.14);
+  --tab-selected-bg:  rgba(0, 0, 0, 0.09);
+  --control-h:        19px;
+  --row-min-h:        20px;
+  --inspector-label-col: minmax(64px, 84px);
+  --radius-field:     4px;
+  --radius-popup:     5px;
 }
 
 /* Windows desktop polish */
@@ -137,6 +159,21 @@
   --scrollbar-track: #1e1e1e;
   --scrollbar-thumb: #505050;
   --scrollbar-thumb-hover: #686868;
+
+  /* Native controls */
+  --bg-window:        #2b2b2d;
+  --bg-inspector:     #262628;
+  --separator:        #3a3a3c;
+  --label-secondary:  #a1a1a6;
+  --control-bg:       #1c1c1e;
+  --control-popup-bg: #48484b;
+  --control-ring:     rgba(255, 255, 255, 0.16);
+  --control-shadow:   inset 0 0.5px 0 rgba(255, 255, 255, 0.12);
+  --control-accent:   #0a84ff;
+  --segment-track:    #1c1c1e;
+  --segment-on-bg:    #5a5a5e;
+  --segment-on-shadow: none;
+  --tab-selected-bg:  rgba(255, 255, 255, 0.12);
 }
 
 html {

@@ -39,7 +39,7 @@ type PathMorphingDecorationDropdownValue
 import {
 renderArrowTipDropdown,
 renderDashStyleDropdown,
-renderFillModeDropdown,
+renderFillModeSegments,
 renderFillPatternDropdown,
 renderFillShadingDropdown,
 renderLineCapDropdown,
@@ -177,7 +177,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
     if (property.kind === "optionalLength") {
       return (
         <div key={property.id} className={propertyClassName}>
-          {renderMultiOptionalLengthField(property, true, provenance)}
+          {renderMultiOptionalLengthField(property, false, provenance)}
         </div>
       );
     }
@@ -360,7 +360,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
           <div className={css.propertyLabel}>{property.label}</div>
           {maybeWrapWithProvenanceTooltip(
             provenance,
-            renderFillModeDropdown(
+            renderFillModeSegments(
               {
                 label: property.label,
                 value: property.value,
@@ -371,8 +371,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
                 applyFillModeValueMany(property.writes, nextValue, property.contexts);
                 setFillAdvancedOptionsOpen(nextValue !== "solid");
               },
-              dropdownValue,
-              valueClassName
+              dropdownValue
             ),
             true
           )}

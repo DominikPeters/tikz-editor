@@ -849,12 +849,12 @@ test("group honors editor indent size and supports pointer-up drill-down behavio
   await expect(page.getByTestId("canvas-context-menu")).toBeVisible();
   await expect(page.getByTestId("canvas-context-cmd-edit.ungroup")).toBeEnabled();
   await page.keyboard.press("Escape");
-  await expect(page.getByText("scope", { exact: true })).toBeVisible();
+  await expect(page.getByText("Scope", { exact: true })).toBeVisible();
   await expect(page.getByText("Transform", { exact: true })).toBeVisible();
-  await expect(page.getByText("X shift", { exact: true })).toBeVisible();
-  await expect(page.getByText("Y shift", { exact: true })).toBeVisible();
-  await expect(page.getByText("X scale", { exact: true })).toBeVisible();
-  await expect(page.getByText("Y scale", { exact: true })).toBeVisible();
+  await expect(page.getByTitle("X shift", { exact: true })).toBeVisible();
+  await expect(page.getByTitle("Y shift", { exact: true })).toBeVisible();
+  await expect(page.getByTitle("X scale", { exact: true })).toBeVisible();
+  await expect(page.getByTitle("Y scale", { exact: true })).toBeVisible();
   await openMenuSection(page, "edit");
   await expect(page.getByTestId("menu-cmd-edit.ungroup")).toBeEnabled();
   await page.getByRole("menuitem", { name: "Transform" }).hover();

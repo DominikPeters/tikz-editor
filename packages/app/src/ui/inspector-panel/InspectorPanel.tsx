@@ -10,12 +10,13 @@ RiFontSansSerif,
 RiFontSerif,
 RiItalic
 } from "@remixicon/react";
-import { useCallback,useEffect,useMemo,useState,type FocusEvent,type JSX } from "react";
+import { useEffect,useState,type FocusEvent,type JSX,type ReactNode } from "react";
 import { CM_PER_PT, formatNumber } from "@tikz-editor/core/edit/format";
 import {
 getInspectorDescriptor,
 NODE_INNER_SEP_DEFAULT,
 TIKZPICTURE_GLOBAL_TARGET_ID,
+type InspectorDescriptor,
 type InspectorProperty,
 type NodeFontFamilyId,
 type NodeFontSizePresetId,
@@ -41,6 +42,7 @@ import { MULTI_ARRANGE_ACTIONS,type MultiArrangeAction } from "./arrange-actions
 import { InspectorMultiSection,InspectorSingleSection } from "./InspectorSections";
 import {
 clampNumber,
+compactPairPresentation,
 NODE_FONT_SIZE_MIXED_OPTION_VALUE,
 nodeFontButtonClass,
 type InspectorPropertyProvenance,
@@ -61,6 +63,7 @@ import css from "./InspectorPanel.module.css";
 import { resolveFigureBoundsWorld } from "@tikz-editor/core/edit/figure-bounds";
 import { RenderedTooltip } from "../RenderedTooltip";
 import { SidePanel } from "../SidePanel";
+import { CustomDropdown, type CustomDropdownOption } from "../CustomDropdown";
 import {
 getToolLabel,
 isCreationToolMode,
@@ -71,6 +74,20 @@ toolSupportsStroke
 
 type NumberChangeOptions = {
   recordInHistory?: boolean;
+};
+
+const FIGURE_BOUNDS_MODE_OPTIONS: readonly CustomDropdownOption<"auto" | "fixed">[] = [
+  { value: "auto", label: "Auto from content" },
+  { value: "fixed", label: "Fixed size" }
+];
+
+// Title shown above the inspector for a single selected element.
+const ELEMENT_KIND_TITLES: Record<InspectorDescriptor["elementKind"], string> = {
+  path: "Path",
+  circle: "Circle",
+  ellipse: "Ellipse",
+  text: "Node",
+  scope: "Scope"
 };
 
 type ScalarInspectorProperty =
@@ -242,13 +259,14 @@ export function InspectorPanel() {
       <input
         className={withValueProvenanceClass(css.textInput, provenance)}
         type="text"
+        aria-label={property.label}
         value={property.value}
         disabled={!writable}
         onChange={(event) => { applySetProperty(property.write, event.currentTarget.value); }}
       />
     );
     return (
-      <div>
+      <div className={css.fieldContents}>
         <div className={css.propertyLabel}>{property.label}</div>
         <div className={css.controlRow}>
           {maybeWrapWithProvenanceTooltip(provenance, textInput, true)}
@@ -828,18 +846,36 @@ export function InspectorPanel() {
 
   function renderScrubbableNumberLabel(
     label: string,
-    binding: NumberLabelScrubBinding
+    binding: NumberLabelScrubBinding,
+    baseClassName: string | undefined = css.propertyLabel,
+    title?: string
   ): JSX.Element {
     const className = binding.writable
-      ? `${css.propertyLabel} ${css.propertyLabelScrubbable}`
-      : `${css.propertyLabel} ${css.propertyLabelScrubbableDisabled}`;
+      ? `${baseClassName ?? ""} ${css.propertyLabelScrubbable}`
+      : `${baseClassName ?? ""} ${css.propertyLabelScrubbableDisabled}`;
     return (
       <div
         className={className}
+        title={title}
         onPointerDown={(event) => { beginNumberLabelScrub(event, binding); }}
       >
         {label}
       </div>
+    );
+  }
+
+  // A full-width field puts its label in the row's label column; a compact one
+  // (half of a pair) shows its label as a caption under the field instead.
+  function arrangeScalarField(
+    compact: boolean,
+    label: JSX.Element,
+    control: JSX.Element,
+    notes: ReactNode
+  ): JSX.Element {
+    return compact ? (
+      <div className={css.compactNumberField}>{control}{label}{notes}</div>
+    ) : (
+      <div className={css.fieldContents}>{label}{control}{notes}</div>
     );
   }
 
@@ -858,7 +894,8 @@ export function InspectorPanel() {
   function renderSingleNumberField(
     property: Extract<InspectorProperty, { kind: "number" }>,
     compact = false,
-    provenance: InspectorPropertyProvenance | null = null
+    provenance: InspectorPropertyProvenance | null = null,
+    caption?: string
   ): JSX.Element {
     const { writable, readOnlyReason } = getSingleNumberPropertyState(property);
     const draftKey = singleScalarDraftKey(property);
@@ -868,6 +905,7 @@ export function InspectorPanel() {
     const input = (
       <input
         className={withValueProvenanceClass(css.numberInput, valueProvenance)}
+        aria-label={property.label}
         type="number"
         step={property.step}
         min={property.min}
@@ -907,30 +945,32 @@ export function InspectorPanel() {
         }}
       />
     );
-    return (
-      <div className={compact ? css.compactNumberField : undefined}>
-        {renderScrubbableNumberLabel(property.label, {
-          writable,
-          value: property.value,
-          step: property.step,
-          ...(property.min === undefined ? {} : { min: property.min }),
-          ...(property.max === undefined ? {} : { max: property.max }),
-          onPreview: (next) => { handleNumberChange(property, String(next), { recordInHistory: false }); },
-          onCommit: (next) => { handleNumberChange(property, String(next)); }
-        })}
-        <div className={css.controlRow}>
-          {maybeWrapWithProvenanceTooltip(effectiveProvenance, input, true)}
-          {property.unit ? <span className={css.unitLabel}>{property.unit}</span> : null}
-        </div>
+    return arrangeScalarField(
+      compact,
+      renderScrubbableNumberLabel(compact ? (caption ?? property.label) : property.label, {
+        writable,
+        value: property.value,
+        step: property.step,
+        ...(property.min === undefined ? {} : { min: property.min }),
+        ...(property.max === undefined ? {} : { max: property.max }),
+        onPreview: (next) => { handleNumberChange(property, String(next), { recordInHistory: false }); },
+        onCommit: (next) => { handleNumberChange(property, String(next)); }
+      }, compact ? css.fieldCaption : css.propertyLabel, compact ? property.label : undefined),
+      <div className={css.controlRow}>
+        {maybeWrapWithProvenanceTooltip(effectiveProvenance, input, true)}
+        {property.unit ? <span className={css.unitLabel}>{property.unit}</span> : null}
+      </div>,
+      <>
         {renderReadOnlyReasonNote(readOnlyReason)}
-      </div>
+      </>
     );
   }
 
   function renderMultiNumberField(
     property: Extract<MultiInspectorProperty, { kind: "number" }>,
     compact = false,
-    provenance: InspectorPropertyProvenance | null = null
+    provenance: InspectorPropertyProvenance | null = null,
+    caption?: string
   ): JSX.Element {
     const writable = property.writes.some((write) => write.writable && write.elementId.length > 0);
     const draftKey = multiScalarDraftKey(property);
@@ -940,6 +980,7 @@ export function InspectorPanel() {
     const input = (
       <input
         className={withValueProvenanceClass(css.numberInput, valueProvenance)}
+        aria-label={property.label}
         type="number"
         step={property.step}
         min={property.min}
@@ -979,30 +1020,32 @@ export function InspectorPanel() {
         }}
       />
     );
-    return (
-      <div className={compact ? css.compactNumberField : undefined}>
-        {renderScrubbableNumberLabel(property.label, {
-          writable,
-          value: property.value,
-          step: property.step,
-          ...(property.min === undefined ? {} : { min: property.min }),
-          ...(property.max === undefined ? {} : { max: property.max }),
-          onPreview: (next) => { handleMultiNumberChange(property, String(next), { recordInHistory: false }); },
-          onCommit: (next) => { handleMultiNumberChange(property, String(next)); }
-        })}
-        <div className={css.controlRow}>
-          {maybeWrapWithProvenanceTooltip(effectiveProvenance, input, true)}
-          {property.unit ? <span className={css.unitLabel}>{property.unit}</span> : null}
-        </div>
+    return arrangeScalarField(
+      compact,
+      renderScrubbableNumberLabel(compact ? (caption ?? property.label) : property.label, {
+        writable,
+        value: property.value,
+        step: property.step,
+        ...(property.min === undefined ? {} : { min: property.min }),
+        ...(property.max === undefined ? {} : { max: property.max }),
+        onPreview: (next) => { handleMultiNumberChange(property, String(next), { recordInHistory: false }); },
+        onCommit: (next) => { handleMultiNumberChange(property, String(next)); }
+      }, compact ? css.fieldCaption : css.propertyLabel, compact ? property.label : undefined),
+      <div className={css.controlRow}>
+        {maybeWrapWithProvenanceTooltip(effectiveProvenance, input, true)}
+        {property.unit ? <span className={css.unitLabel}>{property.unit}</span> : null}
+      </div>,
+      <>
         {renderReadOnlyReasonNote(property.readOnlyReason)}
-      </div>
+      </>
     );
   }
 
   function renderSingleLengthField(
     property: Extract<InspectorProperty, { kind: "length" }>,
     compact = false,
-    provenance: InspectorPropertyProvenance | null = null
+    provenance: InspectorPropertyProvenance | null = null,
+    caption?: string
   ): JSX.Element {
     const capability = getInspectorPropertyCapabilityStatus(property);
     const capabilityReadOnlyReason =
@@ -1016,6 +1059,7 @@ export function InspectorPanel() {
     const input = (
       <input
         className={withValueProvenanceClass(css.numberInput, valueProvenance)}
+        aria-label={property.label}
         type="number"
         step={property.step}
         value={draftValue ?? formatNumber(property.value)}
@@ -1057,29 +1101,31 @@ export function InspectorPanel() {
         }}
       />
     );
-    return (
-      <div className={compact ? css.compactNumberField : undefined}>
-        {renderScrubbableNumberLabel(property.label, {
-          writable,
-          value: property.value,
-          step: property.step,
-          onPreview: (next) => { applySingleLengthValue(property, next, { recordInHistory: false }); },
-          onCommit: (next) => { applySingleLengthValue(property, next); }
-        })}
-        <div className={css.controlRow}>
-          {maybeWrapWithProvenanceTooltip(effectiveProvenance, input, true)}
-          <span className={css.unitLabel}>{property.unit}</span>
-        </div>
+    return arrangeScalarField(
+      compact,
+      renderScrubbableNumberLabel(compact ? (caption ?? property.label) : property.label, {
+        writable,
+        value: property.value,
+        step: property.step,
+        onPreview: (next) => { applySingleLengthValue(property, next, { recordInHistory: false }); },
+        onCommit: (next) => { applySingleLengthValue(property, next); }
+      }, compact ? css.fieldCaption : css.propertyLabel, compact ? property.label : undefined),
+      <div className={css.controlRow}>
+        {maybeWrapWithProvenanceTooltip(effectiveProvenance, input, true)}
+        <span className={css.unitLabel}>{property.unit}</span>
+      </div>,
+      <>
         {property.note ? <div className={css.propertyNote}>{property.note}</div> : null}
         {renderReadOnlyReasonNote(readOnlyReason)}
-      </div>
+      </>
     );
   }
 
   function renderMultiLengthField(
     property: Extract<MultiInspectorProperty, { kind: "length" }>,
     compact = false,
-    provenance: InspectorPropertyProvenance | null = null
+    provenance: InspectorPropertyProvenance | null = null,
+    caption?: string
   ): JSX.Element {
     const writable = property.writes.some((write) => write.writable && write.elementId.length > 0);
     const draftKey = multiScalarDraftKey(property);
@@ -1089,6 +1135,7 @@ export function InspectorPanel() {
     const input = (
       <input
         className={withValueProvenanceClass(css.numberInput, valueProvenance)}
+        aria-label={property.label}
         type="number"
         step={property.step}
         value={draftValue ?? (property.mixed ? "" : formatNumber(property.value))}
@@ -1130,29 +1177,31 @@ export function InspectorPanel() {
         }}
       />
     );
-    return (
-      <div className={compact ? css.compactNumberField : undefined}>
-        {renderScrubbableNumberLabel(property.label, {
-          writable,
-          value: property.value,
-          step: property.step,
-          onPreview: (next) => { applyMultiLengthValue(property, next, { recordInHistory: false }); },
-          onCommit: (next) => { applyMultiLengthValue(property, next); }
-        })}
-        <div className={css.controlRow}>
-          {maybeWrapWithProvenanceTooltip(effectiveProvenance, input, true)}
-          <span className={css.unitLabel}>{property.unit}</span>
-        </div>
+    return arrangeScalarField(
+      compact,
+      renderScrubbableNumberLabel(compact ? (caption ?? property.label) : property.label, {
+        writable,
+        value: property.value,
+        step: property.step,
+        onPreview: (next) => { applyMultiLengthValue(property, next, { recordInHistory: false }); },
+        onCommit: (next) => { applyMultiLengthValue(property, next); }
+      }, compact ? css.fieldCaption : css.propertyLabel, compact ? property.label : undefined),
+      <div className={css.controlRow}>
+        {maybeWrapWithProvenanceTooltip(effectiveProvenance, input, true)}
+        <span className={css.unitLabel}>{property.unit}</span>
+      </div>,
+      <>
         {property.note ? <div className={css.propertyNote}>{property.note}</div> : null}
         {renderReadOnlyReasonNote(property.readOnlyReason)}
-      </div>
+      </>
     );
   }
 
   function renderSingleOptionalLengthField(
     property: Extract<InspectorProperty, { kind: "optionalLength" }>,
     compact = false,
-    provenance: InspectorPropertyProvenance | null = null
+    provenance: InspectorPropertyProvenance | null = null,
+    caption?: string
   ): JSX.Element {
     const capability = getInspectorPropertyCapabilityStatus(property);
     const capabilityReadOnlyReason =
@@ -1165,6 +1214,7 @@ export function InspectorPanel() {
     const input = (
       <input
         className={withValueProvenanceClass(css.numberInput, provenance)}
+        aria-label={property.label}
         type="number"
         step={property.step}
         value={inputValue}
@@ -1206,23 +1256,25 @@ export function InspectorPanel() {
         }}
       />
     );
-    return (
-      <div className={compact ? css.compactNumberField : undefined}>
-        <div className={css.propertyLabel}>{property.label}</div>
-        <div className={css.controlRow}>
-          {maybeWrapWithProvenanceTooltip(provenance, input, true)}
-          <span className={css.unitLabel}>{property.unit}</span>
-        </div>
+    return arrangeScalarField(
+      compact,
+      <div className={compact ? css.fieldCaption : css.propertyLabel} title={compact ? property.label : undefined}>{compact ? (caption ?? property.label) : property.label}</div>,
+      <div className={css.controlRow}>
+        {maybeWrapWithProvenanceTooltip(provenance, input, true)}
+        <span className={css.unitLabel}>{property.unit}</span>
+      </div>,
+      <>
         {property.note ? <div className={css.propertyNote}>{property.note}</div> : null}
         {renderReadOnlyReasonNote(readOnlyReason)}
-      </div>
+      </>
     );
   }
 
   function renderMultiOptionalLengthField(
     property: Extract<MultiInspectorProperty, { kind: "optionalLength" }>,
     compact = false,
-    provenance: InspectorPropertyProvenance | null = null
+    provenance: InspectorPropertyProvenance | null = null,
+    caption?: string
   ): JSX.Element {
     const writable = property.writes.some((write) => write.writable && write.elementId.length > 0);
     const draftKey = multiOptionalLengthDraftKey(property);
@@ -1231,6 +1283,7 @@ export function InspectorPanel() {
     const input = (
       <input
         className={withValueProvenanceClass(css.numberInput, provenance)}
+        aria-label={property.label}
         type="number"
         step={property.step}
         value={inputValue}
@@ -1272,16 +1325,17 @@ export function InspectorPanel() {
         }}
       />
     );
-    return (
-      <div className={compact ? css.compactNumberField : undefined}>
-        <div className={css.propertyLabel}>{property.label}</div>
-        <div className={css.controlRow}>
-          {maybeWrapWithProvenanceTooltip(provenance, input, true)}
-          <span className={css.unitLabel}>{property.unit}</span>
-        </div>
+    return arrangeScalarField(
+      compact,
+      <div className={compact ? css.fieldCaption : css.propertyLabel} title={compact ? property.label : undefined}>{compact ? (caption ?? property.label) : property.label}</div>,
+      <div className={css.controlRow}>
+        {maybeWrapWithProvenanceTooltip(provenance, input, true)}
+        <span className={css.unitLabel}>{property.unit}</span>
+      </div>,
+      <>
         {property.note ? <div className={css.propertyNote}>{property.note}</div> : null}
         {renderReadOnlyReasonNote(property.readOnlyReason)}
-      </div>
+      </>
     );
   }
 
@@ -1334,10 +1388,14 @@ export function InspectorPanel() {
     leftProvenance: InspectorPropertyProvenance | null = null,
     rightProvenance: InspectorPropertyProvenance | null = null
   ): JSX.Element {
+    const presentation = compactPairPresentation(left, right);
     return (
-      <div key={`${left.id}:${right.id}`} className={css.compactNumberPair}>
-        {renderSingleNumberField(left, true, leftProvenance)}
-        {renderSingleNumberField(right, true, rightProvenance)}
+      <div key={`${left.id}:${right.id}`} className={css.property}>
+        <div className={css.propertyLabel}>{presentation.label}</div>
+        <div className={css.compactNumberPair}>
+          {renderSingleNumberField(left, true, leftProvenance, presentation.captions[0])}
+          {renderSingleNumberField(right, true, rightProvenance, presentation.captions[1])}
+        </div>
       </div>
     );
   }
@@ -1348,10 +1406,14 @@ export function InspectorPanel() {
     leftProvenance: InspectorPropertyProvenance | null,
     rightProvenance: InspectorPropertyProvenance | null
   ): JSX.Element {
+    const presentation = compactPairPresentation(left, right);
     return (
-      <div key={`${left.id}:${right.id}`} className={css.compactNumberPair}>
-        {renderMultiNumberField(left, true, leftProvenance)}
-        {renderMultiNumberField(right, true, rightProvenance)}
+      <div key={`${left.id}:${right.id}`} className={css.property}>
+        <div className={css.propertyLabel}>{presentation.label}</div>
+        <div className={css.compactNumberPair}>
+          {renderMultiNumberField(left, true, leftProvenance, presentation.captions[0])}
+          {renderMultiNumberField(right, true, rightProvenance, presentation.captions[1])}
+        </div>
       </div>
     );
   }
@@ -1362,10 +1424,14 @@ export function InspectorPanel() {
     leftProvenance: InspectorPropertyProvenance | null = null,
     rightProvenance: InspectorPropertyProvenance | null = null
   ): JSX.Element {
+    const presentation = compactPairPresentation(left, right);
     return (
-      <div key={`${left.id}:${right.id}`} className={css.compactNumberPair}>
-        {renderSingleLengthField(left, true, leftProvenance)}
-        {renderSingleLengthField(right, true, rightProvenance)}
+      <div key={`${left.id}:${right.id}`} className={css.property}>
+        <div className={css.propertyLabel}>{presentation.label}</div>
+        <div className={css.compactNumberPair}>
+          {renderSingleLengthField(left, true, leftProvenance, presentation.captions[0])}
+          {renderSingleLengthField(right, true, rightProvenance, presentation.captions[1])}
+        </div>
       </div>
     );
   }
@@ -1376,10 +1442,14 @@ export function InspectorPanel() {
     leftProvenance: InspectorPropertyProvenance | null,
     rightProvenance: InspectorPropertyProvenance | null
   ): JSX.Element {
+    const presentation = compactPairPresentation(left, right);
     return (
-      <div key={`${left.id}:${right.id}`} className={css.compactNumberPair}>
-        {renderMultiLengthField(left, true, leftProvenance)}
-        {renderMultiLengthField(right, true, rightProvenance)}
+      <div key={`${left.id}:${right.id}`} className={css.property}>
+        <div className={css.propertyLabel}>{presentation.label}</div>
+        <div className={css.compactNumberPair}>
+          {renderMultiLengthField(left, true, leftProvenance, presentation.captions[0])}
+          {renderMultiLengthField(right, true, rightProvenance, presentation.captions[1])}
+        </div>
       </div>
     );
   }
@@ -1588,64 +1658,6 @@ export function InspectorPanel() {
     return renderMultiInspectorProperty(property, propertyRendererApi);
   }
 
-  const singleFillModeProperty = useMemo(
-    () =>
-      renderedDescriptor?.sections
-        .find((section) => section.id === "fill")
-        ?.properties.find(
-          (property): property is Extract<InspectorProperty, { kind: "fillMode" }> =>
-            property.kind === "fillMode"
-        ),
-    [renderedDescriptor]
-  );
-  const fillModeSingleCanWrite = Boolean(
-    singleFillModeProperty &&
-      singleFillModeProperty.write.writable &&
-      getInspectorPropertyCapabilityStatus(singleFillModeProperty).status !== "unsupported"
-  );
-  const onEnableGradientFillSingle = useCallback(() => {
-    if (!singleFillModeProperty || !fillModeSingleCanWrite) {
-      return;
-    }
-    setFillAdvancedOptionsOpen(true);
-    applyFillModeValue(singleFillModeProperty.write, "gradient", singleFillModeProperty.context);
-  }, [singleFillModeProperty, fillModeSingleCanWrite, applyFillModeValue]);
-  const onEnablePatternFillSingle = useCallback(() => {
-    if (!singleFillModeProperty || !fillModeSingleCanWrite) {
-      return;
-    }
-    setFillAdvancedOptionsOpen(true);
-    applyFillModeValue(singleFillModeProperty.write, "pattern", singleFillModeProperty.context);
-  }, [singleFillModeProperty, fillModeSingleCanWrite, applyFillModeValue]);
-
-  const multiFillModeProperty = useMemo(
-    () =>
-      renderedMultiModel?.sections
-        .find((section) => section.id === "fill")
-        ?.properties.find(
-          (property): property is Extract<MultiInspectorProperty, { kind: "fillMode" }> =>
-            property.kind === "fillMode"
-        ),
-    [renderedMultiModel]
-  );
-  const fillModeMultiCanWrite = Boolean(
-    multiFillModeProperty?.writes.some((write) => write.writable && write.elementId.length > 0)
-  );
-  const onEnableGradientFillMulti = useCallback(() => {
-    if (!multiFillModeProperty || !fillModeMultiCanWrite) {
-      return;
-    }
-    setFillAdvancedOptionsOpen(true);
-    applyFillModeValueMany(multiFillModeProperty.writes, "gradient", multiFillModeProperty.contexts);
-  }, [multiFillModeProperty, fillModeMultiCanWrite, applyFillModeValueMany]);
-  const onEnablePatternFillMulti = useCallback(() => {
-    if (!multiFillModeProperty || !fillModeMultiCanWrite) {
-      return;
-    }
-    setFillAdvancedOptionsOpen(true);
-    applyFillModeValueMany(multiFillModeProperty.writes, "pattern", multiFillModeProperty.contexts);
-  }, [multiFillModeProperty, fillModeMultiCanWrite, applyFillModeValueMany]);
-
   function makeGlobalTransformNumberProperty(
     key: "xscale" | "yscale",
     label: string
@@ -1706,11 +1718,11 @@ export function InspectorPanel() {
   ): JSX.Element {
     return (
       <div className={css.compactNumberField}>
-        <div className={css.propertyLabel}>{label}</div>
         <div className={css.controlRow}>
           <input
             className={css.numberInput}
             type="number"
+            aria-label={`Figure ${label.toLowerCase()}`}
             step={0.1}
             min={key === "width" || key === "height" ? 0 : undefined}
             value={formatNumber(value)}
@@ -1728,6 +1740,7 @@ export function InspectorPanel() {
           />
           <span className={css.unitLabel}>cm</span>
         </div>
+        <div className={css.fieldCaption}>{label}</div>
       </div>
     );
   }
@@ -1739,35 +1752,37 @@ export function InspectorPanel() {
       <>
         <div className={css.property}>
           <div className={css.propertyLabel}>Mode</div>
-          <div className={css.controlRow}>
-            <select
-              className={css.numberInput}
-              value={fixed ? "fixed" : "auto"}
-              onChange={(event) => {
-                if (event.currentTarget.value === "auto") {
-                  dispatch({
-                    type: "APPLY_EDIT_ACTION",
-                    action: { kind: "setFigureBounds", mode: "auto" }
-                  });
-                  return;
-                }
-                applyFigureBoundsValue(values);
-              }}
-            >
-              <option value="auto">Auto from content</option>
-              <option value="fixed">Fixed size</option>
-            </select>
-          </div>
+          <CustomDropdown
+            ariaLabel="Figure bounds mode"
+            value={fixed ? "fixed" : "auto"}
+            options={FIGURE_BOUNDS_MODE_OPTIONS}
+            onChange={(nextValue) => {
+              if (nextValue === "auto") {
+                dispatch({
+                  type: "APPLY_EDIT_ACTION",
+                  action: { kind: "setFigureBounds", mode: "auto" }
+                });
+                return;
+              }
+              applyFigureBoundsValue(values);
+            }}
+          />
         </div>
         {fixed ? (
           <>
-            <div className={css.compactNumberPair}>
-              {renderFigureBoundsNumberField("X", values.x, "x", false)}
-              {renderFigureBoundsNumberField("Y", values.y, "y", false)}
+            <div className={css.property}>
+              <div className={css.propertyLabel}>Position</div>
+              <div className={css.compactNumberPair}>
+                {renderFigureBoundsNumberField("X", values.x, "x", false)}
+                {renderFigureBoundsNumberField("Y", values.y, "y", false)}
+              </div>
             </div>
-            <div className={css.compactNumberPair}>
-              {renderFigureBoundsNumberField("Width", values.width, "width", false)}
-              {renderFigureBoundsNumberField("Height", values.height, "height", false)}
+            <div className={css.property}>
+              <div className={css.propertyLabel}>Size</div>
+              <div className={css.compactNumberPair}>
+                {renderFigureBoundsNumberField("Width", values.width, "width", false)}
+                {renderFigureBoundsNumberField("Height", values.height, "height", false)}
+              </div>
             </div>
           </>
         ) : null}
@@ -1783,13 +1798,13 @@ export function InspectorPanel() {
         <SidePanel.Header>tikzpicture</SidePanel.Header>
         <SidePanel.Content className={css.content ?? ""}>
           <div className={css.elementInfo}>
-            <SidePanel.Section>
+            <SidePanel.Section collapseId="inspector:picture-transform">
               <SidePanel.SectionHeader>
                 <span>Transform</span>
               </SidePanel.SectionHeader>
               <SidePanel.SectionBody>{renderSingleNumberPair(xscale, yscale)}</SidePanel.SectionBody>
             </SidePanel.Section>
-            <SidePanel.Section>
+            <SidePanel.Section collapseId="inspector:figure-bounds">
               <SidePanel.SectionHeader>
                 <span>Figure Bounds</span>
               </SidePanel.SectionHeader>
@@ -1961,7 +1976,7 @@ export function InspectorPanel() {
           </SidePanel.Content>
         ) : (
           <>
-            <SidePanel.Header>{renderedDescriptor.elementKind}</SidePanel.Header>
+            <SidePanel.Header>{ELEMENT_KIND_TITLES[renderedDescriptor.elementKind]}</SidePanel.Header>
             <SidePanel.Content className={css.content ?? ""}>
               <div className={css.elementInfo}>
                 {renderedDescriptor.readOnlyReason ? (
@@ -1980,14 +1995,10 @@ export function InspectorPanel() {
                     fillMoreOptionsOpen={fillMoreOptionsOpen}
                     setFillMoreOptionsOpen={setFillMoreOptionsOpen}
                     fillAdvancedOptionsOpen={fillAdvancedOptionsOpen}
-                    setFillAdvancedOptionsOpen={setFillAdvancedOptionsOpen}
                     renderedSinglePropertyProvenance={renderedSinglePropertyProvenance}
                     renderSingleNumberPair={renderSingleNumberPair}
                     renderSingleLengthPair={renderSingleLengthPair}
                     renderProperty={renderProperty}
-                    onEnableGradientFillSingle={onEnableGradientFillSingle}
-                    onEnablePatternFillSingle={onEnablePatternFillSingle}
-                    fillModeSingleCanWrite={fillModeSingleCanWrite}
                   />
                 ))}
               </div>
@@ -2014,14 +2025,10 @@ export function InspectorPanel() {
                     fillMoreOptionsOpen={fillMoreOptionsOpen}
                     setFillMoreOptionsOpen={setFillMoreOptionsOpen}
                     fillAdvancedOptionsOpen={fillAdvancedOptionsOpen}
-                    setFillAdvancedOptionsOpen={setFillAdvancedOptionsOpen}
                     renderedMultiPropertyProvenance={renderedMultiPropertyProvenance}
                     renderMultiNumberPair={renderMultiNumberPair}
                     renderMultiLengthPair={renderMultiLengthPair}
                     renderMultiProperty={renderMultiProperty}
-                    onEnableGradientFillMulti={onEnableGradientFillMulti}
-                    onEnablePatternFillMulti={onEnablePatternFillMulti}
-                    fillModeMultiCanWrite={fillModeMultiCanWrite}
                   />
                 ))
               )}

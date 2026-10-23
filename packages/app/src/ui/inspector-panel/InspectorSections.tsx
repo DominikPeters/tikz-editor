@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import { Fragment, type JSX, type ReactNode } from "react";
 import type { InspectorDescriptor, InspectorProperty } from "@tikz-editor/core/edit/inspector";
 import {
   type MultiInspectorProperty,
@@ -23,7 +23,6 @@ export function InspectorSingleSection(props: {
   fillMoreOptionsOpen: boolean;
   setFillMoreOptionsOpen: (updater: (current: boolean) => boolean) => void;
   fillAdvancedOptionsOpen: boolean;
-  setFillAdvancedOptionsOpen: (next: boolean) => void;
   renderedSinglePropertyProvenance: InspectorPropertyProvenanceMap;
   renderSingleNumberPair: (
     left: Extract<InspectorProperty, { kind: "number" }>,
@@ -38,9 +37,6 @@ export function InspectorSingleSection(props: {
     rightProvenance: InspectorPropertyProvenance | null
   ) => JSX.Element;
   renderProperty: (property: InspectorProperty) => JSX.Element;
-  onEnableGradientFillSingle: () => void;
-  onEnablePatternFillSingle: () => void;
-  fillModeSingleCanWrite: boolean;
 }) {
   const {
     section,
@@ -49,14 +45,10 @@ export function InspectorSingleSection(props: {
     fillMoreOptionsOpen,
     setFillMoreOptionsOpen,
     fillAdvancedOptionsOpen,
-    setFillAdvancedOptionsOpen,
     renderedSinglePropertyProvenance,
     renderSingleNumberPair,
     renderSingleLengthPair,
-    renderProperty,
-    onEnableGradientFillSingle,
-    onEnablePatternFillSingle,
-    fillModeSingleCanWrite
+    renderProperty
   } = props;
 
   const strokeMoreOptionsProperties =
@@ -79,10 +71,6 @@ export function InspectorSingleSection(props: {
     section.id === "fill"
       ? section.properties.filter((property) => isFillAdvancedPropertyId(property.id))
       : [];
-  const fillModeProperty =
-    section.id === "fill"
-      ? section.properties.find((property): property is Extract<InspectorProperty, { kind: "fillMode" }> => property.kind === "fillMode")
-      : undefined;
   const forceShowFillAdvancedOptions = fillAdvancedProperties.some((property) =>
     shouldAutoShowFillAdvancedOptions(property)
   );
@@ -93,23 +81,34 @@ export function InspectorSingleSection(props: {
       : section.id === "fill"
         ? section.properties.filter((property) => {
             if (!showFillMoreOptions && isFillMoreOptionsPropertyId(property.id)) return false;
-            if (!showFillAdvancedOptions && isFillAdvancedPropertyId(property.id)) return false;
+            if (!showFillAdvancedOptions && property.kind !== "fillMode" && isFillAdvancedPropertyId(property.id)) return false;
             if (showFillAdvancedOptions && property.id === "fill-color") return false;
             return true;
           })
         : section.properties;
+  const orderedProperties = section.id === "fill" ? fillModeFirst(visibleProperties) : visibleProperties;
 
   return (
-    <SidePanel.Section key={section.id}>
-      <SidePanel.SectionHeader>
-        <span>{section.title}</span>
+    <SidePanel.Section key={section.id} collapseId={`inspector:${section.id}`}>
+      <SidePanel.SectionHeader
+        accessory={renderMoreOptionsToggle({
+          sectionId: section.id,
+          strokeToggleAvailable: strokeMoreOptionsProperties.length > 0 && !forceShowStrokeMoreOptions,
+          showStrokeMoreOptions,
+          setStrokeMoreOptionsOpen,
+          fillToggleAvailable: fillMoreOptionsProperties.length > 0 && !forceShowFillMoreOptions,
+          showFillMoreOptions,
+          setFillMoreOptionsOpen
+        })}
+      >
+        {section.title}
       </SidePanel.SectionHeader>
       <SidePanel.SectionBody>
-        {visibleProperties.map((property, index) => {
-          if (index > 0 && shouldRenderCompactPair(visibleProperties[index - 1], property)) {
+        {orderedProperties.map((property, index) => {
+          if (index > 0 && shouldRenderCompactPair(orderedProperties[index - 1], property)) {
             return null;
           }
-          const next = visibleProperties[index + 1];
+          const next = orderedProperties[index + 1];
           if (shouldRenderCompactPair(property, next)) {
             if (property.kind === "number" && next?.kind === "number") {
               const left = property;
@@ -133,72 +132,15 @@ export function InspectorSingleSection(props: {
             }
             if (property.kind === "nodeTextAlign" && next?.kind === "optionalLength") {
               return (
-                <div key={`${property.id}:${next.id}`} className={css.compactNumberPair}>
+                <Fragment key={`${property.id}:${next.id}`}>
                   {renderProperty(property)}
                   {renderProperty(next)}
-                </div>
+                </Fragment>
               );
             }
           }
           return renderProperty(property);
         })}
-        {section.id === "stroke" &&
-        strokeMoreOptionsProperties.length > 0 &&
-        !forceShowStrokeMoreOptions ? (
-          <button
-            type="button"
-            className={css.moreOptionsToggle}
-            onClick={() => { setStrokeMoreOptionsOpen((current) => !current); }}
-          >
-            {showStrokeMoreOptions ? "fewer options.." : "more options.."}
-          </button>
-        ) : null}
-        {section.id === "fill" &&
-        fillMoreOptionsProperties.length > 0 &&
-        !forceShowFillMoreOptions ? (
-          <button
-            type="button"
-            className={css.moreOptionsToggle}
-            onClick={() => { setFillMoreOptionsOpen((current) => !current); }}
-          >
-            {showFillMoreOptions ? "fewer options.." : "more options.."}
-          </button>
-        ) : null}
-        {section.id === "fill" &&
-        fillAdvancedProperties.length > 0 &&
-        !showFillAdvancedOptions &&
-        fillModeProperty ? (
-          <div className={css.fillQuickActions}>
-            <button
-              type="button"
-              className={css.moreOptionsToggle}
-              disabled={!fillModeSingleCanWrite}
-              onClick={() => {
-                if (!fillModeSingleCanWrite) {
-                  return;
-                }
-                setFillAdvancedOptionsOpen(true);
-                onEnableGradientFillSingle();
-              }}
-            >
-              + gradient
-            </button>
-            <button
-              type="button"
-              className={css.moreOptionsToggle}
-              disabled={!fillModeSingleCanWrite}
-              onClick={() => {
-                if (!fillModeSingleCanWrite) {
-                  return;
-                }
-                setFillAdvancedOptionsOpen(true);
-                onEnablePatternFillSingle();
-              }}
-            >
-              + pattern
-            </button>
-          </div>
-        ) : null}
       </SidePanel.SectionBody>
     </SidePanel.Section>
   );
@@ -211,7 +153,6 @@ export function InspectorMultiSection(props: {
   fillMoreOptionsOpen: boolean;
   setFillMoreOptionsOpen: (updater: (current: boolean) => boolean) => void;
   fillAdvancedOptionsOpen: boolean;
-  setFillAdvancedOptionsOpen: (next: boolean) => void;
   renderedMultiPropertyProvenance: InspectorPropertyProvenanceMap;
   renderMultiNumberPair: (
     left: Extract<MultiInspectorProperty, { kind: "number" }>,
@@ -226,9 +167,6 @@ export function InspectorMultiSection(props: {
     rightProvenance: InspectorPropertyProvenance | null
   ) => JSX.Element;
   renderMultiProperty: (property: MultiInspectorProperty) => JSX.Element | null;
-  onEnableGradientFillMulti: () => void;
-  onEnablePatternFillMulti: () => void;
-  fillModeMultiCanWrite: boolean;
 }) {
   const {
     section,
@@ -237,14 +175,10 @@ export function InspectorMultiSection(props: {
     fillMoreOptionsOpen,
     setFillMoreOptionsOpen,
     fillAdvancedOptionsOpen,
-    setFillAdvancedOptionsOpen,
     renderedMultiPropertyProvenance,
     renderMultiNumberPair,
     renderMultiLengthPair,
-    renderMultiProperty,
-    onEnableGradientFillMulti,
-    onEnablePatternFillMulti,
-    fillModeMultiCanWrite
+    renderMultiProperty
   } = props;
 
   const strokeMoreOptionsProperties =
@@ -267,10 +201,6 @@ export function InspectorMultiSection(props: {
     section.id === "fill"
       ? section.properties.filter((property) => isFillAdvancedPropertyId(property.id))
       : [];
-  const fillModeProperty =
-    section.id === "fill"
-      ? section.properties.find((property): property is Extract<MultiInspectorProperty, { kind: "fillMode" }> => property.kind === "fillMode")
-      : undefined;
   const forceShowFillAdvancedOptions = fillAdvancedProperties.some((property) =>
     shouldAutoShowFillAdvancedOptions(property)
   );
@@ -281,23 +211,34 @@ export function InspectorMultiSection(props: {
       : section.id === "fill"
         ? section.properties.filter((property) => {
             if (!showFillMoreOptions && isFillMoreOptionsPropertyId(property.id)) return false;
-            if (!showFillAdvancedOptions && isFillAdvancedPropertyId(property.id)) return false;
+            if (!showFillAdvancedOptions && property.kind !== "fillMode" && isFillAdvancedPropertyId(property.id)) return false;
             if (showFillAdvancedOptions && property.id === "fill-color") return false;
             return true;
           })
         : section.properties;
+  const orderedProperties = section.id === "fill" ? fillModeFirst(visibleProperties) : visibleProperties;
 
   return (
-    <SidePanel.Section key={section.id}>
-      <SidePanel.SectionHeader>
-        <span>{section.title}</span>
+    <SidePanel.Section key={section.id} collapseId={`inspector:${section.id}`}>
+      <SidePanel.SectionHeader
+        accessory={renderMoreOptionsToggle({
+          sectionId: section.id,
+          strokeToggleAvailable: strokeMoreOptionsProperties.length > 0 && !forceShowStrokeMoreOptions,
+          showStrokeMoreOptions,
+          setStrokeMoreOptionsOpen,
+          fillToggleAvailable: fillMoreOptionsProperties.length > 0 && !forceShowFillMoreOptions,
+          showFillMoreOptions,
+          setFillMoreOptionsOpen
+        })}
+      >
+        {section.title}
       </SidePanel.SectionHeader>
       <SidePanel.SectionBody>
-        {visibleProperties.map((property, index) => {
-          if (index > 0 && shouldRenderCompactPair(visibleProperties[index - 1], property)) {
+        {orderedProperties.map((property, index) => {
+          if (index > 0 && shouldRenderCompactPair(orderedProperties[index - 1], property)) {
             return null;
           }
-          const next = visibleProperties[index + 1];
+          const next = orderedProperties[index + 1];
           if (shouldRenderCompactPair(property, next)) {
             if (property.kind === "number" && next?.kind === "number") {
               const left = property;
@@ -321,73 +262,51 @@ export function InspectorMultiSection(props: {
             }
             if (property.kind === "nodeTextAlign" && next?.kind === "optionalLength") {
               return (
-                <div key={`${property.id}:${next.id}`} className={css.compactNumberPair}>
+                <Fragment key={`${property.id}:${next.id}`}>
                   {renderMultiProperty(property)}
                   {renderMultiProperty(next)}
-                </div>
+                </Fragment>
               );
             }
           }
           return renderMultiProperty(property);
         })}
-        {section.id === "stroke" &&
-        strokeMoreOptionsProperties.length > 0 &&
-        !forceShowStrokeMoreOptions ? (
-          <button
-            type="button"
-            className={css.moreOptionsToggle}
-            onClick={() => { setStrokeMoreOptionsOpen((current) => !current); }}
-          >
-            {showStrokeMoreOptions ? "fewer options.." : "more options.."}
-          </button>
-        ) : null}
-        {section.id === "fill" &&
-        fillMoreOptionsProperties.length > 0 &&
-        !forceShowFillMoreOptions ? (
-          <button
-            type="button"
-            className={css.moreOptionsToggle}
-            onClick={() => { setFillMoreOptionsOpen((current) => !current); }}
-          >
-            {showFillMoreOptions ? "fewer options.." : "more options.."}
-          </button>
-        ) : null}
-        {section.id === "fill" &&
-        fillAdvancedProperties.length > 0 &&
-        !showFillAdvancedOptions &&
-        fillModeProperty ? (
-          <div className={css.fillQuickActions}>
-            <button
-              type="button"
-              className={css.moreOptionsToggle}
-              disabled={!fillModeMultiCanWrite}
-              onClick={() => {
-                if (!fillModeMultiCanWrite) {
-                  return;
-                }
-                setFillAdvancedOptionsOpen(true);
-                onEnableGradientFillMulti();
-              }}
-            >
-              + gradient
-            </button>
-            <button
-              type="button"
-              className={css.moreOptionsToggle}
-              disabled={!fillModeMultiCanWrite}
-              onClick={() => {
-                if (!fillModeMultiCanWrite) {
-                  return;
-                }
-                setFillAdvancedOptionsOpen(true);
-                onEnablePatternFillMulti();
-              }}
-            >
-              + pattern
-            </button>
-          </div>
-        ) : null}
       </SidePanel.SectionBody>
     </SidePanel.Section>
+  );
+}
+
+// Fill mode leads the fill section so Solid / Gradient / Pattern reads as the
+// section's first choice.
+function fillModeFirst<T extends { kind: string }>(properties: T[]): T[] {
+  const mode = properties.filter((property) => property.kind === "fillMode");
+  return [...mode, ...properties.filter((property) => property.kind !== "fillMode")];
+}
+
+function renderMoreOptionsToggle(options: {
+  sectionId: string;
+  strokeToggleAvailable: boolean;
+  showStrokeMoreOptions: boolean;
+  setStrokeMoreOptionsOpen: (updater: (current: boolean) => boolean) => void;
+  fillToggleAvailable: boolean;
+  showFillMoreOptions: boolean;
+  setFillMoreOptionsOpen: (updater: (current: boolean) => boolean) => void;
+}): ReactNode {
+  const toggle =
+    options.sectionId === "stroke" && options.strokeToggleAvailable
+      ? { open: options.showStrokeMoreOptions, set: options.setStrokeMoreOptionsOpen }
+      : options.sectionId === "fill" && options.fillToggleAvailable
+        ? { open: options.showFillMoreOptions, set: options.setFillMoreOptionsOpen }
+        : null;
+  if (!toggle) return null;
+  return (
+    <button
+      type="button"
+      className={css.moreOptionsToggle}
+      aria-expanded={toggle.open}
+      onClick={() => { toggle.set((current) => !current); }}
+    >
+      {toggle.open ? "Show Less" : "Show More"}
+    </button>
   );
 }

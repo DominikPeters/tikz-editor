@@ -6,6 +6,8 @@
 
 .content {
   min-width: 0;
+  padding: 0;
+  container-type: inline-size;
 }
 
 .hint {
@@ -22,11 +24,11 @@
 }
 
 .globalNote {
-  margin-top: 2px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--separator);
   font-size: calc(var(--app-ui-scale, 1) * 10px);
   color: var(--color-warning);
   line-height: 1.4;
-  margin-bottom: 8px;
   -webkit-user-select: text;
   user-select: text;
 }
@@ -37,8 +39,8 @@
   padding: 7px 9px;
   background: color-mix(in srgb, var(--bg-pane) 72%, var(--bg-app));
   border: 1px solid var(--border-lighter);
-  border-radius: 4px;
-  margin-bottom: 10px;
+  border-radius: 6px;
+  margin: 8px 12px 4px;
   line-height: 1.45;
 }
 
@@ -65,90 +67,94 @@
   color: var(--text-faint);
 }
 
+/* "Show More" / "Show Less" in a section header, like the Finder sidebar. */
 .moreOptionsToggle {
-  align-self: flex-start;
+  flex-shrink: 0;
   border: 0;
   background: transparent;
-  padding: 0;
+  padding: 0 2px;
   font: inherit;
   font-size: calc(var(--app-ui-scale, 1) * 10px);
-  color: var(--text-faint);
-  text-decoration: underline;
-  cursor: pointer;
+  font-weight: 400;
+  color: var(--label-secondary);
+  cursor: default;
 }
 
 .moreOptionsToggle:hover {
-  color: var(--text);
+  color: var(--control-accent);
 }
 
 .moreOptionsToggle:focus-visible {
-  outline: 1px solid var(--border);
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 60%, transparent);
   outline-offset: 1px;
-  border-radius: 2px;
-}
-
-.fillQuickActions {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  border-radius: 3px;
 }
 
 .multiArrangeRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--separator);
 }
 
 .multiArrangeGroup {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--border-light);
-  border-radius: 3px;
-  overflow: hidden;
-  background: var(--btn-disabled-bg);
+  composes: segmented from "../controls.module.css";
 }
 
 .multiArrangeIconButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 22px;
-  border: 0;
-  border-right: 1px solid var(--border-light);
-  background: var(--btn-disabled-bg);
-  color: var(--text-faint);
-  cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
+  composes: segment from "../controls.module.css";
+  flex: 0 0 auto;
+  width: calc(var(--app-ui-scale, 1) * 24px);
+  padding: 0;
 }
 
-.multiArrangeGroup .multiArrangeIconButton:last-child {
-  border-right: 0;
-}
-
-.multiArrangeIconButton:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bg-header) 64%, var(--btn-disabled-bg));
-  color: var(--text);
-}
-
-.multiArrangeIconButton:disabled {
-  cursor: default;
-  color: color-mix(in srgb, var(--text-faint) 52%, var(--btn-disabled-text));
-  background: var(--btn-disabled-bg);
-}
-
-.multiArrangeIconButton:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--text) 35%, transparent);
-  outline-offset: -1px;
-}
+/* ── Property rows: label column on the left, controls on the right ──────── */
 
 .property {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  --inspector-number-max-w: 110px;
+  display: grid;
+  grid-template-columns: var(--inspector-label-col) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 3px;
+  min-height: calc(var(--app-ui-scale, 1) * var(--row-min-h));
+}
+
+/* Field renderers return their label, control and notes in a wrapper that
+   takes no box, so each piece lands in the row's grid directly. */
+.fieldContents {
+  display: contents;
+}
+
+.property > *,
+.fieldContents > * {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.property > .propertyLabel,
+.fieldContents > .propertyLabel {
+  grid-column: 1;
+}
+
+/* In a very narrow dock, labels go back above their controls. */
+@container (max-width: 210px) {
+  .property {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .property > *,
+  .fieldContents > *,
+  .property > .propertyLabel,
+  .fieldContents > .propertyLabel {
+    grid-column: 1;
+  }
+
+  .fieldContents > .controlRow:has(.numberInput) {
+    width: 100%;
+  }
 }
 
 .subProperty {
@@ -157,22 +163,38 @@
   border-left: 1px solid color-mix(in srgb, var(--border-light) 75%, transparent);
 }
 
+/* Two values under one row label, each with a caption (X/Y, Width/Height). */
 .compactNumberPair {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, var(--inspector-number-max-w)));
+  gap: 6px;
 }
 
 .compactNumberField {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 1px;
   min-width: 0;
 }
 
 .propertyLabel {
-  font-size: calc(var(--app-ui-scale, 1) * 10px);
-  color: var(--text-muted);
+  min-width: 0;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  line-height: 1.2;
+  color: var(--label-secondary);
+  overflow-wrap: anywhere;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.fieldCaption {
+  font-size: calc(var(--app-ui-scale, 1) * 9.5px);
+  line-height: 1.2;
+  color: var(--label-secondary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -194,17 +216,24 @@
 .controlRow {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
-.sliderHeaderRow {
+/* A lone numeric field is as wide as one field of a pair, so values line up. */
+.fieldContents > .controlRow:has(.numberInput) {
+  width: min(calc(50% - 3px), var(--inspector-number-max-w));
+}
+
+.sliderRow {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: 8px;
 }
 
 .sliderReadout {
+  flex-shrink: 0;
+  min-width: 28px;
+  text-align: right;
   font-size: calc(var(--app-ui-scale, 1) * 10px);
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -213,10 +242,12 @@
 }
 
 .sliderInput {
+  flex: 1 1 auto;
+  min-width: 0;
   width: 100%;
   margin: 2px 0;
   padding: 0;
-  accent-color: var(--accent, #4a7);
+  accent-color: var(--control-accent);
 }
 
 .sliderInput:disabled {
@@ -237,66 +268,31 @@
 }
 
 .nodeFontButtonGroup {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--border-light);
-  border-radius: 3px;
-  overflow: hidden;
-  background: var(--bg-pane);
+  composes: segmented from "../controls.module.css";
 }
 
 .nodeFontIconButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: 0;
-  border-right: 1px solid var(--border-light);
-  background: var(--bg-pane);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.nodeFontButtonGroup .nodeFontIconButton:last-child {
-  border-right: 0;
-}
-
-.nodeFontIconButton:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bg-header) 72%, var(--bg-pane));
-  color: var(--text);
-}
-
-.nodeFontIconButton:disabled {
-  cursor: default;
-  color: var(--text-faint);
-  background: var(--btn-disabled-bg);
+  composes: segment from "../controls.module.css";
+  flex: 0 0 auto;
+  width: calc(var(--app-ui-scale, 1) * 21px);
+  padding: 0;
 }
 
 .nodeFontIconButtonActive {
-  background: color-mix(in srgb, var(--toggle-active-bg) 58%, var(--bg-pane));
-  color: var(--text);
+  composes: segmentOn from "../controls.module.css";
 }
 
 .nodeFontIconButtonMixed {
-  background: color-mix(in srgb, var(--toggle-mixed-bg) 72%, var(--bg-pane));
-  color: var(--text);
-}
-
-.nodeFontIconButton:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--text) 35%, transparent);
-  outline-offset: -1px;
+  composes: segmentMixed from "../controls.module.css";
 }
 
 .nodeTextAlignButton {
-  width: 24px;
-  height: 22px;
+  width: calc(var(--app-ui-scale, 1) * 26px);
 }
 
 .nodeFontSizeRow {
-  min-width: 0;
-  flex: 1;
+  min-width: 84px;
+  flex: 1 1 84px;
 }
 
 .nodeFontSizeOption {
@@ -321,14 +317,8 @@
 }
 
 .numberInput {
+  composes: field fieldNumeric from "../controls.module.css";
   width: 100%;
-  min-height: 22px;
-  padding: 2px 5px;
-  font-size: calc(var(--app-ui-scale, 1) * 11px);
-  color: var(--text);
-  background: var(--bg-pane);
-  border: 1px solid var(--border-light);
-  border-radius: 2px;
 }
 
 .numberInput:not(:focus) {
@@ -337,14 +327,8 @@
 }
 
 .textInput {
+  composes: field from "../controls.module.css";
   width: 100%;
-  min-width: 0;
-  border: 1px solid var(--border-light);
-  background: var(--bg-pane);
-  color: var(--text);
-  font: inherit;
-  font-size: calc(var(--app-ui-scale, 1) * 11px);
-  padding: 4px 6px;
 }
 
 .textInput:not(:focus) {
@@ -352,21 +336,9 @@
   user-select: none;
 }
 
-.textInput:disabled {
-  opacity: 0.65;
-}
-
-.numberInput:disabled {
-  color: var(--text-dim);
-  background: var(--btn-disabled-bg);
-}
-
 .unitLabel {
-  font-size: calc(var(--app-ui-scale, 1) * 10px);
-  color: var(--text-faint);
-  min-width: 18px;
-  -webkit-user-select: none;
-  user-select: none;
+  composes: fieldUnit from "../controls.module.css";
+  min-width: 12px;
 }
 
 .rangeInput {
@@ -381,7 +353,23 @@
 }
 
 .checkboxInput {
-  margin: 0;
+  composes: checkbox from "../controls.module.css";
+}
+
+.fillModeSegments {
+  composes: segmented from "../controls.module.css";
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.fillModeSegment {
+  composes: segment from "../controls.module.css";
+  padding: 0 4px;
+}
+
+.fillModeSegmentOn {
+  composes: segmentOn from "../controls.module.css";
 }
 
 .checkboxLabel {
