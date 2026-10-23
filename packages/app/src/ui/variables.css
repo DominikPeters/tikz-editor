@@ -66,7 +66,9 @@
   /* Native controls (AppKit-style small controls, see controls.module.css).
      Sizes are unscaled; multiply by --app-ui-scale where they are used,
      because the scale is set on the app root, not on :root. */
-  --bg-window:        #f6f6f6;   /* toolbar, tab bar, status bar */
+  --bg-window:        #f6f6f6;   /* toolbar, active document tab, status bar */
+  --bg-tabbar:        #dedede;   /* document tab bar behind inactive tabs */
+  --tabbar-divider:   #c2c2c2;   /* between document tabs; --separator matches --bg-tabbar */
   --bg-inspector:     #f5f5f5;   /* side-panel background */
   --separator:        #dedede;   /* section hairlines */
   --label-secondary:  #636366;   /* row labels and captions */
@@ -162,6 +164,8 @@
 
   /* Native controls */
   --bg-window:        #2b2b2d;
+  --bg-tabbar:        #1c1c1e;
+  --tabbar-divider:   #3a3a3c;
   --bg-inspector:     #262628;
   --separator:        #3a3a3c;
   --label-secondary:  #a1a1a6;

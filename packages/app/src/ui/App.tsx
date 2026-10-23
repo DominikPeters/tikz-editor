@@ -640,6 +640,23 @@ function EditorApp() {
     delete document.documentElement.dataset.desktopOs;
   }, [platform.id]);
 
+  // macOS hides the traffic lights in full screen, so the toolbar drops their inset.
+  // A full-screen window covers the screen; a zoomed one stops at the menu bar.
+  useEffect(() => {
+    if (desktopOsFromPlatformId(platform.id) !== "macos") return;
+    const update = () => {
+      document.documentElement.dataset.fullscreen = String(
+        window.outerWidth >= window.screen.width && window.outerHeight >= window.screen.height
+      );
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      delete document.documentElement.dataset.fullscreen;
+    };
+  }, [platform.id]);
+
   useEffect(() => {
     sourceRef.current = source;
     snapshotRef.current = snapshot;

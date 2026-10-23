@@ -4,17 +4,17 @@
   display: flex;
   align-items: center;
   gap: 0;
-  background: var(--bg-header);
-  border-top: 1px solid var(--border);
-  height: 24px;
+  background: var(--bg-window);
+  border-top: 1px solid var(--separator);
+  height: calc(var(--app-ui-scale, 1) * 22px);
   flex-shrink: 0;
   font-size: calc(var(--app-ui-scale, 1) * 11px);
-  color: var(--text-muted);
+  color: var(--label-secondary);
   padding: 0 6px;
   overflow: hidden;
-  --status-range-track: color-mix(in srgb, var(--border) 74%, var(--bg-app));
-  --status-range-thumb-bg: var(--bg-pane);
-  --status-range-thumb-border: color-mix(in srgb, var(--border) 72%, transparent);
+  --status-range-track: var(--segment-track);
+  --status-range-thumb-bg: var(--segment-on-bg);
+  --status-range-thumb-border: var(--control-ring);
   --status-range-thumb-shadow: color-mix(in srgb, var(--text) 20%, transparent);
 }
 
@@ -25,21 +25,17 @@
   min-width: 0;
 }
 
+/* Cells are set apart by space (14px), without dividers. */
 .cell {
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 7px;
   height: 100%;
   white-space: nowrap;
-  border-right: 1px solid var(--border-light);
 }
 
 .group:first-child .cell:first-child {
   padding-left: 2px;
-}
-
-.group:last-child .cell:last-of-type {
-  border-right: none;
 }
 
 .label {
@@ -117,7 +113,7 @@
 
 .iconButton {
   width: 24px;
-  height: 22px;
+  height: calc(var(--app-ui-scale, 1) * 18px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -131,7 +127,7 @@
 }
 
 .iconButton:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--tab-selected-bg) 60%, transparent);
   color: var(--text);
 }
 
@@ -168,7 +164,7 @@
 .dismissButton:focus-visible,
 .zoomSlider:focus-visible,
 .zoomSelect:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 60%, transparent);
   outline-offset: 1px;
 }
 
@@ -181,7 +177,7 @@
   margin-left: 4px;
   border-radius: 2px;
   background: var(--status-range-track);
-  accent-color: var(--accent);
+  accent-color: var(--control-accent);
   cursor: pointer;
   outline: none;
 }
@@ -219,7 +215,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  height: 22px;
+  height: calc(var(--app-ui-scale, 1) * 18px);
   min-width: 50px;
   margin-left: 4px;
   padding: 0 12px 0 5px;
@@ -229,7 +225,7 @@
 
 .zoomSelectWrap:hover,
 .zoomSelectWrap:focus-within {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--tab-selected-bg) 60%, transparent);
   color: var(--text);
 }
 

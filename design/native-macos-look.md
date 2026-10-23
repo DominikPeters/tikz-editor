@@ -307,6 +307,22 @@ custom-styled; only change its colours to the new tokens.
 **`App.module.css`.** No layout change. Confirm the transparent macOS
 background still looks right behind the now-opaque panels.
 
+**As built (differences from the above):**
+
+- The toolbar title is unchanged: it only appears on web ("TikZ Editor Web"),
+  where the browser shows the document name.
+- `trafficLightPosition` is `{x:16, y:17}`, not 13: the old y of 21 centred
+  the lights in the 46px toolbar, so the same offset gives 17 for 38px. Not
+  yet checked on a real window; `test:desktop:e2e` needs tauri-driver, which
+  does not run on macOS.
+- Full screen sets `html[data-fullscreen]` from a window-covers-screen test in
+  `App.tsx` (a zoomed window stops at the menu bar); the toolbar then drops
+  its traffic-light inset.
+- The tab bar needs its own divider colour, `--tabbar-divider`: `--separator`
+  equals `--bg-tabbar` in light mode, which made the inactive tabs one bar.
+- The dirty dot sits on the tab's leading edge and gives way to the close
+  button on hover; the "changed on disk" triangle stays beside the title.
+
 ## Phase 5 — View › Panels menu (S)
 
 Checked states already work: `editor-command-runtime.ts` sets `checked`, and

@@ -1,13 +1,13 @@
 /* ── Toolbar ───────────────────────────────────────────────────────────────── */
 
+/* The tab bar below draws the dividing line. */
 .toolbar {
   display: flex;
   align-items: center;
   gap: 0;
-  background: var(--bg-app);
-  border-bottom: 1px solid var(--border);
-  padding: 4px 6px;
-  min-height: 40px;
+  background: var(--bg-window);
+  padding: 0 8px;
+  min-height: 38px;
   flex-shrink: 0;
 }
 
@@ -15,9 +15,14 @@
   background: transparent;
 }
 
+/* Clears the traffic lights (trafficLightPosition in tauri.macos.conf.json). */
 .toolbarDesktop {
-  padding-left: 90px;
-  min-height: 46px;
+  padding-left: 80px;
+  min-height: 38px;
+}
+
+:global(html[data-fullscreen="true"]) .toolbarDesktop {
+  padding-left: 8px;
 }
 
 .title {
@@ -33,11 +38,9 @@
   font-weight: 400;
 }
 
+/* Groups are set apart by space, as in AppKit toolbars, not by rules. */
 .separator {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-  margin: 0 3px;
+  width: 10px;
   flex-shrink: 0;
 }
 
@@ -54,12 +57,12 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 4px;
-  height: 32px;
-  min-width: 32px;
+  padding: 0 4px;
+  height: 24px;
+  min-width: 28px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 5px;
   font-size: calc(var(--app-ui-scale, 1) * 11px);
   font-family: inherit;
   color: var(--text);
@@ -70,11 +73,16 @@
 }
 
 .btn:hover:not(:disabled) {
-  background: var(--btn-hover-bg);
+  background: color-mix(in srgb, var(--tab-selected-bg) 60%, transparent);
 }
 
 .btn:active:not(:disabled) {
-  background: var(--btn-active-bg);
+  background: color-mix(in srgb, var(--tab-selected-bg) 140%, transparent);
+}
+
+.btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 60%, transparent);
+  outline-offset: 0;
 }
 
 .btn:disabled {
@@ -83,13 +91,10 @@
   opacity: 0.5;
 }
 
-/* Native-style active state: subtle gray highlight */
-.btnActive {
-  background: color-mix(in srgb, var(--text) 12%, transparent);
-}
-
+/* Native-style active state: the recessed-tab highlight */
+.btnActive,
 .btnActive:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text) 18%, transparent);
+  background: var(--tab-selected-bg);
 }
 
 .btnPartial {
@@ -101,22 +106,22 @@
 .splitButton {
   display: inline-flex;
   align-items: stretch;
-  border-radius: 6px;
+  border-radius: 5px;
 }
 
 .splitButtonMain {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
-  padding: 4px 2px 4px 6px;
+  padding: 1px 2px 0 6px;
   min-width: 28px;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .splitButtonCaret {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
-  padding: 4px 3px 4px 1px;
+  padding: 0 3px 0 1px;
   min-width: 10px;
 }
 
@@ -148,12 +153,12 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
+  height: 24px;
   margin-left: 8px;
   margin-right: 3px;
   padding: 0 10px;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
-  border-radius: 6px;
+  border-radius: 5px;
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-pane));
   color: var(--text);
   font: inherit;
