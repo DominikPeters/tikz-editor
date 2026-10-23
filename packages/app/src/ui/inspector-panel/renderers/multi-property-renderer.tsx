@@ -49,6 +49,7 @@ renderPathMorphingDecorationDropdown,
 renderShadowPresetDropdown
 } from "../property-dropdowns";
 import type { RenderPropertyApi } from "../property-renderer-types";
+import { rangeFillStyle } from "../../range-fill";
 export function renderMultiInspectorProperty(property: MultiInspectorProperty, api: RenderPropertyApi) {
   const {
     renderedMultiPropertyProvenance,
@@ -187,9 +188,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
       return (
         <div key={property.id} className={propertyClassName}>
           <div className={css.propertyLabel}>{property.label}</div>
-          {maybeWrapWithProvenanceTooltip(
-            provenance,
-            renderNodeTextAlignToolbar(
+          {renderNodeTextAlignToolbar(
               {
                 value: property.value,
                 mixed: property.mixed
@@ -199,9 +198,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
                 { applySetPropertyMany(property.writes, nextValue === "unset" ? "" : nextValue, {
                   clearKeys: property.clearKeys
                 }); }
-            ),
-            true
-          )}
+            )}
           {renderReadOnlyReasonNote(property.readOnlyReason)}
         </div>
       );
@@ -254,9 +251,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
       return (
         <div key={property.id} className={propertyClassName}>
           <div className={css.propertyLabel}>{property.label}</div>
-          {maybeWrapWithProvenanceTooltip(
-            provenance,
-            renderNodeFontToolbar(
+          {renderNodeFontToolbar(
             {
               family: property.family,
               familyMixed: property.familyMixed,
@@ -303,9 +298,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
               ); },
             () => { clearHoverPreviewSession(previewOwnerKey); },
             () => { restoreHoverPreviewBase(previewOwnerKey); }
-            ),
-            true
-          )}
+            )}
           {property.notes.map((note) => (
             <div key={`${property.id}:${note}`} className={css.propertyNote}>
               {note}
@@ -358,22 +351,19 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
       return (
         <div key={property.id} className={propertyClassName}>
           <div className={css.propertyLabel}>{property.label}</div>
-          {maybeWrapWithProvenanceTooltip(
-            provenance,
-            renderFillModeSegments(
-              {
-                label: property.label,
-                value: property.value,
-                options: property.options
-              },
-              writable,
-              (nextValue) => {
-                applyFillModeValueMany(property.writes, nextValue, property.contexts);
-                setFillAdvancedOptionsOpen(nextValue !== "solid");
-              },
-              dropdownValue
-            ),
-            true
+          {/* No provenance tooltip: on a segmented control it pops up over whichever segment is hovered. */}
+          {renderFillModeSegments(
+            {
+              label: property.label,
+              value: property.value,
+              options: property.options
+            },
+            writable,
+            (nextValue) => {
+              applyFillModeValueMany(property.writes, nextValue, property.contexts);
+              setFillAdvancedOptionsOpen(nextValue !== "solid");
+            },
+            dropdownValue
           )}
           {renderReadOnlyReasonNote(property.readOnlyReason)}
         </div>
@@ -575,6 +565,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
               <input
                 className={css.rangeInput}
                 type="range"
+                style={rangeFillStyle(sliderValue, property.min, property.max)}
                 min={property.min}
                 max={property.max}
                 step={property.step}
@@ -782,6 +773,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
               <input
                 className={css.rangeInput}
                 type="range"
+                style={rangeFillStyle(sliderValue, minRadius, maxRadius)}
                 min={minRadius}
                 max={maxRadius}
                 step={property.step}

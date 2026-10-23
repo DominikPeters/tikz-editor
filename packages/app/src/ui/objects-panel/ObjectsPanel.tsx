@@ -347,11 +347,11 @@ export function ObjectsPanel() {
                   setDropTarget(null);
                 }}
               >
-                <div className={css.treeCell} style={{ paddingLeft: depth * 16 }}>
+                <div className={css.treeCell} style={{ paddingLeft: depth * 12 }}>
                   <RenderedTooltip content={collapsedIds.has(node.id) ? `Expand ${node.title}` : `Collapse ${node.title}`}>
                     <button
                       type="button"
-                      className={node.childCount > 0 ? css.iconButton : [css.iconButton, css.iconButtonDisabled].join(" ")}
+                      className={node.childCount > 0 ? css.disclosure : [css.disclosure, css.iconButtonDisabled].join(" ")}
                       onClick={(event) => {
                         event.stopPropagation();
                         if (node.childCount === 0) {
@@ -370,25 +370,11 @@ export function ObjectsPanel() {
                       aria-label={collapsedIds.has(node.id) ? `Expand ${node.title}` : `Collapse ${node.title}`}
                     >
                       {node.childCount > 0 ? (
-                        collapsedIds.has(node.id) ? <RiArrowRightSLine size={16} /> : <RiArrowDownSLine size={16} />
+                        collapsedIds.has(node.id) ? <RiArrowRightSLine size={12} /> : <RiArrowDownSLine size={12} />
                       ) : null}
                     </button>
                   </RenderedTooltip>
                 </div>
-                <RenderedTooltip content={node.hidden ? `Show ${node.title}` : `Hide ${node.title}`}>
-                  <button
-                    type="button"
-                    className={css.iconButton}
-                    onPointerDown={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      toggleVisibility(node);
-                    }}
-                    aria-label={node.hidden ? `Show ${node.title}` : `Hide ${node.title}`}
-                  >
-                    {node.hidden ? <RiEyeOffLine size={16} /> : <RiEyeLine size={16} />}
-                  </button>
-                </RenderedTooltip>
                 <div className={css.rowMain}>
                   {isEditing ? (
                     <input
@@ -420,6 +406,20 @@ export function ObjectsPanel() {
                     </button>
                   )}
                 </div>
+                <RenderedTooltip content={node.hidden ? `Show ${node.title}` : `Hide ${node.title}`}>
+                  <button
+                    type="button"
+                    className={[css.iconButton, css.visibilityButton, node.hidden ? css.visibilityHidden : ""].filter(Boolean).join(" ")}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      toggleVisibility(node);
+                    }}
+                    aria-label={node.hidden ? `Show ${node.title}` : `Hide ${node.title}`}
+                  >
+                    {node.hidden ? <RiEyeOffLine size={13} /> : <RiEyeLine size={13} />}
+                  </button>
+                </RenderedTooltip>
               </div>
             );
           })}

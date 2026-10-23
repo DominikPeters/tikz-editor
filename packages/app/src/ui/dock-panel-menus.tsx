@@ -205,7 +205,7 @@ function tabStripMode(tabset: TabSetNode): "labels" | "selectedLabel" | "icons" 
  * inactive tabs keep only their icon; the label stays in the DOM, visually
  * hidden, for screen readers and for tests that select tabs by name.
  */
-export function renderDockTab(node: TabNode, values: ITabRenderValues, kind: DocumentKind, onUnmeasured: (tabset: TabSetNode) => void): void {
+export function renderDockTab(node: TabNode, values: ITabRenderValues, kind: DocumentKind, onLaidOut: (tabset: TabSetNode) => void): void {
   const name = node.getName();
   const parent = node.getParent();
   if (!(parent instanceof TabSetNode)) return;
@@ -217,7 +217,7 @@ export function renderDockTab(node: TabNode, values: ITabRenderValues, kind: Doc
   }
   const icon = panelIcon(node.getComponent() ?? node.getId(), kind);
   const mode = tabStripMode(parent);
-  if (!(parent.getRect().width > 0)) onUnmeasured(parent);
+  onLaidOut(parent);
   if (mode === "labels" || icon == null) {
     values.content = label;
     return;
@@ -336,19 +336,29 @@ export function useDockPanelMenus(host: DockMenuHost, kind: DocumentKind) {
     );
   }, [host, kind, show]);
 
-  // flexlayout measures a strip after rendering it and does not render it
-  // again for that alone, so a strip first drawn unmeasured (as icons) asks
-  // for one more render once its width is known.
-  const pendingRerender = useRef(false);
-  const onUnmeasured = useCallback((tabset: TabSetNode) => {
-    if (pendingRerender.current) return;
-    pendingRerender.current = true;
-    requestAnimationFrame(() => {
-      pendingRerender.current = false;
-      if (tabset.getRect().width > 0) host.redraw();
-    });
+  // flexlayout measures a strip after rendering its tabs and does not render
+  // them again for that alone, so tabs can be laid out for a stale width: none
+  // on the first render, the old one after a resize. Each strip remembers the
+  // width it was laid out for and asks for one more render if that changed.
+  const laidOutWidths = useRef(new WeakMap<TabSetNode, number>());
+  const pendingCheck = useRef(new Set<TabSetNode>());
+  const onLaidOut = useCallback((tabset: TabSetNode) => {
+    laidOutWidths.current.set(tabset, tabset.getRect().width);
+    if (pendingCheck.current.has(tabset)) return;
+    pendingCheck.current.add(tabset);
+    // A strip not yet measured gets a few more frames before the check gives up.
+    const check = (framesLeft: number) => {
+      const width = tabset.getRect().width;
+      if (!(width > 0) && framesLeft > 0) {
+        requestAnimationFrame(() => { check(framesLeft - 1); });
+        return;
+      }
+      pendingCheck.current.delete(tabset);
+      if (width > 0 && width !== laidOutWidths.current.get(tabset)) host.redraw();
+    };
+    requestAnimationFrame(() => { check(10); });
   }, [host]);
-  const onRenderTab = useCallback((node: TabNode, values: ITabRenderValues) => { renderDockTab(node, values, kind, onUnmeasured); }, [kind, onUnmeasured]);
+  const onRenderTab = useCallback((node: TabNode, values: ITabRenderValues) => { renderDockTab(node, values, kind, onLaidOut); }, [kind, onLaidOut]);
 
   const close = useCallback(() => { setMenu(null); }, []);
   const element = menu ? (

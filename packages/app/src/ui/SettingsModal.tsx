@@ -7,6 +7,7 @@ import {
 } from "../settings/types";
 import { Modal } from "./Modal";
 import css from "./SettingsModal.module.css";
+import { rangeFillStyle } from "./range-fill";
 
 type CategoryId = "general" | "editor" | "canvas";
 
@@ -372,6 +373,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       id="setting-zoom-speed"
                       className={css.range}
                       type="range"
+                      style={rangeFillStyle(settings.canvas.zoomSpeed, CANVAS_ZOOM_SPEED_MIN, CANVAS_ZOOM_SPEED_MAX)}
                       min={CANVAS_ZOOM_SPEED_MIN}
                       max={CANVAS_ZOOM_SPEED_MAX}
                       step={CANVAS_ZOOM_SPEED_STEP}

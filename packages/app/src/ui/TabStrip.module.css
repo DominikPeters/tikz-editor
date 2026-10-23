@@ -7,7 +7,6 @@
   height: calc(var(--app-ui-scale, 1) * 24px);
   box-sizing: content-box;
   background: var(--bg-tabbar);
-  border-top: 1px solid var(--tabbar-divider);
   border-bottom: 1px solid var(--tabbar-divider);
   overflow-x: auto;
   overflow-y: hidden;

@@ -81,9 +81,11 @@
   --segment-on-bg:    #ffffff;
   --segment-on-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.14);
   --tab-selected-bg:  rgba(0, 0, 0, 0.09);
+  --slider-track:     rgba(0, 0, 0, 0.14);
+  --slider-knob:      #ffffff;
   --control-h:        19px;
   --row-min-h:        20px;
-  --inspector-label-col: minmax(64px, 84px);
+  --inspector-label-col: minmax(56px, 72px);
   --radius-field:     4px;
   --radius-popup:     5px;
 }
@@ -178,6 +180,8 @@
   --segment-on-bg:    #5a5a5e;
   --segment-on-shadow: none;
   --tab-selected-bg:  rgba(255, 255, 255, 0.12);
+  --slider-track:     rgba(255, 255, 255, 0.2);
+  --slider-knob:      #d4d4d8;
 }
 
 html {

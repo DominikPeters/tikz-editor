@@ -3,10 +3,6 @@
   --settings-card-bg: var(--bg-pane);
   --settings-control-bg: var(--bg-pane);
   --settings-control-border: var(--border);
-  --settings-range-track: color-mix(in srgb, var(--border) 74%, var(--bg-app));
-  --settings-range-thumb-bg: var(--bg-pane);
-  --settings-range-thumb-border: color-mix(in srgb, var(--border) 72%, transparent);
-  --settings-range-thumb-shadow: color-mix(in srgb, var(--text) 20%, transparent);
 }
 
 .bodyLayout {
@@ -164,41 +160,8 @@
 }
 
 .range {
-  -webkit-appearance: none;
+  composes: slider from "./controls.module.css";
   width: 180px;
-  height: 4px;
-  background: var(--settings-range-track);
-  border-radius: 2px;
-  cursor: pointer;
-  outline: none;
-}
-
-.range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--settings-range-thumb-bg);
-  border: 1px solid var(--settings-range-thumb-border);
-  box-shadow: 0 0.5px 2px var(--settings-range-thumb-shadow);
-  cursor: pointer;
-}
-
-.range::-moz-range-track {
-  height: 4px;
-  background: var(--settings-range-track);
-  border: none;
-  border-radius: 2px;
-}
-
-.range::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--settings-range-thumb-bg);
-  border: 1px solid var(--settings-range-thumb-border);
-  box-shadow: 0 0.5px 2px var(--settings-range-thumb-shadow);
-  cursor: pointer;
 }
 
 .fontPreviewRow {

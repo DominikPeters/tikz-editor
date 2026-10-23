@@ -18,6 +18,7 @@ import {
   subscribeCanvasTextContext
 } from "./canvas-panel/canvas-text-context";
 import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
+import { rangeFillStyle } from "./range-fill";
 
 const TEX_PT_PER_IN = 72.27;
 const CSS_SCREEN_DPI = 96;
@@ -334,6 +335,7 @@ export function StatusBar() {
         <input
           className={css.zoomSlider}
           type="range"
+          style={rangeFillStyle(sliderZoomPercent, MIN_ZOOM_PERCENT, maxZoomPercent)}
           min={MIN_ZOOM_PERCENT}
           max={maxZoomPercent}
           step={1}

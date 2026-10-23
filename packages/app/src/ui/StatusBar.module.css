@@ -12,10 +12,6 @@
   color: var(--label-secondary);
   padding: 0 6px;
   overflow: hidden;
-  --status-range-track: var(--segment-track);
-  --status-range-thumb-bg: var(--segment-on-bg);
-  --status-range-thumb-border: var(--control-ring);
-  --status-range-thumb-shadow: color-mix(in srgb, var(--text) 20%, transparent);
 }
 
 .group {
@@ -169,46 +165,10 @@
 }
 
 .zoomSlider {
-  -webkit-appearance: none;
-  appearance: none;
+  composes: slider from "./controls.module.css";
   width: 132px;
   min-width: 80px;
-  height: 4px;
   margin-left: 4px;
-  border-radius: 2px;
-  background: var(--status-range-track);
-  accent-color: var(--control-accent);
-  cursor: pointer;
-  outline: none;
-}
-
-.zoomSlider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--status-range-thumb-bg);
-  border: 1px solid var(--status-range-thumb-border);
-  box-shadow: 0 0.5px 2px var(--status-range-thumb-shadow);
-  cursor: pointer;
-}
-
-.zoomSlider::-moz-range-track {
-  height: 4px;
-  background: var(--status-range-track);
-  border: none;
-  border-radius: 2px;
-}
-
-.zoomSlider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--status-range-thumb-bg);
-  border: 1px solid var(--status-range-thumb-border);
-  box-shadow: 0 0.5px 2px var(--status-range-thumb-shadow);
-  cursor: pointer;
 }
 
 .zoomSelectWrap {

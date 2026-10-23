@@ -195,9 +195,10 @@ export function DeckInspectorPanel(): JSX.Element {
     <SidePanel className={css.panel ?? ""}>
       <SidePanel.Header>{rendered.title}</SidePanel.Header>
       <SidePanel.Content className={css.content ?? ""}>
+        <SidePanel.Section>
         <SidePanel.SectionBody>
           <fieldset disabled={activeFrame?.frameId !== activeRootId || activeFrame.step !== Math.min(activeStep, Math.max(1, activeFrame.stepCount))}
-            style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+            className={css.deckFields}>
           {rendered.fields.length === 0 ? (
             <p className={css.hint}>This object has no editable properties yet.</p>
           ) : (
@@ -212,6 +213,7 @@ export function DeckInspectorPanel(): JSX.Element {
           )}
           </fieldset>
         </SidePanel.SectionBody>
+        </SidePanel.Section>
       </SidePanel.Content>
     </SidePanel>
   );

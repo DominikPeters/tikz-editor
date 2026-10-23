@@ -209,6 +209,23 @@
   outline-offset: -1px;
 }
 
+/* The overflow button overlays the end of the tab strip instead of taking room
+   from it. Otherwise showing it could leave too little room for tabs that fit
+   without it, and it stays (flexlayout only drops it once the tabs fit). */
+.flexlayout__tab_button_overflow {
+  position: relative;
+  z-index: 1;
+  width: calc(var(--app-ui-scale, 1) * 22px);
+  min-width: 0;
+  margin-left: calc(var(--app-ui-scale, 1) * -22px);
+  background: var(--bg-inspector) !important;
+  box-shadow: -6px 0 6px var(--bg-inspector);
+}
+
+.flexlayout__tab_button_overflow:hover {
+  background: color-mix(in srgb, var(--tab-selected-bg) 70%, var(--bg-inspector)) !important;
+}
+
 .flexlayout__tab_toolbar_sticky_buttons_container {
   padding-left: 2px !important;
 }

@@ -4,7 +4,9 @@
   border-left: 1px solid var(--border);
 }
 
-.content {
+/* Doubled so it beats SidePanel's .content padding, which loads later;
+   the sections carry the side padding. */
+.content.content {
   min-width: 0;
   padding: 0;
   container-type: inline-size;
@@ -152,7 +154,8 @@
     grid-column: 1;
   }
 
-  .fieldContents > .controlRow:has(.numberInput) {
+  .fieldContents > .controlRow:has(.numberInput),
+  .property > .controlRow:has(.numberInput) {
     width: 100%;
   }
 }
@@ -168,6 +171,18 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, var(--inspector-number-max-w)));
   gap: 6px;
+}
+
+/* With captions under the fields, centre the label on the fields, not on
+   fields and captions together. */
+.property:has(> .compactNumberPair) {
+  align-items: start;
+}
+
+.property:has(> .compactNumberPair) > .propertyLabel {
+  display: flex;
+  align-items: center;
+  min-height: calc(var(--app-ui-scale, 1) * var(--control-h));
 }
 
 .compactNumberField {
@@ -220,7 +235,9 @@
 }
 
 /* A lone numeric field is as wide as one field of a pair, so values line up. */
-.fieldContents > .controlRow:has(.numberInput) {
+/* Single numbers keep a pair's field width, so values line up down the panel. */
+.fieldContents > .controlRow:has(.numberInput),
+.property > .controlRow:has(.numberInput) {
   width: min(calc(50% - 3px), var(--inspector-number-max-w));
 }
 
@@ -242,16 +259,9 @@
 }
 
 .sliderInput {
+  composes: slider from "../controls.module.css";
   flex: 1 1 auto;
-  min-width: 0;
   width: 100%;
-  margin: 2px 0;
-  padding: 0;
-  accent-color: var(--control-accent);
-}
-
-.sliderInput:disabled {
-  opacity: 0.5;
 }
 
 .nodeFontControls {
@@ -342,6 +352,7 @@
 }
 
 .rangeInput {
+  composes: slider from "../controls.module.css";
   width: 100%;
 }
 
@@ -861,4 +872,16 @@
   line-height: 1.35;
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* The deck inspector's fields sit in a fieldset (to disable them off-step);
+   it lays its rows out as the section body would. */
+.deckFields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }

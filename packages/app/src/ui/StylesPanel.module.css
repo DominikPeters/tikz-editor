@@ -44,11 +44,12 @@
   gap: 0;
 }
 
-/* ── Declaration row (4-column grid: toggle | key | value | delete) ─────── */
+/* ── Declaration row (toggle | key | value; delete overlays the right padding) ── */
 
 .declaration {
+  position: relative;
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) minmax(100px, 140px) 14px;
+  grid-template-columns: 14px minmax(0, 1fr) minmax(100px, 150px);
   gap: 3px;
   align-items: center;
   min-height: calc(var(--app-ui-scale, 1) * 20px);
@@ -103,9 +104,16 @@
   min-height: 18px;
 }
 
-.keyInput:focus {
-  border-color: var(--control-ring);
+/* Keys read as plain text until hovered or edited. Doubled to beat the
+   pop-up button styling the editable dropdown composes. */
+.keyInput.keyInput {
+  box-shadow: none;
+}
+
+.keyInput.keyInput:hover,
+.keyInput.keyInput:focus {
   background: var(--control-bg);
+  box-shadow: 0 0 0 0.5px var(--control-ring);
 }
 
 .valueInput {
@@ -168,8 +176,14 @@
 
 /* ── Delete button ─────────────────────────────────────────────────────── */
 
+/* Sits in the section's right padding, so the values reach the same edge
+   as the inspector's controls. */
 .deleteButton {
-  width: 14px;
+  position: absolute;
+  right: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
   height: 14px;
   display: flex;
   align-items: center;
@@ -196,7 +210,7 @@
 }
 
 .deleteButtonPlaceholder {
-  width: 14px;
+  display: none;
 }
 
 /* ── Checkbox ──────────────────────────────────────────────────────────── */

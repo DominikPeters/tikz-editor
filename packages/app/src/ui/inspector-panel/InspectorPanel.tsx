@@ -71,6 +71,7 @@ TOOL_HINTS,
 toolSupportsFill,
 toolSupportsStroke
 } from "../tool-config";
+import { rangeFillStyle } from "../range-fill";
 
 type NumberChangeOptions = {
   recordInHistory?: boolean;
@@ -1888,6 +1889,7 @@ export function InspectorPanel() {
                         data-testid="inspector-freehand-smoothing-slider"
                         className={css.rangeInput}
                         type="range"
+                        style={rangeFillStyle(freehandSmoothingPx, 4, 32)}
                         min={4}
                         max={32}
                         step={1}

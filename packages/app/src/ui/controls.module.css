@@ -93,8 +93,18 @@
   color: var(--text-dim);
 }
 
+/* No spin arrows: they crowd the value, and label scrubbing and the arrow
+   keys already step it. */
 .fieldNumeric {
   text-align: right;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.fieldNumeric::-webkit-inner-spin-button,
+.fieldNumeric::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .fieldUnit {
@@ -192,4 +202,72 @@
   background: var(--tab-selected-bg);
   color: var(--text);
   font-weight: 600;
+}
+
+/* ── Slider: thin track, accent fill up to a small round knob ─────────────────
+   WebKit cannot fill the track by itself, so the input carries its position as
+   --fill (see rangeFillStyle in range-fill.ts). */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  height: calc(var(--app-ui-scale, 1) * 16px);
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--control-accent) 0 var(--fill, 0%),
+    var(--slider-track) var(--fill, 0%) 100%
+  );
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--slider-knob);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+.slider::-moz-range-track {
+  height: 4px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--slider-track);
+}
+
+.slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--control-accent);
+}
+
+.slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--slider-knob);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+.slider:focus-visible {
+  outline: none;
+}
+
+.slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--control-accent) 45%, transparent), 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+.slider:disabled {
+  opacity: 0.5;
 }

@@ -411,3 +411,32 @@ then run a contrast pass on labels, captions and disabled states.
   inspector at minimum and wide widths, a Beamer document, keyboard focus
   rings (`:focus-visible` on every new control), and screenshots against the
   mockup boards.
+
+## Review round (2026-10-24)
+
+Changes after the first look at phases 1–6:
+
+- Toolbar: back to the earlier, taller toolbar with dividers between tool
+  groups (and the original traffic-light position); only the full-screen
+  inset fix stays. The tab bar no longer draws a top border, since the
+  toolbar has one.
+- Inspector side spacing: SidePanel's `.content` padding (6px) was leaking
+  into the inspector, adding to the 12px section padding; the inspector's
+  own `padding: 0` lost on load order. The label column is now
+  `minmax(56px, 72px)`.
+- Deck (frame) inspector: its fields sat in a bare `SectionBody` with no
+  `Section`, and its number fields skipped the width cap.
+- X/Y pairs: the row label centres on the fields, not on fields plus
+  captions; numeric fields have no spin arrows.
+- Segmented controls and button groups no longer carry the provenance
+  tooltip.
+- Sliders: one shared style (`controls.module.css` `.slider`), with the
+  track filled up to the knob via `--fill` (`range-fill.ts`).
+- Styles panel: the delete button overlays the right padding instead of
+  reserving a column; editable keys read as plain text until hovered.
+- Objects: a 12px disclosure column and 12px indentation per level; the
+  visibility toggle moved to the right end and shows on hover or while
+  hidden.
+- Dock tab strips: the overflow button overlays the strip end instead of
+  taking room, and a strip re-renders whenever it was laid out for a stale
+  width, which fixes stuck overflow buttons and stale modes after resizes.

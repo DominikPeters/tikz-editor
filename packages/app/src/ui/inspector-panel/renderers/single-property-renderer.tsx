@@ -28,6 +28,7 @@ renderPathMorphingDecorationDropdown,
 renderShadowPresetDropdown
 } from "../property-dropdowns";
 import type { RenderPropertyApi } from "../property-renderer-types";
+import { rangeFillStyle } from "../../range-fill";
 export function renderSingleInspectorProperty(property: InspectorProperty, api: RenderPropertyApi) {
   const {
     renderedSinglePropertyProvenance,
@@ -175,6 +176,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
               <input
                 className={css.sliderInput}
                 type="range"
+                style={rangeFillStyle(property.value, property.min, property.max)}
                 aria-label={property.label}
                 min={property.min}
                 max={property.max}
@@ -230,9 +232,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
       return (
         <div key={property.id} className={propertyClassName}>
           <div className={css.propertyLabel}>{property.label}</div>
-          {maybeWrapWithProvenanceTooltip(
-            provenance,
-            renderNodeTextAlignToolbar(
+          {renderNodeTextAlignToolbar(
               {
                 value: property.value,
                 mixed: false
@@ -240,9 +240,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
               writable,
               (nextValue: "unset" | "left" | "center" | "right" | "justify") =>
                 { applySetProperty(property.write, nextValue === "unset" ? "" : nextValue, { clearKeys: property.clearKeys }); }
-            ),
-            true
-          )}
+            )}
           {renderReadOnlyReasonNote(readOnlyReason)}
         </div>
       );
@@ -290,9 +288,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
       return (
         <div key={property.id} className={propertyClassName}>
           <div className={css.propertyLabel}>{property.label}</div>
-          {maybeWrapWithProvenanceTooltip(
-            provenance,
-            renderNodeFontToolbar(
+          {renderNodeFontToolbar(
               {
                 family: property.family,
                 familyMixed: false,
@@ -359,9 +355,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
                 ); },
               () => { clearHoverPreviewSession(previewOwnerKey); },
               () => { restoreHoverPreviewBase(previewOwnerKey); }
-            ),
-            true
-          )}
+            )}
           {property.note ? <div className={css.propertyNote}>{property.note}</div> : null}
           {renderReadOnlyReasonNote(readOnlyReason)}
         </div>
@@ -406,21 +400,18 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
       return (
         <div key={property.id} className={propertyClassName}>
           <div className={css.propertyLabel}>{property.label}</div>
-          {maybeWrapWithProvenanceTooltip(
-            provenance,
-            renderFillModeSegments(
-              {
-                label: property.label,
-                value: property.value,
-                options: property.options
-              },
-              writable,
-              (nextValue) => {
-                applyFillModeValue(property.write, nextValue, property.context);
-                setFillAdvancedOptionsOpen(nextValue !== "solid");
-              }
-            ),
-            true
+          {/* No provenance tooltip: on a segmented control it pops up over whichever segment is hovered. */}
+          {renderFillModeSegments(
+            {
+              label: property.label,
+              value: property.value,
+              options: property.options
+            },
+            writable,
+            (nextValue) => {
+              applyFillModeValue(property.write, nextValue, property.context);
+              setFillAdvancedOptionsOpen(nextValue !== "solid");
+            }
           )}
           {renderReadOnlyReasonNote(readOnlyReason)}
         </div>
@@ -604,6 +595,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
             <input
               className={css.rangeInput}
               type="range"
+              style={rangeFillStyle(property.value, property.min, property.max)}
               min={property.min}
               max={property.max}
               step={property.step}
@@ -798,6 +790,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
               <input
                 className={css.rangeInput}
                 type="range"
+                style={rangeFillStyle(currentRadius, minRadius, maxRadius)}
                 min={minRadius}
                 max={maxRadius}
                 step={property.step}

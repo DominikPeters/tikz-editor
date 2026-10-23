@@ -39,9 +39,11 @@
   outline: none;
 }
 
+/* Disclosure (indented by depth) | title | visibility, which shows on hover
+   or while the object is hidden. */
 .row {
   display: grid;
-  grid-template-columns: minmax(18px, auto) 18px minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 2px;
   min-height: calc(var(--app-ui-scale, 1) * 20px);
@@ -62,6 +64,7 @@
 }
 
 .tree:focus-within .rowSelected .iconButton,
+.tree:focus-within .rowSelected .disclosure,
 .tree:focus-within .rowSelected .labelMeta {
   color: rgb(255 255 255 / 80%);
 }
@@ -95,12 +98,40 @@
 }
 
 .iconButton svg {
-  width: calc(var(--app-ui-scale, 1) * 14px);
-  height: calc(var(--app-ui-scale, 1) * 14px);
+  width: calc(var(--app-ui-scale, 1) * 13px);
+  height: calc(var(--app-ui-scale, 1) * 13px);
 }
 
 .iconButton:hover {
   color: var(--text);
+}
+
+.disclosure {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--app-ui-scale, 1) * 12px);
+  height: calc(var(--app-ui-scale, 1) * 18px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--label-secondary);
+  cursor: default;
+}
+
+.disclosure svg {
+  width: calc(var(--app-ui-scale, 1) * 12px);
+  height: calc(var(--app-ui-scale, 1) * 12px);
+}
+
+.visibilityButton {
+  opacity: 0;
+}
+
+.row:hover .visibilityButton,
+.visibilityButton:focus-visible,
+.visibilityHidden {
+  opacity: 1;
 }
 
 .iconButtonDisabled {
@@ -149,4 +180,8 @@
 
 .dropAfter {
   box-shadow: inset 0 -2px 0 var(--control-accent);
+}
+
+.row:has(.visibilityHidden) .title {
+  color: var(--label-secondary);
 }
