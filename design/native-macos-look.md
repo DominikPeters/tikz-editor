@@ -501,6 +501,12 @@ As built (dialogs and Settings, 2026-10-24):
 - The app mark in alerts is drawn in CSS, like About's.
 - Fields in the PNG, SVG, workspace, Repeat and arXiv dialogs compose the
   shared `field`. Dialog controls are 3px taller than inspector ones.
+- The old accent: chrome uses `--control-accent` throughout. Selected
+  chips (colour picker tabs and swatches, toolbar popups, the Assistant
+  model menu) are a 16% tint of it, and links take `--link-color` (AppKit
+  linkColor, Fluent accent text). The `--accent-btn-*` tokens are gone.
+  `--accent` and `--accent-dark` remain for the canvas, plus the developer
+  panel.
 - Settings: the Windows navigation list has the Fluent selection pill.
   `settings-and-persistence` now checks the control tokens instead of
   `--bg-pane` and `--border`.

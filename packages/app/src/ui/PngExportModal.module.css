@@ -137,7 +137,7 @@
 
 .checkboxRow input {
   margin-top: 2px;
-  accent-color: var(--accent);
+  accent-color: var(--control-accent);
 }
 
 .checkboxText {

@@ -30,12 +30,12 @@
 }
 
 .card:hover {
-  border-color: var(--accent-btn-border);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+  border-color: var(--control-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--control-accent) 40%, transparent);
 }
 
 .card:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 70%, transparent);
   outline-offset: 1px;
 }
 

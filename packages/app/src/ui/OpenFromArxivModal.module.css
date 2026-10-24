@@ -77,7 +77,7 @@
 }
 
 .paperLink {
-  color: var(--accent-dark);
+  color: var(--link-color);
   font-size: 12px;
   text-decoration: none;
 }
@@ -121,13 +121,13 @@
 }
 
 .card:hover {
-  border-color: var(--accent-btn-hover-border);
-  background: color-mix(in srgb, var(--accent) 5%, var(--bg-pane));
+  border-color: var(--control-accent);
+  background: color-mix(in srgb, var(--control-accent) 5%, var(--bg-pane));
 }
 
 .selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
+  border-color: var(--control-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--control-accent) 28%, transparent);
 }
 
 .cardIndex {

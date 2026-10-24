@@ -100,7 +100,7 @@
 }
 
 .editorWrap :global(.cm-inline-color-swatch:not(.cm-inline-color-swatch-readonly):hover) {
-  border-color: var(--accent);
+  border-color: var(--control-accent);
   box-shadow: 0 0 0 2px rgba(47, 122, 216, 0.18);
 }
 
@@ -132,7 +132,7 @@
 }
 
 .editorWrap :global(.cm-figure-box:hover) {
-  border-color: var(--accent);
+  border-color: var(--control-accent);
 }
 
 .editorWrap :global(.cm-figure-box-thumb) {
@@ -269,7 +269,7 @@
 }
 
 :global(.cm-editor-docs-tooltip-link) {
-  color: var(--accent-dark);
+  color: var(--link-color);
   text-decoration: none;
 }
 

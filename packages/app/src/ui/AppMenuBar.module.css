@@ -123,7 +123,7 @@
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  color: var(--accent-dark);
+  color: var(--text);
   font-size: calc(var(--app-ui-scale, 1) * 11px);
 }
 

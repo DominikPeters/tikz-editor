@@ -93,14 +93,14 @@ export function SvgCodeEditor({ value, onChange, ariaLabel }: SvgCodeEditorProps
                 backgroundColor: "color-mix(in srgb, var(--bg-header) 72%, transparent)"
               },
               ".cm-selectionBackground, ::selection": {
-                backgroundColor: "color-mix(in srgb, var(--accent) 24%, white)"
+                backgroundColor: "color-mix(in srgb, var(--control-accent) 24%, var(--bg-pane))"
               },
               ".cm-cursor, .cm-dropCursor": {
-                borderLeftColor: "var(--accent-dark)"
+                borderLeftColor: "var(--control-accent)"
               },
               ".cm-matchingBracket": {
-                backgroundColor: "color-mix(in srgb, var(--accent) 14%, white)",
-                outline: "1px solid color-mix(in srgb, var(--accent) 28%, transparent)"
+                backgroundColor: "color-mix(in srgb, var(--control-accent) 14%, var(--bg-pane))",
+                outline: "1px solid color-mix(in srgb, var(--control-accent) 28%, transparent)"
               }
             },
             { dark: false }

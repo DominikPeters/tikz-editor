@@ -133,9 +133,9 @@
 }
 
 .tabButtonActive {
-  border-color: var(--accent-btn-border);
-  background: var(--accent-btn-bg);
-  color: var(--accent-dark);
+  border-color: var(--control-accent);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
+  color: var(--text);
 }
 
 .standardTabPanel {
@@ -385,8 +385,8 @@
 }
 
 .swatchButtonSelected {
-  border-color: var(--accent-btn-border);
-  background: var(--accent-btn-bg);
+  border-color: var(--control-accent);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
 }
 
 .swatchButton:disabled {
@@ -446,7 +446,7 @@
 }
 
 .brightnessTrack:focus-visible {
-  outline: 2px solid var(--accent-btn-border);
+  outline: 2px solid var(--control-accent);
   outline-offset: 1px;
 }
 

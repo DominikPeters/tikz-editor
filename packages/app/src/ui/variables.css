@@ -34,13 +34,10 @@
   --toggle-active-bg: #dcdcdc;
   --toggle-mixed-bg:  #e6e6e6;
 
-  /* Accent blue */
+  /* Canvas blue: selection handles, guides and drop targets on the drawing.
+     Window chrome uses --control-accent, which can follow the system. */
   --accent:              #5898d0;
   --accent-dark:         #1060b0;
-  --accent-btn-bg:       #c4daf4;
-  --accent-btn-border:   #5898d0;
-  --accent-btn-hover-bg: #b4ccec;
-  --accent-btn-hover-border: #4888c0;
 
   /* Semantic colours — keep saturated for legibility */
   --color-error:   #bf2c29;
@@ -78,6 +75,7 @@
   --control-shadow:   0 1px 1.5px rgba(0, 0, 0, 0.1);
   --control-accent:   #007aff;
   --control-selection: #0063e1;  /* selected rows in a focused list */
+  --link-color:       #0068da;   /* AppKit linkColor */
   --segment-track:    rgba(0, 0, 0, 0.07);
   --segment-on-bg:    #ffffff;
   --segment-on-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.14);
@@ -119,6 +117,7 @@
   --control-shadow:   none;
   --control-accent:   #005fb8;
   --control-on-accent: #ffffff;
+  --link-color:       #005fb8;
   --control-selection: #005fb8;
   --segment-track:    transparent;
   --segment-on-bg:    #005fb8;
@@ -156,6 +155,7 @@
   --control-shadow:   none;
   --control-accent:   #60cdff;
   --control-on-accent: #000000;
+  --link-color:       #99ebff;
   --control-selection: #005fb8;  /* under white text */
   --segment-track:    transparent;
   --segment-on-bg:    #60cdff;
@@ -199,13 +199,9 @@
   --toggle-active-bg: #404040;
   --toggle-mixed-bg:  #363636;
 
-  /* Accent blue (slightly muted for dark) */
+  /* Canvas blue (slightly muted for dark) */
   --accent:              #5898d0;
   --accent-dark:         #7ab4e0;
-  --accent-btn-bg:       #1e3a5a;
-  --accent-btn-border:   #3a6090;
-  --accent-btn-hover-bg: #25496e;
-  --accent-btn-hover-border: #4878a8;
 
   /* Semantic colours */
   --color-error:   #e05555;
@@ -241,6 +237,7 @@
   --control-shadow:   inset 0 0.5px 0 rgba(255, 255, 255, 0.12);
   --control-accent:   #0a84ff;
   --control-selection: #0058d0;
+  --link-color:       #419cff;
   --segment-track:    #1c1c1e;
   --segment-on-bg:    #5a5a5e;
   --segment-on-shadow: none;
@@ -376,7 +373,7 @@ html {
 [data-color-scheme="dark"] .cm-panel.cm-search input[type="checkbox"],
 [data-color-scheme="dark"] .cm-panel.cm-search input[type="radio"] {
   color-scheme: dark;
-  accent-color: #5898d0;
+  accent-color: var(--control-accent);
 }
 
 [data-color-scheme="dark"] .cm-searchMatch {

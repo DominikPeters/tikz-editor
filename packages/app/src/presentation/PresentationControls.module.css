@@ -55,12 +55,12 @@
 }
 
 .layout:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--control-accent);
   outline-offset: -1px;
 }
 
 .layout[aria-current="true"] {
-  border-color: var(--accent);
+  border-color: var(--control-accent);
 }
 
 .layoutPreview {

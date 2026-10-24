@@ -157,9 +157,9 @@
   margin-left: 8px;
   margin-right: 3px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--control-accent) 42%, var(--border));
   border-radius: 6px;
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-pane));
+  background: color-mix(in srgb, var(--control-accent) 12%, var(--bg-pane));
   color: var(--text);
   font: inherit;
   font-size: calc(var(--app-ui-scale, 1) * 11px);
@@ -169,12 +169,12 @@
 }
 
 .updateChip:hover {
-  background: color-mix(in srgb, var(--accent) 18%, var(--bg-pane));
-  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+  background: color-mix(in srgb, var(--control-accent) 18%, var(--bg-pane));
+  border-color: color-mix(in srgb, var(--control-accent) 58%, var(--border));
 }
 
 .updateChip:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 70%, transparent);
   outline-offset: 1px;
 }
 

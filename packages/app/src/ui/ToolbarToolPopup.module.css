@@ -46,14 +46,14 @@
 
 .matrixPickerCell:hover,
 .matrixPickerCell:focus-visible {
-  border-color: var(--accent-btn-border);
-  background: color-mix(in srgb, var(--accent-btn-bg) 70%, var(--bg-pane));
+  border-color: var(--control-accent);
+  background: color-mix(in srgb, color-mix(in srgb, var(--control-accent) 16%, transparent) 70%, var(--bg-pane));
   outline: none;
 }
 
 .matrixPickerCellSelected {
-  border-color: var(--accent-btn-border);
-  background: var(--accent-btn-bg);
+  border-color: var(--control-accent);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
 }
 
 .section {
@@ -96,8 +96,8 @@
 }
 
 .visualChoiceButtonSelected {
-  background: var(--accent-btn-bg);
-  border-color: var(--accent-btn-border);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
+  border-color: var(--control-accent);
 }
 
 .visualChoicePreview {

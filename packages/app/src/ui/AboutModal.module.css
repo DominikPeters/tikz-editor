@@ -31,7 +31,7 @@
 }
 
 .closeButton:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 70%, transparent);
   outline-offset: 1px;
 }
 
@@ -106,7 +106,7 @@
 }
 
 .meta a {
-  color: var(--accent);
+  color: var(--link-color);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
