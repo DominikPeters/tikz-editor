@@ -48,9 +48,11 @@ export function buildPaintToggle(
   const styleWins = lastStyleIndex >= 0 && lastStyleIndex > lastOwnIndex && !localShading;
 
   // A bare colour (`\draw[red]`) or `color=` colours both paints and node
-  // text, so it goes with this paint only when nothing else uses it.
+  // text, and the nodes, edges and pics on the path, so it goes with this
+  // paint only when nothing else uses it.
   const otherEnabled = paint === "stroke" ? state.fillEnabled : state.strokeEnabled;
-  const ownsColor = !otherEnabled && !isNodeTarget(context.targetKind) && !styleWins;
+  const colorDependents = context.resolvedTarget?.kind === "found" && context.resolvedTarget.target.hasColorDependents === true;
+  const ownsColor = !otherEnabled && !isNodeTarget(context.targetKind) && !colorDependents && !styleWins;
   const colorFlags = entries.filter((entry) => entry.kind === "flag" && isLikelyBareColorOption(entry.key)).map((entry) => entry.key.trim());
   const colorKeys = ownsColor ? ["color", ...colorFlags] : [];
   const ownedKeys = new Set([...(paint === "stroke" ? ["draw"] : FILL_PAINT_KEYS), ...colorKeys.map(normalizeOptionKey)]);
@@ -62,7 +64,7 @@ export function buildPaintToggle(
   const otherKey = paint === "stroke" ? "fill" : "draw";
   const otherHasColor = entries.some((entry) => entry.kind === "kv" && normalizeOptionKey(entry.key) === otherKey);
   const otherColor = paint === "stroke" ? context.element.style.fill : context.element.style.stroke;
-  const aliasFlag = !ownsColor && commandName(context) === key ? colorFlags.at(-1) ?? null : null;
+  const aliasFlag = !ownsColor && !colorDependents && commandName(context) === key ? colorFlags.at(-1) ?? null : null;
   const sharedFlag = aliasFlag != null && otherColor != null && sameColor(otherColor, aliasFlag) ? aliasFlag : null;
 
   // `fill=none` leaves shading on, so shading that outlives the local options
@@ -90,7 +92,7 @@ export function buildPaintToggle(
   // `\draw[blue]`, and `draw=none` on \draw takes a bare colour with it. So
   // the paint comes back with its colour unless nothing can recolour it.
   const current = paint === "stroke" ? context.element.style.stroke : context.element.style.fill;
-  const flagKeepsColor = aliasFlag == null && !otherHasColor && current != null
+  const flagKeepsColor = aliasFlag == null && (!otherHasColor || colorDependents) && current != null
     && sameColor(current, context.element.style.textColor ?? "black");
   const writtenColor = state.colorSyntax != null && current != null && sameColor(state.colorSyntax, current) ? state.colorSyntax : null;
   // The resolved colour is only writable as TikZ when it is a colour name.
@@ -102,11 +104,16 @@ export function buildPaintToggle(
     enabled,
     write,
     disable,
-    restore: !enabled ? [] : styleWins ? [{ key, value: "", propertyId }] : [
-          ...restoreMutations(owned, key, propertyId, paintValue, commandPaints(context, key) || aliasFlag != null),
-          // Shading from \shade or \shadedraw went with the command.
-          ...(paint === "fill" && commandShades(context) ? [{ key: "shade", value: "true", propertyId: "fill-shade" as const }] : [])
-        ],
+    restore: !enabled ? [] : [
+      // Remove the suppression before replaying local options, which may
+      // themselves include an authored shade=none / shade=false.
+      ...(disableShade ? [{ key: "shade", value: "", propertyId: "fill-shade" as const }] : []),
+      ...(styleWins ? [{ key, value: "", propertyId }] : restoreMutations(owned, key, propertyId, paintValue, commandPaints(context, key) || aliasFlag != null)),
+      // Shading from \shade or \shadedraw went with the command.
+      ...(paint === "fill" && commandShades(context) && context.element.style.shadeEnabled
+        ? [{ key: "shade", value: "true", propertyId: "fill-shade" as const }]
+        : [])
+    ],
     enable: [{ key, value: "true", propertyId }]
   };
 }

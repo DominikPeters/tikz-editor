@@ -661,7 +661,9 @@ function normalizeOptionEntryRaw(entry: OptionEntry): TikzFragment {
 }
 
 function resolveOptionSerializationContext(target: PropertyTarget): OptionSerializationContext {
-  if (!target.pathCommand) {
+  // A bare colour also colours the path's nodes, edges and pics, so there
+  // draw / fill colours are written as their own keys.
+  if (!target.pathCommand || target.hasColorDependents) {
     return DEFAULT_OPTION_SERIALIZATION_CONTEXT;
   }
 

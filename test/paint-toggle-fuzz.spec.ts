@@ -49,7 +49,8 @@ function randomStatement(rng: () => number): string {
   const [colors = [], ...rest] = groups.map((group) => rng() < 0.5 ? [pick(group, rng)] : []);
   const options = [...colors, ...rest.flat().sort(() => rng() - 0.5)];
   const list = options.length > 0 ? `[${options.join(", ")}]` : "";
-  return node ? `\\node${list} (a) at (0,0) {x};` : `${command}${list} (0,0) rectangle (1,1);`;
+  const attachedNode = !node && rng() < 0.35 ? ` node${rng() < 0.5 ? "[text=green]" : ""} {label}` : "";
+  return node ? `\\node${list} (a) at (0,0) {x};` : `${command}${list} (0,0) rectangle (1,1)${attachedNode};`;
 }
 
 function picture(statement: string): string {
@@ -61,6 +62,7 @@ type Snapshot = {
   source: string;
   element: SceneElement;
   bystander: string;
+  textColors: Array<string | null>;
   diagnostics: number;
   toggles: Partial<Record<InspectorPaintToggle["paint"], InspectorPaintToggle>>;
   editHandles: ReturnType<typeof renderTikzToSvg>["semantic"]["editHandles"];
@@ -79,6 +81,7 @@ function snapshot(source: string): Snapshot {
     source,
     element,
     bystander: JSON.stringify(rest.at(-1)?.style ?? null),
+    textColors: rendered.semantic.scene.elements.filter(element => element.kind === "Text").map(element => element.style.textColor),
     diagnostics: rendered.semantic.diagnostics.filter((diagnostic) => diagnostic.severity === "error").length,
     toggles,
     editHandles: rendered.semantic.editHandles
@@ -147,12 +150,14 @@ describe("paint toggle fuzz", () => {
         expect(isPainted(off.element, paint), `${context}\noff:\n${off.source}`).toBe(false);
         expect(paintOf(off.element, other), `${context}\noff:\n${off.source}`).toBe(paintOf(original.element, other));
         expect(off.bystander, context).toBe(original.bystander);
+        expect(off.textColors, context).toEqual(original.textColors);
 
         const offToggle = off.toggles[paint];
         if (!offToggle) throw new Error(`No ${paint} toggle after switching off\n${off.source}`);
         const restored = snapshot(apply(off, offToggle, toggle.restore.length > 0 ? toggle.restore : offToggle.enable));
         expect(paintOf(restored.element, paint), `${context}\nrestored:\n${restored.source}`).toBe(paintOf(original.element, paint));
         expect(paintOf(restored.element, other), `${context}\nrestored:\n${restored.source}`).toBe(paintOf(original.element, other));
+        expect(restored.textColors, context).toEqual(original.textColors);
 
         const enabled = snapshot(apply(off, offToggle, offToggle.enable));
         expect(enabled.toggles[paint]?.enabled, `${context}\nenabled:\n${enabled.source}`).toBe(true);

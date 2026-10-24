@@ -457,7 +457,8 @@ function resolvePaintOptions(
   for (const entry of resolved.target.options.entries) {
     if (entry.kind === "kv") {
       const key = normalizeOptionKey(entry.key);
-      if (key === "draw" || key === "color") {
+      // `color` sets the current colour without switching drawing on.
+      if (key === "draw") {
         draw = normalizeOptionValue(entry.valueRaw);
       }
       if (key === "fill") {

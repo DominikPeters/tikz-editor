@@ -50,7 +50,7 @@ export type ApplySetPropertyOptions = {
 type RememberedPaint = {
   mutations: readonly PropertyWriteMutation[];
   /** The source just after the checkbox switched the paint off, and just before. */
-  exact: { documentId: string; revision: number; source: string; restoreSource: string };
+  exact: { documentId: string; revision: number; source: string; restoreSource: string; paintKeys: ReadonlySet<string> };
 };
 
 function dispatchPaintWrites(
@@ -88,8 +88,8 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
       toggle.write.writable && toggle.write.elementId.length > 0 && toggle.enabled !== enabled
     );
     if (changing.length === 0) return;
-    const memoryKey = (toggle: InspectorPaintToggle) => `${toggle.write.elementId}:${toggle.paint}`;
     const before = useEditorStore.getState();
+    const memoryKey = (toggle: InspectorPaintToggle) => `${before.activeDocumentId}:${toggle.write.elementId}:${toggle.paint}`;
 
     if (enabled) {
       const remembered = changing.map((toggle) => rememberedPaint.current.get(memoryKey(toggle)));
@@ -98,6 +98,9 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
       if (
         exact
         && remembered.every((entry) => entry?.exact === exact)
+        // A whole-source restore is valid only for the complete original batch.
+        && exact.paintKeys.size === changing.length
+        && changing.every((toggle) => exact.paintKeys.has(memoryKey(toggle)))
         && exact.documentId === before.activeDocumentId
         && exact.revision === before.sourceRevision
         && exact.source === before.source
@@ -118,7 +121,13 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
     dispatchPaintWrites(dispatch, changing.map((toggle) => [toggle, toggle.disable]), options);
     const after = useEditorStore.getState();
     if (after.sourceRevision === before.sourceRevision) return;
-    const exact = { documentId: after.activeDocumentId, revision: after.sourceRevision, source: after.source, restoreSource: before.source };
+    const exact = {
+      documentId: after.activeDocumentId,
+      revision: after.sourceRevision,
+      source: after.source,
+      restoreSource: before.source,
+      paintKeys: new Set(changing.map(memoryKey))
+    };
     for (const toggle of changing) {
       rememberedPaint.current.set(memoryKey(toggle), { mutations: toggle.restore.length > 0 ? toggle.restore : toggle.enable, exact });
     }

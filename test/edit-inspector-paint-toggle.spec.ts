@@ -15,7 +15,7 @@ function statement(source: string): string {
 
 function toggleFor(source: string, paint: InspectorPaintToggle["paint"]) {
   const rendered = renderTikzToSvg(source);
-  const element = rendered.semantic.scene.elements[0];
+  const element = rendered.semantic.scene.elements.find(element => element.kind === "Path") ?? rendered.semantic.scene.elements[0];
   if (!element) throw new Error("Expected a scene element");
   const descriptor = getInspectorDescriptor(element, { source, editHandles: rendered.semantic.editHandles });
   const toggle = descriptor.sections.find((section) => section.id === paint)?.toggle;
@@ -110,6 +110,65 @@ describe("inspector paint toggles", () => {
     const source = picture(String.raw`\draw[s] (0,0) rectangle (1,1);`, "[s/.style={left color=red, right color=blue}]");
     // The evaluator gives shading keys a black fill, so `fill=none` stays too.
     expect(statement(applyMutations(source, "fill", (toggle) => toggle.disable))).toBe(String.raw`\draw[s, fill=none, shade=none] (0,0) rectangle (1,1);`);
+  });
+
+  it.each([
+    "[s/.style={left color=red, right color=blue}]",
+    "[left color=red, right color=blue]"
+  ])("restores inherited shading without retaining the temporary suppression: %s", options => {
+    const body = options.includes("s/.style") ? String.raw`\draw[s] (0,0) rectangle (1,1);` : String.raw`\draw (0,0) rectangle (1,1);`;
+    const source = picture(body, options);
+    const { toggle } = toggleFor(source, "fill");
+    const off = applyMutations(source, "fill", current => current.disable);
+    const restored = applyMutations(off, "fill", () => toggle.restore);
+    expect(restored).toBe(source);
+  });
+
+  it.each(["stroke", "fill"] as const)("keeps attached node colours when switching %s off", paint => {
+    const command = paint === "stroke" ? String.raw`\draw` : String.raw`\fill`;
+    for (const color of ["red", "color=red"]) {
+      for (const nodes of ["node {label}", "node[draw] {label}", "node[text=green] {label}"]) {
+        const source = picture(`${command}[${color}] (0,0) rectangle (1,1) ${nodes};`);
+        const textPaint = (source: string) => renderTikzToSvg(source).semantic.scene.elements
+          .filter(element => element.kind === "Text").map(element => ({
+            color: element.style.textColor,
+            ...(nodes.includes("[draw]") ? { border: element.style.stroke } : {})
+          }));
+        const { toggle } = toggleFor(source, paint);
+        const off = applyMutations(source, paint, current => current.disable);
+        expect(toggleFor(off, paint).toggle.enabled).toBe(false);
+        expect(textPaint(off)).toEqual(textPaint(source));
+        expect(off).not.toContain("=none");
+        const restored = applyMutations(off, paint, () => toggle.restore);
+        expect(toggleFor(restored, paint).toggle.enabled).toBe(true);
+        expect(textPaint(restored)).toEqual(textPaint(source));
+      }
+    }
+  });
+
+  it.each([
+    "to node {label} (1,1)",
+    'to["label"] (1,1)',
+    "to[edge label={label}] (1,1)"
+  ])("preserves the colour of labels attached to a to operation: %s", operation => {
+    const source = picture(`\\draw[red] (0,0) ${operation};`);
+    const textColors = (source: string) => renderTikzToSvg(source).semantic.scene.elements
+      .filter(element => element.kind === "Text").map(element => element.style.textColor);
+    expect(textColors(source)).toEqual(["#ff0000"]);
+    const { toggle } = toggleFor(source, "stroke");
+    const off = applyMutations(source, "stroke", current => current.disable);
+    expect(textColors(off)).toEqual(textColors(source));
+    const restored = applyMutations(off, "stroke", () => toggle.restore);
+    expect(textColors(restored)).toEqual(textColors(source));
+  });
+
+  it("keeps authored shading suppression when restoring a solid fill", () => {
+    const source = picture(String.raw`\shadedraw[shade=none, fill=red] (0,0) rectangle (1,1);`);
+    const { toggle } = toggleFor(source, "fill");
+    const off = applyMutations(source, "fill", current => current.disable);
+    const restored = applyMutations(off, "fill", () => toggle.restore);
+    const style = renderTikzToSvg(restored).semantic.scene.elements.find(element => element.kind === "Path")?.style;
+    expect(style).toMatchObject({ fill: "#ff0000", shadeEnabled: false });
   });
 
   it("switches a plain \\shade off", () => {
