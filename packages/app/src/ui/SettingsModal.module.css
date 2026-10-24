@@ -338,6 +338,8 @@
   background-position: right 9px center;
   background-size: 10px 10px;
   box-shadow: inset 0 0 0 1px var(--control-ring), inset 0 -1px 0 var(--control-stroke-bottom);
+  /* Combo boxes on settings cards are wide enough for their longest choice. */
+  min-width: calc(var(--app-ui-scale, 1) * 200px);
 }
 
 :global(html[data-desktop-os="windows"]) .resetRow {
