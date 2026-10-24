@@ -193,10 +193,13 @@ Done together, since the custom title bar decides where the document tabs go.
   it maximises. The script logs the window's children and hit-tests the
   caption, and Notepad's flyout serves as a control. `SetCursorPos` alone
   does not open the flyout.
-- **Flyout theme:** the shell draws the flyout in the window's frame theme
-  (light for classic Notepad, which has none), which tao takes from the
-  system theme. The script therefore broadcasts `ImmersiveColorSet` after
-  switching the theme in the registry.
+- **Open: flyout theme.** On the runner our flyout is dark in both themes,
+  while Notepad's is light. It is not the frame: the script logs
+  `DWMWA_USE_IMMERSIVE_DARK_MODE`, which is 0 in the light run and 1 in the
+  dark one, as tao reads `AppsUseLightTheme`. The shell seems not to pick up
+  the script's registry switch (the taskbar stays light in the dark run,
+  even after broadcasting `ImmersiveColorSet`), so check this on a real
+  machine before chasing it.
 - **Runner limits:** no rounded corners or window shadow, since the VM has
   only the basic display adapter. Both need a real Windows 11 check.
 
@@ -223,7 +226,7 @@ Done together, since the custom title bar decides where the document tabs go.
   Windows Server 2025, which shares the Windows 11 24H2 shell, Snap Layouts
   included, but has no GPU.
 - Still to check on a real machine (or a short-lived VM with a GPU): rounded
-  corners and the shadow, dragging and double-clicking the title bar,
-  Alt+Space, Mica.
+  corners and the shadow, the Snap Layouts flyout's theme, dragging and
+  double-clicking the title bar, Alt+Space, Mica.
 - Tests: e2e for menu keyboard access, plus the existing suites (see
   `native-macos-look.md`, "Verification per phase").
