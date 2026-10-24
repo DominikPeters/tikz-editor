@@ -1,161 +1,195 @@
-.dialog {
+/* Settings. The base look (web and macOS) is the macOS settings window: a bar
+   of icon tabs, then a form with labels right-aligned against their
+   controls and help text under the control. Windows gets the Settings app:
+   a navigation list and one card per setting (end of file). Every row is
+   `settingRow > settingLabel(text, settingDesc) + control`, so the form is
+   laid out with grid and `display: contents` on the label. */
+
+/* A macOS settings window fits its content; Windows keeps a fixed page. */
+.dialog[open] {
+  width: min(calc(var(--app-ui-scale, 1) * 620px), calc(100vw - 40px));
+}
+
+:global(html[data-desktop-os="windows"]) .dialog[open] {
+  width: min(840px, calc(100vw - 40px));
   height: min(560px, calc(100vh - 80px));
-  --settings-card-bg: var(--bg-pane);
-  --settings-control-bg: var(--bg-pane);
-  --settings-control-border: var(--border);
 }
 
 .bodyLayout {
   flex: 1;
   min-height: 0;
   display: flex;
+  flex-direction: column;
   overflow: hidden;
-  background: color-mix(in srgb, var(--bg-pane) 84%, var(--bg-app));
 }
 
+/* ── Category tabs ──────────────────────────────────────────────────────── */
+
 .sidebar {
-  width: 156px;
   flex-shrink: 0;
-  border-right: 1px solid var(--border-lighter);
-  background: color-mix(in srgb, var(--bg-pane) 70%, var(--bg-app));
-  padding: 8px 6px;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  overflow-y: auto;
+  justify-content: center;
+  gap: 4px;
+  padding: 2px 12px 8px;
+  border-bottom: 1px solid var(--separator);
 }
 
 .navItem {
-  display: block;
-  width: 100%;
-  padding: 5px 10px;
-  text-align: left;
+  width: calc(var(--app-ui-scale, 1) * 84px);
+  height: calc(var(--app-ui-scale, 1) * 50px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0;
   border: none;
+  border-radius: 7px;
   background: none;
   font-family: inherit;
-  font-size: calc(var(--app-ui-scale, 1) * 12px);
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 5px;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  color: var(--label-secondary);
+  cursor: default;
+}
+
+.navIcon {
+  width: calc(var(--app-ui-scale, 1) * 22px);
+  height: calc(var(--app-ui-scale, 1) * 22px);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .navItem:hover {
-  background: var(--btn-hover-bg);
-  color: var(--text);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
 .navItemActive,
 .navItemActive:hover {
-  background: var(--accent-btn-bg);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text);
-  font-weight: 600;
 }
+
+.navItemActive .navIcon {
+  color: var(--control-accent);
+}
+
+.navItem:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--control-accent) 45%, transparent);
+  outline-offset: -1px;
+}
+
+/* ── Form ───────────────────────────────────────────────────────────────── */
 
 .content {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 16px 16px;
+  padding: 20px 28px 20px;
 }
 
 .panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
 }
 
+/* The tab bar already names the page. */
 .panelTitle {
-  font-size: calc(var(--app-ui-scale, 1) * 12px);
-  font-weight: 600;
-  color: var(--text);
-  padding: 0 2px;
+  display: none;
 }
 
 .settingsGroup {
-  background: var(--settings-card-bg, var(--bg-pane));
-  border: 1px solid var(--border-light);
-  border-radius: 6px;
-  overflow: hidden;
-  margin-bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .settingRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 3px;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 7px 12px;
-  border-bottom: 1px solid var(--border-lighter);
-}
-
-.settingRow:last-child {
-  border-bottom: none;
+  font-size: calc(var(--app-ui-scale, 1) * 12px);
+  color: var(--text);
+  /* The label's own text is an anonymous grid item in the first column. */
+  text-align: right;
 }
 
 .settingLabel {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: calc(var(--app-ui-scale, 1) * 12px);
-  color: var(--text);
-  cursor: pointer;
+  display: contents;
+  cursor: default;
 }
 
 .settingDesc {
+  grid-column: 2;
+  grid-row: 2;
+  max-width: 320px;
   font-size: calc(var(--app-ui-scale, 1) * 11px);
-  color: var(--text-faint);
-  cursor: default;
+  color: var(--label-secondary);
   line-height: 1.35;
+  text-align: left;
+}
+
+.settingRow > :not(label) {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: start;
+  text-align: left;
 }
 
 .checkbox {
-  cursor: pointer;
   flex-shrink: 0;
-  accent-color: var(--accent);
+  margin: 0;
+  accent-color: var(--control-accent);
 }
 
-.select,
-.numberInput {
-  height: 24px;
-  padding: 0 8px;
-  border: 1px solid var(--settings-control-border, var(--border));
-  border-radius: 4px;
-  background: var(--settings-control-bg, var(--bg-pane));
+/* A native select, drawn as a pop-up button with its chevron tile. */
+.select {
+  box-sizing: border-box;
+  border: 0;
+  border-radius: var(--radius-popup);
   color: var(--text);
   font-family: inherit;
-  font-size: calc(var(--app-ui-scale, 1) * 11px);
-  cursor: pointer;
-}
-
-.select {
   -webkit-appearance: none;
   appearance: none;
-  padding-right: 18px;
-  background-color: var(--settings-control-bg, var(--bg-pane));
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
-    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
-  background-position:
-    calc(100% - 10px) 10px,
-    calc(100% - 6px) 10px;
+  min-width: calc(var(--app-ui-scale, 1) * 140px);
+  height: calc(var(--app-ui-scale, 1) * (var(--control-h) + 3px));
+  padding: 0 26px 0 8px;
+  background-color: var(--control-popup-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 14'%3E%3Cpath d='M2 5l3-3 3 3M2 9l3 3 3-3' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"),
+    linear-gradient(var(--control-accent), var(--control-accent));
+  background-position: right 7px center, right 3px center;
+  background-size: 8px 11px, 16px calc(100% - 6px);
   background-repeat: no-repeat;
-  background-size: 4px 4px;
+  box-shadow: 0 0 0 0.5px var(--control-ring), var(--control-shadow);
+  font-size: calc(var(--app-ui-scale, 1) * 12px);
+  font-variant-numeric: normal;
+  text-align: left;
+  cursor: default;
 }
 
 .numberInput {
-  width: 80px;
-  cursor: text;
+  composes: field fieldNumeric from "./controls.module.css";
+  width: calc(var(--app-ui-scale, 1) * 64px);
+  height: calc(var(--app-ui-scale, 1) * (var(--control-h) + 3px));
+  font-size: calc(var(--app-ui-scale, 1) * 12px);
 }
 
-.select:hover,
-.numberInput:hover {
-  border-color: var(--border);
+.select:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--control-accent) 45%, transparent);
+  outline-offset: 0;
 }
 
-.select:focus-visible,
-.numberInput:focus-visible,
-.checkbox:focus-visible,
-.range:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+:global(html[data-desktop-os="windows"]) .select:focus-visible {
+  outline: 2px solid var(--focus-outer);
+  outline-offset: 1px;
+}
+
+.checkbox:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--control-accent) 45%, transparent);
   outline-offset: 1px;
 }
 
@@ -164,47 +198,160 @@
   width: 180px;
 }
 
-.fontPreviewRow {
-  padding: 8px 12px;
-  display: flex;
-  align-items: center;
-  min-height: 40px;
-  background: var(--settings-card-bg);
-  border-top: 1px solid var(--border-lighter);
-}
-
-.fontPreviewImg {
-  height: 26px;
-  width: auto;
-  max-width: 100%;
-}
-
-:global([data-color-scheme="dark"]) .fontPreviewImg {
-  filter: invert(1);
-  opacity: 0.82;
-}
-
 .resetRow {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 4px;
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+  column-gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--separator);
 }
 
 .resetButton {
+  grid-column: 2;
+  justify-self: start;
   appearance: none;
-  height: 24px;
-  padding: 0 10px;
-  border: 1px solid var(--border-light);
-  border-radius: 4px;
-  background: var(--bg-pane);
-  color: var(--text-muted);
+  height: calc(var(--app-ui-scale, 1) * 22px);
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--control-popup-bg);
+  box-shadow: 0 0 0 0.5px var(--control-ring), var(--control-shadow);
+  color: var(--text);
   font-family: inherit;
-  font-size: calc(var(--app-ui-scale, 1) * 11px);
-  cursor: pointer;
+  font-size: calc(var(--app-ui-scale, 1) * 12px);
+  cursor: default;
 }
 
-.resetButton:hover {
-  background: var(--btn-hover-bg);
-  border-color: var(--border);
+.resetButton:active:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 10%, var(--control-popup-bg));
+}
+
+.resetButton:disabled {
+  opacity: 0.5;
+}
+
+.resetButton:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--control-accent) 45%, transparent);
+  outline-offset: 0;
+}
+
+/* ── Windows 11: the Settings app ───────────────────────────────────────── */
+
+:global(html[data-desktop-os="windows"]) .bodyLayout {
+  flex-direction: row;
+}
+
+:global(html[data-desktop-os="windows"]) .sidebar {
+  width: calc(var(--app-ui-scale, 1) * 170px);
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 3px;
+  padding: 6px 6px;
+  border-bottom: 0;
+}
+
+:global(html[data-desktop-os="windows"]) .navItem {
+  position: relative;
+  width: 100%;
+  height: calc(var(--app-ui-scale, 1) * 32px);
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 0 12px;
+  border-radius: 4px;
+  font-size: calc(var(--app-ui-scale, 1) * 12px);
   color: var(--text);
+}
+
+:global(html[data-desktop-os="windows"]) .navIcon {
+  width: calc(var(--app-ui-scale, 1) * 15px);
+  height: calc(var(--app-ui-scale, 1) * 15px);
+}
+
+:global(html[data-desktop-os="windows"]) .navItem:hover,
+:global(html[data-desktop-os="windows"]) .navItemActive {
+  background: var(--tab-selected-bg);
+}
+
+:global(html[data-desktop-os="windows"]) .navItemActive .navIcon {
+  color: currentColor;
+}
+
+/* The selection pill on the left edge. */
+:global(html[data-desktop-os="windows"]) .navItemActive::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 25%;
+  bottom: 25%;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--control-accent);
+}
+
+:global(html[data-desktop-os="windows"]) .content {
+  padding: 18px 24px;
+  border-top-left-radius: 8px;
+  border-left: 1px solid var(--separator);
+  border-top: 1px solid var(--separator);
+  background: var(--bg-inspector);
+}
+
+:global(html[data-desktop-os="windows"]) .panelTitle {
+  display: block;
+  margin-bottom: 4px;
+  font-size: calc(var(--app-ui-scale, 1) * 20px);
+  font-weight: 600;
+}
+
+:global(html[data-desktop-os="windows"]) .settingsGroup {
+  gap: 4px;
+}
+
+:global(html[data-desktop-os="windows"]) .settingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: calc(var(--app-ui-scale, 1) * 56px);
+  box-sizing: border-box;
+  padding: 10px 16px;
+  border: 1px solid var(--separator);
+  border-radius: 6px;
+  background: var(--control-popup-bg);
+  text-align: left;
+}
+
+:global(html[data-desktop-os="windows"]) .settingLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+:global(html[data-desktop-os="windows"]) .settingDesc {
+  max-width: none;
+}
+
+/* Windows draws a plain chevron, as on its combo boxes. */
+:global(html[data-desktop-os="windows"]) .select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1.5 3.5l3.5 3.5 3.5-3.5' fill='none' stroke='%23808080' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right 9px center;
+  background-size: 10px 10px;
+  box-shadow: inset 0 0 0 1px var(--control-ring), inset 0 -1px 0 var(--control-stroke-bottom);
+}
+
+:global(html[data-desktop-os="windows"]) .resetRow {
+  display: flex;
+  border-top: 0;
+  padding-top: 8px;
+}
+
+:global(html[data-desktop-os="windows"]) .resetButton {
+  height: calc(var(--app-ui-scale, 1) * 28px);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--control-ring), inset 0 -1px 0 var(--control-stroke-bottom);
+}
+
+:global(html[data-desktop-os="windows"]) .resetButton:hover:not(:disabled) {
+  background: var(--control-hover-bg);
 }

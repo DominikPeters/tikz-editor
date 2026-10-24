@@ -128,14 +128,15 @@ test("settings modal controls follow dark theme colors", async ({ page }) => {
     const probe = document.createElement("div");
     document.body.appendChild(probe);
 
-    probe.style.backgroundColor = "var(--bg-pane)";
-    const paneBackground = getComputedStyle(probe).backgroundColor;
+    // Pop-up buttons and fields draw from the shared control tokens.
+    probe.style.backgroundColor = "var(--control-popup-bg)";
+    const popUpBackground = getComputedStyle(probe).backgroundColor;
+
+    probe.style.backgroundColor = "var(--control-bg)";
+    const fieldBackground = getComputedStyle(probe).backgroundColor;
 
     probe.style.color = "var(--text)";
     const textColor = getComputedStyle(probe).color;
-
-    probe.style.borderColor = "var(--border)";
-    const borderColor = getComputedStyle(probe).borderColor;
 
     probe.style.backgroundColor = "var(--scrollbar-track)";
     const scrollbarTrack = getComputedStyle(probe).backgroundColor;
@@ -144,21 +145,19 @@ test("settings modal controls follow dark theme colors", async ({ page }) => {
     const scrollbarThumb = getComputedStyle(probe).backgroundColor;
 
     document.body.removeChild(probe);
-    return { paneBackground, textColor, borderColor, scrollbarTrack, scrollbarThumb };
+    return { popUpBackground, fieldBackground, textColor, scrollbarTrack, scrollbarThumb };
   });
 
   const generalSelectStyles = await page.locator("#setting-color-scheme").evaluate((element) => {
     const style = getComputedStyle(element);
     return {
       backgroundColor: style.backgroundColor,
-      color: style.color,
-      borderColor: style.borderColor
+      color: style.color
     };
   });
 
-  expect(generalSelectStyles.backgroundColor).toBe(expectedThemeColors.paneBackground);
+  expect(generalSelectStyles.backgroundColor).toBe(expectedThemeColors.popUpBackground);
   expect(generalSelectStyles.color).toBe(expectedThemeColors.textColor);
-  expect(generalSelectStyles.borderColor).toBe(expectedThemeColors.borderColor);
 
   await page.getByTestId("settings-category-editor").click();
 
@@ -166,14 +165,12 @@ test("settings modal controls follow dark theme colors", async ({ page }) => {
     const style = getComputedStyle(element);
     return {
       backgroundColor: style.backgroundColor,
-      color: style.color,
-      borderColor: style.borderColor
+      color: style.color
     };
   });
 
-  expect(numberInputStyles.backgroundColor).toBe(expectedThemeColors.paneBackground);
+  expect(numberInputStyles.backgroundColor).toBe(expectedThemeColors.fieldBackground);
   expect(numberInputStyles.color).toBe(expectedThemeColors.textColor);
-  expect(numberInputStyles.borderColor).toBe(expectedThemeColors.borderColor);
 
   const rootScrollbarStyles = await page.evaluate(() => {
     const style = getComputedStyle(document.documentElement);

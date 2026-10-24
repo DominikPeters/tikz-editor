@@ -11,10 +11,11 @@ import { rangeFillStyle } from "./range-fill";
 
 type CategoryId = "general" | "editor" | "canvas";
 
-const CATEGORIES: { id: CategoryId; label: string }[] = [
-  { id: "general", label: "General" },
-  { id: "editor", label: "Code Editor" },
-  { id: "canvas", label: "Canvas" }
+// Icons for the macOS toolbar tabs and the Windows navigation list.
+const CATEGORIES: { id: CategoryId; label: string; icon: string }[] = [
+  { id: "general", label: "General", icon: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8" },
+  { id: "editor", label: "Code Editor", icon: "M9 4c-2 0-3 1-3 3v2c0 1.5-1 3-2.5 3C5 12 6 13.5 6 15v2c0 2 1 3 3 3M15 4c2 0 3 1 3 3v2c0 1.5 1 3 2.5 3-1.5 0-2.5 1.5-2.5 3v2c0 2-1 3-3 3" },
+  { id: "canvas", label: "Canvas", icon: "M5.5 3.5h13a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2zM3.5 9.5h17M3.5 14.5h17M9.5 3.5v17M14.5 3.5v17" }
 ];
 
 let rememberedCategory: CategoryId = "general";
@@ -92,8 +93,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 className={[css.navItem, activeCategory === cat.id ? css.navItemActive : ""].filter(Boolean).join(" ")}
                 onClick={() => { selectCategory(cat.id); }}
                 data-testid={`settings-category-${cat.id}`}
+                aria-current={activeCategory === cat.id ? "page" : undefined}
               >
-                {cat.label}
+                <svg className={css.navIcon} viewBox="0 0 24 24" aria-hidden="true"><path d={cat.icon} /></svg>
+                <span>{cat.label}</span>
               </button>
             ))}
           </nav>

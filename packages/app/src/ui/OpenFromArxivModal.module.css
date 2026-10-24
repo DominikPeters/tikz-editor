@@ -30,21 +30,12 @@
 }
 
 .input {
-  min-width: 0;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-pane);
-  color: var(--text);
-  font: inherit;
+  composes: field from "./controls.module.css";
+  height: calc(var(--app-ui-scale, 1) * (var(--control-h) + 7px));
+  padding: 0 8px;
+  font-size: calc(var(--app-ui-scale, 1) * 12px);
 }
 
-.input:focus {
-  border-color: var(--accent);
-  outline: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
-  outline-offset: 0;
-}
 
 .input:disabled {
   color: var(--btn-disabled-text);

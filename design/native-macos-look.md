@@ -450,6 +450,61 @@ size via `PAINT_TOGGLE_FUZZ_SEED` / `PAINT_TOGGLE_FUZZ_CASES`),
 (remembered paint in the store) and
 `apps/web/e2e/inspector-paint-toggles.spec.ts`.
 
+## Phase 8 — Dialogs, the old accent and the Styles panel (both platforms)
+
+Picked up after the Windows pass started (2026-10-24); the first plan left
+dialogs out of scope. Mockups: "Export PNG as an attached sheet", "Unsaved
+changes as an NSAlert", "Settings as a separate window", and the Windows
+"ContentDialog" and "Settings page" boards. `Modal` already has Header,
+Body, Footer and button slots, and every footer lists its buttons macOS
+style (default button last), so this is mostly CSS.
+
+1. **Dialogs.** The base look (web and macOS):
+   - **Sheets:** the bold 13px title in the body's flow, with no header bar
+     and no footer band.
+   - **Buttons:** AppKit push buttons, the default one filled with
+     `--control-accent`.
+   - **Close button:** kept, but quieter. AppKit sheets have none, but
+     tests and web users rely on it.
+   - **Position:** on desktop macOS a sheet hangs just below the toolbar and
+     barely dims the window; web keeps it centred.
+   - **Alerts:** a new `alert` sheet kind (unsaved changes, file changed on
+     disk) is an NSAlert: app mark, centred text, buttons stacked full width
+     with the default on top.
+   - **Windows:** ContentDialogs. A 30% smoke layer, 8px corners, a large
+     semibold title, and a grey footer band whose equal-width buttons put the
+     default first (`row-reverse`).
+   - **Floating panels** (equation, repeat, TikzJax, compiled slide) take the
+     same tokens and buttons.
+2. **Settings.** On macOS, a toolbar of icon tabs and right-aligned labels,
+   as in the mockup but still a sheet: a real second window is a later step.
+   On Windows, the navigation list and cards from the Settings page board.
+3. **The old accent.**
+   - Window chrome moves off the `--accent` family (dialog buttons and
+     links, toolbar popups, colour picker, presentation controls, Assistant
+     focus rings) onto `--control-accent`, which follows the system accent
+     on macOS.
+   - Links get a `--link-color` token.
+   - The canvas keeps `--accent`: selection handles and guides are drawing
+     colours, and a graphite system accent should not turn them grey.
+4. **Styles panel.** Beyond the 20px rows of phase 6; scoped once the
+   dialogs are in.
+
+As built (dialogs and Settings, 2026-10-24):
+
+- `Modal.module.css` holds the base, macOS and Windows looks. The desktop
+  macOS sheet sits 46px from the top (the toolbar's height), with square top
+  corners.
+- `Modal`'s new `alert` prop sets `role="alertdialog"`; the unsaved-changes
+  and file-conflict dialogs use it. The unsaved-changes dialog now asks
+  "Do you want to save the changes made to “…”?".
+- The app mark in alerts is drawn in CSS, like About's.
+- Fields in the PNG, SVG, workspace, Repeat and arXiv dialogs compose the
+  shared `field`. Dialog controls are 3px taller than inspector ones.
+- Settings: the Windows navigation list has the Fluent selection pill.
+  `settings-and-persistence` now checks the control tokens instead of
+  `--bg-pane` and `--border`.
+
 ## Verification per phase
 
 - `npm run typecheck`, `npm run lint:prod`, `npm test`.

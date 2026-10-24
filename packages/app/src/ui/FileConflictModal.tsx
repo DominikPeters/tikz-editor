@@ -15,6 +15,7 @@ export function FileConflictModal({
       onClose={() => { onChoose("cancel"); }}
       closeOnBackdrop={false}
       size="sm"
+      alert
       labelledBy="file-conflict-title"
       dataTestId="file-conflict-modal"
     >

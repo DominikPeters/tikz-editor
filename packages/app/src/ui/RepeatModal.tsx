@@ -61,6 +61,7 @@ export function RepeatModal({
           <label className={css.field}>
             <span>Columns</span>
             <input
+              className={css.input}
               data-testid="repeat-columns-input"
               type="number"
               min={1}
@@ -72,6 +73,7 @@ export function RepeatModal({
           <label className={css.field}>
             <span>Rows</span>
             <input
+              className={css.input}
               data-testid="repeat-rows-input"
               type="number"
               min={1}
@@ -83,6 +85,7 @@ export function RepeatModal({
           <label className={css.field}>
             <span>H Step (cm)</span>
             <input
+              className={css.input}
               data-testid="repeat-horizontal-step-input"
               type="number"
               step={0.1}
@@ -93,6 +96,7 @@ export function RepeatModal({
           <label className={css.field}>
             <span>V Step (cm)</span>
             <input
+              className={css.input}
               data-testid="repeat-vertical-step-input"
               type="number"
               step={0.1}

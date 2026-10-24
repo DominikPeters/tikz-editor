@@ -134,16 +134,7 @@ fill, accent icon and accent bar. Tests: `apps/web/e2e/menu-keyboard.spec.ts`
 
 ## Phase 4 — Dialogs (M)
 
-- **Modals become ContentDialogs:**
-  - a 30% black smoke layer behind them;
-  - 8px corners and a deep shadow;
-  - a 20px semibold title;
-  - a grey footer band with equal-width buttons, the accent (primary)
-    button first.
-- **`UnsavedChangesModal`:** Save / Don't save / Cancel, in that order.
-- **Settings:** a left navigation list and cards with a title, a
-  description and the control on the right, as in the "Settings page" board.
-  Same content as today.
+Done together with the macOS dialogs: see `native-macos-look.md`, phase 8.
 
 ## Phase 5 — System integration (S–M)
 

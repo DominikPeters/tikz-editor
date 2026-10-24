@@ -1,4 +1,8 @@
 /* ── Native dialog reset ────────────────────────────────────────────────── */
+/* The base look is an AppKit sheet (web and macOS): window background, no
+   header bar or footer band, bold 13px title, push buttons. Desktop macOS
+   hangs it below the toolbar; Windows turns it into a ContentDialog (end of
+   file). design/native-macos-look.md, phase 8. */
 
 .sheet {
   margin: auto;
@@ -7,22 +11,28 @@
   background: transparent;
   color: inherit;
   font-family: var(--font-ui);
-  /* Trigger our own animation; native dialog has no built-in transition. */
 }
 
 .sheet[open] {
   display: flex;
   flex-direction: column;
-  background: var(--bg-pane);
+  background: var(--bg-window);
   color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 0;
+  border-radius: 12px;
   box-shadow:
-    0 1px 3px color-mix(in srgb, black 12%, transparent),
-    0 18px 48px color-mix(in srgb, black 22%, transparent);
+    0 0 0 0.5px rgba(0, 0, 0, 0.25),
+    0 16px 48px rgba(0, 0, 0, 0.28);
   overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
+}
+
+[data-color-scheme="dark"] .sheet[open] {
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.7),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.12),
+    0 16px 48px rgba(0, 0, 0, 0.5);
 }
 
 .sheet::backdrop {
@@ -90,19 +100,26 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--bg-pane);
+  background: var(--bg-window);
   color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 0;
+  border-radius: 10px;
   box-shadow:
-    0 1px 3px color-mix(in srgb, black 12%, transparent),
-    0 18px 48px color-mix(in srgb, black 22%, transparent);
+    0 0 0 0.5px rgba(0, 0, 0, 0.25),
+    0 16px 48px rgba(0, 0, 0, 0.24);
   overflow: hidden;
   font-family: var(--font-ui);
   -webkit-user-select: none;
   user-select: none;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
+}
+
+[data-color-scheme="dark"] .panelWrap {
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.7),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.12),
+    0 16px 48px rgba(0, 0, 0, 0.5);
 }
 
 .panelWrap :where(input, textarea, select, option, [contenteditable="true"]) {
@@ -128,8 +145,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-lighter);
+  padding: 16px 20px 4px;
+}
+
+/* A floating panel is a small utility window: its header is a title bar. */
+.panelWrap .header {
+  padding: 8px 10px 8px 14px;
+  border-bottom: 1px solid var(--separator);
 }
 
 .headerDraggable {
@@ -149,10 +171,14 @@
 .title {
   margin: 0;
   font-size: calc(var(--app-ui-scale, 1) * 13px);
-  font-weight: 600;
-  line-height: 1.25;
+  font-weight: 700;
+  line-height: 1.3;
   color: var(--text);
-  letter-spacing: -0.005em;
+}
+
+.panelWrap .title {
+  font-size: calc(var(--app-ui-scale, 1) * 12px);
+  font-weight: 600;
 }
 
 .headerTrailing {
@@ -163,27 +189,27 @@
 }
 
 .closeIconButton {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
+  color: var(--label-secondary);
+  cursor: default;
 }
 
 .closeIconButton:hover {
-  background: var(--btn-hover-bg);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text);
 }
 
 .closeIconButton:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  outline-offset: 1px;
+  outline: 3px solid color-mix(in srgb, var(--control-accent) 45%, transparent);
+  outline-offset: 0;
 }
 
 /* ── Body ───────────────────────────────────────────────────────────────── */
@@ -200,12 +226,12 @@
 }
 
 .bodyPadDefault {
-  padding: 12px 14px;
+  padding: 10px 20px;
   gap: 10px;
 }
 
 .bodyPadCompact {
-  padding: 8px 12px;
+  padding: 8px 14px;
   gap: 6px;
 }
 
@@ -219,10 +245,12 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--border-lighter);
-  background: color-mix(in srgb, var(--bg-pane) 92%, var(--bg-header));
+  gap: 10px;
+  padding: 10px 20px 18px;
+}
+
+.panelWrap .footer {
+  padding: 10px 14px 12px;
 }
 
 .footerEnd {
@@ -237,92 +265,288 @@
   justify-content: space-between;
 }
 
-/* ── Buttons ────────────────────────────────────────────────────────────── */
+/* ── Buttons: AppKit push buttons ───────────────────────────────────────── */
 
 .btn {
   appearance: none;
-  height: 26px;
+  height: calc(var(--app-ui-scale, 1) * 22px);
+  min-width: calc(var(--app-ui-scale, 1) * 72px);
   padding: 0 12px;
-  border-radius: 5px;
+  border: 0;
+  border-radius: 6px;
   font-family: inherit;
   font-size: calc(var(--app-ui-scale, 1) * 12px);
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1;
-  cursor: pointer;
+  cursor: default;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   white-space: nowrap;
-  transition: background-color 80ms ease, border-color 80ms ease;
 }
 
 .btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  outline-offset: 1px;
+  outline: 3px solid color-mix(in srgb, var(--control-accent) 45%, transparent);
+  outline-offset: 0;
 }
 
 .btn:disabled {
-  cursor: default;
   opacity: 0.5;
 }
 
-.btnSecondary {
-  background: var(--bg-pane);
-  border: 1px solid var(--border);
+.btnSecondary,
+.btnDanger {
+  background: var(--control-popup-bg);
+  box-shadow: 0 0 0 0.5px var(--control-ring), var(--control-shadow);
   color: var(--text);
 }
 
-.btnSecondary:hover:not(:disabled) {
-  background: var(--btn-hover-bg);
-}
-
-.btnSecondary:active:not(:disabled) {
-  background: var(--btn-active-bg);
-}
-
-.btnPrimary {
-  background: var(--accent);
-  border: 1px solid var(--accent-btn-border);
-  color: #ffffff;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 20%, transparent);
-}
-
-.btnPrimary:hover:not(:disabled) {
-  filter: brightness(1.05);
-}
-
-.btnPrimary:active:not(:disabled) {
-  filter: brightness(0.95);
-}
-
-[data-color-scheme="dark"] .btnPrimary {
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
-}
-
+/* AppKit has no red push button; the label carries the warning. */
 .btnDanger {
-  background: var(--bg-pane);
-  border: 1px solid var(--color-error);
   color: var(--color-error);
 }
 
-.btnDanger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-error) 8%, var(--bg-pane));
+.btnSecondary:active:not(:disabled),
+.btnDanger:active:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 10%, var(--control-popup-bg));
 }
 
-.btnDanger:active:not(:disabled) {
-  background: color-mix(in srgb, var(--color-error) 14%, var(--bg-pane));
+.btnPrimary {
+  background: var(--control-accent);
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--control-accent) 70%, black),
+    0 1px 1.5px rgba(0, 0, 0, 0.15);
+  color: #ffffff;
+}
+
+.btnPrimary:active:not(:disabled) {
+  filter: brightness(0.9);
 }
 
 .btnGhost {
+  min-width: 0;
   background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-muted);
+  color: var(--label-secondary);
 }
 
 .btnGhost:hover:not(:disabled) {
-  background: var(--btn-hover-bg);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text);
+}
+
+/* ── Alert: NSAlert ─────────────────────────────────────────────────────── */
+/* The app mark, a bold question, a short message and buttons stacked full
+   width with the default on top (footers list it last). */
+
+.alert[open] {
+  width: min(calc(var(--app-ui-scale, 1) * 272px), calc(100vw - 32px));
+  padding: 20px 16px 16px;
+  text-align: center;
+}
+
+.alert .header {
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+}
+
+.alert .header::before {
+  content: "\\t";
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: #24509a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font: 44px/64px Georgia, "Times New Roman", serif;
+  text-align: center;
+}
+
+.alert .headerText {
+  justify-content: center;
+}
+
+.alert .headerTrailing {
+  display: none;
+}
+
+.alert .body {
+  padding: 6px 0 16px;
+  overflow: visible;
+}
+
+.alert .footer {
+  flex-direction: column-reverse;
+  align-items: stretch;
+  gap: 8px;
+  padding: 0;
+}
+
+.alert .btn {
+  height: calc(var(--app-ui-scale, 1) * 24px);
+}
+
+/* ── Desktop macOS: sheets hang from the toolbar ────────────────────────── */
+
+:global(html[data-desktop-os="macos"]) .sheet[open] {
+  margin: 46px auto auto;
+  max-height: calc(100vh - 66px);
+  border-radius: 0 0 12px 12px;
+}
+
+:global(html[data-desktop-os="macos"]) .alert[open] {
+  margin-top: 56px;
+  border-radius: 12px;
+}
+
+/* The window behind a sheet only looks inactive. */
+:global(html[data-desktop-os="macos"]) .sheet::backdrop {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+:global(html[data-desktop-os="macos"][data-color-scheme="dark"]) .sheet::backdrop {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* ── Windows 11: ContentDialog ──────────────────────────────────────────── */
+/* Smoke behind, a large semibold title, and a footer band whose equal-width
+   buttons put the default first (row-reverse of the macOS order). */
+
+:global(html[data-desktop-os="windows"]) .sheet[open],
+:global(html[data-desktop-os="windows"]) .panelWrap {
+  border-radius: 8px;
+  background: var(--control-popup-bg);
+  box-shadow:
+    0 0 0 1px var(--control-ring),
+    0 32px 64px rgba(0, 0, 0, 0.28),
+    0 2px 21px rgba(0, 0, 0, 0.22);
+}
+
+:global(html[data-desktop-os="windows"]) .sheet::backdrop {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+:global(html[data-desktop-os="windows"]) .sheet .header {
+  padding: 22px 24px 4px;
+}
+
+:global(html[data-desktop-os="windows"]) .sheet .title {
+  font-size: calc(var(--app-ui-scale, 1) * 18px);
+  font-weight: 600;
+}
+
+:global(html[data-desktop-os="windows"]) .sheet .bodyPadDefault {
+  padding: 10px 24px 22px;
+}
+
+:global(html[data-desktop-os="windows"]) .footer {
+  padding: 20px 24px;
+  border-top: 1px solid var(--separator);
+  background: var(--bg-window);
+  gap: 8px;
+}
+
+:global(html[data-desktop-os="windows"]) .panelWrap .footer {
+  padding: 12px 14px;
+}
+
+:global(html[data-desktop-os="windows"]) .footerEnd {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+:global(html[data-desktop-os="windows"]) .footerEnd > .btn {
+  flex: 1 1 0;
+}
+
+:global(html[data-desktop-os="windows"]) .btn {
+  height: calc(var(--app-ui-scale, 1) * 28px);
+  border-radius: 4px;
+}
+
+:global(html[data-desktop-os="windows"]) .btn:focus-visible {
+  outline: 2px solid var(--focus-outer);
+  outline-offset: 1px;
+}
+
+:global(html[data-desktop-os="windows"]) .btnSecondary,
+:global(html[data-desktop-os="windows"]) .btnDanger {
+  background: var(--control-popup-bg);
+  box-shadow: inset 0 0 0 1px var(--control-ring), inset 0 -1px 0 var(--control-stroke-bottom);
+}
+
+:global(html[data-desktop-os="windows"]) .btnSecondary:hover:not(:disabled),
+:global(html[data-desktop-os="windows"]) .btnDanger:hover:not(:disabled) {
+  background: var(--control-hover-bg);
+}
+
+:global(html[data-desktop-os="windows"]) .btnPrimary {
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  color: var(--control-on-accent);
+}
+
+:global(html[data-desktop-os="windows"]) .btnPrimary:hover:not(:disabled) {
+  filter: none;
+  background: color-mix(in srgb, var(--control-accent) 90%, var(--control-popup-bg));
+}
+
+:global(html[data-desktop-os="windows"]) .closeIconButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+}
+
+/* Fluent greys a disabled button instead of fading it. */
+:global(html[data-desktop-os="windows"]) .btn:disabled {
+  opacity: 1;
+  color: var(--text-dim);
+}
+
+:global(html[data-desktop-os="windows"]) .btnPrimary:disabled {
+  background: color-mix(in srgb, var(--text) 20%, transparent);
+  box-shadow: none;
+  color: #ffffff;
+}
+
+:global(html[data-desktop-os="windows"][data-color-scheme="dark"]) .btnPrimary:disabled {
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+  color: color-mix(in srgb, var(--text) 53%, transparent);
+}
+
+/* An alert is a plain ContentDialog: no mark, text to the left. */
+:global(html[data-desktop-os="windows"]) .alert[open] {
+  width: min(calc(var(--app-ui-scale, 1) * 440px), calc(100vw - 32px));
+  padding: 0;
+  text-align: left;
+}
+
+:global(html[data-desktop-os="windows"]) .alert .header {
+  flex-direction: row;
+  padding: 22px 24px 4px;
+}
+
+:global(html[data-desktop-os="windows"]) .alert .header::before {
+  content: none;
+}
+
+:global(html[data-desktop-os="windows"]) .alert .headerText {
+  justify-content: flex-start;
+}
+
+:global(html[data-desktop-os="windows"]) .alert .body {
+  padding: 10px 24px 22px;
+}
+
+:global(html[data-desktop-os="windows"]) .alert .footer {
+  flex-direction: row-reverse;
+  align-items: center;
+  padding: 20px 24px;
+}
+
+:global(html[data-desktop-os="windows"]) .alert .btn {
+  flex: 1 1 0;
+  height: calc(var(--app-ui-scale, 1) * 28px);
 }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */

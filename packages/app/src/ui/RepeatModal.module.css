@@ -17,22 +17,9 @@
 }
 
 .field input {
-  height: 24px;
   width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg-pane);
-  color: var(--text);
-  padding: 0 7px;
-  font: inherit;
-  font-size: calc(var(--app-ui-scale, 1) * 12px);
 }
 
-.field input:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  outline-offset: -1px;
-  border-color: var(--accent);
-}
 
 .metrics {
   display: flex;
@@ -57,4 +44,10 @@
   .grid {
     grid-template-columns: 1fr;
   }
+}
+
+.input {
+  composes: field from "./controls.module.css";
+  height: calc(var(--app-ui-scale, 1) * (var(--control-h) + 3px));
+  font-size: calc(var(--app-ui-scale, 1) * 12px);
 }
