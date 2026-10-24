@@ -4,6 +4,7 @@ mod presentation;
 mod update_preferences;
 mod portable;
 mod snap_layout;
+mod windows_accent;
 
 use assistant::{
     AssistantAccountSnapshot, AssistantModelOption, AssistantState, AssistantThreadStatePayload,
@@ -3113,6 +3114,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             snap_layout::desktop_set_maximize_button_bounds,
+            windows_accent::desktop_accent_palette,
             presentation::desktop_presentation_keep_awake,
             presentation::desktop_prepare_presentation_window,
             update_preferences::desktop_get_automatic_update_checks,

@@ -117,12 +117,14 @@
   --control-stroke-strong: rgba(0, 0, 0, 0.4458);
   --control-hover-bg: #f6f6f6;
   --control-shadow:   none;
-  --control-accent:   #005fb8;
+  /* --system-accent-*: the Windows accent palette (WindowsTitleBar); the
+     fallbacks are the default blue's shades. */
+  --control-accent:   var(--system-accent-dark1, #005fb8);
   --control-on-accent: #ffffff;
-  --link-color:       #005fb8;
-  --control-selection: #005fb8;
+  --link-color:       var(--system-accent-dark1, #005fb8);
+  --control-selection: var(--system-accent-dark1, #005fb8);
   --segment-track:    transparent;
-  --segment-on-bg:    #005fb8;
+  --segment-on-bg:    var(--system-accent-dark1, #005fb8);
   --segment-on-shadow: none;
   --tab-selected-bg:  rgba(0, 0, 0, 0.0373);
   --slider-track:     rgba(0, 0, 0, 0.4458);
@@ -157,12 +159,12 @@
   --control-stroke-strong: rgba(255, 255, 255, 0.5442);
   --control-hover-bg: #323232;
   --control-shadow:   none;
-  --control-accent:   #60cdff;
+  --control-accent:   var(--system-accent-light2, #60cdff);
   --control-on-accent: #000000;
-  --link-color:       #99ebff;
-  --control-selection: #005fb8;  /* under white text */
+  --link-color:       var(--system-accent-light3, #99ebff);
+  --control-selection: var(--system-accent-dark1, #005fb8);  /* under white text */
   --segment-track:    transparent;
-  --segment-on-bg:    #60cdff;
+  --segment-on-bg:    var(--system-accent-light2, #60cdff);
   --segment-on-shadow: none;
   --tab-selected-bg:  rgba(255, 255, 255, 0.0605);
   --slider-track:     rgba(255, 255, 255, 0.5442);

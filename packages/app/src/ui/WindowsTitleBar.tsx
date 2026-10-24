@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import type { PlatformWindowFrame } from "../platform/types";
 import css from "./WindowsTitleBar.module.css";
 
+const ACCENT_SHADES = ["light3", "light2", "light1", "base", "dark1", "dark2", "dark3"] as const;
+
 /**
  * The title bar of the Windows look: the app mark, the document tabs, a drag
  * region and the caption buttons (design/native-windows-look.md, phase 6).
@@ -19,6 +21,25 @@ export function WindowsTitleBar({ frame, children }: { frame: PlatformWindowFram
   }, [frame]);
 
   useEffect(() => frame?.onMaximizeButtonHover?.(setMaximizeHovered), [frame]);
+
+  // The system accent, as --system-accent-* for the Windows tokens in
+  // variables.css. Read again when the window comes back to the front, in
+  // case it changed in Settings meanwhile.
+  useEffect(() => {
+    const readPalette = frame?.accentPalette;
+    if (!readPalette) return;
+    const apply = () => {
+      void readPalette().then((palette) => {
+        ACCENT_SHADES.forEach((shade, index) => {
+          const color = palette?.[index];
+          if (color) document.documentElement.style.setProperty(`--system-accent-${shade}`, color);
+        });
+      }, () => null);
+    };
+    apply();
+    window.addEventListener("focus", apply);
+    return () => { window.removeEventListener("focus", apply); };
+  }, [frame]);
 
   // Keeps the shell's Snap Layouts window over the maximise button. It sits at
   // the right edge, so it moves whenever the window is resized.

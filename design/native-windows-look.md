@@ -190,6 +190,19 @@ Done together, since the custom title bar decides where the document tabs go.
   the File menu, Settings, Snap Layouts and the maximised window, light and
   dark (`apps/desktop/scripts/windows-screenshots.ps1`).
 
+## As built: phase 5, accent only (2026-10-25)
+
+- `windows_accent.rs` reads `Explorer\Accent\AccentPalette` (eight RGBA
+  shades), and `frame.accentPalette` passes it on. `WindowsTitleBar` sets
+  `--system-accent-light3` … `--system-accent-dark3` on the root, at start and
+  whenever the window regains focus.
+- The Windows tokens use dark 1 (light theme) and light 2 (dark theme), as
+  WinUI does, falling back to the default blue.
+- Mica is not done: it needs a transparent window and webview with every
+  surface above it transparent where Mica should show, which wants a check
+  on a real Windows 11 machine first. The title bar keeps a solid
+  `--bg-titlebar`.
+
 ## Verification
 
 - Now: the web build in Chromium, the engine WebView2 uses. In a dev build

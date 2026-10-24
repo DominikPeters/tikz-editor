@@ -47,6 +47,10 @@ export function createWindowFrame(): PlatformWindowFrame {
     setMaximizeButtonBounds: (bounds) => {
       void invoke("desktop_set_maximize_button_bounds", { bounds }).catch(() => null);
     },
+    accentPalette: async () => {
+      const core = await import("@tauri-apps/api/core");
+      return await core.invoke<string[] | null>("desktop_accent_palette");
+    },
     onMaximizeButtonHover: (listener) => subscription(async () => {
       const window = await currentWindow();
       return await window.listen<boolean>(MAXIMIZE_HOVER_EVENT, (event) => { listener(event.payload); });

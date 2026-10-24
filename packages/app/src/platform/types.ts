@@ -151,6 +151,8 @@ export type PlatformWindowFrame = {
   setMaximizeButtonBounds?: (bounds: { x: number; y: number; width: number; height: number } | null) => void;
   /** The pointer over the maximise button, which the system now handles. */
   onMaximizeButtonHover?: (listener: (hovered: boolean) => void) => () => void;
+  /** The system accent's shades as `#rrggbb`: light 3 to dark 3. */
+  accentPalette?: () => Promise<readonly string[] | null>;
 };
 
 export type PlatformHaptics = {
