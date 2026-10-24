@@ -70,6 +70,14 @@
 }
 
 /* "Show More" / "Show Less" in a section header, like the Finder sidebar. */
+/* The Stroke / Fill on-off checkbox before the section title. */
+.paintToggle {
+  composes: checkbox from "../controls.module.css";
+  flex-shrink: 0;
+  width: calc(var(--app-ui-scale, 1) * 12px);
+  height: calc(var(--app-ui-scale, 1) * 12px);
+}
+
 .moreOptionsToggle {
   flex-shrink: 0;
   border: 0;

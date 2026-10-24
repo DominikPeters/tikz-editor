@@ -1,6 +1,6 @@
 import type { StyleLevel } from "../actions.js";
 import type { EditParseOptions } from "../parse-options.js";
-import type { SemanticPropertyId } from "../property-registry.js";
+import type { PropertyWriteMutation, SemanticPropertyId } from "../property-registry.js";
 import type {
   ArrowTipWriteContext,
   FillModeMutationContext,
@@ -314,11 +314,25 @@ type InspectorPropertyValue =
 
 export type InspectorProperty = InspectorPropertyValue & { readOnlyReason?: string };
 
+/** The checkbox in a Stroke or Fill section header. */
+export type InspectorPaintToggle = {
+  paint: "stroke" | "fill";
+  enabled: boolean;
+  write: SetPropertyWriteTarget;
+  /** Writes that switch the paint off. */
+  disable: PropertyWriteMutation[];
+  /** Writes that bring the current paint back after `disable`; empty while it is off. */
+  restore: PropertyWriteMutation[];
+  /** Writes that switch the paint on when nothing was remembered: plain `draw` / `fill`. */
+  enable: PropertyWriteMutation[];
+};
+
 export type InspectorSection = {
   id: string;
   title: string;
   sourceLevel: StyleLevel;
   properties: InspectorProperty[];
+  toggle?: InspectorPaintToggle;
 };
 
 export type InspectorDescriptor = {

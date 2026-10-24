@@ -15,6 +15,8 @@ import {
   lineWidthPresetLabel
 } from "./preset-values.js";
 import { computePathStrokeControlVisibility } from "./path-stroke-visibility.js";
+import { isFillPaintEnabled } from "./fill-section.js";
+import { buildPaintToggle } from "./paint-toggle.js";
 import type { InspectorSectionBuildContext, SectionBuilder } from "./section-builder.js";
 import type { InspectorSection } from "./types.js";
 
@@ -42,6 +44,11 @@ export const buildStrokeSection: SectionBuilder = (context) => {
     id: "stroke",
     title: "Stroke",
     sourceLevel: "command" as const,
+    toggle: buildPaintToggle(context, "stroke", {
+      strokeEnabled: strokeColor != null && strokeColor !== "none",
+      fillEnabled: isFillPaintEnabled(element),
+      colorSyntax: strokeColorSyntax
+    }),
     properties: [
       {
         kind: "color" as const,

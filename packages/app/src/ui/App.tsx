@@ -197,11 +197,18 @@ function isCanvasViewportFocused(): boolean {
   );
 }
 
+// Inputs that take no text (a checkbox, a slider) leave app shortcuts such as
+// Undo working, as focused controls do in a native window.
+const NON_TEXT_INPUT_TYPES = new Set(["checkbox", "radio", "range", "button", "submit", "reset", "color", "file", "image"]);
+
 function isEditableShortcutTarget(target: EventTarget | null): target is HTMLElement {
   if (!(target instanceof HTMLElement)) {
     return false;
   }
-  return target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+  if (target instanceof HTMLInputElement) {
+    return !NON_TEXT_INPUT_TYPES.has(target.type);
+  }
+  return target.isContentEditable || target.tagName === "TEXTAREA";
 }
 
 function selectAllInEditableTarget(target: HTMLElement): boolean {

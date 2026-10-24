@@ -27,12 +27,13 @@ export function applyFlagEntry(
       diagnostics: []
     };
   }
+  // A bare `fill` only switches filling on: it paints with the current colour,
+  // as `draw` does above (\path[red, fill] fills red), and keeps a pattern.
   if (key === "fill") {
     return {
       style: {
         ...style,
-        fill: style.fill ?? "black",
-        fillPattern: null
+        fill: style.fill ?? style.textColor ?? "black"
       },
       transform,
       diagnostics: []

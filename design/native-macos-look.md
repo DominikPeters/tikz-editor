@@ -408,7 +408,34 @@ rows in Objects) is `-apple-system-selected-content-background`, inside
 built CSS, light and dark; WebKit resolves the keywords in the web content
 process, which reads the System Settings accent. The older `--accent` family
 (dialogs, toolbar toggles) is unchanged. Steppers and the rotation knob are
-dropped; the Stroke/Fill checkbox stays a separate task.
+dropped.
+
+As built (Stroke/Fill checkbox, 2026-10-24): the checkbox means "this paint
+off", not "remove `draw`/`fill`". Core (`edit/inspector/paint-toggle.ts`) gives
+each Stroke and Fill section a `toggle` with three write lists: `disable`
+(`draw=none` / `fill=none`, plus `shade=none` when shading outlives the local
+options), `restore` (the paint as it was) and `enable` (plain `draw` / `fill`,
+the PGF default). The property-write planner then folds the `none` away or
+rewrites the command wherever that renders the same: `\filldraw[fill=red]`
+with Fill off becomes `\draw`, `\shadedraw` becomes `\draw` or `\shade`, and
+`none` stays only where a style or scope would paint again. The planner now
+knows what each command paints by itself (`\filldraw`, `\shade`, `\shadedraw`)
+and compares nodes by what they draw.
+
+- Off hides the section's rows, as Keynote does; a multi-selection shows a
+  mixed checkbox, and clicking it switches every element on.
+- Switching back on right away patches back the exact earlier source. After
+  other edits it replays the remembered writes; an option a later style
+  overrode cannot be put back in place, so such a style keeps deciding.
+- Two evaluator fixes came out of it: a bare `fill` uses the current colour
+  (`\path[red, fill]` fills red) and keeps a pattern, as in PGF.
+- A focused checkbox or slider no longer blocks app shortcuts such as Undo.
+- Known gap: the editor lets a pattern switch shading off, which PGF does not.
+
+Tests: `test/edit-inspector-paint-toggle.spec.ts` (round trips),
+`test/paint-toggle-fuzz.spec.ts` (random paths and nodes; seed and size via
+`PAINT_TOGGLE_FUZZ_SEED` / `PAINT_TOGGLE_FUZZ_CASES`) and
+`apps/web/e2e/inspector-paint-toggles.spec.ts`.
 
 ## Verification per phase
 

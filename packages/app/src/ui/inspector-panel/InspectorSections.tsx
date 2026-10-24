@@ -1,5 +1,5 @@
-import { Fragment, type JSX, type ReactNode } from "react";
-import type { InspectorDescriptor, InspectorProperty } from "@tikz-editor/core/edit/inspector";
+import { Fragment, useEffect, useRef, type JSX, type ReactNode } from "react";
+import type { InspectorDescriptor, InspectorPaintToggle, InspectorProperty } from "@tikz-editor/core/edit/inspector";
 import {
   type MultiInspectorProperty,
   type MultiInspectorSection,
@@ -37,6 +37,7 @@ export function InspectorSingleSection(props: {
     rightProvenance: InspectorPropertyProvenance | null
   ) => JSX.Element;
   renderProperty: (property: InspectorProperty) => JSX.Element;
+  onTogglePaint: (toggles: readonly InspectorPaintToggle[], enabled: boolean) => void;
 }) {
   const {
     section,
@@ -48,8 +49,10 @@ export function InspectorSingleSection(props: {
     renderedSinglePropertyProvenance,
     renderSingleNumberPair,
     renderSingleLengthPair,
-    renderProperty
+    renderProperty,
+    onTogglePaint
   } = props;
+  const toggles = section.toggle ? [section.toggle] : [];
 
   const strokeMoreOptionsProperties =
     section.id === "stroke"
@@ -91,7 +94,8 @@ export function InspectorSingleSection(props: {
   return (
     <SidePanel.Section key={section.id} collapseId={`inspector:${section.id}`}>
       <SidePanel.SectionHeader
-        accessory={renderMoreOptionsToggle({
+        leading={toggles.length > 0 ? <PaintToggleCheckbox title={section.title} toggles={toggles} onToggle={onTogglePaint} /> : null}
+        accessory={paintOff(toggles) ? null : renderMoreOptionsToggle({
           sectionId: section.id,
           strokeToggleAvailable: strokeMoreOptionsProperties.length > 0 && !forceShowStrokeMoreOptions,
           showStrokeMoreOptions,
@@ -103,7 +107,7 @@ export function InspectorSingleSection(props: {
       >
         {section.title}
       </SidePanel.SectionHeader>
-      <SidePanel.SectionBody>
+      {paintOff(toggles) ? null : <SidePanel.SectionBody>
         {orderedProperties.map((property, index) => {
           if (index > 0 && shouldRenderCompactPair(orderedProperties[index - 1], property)) {
             return null;
@@ -141,7 +145,7 @@ export function InspectorSingleSection(props: {
           }
           return renderProperty(property);
         })}
-      </SidePanel.SectionBody>
+      </SidePanel.SectionBody>}
     </SidePanel.Section>
   );
 }
@@ -167,6 +171,7 @@ export function InspectorMultiSection(props: {
     rightProvenance: InspectorPropertyProvenance | null
   ) => JSX.Element;
   renderMultiProperty: (property: MultiInspectorProperty) => JSX.Element | null;
+  onTogglePaint: (toggles: readonly InspectorPaintToggle[], enabled: boolean) => void;
 }) {
   const {
     section,
@@ -178,8 +183,10 @@ export function InspectorMultiSection(props: {
     renderedMultiPropertyProvenance,
     renderMultiNumberPair,
     renderMultiLengthPair,
-    renderMultiProperty
+    renderMultiProperty,
+    onTogglePaint
   } = props;
+  const toggles = section.toggles ?? [];
 
   const strokeMoreOptionsProperties =
     section.id === "stroke"
@@ -221,7 +228,8 @@ export function InspectorMultiSection(props: {
   return (
     <SidePanel.Section key={section.id} collapseId={`inspector:${section.id}`}>
       <SidePanel.SectionHeader
-        accessory={renderMoreOptionsToggle({
+        leading={toggles.length > 0 ? <PaintToggleCheckbox title={section.title} toggles={toggles} onToggle={onTogglePaint} /> : null}
+        accessory={paintOff(toggles) ? null : renderMoreOptionsToggle({
           sectionId: section.id,
           strokeToggleAvailable: strokeMoreOptionsProperties.length > 0 && !forceShowStrokeMoreOptions,
           showStrokeMoreOptions,
@@ -233,7 +241,7 @@ export function InspectorMultiSection(props: {
       >
         {section.title}
       </SidePanel.SectionHeader>
-      <SidePanel.SectionBody>
+      {paintOff(toggles) ? null : <SidePanel.SectionBody>
         {orderedProperties.map((property, index) => {
           if (index > 0 && shouldRenderCompactPair(orderedProperties[index - 1], property)) {
             return null;
@@ -271,8 +279,41 @@ export function InspectorMultiSection(props: {
           }
           return renderMultiProperty(property);
         })}
-      </SidePanel.SectionBody>
+      </SidePanel.SectionBody>}
     </SidePanel.Section>
+  );
+}
+
+// With its paint off, a Stroke or Fill section is just its header, as in Keynote.
+function paintOff(toggles: readonly InspectorPaintToggle[]): boolean {
+  return toggles.length > 0 && toggles.every((toggle) => !toggle.enabled);
+}
+
+// Checked when every selected element paints, mixed when only some do.
+function PaintToggleCheckbox(props: {
+  title: string;
+  toggles: readonly InspectorPaintToggle[];
+  onToggle: (toggles: readonly InspectorPaintToggle[], enabled: boolean) => void;
+}) {
+  const { title, toggles, onToggle } = props;
+  const ref = useRef<HTMLInputElement>(null);
+  const enabledCount = toggles.filter((toggle) => toggle.enabled).length;
+  const mixed = enabledCount > 0 && enabledCount < toggles.length;
+  const writable = toggles.some((toggle) => toggle.write.writable);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = mixed;
+  }, [mixed]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className={css.paintToggle}
+      aria-label={title}
+      title={writable ? undefined : toggles.find((toggle) => toggle.write.reason)?.write.reason}
+      checked={enabledCount === toggles.length}
+      disabled={!writable}
+      onChange={() => { onToggle(toggles, mixed || enabledCount === 0); }}
+    />
   );
 }
 

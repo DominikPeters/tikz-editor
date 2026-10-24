@@ -307,7 +307,7 @@ describe("property write planner", () => {
     );
   });
 
-  it("keeps explicit disabled fills when command-default fill would reappear", () => {
+  it("rewrites \\filldraw to \\draw when its fill is disabled", () => {
     const source = String.raw`\begin{tikzpicture}
   \filldraw[fill=red] (0,0) rectangle (1,1);
 \end{tikzpicture}`;
@@ -320,7 +320,7 @@ describe("property write planner", () => {
         clearKeys: ["red"]
       }),
       String.raw`\begin{tikzpicture}
-  \filldraw[fill=none] (0,0) rectangle (1,1);
+  \draw (0,0) rectangle (1,1);
 \end{tikzpicture}`
     );
   });

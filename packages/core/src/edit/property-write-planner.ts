@@ -56,8 +56,24 @@ type CleanupCandidate = {
 type PaintOptions = {
   draw: string | null;
   fill: string | null;
+  shade: string | null;
   drawDisabled: boolean;
   fillDisabled: boolean;
+  shadeDisabled: boolean;
+};
+
+type PaintCommand = "path" | "draw" | "fill" | "filldraw" | "shade" | "shadedraw";
+type PaintCandidateCommand = "path" | "draw" | "fill" | "shade" | "shadedraw";
+
+// What each path command switches on by itself: \filldraw is \path[draw, fill]
+// and \shadedraw is \path[draw, shade] (PGF manual, "Actions on Paths").
+const COMMAND_PAINT: Record<PaintCommand, { draw: boolean; fill: boolean; shade: boolean }> = {
+  path: { draw: false, fill: false, shade: false },
+  draw: { draw: true, fill: false, shade: false },
+  fill: { draw: false, fill: true, shade: false },
+  filldraw: { draw: true, fill: true, shade: false },
+  shade: { draw: false, fill: false, shade: true },
+  shadedraw: { draw: true, fill: false, shade: true }
 };
 
 export function applyPlannedSetPropertyAction(
@@ -211,13 +227,13 @@ function buildPaintCommandCleanupCandidates(
   const paint = resolvePaintOptions(source, action.elementId, parseOptions);
   const shouldPreserveInheritedDrawSuppression = paint.drawDisabled
     && hasInheritedRenderableDrawBeforeCommand(checker.elements(source, action.elementId), action.elementId);
-  const commands = chooseCandidateCommands(paint);
+  const commands = chooseCandidateCommands(command, paint);
   const candidates: CleanupCandidate[] = [];
   for (const nextCommand of commands) {
     if (shouldPreserveInheritedDrawSuppression && commandRemovesExplicitDrawSuppression(nextCommand)) {
       continue;
     }
-    const candidate = rewritePaintCommand(source, action.elementId, nextCommand, paint, parseOptions);
+    const candidate = rewritePaintCommand(source, action.elementId, command, nextCommand, paint, parseOptions);
     if (candidate && candidate !== source) {
       candidates.push({
         source: candidate,
@@ -228,10 +244,23 @@ function buildPaintCommandCleanupCandidates(
   return candidates;
 }
 
-function chooseCandidateCommands(paint: PaintOptions): Array<"path" | "draw" | "fill"> {
-  const drawEnabled = paint.draw != null && !paint.drawDisabled;
-  const fillEnabled = paint.fill != null && !paint.fillDisabled;
-  const candidates: Array<"path" | "draw" | "fill"> = [];
+function chooseCandidateCommands(command: PaintCommand, paint: PaintOptions): PaintCandidateCommand[] {
+  const drawEnabled = isPaintEnabled(paint.draw, paint.drawDisabled, COMMAND_PAINT[command].draw);
+  const fillEnabled = isPaintEnabled(paint.fill, paint.fillDisabled, COMMAND_PAINT[command].fill);
+  // \filldraw stays while it still draws and fills: recolouring it is no
+  // reason to rewrite it as \draw[fill=...].
+  if (command === "filldraw" && drawEnabled && fillEnabled) {
+    return [];
+  }
+  // A command that still shades keeps shading; without a stroke it is \shade.
+  if (COMMAND_PAINT[command].shade && !paint.shadeDisabled) {
+    return drawEnabled || fillEnabled ? [] : ["shade"];
+  }
+  // A plain `shade` flag folds into the command: \path[shade] is \shade.
+  if (paint.shade != null && isPaintFlag(paint.shade) && !fillEnabled) {
+    return [drawEnabled ? "shadedraw" : "shade"];
+  }
+  const candidates: PaintCandidateCommand[] = [];
   if (!drawEnabled && !fillEnabled) {
     candidates.push("path");
   }
@@ -242,6 +271,11 @@ function chooseCandidateCommands(paint: PaintOptions): Array<"path" | "draw" | "
     candidates.push("draw");
   }
   return candidates.filter((candidate, index) => candidates.indexOf(candidate) === index);
+}
+
+// A local option overrides the command: \filldraw[fill=none] does not fill.
+function isPaintEnabled(value: string | null, disabled: boolean, fromCommand: boolean): boolean {
+  return !disabled && (value != null || fromCommand);
 }
 
 function isPureComplementaryPaintAppend(
@@ -270,56 +304,77 @@ function isPureComplementaryPaintAppend(
       && !paint.fillDisabled);
 }
 
-function commandRemovesExplicitDrawSuppression(command: "path" | "draw" | "fill"): boolean {
-  return command === "path" || command === "fill";
+function commandRemovesExplicitDrawSuppression(command: PaintCandidateCommand): boolean {
+  // Only \path, \fill and \shade leave the stroke off by themselves.
+  return command === "path" || command === "fill" || command === "shade";
 }
 
-function normalizedPaintCommand(command: string | undefined): "path" | "draw" | "fill" | "filldraw" | null {
+const PAINT_COMMANDS: readonly PaintCommand[] = ["path", "draw", "fill", "filldraw", "shade", "shadedraw"];
+
+function normalizedPaintCommand(command: string | undefined): PaintCommand | null {
   const normalized = command?.trim().toLowerCase();
-  return normalized === "path" || normalized === "draw" || normalized === "fill" || normalized === "filldraw"
-    ? normalized
-    : null;
+  return PAINT_COMMANDS.find((candidate) => candidate === normalized) ?? null;
 }
 
 function rewritePaintCommand(
   source: string,
   elementId: string,
-  nextCommand: "path" | "draw" | "fill",
+  command: PaintCommand,
+  nextCommand: PaintCandidateCommand,
   paint: PaintOptions,
   parseOptions: EditParseOptions
 ): EditedSource | null {
-  let current = rewritePathCommandToken(source, elementId, nextCommand, parseOptions);
-  if (!current) {
+  // Removals and moved flags go in before the command changes; colours go in
+  // after, so the new command can write them bare (\fill[red]).
+  const before: Array<[key: string, value: string]> = [];
+  const after: Array<[key: string, value: string]> = [];
+  const provides = COMMAND_PAINT[nextCommand];
+  for (const key of ["draw", "fill"] as const) {
+    const value = paint[key];
+    const disabled = key === "draw" ? paint.drawDisabled : paint.fillDisabled;
+    if (disabled) {
+      // The new command does not paint this, so `none` has nothing left to override.
+      if (!provides[key]) before.push([key, ""]);
+      continue;
+    }
+    if (value == null) {
+      // Paint the old command supplied moves into the options.
+      if (COMMAND_PAINT[command][key] && !provides[key]) before.push([key, "true"]);
+      continue;
+    }
+    if (provides[key] && isPaintFlag(value)) {
+      before.push([key, ""]);
+    } else if (provides[key]) {
+      after.push([key, value]);
+    }
+  }
+  if (paint.shadeDisabled || (provides.shade && paint.shade != null && isPaintFlag(paint.shade))) {
+    before.push(["shade", ""]);
+  }
+
+  // On \draw and \fill a bare colour is the paint colour, so clearing `fill`
+  // there would also remove `red` from `[red, fill]`; those commands take
+  // every edit after the rewrite, as before.
+  const aliasesBareColor = command === "draw" || command === "fill";
+  let edited = source;
+  if (!aliasesBareColor) {
+    for (const [key, value] of before) {
+      edited = applyOptionalPropertyMutation(edited, elementId, key, value, parseOptions) ?? edited;
+    }
+  }
+  const rewritten = rewritePathCommandToken(edited, elementId, nextCommand, parseOptions);
+  if (!rewritten) {
     return null;
   }
-
-  if (nextCommand === "path") {
-    if (paint.drawDisabled) {
-      current = applyOptionalPropertyMutation(current, elementId, "draw", "", parseOptions) ?? current;
-    }
-    if (paint.fillDisabled) {
-      current = applyOptionalPropertyMutation(current, elementId, "fill", "", parseOptions) ?? current;
-    }
-    return current;
-  }
-
-  if (nextCommand === "fill") {
-    if (paint.fill && !paint.fillDisabled) {
-      current = applyOptionalPropertyMutation(current, elementId, "fill", paint.fill, parseOptions) ?? current;
-    }
-    if (paint.drawDisabled) {
-      current = applyOptionalPropertyMutation(current, elementId, "draw", "", parseOptions) ?? current;
-    }
-    return current;
-  }
-
-  if (paint.draw && !paint.drawDisabled) {
-    current = applyOptionalPropertyMutation(current, elementId, "draw", paint.draw, parseOptions) ?? current;
-  }
-  if (paint.fillDisabled) {
-    current = applyOptionalPropertyMutation(current, elementId, "fill", "", parseOptions) ?? current;
+  let current: EditedSource = rewritten;
+  for (const [key, value] of aliasesBareColor ? [...before, ...after] : after) {
+    current = applyOptionalPropertyMutation(current, elementId, key, value, parseOptions) ?? current;
   }
   return current;
+}
+
+function isPaintFlag(value: string): boolean {
+  return value.trim().toLowerCase() === "true";
 }
 
 function applyOptionalPropertyMutation(
@@ -344,7 +399,7 @@ function applyOptionalPropertyMutation(
 function rewritePathCommandToken(
   source: string,
   elementId: string,
-  nextCommand: "path" | "draw" | "fill",
+  nextCommand: PaintCandidateCommand,
   parseOptions: EditParseOptions
 ): EditedSource | null {
   const resolved = resolvePropertyTarget(source, elementId, parseOptions);
@@ -355,7 +410,15 @@ function rewritePathCommandToken(
   if (!commandSpan) {
     return null;
   }
-  const command = nextCommand === "path" ? tikz`\path` : nextCommand === "draw" ? tikz`\draw` : tikz`\fill`;
+  const command = nextCommand === "path"
+    ? tikz`\path`
+    : nextCommand === "draw"
+      ? tikz`\draw`
+      : nextCommand === "fill"
+        ? tikz`\fill`
+        : nextCommand === "shade"
+          ? tikz`\shade`
+          : tikz`\shadedraw`;
   return replaceSpan(source, commandSpan, command).source;
 }
 
@@ -382,12 +445,15 @@ function resolvePaintOptions(
     return {
       draw: null,
       fill: null,
+      shade: null,
       drawDisabled: false,
-      fillDisabled: false
+      fillDisabled: false,
+      shadeDisabled: false
     };
   }
   let draw: string | null = null;
   let fill: string | null = null;
+  let shade: string | null = null;
   for (const entry of resolved.target.options.entries) {
     if (entry.kind === "kv") {
       const key = normalizeOptionKey(entry.key);
@@ -397,6 +463,9 @@ function resolvePaintOptions(
       if (key === "fill") {
         fill = normalizeOptionValue(entry.valueRaw);
       }
+      if (key === "shade") {
+        shade = normalizeOptionValue(entry.valueRaw);
+      }
       continue;
     }
     if (entry.kind === "flag") {
@@ -405,14 +474,18 @@ function resolvePaintOptions(
         draw = "true";
       } else if (key === "fill") {
         fill = "true";
+      } else if (key === "shade") {
+        shade = "true";
       }
     }
   }
   return {
     draw,
     fill,
+    shade,
     drawDisabled: isDisabledPaintValue(draw),
-    fillDisabled: isDisabledPaintValue(fill)
+    fillDisabled: isDisabledPaintValue(fill),
+    shadeDisabled: isDisabledPaintValue(shade)
   };
 }
 
@@ -542,7 +615,8 @@ function sanitizeSemanticValue(value: unknown, geometricStyle = false): unknown 
     }
     output[key] = sanitizeStyleValueForSignature(key, entryValue, geometricStyle);
     if (output[key] === entryValue) {
-      output[key] = sanitizeSemanticValue(entryValue, isGeometricElement && key === "style");
+      const nodeStyle = input.kind === "Text" && key === "style" ? normalizeNodePaintForSignature(entryValue) : entryValue;
+      output[key] = sanitizeSemanticValue(nodeStyle, isGeometricElement && key === "style");
     }
   }
   return output;
@@ -556,6 +630,19 @@ function sanitizeStyleValueForSignature(key: string, value: unknown, geometricSt
     return normalizePaintColorForSignature(value);
   }
   return value;
+}
+
+// A node draws its border only with `draw`, so its stroke colour is moot
+// otherwise, and `fill=none` paints like no fill at all.
+function normalizeNodePaintForSignature(style: unknown): unknown {
+  if (!isObjectRecord(style)) {
+    return style;
+  }
+  return {
+    ...style,
+    stroke: style.drawExplicit === true ? normalizePaintColorForSignature(style.stroke) : null,
+    fill: normalizePaintColorForSignature(style.fill)
+  };
 }
 
 function normalizePaintColorForSignature(value: unknown): unknown {

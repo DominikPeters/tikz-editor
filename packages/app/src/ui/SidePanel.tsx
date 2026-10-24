@@ -72,17 +72,20 @@ SidePanel.Section = function SidePanelSection({ children, className, collapseId 
 export type SidePanelSectionHeaderProps = {
   children: ReactNode;
   className?: string;
+  /** A control before the title, outside the disclosure button (a section's on/off checkbox). */
+  leading?: ReactNode;
   /** Controls placed at the trailing end of the header, outside the disclosure button. */
   accessory?: ReactNode;
 };
 
-SidePanel.SectionHeader = function SidePanelSectionHeader({ children, className, accessory }: SidePanelSectionHeaderProps) {
+SidePanel.SectionHeader = function SidePanelSectionHeader({ children, className, leading, accessory }: SidePanelSectionHeaderProps) {
   const collapse = useContext(SectionCollapseContext);
   const toggle = useSectionCollapseStore((state) => state.toggle);
   const headerClassName = [css.sectionHeader, className].filter(Boolean).join(" ");
   if (!collapse) {
     return (
       <div className={headerClassName} data-select="chrome">
+        {leading}
         {children}
         {accessory}
       </div>
@@ -90,6 +93,7 @@ SidePanel.SectionHeader = function SidePanelSectionHeader({ children, className,
   }
   return (
     <div className={headerClassName} data-select="chrome">
+      {leading}
       <button
         type="button"
         className={css.sectionDisclosure}

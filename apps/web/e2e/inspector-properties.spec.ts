@@ -47,6 +47,11 @@ test("node stroke color inspector writes draw option", async ({ page }) => {
   await clickTextHitRegionByTargetId(page, "path:0");
   await expect.poll(async () => readSelectedSourceIds(page)).toEqual(["path:0"]);
 
+  // An undrawn node's Stroke section is just its checkbox until it is ticked.
+  await page.getByRole("checkbox", { name: "Stroke", exact: true }).click();
+  await expect.poll(async () => readSource(page)).toBe(String.raw`\begin{tikzpicture}
+  \node[draw] at (0,3) {node};
+\end{tikzpicture}`);
   const strokeSection = page.getByText("Stroke", { exact: true }).first();
   await expect(strokeSection).toBeVisible();
   await strokeSection.locator("xpath=following::button[@aria-label='Color'][1]").click();

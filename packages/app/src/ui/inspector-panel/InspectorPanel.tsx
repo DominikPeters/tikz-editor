@@ -164,6 +164,7 @@ export function InspectorPanel() {
   });
 
   const {
+    applyPaintToggle,
     applySetProperty,
     applySetPropertyMany,
     normalizeColorSetPropertyChange,
@@ -2001,6 +2002,7 @@ export function InspectorPanel() {
                     renderSingleNumberPair={renderSingleNumberPair}
                     renderSingleLengthPair={renderSingleLengthPair}
                     renderProperty={renderProperty}
+                    onTogglePaint={applyPaintToggle}
                   />
                 ))}
               </div>
@@ -2031,6 +2033,7 @@ export function InspectorPanel() {
                     renderMultiNumberPair={renderMultiNumberPair}
                     renderMultiLengthPair={renderMultiLengthPair}
                     renderMultiProperty={renderMultiProperty}
+                    onTogglePaint={applyPaintToggle}
                   />
                 ))
               )}

@@ -11,6 +11,7 @@ import {
   type FillPatternMetaOptionKey,
   type FillShadingPresetId,
   type InspectorDescriptor,
+  type InspectorPaintToggle,
   type InspectorProperty,
   type LineCapPresetId,
   type LineJoinPresetId,
@@ -362,6 +363,8 @@ export type MultiInspectorSection = {
   title: string;
   sourceLevel: InspectorDescriptor["sections"][number]["sourceLevel"];
   properties: MultiInspectorProperty[];
+  /** One Stroke/Fill checkbox per selected element, when every element has one. */
+  toggles?: InspectorPaintToggle[];
 };
 
 export type MultiInspectorModel = {
@@ -634,11 +637,13 @@ export function buildMultiInspectorModel(descriptors: InspectorDescriptor[], sel
     }
 
     if (properties.length > 0) {
+      const toggles = matchingSections.flatMap((section) => section.toggle ? [section.toggle] : []);
       sections.push({
         id: baseSection.id,
         title: baseSection.title,
         sourceLevel: baseSection.sourceLevel,
-        properties
+        properties,
+        ...(toggles.length === matchingSections.length ? { toggles } : {})
       });
     }
   }

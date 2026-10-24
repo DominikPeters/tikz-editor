@@ -717,7 +717,7 @@ function resolveFlagAliasKey(
   return isLikelyBareColorOption(entry.key) ? bareColorKey : null;
 }
 
-function isLikelyBareColorOption(raw: string): boolean {
+export function isLikelyBareColorOption(raw: string): boolean {
   const trimmed = raw.trim().toLowerCase();
   if (trimmed.length === 0) {
     return false;

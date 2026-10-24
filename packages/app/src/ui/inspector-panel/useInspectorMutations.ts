@@ -1,5 +1,5 @@
 import type { EditAction } from "@tikz-editor/core/edit/actions";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type {
   ArrowTipPresetId,
   ArrowTipSide,
@@ -8,6 +8,7 @@ import type {
   FillPatternMetaOptionKey,
   FillPatternPresetId,
   FillShadingPresetId,
+  InspectorPaintToggle,
   LineCapPresetId,
   LineJoinPresetId,
   NodeFontFamilyId,
@@ -34,7 +35,9 @@ import {
   type FillPatternOptionMutationContext,
   type NodeFontMutationContext
 } from "@tikz-editor/core/edit/property-write-builders";
-import { buildPropertyMutations, propertyIdForWriteKey } from "@tikz-editor/core/edit/property-registry";
+import { buildPropertyMutations, propertyIdForWriteKey, type PropertyWriteMutation } from "@tikz-editor/core/edit/property-registry";
+import { documentDiffPatch } from "@tikz-editor/core/edit/patch";
+import { useEditorStore } from "../../store/store";
 import type { EditorAction } from "../../store/types";
 
 export type ApplySetPropertyOptions = {
@@ -44,7 +47,83 @@ export type ApplySetPropertyOptions = {
   recordInHistory?: boolean;
 };
 
+type RememberedPaint = {
+  mutations: readonly PropertyWriteMutation[];
+  /** The source just after the checkbox switched the paint off, and just before. */
+  exact: { documentId: string; revision: number; source: string; restoreSource: string };
+};
+
+function dispatchPaintWrites(
+  dispatch: (action: EditorAction) => void,
+  writes: ReadonlyArray<readonly [InspectorPaintToggle, readonly PropertyWriteMutation[]]>,
+  options: ApplySetPropertyOptions
+): void {
+  const actions: Extract<EditAction, { kind: "setProperty" }>[] = writes.flatMap(([{ write }, mutations]) =>
+    mutations.map((mutation) => ({
+      kind: "setProperty" as const,
+      elementId: write.elementId,
+      level: write.level,
+      key: mutation.key,
+      value: mutation.value,
+      ...(mutation.propertyId === undefined ? {} : { propertyId: mutation.propertyId }),
+      ...(mutation.clearKeys === undefined ? {} : { clearKeys: mutation.clearKeys })
+    }))
+  );
+  if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
+}
+
 export function useInspectorMutations(dispatch: (action: EditorAction) => void) {
+  // The paint a Stroke/Fill checkbox switched off, by element, so switching it
+  // back on in this session restores it instead of a plain `draw` / `fill`.
+  // While nothing else has changed the source, the exact earlier text comes
+  // back; after other edits, the remembered writes bring the paint back.
+  const rememberedPaint = useRef(new Map<string, RememberedPaint>());
+
+  const applyPaintToggle = useCallback((
+    toggles: readonly InspectorPaintToggle[],
+    enabled: boolean,
+    options: ApplySetPropertyOptions = {}
+  ): void => {
+    const changing = toggles.filter((toggle) =>
+      toggle.write.writable && toggle.write.elementId.length > 0 && toggle.enabled !== enabled
+    );
+    if (changing.length === 0) return;
+    const memoryKey = (toggle: InspectorPaintToggle) => `${toggle.write.elementId}:${toggle.paint}`;
+    const before = useEditorStore.getState();
+
+    if (enabled) {
+      const remembered = changing.map((toggle) => rememberedPaint.current.get(memoryKey(toggle)));
+      for (const toggle of changing) rememberedPaint.current.delete(memoryKey(toggle));
+      const exact = remembered[0]?.exact;
+      if (
+        exact
+        && remembered.every((entry) => entry?.exact === exact)
+        && exact.documentId === before.activeDocumentId
+        && exact.revision === before.sourceRevision
+        && exact.source === before.source
+      ) {
+        dispatch({
+          type: "APPLY_SOURCE_PATCHES",
+          documentId: exact.documentId,
+          baseRevision: exact.revision,
+          patches: [documentDiffPatch(exact.source, exact.restoreSource)],
+          changedSourceIds: changing.map((toggle) => toggle.write.elementId)
+        });
+        return;
+      }
+      dispatchPaintWrites(dispatch, changing.map((toggle, index) => [toggle, remembered[index]?.mutations ?? toggle.enable]), options);
+      return;
+    }
+
+    dispatchPaintWrites(dispatch, changing.map((toggle) => [toggle, toggle.disable]), options);
+    const after = useEditorStore.getState();
+    if (after.sourceRevision === before.sourceRevision) return;
+    const exact = { documentId: after.activeDocumentId, revision: after.sourceRevision, source: after.source, restoreSource: before.source };
+    for (const toggle of changing) {
+      rememberedPaint.current.set(memoryKey(toggle), { mutations: toggle.restore.length > 0 ? toggle.restore : toggle.enable, exact });
+    }
+  }, [dispatch]);
+
   const applySetProperty = useCallback(
     (
       write: SetPropertyWriteTarget,
@@ -696,6 +775,7 @@ export function useInspectorMutations(dispatch: (action: EditorAction) => void) 
   }, [dispatch]);
 
   return {
+    applyPaintToggle,
     applySetProperty,
     applySetPropertyMany,
     normalizeColorSetPropertyChange,
