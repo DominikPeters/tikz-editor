@@ -65,6 +65,15 @@ public static class NativeWindow {
     SendMessageTimeout((IntPtr)0xffff, 0x001A, IntPtr.Zero, "ImmersiveColorSet", 2, 5000, out result);
   }
 
+  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out int value, int size);
+
+  // DWMWA_USE_IMMERSIVE_DARK_MODE: whether the frame, and the shell's flyouts
+  // for the window, are drawn dark.
+  public static int DarkFrame(IntPtr window) {
+    int value;
+    return DwmGetWindowAttribute(window, 20, out value, 4) == 0 ? value : -1;
+  }
+
   public static void Click(int x, int y) {
     MoveMouse(x, y);
     mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
@@ -125,7 +134,7 @@ function Show-SnapLayouts([string]$Name, [IntPtr]$Window) {
     Write-Host "No HTMAXBUTTON along the caption of $Window"
     return $null
   }
-  Write-Host "Maximise button of $Window at $button"
+  Write-Host "Maximise button of $Window at $button; dark frame: $([NativeWindow]::DarkFrame($Window))"
   [NativeWindow]::MoveMouse($button.X - 4, $button.Y)
   Start-Sleep -Milliseconds 200
   [NativeWindow]::MoveMouse($button.X, $button.Y)
