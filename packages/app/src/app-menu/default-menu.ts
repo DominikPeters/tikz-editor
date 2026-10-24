@@ -151,7 +151,15 @@ export const APP_MENU_DEFINITION = [
         commandId: APP_MENU_COMMAND_IDS.QUIT_APP,
         label: "Quit",
         accelerator: "CmdOrCtrl+Q",
-        platforms: ["desktop"]
+        platforms: ["desktop-macos", "desktop-linux"]
+      },
+      // Windows closes the window with Alt+F4, which the system handles.
+      {
+        kind: "command",
+        commandId: APP_MENU_COMMAND_IDS.QUIT_APP,
+        label: "Exit",
+        accelerator: "Alt+F4",
+        platforms: ["desktop-windows"]
       }
     ]
   },

@@ -97,6 +97,12 @@ export type PlatformMenu = {
     commandStates: Partial<Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>>;
     onCommandRun?: MenuCommandHandler;
   }) => Promise<void> | void;
+  /** File › Open Recent for the in-app menu bar; a native menu builds its own. */
+  recentFiles?: {
+    list: () => Promise<readonly string[]>;
+    open: (path: string) => void;
+    clear: () => Promise<void>;
+  };
 };
 
 export type DesktopContextMenuItem =

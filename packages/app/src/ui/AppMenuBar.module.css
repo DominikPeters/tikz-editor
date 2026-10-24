@@ -64,7 +64,7 @@
 }
 
 .submenu:hover > .popupNested,
-.submenu:focus-within > .popupNested {
+.submenu[data-open] > .popupNested {
   display: flex;
 }
 
@@ -95,12 +95,26 @@
   cursor: default;
 }
 
-.item:hover:not(:disabled) {
+.item:hover:not([aria-disabled="true"]),
+.item:focus {
+  outline: none;
   background: var(--btn-hover-bg);
   border-color: var(--border-light);
 }
 
-.item:disabled {
+.trigger:focus-visible {
+  outline: none;
+  background: var(--btn-hover-bg);
+  border-color: var(--border-light);
+}
+
+/* Shown once Alt, F10 or Alt+letter brought the keyboard to the menus. */
+.menuBar[data-access-keys] .accessKey {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.item[aria-disabled="true"] {
   color: var(--text-dim);
   cursor: default;
 }
@@ -150,4 +164,89 @@
     padding: 0 10px;
     font-size: calc(var(--app-ui-scale, 1) * 12px);
   }
+}
+
+/* ── Windows 11 (Fluent) ────────────────────────────────────────────────────
+   The menu bar sits at the start of the toolbar row (Toolbar's menuBar),
+   so it drops its own row; flyouts get Fluent corners, padding and shadow. */
+
+:global(html[data-desktop-os="windows"]) .menuBar {
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border-bottom: 0;
+}
+
+:global(html[data-desktop-os="windows"]) .trigger {
+  height: calc(var(--app-ui-scale, 1) * 26px);
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  cursor: default;
+}
+
+:global(html[data-desktop-os="windows"]) .trigger:hover,
+:global(html[data-desktop-os="windows"]) .trigger:focus-visible {
+  background: var(--tab-selected-bg);
+}
+
+:global(html[data-desktop-os="windows"]) .triggerActive,
+:global(html[data-desktop-os="windows"]) .triggerActive:hover {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+:global(html[data-desktop-os="windows"]) .popup {
+  top: calc(100% + 4px);
+  min-width: 240px;
+  padding: 4px;
+  gap: 1px;
+  border: 1px solid var(--control-ring);
+  border-radius: 8px;
+  background: var(--control-popup-bg);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.14);
+}
+
+:global(html[data-desktop-os="windows"][data-color-scheme="dark"]) .popup {
+  border-color: rgba(0, 0, 0, 0.2);
+  background: #2c2c2c;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.26);
+}
+
+:global(html[data-desktop-os="windows"]) .popupNested {
+  top: -5px;
+  left: calc(100% + 2px);
+}
+
+:global(html[data-desktop-os="windows"]) .item {
+  min-height: calc(var(--app-ui-scale, 1) * 28px);
+  border: 0;
+  border-radius: 4px;
+  padding: 0 10px 0 6px;
+  gap: 10px;
+  cursor: default;
+}
+
+:global(html[data-desktop-os="windows"]) .itemNoCheck {
+  padding-left: 10px;
+}
+
+:global(html[data-desktop-os="windows"]) .item:hover:not([aria-disabled="true"]),
+:global(html[data-desktop-os="windows"]) .item:focus {
+  background: var(--tab-selected-bg);
+}
+
+:global(html[data-desktop-os="windows"]) .check {
+  color: var(--text);
+}
+
+:global(html[data-desktop-os="windows"]) .shortcut {
+  font-family: inherit;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  color: var(--label-secondary);
+}
+
+:global(html[data-desktop-os="windows"]) .separator {
+  margin: 3px -4px;
+  background: var(--separator);
 }

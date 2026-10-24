@@ -73,6 +73,10 @@ function bytesFromBase64(base64: string): Uint8Array {
   return bytes;
 }
 
+function isWindowsDesktop(): boolean {
+  return typeof navigator !== "undefined" && /windows/iu.test(navigator.userAgent);
+}
+
 export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {}): EditorPlatform {
   const mergedEnv = { ...readInjectedTestEnvironment(), ...env };
   const storage = resolvePlatformStorage(mergedEnv.storage);
@@ -91,26 +95,32 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
   let pendingOpenSyncQueue = Promise.resolve();
   let nextContextMenuRequestId = 0;
 
+  // Windows gets the in-app menu bar: the Win32 one ignores dark mode and
+  // looks dated next to the Fluent window (design/native-windows-look.md).
+  const usesNativeMenuBar = !isWindowsDesktop();
+
+  function openRecentFile(path: string): void {
+    if (!openRequestHandler) {
+      return;
+    }
+    void getBridge().openText(path).then((opened) => {
+      if (!opened) {
+        return;
+      }
+      openRequestHandler?.({
+        source: opened.source,
+        fileRef: toDesktopFileRef(opened.path, opened.name)
+      });
+      nativeMenuManager.refreshRecents();
+    });
+  }
+
   const nativeMenuManager = createNativeDesktopMenuManager({
     getBridge,
     dispatchCommand: (commandId, origin) => {
       menuHandler?.(commandId, origin);
     },
-    dispatchOpenRecent: (path) => {
-      if (!openRequestHandler) {
-        return;
-      }
-      void getBridge().openText(path).then((opened) => {
-        if (!opened) {
-          return;
-        }
-        openRequestHandler?.({
-          source: opened.source,
-          fileRef: toDesktopFileRef(opened.path, opened.name)
-        });
-        nativeMenuManager.refreshRecents();
-      });
-    },
+    dispatchOpenRecent: openRecentFile,
     reportError: logDesktopPlatformDebug
   });
 
@@ -259,7 +269,7 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
       }
     },
     menu: {
-      usesNativeMenuBar: true,
+      usesNativeMenuBar,
       usesNativeContextMenus: true,
       bindCommandHandler: (handler) => {
         menuHandler = handler;
@@ -272,9 +282,19 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
       dispatchCommand: (commandId, origin = "platform") => {
         menuHandler?.(commandId, origin);
       },
-      syncNativeMenu: async (payload) => {
-        await nativeMenuManager.sync(payload);
-      },
+      ...(usesNativeMenuBar
+        ? {
+            syncNativeMenu: async (payload) => {
+              await nativeMenuManager.sync(payload);
+            }
+          }
+        : {
+            recentFiles: {
+              list: async () => await getBridge().listRecentFiles(),
+              open: openRecentFile,
+              clear: async () => { await getBridge().clearRecentFiles(); }
+            }
+          }),
       showNativeContextMenu: async (payload) => {
         nextContextMenuRequestId += 1;
         const requestId = `ctx-${Date.now()}-${nextContextMenuRequestId}`;

@@ -1,5 +1,3 @@
-import { isWindowsLikePlatform } from "../ui/key-labels";
-
 export type EditorSettings = {
   wordWrap: boolean;
   fontSize: number;
@@ -73,8 +71,7 @@ export const MAX_FORMATTER_MAX_LINE_LENGTH = 240;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   general: {
-    // Windows sets interface text in 9pt Segoe UI; 11px reads small there.
-    uiFontSizePx: isWindowsLikePlatform() ? 12 : 11,
+    uiFontSizePx: 11,
     colorScheme: "system",
     canvasInvert: false
   },

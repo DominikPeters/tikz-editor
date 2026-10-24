@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { RiDownloadCloudLine } from "@remixicon/react";
 import { useProjectNamedColorSwatches } from "../colors/project-named-colors";
 import { useEditorStore } from "../store/store";
@@ -32,13 +32,15 @@ const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
 
 type ToolbarProps = {
   onPresentationOptions: () => void;
+  /** The in-app menu bar, when it shares the toolbar row (Windows). */
+  menuBar?: ReactNode;
   updateChip?: {
     version: string;
     onClick: () => void;
   } | null;
 };
 
-export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarProps) {
+export function Toolbar({ updateChip = null, onPresentationOptions, menuBar = null }: ToolbarProps) {
   const documentId = useEditorStore(s => s.activeDocumentId);
   const drawingSurface = useEditorStore(s => s.documentKind !== "beamer" || parseDocumentRootId(s.activeRootId ?? "") != null);
   const toolMode = useEditorStore((s) => s.toolMode);
@@ -357,6 +359,12 @@ export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarPro
 
   return (
     <div className={`${css.toolbar}${isMacDesktop ? ` ${css.toolbarDesktop}` : ""}`} data-tauri-drag-region data-select="chrome">
+      {menuBar ? (
+        <>
+          {menuBar}
+          <div className={css.separator} />
+        </>
+      ) : null}
       {showAppTitle ? (
         <>
           <span className={css.title}>

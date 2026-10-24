@@ -6,6 +6,7 @@ import {
   MIN_FORMATTER_MAX_LINE_LENGTH, MAX_FORMATTER_MAX_LINE_LENGTH
 } from "./types";
 import { getActiveEditorPlatform } from "../platform/current";
+import { isWindowsLikePlatform } from "../ui/key-labels";
 
 const STORAGE_KEY = "tikz-editor:settings";
 const SETTINGS_VERSION = 1;
@@ -31,17 +32,25 @@ function readNumber(value: unknown, fallback: number, min: number, max: number, 
   return Math.max(min, Math.min(max, round ? Math.round(value) : value));
 }
 
+/** The defaults here: Windows sets interface text in 9pt Segoe UI, so the
+ *  desktop app there starts at 12px, where 11px would read small. */
+export function platformDefaultSettings(): AppSettings {
+  if (!getActiveEditorPlatform().id.startsWith("desktop") || !isWindowsLikePlatform()) return DEFAULT_SETTINGS;
+  return { ...DEFAULT_SETTINGS, general: { ...DEFAULT_SETTINGS.general, uiFontSizePx: 12 } };
+}
+
 export function loadSettings(): AppSettings {
+  const defaults = platformDefaultSettings();
   try {
     const raw = getActiveEditorPlatform().persistence.load(STORAGE_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
+    if (!raw) return defaults;
     const parsedRaw = JSON.parse(raw) as unknown;
     if (!isRecord(parsedRaw)) {
-      return DEFAULT_SETTINGS;
+      return defaults;
     }
     const parsedCandidate = parsedRaw.settings;
     if (!isRecord(parsedCandidate)) {
-      return DEFAULT_SETTINGS;
+      return defaults;
     }
     // Keep the existing field-based compatibility policy: legacy and newer envelopes
     // can contribute recognized valid fields; absent/unknown fields use current defaults.
@@ -51,7 +60,7 @@ export function loadSettings(): AppSettings {
     const colorPicker = readSection(parsedCandidate.colorPicker);
     return {
       general: {
-        uiFontSizePx: readNumber(general.uiFontSizePx, DEFAULT_SETTINGS.general.uiFontSizePx,
+        uiFontSizePx: readNumber(general.uiFontSizePx, defaults.general.uiFontSizePx,
           UI_FONT_SIZE_MIN_PX, UI_FONT_SIZE_MAX_PX, true),
         colorScheme: readOption(general.colorScheme, ["system", "light", "dark"], DEFAULT_SETTINGS.general.colorScheme),
         canvasInvert: readBoolean(general.canvasInvert, DEFAULT_SETTINGS.general.canvasInvert)
@@ -78,7 +87,7 @@ export function loadSettings(): AppSettings {
       }
     };
   } catch {
-    return DEFAULT_SETTINGS;
+    return defaults;
   }
 }
 

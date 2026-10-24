@@ -229,3 +229,60 @@
     padding: 8px;
   }
 }
+
+/* ── Windows 11 (Fluent command bar) ────────────────────────────────────────
+   One row with the menus at its start (see AppMenuBar). The active tool gets
+   a light fill, an accent icon and a short accent bar under it. */
+
+:global(html[data-desktop-os="windows"]) .toolbar {
+  min-height: calc(var(--app-ui-scale, 1) * 36px);
+  padding: 2px 6px;
+  background: var(--bg-window);
+  border-bottom-color: var(--separator);
+}
+
+:global(html[data-desktop-os="windows"]) .separator {
+  height: 18px;
+  margin: 0 5px;
+  background: var(--separator);
+}
+
+:global(html[data-desktop-os="windows"]) .btn {
+  height: calc(var(--app-ui-scale, 1) * 28px);
+  min-width: calc(var(--app-ui-scale, 1) * 30px);
+  border-radius: 4px;
+  cursor: default;
+  transition: none;
+}
+
+:global(html[data-desktop-os="windows"]) .btn:hover:not(:disabled) {
+  background: var(--tab-selected-bg);
+}
+
+:global(html[data-desktop-os="windows"]) .btn:active:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+:global(html[data-desktop-os="windows"]) .btnActive,
+:global(html[data-desktop-os="windows"]) .btnActive:hover:not(:disabled) {
+  position: relative;
+  background: var(--tab-selected-bg);
+  color: var(--control-accent);
+}
+
+:global(html[data-desktop-os="windows"]) .btnActive::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 1px;
+  width: 12px;
+  height: 2px;
+  margin-left: -6px;
+  border-radius: 1px;
+  background: var(--control-accent);
+}
+
+/* The bucket's own colour bar sits where the accent bar would. */
+:global(html[data-desktop-os="windows"]) .splitButton .btnActive::after {
+  content: none;
+}

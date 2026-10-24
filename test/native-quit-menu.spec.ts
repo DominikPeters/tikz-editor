@@ -29,7 +29,8 @@ describe("guarded native Quit", () => {
     expect(capture.predefined.filter(item => item.item === "Quit")).toEqual([]);
     const quits = capture.commands.filter(item => item.id === APP_MENU_COMMAND_IDS.QUIT_APP);
     expect(quits).toHaveLength(1);
-    expect(quits[0]).toMatchObject({ enabled: true, accelerator: "CmdOrCtrl+Q" });
+    // Windows calls it Exit, on Alt+F4.
+    expect(quits[0]).toMatchObject({ enabled: true, accelerator: platform === "Win32" ? "Alt+F4" : "CmdOrCtrl+Q" });
     (quits[0].action as (id: string) => void)(APP_MENU_COMMAND_IDS.QUIT_APP);
     expect(dispatch).toHaveBeenCalledExactlyOnceWith(APP_MENU_COMMAND_IDS.QUIT_APP, "platform");
     await manager.sync({ definition, commandStates: { [APP_MENU_COMMAND_IDS.QUIT_APP]: { enabled: false } } });

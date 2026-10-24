@@ -190,6 +190,13 @@ function desktopOsFromPlatformId(platformId: string): "windows" | "macos" | "oth
   return "other";
 }
 
+/** The OS whose look the window takes. A dev build on web previews Windows with ?desktop-os=windows. */
+function lookOsFromPlatformId(platformId: string): "windows" | "macos" | "other" | null {
+  const desktopOs = desktopOsFromPlatformId(platformId);
+  if (desktopOs) return desktopOs;
+  return import.meta.env.DEV && new URLSearchParams(window.location.search).get("desktop-os") === "windows" ? "windows" : null;
+}
+
 function isCanvasViewportFocused(): boolean {
   return (
     document.activeElement instanceof HTMLElement &&
@@ -652,9 +659,7 @@ function EditorApp() {
   }, [platform.updates, runUpdateCheck]);
 
   useEffect(() => {
-    // A dev build on web previews the Windows look with ?desktop-os=windows.
-    const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("desktop-os") === "windows";
-    const desktopOs = desktopOsFromPlatformId(platform.id) ?? (preview ? "windows" : null);
+    const desktopOs = lookOsFromPlatformId(platform.id);
     if (desktopOs) {
       document.documentElement.dataset.desktopOs = desktopOs;
       return;
@@ -2129,6 +2134,17 @@ function EditorApp() {
     dispatch({ type: "MARK_DOCUMENT_SAVED", fileRef: resolved.fileRef });
   }
 
+  // On Windows the menus share the toolbar row, as in a Fluent command bar.
+  const menuBarInToolbar = lookOsFromPlatformId(platform.id) === "windows";
+  const appMenuBar = (
+    <AppMenuBar
+      definition={menuDefinition}
+      bindings={commandRuntime.bindings}
+      recentFiles={platform.menu?.recentFiles}
+      keyboardAccess={!isMacLikePlatform()}
+    />
+  );
+
   return (
     <div
       className={css.app}
@@ -2138,13 +2154,9 @@ function EditorApp() {
       onDragLeave={onAppDragLeave}
       onDrop={(e) => { void onAppDrop(e); }}
     >
-      {platform.menu?.usesNativeMenuBar ? null : (
-        <AppMenuBar
-          definition={menuDefinition}
-          bindings={commandRuntime.bindings}
-        />
-      )}
+      {platform.menu?.usesNativeMenuBar || menuBarInToolbar ? null : appMenuBar}
       <Toolbar
+        menuBar={menuBarInToolbar ? appMenuBar : null}
         onPresentationOptions={handlePresentationOptions}
         updateChip={
           availableUpdate && availableUpdate.version !== skippedUpdateVersion && !showUpdateModal && !updateDismissedForSession

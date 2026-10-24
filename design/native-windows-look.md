@@ -72,9 +72,11 @@ As built (phase 1, 2026-10-24): the tokens above are under
 block; the `--accent` family (dialogs, toolbar) stays the shared blue until
 phase 4. Strokes are inset shadows so control boxes keep their size. The
 pop-up chevron is redrawn with the CSS `d` property, which Chromium (so
-WebView2) supports. Interface text defaults to 12px on Windows (web
-included), so `--control-h: 22px` comes out at 24px; settings saved earlier
-keep their size. Checkboxes stay native: Chromium's already follow Fluent.
+WebView2) supports. Interface text defaults to 12px in the Windows
+desktop app (`platformDefaultSettings`), so `--control-h: 22px` comes out at
+24px; settings saved earlier keep their size. Web stays at 11px: the e2e
+suite runs with Playwright's "Desktop Chrome" device, whose user agent says
+Windows. Checkboxes stay native: Chromium's already follow Fluent.
 `?desktop-os=windows` previews it in a dev build.
 
 ## Phase 2 — Command bar and in-app menus (M)
@@ -95,6 +97,27 @@ keep their size. Checkboxes stay native: Chromium's already follow Fluent.
   short accent underline.
 - Context menus stay native for now (Win32). Moving them in-app comes later
   and is not in this plan.
+
+As built (phase 2, 2026-10-24): on Windows the desktop adapter reports
+`usesNativeMenuBar: false`, skips `syncNativeMenu` (so no Win32 menu bar is
+set) and offers `menu.recentFiles` for the in-app File › Open Recent. The
+menu bar goes into the toolbar row (`Toolbar`'s `menuBar`) when the look is
+Windows. Keyboard access, on any non-Mac platform (web included):
+
+- Alt pressed and released alone, or F10, focuses File; Alt+letter opens a
+  menu.
+- The arrow keys, Home and End, Enter and Space, Escape and Tab work as in
+  Win32 menus. Disabled items can be focused (`aria-disabled`, not
+  `disabled`).
+- Letters pick items.
+
+Access keys are assigned automatically per menu (`menu-access-keys.ts`):
+Windows conventions such as Cu**t**, E**x**it and Save **A**s first, then
+first letters. They are underlined only after keyboard entry. Windows shows
+Exit (Alt+F4) instead of Quit (Ctrl+Q). The active tool gets the Fluent
+fill, accent icon and accent bar. Tests: `apps/web/e2e/menu-keyboard.spec.ts`
+(claims a Windows `navigator.platform`), `test/menu-access-keys.spec.ts`,
+`test/web/app-menu-bar-recent-files.spec.ts`.
 
 ## Phase 3 — Panels, tabs, inspector, status bar (M)
 
