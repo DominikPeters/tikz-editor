@@ -239,6 +239,7 @@ test("codemirror search controls follow dark theme colors", async ({ page }) => 
     };
   });
 
-  expect(matchCaseStyles.accentColor).toBe("rgb(88, 152, 208)");
+  // The dark control accent (#0a84ff), as on the other checkboxes.
+  expect(matchCaseStyles.accentColor).toBe("rgb(10, 132, 255)");
   expect(matchCaseStyles.colorScheme).toBe("dark");
 });

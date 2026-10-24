@@ -487,8 +487,8 @@ style (default button last), so this is mostly CSS.
    - Links get a `--link-color` token.
    - The canvas keeps `--accent`: selection handles and guides are drawing
      colours, and a graphite system accent should not turn them grey.
-4. **Styles panel.** Beyond the 20px rows of phase 6; scoped once the
-   dialogs are in.
+4. **Styles panel.** Beyond the 20px rows of phase 6: consistent type,
+   readable read-only rows, values as written.
 
 As built (dialogs and Settings, 2026-10-24):
 
@@ -508,6 +508,19 @@ As built (dialogs and Settings, 2026-10-24):
   `--accent` and `--accent-dark` remain for the canvas, plus the developer
   panel.
 - Settings: the Windows navigation list has the Fluent selection pill.
+- Styles panel:
+  - Section headers use the UI font, like the inspector's.
+  - Keys (always monospace) and values split the row about evenly, so
+    "minimum width" fits.
+  - Editable keys stay plain text until hovered.
+  - Read-only values (TikZ defaults, values a style decides) read as text:
+    a colour keeps its swatch.
+  - Lengths and numbers show the value as written ("2cm", not
+    "56.9055pt"), and a renamed key keeps it.
+  - An edited value is a number only when it is a bare number. "3cm" goes
+    into the source as written, where `parseFloat` used to take it as 3.
+  - Fixed: a long read-only key ran into its value (the inline span did not
+    clip).
   `settings-and-persistence` now checks the control tokens instead of
   `--bg-pane` and `--border`.
 

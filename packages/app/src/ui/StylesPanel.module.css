@@ -16,9 +16,13 @@
   min-width: 0;
 }
 
+/* Section headers read like the inspector's: the rule's name in the UI font,
+   its option list (".box") and source line in smaller secondary text. */
 .sectionTitle {
-  font-family: var(--font-mono);
-  font-size: calc(var(--app-ui-scale, 1) * 10px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
 }
 
 .sectionMeta {
@@ -29,11 +33,11 @@
 }
 
 .sectionLocation {
+  flex-shrink: 0;
   margin-left: auto;
   text-align: right;
-  font-size: calc(var(--app-ui-scale, 1) * 8px);
+  font-size: calc(var(--app-ui-scale, 1) * 10px);
   color: var(--label-secondary);
-  font-family: var(--font-mono);
   font-weight: normal;
   text-transform: none;
   letter-spacing: 0;
@@ -49,7 +53,8 @@
 .declaration {
   position: relative;
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) minmax(100px, 150px);
+  /* Keys get room too: "minimum width" should not read "minimum w". */
+  grid-template-columns: 14px minmax(0, 1.1fr) minmax(0, 1fr);
   gap: 3px;
   align-items: center;
   min-height: calc(var(--app-ui-scale, 1) * 20px);
@@ -87,6 +92,7 @@
 }
 
 .propertyName {
+  display: block;
   color: var(--text);
   min-width: 0;
   overflow: hidden;
@@ -107,7 +113,10 @@
 /* Keys read as plain text until hovered or edited. Doubled to beat the
    pop-up button styling the editable dropdown composes. */
 .keyInput.keyInput {
+  background: transparent;
   box-shadow: none;
+  font-family: var(--font-mono);
+  font-size: calc(var(--app-ui-scale, 1) * 10px);
 }
 
 .keyInput.keyInput:hover,
@@ -116,10 +125,34 @@
   box-shadow: 0 0 0 0.5px var(--control-ring);
 }
 
+/* The Fluent field strokes (controls.module.css) are more specific. */
+:global(html[data-desktop-os="windows"]) .keyInput.keyInput {
+  box-shadow: none;
+}
+
+:global(html[data-desktop-os="windows"]) .keyInput.keyInput:hover,
+:global(html[data-desktop-os="windows"]) .keyInput.keyInput:focus {
+  box-shadow: inset 0 0 0 1px var(--control-ring), inset 0 -1px 0 var(--control-stroke-strong);
+}
+
 .valueInput {
   font-family: var(--font-mono);
   font-size: calc(var(--app-ui-scale, 1) * 10px);
   min-height: 18px;
+}
+
+/* Read-only rows (TikZ defaults, values a style decides) show their values as
+   text, not as disabled controls; a colour keeps its swatch. */
+.declaration.declaration .valueCell :is(button, input):disabled {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--label-secondary);
+  opacity: 1;
+}
+
+.declaration.declaration .valueCell button:disabled > span[aria-hidden="true"]:last-child {
+  visibility: hidden;
 }
 
 /* ── Raw value (click-to-edit) ─────────────────────────────────────────── */
