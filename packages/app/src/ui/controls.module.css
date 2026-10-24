@@ -271,3 +271,113 @@
 .slider:disabled {
   opacity: 0.5;
 }
+
+/* ── Windows 11 (Fluent) ────────────────────────────────────────────────────
+   A 1px stroke with a darker bottom edge, drawn as inset shadows so the box
+   keeps its size; focus is the Fluent double ring (white inside, dark
+   outside). Tokens in variables.css. */
+
+:global(html[data-desktop-os="windows"]) .popUp {
+  padding: 0 4px 0 8px;
+  box-shadow: inset 0 0 0 1px var(--control-ring), inset 0 -1px 0 var(--control-stroke-bottom);
+}
+
+:global(html[data-desktop-os="windows"]) .popUp:hover:not(:disabled) {
+  background: var(--control-hover-bg);
+}
+
+:global(html[data-desktop-os="windows"]) .popUp:disabled {
+  box-shadow: inset 0 0 0 1px var(--control-ring);
+}
+
+:global(html[data-desktop-os="windows"]) .popUp:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px var(--control-ring),
+    inset 0 -1px 0 var(--control-stroke-bottom),
+    0 0 0 1px var(--focus-inner),
+    0 0 0 3px var(--focus-outer);
+}
+
+/* A plain down chevron instead of the accent tile. WebView2 is Chromium,
+   which lets CSS redraw the path. */
+:global(html[data-desktop-os="windows"]) .popUpIndicator,
+:global(html[data-desktop-os="windows"]) .popUp:disabled .popUpIndicator {
+  background: transparent;
+  color: var(--label-secondary);
+}
+
+:global(html[data-desktop-os="windows"]) .popUpIndicatorIcon path {
+  d: path("M1.5 5.5l3.5 3.5 3.5-3.5");
+}
+
+:global(html[data-desktop-os="windows"]) .field {
+  padding: 0 6px;
+  box-shadow: inset 0 0 0 1px var(--control-ring), inset 0 -1px 0 var(--control-stroke-strong);
+}
+
+:global(html[data-desktop-os="windows"]) .field:hover:not(:disabled, :focus) {
+  background: var(--control-hover-bg);
+}
+
+:global(html[data-desktop-os="windows"]) .field:focus {
+  background: var(--control-bg-focus);
+  box-shadow: inset 0 0 0 1px var(--control-ring), inset 0 -2px 0 var(--control-accent);
+}
+
+/* The segmented control becomes a Fluent toggle group: hairline-divided
+   buttons in one stroked box, the selected one filled with the accent. */
+:global(html[data-desktop-os="windows"]) .segmented {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--control-popup-bg);
+  box-shadow: inset 0 0 0 1px var(--control-ring), inset 0 -1px 0 var(--control-stroke-bottom);
+}
+
+:global(html[data-desktop-os="windows"]) .segment {
+  min-height: calc(var(--app-ui-scale, 1) * var(--control-h));
+  border-radius: 0;
+}
+
+:global(html[data-desktop-os="windows"]) .segment + .segment {
+  box-shadow: inset 1px 0 0 var(--control-ring);
+}
+
+:global(html[data-desktop-os="windows"]) .segment:hover:not(:disabled) {
+  background: var(--control-hover-bg);
+}
+
+:global(html[data-desktop-os="windows"]) .segmentOn,
+:global(html[data-desktop-os="windows"]) .segmentOn:hover:not(:disabled) {
+  background: var(--control-accent);
+  box-shadow: none;
+  color: var(--control-on-accent);
+}
+
+:global(html[data-desktop-os="windows"]) .segmentMixed {
+  background: color-mix(in srgb, var(--control-accent) 22%, transparent);
+}
+
+:global(html[data-desktop-os="windows"]) .segment:focus-visible {
+  outline: 2px solid var(--focus-outer);
+  outline-offset: -2px;
+  box-shadow: inset 0 0 0 3px var(--focus-inner);
+}
+
+/* Slider: a white knob with an accent dot that grows under the pointer. */
+:global(html[data-desktop-os="windows"]) .slider::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  background: radial-gradient(circle, var(--control-accent) 0 4px, var(--slider-knob) 4.5px);
+  box-shadow: 0 0 0 1px var(--control-ring), 0 1px 2px rgba(0, 0, 0, 0.16);
+}
+
+:global(html[data-desktop-os="windows"]) .slider:hover::-webkit-slider-thumb {
+  background: radial-gradient(circle, var(--control-accent) 0 5px, var(--slider-knob) 5.5px);
+}
+
+:global(html[data-desktop-os="windows"]) .slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 1px var(--focus-inner), 0 0 0 3px var(--focus-outer);
+}

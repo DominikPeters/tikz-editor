@@ -91,17 +91,80 @@
   --radius-popup:     5px;
 }
 
-/* Windows desktop polish */
-[data-desktop-os="windows"] {
-  --bg-app: rgb(246, 246, 246);
-  --bg-header: rgb(246, 246, 246);
+/* ── Windows 11 (Fluent) ───────────────────────────────────────────────────────
+   Values from the WinUI 3 light and dark theme resources. :root raises the
+   specificity over the dark-mode block below, so the dark Windows block has to
+   set every colour this one sets. Fluent controls draw a 1px stroke with a
+   darker bottom edge (--control-stroke-bottom); see controls.module.css. */
+:root[data-desktop-os="windows"] {
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
 
-  --accent: #7a7a7a;
-  --accent-dark: #3f3f3f;
-  --accent-btn-bg: #e7e7e7;
-  --accent-btn-border: #b8b8b8;
-  --accent-btn-hover-bg: #dddddd;
-  --accent-btn-hover-border: #a7a7a7;
+  --text:             #1a1a1a;
+  --bg-app:           #f3f3f3;
+  --bg-header:        #f3f3f3;
+  --bg-window:        #f3f3f3;
+  --bg-tabbar:        #e9e9e9;
+  --tabbar-divider:   #d4d4d4;
+  --bg-inspector:     #f9f9f9;
+  --separator:        #e5e5e5;
+  --label-secondary:  #5d5d5d;
+  --control-bg:       #ffffff;
+  --control-bg-focus: #ffffff;
+  --control-popup-bg: #fbfbfb;
+  --control-ring:     rgba(0, 0, 0, 0.0578);
+  --control-stroke-bottom: rgba(0, 0, 0, 0.1622);
+  --control-stroke-strong: rgba(0, 0, 0, 0.4458);
+  --control-hover-bg: #f6f6f6;
+  --control-shadow:   none;
+  --control-accent:   #005fb8;
+  --control-on-accent: #ffffff;
+  --control-selection: #005fb8;
+  --segment-track:    transparent;
+  --segment-on-bg:    #005fb8;
+  --segment-on-shadow: none;
+  --tab-selected-bg:  rgba(0, 0, 0, 0.0373);
+  --slider-track:     rgba(0, 0, 0, 0.4458);
+  --slider-knob:      #ffffff;
+  --focus-outer:      rgba(0, 0, 0, 0.896);
+  --focus-inner:      #ffffff;
+
+  /* 12px text by default (see DEFAULT_SETTINGS), so 22px × 12/11 = 24px. */
+  --control-h:        22px;
+  --row-min-h:        22px;
+  --radius-field:     4px;
+  --radius-popup:     4px;
+}
+
+:root[data-desktop-os="windows"][data-color-scheme="dark"] {
+  --text:             #ffffff;
+  --bg-app:           #202020;
+  --bg-header:        #202020;
+  --bg-window:        #202020;
+  --bg-tabbar:        #1c1c1c;
+  --tabbar-divider:   #3d3d3d;
+  --bg-inspector:     #272727;
+  --separator:        #3d3d3d;
+  --label-secondary:  #c5c5c5;
+  --control-bg:       #2d2d2d;
+  --control-bg-focus: #1f1f1f;
+  --control-popup-bg: #2d2d2d;
+  --control-ring:     rgba(255, 255, 255, 0.0698);
+  --control-stroke-bottom: rgba(255, 255, 255, 0.093);
+  --control-stroke-strong: rgba(255, 255, 255, 0.5442);
+  --control-hover-bg: #323232;
+  --control-shadow:   none;
+  --control-accent:   #60cdff;
+  --control-on-accent: #000000;
+  --control-selection: #005fb8;  /* under white text */
+  --segment-track:    transparent;
+  --segment-on-bg:    #60cdff;
+  --segment-on-shadow: none;
+  --tab-selected-bg:  rgba(255, 255, 255, 0.0605);
+  --slider-track:     rgba(255, 255, 255, 0.5442);
+  --slider-knob:      #454545;
+  --focus-outer:      #ffffff;
+  --focus-inner:      rgba(0, 0, 0, 0.7);
 }
 
 /* ── Dark mode overrides ────────────────────────────────────────────────────── */

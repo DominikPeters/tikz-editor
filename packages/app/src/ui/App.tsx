@@ -652,7 +652,9 @@ function EditorApp() {
   }, [platform.updates, runUpdateCheck]);
 
   useEffect(() => {
-    const desktopOs = desktopOsFromPlatformId(platform.id);
+    // A dev build on web previews the Windows look with ?desktop-os=windows.
+    const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("desktop-os") === "windows";
+    const desktopOs = desktopOsFromPlatformId(platform.id) ?? (preview ? "windows" : null);
     if (desktopOs) {
       document.documentElement.dataset.desktopOs = desktopOs;
       return;
