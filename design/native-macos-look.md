@@ -400,6 +400,16 @@ then run a contrast pass on labels, captions and disabled states.
 - A rotation knob next to Rotate.
 - `-apple-system-control-accent` for `--control-accent` on desktop macOS.
 
+As built (accent only, 2026-10-24): on desktop macOS, `--control-accent` is
+`-apple-system-control-accent` and the new `--control-selection` (focused list
+rows in Objects) is `-apple-system-selected-content-background`, inside
+`@supports` under `:root[data-desktop-os="macos"]`. Web and Windows keep
+#007aff / #0a84ff and #0063e1 / #0058d0. Checked in a WKWebView against the
+built CSS, light and dark; WebKit resolves the keywords in the web content
+process, which reads the System Settings accent. The older `--accent` family
+(dialogs, toolbar toggles) is unchanged. Steppers and the rotation knob are
+dropped; the Stroke/Fill checkbox stays a separate task.
+
 ## Verification per phase
 
 - `npm run typecheck`, `npm run lint:prod`, `npm test`.

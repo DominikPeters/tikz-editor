@@ -59,7 +59,7 @@
 }
 
 .tree:focus-within .rowSelected {
-  background: var(--control-accent);
+  background: var(--control-selection);
   color: #fff;
 }
 
