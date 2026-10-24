@@ -777,7 +777,7 @@ function evaluatePathInFrame(
 
           const resolvedEdgeStyle = withDependencySource(context, graphStatement.id, () =>
             resolveContextDelta(
-              builder.style,
+              edgePathBaseStyle(builder.style),
               frameTransform,
               edgeOptionLayers,
               frame.customStyles,
@@ -1517,6 +1517,10 @@ function evaluatePathInFrame(
         if (pathItem.kind !== "EdgeOperation") throw new Error("Unexpected path operation handler");
         const item = pathItem;
         const edgePlan = extractToLikeOptionPlan(mergeToLikePathOptions(item, builder.leadingToLikeOptions));
+        // The merged options carry the path's `to path` keys into the edge;
+        // its style already holds them, so only the edge's own options are
+        // applied after `every edge`.
+        const ownEdgeOptions = item.options ? extractToLikeOptionPlan(item).item.options : undefined;
         const edgeItem: EdgeOperationItem =
           edgePlan.generatedNodes.length > 0
             ? {
@@ -1577,20 +1581,20 @@ function evaluatePathInFrame(
             rawOptions: [drawEdgeOptions]
           });
         }
-        if (edgeItem.options) {
+        if (ownEdgeOptions) {
           edgeOptionLayers.push({
             kind: "command",
             sourceRef: {
               sourceId: edgeItem.id,
-              sourceSpan: edgeItem.optionsSpan ?? item.span,
+              sourceSpan: item.optionsSpan ?? item.span,
               sourceKind: "edge-options",
               label: "edge"
             },
-            rawOptions: [edgeItem.options]
+            rawOptions: [ownEdgeOptions]
           });
         }
         const resolvedEdgeStyle = resolveContextDelta(
-          builder.style,
+          edgePathBaseStyle(builder.style),
           frameTransform,
           edgeOptionLayers,
           frame.customStyles,
@@ -2837,6 +2841,13 @@ function resolveNamedCoordinateRewriteHandleId(rawName: string, context: Semanti
     }
   }
   return undefined;
+}
+
+// An edge is a path of its own (`\path[every edge, ...]`): it keeps the
+// colours and settings of the path it is on, but not whether that path draws,
+// fills, shades or clips.
+function edgePathBaseStyle(style: ResolvedStyle): ResolvedStyle {
+  return { ...style, fill: null, fillPattern: null, shadeEnabled: false, drawExplicit: false, clip: false, useAsBoundingBox: false };
 }
 
 function mergeToLikePathOptions<T extends ToOperationItem | EdgeOperationItem>(

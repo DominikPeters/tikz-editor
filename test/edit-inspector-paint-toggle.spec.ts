@@ -162,6 +162,17 @@ describe("inspector paint toggles", () => {
     expect(textColors(restored)).toEqual(textColors(source));
   });
 
+  it.each([
+    [String.raw`\draw[red] (0,0) -- (1,0) edge (1,1);`, String.raw`\path[red] (0,0) -- (1,0) edge (1,1);`],
+    [String.raw`\draw[red] (0,0) -- (1,0) pic {p};`, String.raw`\path[red] (0,0) -- (1,0) pic {p};`]
+  ])("keeps the colour of edges and pics when switching the stroke off: %s", (body, off) => {
+    const options = String.raw`[p/.pic={\draw (0,0) circle (0.2);}]`;
+    const others = (source: string) => JSON.stringify(renderTikzToSvg(source).semantic.scene.elements.slice(1).map(element => element.style));
+    const source = picture(body, options);
+    expect(roundTrip("stroke", body, options)).toMatchObject({ off, restored: body });
+    expect(others(picture(off, options))).toBe(others(source));
+  });
+
   it("keeps authored shading suppression when restoring a solid fill", () => {
     const source = picture(String.raw`\shadedraw[shade=none, fill=red] (0,0) rectangle (1,1);`);
     const { toggle } = toggleFor(source, "fill");

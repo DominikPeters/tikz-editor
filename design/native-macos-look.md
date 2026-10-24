@@ -430,11 +430,24 @@ and compares nodes by what they draw.
 - Two evaluator fixes came out of it: a bare `fill` uses the current colour
   (`\path[red, fill]` fills red) and keeps a pattern, as in PGF.
 - A focused checkbox or slider no longer blocks app shortcuts such as Undo.
-- Known gap: the editor lets a pattern switch shading off, which PGF does not.
+- A bare colour also colours the nodes, edges and pics on the path, so there
+  it stays when a paint goes (`\draw[red] … node {x}` → `\path[red] …`), and
+  draw / fill colours are written as their own keys.
+- Review round: edges are now paths of their own, as in PGF: they keep the
+  path's colours and settings but not its draw / fill mode, so
+  `\path[draw=none] (a) edge (b)` draws the edge and `\path[fill=red]` does
+  not fill it. A restore after a partial batch replays only those elements'
+  writes, and remembered paint is kept per document.
+- Known gaps: the editor lets a pattern switch shading off, which PGF does
+  not. It cannot keep a stroke colour while drawing is off, so an edge drawn
+  in its path's `draw=blue` turns to the current colour when the path's
+  stroke goes (PGF keeps blue).
 
 Tests: `test/edit-inspector-paint-toggle.spec.ts` (round trips),
-`test/paint-toggle-fuzz.spec.ts` (random paths and nodes; seed and size via
-`PAINT_TOGGLE_FUZZ_SEED` / `PAINT_TOGGLE_FUZZ_CASES`) and
+`test/paint-toggle-fuzz.spec.ts` (random paths, nodes and edges; seed and
+size via `PAINT_TOGGLE_FUZZ_SEED` / `PAINT_TOGGLE_FUZZ_CASES`),
+`test/semantic-edge-paint.spec.ts`, `test/web/inspector-paint-toggle.spec.ts`
+(remembered paint in the store) and
 `apps/web/e2e/inspector-paint-toggles.spec.ts`.
 
 ## Verification per phase

@@ -607,6 +607,7 @@ function sanitizeSemanticValue(value: unknown, geometricStyle = false): unknown 
       key === "runtimeId" ||
       key === "sourceSpan" ||
       key === "textSourceSpan" ||
+      key === "invocationSpan" ||
       key === "sourceFingerprint" ||
       key === "styleChain" ||
       key === "rawOptions" ||
