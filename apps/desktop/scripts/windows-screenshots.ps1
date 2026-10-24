@@ -56,6 +56,15 @@ public static class NativeWindow {
     mouse_event(0x8001, x * 65535 / (GetSystemMetrics(0) - 1), y * 65535 / (GetSystemMetrics(1) - 1), 0, UIntPtr.Zero);
   }
 
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessageTimeout(IntPtr window, uint message, IntPtr wParam, string lParam, uint flags, uint timeout, out IntPtr result);
+
+  // Tells running programs, the shell among them, that the theme changed, as
+  // Settings does; otherwise they keep the theme they cached.
+  public static void BroadcastThemeChange() {
+    IntPtr result;
+    SendMessageTimeout((IntPtr)0xffff, 0x001A, IntPtr.Zero, "ImmersiveColorSet", 2, 5000, out result);
+  }
+
   public static void Click(int x, int y) {
     MoveMouse(x, y);
     mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
@@ -136,6 +145,8 @@ function Capture-Theme([string]$Theme) {
   New-Item -Path $personalize -Force | Out-Null
   Set-ItemProperty -Path $personalize -Name AppsUseLightTheme -Value ([int]($Theme -eq "light")) -Type DWord
   Set-ItemProperty -Path $personalize -Name SystemUsesLightTheme -Value ([int]($Theme -eq "light")) -Type DWord
+  [NativeWindow]::BroadcastThemeChange()
+  Start-Sleep -Seconds 1
 
   $app = Start-Process -FilePath $ExecutablePath -WorkingDirectory (Split-Path $ExecutablePath) -PassThru
   try {

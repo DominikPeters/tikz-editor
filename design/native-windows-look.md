@@ -184,11 +184,21 @@ Done together, since the custom title bar decides where the document tabs go.
 - **Dock tabs:** pivots, with the selected tab semibold over a 3px accent
   bar. The status bar needed nothing: its tokens already give the Fluent
   look.
-- **Not built yet:** the Windows code compiles only on Windows, so its
-  first build is on CI. The `Windows screenshots` workflow builds the
-  portable app on `windows-2025` and uploads screenshots of the window,
+- **Checked on CI (2026-10-25):** the `Windows screenshots` workflow builds
+  the portable app on `windows-2025` and uploads screenshots of the window,
   the File menu, Settings, Snap Layouts and the maximised window, light and
-  dark (`apps/desktop/scripts/windows-screenshots.ps1`).
+  dark (`apps/desktop/scripts/windows-screenshots.ps1`). The Rust code
+  compiled the first time. With real mouse input the Snap Layouts flyout
+  opens on our maximise button, the button shows its hover, and a click on
+  it maximises. The script logs the window's children and hit-tests the
+  caption, and Notepad's flyout serves as a control. `SetCursorPos` alone
+  does not open the flyout.
+- **Flyout theme:** the shell draws the flyout in the window's frame theme
+  (light for classic Notepad, which has none), which tao takes from the
+  system theme. The script therefore broadcasts `ImmersiveColorSet` after
+  switching the theme in the registry.
+- **Runner limits:** no rounded corners or window shadow, since the VM has
+  only the basic display adapter. Both need a real Windows 11 check.
 
 ## As built: phase 5, accent only (2026-10-25)
 
@@ -209,10 +219,11 @@ Done together, since the custom title bar decides where the document tabs go.
   `?desktop-os=windows` sets `data-desktop-os="windows"` on web, so the
   Windows styles apply. This checks layout, tokens, light/dark and keyboard
   behaviour; not Segoe UI metrics, the title bar, Mica or the system accent.
-- Later: a GitHub Actions workflow on `windows-latest` that builds the desktop
-  app, opens a sample document in light and dark and uploads screenshots.
-  Runners are Windows Server, so it is close to but not exactly Windows 11.
-- For phase 6, a short-lived Windows VM (Google Cloud credit) for what
-  screenshots cannot show: Snap Layouts on hover, dragging, Alt+Space.
+- CI: the `Windows screenshots` workflow (see phase 6 above). Runners are
+  Windows Server 2025, which shares the Windows 11 24H2 shell, Snap Layouts
+  included, but has no GPU.
+- Still to check on a real machine (or a short-lived VM with a GPU): rounded
+  corners and the shadow, dragging and double-clicking the title bar,
+  Alt+Space, Mica.
 - Tests: e2e for menu keyboard access, plus the existing suites (see
   `native-macos-look.md`, "Verification per phase").
