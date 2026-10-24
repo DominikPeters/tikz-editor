@@ -237,7 +237,7 @@
 :global(html[data-desktop-os="windows"]) .toolbar {
   min-height: calc(var(--app-ui-scale, 1) * 36px);
   padding: 2px 6px;
-  background: var(--bg-window);
+  background: var(--bg-commandbar);
   border-bottom-color: var(--separator);
 }
 

@@ -134,6 +134,23 @@ export type PlatformWindowApi = {
   showMessage?: (options: { title: string; message: string; kind?: "info" | "warning" | "error" }) => Promise<void> | void;
   openExternalUrl?: (url: string) => Promise<boolean> | boolean;
   setTheme?: (theme: "light" | "dark" | null) => Promise<void>;
+  /** Present when the app draws the title bar itself (Windows). */
+  frame?: PlatformWindowFrame;
+};
+
+/** What the caption buttons of a self-drawn title bar do. */
+export type PlatformWindowFrame = {
+  minimize: () => Promise<void>;
+  toggleMaximize: () => Promise<void>;
+  /** Asks to close, as the system close button would: unsaved changes are checked. */
+  close: () => Promise<void>;
+  isMaximized: () => Promise<boolean>;
+  onMaximizedChange: (listener: (maximized: boolean) => void) => () => void;
+  /** Where the maximise button is, in CSS pixels, so that Windows can offer
+   *  Snap Layouts over it; null removes it. */
+  setMaximizeButtonBounds?: (bounds: { x: number; y: number; width: number; height: number } | null) => void;
+  /** The pointer over the maximise button, which the system now handles. */
+  onMaximizeButtonHover?: (listener: (hovered: boolean) => void) => () => void;
 };
 
 export type PlatformHaptics = {

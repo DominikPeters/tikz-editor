@@ -161,6 +161,35 @@ Done together with the macOS dialogs: see `native-macos-look.md`, phase 8.
   - the system menu on Alt+Space;
   - the Snap Layouts flyout (the adapted plugin from Decision 1).
 
+## As built: phases 3 and 6 (2026-10-25)
+
+Done together, since the custom title bar decides where the document tabs go.
+
+- **`WindowsTitleBar`** (app package): the app mark, the `TabStrip`, a drag
+  region (`data-tauri-drag-region`) and 46px caption buttons. It replaces
+  the tab row on the Windows look, above the command bar.
+- **Tabs:** fixed-width tabs with rounded tops on `--bg-titlebar`. The
+  active one has `--bg-commandbar`, so it joins the command bar. The unsaved
+  dot leads, and the close button trails.
+- **Window controls:** `PlatformWindowApi.frame` (desktop adapter,
+  `window-frame.ts`) minimises, maximises and closes through Tauri. Close
+  raises `CloseRequested`, so the unsaved-changes guard runs as for Alt+F4.
+- **Snap Layouts:** `snap_layout.rs` is adapted from
+  tauri-plugin-snap-layout (MIT; notice in the file). The page reports the
+  maximise button's box, and a transparent `STATIC` child window over it
+  answers `HTMAXBUTTON`, maximises or restores on click, and sends hover
+  back as `desktop-maximize-button-hover`.
+- **Config:** `tauri.windows.conf.json` sets `decorations: false` and
+  `shadow: true`. The `windows-frame` capability allows the window calls.
+- **Dock tabs:** pivots, with the selected tab semibold over a 3px accent
+  bar. The status bar needed nothing: its tokens already give the Fluent
+  look.
+- **Not built yet:** the Windows code compiles only on Windows, so its
+  first build is on CI. The `Windows screenshots` workflow builds the
+  portable app on `windows-2025` and uploads screenshots of the window,
+  the File menu, Settings, Snap Layouts and the maximised window, light and
+  dark (`apps/desktop/scripts/windows-screenshots.ps1`).
+
 ## Verification
 
 - Now: the web build in Chromium, the engine WebView2 uses. In a dev build

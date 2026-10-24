@@ -146,3 +146,67 @@
   outline: 2px solid color-mix(in srgb, var(--control-accent) 60%, transparent);
   outline-offset: -2px;
 }
+
+/* ── Windows 11: tabs in the title bar ──────────────────────────────────────
+   WindowsTitleBar holds the strip. Tabs keep a fixed width, start at the
+   left and round their top corners; the active one has the command bar's
+   colour, so it joins it. The unsaved dot leads, the close button trails. */
+
+:global(html[data-desktop-os="windows"]) .strip {
+  flex: 0 1 auto;
+  min-width: 0;
+  height: calc(var(--app-ui-scale, 1) * 28px);
+  gap: 1px;
+  border-bottom: 0;
+  background: transparent;
+}
+
+:global(html[data-desktop-os="windows"]) .tab {
+  flex: 0 1 calc(var(--app-ui-scale, 1) * 200px);
+  min-width: 90px;
+  border-left: 0;
+  border-radius: 6px 6px 0 0;
+}
+
+:global(html[data-desktop-os="windows"]) .tab:hover:not(.tabActive) {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+:global(html[data-desktop-os="windows"]) .tabActive {
+  background: var(--bg-commandbar);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent);
+  clip-path: inset(-1px -1px 0 -1px);
+}
+
+:global(html[data-desktop-os="windows"]) .tabButton {
+  justify-content: flex-start;
+  padding: 0 28px 0 22px;
+}
+
+:global(html[data-desktop-os="windows"]) .title {
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+}
+
+:global(html[data-desktop-os="windows"]) .tab:hover .dirty {
+  opacity: 1;
+}
+
+:global(html[data-desktop-os="windows"]) .close {
+  left: auto;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+}
+
+:global(html[data-desktop-os="windows"]) .tabActive .close {
+  opacity: 1;
+}
+
+:global(html[data-desktop-os="windows"]) .add {
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 2px;
+  border-left: 0;
+  border-radius: 4px;
+}

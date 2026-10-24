@@ -15,6 +15,7 @@ import {
   createNativeDesktopMenuManager,
   serializeDesktopContextMenuItems
 } from "./native-menu";
+import { createWindowFrame } from "./window-frame";
 
 export type DesktopPlatformEnvironment = {
   storage?: StorageLike;
@@ -320,6 +321,8 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
       }
     },
     window: {
+      // Windows draws its own title bar, with the document tabs in it.
+      ...(isWindowsDesktop() ? { frame: createWindowFrame() } : {}),
       setDocumentState: ({ title, dirty }) => {
         const baseTitle = title ?? "TikZ Editor";
         const fullTitle = dirty ? `• ${baseTitle}` : baseTitle;

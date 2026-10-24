@@ -335,3 +335,49 @@
     --font-size: 13px;
   }
 }
+
+/* ── Windows 11: pivot tabs ──────────────────────────────────────────────────
+   Text tabs without backgrounds on the window colour; the selected one is
+   semibold over a short accent bar. Single-panel docks keep the plain title. */
+
+html[data-desktop-os="windows"] .flexlayout__tabset_tabbar_outer {
+  height: calc(var(--app-ui-scale, 1) * 28px) !important;
+  min-height: calc(var(--app-ui-scale, 1) * 28px) !important;
+  background: var(--bg-window) !important;
+  border-bottom: 1px solid var(--separator);
+  align-items: stretch;
+}
+
+html[data-desktop-os="windows"] .flexlayout__tabset_tabbar_inner_tab_container {
+  align-items: stretch;
+  gap: 0;
+}
+
+html[data-desktop-os="windows"] .flexlayout__tab_button {
+  position: relative;
+  height: auto;
+  padding: 0 8px !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+html[data-desktop-os="windows"] .flexlayout__tab_button:hover {
+  background: transparent !important;
+  color: var(--text);
+}
+
+html[data-desktop-os="windows"] .flexlayout__tab_button--selected::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 16px;
+  height: 3px;
+  margin-left: -8px;
+  border-radius: 2px;
+  background: var(--control-accent);
+}
+
+html[data-desktop-os="windows"] .flexlayout__tab_button_trailing {
+  border-radius: 4px !important;
+}

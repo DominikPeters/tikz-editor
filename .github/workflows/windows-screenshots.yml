@@ -1,0 +1,49 @@
+name: Windows screenshots
+
+# Builds the portable Windows app and uploads screenshots of its window, light
+# and dark, so the Windows look can be checked without a Windows machine
+# (design/native-windows-look.md, Verification).
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "packages/app/src/ui/**"
+      - "packages/app/src/platform/**"
+      - "apps/desktop/**"
+      - ".github/workflows/windows-screenshots.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    # Windows Server 2025 shares the Windows 11 (24H2) desktop.
+    runs-on: windows-2025
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+      - run: npm ci
+      - name: Build portable Windows executable
+        run: npm run -w @tikz-editor/desktop tauri:build:portable -- --ci
+      - name: Take screenshots
+        timeout-minutes: 10
+        shell: pwsh
+        run: ./apps/desktop/scripts/windows-screenshots.ps1 -OutputDirectory "$env:RUNNER_TEMP\screenshots"
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-screenshots
+          path: ${{ runner.temp }}/screenshots/*.png
+          if-no-files-found: warn

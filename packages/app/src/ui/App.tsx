@@ -28,6 +28,7 @@ import type { SceneFigure } from "@tikz-editor/core/semantic/types";
 import { createMinimalTikzSourceArtifact } from "@tikz-editor/core/export/index";
 import { installAppProfilingRecorder, readAppProfilingSnapshot, resetAppProfilingSession } from "../profiling";
 import { AppMenuBar } from "./AppMenuBar";
+import { WindowsTitleBar } from "./WindowsTitleBar";
 import { Toolbar } from "./Toolbar";
 import { DockLayout } from "./DockLayout";
 import { StatusBar } from "./StatusBar";
@@ -2134,8 +2135,16 @@ function EditorApp() {
     dispatch({ type: "MARK_DOCUMENT_SAVED", fileRef: resolved.fileRef });
   }
 
-  // On Windows the menus share the toolbar row, as in a Fluent command bar.
-  const menuBarInToolbar = lookOsFromPlatformId(platform.id) === "windows";
+  // The Windows look draws its own title bar with the document tabs in it,
+  // and the menus share the toolbar row, as in a Fluent command bar.
+  const windowsLook = lookOsFromPlatformId(platform.id) === "windows";
+  const tabStrip = (
+    <TabStrip
+      onRequestCloseDocument={(documentId) => {
+        requestCloseIntent({ kind: "close-document", documentId });
+      }}
+    />
+  );
   const appMenuBar = (
     <AppMenuBar
       definition={menuDefinition}
@@ -2154,9 +2163,10 @@ function EditorApp() {
       onDragLeave={onAppDragLeave}
       onDrop={(e) => { void onAppDrop(e); }}
     >
-      {platform.menu?.usesNativeMenuBar || menuBarInToolbar ? null : appMenuBar}
+      {windowsLook ? <WindowsTitleBar frame={platform.window?.frame ?? null}>{tabStrip}</WindowsTitleBar> : null}
+      {platform.menu?.usesNativeMenuBar || windowsLook ? null : appMenuBar}
       <Toolbar
-        menuBar={menuBarInToolbar ? appMenuBar : null}
+        menuBar={windowsLook ? appMenuBar : null}
         onPresentationOptions={handlePresentationOptions}
         updateChip={
           availableUpdate && availableUpdate.version !== skippedUpdateVersion && !showUpdateModal && !updateDismissedForSession
@@ -2170,11 +2180,7 @@ function EditorApp() {
             : null
         }
       />
-      <TabStrip
-        onRequestCloseDocument={(documentId) => {
-          requestCloseIntent({ kind: "close-document", documentId });
-        }}
-      />
+      {windowsLook ? null : tabStrip}
       {presentation.error ? <div className={presentationCss.feedback} role="alert"><span>{presentation.error}</span><Modal.SecondaryButton onClick={handlePresentationOptions}>Presentation Options…</Modal.SecondaryButton><Modal.SecondaryButton onClick={presentationService.clearError}>Dismiss</Modal.SecondaryButton></div> : null}
       {presentation.snapshot && !presentation.snapshot.outputAvailable ? <div className={presentationCss.feedback} role="status"><span>Audience output is closed.</span><Modal.SecondaryButton onClick={handlePresentationOptions}>Choose Audience Output…</Modal.SecondaryButton></div> : null}
       {showPresentationOptions ? <PresentationOptionsModal active={presenting} onClose={() => { setShowPresentationOptions(false); }} /> : null}
