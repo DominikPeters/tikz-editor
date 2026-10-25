@@ -4,7 +4,7 @@ Status: proposal (2026-10-25), agreed with Dominik in outline: no inspector
 tabs; slide plus presentation sections when nothing is selected; theme
 gallery in a popover; the theme is reachable only from the inspector with
 nothing selected (no menu command). Work is phased UI-first (see Phasing).
-Phase 1 is implemented (2026-10-25).
+Phases 1 and 2 are implemented (2026-10-25).
 
 ## Problem
 
@@ -183,27 +183,41 @@ every catalog theme and checks the mapping against the chrome's text spans.
 
 ## Theme gallery popover
 
-Opened from **Change…** on the theme card. Wide enough for a grid of
-thumbnails; the inspector is too narrow.
+Opened from **Change…** on the theme card
+(`packages/app/src/ui/theme-gallery/`).
 
-- Each tile renders **the user's own deck**, the title slide and the current
-  slide, under that theme. Generic sample slides would not show how the
-  user's long title or three-level itemize looks.
-- Tiles are grouped as in Beamer's theme matrix: no navigation, tree,
-  sidebar, mini frames, section/subsection tables, plus the modern themes.
-- Hovering a tile previews it on the canvas; leaving restores the current
-  theme. Clicking commits one undoable action.
-- Previews never touch the source. `resolveBeamerTheme` works from the
-  document model (`document.preamble.themes` in source order), so a preview
-  is a **theme override**: the same document model with its theme-use list
-  replaced by a synthetic one, passed through the render entry point. This
-  keeps hover out of undo, dirty state and the source panel, and lets the
-  gallery exist before any source rewriting does.
-- Thumbnails render in the thumbnail worker with the same override. Cache by
-  theme id plus a hash of the preamble and the two frames. Roughly 30 themes
-  × 2 frames; render visible tiles first.
-- Switching an aggregate theme keeps the user's color overrides and keeps
-  options only where the new theme reads the same key.
+- It covers the inspector column, full height, two tiles to a row, rather
+  than opening wide over the canvas: the canvas is where the hover preview
+  is drawn, so it has to stay in view. (The first draft wanted a wide
+  popover; building the preview showed why not.)
+- Each tile renders **the user's own deck**: the title slide (the first
+  frame with `\titlepage` or `\maketitle`, else the first frame), with the
+  current slide inset at its current step. Generic sample slides would not
+  show how the user's long title or three-level itemize looks.
+- Tiles are grouped as in Beamer's theme matrix, modern themes first: modern,
+  no navigation bar, tree, sidebar, mini frames, section tables. The current
+  theme has an accent ring and gets focus on opening.
+- Pointing at a tile, or focusing it with the arrow keys, draws its render of
+  the current slide over the canvas page (an image in the canvas's world
+  stage, above the real render and below the interaction layer). Moving out
+  of the popover, Escape or closing removes it. It previews on pointer
+  *move*, not enter: the popover opens under the pointer, and the tile that
+  lands there must not preview by accident. Clicking applies the theme as
+  one undoable `deckSetPresentationTheme`.
+- Previews never touch the source. `prepareBeamerDocument` takes a
+  `presentationTheme` option; only the theme resolution sees the switched
+  theme uses (`theme-switch.ts`), the rest of the deck keeps its real spans.
+  The preview and the action come from one plan, and a test checks that a
+  preview renders identically to the applied edit.
+- Thumbnails render in the thumbnail worker, which keeps a prepared document
+  for the previewed theme beside the slide sorter's, so the gallery does not
+  evict it. Renders are cached by source fingerprint, graphics bundle, theme,
+  frame and step; the current theme renders first. On this dev machine the
+  60 renders of a small deck take under a second.
+- Switching keeps the user's later color, font, inner and outer theme
+  commands, and keeps an option only where the new theme reads it
+  (`[right,width=2cm]{Berkeley}` → `{PaloAlto}` keeps both; moloch's
+  `progressbar` is dropped for Madrid, along with the empty bracket).
 
 ## Object fields to add
 
@@ -291,12 +305,12 @@ in Presentation is disabled with its real value. Read-only values use the
 secondary label color: the shared disabled pop-up text is too faint to read
 in dark mode (an app-wide issue of `controls.module.css`, not fixed here).
 
-**Phase 2: theme gallery popover.** The popover layout and grouping, the
-theme override through the render entry point, worker thumbnails and their
-cache, hover preview on the canvas. Click-to-apply uses the narrowest
-possible write: replace the name in the last `\usetheme`, or insert one line
-after `\documentclass` when there is none. Shadowing and guard rules wait
-for phase 4.
+**Phase 2: theme gallery popover.** Implemented 2026-10-25, as described
+under Theme gallery popover. Click-to-apply is the narrow write: rename the
+last executing `\usetheme` (commands inside macro definitions are skipped)
+or insert one after the `\documentclass` line. `deckSetPresentationTheme` is
+the first document-scoped deck action; it ignores the rendered frame. Phase 4
+adds the shadowing diagnostics and the other component kinds.
 
 **Phase 3: object field UI.** The new object fields (list reveal, columns
 container, image path and options, Edit drawing, overlay spec on more kinds,

@@ -110,8 +110,9 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise
     const svg = await withTexGlyphOutlines(async () => {
       if (request.deckFrameIndex != null) {
         const { prepareBeamerDocument } = await import("@tikz-editor/core/beamer/index");
-        const prepared = prepareBeamerDocument(request.source);
-        const step = Math.max(1, prepared.frameStepCount(request.deckFrameIndex));
+        const prepared = prepareBeamerDocument(request.source, request.presentationTheme === undefined ? {} : { presentationTheme: request.presentationTheme });
+        const finalStep = Math.max(1, prepared.frameStepCount(request.deckFrameIndex));
+        const step = request.deckStep === undefined ? finalStep : Math.min(Math.max(1, request.deckStep), finalStep);
         return (await prepared.renderFrame({
           frameIndex: request.deckFrameIndex,
           step,

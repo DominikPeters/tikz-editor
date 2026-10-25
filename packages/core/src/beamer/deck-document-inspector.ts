@@ -35,6 +35,8 @@ import type {
 export type DeckThemeCard = {
   /** Display name: the last `\usetheme`, or "Default" when there is none. */
   name: string;
+  /** The catalog id of that theme, null when the preview does not know it. */
+  catalogId: string | null;
   group: BeamerThemeGroup | null;
   /** False when the renderer does not know the theme and uses default chrome. */
   supported: boolean;
@@ -156,6 +158,7 @@ function themeCard(
   add(resolveBeamerThemeColor(theme, "example text").fg);
   return {
     name: entry?.label ?? presentationName ?? "Default",
+    catalogId: entry?.id ?? null,
     group: entry?.group ?? null,
     supported: presentation == null || entry != null,
     components,

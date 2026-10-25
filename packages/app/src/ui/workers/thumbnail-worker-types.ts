@@ -21,6 +21,10 @@ export type ThumbnailRenderRequest = {
   graphicsPreviewBundleKey?: string;
   /** Present for deck frames: render this Beamer frame's final overlay step. */
   deckFrameIndex?: number;
+  /** Deck frames only: render as if switched to this presentation theme (the theme gallery). */
+  presentationTheme?: string;
+  /** Deck frames only: this overlay step instead of the final one. */
+  deckStep?: number;
   parseOptions: ThumbnailRenderParseOptions;
   svgOptions?: ThumbnailRenderSvgOptions;
 };

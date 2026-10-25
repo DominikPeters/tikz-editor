@@ -255,6 +255,24 @@
     },
     {
       "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/theme-switch.ts",
+      "declaration": "presentationThemeEdits.kept",
+      "hash": "e80b4fcfd77c",
+      "count": 1,
+      "expression": "sourceSlice(document.source, option)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/theme-switch.ts",
+      "declaration": "presentationThemeEdits.name",
+      "hash": "c7915bd42798",
+      "count": 1,
+      "expression": "userText(plan.entry.name, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
       "symbol": "userText",
       "file": "packages/core/src/edit/actions.ts",
       "declaration": "applyConnectHandle.nodeReference",

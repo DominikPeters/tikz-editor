@@ -130,6 +130,7 @@ import {
   resolveBeamerTheme,
   resolveBeamerThemeColor,
 } from "./theme/index.js";
+import { documentWithPresentationTheme, planPresentationThemeSwitch } from "./theme-switch.js";
 import type {
   BeamerFrameChromePlan,
   BeamerNavigationModel,
@@ -306,7 +307,11 @@ function createBeamerRenderContext(
     options.exactSyntax
   );
   const document = scanBeamerDocumentWithSyntax(syntaxContext);
-  const theme = resolveBeamerTheme(document);
+  const themeSwitch = options.presentationTheme === undefined
+    ? null
+    : planPresentationThemeSwitch(document, options.presentationTheme);
+  // Only the theme sees the switched uses; spans elsewhere stay the source's.
+  const theme = resolveBeamerTheme(themeSwitch ? documentWithPresentationTheme(document, themeSwitch) : document);
   const frameMacroBindings = new Map<string, ReadonlyMap<string, MacroBinding>>();
   const overlaysByFrameId = new Map(document.frames.map((frame) => {
     const overlays = scanBeamerFrameOverlays(source, frame, syntaxContext.syntax);

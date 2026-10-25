@@ -1,6 +1,7 @@
-import { useState, type JSX } from "react";
+import { useRef, useState, type JSX } from "react";
 import { Actions } from "flexlayout-react";
 import type {
+  BeamerThemeCatalogEntry,
   BeamerThemeGroup,
   DeckDocumentInspectorModel,
   DeckSlideContext,
@@ -8,6 +9,7 @@ import type {
 } from "@tikz-editor/core/beamer/index";
 import { SidePanel } from "../SidePanel";
 import { getDockLayoutHandle } from "../DockLayout";
+import { ThemeGalleryPopover } from "../theme-gallery/ThemeGalleryPopover";
 import { DeckField, type DeckFieldCommit } from "./deck-fields";
 import css from "./InspectorPanel.module.css";
 
@@ -99,8 +101,10 @@ const GROUP_LABELS: Record<BeamerThemeGroup, string> = {
   modern: "Modern",
 };
 
-function ThemeCard(props: { card: DeckThemeCard }): JSX.Element {
-  const { card } = props;
+function ThemeCard(props: { card: DeckThemeCard; onApplyTheme: (entry: BeamerThemeCatalogEntry) => void }): JSX.Element {
+  const { card, onApplyTheme } = props;
+  const changeRef = useRef<HTMLButtonElement>(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   // Metropolis and moloch name every component after themselves; only parts
   // that differ from the theme's own name say anything.
   const components = [...new Set(card.components
@@ -123,11 +127,25 @@ function ThemeCard(props: { card: DeckThemeCard }): JSX.Element {
               : "Not previewed: the preview uses Beamer's default look."}
           </div>
         </div>
-        {/* The gallery popover arrives with phase 2 of the document inspector. */}
-        <button type="button" className={css.deckThemeChange} disabled title="The theme gallery is not available yet">
+        <button
+          ref={changeRef}
+          type="button"
+          className={css.deckThemeChange}
+          aria-haspopup="dialog"
+          aria-expanded={galleryOpen}
+          onClick={() => { setGalleryOpen((open) => !open); }}
+        >
           Change…
         </button>
       </div>
+      {galleryOpen && changeRef.current ? (
+        <ThemeGalleryPopover
+          anchor={changeRef.current}
+          currentThemeId={card.catalogId}
+          onApply={onApplyTheme}
+          onClose={() => { setGalleryOpen(false); }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -135,8 +153,9 @@ function ThemeCard(props: { card: DeckThemeCard }): JSX.Element {
 export function DeckDocumentSections(props: {
   model: DeckDocumentInspectorModel;
   onCommit: DeckFieldCommit;
+  onApplyTheme: (entry: BeamerThemeCatalogEntry) => void;
 }): JSX.Element {
-  const { model, onCommit } = props;
+  const { model, onCommit, onApplyTheme } = props;
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const fields = (list: DeckDocumentInspectorModel["page"]) => (
     <div className={css.deckFields}>
@@ -161,7 +180,7 @@ export function DeckDocumentSections(props: {
           Theme
         </SidePanel.SectionHeader>
         <SidePanel.SectionBody>
-          <ThemeCard card={model.theme} />
+          <ThemeCard card={model.theme} onApplyTheme={onApplyTheme} />
           {model.themeOptions.length > 0 ? fields(model.themeOptions) : null}
           {advancedOpen ? <div className={css.deckAdvanced}>{fields(model.components)}</div> : null}
         </SidePanel.SectionBody>

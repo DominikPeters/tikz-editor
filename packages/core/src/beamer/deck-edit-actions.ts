@@ -18,6 +18,7 @@ import {
   beamerObjectDuplicationPatch,
   type BeamerStructuralEdit,
 } from "./structural-edit.js";
+import { planPresentationThemeSwitch, presentationThemeEdits } from "./theme-switch.js";
 import type { BeamerFrameLayout } from "./types.js";
 
 /**
@@ -40,7 +41,9 @@ export type DeckEditAction =
   | { kind: "deckSetGraphicsOption"; frameId: string; objectId: string; key: string; value: string | null }
   | { kind: "deckSetEnvironmentOption"; frameId: string; objectId: string; key: string; value: string | null }
   | { kind: "deckSetColumnWidth"; frameId: string; objectId: string; width: string }
-  | { kind: "deckSetFrameOption"; frameId: string; key: string; value: string | true | null };
+  | { kind: "deckSetFrameOption"; frameId: string; key: string; value: string | true | null }
+  /** Document-scoped: rewrites the preamble, whatever frame is rendered. */
+  | { kind: "deckSetPresentationTheme"; name: string };
 
 const DECK_EDIT_ACTION_KINDS: ReadonlySet<string> = new Set([
   "deckDeleteObject",
@@ -52,6 +55,7 @@ const DECK_EDIT_ACTION_KINDS: ReadonlySet<string> = new Set([
   "deckSetEnvironmentOption",
   "deckSetColumnWidth",
   "deckSetFrameOption",
+  "deckSetPresentationTheme",
 ]);
 
 export function isDeckEditAction(action: { kind: string }): action is DeckEditAction {
@@ -77,6 +81,9 @@ export function applyDeckEditAction(
   layout: BeamerFrameLayout,
   action: DeckEditAction
 ): EditActionResult {
+  if (action.kind === "deckSetPresentationTheme") {
+    return applySetPresentationTheme(source, action.name);
+  }
   if (layout.frameId !== action.frameId) {
     return { kind: "unsupported", reason: "The targeted frame is not the rendered frame." };
   }
@@ -533,6 +540,15 @@ function applySetColumnWidth(
     return finishEdits(source, [{ span: existing.contentSpan, insert: typed }]);
   }
   return finishEdits(source, [{ span: { from: cursor, to: cursor }, insert: tikz`{${typed}}` }]);
+}
+
+function applySetPresentationTheme(source: string, name: string): EditActionResult {
+  const document = scanBeamerDocument(source);
+  const plan = planPresentationThemeSwitch(document, name);
+  if (!plan) {
+    return { kind: "unsupported", reason: `The preview does not know the theme '${name}'.` };
+  }
+  return finishEdits(source, presentationThemeEdits(document, plan));
 }
 
 function applySetFrameOption(

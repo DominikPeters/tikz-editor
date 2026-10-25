@@ -9,6 +9,7 @@ import {
   buildDeckObjectInspector,
   buildDeckSlideContext,
   type BeamerFrameLayout,
+  type BeamerThemeCatalogEntry,
   type DeckDocumentInspectorModel,
   type DeckEditAction,
   type DeckInspectorField,
@@ -213,6 +214,9 @@ export function DeckInspectorPanel(): JSX.Element {
     );
   }
 
+  const applyTheme = (entry: BeamerThemeCatalogEntry): void => {
+    dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "deckSetPresentationTheme", name: entry.name } });
+  };
   const frameFieldsDisabled = activeFrame?.frameId !== activeRootId ||
     activeFrame.step !== Math.min(activeStep, Math.max(1, activeFrame.stepCount));
   const fieldList = (
@@ -261,9 +265,9 @@ export function DeckInspectorPanel(): JSX.Element {
           ) : null}
         </div>
         {documentModel ? (
-          <div className={css.deckScope}>
+          <div className={css.deckScope} data-inspector-panel>
             <DeckScopeHeader title="Presentation" />
-            <DeckDocumentSections model={documentModel} onCommit={commit} />
+            <DeckDocumentSections model={documentModel} onCommit={commit} onApplyTheme={applyTheme} />
           </div>
         ) : null}
       </SidePanel.Content>

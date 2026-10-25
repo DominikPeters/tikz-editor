@@ -58,6 +58,11 @@ export {
   type DeckThemeCard,
 } from "./deck-document-inspector.js";
 export {
+  documentWithPresentationTheme,
+  planPresentationThemeSwitch,
+  type BeamerPresentationThemeSwitch,
+} from "./theme-switch.js";
+export {
   BEAMER_PRESENTATION_THEMES,
   beamerPresentationTheme,
   type BeamerThemeCatalogEntry,

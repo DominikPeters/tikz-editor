@@ -57,7 +57,7 @@ async function pumpQueue(): Promise<void> {
   try {
     const graphicsResolver = resolveGraphicsResolver(next.graphicsPreviewBundleKey);
     const svg = await withTexGlyphOutlines(async () => next.deckFrameIndex != null
-      ? await renderDeckFrameThumbnail(next.source, next.deckFrameIndex, graphicsResolver)
+      ? await renderDeckFrameThumbnail(next.source, next.deckFrameIndex, graphicsResolver, next.presentationTheme, next.deckStep)
       : (await renderTikzToSvgAsync(next.source, {
           parse: {
             recover: next.parseOptions.recover ?? true,
@@ -147,19 +147,36 @@ function cleanupCancellationMarks(): void {
 }
 
 // Document-level Beamer passes are shared across the whole thumbnail sweep.
+// Theme gallery previews keep their own, so they do not evict the sorter's;
+// the gallery asks for one theme's frames together.
 let deckPrepared: { source: string; prepared: PreparedBeamerDocument } | null = null;
+let themePreviewPrepared: { source: string; theme: string; prepared: PreparedBeamerDocument } | null = null;
+
+function preparedDeck(source: string, presentationTheme: string | undefined): PreparedBeamerDocument {
+  if (presentationTheme === undefined) {
+    if (deckPrepared?.source !== source) {
+      deckPrepared = { source, prepared: prepareBeamerDocument(source) };
+    }
+    return deckPrepared.prepared;
+  }
+  if (themePreviewPrepared?.source !== source || themePreviewPrepared.theme !== presentationTheme) {
+    themePreviewPrepared = { source, theme: presentationTheme, prepared: prepareBeamerDocument(source, { presentationTheme }) };
+  }
+  return themePreviewPrepared.prepared;
+}
 
 async function renderDeckFrameThumbnail(
   source: string,
   frameIndex: number,
-  graphicsResolver: DocumentGraphicsResolver | undefined
+  graphicsResolver: DocumentGraphicsResolver | undefined,
+  presentationTheme: string | undefined,
+  requestedStep: number | undefined
 ): Promise<string> {
-  if (deckPrepared?.source !== source) {
-    deckPrepared = { source, prepared: prepareBeamerDocument(source) };
-  }
+  const prepared = preparedDeck(source, presentationTheme);
   // Sorter thumbnails show the frame's final overlay step (handout view).
-  const step = Math.max(1, deckPrepared.prepared.frameStepCount(frameIndex));
-  const result = await deckPrepared.prepared.renderFrame({
+  const finalStep = Math.max(1, prepared.frameStepCount(frameIndex));
+  const step = requestedStep === undefined ? finalStep : Math.min(Math.max(1, requestedStep), finalStep);
+  const result = await prepared.renderFrame({
     frameIndex,
     step,
     ...(graphicsResolver === undefined ? {} : { graphicsResolver })

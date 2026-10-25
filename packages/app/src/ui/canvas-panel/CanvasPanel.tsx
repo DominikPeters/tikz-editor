@@ -62,6 +62,7 @@ import { getActiveEditorPlatform } from "../../platform/current";
 import { GRID_SIZE_MINOR_TARGET_PX } from "../../settings/types";
 import { useSettingsStore } from "../../settings/useSettingsStore";
 import { useEditorStore } from "../../store/store";
+import { useThemePreviewStore } from "../theme-gallery/theme-preview-store";
 import type { CanvasDragKind,CanvasTransform } from "../../store/types";
 import { deckStepRootKey, rootKey } from "../../root-key";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
@@ -511,6 +512,11 @@ export const CanvasPanel = memo(function CanvasPanel({
 
   // The frame paints the slide; its overlay scene supplies editing geometry.
   const deckActiveFrame = snapshot.deck?.activeFrame ?? null;
+  // The theme gallery's hover preview, while it still shows this slide.
+  const themePreview = useThemePreviewStore((s) => s.preview);
+  const themePreviewUrl = themePreview && deckActiveFrame && themePreview.documentId === activeDocumentId &&
+    themePreview.frameId === deckActiveFrame.frameId && themePreview.source === source
+    ? themePreview.url : null;
   const activeDeckStep = useEditorStore(s => s.deckStepByRootKey[deckStepRootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
   const drawingLayerRootId = useEditorStore(s => s.documents[s.activeDocumentId]?.drawingLayerRootId ?? null);
   const deckFrameFresh = !!deckActiveFrame && snapshot.source === source && deckActiveFrame.frameId === activeRootId &&
@@ -3635,6 +3641,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         }
         nestedFigureBreadcrumb={nestedFigureBreadcrumb}
         layerBackdropSvg={overlayLayer?.pageCoordinates ? null : overlayLayer?.backdropSvg ?? null}
+        themePreviewUrl={themePreviewUrl}
         RULER_SIZE={RULER_SIZE}
       />
       {deckOverlayMenu.menu}

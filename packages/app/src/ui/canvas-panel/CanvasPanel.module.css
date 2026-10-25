@@ -172,6 +172,17 @@
 }
 
 /* A drawing layer's slide, under the layer's own transparent SVG. */
+/* The theme gallery's preview: the page under another theme, above the
+   real render and below the interaction layer. */
+.themePreview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+
 .layerBackdrop {
   position: absolute;
   inset: 0;
@@ -190,6 +201,10 @@
 .svgLayerOverBackdrop {
   background: transparent;
   box-shadow: none;
+}
+
+:global([data-canvas-invert]) .themePreview {
+  filter: invert(1) hue-rotate(180deg);
 }
 
 :global([data-canvas-invert]) .layerBackdrop {
