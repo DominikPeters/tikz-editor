@@ -80,7 +80,7 @@ function applied(fx: Fixture, action: DeckEditAction): string {
 describe("deck object fields", () => {
   it("reads a list's reveal and an enumerate's label template", async () => {
     const fx = await fixture();
-    expect(field(fields(fx, "list", 0), "reveal")).toMatchObject({ value: "+-| alert@+", write: null });
+    expect(field(fields(fx, "list", 0), "reveal")).toMatchObject({ value: "+-| alert@+", write: { kind: "setListDefaultOverlay" } });
     expect(fields(fx, "list", 0).some((entry) => entry.id === "template")).toBe(false);
     expect(field(fields(fx, "list", 1), "reveal")).toMatchObject({ value: "+-" });
     expect(field(fields(fx, "list", 1), "template")).toMatchObject({ value: "(a)" });
@@ -101,7 +101,7 @@ describe("deck object fields", () => {
     const image = fields(fx, "graphics");
     expect(field(image, "file")).toMatchObject({ value: "figure.pdf", write: null });
     expect(field(image, "width")).toMatchObject({ value: 0.5 });
-    expect(field(image, "page")).toMatchObject({ value: null, step: 1 });
+    expect(field(image, "page")).toMatchObject({ value: 1, step: 1 });
     expect(field(image, "keepaspectratio")).toMatchObject({ value: true });
     expect(field(image, "trim")).toMatchObject({ value: "1 2 3 4" });
     expect(field(image, "clip")).toMatchObject({ value: true });
@@ -125,6 +125,25 @@ describe("deck object fields", () => {
 });
 
 describe("deck object field writes", () => {
+  it.each([
+    ["keepaspectratio=true,clip=true", true, true],
+    ["keepaspectratio,keepaspectratio=false,clip,clip=false", false, false],
+    ["keepaspectratio=no,clip=0,clip", false, true],
+  ])("reads explicit boolean values in source order: %s", async (options, aspect, clip) => {
+    const fx = await fixture(SOURCE.replace("width=.5\\textwidth,keepaspectratio,trim=1 2 3 4,clip", String(options)));
+    expect(field(fields(fx, "graphics"), "keepaspectratio")).toMatchObject({ value: aspect });
+    expect(field(fields(fx, "graphics"), "clip")).toMatchObject({ value: clip });
+  });
+
+  it("removes every duplicate flag while preserving comments and other options", async () => {
+    const fx = await fixture(SOURCE.replace("keepaspectratio,trim=1 2 3 4,clip", "clip, % retain crop note\ntrim=1 2 3 4,clip=true"));
+    const next = applied(fx, { kind: "deckSetGraphicsOption", frameId: fx.layout.frameId, objectId: fx.node("graphics").id, key: "clip", value: null });
+    expect(next).toContain("% retain crop note\ntrim=1 2 3 4");
+    const reread = await fixture(next);
+    expect(field(fields(reread, "graphics"), "clip")).toMatchObject({ value: false });
+    expect(field(fields(reread, "graphics"), "width")).toMatchObject({ value: 0.5 });
+  });
+
   it("replaces a columns alignment case-sensitively and clears it", async () => {
     const fx = await fixture();
     const objectId = fx.node("columns").id;
@@ -152,7 +171,7 @@ describe("deck object field writes", () => {
     const frameId = fx.layout.frameId;
     const objectId = fx.node("graphics").id;
     expect(applied(fx, { kind: "deckSetGraphicsOption", frameId, objectId, key: "clip", value: null }))
-      .toContain("\\includegraphics[width=.5\\textwidth, keepaspectratio, trim=1 2 3 4]{figure.pdf}");
+      .toContain("\\includegraphics[width=.5\\textwidth,keepaspectratio,trim=1 2 3 4]{figure.pdf}");
     expect(applied(fx, { kind: "deckSetGraphicsOption", frameId, objectId, key: "page", value: "3" }))
       .toContain("trim=1 2 3 4,clip, page=3]{figure.pdf}");
 

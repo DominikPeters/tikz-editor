@@ -514,10 +514,12 @@ export const CanvasPanel = memo(function CanvasPanel({
   const deckActiveFrame = snapshot.deck?.activeFrame ?? null;
   // The theme gallery's hover preview, while it still shows this slide.
   const themePreview = useThemePreviewStore((s) => s.preview);
-  const themePreviewUrl = themePreview && deckActiveFrame && themePreview.documentId === activeDocumentId &&
-    themePreview.frameId === deckActiveFrame.frameId && themePreview.source === source
-    ? themePreview.url : null;
   const activeDeckStep = useEditorStore(s => s.deckStepByRootKey[deckStepRootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
+  const themePreviewUrl = themePreview && deckActiveFrame && themePreview.documentId === activeDocumentId &&
+    themePreview.frameId === activeRootId && themePreview.frameId === deckActiveFrame.frameId &&
+    themePreview.step === Math.min(activeDeckStep, Math.max(1, deckActiveFrame.stepCount)) &&
+    themePreview.step === deckActiveFrame.step && themePreview.source === source
+    ? themePreview.url : null;
   const drawingLayerRootId = useEditorStore(s => s.documents[s.activeDocumentId]?.drawingLayerRootId ?? null);
   const deckFrameFresh = !!deckActiveFrame && snapshot.source === source && deckActiveFrame.frameId === activeRootId &&
     deckActiveFrame.step === Math.min(activeDeckStep, Math.max(1, deckActiveFrame.stepCount));

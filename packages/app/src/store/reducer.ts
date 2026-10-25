@@ -2,7 +2,7 @@ import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { editingIdentityRootId, reconcileEditingIdentities, updateDocumentIdentities, withEditingHandleIdentities } from "../editing-identities";
 import { executeDocumentEdit } from "../edit-execution";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
-import { editBeamerSlides, isDeckEditAction } from "@tikz-editor/core/beamer/index";
+import { editBeamerSlides, isDeckDocumentEditAction, isDeckEditAction } from "@tikz-editor/core/beamer/index";
 import type {
   DocumentSession,
   DocumentSessions,
@@ -851,7 +851,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       )) return state;
       const resultOwnsGesture = documentId === state.activeDocumentId && state.activeCanvasDragKind != null && action.precomputedSource === activeDoc.source &&
         action.precomputedResult?.geometryBaseSource != null && action.precomputedResult.identityMoves != null;
-      if (activeDoc.editingIdentities && activeDoc.editingTargetsStale && activeDoc.snapshot.source !== activeDoc.source && !resultOwnsGesture) {
+      if (activeDoc.editingIdentities && activeDoc.editingTargetsStale && activeDoc.snapshot.source !== activeDoc.source && !resultOwnsGesture && !isDeckDocumentEditAction(action.action)) {
         workspace = updateDocument(workspace, documentId, doc => applyEditWarningToDocument(doc, "The figure is still catching up with the source edit."));
         break;
       }

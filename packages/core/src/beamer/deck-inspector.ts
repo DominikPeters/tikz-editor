@@ -15,6 +15,10 @@ import {
 import type { BeamerObjectNode } from "./object-index.js";
 import type { Span } from "../ast/types.js";
 import type { BeamerDocumentModel } from "./types.js";
+import type { BeamerThemeKind } from "./types.js";
+import type { BeamerChromeMetadataField } from "./theme/chrome-metadata.js";
+import { readBeamerListHead } from "./list-head.js";
+import { enumerateTemplateText } from "../text/tex/enumerate-template.js";
 
 /**
  * Inspector models for deck objects and frames (Stage 3b). Builders read
@@ -24,9 +28,18 @@ import type { BeamerDocumentModel } from "./types.js";
  * truth for what the inspector shows.
  */
 export type DeckInspectorWrite =
+  | { kind: "setColor"; role: string; side: "fg" | "bg" }
+  | { kind: "setClassOption"; key: "aspectratio" | "font-size" }
+  | { kind: "setNavigationSymbols" }
+  | { kind: "setMetadataShort"; field: BeamerChromeMetadataField }
+  | { kind: "setThemeOption"; key: string }
+  | { kind: "setThemeFlagChoice"; keys: readonly string[] }
+  | { kind: "setTheme"; themeKind: Exclude<BeamerThemeKind, "theme"> }
   | { kind: "renameEnvironment" }
   | { kind: "setEnvironmentTitle" }
   | { kind: "setOverlaySpec" }
+  | { kind: "setListDefaultOverlay" }
+  | { kind: "setListLabelTemplate" }
   | {
       kind: "setGraphicsOption";
       key: string;
@@ -45,17 +58,18 @@ export type DeckInspectorWrite =
 
 /** What a button field does; the app runs it, there is no source write. */
 export type DeckInspectorCommand =
+  | { kind: "replaceGraphics" }
   | { kind: "enterDrawing"; rootId: string }
   | { kind: "revealSource"; span: Span };
 
 /** A resolved color; `expression` is the authored value when the preamble sets it. */
-export type DeckInspectorColor = { css: string; expression: string | null };
+export type DeckInspectorColor = { css: string; expression: string | null; origin: "theme" | "preamble"; sourceSpan?: Span; role?: string };
 
 /**
  * `write: null` marks a field the editor shows but cannot change yet; the
  * panel renders it disabled with its real value.
  */
-export type DeckInspectorField =
+export type DeckInspectorField = { readOnly?: { reason: string; span: Span } } & (
   | {
       kind: "enum";
       id: string;
@@ -98,6 +112,9 @@ export type DeckInspectorField =
       kind: "color";
       id: string;
       label: string;
+      role: string;
+      namedColorSwatches: readonly { token: string; cssColor: string }[];
+      resetSides: readonly ("fg" | "bg")[];
       /** Only the sides the role is shown with; null when the role leaves it unset. */
       fg?: DeckInspectorColor | null;
       bg?: DeckInspectorColor | null;
@@ -111,7 +128,7 @@ export type DeckInspectorField =
   /** A warning about the object, such as why the preview cannot draw it. */
   | { kind: "message"; id: string; text: string; write: null }
   /** Read-only source text, shown verbatim. */
-  | { kind: "code"; id: string; label: string; text: string; write: null };
+  | { kind: "code"; id: string; label: string; text: string; write: null });
 
 export type DeckInspectorModel = {
   target: "object" | "frame";
@@ -227,7 +244,8 @@ function overlayField(
   anchor: number,
   limit: number
 ): DeckInspectorField {
-  const overlay = beamerOverlayArgumentAfter(context, anchor, limit);
+  const optional = beamerOptionalArgumentAfter(context, anchor, limit);
+  const overlay = beamerOverlayArgumentAfter(context, anchor, limit) ?? (optional ? beamerOverlayArgumentAfter(context, optional.span.to, limit) : null);
   return {
     kind: "text",
     id: "overlay",
@@ -269,7 +287,8 @@ function blockFields(
 }
 
 const REVEAL_OPTIONS = [
-  { value: "", label: "All at once" },
+  { value: "", label: "Default" },
+  { value: "1-", label: "All at once" },
   { value: "+-", label: "One by one" },
   { value: "+-| alert@+", label: "One by one, highlighted" },
 ] as const;
@@ -291,27 +310,18 @@ function listFields(
   if (!pair) {
     return fields;
   }
-  let reveal = "";
-  let template = "";
-  let cursor = pair.begin.span.to;
-  for (let index = 0; index < 2; index += 1) {
-    const argument = beamerOptionalArgumentAfter(context, cursor, node.sourceSpan.to);
-    if (!argument) break;
-    const text = argument.value.trim();
-    if (text.startsWith("<") && text.endsWith(">")) {
-      reveal = text.slice(1, -1).trim();
-    } else {
-      template = text;
-    }
-    cursor = argument.span.to;
-  }
+  const head = readBeamerListHead(context, pair.begin.span.to, pair.end.span.from, pair.begin.name);
+  const reveal = head.overlay?.value ?? "";
+  const template = head.label?.value ?? "";
+  const readOnly = head.problem ? { reason: head.problem, span: { from: pair.begin.span.to, to: head.end } } : null;
   const revealOptions: Array<{ value: string; label: string }> = [...REVEAL_OPTIONS];
   if (!revealOptions.some((option) => option.value === reveal)) {
     revealOptions.push({ value: reveal, label: `<${reveal}>` });
   }
-  fields.push({ kind: "enum", id: "reveal", label: "Reveal", value: reveal, options: revealOptions, write: null });
+  fields.push({ kind: "enum", id: "reveal", label: "Reveal", value: reveal, options: revealOptions, write: readOnly ? null : { kind: "setListDefaultOverlay" }, ...(readOnly ? { readOnly } : {}) });
   if (pair.begin.name === "enumerate") {
-    fields.push({ kind: "text", id: "template", label: "Labels", value: template, placeholder: "1.", write: null });
+    const labelBlocked = readOnly ?? (enumerateTemplateText(template, 1) === null ? { reason: "This label template uses custom TeX code. Edit it in Source.", span: head.label?.span ?? pair.begin.span } : null);
+    fields.push({ kind: "text", id: "template", label: "Labels", value: template, placeholder: "From theme", write: labelBlocked ? null : { kind: "setListLabelTemplate" }, ...(labelBlocked ? { readOnly: labelBlocked } : {}) });
   }
   return fields;
 }
@@ -496,30 +506,36 @@ function graphicsFields(
   if (!command) {
     return [];
   }
-  const overlay = beamerOverlayArgumentAfter(context, command.span.to, node.sourceSpan.to);
+  const commandEnd = command.starSpan?.to ?? command.span.to;
+  const overlay = beamerOverlayArgumentAfter(context, commandEnd, node.sourceSpan.to);
   const optional = beamerOptionalArgumentAfter(
     context,
-    overlay?.span.to ?? command.span.to,
+    overlay?.span.to ?? commandEnd,
     node.sourceSpan.to
   );
   const file = beamerRequiredArgumentAfter(
     context,
-    optional?.span.to ?? overlay?.span.to ?? command.span.to,
+    optional?.span.to ?? overlay?.span.to ?? commandEnd,
     node.sourceSpan.to
   );
   const list = optional ? readOptionList(context.source, optional) : null;
   const rawValue = (key: string): string | null => {
-    const entry = list?.entries.find((candidate) => candidate.key === key);
+    const entry = [...list?.entries ?? []].reverse().find((candidate) => candidate.key === key);
     if (!entry?.valueSpan) {
       return null;
     }
     return context.source.slice(entry.valueSpan.from, entry.valueSpan.to);
   };
-  const hasFlag = (key: string): boolean =>
-    list?.entries.some((entry) => entry.key === key && entry.valueSpan == null) ?? false;
+  const hasFlag = (key: string): boolean => {
+    const entry = [...list?.entries ?? []].reverse().find(candidate => candidate.key === key);
+    if (!entry) return false;
+    const raw = entry.valueSpan ? context.source.slice(entry.valueSpan.from, entry.valueSpan.to).trim().toLowerCase() : "";
+    return !["false", "0", "no"].includes(raw);
+  };
   const path = file?.value.trim() ?? "";
   const fields: DeckInspectorField[] = [
     { kind: "text", id: "file", label: "File", value: path, write: null },
+    { kind: "button", id: "replace-image", label: "Replace Image…", command: { kind: "replaceGraphics" }, write: null },
   ];
   const numberFields: Array<readonly [string, string, string]> = [
     ["width", "Width", "\\textwidth"],
@@ -538,7 +554,7 @@ function graphicsFields(
       write: (suffix) => ({ kind: "setGraphicsOption", key: id, suffix }),
     });
     if (field) {
-      fields.push(field.kind === "number" && id === "page" ? { ...field, step: 1, min: 1 } : field);
+      fields.push(field.kind === "number" && id === "page" ? { ...field, value: field.value ?? 1, step: 1, min: 1 } : field);
     }
   }
   fields.push(

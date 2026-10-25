@@ -6,6 +6,8 @@ import { scanTikzFigures } from "../parser/figure-scan.js";
 import { beamerTikzLayerState } from "./overlay-pictures.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 import { scanBeamerNoteCommands } from "./notes.js";
+import { scanBeamerMetadataDeclarations } from "./metadata-declarations.js";
+import { preambleCommandScope } from "./preamble-edit-context.js";
 import {
   createBeamerSyntaxContext,
   beamerOptionalArgumentAfter,
@@ -24,8 +26,6 @@ import type {
   BeamerFrameModel,
   BeamerFrameOption,
   BeamerFrameOptions,
-  BeamerMetadataFieldModel,
-  BeamerMetadataFieldName,
   BeamerPreambleModel,
   BeamerSectionModel,
   BeamerTheoremDeclarationModel,
@@ -100,7 +100,7 @@ export function scanBeamerDocumentWithSyntax(
     root.sourceOrder = sourceOrder;
   });
 
-  return {
+  const document: BeamerDocumentModel = {
     source,
     documentSpan: documentRange.documentSpan,
     documentBodySpan: documentRange.bodySpan,
@@ -110,6 +110,23 @@ export function scanBeamerDocumentWithSyntax(
     roots,
     diagnostics,
   };
+  // Ignore stored/scoped declarations rather than mistaking them for global
+  // title-page data. Later executing declarations replace both forms.
+  document.preamble.documentClass = null;
+  for (const command of beamerControlSequencesIn(syntaxContext, document.preamble.span)) {
+    if (command.name === "documentclass" && preambleCommandScope(document, { from: command.from, to: command.to }, syntaxContext) === "top-level") {
+      document.preamble.documentClass = readDocumentClass(syntaxContext, command, document.preamble.span.to);
+      if (document.preamble.documentClass) break;
+    }
+  }
+  for (const declaration of scanBeamerMetadataDeclarations(document, syntaxContext)) {
+    if (declaration.scope === "top-level" && declaration.field) document.preamble.metadata[declaration.name] = declaration.field;
+    if (declaration.scope === "scoped") diagnostics.push({
+      severity: "warning", code: "beamer-scoped-metadata", span: declaration.span,
+      message: "Scoped title information is not applied to the presentation preview.",
+    });
+  }
+  return document;
 }
 
 function findDocumentRange(
@@ -552,16 +569,6 @@ function scanPreamble(
       }
       continue;
     }
-    if (command.name === "title" || command.name === "subtitle" || command.name === "author" || command.name === "institute" || command.name === "date" || command.name === "titlegraphic") {
-      const name = command.name;
-      if (!metadata[name]) {
-        const field = readMetadataField(context, command, name, span.to);
-        if (field) {
-          metadata[name] = field;
-        }
-      }
-      continue;
-    }
     if (command.name === "AtBeginSection") {
       const value = readCommandMainArgument(
         context,
@@ -995,31 +1002,6 @@ function readThemeUse(
     commandSpan: { from: command.from, to: command.to },
     ...(options !== undefined ? { options } : {}),
     name,
-  };
-}
-
-function readMetadataField(
-  context: BeamerSyntaxContext,
-  command: BeamerControlSequence,
-  name: BeamerMetadataFieldName,
-  limit: number
-): BeamerMetadataFieldModel | null {
-  const shortValue =
-    beamerOptionalArgumentAfter(context, command.to, limit) ?? undefined;
-  const value = beamerRequiredArgumentAfter(
-    context,
-    shortValue?.span.to ?? command.to,
-    limit
-  );
-  if (!value) {
-    return null;
-  }
-  return {
-    name,
-    span: { from: command.from, to: value.span.to },
-    commandSpan: { from: command.from, to: command.to },
-    ...(shortValue !== undefined ? { shortValue } : {}),
-    value,
   };
 }
 

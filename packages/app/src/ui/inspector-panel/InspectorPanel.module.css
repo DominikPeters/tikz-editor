@@ -894,6 +894,33 @@
   border: 0;
 }
 
+.deckReadOnlyReason {
+  margin: 0 0 4px;
+  color: var(--label-secondary);
+  font-size: calc(var(--app-ui-scale, 1) * 10px);
+  line-height: 1.35;
+}
+
+.deckReadOnlyReason .deckInfoLink {
+  margin-left: 0;
+}
+
+/* A two-sided role shows its text and fill pickers side by side. Their
+   popovers anchor to the whole row, as a single picker's would, so the left
+   one does not open past the panel's edge. */
+.deckColorRow {
+  position: relative;
+}
+
+.deckColorSide {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.deckColorSide > * {
+  position: static;
+}
+
 /* ── Deck inspector with nothing selected: slide and presentation scopes ── */
 
 /* Each scope pins its header while it scrolls; the next scope's header
@@ -953,7 +980,10 @@
 /* A placeholder here is the value a field falls back to: italic, like the
    inspector's other inherited values. */
 .deckFallbackFields input::placeholder {
+  color: var(--label-secondary);
+  -webkit-text-fill-color: var(--label-secondary);
   font-style: italic;
+  opacity: 1;
 }
 
 .deckInfoValue {
@@ -1022,46 +1052,6 @@
   height: 5px;
   border-radius: 50%;
   background: currentColor;
-}
-
-.deckColorValue {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  min-height: calc(var(--app-ui-scale, 1) * var(--control-h));
-}
-
-.deckColorSwatch,
-.deckColorSample {
-  flex-shrink: 0;
-  box-sizing: border-box;
-  border-radius: 3px;
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--text) 30%, transparent);
-}
-
-.deckColorSwatch {
-  width: calc(var(--app-ui-scale, 1) * 26px);
-  height: calc(var(--app-ui-scale, 1) * 14px);
-}
-
-.deckColorSample {
-  width: calc(var(--app-ui-scale, 1) * 26px);
-  height: calc(var(--app-ui-scale, 1) * 14px);
-  font-size: calc(var(--app-ui-scale, 1) * 9.5px);
-  font-weight: 600;
-  line-height: calc(var(--app-ui-scale, 1) * 14px);
-  text-align: center;
-}
-
-.deckColorText {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: calc(var(--app-ui-scale, 1) * 10px);
-  color: var(--text);
 }
 
 .deckThemeCard {

@@ -6,11 +6,12 @@ import type {
   DeckDocumentInspectorModel,
   DeckSlideContext,
   DeckThemeCard,
+  DeckInspectorCommand,
 } from "@tikz-editor/core/beamer/index";
 import { SidePanel } from "../SidePanel";
 import { getDockLayoutHandle } from "../DockLayout";
 import { ThemeGalleryPopover } from "../theme-gallery/ThemeGalleryPopover";
-import { DeckField, type DeckFieldCommit } from "./deck-fields";
+import { DeckField, DeckReadOnlyNote, type DeckFieldCommit } from "./deck-fields";
 import css from "./InspectorPanel.module.css";
 
 /**
@@ -133,6 +134,8 @@ function ThemeCard(props: { card: DeckThemeCard; onApplyTheme: (entry: BeamerThe
           className={css.deckThemeChange}
           aria-haspopup="dialog"
           aria-expanded={galleryOpen}
+          disabled={card.readOnly != null}
+          title={card.readOnly?.reason}
           onClick={() => { setGalleryOpen((open) => !open); }}
         >
           Change…
@@ -154,12 +157,24 @@ export function DeckDocumentSections(props: {
   model: DeckDocumentInspectorModel;
   onCommit: DeckFieldCommit;
   onApplyTheme: (entry: BeamerThemeCatalogEntry) => void;
+  onCommand: (command: DeckInspectorCommand) => void;
 }): JSX.Element {
-  const { model, onCommit, onApplyTheme } = props;
+  const { model, onCommit, onApplyTheme, onCommand } = props;
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // One blocker (a grouped \usetheme, say) disables many fields; its reason
+  // shows once, under the first of them.
+  const noted = new Set<string>();
+  const firstNote = (readOnly: DeckThemeCard["readOnly"]): boolean => {
+    const key = readOnly ? `${readOnly.span.from}:${readOnly.reason}` : null;
+    if (key === null || noted.has(key)) return false;
+    noted.add(key);
+    return true;
+  };
   const fields = (list: DeckDocumentInspectorModel["page"]) => (
     <div className={css.deckFields}>
-      {list.map((field) => <DeckField key={field.id} field={field} onCommit={onCommit} />)}
+      {list.map((field) => (
+        <DeckField key={field.id} field={field} onCommit={onCommit} onCommand={onCommand} showReadOnlyNote={firstNote(field.readOnly)} />
+      ))}
     </div>
   );
   return (
@@ -181,6 +196,9 @@ export function DeckDocumentSections(props: {
         </SidePanel.SectionHeader>
         <SidePanel.SectionBody>
           <ThemeCard card={model.theme} onApplyTheme={onApplyTheme} />
+          {model.theme.readOnly && firstNote(model.theme.readOnly) ? (
+            <DeckReadOnlyNote reason={model.theme.readOnly.reason} span={model.theme.readOnly.span} onCommand={onCommand} />
+          ) : null}
           {model.themeOptions.length > 0 ? fields(model.themeOptions) : null}
           {advancedOpen ? <div className={css.deckAdvanced}>{fields(model.components)}</div> : null}
         </SidePanel.SectionBody>

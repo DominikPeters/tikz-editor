@@ -59,6 +59,24 @@
       "rule": "F2",
       "symbol": "userText",
       "file": "packages/core/src/beamer/deck-edit-actions.ts",
+      "declaration": "applyReplaceGraphics.edits.insert",
+      "hash": "72a4a8696d83",
+      "count": 1,
+      "expression": "userText(path, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/deck-edit-actions.ts",
+      "declaration": "applyReplaceGraphics.insert",
+      "hash": "affc65ef2373",
+      "count": 1,
+      "expression": "sourceSlice(source, comment)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/deck-edit-actions.ts",
       "declaration": "applySetColumnWidth.typed",
       "hash": "99f198ebff92",
       "count": 1,
@@ -72,15 +90,6 @@
       "hash": "8dcdcf8649da",
       "count": 1,
       "expression": "userText(title, \"beamer-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/deck-edit-actions.ts",
-      "declaration": "buildOptionEdits",
-      "hash": "1e9667546671",
-      "count": 1,
-      "expression": "sourceSlice(source, entry.span)"
     },
     {
       "rule": "F2",
@@ -148,6 +157,159 @@
     {
       "rule": "F2",
       "symbol": "userText",
+      "file": "packages/core/src/beamer/document-color-edits.ts",
+      "declaration": "planDeckColorEdit.command",
+      "hash": "5bd162385032",
+      "count": 1,
+      "expression": "userText(action.value, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/document-color-edits.ts",
+      "declaration": "planDeckColorEdit.command",
+      "hash": "9374a4e17722",
+      "count": 1,
+      "expression": "userText(action.side, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/document-color-edits.ts",
+      "declaration": "planDeckColorEdit.command",
+      "hash": "fa60c462ddca",
+      "count": 1,
+      "expression": "userText(action.role, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/document-color-edits.ts",
+      "declaration": "rewriteSide.text",
+      "hash": "174759a3f5b2",
+      "count": 1,
+      "expression": "userText(side, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/document-color-edits.ts",
+      "declaration": "rewriteSide.text",
+      "hash": "b22fcc7004ea",
+      "count": 1,
+      "expression": "userText(value, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/document-page-edits.ts",
+      "declaration": "planDeckPageEdit.command",
+      "hash": "b64cd4499cbf",
+      "count": 1,
+      "expression": "userText(`\\\\${action.field}`, \"beamer-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/document-page-edits.ts",
+      "declaration": "planDeckPageEdit.text",
+      "hash": "b22fcc7004ea",
+      "count": 2,
+      "expression": "userText(value, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/document-page-edits.ts",
+      "declaration": "planDeckPageEdit.value",
+      "hash": "5bd162385032",
+      "count": 1,
+      "expression": "userText(action.value, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/document-page-edits.ts",
+      "declaration": "retainedComments",
+      "hash": "4752ed62b386",
+      "count": 1,
+      "expression": "sourceSlice(document.source, comment)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/document-theme-edits.ts",
+      "declaration": "planDeckDocumentThemeEdit.command",
+      "hash": "82626cfdda13",
+      "count": 1,
+      "expression": "userText(`\\\\${BEAMER_THEME_COMMANDS[kind]}`, \"beamer-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/document-theme-edits.ts",
+      "declaration": "planDeckDocumentThemeEdit.key",
+      "hash": "dc0170e5f002",
+      "count": 1,
+      "expression": "userText(action.key, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/document-theme-edits.ts",
+      "declaration": "planDeckDocumentThemeEdit.options",
+      "hash": "45eebf1edf51",
+      "count": 1,
+      "expression": "sourceSlice(document.source, target.options.span)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/document-theme-edits.ts",
+      "declaration": "planDeckDocumentThemeEdit.text",
+      "hash": "b22fcc7004ea",
+      "count": 1,
+      "expression": "userText(value, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/document-theme-edits.ts",
+      "declaration": "planDeckDocumentThemeEdit.typedName",
+      "hash": "01fb14e58665",
+      "count": 1,
+      "expression": "userText(name, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/list-head.ts",
+      "declaration": "planBeamerListHeadEdit",
+      "hash": "2786bb45e39c",
+      "count": 1,
+      "expression": "sourceSlice(context.source, existing.span)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/list-head.ts",
+      "declaration": "planBeamerListHeadEdit",
+      "hash": "b22fcc7004ea",
+      "count": 2,
+      "expression": "userText(value, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/list-head.ts",
+      "declaration": "planBeamerListHeadEdit.trivia",
+      "hash": "7db3b42ab1c6",
+      "count": 1,
+      "expression": "sourceSlice(context.source, comment)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
       "file": "packages/core/src/beamer/note-editing.ts",
       "declaration": "editBeamerFrameNote.text",
       "hash": "2a13dc7210be",
@@ -171,6 +333,51 @@
       "hash": "a988f61a7876",
       "count": 3,
       "expression": "userText(spec, \"beamer-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/option-edits.ts",
+      "declaration": "rewriteBeamerOptions",
+      "hash": "1e9667546671",
+      "count": 1,
+      "expression": "sourceSlice(source, entry.span)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/option-edits.ts",
+      "declaration": "rewriteBeamerOptions",
+      "hash": "affc65ef2373",
+      "count": 2,
+      "expression": "sourceSlice(source, comment)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/option-edits.ts",
+      "declaration": "rewriteBeamerOptions.trivia",
+      "hash": "738d2930e8b6",
+      "count": 1,
+      "expression": "sourceSlice(source, { from, to: span.to })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/option-edits.ts",
+      "declaration": "rewriteBeamerOptions.trivia",
+      "hash": "ef2e86af5b90",
+      "count": 1,
+      "expression": "sourceSlice(source, { from, to: at })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/preamble-edit-context.ts",
+      "declaration": "themeNamePrefix",
+      "hash": "9c453dc647b1",
+      "count": 1,
+      "expression": "sourceSlice(document.source, { from: use.name.contentSpan.from, to: comma + 1 })"
     },
     {
       "rule": "F2",
@@ -252,15 +459,6 @@
       "hash": "8b6decde8d5a",
       "count": 1,
       "expression": "sourceSlice(source, span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/theme-switch.ts",
-      "declaration": "presentationThemeEdits.kept",
-      "hash": "e80b4fcfd77c",
-      "count": 1,
-      "expression": "sourceSlice(document.source, option)"
     },
     {
       "rule": "F2",

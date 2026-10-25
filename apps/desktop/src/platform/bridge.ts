@@ -69,7 +69,7 @@ export type DesktopLocalAssetReadResult =
 
 export type DesktopBridge = {
   openText: (path?: string | null, options?: { addToRecent?: boolean }) => Promise<DesktopOpenTextResult | null>;
-  openBinary?: (path?: string | null, options?: { addToRecent?: boolean }) => Promise<DesktopOpenBinaryResult | null>;
+  openBinary?: (path?: string | null, options?: { addToRecent?: boolean; kind?: "graphics" }) => Promise<DesktopOpenBinaryResult | null>;
   fetchArxivSource?: (idOrUrl: string) => Promise<ArxivSourcePayload>;
   saveText: (params: {
     text: string;
@@ -219,6 +219,7 @@ export function createDefaultBridge(): DesktopBridge {
     }),
     openBinary: async (path, options) => await invoke<DesktopOpenBinaryResult | null>("desktop_open_binary", {
       path,
+      kind: options?.kind,
       addToRecent: options?.addToRecent
     }),
     fetchArxivSource: async (idOrUrl) => await invoke<ArxivSourcePayload>("desktop_fetch_arxiv_source", { idOrUrl }),

@@ -31,7 +31,7 @@ export type PlatformClipboard = {
 
 export type PlatformFileApi = {
   openText?: (options?: { addToRecent?: boolean }) => Promise<{ source: string; fileRef: DocumentFileRef | null } | null>;
-  openBinary?: (options?: { addToRecent?: boolean }) => Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef | null } | null>;
+  openBinary?: (options?: { addToRecent?: boolean; kind?: "graphics" }) => Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef | null } | null>;
   fetchArxivSource?: (idOrUrl: string) => Promise<ArxivSourcePayload>;
   bindOpenRequest?: (
     handler: (opened: { source: string; fileRef: DocumentFileRef | null }) => void
@@ -46,6 +46,8 @@ export type PlatformFileApi = {
   >;
   readLinkedText?: (fileRef: DocumentFileRef) => Promise<LinkedTextReadResult>;
   readLocalAsset?: (path: string) => Promise<LocalAssetReadResult>;
+  /** Persist a selected browser asset without embedding bytes in TeX source. */
+  storeGraphicAsset?: (asset: { path: string; bytes: ArrayBuffer }) => Promise<void>;
   writeLinkedText?: (
     fileRef: DocumentFileRef,
     text: string,

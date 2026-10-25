@@ -160,6 +160,12 @@ export function useInspectorPreviewScrub(args: {
   const handleNumberLabelScrubWindowBlur = useCallback(() => {
     stopNumberLabelScrubRef.current(false);
   }, []);
+  const handleNumberLabelScrubKeyDown = useCallback((event: KeyboardEvent) => {
+    if (event.key !== "Escape" || !numberLabelScrubSessionRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    stopNumberLabelScrubRef.current(false);
+  }, []);
 
   const removeNumberLabelScrubListeners = useCallback(() => {
     if (!numberLabelScrubListenersAttachedRef.current) {
@@ -169,12 +175,14 @@ export function useInspectorPreviewScrub(args: {
     window.removeEventListener("pointerup", handleNumberLabelScrubPointerUp);
     window.removeEventListener("pointercancel", handleNumberLabelScrubPointerCancel);
     window.removeEventListener("blur", handleNumberLabelScrubWindowBlur);
+    window.removeEventListener("keydown", handleNumberLabelScrubKeyDown, true);
     numberLabelScrubListenersAttachedRef.current = false;
   }, [
     handleNumberLabelScrubPointerCancel,
     handleNumberLabelScrubPointerMove,
     handleNumberLabelScrubPointerUp,
-    handleNumberLabelScrubWindowBlur
+    handleNumberLabelScrubWindowBlur,
+    handleNumberLabelScrubKeyDown
   ]);
 
   const stopNumberLabelScrub = useCallback((commit: boolean, pointerId?: number) => {
@@ -207,12 +215,14 @@ export function useInspectorPreviewScrub(args: {
     window.addEventListener("pointerup", handleNumberLabelScrubPointerUp);
     window.addEventListener("pointercancel", handleNumberLabelScrubPointerCancel);
     window.addEventListener("blur", handleNumberLabelScrubWindowBlur);
+    window.addEventListener("keydown", handleNumberLabelScrubKeyDown, true);
     numberLabelScrubListenersAttachedRef.current = true;
   }, [
     handleNumberLabelScrubPointerCancel,
     handleNumberLabelScrubPointerMove,
     handleNumberLabelScrubPointerUp,
-    handleNumberLabelScrubWindowBlur
+    handleNumberLabelScrubWindowBlur,
+    handleNumberLabelScrubKeyDown
   ]);
 
   const beginNumberLabelScrub = useCallback((event: ReactPointerEvent<HTMLElement>, binding: NumberLabelScrubBinding) => {

@@ -9,6 +9,7 @@ import { create } from "zustand";
 export type ThemePreview = {
   documentId: string;
   frameId: string;
+  step: number;
   source: string;
   themeId: string;
   url: string;

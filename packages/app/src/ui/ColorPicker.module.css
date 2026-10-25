@@ -28,6 +28,12 @@
   flex-shrink: 0;
 }
 
+.triggerSwatchWell {
+  flex: 1 1 auto;
+  width: auto;
+  height: calc(var(--app-ui-scale, 1) * 13px);
+}
+
 .triggerSwatchNone {
   position: relative;
   border-color: var(--border);
@@ -96,6 +102,26 @@
   border-radius: 2px;
   background: var(--bg-pane);
   padding: 6px;
+}
+
+/* Sits under the picker as its last row, like a menu's reset item. */
+.resetButton {
+  display: block;
+  width: 100%;
+  margin-top: -1px;
+  border: 1px solid var(--border-light);
+  border-radius: 0 0 2px 2px;
+  background: var(--bg-pane);
+  color: var(--text);
+  font-family: inherit;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  text-align: left;
+  padding: 5px 8px;
+  cursor: default;
+}
+
+.resetButton:hover {
+  background: color-mix(in srgb, var(--control-accent) 14%, var(--bg-pane));
 }
 
 .rootDisabled {
@@ -489,4 +515,20 @@
 .brightnessCenterLabel {
   flex: 1;
   text-align: center;
+}
+
+/* A wide well draws its "none" slash corner to corner instead. */
+.triggerSwatchWell.triggerSwatchNone {
+  background-image:
+    linear-gradient(to top right, transparent calc(50% - 1px), var(--color-error) calc(50% - 0.5px), var(--color-error) calc(50% + 0.5px), transparent calc(50% + 1px)),
+    linear-gradient(45deg, var(--border-light) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--border-light) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--border-light) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--border-light) 75%);
+  background-size: 100% 100%, 4px 4px, 4px 4px, 4px 4px, 4px 4px;
+  background-position: 0 0, 0 0, 0 2px, 2px -2px, -2px 0;
+}
+
+.triggerSwatchWell.triggerSwatchNone::after {
+  content: none;
 }

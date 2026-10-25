@@ -1,4 +1,7 @@
-import { sourceSlice, tikz, userText } from "../edit/fragment.js";
+import { tikz, userText } from "../edit/fragment.js";
+import { parseOptionListRaw } from "../options/parse.js";
+import { rewriteBeamerOptions } from "./option-edits.js";
+import { executingThemeUses, initialThemeInsertionOffset, literalThemeNames, preambleInsertion, themeEditBlocker, themeNamePrefix } from "./preamble-edit-context.js";
 import type { BeamerStructuralEdit } from "./structural-edit.js";
 import { beamerPresentationTheme, type BeamerThemeCatalogEntry } from "./theme/catalog.js";
 import type { BeamerDocumentModel, BeamerThemeUseModel } from "./types.js";
@@ -24,25 +27,28 @@ export function planPresentationThemeSwitch(
   name: string
 ): BeamerPresentationThemeSwitch | null {
   const entry = beamerPresentationTheme(name);
-  if (!entry) {
+  if (!entry || themeEditBlocker(document)) {
     return null;
   }
-  const target = document.preamble.themes
-    .filter((use) => use.kind === "theme" && !document.preamble.macroDefinitions.some((definition) =>
-      definition.span.from <= use.span.from && definition.span.to >= use.span.to))
+  const target = executingThemeUses(document)
+    .filter((use) => use.kind === "theme")
     .at(-1) ?? null;
   const readKeys = new Set(entry.options.flatMap((schema) =>
     schema.kind === "flag-choice" ? schema.values.map((choice) => choice.value) : [schema.key]));
+  // These native options are intentionally not controls until the renderer
+  // draws them, but switching between modern themes must not erase them.
+  if (entry.id === "metropolis" || entry.id === "moloch") {
+    for (const key of ["block", "sectionpage", "subsectionpage", "titleformat", "titleformat plain", "titleformat title", "titleformat subtitle", "titleformat section", "titleformat frame"]) readKeys.add(key);
+  }
+  if (entry.id === "madrid" || entry.id === "boadilla") readKeys.add("shadow");
   const keptOptions: Array<{ text: string; from: number; to: number }> = [];
+  const sameTheme = target && literalThemeNames(target)?.at(-1)?.toLowerCase() === entry.id;
   if (target?.options) {
-    let from = target.options.contentSpan.from;
-    for (const raw of target.options.value.split(",")) {
-      const to = from + raw.length;
-      const key = raw.split("=")[0]?.trim() ?? "";
-      if (readKeys.has(key)) {
-        keptOptions.push({ text: raw.trim(), from: from + raw.indexOf(raw.trim()), to: from + raw.indexOf(raw.trim()) + raw.trim().length });
+    const entries = parseOptionListRaw(document.source.slice(target.options.span.from, target.options.span.to), target.options.span.from).entries;
+    for (const option of entries) {
+      if (sameTheme || (option.kind !== "unknown" && readKeys.has(option.key))) {
+        keptOptions.push({ text: option.raw, ...option.span });
       }
-      from = to + 1;
     }
   }
   return { entry, target, keptOptions };
@@ -58,7 +64,7 @@ export function documentWithPresentationTheme(
   const switched: BeamerThemeUseModel = target
     ? {
         ...target,
-        name: { ...target.name, value: plan.entry.name },
+        name: { ...target.name, value: [...(literalThemeNames(target) ?? []).slice(0, -1), plan.entry.name].join(",") },
         ...(options.length > 0 && target.options ? { options: { ...target.options, value: options } } : {}),
       }
     : syntheticThemeUse(document, plan.entry.name);
@@ -79,27 +85,19 @@ export function presentationThemeEdits(
   const { target } = plan;
   if (!target) {
     const at = themeInsertionOffset(document);
-    return [{ span: { from: at, to: at }, insert: tikz`
-\usetheme{${name}}` }];
+    return [{ span: { from: at, to: at }, insert: preambleInsertion(document, at, tikz`\usetheme{${name}}`) }];
   }
-  const edits: BeamerStructuralEdit[] = [{ span: target.name.contentSpan, insert: name }];
+  const edits: BeamerStructuralEdit[] = [{ span: target.name.contentSpan, insert: tikz`${themeNamePrefix(document, target)}${name}` }];
   if (target.options) {
-    const kept = plan.keptOptions.map((option) => sourceSlice(document.source, option));
-    edits.push(kept.length > 0
-      ? { span: target.options.contentSpan, insert: kept.reduce((joined, option) => tikz`${joined},${option}`) }
-      : { span: target.options.span, insert: tikz`` });
+    const kept = new Set(plan.keptOptions.map(option => option.from));
+    edits.push(...rewriteBeamerOptions(document.source, target.options, option => kept.has(option.span.from)));
   }
   return edits;
 }
 
 /** The end of the `\documentclass` line, where a new `\usetheme` goes. */
 function themeInsertionOffset(document: BeamerDocumentModel): number {
-  const documentClass = document.preamble.documentClass;
-  if (!documentClass) {
-    return document.preamble.span.from;
-  }
-  const lineEnd = document.source.indexOf("\n", documentClass.span.to);
-  return lineEnd === -1 ? documentClass.span.to : lineEnd;
+  return initialThemeInsertionOffset(document);
 }
 
 function syntheticThemeUse(document: BeamerDocumentModel, name: string): BeamerThemeUseModel {

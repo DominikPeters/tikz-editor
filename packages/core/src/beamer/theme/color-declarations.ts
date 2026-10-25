@@ -6,12 +6,13 @@ import { parseOptionListRaw } from "../../options/parse.js";
 import type { OptionEntry } from "../../options/types.js";
 import { readTexBalancedDelimited } from "../../parser/tex-lexical.js";
 import { resolveColorToCss, resolveDefineColorModel } from "../../semantic/style/colors.js";
-import { beamerControlSequencesIn, beamerOptionalArgumentAfter, beamerRequiredArgumentAfter, createBeamerSyntaxContext } from "../syntax.js";
+import { beamerControlSequencesIn, beamerOptionalArgumentAfter, beamerRequiredArgumentAfter, beamerSourceValueTokens, createBeamerSyntaxContext } from "../syntax.js";
 import type { BeamerDelimitedSourceValue, BeamerDocumentModel } from "../types.js";
+import { preambleCommandScope } from "../preamble-edit-context.js";
 import type { BeamerThemeColor, ResolvedBeamerThemeColor } from "./types.js";
 
 export type BeamerColorDeclarationEvent =
-  | { kind: "beamer-color"; span: Span; role: BeamerDelimitedSourceValue; starred: boolean; entries: readonly OptionEntry[] }
+  | { kind: "beamer-color"; span: Span; role: BeamerDelimitedSourceValue; options: BeamerDelimitedSourceValue; starred: boolean; entries: readonly OptionEntry[] }
   | { kind: "define-color"; span: Span; name: BeamerDelimitedSourceValue; model: BeamerDelimitedSourceValue; specification: BeamerDelimitedSourceValue; provide: boolean }
   | { kind: "color-alias"; span: Span; name: BeamerDelimitedSourceValue; expression: BeamerDelimitedSourceValue }
   | { kind: "use-color"; span: Span; role: BeamerDelimitedSourceValue; starred: boolean }
@@ -23,21 +24,19 @@ export function scanBeamerColorDeclarations(document: BeamerDocumentModel, span:
   const limit = span.to;
   const events: BeamerColorDeclarationEvent[] = [];
   const names = new Set(["setbeamercolor", "definecolor", "providecolor", "colorlet", "usebeamercolor"]);
+  const argumentAfter = (at: number): BeamerDelimitedSourceValue | null => {
+    const argument = beamerRequiredArgumentAfter(context, at, limit);
+    return argument ? { ...argument, value: beamerSourceValueTokens(context, argument).replace(/\s+/gu, " ") } : null;
+  };
   for (const command of beamerControlSequencesIn(context, span)) {
     if (!names.has(command.name) || document.preamble.macroDefinitions.some(definition => definition.span.from <= command.from && definition.span.to >= command.to)) continue;
     const commandSpan = { from: command.from, to: command.to };
-    let syntaxNode = context.syntax.tree.resolveInner(command.from + 1, 1);
-    let grouped = false;
-    while (syntaxNode.parent) {
-      syntaxNode = syntaxNode.parent;
-      if (syntaxNode.name === "Group") grouped = true;
-    }
-    if (grouped && !scoped) {
+    if (!scoped && preambleCommandScope(document, commandSpan, context) !== "top-level") {
       events.push(colorDiagnostic(commandSpan, "beamer-color-scoped-declaration", "Grouped preamble color declarations are not supported in this preview."));
       continue;
     }
     const optional = beamerOptionalArgumentAfter(context, command.to, limit);
-    const first = beamerRequiredArgumentAfter(context, optional?.span.to ?? command.to, limit);
+    const first = argumentAfter(optional?.span.to ?? command.to);
     if (!first) {
       events.push(colorDiagnostic(commandSpan, "beamer-color-missing-argument", `The \\${command.name} declaration is missing its color name or role.`));
       continue;
@@ -47,8 +46,8 @@ export function scanBeamerColorDeclarations(document: BeamerDocumentModel, span:
       continue;
     }
     const secondOptional = beamerOptionalArgumentAfter(context, first.span.to, limit);
-    const second = beamerRequiredArgumentAfter(context, secondOptional?.span.to ?? first.span.to, limit);
-    const third = second && beamerRequiredArgumentAfter(context, second.span.to, limit);
+    const second = argumentAfter(secondOptional?.span.to ?? first.span.to);
+    const third = second && argumentAfter(second.span.to);
     const span = { from: command.from, to: (command.name === "definecolor" || command.name === "providecolor" ? third : second)?.span.to ?? first.span.to };
     if (optional || secondOptional) {
       events.push(colorDiagnostic(span, "beamer-color-unsupported-model-option", "Optional target-model conversions on color declarations are not supported in this preview."));
@@ -62,7 +61,7 @@ export function scanBeamerColorDeclarations(document: BeamerDocumentModel, span:
       // Reuse the shared source-ranged key parser; these synthetic delimiters
       // occupy the authored opening/closing brace offsets exactly.
       const entries = parseOptionListRaw(`[${document.source.slice(second.contentSpan.from, second.contentSpan.to)}]`, second.contentSpan.from - 1).entries;
-      events.push({ kind: "beamer-color", role: first, starred: command.starred, entries, span });
+      events.push({ kind: "beamer-color", role: first, options: second, starred: command.starred, entries, span });
     } else if (command.name === "colorlet") {
       events.push({ kind: "color-alias", name: first, expression: second, span });
     } else {
@@ -162,10 +161,10 @@ export function applyBeamerColorDeclaration(state: BeamerColorDeclarationState, 
       color.use = value.split(",").map(parent => parent.trim()).filter(Boolean);
     } else if (entry.key === "fg") {
       delete color.fg; delete color.fgMix; delete color.fgRgb;
-      color.fgExpression = { value, span: valueSpan };
+      color.fgExpression = { value, span: valueSpan, authored: true };
     } else {
       delete color.bg; delete color.bgMix;
-      color.bgExpression = { value, span: valueSpan };
+      color.bgExpression = { value, span: valueSpan, authored: true };
     }
   }
   state.colors[role] = color;

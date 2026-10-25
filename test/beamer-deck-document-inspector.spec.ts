@@ -68,6 +68,29 @@ describe("chrome metadata fields", () => {
 });
 
 describe("buildDeckDocumentInspector", () => {
+  it("reports only the winning authored color and tracks provenance per side", () => {
+    const model = buildDeckDocumentInspector(scanBeamerDocument(deck([
+      "\\documentclass{beamer}",
+      "\\setbeamercolor{alerted text}{fg=red}",
+      "\\usecolortheme{beaver}",
+      "\\setbeamercolor{palette primary}{bg=green}",
+    ])));
+    expect(field(model.colors, "color:alerted text")).toMatchObject({ origin: "theme", fg: { css: "#bd1919", expression: null } });
+    expect(field(model.colors, "color:palette primary")).toMatchObject({
+      origin: "preamble", fg: { origin: "theme", expression: null }, bg: { origin: "preamble", expression: "green" },
+    });
+  });
+
+  it("honors starred resets and inherited authored colors", () => {
+    const model = buildDeckDocumentInspector(scanBeamerDocument(deck([
+      "\\documentclass{beamer}",
+      "\\setbeamercolor{structure}{fg=red}",
+      "\\setbeamercolor*{structure}{parent=normal text}",
+      "\\setbeamercolor{normal text}{fg=green}",
+    ])));
+    expect(field(model.colors, "color:structure")).toMatchObject({ origin: "preamble", fg: { css: "#00ff00", expression: "green", role: "normal text" } });
+  });
+
   it("reads a moloch deck: options, color override, page and title info", () => {
     const document = scanBeamerDocument(deck([
       "\\documentclass[aspectratio=169,10pt]{beamer}",
@@ -80,7 +103,7 @@ describe("buildDeckDocumentInspector", () => {
 
     expect(model.theme).toMatchObject({ name: "moloch", group: "modern", supported: true });
     expect(model.theme.palette.length).toBeGreaterThan(1);
-    expect(field(model.themeOptions, "theme-option:progressbar")).toMatchObject({ value: "frametitle", write: null });
+    expect(field(model.themeOptions, "theme-option:progressbar")).toMatchObject({ value: "frametitle", write: { kind: "setThemeOption", key: "progressbar" } });
     expect(field(model.themeOptions, "theme-option:numbering")).toMatchObject({ value: "fraction" });
     expect(field(model.themeOptions, "theme-option:background")).toMatchObject({ value: "light" });
 
@@ -93,8 +116,8 @@ describe("buildDeckDocumentInspector", () => {
 
     expect(field(model.page, "aspectratio")).toMatchObject({ value: "169" });
     expect(field(model.page, "class-font-size")).toMatchObject({ value: "10" });
-    // Both modern themes clear the navigation symbols.
-    expect(field(model.page, "navigation-symbols")).toMatchObject({ value: false });
+    // Both modern themes clear the navigation symbols; nothing overrides that.
+    expect(field(model.page, "navigation-symbols")).toMatchObject({ value: "" });
 
     // Moloch's footline prints only the frame number.
     expect(model.headerFooter).toEqual([]);
@@ -104,9 +127,10 @@ describe("buildDeckDocumentInspector", () => {
     const model = buildDeckDocumentInspector(scanBeamerDocument(deck(["\\documentclass{beamer}"])));
     expect(model.theme).toMatchObject({ name: "Default", supported: true, components: [] });
     expect(model.themeOptions).toEqual([]);
-    expect(field(model.page, "aspectratio")).toMatchObject({ value: "43" });
-    expect(field(model.page, "class-font-size")).toMatchObject({ value: "11" });
-    expect(field(model.page, "navigation-symbols")).toMatchObject({ value: true });
+    // "" is the class or theme default.
+    expect(field(model.page, "aspectratio")).toMatchObject({ value: "" });
+    expect(field(model.page, "class-font-size")).toMatchObject({ value: "" });
+    expect(field(model.page, "navigation-symbols")).toMatchObject({ value: "" });
     expect(model.components.every((component) => component.kind === "enum" && component.value === "")).toBe(true);
   });
 
@@ -126,7 +150,7 @@ describe("buildDeckDocumentInspector", () => {
     expect(field(model.themeOptions, "theme-option:secheader")).toMatchObject({ value: true });
     expect(field(model.components, "component:color-theme")).toMatchObject({ value: "beaver" });
     expect(field(model.components, "component:outer-theme")).toMatchObject({ value: "" });
-    expect(field(model.page, "navigation-symbols")).toMatchObject({ value: false });
+    expect(field(model.page, "navigation-symbols")).toMatchObject({ value: "hidden" });
   });
 
   it("offers the short forms the theme's chrome prints, falling back to the long form", () => {
@@ -185,21 +209,21 @@ describe("slide fields and context", () => {
   const [first, second] = document.frames;
 
   it("reads shrink, frame breaks and numbering", () => {
-    const fields = buildDeckFrameInspector(source, first!.id, document)!.fields;
+    const fields = buildDeckFrameInspector(source, first.id, document)!.fields;
     expect(field(fields, "shrink")).toMatchObject({ value: 15, write: { kind: "setFrameOption", key: "shrink" } });
     expect(field(fields, "allowframebreaks")).toMatchObject({ value: true });
     expect(field(fields, "noframenumbering")).toMatchObject({ value: true });
     // A bare shrink flag is Beamer's 0%.
-    expect(field(buildDeckFrameInspector(source, second!.id, document)!.fields, "shrink")).toMatchObject({ value: 0 });
+    expect(field(buildDeckFrameInspector(source, second.id, document)!.fields, "shrink")).toMatchObject({ value: 0 });
   });
 
   it("names the section, subsection and counts notes", () => {
-    expect(buildDeckSlideContext(document, first!.id)).toEqual({
+    expect(buildDeckSlideContext(document, first.id)).toEqual({
       section: "Intro",
       subsection: "Why",
       noteCount: 2,
       issues: [],
     });
-    expect(buildDeckSlideContext(document, second!.id)).toMatchObject({ noteCount: 0 });
+    expect(buildDeckSlideContext(document, second.id)).toMatchObject({ noteCount: 0 });
   });
 });

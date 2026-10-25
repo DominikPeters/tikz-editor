@@ -714,10 +714,20 @@ export const capabilityMatrix: CapabilityMatrix = {
     notes:
       "Headless source scanner inventories Beamer frames, sections, frame headers, preamble metadata, and nested TikZ roots. Frame content lowering and rendering are tracked by later Beamer phases."
   },
+  beamer_document_inspector: {
+    parser: "not-applicable", semantic: "not-applicable", svg: "not-applicable", edit: "partial",
+    fixtures: ["beamer_document_inspector"],
+    notes: "Source-backed presentation inspector edits registered theme options and component themes, class aspect ratio and exclusive base font flags, stock navigation visibility and header/footer short forms, plus per-side color-role values and resets with document named-color swatches. Document actions resolve current source without rendered frame geometry and retain undo/redo, comments and unrelated declarations. Metadata reads the last executing preamble declaration; an absent short form inherits the full text, an empty short form hides it, and reset restores inheritance. Scoped, computed, redefined or ambiguous targets and custom navigation programs require source editing. Color resets remove repeated authored side keys while retaining starred clears, the other side and inheritance/use declarations. Object inspector actions edit list reveal defaults and bounded enumerate mini templates, and replace image filenames while preserving sizing/crop and resetting PDF page selection. The app imports browser assets into persistent storage and uses relative native references when possible; deferred replacements retain revision/selection ownership and undo/redo. Unsupported rotation/graphics overlays remain source-editable."
+  },
   beamer_frame_shrink: {
     parser: "partial", semantic: "not-applicable", svg: "partial", edit: "partial",
     fixtures: ["beamer_frame_shrink"],
     notes: "Stock shrink frames expand body text widths before layout, apply TeX's minimum/overflow scale and cramped list item separation, and retain unscaled titles/chrome. Body glyphs/rules, caret stops and source hit bounds share the same outer transform. Squeeze uses live cramped item separation without scaling. Frame zoom and arbitrary shrink/template redefinitions remain unsupported.",
+  },
+  beamer_list_templates: {
+    parser: "partial", semantic: "not-applicable", svg: "partial", edit: "partial",
+    fixtures: ["beamer_list_templates"],
+    notes: "Literal enumerate mini templates support ungrouped 1/a/A/i/I counters and grouped literal prefixes/suffixes. Per-list templates override the theme marker and preserve custom item labels and counters. Inspector list edits retain item-specific overlays, write canonical reveal-before-label order and distinguish inherited defaults from explicit 1- visibility. Enumerate-to-itemize conversion removes enumerate-only labels. Custom TeX template programs and ambiguous repeated arguments remain source-editable.",
   },
   beamer_frame_flow: {
     parser: "partial", semantic: "not-applicable", svg: "partial", edit: "none",

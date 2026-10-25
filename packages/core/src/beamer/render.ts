@@ -250,6 +250,7 @@ function beamerListLayoutProfile(
     sizeOverrides: beamerListSizeOverrides(theme),
     paragraphSkipPt: Number(theme.options["paragraph-skip-pt"] ?? 0),
     selectBodyFontBeforeList: true,
+    enumerateMiniTemplates: true,
     bodyFontSizePtByDepth: [undefined, small.sizePt, footnotesize.sizePt],
     bodyBaselineSkipPtByDepth: [undefined, small.lineHeightPt * Number(theme.options["line-spread"] ?? 1), footnotesize.lineHeightPt * Number(theme.options["line-spread"] ?? 1)],
     leftMarginEmByDepth: theme.dimensions.listLeftMarginEmByDepth,

@@ -11,8 +11,31 @@ import {
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 import { applyEditAction } from "../packages/core/src/edit/actions.js";
 import { capabilityFixtures } from "./capability-fixtures.js";
+import { applyDeckDocumentEditAction, buildDeckDocumentInspector, scanBeamerDocument, type DeckDocumentEditAction } from "../packages/core/src/beamer/index.js";
 
 describe("capability matrix guards", () => {
+  it("justifies document inspector editing with source-backed page, navigation, metadata and color actions", () => {
+    expect(capabilityMatrix.beamer_document_inspector.edit).toBe("partial");
+    let source = capabilityFixtures.beamer_document_inspector;
+    const actions: DeckDocumentEditAction[] = [
+      { kind: "deckSetClassOption", key: "font-size", value: "12" },
+      { kind: "deckSetNavigationSymbols", visible: false },
+      { kind: "deckSetMetadataShort", field: "title", value: "Header" },
+      { kind: "deckSetColor", role: "structure", side: "fg", value: "red" },
+    ];
+    for (const action of actions) {
+      const result = applyDeckDocumentEditAction(source, action);
+      if (result.kind !== "success") throw new Error("Expected a document inspector capability edit");
+      source = result.newSource;
+    }
+    const document = scanBeamerDocument(source);
+    const model = buildDeckDocumentInspector(document);
+    expect(model.page.find(field => field.id === "class-font-size")).toMatchObject({ value: "12" });
+    expect(model.page.find(field => field.id === "navigation-symbols")).toMatchObject({ value: "hidden" });
+    expect(model.colors.find(field => field.id === "color:structure")).toMatchObject({ fg: { css: "#ff0000", expression: "red" } });
+    expect(document.preamble.metadata.title?.value.value).toBe("Long title");
+    expect(document.preamble.metadata.title?.shortValue?.value).toBe("Header");
+  });
   it("has exact matrix coverage for all feature IDs", () => {
     const matrixKeys = Object.keys(capabilityMatrix).sort();
     expect(matrixKeys).toEqual([...FEATURE_IDS].sort());

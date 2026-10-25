@@ -400,7 +400,7 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
         };
       },
       openBinary: async (options) => {
-        const opened = await getBridge().openBinary?.(null, { addToRecent: options?.addToRecent ?? true });
+        const opened = await getBridge().openBinary?.(null, { addToRecent: options?.addToRecent ?? true, ...(options?.kind ? { kind: options.kind } : {}) });
         if (!opened) {
           return null;
         }

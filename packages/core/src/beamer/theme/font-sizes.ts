@@ -3,6 +3,7 @@ import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { BeamerDocumentModel } from "../types.js";
 import type { ResolvedBeamerTheme } from "./types.js";
+import { beamerClassFontOption, beamerClassOptionEntries } from "../class-options.js";
 
 const names = ["tiny", "scriptsize", "footnotesize", "small", "normalsize", "large", "Large", "LARGE", "huge", "Huge"] as const;
 export type BeamerNamedFontSize = typeof names[number];
@@ -24,9 +25,9 @@ const profileLookup: Readonly<Partial<Record<string, readonly Size[]>>> = profil
 
 export function beamerClassFontSize(document: BeamerDocumentModel): string {
   let size = "11";
-  for (const option of (document.preamble.documentClass?.options?.value ?? "").split(",")) {
-    const match = /^(8|9|10|11|12|14|17|20)pt$/u.exec(option.trim());
-    if (match?.[1] !== undefined) size = match[1];
+  for (const option of beamerClassOptionEntries(document)) {
+    const value = beamerClassFontOption(option);
+    if (value !== null) size = value;
   }
   return size;
 }

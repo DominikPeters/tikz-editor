@@ -2099,14 +2099,21 @@ fn desktop_open_text(
 fn desktop_open_binary(
     path: Option<String>,
     add_to_recent: Option<bool>,
+    kind: Option<String>,
     app: AppHandle,
 ) -> Result<Option<OpenBinaryPayload>, String> {
     let resolved_path = if let Some(raw_path) = path {
         Some(PathBuf::from(raw_path))
     } else {
-        FileDialog::new()
-            .add_filter("PowerPoint", &["pptx"])
-            .pick_file()
+        if kind.as_deref() == Some("graphics") {
+            FileDialog::new()
+                .add_filter("Images and PDF", &["png", "jpg", "jpeg", "svg", "pdf"])
+                .pick_file()
+        } else {
+            FileDialog::new()
+                .add_filter("PowerPoint", &["pptx"])
+                .pick_file()
+        }
     };
     let Some(path_buf) = resolved_path else {
         return Ok(None);

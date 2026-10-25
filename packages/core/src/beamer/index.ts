@@ -47,9 +47,11 @@ export {
 } from "./structural-edit.js";
 export {
   applyDeckEditAction,
+  applyDeckDocumentEditAction,
   isDeckEditAction,
   type DeckEditAction,
 } from "./deck-edit-actions.js";
+export { isDeckDocumentEditAction, type DeckDocumentEditAction } from "./document-theme-edits.js";
 export {
   buildDeckDocumentInspector,
   buildDeckSlideContext,

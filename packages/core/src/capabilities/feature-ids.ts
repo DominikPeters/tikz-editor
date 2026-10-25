@@ -98,6 +98,8 @@ export const FEATURE_IDS = [
   "beamer_preformatted", // Bounded listings and alltt blocks.
   "text_transform_boxes", // Source-backed graphicx transforms of text/math and paragraph boxes.
   "beamer_document_scan",
+  "beamer_document_inspector", // Safe document-scoped theme, page, navigation, short-metadata and color-side edits.
+  "beamer_list_templates", // Source-backed enumerate mini templates, list reveal and safe list conversion.
   "beamer_frame_shrink", // Stock shrink/squeeze arithmetic and body paint transforms.
   "beamer_frame_flow", // Measured headings, metadata chrome, stock contents, fixed overlay areas and vertical composition.
   "beamer_titlepages", // Measured stock and modern titlepage templates and metadata.

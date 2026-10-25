@@ -1,11 +1,13 @@
-import { useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
+import { useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
+import type { Span } from "@tikz-editor/core/ast/types";
 import type {
-  DeckInspectorColor,
   DeckInspectorCommand,
   DeckInspectorField,
   DeckInspectorWrite,
 } from "@tikz-editor/core/beamer/index";
 import { CustomDropdown } from "../CustomDropdown";
+import { ColorPickerField } from "../ColorPicker";
+import { BASIC_PICKER_COLORS } from "../../colors/color-palette";
 import css from "./InspectorPanel.module.css";
 
 export type DeckFieldCommit = (write: DeckInspectorWrite, value: string | number | boolean | null) => void;
@@ -16,14 +18,37 @@ export type DeckFieldScrub = (
 
 /**
  * One deck inspector row. A field without a `write` is one the editor can
- * show but not change yet; it renders disabled with its real value.
+ * show but not change yet; it renders disabled with its real value. Its
+ * reason shows once per blocker (`showReadOnlyNote`), not under every field
+ * the blocker disables.
  */
-export function DeckField(props: {
+type DeckFieldProps = {
   field: DeckInspectorField;
   onCommit: DeckFieldCommit;
   onBeginScrub?: DeckFieldScrub;
   onCommand?: (command: DeckInspectorCommand) => void;
-}): JSX.Element {
+  showReadOnlyNote?: boolean;
+};
+
+export function DeckField(props: DeckFieldProps): JSX.Element {
+  const readOnly = props.showReadOnlyNote === false ? null : props.field.readOnly;
+  return <>
+    <DeckFieldControl {...props} />
+    {readOnly ? <DeckReadOnlyNote reason={readOnly.reason} span={readOnly.span} {...(props.onCommand ? { onCommand: props.onCommand } : {})} /> : null}
+  </>;
+}
+
+export function DeckReadOnlyNote(props: { reason: string; span: Span; onCommand?: (command: DeckInspectorCommand) => void }): JSX.Element {
+  const { reason, span, onCommand } = props;
+  return (
+    <p className={css.deckReadOnlyReason}>
+      {reason}{" "}
+      {onCommand ? <button type="button" className={css.deckInfoLink} onClick={() => { onCommand({ kind: "revealSource", span }); }}>Show in Source</button> : null}
+    </p>
+  );
+}
+
+function DeckFieldControl(props: DeckFieldProps): JSX.Element {
   const { field, onCommit, onBeginScrub, onCommand } = props;
   const write = field.write;
   const commit = (value: string | number | boolean | null): void => {
@@ -63,7 +88,7 @@ export function DeckField(props: {
     case "number":
       return <DeckNumberField field={field} onCommit={commit} {...(onBeginScrub ? { onBeginScrub } : {})} />;
     case "color":
-      return <DeckColorField field={field} />;
+      return <DeckColorField field={field} onCommit={onCommit} />;
     case "button":
       return (
         <div className={`${css.property} ${css.deckBooleanProperty}`}>
@@ -94,6 +119,7 @@ function DeckTextField(props: {
 }): JSX.Element {
   const { field, onCommit } = props;
   const [draft, setDraft] = useState<string | null>(null);
+  const skipBlur = useRef(false);
   const commitDraft = (value: string): void => {
     setDraft(null);
     if (value !== field.value) {
@@ -114,6 +140,7 @@ function DeckTextField(props: {
           title={field.write == null && field.value.length > 0 ? field.value : undefined}
           onChange={(event) => { setDraft(event.currentTarget.value); }}
           onBlur={(event) => {
+            if (skipBlur.current) { skipBlur.current = false; return; }
             if (draft != null) {
               commitDraft(event.currentTarget.value);
             }
@@ -121,10 +148,13 @@ function DeckTextField(props: {
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
+              skipBlur.current = true;
               commitDraft(event.currentTarget.value);
               event.currentTarget.blur();
             } else if (event.key === "Escape") {
               event.preventDefault();
+              event.stopPropagation();
+              skipBlur.current = true;
               setDraft(null);
               event.currentTarget.blur();
             }
@@ -142,6 +172,7 @@ function DeckNumberField(props: {
 }): JSX.Element {
   const { field, onCommit, onBeginScrub } = props;
   const [draft, setDraft] = useState<string | null>(null);
+  const skipBlur = useRef(false);
   const scrubbable = field.value != null && field.write != null && onBeginScrub != null;
   const commitDraft = (raw: string): void => {
     setDraft(null);
@@ -183,6 +214,7 @@ function DeckNumberField(props: {
           disabled={field.write == null}
           onChange={(event) => { setDraft(event.currentTarget.value); }}
           onBlur={(event) => {
+            if (skipBlur.current) { skipBlur.current = false; return; }
             if (draft != null) {
               commitDraft(event.currentTarget.value);
             }
@@ -190,10 +222,13 @@ function DeckNumberField(props: {
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
+              skipBlur.current = true;
               commitDraft(event.currentTarget.value);
               event.currentTarget.blur();
             } else if (event.key === "Escape") {
               event.preventDefault();
+              event.stopPropagation();
+              skipBlur.current = true;
               setDraft(null);
               event.currentTarget.blur();
             }
@@ -206,47 +241,41 @@ function DeckNumberField(props: {
 }
 
 /**
- * A Beamer color role. Roles with both sides show a sample of the text color
- * on the fill, the way the theme paints them; one-sided roles show a swatch.
- * The value reads as the preamble wrote it, or in italics when it comes from
- * the theme (the inspector's convention for inherited values).
+ * A Beamer color role: one picker per side the role is shown with, text
+ * color first. A value reads as the preamble wrote it, or in italics when it
+ * comes from the theme (the inspector's convention for inherited values); a
+ * side the preamble sets offers "Use Theme Color" in its picker.
  */
 function DeckColorField(props: {
   field: Extract<DeckInspectorField, { kind: "color" }>;
+  onCommit: DeckFieldCommit;
 }): JSX.Element {
-  const { field } = props;
-  const fg = field.fg ?? null;
-  const bg = field.bg ?? null;
+  const { field, onCommit } = props;
   const both = field.fg !== undefined && field.bg !== undefined;
-  const shown = both ? bg ?? fg : fg ?? bg;
-  const describe = (color: DeckInspectorColor | null): string => color?.expression ?? color?.css ?? "none";
-  const valueText = both && fg && bg ? `${describe(fg)} on ${describe(bg)}` : describe(shown);
-  const inherited = field.origin === "theme";
+  const sides = (["fg", "bg"] as const).filter(side => field[side] !== undefined);
   return (
     <div className={css.property}>
       <div className={css.propertyLabel}>{field.label}</div>
-      <div
-        className={css.deckColorValue}
-        title={`${valueText} — ${inherited ? "from the theme" : "set in the preamble"}`}
-      >
-        {both ? (
-          <span
-            className={css.deckColorSample}
-            style={{ background: bg?.css ?? field.backdrop ?? "transparent", color: fg?.css ?? "inherit" }}
-            aria-hidden="true"
-          >
-            Aa
-          </span>
-        ) : (
-          <span
-            className={css.deckColorSwatch}
-            style={{ background: shown?.css ?? "transparent" }}
-            aria-hidden="true"
-          />
-        )}
-        <span className={inherited ? `${css.deckColorText} ${css.provenanceValue}` : css.deckColorText}>
-          {valueText}
-        </span>
+      <div className={`${css.controlRow} ${css.deckColorRow}`}>
+        {sides.map(side => {
+          const color = field[side] ?? null;
+          const label = both ? `${field.label} ${side === "fg" ? "text" : "fill"}` : field.label;
+          const inherited = color?.role !== undefined && color.role !== field.role;
+          const origin = inherited ? `inherited from ${color.role}` : color?.origin === "preamble" ? "set in the preamble" : "from the theme";
+          const write = { kind: "setColor" as const, role: field.role, side };
+          return (
+            <div key={side} className={css.deckColorSide} title={`${both ? `${side === "fg" ? "Text" : "Fill"}: ` : ""}${color?.expression ?? color?.css ?? "none"} — ${origin}`}>
+              <ColorPickerField ariaLabel={label} options={BASIC_PICKER_COLORS}
+                namedColorSwatches={field.namedColorSwatches} value={color?.css ?? null}
+                resolvedValue={color?.css ?? null}
+                syntaxValue={color?.expression === "" ? "none" : color?.expression ?? null}
+                triggerLabelClassName={color?.origin === "theme" || inherited ? css.provenanceValue ?? "" : ""}
+                preserveNamedColorSpelling commitOnRelease swatchOnly={both} disabled={field.write === null}
+                {...(field.write && field.resetSides.includes(side) ? { resetLabel: "Use Theme Color", onReset: () => { onCommit(write, null); } } : {})}
+                onChange={value => { onCommit(write, value === "none" ? "" : value); }} />
+            </div>
+          );
+        })}
       </div>
     </div>
   );

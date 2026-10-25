@@ -53,6 +53,7 @@ export function ThemeGalleryPopover(props: {
   const showPreview = useThemePreviewStore((s) => s.show);
   const clearPreview = useThemePreviewStore((s) => s.clear);
   const rootRef = useRef<HTMLDivElement>(null);
+  const focusedInitially = useRef(false);
   const [position, setPosition] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
   const [tick, setTick] = useState(0);
   const [previewed, setPreviewed] = useState<string | null>(null);
@@ -65,10 +66,11 @@ export function ThemeGalleryPopover(props: {
   // The title slide is the first frame that typesets one; else the first frame.
   const title = frames.find((frame) => /\\(titlepage|maketitle)\b/u.test(source.slice(frame.span.from, frame.span.to))) ?? frames[0] ?? null;
   const currentIndex = current?.frameIndex ?? null;
+  const currentStep = Math.min(activeStep, Math.max(1, current?.stepCount ?? 1));
   const titleIndex = title && title.frameIndex !== currentIndex ? title.frameIndex : null;
   const currentFrame = useMemo<WantedFrame | null>(
-    () => (currentIndex == null ? null : { frameIndex: currentIndex, step: activeStep }),
-    [activeStep, currentIndex]
+    () => (currentIndex == null ? null : { frameIndex: currentIndex, step: currentStep }),
+    [currentStep, currentIndex]
   );
   const titleFrame = useMemo<WantedFrame | null>(() => (titleIndex == null ? null : { frameIndex: titleIndex }), [titleIndex]);
   const fingerprint = useMemo(() => computeSourceFingerprint(source), [source]);
@@ -126,8 +128,9 @@ export function ThemeGalleryPopover(props: {
       return;
     }
     const url = renders.get(keyFor(previewed, currentFrame));
-    if (url) showPreview({ documentId, frameId: currentId, source, themeId: previewed, url });
-  }, [clearPreview, currentFrame, currentId, currentThemeId, documentId, keyFor, previewed, showPreview, source, tick]);
+    if (url) showPreview({ documentId, frameId: currentId, step: currentStep, source, themeId: previewed, url });
+    else clearPreview();
+  }, [currentStep, clearPreview, currentFrame, currentId, currentThemeId, documentId, keyFor, previewed, showPreview, source, tick]);
   useEffect(() => clearPreview, [clearPreview]);
 
   useLayoutEffect(() => {
@@ -136,7 +139,8 @@ export function ThemeGalleryPopover(props: {
       // stays in view for the preview.
       const scope = anchor.closest("[data-inspector-panel]");
       const panelRect = (scope?.parentElement ?? anchor).getBoundingClientRect();
-      const width = Math.min(Math.max(panelRect.width - 8, 320), window.innerWidth - 16);
+      const scale = Number(getComputedStyle(anchor).getPropertyValue("--app-ui-scale")) || 1;
+      const width = Math.min(Math.max(panelRect.width - 8, 280 * scale + 48), window.innerWidth - 16);
       const left = Math.max(8, Math.min(panelRect.right - 4 - width, window.innerWidth - width - 8));
       const top = Math.max(8, panelRect.top + 4);
       const bottom = Math.min(window.innerHeight - 8, Math.max(panelRect.bottom - 4, top + 320));
@@ -159,12 +163,15 @@ export function ThemeGalleryPopover(props: {
     };
   }, [anchor, onClose]);
 
-  useEffect(() => {
+  const positioned = position != null;
+  useLayoutEffect(() => {
+    if (!positioned || focusedInitially.current) return;
+    focusedInitially.current = true;
     const selected = rootRef.current?.querySelector<HTMLButtonElement>("[aria-pressed='true']")
       ?? rootRef.current?.querySelector<HTMLButtonElement>("button[data-theme-id]");
     selected?.focus({ preventScroll: true });
     selected?.scrollIntoView({ block: "nearest" });
-  }, []);
+  }, [positioned]);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     if (event.key === "Escape") {

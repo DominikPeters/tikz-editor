@@ -36,7 +36,7 @@ describe("deckSetPresentationTheme", () => {
       "\\usecolortheme{beaver}",
     );
     const next = switched(source, "metropolis");
-    expect(next).toContain("\\usetheme[progressbar=frametitle,numbering=fraction]{metropolis}");
+    expect(next).toContain("\\usetheme[progressbar=frametitle, numbering=fraction]{metropolis}");
     expect(next).toContain("\\usetheme{Berlin}");
     expect(next).toContain("\\newcommand{\\later}{\\usetheme{Warsaw}}");
     expect(next).toContain("\\usecolortheme{beaver}");
@@ -53,9 +53,9 @@ describe("deckSetPresentationTheme", () => {
     expect(next).toContain("\\usetheme[right,width=2cm]{PaloAlto}");
   });
 
-  it("inserts a \\usetheme after \\documentclass when the deck has none", () => {
+  it("inserts a \\usetheme after the class and package block when the deck has none", () => {
     const next = switched(deck("\\documentclass[aspectratio=169]{beamer}", "\\usepackage{amsmath}"), "Warsaw");
-    expect(next.startsWith("\\documentclass[aspectratio=169]{beamer}\n\\usetheme{Warsaw}\n\\usepackage{amsmath}")).toBe(true);
+    expect(next.startsWith("\\documentclass[aspectratio=169]{beamer}\n\\usepackage{amsmath}\n\\usetheme{Warsaw}")).toBe(true);
   });
 
   it("refuses a theme the preview does not know", () => {

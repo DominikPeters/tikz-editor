@@ -1,6 +1,12 @@
+import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import { scanBeamerNoteCommands } from "./notes.js";
-import { scanBeamerColorDeclarations } from "./theme/color-declarations.js";
+import { themeOptionEditBlocker } from "./document-theme-edits.js";
+import { executingThemeUses, themeEditBlocker } from "./preamble-edit-context.js";
+import { BEAMER_ASPECT_RATIOS, BEAMER_CLASS_FONT_SIZES, beamerClassFontOption, beamerClassOptionEntries, beamerClassOptionValue } from "./class-options.js";
+import { classOptionEditBlocker, metadataShortEditBlocker, navigationEditBlocker } from "./document-page-edits.js";
+import { authoredColorSides, BEAMER_INSPECTOR_COLOR_ROLES, beamerNamedColorSwatches, colorEditBlocker } from "./document-color-edits.js";
+import { scanBeamerNavigationTemplates } from "./theme/template-declarations.js";
 import {
   beamerPresentationTheme,
   beamerThemeComponentChoices,
@@ -15,6 +21,7 @@ import {
   registeredBeamerThemeComponents,
   resolveBeamerTheme,
   resolveBeamerThemeColor,
+  resolveBeamerThemeColorOrigin,
 } from "./theme/resolve.js";
 import type { ResolvedBeamerTheme } from "./theme/types.js";
 import type { DeckInspectorColor, DeckInspectorField } from "./deck-inspector.js";
@@ -29,8 +36,8 @@ import type {
  * Inspector model for the whole deck, shown below the slide's options when
  * nothing is selected. Everything is read from the scanned document and the
  * theme the renderer resolves from it, so the panel shows what the preview
- * shows. Fields carry `write: null` until the document-scoped edit actions
- * exist (design/beamer-document-inspector.md, phase 4).
+ * shows. Theme, page, navigation and short metadata controls are writable;
+ * color controls are writable (design/beamer-document-inspector.md).
  */
 export type DeckThemeCard = {
   /** Display name: the last `\usetheme`, or "Default" when there is none. */
@@ -45,6 +52,7 @@ export type DeckThemeCard = {
   /** A few characteristic colors of the resolved theme, for a swatch strip. */
   palette: readonly string[];
   issues: readonly Diagnostic[];
+  readOnly?: { reason: string; span: Span };
 };
 
 export type DeckDocumentInspectorModel = {
@@ -71,16 +79,24 @@ export function buildDeckDocumentInspector(
   document: BeamerDocumentModel,
   theme: ResolvedBeamerTheme = resolveBeamerTheme(document)
 ): DeckDocumentInspectorModel {
-  const uses = activeThemeUses(document);
+  const uses = executingThemeUses(document);
+  const blocked = themeEditBlocker(document);
+  const optionBlocked = themeOptionEditBlocker(document);
   const presentation = uses.filter((use) => use.kind === "theme").at(-1) ?? null;
   const presentationName = presentation ? lastName(presentation) : null;
   const entry = presentationName == null ? beamerPresentationTheme("default") : beamerPresentationTheme(presentationName);
   return {
-    theme: themeCard(theme, presentation, presentationName, entry),
+    theme: { ...themeCard(theme, presentation, presentationName, entry), ...(blocked ? { readOnly: blocked } : {}) },
     themeOptions: (entry?.options ?? [])
-      .map((schema) => themeOptionField(schema, parseThemeOptions(presentation?.options?.value))),
+      .map((schema) => {
+        const field = themeOptionField(schema, parseThemeOptions(presentation?.options?.value));
+        return optionBlocked ? { ...field, write: null, readOnly: optionBlocked } : field;
+      }),
     components: (["color-theme", "font-theme", "inner-theme", "outer-theme"] as const)
-      .map((kind) => componentField(kind, uses)),
+      .map((kind) => {
+        const field = componentField(kind, uses);
+        return blocked ? { ...field, write: null, readOnly: blocked } : field;
+      }),
     colors: colorFields(document, theme),
     page: pageFields(document, theme),
     headerFooter: headerFooterFields(document, theme),
@@ -116,12 +132,6 @@ export function buildDeckSlideContext(
     noteCount: notes.length,
     issues: [...byMessage.values()],
   };
-}
-
-/** Theme commands that execute, in source order (not those inside macro definitions). */
-function activeThemeUses(document: BeamerDocumentModel): BeamerThemeUseModel[] {
-  return document.preamble.themes.filter((use) => !document.preamble.macroDefinitions.some((definition) =>
-    definition.span.from <= use.span.from && definition.span.to >= use.span.to));
 }
 
 /** `\usetheme{a,b}` loads both; the later one is the one the deck looks like. */
@@ -177,7 +187,7 @@ function themeOptionField(
       return {
         kind: "boolean", id: `theme-option:${schema.key}`, label: schema.label,
         value: raw === undefined ? schema.default : raw === true || raw === "true",
-        write: null,
+        write: { kind: "setThemeOption", key: schema.key },
       };
     }
     case "enum": {
@@ -186,7 +196,7 @@ function themeOptionField(
         kind: "enum", id: `theme-option:${schema.key}`, label: schema.label,
         value: typeof raw === "string" ? raw : schema.default,
         options: [...schema.values],
-        write: null,
+        write: { kind: "setThemeOption", key: schema.key },
       };
     }
     case "flag-choice": {
@@ -197,7 +207,7 @@ function themeOptionField(
         kind: "enum", id: `theme-option:${schema.id}`, label: schema.label,
         value: given ?? schema.default,
         options: [...schema.values],
-        write: null,
+        write: { kind: "setThemeFlagChoice", keys: flags },
       };
     }
     case "dimension": {
@@ -206,7 +216,7 @@ function themeOptionField(
         kind: "text", id: `theme-option:${schema.key}`, label: schema.label,
         value: typeof raw === "string" ? raw : "",
         placeholder: schema.placeholder,
-        write: null,
+        write: { kind: "setThemeOption", key: schema.key },
       };
     }
   }
@@ -241,104 +251,76 @@ function componentField(
     label: COMPONENT_LABELS[kind],
     value: choices.find((name) => name === value.toLocaleLowerCase()) ?? value,
     options,
-    write: null,
+    write: { kind: "setTheme", themeKind: kind },
   };
 }
 
-const COLOR_ROLES: ReadonlyArray<{ role: string; label: string; sides: ReadonlyArray<"fg" | "bg"> }> = [
-  { role: "structure", label: "Structure", sides: ["fg"] },
-  { role: "normal text", label: "Text", sides: ["fg"] },
-  { role: "background canvas", label: "Background", sides: ["bg"] },
-  { role: "alerted text", label: "Alerted text", sides: ["fg"] },
-  { role: "example text", label: "Example text", sides: ["fg"] },
-  { role: "palette primary", label: "Primary", sides: ["fg", "bg"] },
-  { role: "palette secondary", label: "Secondary", sides: ["fg", "bg"] },
-  { role: "palette tertiary", label: "Tertiary", sides: ["fg", "bg"] },
-  { role: "palette quaternary", label: "Quaternary", sides: ["fg", "bg"] },
-];
-
 function colorFields(document: BeamerDocumentModel, theme: ResolvedBeamerTheme): DeckInspectorField[] {
-  // The preamble's own `\setbeamercolor`s, latest last; the resolver has
-  // already applied them, so they only decide the origin and the expression.
-  const overrides = scanBeamerColorDeclarations(document).flatMap((event) =>
-    event.kind === "beamer-color" ? [event] : []);
   const canvas = resolveBeamerThemeColor(theme, "background canvas").bg;
-  return COLOR_ROLES.map(({ role, label, sides }) => {
+  const namedColorSwatches = beamerNamedColorSwatches(document, theme);
+  return BEAMER_INSPECTOR_COLOR_ROLES.map(({ role, label, sides }) => {
     const resolved = resolveBeamerThemeColor(theme, role);
-    const own = overrides.filter((event) => normalizeRole(event.role.value) === role);
-    const authored = (side: "fg" | "bg"): string | null => {
-      for (const event of [...own].reverse()) {
-        const entry = [...event.entries].reverse().find((candidate) => candidate.kind === "kv" && candidate.key.trim() === side);
-        if (entry?.kind === "kv") return entry.valueRaw.trim();
-      }
-      return null;
-    };
+    const blocked = colorEditBlocker(document, role);
+    const authored = authoredColorSides(document, role);
     const side = (name: "fg" | "bg"): DeckInspectorColor | null => {
       const css = resolved[name];
-      return css ? { css, expression: authored(name) } : null;
+      const origin = resolveBeamerThemeColorOrigin(theme, role, name);
+      return css || origin ? { css: css ?? "transparent", expression: origin?.expression ?? null, origin: origin ? "preamble" : "theme", ...(origin ? { sourceSpan: origin.span, role: origin.role } : {}) } : null;
     };
     return {
       kind: "color" as const,
       id: `color:${role}`,
       label,
+      role,
+      namedColorSwatches,
+      resetSides: sides.filter(side => authored.has(side)),
       ...(sides.includes("fg") ? { fg: side("fg") } : {}),
       ...(sides.includes("bg") ? { bg: side("bg") } : {}),
       ...(sides.length === 2 && canvas ? { backdrop: canvas } : {}),
-      origin: own.length > 0 ? "preamble" as const : "theme" as const,
-      write: null,
+      origin: sides.some(name => resolveBeamerThemeColorOrigin(theme, role, name) != null) ? "preamble" as const : "theme" as const,
+      write: blocked ? null : { kind: "setColor" as const, role, side: sides[0] ?? "fg" },
+      ...(blocked ? { readOnly: blocked } : {}),
     };
   });
 }
 
-function normalizeRole(raw: string): string {
-  return raw.trim().replace(/\s+/gu, " ");
-}
-
-/** The `aspectratio` values `beamer.cls` defines, in the order of its manual. */
-const ASPECT_RATIOS = [
-  { value: "43", label: "4:3" },
-  { value: "169", label: "16:9" },
-  { value: "1610", label: "16:10" },
-  { value: "149", label: "14:9" },
-  { value: "141", label: "1.41:1 (A4)" },
-  { value: "54", label: "5:4" },
-  { value: "32", label: "3:2" },
-  { value: "2013", label: "20:13" },
-] as const;
-
-const CLASS_FONT_SIZES = ["8", "9", "10", "11", "12", "14", "17", "20"] as const;
-
+/** "" is the class or theme default; choosing it removes the authored setting. */
 function pageFields(document: BeamerDocumentModel, theme: ResolvedBeamerTheme): DeckInspectorField[] {
-  const aspect = classOption(document, "aspectratio") ?? "43";
-  const aspectOptions: Array<{ value: string; label: string }> = [...ASPECT_RATIOS];
+  const options = beamerClassOptionEntries(document);
+  const aspect = options.some(option => option.kind !== "unknown" && option.key === "aspectratio")
+    ? beamerClassOptionValue(document, "aspectratio") ?? "43" : "";
+  const aspectOptions: Array<{ value: string; label: string }> = [{ value: "", label: "Default (4:3)" }, ...BEAMER_ASPECT_RATIOS];
+  const classBlocked = classOptionEditBlocker(document);
+  const navigationBlocked = navigationEditBlocker(document);
   if (!aspectOptions.some((option) => option.value === aspect)) {
     aspectOptions.push({ value: aspect, label: aspect });
   }
+  const shown = theme.templates.navigationSymbols.id !== "beamer/navigation-symbols/none";
   return [
     {
       kind: "enum", id: "aspectratio", label: "Aspect ratio", value: aspect,
-      options: aspectOptions, write: null,
+      options: aspectOptions, write: classBlocked ? null : { kind: "setClassOption", key: "aspectratio" },
+      ...(classBlocked ? { readOnly: classBlocked } : {}),
     },
     {
-      kind: "enum", id: "class-font-size", label: "Base font size", value: beamerClassFontSize(document),
-      options: CLASS_FONT_SIZES.map((size) => ({ value: size, label: `${size} pt` })), write: null,
+      kind: "enum", id: "class-font-size", label: "Font size",
+      value: options.some(option => beamerClassFontOption(option) !== null) ? beamerClassFontSize(document) : "",
+      options: [{ value: "", label: "Default (11 pt)" }, ...BEAMER_CLASS_FONT_SIZES.map((size) => ({ value: size, label: `${size} pt` }))],
+      write: classBlocked ? null : { kind: "setClassOption", key: "font-size" },
+      ...(classBlocked ? { readOnly: classBlocked } : {}),
     },
     {
-      kind: "boolean", id: "navigation-symbols", label: "Navigation symbols",
-      value: theme.templates.navigationSymbols.id !== "beamer/navigation-symbols/none",
-      write: null,
+      kind: "enum", id: "navigation-symbols", label: "Navigation",
+      value: scanBeamerNavigationTemplates(document).length > 0 ? shown ? "shown" : "hidden" : "",
+      options: [
+        { value: "", label: "From theme" },
+        { value: "shown", label: "Symbols shown" },
+        { value: "hidden", label: "Symbols hidden" },
+      ],
+      write: navigationBlocked ? null : { kind: "setNavigationSymbols" },
+      ...(navigationBlocked ? { readOnly: navigationBlocked } : {}),
     },
   ];
-}
-
-function classOption(document: BeamerDocumentModel, key: string): string | null {
-  for (const entry of (document.preamble.documentClass?.options?.value ?? "").split(",")) {
-    const [rawKey, ...rawValue] = entry.split("=");
-    if (rawKey?.trim() === key) {
-      return rawValue.join("=").trim() || null;
-    }
-  }
-  return null;
 }
 
 const METADATA_LABELS: Record<BeamerChromeMetadataField, string> = {
@@ -351,19 +333,22 @@ const METADATA_LABELS: Record<BeamerChromeMetadataField, string> = {
 /**
  * The short forms, as the text the theme prints in its header, footer or
  * sidebar. The long forms belong to the title slide and are edited there; an
- * empty field shows the long form it falls back to as its placeholder.
+ * inherited field shows the full text as its placeholder, and clearing a
+ * field inherits again. An authored empty short form (`[]`) shows "Hidden".
  */
 function headerFooterFields(document: BeamerDocumentModel, theme: ResolvedBeamerTheme): DeckInspectorField[] {
   return beamerChromeMetadataFields(theme).map((name) => {
     const field = document.preamble.metadata[name];
     const long = field?.value.value.trim() ?? "";
+    const blocked = metadataShortEditBlocker(document, name);
     return {
       kind: "text",
       id: `metadata:${name}:short`,
       label: METADATA_LABELS[name],
       value: field?.shortValue?.value ?? "",
-      placeholder: long.length > 0 ? long : "Not set",
-      write: null,
+      placeholder: field?.shortValue ? "Hidden" : long.length > 0 ? long : "Not set",
+      write: blocked ? null : { kind: "setMetadataShort", field: name },
+      ...(blocked ? { readOnly: blocked } : {}),
     };
   });
 }

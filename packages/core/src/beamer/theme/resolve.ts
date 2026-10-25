@@ -1,4 +1,6 @@
 import { requireArrayValue } from "../../utils/collections.js";
+import { parseOptionListRaw } from "../../options/parse.js";
+import type { Span } from "../../ast/types.js";
 import type { Diagnostic } from "../../diagnostics/types.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import type { BeamerDocumentModel, BeamerThemeKind } from "../types.js";
@@ -156,6 +158,26 @@ export function resolveBeamerThemeColor(
   role: string
 ): ResolvedBeamerThemeColor {
   return resolveBeamerColorRecord(theme.colors, theme.colorAliases ?? {}, theme.colorAliasRgb ?? {}, role);
+}
+
+/** Winning authored value, after theme composition, resets and parent inheritance. */
+export function resolveBeamerThemeColorOrigin(
+  theme: ResolvedBeamerTheme,
+  role: string,
+  side: "fg" | "bg",
+  ancestors: ReadonlySet<string> = new Set()
+): { expression: string; span: Span; role: string } | null {
+  if (ancestors.has(role)) return null;
+  const seen = new Set(ancestors); seen.add(role);
+  const color = theme.colors[role];
+  if (!color) return null;
+  const expression = side === "fg" ? color.fgExpression : color.bgExpression;
+  if (expression) return expression.authored ? { expression: expression.value, span: expression.span, role } : null;
+  if (color[side] !== undefined || (side === "fg" ? color.fgMix : color.bgMix)) return null;
+  for (const parent of [...color.parents ?? (color.parent ? [color.parent] : [])].reverse()) {
+    if (resolveBeamerThemeColor(theme, parent)[side] !== undefined) return resolveBeamerThemeColorOrigin(theme, parent, side, seen);
+  }
+  return null;
 }
 
 function resolveBeamerColorRecord(colors: Readonly<Record<string, BeamerThemeColor>>, aliases: Readonly<Record<string, string>>, aliasRgb: Readonly<Record<string, BeamerColorRgb>>, role: string, captureRgb?: (field: "fg" | "bg", channels: BeamerColorRgb | null) => void): ResolvedBeamerThemeColor {
@@ -1832,15 +1854,12 @@ export function parseThemeOptions(
     return {};
   }
   const result: Record<string, string | boolean> = {};
-  for (const rawEntry of source.split(",")) {
-    const [rawKey, ...rawValue] = rawEntry.split("=");
-    const key = rawKey?.trim();
-    if (!key) {
-      continue;
-    }
-    result[key] = rawValue.length > 0
-      ? rawValue.join("=").trim()
-      : true;
+  for (const entry of parseOptionListRaw(`[${source}]`).entries) {
+    if (entry.kind === "unknown") continue;
+    // Updating insertion order also makes repeated exclusive flags last-wins.
+    delete result[entry.key];
+    const raw = entry.kind === "kv" ? entry.valueRaw.trim() : null;
+    result[entry.key] = raw == null ? true : raw.startsWith("{") && raw.endsWith("}") ? raw.slice(1, -1) : raw;
   }
   return result;
 }
@@ -1860,11 +1879,8 @@ function sidebarAggregateOptions(
     height?: string;
   } = {}
 ): Readonly<Record<string, string | boolean>> {
-  const side = options.right === true
-    ? "right"
-    : options.left === true
-      ? "left"
-      : defaults.side ?? "left";
+  const side = Object.keys(options).filter(key => (key === "right" || key === "left") && options[key] === true).at(-1)
+    ?? defaults.side ?? "left";
   return {
     side,
     ...(typeof options.width === "string"

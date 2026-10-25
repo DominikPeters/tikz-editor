@@ -1,6 +1,6 @@
 import { deckPageDerived, deckObjectIndexKey } from "../../deck-page-derived-cache";
 import { deckStepRootKey } from "../../root-key";
-import { useCallback, useEffect, useMemo, useRef, type JSX, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import {
   applyDeckEditAction,
   buildBeamerObjectIndex,
@@ -8,6 +8,8 @@ import {
   buildDeckFrameInspector,
   buildDeckObjectInspector,
   buildDeckSlideContext,
+  scanBeamerDocument,
+  type DeckDocumentEditAction,
   type BeamerFrameLayout,
   type BeamerObjectNode,
   type BeamerThemeCatalogEntry,
@@ -27,6 +29,7 @@ import { DeckField } from "./deck-fields";
 import { DeckDocumentSections, DeckScopeHeader, DeckSlideInfoSection } from "./DeckDocumentSections";
 import { useInspectorPreviewScrub } from "./useInspectorPreviewScrub";
 import css from "./InspectorPanel.module.css";
+import { replaceSelectedDeckGraphics } from "../deck-graphics-replacement";
 
 /**
  * Deck-mode inspector (Stage 3b): renders `DeckInspectorModel` fields for
@@ -43,6 +46,8 @@ import css from "./InspectorPanel.module.css";
  * commit one recorded action computed against that frozen base.
  */
 export function DeckInspectorPanel(): JSX.Element {
+  const [replacementError, setReplacementError] = useState<{ documentId: string; objectId: string | null; message: string } | null>(null);
+  const replacing = useRef(false);
   const dispatch = useEditorStore((s) => s.dispatch);
   const source = useEditorStore((s) => s.source);
   const snapshot = useEditorStore((s) => s.snapshot);
@@ -90,17 +95,21 @@ export function DeckInspectorPanel(): JSX.Element {
 
   // Keep showing the last model while a re-render is in flight so the panel
   // does not flicker to empty between an edit and its reconciled snapshot.
-  const lastModelRef = useRef<DeckInspectorModel | null>(null);
+  const lastModelRef = useRef<{ documentId: string; rootId: string | null; model: DeckInspectorModel } | null>(null);
   if (model) {
-    lastModelRef.current = model;
+    lastModelRef.current = { documentId: activeDocumentId, rootId: activeRootId, model };
   }
-  const rendered = model ?? lastModelRef.current;
+  const currentDocument = useMemo(() => deckDocument && snapshot.source === source
+    ? deckDocument : scanBeamerDocument(source), [deckDocument, snapshot.source, source]);
+  const previous = lastModelRef.current;
+  const rendered = currentDocument.frames.length === 0 ? null : model ??
+    (previous?.documentId === activeDocumentId && previous.rootId === activeRootId ? previous.model : null);
 
-  // Presentation-wide values depend only on the scanned deck, so they show
-  // the last render's document even while a newer one is in flight.
+  // Presentation edits resolve against current source even while rendering
+  // lags behind, and do not require the deck to have any frames.
   const documentModel = useMemo<DeckDocumentInspectorModel | null>(
-    () => (deckDocument ? buildDeckDocumentInspector(deckDocument) : null),
-    [deckDocument]
+    () => buildDeckDocumentInspector(currentDocument),
+    [currentDocument]
   );
   const frameSummary = snapshot.deck?.frames.find((frame) => frame.id === activeRootId) ?? null;
   const slideContext = useMemo<DeckSlideContext | null>(
@@ -118,6 +127,8 @@ export function DeckInspectorPanel(): JSX.Element {
       write: DeckInspectorWrite,
       value: string | number | boolean | null
     ): DeckEditAction | null => {
+      const documentAction = deckDocumentActionForWrite(write, value);
+      if (documentAction) return documentAction;
       if (frameId == null || !fresh) {
         return null;
       }
@@ -178,6 +189,7 @@ export function DeckInspectorPanel(): JSX.Element {
     () => (objectId != null ? [objectId] : []),
     [objectId]
   );
+  const setFrozenInspectorView = useCallback(() => {}, []);
   const { beginNumberLabelScrub } = useInspectorPreviewScrub({
     dispatch,
     selectedSourceIds: selectionIds,
@@ -185,7 +197,7 @@ export function DeckInspectorPanel(): JSX.Element {
     multiModel: null,
     singlePropertyProvenance: {},
     multiPropertyProvenance: {},
-    setFrozenInspectorView: () => {},
+    setFrozenInspectorView,
   });
 
   const scrubBaseRef = useRef<{
@@ -250,7 +262,7 @@ export function DeckInspectorPanel(): JSX.Element {
     [actionFor, activeFrame, beginNumberLabelScrub, dispatch, fresh, rememberSelection, source]
   );
 
-  if (!rendered) {
+  if (!rendered && !documentModel) {
     return (
       <SidePanel className={css.panel ?? ""}>
         <SidePanel.Content>
@@ -261,6 +273,16 @@ export function DeckInspectorPanel(): JSX.Element {
   }
 
   const runCommand = (command: DeckInspectorCommand): void => {
+    if (command.kind === "replaceGraphics") {
+      if (replacing.current) return;
+      replacing.current = true;
+      setReplacementError(null);
+      void replaceSelectedDeckGraphics({ getState: useEditorStore.getState, dispatch, rememberSelection }).then(result => {
+        replacing.current = false;
+        if (result.status === "failed") setReplacementError({ documentId: activeDocumentId, objectId, message: result.reason });
+      });
+      return;
+    }
     if (command.kind === "enterDrawing") {
       if (frameId != null) dispatch({ type: "SET_DECK_OBJECT_SELECTION", frameId, objectId: null });
       dispatch({ type: "SET_ACTIVE_ROOT", rootId: command.rootId });
@@ -274,16 +296,15 @@ export function DeckInspectorPanel(): JSX.Element {
   const applyTheme = (entry: BeamerThemeCatalogEntry): void => {
     dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "deckSetPresentationTheme", name: entry.name } });
   };
-  const frameFieldsDisabled = activeFrame?.frameId !== activeRootId ||
-    activeFrame.step !== Math.min(activeStep, Math.max(1, activeFrame.stepCount));
+  const frameFieldsDisabled = !fresh;
   const fieldList = (
     <fieldset disabled={frameFieldsDisabled} className={css.deckFields}>
-      {rendered.fields.length === 0 ? (
+      {rendered == null || rendered.fields.length === 0 ? (
         <p className={css.hint}>This object has no editable properties yet.</p>
       ) : (
         rendered.fields.map((field) => (
           <DeckField
-            key={field.id}
+            key={`${activeDocumentId}:${objectId ?? frameId}:${field.id}`}
             field={field}
             onCommit={commit}
             onBeginScrub={beginDeckScrub}
@@ -294,13 +315,13 @@ export function DeckInspectorPanel(): JSX.Element {
     </fieldset>
   );
 
-  if (rendered.target === "object") {
+  if (rendered?.target === "object") {
     return (
       <SidePanel className={css.panel ?? ""}>
         <SidePanel.Header>{rendered.title}</SidePanel.Header>
         <SidePanel.Content className={css.content ?? ""}>
           <SidePanel.Section>
-            <SidePanel.SectionBody>{fieldList}</SidePanel.SectionBody>
+            <SidePanel.SectionBody>{fieldList}{replacementError?.documentId === activeDocumentId && replacementError.objectId === objectId ? <p role="alert" className={css.deckReadOnlyReason}>{replacementError.message}</p> : null}</SidePanel.SectionBody>
           </SidePanel.Section>
         </SidePanel.Content>
       </SidePanel>
@@ -310,7 +331,7 @@ export function DeckInspectorPanel(): JSX.Element {
   return (
     <SidePanel className={css.panel ?? ""}>
       <SidePanel.Content className={css.content ?? ""}>
-        <div className={css.deckScope}>
+        {rendered ? <div className={css.deckScope}>
           <DeckScopeHeader
             title={frameSummary ? `Slide ${frameSummary.frameIndex + 1}` : "Slide"}
             detail={frameSummary?.title ?? null}
@@ -321,11 +342,11 @@ export function DeckInspectorPanel(): JSX.Element {
           {slideContext ? (
             <DeckSlideInfoSection context={slideContext} stepCount={frameSummary?.stepCount ?? 1} />
           ) : null}
-        </div>
+        </div> : null}
         {documentModel ? (
           <div className={css.deckScope} data-inspector-panel>
             <DeckScopeHeader title="Presentation" />
-            <DeckDocumentSections model={documentModel} onCommit={commit} onApplyTheme={applyTheme} />
+            <DeckDocumentSections model={documentModel} onCommit={commit} onApplyTheme={applyTheme} onCommand={runCommand} />
           </div>
         ) : null}
       </SidePanel.Content>
@@ -335,6 +356,21 @@ export function DeckInspectorPanel(): JSX.Element {
 
 function formatDeckNumber(value: number): string {
   return String(Number(value.toFixed(4)));
+}
+
+function deckDocumentActionForWrite(write: DeckInspectorWrite, value: string | number | boolean | null): DeckDocumentEditAction | null {
+  if (write.kind === "setColor") return { kind: "deckSetColor", role: write.role, side: write.side, value: value === null ? null : String(value) };
+  // An empty choice or a cleared field returns to the default.
+  if (write.kind === "setClassOption") return { kind: "deckSetClassOption", key: write.key, value: value == null || value === "" ? null : String(value) };
+  if (write.kind === "setNavigationSymbols") return { kind: "deckSetNavigationSymbols", visible: value == null || value === "" ? null : value === "shown" };
+  if (write.kind === "setMetadataShort") return { kind: "deckSetMetadataShort", field: write.field, value: value == null || value === "" ? null : String(value) };
+  if (write.kind === "setTheme") return { kind: "deckSetTheme", themeKind: write.themeKind, name: typeof value === "string" && value.length > 0 ? value : null };
+  if (write.kind === "setThemeOption") return { kind: "deckSetThemeOption", key: write.key, value: value === true ? true : typeof value === "string" && value.trim().length > 0 ? value.trim() : null };
+  if (write.kind === "setThemeFlagChoice") {
+    const key = typeof value === "string" && write.keys.includes(value) ? value : null;
+    return { kind: "deckSetThemeOption", key: key ?? write.keys[0] ?? "", value: key ? true : null };
+  }
+  return null;
 }
 
 function deckActionForWrite(
@@ -352,6 +388,17 @@ function deckActionForWrite(
       : String(value);
   };
   switch (write.kind) {
+    case "setListDefaultOverlay":
+      return objectId == null ? null : { kind: "deckSetListDefaultOverlay", frameId, objectId, spec: typeof value === "string" && value.length > 0 ? value : null };
+    case "setListLabelTemplate":
+      return objectId == null ? null : { kind: "deckSetListLabelTemplate", frameId, objectId, template: typeof value === "string" && value.length > 0 ? value : null };
+    case "setColor":
+    case "setClassOption":
+    case "setNavigationSymbols":
+    case "setMetadataShort":
+    case "setTheme":
+    case "setThemeOption":
+    case "setThemeFlagChoice": return deckDocumentActionForWrite(write, value);
     case "renameEnvironment":
       return objectId == null
         ? null

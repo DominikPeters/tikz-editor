@@ -4,7 +4,7 @@ Status: proposal (2026-10-25), agreed with Dominik in outline: no inspector
 tabs; slide plus presentation sections when nothing is selected; theme
 gallery in a popover; the theme is reachable only from the inspector with
 nothing selected (no menu command). Work is phased UI-first (see Phasing).
-Phases 1–3 are implemented (2026-10-25).
+All four phases are implemented (2026-10-25).
 
 ## Problem
 
@@ -136,11 +136,14 @@ Swatches for the roles that drive most of a theme:
 - `palette primary` … `palette quaternary`
 - `background canvas`, `normal text`
 
-Each swatch shows the effective color and its origin: the theme, or a
-preamble override (with a jump to its line). Editing writes or rewrites a
-`\setbeamercolor{role}{fg=…}` / `bg=…`; **Reset** removes the override.
-Named colors from `\definecolor` / `\colorlet` appear in the picker as the
-deck's palette, and picking one writes the name, not its RGB value.
+Each role is one row: a color picker for a one-sided role, or text and fill
+color wells side by side for a palette role (the value in the tooltip). A
+value from the theme reads in italics. Editing writes or rewrites a
+`\setbeamercolor{role}{fg=…}` / `bg=…`; a side the preamble sets offers
+**Use Theme Color** at the bottom of its picker, which removes that side's
+authored keys. Named colors from `\definecolor` / `\colorlet` appear in the
+picker as the deck's palette, and picking one writes the name, not its RGB
+value.
 
 Because roles inherit (`structure` feeds many others through `parent` and
 deferred mixes), the swatch for a role that has no override shows the
@@ -150,13 +153,15 @@ swatches. Overrides are written after the last theme command, since a later
 
 ### Page
 
-- **Aspect ratio**: the `aspectratio` class option (43, 169, 1610, 149, 54,
-  32, 141; the table in `geometry.ts`).
-- **Base font size**: the class font size option (8pt–20pt; the profiles in
-  `theme/font-sizes.ts`).
-- **Navigation symbols**: a checkbox writing
-  `\setbeamertemplate{navigation symbols}{}` or removing it. Metropolis and
-  moloch already hide them; the checkbox reflects the resolved state.
+Each is a pop-up whose first choice is the default; choosing it removes the
+authored setting, as clearing a field does in the TikZ inspector.
+
+- **Aspect ratio**: the `aspectratio` class option (Default (4:3), then
+  43, 169, 1610, 149, 141, 54, 32 and 2013).
+- **Font size**: the exclusive class font flags (Default (11 pt), then
+  8pt–20pt; the profiles in `theme/font-sizes.ts`).
+- **Navigation**: From theme, Symbols shown (`[default]`, written after the
+  theme so it overrides metropolis and moloch) or Symbols hidden (`{}`).
 
 ### Header & Footer
 
@@ -180,6 +185,10 @@ inspector shows inherited values. That makes the common problem visible: a
 long form with `\LARGE` or `\large` for the title page is printed in the
 footer at that size too, which is why authors set short forms. A test renders
 every catalog theme and checks the mapping against the chrome's text spans.
+
+Clearing a field removes the short form, so it falls back to the long form
+again. An authored empty short form (`\title[]{…}`) shows "Hidden"; the
+inspector reads it but does not write one.
 
 ## Theme gallery popover
 
@@ -254,28 +263,34 @@ reselects it once the edited frame has rendered.
 
 ## Core: document-scoped edit actions
 
-New members of the deck action family, pure
-`(source, document model, action) → EditActionResult` like the existing ones,
-but without a frame id:
+Members of the deck action family without a frame id, applied by
+`applyDeckDocumentEditAction(source, action)` against the current source, so
+they work while a frame is rendering and in a deck with no frames:
 
-- `deckSetTheme { kind: BeamerThemeKind; name: string | null; options }`
-  (`null` removes the line)
-- `deckSetThemeOption { kind; key; value | null }`
-- `deckSetClassOption { key; value | null }`
-- `deckSetMetadata { field: BeamerMetadataFieldName; short?; long? }`
-- `deckSetBeamerColor { role; fg?; bg? }` and `deckResetBeamerColor { role }`
-- `deckSetNavigationSymbols { visible }`
+- `deckSetPresentationTheme { name }`, `deckSetThemeOption { key; value }`
+  and `deckSetTheme { themeKind; name | null }` (`document-theme-edits.ts`)
+- `deckSetClassOption`, `deckSetNavigationSymbols { visible | null }` and
+  `deckSetMetadataShort { field; value | null }` (`document-page-edits.ts`)
+- `deckSetColor { role; side; value | null }` (`document-color-edits.ts`)
+
+`null` always returns to the default by removing authored source. Option
+rewrites go through `option-edits.ts`, which keeps comments, untouched
+entries and line endings.
 
 Insertion and ordering rules:
 
 - Beamer composes theme commands in source order, so an edit targets the
-  **last** command of that kind. If an earlier command is shadowed by a later
-  one, the inspector says so instead of editing a line with no effect.
+  **last** command of that kind. A component theme moves only when a later
+  `\usetheme` would load over it, and then just past that `\usetheme`, never
+  past the author's own declarations.
 - Missing commands are inserted after the last `\use*theme` line, or after
-  `\documentclass` (and its `\usepackage` block) if there is none.
-- Commands inside macro definitions, groups or `\AtBeginDocument` are read
-  but never rewritten; the field shows as read-only with the reason. This
-  matches how `template-declarations.ts` already treats grouped templates.
+  `\documentclass` (and its `\usepackage` block) if there is none; color
+  overrides go after the last theme command and named-color definition.
+- Commands inside macro definitions are stored code and left alone. Commands
+  inside groups, hooks or conditionals, computed names and redefined
+  commands block the edit (`preamble-edit-context.ts`): the field is disabled,
+  and the reason with a Show in Source link appears once, under the first
+  field it disables.
 
 ## App
 
@@ -287,7 +302,7 @@ Insertion and ordering rules:
   alongside `buildDeckFrameInspector`), reading values from the same spans the
   actions rewrite, as Stage 3b established.
 - A color field kind joins `enum` / `text` / `number` / `boolean`, with an
-  origin (theme or override) and a reset.
+  origin (theme or override) and the sides that have a reset.
 
 ## Non-goals
 
@@ -332,19 +347,33 @@ take flags, environment options reach `columns` and `column` with exclusive,
 case-sensitive flags. An e2e test covers the writes, Edit Drawing and Show
 in Source.
 
-**Phase 4: source writes.** The document-scoped actions above with their
-insertion, shadowing and guard rules; theme options, component themes, class
-options, color overrides, navigation symbols, metadata short forms; the
-remaining object-field writes. Round-trip tests per action, and the actions
-added to the edit-action fuzzer.
+**Phase 4: source writes.** Implemented 2026-10-25 (by Codex, then
+revised): the document-scoped actions above, theme options and component
+themes, class options, navigation symbols, short forms and colors; for
+objects, list reveal and enumerate labels (`list-head.ts`, either argument
+order, written as Beamer's `[<overlay>][labels]`) and image Replace….
+
+- The renderer now draws literal enumerate mini templates (`(a)`, `i.`,
+  `{Step }1`; `text/tex/enumerate-template.ts`), enabled by Beamer's list
+  profile. Converting enumerate to itemize drops the template.
+- Replace… keeps sizing and crop options and drops `page`, which belonged to
+  the old file. On the desktop the path is relative to the document where
+  possible. In the browser the image is kept in browser storage
+  under a `__tikz_assets__/…` path; exporting the `.tex` does not bundle it.
+- Metadata scanning now takes the last executing preamble declaration, as
+  TeX does, rather than the first; the renderer and the inspector share it.
+- Tests: round trips, patch replay and idempotence per action
+  (`beamer-document-theme-edits`, `beamer-page-edit-actions`,
+  `beamer-color-edit-actions`, `beamer-list-image-edits`), deterministic
+  mixed action sequences that render after every step, and e2e coverage in
+  `beamer-presentation-inspector`, `beamer-color-inspector` and
+  `beamer-list-image-inspector`. The TikZ edit-action fuzzer does not
+  generate deck actions.
+- Not done: a desktop (Tauri) smoke test of Replace….
 
 ## Open questions
 
 - Whether the gallery popover should also offer color themes as a second
   row of swatches, or leave them to Advanced.
-- Whether the theme override for previews should also carry color overrides
-  (previewing a picked color before committing), or whether colors commit
-  immediately. Color events are read from source spans, so overriding them
-  at the model level is harder than overriding theme uses.
-- Whether the color row should get a reset affordance now (disabled) or only
-  with phase 4's writes.
+- Whether to add canvas hover previews for colors later; color choices
+  commit directly for now.

@@ -1,5 +1,5 @@
 import { applyEditAction, type EditAction, type EditActionResult } from "@tikz-editor/core/edit/actions";
-import { applyDeckEditAction, beamerOverlayPicturesIn, isDeckEditAction, scanBeamerDocument, type DeckEditAction } from "@tikz-editor/core/beamer/index";
+import { applyDeckEditAction, applyDeckDocumentEditAction, beamerOverlayPicturesIn, isDeckDocumentEditAction, isDeckEditAction, scanBeamerDocument, type DeckEditAction } from "@tikz-editor/core/beamer/index";
 import { createBeamerSyntaxContext } from "@tikz-editor/core/beamer/syntax";
 import { createEditGeometrySession, type EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
@@ -43,6 +43,7 @@ export function executeDocumentEdit(
   const nested = documentKindForSource(source) === "beamer" && (ref?.kind === "beamer-frame-tikz" || slideOverlay);
   const deck = documentKindForSource(source) === "beamer" && ref?.kind !== "beamer-frame-tikz";
   if (isDeckEditAction(action)) {
+    if (deck && isDeckDocumentEditAction(action)) return applyDeckDocumentEditAction(source, action);
     const frame = snapshot.deck?.activeFrame;
     return deck && frame && snapshot.source === source
       ? applyDeckEditAction(source, frame.layout, action)
