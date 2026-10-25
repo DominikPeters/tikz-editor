@@ -34,6 +34,16 @@
   height: calc(var(--app-ui-scale, 1) * 13px);
 }
 
+/* The text color as a letter on the fill it is drawn over. */
+.triggerSwatchGlyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  font-weight: 700;
+  line-height: 1;
+}
+
 .triggerSwatchNone {
   position: relative;
   border-color: var(--border);

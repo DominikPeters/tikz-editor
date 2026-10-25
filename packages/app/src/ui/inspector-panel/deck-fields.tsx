@@ -242,7 +242,7 @@ function DeckNumberField(props: {
 
 /**
  * A Beamer color role: one picker per side the role is shown with, text
- * color first. A value reads as the preamble wrote it, or in italics when it
+ * color first, drawn as a letter on the fill. A value reads as the preamble wrote it, or in italics when it
  * comes from the theme (the inspector's convention for inherited values); a
  * side the preamble sets offers "Use Theme Color" in its picker.
  */
@@ -253,6 +253,9 @@ function DeckColorField(props: {
   const { field, onCommit } = props;
   const both = field.fg !== undefined && field.bg !== undefined;
   const sides = (["fg", "bg"] as const).filter(side => field[side] !== undefined);
+  // The text well draws its letter over the role's fill, or over the slide
+  // background where the role has none, as the theme paints it.
+  const fill = field.bg?.css && field.bg.css !== "transparent" ? field.bg.css : field.backdrop ?? null;
   return (
     <div className={css.property}>
       <div className={css.propertyLabel}>{field.label}</div>
@@ -271,6 +274,7 @@ function DeckColorField(props: {
                 syntaxValue={color?.expression === "" ? "none" : color?.expression ?? null}
                 triggerLabelClassName={color?.origin === "theme" || inherited ? css.provenanceValue ?? "" : ""}
                 preserveNamedColorSpelling commitOnRelease swatchOnly={both} disabled={field.write === null}
+                {...(both && side === "fg" ? { glyphBackground: fill } : {})}
                 {...(field.write && field.resetSides.includes(side) ? { resetLabel: "Use Theme Color", onReset: () => { onCommit(write, null); } } : {})}
                 onChange={value => { onCommit(write, value === "none" ? "" : value); }} />
             </div>

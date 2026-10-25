@@ -55,6 +55,8 @@ export type ColorPickerProps = {
   commitOnRelease?: boolean;
   /** A color well: the swatch fills the trigger and the value moves to its tooltip. */
   swatchOnly?: boolean;
+  /** For a text color well: the well shows an "A" in the color on this fill. */
+  glyphBackground?: string | null;
   /** An entry below the picker that removes the authored value. */
   resetLabel?: string;
   onReset?: () => void;
@@ -74,6 +76,7 @@ export function ColorPickerField({
   preserveNamedColorSpelling = false,
   commitOnRelease = false,
   swatchOnly = false,
+  glyphBackground = null,
   resetLabel,
   onReset,
   onChange
@@ -99,6 +102,8 @@ export function ColorPickerField({
   const displaySwatchColor = resolvedValue ?? (displaySwatchToken
     ? cssColorForToken(displaySwatchToken, namedColorLookup)
     : null);
+  const swatchNone = displayLabel === "none" || mixed;
+  const glyph = swatchOnly && glyphBackground != null && !swatchNone;
 
   useEffect(() => {
     if (!open) {
@@ -207,13 +212,18 @@ export function ColorPickerField({
             className={[
               css.triggerSwatch,
               swatchOnly ? css.triggerSwatchWell : "",
-              displayLabel === "none" || mixed ? css.triggerSwatchNone : ""
+              glyph ? css.triggerSwatchGlyph : "",
+              swatchNone ? css.triggerSwatchNone : ""
             ]
               .filter(Boolean)
               .join(" ")}
-            style={displaySwatchColor != null ? { background: displaySwatchColor } : undefined}
+            style={glyph
+              ? { background: glyphBackground, color: displaySwatchColor ?? "inherit" }
+              : displaySwatchColor != null ? { background: displaySwatchColor } : undefined}
             aria-hidden="true"
-          />
+          >
+            {glyph ? "A" : null}
+          </span>
           {swatchOnly ? null : <span className={[css.triggerLabel, triggerLabelClassName ?? ""].filter(Boolean).join(" ")}>{displayLabel}</span>}
         </span>
         <span className={css.triggerCaret} aria-hidden="true">
