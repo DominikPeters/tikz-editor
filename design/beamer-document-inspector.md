@@ -2,7 +2,8 @@
 
 Status: proposal (2026-10-25), agreed with Dominik in outline: no inspector
 tabs; slide plus presentation sections when nothing is selected; theme
-gallery in a popover.
+gallery in a popover; the theme is reachable only from the inspector with
+nothing selected (no menu command). Work is phased UI-first (see Phasing).
 
 ## Problem
 
@@ -48,11 +49,9 @@ the groups are `SidePanel.Section`s and collapsible; collapsed state persists
 per user (not per document), so someone who never touches title metadata
 collapses it once.
 
-The cost of this layout is that the theme is out of reach while an object is
-selected. A menu command **Theme…** opens the gallery popover regardless of
-selection. There is no Format menu today (File, Edit, Path, Insert, View,
-Present, Help); placing it under View or introducing Format is an open
-question.
+The theme is out of reach while an object is selected; that is accepted.
+Escape or a click on empty canvas brings it back. There is no **Theme…** menu
+command.
 
 ## This slide
 
@@ -160,21 +159,25 @@ the inspector does not try to model author lists.
 
 ## Theme gallery popover
 
-Opened from **Change…** on the theme card or from the **Theme…** menu
-command. Wide enough for a grid of thumbnails; the inspector is too narrow.
+Opened from **Change…** on the theme card. Wide enough for a grid of
+thumbnails; the inspector is too narrow.
 
 - Each tile renders **the user's own deck**, the title slide and the current
   slide, under that theme. Generic sample slides would not show how the
   user's long title or three-level itemize looks.
 - Tiles are grouped as in Beamer's theme matrix: no navigation, tree,
   sidebar, mini frames, section/subsection tables, plus the modern themes.
-- Hovering a tile previews it on the canvas through `SET_SOURCE_TRANSIENT`,
-  the path label scrubs already use; leaving restores the source. Clicking
-  commits one undoable action.
-- Rendering runs in the thumbnail worker against a substituted source (the
-  same document with its theme lines rewritten). Cache by theme id plus a
-  hash of the preamble and the two frames. Roughly 30 themes × 2 frames;
-  render visible tiles first.
+- Hovering a tile previews it on the canvas; leaving restores the current
+  theme. Clicking commits one undoable action.
+- Previews never touch the source. `resolveBeamerTheme` works from the
+  document model (`document.preamble.themes` in source order), so a preview
+  is a **theme override**: the same document model with its theme-use list
+  replaced by a synthetic one, passed through the render entry point. This
+  keeps hover out of undo, dirty state and the source panel, and lets the
+  gallery exist before any source rewriting does.
+- Thumbnails render in the thumbnail worker with the same override. Cache by
+  theme id plus a hash of the preamble and the two frames. Roughly 30 themes
+  × 2 frames; render visible tiles first.
 - Switching an aggregate theme keeps the user's color overrides and keeps
   options only where the new theme reads the same key.
 
@@ -240,11 +243,50 @@ Insertion and ordering rules:
 - Authoring or exporting custom themes.
 - Offering themes the native renderer cannot resolve.
 
+## Phasing
+
+UI design work comes first, while it is cheap to change; source rewriting
+comes last. Each UI phase ends with light and dark screenshots for review
+before the next one starts. Until phase 4, a control whose write does not
+exist yet is shown disabled with its real current value, so the layout is
+judged with real decks rather than placeholder data.
+
+**Phase 1: inspector layout and read path.** `buildDeckDocumentInspector`
+reading current values from the document model: theme and options, color
+roles with origin, aspect ratio, class font size, navigation symbols, title
+metadata with short forms. The panel's selection-driven structure, the
+distinct scope headers, collapsible sections with persisted state, the theme
+card, and the new color field control (swatch, origin, reset). Frame fields
+that are plain frame options (`shrink`, `allowframebreaks`,
+`noframenumbering`, `standout`) are writable already through
+`deckSetFrameOption`; the read-only slide context (section, steps, notes,
+diagnostics) is in this phase too.
+
+**Phase 2: theme gallery popover.** The popover layout and grouping, the
+theme override through the render entry point, worker thumbnails and their
+cache, hover preview on the canvas. Click-to-apply uses the narrowest
+possible write: replace the name in the last `\usetheme`, or insert one line
+after `\documentclass` when there is none. Shadowing and guard rules wait
+for phase 4.
+
+**Phase 3: object field UI.** The new object fields (list reveal, columns
+container, image path and options, Edit drawing, overlay spec on more kinds,
+unsupported content view), with writes only where an existing deck action
+already covers them.
+
+**Phase 4: source writes.** The document-scoped actions above with their
+insertion, shadowing and guard rules; theme options, component themes, class
+options, color overrides, navigation symbols, metadata short forms; the
+remaining object-field writes. Round-trip tests per action, and the actions
+added to the edit-action fuzzer.
+
 ## Open questions
 
-- Menu placement of **Theme…**: View, or a new Format menu that could also
-  hold text formatting later.
 - Whether the gallery popover should also offer color themes as a second
   row of swatches, or leave them to Advanced.
+- Whether the theme override for previews should also carry color overrides
+  (previewing a picked color before committing), or whether colors commit
+  immediately. Color events are read from source spans, so overriding them
+  at the model level is harder than overriding theme uses.
 - Whether title info belongs under Presentation or should appear in the
   object inspector when the title slide's title block is selected.
