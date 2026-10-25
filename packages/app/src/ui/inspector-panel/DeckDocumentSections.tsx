@@ -197,9 +197,6 @@ export function DeckDocumentSections(props: {
         <SidePanel.Section collapseId="deck-inspector:header-footer">
           <SidePanel.SectionHeader>Header &amp; Footer</SidePanel.SectionHeader>
           <SidePanel.SectionBody>
-            <p className={css.deckSectionNote}>
-              Shorter text for the theme&rsquo;s header, footer or sidebar. Empty fields use the title slide&rsquo;s text.
-            </p>
             <div className={css.deckFallbackFields}>{fields(model.headerFooter)}</div>
           </SidePanel.SectionBody>
         </SidePanel.Section>

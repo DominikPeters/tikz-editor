@@ -202,7 +202,6 @@ export function ThemeGalleryPopover(props: {
     >
       <div className={css.header}>
         <span className={css.title}>Themes</span>
-        <span className={css.subtitle}>Point at a theme to preview it on the slide.</span>
       </div>
       <div className={css.scroll}>
         {GROUPS.map((group) => (

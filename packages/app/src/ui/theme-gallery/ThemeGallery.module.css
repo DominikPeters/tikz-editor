@@ -20,8 +20,6 @@
 
 .header {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
   padding: 9px 12px 8px;
   border-bottom: 1px solid var(--separator);
   -webkit-user-select: none;
@@ -31,11 +29,6 @@
 .title {
   font-size: calc(var(--app-ui-scale, 1) * 12px);
   font-weight: 600;
-}
-
-.subtitle {
-  font-size: calc(var(--app-ui-scale, 1) * 10px);
-  color: var(--label-secondary);
 }
 
 .scroll {

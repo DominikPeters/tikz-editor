@@ -956,13 +956,6 @@
   font-style: italic;
 }
 
-.deckSectionNote {
-  margin: 0 0 4px;
-  font-size: calc(var(--app-ui-scale, 1) * 10px);
-  line-height: 1.35;
-  color: var(--label-secondary);
-}
-
 .deckInfoValue {
   display: flex;
   align-items: baseline;
