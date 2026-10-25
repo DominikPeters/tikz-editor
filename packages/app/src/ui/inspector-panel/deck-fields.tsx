@@ -1,6 +1,7 @@
 import { useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import type {
   DeckInspectorColor,
+  DeckInspectorCommand,
   DeckInspectorField,
   DeckInspectorWrite,
 } from "@tikz-editor/core/beamer/index";
@@ -21,8 +22,9 @@ export function DeckField(props: {
   field: DeckInspectorField;
   onCommit: DeckFieldCommit;
   onBeginScrub?: DeckFieldScrub;
+  onCommand?: (command: DeckInspectorCommand) => void;
 }): JSX.Element {
-  const { field, onCommit, onBeginScrub } = props;
+  const { field, onCommit, onBeginScrub, onCommand } = props;
   const write = field.write;
   const commit = (value: string | number | boolean | null): void => {
     if (write) onCommit(write, value);
@@ -62,6 +64,27 @@ export function DeckField(props: {
       return <DeckNumberField field={field} onCommit={commit} {...(onBeginScrub ? { onBeginScrub } : {})} />;
     case "color":
       return <DeckColorField field={field} />;
+    case "button":
+      return (
+        <div className={`${css.property} ${css.deckBooleanProperty}`}>
+          <button
+            type="button"
+            className={css.deckCommandButton}
+            disabled={onCommand == null}
+            onClick={() => { onCommand?.(field.command); }}
+          >
+            {field.label}
+          </button>
+        </div>
+      );
+    case "message":
+      return <p className={css.deckObjectMessage}>{field.text}</p>;
+    case "code":
+      return (
+        <div className={`${css.property} ${css.deckBooleanProperty}`}>
+          <pre className={css.deckCode} aria-label={field.label}>{field.text}</pre>
+        </div>
+      );
   }
 }
 
@@ -156,7 +179,7 @@ function DeckNumberField(props: {
           min={field.min}
           max={field.max}
           value={draft ?? (field.value != null ? String(field.value) : "")}
-          placeholder={field.value == null ? "Off" : undefined}
+          placeholder={field.value == null ? field.placeholder ?? "Auto" : undefined}
           disabled={field.write == null}
           onChange={(event) => { setDraft(event.currentTarget.value); }}
           onBlur={(event) => {

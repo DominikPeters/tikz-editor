@@ -4,7 +4,7 @@ Status: proposal (2026-10-25), agreed with Dominik in outline: no inspector
 tabs; slide plus presentation sections when nothing is selected; theme
 gallery in a popover; the theme is reachable only from the inspector with
 nothing selected (no menu command). Work is phased UI-first (see Phasing).
-Phases 1 and 2 are implemented (2026-10-25).
+Phases 1–3 are implemented (2026-10-25).
 
 ## Problem
 
@@ -219,24 +219,38 @@ Opened from **Change…** on the theme card
   (`[right,width=2cm]{Berkeley}` → `{PaloAlto}` keeps both; moloch's
   `progressbar` is dropped for Madrid, along with the empty bracket).
 
-## Object fields to add
+## Object fields
 
-Independent of the document work, the gaps visible in `deck-inspector.ts`:
+Built in phase 3 (`deck-inspector.ts`). "Live" fields write now; the others
+show their real value, disabled, until phase 4.
 
-- **List**: "Reveal one by one" toggle (`[<+->]` on the environment; listed in
-  `beamer-editor.md` but not built), enumerate label style.
-- **Columns** container (no fields today): `t`/`c`/`b` alignment,
-  `onlytextwidth`, `totalwidth`.
-- **Image**: file path with **Replace…**, `keepaspectratio`, `angle`,
-  trim/clip.
-- **Drawing**: **Edit drawing** button entering the embedded TikZ editing
-  session.
-- **Overlay spec** on every object kind that carries one, not only items and
-  blocks.
-- **Unsupported content**: the reason, the source excerpt and **Show in
-  source**, instead of "no editable properties yet".
+- **List**: type (live); **Reveal** — all at once, one by one (`<+->`), one
+  by one highlighted (`<+-| alert@+>`), or the authored spec; and for
+  enumerate the **Labels** template (`[(a)]`). Both read the list's optional
+  arguments after `\begin{…}`; writing them waits for phase 4 (the two
+  optional arguments interact).
+- **Columns**: **Alignment** (center, top `T`, first baseline `t`, bottom),
+  **Total width**, **Only text width** — all live. **Column**: width (live)
+  and alignment, with "Same as columns" for none (live). Alignment flags are
+  exclusive and case-sensitive (`T` is not `t`), so option lists now keep the
+  authored key spelling beside the lowercased one.
+- **Image**: **File** (read-only), width, height, scale, **Page** for PDFs,
+  **Keep aspect ratio**, **Trim**, **Clip to trim** — all live but the file.
+  Not offered because the preview does not draw them: `angle`, and an overlay
+  spec (`\includegraphics<2->` currently makes the image disappear from the
+  preview; a fidelity gap). **Replace…** waits for phase 4.
+- **Drawing**: scale (live) and **Edit Drawing**, which enters the picture
+  as Enter/F2 on the canvas does.
+- **Unsupported content**: the renderer's reason as a warning, the source
+  excerpt, and **Show in Source**, which opens the source panel at it.
 - Later: text-run selection (size commands, `\alert`, color). This needs a
   text-run node in the object index first.
+
+An inspector edit can rename the object it edits: an image's id ends in its
+text range, so a longer option list gives it a new id, and the selection
+used to drop (true of the existing width field too). The panel now remembers
+the edited object's kind and start (an object edit never moves its start) and
+reselects it once the edited frame has rendered.
 
 ## Core: document-scoped edit actions
 
@@ -312,10 +326,11 @@ or insert one after the `\documentclass` line. `deckSetPresentationTheme` is
 the first document-scoped deck action; it ignores the rendered frame. Phase 4
 adds the shadowing diagnostics and the other component kinds.
 
-**Phase 3: object field UI.** The new object fields (list reveal, columns
-container, image path and options, Edit drawing, overlay spec on more kinds,
-unsupported content view), with writes only where an existing deck action
-already covers them.
+**Phase 3: object field UI.** Implemented 2026-10-25, as described under
+Object fields. The live writes are existing actions widened: image options
+take flags, environment options reach `columns` and `column` with exclusive,
+case-sensitive flags. An e2e test covers the writes, Edit Drawing and Show
+in Source.
 
 **Phase 4: source writes.** The document-scoped actions above with their
 insertion, shadowing and guard rules; theme options, component themes, class

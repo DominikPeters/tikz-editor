@@ -1,6 +1,6 @@
 import { deckPageDerived, deckObjectIndexKey } from "../../deck-page-derived-cache";
 import { deckStepRootKey } from "../../root-key";
-import { useCallback, useMemo, useRef, type JSX, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import {
   applyDeckEditAction,
   buildBeamerObjectIndex,
@@ -9,15 +9,19 @@ import {
   buildDeckObjectInspector,
   buildDeckSlideContext,
   type BeamerFrameLayout,
+  type BeamerObjectNode,
   type BeamerThemeCatalogEntry,
   type DeckDocumentInspectorModel,
   type DeckEditAction,
+  type DeckInspectorCommand,
   type DeckInspectorField,
   type DeckInspectorModel,
   type DeckInspectorWrite,
   type DeckSlideContext,
 } from "@tikz-editor/core/beamer/index";
+import { Actions } from "flexlayout-react";
 import { useEditorStore } from "../../store/store";
+import { getDockLayoutHandle } from "../DockLayout";
 import { SidePanel } from "../SidePanel";
 import { DeckField } from "./deck-fields";
 import { DeckDocumentSections, DeckScopeHeader, DeckSlideInfoSection } from "./DeckDocumentSections";
@@ -44,6 +48,7 @@ export function DeckInspectorPanel(): JSX.Element {
   const snapshot = useEditorStore((s) => s.snapshot);
   const deckObjectSelection = useEditorStore((s) => s.deckObjectSelection);
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
+  const sourceRevision = useEditorStore((s) => s.sourceRevision);
 
   const activeFrame = snapshot.deck?.activeFrame ?? null;
   const deckDocument = snapshot.deck?.document;
@@ -75,7 +80,9 @@ export function DeckInspectorPanel(): JSX.Element {
       return null;
     }
     if (selectedNode) {
-      return buildDeckObjectInspector(source, selectedNode);
+      // An unsupported object's layout item says why the preview cannot draw it.
+      const message = activeFrame.layout.items.find((item) => item.id === selectedNode.id)?.message;
+      return buildDeckObjectInspector(source, selectedNode, message === undefined ? {} : { message });
     }
     // The render's scan of the deck, rather than scanning it again here.
     return buildDeckFrameInspector(source, activeFrame.frameId, deckDocument);
@@ -119,14 +126,52 @@ export function DeckInspectorPanel(): JSX.Element {
     [frameId, fresh, objectId]
   );
 
+  // Some object ids carry source offsets (an image's ends in its text
+  // range), so an edit that changes the object's length renames it. Object
+  // edits never move its start: remember kind and start, and reselect the
+  // object found there once the edited frame has rendered.
+  const reselectRef = useRef<{
+    documentId: string;
+    frameId: string;
+    kind: BeamerObjectNode["kind"];
+    from: number;
+    /** The pre-edit source, whose render must not settle the reselect. */
+    sourceBefore: string;
+  } | null>(null);
+  const rememberSelection = useCallback((): void => {
+    reselectRef.current = selectedNode && frameId != null
+      ? { documentId: activeDocumentId, frameId, kind: selectedNode.kind, from: selectedNode.sourceSpan.from, sourceBefore: source }
+      : null;
+  }, [activeDocumentId, frameId, selectedNode, source]);
+  useEffect(() => {
+    const pending = reselectRef.current;
+    if (!pending || !fresh || source === pending.sourceBefore) {
+      return;
+    }
+    reselectRef.current = null;
+    if (selectedNode || pending.documentId !== activeDocumentId || pending.frameId !== activeFrame.frameId) {
+      return;
+    }
+    const index = deckPageDerived(activeFrame, source, deckObjectIndexKey, () => buildBeamerObjectIndex({
+      items: activeFrame.layout.items,
+      paragraphs: activeFrame.layout.paragraphs,
+      source,
+    }));
+    const node = index.nodes.find((candidate) => candidate.kind === pending.kind && candidate.sourceSpan.from === pending.from);
+    if (node) {
+      dispatch({ type: "SET_DECK_OBJECT_SELECTION", frameId: pending.frameId, objectId: node.id });
+    }
+  }, [activeDocumentId, activeFrame, dispatch, fresh, selectedNode, source]);
+
   const commit = useCallback(
     (write: DeckInspectorWrite, value: string | number | boolean | null): void => {
       const action = actionFor(write, value);
       if (action) {
+        rememberSelection();
         dispatch({ type: "APPLY_EDIT_ACTION", action });
       }
     },
-    [actionFor, dispatch]
+    [actionFor, dispatch, rememberSelection]
   );
 
   const selectionIds = useMemo(
@@ -190,6 +235,7 @@ export function DeckInspectorPanel(): JSX.Element {
           // the precomputed result applies against the current document.
           const built = buildResult(next);
           if (built) {
+            rememberSelection();
             dispatch({
               type: "APPLY_EDIT_ACTION",
               action: built.action,
@@ -201,7 +247,7 @@ export function DeckInspectorPanel(): JSX.Element {
         },
       });
     },
-    [actionFor, activeFrame, beginNumberLabelScrub, dispatch, fresh, source]
+    [actionFor, activeFrame, beginNumberLabelScrub, dispatch, fresh, rememberSelection, source]
   );
 
   if (!rendered) {
@@ -214,6 +260,17 @@ export function DeckInspectorPanel(): JSX.Element {
     );
   }
 
+  const runCommand = (command: DeckInspectorCommand): void => {
+    if (command.kind === "enterDrawing") {
+      if (frameId != null) dispatch({ type: "SET_DECK_OBJECT_SELECTION", frameId, objectId: null });
+      dispatch({ type: "SET_ACTIVE_ROOT", rootId: command.rootId });
+      return;
+    }
+    const dock = getDockLayoutHandle();
+    if (dock && !dock.getModel().getNodeById("source")) dock.togglePanel("source");
+    dock?.getModel().doAction(Actions.selectTab("source"));
+    dispatch({ type: "REVEAL_SOURCE", documentId: activeDocumentId, sourceRevision, span: command.span });
+  };
   const applyTheme = (entry: BeamerThemeCatalogEntry): void => {
     dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "deckSetPresentationTheme", name: entry.name } });
   };
@@ -230,6 +287,7 @@ export function DeckInspectorPanel(): JSX.Element {
             field={field}
             onCommit={commit}
             onBeginScrub={beginDeckScrub}
+            onCommand={runCommand}
           />
         ))
       )}
@@ -334,6 +392,24 @@ function deckActionForWrite(
             key: write.key,
             value: dimension(write.suffix),
           };
+    case "setGraphicsFlag":
+      return objectId == null
+        ? null
+        : { kind: "deckSetGraphicsOption", frameId, objectId, key: write.key, value: value === true ? true : null };
+    case "setEnvironmentFlag":
+      return objectId == null
+        ? null
+        : { kind: "deckSetEnvironmentOption", frameId, objectId, key: write.key, value: value === true ? true : null };
+    case "setEnvironmentFlagChoice": {
+      if (objectId == null) {
+        return null;
+      }
+      // "" clears every flag of the choice; a flag replaces the others.
+      const flag = typeof value === "string" ? value : "";
+      return flag.length > 0
+        ? { kind: "deckSetEnvironmentOption", frameId, objectId, key: flag, value: true, exclusive: write.keys }
+        : { kind: "deckSetEnvironmentOption", frameId, objectId, key: write.keys[0] ?? "", value: null, exclusive: write.keys };
+    }
     case "setColumnWidth": {
       if (objectId == null) {
         return null;

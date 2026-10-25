@@ -38,8 +38,19 @@ export type DeckEditAction =
   | { kind: "deckRenameEnvironment"; frameId: string; objectId: string; name: string }
   | { kind: "deckSetEnvironmentTitle"; frameId: string; objectId: string; title: string }
   | { kind: "deckSetOverlaySpec"; frameId: string; objectId: string; spec: string | null }
-  | { kind: "deckSetGraphicsOption"; frameId: string; objectId: string; key: string; value: string | null }
-  | { kind: "deckSetEnvironmentOption"; frameId: string; objectId: string; key: string; value: string | null }
+  | { kind: "deckSetGraphicsOption"; frameId: string; objectId: string; key: string; value: string | true | null }
+  /**
+   * `true` writes a flag. Keys are case-sensitive (`columns` tells `T` from
+   * `t`); `exclusive` names flags removed when this one is set (alignment).
+   */
+  | {
+      kind: "deckSetEnvironmentOption";
+      frameId: string;
+      objectId: string;
+      key: string;
+      value: string | true | null;
+      exclusive?: readonly string[];
+    }
   | { kind: "deckSetColumnWidth"; frameId: string; objectId: string; width: string }
   | { kind: "deckSetFrameOption"; frameId: string; key: string; value: string | true | null }
   /** Document-scoped: rewrites the preamble, whatever frame is rendered. */
@@ -125,7 +136,7 @@ export function applyDeckEditAction(
     case "deckSetGraphicsOption":
       return applySetGraphicsOption(source, node, action.key, action.value);
     case "deckSetEnvironmentOption":
-      return applySetEnvironmentOption(source, node, action.key, action.value);
+      return applySetEnvironmentOption(source, node, action.key, action.value, action.exclusive ?? []);
     case "deckSetColumnWidth":
       return applySetColumnWidth(source, node, action.width);
   }
@@ -335,7 +346,12 @@ export type OptionListLocation = {
   span: Span;
   /** Span of the source between the brackets. */
   contentSpan: Span;
-  entries: readonly { span: Span; key: string | null; valueSpan: Span | null }[];
+  /**
+   * `key` is lowercased, as the TikZ option parser normalizes it;
+   * `authoredKey` is the spelling in the source, for case-sensitive keys
+   * such as `columns`' `T` and `t`.
+   */
+  entries: readonly { span: Span; key: string | null; authoredKey: string | null; valueSpan: Span | null }[];
 };
 
 export function readOptionList(
@@ -349,11 +365,16 @@ export function readOptionList(
   return {
     span: argument.span,
     contentSpan: argument.contentSpan,
-    entries: ast.entries.map((entry) => ({
-      span: entry.span,
-      key: entry.kind === "kv" || entry.kind === "flag" ? entry.key : null,
-      valueSpan: entry.kind === "kv" ? entry.valueSpan ?? null : null,
-    })),
+    entries: ast.entries.map((entry) => {
+      const named = entry.kind === "kv" || entry.kind === "flag";
+      const keySpan = named ? entry.keySpan : undefined;
+      return {
+        span: entry.span,
+        key: named ? entry.key : null,
+        authoredKey: !named ? null : keySpan ? source.slice(keySpan.from, keySpan.to).trim() : entry.raw.split("=")[0]?.trim() ?? entry.key,
+        valueSpan: entry.kind === "kv" ? entry.valueSpan ?? null : null,
+      };
+    }),
   };
 }
 
@@ -379,9 +400,10 @@ function buildOptionEdits(
   context: OptionListEditContext,
   key: string,
   value: string | true | null,
-  removeKeys: readonly string[] = []
+  removeKeys: readonly string[] = [],
+  caseSensitive = false
 ): { edits: BeamerStructuralEdit[] } | { error: string } {
-  const normalizedKey = key.trim().toLowerCase();
+  const normalizedKey = caseSensitive ? key.trim() : key.trim().toLowerCase();
   if (normalizedKey.length === 0 || !isSingleLine(normalizedKey)) {
     return { error: "Option keys must be single-line and non-empty." };
   }
@@ -404,14 +426,15 @@ function buildOptionEdits(
     };
   }
 
+  const keyOf = (entry: OptionListLocation["entries"][number]): string | null =>
+    caseSensitive ? entry.authoredKey : entry.key;
   const removedIndexes = new Set<number>();
   for (const removeKey of removeKeys) {
-    const index = list.entries.findIndex((entry) => entry.key === removeKey);
-    if (index >= 0) {
-      removedIndexes.add(index);
-    }
+    list.entries.forEach((entry, index) => {
+      if (keyOf(entry) === removeKey) removedIndexes.add(index);
+    });
   }
-  const targetIndex = list.entries.findIndex((entry) => entry.key === normalizedKey);
+  const targetIndex = list.entries.findIndex((entry) => keyOf(entry) === normalizedKey);
   if (entryText == null && targetIndex >= 0) {
     removedIndexes.add(targetIndex);
   }
@@ -456,7 +479,7 @@ function applySetGraphicsOption(
   source: string,
   node: BeamerObjectNode,
   key: string,
-  value: string | null
+  value: string | true | null
 ): EditActionResult {
   if (node.kind !== "graphics") {
     return { kind: "unsupported", reason: "Only graphics take image options." };
@@ -468,12 +491,14 @@ function applySetGraphicsOption(
   if (!command) {
     return { kind: "unsupported", reason: "The graphics command was not found." };
   }
-  const optional = beamerOptionalArgumentAfter(context, command.span.to, node.sourceSpan.to);
+  // Options follow an overlay spec: `\includegraphics<2->[width=…]{file}`.
+  const afterOverlay = beamerOverlayArgumentAfter(context, command.span.to, node.sourceSpan.to)?.span.to ?? command.span.to;
+  const optional = beamerOptionalArgumentAfter(context, afterOverlay, node.sourceSpan.to);
   const result = buildOptionEdits(
     source,
     {
       list: optional ? readOptionList(source, optional) : null,
-      insertAt: command.span.to,
+      insertAt: afterOverlay,
     },
     key,
     value ?? null
@@ -484,14 +509,18 @@ function applySetGraphicsOption(
   return finishEdits(source, result.edits);
 }
 
-/** Option-list edits on an environment's `[...]` (embedded tikz `scale=`). */
+/**
+ * Option-list edits on an environment's first `[...]`: embedded tikz
+ * `scale=`, and the alignment and width options of `columns` and `column`.
+ */
 function applySetEnvironmentOption(
   source: string,
   node: BeamerObjectNode,
   key: string,
-  value: string | null
+  value: string | true | null,
+  exclusive: readonly string[]
 ): EditActionResult {
-  if (node.kind !== "tikzpicture") {
+  if (node.kind !== "tikzpicture" && node.kind !== "columns" && node.kind !== "column") {
     return { kind: "unsupported", reason: "This object does not take environment options." };
   }
   const context = createBeamerSyntaxContext(source);
@@ -507,7 +536,9 @@ function applySetEnvironmentOption(
       insertAt: pair.begin.span.to,
     },
     key,
-    value ?? null
+    value ?? null,
+    value === null ? exclusive : exclusive.filter((flag) => flag !== key),
+    true
   );
   if ("error" in result) {
     return { kind: "unsupported", reason: result.error };

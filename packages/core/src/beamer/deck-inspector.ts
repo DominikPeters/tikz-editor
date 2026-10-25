@@ -10,8 +10,10 @@ import {
   environmentBoundariesOf,
   readOptionList,
   RENAMEABLE_ENVIRONMENT_GROUPS,
+  type OptionListLocation,
 } from "./deck-edit-actions.js";
 import type { BeamerObjectNode } from "./object-index.js";
+import type { Span } from "../ast/types.js";
 import type { BeamerDocumentModel } from "./types.js";
 
 /**
@@ -32,9 +34,19 @@ export type DeckInspectorWrite =
       suffix: string;
     }
   | { kind: "setEnvironmentOption"; key: string; suffix: string }
+  /** A flag in an image's or environment's options: present or absent. */
+  | { kind: "setGraphicsFlag"; key: string }
+  | { kind: "setEnvironmentFlag"; key: string }
+  /** One of a set of exclusive flags (column alignment); "" removes them all. */
+  | { kind: "setEnvironmentFlagChoice"; keys: readonly string[] }
   | { kind: "setColumnWidth"; suffix: string }
   | { kind: "setFrameOption"; key: string }
   | { kind: "setFrameAlignment" };
+
+/** What a button field does; the app runs it, there is no source write. */
+export type DeckInspectorCommand =
+  | { kind: "enterDrawing"; rootId: string }
+  | { kind: "revealSource"; span: Span };
 
 /** A resolved color; `expression` is the authored value when the preamble sets it. */
 export type DeckInspectorColor = { css: string; expression: string | null };
@@ -71,6 +83,8 @@ export type DeckInspectorField =
       max?: number;
       /** Display-only suffix shown beside the input. */
       unit?: string;
+      /** Shown while unset; "Auto" when absent. */
+      placeholder?: string;
       write: DeckInspectorWrite | null;
     }
   | {
@@ -92,7 +106,12 @@ export type DeckInspectorField =
       /** Whether a preamble `\setbeamercolor` sets this role, or the theme alone. */
       origin: "theme" | "preamble";
       write: DeckInspectorWrite | null;
-    };
+    }
+  | { kind: "button"; id: string; label: string; command: DeckInspectorCommand; write: null }
+  /** A warning about the object, such as why the preview cannot draw it. */
+  | { kind: "message"; id: string; text: string; write: null }
+  /** Read-only source text, shown verbatim. */
+  | { kind: "code"; id: string; label: string; text: string; write: null };
 
 export type DeckInspectorModel = {
   target: "object" | "frame";
@@ -137,9 +156,11 @@ const OBJECT_TITLES: Partial<Record<BeamerObjectNode["kind"], string>> = {
   item: "Item",
 };
 
+/** `message` is the layout's note on an unsupported object, when it has one. */
 export function buildDeckObjectInspector(
   source: string,
-  node: BeamerObjectNode
+  node: BeamerObjectNode,
+  extra: { message?: string } = {}
 ): DeckInspectorModel {
   const context = createBeamerSyntaxContext(source);
   const fields: DeckInspectorField[] = [];
@@ -153,6 +174,9 @@ export function buildDeckObjectInspector(
     case "item":
       fields.push(...itemFields(context, node));
       break;
+    case "columns":
+      fields.push(...columnsFields(context, node));
+      break;
     case "column":
       fields.push(...columnFields(context, node));
       break;
@@ -163,8 +187,7 @@ export function buildDeckObjectInspector(
       fields.push(...tikzFields(context, node));
       break;
     case "unsupported":
-    case "columns":
-      // No editable properties yet (per-divider widths live on the columns).
+      fields.push(...unsupportedFields(context, node, extra.message));
       break;
   }
   return {
@@ -245,12 +268,52 @@ function blockFields(
   return fields;
 }
 
+const REVEAL_OPTIONS = [
+  { value: "", label: "All at once" },
+  { value: "+-", label: "One by one" },
+  { value: "+-| alert@+", label: "One by one, highlighted" },
+] as const;
+
+/**
+ * Beamer lists take a default overlay spec (`[<+->]`) and, for enumerate, a
+ * label template (`[(a)]`), as optional arguments after `\begin{…}`.
+ */
 function listFields(
   context: BeamerSyntaxContext,
   node: BeamerObjectNode
 ): DeckInspectorField[] {
+  const fields: DeckInspectorField[] = [];
   const typeField = environmentEnumField(context, node, "Type");
-  return typeField ? [typeField] : [];
+  if (typeField) {
+    fields.push(typeField);
+  }
+  const pair = environmentBoundariesOf(context, node);
+  if (!pair) {
+    return fields;
+  }
+  let reveal = "";
+  let template = "";
+  let cursor = pair.begin.span.to;
+  for (let index = 0; index < 2; index += 1) {
+    const argument = beamerOptionalArgumentAfter(context, cursor, node.sourceSpan.to);
+    if (!argument) break;
+    const text = argument.value.trim();
+    if (text.startsWith("<") && text.endsWith(">")) {
+      reveal = text.slice(1, -1).trim();
+    } else {
+      template = text;
+    }
+    cursor = argument.span.to;
+  }
+  const revealOptions: Array<{ value: string; label: string }> = [...REVEAL_OPTIONS];
+  if (!revealOptions.some((option) => option.value === reveal)) {
+    revealOptions.push({ value: reveal, label: `<${reveal}>` });
+  }
+  fields.push({ kind: "enum", id: "reveal", label: "Reveal", value: reveal, options: revealOptions, write: null });
+  if (pair.begin.name === "enumerate") {
+    fields.push({ kind: "text", id: "template", label: "Labels", value: template, placeholder: "1.", write: null });
+  }
+  return fields;
 }
 
 function itemFields(
@@ -270,6 +333,65 @@ function itemFields(
   ];
 }
 
+/** Beamer's vertical alignments for columns, as flag options; the last given wins. */
+const ALIGNMENT_FLAGS = ["c", "t", "T", "b"] as const;
+const ALIGNMENT_OPTIONS = [
+  { value: "c", label: "Center" },
+  { value: "T", label: "Top" },
+  { value: "t", label: "First baseline" },
+  { value: "b", label: "Bottom" },
+] as const;
+
+function alignmentFlag(list: OptionListLocation | null): string | null {
+  const flags = list?.entries.flatMap((entry) =>
+    entry.valueSpan == null && entry.authoredKey != null && (ALIGNMENT_FLAGS as readonly string[]).includes(entry.authoredKey)
+      ? [entry.authoredKey] : []) ?? [];
+  return flags.at(-1) ?? null;
+}
+
+function environmentOptions(
+  context: BeamerSyntaxContext,
+  node: BeamerObjectNode
+): OptionListLocation | null {
+  const pair = environmentBoundariesOf(context, node);
+  const optional = pair && beamerOptionalArgumentAfter(context, pair.begin.span.to, node.sourceSpan.to);
+  return optional ? readOptionList(context.source, optional) : null;
+}
+
+function columnsFields(
+  context: BeamerSyntaxContext,
+  node: BeamerObjectNode
+): DeckInspectorField[] {
+  const list = environmentOptions(context, node);
+  const fields: DeckInspectorField[] = [{
+    kind: "enum",
+    id: "alignment",
+    label: "Alignment",
+    value: alignmentFlag(list) ?? "c",
+    options: [...ALIGNMENT_OPTIONS],
+    write: { kind: "setEnvironmentFlagChoice", keys: ALIGNMENT_FLAGS },
+  }];
+  const totalWidth = list?.entries.find((entry) => entry.key === "totalwidth");
+  const totalWidthField = optionNumberField({
+    id: "totalwidth",
+    label: "Total width",
+    raw: totalWidth?.valueSpan ? context.source.slice(totalWidth.valueSpan.from, totalWidth.valueSpan.to) : null,
+    defaultSuffix: "\\textwidth",
+    write: (suffix) => ({ kind: "setEnvironmentOption", key: "totalwidth", suffix }),
+  });
+  if (totalWidthField) {
+    fields.push(totalWidthField);
+  }
+  fields.push({
+    kind: "boolean",
+    id: "onlytextwidth",
+    label: "Only text width",
+    value: list?.entries.some((entry) => entry.key === "onlytextwidth") ?? false,
+    write: { kind: "setEnvironmentFlag", key: "onlytextwidth" },
+  });
+  return fields;
+}
+
 function columnFields(
   context: BeamerSyntaxContext,
   node: BeamerObjectNode
@@ -283,6 +405,14 @@ function columnFields(
     pair.begin.span.to,
     node.sourceSpan.to
   );
+  const alignment: DeckInspectorField = {
+    kind: "enum",
+    id: "alignment",
+    label: "Alignment",
+    value: alignmentFlag(placement ? readOptionList(context.source, placement) : null) ?? "",
+    options: [{ value: "", label: "Same as columns" }, ...ALIGNMENT_OPTIONS],
+    write: { kind: "setEnvironmentFlagChoice", keys: ALIGNMENT_FLAGS },
+  };
   const cursor = placement?.span.to ?? pair.begin.span.to;
   const width = beamerRequiredArgumentAfter(context, cursor, node.sourceSpan.to);
   const raw = width?.value ?? "";
@@ -296,6 +426,7 @@ function columnFields(
         value: raw,
         write: { kind: "setColumnWidth", suffix: "" },
       },
+      alignment,
     ];
   }
   return [
@@ -309,6 +440,7 @@ function columnFields(
       ...(parsed.suffix ? { unit: parsed.suffix } : {}),
       write: { kind: "setColumnWidth", suffix: parsed.suffix },
     },
+    alignment,
   ];
 }
 
@@ -348,6 +480,12 @@ function optionNumberField(args: {
   };
 }
 
+/**
+ * `\includegraphics[options]{file}`. Offers the options the text engine
+ * draws (text/tex/ir.ts); `angle` and friends are not drawn, so not offered.
+ * Nor is an overlay spec: the preview does not draw `\includegraphics<2->`
+ * yet. Reading still steps over one, so such an image keeps its options.
+ */
 function graphicsFields(
   context: BeamerSyntaxContext,
   node: BeamerObjectNode
@@ -358,9 +496,15 @@ function graphicsFields(
   if (!command) {
     return [];
   }
+  const overlay = beamerOverlayArgumentAfter(context, command.span.to, node.sourceSpan.to);
   const optional = beamerOptionalArgumentAfter(
     context,
-    command.span.to,
+    overlay?.span.to ?? command.span.to,
+    node.sourceSpan.to
+  );
+  const file = beamerRequiredArgumentAfter(
+    context,
+    optional?.span.to ?? overlay?.span.to ?? command.span.to,
     node.sourceSpan.to
   );
   const list = optional ? readOptionList(context.source, optional) : null;
@@ -371,12 +515,21 @@ function graphicsFields(
     }
     return context.source.slice(entry.valueSpan.from, entry.valueSpan.to);
   };
-  const fields: DeckInspectorField[] = [];
-  for (const [id, label, defaultSuffix] of [
+  const hasFlag = (key: string): boolean =>
+    list?.entries.some((entry) => entry.key === key && entry.valueSpan == null) ?? false;
+  const path = file?.value.trim() ?? "";
+  const fields: DeckInspectorField[] = [
+    { kind: "text", id: "file", label: "File", value: path, write: null },
+  ];
+  const numberFields: Array<readonly [string, string, string]> = [
     ["width", "Width", "\\textwidth"],
     ["height", "Height", "\\textheight"],
     ["scale", "Scale", ""],
-  ] as const) {
+  ];
+  if (/\.pdf$/iu.test(path)) {
+    numberFields.push(["page", "Page", ""]);
+  }
+  for (const [id, label, defaultSuffix] of numberFields) {
     const field = optionNumberField({
       id,
       label,
@@ -385,9 +538,33 @@ function graphicsFields(
       write: (suffix) => ({ kind: "setGraphicsOption", key: id, suffix }),
     });
     if (field) {
-      fields.push(field);
+      fields.push(field.kind === "number" && id === "page" ? { ...field, step: 1, min: 1 } : field);
     }
   }
+  fields.push(
+    {
+      kind: "boolean",
+      id: "keepaspectratio",
+      label: "Keep aspect ratio",
+      value: hasFlag("keepaspectratio"),
+      write: { kind: "setGraphicsFlag", key: "keepaspectratio" },
+    },
+    {
+      kind: "text",
+      id: "trim",
+      label: "Trim",
+      value: rawValue("trim") ?? "",
+      placeholder: "left bottom right top",
+      write: { kind: "setGraphicsOption", key: "trim", suffix: "" },
+    },
+    {
+      kind: "boolean",
+      id: "clip",
+      label: "Clip to trim",
+      value: hasFlag("clip"),
+      write: { kind: "setGraphicsFlag", key: "clip" },
+    },
+  );
   return fields;
 }
 
@@ -395,20 +572,12 @@ function tikzFields(
   context: BeamerSyntaxContext,
   node: BeamerObjectNode
 ): DeckInspectorField[] {
-  const pair = environmentBoundariesOf(context, node);
-  if (!pair) {
-    return [];
-  }
-  const optional = beamerOptionalArgumentAfter(
-    context,
-    pair.begin.span.to,
-    node.sourceSpan.to
-  );
-  const list = optional ? readOptionList(context.source, optional) : null;
+  const list = environmentOptions(context, node);
   const entry = list?.entries.find((candidate) => candidate.key === "scale");
   const raw = entry?.valueSpan
     ? context.source.slice(entry.valueSpan.from, entry.valueSpan.to)
     : null;
+  const fields: DeckInspectorField[] = [];
   const field = optionNumberField({
     id: "scale",
     label: "Scale",
@@ -416,7 +585,46 @@ function tikzFields(
     defaultSuffix: "",
     write: (suffix) => ({ kind: "setEnvironmentOption", key: "scale", suffix }),
   });
-  return field ? [field] : [];
+  if (field) {
+    fields.push(field);
+  }
+  if (node.rootId) {
+    fields.push({
+      kind: "button",
+      id: "edit-drawing",
+      label: "Edit Drawing",
+      command: { kind: "enterDrawing", rootId: node.rootId },
+      write: null,
+    });
+  }
+  return fields;
+}
+
+const UNSUPPORTED_EXCERPT_LIMIT = 600;
+
+function unsupportedFields(
+  context: BeamerSyntaxContext,
+  node: BeamerObjectNode,
+  message: string | undefined
+): DeckInspectorField[] {
+  const text = context.source.slice(node.sourceSpan.from, node.sourceSpan.to).trim();
+  return [
+    ...(message ? [{ kind: "message" as const, id: "reason", text: message, write: null }] : []),
+    {
+      kind: "code",
+      id: "source",
+      label: "Source",
+      text: text.length > UNSUPPORTED_EXCERPT_LIMIT ? `${text.slice(0, UNSUPPORTED_EXCERPT_LIMIT)}…` : text,
+      write: null,
+    },
+    {
+      kind: "button",
+      id: "show-in-source",
+      label: "Show in Source",
+      command: { kind: "revealSource", span: node.sourceSpan },
+      write: null,
+    },
+  ];
 }
 
 const FRAME_ALIGNMENT_OPTIONS = [
@@ -467,6 +675,7 @@ export function buildDeckFrameInspector(
         min: 0,
         max: 99,
         unit: "%",
+        placeholder: "Off",
         write: { kind: "setFrameOption", key: "shrink" },
       },
       {

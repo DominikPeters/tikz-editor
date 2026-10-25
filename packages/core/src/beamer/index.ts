@@ -73,6 +73,7 @@ export {
   buildDeckObjectInspector,
   splitDeckDimension,
   type DeckInspectorColor,
+  type DeckInspectorCommand,
   type DeckInspectorField,
   type DeckInspectorModel,
   type DeckInspectorWrite,
