@@ -1,26 +1,33 @@
 import { deckPageDerived, deckObjectIndexKey } from "../../deck-page-derived-cache";
 import { deckStepRootKey } from "../../root-key";
-import { useCallback, useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useMemo, useRef, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import {
   applyDeckEditAction,
   buildBeamerObjectIndex,
+  buildDeckDocumentInspector,
   buildDeckFrameInspector,
   buildDeckObjectInspector,
+  buildDeckSlideContext,
   type BeamerFrameLayout,
+  type DeckDocumentInspectorModel,
   type DeckEditAction,
   type DeckInspectorField,
   type DeckInspectorModel,
   type DeckInspectorWrite,
+  type DeckSlideContext,
 } from "@tikz-editor/core/beamer/index";
 import { useEditorStore } from "../../store/store";
 import { SidePanel } from "../SidePanel";
-import { CustomDropdown } from "../CustomDropdown";
+import { DeckField } from "./deck-fields";
+import { DeckDocumentSections, DeckScopeHeader, DeckSlideInfoSection } from "./DeckDocumentSections";
 import { useInspectorPreviewScrub } from "./useInspectorPreviewScrub";
 import css from "./InspectorPanel.module.css";
 
 /**
  * Deck-mode inspector (Stage 3b): renders `DeckInspectorModel` fields for
- * the selected deck object, or the frame options when nothing is selected.
+ * the selected deck object. With nothing selected it shows two scopes: the
+ * slide's options and context, then the presentation's theme, colors, page
+ * and title info (design/beamer-document-inspector.md).
  * Reuses the tikz inspector's styling and scrub machinery; writes dispatch
  * `DeckEditAction`s through the shared `APPLY_EDIT_ACTION` bookkeeping.
  *
@@ -81,6 +88,20 @@ export function DeckInspectorPanel(): JSX.Element {
   }
   const rendered = model ?? lastModelRef.current;
 
+  // Presentation-wide values depend only on the scanned deck, so they show
+  // the last render's document even while a newer one is in flight.
+  const documentModel = useMemo<DeckDocumentInspectorModel | null>(
+    () => (deckDocument ? buildDeckDocumentInspector(deckDocument) : null),
+    [deckDocument]
+  );
+  const frameSummary = snapshot.deck?.frames.find((frame) => frame.id === activeRootId) ?? null;
+  const slideContext = useMemo<DeckSlideContext | null>(
+    () => deckDocument && activeRootId
+      ? buildDeckSlideContext(deckDocument, activeRootId, activeFrame?.frameId === activeRootId ? activeFrame.layout : undefined)
+      : null,
+    [activeFrame, activeRootId, deckDocument]
+  );
+
   const frameId = activeFrame?.frameId ?? null;
   const objectId = selectedNode?.id ?? deckObjectSelection?.objectId ?? null;
 
@@ -131,13 +152,14 @@ export function DeckInspectorPanel(): JSX.Element {
       event: ReactPointerEvent<HTMLElement>,
       field: Extract<DeckInspectorField, { kind: "number" }>
     ): void => {
-      if (!fresh || field.value == null) {
+      const write = field.write;
+      if (!fresh || field.value == null || write == null) {
         return;
       }
       const base = { source, layout: activeFrame.layout };
       scrubBaseRef.current = base;
       const buildResult = (next: number) => {
-        const action = actionFor(field.write, next);
+        const action = actionFor(write, next);
         if (!action) {
           return null;
         }
@@ -191,29 +213,59 @@ export function DeckInspectorPanel(): JSX.Element {
     );
   }
 
+  const frameFieldsDisabled = activeFrame?.frameId !== activeRootId ||
+    activeFrame.step !== Math.min(activeStep, Math.max(1, activeFrame.stepCount));
+  const fieldList = (
+    <fieldset disabled={frameFieldsDisabled} className={css.deckFields}>
+      {rendered.fields.length === 0 ? (
+        <p className={css.hint}>This object has no editable properties yet.</p>
+      ) : (
+        rendered.fields.map((field) => (
+          <DeckField
+            key={field.id}
+            field={field}
+            onCommit={commit}
+            onBeginScrub={beginDeckScrub}
+          />
+        ))
+      )}
+    </fieldset>
+  );
+
+  if (rendered.target === "object") {
+    return (
+      <SidePanel className={css.panel ?? ""}>
+        <SidePanel.Header>{rendered.title}</SidePanel.Header>
+        <SidePanel.Content className={css.content ?? ""}>
+          <SidePanel.Section>
+            <SidePanel.SectionBody>{fieldList}</SidePanel.SectionBody>
+          </SidePanel.Section>
+        </SidePanel.Content>
+      </SidePanel>
+    );
+  }
+
   return (
     <SidePanel className={css.panel ?? ""}>
-      <SidePanel.Header>{rendered.title}</SidePanel.Header>
       <SidePanel.Content className={css.content ?? ""}>
-        <SidePanel.Section>
-        <SidePanel.SectionBody>
-          <fieldset disabled={activeFrame?.frameId !== activeRootId || activeFrame.step !== Math.min(activeStep, Math.max(1, activeFrame.stepCount))}
-            className={css.deckFields}>
-          {rendered.fields.length === 0 ? (
-            <p className={css.hint}>This object has no editable properties yet.</p>
-          ) : (
-            rendered.fields.map((field) => (
-              <DeckField
-                key={field.id}
-                field={field}
-                onCommit={commit}
-                onBeginScrub={beginDeckScrub}
-              />
-            ))
-          )}
-          </fieldset>
-        </SidePanel.SectionBody>
-        </SidePanel.Section>
+        <div className={css.deckScope}>
+          <DeckScopeHeader
+            title={frameSummary ? `Slide ${frameSummary.frameIndex + 1}` : "Slide"}
+            detail={frameSummary?.title ?? null}
+          />
+          <SidePanel.Section>
+            <SidePanel.SectionBody>{fieldList}</SidePanel.SectionBody>
+          </SidePanel.Section>
+          {slideContext ? (
+            <DeckSlideInfoSection context={slideContext} stepCount={frameSummary?.stepCount ?? 1} />
+          ) : null}
+        </div>
+        {documentModel ? (
+          <div className={css.deckScope}>
+            <DeckScopeHeader title="Presentation" />
+            <DeckDocumentSections model={documentModel} onCommit={commit} />
+          </div>
+        ) : null}
       </SidePanel.Content>
     </SidePanel>
   );
@@ -302,164 +354,4 @@ function deckActionForWrite(
     case "setFrameAlignment":
       return { kind: "deckSetFrameOption", frameId, key: String(value), value: true };
   }
-}
-
-function DeckField(props: {
-  field: DeckInspectorField;
-  onCommit: (write: DeckInspectorWrite, value: string | number | boolean | null) => void;
-  onBeginScrub: (
-    event: ReactPointerEvent<HTMLElement>,
-    field: Extract<DeckInspectorField, { kind: "number" }>
-  ) => void;
-}): JSX.Element {
-  const { field, onCommit, onBeginScrub } = props;
-  switch (field.kind) {
-    case "enum":
-      return (
-        <div className={css.property}>
-          <div className={css.propertyLabel}>{field.label}</div>
-          <CustomDropdown
-            ariaLabel={field.label}
-            value={field.value}
-            options={[...field.options]}
-            onChange={(next) => { onCommit(field.write, next); }}
-          />
-        </div>
-      );
-    case "boolean":
-      return (
-        <div className={css.property}>
-          <label className={css.checkboxControl}>
-            <input
-              className={css.checkboxInput}
-              type="checkbox"
-              checked={field.value}
-              onChange={(event) => { onCommit(field.write, event.currentTarget.checked); }}
-            />
-            <span className={css.checkboxLabel}>{field.label}</span>
-          </label>
-        </div>
-      );
-    case "text":
-      return <DeckTextField field={field} onCommit={onCommit} />;
-    case "number":
-      return <DeckNumberField field={field} onCommit={onCommit} onBeginScrub={onBeginScrub} />;
-  }
-}
-
-function DeckTextField(props: {
-  field: Extract<DeckInspectorField, { kind: "text" }>;
-  onCommit: (write: DeckInspectorWrite, value: string) => void;
-}): JSX.Element {
-  const { field, onCommit } = props;
-  const [draft, setDraft] = useState<string | null>(null);
-  const commitDraft = (value: string): void => {
-    setDraft(null);
-    if (value !== field.value) {
-      onCommit(field.write, value);
-    }
-  };
-  return (
-    <div className={css.property}>
-      <div className={css.propertyLabel}>{field.label}</div>
-      <div className={css.controlRow}>
-        <input
-          className={css.textInput}
-          type="text"
-          aria-label={field.label}
-          value={draft ?? field.value}
-          placeholder={field.placeholder}
-          onChange={(event) => { setDraft(event.currentTarget.value); }}
-          onBlur={(event) => {
-            if (draft != null) {
-              commitDraft(event.currentTarget.value);
-            }
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commitDraft(event.currentTarget.value);
-              event.currentTarget.blur();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              setDraft(null);
-              event.currentTarget.blur();
-            }
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function DeckNumberField(props: {
-  field: Extract<DeckInspectorField, { kind: "number" }>;
-  onCommit: (write: DeckInspectorWrite, value: number | null) => void;
-  onBeginScrub: (
-    event: ReactPointerEvent<HTMLElement>,
-    field: Extract<DeckInspectorField, { kind: "number" }>
-  ) => void;
-}): JSX.Element {
-  const { field, onCommit, onBeginScrub } = props;
-  const [draft, setDraft] = useState<string | null>(null);
-  const scrubbable = field.value != null;
-  const commitDraft = (raw: string): void => {
-    setDraft(null);
-    const trimmed = raw.trim();
-    if (trimmed.length === 0) {
-      if (field.value != null) {
-        onCommit(field.write, null);
-      }
-      return;
-    }
-    const parsed = Number(trimmed);
-    if (!Number.isFinite(parsed) || parsed === field.value) {
-      return;
-    }
-    onCommit(field.write, parsed);
-  };
-  return (
-    <div className={css.property}>
-      <div
-        className={
-          scrubbable
-            ? `${css.propertyLabel} ${css.propertyLabelScrubbable}`
-            : css.propertyLabel
-        }
-        onPointerDown={(event) => { onBeginScrub(event, field); }}
-      >
-        {field.label}
-      </div>
-      <div className={css.controlRow}>
-        <input
-          className={css.numberInput}
-          type="number"
-          aria-label={field.label}
-          step={field.step}
-          min={field.min}
-          max={field.max}
-          value={draft ?? (field.value != null ? String(field.value) : "")}
-          placeholder={field.value == null ? "Unset" : undefined}
-          onChange={(event) => { setDraft(event.currentTarget.value); }}
-          onBlur={(event) => {
-            if (draft != null) {
-              commitDraft(event.currentTarget.value);
-            }
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commitDraft(event.currentTarget.value);
-              event.currentTarget.blur();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              setDraft(null);
-              event.currentTarget.blur();
-            }
-          }}
-        />
-        {field.unit ? <span className={css.unitLabel}>{field.unit}</span> : null}
-      </div>
-    </div>
-  );
 }

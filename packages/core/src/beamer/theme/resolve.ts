@@ -1619,6 +1619,11 @@ const componentRegistry: Record<
   "outer-theme": outerThemeAppliers,
 };
 
+/** Normalized names of the components the resolver applies, per kind. */
+export function registeredBeamerThemeComponents(kind: BeamerThemeKind): readonly string[] {
+  return [...componentRegistry[kind].keys()];
+}
+
 function applyModernTheme(
   state: MutableTheme,
   use: BeamerThemeUse,
@@ -1820,7 +1825,7 @@ function markApplied(
   });
 }
 
-function parseThemeOptions(
+export function parseThemeOptions(
   source: string | undefined
 ): Readonly<Record<string, string | boolean>> {
   if (!source) {

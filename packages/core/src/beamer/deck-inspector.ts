@@ -36,6 +36,13 @@ export type DeckInspectorWrite =
   | { kind: "setFrameOption"; key: string }
   | { kind: "setFrameAlignment" };
 
+/** A resolved color; `expression` is the authored value when the preamble sets it. */
+export type DeckInspectorColor = { css: string; expression: string | null };
+
+/**
+ * `write: null` marks a field the editor shows but cannot change yet; the
+ * panel renders it disabled with its real value.
+ */
 export type DeckInspectorField =
   | {
       kind: "enum";
@@ -43,7 +50,7 @@ export type DeckInspectorField =
       label: string;
       value: string;
       options: ReadonlyArray<{ value: string; label: string }>;
-      write: DeckInspectorWrite;
+      write: DeckInspectorWrite | null;
     }
   | {
       kind: "text";
@@ -51,7 +58,7 @@ export type DeckInspectorField =
       label: string;
       value: string;
       placeholder?: string;
-      write: DeckInspectorWrite;
+      write: DeckInspectorWrite | null;
     }
   | {
       kind: "number";
@@ -64,14 +71,27 @@ export type DeckInspectorField =
       max?: number;
       /** Display-only suffix shown beside the input. */
       unit?: string;
-      write: DeckInspectorWrite;
+      write: DeckInspectorWrite | null;
     }
   | {
       kind: "boolean";
       id: string;
       label: string;
       value: boolean;
-      write: DeckInspectorWrite;
+      write: DeckInspectorWrite | null;
+    }
+  | {
+      kind: "color";
+      id: string;
+      label: string;
+      /** Only the sides the role is shown with; null when the role leaves it unset. */
+      fg?: DeckInspectorColor | null;
+      bg?: DeckInspectorColor | null;
+      /** What a role without a fill is painted over: the slide background. */
+      backdrop?: string;
+      /** Whether a preamble `\setbeamercolor` sets this role, or the theme alone. */
+      origin: "theme" | "preamble";
+      write: DeckInspectorWrite | null;
     };
 
 export type DeckInspectorModel = {
@@ -422,10 +442,14 @@ export function buildDeckFrameInspector(
   const alignment = hasFlag("t") ? "t" : hasFlag("b") ? "b" : "c";
   const label =
     options?.entries.find((entry) => entry.key === "label")?.value ?? "";
+  // The last `shrink` wins, as in resolveBeamerFrameShrink; a bare flag is 0%.
+  const shrinkEntry = [...options?.entries ?? []].reverse().find((entry) => entry.key === "shrink");
+  const shrinkValue = shrinkEntry == null ? null : Number(shrinkEntry.value?.trim() ?? 0);
   return {
     target: "frame",
     title: "Frame",
     fields: [
+      // Layout first, then the slide's chrome, then technical options.
       {
         kind: "enum",
         id: "alignment",
@@ -435,18 +459,43 @@ export function buildDeckFrameInspector(
         write: { kind: "setFrameAlignment" },
       },
       {
+        kind: "number",
+        id: "shrink",
+        label: "Shrink to fit",
+        value: shrinkValue != null && Number.isFinite(shrinkValue) ? shrinkValue : null,
+        step: 1,
+        min: 0,
+        max: 99,
+        unit: "%",
+        write: { kind: "setFrameOption", key: "shrink" },
+      },
+      {
+        kind: "boolean",
+        id: "allowframebreaks",
+        label: "Continue on more slides",
+        value: options?.allowFrameBreaks != null,
+        write: { kind: "setFrameOption", key: "allowframebreaks" },
+      },
+      {
+        kind: "boolean",
+        id: "plain",
+        label: "Plain (no headline or footline)",
+        value: options?.plain ?? false,
+        write: { kind: "setFrameOption", key: "plain" },
+      },
+      {
+        kind: "boolean",
+        id: "noframenumbering",
+        label: "Skip in frame numbering",
+        value: options?.noFrameNumbering ?? false,
+        write: { kind: "setFrameOption", key: "noframenumbering" },
+      },
+      {
         kind: "boolean",
         id: "fragile",
         label: "Fragile (verbatim content)",
         value: options?.fragile ?? false,
         write: { kind: "setFrameOption", key: "fragile" },
-      },
-      {
-        kind: "boolean",
-        id: "plain",
-        label: "Plain (no headline/footline)",
-        value: options?.plain ?? false,
-        write: { kind: "setFrameOption", key: "plain" },
       },
       {
         kind: "text",

@@ -143,8 +143,11 @@ describe("deck inspector models", () => {
     expect(model!.title).toBe("Frame");
     expect(model!.fields.map((field) => field.id)).toEqual([
       "alignment",
-      "fragile",
+      "shrink",
+      "allowframebreaks",
       "plain",
+      "noframenumbering",
+      "fragile",
       "label",
     ]);
     expect(fieldById(model!.fields, "alignment")).toMatchObject({

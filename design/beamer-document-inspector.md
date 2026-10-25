@@ -4,6 +4,7 @@ Status: proposal (2026-10-25), agreed with Dominik in outline: no inspector
 tabs; slide plus presentation sections when nothing is selected; theme
 gallery in a popover; the theme is reachable only from the inspector with
 nothing selected (no menu command). Work is phased UI-first (see Phasing).
+Phase 1 is implemented (2026-10-25).
 
 ## Problem
 
@@ -60,10 +61,17 @@ off the inspector (it is canvas-editable, decided in Stage 3b).
 
 Additions, all frame options the scanner already recognizes:
 
-- **Shrink**: off / on / value (`shrink`, `shrink=20`), from `frame-shrink.ts`.
-- **Allow frame breaks** (`allowframebreaks`).
-- **No frame numbering** (`noframenumbering`).
-- **Standout**: only shown when the active theme is metropolis or moloch.
+- **Shrink to fit**: a percentage; empty is off, a bare `shrink` reads as 0%
+  (`frame-shrink.ts`).
+- **Continue on more slides** (`allowframebreaks`).
+- **Skip in frame numbering** (`noframenumbering`).
+
+Metropolis's `standout` is not offered: the renderer does not draw it yet.
+
+Order is logical, not alphabetical: layout (alignment, shrink, continue on
+more slides), then the slide's chrome (plain, skip in numbering), then
+technical options (fragile, label). Checkboxes carry their own label and
+span both columns.
 
 Read-only context, each a link where a panel owns the data:
 
@@ -78,23 +86,26 @@ Read-only context, each a link where a panel owns the data:
 
 ### Theme
 
-A compact card: the current theme's name and a small rendering of the
-user's own title slide, plus a **Change…** button that opens the gallery
-popover (below). Under the card, the active theme's options as ordinary
-fields. The resolver already reads these option keys; each theme exposes only
-its own:
+A compact card: a strip of the theme's characteristic colors, its name, its
+Beamer group and the components it is built from (only those not named after
+the theme itself), plus a **Change…** button that opens the gallery popover
+(below). A rendering of the user's own title slide replaces the color strip
+once phase 2 has theme-override rendering. Under the card, the active
+theme's options as ordinary fields, from `theme/catalog.ts`:
 
-| Theme family | Options |
+| Themes | Options |
 | --- | --- |
-| metropolis, moloch | `progressbar` (none/head/frametitle/foot), `numbering`, `block` (transparent/fill), `sectionpage`, `background` |
-| Madrid and other infolines themes | `secheader` |
-| miniframes / smooth themes | `compress`, `subsection` |
-| sidebar themes | `width`, `height`, `hideothersubsections`, `hideallsubsections` |
-| shadow outer theme | `shadow` |
+| metropolis, moloch | `progressbar` (none/head/frametitle/foot), `numbering` (counter/fraction/none), `background` (light/dark) |
+| Madrid, Boadilla | `secheader` |
+| Berlin, Ilmenau, Dresden, Singapore, Szeged | `compress` |
+| Berkeley, PaloAlto, Goettingen, Marburg, Hannover, Rochester | `left`/`right`, `width`, `height`, `hideothersubsections`, `hideallsubsections` |
 
-The option schema per theme lives next to its applier in
-`theme/resolve.ts`, so the inspector and the resolver cannot drift: an option
-the resolver does not read is not offered.
+An option the resolver does not read is not offered, even when Beamer
+declares it. Not offered today for that reason: metropolis/moloch `block`
+and `sectionpage` (recorded on the template, not drawn: `block=fill` is in
+many corpus decks, so this is a fidelity gap worth closing), and the stock
+themes' `shadow`, `subsection` and `hooks`. A test checks the catalog
+against the resolver's component registry.
 
 **Advanced** (disclosure, closed by default): color theme, font theme, inner
 theme and outer theme as dropdowns. Color themes are grouped as Beamer groups
@@ -147,15 +158,28 @@ swatches. Overrides are written after the last theme command, since a later
   `\setbeamertemplate{navigation symbols}{}` or removing it. Metropolis and
   moloch already hide them; the checkbox reflects the resolved state.
 
-### Title info
+### Header & Footer
 
-Title, subtitle, author, institute, date, title graphic. Each text field has
-its **short form** (`\author[short]{long}`) next to it. The long forms are
-editable on the title slide, but short forms only appear in footlines and
-headlines, so the inspector is their only reasonable home. Spans come from
-`BeamerMetadataFieldModel`. Long forms with structure beyond plain text
-(`\and`, `\inst{}`, line breaks) show the source text and edit it as source;
-the inspector does not try to model author lists.
+Decided with Dominik after the first screenshots, replacing a "Title info"
+list of every metadata field with its short form under it.
+
+The long forms (`\title{…}`, `\author{…}`, …) belong to the title slide and
+are edited there, on the canvas; the inspector does not repeat them, and
+subtitle and title graphic, which only the title page prints, do not appear.
+
+Short forms are exactly the text a theme prints in its headline, footline or
+sidebar: every such template prints `short ?? long`. So this section lists
+only the fields the active theme's chrome prints
+(`theme/chrome-metadata.ts`: infolines prints title, author, institute and
+date; split prints author and title; the miniframes footline what its style
+names; tree headlines the title; a visible sidebar title and author), and is
+absent for themes that print none (default, metropolis, moloch, Bergen,
+Darmstadt, …). Each field holds the short form; when there is none, its
+placeholder shows the long form it falls back to, in italics, as the
+inspector shows inherited values. That makes the common problem visible: a
+long form with `\LARGE` or `\large` for the title page is printed in the
+footer at that size too, which is why authors set short forms. A test renders
+every catalog theme and checks the mapping against the chrome's text spans.
 
 ## Theme gallery popover
 
@@ -251,16 +275,21 @@ before the next one starts. Until phase 4, a control whose write does not
 exist yet is shown disabled with its real current value, so the layout is
 judged with real decks rather than placeholder data.
 
-**Phase 1: inspector layout and read path.** `buildDeckDocumentInspector`
-reading current values from the document model: theme and options, color
-roles with origin, aspect ratio, class font size, navigation symbols, title
-metadata with short forms. The panel's selection-driven structure, the
-distinct scope headers, collapsible sections with persisted state, the theme
-card, and the new color field control (swatch, origin, reset). Frame fields
-that are plain frame options (`shrink`, `allowframebreaks`,
-`noframenumbering`, `standout`) are writable already through
-`deckSetFrameOption`; the read-only slide context (section, steps, notes,
-diagnostics) is in this phase too.
+**Phase 1: inspector layout and read path.** Implemented 2026-10-25.
+`buildDeckDocumentInspector` and `buildDeckSlideContext`
+(`packages/core/src/beamer/deck-document-inspector.ts`) read current values
+from the scanned deck and its resolved theme: theme card and options,
+component themes, color roles with their origin, aspect ratio, class font
+size, navigation symbols, header and footer text. The panel
+(`DeckInspectorPanel`, `DeckDocumentSections`, `deck-fields.tsx`) has the
+pinned scope headers, collapsible sections with persisted state, the theme
+card, and the color row (a swatch, or an "Aa" sample of text on fill drawn
+over the slide background when the role has no fill; the value as authored,
+or in italics when it comes from the theme). Shrink, continue on more slides
+and skip in numbering are writable through `deckSetFrameOption`; everything
+in Presentation is disabled with its real value. Read-only values use the
+secondary label color: the shared disabled pop-up text is too faint to read
+in dark mode (an app-wide issue of `controls.module.css`, not fixed here).
 
 **Phase 2: theme gallery popover.** The popover layout and grouping, the
 theme override through the render entry point, worker thumbnails and their
@@ -288,5 +317,5 @@ added to the edit-action fuzzer.
   (previewing a picked color before committing), or whether colors commit
   immediately. Color events are read from source spans, so overriding them
   at the model level is harder than overriding theme uses.
-- Whether title info belongs under Presentation or should appear in the
-  object inspector when the title slide's title block is selected.
+- Whether the color row should get a reset affordance now (disabled) or only
+  with phase 4's writes.

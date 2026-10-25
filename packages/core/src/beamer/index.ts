@@ -51,9 +51,23 @@ export {
   type DeckEditAction,
 } from "./deck-edit-actions.js";
 export {
+  buildDeckDocumentInspector,
+  buildDeckSlideContext,
+  type DeckDocumentInspectorModel,
+  type DeckSlideContext,
+  type DeckThemeCard,
+} from "./deck-document-inspector.js";
+export {
+  BEAMER_PRESENTATION_THEMES,
+  beamerPresentationTheme,
+  type BeamerThemeCatalogEntry,
+  type BeamerThemeGroup,
+} from "./theme/catalog.js";
+export {
   buildDeckFrameInspector,
   buildDeckObjectInspector,
   splitDeckDimension,
+  type DeckInspectorColor,
   type DeckInspectorField,
   type DeckInspectorModel,
   type DeckInspectorWrite,
