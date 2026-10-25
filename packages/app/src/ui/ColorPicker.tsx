@@ -55,7 +55,7 @@ export type ColorPickerProps = {
   commitOnRelease?: boolean;
   /** A color well: the swatch fills the trigger and the value moves to its tooltip. */
   swatchOnly?: boolean;
-  /** For a text color well: the well shows an "A" in the color on this fill. */
+  /** For a text color well: the well shows "Aa" in the color on this fill. */
   glyphBackground?: string | null;
   /** An entry below the picker that removes the authored value. */
   resetLabel?: string;
@@ -222,7 +222,7 @@ export function ColorPickerField({
               : displaySwatchColor != null ? { background: displaySwatchColor } : undefined}
             aria-hidden="true"
           >
-            {glyph ? "A" : null}
+            {glyph ? "Aa" : null}
           </span>
           {swatchOnly ? null : <span className={[css.triggerLabel, triggerLabelClassName ?? ""].filter(Boolean).join(" ")}>{displayLabel}</span>}
         </span>
