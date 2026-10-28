@@ -96,7 +96,11 @@ export function useFigureThumbnails(
   const externalFigureId = externalThumbnail?.figureId;
   const externalDeckFrameIndex = externalThumbnail?.deckFrameIndex;
   const externalUrl = externalThumbnail?.url;
-  const lastThumbnailByDocumentKeyRef = useRef(new Map<string, Map<string, string>>());
+  // Only the active document needs stale-image fallbacks. Revisited documents
+  // use the shared, size-bounded cache instead of retaining every visited deck.
+  const lastThumbnailByFigureId = useMemo(
+    () => ({ documentKey, thumbnails: new Map<string, string>() }), [documentKey]
+  ).thumbnails;
 
   // An edited frame refreshes at once. The others take the whole document as
   // their context when text outside the frames changes, or once the edit
@@ -127,16 +131,12 @@ export function useFigureThumbnails(
     return map;
   }, [documentFingerprint, figures, graphicsPreviewBundleKey, source]);
   const [tick, setTick] = useState(0);
-  const lastThumbnailByFigureId =
-    lastThumbnailByDocumentKeyRef.current.get(documentKey) ??
-    (() => {
-      const next = new Map<string, string>();
-      lastThumbnailByDocumentKeyRef.current.set(documentKey, next);
-      return next;
-    })();
-
   const thumbnails = useMemo(() => {
     void tick;
+    const figureIds = new Set(figures.map((figure) => figure.id));
+    for (const id of lastThumbnailByFigureId.keys()) {
+      if (!figureIds.has(id)) lastThumbnailByFigureId.delete(id);
+    }
     const next = new Map<string, string>();
     for (const figure of figures) {
       if (figure.id === externalFigureId && externalUrl) {

@@ -54,7 +54,7 @@ export function trackDocumentEdit(session: DocumentEditSession, state: SessionSt
 /** Cancelling a preview may restore its inactive tab, but never an intervening edit. */
 export function restoreDocumentEdit(
   session: DocumentEditSession, getState: () => SessionState, dispatch: (action: EditorAction) => void,
-  preview?: Pick<Extract<EditActionResult, { kind: "success" | "partial" }>, "newSource" | "patches" | "identityMoves">
+  preview?: Pick<Extract<EditActionResult, { kind: "success" | "partial" }>, "newSource" | "patches" | "identityMoves" | "changedSourceIds">
 ): boolean {
   if (!ownsDocumentEdit(session, getState())) return false;
   if (preview && (preview.newSource !== session.latestSource ||
@@ -68,7 +68,11 @@ export function restoreDocumentEdit(
   const inverseIdentityMoves = preview?.identityMoves?.map(move => ({ oldSpan: move.newSpan, newSpan: move.oldSpan }));
   dispatch({ type: "SET_SOURCE_TRANSIENT", documentId: session.documentId,
     source: session.baseSource, expectedSource: session.latestSource, expectedSourceRevision: session.latestRevision,
-    changedSourceIds: session.changedSourceIds,
+    // Canvas gestures capture ownership before they know which target edits
+    // will succeed. Their preview result supplies the affected statements for
+    // the inverse transition too; dropping that hint forces a full render of
+    // the temporary baseline before the gesture's history commit.
+    changedSourceIds: session.changedSourceIds ?? preview?.changedSourceIds ?? null,
     ...(inversePatches === undefined ? {} : { patches: inversePatches }),
     ...(inverseIdentityMoves === undefined ? {} : { identityMoves: inverseIdentityMoves }) });
   trackDocumentEdit(session, getState());

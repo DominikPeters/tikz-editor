@@ -465,12 +465,19 @@ function createInitialModel(kind: DocumentKind): Model {
 export const DockLayout = memo(function DockLayout(props: DockLayoutProps) {
   const kind = useEditorStore(s => s.documentKind);
   // A nested TikZ picture keeps its parent deck's panel arrangement.
-  return <DocumentDockLayout key={kind} {...props} kind={kind} />;
+  return <DocumentDockLayout {...props} kind={kind} />;
 });
 
 function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn, onNewChat, kind }: DockLayoutProps & { kind: DocumentKind }) {
   const dispatch = useEditorStore((s) => s.dispatch);
-  const [model, setModel] = useState(() => createInitialModel(kind));
+  const [layout, setLayout] = useState(() => ({ kind, model: createInitialModel(kind) }));
+  // Keep FlexLayout mounted: its document visibility listener survives an
+  // unmount and would retain each prior layout after a document-kind switch.
+  // Replace the model before committing the new kind, so layout effects and
+  // persistence always see the matching document-kind arrangement.
+  if (layout.kind !== kind) setLayout({ kind, model: createInitialModel(kind) });
+  const model = layout.model;
+  const setModel = useCallback((next: Model) => { setLayout({ kind, model: next }); }, [kind]);
   const modelRef = useRef(model);
   modelRef.current = model;
 
@@ -586,6 +593,7 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
   const figureCount = useEditorStore((s) => snapshotRoots(s.snapshot).length);
   // From none, as at startup: a layout mounted for a multi-figure document opens the list too.
   const prevFigureCountRef = useRef(0);
+  useEffect(() => { prevFigureCountRef.current = 0; }, [kind]);
   useEffect(() => {
     const prev = prevFigureCountRef.current;
     prevFigureCountRef.current = figureCount;

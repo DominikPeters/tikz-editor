@@ -90,6 +90,7 @@ const tabSizeCompartment = new Compartment();
 const editableCompartment = new Compartment();
 const highlightCompartment = new Compartment();
 const languageCompartment = new Compartment();
+const historyCompartment = new Compartment();
 
 type SourceLanguageMode = "tikz" | "tex" | "beamer";
 
@@ -861,6 +862,7 @@ export function SourcePanel() {
 
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const historyDocumentIdRef = useRef(activeDocumentId);
   const colorPickerRef = useRef<HTMLDivElement | null>(null);
   const ignoreNextSelectionSyncRef = useRef(false);
   const suppressStoreSelectionSyncRef = useRef(false);
@@ -994,7 +996,7 @@ export function SourcePanel() {
         highlightActiveLineGutter(),
         highlightSpecialChars(),
         CMState.lineSeparator.of("\n"),
-        history(),
+        historyCompartment.of(history()),
         foldGutter(),
         drawSelection(),
         dropCursor(),
@@ -1073,6 +1075,30 @@ export function SourcePanel() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally run once; source synced via separate effect below
+
+  useLayoutEffect(() => {
+    if (historyDocumentIdRef.current === activeDocumentId) return;
+    historyDocumentIdRef.current = activeDocumentId;
+    const view = viewRef.current;
+    if (!view) return;
+    // The view survives tab switches, but its local undo entries belong to
+    // the previous document and can retain deleted text from closed files.
+    // Removing then restoring the history field releases those entries.
+    view.dispatch({ effects: historyCompartment.reconfigure([]) });
+    view.dispatch({ effects: historyCompartment.reconfigure(history()) });
+    // Chromium also records native contenteditable undo steps, independently
+    // of CodeMirror's history. They retain detached lines (and their cmTile
+    // trees) from earlier documents. Detaching the same editable subtree
+    // retires those native steps without recreating the view or its listeners.
+    const parent = view.dom.parentNode;
+    if (parent && view.dom.isConnected) {
+      const nextSibling = view.dom.nextSibling;
+      const hadFocus = view.hasFocus;
+      view.dom.remove();
+      parent.insertBefore(view.dom, nextSibling);
+      if (hadFocus) view.focus();
+    }
+  }, [activeDocumentId]);
 
   // ── Reactively apply editor settings ────────────────────────────────────────
   useEffect(() => {

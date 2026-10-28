@@ -282,9 +282,7 @@ struct PendingServerRequest {
     process: ProcessHandle,
 }
 
-#[derive(Clone)]
 struct DocumentAssistantSession {
-    document_id: String,
     session_generation: u64,
     thread_id: String,
     workspace_path: PathBuf,
@@ -396,11 +394,21 @@ impl AssistantState {
                 .documents
                 .lock()
                 .expect("documents lock poisoned");
-            docs.values().cloned().collect::<Vec<_>>()
+            // Poll only file identities. Cloning sessions would copy the entire
+            // conversation and source every 300 ms, even while the app is idle.
+            docs.iter()
+                .map(|(id, session)| {
+                    (
+                        id.clone(),
+                        session.session_generation,
+                        session.figure_path.clone(),
+                    )
+                })
+                .collect::<Vec<_>>()
         };
 
-        for session in sessions {
-            let Ok(source) = fs::read_to_string(&session.figure_path) else {
+        for (document_id, session_generation, figure_path) in sessions {
+            let Ok(source) = fs::read_to_string(&figure_path) else {
                 continue;
             };
             let mut docs = self
@@ -408,10 +416,10 @@ impl AssistantState {
                 .documents
                 .lock()
                 .expect("documents lock poisoned");
-            let Some(current) = docs.get_mut(&session.document_id) else {
+            let Some(current) = docs.get_mut(&document_id) else {
                 continue;
             };
-            if current.session_generation != session.session_generation
+            if current.session_generation != session_generation
                 || source == current.last_seen_figure_source
             {
                 continue;
@@ -423,8 +431,8 @@ impl AssistantState {
             let _ = self.emit_event(AssistantEventPayload {
                 kind: "source-updated".to_string(),
                 data: json!({
-                  "documentId": session.document_id,
-                  "sessionGeneration": session.session_generation,
+                  "documentId": document_id,
+                  "sessionGeneration": session_generation,
                   "source": source,
                   "revisionToken": revision
                 }),
@@ -741,9 +749,9 @@ impl AssistantState {
             .lock()
             .map_err(|_| "documents lock unavailable".to_string())?
             .get(&document_id)
-            .cloned()
+            .map(summary_from_session)
         {
-            return Ok(summary_from_session(&existing));
+            return Ok(existing);
         }
 
         drop(generations);
@@ -894,7 +902,6 @@ impl AssistantState {
         };
 
         let session = DocumentAssistantSession {
-            document_id: document_id.clone(),
             session_generation,
             thread_id: thread_id.clone(),
             workspace_path: workspace.clone(),
@@ -915,12 +922,13 @@ impl AssistantState {
         if generations.get(&document_id) != Some(&session_generation) {
             return Err("Assistant chat was replaced".to_string());
         }
+        let summary = summary_from_session(&session);
         self.inner
             .documents
             .lock()
             .map_err(|_| "documents lock unavailable".to_string())?
-            .insert(document_id, session.clone());
-        Ok(summary_from_session(&session))
+            .insert(document_id, session);
+        Ok(summary)
     }
 
     pub fn start_turn(
@@ -1103,19 +1111,19 @@ impl AssistantState {
         document_id: String,
         session_generation: u64,
     ) -> Result<(), String> {
-        let session = self
+        let (thread_id, turn_id) = self
             .inner
             .documents
             .lock()
             .map_err(|_| "documents lock unavailable".to_string())?
             .get(&document_id)
             .filter(|session| session.session_generation == session_generation)
-            .cloned()
+            .map(|session| (session.thread_id.clone(), session.current_turn_id.clone()))
             .ok_or_else(|| "Assistant thread not initialized for document".to_string())?;
-        if let Some(turn_id) = session.current_turn_id {
+        if let Some(turn_id) = turn_id {
             let _ = self.request(
                 "turn/interrupt",
-                json!({ "threadId": session.thread_id, "turnId": turn_id }),
+                json!({ "threadId": thread_id, "turnId": turn_id }),
             )?;
         }
         Ok(())
@@ -1128,21 +1136,24 @@ impl AssistantState {
         prompt: String,
         pasted_images: Option<Vec<AssistantPastedImageInput>>,
     ) -> Result<Option<String>, String> {
-        let session = self
+        let (thread_id, turn_id, workspace_path) = self
             .inner
             .documents
             .lock()
             .map_err(|_| "documents lock unavailable".to_string())?
             .get(&document_id)
             .filter(|session| session.session_generation == session_generation)
-            .cloned()
+            .map(|session| {
+                (
+                    session.thread_id.clone(),
+                    session.current_turn_id.clone(),
+                    session.workspace_path.clone(),
+                )
+            })
             .ok_or_else(|| "Assistant thread not initialized for document".to_string())?;
-        let turn_id = session
-            .current_turn_id
-            .clone()
-            .ok_or_else(|| "No active assistant turn to steer".to_string())?;
+        let turn_id = turn_id.ok_or_else(|| "No active assistant turn to steer".to_string())?;
         let pasted_image_paths = persist_pasted_images(
-            Path::new(&session.workspace_path),
+            Path::new(&workspace_path),
             pasted_images.unwrap_or_default(),
         )?;
         let mut input = vec![json!({
@@ -1160,7 +1171,7 @@ impl AssistantState {
         let result = self.request(
             "turn/steer",
             json!({
-                "threadId": session.thread_id,
+                "threadId": thread_id,
                 "input": input,
                 "expectedTurnId": turn_id
             }),

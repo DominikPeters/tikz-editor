@@ -94,6 +94,31 @@ describe("workspace model", () => {
     expect(closedAll.documents[closedAll.activeDocumentId]?.title).toContain("Untitled");
   });
 
+  it("retires closed-document overlay steps while keeping the other document's nested-picture step", () => {
+    const initial = makeInitialState();
+    const firstId = initial.activeDocumentId;
+    const first = editorReducer(initial, { type: "SET_DECK_STEP", rootId: "frame:0", step: 2 });
+    const second = editorReducer(first, { type: "NEW_DOCUMENT" });
+    const secondId = second.activeDocumentId;
+    const stepped = editorReducer(second, { type: "SET_DECK_STEP", rootId: "frame:3:tikzpicture:0", step: 4 });
+    expect(stepped.deckStepByRootKey).toEqual({ [`${firstId}::frame:0`]: 2, [`${secondId}::frame:3`]: 4 });
+
+    const closed = editorReducer(stepped, { type: "CLOSE_DOCUMENT", documentId: firstId });
+    expect(closed.activeDocumentId).toBe(secondId);
+    expect(closed.deckStepByRootKey).toEqual({ [`${secondId}::frame:3`]: 4 });
+    expect(editorReducer(closed, { type: "CLOSE_DOCUMENT", documentId: firstId })).toBe(closed);
+  });
+
+  it("drops overlay-step records when replacing the only tab or closing all tabs", () => {
+    const stepped = editorReducer(makeInitialState(), { type: "SET_DECK_STEP", rootId: "frame:0", step: 2 });
+    expect(editorReducer(stepped, { type: "CLOSE_DOCUMENT" }).deckStepByRootKey).toEqual({});
+
+    const second = editorReducer(stepped, { type: "NEW_DOCUMENT" });
+    const bothStepped = editorReducer(second, { type: "SET_DECK_STEP", rootId: "frame:1", step: 3 });
+    expect(Object.keys(bothStepped.deckStepByRootKey)).toHaveLength(2);
+    expect(editorReducer(bothStepped, { type: "CLOSE_ALL_DOCUMENTS" }).deckStepByRootKey).toEqual({});
+  });
+
   it("tracks dirty and save transitions per document", () => {
     const initial = makeInitialState();
     const edited = editorReducer(initial, { type: "CODE_EDITED", source: `${initial.source}\n% changed` });

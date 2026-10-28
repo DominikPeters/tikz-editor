@@ -11,9 +11,15 @@ export function importedGraphicPath(name: string): string {
 }
 
 export function graphicBytesBase64(bytes: ArrayBuffer): string {
-  let binary = "";
-  for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte);
-  return btoa(binary);
+  const view = new Uint8Array(bytes);
+  const chunks: string[] = [];
+  // Bound argument count and avoid one intermediate string node per byte when
+  // importing multi-megabyte images/PDFs.
+  const chunkSize = 32 * 1024;
+  for (let offset = 0; offset < view.length; offset += chunkSize) {
+    chunks.push(String.fromCharCode(...view.subarray(offset, offset + chunkSize)));
+  }
+  return btoa(chunks.join(""));
 }
 
 export function storeImportedGraphic(storage: PlatformPersistence, graphic: { path: string; payload: string }): void {

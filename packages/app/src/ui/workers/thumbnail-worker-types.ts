@@ -34,6 +34,11 @@ export type ThumbnailRegisterGraphicsMessage = {
   bundle: DocumentGraphicsPreviewBundle;
 };
 
+export type ThumbnailUnregisterGraphicsMessage = {
+  type: "unregisterGraphics";
+  cacheKey: string;
+};
+
 export type ThumbnailCancelGroup = {
   type: "cancelGroup";
   groupId: string;
@@ -41,6 +46,7 @@ export type ThumbnailCancelGroup = {
 
 export type ThumbnailWorkerRequestMessage =
   | ThumbnailRegisterGraphicsMessage
+  | ThumbnailUnregisterGraphicsMessage
   | ThumbnailRenderRequest
   | ThumbnailCancelGroup;
 
