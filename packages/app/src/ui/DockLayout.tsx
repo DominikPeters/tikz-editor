@@ -1,6 +1,6 @@
 import { isRecord } from "../validation";
 import { Activity, Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Layout, Model, Actions, DockLocation, type IJsonModel, type TabNode } from "flexlayout-react";
+import { Layout, Model, Actions, DockLocation, TabSetNode, type IJsonModel, type TabNode } from "flexlayout-react";
 import { useEditorStore } from "../store/store";
 import type { EditorAction } from "../store/types";
 import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
@@ -22,56 +22,14 @@ import "flexlayout-react/style/gray.css";
 import "./DockLayout.css";
 import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
 import { isDockLayoutJson } from "./dock-layout-validation";
-import { DOCK_PANEL_IDS, panelTitle, useDockPanelMenus } from "./dock-panel-menus";
+import { DOCK_PANEL_IDS, dockSideOf, movePanelToSide, panelHomeSide, panelTitle, useDockPanelMenus } from "./dock-panel-menus";
 import type { DocumentKind } from "@tikz-editor/core/document/kind";
 
 // ── Panel IDs ─────────────────────────────────────────────────────────────────
 
 export const PANEL_IDS = DOCK_PANEL_IDS;
 
-const HOME_TABSET_IDS = ["source-tabset", "canvas-tabset", "right-tabset"] as const;
-
-type PanelHome = {
-  tabsetId: string;
-  dockLocation: DockLocation;
-  edgeLocation: DockLocation;
-};
-
-const PANEL_HOMES: Record<string, PanelHome> = {
-  [PANEL_IDS.source]: {
-    tabsetId: "source-tabset",
-    dockLocation: DockLocation.CENTER,
-    edgeLocation: DockLocation.LEFT,
-  },
-  [PANEL_IDS.figureNavigator]: {
-    tabsetId: "canvas-tabset",
-    dockLocation: DockLocation.BOTTOM,
-    edgeLocation: DockLocation.BOTTOM,
-  },
-  [PANEL_IDS.inspector]: {
-    tabsetId: "right-tabset",
-    dockLocation: DockLocation.CENTER,
-    edgeLocation: DockLocation.RIGHT,
-  },
-  [PANEL_IDS.builds]: { tabsetId: "right-tabset", dockLocation: DockLocation.CENTER, edgeLocation: DockLocation.RIGHT },
-  // Under the slide, as presentation software shows its notes.
-  [PANEL_IDS.notes]: { tabsetId: "canvas-tabset", dockLocation: DockLocation.BOTTOM, edgeLocation: DockLocation.BOTTOM },
-  [PANEL_IDS.objects]: {
-    tabsetId: "right-tabset",
-    dockLocation: DockLocation.CENTER,
-    edgeLocation: DockLocation.RIGHT,
-  },
-  [PANEL_IDS.styles]: {
-    tabsetId: "right-tabset",
-    dockLocation: DockLocation.CENTER,
-    edgeLocation: DockLocation.RIGHT,
-  },
-  [PANEL_IDS.assistant]: {
-    tabsetId: "right-tabset",
-    dockLocation: DockLocation.CENTER,
-    edgeLocation: DockLocation.RIGHT,
-  },
-};
+const HOME_TABSET_IDS = ["left-tabset", "source-tabset", "canvas-tabset", "right-tabset"] as const;
 
 // ── Default layout ────────────────────────────────────────────────────────────
 
@@ -137,6 +95,42 @@ function buildDefaultLayout(): IJsonModel {
           id: "right-tabset",
           enableDeleteWhenEmpty: false,
           children: rightTabs,
+        },
+      ],
+    },
+  };
+}
+
+function defaultLayoutForKind(kind: DocumentKind = "tikz"): IJsonModel {
+  const base = buildDefaultLayout();
+  if (kind === "tikz") return base;
+  const right = base.layout.children[2];
+  if (right?.type !== "tabset") throw new Error("Default layout is missing its sidebar.");
+  return {
+    ...base,
+    layout: {
+      type: "row",
+      children: [
+        {
+          type: "tabset", id: "left-tabset", weight: 20, enableDeleteWhenEmpty: false,
+          children: [{ type: "tab", id: PANEL_IDS.figureNavigator, name: "Slides", component: "figure-navigator" }],
+        },
+        {
+          type: "row", weight: 60,
+          children: [
+            {
+              type: "tabset", id: "canvas-tabset", weight: 65, enableDeleteWhenEmpty: false,
+              children: [{ type: "tab", id: PANEL_IDS.canvas, name: "Canvas", component: "canvas", enableClose: false }],
+            },
+            {
+              type: "tabset", id: "source-tabset", weight: 35, enableDeleteWhenEmpty: false,
+              children: [{ type: "tab", id: PANEL_IDS.source, name: "Source", component: "source" }],
+            },
+          ],
+        },
+        {
+          ...right,
+          children: [...right.children, { type: "tab", id: PANEL_IDS.builds, name: "Overlays", component: "builds" }],
         },
       ],
     },
@@ -296,7 +290,7 @@ function buildWideInspectorLayout(): IJsonModel {
 }
 
 export const LAYOUT_PRESETS = {
-  default: buildDefaultLayout,
+  default: defaultLayoutForKind,
   sourceOnTop: buildSourceOnTopLayout,
   canvasOnly: buildCanvasOnlyLayout,
   wideInspector: buildWideInspectorLayout,
@@ -307,11 +301,11 @@ export type BuiltInWorkspaceId = keyof typeof LAYOUT_PRESETS;
 export type BuiltInWorkspace = {
   id: BuiltInWorkspaceId;
   name: string;
-  build: () => IJsonModel;
+  build: (kind?: DocumentKind) => IJsonModel;
 };
 
 export const BUILT_IN_WORKSPACES: readonly BuiltInWorkspace[] = [
-  { id: "default",        name: "Default",         build: buildDefaultLayout },
+  { id: "default",        name: "Default",         build: defaultLayoutForKind },
   { id: "sourceOnTop",    name: "Source on Top",   build: buildSourceOnTopLayout },
   { id: "canvasOnly",     name: "Canvas Only",     build: buildCanvasOnlyLayout },
   { id: "wideInspector",  name: "Wide Inspector",  build: buildWideInspectorLayout },
@@ -446,18 +440,6 @@ export function getDockLayoutHandle(): DockLayoutHandle | null {
   return activeDockHandle;
 }
 
-function defaultLayoutForKind(kind: DocumentKind): IJsonModel {
-  const model = Model.fromJson(buildDefaultLayout());
-  if (kind === "beamer") {
-    model.doAction(Actions.addNode({ type: "tab", id: PANEL_IDS.builds, name: "Overlays", component: "builds" }, "right-tabset", DockLocation.CENTER, -1, false));
-    model.doAction(Actions.addNode({ type: "tab", id: PANEL_IDS.figureNavigator, name: "Slides", component: "figure-navigator" }, "canvas-tabset", DockLocation.BOTTOM, -1, false));
-    const navigatorHome = model.getNodeById(PANEL_IDS.figureNavigator)?.getParent();
-    if (navigatorHome) model.doAction(Actions.updateNodeAttributes(navigatorHome.getId(), { weight: 15 }));
-    model.doAction(Actions.updateNodeAttributes("canvas-tabset", { weight: 85 }));
-  }
-  return model.toJson();
-}
-
 function createLayoutModel(json: unknown, kind: DocumentKind = "tikz"): { model: Model; recovered: boolean } {
   try {
     if (!isDockLayoutJson(json)) throw new Error("Invalid dock layout structure.");
@@ -489,6 +471,8 @@ export const DockLayout = memo(function DockLayout(props: DockLayoutProps) {
 function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn, onNewChat, kind }: DockLayoutProps & { kind: DocumentKind }) {
   const dispatch = useEditorStore((s) => s.dispatch);
   const [model, setModel] = useState(() => createInitialModel(kind));
+  const modelRef = useRef(model);
+  modelRef.current = model;
 
   // Factory — renders panel content for each tab
   const factory = useCallback(
@@ -507,14 +491,16 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
               <MemoCanvasPanel repeatPreviewModel={repeatPreviewModel} />
             </Suspense>
           );
-        case "figure-navigator":
+        case "figure-navigator": {
+          const parent = node.getParent();
           return (
             <WhileTabVisible node={node}>
               <Suspense fallback={null}>
-                <MemoRootNavigator />
+                <MemoRootNavigator vertical={kind === "beamer" && parent instanceof TabSetNode && dockSideOf(modelRef.current, parent) === "left"} />
               </Suspense>
             </WhileTabVisible>
           );
+        }
         case "inspector":
           return <WhileTabVisible node={node}><InspectorPanelSwitch /></WhileTabVisible>;
         case "builds":
@@ -533,7 +519,7 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
           return <div>Unknown panel: {component}</div>;
       }
     },
-    [repeatPreviewModel, onSubmitPrompt, onInterruptTurn, onNewChat]
+    [repeatPreviewModel, onSubmitPrompt, onInterruptTurn, onNewChat, kind]
   );
 
   // On model change: persist + sync to Zustand
@@ -547,9 +533,6 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
 
   // Expose handle. We use a ref to always point to the latest model via closure,
   // so that handle identity stays stable but always operates on current model.
-  const modelRef = useRef(model);
-  modelRef.current = model;
-
   const setModelRef = useRef(setModel);
   setModelRef.current = setModel;
 
@@ -565,46 +548,18 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
       if (existing) {
         m.doAction(Actions.deleteTab(panelId));
       } else {
-        const home = PANEL_HOMES[panelId];
         const tabJson = { type: "tab", id: panelId, name: panelTitle(panelId, useEditorStore.getState().documentKind), component: panelId };
-
-        const homeTabset = home ? m.getNodeById(home.tabsetId) : null;
-        if (home && homeTabset) {
-          // Home tabset exists — add into it at the normal dock location.
-          m.doAction(Actions.addNode(tabJson, home.tabsetId, home.dockLocation, -1));
-        } else if (home) {
-          // Home tabset is gone — re-establish it at the expected edge of the root.
-          const rootId = m.getRoot().getId();
-          m.doAction(Actions.addNode(tabJson, rootId, home.edgeLocation, -1));
-          const newTabset = m.getNodeById(panelId)?.getParent();
-          if (newTabset && newTabset.getId() !== home.tabsetId) {
-            m.doAction(Actions.updateNodeAttributes(newTabset.getId(), {
-              id: home.tabsetId,
-              enableDeleteWhenEmpty: false,
-            }));
-          }
-        } else {
-          // Unknown panel — dock to the first tabset as a safety net.
-          m.doAction(Actions.addNode(tabJson, m.getFirstTabSet().getId(), DockLocation.CENTER, -1));
-        }
-
-        // Panels docked below the canvas take a small part of its height.
-        const belowCanvasWeight = { [PANEL_IDS.figureNavigator]: 15, [PANEL_IDS.notes]: 20 }[panelId];
-        if (belowCanvasWeight !== undefined) {
-          const belowTabset = m.getNodeById(panelId)?.getParent();
-          if (belowTabset) {
-            m.doAction(Actions.updateNodeAttributes(belowTabset.getId(), { weight: belowCanvasWeight }));
-            const canvasTs = m.getNodeById("canvas-tabset");
-            if (canvasTs) m.doAction(Actions.updateNodeAttributes("canvas-tabset", { weight: 100 - belowCanvasWeight }));
-          }
-        }
+        m.doAction(Actions.addNode(tabJson, m.getFirstTabSet().getId(), DockLocation.CENTER, -1));
+        const side = panelHomeSide(panelId, kind);
+        const belowCanvasWeight = { [PANEL_IDS.figureNavigator]: 15, [PANEL_IDS.source]: 35 }[panelId] ?? 20;
+        if (side) movePanelToSide(m, panelId, side, belowCanvasWeight);
       }
       saveDockLayout(m.toJson(), kind);
       syncLayoutStateToStore(m, dispatchRef.current);
     },
     applyPreset(preset: keyof typeof LAYOUT_PRESETS) {
       const builder = LAYOUT_PRESETS[preset];
-      this.applyLayoutJson(builder());
+      this.applyLayoutJson(builder(kind));
     },
     applyLayoutJson(json: IJsonModel) {
       const { model: newModel } = createLayoutModel(json, kind);

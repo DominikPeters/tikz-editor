@@ -1,17 +1,19 @@
 import type { IJsonModel } from "flexlayout-react";
 import { BUILT_IN_WORKSPACES, getDockLayoutHandle } from "./DockLayout";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
+import { useEditorStore } from "../store/store";
 
 export type WorkspaceEntry =
   | { kind: "built-in"; id: string; name: string; json: IJsonModel }
   | { kind: "user"; id: string; name: string; json: IJsonModel };
 
 export function listAllWorkspaces(): WorkspaceEntry[] {
+  const kind = useEditorStore.getState().documentKind;
   const builtIns: WorkspaceEntry[] = BUILT_IN_WORKSPACES.map((b) => ({
     kind: "built-in" as const,
     id: b.id,
     name: b.name,
-    json: b.build(),
+    json: b.build(kind),
   }));
   const users = useWorkspaceListStore.getState().userWorkspaces.map((u): WorkspaceEntry => ({
     kind: "user",
@@ -46,7 +48,7 @@ export function applyWorkspace(id: string): void {
   if (!handle) return;
   const builtIn = BUILT_IN_WORKSPACES.find((b) => b.id === id);
   if (builtIn) {
-    handle.applyLayoutJson(builtIn.build());
+    handle.applyLayoutJson(builtIn.build(useEditorStore.getState().documentKind));
     return;
   }
   const user = useWorkspaceListStore.getState().userWorkspaces.find((u) => u.id === id);

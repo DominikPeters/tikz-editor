@@ -17,7 +17,7 @@ const scrollByDocument = new Map<string, { left: number; top: number }>();
 const collapsedByDocument = new Map<string, Set<string>>();
 const DRAG_TYPE = "application/x-tikz-editor-slides";
 
-export function RootNavigator() {
+export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
   const documentId = useEditorStore(s => s.activeDocumentId);
   const source = useEditorStore(s => s.source);
   const revision = useEditorStore(s => s.sourceRevision);
@@ -123,7 +123,7 @@ export function RootNavigator() {
     let frame = 0;
     const update = () => {
       frame = 0;
-      setLayout(panel.clientWidth < 270 ? "vertical" : panel.clientHeight < 240 ? "strip" : "grid");
+      setLayout(vertical || panel.clientWidth < 270 ? "vertical" : panel.clientHeight < 240 ? "strip" : "grid");
       const box = viewport.getBoundingClientRect();
       const visible = shownIds.filter(id => {
         const rect = buttons.current.get(id)?.getBoundingClientRect();
@@ -138,7 +138,7 @@ export function RootNavigator() {
     viewport.addEventListener("scroll", schedule, { passive: true });
     schedule();
     return () => { observer.disconnect(); viewport.removeEventListener("scroll", schedule); cancelAnimationFrame(frame); };
-  }, [documentId, shownKey, layout]);
+  }, [documentId, shownKey, layout, vertical]);
   // Reveal the active card when it or the slides' arrangement changes, not at
   // every edit: scrolling into view measures the layout. Collapsing a section
   // is no reason to reopen it.

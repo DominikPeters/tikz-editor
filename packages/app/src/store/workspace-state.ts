@@ -236,10 +236,11 @@ export function documentKindForSource(source: string): DocumentKind {
 export function projectState(workspace: WorkspacePersistedState, ui: WorkspaceEphemeralState): EditorState {
   const normalizedWorkspace = normalizeWorkspaceActiveDocument(workspace);
   const active = getActiveDocument(normalizedWorkspace);
+  const documentKind = documentKindForSource(active.source);
   return {
     source: active.source,
     sourceRevision: active.sourceRevision,
-    documentKind: documentKindForSource(active.source),
+    documentKind,
     activeRootId: active.activeRootId,
     snapshot: active.snapshot,
     pendingRequestId: active.pendingRequestId,
@@ -267,10 +268,11 @@ export function projectState(workspace: WorkspacePersistedState, ui: WorkspaceEp
     activeInspectorEditDocumentId: ui.activeInspectorEditDocumentId,
     activeCanvasTextEditSourceId: ui.activeCanvasTextEditSourceId,
     canvasTextEditMask: ui.canvasTextEditMask,
-    showGrid: ui.showGrid,
+    canvasViewPreferences: ui.canvasViewPreferences,
+    showGrid: ui.canvasViewPreferences[documentKind].showGrid,
     showTransparencyGrid: ui.showTransparencyGrid,
     snapModes: ui.snapModes,
-    showRulers: ui.showRulers,
+    showRulers: ui.canvasViewPreferences[documentKind].showRulers,
     showGuides: ui.showGuides,
     showDocumentBounds: ui.showDocumentBounds,
     freehandSmoothingPx: ui.freehandSmoothingPx,
@@ -320,6 +322,7 @@ export function workspaceStateFromEditorState(state: EditorState): WorkspacePers
 
 export function uiStateFromEditorState(state: EditorState): WorkspaceEphemeralState {
   return {
+    canvasViewPreferences: state.canvasViewPreferences,
     toolMode: state.toolMode,
     canvasTransform: state.canvasTransform,
     hoveredElementId: state.hoveredElementId,
@@ -328,10 +331,8 @@ export function uiStateFromEditorState(state: EditorState): WorkspaceEphemeralSt
     activeInspectorEditDocumentId: state.activeInspectorEditDocumentId,
     activeCanvasTextEditSourceId: state.activeCanvasTextEditSourceId,
     canvasTextEditMask: state.canvasTextEditMask,
-    showGrid: state.showGrid,
     showTransparencyGrid: state.showTransparencyGrid,
     snapModes: state.snapModes,
-    showRulers: state.showRulers,
     showGuides: state.showGuides,
     showDocumentBounds: state.showDocumentBounds,
     freehandSmoothingPx: state.freehandSmoothingPx,

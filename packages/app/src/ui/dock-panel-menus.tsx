@@ -84,7 +84,7 @@ const TOGGLE_COMMANDS: Record<string, AppMenuCommandId> = {
 
 export type DockSide = "left" | "below-canvas" | "right";
 
-const SIDE_TABSET_IDS: Record<Exclude<DockSide, "below-canvas">, string> = { left: "source-tabset", right: "right-tabset" };
+const SIDE_TABSET_IDS: Record<Exclude<DockSide, "below-canvas">, string> = { left: "left-tabset", right: "right-tabset" };
 
 /** Where each panel lives when it is shown from a menu. */
 const PANEL_SIDES: Record<string, DockSide> = {
@@ -98,9 +98,17 @@ const PANEL_SIDES: Record<string, DockSide> = {
   [P.assistant]: "right",
 };
 
+export function panelHomeSide(panelId: string, kind: DocumentKind): DockSide | undefined {
+  if (kind === "beamer") {
+    if (panelId === P.source) return "below-canvas";
+    if (panelId === P.figureNavigator) return "left";
+  }
+  return PANEL_SIDES[panelId];
+}
+
 /** The tabset stacked directly under the canvas, if the layout has one. */
 function belowCanvasTabset(model: Model): TabSetNode | null {
-  const canvas = model.getNodeById("canvas-tabset");
+  const canvas = model.getNodeById(P.canvas)?.getParent();
   const parent = canvas?.getParent();
   if (!canvas || !(parent instanceof RowNode) || parent.getOrientation() !== Orientation.VERT) return null;
   const siblings = parent.getChildren();
@@ -109,34 +117,42 @@ function belowCanvasTabset(model: Model): TabSetNode | null {
 }
 
 export function dockSideOf(model: Model, tabset: TabSetNode): DockSide | null {
+  if (belowCanvasTabset(model) === tabset) return "below-canvas";
   if (tabset.getId() === SIDE_TABSET_IDS.left) return "left";
+  // TikZ and older saved layouts use source-tabset for the left dock.
+  if (tabset.getId() === "source-tabset") return "left";
   if (tabset.getId() === SIDE_TABSET_IDS.right) return "right";
-  return belowCanvasTabset(model) === tabset ? "below-canvas" : null;
+  return null;
 }
 
 function canMoveTo(model: Model, side: DockSide): boolean {
-  return side !== "below-canvas" || model.getNodeById("canvas-tabset") != null;
+  return side !== "below-canvas" || model.getNodeById(P.canvas)?.getParent() instanceof TabSetNode;
 }
 
 /** Moves a panel into the dock on one side, re-creating that dock if it is gone. */
-export function movePanelToSide(model: Model, panelId: string, side: DockSide): void {
+export function movePanelToSide(model: Model, panelId: string, side: DockSide, belowCanvasWeight = 20): void {
   if (side === "below-canvas") {
     const below = belowCanvasTabset(model);
     if (below) {
       model.doAction(Actions.moveNode(panelId, below.getId(), DockLocation.CENTER, -1));
       return;
     }
-    model.doAction(Actions.moveNode(panelId, "canvas-tabset", DockLocation.BOTTOM, -1));
+    const canvas = model.getNodeById(P.canvas)?.getParent();
+    if (!(canvas instanceof TabSetNode)) return;
+    model.doAction(Actions.moveNode(panelId, canvas.getId(), DockLocation.BOTTOM, -1));
     const created = model.getNodeById(panelId)?.getParent();
     if (created) {
-      model.doAction(Actions.updateNodeAttributes(created.getId(), { weight: 20 }));
-      model.doAction(Actions.updateNodeAttributes("canvas-tabset", { weight: 80 }));
+      model.doAction(Actions.updateNodeAttributes(created.getId(), { weight: belowCanvasWeight }));
+      model.doAction(Actions.updateNodeAttributes(canvas.getId(), { weight: 100 - belowCanvasWeight }));
     }
     return;
   }
   const tabsetId = SIDE_TABSET_IDS[side];
-  if (model.getNodeById(tabsetId)) {
-    model.doAction(Actions.moveNode(panelId, tabsetId, DockLocation.CENTER, -1));
+  const legacyLeft = model.getNodeById("source-tabset");
+  const target = model.getNodeById(tabsetId) ??
+    (side === "left" && legacyLeft instanceof TabSetNode && dockSideOf(model, legacyLeft) === "left" ? legacyLeft : null);
+  if (target) {
+    model.doAction(Actions.moveNode(panelId, target.getId(), DockLocation.CENTER, -1));
     return;
   }
   model.doAction(Actions.moveNode(panelId, model.getRoot().getId(), side === "left" ? DockLocation.LEFT : DockLocation.RIGHT, -1));
@@ -251,7 +267,7 @@ function panelAvailable(panelId: string, kind: DocumentKind): boolean {
 function dockMenuPanels(model: Model, tabset: TabSetNode, kind: DocumentKind): string[] {
   const side = dockSideOf(model, tabset);
   const here = tabset.getChildren().map(child => child.getId()).filter(id => id !== P.canvas);
-  const home = Object.keys(PANEL_SIDES).filter(id => side != null && PANEL_SIDES[id] === side && model.getNodeById(id) == null);
+  const home = Object.keys(PANEL_SIDES).filter(id => side != null && panelHomeSide(id, kind) === side && model.getNodeById(id) == null);
   return [...here, ...home].filter(id => TOGGLE_COMMANDS[id] !== undefined && panelAvailable(id, kind));
 }
 
@@ -282,23 +298,25 @@ export function useDockPanelMenus(host: DockMenuHost, kind: DocumentKind) {
   }, []);
 
   const onContextMenu = useCallback((node: TabNode | TabSetNode | BorderNode, event: MouseEvent<HTMLElement>) => {
-    if (!(node instanceof TabNode) || node.getId() === P.canvas) return;
+    // A stretched single tab reports its tabset as the context-menu target.
+    const tab = node instanceof TabSetNode && node.getChildren().length === 1 ? node.getSelectedNode() : node;
+    if (!(tab instanceof TabNode) || tab.getId() === P.canvas) return;
     const model = host.getModel();
-    const parent = node.getParent();
+    const parent = tab.getParent();
     const current = parent instanceof TabSetNode ? dockSideOf(model, parent) : null;
-    const panelId = node.getId();
+    const panelId = tab.getId();
     const move = (side: DockSide) => ({
       enabled: current !== side && canMoveTo(model, side),
       run: () => { movePanelToSide(host.getModel(), panelId, side); host.persist(); }
     });
     const bindings: CommandBindings = {
-      [IDS.PANEL_CLOSE]: { enabled: node.isEnableClose(), run: () => { host.togglePanel(panelId); } },
+      [IDS.PANEL_CLOSE]: { enabled: tab.isEnableClose(), run: () => { host.togglePanel(panelId); } },
       [IDS.PANEL_MOVE_LEFT]: move("left"),
       [IDS.PANEL_MOVE_BELOW_CANVAS]: move("below-canvas"),
       [IDS.PANEL_MOVE_RIGHT]: move("right"),
     };
     show(event, [
-      { kind: "command", commandId: IDS.PANEL_CLOSE, label: `Close “${node.getName()}”` },
+      { kind: "command", commandId: IDS.PANEL_CLOSE, label: `Close “${tab.getName()}”` },
       { kind: "separator" },
       { kind: "command", commandId: IDS.PANEL_MOVE_LEFT, label: "Move to Left Side" },
       { kind: "command", commandId: IDS.PANEL_MOVE_BELOW_CANVAS, label: "Move Below Canvas" },

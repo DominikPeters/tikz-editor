@@ -32,6 +32,7 @@ import {
 } from "./workspace-state";
 import { reconcileActiveRootSelection, snapshotRoots } from "../root-inventory";
 import { deckStepRootKey, rootKey } from "../root-key";
+import { DEFAULT_CANVAS_VIEW_PREFERENCES, type CanvasViewPreferences } from "./canvas-view-preferences";
 export { DEFAULT_SOURCE, WORKSPACE_VERSION } from "./workspace-state";
 const FREEHAND_SMOOTHING_MIN_PX = 4;
 const FREEHAND_SMOOTHING_MAX_PX = 32;
@@ -49,8 +50,9 @@ const MAX_DEVELOPER_LOG_ARRAY_ITEMS = 20;
 const MAX_DEVELOPER_LOG_OBJECT_KEYS = 24;
 const MAX_DEVELOPER_LOG_DEPTH = 4;
 
-function initialUiState(): WorkspaceEphemeralState {
+function initialUiState(canvasViewPreferences: CanvasViewPreferences): WorkspaceEphemeralState {
   return {
+    canvasViewPreferences,
     toolMode: "select",
     canvasTransform: DEFAULT_CANVAS_TRANSFORM,
     hoveredElementId: null,
@@ -59,7 +61,6 @@ function initialUiState(): WorkspaceEphemeralState {
     activeInspectorEditDocumentId: null,
     activeCanvasTextEditSourceId: null,
     canvasTextEditMask: null,
-    showGrid: true,
     showTransparencyGrid: false,
     snapModes: {
       grid: true,
@@ -67,7 +68,6 @@ function initialUiState(): WorkspaceEphemeralState {
       points: true,
       gaps: true
     },
-    showRulers: true,
     showGuides: true,
     showDocumentBounds: true,
     freehandSmoothingPx: DEFAULT_FREEHAND_SMOOTHING_PX,
@@ -304,9 +304,9 @@ function readAssistantText(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-export function makeInitialState(seed?: WorkspaceSeed): EditorState {
+export function makeInitialState(seed?: WorkspaceSeed, canvasViewPreferences = DEFAULT_CANVAS_VIEW_PREFERENCES): EditorState {
   const workspace = seed ? hydrateWorkspaceStateFromSeed(seed) : createInitialWorkspaceState();
-  return projectState(workspace, initialUiState());
+  return projectState(workspace, initialUiState(canvasViewPreferences));
 }
 
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
@@ -1578,10 +1578,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     }
 
     case "TOGGLE_CANVAS_AID":
-      if (action.aid === "grid") {
-        ui = { ...ui, showGrid: !ui.showGrid };
-      } else if (action.aid === "rulers") {
-        ui = { ...ui, showRulers: !ui.showRulers };
+      if (action.aid === "grid" || action.aid === "rulers") {
+        const kind = state.documentKind;
+        const field = action.aid === "grid" ? "showGrid" : "showRulers";
+        ui = { ...ui, canvasViewPreferences: {
+          ...ui.canvasViewPreferences,
+          [kind]: { ...ui.canvasViewPreferences[kind], [field]: !state[field] },
+        } };
       } else if (action.aid === "guides") {
         ui = { ...ui, showGuides: !ui.showGuides };
       } else if (action.aid === "transparencyGrid") {

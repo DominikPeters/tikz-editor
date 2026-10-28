@@ -56,6 +56,11 @@ for (const layout of ["strip", "vertical", "grid"] as const) {
   test(`keeps the ${layout} slide list in place when clicking a slide after scrolling`, async ({ page }) => {
     await gotoApp(page);
     if (layout !== "strip") await dock(page, layout === "vertical" ? 18 : 40);
+    else {
+      await setSource(page, SOURCE);
+      await page.locator(".flexlayout__tabset_tabbar_outer .dock-tab-label").filter({ hasText: /^Slides$/u }).click({ button: "right" });
+      await page.getByRole("menuitem", { name: "Move Below Canvas", exact: true }).click();
+    }
     const source = String.raw`\documentclass{beamer}
 \begin{document}
 ${Array.from({ length: 24 }, (_, i) => String.raw`\begin{frame}{Item ${i + 1}}Content.\end{frame}`).join("\n")}
@@ -90,7 +95,7 @@ test("mirrors the active overlay, shows other slides' final overlays, and keeps 
   await gotoApp(page); await setSource(page, SOURCE);
   await expect(nav(page).getByRole("button", { name: "New slide", exact: true })).toHaveCount(0);
   await card(page, "A").click();
-  await expect(nav(page)).toHaveAttribute("data-layout", "strip");
+  await expect(nav(page)).toHaveAttribute("data-layout", "vertical");
   await expect(nav(page).locator("img")).toHaveCount(4);
   const image = await card(page, "A").locator("img").getAttribute("src");
   expect(decodeURIComponent(image!).includes(`data-source-start="${SOURCE.indexOf("Later.")}"`)).toBe(false);

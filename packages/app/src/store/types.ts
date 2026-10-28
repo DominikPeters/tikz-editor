@@ -11,6 +11,7 @@ import type {
   AssistantTurnStatus
 } from "../platform/types";
 import type { DocumentKind } from "@tikz-editor/core/document/kind";
+import type { CanvasViewPreferences } from "./canvas-view-preferences";
 
 export type ToolMode =
   | "select"
@@ -237,6 +238,8 @@ export type DeckObjectSelection = {
 };
 
 export type WorkspaceEphemeralState = {
+  /** Persisted separately from documents and named panel layouts. */
+  canvasViewPreferences: CanvasViewPreferences;
   // ── canvas slice ─────────────────────────────────────────────────────────────
   toolMode: ToolMode;
   canvasTransform: CanvasTransform;
@@ -249,10 +252,8 @@ export type WorkspaceEphemeralState = {
   activeCanvasTextEditSourceId: string | null;
   /** Structural mask for the active canvas text-editing session (see type). */
   canvasTextEditMask: CanvasTextEditMask | null;
-  showGrid: boolean;
   showTransparencyGrid: boolean;
   snapModes: SnapModes;
-  showRulers: boolean;
   showGuides: boolean;
   showDocumentBounds: boolean;
   freehandSmoothingPx: number;
@@ -341,6 +342,7 @@ export type EditorState = {
   recentDocumentIds: string[];
 
   // ── canvas slice ─────────────────────────────────────────────────────────────
+  canvasViewPreferences: CanvasViewPreferences;
   toolMode: ToolMode;
   canvasTransform: CanvasTransform;
   hoveredElementId: string | null;
