@@ -17,6 +17,24 @@ function recovered(text: string): string {
 }
 
 describe("TeX recovery", () => {
+  it("keeps recent recoveries reusable without retaining many large document revisions", () => {
+    const firstText = `first {${"x".repeat(300000)}`;
+    const first = scanTexRecovery(firstText);
+    const hotText = "recent {text";
+    const hot = scanTexRecovery(hotText);
+    for (let index = 0; index < 5; index++) {
+      scanTexRecovery(`${index} {${"x".repeat(300000)}`);
+      expect(scanTexRecovery(hotText)).toBe(hot);
+    }
+    expect(scanTexRecovery(firstText)).not.toBe(first);
+    expect(scanTexRecovery(firstText)).toEqual(first);
+  });
+
+  it("reuses one recovery larger than the memory budget", () => {
+    const text = `large {${"x".repeat(1100000)}`;
+    expect(scanTexRecovery(text)).toBe(scanTexRecovery(text));
+  });
+
   it.each([
     String.raw`Intro \textbf{bold} and $x^{2}$ \(y\) \[z\] $$w$$.`,
     "{\\small one\n\ntwo}",

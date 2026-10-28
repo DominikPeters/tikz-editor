@@ -2,6 +2,7 @@ import { requireArrayValue } from "../../../utils/collections.js";
 import { englishDefaults } from '../languages/en.js';
 import { EN_US_EXCEPTIONS } from '../languages/data/hyph-en-us.exceptions.js';
 import { EN_US_PATTERNS } from '../languages/data/hyph-en-us.patterns.js';
+import { TexWeightedLruCache } from '../../tex/cache.js';
 
 export interface Hyphenator {
   hyphenate(word: string): number[];
@@ -129,7 +130,9 @@ function applyMinima(
 
 const cachedTrie = buildPatternTrie(EN_US_PATTERNS);
 const cachedExceptions = buildExceptionMap(EN_US_EXCEPTIONS);
-const hyphenatorCache = new Map<string, EnglishHyphenator>();
+// Hyphenators live across documents. Neither a stream of new words while
+// typing nor document-defined minima should keep every earlier value alive.
+const hyphenatorCache = new TexWeightedLruCache<string, EnglishHyphenator>(16, 16);
 
 export function preloadEnglishHyphenator(): Promise<void> {
   return Promise.resolve();
@@ -140,7 +143,7 @@ export class EnglishHyphenator implements Hyphenator {
   private readonly exceptions: Map<string, number[]>;
   private readonly leftMin: number;
   private readonly rightMin: number;
-  private readonly cache = new Map<string, number[]>();
+  private readonly cache = new TexWeightedLruCache<string, number[]>(16384, 2 * 1024 * 1024);
 
   constructor(trie: TrieNode, exceptions: Map<string, number[]>, options: HyphenatorOptions = {}) {
     this.leftMin = options.leftMin ?? englishDefaults.lefthyphenmin;
@@ -168,7 +171,7 @@ export class EnglishHyphenator implements Hyphenator {
         this.leftMin,
         this.rightMin
       );
-      this.cache.set(lowerWord, filtered);
+      this.cache.set(lowerWord, filtered, lowerWord.length * 2 + filtered.length * 8 + 96);
       return filtered;
     }
 
@@ -207,7 +210,7 @@ export class EnglishHyphenator implements Hyphenator {
       this.leftMin,
       this.rightMin
     );
-    this.cache.set(lowerWord, filtered);
+    this.cache.set(lowerWord, filtered, lowerWord.length * 2 + filtered.length * 8 + 96);
     return filtered;
   }
 }
@@ -221,7 +224,7 @@ export function createEnglishHyphenator(
   let cached = hyphenatorCache.get(key);
   if (!cached) {
     cached = new EnglishHyphenator(cachedTrie, cachedExceptions, { leftMin, rightMin });
-    hyphenatorCache.set(key, cached);
+    hyphenatorCache.set(key, cached, 1);
   }
   return cached;
 }

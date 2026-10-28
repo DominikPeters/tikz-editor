@@ -19,24 +19,16 @@ import { resolveMatrixCellEditTarget, resolveMatrixMode } from "../semantic/node
 import { incrementProfilingCounter } from "../profiling.js";
 import { findPathStatementById } from "./statement-find.js";
 import { walkPathItems } from "../ast/walk.js";
+import { ForeachSnippetParseCache } from "../foreach/snippet-parse-cache.js";
 
 // Every foreach-template target reparses its loop's body, and the canvas
 // resolves the targets of all text in a figure on each render, most of them in
 // the same few loops: keep recent body parses. Callers only read them.
 const LOOP_BODY_PARSE_LIMIT = 64;
-const loopBodyParses = new Map<string, ForeachStatementBodyParseResult>();
+const loopBodyParses = new ForeachSnippetParseCache<ForeachStatementBodyParseResult>(LOOP_BODY_PARSE_LIMIT, 4 * 1024 * 1024);
 
 function parseLoopBody(bodyRaw: string, bodySpan: Span): ForeachStatementBodyParseResult {
-  const key = `${bodySpan.from}:${bodySpan.to}:${bodyRaw}`;
-  let parsed = loopBodyParses.get(key);
-  if (parsed) {
-    loopBodyParses.delete(key);
-  } else {
-    parsed = parseStatementsFromBodyWithMapping(bodyRaw, bodySpan);
-    if (loopBodyParses.size >= LOOP_BODY_PARSE_LIMIT) loopBodyParses.delete(requireDefined(loopBodyParses.keys().next().value, "Missing required loopBodyParses.keys().next().value"));
-  }
-  loopBodyParses.set(key, parsed);
-  return parsed;
+  return loopBodyParses.getOrParse(bodyRaw, bodySpan, () => parseStatementsFromBodyWithMapping(bodyRaw, bodySpan));
 }
 
 // A parse result owns its target index. Normal targets no longer walk every

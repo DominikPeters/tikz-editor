@@ -178,11 +178,25 @@ export function getExactTexSyntaxIndex(
 function rememberRecentIndex(parser: LRParser, index: TexSyntaxIndex, replaced: TexSyntaxIndex | null): void {
   let recent = (recentIndexesByParser.get(parser) ?? []).filter((entry) => entry !== index && entry !== replaced);
   recent = [index, ...recent];
-  if (recent.length > RECENT_INDEX_LIMIT) {
-    const smallest = recent.slice(1).reduce((min, entry) => entry.source.length < min.source.length ? entry : min);
+  // The history is a second owner of indexes, independent of the reusable
+  // cache. Its count limit alone could pin eight arbitrarily large documents.
+  // Preserve one oversized current document so indexing its small captions
+  // does not discard the only tree from which its next edit can reparse.
+  const oversized = recent.find((entry) => syntaxIndexBytes(entry.source) > SYNTAX_INDEX_CACHE_BYTES);
+  recent = recent.filter((entry) => entry === oversized || syntaxIndexBytes(entry.source) <= SYNTAX_INDEX_CACHE_BYTES);
+  let bytes = recent.reduce((sum, entry) => sum + (entry === oversized ? 0 : syntaxIndexBytes(entry.source)), 0);
+  while (recent.length > RECENT_INDEX_LIMIT || bytes > SYNTAX_INDEX_CACHE_BYTES) {
+    const candidates = recent.slice(1).filter((entry) => entry !== oversized);
+    if (candidates.length === 0) break;
+    const smallest = candidates.reduce((min, entry) => entry.source.length < min.source.length ? entry : min);
     recent = recent.filter((entry) => entry !== smallest);
+    bytes -= syntaxIndexBytes(smallest.source);
   }
   recentIndexesByParser.set(parser, recent);
+}
+
+function syntaxIndexBytes(source: string): number {
+  return source.length * 64 + 4096;
 }
 
 /** Whether two trees have the same nodes at the same places. */
