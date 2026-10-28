@@ -125,13 +125,16 @@ async function rasterizeSvg(svg: SVGSVGElement): Promise<{
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.ceil(bounds.width * scale));
   canvas.height = Math.max(1, Math.ceil(bounds.height * scale));
-  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
+  let url: string | undefined;
+  let cropped: HTMLCanvasElement | undefined;
   try {
+    const imageUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
+    url = imageUrl;
     const image = new Image();
     await new Promise<void>((resolve, reject) => {
       image.onload = () => { resolve(); };
       image.onerror = () => { reject(new Error("Failed to render PDF mask or filter.")); };
-      image.src = url;
+      image.src = imageUrl;
     });
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) throw new Error("PDF effects require a 2D canvas context.");
@@ -147,7 +150,7 @@ async function rasterizeSvg(svg: SVGSVGElement): Promise<{
       }
     }
     if (right < left) return null;
-    const cropped = document.createElement("canvas");
+    cropped = document.createElement("canvas");
     cropped.width = right - left + 1;
     cropped.height = bottom - top + 1;
     const cropContext = cropped.getContext("2d");
@@ -159,6 +162,9 @@ async function rasterizeSvg(svg: SVGSVGElement): Promise<{
       height: cropped.height * bounds.height / canvas.height,
       dataUrl: cropped.toDataURL("image/png") };
   } finally {
-    URL.revokeObjectURL(url);
+    if (url) URL.revokeObjectURL(url);
+    canvas.width = 0;
+    canvas.height = 0;
+    if (cropped) { cropped.width = 0; cropped.height = 0; }
   }
 }

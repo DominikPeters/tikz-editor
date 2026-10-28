@@ -81,12 +81,20 @@ export async function openPdfDocument(bytes: Uint8Array): Promise<PdfDocument> {
   const open = async (): Promise<PdfDocument> => {
     await configurePdfJsWorker(pdfjs);
     // pdf.js hands its data to the worker, so it gets a copy.
-    return await pdfjs.getDocument({
+    const loadingTask = pdfjs.getDocument({
       data: new Uint8Array(bytes),
       isOffscreenCanvasSupported: false,
       useWorkerFetch: false,
       ownerDocument,
-    }).promise;
+    });
+    try {
+      return await loadingTask.promise;
+    } catch (error) {
+      // No proxy is returned to the caller on failure, so the task still owns
+      // its worker and any partially decoded document.
+      await loadingTask.destroy();
+      throw error;
+    }
   };
   try {
     return await open();
@@ -113,8 +121,8 @@ async function rasterizePdfWithWorkerMode(
     ownerDocument,
   });
 
-  const pdf = await loadingTask.promise;
   try {
+    const pdf = await loadingTask.promise;
     if (request.pageNumber > pdf.numPages) {
       throw new Error(`PDF page ${request.pageNumber} is out of range; document has ${pdf.numPages} page${pdf.numPages === 1 ? "" : "s"}.`);
     }
@@ -146,20 +154,24 @@ async function rasterizePdfWithWorkerMode(
       const pixelHeight = Math.max(1, Math.ceil(viewport.height));
       canvas.width = pixelWidth;
       canvas.height = pixelHeight;
-      const canvasContext = canvas.getContext("2d");
-      if (!canvasContext) {
-        throw new Error("PDF rendering requires a 2D canvas context.");
+      let dataUrl: string;
+      try {
+        const canvasContext = canvas.getContext("2d");
+        if (!canvasContext) {
+          throw new Error("PDF rendering requires a 2D canvas context.");
+        }
+
+        await page.render({
+          canvas,
+          canvasContext,
+          viewport,
+        }).promise;
+        dataUrl = canvas.toDataURL("image/png");
+      } finally {
+        // Release the backing surface on render/serialization errors too.
+        canvas.width = 0;
+        canvas.height = 0;
       }
-
-      await page.render({
-        canvas,
-        canvasContext,
-        viewport,
-      }).promise;
-
-      const dataUrl = canvas.toDataURL("image/png");
-      canvas.width = 0;
-      canvas.height = 0;
       const dataBase64 = dataUrl.match(/^data:image\/png;base64,(.+)$/)?.[1];
       if (!dataBase64) {
         throw new Error("PDF rendering did not produce a PNG data URL.");

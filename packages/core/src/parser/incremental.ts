@@ -352,7 +352,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
         figure: nextFigure,
         statementRefsBySourceId: nextIndex,
         diagnosticPartition: nextDiagnosticPartition,
-        tree: lazy(() => parseSyntax(resolveParseWindowSource(structuralSource, nextActiveFigureSpan)))
+        tree: lazySyntaxTree(structuralSource, nextActiveFigureSpan)
       };
       cached = nextCache;
       return {
@@ -614,6 +614,14 @@ function createParseResultFromCache(cache: CachedIncrementalParseState, source: 
 function lazy<T>(build: () => T): () => T {
   let value: { readonly current: T } | undefined;
   return () => (value ??= { current: build() }).current;
+}
+
+/** Keep the deferred tree independent of the evaluator's previous-cache context. */
+function lazySyntaxTree(source: string, span: Span): () => Tree {
+  // A closure created inside evaluate shares a lexical context with callbacks
+  // that use currentCache, keeping every preceding parse alive through this
+  // tree builder during a long incremental gesture.
+  return lazy(() => parseSyntax(resolveParseWindowSource(source, span)));
 }
 
 function buildCache(

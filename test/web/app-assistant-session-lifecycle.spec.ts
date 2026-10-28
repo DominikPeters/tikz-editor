@@ -3,7 +3,7 @@
 import { requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { appCallbacks, deferred, mountAssistantApp, unmountAssistantApp } from "./assistant-session-fixtures";
+import { appCallbacks, tabCallbacks, deferred, mountAssistantApp, unmountAssistantApp } from "./assistant-session-fixtures";
 import { createDesktopPlatformAdapter, type DesktopBridge } from "../../apps/desktop/src/platform/desktop-platform";
 import { getActiveEditorPlatform, setActiveEditorPlatform } from "../../packages/app/src/platform/current";
 import { useEditorStore } from "../../packages/app/src/store/store";
@@ -74,6 +74,67 @@ describe("App assistant chat lifecycle", () => {
     expect(app.start).not.toHaveBeenCalled();
     expect(requireDocumentSession(useEditorStore.getState().documents, app.id).assistantThreadId).toBeNull();
     expect(requireDocumentSession(useEditorStore.getState().documents, app.id).assistantItems).toEqual([]);
+  });
+
+  it("retires a closed document and fences off a thread ensure already in flight", async () => {
+    const pending = deferred<AssistantThreadSummary>();
+    const app = await mount({ assistantEnsureDocumentThread: async () => pending.promise });
+    let submitting!: Promise<void>;
+    await act(async () => { submitting = appCallbacks.current.onSubmitPrompt("old", null, []); });
+    await act(async () => { useEditorStore.getState().dispatch({ type: "CLOSE_DOCUMENT", documentId: app.id }); });
+    expect(app.reset).toHaveBeenCalledExactlyOnceWith({ documentId: app.id, sessionGeneration: 1 });
+    await act(async () => { pending.resolve(summary(0)); await submitting; });
+    expect(app.start).not.toHaveBeenCalled();
+    expect(useEditorStore.getState().documents[app.id]).toBeUndefined();
+  });
+
+  it("retires every removed document using its current generation when closing all tabs", async () => {
+    const app = await mount();
+    let secondId!: string;
+    await act(async () => {
+      useEditorStore.getState().dispatch({ type: "NEW_DOCUMENT", source });
+      secondId = useEditorStore.getState().activeDocumentId;
+      useEditorStore.getState().dispatch({ type: "ASSISTANT_NEW_CHAT", documentId: secondId });
+      useEditorStore.getState().dispatch({ type: "ASSISTANT_NEW_CHAT", documentId: secondId });
+    });
+    expect(app.reset).not.toHaveBeenCalled();
+    await act(async () => { useEditorStore.getState().dispatch({ type: "CLOSE_ALL_DOCUMENTS" }); });
+    expect(app.reset).toHaveBeenCalledTimes(2);
+    expect(app.reset).toHaveBeenCalledWith({ documentId: app.id, sessionGeneration: 1 });
+    expect(app.reset).toHaveBeenCalledWith({ documentId: secondId, sessionGeneration: 3 });
+    expect(useEditorStore.getState().documents[app.id]).toBeUndefined();
+    expect(useEditorStore.getState().documents[secondId]).toBeUndefined();
+  });
+
+  it("keeps the session when an unsaved close is cancelled or no document was removed", async () => {
+    const confirm = vi.fn(async () => "cancel" as const);
+    const app = await mount({ confirmUnsavedChanges: confirm });
+    await act(async () => { tabCallbacks.current!.onRequestCloseDocument(app.id); });
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(useEditorStore.getState().documents[app.id]).toBeDefined();
+    await act(async () => {
+      useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: `${source}\n% edited` });
+      useEditorStore.getState().dispatch({ type: "CLOSE_DOCUMENT", documentId: "missing" });
+    });
+    expect(app.reset).not.toHaveBeenCalled();
+  });
+
+  it("contains native reset failures while closing a document", async () => {
+    const failure = new Error("native reset failed");
+    const reset = vi.fn(async () => { throw failure; });
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    const app = await mount({ assistantResetDocumentThread: reset });
+    await act(async () => { useEditorStore.getState().dispatch({ type: "CLOSE_DOCUMENT", documentId: app.id }); });
+    expect(reset).toHaveBeenCalledExactlyOnceWith({ documentId: app.id, sessionGeneration: 1 });
+    expect(useEditorStore.getState().documents[app.id]).toBeUndefined();
+    expect(log).toHaveBeenCalledWith("[tikz-editor] Closed document assistant cleanup failed.", failure);
+  });
+
+  it("unsubscribes on app unmount without resetting restorable sessions", async () => {
+    const app = await mount();
+    await unmountAssistantApp();
+    useEditorStore.getState().dispatch({ type: "CLOSE_DOCUMENT", documentId: app.id });
+    expect(app.reset).not.toHaveBeenCalled();
   });
 
   it("rejects retired events and reducer actions while accepting the current generation", async () => {

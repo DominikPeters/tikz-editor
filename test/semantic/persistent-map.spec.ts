@@ -1,8 +1,49 @@
 import { describe, expect, it } from "vitest";
 
 import { PersistentMap } from "../../packages/core/src/semantic/persistent-map.js";
+import { collectTestGarbage } from "../setup/gc.js";
 
 describe("PersistentMap", () => {
+  it("releases superseded values once a sealed snapshot has a complete flat map", async () => {
+    const map = new PersistentMap<string, { revision: number; payload: Uint8Array }>();
+    const references: WeakRef<object>[] = [];
+    function update(revision: number) {
+      const value = { revision, payload: new Uint8Array(1024) };
+      references.push(new WeakRef(value));
+      map.set("node", value);
+      return map.snapshot();
+    }
+    const first = update(0);
+    for (let revision = 1; revision < 200; revision++) {
+      update(revision);
+      expect(map.size).toBe(1);
+    }
+    await collectTestGarbage();
+    // An explicitly retained old version still owns its value. The latest
+    // version must not pin the 198 overwritten values between them.
+    expect(references.filter(reference => reference.deref())).toHaveLength(2);
+    expect(new PersistentMap(first).get("node")?.revision).toBe(0);
+    expect(map.get("node")?.revision).toBe(199);
+  });
+
+  it("compacts a flat writable version when it becomes a snapshot", async () => {
+    const map = new PersistentMap<string, object>();
+    const references: WeakRef<object>[] = [];
+    function update(revision: number) {
+      const value = { revision };
+      references.push(new WeakRef(value));
+      map.set("node", value);
+      expect([...map.values()]).toEqual([value]);
+      map.snapshot();
+    }
+    for (let revision = 0; revision < 100; revision++) update(revision);
+    await collectTestGarbage();
+    expect(references.filter(reference => reference.deref())).toHaveLength(1);
+    // A later write must fork the compacted state and retain all its keys.
+    map.set("other", {});
+    expect(map.size).toBe(2);
+  });
+
   it("materializes long checkpoint histories with linear retained storage", () => {
     const map = new PersistentMap<number, number | undefined>();
     const snapshots = [];

@@ -397,7 +397,10 @@ export function prepareBeamerDocument(
   const context = createBeamerRenderContext(source, options);
   let quotes: "tex" | "unicode" | undefined;
   const bodyIrByFrameIndex = new Map<number, BeamerFrameBodyIr>();
-  const counterContexts = new Map<DocumentGraphicsResolver | undefined, Promise<{ beforeFrames: number[]; totalFrames: number }>>();
+  // Asset refreshes replace resolvers while keeping this prepared document.
+  // Old counter results must not keep those resolvers and their image bytes alive.
+  const noGraphicsResolver = {};
+  const counterContexts = new WeakMap<object, Promise<{ beforeFrames: number[]; totalFrames: number }>>();
 
   const requireFrame = (frameIndex: number): BeamerFrameModel => {
     const frame = context.document.frames[frameIndex];
@@ -446,7 +449,8 @@ export function prepareBeamerDocument(
   // that can split, once per graphics resolver, to make totals and later
   // frames independent of the order in which callers request their pages.
   const frameCounterContext = (graphicsResolver?: DocumentGraphicsResolver, work?: BeamerRenderWork) => {
-    let pending = counterContexts.get(graphicsResolver);
+    const key = graphicsResolver ?? noGraphicsResolver;
+    let pending = counterContexts.get(key);
     if (!pending) {
       pending = (async () => {
         const beforeFrames: number[] = [];
@@ -461,8 +465,8 @@ export function prepareBeamerDocument(
         }
         return { beforeFrames, totalFrames };
       })();
-      counterContexts.set(graphicsResolver, pending);
-      void pending.catch(() => { if (counterContexts.get(graphicsResolver) === pending) counterContexts.delete(graphicsResolver); });
+      counterContexts.set(key, pending);
+      void pending.catch(() => { if (counterContexts.get(key) === pending) counterContexts.delete(key); });
     }
     return pending;
   };

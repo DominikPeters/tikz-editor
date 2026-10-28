@@ -8,6 +8,10 @@ const appCallbacks = vi.hoisted(() => ({ current: {} as {
   onSubmitPrompt: (prompt: string, model: string | null, attachments: []) => Promise<void>;
 } }));
 export { appCallbacks };
+const tabCallbacks = vi.hoisted(() => ({ current: null as null | {
+  onRequestCloseDocument: (documentId: string) => void;
+} }));
+export { tabCallbacks };
 
 // Keep App orchestration, store, reducer, and desktop adapter. Capture assistant
 // callbacks while excluding unrelated UI and rendering work.
@@ -17,7 +21,10 @@ vi.mock("../../packages/app/src/ui/compute-scheduler", () => ({
 }));
 vi.mock("../../packages/app/src/ui/AppMenuBar", () => ({ AppMenuBar: () => null }));
 vi.mock("../../packages/app/src/ui/Toolbar", () => ({ Toolbar: () => null }));
-vi.mock("../../packages/app/src/ui/TabStrip", () => ({ TabStrip: () => null }));
+vi.mock("../../packages/app/src/ui/TabStrip", () => ({ TabStrip: (callbacks: NonNullable<typeof tabCallbacks.current>) => {
+  tabCallbacks.current = callbacks;
+  return null;
+} }));
 vi.mock("../../packages/app/src/ui/DockLayout", () => ({ DockLayout: (callbacks: typeof appCallbacks.current) => { appCallbacks.current = callbacks; return null; } }));
 vi.mock("../../packages/app/src/ui/StatusBar", () => ({ StatusBar: () => null }));
 vi.mock("../../packages/app/src/ui/DevPanel", () => ({ DevPanel: () => null }));

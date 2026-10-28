@@ -8,7 +8,7 @@ import { useEditorStore } from "../../packages/app/src/store/store";
 import { makeInitialState } from "../../packages/app/src/store/reducer";
 import { loadUserWorkspaces } from "../../packages/app/src/store/workspace-storage";
 
-const visual = vi.hoisted(() => ({ factory: null as null | ((node: TabNode) => React.ReactNode) }));
+const visual = vi.hoisted(() => ({ factory: null as null | ((node: TabNode) => React.ReactNode), mounts: 0, unmounts: 0 }));
 // Exercise the real dock model, persistence, and store while omitting unrelated panel UI.
 vi.mock("../../packages/app/src/ui/source-panel/SourcePanel", () => ({ SourcePanel: () => null }));
 vi.mock("../../packages/app/src/ui/canvas-panel/CanvasPanel", () => ({ CanvasPanel: () => null }));
@@ -21,7 +21,14 @@ vi.mock("../../packages/app/src/ui/StylesPanel", () => ({ StylesPanel: () => nul
 vi.mock("../../packages/app/src/ui/AssistantPanel", () => ({ AssistantPanel: () => null }));
 vi.mock("flexlayout-react", async importOriginal => ({
   ...await importOriginal<typeof import("flexlayout-react")>(),
-  Layout: ({ factory }: { factory: (node: TabNode) => React.ReactNode }) => { visual.factory = factory; return null; }
+  Layout: function Layout({ factory }: { factory: (node: TabNode) => React.ReactNode }) {
+    React.useEffect(() => {
+      visual.mounts++;
+      return () => { visual.unmounts++; };
+    }, []);
+    visual.factory = factory;
+    return null;
+  }
 }));
 import { DockLayout, getDockLayoutHandle, LAYOUT_PRESETS } from "../../packages/app/src/ui/DockLayout";
 import { applyWorkspace, listAllWorkspaces } from "../../packages/app/src/ui/workspace-apply";
@@ -53,6 +60,8 @@ describe("dock layout recovery", () => {
 
   beforeEach(() => {
     root = null;
+    visual.mounts = 0;
+    visual.unmounts = 0;
     originalStore = useEditorStore.getState();
     useEditorStore.setState(makeInitialState());
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -128,6 +137,8 @@ describe("dock layout recovery", () => {
     expect(useEditorStore.getState().showSourcePanel).toBe(true);
     expect(getDockLayoutHandle()!.getModel().getNodeById("builds")).toBeUndefined();
     expect(storage.has("tikz-editor:dock-layout:beamer")).toBe(true);
+    expect(visual.mounts).toBe(1);
+    expect(visual.unmounts).toBe(0);
   });
 
   it("recovers malformed user-workspace apply and persists the recovered model", async () => {

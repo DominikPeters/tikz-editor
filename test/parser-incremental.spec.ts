@@ -4,8 +4,39 @@ import type { Span } from "../packages/core/src/ast/types.js";
 import type { SourcePatch } from "../packages/core/src/edit/types.js";
 import { createIncrementalParseSession, parseTikz } from "../packages/core/src/parser/index.js";
 import { fragment } from "./fragment-helpers.js";
+import { collectTestGarbage } from "./setup/gc.js";
 
 describe("incremental parser session", () => {
+  it("releases intermediate parse inventories while keeping deferred trees and held results readable", async () => {
+    const sourceFor = (revision: number) => `\\begin{tikzpicture}\n\\draw (${(revision / 1000).toFixed(3)},0) -- (4,0);\n` +
+      Array.from({ length: 64 }, (_, index) => `\\draw (${index},-1) rectangle ++(.7,.6);`).join("\n") + "\n\\end{tikzpicture}";
+    const session = createIncrementalParseSession();
+    session.prime(parseWithContext(sourceFor(0)), { includeContextDefinitions: true, sourceRevision: 0 });
+    const references: WeakRef<object>[] = [];
+    const update = (revision: number) => {
+      const result = session.evaluate({ source: sourceFor(revision), sourceRevision: revision,
+        includeContextDefinitions: true, inferChanges: true, trigger: "drag-handle" });
+      expect(result.stats.strategy).toBe("incremental");
+      references.push(new WeakRef(result.parse.figures));
+      return result.parse;
+    };
+    const held = update(1);
+    for (let revision = 2; revision <= 40; revision++) update(revision);
+    await collectTestGarbage();
+    // Only the deliberately held result and the session's current version
+    // should remain. Lazy tree builders must not own previous evaluator frames.
+    expect(references.filter(reference => reference.deref())).toHaveLength(2);
+    const treeSpans = (parse: ReturnType<typeof parseTikz>) => {
+      const spans: string[] = [];
+      parse.tree.iterate({ enter(node) { spans.push(`${node.name}:${node.from}:${node.to}`); } });
+      return spans;
+    };
+    expect(treeSpans(held)).toEqual(treeSpans(parseWithContext(sourceFor(1))));
+    const current = session.evaluate({ source: sourceFor(40), sourceRevision: 40, includeContextDefinitions: true }).parse;
+    expect(treeSpans(current)).toEqual(treeSpans(parseWithContext(sourceFor(40))));
+    expect(current.figure).toEqual(parseWithContext(sourceFor(40)).figure);
+  });
+
   it("infers coalesced source edits and exposes a current syntax tree", () => {
     const source = String.raw`\begin{tikzpicture}
       \node (a) at (0,0) {First};

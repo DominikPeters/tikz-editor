@@ -16,6 +16,7 @@ import { getActiveEditorPlatform } from "./platform/current";
 import type { LocalAssetReadResult } from "./platform/types";
 import type { DocumentFileRef } from "./store/types";
 import { isImportedGraphicPath, readImportedGraphic } from "./imported-graphics.js";
+import { BoundedLru } from "./bounded-lru";
 
 type ResolvedImageMimeType = "image/png" | "image/jpeg" | "image/svg+xml";
 type RawAssetMimeType = ResolvedImageMimeType | "application/pdf";
@@ -41,12 +42,17 @@ type PathCacheEntry = {
 const SUPPORTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".svg", ".pdf"] as const;
 const TEX_PT_PER_BP = 72.27 / 72;
 const MAX_PREVIEW_BUNDLES = 8;
-const pathCache = new Map<string, PathCacheEntry>();
+// Documents can be closed without reloading the app. Keep reusable image data
+// within a fixed budget instead of retaining every file/page ever opened.
+// Retain a single oversize current image so edits do not reread/rasterize it.
+const pathCache = new BoundedLru<string, PathCacheEntry>(256, 64 * 1024 * 1024, true);
 const pendingPathReads = new Map<string, {
   readonly token: symbol;
   readonly promise: Promise<PathCacheEntry>;
 }>();
-const previewBundles = new Map<string, DocumentGraphicsPreviewBundle>();
+// The newest bundle must remain available to the thumbnail worker, even when a
+// single document exceeds the history budget.
+const previewBundles = new BoundedLru<string, DocumentGraphicsPreviewBundle>(MAX_PREVIEW_BUNDLES, 48 * 1024 * 1024, true);
 let cacheGeneration = 0;
 
 /** Synchronous freshness fence for completed page caches. */
@@ -150,17 +156,14 @@ export async function prepareDocumentGraphicsResolver(params: {
 export function getDocumentGraphicsPreviewBundle(
   cacheKey: string
 ): DocumentGraphicsPreviewBundle | null {
-  const bundle = previewBundles.get(cacheKey) ?? null;
-  if (bundle) {
-    previewBundles.delete(cacheKey);
-    previewBundles.set(cacheKey, bundle);
-  }
-  return bundle;
+  return previewBundles.get(cacheKey) ?? null;
 }
 
 export function invalidateImageAssetPath(path: string): void {
   const comparablePath = comparableLocalPath(path);
-  for (const [key, entry] of pathCache) {
+  for (const key of pathCache.keys()) {
+    const entry = pathCache.peek(key);
+    if (!entry) continue;
     if (comparableLocalPath(entry.path) === comparablePath) {
       pathCache.delete(key);
       continue;
@@ -231,7 +234,9 @@ async function resolveIncludeGraphicsAsset(params: {
           const read = await readLocalAsset(candidate);
           const entry = await pathCacheEntryFromRead(candidate, descriptor.candidates, read, params.options);
           // Invalidation retires this token, including during PDF rasterization.
-          if (pendingPathReads.get(cacheKey)?.token === token) pathCache.set(cacheKey, entry);
+          if (pendingPathReads.get(cacheKey)?.token === token) {
+            pathCache.set(cacheKey, entry, pathCacheEntryBytes(cacheKey, entry));
+          }
           return entry;
         })()
       };
@@ -486,15 +491,19 @@ function graphicsPreviewRevision(revision: string): string {
 }
 
 function rememberPreviewBundle(bundle: DocumentGraphicsPreviewBundle): void {
-  previewBundles.delete(bundle.cacheKey);
-  previewBundles.set(bundle.cacheKey, bundle);
-  while (previewBundles.size > MAX_PREVIEW_BUNDLES) {
-    const oldestKey = previewBundles.keys().next().value;
-    if (oldestKey === undefined) {
-      break;
-    }
-    previewBundles.delete(oldestKey);
-  }
+  previewBundles.set(bundle.cacheKey, bundle, documentGraphicsPreviewBundleBytes(bundle));
+}
+
+/** Conservative UTF-16 payload estimate, also used for worker registrations. */
+export function documentGraphicsPreviewBundleBytes(bundle: DocumentGraphicsPreviewBundle): number {
+  return 128 + bundle.cacheKey.length * 2 + bundle.entries.reduce((bytes, entry) => bytes +
+    256 + entry.requestKey.length * 2 + (entry.resolution.status === "resolved" ? entry.resolution.dataBase64.length * 2 : 0), 0);
+}
+
+function pathCacheEntryBytes(key: string, entry: PathCacheEntry): number {
+  return 512 + (key.length + entry.path.length + entry.signature.length +
+    entry.watchedPaths.reduce((length, path) => length + path.length, 0) +
+    (entry.resolution.status === "resolved" ? entry.resolution.dataBase64.length : 0)) * 2;
 }
 
 function collectIncludeGraphicsCandidates(source: string): ImageIncludeCandidate[] {

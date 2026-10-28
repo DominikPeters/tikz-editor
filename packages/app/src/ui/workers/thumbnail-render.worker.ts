@@ -15,6 +15,7 @@ const queue: ThumbnailRenderRequest[] = [];
 const cancelledGroupIds = new Set<string>();
 const graphicsResolvers = new Map<string, DocumentGraphicsResolver>();
 let busy = false;
+let activeGroupId: string | null = null;
 
 self.onmessage = (event: MessageEvent<ThumbnailWorkerRequestMessage | null>) => {
   const message = event.data;
@@ -30,8 +31,15 @@ self.onmessage = (event: MessageEvent<ThumbnailWorkerRequestMessage | null>) => 
     return;
   }
 
+  if (message.type === "unregisterGraphics") {
+    graphicsResolvers.delete(message.cacheKey);
+    return;
+  }
+
   if (message.type === "cancelGroup") {
-    cancelledGroupIds.add(message.groupId);
+    // Messages from the client arrive in order: queued work can be removed
+    // outright, and only the running request needs a cancellation mark.
+    if (activeGroupId === message.groupId) cancelledGroupIds.add(message.groupId);
     removeQueuedRequest((entry) => entry.groupId === message.groupId);
     return;
   }
@@ -54,6 +62,7 @@ async function pumpQueue(): Promise<void> {
   }
 
   busy = true;
+  activeGroupId = next.groupId;
   try {
     const graphicsResolver = resolveGraphicsResolver(next.graphicsPreviewBundleKey);
     const svg = await withTexGlyphOutlines(async () => next.deckFrameIndex != null
@@ -100,6 +109,7 @@ async function pumpQueue(): Promise<void> {
     self.postMessage(response);
   } finally {
     busy = false;
+    activeGroupId = null;
     cleanupCancellationMarks();
     if (queue.length > 0) {
       void pumpQueue();

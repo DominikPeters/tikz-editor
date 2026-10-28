@@ -53,6 +53,7 @@ import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
 import type { AssistantEvent, UpdateInfo, UpdateInstallProgress } from "../platform/types";
 import { resolveOpenedFileForDocument, dataTransferHasFilePayload } from "./svg-import";
 import type { AssistantComposerImageAttachment } from "./assistant-image-attachments";
+import { useClosedDocumentAssistantCleanup } from "./useClosedDocumentAssistantCleanup";
 import { formatEquationText, type EquationNodeTarget } from "./equation-utils";
 import { useScheduledCompute } from "./hooks/useScheduledCompute";
 import { useDeckNeighborPrewarm } from "./hooks/useDeckNeighborPrewarm";
@@ -340,6 +341,7 @@ function EditorApp() {
     canvasInvert: s.settings.general.canvasInvert
   })));
   const platform = getActiveEditorPlatform();
+  useClosedDocumentAssistantCleanup(platform.assistant);
   const menuTarget = menuTargetFromPlatformId(platform.id);
   const documentKind = useEditorStore(s => s.documentKind);
   const nestedDrawing = parseDocumentRootId(activeRootId ?? "")?.kind === "beamer-frame-tikz" || snapshot.overlayLayer != null;

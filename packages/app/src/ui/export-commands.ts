@@ -108,36 +108,36 @@ export async function renderPngExport(
   canvas.width = pixelWidth;
   canvas.height = pixelHeight;
 
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("PNG export requires a 2D canvas context.");
-  }
-
-  if (options.transparentBackground === false) {
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, pixelWidth, pixelHeight);
-  } else {
-    context.clearRect(0, 0, pixelWidth, pixelHeight);
-  }
-
-  const svgBlob = new Blob([text], { type: "image/svg+xml;charset=utf-8" });
-  const svgUrl = URL.createObjectURL(svgBlob);
-
   try {
-    const image = await loadSvgImage(svgUrl);
-    context.drawImage(image, 0, 0, pixelWidth, pixelHeight);
-  } finally {
-    URL.revokeObjectURL(svgUrl);
-  }
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("PNG export requires a 2D canvas context.");
+    }
 
-  const blob = await canvasToBlob(canvas, artifact.mimeType);
-  return {
-    artifact,
-    blob,
-    dpi,
-    pixelWidth,
-    pixelHeight
-  };
+    if (options.transparentBackground === false) {
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, pixelWidth, pixelHeight);
+    } else {
+      context.clearRect(0, 0, pixelWidth, pixelHeight);
+    }
+
+    const svgBlob = new Blob([text], { type: "image/svg+xml;charset=utf-8" });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    try {
+      const image = await loadSvgImage(svgUrl);
+      context.drawImage(image, 0, 0, pixelWidth, pixelHeight);
+    } finally {
+      URL.revokeObjectURL(svgUrl);
+    }
+
+    const blob = await canvasToBlob(canvas, artifact.mimeType);
+    return { artifact, blob, dpi, pixelWidth, pixelHeight };
+  } finally {
+    // The encoded blob owns its pixels. Release the scratch backing surface
+    // immediately, including decode/encoding failures, rather than waiting for GC.
+    canvas.width = 0;
+    canvas.height = 0;
+  }
 }
 
 export async function exportPngDownload(

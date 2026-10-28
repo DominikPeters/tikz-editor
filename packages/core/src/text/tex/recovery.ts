@@ -1,6 +1,7 @@
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { Span } from "../../ast/types.js";
+import { TexWeightedLruCache } from "./cache.js";
 
 /**
  * Recovery from unbalanced TeX (T1, T2, T5): an opener with no closer is
@@ -61,8 +62,11 @@ const DEFINITIONS = new Set(["newcommand", "renewcommand", "providecommand", "De
   "DeclareDocumentCommand", "NewDocumentEnvironment", "RenewDocumentEnvironment", "newcolumntype",
   "defbeamertemplate", "setbeamertemplate", "addtobeamertemplate"]);
 
-const cache = new Map<string, TexRecovery>();
-const CACHE_LIMIT = 128;
+// Source keys include whole documents: an entry limit alone can retain many
+// large revisions. Keep a single oversized active document reusable as well.
+const cache = new TexWeightedLruCache<string, TexRecovery>(128, 2 * 1024 * 1024, {
+  retainOversizedEntry: true,
+});
 
 /** The recovery a text needs (cached by text). */
 export function scanTexRecovery(text: string): TexRecovery {
@@ -71,11 +75,7 @@ export function scanTexRecovery(text: string): TexRecovery {
     return cached;
   }
   const recovery = scan(text);
-  cache.set(text, recovery);
-  if (cache.size > CACHE_LIMIT) {
-    const oldest = cache.keys().next();
-    if (!oldest.done) cache.delete(oldest.value);
-  }
+  cache.set(text, recovery, text.length * 2 + recovery.closers.length * 160 + recovery.strays.length * 64 + 96);
   return recovery;
 }
 
