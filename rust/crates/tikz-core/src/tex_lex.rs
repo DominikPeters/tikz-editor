@@ -36,7 +36,10 @@ pub fn read_tex_control_sequence(source: &str, from: usize) -> Option<TexControl
         cursor += 1;
     }
     if cursor == from + 1 {
-        cursor = bytes.len().min(from + 2);
+        // Control symbol: the backslash plus exactly one *character*. Using
+        // `from + 2` bytes would split a multibyte char and panic on slice.
+        let symbol_len = source[from + 1..].chars().next().map_or(0, char::len_utf8);
+        cursor = from + 1 + symbol_len;
     }
     Some(TexControlSequence {
         raw: source[from..cursor].to_string(),
@@ -275,5 +278,18 @@ mod tex_lex_unit_tests {
         let source = "{a\\}b % t }\n}";
         let span = read_tex_balanced_delimited(source, 0, b'{', b'}', source.len());
         assert_eq!(span, Some(Span::new(0, source.len())));
+    }
+}
+
+#[cfg(test)]
+mod multibyte_regression {
+    use super::*;
+
+    #[test]
+    fn control_symbol_before_multibyte_char_does_not_split_it() {
+        let seq = read_tex_control_sequence("\\\u{4e2d}x", 0).unwrap();
+        assert_eq!(seq.raw, "\\\u{4e2d}");
+        assert_eq!(seq.span, Span::new(0, 4));
+        assert_eq!(read_tex_control_sequence("\\", 0).unwrap().raw, "\\");
     }
 }

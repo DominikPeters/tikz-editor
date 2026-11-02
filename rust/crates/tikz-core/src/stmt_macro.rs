@@ -252,7 +252,6 @@ fn declare_operator_body(inner: &str, starred: bool) -> String {
         "{}{{{inner}}}",
         if starred { "\\operatorname*" } else { "\\operatorname" }
     )
-    .into()
 }
 
 /// Scan `\name` inside the bare inner text of a macro-name group.
@@ -459,7 +458,7 @@ mod stmt_macro_unit_tests {
         assert_eq!(stmt.optional_default_span, Some(Span::new(21, 22)));
         assert_eq!(stmt.body_raw, "y");
         assert_eq!(stmt.body_span, Some(Span::new(24, 25)));
-        assert_eq!(stmt.starred, false);
+        assert!(!stmt.starred);
     }
 
     #[test]
@@ -519,7 +518,7 @@ mod stmt_macro_unit_tests {
         );
         assert_eq!(stmt.name_raw, "\\bar");
         assert_eq!(stmt.name_span, Some(Span::new(12, 16)));
-        assert_eq!(stmt.starred, true);
+        assert!(stmt.starred);
         assert_eq!(stmt.body_raw, "y");
         assert_eq!(stmt.body_span, Some(Span::new(17, 18)));
     }
@@ -540,7 +539,7 @@ mod stmt_macro_unit_tests {
         );
         // The star sits between the command token and the name node.
         assert_eq!(stmt.command_raw, "\\DeclareMathOperator");
-        assert_eq!(stmt.starred, true);
+        assert!(stmt.starred);
         assert_eq!(stmt.name_raw, "\\foo");
         assert_eq!(stmt.name_span, Some(Span::new(22, 26)));
         assert_eq!(stmt.body_raw, "\\operatorname*{x y}");
@@ -561,7 +560,7 @@ mod stmt_macro_unit_tests {
             },
             "macro-command-definition:5".to_string(),
         );
-        assert_eq!(stmt.starred, false);
+        assert!(!stmt.starred);
         assert_eq!(stmt.body_raw, "\\operatorname{x}");
         assert_eq!(stmt.body_span, Some(Span::new(27, 28)));
     }
@@ -585,7 +584,7 @@ mod stmt_macro_unit_tests {
             "macro-command-definition:6".to_string(),
         );
         assert_eq!(stmt.command_raw, "\\DeclareMathOperator");
-        assert_eq!(stmt.starred, true);
+        assert!(stmt.starred);
         assert_eq!(stmt.name_raw, "\\foo");
         assert_eq!(stmt.name_span, Some(Span::new(13, 17)));
         assert_eq!(stmt.body_raw, "\\operatorname*{y}");
@@ -608,7 +607,7 @@ mod stmt_macro_unit_tests {
             },
             "macro-command-definition:7".to_string(),
         );
-        assert_eq!(stmt.starred, true);
+        assert!(stmt.starred);
         assert_eq!(stmt.name_raw, "\\foo");
         assert_eq!(stmt.name_span, Some(Span::new(22, 26)));
         assert_eq!(stmt.body_raw, "\\operatorname*{\\foo}");

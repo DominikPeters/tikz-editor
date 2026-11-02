@@ -312,7 +312,7 @@ fn contains_cs_colon(core: &str) -> bool {
     while let Some(found) = lower[cursor..].find("cs") {
         let start = cursor + found;
         // Left `\b` for `cs`: JS word chars are ASCII [A-Za-z0-9_] only.
-        if start > 0 && bytes[start - 1].is_ascii_alphanumeric() || start > 0 && bytes[start - 1] == b'_' {
+        if start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
             cursor = start + 1;
             continue;
         }

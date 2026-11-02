@@ -23,9 +23,9 @@ use crate::span::Span;
 /// ```
 /// use tikz_core::region::to_group_inner_span;
 /// use tikz_core::span::Span;
-/// // Group `{2}` in `\newcommand {\bar} {2}` sits at bytes 17..20.
+/// // Group `{2}` in `\newcommand {\bar} {2}` sits at bytes 19..22.
 /// let source = "\\newcommand {\\bar} {2}";
-/// assert_eq!(to_group_inner_span(Span::new(17, 20), source), Span::new(18, 19));
+/// assert_eq!(to_group_inner_span(Span::new(19, 22), source), Span::new(20, 21));
 /// ```
 pub fn to_group_inner_span(span: Span, source: &str) -> Span {
     strip_delimiters(span, source, b'{', b'}')

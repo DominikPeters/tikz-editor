@@ -9,7 +9,7 @@
   "completed_at": null,
   "_active_bucket": {
     "name": "rewrite",
-    "started_at": 1793529467.391253
+    "started_at": 1793606569.9905367
   },
   "_bucket_seconds": {
     "discovery": 259.7900640964508,
@@ -42,7 +42,7 @@
       "max_nesting_depth": 15,
       "avg_fn_loc": 11,
       "hazards_count": 1376,
-      "latent_bugs_found": 11
+      "latent_bugs_found": 12
     },
     "after": {
       "scanned": false,
@@ -59,7 +59,7 @@
       "unsafe_blocks": null,
       "forbid_unsafe": false,
       "branch_coverage_pct": null,
-      "clippy_warnings": null
+      "clippy_warnings": 0
     }
   },
   "opportunities": [
@@ -224,10 +224,58 @@
       "title": "Patch insertion anchored to next model's prior part",
       "file": "packages/core/src/svg/patch.ts:64",
       "description": "insertionIndex derives afterPartId from the next model's findPreviousPartIdInOrder with append-at-end fallback; a Rust rewrite must not switch to before-anchoring or edit-time ordering diverges."
+    },
+    {
+      "category": "latent_bug",
+      "title": "read_tex_control_sequence split a multibyte char after backslash",
+      "file": "rust/crates/tikz-core/src/tex_lex.rs:42",
+      "description": "Port used from+2 BYTES for control symbols; backslash followed by a non-ASCII char panicked on slice (found by proptest token_soup). JS indexes UTF-16 units so legacy never panics. Fixed: advance by len_utf8 of the next char, regression test added."
+    },
+    {
+      "category": "architecture",
+      "title": "Blueprint parity plan assumed wrapper geometry compares without text engine; goldens say otherwise",
+      "file": "migration/svg_diff.py",
+      "description": "Goldens were captured in TeX text mode. svg_diff.py requires identical element counts and glyph presence, and viewBox/flip/node sizes depend on glyph metrics. Option set: (a) port Latin Modern metrics + OT1 shaper, (b) add a geometry-only comparator mode plus new text-free goldens (needs a legacy run), (c) accept 1/11 as the parity ceiling for this slice."
+    },
+    {
+      "category": "hygiene",
+      "title": "Cargo.lock v4 and egui 0.33 need cargo >= 1.78/1.88; apt gives 1.75",
+      "file": "rust/Cargo.lock",
+      "description": "Sandbox builds a scratch workspace without tikz-app, proptest pinned to 1.4.0 and tempfile 3.10.1 (edition2024 crates in newer resolves). Repo manifests untouched. tikz-app and llvm-profdata/PGO need a newer toolchain."
     }
   ],
-  "test_iterations": [],
-  "parity_iterations": [],
+  "test_iterations": [
+    {
+      "iteration": 1,
+      "total": 93,
+      "passed": 92,
+      "failed": 1,
+      "coverage_pct": null,
+      "clippy_warnings": 8,
+      "failures_summary": "doctest region::to_group_inner_span: span 17..20 pointed at '} {' not '{2}' (bytes are 19..22); 8 clippy lints (bool simplify, useless .into(), 6x assert_eq! on bool)",
+      "fix_applied": "none (baseline run on apt rustc 1.75, scratch workspace without tikz-app, proptest pinned 1.4.0)"
+    },
+    {
+      "iteration": 2,
+      "total": 93,
+      "passed": 93,
+      "failed": 0,
+      "coverage_pct": null,
+      "clippy_warnings": 0,
+      "failures_summary": "all green",
+      "fix_applied": "doctest span -> 19..22/20..21; parenthesised bool in coordinate.rs; dropped useless .into() in stmt_macro.rs; assert_eq!(x,bool)->assert!"
+    }
+  ],
+  "parity_iterations": [
+    {
+      "iteration": 1,
+      "seeds_tested": 11,
+      "seeds_passed": 1,
+      "max_abs_error": "0",
+      "divergence_cause": "10/11 goldens contain TeX-mode text (data-text-renderer=tex, per-glyph <path>). svg_diff.py needs equal element counts and glyph presence; viewBox, y-flip constant and node box sizes all depend on Latin Modern glyph metrics, so even path d values shift. Not fixable without the deferred text engine. Rust emits explicit diagnostics (exit 3) for these, never a wrong SVG. Only minimal.tex (no text) is in reach.",
+      "fix_applied": "none yet; minimal passes byte-identical (cmp) and via svg_diff 2/2 elems max_abs_err=0"
+    }
+  ],
   "benchmarks": [
     {
       "stage": "legacy_baseline",
