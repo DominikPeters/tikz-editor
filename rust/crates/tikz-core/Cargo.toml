@@ -1,0 +1,16 @@
+[package]
+name = "tikz-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Safe-Rust port of the tikz-editor core pipeline: parse -> semantic scene -> SVG/canvas."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+
+[dev-dependencies]
+proptest = "1.6"
+approx = "0.5"
+

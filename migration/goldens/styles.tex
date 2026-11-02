@@ -1,0 +1,9 @@
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners=2pt, fill=orange!30, minimum width=8mm, minimum height=4mm},
+  every node/.style={font=\small}]
+  \node[box] (s) at (0,0) {start};
+  \node[box, right=12mm of s] (e) {end};
+  \node[box, above=6mm of e] (t) {top};
+  \draw[very thick] (s) -- (e) -- (t) -- cycle;
+  \draw[thin, shift={(0,-1)}, dash pattern=on 3pt off 2pt] (0,0) -- (4,0);
+\end{tikzpicture}

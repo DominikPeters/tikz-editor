@@ -1,0 +1,19 @@
+\documentclass[tikz]{standalone}
+\usetikzlibrary{shapes.misc,shapes.symbols,shapes.multipart}
+\begin{document}
+\begin{tikzpicture}
+  \node[draw,rounded rectangle] at (0,0) {rounded};
+  \node[draw,rounded rectangle,rounded rectangle west arc=concave,rounded rectangle east arc=none] at (4,0) {rounded opts};
+  \node[draw,chamfered rectangle,chamfered rectangle corners={north west,south east}] at (8,0) {chamfered};
+  \node[draw,cross out] at (12,0) {cross};
+  \node[draw,strike out] at (16,0) {strike};
+  \node[draw,magnifying glass,magnifying glass handle angle=-30,magnifying glass handle aspect=1.8] at (20,0) {mag};
+
+  \node[draw,circle split] at (0,-4) {top\nodepart{lower}lower};
+  \node[draw,circle solidus] at (4,-4) {top\nodepart{lower}lower};
+  \node[draw,ellipse split] at (8,-4) {top\nodepart{lower}lower};
+  \node[draw,diamond split,inner xsep=1cm] at (12,-4) {top\nodepart{lower}lower};
+  \node[draw,rectangle split,rectangle split parts=4] at (16,-4) {one\nodepart{two}two\nodepart{three}three\nodepart{four}four};
+  \node[draw,rectangle split,rectangle split parts=4,rectangle split horizontal] at (20,-4) {one\nodepart{two}two\nodepart{three}three\nodepart{four}four};
+\end{tikzpicture}
+\end{document}

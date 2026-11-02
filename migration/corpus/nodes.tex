@@ -1,0 +1,8 @@
+\begin{tikzpicture}
+  \node[draw,text width=2.4cm,align=center] (n1) at (0,0) {first line\\second line};
+  \node[draw,ellipse] (n2) at (3,0) {ellipse node};
+  \node[draw,circle,label={above:$f(x)$}] (n3) at (1.5,2) {$\alpha+\beta$};
+  \node[opacity=0.6,fill=green!30] (n4) at (3,2) {faded};
+  \draw (n1) -- (n2);
+  \node[font=\Large\bfseries] at (0,-2) {Big};
+\end{tikzpicture}

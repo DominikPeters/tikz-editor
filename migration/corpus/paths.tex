@@ -1,0 +1,11 @@
+\begin{tikzpicture}[>=Stealth]
+  \node[draw] (a) at (0,0) {A};
+  \node[draw,circle] (b) at (3,1) {B};
+  \draw[->] (a) -- (b);
+  \draw[->] (a) to[bend right=30] (b);
+  \draw[->] (a) |- (b);
+  \draw[->] (a) -| (b);
+  \draw[thick] (a.north) ++(0,0.3) -| ++(-1,-1);
+  \draw[dotted] (0,-1) -- (1,-1) -- cycle;
+  \draw (0.5,-2) .. controls (1,-3) and (2,-1) .. (3,-2);
+\end{tikzpicture}

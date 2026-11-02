@@ -1,0 +1,13 @@
+[package]
+name = "tikz-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Headless TikZ renderer CLI used for golden parity and benchmarks."
+
+[[bin]]
+name = "tikz-cli"
+path = "src/main.rs"
+
+[dependencies]
+tikz-core = { path = "../tikz-core" }

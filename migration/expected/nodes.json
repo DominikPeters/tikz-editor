@@ -1,0 +1,601 @@
+{
+ "name": "nodes",
+ "figures": [
+  {
+   "index": 0,
+   "span": {
+    "from": 0,
+    "to": 377
+   },
+   "inventorySpan": {
+    "from": 0,
+    "to": 377
+   },
+   "beginSpan": {
+    "from": 0,
+    "to": 19
+   },
+   "endSpan": {
+    "from": 360,
+    "to": 377
+   },
+   "statements": [
+    {
+     "kind": "Path",
+     "id": "path:0",
+     "span": {
+      "from": 22,
+      "to": 104
+     },
+     "command": "node",
+     "items": [
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:0:0",
+       "span": {
+        "from": 64,
+        "to": 68
+       },
+       "x": "n1",
+       "y": "",
+       "raw": "(n1)",
+       "form": "named"
+      },
+      {
+       "kind": "PathKeyword",
+       "id": "path-keyword:0:1",
+       "span": {
+        "from": 69,
+        "to": 71
+       },
+       "keyword": "at"
+      },
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:0:2",
+       "span": {
+        "from": 72,
+        "to": 77
+       },
+       "x": "0",
+       "y": "0",
+       "raw": "(0,0)",
+       "form": "cartesian"
+      },
+      {
+       "kind": "Node",
+       "id": "node:0:3",
+       "span": {
+        "from": 27,
+        "to": 103
+       },
+       "raw": "[draw,text width=2.4cm,align=center] (n1) at (0,0) {first line\\\\second line}",
+       "templateRaw": "[draw,text width=2.4cm,align=center] (n1) at (0,0) {first line\\\\second line}",
+       "optionsSpan": {
+        "from": 27,
+        "to": 63
+       },
+       "options": {
+        "span": {
+         "from": 27,
+         "to": 63
+        },
+        "raw": "[draw,text width=2.4cm,align=center]",
+        "entries": [
+         {
+          "kind": "flag",
+          "key": "draw",
+          "span": {
+           "from": 28,
+           "to": 32
+          },
+          "keySpan": {
+           "from": 28,
+           "to": 32
+          },
+          "raw": "draw"
+         },
+         {
+          "kind": "kv",
+          "key": "text width",
+          "valueRaw": "2.4cm",
+          "span": {
+           "from": 33,
+           "to": 49
+          },
+          "keySpan": {
+           "from": 33,
+           "to": 43
+          },
+          "valueSpan": {
+           "from": 44,
+           "to": 49
+          },
+          "raw": "text width=2.4cm"
+         },
+         {
+          "kind": "kv",
+          "key": "align",
+          "valueRaw": "center",
+          "span": {
+           "from": 50,
+           "to": 62
+          },
+          "keySpan": {
+           "from": 50,
+           "to": 55
+          },
+          "valueSpan": {
+           "from": 56,
+           "to": 62
+          },
+          "raw": "align=center"
+         }
+        ]
+       },
+       "textSource": "group",
+       "textSpan": {
+        "from": 79,
+        "to": 102
+       },
+       "text": "first line\\\\second line",
+       "name": "n1"
+      }
+     ]
+    },
+    {
+     "kind": "Path",
+     "id": "path:1",
+     "span": {
+      "from": 107,
+      "to": 156
+     },
+     "command": "node",
+     "items": [
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:1:0",
+       "span": {
+        "from": 127,
+        "to": 131
+       },
+       "x": "n2",
+       "y": "",
+       "raw": "(n2)",
+       "form": "named"
+      },
+      {
+       "kind": "PathKeyword",
+       "id": "path-keyword:1:1",
+       "span": {
+        "from": 132,
+        "to": 134
+       },
+       "keyword": "at"
+      },
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:1:2",
+       "span": {
+        "from": 135,
+        "to": 140
+       },
+       "x": "3",
+       "y": "0",
+       "raw": "(3,0)",
+       "form": "cartesian"
+      },
+      {
+       "kind": "Node",
+       "id": "node:1:3",
+       "span": {
+        "from": 112,
+        "to": 155
+       },
+       "raw": "[draw,ellipse] (n2) at (3,0) {ellipse node}",
+       "templateRaw": "[draw,ellipse] (n2) at (3,0) {ellipse node}",
+       "optionsSpan": {
+        "from": 112,
+        "to": 126
+       },
+       "options": {
+        "span": {
+         "from": 112,
+         "to": 126
+        },
+        "raw": "[draw,ellipse]",
+        "entries": [
+         {
+          "kind": "flag",
+          "key": "draw",
+          "span": {
+           "from": 113,
+           "to": 117
+          },
+          "keySpan": {
+           "from": 113,
+           "to": 117
+          },
+          "raw": "draw"
+         },
+         {
+          "kind": "flag",
+          "key": "ellipse",
+          "span": {
+           "from": 118,
+           "to": 125
+          },
+          "keySpan": {
+           "from": 118,
+           "to": 125
+          },
+          "raw": "ellipse"
+         }
+        ]
+       },
+       "textSource": "group",
+       "textSpan": {
+        "from": 142,
+        "to": 154
+       },
+       "text": "ellipse node",
+       "name": "n2"
+      }
+     ]
+    },
+    {
+     "kind": "Path",
+     "id": "path:2",
+     "span": {
+      "from": 159,
+      "to": 232
+     },
+     "command": "node",
+     "items": [
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:2:0",
+       "span": {
+        "from": 199,
+        "to": 203
+       },
+       "x": "n3",
+       "y": "",
+       "raw": "(n3)",
+       "form": "named"
+      },
+      {
+       "kind": "PathKeyword",
+       "id": "path-keyword:2:1",
+       "span": {
+        "from": 204,
+        "to": 206
+       },
+       "keyword": "at"
+      },
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:2:2",
+       "span": {
+        "from": 207,
+        "to": 214
+       },
+       "x": "1.5",
+       "y": "2",
+       "raw": "(1.5,2)",
+       "form": "cartesian"
+      },
+      {
+       "kind": "Node",
+       "id": "node:2:3",
+       "span": {
+        "from": 164,
+        "to": 231
+       },
+       "raw": "[draw,circle,label={above:$f(x)$}] (n3) at (1.5,2) {$\\alpha+\\beta$}",
+       "templateRaw": "[draw,circle,label={above:$f(x)$}] (n3) at (1.5,2) {$\\alpha+\\beta$}",
+       "optionsSpan": {
+        "from": 164,
+        "to": 198
+       },
+       "options": {
+        "span": {
+         "from": 164,
+         "to": 198
+        },
+        "raw": "[draw,circle,label={above:$f(x)$}]",
+        "entries": [
+         {
+          "kind": "flag",
+          "key": "draw",
+          "span": {
+           "from": 165,
+           "to": 169
+          },
+          "keySpan": {
+           "from": 165,
+           "to": 169
+          },
+          "raw": "draw"
+         },
+         {
+          "kind": "flag",
+          "key": "circle",
+          "span": {
+           "from": 170,
+           "to": 176
+          },
+          "keySpan": {
+           "from": 170,
+           "to": 176
+          },
+          "raw": "circle"
+         },
+         {
+          "kind": "kv",
+          "key": "label",
+          "valueRaw": "{above:$f(x)$}",
+          "span": {
+           "from": 177,
+           "to": 197
+          },
+          "keySpan": {
+           "from": 177,
+           "to": 182
+          },
+          "valueSpan": {
+           "from": 183,
+           "to": 197
+          },
+          "raw": "label={above:$f(x)$}"
+         }
+        ]
+       },
+       "textSource": "group",
+       "textSpan": {
+        "from": 216,
+        "to": 230
+       },
+       "text": "$\\alpha+\\beta$",
+       "name": "n3"
+      }
+     ]
+    },
+    {
+     "kind": "Path",
+     "id": "path:3",
+     "span": {
+      "from": 235,
+      "to": 290
+     },
+     "command": "node",
+     "items": [
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:3:0",
+       "span": {
+        "from": 268,
+        "to": 272
+       },
+       "x": "n4",
+       "y": "",
+       "raw": "(n4)",
+       "form": "named"
+      },
+      {
+       "kind": "PathKeyword",
+       "id": "path-keyword:3:1",
+       "span": {
+        "from": 273,
+        "to": 275
+       },
+       "keyword": "at"
+      },
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:3:2",
+       "span": {
+        "from": 276,
+        "to": 281
+       },
+       "x": "3",
+       "y": "2",
+       "raw": "(3,2)",
+       "form": "cartesian"
+      },
+      {
+       "kind": "Node",
+       "id": "node:3:3",
+       "span": {
+        "from": 240,
+        "to": 289
+       },
+       "raw": "[opacity=0.6,fill=green!30] (n4) at (3,2) {faded}",
+       "templateRaw": "[opacity=0.6,fill=green!30] (n4) at (3,2) {faded}",
+       "optionsSpan": {
+        "from": 240,
+        "to": 267
+       },
+       "options": {
+        "span": {
+         "from": 240,
+         "to": 267
+        },
+        "raw": "[opacity=0.6,fill=green!30]",
+        "entries": [
+         {
+          "kind": "kv",
+          "key": "opacity",
+          "valueRaw": "0.6",
+          "span": {
+           "from": 241,
+           "to": 252
+          },
+          "keySpan": {
+           "from": 241,
+           "to": 248
+          },
+          "valueSpan": {
+           "from": 249,
+           "to": 252
+          },
+          "raw": "opacity=0.6"
+         },
+         {
+          "kind": "kv",
+          "key": "fill",
+          "valueRaw": "green!30",
+          "span": {
+           "from": 253,
+           "to": 266
+          },
+          "keySpan": {
+           "from": 253,
+           "to": 257
+          },
+          "valueSpan": {
+           "from": 258,
+           "to": 266
+          },
+          "raw": "fill=green!30"
+         }
+        ]
+       },
+       "textSource": "group",
+       "textSpan": {
+        "from": 283,
+        "to": 288
+       },
+       "text": "faded",
+       "name": "n4"
+      }
+     ]
+    },
+    {
+     "kind": "Path",
+     "id": "path:4",
+     "span": {
+      "from": 293,
+      "to": 312
+     },
+     "command": "draw",
+     "items": [
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:4:0",
+       "span": {
+        "from": 299,
+        "to": 303
+       },
+       "x": "n1",
+       "y": "",
+       "raw": "(n1)",
+       "form": "named"
+      },
+      {
+       "kind": "PathKeyword",
+       "id": "path-keyword:4:1",
+       "span": {
+        "from": 304,
+        "to": 306
+       },
+       "keyword": "--"
+      },
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:4:2",
+       "span": {
+        "from": 307,
+        "to": 311
+       },
+       "x": "n2",
+       "y": "",
+       "raw": "(n2)",
+       "form": "named"
+      }
+     ]
+    },
+    {
+     "kind": "Path",
+     "id": "path:5",
+     "span": {
+      "from": 315,
+      "to": 359
+     },
+     "command": "node",
+     "items": [
+      {
+       "kind": "PathKeyword",
+       "id": "path-keyword:5:0",
+       "span": {
+        "from": 343,
+        "to": 345
+       },
+       "keyword": "at"
+      },
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:5:1",
+       "span": {
+        "from": 346,
+        "to": 352
+       },
+       "x": "0",
+       "y": "-2",
+       "raw": "(0,-2)",
+       "form": "cartesian"
+      },
+      {
+       "kind": "Node",
+       "id": "node:5:2",
+       "span": {
+        "from": 320,
+        "to": 358
+       },
+       "raw": "[font=\\Large\\bfseries] at (0,-2) {Big}",
+       "templateRaw": "[font=\\Large\\bfseries] at (0,-2) {Big}",
+       "optionsSpan": {
+        "from": 320,
+        "to": 342
+       },
+       "options": {
+        "span": {
+         "from": 320,
+         "to": 342
+        },
+        "raw": "[font=\\Large\\bfseries]",
+        "entries": [
+         {
+          "kind": "kv",
+          "key": "font",
+          "valueRaw": "\\Large\\bfseries",
+          "span": {
+           "from": 321,
+           "to": 341
+          },
+          "keySpan": {
+           "from": 321,
+           "to": 325
+          },
+          "valueSpan": {
+           "from": 326,
+           "to": 341
+          },
+          "raw": "font=\\Large\\bfseries"
+         }
+        ]
+       },
+       "textSource": "group",
+       "textSpan": {
+        "from": 354,
+        "to": 357
+       },
+       "text": "Big"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "diagnostics": []
+}

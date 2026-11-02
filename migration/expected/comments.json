@@ -1,0 +1,113 @@
+{
+ "name": "comments",
+ "figures": [
+  {
+   "index": 0,
+   "span": {
+    "from": 0,
+    "to": 114
+   },
+   "inventorySpan": {
+    "from": 0,
+    "to": 114
+   },
+   "beginSpan": {
+    "from": 0,
+    "to": 19
+   },
+   "endSpan": {
+    "from": 97,
+    "to": 114
+   },
+   "statements": [
+    {
+     "kind": "Path",
+     "id": "path:0",
+     "span": {
+      "from": 44,
+      "to": 85
+     },
+     "command": "draw",
+     "items": [
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:0:0",
+       "span": {
+        "from": 50,
+        "to": 55
+       },
+       "x": "0",
+       "y": "0",
+       "raw": "(0,0)",
+       "form": "cartesian"
+      },
+      {
+       "kind": "PathKeyword",
+       "id": "path-keyword:0:1",
+       "span": {
+        "from": 56,
+        "to": 58
+       },
+       "keyword": "--"
+      },
+      {
+       "kind": "Coordinate",
+       "id": "coordinate:0:2",
+       "span": {
+        "from": 59,
+        "to": 64
+       },
+       "x": "1",
+       "y": "1",
+       "raw": "(1,1)",
+       "form": "cartesian"
+      },
+      {
+       "kind": "Node",
+       "id": "node:0:3",
+       "span": {
+        "from": 65,
+        "to": 84
+       },
+       "raw": "node[above] {Hello}",
+       "templateRaw": "node[above] {Hello}",
+       "optionsSpan": {
+        "from": 69,
+        "to": 76
+       },
+       "options": {
+        "span": {
+         "from": 69,
+         "to": 76
+        },
+        "raw": "[above]",
+        "entries": [
+         {
+          "kind": "flag",
+          "key": "above",
+          "span": {
+           "from": 70,
+           "to": 75
+          },
+          "keySpan": {
+           "from": 70,
+           "to": 75
+          },
+          "raw": "above"
+         }
+        ]
+       },
+       "textSource": "group",
+       "textSpan": {
+        "from": 78,
+        "to": 83
+       },
+       "text": "Hello"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "diagnostics": []
+}

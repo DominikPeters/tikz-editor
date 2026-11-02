@@ -1,0 +1,10 @@
+\begin{tikzpicture}
+  \draw[very thin,color=gray] (-0.4,-0.4) grid (3.9,3.9);
+  \draw[->,blue] (-0.2,0) -- (3,0) node[right] {$x$};
+  \draw[->,red] (0,-0.2) -- (0,3) node[above] {$y$};
+  \draw[line width=2pt,red,dashed] (1,1) rectangle (2.5,2.5);
+  \draw[fill=yellow,fill opacity=.6,draw=black] (3,3) circle [radius=0.6];
+  \draw[rotate around={45:(3,1)}] (2.5,1) rectangle (3.5,1.5);
+  \draw[green!60!black] (0.5,3.5) arc (0:180:0.75);
+  \draw[purple] (2,3.5) ellipse (0.5 and 0.25);
+\end{tikzpicture}

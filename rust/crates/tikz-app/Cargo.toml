@@ -1,0 +1,15 @@
+[package]
+name = "tikz-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "egui-based TikZ editor: source view + canvas + selection/move/resize."
+
+[[bin]]
+name = "tikz-app"
+path = "src/main.rs"
+
+[dependencies]
+tikz-core = { path = "../tikz-core" }
+eframe.workspace = true
+egui.workspace = true

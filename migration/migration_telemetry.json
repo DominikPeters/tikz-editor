@@ -1,0 +1,251 @@
+{
+  "project_name": "tikz-editor",
+  "legacy_language": "typescript",
+  "user": "cachy",
+  "model": null,
+  "source_url": "",
+  "scope_summary": "",
+  "started_at_epoch": 1793528080.999677,
+  "completed_at": null,
+  "_active_bucket": {
+    "name": "rewrite",
+    "started_at": 1793529467.391253
+  },
+  "_bucket_seconds": {
+    "discovery": 259.7900640964508,
+    "blueprint": 1119.8943221569061,
+    "rewrite": 0.0,
+    "test_heal": 0.0,
+    "parity": 0.0,
+    "pgo_bench": 0.0
+  },
+  "story": {
+    "headline": "",
+    "intro": "",
+    "ch1_narrative": "",
+    "ch2_narrative": "",
+    "ch3_narrative": "",
+    "ch4_narrative": "",
+    "ch5_narrative": ""
+  },
+  "census": {
+    "before": {
+      "scanned": true,
+      "files": 650,
+      "code_loc": 185677,
+      "comment_loc": 6179,
+      "comment_pct": 3.3,
+      "max_file_loc": 7680,
+      "avg_file_loc": 295,
+      "files_under_400_pct": 80.5,
+      "doc_tests": 0,
+      "max_nesting_depth": 15,
+      "avg_fn_loc": 11,
+      "hazards_count": 1376,
+      "latent_bugs_found": 11
+    },
+    "after": {
+      "scanned": false,
+      "files": 0,
+      "code_loc": 0,
+      "comment_loc": 0,
+      "comment_pct": null,
+      "max_file_loc": 0,
+      "avg_file_loc": 0,
+      "files_under_400_pct": null,
+      "doc_tests": 0,
+      "max_nesting_depth": null,
+      "avg_fn_loc": null,
+      "unsafe_blocks": null,
+      "forbid_unsafe": false,
+      "branch_coverage_pct": null,
+      "clippy_warnings": null
+    }
+  },
+  "opportunities": [
+    {
+      "category": "architecture",
+      "title": "Hydra render path: sync/async/text-scope triple dispatch in one file",
+      "file": "packages/core/src/render/index.ts",
+      "description": "renderTikzToSvg and renderTikzToSvgAsync share pipeline steps but re-implement plumbing with three scope branches; port collapses to one santized render() with an explicit Scene cache and no async cooperative machinery for headless parity."
+    },
+    {
+      "category": "hygiene",
+      "title": "Max file 7680 LOC (emit.ts 2346, evaluate.ts 3767, path/graph.ts 3789)",
+      "file": "packages/core/src/semantic/evaluate.ts",
+      "description": "Census: max_file_loc 7680, avg 295, 80.5% under 400. Port enforces <=400 LOC/module with small pure modules."
+    },
+    {
+      "category": "hygiene",
+      "title": "Comment density 3.3% across 185677 code LOC",
+      "file": "packages/core/src",
+      "description": "Scan census: 6179 comment lines for 185677 code LOC. Port targets >=15% rustdoc with doc-tested public APIs."
+    },
+    {
+      "category": "performance",
+      "title": "Deterministic evaluation enables span>scene cache -> instant re-renders",
+      "file": "packages/core/src/editing",
+      "description": "Legacy re-evaluates figures on edits; port will key interim Scene by figure range to avoid re-evaluating unedited figures (numbers pending PGO bench)."
+    },
+    {
+      "category": "latent_bug",
+      "title": "Option comment mask misreads escaped-backslash comments",
+      "file": "packages/core/src/options/parse.ts:60",
+      "description": "maskLineComments uses a 1-char lookbehind with no backslash pairing, so a backslash-backslash-percent sequence is misread as an escaped percent and the TeX comment is not masked. Rust port replicates the legacy masking exactly to keep spans/diagnostics in parity."
+    },
+    {
+      "category": "latent_bug",
+      "title": "Style keys lowercased -> case-colliding style names",
+      "file": "packages/core/src/options/parse.ts:85",
+      "description": "Option and flag keys are toLowerCase()d before the store; PGF style names are case-sensitive, so MyStyle/.style and mystyle/.style collide. Rust keeps PGF case-sensitivity and documents the divergence."
+    },
+    {
+      "category": "latent_bug",
+      "title": "Color sniff misclassifies hyphenated/underscored names",
+      "file": "packages/core/src/options/parse.ts:165",
+      "description": "looksLikeColorSpecification restricts component names to alnum, so blue-gray!50 misses the 5-token percent chain; xcolor handling must match accepted and rejected forms for identical diagnostics."
+    },
+    {
+      "category": "latent_bug",
+      "title": "Scanner-grammar divergence for trivia after begin",
+      "file": "packages/core/src/parser/tex-lexical.ts:56",
+      "description": "readTexEnvironmentDelimiter supports allowTrivia but figure-scan calls it with false, so begin/newline/name is invisible to the Rust-relevant scanner while the lezer grammar still sees it. Corpus is safe; port pins adjacent-brace behavior."
+    },
+    {
+      "category": "latent_bug",
+      "title": "Recovered diagnostics tie on equal spans -> push order matters",
+      "file": "packages/core/src/parser/index.ts:97",
+      "description": "Diagnostics sort by span only (shared.ts compareDiagnosticPosition), so equal (from,to) pairs keep insertion order. Rust comparator must tie-break identically or verify no equal-span collisions in the corpus."
+    },
+    {
+      "category": "hygiene",
+      "title": "Flag regex over-accepts free text as arrows",
+      "file": "packages/core/src/options/parse.ts:120",
+      "description": "Arrow-sniff regex accepts multi-word free text as flags; malformed options degrade into plausible flag entries instead of unknown. Rust pins the same classifier for diagnostic parity."
+    },
+    {
+      "category": "hygiene",
+      "title": "Style value strips exactly one outer brace pair",
+      "file": "packages/core/src/options/parse.ts:301",
+      "description": "parseStyleValueAsOptionList removes one outer {...} only; {{...}} or {a}{b} residue plus approximate no-brace span math are legacy quirks; port strips identically."
+    },
+    {
+      "category": "hygiene",
+      "title": "Picture recovery keeps first begin under nested env",
+      "file": "packages/core/src/parser/figure-scan.ts:59",
+      "description": "begin ??= environment recovery pins the first begin and skips non-matching ends; documented recovery boundary to replicate."
+    },
+    {
+      "category": "hygiene",
+      "title": "Unresolved placeholder heuristic scans any #digit",
+      "file": "packages/core/src/parser/figure-scan.ts:145",
+      "description": "containsUnresolvedMacroPlaceholder treats any #digit in picture text (outside comments, ## and \\# skipped via 2-char escape step) as unresolved; scan order must be ported verbatim."
+    },
+    {
+      "category": "performance",
+      "title": "Incremental parse falls back hard on any global diagnostic",
+      "file": "packages/core/src/parser/incremental.ts:559",
+      "description": "One global diagnostic forces full-figure re-parse; per-statement cache demands zero global diagnostics. Deferred for Rust: one-shot rendering needs no incremental session (1,076 LOC)."
+    },
+    {
+      "category": "hygiene",
+      "title": "structuralMasks splits node text into parallel field",
+      "file": "packages/core/src/parser/index.ts:80",
+      "description": "Masked structural text is re-sliced per node, giving text vs structuralText divergence; editor-only. Rust corpus path disables masks entirely."
+    },
+    {
+      "category": "latent_bug",
+      "title": "toFixed(4) tie-rounding differs from Rust formatting",
+      "file": "packages/core/src/svg/format.ts:6",
+      "description": "JS toFixed rounds ties toward the larger integer candidate on the exact decimal expansion of the double (-0.00005 -> '0' while Rust half-away gives -0.0001). Port must implement the ECMAScript toFixed algorithm, with 0.00005/-0.00005/2.675 golden tie tests."
+    },
+    {
+      "category": "latent_bug",
+      "title": "Stable SVG ids hash UTF-16 code units",
+      "file": "packages/core/src/svg/emit.ts:2232",
+      "description": "FNV-1a over UTF-16 code units with Math.imul semantics and >>> 0 base36; hashing UTF-8 bytes diverges on non-ASCII signatures. Rust: wrapping_mul(0x01000193) over UTF-16 codepoint sequence."
+    },
+    {
+      "category": "hygiene",
+      "title": "viewBox re-measures only marker/shorten paths in degenerate frame",
+      "file": "packages/core/src/svg/viewbox.ts:12",
+      "description": "computeViewBox measures in {y:0,height:0} then re-flips; correct only because worldToSvgPoint collapses, but any stroke-math change silently corrupts bounds. Ordinary strokes rely on the semantic \u00b1lineWidth/2 AABB, over-expanding rotated frames."
+    },
+    {
+      "category": "latent_bug",
+      "title": "1.15em vs 1.05 line-height conventions disagree",
+      "file": "packages/core/src/svg/emit.ts:749",
+      "description": "estimateTextBlockWidth/Height uses 1.15 per line while plain node layout uses fontSize*1.05, so a text element without blockHeight lays out at 1.15 but sizes its node box at 1.05. Port documents and replicates."
+    },
+    {
+      "category": "latent_bug",
+      "title": "Arrow shortening endpoint-order quirk",
+      "file": "packages/core/src/svg/arrows/shorten.ts:122",
+      "description": "Endpoint-only shortening processes the end token first and lets a start overrun flip the direction (documented PGF quirk); only the last subpath shortens when tips exist. Port keeps both orderings."
+    },
+    {
+      "category": "latent_bug",
+      "title": "Degenerate shading fit silently renders unfilled",
+      "file": "packages/core/src/svg/emit.ts:1331",
+      "description": "computeShadingTransform bails to plain fill when fitted scale <= 1e-4 with no diagnostic; mimic exactly."
+    },
+    {
+      "category": "latent_bug",
+      "title": "Two ellipse-bounds conventions coexist",
+      "file": "packages/core/src/svg/emit.ts:1127",
+      "description": "Kappa-0.55228475 based extent for shading fitting vs analytic computeSvgEllipseBounds for bounds; replicate per call-site or shading angles drift."
+    },
+    {
+      "category": "hygiene",
+      "title": "Miter join bound approximates SVG miter-length rule",
+      "file": "packages/core/src/svg/geometry.ts:115",
+      "description": "Offset-point bound includes a miter point only when offset length <= miterLimit*halfWidth, while SVG tests lineWid=dth/sin(theta/2) <= miterLimit; strict pixel-parity could diverge at extreme corners."
+    },
+    {
+      "category": "hygiene",
+      "title": "partId collision appends '#2'/'#3' suffixes",
+      "file": "packages/core/src/svg/model.ts:70",
+      "description": "Duplicate basePartIds get #N suffixes (hard duplicate throws); ids are internal but live-DOM anchoring depends on the exact scheme, so port it verbatim."
+    },
+    {
+      "category": "hygiene",
+      "title": "Part fingerprint is the whole markup string",
+      "file": "packages/core/src/svg/model.ts:82",
+      "description": "Equivalence uses full markup equality and defs.join; any attribute-order change flips patching to replaceAll fallback (incremental-only concern, kept for edit-time slice)."
+    },
+    {
+      "category": "hygiene",
+      "title": "escapeText deliberately leaves quotes unescaped",
+      "file": "packages/core/src/svg/emit.ts:2138",
+      "description": "Text nodes escape only & < >; attributes add \" -> &quot;. Browser-compatible but not strictly XML-safe; keep byte-identical rather than 'more correct'."
+    },
+    {
+      "category": "hygiene",
+      "title": "Patch insertion anchored to next model's prior part",
+      "file": "packages/core/src/svg/patch.ts:64",
+      "description": "insertionIndex derives afterPartId from the next model's findPreviousPartIdInOrder with append-at-end fallback; a Rust rewrite must not switch to before-anchoring or edit-time ordering diverges."
+    }
+  ],
+  "test_iterations": [],
+  "parity_iterations": [],
+  "benchmarks": [
+    {
+      "stage": "legacy_baseline",
+      "label": "1. Legacy TypeScript Baseline",
+      "wall_time_ms": 624.4,
+      "peak_rss_mb": 287.0,
+      "speedup": 1.0,
+      "notes": "PURPOSE: supersedes earlier 6-doc entry. Workload: 11-doc corpus x 10 fresh full-pipeline renders (parse->semantic->svg), warm loop of 110 renders in 624.4ms (5.68ms/doc). Peak RSS = RUSAGE_CHILDREN incl node+font engine; process startup outside warm loop measured 1596.5ms total."
+    }
+  ],
+  "time_buckets": [],
+  "scorecard": [],
+  "roi": {},
+  "spotlight": {
+    "explanation": "",
+    "legacy_file": "",
+    "legacy_code": "",
+    "rust_file": "",
+    "rust_code": ""
+  }
+}
