@@ -98,27 +98,6 @@
 
 /* ── iPad styling ──────────────────────────────────────────────────────── */
 
-:global(html[data-editor-platform="ipad"]) .trigger {
-  min-height: 34px;
-  padding: 5px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--ipad-control-fill);
-  font-size: 14px;
-}
-
-:global(html[data-editor-platform="ipad"]) .triggerOpen {
-  background: var(--bg-pane);
-}
-
-:global(html[data-editor-platform="ipad"]) .trigger:disabled {
-  background: var(--ipad-control-fill-disabled);
-}
-
-:global(html[data-editor-platform="ipad"]) .triggerCaret {
-  color: var(--text-muted);
-}
-
 :global(html[data-editor-platform="ipad"]) .menu {
   border: 0;
   border-radius: 12px;

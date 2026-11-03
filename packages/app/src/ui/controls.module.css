@@ -272,6 +272,55 @@
   opacity: 0.5;
 }
 
+/* ── iPad ───────────────────────────────────────────────────────────────────
+   Sizes come from the iPad tokens in variables.css; text follows the iOS
+   type scale instead of the desktop UI scale, and the pop-up indicator is the
+   plain chevron.up.chevron.down of a UIKit menu button, not an accent tile. */
+
+:global(html[data-editor-platform="ipad"]) .popUp {
+  gap: 8px;
+  padding: 0 8px 0 10px;
+  font-size: 14px;
+}
+
+:global(html[data-editor-platform="ipad"]) .popUpIndicator,
+:global(html[data-editor-platform="ipad"]) .popUp:disabled .popUpIndicator {
+  width: 12px;
+  height: 16px;
+  background: transparent;
+  color: var(--label-secondary);
+}
+
+:global(html[data-editor-platform="ipad"]) .popUpIndicatorIcon {
+  width: 9px;
+  height: 13px;
+}
+
+:global(html[data-editor-platform="ipad"]) .field {
+  padding: 0 8px;
+  font-size: 14px;
+}
+
+:global(html[data-editor-platform="ipad"]) .fieldUnit {
+  font-size: 12px;
+}
+
+:global(html[data-editor-platform="ipad"]) .checkbox {
+  width: 18px;
+  height: 18px;
+}
+
+:global(html[data-editor-platform="ipad"]) .segmented {
+  padding: 2px;
+  border-radius: 9px;
+}
+
+:global(html[data-editor-platform="ipad"]) .segment {
+  min-height: 28px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+
 /* ── Windows 11 (Fluent) ────────────────────────────────────────────────────
    A 1px stroke with a darker bottom edge, drawn as inset shadows so the box
    keeps its size; focus is the Fluent double ring (white inside, dark

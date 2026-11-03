@@ -545,31 +545,10 @@
 
 /* ── iPad styling ──────────────────────────────────────────────────────── */
 
-:global(html[data-editor-platform="ipad"]) .triggerButton {
-  min-height: 34px;
-  padding: 5px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--ipad-control-fill);
-  font-size: 14px;
-}
-
-:global(html[data-editor-platform="ipad"]) .triggerButtonOpen {
-  background: var(--bg-pane);
-}
-
-:global(html[data-editor-platform="ipad"]) .triggerButton:disabled {
-  background: var(--ipad-control-fill-disabled);
-}
-
 :global(html[data-editor-platform="ipad"]) .triggerSwatch {
   width: 18px;
   height: 18px;
   border-radius: 5px;
-}
-
-:global(html[data-editor-platform="ipad"]) .triggerCaret {
-  color: var(--text-muted);
 }
 
 :global(html[data-editor-platform="ipad"]) .popover {

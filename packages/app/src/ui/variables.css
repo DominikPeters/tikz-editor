@@ -173,6 +173,28 @@
   --focus-inner:      rgba(0, 0, 0, 0.7);
 }
 
+/* ── iPad ───────────────────────────────────────────────────────────────────
+   Finger-sized controls drawn as UIKit draws them: borderless, on the
+   tertiary system fill. Text sizes are in controls.module.css and the
+   panels' iPad sections. */
+
+:root[data-editor-platform="ipad"] {
+  --control-bg:       rgba(118, 118, 128, 0.12);
+  --control-popup-bg: rgba(118, 118, 128, 0.12);
+  --control-ring:     transparent;
+  --control-shadow:   none;
+  --control-h:        30px;
+  --row-min-h:        32px;
+  --inspector-label-col: minmax(76px, 92px);
+  --radius-field:     7px;
+  --radius-popup:     7px;
+}
+
+:root[data-editor-platform="ipad"][data-color-scheme="dark"] {
+  --control-bg:       rgba(118, 118, 128, 0.24);
+  --control-popup-bg: rgba(118, 118, 128, 0.24);
+}
+
 /* ── Dark mode overrides ────────────────────────────────────────────────────── */
 
 [data-color-scheme="dark"] {

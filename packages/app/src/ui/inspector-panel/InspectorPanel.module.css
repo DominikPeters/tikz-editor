@@ -495,22 +495,16 @@
   }
 }
 
-:global(html[data-editor-platform="ipad"]) .numberInput,
-:global(html[data-editor-platform="ipad"]) .textInput {
-  border-color: transparent;
-  border-radius: 8px;
-  background: var(--ipad-control-fill);
+:global(html[data-editor-platform="ipad"]) .property {
+  column-gap: 10px;
 }
 
-:global(html[data-editor-platform="ipad"]) .numberInput:focus,
-:global(html[data-editor-platform="ipad"]) .textInput:focus {
-  outline: none;
-  border-color: var(--control-accent);
-  background: var(--bg-pane);
+:global(html[data-editor-platform="ipad"]) .propertyLabel {
+  font-size: 13px;
 }
 
-:global(html[data-editor-platform="ipad"]) .numberInput:disabled {
-  background: var(--ipad-control-fill-disabled);
+:global(html[data-editor-platform="ipad"]) .fieldCaption {
+  font-size: 11px;
 }
 
 :global(html[data-editor-platform="ipad"]) .checkboxControl {

@@ -48,10 +48,10 @@ html[data-editor-platform="ipad"] #root > * {
   height: 100%;
 }
 
-html[data-editor-platform="ipad"] input,
+html[data-editor-platform="ipad"] input:not([type="checkbox"], [type="radio"], [type="range"]),
 html[data-editor-platform="ipad"] select,
 html[data-editor-platform="ipad"] textarea {
-  min-height: 34px;
+  min-height: var(--control-h);
 }
 
 @media (pointer: coarse) {
