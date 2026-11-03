@@ -88,7 +88,7 @@
 
 .splitDivider[data-active="true"] .splitDividerBar,
 .splitDivider:active .splitDividerBar {
-  background: var(--accent-dark);
+  background: var(--control-accent);
 }
 
 .canvasFrame {
@@ -168,7 +168,7 @@
 }
 
 .floatResizeHandle:active::before {
-  border-color: var(--accent-dark);
+  border-color: var(--control-accent);
 }
 
 .sourceDrawer .sourceAccessoryBar {
@@ -182,8 +182,8 @@
   bottom: calc(12px + var(--ipad-bottom-touch-inset));
   z-index: 45;
   border-radius: var(--ipad-radius-card);
-  border: 2px solid color-mix(in srgb, var(--accent-dark) 50%, transparent);
-  background: color-mix(in srgb, var(--accent-dark) 10%, transparent);
+  border: 2px solid color-mix(in srgb, var(--control-accent) 50%, transparent);
+  background: color-mix(in srgb, var(--control-accent) 10%, transparent);
   pointer-events: none;
   animation: dockPreviewIn 160ms ease-out;
 }
@@ -292,8 +292,8 @@
 }
 
 .sourceAccessoryButton:active {
-  background: var(--accent-btn-bg);
-  border-color: var(--accent-btn-border);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
+  border-color: var(--control-accent);
 }
 
 .floatingPanel {

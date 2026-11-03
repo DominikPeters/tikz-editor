@@ -505,7 +505,7 @@
 :global(html[data-editor-platform="ipad"]) .numberInput:focus,
 :global(html[data-editor-platform="ipad"]) .textInput:focus {
   outline: none;
-  border-color: var(--accent-btn-border);
+  border-color: var(--control-accent);
   background: var(--bg-pane);
 }
 
@@ -551,7 +551,7 @@
 }
 
 :global(html[data-editor-platform="ipad"]) .checkboxInput:checked {
-  background: var(--accent-dark);
+  background: var(--control-accent);
 }
 
 :global(html[data-editor-platform="ipad"]) .checkboxInput:checked::before {
@@ -597,7 +597,7 @@
 
 :global(html[data-editor-platform="ipad"]) .sliderInput,
 :global(html[data-editor-platform="ipad"]) .rangeInput {
-  accent-color: var(--accent-dark);
+  accent-color: var(--control-accent);
 }
 
 :global(html[data-editor-platform="ipad"]) .toolHint {
@@ -613,7 +613,7 @@
 
 :global(html[data-editor-platform="ipad"]) .moreOptionsToggle {
   min-height: 30px;
-  color: var(--accent-dark);
+  color: var(--control-accent);
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;

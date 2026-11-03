@@ -137,8 +137,8 @@
 }
 
 :global(html[data-editor-platform="ipad"]) .optionSelected {
-  background: var(--accent-btn-bg);
-  color: var(--accent-dark);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
+  color: var(--control-accent);
 }
 
 :global(html[data-editor-platform="ipad"]) .menuHeader {

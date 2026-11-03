@@ -63,8 +63,8 @@
 
 .iconButtonActive,
 .iconButtonActive:active:not(:disabled) {
-  color: var(--accent-dark);
-  background: var(--accent-btn-bg);
+  color: var(--control-accent);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
 }
 
 .titleButton {
@@ -105,7 +105,7 @@
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: var(--accent-dark);
+  background: var(--control-accent);
   flex-shrink: 0;
 }
 
@@ -118,8 +118,8 @@
   padding: 0 12px;
   border: 0;
   border-radius: 999px;
-  background: var(--accent-btn-bg);
-  color: var(--accent-dark);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
+  color: var(--control-accent);
   font: inherit;
   font-size: 13px;
   font-weight: 600;

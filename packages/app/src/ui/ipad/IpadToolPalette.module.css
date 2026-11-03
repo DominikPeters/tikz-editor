@@ -76,7 +76,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  color: var(--accent-dark);
+  color: var(--control-accent);
   opacity: 0;
   transition: opacity 160ms ease-out;
   pointer-events: none;
@@ -156,8 +156,8 @@
 
 .toolButtonActive,
 .toolButtonActive:active {
-  color: var(--accent-dark);
-  background: var(--accent-btn-bg);
+  color: var(--control-accent);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
 }
 
 .toolButtonSeparated {
@@ -309,8 +309,8 @@
 }
 
 .moreItemActive {
-  color: var(--accent-dark);
-  background: var(--accent-btn-bg);
+  color: var(--control-accent);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
 }
 
 .moreItemIcon {
@@ -361,8 +361,8 @@
 }
 
 .matrixPickerCellSelected {
-  border-color: var(--accent-btn-border);
-  background: var(--accent-btn-bg);
+  border-color: var(--control-accent);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
 }
 
 .matrixPickerCaption {

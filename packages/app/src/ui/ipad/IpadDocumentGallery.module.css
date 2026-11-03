@@ -69,12 +69,12 @@
 }
 
 .actionPrimary {
-  background: var(--accent-btn-bg);
-  color: var(--accent-dark);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
+  color: var(--control-accent);
 }
 
 .actionPrimary:active:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-btn-bg) 80%, var(--accent-dark));
+  background: color-mix(in srgb, var(--control-accent) 26%, transparent);
 }
 
 .closeButton {
@@ -141,9 +141,9 @@
 }
 
 .cardActive .cardButton {
-  border-color: var(--accent-dark);
+  border-color: var(--control-accent);
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--accent-dark) 55%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--control-accent) 55%, transparent),
     0 1px 5px rgba(0, 0, 0, 0.10);
 }
 
@@ -192,7 +192,7 @@
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: var(--accent-dark);
+  background: var(--control-accent);
   flex-shrink: 0;
 }
 
