@@ -19,6 +19,13 @@ type SaveRequest = {
   promise: Promise<boolean>;
 };
 
+/** A never-saved document is offered under its title ("Untitled 1.tex"). */
+export function suggestedSaveName(doc: Pick<DocumentSession, "fileRef" | "title">): string {
+  if (doc.fileRef?.name) return doc.fileRef.name;
+  const base = doc.title.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim() || "Untitled";
+  return /\.(tex|tikz)$/i.test(base) ? base : `${base}.tex`;
+}
+
 export function useDocumentFileOperations({ dispatch, showMessage }: {
   dispatch: (action: EditorAction) => void;
   showMessage: (title: string, message: string, kind?: "info" | "warning" | "error") => Promise<void>;
@@ -162,7 +169,7 @@ export function useDocumentFileOperations({ dispatch, showMessage }: {
       }
 
       const result = await files.saveText(doc.source, { mode, fileRef: doc.fileRef,
-        suggestedName: doc.fileRef?.name ?? "tikz-document.tex" });
+        suggestedName: suggestedSaveName(doc) });
       if (!stillOwnsBinding()) return false;
       if (result.status === "saved") {
         dispatch({ type: "MARK_DOCUMENT_SAVED", documentId, savedSource: doc.source,
