@@ -306,11 +306,17 @@
 }
 
 :global(html[data-editor-platform="ipad"]) .declaration {
-  grid-template-columns: 24px minmax(0, 1.2fr) minmax(90px, 1fr) 32px;
-  gap: 7px;
+  grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
   padding: 2px 0;
-  min-height: 38px;
+  min-height: 36px;
   font-size: 12px;
+}
+
+/* No hover on touch: an editable row shows its delete button in a column of
+   its own; read-only rows give that room to the value. */
+:global(html[data-editor-platform="ipad"]) .declaration:has(.deleteButton) {
+  grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr) 28px;
 }
 
 :global(html[data-editor-platform="ipad"]) .keyCell {
@@ -326,18 +332,24 @@
 }
 
 :global(html[data-editor-platform="ipad"]) .propertyName {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 :global(html[data-editor-platform="ipad"]) .keyInput,
 :global(html[data-editor-platform="ipad"]) .valueInput,
 :global(html[data-editor-platform="ipad"]) .rawInput {
-  min-height: 32px;
-  padding: 4px 8px;
+  min-height: var(--control-h);
+  padding: 0 8px;
   border: 0;
-  border-radius: 7px;
-  background: var(--ipad-control-fill);
-  font-size: 14px;
+  border-radius: var(--radius-field);
+  background: var(--control-bg);
+  font-size: 12px;
+}
+
+/* Keys read as text, as on the desktop; the field shows once it has focus. */
+:global(html[data-editor-platform="ipad"]) .keyInput.keyInput:not(:focus) {
+  padding: 0 2px;
+  background: transparent;
 }
 
 :global(html[data-editor-platform="ipad"]) .keyInput:focus,
@@ -350,25 +362,26 @@
 }
 
 :global(html[data-editor-platform="ipad"]) .rawValueButton {
-  min-height: 32px;
-  padding: 4px 8px;
+  min-height: var(--control-h);
+  padding: 0 8px;
   border: 0;
-  border-radius: 7px;
-  background: var(--ipad-control-fill);
-  font-size: 14px;
+  border-radius: var(--radius-field);
+  background: var(--control-bg);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 :global(html[data-editor-platform="ipad"]) .deleteButton {
-  width: 32px;
-  height: 32px;
+  position: static;
+  transform: none;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   font-size: 14px;
   opacity: 1;
   color: var(--text-muted);
-}
-
-:global(html[data-editor-platform="ipad"]) .deleteButtonPlaceholder {
-  width: 32px;
 }
 
 :global(html[data-editor-platform="ipad"]) .addButton {
