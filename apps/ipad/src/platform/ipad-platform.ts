@@ -67,6 +67,13 @@ function fileNameFromPath(path: string, fallback: string): string {
   }
 }
 
+// Tauri commands reject with plain strings, not Error objects.
+function errorReason(error: unknown, fallback: string): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string" && error.length > 0) return error;
+  return fallback;
+}
+
 function fileRefFromPath(path: string, fallbackName: string): DocumentFileRef {
   return {
     kind: "file",
@@ -102,7 +109,7 @@ async function readLinkedTextFile(fileRef: DocumentFileRef): Promise<LinkedTextR
   } catch (error) {
     return {
       status: "failed",
-      reason: error instanceof Error ? error.message : "Unable to read linked file."
+      reason: errorReason(error, "Unable to read linked file.")
     };
   }
 }
@@ -135,7 +142,7 @@ async function writeLinkedTextFile(
   } catch (error) {
     return {
       status: "failed",
-      reason: error instanceof Error ? error.message : "Unable to write linked file."
+      reason: errorReason(error, "Unable to write linked file.")
     };
   }
 }
@@ -213,10 +220,13 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
     },
     files: {
       openText: async () => {
+        // "scoped" opens the file in place; the default copies it into the
+        // sandbox, so saves would land in the copy and never reach Files.
         const selected = await open({
           multiple: false,
           directory: false,
-          filters: TEXT_FILTERS
+          filters: TEXT_FILTERS,
+          fileAccessMode: "scoped"
         });
         const path = firstSelectedPath(selected);
         if (!path) {
@@ -276,7 +286,7 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
           return {
             status: "failed",
             fileRef: options?.fileRef ?? null,
-            reason: error instanceof Error ? error.message : "Unable to save file."
+            reason: errorReason(error, "Unable to save file.")
           };
         }
       },
