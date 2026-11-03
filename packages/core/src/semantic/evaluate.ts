@@ -2913,7 +2913,7 @@ function containsCmOption(optionLists: OptionListAst[]): boolean {
 }
 
 function isCmOptionEntry(entry: OptionEntry): boolean {
-  return entry.kind === "kv" && (entry.key === "cm" || entry.key === "/tikz/cm");
+  return entry.kind === "kv" && ["cm", "/tikz/cm", "xslant", "/tikz/xslant", "yslant", "/tikz/yslant"].includes(entry.key);
 }
 
 function markForeachFeaturesFromFigure(figure: TikzFigure, featureUsage: FeatureUsage): void {

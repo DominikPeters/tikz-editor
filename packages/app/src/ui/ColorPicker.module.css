@@ -4,31 +4,11 @@
 }
 
 .triggerButton {
-  width: 100%;
-  min-height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  border: 1px solid var(--border-light);
-  border-radius: 2px;
-  background: var(--bg-pane);
-  color: var(--text);
-  font-family: inherit;
-  font-size: calc(var(--app-ui-scale, 1) * 11px);
-  text-align: left;
-  cursor: pointer;
-  padding: 2px 5px;
+  composes: popUp from "./controls.module.css";
 }
 
 .triggerButtonOpen {
-  border-color: var(--border);
-}
-
-.triggerButton:disabled {
-  color: var(--text-dim);
-  background: var(--btn-disabled-bg);
-  cursor: default;
+  box-shadow: 0 0 0 0.5px var(--control-ring), 0 0 0 3px color-mix(in srgb, var(--control-accent) 30%, transparent);
 }
 
 .triggerValue {
@@ -40,11 +20,28 @@
 }
 
 .triggerSwatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
+  width: calc(var(--app-ui-scale, 1) * 20px);
+  height: calc(var(--app-ui-scale, 1) * 11px);
+  box-sizing: border-box;
+  border-radius: 3px;
   border: 1px solid color-mix(in srgb, var(--text) 18%, var(--border));
   flex-shrink: 0;
+}
+
+.triggerSwatchWell {
+  flex: 1 1 auto;
+  width: auto;
+  height: calc(var(--app-ui-scale, 1) * 13px);
+}
+
+/* The text color as a letter on the fill it is drawn over. */
+.triggerSwatchGlyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  font-weight: 700;
+  line-height: 1;
 }
 
 .triggerSwatchNone {
@@ -68,7 +65,7 @@
   top: 50%;
   height: 1.5px;
   background: var(--color-error);
-  transform: translateY(-50%) rotate(-45deg);
+  transform: translateY(-50%) rotate(-29deg);
 }
 
 .triggerLabel {
@@ -79,23 +76,11 @@
 }
 
 .triggerCaret {
-  color: var(--text-faint);
-  width: 12px;
-  height: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  composes: popUpIndicator from "./controls.module.css";
 }
 
 .triggerCaretIcon {
-  width: 12px;
-  height: 8px;
-  stroke: currentColor;
-  stroke-width: 1.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  fill: none;
+  composes: popUpIndicatorIcon from "./controls.module.css";
 }
 
 .popover {
@@ -127,6 +112,26 @@
   border-radius: 2px;
   background: var(--bg-pane);
   padding: 6px;
+}
+
+/* Sits under the picker as its last row, like a menu's reset item. */
+.resetButton {
+  display: block;
+  width: 100%;
+  margin-top: -1px;
+  border: 1px solid var(--border-light);
+  border-radius: 0 0 2px 2px;
+  background: var(--bg-pane);
+  color: var(--text);
+  font-family: inherit;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  text-align: left;
+  padding: 5px 8px;
+  cursor: default;
+}
+
+.resetButton:hover {
+  background: color-mix(in srgb, var(--control-accent) 14%, var(--bg-pane));
 }
 
 .rootDisabled {
@@ -164,9 +169,9 @@
 }
 
 .tabButtonActive {
-  border-color: var(--accent-btn-border);
-  background: var(--accent-btn-bg);
-  color: var(--accent-dark);
+  border-color: var(--control-accent);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
+  color: var(--text);
 }
 
 .standardTabPanel {
@@ -416,8 +421,8 @@
 }
 
 .swatchButtonSelected {
-  border-color: var(--accent-btn-border);
-  background: var(--accent-btn-bg);
+  border-color: var(--control-accent);
+  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
 }
 
 .swatchButton:disabled {
@@ -477,7 +482,7 @@
 }
 
 .brightnessTrack:focus-visible {
-  outline: 2px solid var(--accent-btn-border);
+  outline: 2px solid var(--control-accent);
   outline-offset: 1px;
 }
 
@@ -520,6 +525,22 @@
 .brightnessCenterLabel {
   flex: 1;
   text-align: center;
+}
+
+/* A wide well draws its "none" slash corner to corner instead. */
+.triggerSwatchWell.triggerSwatchNone {
+  background-image:
+    linear-gradient(to top right, transparent calc(50% - 1px), var(--color-error) calc(50% - 0.5px), var(--color-error) calc(50% + 0.5px), transparent calc(50% + 1px)),
+    linear-gradient(45deg, var(--border-light) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--border-light) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--border-light) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--border-light) 75%);
+  background-size: 100% 100%, 4px 4px, 4px 4px, 4px 4px, 4px 4px;
+  background-position: 0 0, 0 0, 0 2px, 2px -2px, -2px 0;
+}
+
+.triggerSwatchWell.triggerSwatchNone::after {
+  content: none;
 }
 
 /* ── iPad styling ──────────────────────────────────────────────────────── */

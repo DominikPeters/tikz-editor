@@ -1,8 +1,11 @@
 # Coordinate writer
 
-Status: draft, second revision after review. Inventory, fuzzer and failure
-classes are in [coordinate-writes.md](coordinate-writes.md); this document
-designs the writer from those failures.
+Status: phases 0–5 implemented; migration exceptions are empty. The
+follow-up PGF oracle, expanded pointer fuzzer and cost measurement are now
+implemented too. Reviewed low-level constructors remain fingerprinted by
+the checker. Inventory and failure classes are in
+[coordinate-writes.md](coordinate-writes.md); measured costs and current
+limits are in [coordinate-writer-costs.md](coordinate-writer-costs.md).
 
 Changes from the first draft:
 
@@ -29,78 +32,164 @@ the contexts the writer relies on.
 
 ## Fragments
 
-```ts
-// packages/core/src/edit/fragment.ts
-export type TikzFragment = Brand<string, "TikzFragment">;
-/** Source produced by applying fragments; the only type an edit result's newSource accepts. */
-export type EditedSource = Brand<string, "EditedSource">;
+Built in phase 2 (`packages/core/src/edit/fragment.ts`):
 
-/** Literal text with fragment holes: `tikz\`\\draw${options} ${a} -- ${b};\``. */
-export function tikz(strings: TemplateStringsArray, ...parts: TikzFragment[]): TikzFragment;
-export function joinFragments(parts: readonly TikzFragment[], separator: TikzFragment): TikzFragment;
-/** Existing source copied verbatim. */
-export function sourceSlice(source: string, span: Span): TikzFragment;
-/** Text the user typed or pasted: inspector raw values, node text, raw TikZ paste. */
-export function userText(text: string, origin: UserTextOrigin): TikzFragment;
+```ts
+export type TikzFragment = string & Brand<"fragment">;
+/** Coordinate-writer output: the only value a frame key accepts. */
+export type CoordinateText = TikzFragment & Brand<"coordinate">;
+/** A document after fragments were applied: the only source an edit result carries. */
+export type EditedSource = string & Brand<"edited">;
+/** A frame-free option value; an object, so it is neither a string nor a fragment. */
+export type OptionValue = Readonly<{ [brand]: true; text: string }>;
+
+/** Raw literal text with fragment holes: tikz`\draw${options} ${a} -- ${b};`. */
+export function tikz(strings: TemplateStringsArray, ...parts: readonly TikzFragment[]): TikzFragment;
+export function joinFragments(parts: readonly TikzFragment[], separator?: TikzFragment): TikzFragment;
+/** Newlines and indentation; throws on anything else. */
+export function layout(text: string): TikzFragment;
+/** Slices of what typed constructors produced. */
+export function sliceFragment(fragment: TikzFragment, from: number, to?: number): TikzFragment;
+export function editedSlice(source: EditedSource | TikzFragment, from: number, to: number): TikzFragment;
 export function applyFragments(source: string, edits: readonly { span: Span; fragment: TikzFragment }[]): EditedSource;
+
+// Take any string; every call site is listed and reviewed (F2).
+export function sourceSlice(source: string, span: Span): TikzFragment;
+export function userText(text: string, origin: UserTextOrigin): TikzFragment;
+export function unchangedSource(source: string): EditedSource;
+export function plainNumber(value: number, origin: PlainNumberOrigin, bare?: boolean): TikzFragment;
+export function macroExpansion(text: string): TikzFragment;
+export function optionEntry(key: string, value: TikzFragment | OptionValueText | null): TikzFragment;
+// (The migration escapes `legacyText` and `legacyEditedSource` were deleted in phase 5.)
+
+// Option values, and the key table.
+export function count(n: number): OptionValue;
+export function angle(value: Deg): OptionValue;
+export function canvasLength(value: Pt, unit?: CanvasLengthUnit): OptionValue;
+export function ratio(value: number): OptionValue;
+export function option(key: FrameKey, value: CoordinateText): TikzFragment;
+export function option(key: CanvasKey, value: OptionValue): TikzFragment;
+export function option<K extends string>(key: OtherKey<K>, value?: TikzFragment): TikzFragment;
 ```
 
 - `tikz` takes only fragments in its holes. Its literal parts are fixed at
   compile time, so they can hold keywords and authored constants but no
-  runtime value. A number cannot be concatenated, `.join()`ed or formatted
-  into a fragment; `formatNumber` returns a plain `string`, which no
-  fragment-accepting function takes. The checker requires `tikz` to be used
-  as a tagged literal (rule F4); called as a function it would accept a
-  built `TemplateStringsArray`.
+  runtime value; they are read raw, so TeX is written as TeX
+  (``tikz`\begin{tikzlayer}` ``) and a line break is a real one. A number
+  cannot be concatenated, `.join()`ed or formatted into a fragment:
+  `formatNumber` returns a plain `string`, which no fragment-accepting
+  function takes. The checker requires `tikz` to be used as a tag (F4).
 - Fragments have two roles, so a valid constructor cannot be used in the
   wrong place:
-  - **source fragments** (`TikzFragment`): writer output (points, vectors,
-    radii, rotations, positioning, bounds, offset statements), option lists,
+  - **source fragments** (`TikzFragment`): writer output, option lists,
     statements, `sourceSlice`, `userText`. Only these fill `tikz` holes;
-  - **option values** (`OptionValue`): `count(n)` (matrix rows, foreach
-    bounds), `angle(deg)` for angles that are not geometry (label
-    directions), `canvasLength(pt, unit)` for lengths PGF does not transform
-    (node `minimum width` without `transform shape`, line widths),
-    `ratio(x)` (`pos=`, opacity). They are not fragments, so
+  - **option values** (`OptionValue`): `count`, `angle` for angles that are
+    not geometry (label directions), `canvasLength` for lengths PGF does not
+    transform (node sizes without `transform shape`, line widths),
+    `ratio` (`pos=`, opacity). They are objects, so
     ``tikz`(${canvasLength(p.x, "cm")},…)` `` does not compile. They enter
-    source only through `option(key, value)`.
-- `option(key, value)` checks the key against a table: transform keys
-  (`xshift`, `yshift`, `shift`, `rotate`, `rotate around`, `scale`, `x`, `y`,
-  …) take only writer output, because their values are read in the frame;
-  canvas keys (`minimum width`, `inner sep`, `line width`, `label distance`,
-  …) take option values; any other key takes `userText` or a fixed literal.
-  That is the whole role system: no general grammar of TikZ positions.
-- Lengths that live in a frame are not frame-free: a circle radius `(.5)`
-  goes through the x vector, and `radius=1cm` is scaled by the CTM. They go
-  through the writer (`writer.radius`). `resize-element.ts` writes radii as
-  `radiusPt * CM_PER_PT cm` today; circle and ellipse resize are not fuzzed
-  yet, so this is likely a sixth failure class.
-- `SourcePatch.replacement`, `replaceSpan` and every result's `newSource`
-  take fragments and `EditedSource`, so no string-built source gets into a
-  result. Patch rebasing and composition (`composeSourcePatches`) operate on
-  fragments too.
+    source only through `option(key, value)` or `optionValueFor`. The
+    latter gives the value alone, for option mutations, as an
+    `OptionValueText`: a string that is not a fragment, so a value checked
+    against one key cannot be spliced into coordinate syntax either. The
+    slices that could cut a value back out of its option (`sliceFragment`,
+    `editedSlice`) are reviewed call sites under F2.
+- `option` checks the key against two tables. `FRAME_KEYS` (`shift`,
+  `xshift`, `rotate`, `rotate around`, `scale`, `x`, `y`, `at`, `radius`,
+  angles of arcs, `node distance`, …) take only `CoordinateText`, because
+  their values are read in the frame; `CANVAS_KEYS` (`minimum width`,
+  `inner sep`, `line width`, `label distance`, `shorten`, `pos`,
+  opacities, …) take option values; any other key must be a literal (a key
+  typed `string` could hide a frame key) and takes a fragment. `in`, `out`
+  and the bends are frame keys (phase 5); `rounded corners` and tree
+  distances are in neither table until their frame semantics are checked in
+  PGF. The writer's `coordinateText`
+  is the only `CoordinateText` constructor (writer-internal, F3).
+- Lengths that live in a frame are not frame-free: a plain radius `(.5)`
+  goes through the x and y vectors, a length `radius=1cm` along the canvas
+  axes, and either then through the CTM (`\tikz@do@ellipse`; PGF refuses to
+  mix the two in one ellipse). They go through radius-frame readers and the
+  reviewed `writeRadii` serializer in `writer/authored-values.ts` (F6).
+- `SourcePatch.replacement`, `replaceSpan`, `TextReplacement.text`,
+  `OptionMutation.value` and every result's `newSource` take fragments and
+  `EditedSource`, so no string-built source gets into a result. Patch
+  composition works on fragments; `documentDiffPatch` (two revisions of the
+  document) and `invertSourcePatches` (undo of a preview) copy verbatim text.
+- Wraps go where a string is created, never inside a helper: a helper that
+  wrapped its `string` parameter would launder whatever callers pass. The
+  drawing-layer text of Beamer decks, for instance, is built from `tikz`
+  constants in core, so the app's layer patch needs no escape.
+- Edit actions are a boundary: `setProperty.value`, adornment values and
+  node text arrive as strings and become `userText`. App code that computes
+  such a value (an inspector scrub of `xshift`, say) is outside the
+  guarantee until it sends a structured action instead.
 
-Checker rules (in `scripts/check-coordinate-typing.mjs`, type-aware, already
-in `npm run typecheck`):
+Checker rules (`scripts/check-coordinate-writes.mjs`, type-aware, run by
+`npm run typecheck` through `check-coordinate-typing.mjs`, over the
+production sources of `packages/` and `apps/`):
 
 | rule | checks |
 |---|---|
-| F1 | assertions to `TikzFragment`, `EditedSource`, `CoordinateText` and the writer's frame types only in `fragment.ts` and the writer |
-| F2 | `userText` and `sourceSlice` called only from listed call sites (each one fingerprinted and reviewed) |
-| F3 | writer internals (`formatCoordinate`, `formatPolarCoordinate`, `formatCanvasCoordinate`, `localToSourceUnits`, `ptToCm` on points) imported only inside `edit/writer/`, resolved by symbol so aliases and re-exports count |
-| F4 | `tikz` only as a tagged template literal |
+| F1 | type assertions and type predicates to a type carrying a fragment brand (`TikzFragment`, `CoordinateText`, `EditedSource`, `OptionValue`, also inside unions and arrays) only in `fragment.ts` and `edit/writer/` |
+| F2 | every call of a constructor that takes any string (`userText`, `sourceSlice`, `unchangedSource`, the slices, `plainNumber`, `macroExpansion`, `optionEntry`; until phase 5 also `legacyText`, `legacyEditedSource`) is listed |
+| F3 | writer internals (`formatCoordinate`, `formatPolarCoordinate`, `formatCanvasCoordinate` in `writer/format.ts`, `localToSourceUnits`, `coordinateText`) used only in `edit/writer/`, resolved by symbol so aliases and re-exports count; `ptToCm` not on a point's `x`/`y` outside the writer either |
+| F4 | `tikz` only as a template tag |
+| F5 | a point, vector or bounds constructor of `coords/points.ts` not fed the `x`/`y` of a point in another space (directly, or through `+`, `-`, and one-argument calls such as `pt(…)`), except in the transform modules (`core/src/coords/`, `app/src/ui/coords/`) and the writer |
+| F6 | every reference outside the writer to a serializer in `writer/authored-values.ts` is reviewed and fingerprinted; symbol/signature resolution covers renamed imports, aliases, destructuring, bracket/computed access, binding and re-exports, and guards namespace objects and dynamic imports before they can be narrowed or forwarded |
+
+`CoordinateWriter` exposes only operations that take evaluator-owned sites or
+contexts and world geometry. Raw authored angles, factors, local lengths,
+preserved shift components, typed components and radius lengths are serialized
+by separate functions in `writer/authored-values.ts`. These functions cannot
+prove the caller chose the right frame; they are audited exceptions, rather
+than unrestricted methods on every writer object. Keeping them separate also
+prevents narrowing a writer to a structural type from hiding a raw method.
+F6 is applied to references, not only calls, so moving a serializer to an alias
+requires review at the point it escapes.
+
+The twelve existing F6 sites were reviewed as follows:
+
+| caller | provenance checked |
+|---|---|
+| `statementPointWriter` (two sites) | circle/ellipse lengths solved through the insertion context's radius frame |
+| circle/ellipse resize | lengths solved in the radius frame, then constrained in that same frame |
+| scope resize | authored scale multiplied by the solved ratio; the resulting frame is evaluated |
+| `planOrderedScopeTranslation` (two sites) | shifts solved through the inverse ordered prefix; null components copy parsed document text |
+| path-attached node distance | clamped pt distance for an untransformed directional placement option |
+| property/origin rotation (two sites) | inspector/action angles already authored for the option; the pivot is preserved |
+| curve handle edits (two sites) | angles solved through the curve's inverse linear map |
+| `updateCoordinate` | components entered by the user and wrapped as `userText` |
+
+The current exception list has 147 reviewed entries and no migration entries.
+Adding or changing one of these expressions fails the normal typecheck gate
+until its new fingerprint is explicitly accepted after review.
+
+F5 covers the fixture "a `WorldPoint` built from picture-local numbers",
+which the types alone accept (both are `Pt`). Its first run found the
+center-pivot move building its next pivot as a `WorldPoint` from the
+frame-local pivot plus a local delta; `parseRotateAroundValue` itself labels
+an authored pivot `WorldPoint`. Both are migration entries for class 1.
 
 The pattern rules of the first draft (coordinate-shaped template literals,
-`formatNumber` with branded operands, unbranded point parameters) stay as
-tripwires during migration only. They are not part of the guarantee.
+`formatNumber` with branded operands, unbranded point parameters) are not
+built; the type layer and F1–F6 replace them.
 
-Negative fixtures in `test/fixtures/coordinate-checker/`, each expecting its
-diagnostic: string concatenation into a patch, `.join()` of formatted
-numbers, `formatNumber(x) + "," + formatNumber(y)` split formatting, a helper
-that returns a coordinate string, an alias import of `formatCoordinate`, a
-re-export, a cast to `TikzFragment`, `userText` from an unlisted module, a
-`WorldPoint` built from picture-local numbers, a `canvasLength` in a `tikz`
-hole, `option("xshift", canvasLength(…))`, and `tikz` called as a function.
+Negative fixtures in `test/fixtures/coordinate-checker/` (excluded from the
+repository typecheck) each name the diagnostics they must produce, and only
+those, as TypeScript codes or rule ids; `coordinate-write-checker.spec.ts`
+compiles them with the repository's options and runs the rules without
+exceptions. Type errors: concatenation into a patch (TS2322), `.join()` of
+formatted numbers in a `tikz` hole (TS2345), split formatting into
+`replaceSpan` (TS2345), a helper returning a coordinate string (TS2322), a
+`canvasLength` in a `tikz` hole (TS2345), `option("xshift",
+canvasLength(…))` (TS2769), an option key typed `string` (TS2769). Checker:
+a cast (F1), a type predicate (F1), `userText` in an unlisted module (F2),
+an alias import of `formatCoordinate` and a re-export (F3), `tikz` called
+as a function (F4), a world point from frame-local components (F5), and raw
+serializer calls and escapes (F6). All six former raw methods on
+`CoordinateWriter` must produce TS2339. An
+`allowed.ts` fixture expects nothing. Disabling F1, F4, F5 or F6 fails its
+fixtures.
 
 ## Evaluator-owned site contexts
 
@@ -145,7 +234,7 @@ statement of that frame.
 | statement entries | `semantic.siteContexts.statementEntries`, one per evaluated statement in order; a scope's `:leave` step holds the state at the end of its body; `\foreach` copies give one entry per iteration | built |
 | figure end | `semantic.siteContexts.figureEnd` | built |
 | node placement | canvas orientation (non-translations reset unless `transform shape`) composed with `every node` and the node's own options, in PGF order | with class 4 |
-| current point | for re-spelling relative coordinates | with class 5 |
+| current point | not recorded: `path-pieces.ts` replays it from the handles' worlds, checked against each relative handle's `relativeBase` | class 5 done |
 
 Incremental evaluation keeps each statement's entry context on its reused
 fragment: it is valid exactly as long as the reused elements are, since both
@@ -228,6 +317,9 @@ Spelling policy:
 
 ## Writer API
 
+Built in phase 3: `point` at a `coordinate` site. The rest of this section
+is the target; each operation comes with the failure class that needs it.
+
 ```ts
 // packages/core/src/edit/writer/index.ts
 export type WriteSite =
@@ -257,8 +349,40 @@ export function createCoordinateWriter(snapshot: EditGeometrySnapshot | EditGeom
 
 - Inputs are world-space types only, so "picture coordinates" cannot be
   handed in.
+- What phase 3 built (`edit/writer/`): `createCoordinateWriter(source)` and
+  `point({ kind: "coordinate", handle, context? }, world, { precision })`.
+  The map comes from the handle's site context and its **spelling**, which
+  the evaluator now records on every frame-local handle
+  (`CoordinateSpelling`: unitless per component, and the heading of a
+  `turn` coordinate), through `spelledCoordinateFrame` in
+  `semantic/site-context.ts`; the handle's `frame` is no longer read. The
+  capture oracle checks that this composition equals the evaluator's own
+  frame for every handle, turn coordinates after mid-path options included
+  (linear part for relative ones). `precision` is `drag` (two decimals,
+  polar angles in [0, 360)) or `reparameterize` (six decimals, angle as
+  computed), which center-pivot moves and rotations use. `context`
+  replaces the site context when an edit changes the options a coordinate
+  is read under.
+- `rewriteCoordinate` dispatches: coordinates to the writer (adding `at`
+  for implicitly placed nodes), calc offsets and positioning to their old
+  rewrites, now two `legacyText` exceptions until classes 4 and 5.
+  `rewritePreciseFrameCoordinate` is the writer at `reparameterize`.
+- Two actions resolve the frame after their option edit as a bare CTM
+  (`resolveStatementOptionFrame`), without the axis vectors: center-pivot
+  moves and center-pivot rotation. Phase 3 keeps that behavior through
+  `legacyCtmSiteContext`, a listed migration escape; under `x=`/`y=` it
+  misplaces unitless coordinates (class 1), so the fix belongs there, with
+  the full option state from `resolveStatementOptionState`.
+- Tests: a write-then-read-back round trip for every fuzzer frame and every
+  preserved spelling (mixed units, polar with and without units, relative,
+  turn, `canvas cs:`, a detached named endpoint), a spelling snapshot, and
+  refusals. Forcing unitless spelling in the writer fails five frames.
 - Refusals carry a reason, which actions pass through: singular axes, a
   rotation the frame cannot express, a loop-dependent context.
+- `translated(site, steps)` (class 2): a cartesian or xyz coordinate moved
+  by `Σ variable × world vector`, as loop terms in its own spelling. At a
+  context site the coordinate is `(0,0)` or the text it replaces, which
+  serves a scope's `shift`.
 
 ### Bounds
 
@@ -269,21 +393,39 @@ then `\pgf@protocolsizes`). A `rectangle` between two inverse-mapped corners
 is therefore a rotated rectangle under a rotated or skewed frame, and its
 canvas hull is larger than the requested box. So:
 
-- if the context's linear part is diagonal (identity, scale, flip, axis
-  lengths), write `(x₁,y₁) rectangle (x₂,y₂)`;
+- if the context's unitless map keeps axes axis-aligned (identity, scale,
+  flip, axis lengths, quarter turns), write `(x₁,y₁) rectangle (x₂,y₂)`;
 - otherwise write the four inverse-mapped corners,
   `(p₁) -- (p₂) -- (p₃) -- (p₄) -- cycle`, whose canvas hull is the box;
-- `readBounds` parses both forms through the same context, replacing
-  `parseCoordinateComponentCm`, which reads unitless numbers as centimetres.
+- reading needs no parser of its own: `resolveFigureBoundsWorld` takes the
+  hull of the statement's handles, where the evaluator put them. This
+  replaced `parseCoordinateComponentCm`, which read unitless numbers as
+  centimetres.
+
+Built: `writer.bounds(context, world)`. The context comes from
+`prepareInsertion` at the gap the statement takes (before its own entry
+when it is replaced, else before the first statement), as a
+`\useasboundingbox` path, so `every path` styles apply as in TikZ.
 
 ### Rotation
 
 A path option `rotate` multiplies onto the CTM after the axes: canvas =
-parent · R · axes · c. That is a world rotation when the parent's linear part
-is conformal; under a reflection the angle flips sign. Under a non-conformal
-parent (`xscale=2` scope) the writer refuses with a reason. Baking the
-rotation into coordinates instead needs its own design (curves, shapes, node
-text, dependencies).
+parent · R · axes · c. That is a world rotation when the parent's CTM is
+conformal; under a reflection the angle flips sign. Under a non-conformal
+parent (`xscale=2` scope) no angle is a world rotation. Baking the rotation
+into coordinates instead needs its own design (curves, shapes, node text,
+dependencies).
+
+Built: `writer.rotation(context, angle, pivot)` writes a `rotate around`
+value at the options before it, with the pivot as a coordinate there (its
+plain numbers through the axis vectors, as the evaluator reads
+`rotate around`). `angle` is `{ world }`, refused under stretch or skew, or
+`{ authored }`, the option's own angle. Center-pivot rotation turns the
+world by the gesture's change where the CTM is conformal (flipped under a
+reflection) and keeps its tested behavior elsewhere: the change goes to the
+authored angle, which TikZ composes with the parent. The product table
+first said to refuse there; that would have removed a tested feature, so
+it was decided to keep it.
 
 ### Positioning
 
@@ -294,15 +436,34 @@ pdflatex: `right=1cm of A` leaves a 1cm canvas gap under `scale=2` and
 `rotate=90`, and the node's own `rotate=-35,xshift=3mm` moves it. Unitless
 distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
 
+What the code does with that (class 4, done): the writer needs no frame for a
+positioning option. `right=1.2cm of A` is a canvas distance, so
+`writer.positioning(context, world, { bypassSnapping })` writes cm from the
+node centers and the anchors the evaluator recorded; the direction is chosen
+in world space (PGF's directions are canvas directions, also under a
+reflected frame), snapped to a cardinal one unless `bypassSnapping`, and a
+direction whose distances are not negative is preferred. What was missing
+was the node's own part. A positioned node's handle now stands where the
+positioning puts it, before the node's own `xshift`/`yshift` and the
+translation its transform carries (the evaluator drew the node at the handle
+plus those, but its handle had them half subtracted when a rotation came
+first). A node's placement handle records where the node was drawn and its
+eight anchors relative to that (`nodePlacement`), so
+`positionNodeRelativeTo` measures an unnamed, rotated or round node from its
+real anchors, not from its bounds. Not done: the evaluator applies `xshift`
+in world space whatever its order against `rotate`; PGF composes them in
+option order (`rotate=-35,xshift=3mm` shifts along the rotated axis). That is
+an evaluator fidelity question, not a writer one.
+
 ## Failure classes, mapped
 
 | class | fix |
 |---|---|
 | 1. world cm as source units | insertPathPoint, convert-to-absolute: `writer.point` at an `in-statement` site; figure bounds: `writer.bounds`/`readBounds`; center-pivot rotation: corners via `writer.point`, angle via `writer.rotation` |
-| 2. offsets in a bare picture | `writer.offsetStatement` replaces `getOffsetPreparation` and `translateSingleStatementSnippet`: the copy's gap context, not a fresh picture; the original's handles plan the offset only when the contexts match. Repeat steps go through `writer.vector`; positioned nodes through `writer.positioning` |
-| 3. new coordinates ignore axes and scopes | insertion actions take world points, written at the gap or target-statement context. A core `addPath { start, segments, closed, style }` replaces app-side path and freehand string generation; `appendToPath` takes world segments. The app's `*InPictureCoordinates` mappings are deleted |
-| 4. positioning | drags and `positionNodeRelativeTo` use `writer.positioning`, choosing the direction from the local delta. Aligning `A` with a node positioned from `A` is a move-planning bug (dependents move with `A`), tracked separately |
-| 5. relative coordinates in rewritten paths | restructuring actions compute anchors' world positions and re-spell each one at its new place: `writer.point` for absolute, `writer.vector` from the new predecessor for `+`/`++` |
+| 2. offsets in a bare picture (done) | a copy is inserted unmoved and offset in the document it landed in, by the move machinery (no `offsetStatement`: the copy's own handles carry its frame). Repeat steps are world vectors, written by `writer.translated`; positioned nodes through `writer.positioning` (class 4) |
+| 3. new coordinates ignore axes and scopes (done) | insertion actions take world points, written at the gap or target-statement context. A core `addPath { start, segments, closed, style }` replaces app-side path and freehand string generation; `appendToPath` takes world segments. The app's `*InPictureCoordinates` mappings are deleted |
+| 4. positioning (done) | drags and `positionNodeRelativeTo` use `writer.positioning` (world directions, canvas distances), against handles that stand where the positioning puts the node. Copies and alignments are exact: they bypass the cardinal snap |
+| 5. relative coordinates in rewritten paths | restructuring actions build the path from pieces; `spellPath` keeps every coordinate's text unless it is relative and read from another point now, then `writer.point` with that point as `relativeBase` (absolute where nothing comes before it); cached handles require the current source fingerprint as well as matching coordinate slices, otherwise geometry is evaluated again before rewriting, inserting or smoothing |
 
 ## Product decisions
 
@@ -310,13 +471,13 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
 |---|---|
 | spelling of new coordinates | preserve when editing; new coordinates unitless, always |
 | paste across scopes | two intents. Canvas copy/paste keeps the visual geometry, then applies the paste offset (`offsetStatement` into the destination gap). Pasting raw TikZ keeps its text (`userText`) |
-| rotation in non-conformal frames | refuse with a reason for now |
+| rotation in non-conformal frames | the gesture changes the authored angle, which TikZ composes with the parent (existing, tested behavior; decided to keep) |
 | assistant coordinates | structured placement tools state world units explicitly; raw TikZ from the assistant is source text. Check the existing tool contracts before changing behavior |
 
 ## Gates
 
 - **Fuzzer, per case.** `expected-outcomes.json` records the outcome of all
-  1788 cases (`ok`, `partial`, `unsupported: reason`, `error`, `fail: class`).
+  2728 cases (`ok`, `partial`, `unsupported: reason`, `error`, `fail: class`).
   Any difference fails the test. Recording (`POINTER_FUZZ_UPDATE=1`, full
   run, seed 1) prints every transition and refuses regressions unless
   `POINTER_FUZZ_ACCEPT_REGRESSIONS=1`. Partial results are checked like full
@@ -325,11 +486,19 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
   every frame (`POINTER_FUZZ_FULL=1` on
   the `npm test` step); local `npm test` runs the quick subset. Other seeds
   may change refusals but not add failures.
-- **Checker exceptions, fingerprinted.** One entry per violation: rule id,
-  file, enclosing declaration, and a hash of the normalized offending
-  expression. Line moves don't change it; replacing one violation with
-  another does, and fails. The list only shrinks, with the same
-  print-and-refuse update as the fuzzer.
+- **Checker exceptions, fingerprinted.** `scripts/coordinate-write-exceptions.json`
+  has one entry per fingerprint: rule, file, enclosing declaration path,
+  and a hash of the offending expression without whitespace, with a count
+  and the expression for review. Line moves don't change it; replacing one
+  violation with another does, and fails. Two sections: `reviewed` (calls
+  of fragment constructors whose arguments were checked, and the low-level
+  authored-value serializers whose frame or text provenance was reviewed)
+  and `migration`
+  (everything else; done when empty). A listed count the code no longer
+  reaches fails too, so the list shrinks with the code.
+  `node scripts/check-coordinate-writes.mjs --update` prints removals (`-`)
+  and additions (`+`), writes removals, and refuses additions unless
+  `--accept-new` is given after review.
 - **Capture oracle** and the **compute differential fuzzer** cover the
   contexts.
 
@@ -343,27 +512,219 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
    oracle. Node placement and current point come with classes 4 and 5. The
    only behavior change: `StatementFrameResolver.options` now applies
    `every path` styles.
-2. **Fragment layer and checker.** `TikzFragment`, `EditedSource`,
-   constructors, typed scalar writers; F1–F3 with every current violator in
-   the fingerprinted exception list; negative fixtures. From here on, new
-   code cannot add a raw coordinate write.
-3. **Writer core.** On site contexts; port `rewrite.ts`/`frame-coordinate.ts`
-   (already correct) with no behavior change.
+2. **Fragment layer and checker.** Done: fragment types and constructors,
+   option values and the key table, every patch, replacement and result
+   typed; F1–F5 with the fingerprinted exception list; negative fixtures.
+   First list: 156 violations in 150 entries; 59 reviewed constructor
+   calls, and as migration 64 `legacyText`/`legacyEditedSource` calls,
+   22 writer-internal uses (F3) and 11 rebranded points (F5). Reviewing the
+   string-constructor calls found two launderings, now migration entries:
+   `rotate-element` passed computed rotation values as inspector text, and
+   the connect action sliced a document it had built by concatenation. New
+   code cannot add a raw coordinate write without a listed exception. No
+   behavior change.
+3. **Writer core.** Done: the evaluator records each coordinate's
+   spelling, and `edit/writer/` writes existing coordinates from the site
+   context and that spelling; `rewrite.ts` and `frame-coordinate.ts` are
+   ported with no behavior change (unchanged rewrite tests and fuzzer
+   outcomes). The formatters and `localToSourceUnits` moved into the writer;
+   the exception list went from 156 to 139 violations: 18 writer-internal
+   uses and the precise rewrite's two `legacyText` calls left, the old
+   rewrite exception split into calc and positioning, and two
+   `legacyCtmSiteContext` calls were added.
 4. **Class 1**, then **class 3** (world insertion, `addPath`, delete the app
    pre-mapping), then **class 2**, then **classes 4 and 5**. Each phase
    records its improvements with the fuzzer update and shrinks the
    exception list.
+   - Class 1 done: all 71 recorded failures pass (328 → 257 fuzzer
+     failures), no other outcome changed. The writer gained `context`
+     sites (a coordinate at a context the evaluator resolved, keeping the
+     spelling of text it replaces), `readContextPoint`, `bounds` and
+     `rotation`; statement option states come as site contexts
+     (`resolveStatementOptionContext`, `geometry.optionContext`); node
+     positioning handles record where an `at` would be read.
+     `insertPathPoint` and smoothing a corner write at the path's own
+     context (refused when its points are read in different frames);
+     convert-to-absolute at the node's placement; figure bounds as above,
+     read back from handles; center-pivot moves read and write the pivot
+     at the prefix options' context and give the moved coordinates the
+     full option state, which removed `legacyCtmSiteContext`.
+     Exceptions: 139 → 129 (migration 80 → 66; four reviewed
+     `sourceSlice` calls copy the `rotate around` text around the pivot).
+   - Class 3 done: 49 recorded failures pass (257 → 208), no other outcome
+     changed. Insertion actions take world points. A new statement is
+     appended at the end gap, `prepareInsertion` gives the context there
+     (options included, so `[x=2cm]` and scopes count), and the points are
+     written with a `context` site (`edit/new-statement.ts`; it reuses the
+     geometry snapshot when its source is the edited one, which keeps a
+     drawing layer's page shift). `generateElementSource` and the complex
+     path generators take such a point writer; `addPath { start, segments,
+     closed, strokeColor }` replaces the app's path and freehand string
+     generation, and `appendToPath` takes world segments, written in the
+     frame its path's points share (refused when they differ). The app's
+     `picture-coordinates.ts` and its mappings are deleted. A refusal is an
+     `unsupported` result, never a guess. Names and text values entered in
+     templates are `userText`, with a new `node-reference` origin. Circle
+     and ellipse radii stay `legacyText` until phase 5 (`writer.radius`).
+     Exception entries: reviewed 58 → 68 (the template text values),
+     migration 64 → 62.
+   - Class 2 done: 163 recorded failures pass (208 → 45); one case went
+     ok → partial and was fixed (below). `duplicateElements` and
+     `pasteStatements` insert the unmoved copy, evaluate the edited
+     document and move the copy's statements with `applyMoveElements`, so
+     the copy's coordinates are rewritten in the frame, spelling and path
+     options they are read with there (the old bare-picture preparation and
+     its cache are gone). Moving after inserting cost one evaluation per
+     group of copies. Statements are found by span, trimmed of the line
+     break before them, innermost first (a copy in a scope matched the
+     scope). Groups are copied from the end of the document, since an
+     insertion shifts the ids after it. A copy that ends at a named node
+     keeps the node: those skipped endpoints no longer make a duplicate
+     partial. `repeatElements` evaluates the source and gives the writer a
+     step per loop variable (`translated`, `LoopStep`): the coordinate
+     `1+\i*1.5-\j*0.5` keeps each component's unit, a plain number stays
+     one, and the step is the world vector through the inverse of the
+     coordinate's own frame, so axes, rotation and skew are right. A
+     coordinate without a handle, or a relative, polar or named one,
+     sends the statement into `\begin{scope}[shift={…}]`, read in the frame
+     the statement starts in; a frame that differs between passes of an
+     enclosing loop is refused. Output in a plain picture changed: plain
+     numbers stay plain (`(1+\i*2,0)`, not `(1cm+\i*2cm,0)`).
+     Exception entries: migration 62 → 60.
+   - Class 4 done: the 27 positioning failures are gone (45 → 18, the rest
+     class 5), two `positionNodeRelativeTo` cases now refuse where they wrote
+     the wrong place (a rotated node whose centers would need a negative
+     distance). Causes, in order of cases: the positioned node's handle
+     included its own shifts (8 cases: drags, moves, duplicates, aligns of a
+     node with `rotate=…,xshift=…`); duplicates and aligns went through the
+     cardinal snap meant for drags and dropped the offset (16, including
+     `top` alignments in every frame); `positionNodeRelativeTo` took anchors
+     from bounds and offsets from a different center than the one it
+     preserved (3). `rewritePositioningFromContext` moved into the writer as
+     `positioning`, returns typed text, and lost its `legacyText`; the
+     wrapper that put the entry into a node's option brackets is typed too.
+     Exception entries: migration 60 → 58.
+   - Review fixes after class 4. `positionNodeRelativeTo` aimed at the
+     handle (where the `at` is) while removing the node's own
+     `xshift`/`yshift`, so a shifted node moved by its shift; it now aims
+     at where the node is drawn. The evaluator let the anchor a placement
+     implies beat a later `anchor=`, while PGF reads options in order and
+     the later one wins. `optionValueFor` returned a fragment, so a value
+     checked against a canvas key could fill coordinate syntax; it now
+     returns `OptionValueText`, which only option mutations take, and the
+     slices are reviewed F2 sites. Duplicating siblings put every copy
+     after the last one, where a `\tikzset{x=2cm}` or a redefined node name
+     between them changed how a copy read; copies now go after each run of
+     adjacent originals. Repeat refused nothing that a `shift` cannot move:
+     it now refuses a node positioned relative to, or placed at, a node
+     the copy does not declare (PGF reads anchors with the transformation
+     undone).
+   - Class 5 done: the 18 recorded failures pass (18 → 0). Restructuring
+     actions (reverse, split, join, delete point, close/open, point kind,
+     insert point, prepend) build the new path from pieces: the start, the
+     path's own segments, and new lines and curves of its coordinates or of
+     points the writer wrote. `spellPath` replays how TikZ reads them
+     (`tikz.code.tex`: a coordinate is read from the current point, which a
+     `+` one does not update; a first control from where the curve starts,
+     the end from the current point, a second control from the end;
+     controls never update it), on the old path and on the new one. A
+     relative coordinate whose base changes is written again from the new
+     one (`CoordinateSite.relativeBase`), exactly, not rounded like a drag;
+     where nothing comes before it, it becomes absolute; every other
+     coordinate keeps its text, and a path without relative coordinates
+     comes out as before. The replayed bases are checked against the
+     evaluator's `relativeBase`, and a disagreement refuses. A `turn`
+     coordinate is refused once anything before it changes. Most of the
+     failures were the anchor text dropping its `++`: a coordinate's span
+     leaves the prefix out. `explicitSegmentText` and its `legacyText` are
+     gone. Exception entries: reviewed 78 → 80, migration 58 → 57.
 5. **Remaining writers.** Radii and other frame-dependent lengths (after
    adding circle/ellipse resize cases), SVG import, assistant handlers,
    semantic-internal source (`fit`, `tree-child`, `label-quotes`) or audited
    exceptions. Done when the exception list is empty.
+   - Radii: the radius frame is the CTM, through the axis vectors when the
+     radius is a plain number. Three readers give lengths in it
+     (`radiusLengthsOf` for a drag's reach, `circleRadiusLengths` for a
+     world circle, `worldEllipseRadiusLengths` for a world-axis ellipse) and
+     `writeRadii` writes them in their spelling, each radius keeping its
+     own unit. Resize used to read the drag in the center's frame and write
+     `cm`, so a plain radius under `x=2cm` came out half as large; new
+     circles were written in `cm` whatever the CTM, so they doubled in a
+     `scale=2` picture. A new circle in a skewed frame, and a new ellipse
+     the frame turns off the world axes, are refused; a stretched frame
+     gets an `x radius` and a `y radius`.
+   - Values that are frame keys but not points, solved by the action and
+     checked against the frame it produces, are formatted by the writer:
+     `writeAuthoredAngle` (an authored `rotate=`), `writeScaleFactor` (`xscale`), `writeLocalLength` (a shift
+     in its ordered prefix's frame, or a canvas distance such as a node's
+     `above=3pt`), `writeShiftPair`, and `writeTypedComponents` (the public
+     `updateCoordinate` edit, whose components are user text). Matrix and
+     tree placement write through `writer.point` at the node's own
+     coordinate, in its spelling, or at the statement's entry context.
+   - `plainNumber(value, origin)` is the one constructor for numbers no frame
+     reads (Beamer lengths and scales, label counters); its call sites are
+     reviewed under F2, as a number that could fill coordinate syntax.
+   - `to` path angles: PGF's `topaths` computes the curve (the distance
+     between the points, `out`, `in`, a bend's turn) in the coordinates it
+     is read in, and the CTM maps it after. The evaluator read every angle
+     in world space, so `out=0` under `rotate=90` bulged sideways in the
+     editor where PGF draws a straight line, and a bend did not flatten
+     under `xscale=2` (checked with `compare:renderers`). It now computes
+     the curve in the CTM's coordinates; curve handles carry that linear
+     map, and a dragged control or bend is read back into angles there and
+     written by `writeAuthoredAngle`. `in`, `out` and the bends became frame
+     keys.
+   - Exception entries: migration 57 → 0; reviewed 80 → 135 (the
+     structural text now typed at its origin, each copy, user value and
+     new constructor call a listed site). Three agents (Sonnet) did the
+     app-side rebranding, the Beamer text and the structural text; their
+     results were reviewed, and the structural one checked against HEAD on
+     164k edit scenarios with identical output.
+   - With no call site left, `legacyText` and `legacyEditedSource` are
+     deleted: a string can no longer become source text except through a
+     listed constructor or the writer.
 
-Cost to measure before phase 4: memory of the recorded contexts, and the
-time of insertion, paste and repeat in large documents, including cold
-checkpoint preparation. Paper-drag profiling does not exercise these paths;
-add profiling specs for them in `apps/web/profiling/`.
+## Follow-up validation (2026-10-22)
 
-The fuzzer grows with the design: a singular frame expecting `unsupported`,
-a `transform shape` node, a mid-picture `\tikzset{x=2cm}` before the
-insertion site, points inserted after a mid-path `[rotate=…]`, paste into
-another scope, circle and ellipse resize.
+The deferred cost measurement is complete. See
+[coordinate-writer-costs.md](coordinate-writer-costs.md) for the method,
+raw data and limits. The Node core harness measures retained contexts and
+entries, cold/warm checkpoint preparation, insertion, paste and repeat on
+100, 1,000 and 5,000-statement documents. It does not measure UI latency.
+
+The pointer baseline now contains **2,728 cases across 14 frames**:
+2,183 `ok`, 70 checked `partial`, 475 safe `unsupported`, no failures or
+errors. New coverage includes singular frames (must refuse), `transform
+shape` nodes, a changed axis basis before the insertion gap, mid-path
+rotation, paste into another scope, circle/ellipse resizing and synthetic
+`to` angle/bend controls. Coverage assertions require these families in
+every frame. Synthetic controls are selected by statement ownership,
+since their source spans are empty. Leading-relative paths are also
+exercised, including restructuring. Seeds 7 and 42 check the same families
+without accepting geometry failures.
+
+Independent PGF probes in
+`test/fixtures/coordinate-oracles/coordinates.json` record 25 node/path
+cases, regenerated with `node scripts/capture-coordinate-oracles.mjs`
+(PGF 3.1.11, `pdflatex`). Normal tests need no TeX installation. They
+compare rendered geometry and handle/anchor placement within 0.02 TeX pt,
+covering option order, picture/node slants, node offsets with and without
+`transform shape`, axis-dependent shifts, transformed `to` curves,
+mid-path options and leading-relative paths. A separate regression checks
+that a mid-path transform cannot leak into the next statement.
+
+These probes confirmed and drove evaluator fixes: shifts compose in
+option order, slants are applied, plain `above=3pt` follows earlier node
+options (and inherits the parent linear map only with `transform shape`),
+mid-path options affect subsequent coordinates, and a leading `+`/`++`
+gets the path's local origin as its relative base. Rewrites keep that
+origin and do not duplicate the first coordinate's prefix. The fuzzer
+also caught radius resizing treating an authored circle as an ellipse
+merely because unequal axis vectors make it render as one.
+
+Some topology operations still refuse paths containing mid-path options,
+and existing restrictions on scoped paths remain. Their explicit
+`unsupported` outcomes are recorded; adding support must retain the
+pointer invariant. Performance work should next profile whole-document
+paste/repeat evaluation: the measurements show it dominates context
+capture/checkpoint preparation on the largest fixture.

@@ -8,6 +8,7 @@ import { retainSceneTextLayout } from "../../packages/core/src/text/render-scope
 import { getTextLayoutReportProvider } from "../../packages/core/src/text/layout-context.js";
 import { emitSvg } from "../../packages/core/src/svg/emit.js";
 import { diffSvgModels } from "../../packages/core/src/svg/patch.js";
+import { fragment } from "../fragment-helpers.js";
 
 describe("semantic source bindings", () => {
   it("reuses text SVG while resolving current and previous caret reports independently", async () => {
@@ -80,8 +81,8 @@ describe("semantic source bindings", () => {
 
   it("maps disjoint edits and enclosing spans with explicit boundary ownership", () => {
     const resolve = createSourceSpanResolver([
-      { oldSpan: { from: 5, to: 5 }, newSpan: { from: 5, to: 8 }, replacement: "abc" },
-      { oldSpan: { from: 15, to: 19 }, newSpan: { from: 18, to: 19 }, replacement: "x" }
+      { oldSpan: { from: 5, to: 5 }, newSpan: { from: 5, to: 8 }, replacement: fragment("abc") },
+      { oldSpan: { from: 15, to: 19 }, newSpan: { from: 18, to: 19 }, replacement: fragment("x") }
     ]);
     expect(resolve({ from: 0, to: 5 })).toEqual({ from: 0, to: 5 });
     expect(resolve({ from: 5, to: 10 })).toEqual({ from: 8, to: 13 });

@@ -9,6 +9,7 @@ import {
   APP_MENU_DEFINITION,
   filterAppMenuDefinitionForTarget,
   appMenuForDocument,
+  type AppMenuCommandId,
   type AppMenuPlatformTarget
 } from "../app-menu";
 import { flushPendingWorkspaceSave, useEditorStore } from "../store/store";
@@ -27,6 +28,7 @@ import type { SceneFigure } from "@tikz-editor/core/semantic/types";
 import { createMinimalTikzSourceArtifact } from "@tikz-editor/core/export/index";
 import { installAppProfilingRecorder, readAppProfilingSnapshot, resetAppProfilingSession } from "../profiling";
 import { AppMenuBar } from "./AppMenuBar";
+import { WindowsTitleBar } from "./WindowsTitleBar";
 import { Toolbar } from "./Toolbar";
 import { DockLayout } from "./DockLayout";
 import { IpadEditorShell } from "./IpadEditorShell";
@@ -165,6 +167,18 @@ function menuTargetFromPlatformId(platformId: string): AppMenuPlatformTarget {
   return "web";
 }
 
+/** View › Panels order; keep in step with the accelerators in default-menu.ts. */
+const PANEL_SHORTCUT_COMMANDS: Partial<Record<string, AppMenuCommandId>> = {
+  Digit1: APP_MENU_COMMAND_IDS.TOGGLE_SOURCE_PANEL,
+  Digit2: APP_MENU_COMMAND_IDS.TOGGLE_FIGURES_PANEL,
+  Digit3: APP_MENU_COMMAND_IDS.TOGGLE_NOTES_PANEL,
+  Digit4: APP_MENU_COMMAND_IDS.TOGGLE_INSPECTOR_PANEL,
+  Digit5: APP_MENU_COMMAND_IDS.TOGGLE_OBJECTS_PANEL,
+  Digit6: APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL,
+  Digit7: APP_MENU_COMMAND_IDS.TOGGLE_BUILDS_PANEL,
+  Digit8: APP_MENU_COMMAND_IDS.TOGGLE_ASSISTANT_PANEL,
+};
+
 function desktopOsFromPlatformId(platformId: string): "windows" | "macos" | "other" | null {
   if (!platformId.startsWith("desktop")) {
     return null;
@@ -178,6 +192,13 @@ function desktopOsFromPlatformId(platformId: string): "windows" | "macos" | "oth
   return "other";
 }
 
+/** The OS whose look the window takes. A dev build on web previews Windows with ?desktop-os=windows. */
+function lookOsFromPlatformId(platformId: string): "windows" | "macos" | "other" | null {
+  const desktopOs = desktopOsFromPlatformId(platformId);
+  if (desktopOs) return desktopOs;
+  return import.meta.env.DEV && new URLSearchParams(window.location.search).get("desktop-os") === "windows" ? "windows" : null;
+}
+
 function isCanvasViewportFocused(): boolean {
   return (
     document.activeElement instanceof HTMLElement &&
@@ -185,11 +206,18 @@ function isCanvasViewportFocused(): boolean {
   );
 }
 
+// Inputs that take no text (a checkbox, a slider) leave app shortcuts such as
+// Undo working, as focused controls do in a native window.
+const NON_TEXT_INPUT_TYPES = new Set(["checkbox", "radio", "range", "button", "submit", "reset", "color", "file", "image"]);
+
 function isEditableShortcutTarget(target: EventTarget | null): target is HTMLElement {
   if (!(target instanceof HTMLElement)) {
     return false;
   }
-  return target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+  if (target instanceof HTMLInputElement) {
+    return !NON_TEXT_INPUT_TYPES.has(target.type);
+  }
+  return target.isContentEditable || target.tagName === "TEXTAREA";
 }
 
 function selectAllInEditableTarget(target: HTMLElement): boolean {
@@ -636,12 +664,29 @@ function EditorApp() {
   }, [platform.updates, runUpdateCheck]);
 
   useEffect(() => {
-    const desktopOs = desktopOsFromPlatformId(platform.id);
+    const desktopOs = lookOsFromPlatformId(platform.id);
     if (desktopOs) {
       document.documentElement.dataset.desktopOs = desktopOs;
       return;
     }
     delete document.documentElement.dataset.desktopOs;
+  }, [platform.id]);
+
+  // macOS hides the traffic lights in full screen, so the toolbar drops their inset.
+  // A full-screen window covers the screen; a zoomed one stops at the menu bar.
+  useEffect(() => {
+    if (desktopOsFromPlatformId(platform.id) !== "macos") return;
+    const update = () => {
+      document.documentElement.dataset.fullscreen = String(
+        window.outerWidth >= window.screen.width && window.outerHeight >= window.screen.height
+      );
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      delete document.documentElement.dataset.fullscreen;
+    };
   }, [platform.id]);
 
   useEffect(() => {
@@ -1743,6 +1788,16 @@ function EditorApp() {
         return;
       }
 
+      // Option-Command-1…8 toggle panels (View menu order). On a Mac only: Ctrl+Alt elsewhere
+      // is AltGr, which types characters. With a native menu bar the menu handles the key.
+      if (e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey && !getActiveEditorPlatform().menu?.usesNativeMenuBar) {
+        const panelCommand = PANEL_SHORTCUT_COMMANDS[e.code];
+        if (panelCommand && runtime.runCommand(panelCommand, "shortcut")) {
+          e.preventDefault();
+          return;
+        }
+      }
+
       // Ctrl+Shift+D: toggle dev panel
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === "d") {
         runtime.runCommand(APP_MENU_COMMAND_IDS.TOGGLE_DEV_PANEL, "shortcut");
@@ -2098,6 +2153,24 @@ function EditorApp() {
           }
         }
       : null;
+  // The Windows look draws its own title bar with the document tabs in it,
+  // and the menus share the toolbar row, as in a Fluent command bar.
+  const windowsLook = lookOsFromPlatformId(platform.id) === "windows";
+  const tabStrip = (
+    <TabStrip
+      onRequestCloseDocument={(documentId) => {
+        requestCloseIntent({ kind: "close-document", documentId });
+      }}
+    />
+  );
+  const appMenuBar = (
+    <AppMenuBar
+      definition={menuDefinition}
+      bindings={commandRuntime.bindings}
+      recentFiles={platform.menu?.recentFiles}
+      keyboardAccess={!isMacLikePlatform()}
+    />
+  );
 
   return (
     <div
@@ -2119,21 +2192,14 @@ function EditorApp() {
         />
       ) : (
         <>
-          {platform.menu?.usesNativeMenuBar ? null : (
-            <AppMenuBar
-              definition={menuDefinition}
-              bindings={commandRuntime.bindings}
-            />
-          )}
+          {windowsLook ? <WindowsTitleBar frame={platform.window?.frame ?? null}>{tabStrip}</WindowsTitleBar> : null}
+          {platform.menu?.usesNativeMenuBar || windowsLook ? null : appMenuBar}
           <Toolbar
+            menuBar={windowsLook ? appMenuBar : null}
             onPresentationOptions={handlePresentationOptions}
             updateChip={updateChip}
           />
-          <TabStrip
-            onRequestCloseDocument={(documentId) => {
-              requestCloseIntent({ kind: "close-document", documentId });
-            }}
-          />
+          {windowsLook ? null : tabStrip}
           {presentation.error ? <div className={presentationCss.feedback} role="alert"><span>{presentation.error}</span><Modal.SecondaryButton onClick={handlePresentationOptions}>Presentation Options…</Modal.SecondaryButton><Modal.SecondaryButton onClick={presentationService.clearError}>Dismiss</Modal.SecondaryButton></div> : null}
           {presentation.snapshot && !presentation.snapshot.outputAvailable ? <div className={presentationCss.feedback} role="status"><span>Audience output is closed.</span><Modal.SecondaryButton onClick={handlePresentationOptions}>Choose Audience Output…</Modal.SecondaryButton></div> : null}
           <div className={css.body}>

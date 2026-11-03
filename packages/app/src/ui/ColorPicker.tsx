@@ -44,9 +44,22 @@ export type ColorPickerProps = {
   namedColorSwatches?: readonly NamedColorSwatch[];
   value: string | null;
   syntaxValue?: string | null;
+  /** Effective CSS value for expressions resolved by the document renderer. */
+  resolvedValue?: string | null;
   mixed?: boolean;
   disabled?: boolean;
   triggerLabelClassName?: string;
+  /** Preserve the source spelling of document-defined color names. */
+  preserveNamedColorSpelling?: boolean;
+  /** Keep slider drags local until release, producing one recorded edit. */
+  commitOnRelease?: boolean;
+  /** A color well: the swatch fills the trigger and the value moves to its tooltip. */
+  swatchOnly?: boolean;
+  /** For a text color well: the well shows "Aa" in the color on this fill. */
+  glyphBackground?: string | null;
+  /** An entry below the picker that removes the authored value. */
+  resetLabel?: string;
+  onReset?: () => void;
   onChange: (value: string) => void;
 };
 
@@ -56,9 +69,16 @@ export function ColorPickerField({
   namedColorSwatches = [],
   value,
   syntaxValue = null,
+  resolvedValue = null,
   mixed = false,
   disabled = false,
   triggerLabelClassName,
+  preserveNamedColorSpelling = false,
+  commitOnRelease = false,
+  swatchOnly = false,
+  glyphBackground = null,
+  resetLabel,
+  onReset,
   onChange
 }: ColorPickerProps) {
   const [open, setOpen] = useState(false);
@@ -77,11 +97,13 @@ export function ColorPickerField({
   );
   const normalizedValue = normalizeColorToken(value);
   const normalizedSyntaxValue = normalizeColorToken(syntaxValue);
-  const displayLabel = mixed ? "mixed" : (normalizedSyntaxValue ?? normalizedValue ?? "none");
+  const displayLabel = mixed ? "mixed" : (preserveNamedColorSpelling ? syntaxValue?.trim() : normalizedSyntaxValue) ?? normalizedValue ?? "none";
   const displaySwatchToken = mixed ? null : (normalizedSyntaxValue ?? normalizedValue ?? "none");
-  const displaySwatchColor = displaySwatchToken
+  const displaySwatchColor = resolvedValue ?? (displaySwatchToken
     ? cssColorForToken(displaySwatchToken, namedColorLookup)
-    : null;
+    : null);
+  const swatchNone = displayLabel === "none" || mixed;
+  const glyph = swatchOnly && glyphBackground != null && !swatchNone;
 
   useEffect(() => {
     if (!open) {
@@ -209,18 +231,24 @@ export function ColorPickerField({
           <span
             className={[
               css.triggerSwatch,
-              displayLabel === "none" || mixed ? css.triggerSwatchNone : ""
+              swatchOnly ? css.triggerSwatchWell : "",
+              glyph ? css.triggerSwatchGlyph : "",
+              swatchNone ? css.triggerSwatchNone : ""
             ]
               .filter(Boolean)
               .join(" ")}
-            style={displaySwatchColor != null ? { background: displaySwatchColor } : undefined}
+            style={glyph
+              ? { background: glyphBackground, color: displaySwatchColor ?? "inherit" }
+              : displaySwatchColor != null ? { background: displaySwatchColor } : undefined}
             aria-hidden="true"
-          />
-          <span className={[css.triggerLabel, triggerLabelClassName ?? ""].filter(Boolean).join(" ")}>{displayLabel}</span>
+          >
+            {glyph ? "Aa" : null}
+          </span>
+          {swatchOnly ? null : <span className={[css.triggerLabel, triggerLabelClassName ?? ""].filter(Boolean).join(" ")}>{displayLabel}</span>}
         </span>
         <span className={css.triggerCaret} aria-hidden="true">
-          <svg className={css.triggerCaretIcon} viewBox="0 0 12 8" focusable="false">
-            <path d="M1.5 1.5L6 6.5L10.5 1.5" />
+          <svg className={css.triggerCaretIcon} viewBox="0 0 10 14" focusable="false">
+            <path d="M2 5l3-3 3 3M2 9l3 3 3-3" />
           </svg>
         </span>
       </button>
@@ -238,12 +266,24 @@ export function ColorPickerField({
             ariaLabel={ariaLabel}
             value={value}
             syntaxValue={syntaxValue}
+            resolvedValue={resolvedValue}
             options={options}
-            namedColorSwatches={normalizedNamedColorSwatches}
+            namedColorSwatches={preserveNamedColorSpelling ? namedColorSwatches : normalizedNamedColorSwatches}
             mixed={mixed}
             disabled={disabled}
+            preserveNamedColorSpelling={preserveNamedColorSpelling}
+            commitOnRelease={commitOnRelease}
             onChange={onChange}
           />
+          {onReset && resetLabel ? (
+            <button
+              type="button"
+              className={css.resetButton}
+              onClick={() => { setOpen(false); onReset(); }}
+            >
+              {resetLabel}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -256,14 +296,19 @@ export function ColorPicker({
   namedColorSwatches = [],
   value,
   syntaxValue = null,
+  resolvedValue = null,
   mixed = false,
   disabled = false,
+  preserveNamedColorSpelling = false,
+  commitOnRelease = false,
   onChange
 }: ColorPickerProps) {
   const colorPickerAccuracy = useSettingsStore((s) => s.settings.colorPicker.accuracy);
   const normalizedSyntaxValue = normalizeColorToken(syntaxValue);
   const normalizedValue = normalizeColorToken(value);
-  const driverValue = normalizedSyntaxValue ?? normalizedValue;
+  const [dragColor, setDragColor] = useState<string | null>(null);
+  const driverValue = dragColor ?? normalizedSyntaxValue ?? normalizedValue;
+  const customDriverValue = dragColor ?? resolvedValue ?? driverValue;
   const grayscaleDriverValue = expandGrayAliasToBlackMix(driverValue);
   const builtInColors = useMemo(() => buildBuiltInColorList(options), [options]);
   const normalizedNamedColorSwatches = useMemo(
@@ -310,11 +355,11 @@ export function ColorPicker({
   const [dragPointerId, setDragPointerId] = useState<number | null>(null);
   const [customHueDragPointerId, setCustomHueDragPointerId] = useState<number | null>(null);
   const [customShadeDragPointerId, setCustomShadeDragPointerId] = useState<number | null>(null);
-  const [customRgb, setCustomRgb] = useState<RgbColor>(() => resolveCustomRgbFromDriver(driverValue, namedColorLookup));
-  const [customInputValue, setCustomInputValue] = useState<string>(() => rgbToHex(resolveCustomRgbFromDriver(driverValue, namedColorLookup)));
+  const [customRgb, setCustomRgb] = useState<RgbColor>(() => resolveCustomRgbFromDriver(customDriverValue, namedColorLookup));
+  const [customInputValue, setCustomInputValue] = useState<string>(() => rgbToHex(resolveCustomRgbFromDriver(customDriverValue, namedColorLookup)));
   const [customExpression, setCustomExpression] = useState<string>(() =>
     rgbToXcolorExpression(
-      resolveCustomRgbFromDriver(driverValue, namedColorLookup),
+      resolveCustomRgbFromDriver(customDriverValue, namedColorLookup),
       resolveRgbToXcolorOptions("drag", colorPickerAccuracy)
     ).expression
   );
@@ -327,7 +372,7 @@ export function ColorPicker({
   );
   const customHsv = useMemo(() => rgbToHsv(customRgb), [customRgb]);
   const syncCustomStateFromDriver = useCallback((): void => {
-    const resolved = resolveCustomRgbFromDriver(driverValue, namedColorLookup);
+    const resolved = resolveCustomRgbFromDriver(customDriverValue, namedColorLookup);
     setCustomRgb(resolved);
     setCustomInputValue(rgbToHex(resolved));
     setCustomExpression(
@@ -335,7 +380,7 @@ export function ColorPicker({
     );
     setCustomInputError(null);
     setCustomInputWarning(null);
-  }, [colorPickerAccuracy, driverValue, namedColorLookup]);
+  }, [colorPickerAccuracy, customDriverValue, namedColorLookup]);
 
   useEffect(() => {
     if (!isToneBaseColor(toneState.baseColor) || toneState.baseColor === activeBaseColor) {
@@ -393,21 +438,28 @@ export function ColorPicker({
     [ariaLabel]
   );
 
-  function applyColor(nextColor: string): void {
+  function applyColor(nextColor: string, mode: RgbToXcolorMode = "release"): void {
     if (disabled) {
       return;
     }
-    if (!mixed && normalizeColorToken(nextColor) === driverValue) {
+    if (commitOnRelease && mode === "drag") { setDragColor(nextColor); return; }
+    setDragColor(null);
+    if (!mixed && normalizeColorToken(nextColor) === (normalizedSyntaxValue ?? normalizedValue)) {
       return;
     }
-    onChange(nextColor);
+    const spelled = preserveNamedColorSpelling ? nextColor.split("!").map(part => {
+      const token = part.trim();
+      const authored = namedColorSwatches.find(swatch => swatch.token.toLowerCase() === token);
+      return authored ? part.replace(token, authored.token) : part;
+    }).join("!") : nextColor;
+    onChange(spelled);
   }
 
-  function applyTone(nextTonePosition: number): void {
+  function applyTone(nextTonePosition: number, mode: RgbToXcolorMode = "release"): void {
     const nextColor = grayscaleMode
       ? composeGrayscaleToneColor(nextTonePosition)
       : composeToneColor(activeBaseColor, nextTonePosition);
-    applyColor(nextColor);
+    applyColor(nextColor, mode);
   }
 
   function toneFromClientX(clientX: number): number {
@@ -450,14 +502,14 @@ export function ColorPicker({
     event.preventDefault();
     setDragPointerId(event.pointerId);
     event.currentTarget.setPointerCapture(event.pointerId);
-    applyTone(toneFromClientX(event.clientX));
+    applyTone(toneFromClientX(event.clientX), "drag");
   }
 
   function handleBrightnessPointerMove(event: React.PointerEvent<HTMLDivElement>): void {
     if (disabled || dragPointerId == null || event.pointerId !== dragPointerId) {
       return;
     }
-    applyTone(toneFromClientX(event.clientX));
+    applyTone(toneFromClientX(event.clientX), "drag");
   }
 
   function handleBrightnessPointerEnd(event: React.PointerEvent<HTMLDivElement>): void {
@@ -468,6 +520,8 @@ export function ColorPicker({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     setDragPointerId(null);
+    if (commitOnRelease && event.type === "pointercancel") { setDragColor(null); return; }
+    if (commitOnRelease) applyTone(toneFromClientX(event.clientX));
   }
 
   function handleBrightnessKeyDown(event: React.KeyboardEvent<HTMLDivElement>): void {
@@ -555,6 +609,7 @@ export function ColorPicker({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     setCustomHueDragPointerId(null);
+    if (commitOnRelease && event.type === "pointercancel") { setDragColor(null); return; }
     applyCustomHsv(customHueFromClientX(event.clientX), customHsv.s, customHsv.v, "release");
   }
 
@@ -610,6 +665,7 @@ export function ColorPicker({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     setCustomShadeDragPointerId(null);
+    if (commitOnRelease && event.type === "pointercancel") { setDragColor(null); return; }
     const nextShade = customShadeFromClient(event.clientX, event.clientY);
     applyCustomHsv(customHsv.h, nextShade.s, nextShade.v, "release");
   }
@@ -655,7 +711,7 @@ export function ColorPicker({
     setCustomExpression(result.expression);
     setCustomInputError(null);
     setCustomInputWarning(warning);
-    applyColor(result.expression);
+    applyColor(result.expression, mode);
   }
 
   function handleCustomChannelChange(channel: keyof RgbColor, rawValue: string, mode: RgbToXcolorMode): void {
@@ -741,12 +797,13 @@ export function ColorPicker({
                 <div className={css.colorGrid}>
                   {normalizedNamedColorSwatches.map((swatch) => {
                     const selected = selectedSwatchColor === swatch.token;
+                    const label = preserveNamedColorSpelling ? namedColorSwatches.find(color => color.token.toLowerCase() === swatch.token)?.token ?? swatch.token : swatch.token;
                     return (
-                      <RenderedTooltip key={swatch.token} content={swatch.token}>
+                      <RenderedTooltip key={swatch.token} content={label}>
                         <button
                           type="button"
                           className={[css.swatchButton, selected ? css.swatchButtonSelected : ""].filter(Boolean).join(" ")}
-                          aria-label={`${ariaLabel} ${swatch.token}`}
+                          aria-label={`${ariaLabel} ${label}`}
                           onClick={() => { handleSwatchClick(swatch.token); }}
                           disabled={disabled}
                         >

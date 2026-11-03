@@ -1,7 +1,7 @@
 import { getActiveDocument } from "./store/document-sessions";
 import type { EditorAction, EditorState } from "./store/types";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
-import { composeSourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
+import { composeSourcePatches, invertSourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 
 type SessionState = Pick<EditorState, "documents" | "activeDocumentId">;
@@ -64,8 +64,7 @@ export function restoreDocumentEdit(
   const trackedPatches = session.patches && patchesMatchSourceTransition(session.baseSource, session.latestSource, session.patches)
     ? session.patches : undefined;
   const patches = preview?.patches ?? trackedPatches;
-  const inversePatches = patches?.map(patch => ({ oldSpan: patch.newSpan, newSpan: patch.oldSpan,
-    replacement: session.baseSource.slice(patch.oldSpan.from, patch.oldSpan.to) }));
+  const inversePatches = patches && invertSourcePatches(session.baseSource, patches);
   const inverseIdentityMoves = preview?.identityMoves?.map(move => ({ oldSpan: move.newSpan, newSpan: move.oldSpan }));
   dispatch({ type: "SET_SOURCE_TRANSIENT", documentId: session.documentId,
     source: session.baseSource, expectedSource: session.latestSource, expectedSourceRevision: session.latestRevision,

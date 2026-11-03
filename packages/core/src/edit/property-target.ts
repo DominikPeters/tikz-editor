@@ -9,6 +9,7 @@ import type { OptionEntry, OptionListAst } from "../options/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import {
   extractNodeAdornmentPlan,
+  extractToLikeOptionPlan,
   makeNodeAdornmentTargetId,
   stripAdornmentInternalStyleOptions
 } from "../semantic/path/label-quotes.js";
@@ -94,6 +95,8 @@ export type PropertyTarget = {
   id: string;
   kind: PropertyTargetKind;
   pathCommand?: string;
+  /** Nodes, edges or pics on this path inherit its current colour. */
+  hasColorDependents?: boolean;
   span: Span;
   options?: OptionListAst;
   optionsSpan?: Span;
@@ -843,11 +846,21 @@ function makePathStatementTarget(statement: PathStatement, source: string): Prop
   // first, so the node's own keys would override what was just written.
   const options = statement.options ?? head?.options;
   const optionsSpan = statement.options?.span ?? head?.optionsSpan ?? head?.options?.span;
+  // Nodes, edges and pics on the path take its current colour (a bare `red`).
+  const dependents = { found: false };
+  walkPathItems(statement.items, {
+    onNode: () => { dependents.found = true; },
+    onPathItem: (item) => {
+      if (item.kind === "EdgeOperation" || item.kind === "PicOperation") dependents.found = true;
+      if (item.kind === "ToOperation" && extractToLikeOptionPlan(item).generatedNodes.length > 0) dependents.found = true;
+    }
+  });
 
   return {
     id: statement.id,
     kind: "path-statement",
     pathCommand: statement.command,
+    ...(dependents.found ? { hasColorDependents: true } : {}),
     span: statement.span,
     ...(options === undefined ? {} : { options }),
     ...(optionsSpan === undefined ? {} : { optionsSpan }),

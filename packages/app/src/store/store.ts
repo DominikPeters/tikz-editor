@@ -6,6 +6,7 @@ import { loadWorkspaceSeed, saveWorkspace } from "./workspace-storage";
 import { workspaceStateFromEditorState } from "./workspace-state";
 import { claimCachedDeckSnapshot, cancelDeckPrewarm } from "../compute";
 import { deckStepRootKey } from "../root-key";
+import { loadCanvasViewPreferences, saveCanvasViewPreferences } from "./canvas-view-preferences";
 
 const HIGH_FREQUENCY_WORKSPACE_SAVE_DELAY_MS = 1000;
 
@@ -14,7 +15,7 @@ export type EditorStore = EditorState & {
 };
 
 export const useEditorStore = create<EditorStore>((set) => ({
-  ...makeInitialState(loadWorkspaceSeed() ?? undefined),
+  ...makeInitialState(loadWorkspaceSeed() ?? undefined, loadCanvasViewPreferences()),
   dispatch: (action: EditorAction) => { set((state) => {
     let next = editorReducer(state, action);
     if (next.source !== state.source || next.activeDocumentId !== state.activeDocumentId ||
@@ -49,6 +50,9 @@ export const useEditorStore = create<EditorStore>((set) => ({
       } else {
         persistWorkspaceNow(workspaceState);
       }
+    }
+    if (next.canvasViewPreferences !== state.canvasViewPreferences) {
+      saveCanvasViewPreferences(next.canvasViewPreferences);
     }
     return next;
   }); }

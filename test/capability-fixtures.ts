@@ -1,4 +1,5 @@
 export const capabilityFixtures: Record<string, string> = {
+  beamer_list_templates: String.raw`\documentclass{beamer}\begin{document}\begin{frame}\begin{enumerate}[(a)]\item Alpha\item Beta\end{enumerate}\end{frame}\end{document}`,
   text_dirac_notation: String.raw`\begin{tikzpicture}\node {$\bra{a}\ket\psi+\braket{a|b}$};\end{tikzpicture}`,
   beamer_scientific_notation: String.raw`\documentclass{beamer}\usepackage{siunitx}\begin{document}\begin{frame}$\SI{6.67e-5}{\metre\squared\per\second}$\end{frame}\end{document}`,
   beamer_preformatted: String.raw`\documentclass{beamer}\usepackage{listings}\lstset{columns=fullflexible,basicstyle=\ttfamily}\begin{document}\begin{frame}[fragile]
@@ -16,6 +17,9 @@ export const capabilityFixtures: Record<string, string> = {
 \end{tikzpicture}`,
   transform_cm: String.raw`\begin{tikzpicture}
   \draw[cm={0,1,1,0,(1cm,1cm)}] (0,0) -- (1,1) -- (1,0);
+\end{tikzpicture}`,
+  transform_slant: String.raw`\begin{tikzpicture}[xslant=.5,yslant=-.25]
+  \draw (0,0) -- (0,1) -- (1,1);
 \end{tikzpicture}`,
   foreach_basic: String.raw`\begin{tikzpicture}
   \foreach \x in {0,1} \draw (\x,0) -- ++(1,0);
@@ -367,6 +371,11 @@ Alpha.\newpage Beta.\par\framebreak Gamma.
 \bibitem{example} Author. Title.
 \end{thebibliography}\end{frame}
 \end{document}`,
+  beamer_document_inspector: String.raw`\documentclass[aspectratio=169,10pt]{beamer}
+\usetheme{Madrid}
+\title[Short]{Long title}
+\author{Author}
+\begin{document}\begin{frame}{Frame}Text\end{frame}\end{document}`,
   beamer_document_scan: String.raw`\documentclass{beamer}
 \begin{document}
 \section{Introduction}

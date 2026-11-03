@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Statement } from "../packages/core/src/ast/types.js";
+import { userText } from "../packages/core/src/edit/fragment.js";
 import {
   applyTextReplacements,
   buildStatementSnapshotFromStatements,
@@ -14,6 +15,9 @@ import {
   shiftSpansAfterReplacement,
   statementSnippet
 } from "../packages/core/src/edit/statement-ops.js";
+import { fragment } from "./fragment-helpers.js";
+
+const pasted = (snippets: readonly string[]) => snippets.map(snippet => userText(snippet, "pasted-tikz"));
 
 describe("statement ops", () => {
   it("builds nested snapshots and resolves deduplicated statement refs", () => {
@@ -102,23 +106,23 @@ describe("statement ops", () => {
   it("formats snippets and insertion points across blank input and custom newlines", () => {
     expect(resolveRootInsertionPoint("\\draw (0,0);")).toEqual({ offset: 12, indent: "" });
     expect(resolveRootInsertionPoint("  \\end{tikzpicture}")).toEqual({ offset: 2, indent: "    " });
-    expect(formatSnippetsForInsertion(["   ", "\t\\draw (0,0);\n"], "  ", {
+    expect(formatSnippetsForInsertion(pasted(["   ", "\t\\draw (0,0);\n"]), "  ", {
       trailingNewline: true,
       newline: "\r\n"
     })).toEqual({
       text: "\n  \\draw (0,0);\r\n",
       snippetSpans: [{ from: 1, to: 15 }]
     });
-    expect(formatSnippetsForInsertion(["   "], "  ")).toEqual({ text: "", snippetSpans: [] });
-    expect(formatSnippetsForInsertion(["\\draw (0,0);"], "  ", {
+    expect(formatSnippetsForInsertion(pasted(["   "]), "  ")).toEqual({ text: "", snippetSpans: [] });
+    expect(formatSnippetsForInsertion(pasted(["\\draw (0,0);"]), "  ", {
       trailingNewline: true
     }).text).toBe("\n  \\draw (0,0);\n");
   });
 
   it("applies sorted replacements, rejects overlaps, and shifts spans by replacement shape", () => {
     const applied = applyTextReplacements("abcdef", [
-      { span: { from: 4, to: 99 }, text: "Z" },
-      { span: { from: 0, to: 1 }, text: "A" }
+      { span: { from: 4, to: 99 }, text: fragment("Z") },
+      { span: { from: 0, to: 1 }, text: fragment("A") }
     ]);
     expect(applied.source).toBe("AbcdZ");
     expect(applied.applied).toEqual([
@@ -126,15 +130,15 @@ describe("statement ops", () => {
       { oldSpan: { from: 4, to: 6 }, newSpan: { from: 4, to: 5 } }
     ]);
     expect(applyTextReplacements("abc", [
-      { span: { from: Number.NaN, to: Number.NaN }, text: "!" }
+      { span: { from: Number.NaN, to: Number.NaN }, text: fragment("!") }
     ])).toMatchObject({
       source: "!abc",
       applied: [{ oldSpan: { from: 0, to: 0 }, newSpan: { from: 0, to: 1 } }]
     });
     expect(applyTextReplacements("abc", [])).toEqual({ source: "abc", patches: [], applied: [] });
     expect(() => applyTextReplacements("abcdef", [
-      { span: { from: 1, to: 4 }, text: "X" },
-      { span: { from: 3, to: 5 }, text: "Y" }
+      { span: { from: 1, to: 4 }, text: fragment("X") },
+      { span: { from: 3, to: 5 }, text: fragment("Y") }
     ])).toThrow("Overlapping replacements");
 
     expect(shiftSpansAfterReplacement([], { from: 1, to: 3 }, { from: 1, to: 2 })).toEqual([]);

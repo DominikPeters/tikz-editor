@@ -145,6 +145,7 @@ export function evaluateTurnCoordinate(
     world: applyFrameTransform(coordinateFrame, localVector),
     local: localVector,
     frame: coordinateFrame,
+    spelling: { unitlessX: !radius.hasExplicitUnit, unitlessY: !radius.hasExplicitUnit, headingDeg: heading },
     sourceUnits: { ...(optionalRadius1 === undefined ? {} : { radius: optionalRadius1 }) },
     origin: "turn",
     relativeBase: currentPoint,

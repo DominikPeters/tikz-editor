@@ -1,6 +1,6 @@
 import { isRecord } from "../validation";
 import { Activity, Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Layout, Model, Actions, DockLocation, type IJsonModel, type TabNode } from "flexlayout-react";
+import { Layout, Model, Actions, DockLocation, TabSetNode, type IJsonModel, type TabNode } from "flexlayout-react";
 import { useEditorStore } from "../store/store";
 import type { EditorAction } from "../store/types";
 import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
@@ -22,65 +22,14 @@ import "flexlayout-react/style/gray.css";
 import "./DockLayout.css";
 import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
 import { isDockLayoutJson } from "./dock-layout-validation";
+import { DOCK_PANEL_IDS, dockSideOf, movePanelToSide, panelHomeSide, panelTitle, useDockPanelMenus } from "./dock-panel-menus";
 import type { DocumentKind } from "@tikz-editor/core/document/kind";
 
 // ── Panel IDs ─────────────────────────────────────────────────────────────────
 
-export const PANEL_IDS = {
-  source: "source",
-  canvas: "canvas",
-  figureNavigator: "figure-navigator",
-  inspector: "inspector",
-  builds: "builds",
-  notes: "notes",
-  objects: "objects",
-  styles: "styles",
-  assistant: "assistant",
-} as const;
+export const PANEL_IDS = DOCK_PANEL_IDS;
 
-const HOME_TABSET_IDS = ["source-tabset", "canvas-tabset", "right-tabset"] as const;
-
-type PanelHome = {
-  tabsetId: string;
-  dockLocation: DockLocation;
-  edgeLocation: DockLocation;
-};
-
-const PANEL_HOMES: Record<string, PanelHome> = {
-  [PANEL_IDS.source]: {
-    tabsetId: "source-tabset",
-    dockLocation: DockLocation.CENTER,
-    edgeLocation: DockLocation.LEFT,
-  },
-  [PANEL_IDS.figureNavigator]: {
-    tabsetId: "canvas-tabset",
-    dockLocation: DockLocation.BOTTOM,
-    edgeLocation: DockLocation.BOTTOM,
-  },
-  [PANEL_IDS.inspector]: {
-    tabsetId: "right-tabset",
-    dockLocation: DockLocation.CENTER,
-    edgeLocation: DockLocation.RIGHT,
-  },
-  [PANEL_IDS.builds]: { tabsetId: "right-tabset", dockLocation: DockLocation.CENTER, edgeLocation: DockLocation.RIGHT },
-  // Under the slide, as presentation software shows its notes.
-  [PANEL_IDS.notes]: { tabsetId: "canvas-tabset", dockLocation: DockLocation.BOTTOM, edgeLocation: DockLocation.BOTTOM },
-  [PANEL_IDS.objects]: {
-    tabsetId: "right-tabset",
-    dockLocation: DockLocation.CENTER,
-    edgeLocation: DockLocation.RIGHT,
-  },
-  [PANEL_IDS.styles]: {
-    tabsetId: "right-tabset",
-    dockLocation: DockLocation.CENTER,
-    edgeLocation: DockLocation.RIGHT,
-  },
-  [PANEL_IDS.assistant]: {
-    tabsetId: "right-tabset",
-    dockLocation: DockLocation.CENTER,
-    edgeLocation: DockLocation.RIGHT,
-  },
-};
+const HOME_TABSET_IDS = ["left-tabset", "source-tabset", "canvas-tabset", "right-tabset"] as const;
 
 // ── Default layout ────────────────────────────────────────────────────────────
 
@@ -111,7 +60,8 @@ function buildDefaultLayout(): IJsonModel {
       tabEnableClose: true,
       tabEnableRename: false,
       tabEnablePopout: false,
-      splitterSize: 4,
+      // A hairline with a 9px hit area.
+      splitterSize: 1,
       splitterExtra: 4,
       tabSetEnableMaximize: false,
       tabSetEnableSingleTabStretch: true,
@@ -151,12 +101,51 @@ function buildDefaultLayout(): IJsonModel {
   };
 }
 
+function defaultLayoutForKind(kind: DocumentKind = "tikz"): IJsonModel {
+  const base = buildDefaultLayout();
+  if (kind === "tikz") return base;
+  const right = base.layout.children[2];
+  if (right?.type !== "tabset") throw new Error("Default layout is missing its sidebar.");
+  return {
+    ...base,
+    layout: {
+      type: "row",
+      children: [
+        {
+          type: "tabset", id: "left-tabset", weight: 20, enableDeleteWhenEmpty: false,
+          children: [{ type: "tab", id: PANEL_IDS.figureNavigator, name: "Slides", component: "figure-navigator" }],
+        },
+        {
+          type: "row", weight: 60,
+          children: [
+            {
+              type: "tabset", id: "canvas-tabset", weight: 65, enableDeleteWhenEmpty: false,
+              children: [{ type: "tab", id: PANEL_IDS.canvas, name: "Canvas", component: "canvas", enableClose: false }],
+            },
+            {
+              type: "tabset", id: "source-tabset", weight: 35, enableDeleteWhenEmpty: false,
+              children: [{ type: "tab", id: PANEL_IDS.source, name: "Source", component: "source" }],
+            },
+          ],
+        },
+        {
+          ...right,
+          children: [...right.children, { type: "tab", id: PANEL_IDS.builds, name: "Overlays", component: "builds" }],
+        },
+      ],
+    },
+  };
+}
+
 /** Strip assistant tabs if assistant is not available on this platform,
  *  and ensure the home tabsets survive being empty. */
 function sanitizeLayout(json: IJsonModel): IJsonModel {
   const normalizedGlobal = {
     ...json.global,
-    tabSetEnableMaximize: false
+    tabSetEnableMaximize: false,
+    // Layouts saved before the hairline splitters keep their 4px gutters otherwise.
+    splitterSize: 1,
+    splitterExtra: 4
   };
   const jsonWithNormalizedGlobal: IJsonModel = {
     ...json,
@@ -301,7 +290,7 @@ function buildWideInspectorLayout(): IJsonModel {
 }
 
 export const LAYOUT_PRESETS = {
-  default: buildDefaultLayout,
+  default: defaultLayoutForKind,
   sourceOnTop: buildSourceOnTopLayout,
   canvasOnly: buildCanvasOnlyLayout,
   wideInspector: buildWideInspectorLayout,
@@ -312,11 +301,11 @@ export type BuiltInWorkspaceId = keyof typeof LAYOUT_PRESETS;
 export type BuiltInWorkspace = {
   id: BuiltInWorkspaceId;
   name: string;
-  build: () => IJsonModel;
+  build: (kind?: DocumentKind) => IJsonModel;
 };
 
 export const BUILT_IN_WORKSPACES: readonly BuiltInWorkspace[] = [
-  { id: "default",        name: "Default",         build: buildDefaultLayout },
+  { id: "default",        name: "Default",         build: defaultLayoutForKind },
   { id: "sourceOnTop",    name: "Source on Top",   build: buildSourceOnTopLayout },
   { id: "canvasOnly",     name: "Canvas Only",     build: buildCanvasOnlyLayout },
   { id: "wideInspector",  name: "Wide Inspector",  build: buildWideInspectorLayout },
@@ -396,13 +385,26 @@ let activeDockHandle: DockLayoutHandle | null = null;
  * selected, the panel keeps its state but stops following the store (its
  * subscriptions are effects, which a hidden Activity cleans up); it catches up
  * when shown again.
+ *
+ * A tab shows exactly when it is selected here (maximizing is off and there are
+ * no border docks), so the event only prompts a read of the selection: its
+ * payload can be stale. flexlayout's Tab marks itself visible while rendering,
+ * and an unmounting Tab's cleanup can mark it hidden again afterwards, which
+ * left a panel blank the first time it was opened. The event also fires during
+ * that render, so the update waits for a microtask.
  */
 function WhileTabVisible({ node, children }: { node: TabNode; children: ReactNode }) {
-  const [visible, setVisible] = useState(() => node.isVisible());
+  const [visible, setVisible] = useState(() => node.isSelected());
   useEffect(() => {
-    node.setEventListener("visibility", (event: { visible: boolean }) => { setVisible(event.visible); });
-    setVisible(node.isVisible());
-    return () => { node.removeEventListener("visibility"); };
+    let live = true;
+    node.setEventListener("visibility", () => {
+      queueMicrotask(() => { if (live) setVisible(node.isSelected()); });
+    });
+    setVisible(node.isSelected());
+    return () => {
+      live = false;
+      node.removeEventListener("visibility");
+    };
   }, [node]);
   return <Activity mode={visible ? "visible" : "hidden"}>{children}</Activity>;
 }
@@ -438,18 +440,6 @@ export function getDockLayoutHandle(): DockLayoutHandle | null {
   return activeDockHandle;
 }
 
-function defaultLayoutForKind(kind: DocumentKind): IJsonModel {
-  const model = Model.fromJson(buildDefaultLayout());
-  if (kind === "beamer") {
-    model.doAction(Actions.addNode({ type: "tab", id: PANEL_IDS.builds, name: "Overlays", component: "builds" }, "right-tabset", DockLocation.CENTER, -1, false));
-    model.doAction(Actions.addNode({ type: "tab", id: PANEL_IDS.figureNavigator, name: "Slides", component: "figure-navigator" }, "canvas-tabset", DockLocation.BOTTOM, -1, false));
-    const navigatorHome = model.getNodeById(PANEL_IDS.figureNavigator)?.getParent();
-    if (navigatorHome) model.doAction(Actions.updateNodeAttributes(navigatorHome.getId(), { weight: 15 }));
-    model.doAction(Actions.updateNodeAttributes("canvas-tabset", { weight: 85 }));
-  }
-  return model.toJson();
-}
-
 function createLayoutModel(json: unknown, kind: DocumentKind = "tikz"): { model: Model; recovered: boolean } {
   try {
     if (!isDockLayoutJson(json)) throw new Error("Invalid dock layout structure.");
@@ -481,6 +471,8 @@ export const DockLayout = memo(function DockLayout(props: DockLayoutProps) {
 function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn, onNewChat, kind }: DockLayoutProps & { kind: DocumentKind }) {
   const dispatch = useEditorStore((s) => s.dispatch);
   const [model, setModel] = useState(() => createInitialModel(kind));
+  const modelRef = useRef(model);
+  modelRef.current = model;
 
   // Factory — renders panel content for each tab
   const factory = useCallback(
@@ -499,14 +491,16 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
               <MemoCanvasPanel repeatPreviewModel={repeatPreviewModel} />
             </Suspense>
           );
-        case "figure-navigator":
+        case "figure-navigator": {
+          const parent = node.getParent();
           return (
             <WhileTabVisible node={node}>
               <Suspense fallback={null}>
-                <MemoRootNavigator />
+                <MemoRootNavigator vertical={kind === "beamer" && parent instanceof TabSetNode && dockSideOf(modelRef.current, parent) === "left"} />
               </Suspense>
             </WhileTabVisible>
           );
+        }
         case "inspector":
           return <WhileTabVisible node={node}><InspectorPanelSwitch /></WhileTabVisible>;
         case "builds":
@@ -525,7 +519,7 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
           return <div>Unknown panel: {component}</div>;
       }
     },
-    [repeatPreviewModel, onSubmitPrompt, onInterruptTurn, onNewChat]
+    [repeatPreviewModel, onSubmitPrompt, onInterruptTurn, onNewChat, kind]
   );
 
   // On model change: persist + sync to Zustand
@@ -539,9 +533,6 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
 
   // Expose handle. We use a ref to always point to the latest model via closure,
   // so that handle identity stays stable but always operates on current model.
-  const modelRef = useRef(model);
-  modelRef.current = model;
-
   const setModelRef = useRef(setModel);
   setModelRef.current = setModel;
 
@@ -557,57 +548,18 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
       if (existing) {
         m.doAction(Actions.deleteTab(panelId));
       } else {
-        const home = PANEL_HOMES[panelId];
-        const nameMap: Record<string, string> = {
-          source: "Source",
-          canvas: "Canvas",
-          "figure-navigator": useEditorStore.getState().documentKind === "beamer" ? "Slides" : "Figures",
-          inspector: "Inspector",
-          builds: "Overlays",
-          notes: "Notes",
-          objects: "Objects",
-          styles: "Styles",
-          assistant: "Assistant",
-        };
-        const tabJson = { type: "tab", id: panelId, name: nameMap[panelId] ?? panelId, component: panelId };
-
-        const homeTabset = home ? m.getNodeById(home.tabsetId) : null;
-        if (home && homeTabset) {
-          // Home tabset exists — add into it at the normal dock location.
-          m.doAction(Actions.addNode(tabJson, home.tabsetId, home.dockLocation, -1));
-        } else if (home) {
-          // Home tabset is gone — re-establish it at the expected edge of the root.
-          const rootId = m.getRoot().getId();
-          m.doAction(Actions.addNode(tabJson, rootId, home.edgeLocation, -1));
-          const newTabset = m.getNodeById(panelId)?.getParent();
-          if (newTabset && newTabset.getId() !== home.tabsetId) {
-            m.doAction(Actions.updateNodeAttributes(newTabset.getId(), {
-              id: home.tabsetId,
-              enableDeleteWhenEmpty: false,
-            }));
-          }
-        } else {
-          // Unknown panel — dock to the first tabset as a safety net.
-          m.doAction(Actions.addNode(tabJson, m.getFirstTabSet().getId(), DockLocation.CENTER, -1));
-        }
-
-        // Panels docked below the canvas take a small part of its height.
-        const belowCanvasWeight = { [PANEL_IDS.figureNavigator]: 15, [PANEL_IDS.notes]: 20 }[panelId];
-        if (belowCanvasWeight !== undefined) {
-          const belowTabset = m.getNodeById(panelId)?.getParent();
-          if (belowTabset) {
-            m.doAction(Actions.updateNodeAttributes(belowTabset.getId(), { weight: belowCanvasWeight }));
-            const canvasTs = m.getNodeById("canvas-tabset");
-            if (canvasTs) m.doAction(Actions.updateNodeAttributes("canvas-tabset", { weight: 100 - belowCanvasWeight }));
-          }
-        }
+        const tabJson = { type: "tab", id: panelId, name: panelTitle(panelId, useEditorStore.getState().documentKind), component: panelId };
+        m.doAction(Actions.addNode(tabJson, m.getFirstTabSet().getId(), DockLocation.CENTER, -1));
+        const side = panelHomeSide(panelId, kind);
+        const belowCanvasWeight = { [PANEL_IDS.figureNavigator]: 15, [PANEL_IDS.source]: 35 }[panelId] ?? 20;
+        if (side) movePanelToSide(m, panelId, side, belowCanvasWeight);
       }
       saveDockLayout(m.toJson(), kind);
       syncLayoutStateToStore(m, dispatchRef.current);
     },
     applyPreset(preset: keyof typeof LAYOUT_PRESETS) {
       const builder = LAYOUT_PRESETS[preset];
-      this.applyLayoutJson(builder());
+      this.applyLayoutJson(builder(kind));
     },
     applyLayoutJson(json: IJsonModel) {
       const { model: newModel } = createLayoutModel(json, kind);
@@ -676,12 +628,31 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
     if (tab) m.doAction(Actions.renameTab(PANEL_IDS.figureNavigator, deckMode ? "Slides" : "Figures"));
   }, [figureCount, deckMode, model, kind]);
 
+  const layoutRef = useRef<Layout>(null);
+  const menuHost = useMemo(() => ({
+    getModel: () => modelRef.current,
+    redraw: () => { layoutRef.current?.redraw(); },
+    togglePanel: (panelId: string) => { handle.togglePanel(panelId); },
+    persist: () => {
+      saveDockLayout(modelRef.current.toJson(), kind);
+      syncLayoutStateToStore(modelRef.current, dispatchRef.current);
+    },
+  }), [handle, kind]);
+  const { onContextMenu, onRenderTab, onRenderTabSet, menu } = useDockPanelMenus(menuHost, kind);
+
   return (
-    <Layout
-      model={model}
-      factory={factory}
-      onModelChange={onModelChange}
-      realtimeResize
-    />
+    <>
+      <Layout
+        ref={layoutRef}
+        model={model}
+        factory={factory}
+        onModelChange={onModelChange}
+        onContextMenu={onContextMenu}
+        onRenderTab={onRenderTab}
+        onRenderTabSet={onRenderTabSet}
+        realtimeResize
+      />
+      {menu}
+    </>
   );
 }

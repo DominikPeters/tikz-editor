@@ -1,3 +1,4 @@
+import { EMPTY_FRAGMENT, joinFragments, layout, tikz, userText, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { parseOptionListRaw } from "../../options/parse.js";
@@ -89,7 +90,7 @@ export function applySetPropertyActionRaw(
   if (removePrimaryKey) {
     mutations.set(key, { kind: "remove" });
   } else {
-    mutations.set(key, { kind: "set", value: action.value });
+    mutations.set(key, { kind: "set", value: userText(action.value, "inspector-value") });
   }
   const rewritten = applyOptionMutationsToTarget(source, resolved.target, mutations);
   if (!rewritten) {
@@ -433,10 +434,10 @@ function serializeCommentToggleItems(
   items: readonly CommentToggleItem[],
   format: PropertyTargetOptionsFormat,
   context: CommentToggleSerializationContext
-): string {
-  const withIndent = (line: string): string =>
-    context.lineIndent.length > 0 ? `${context.lineIndent}${line}` : line;
-  const lines: string[] = [];
+): TikzFragment {
+  const withIndent = (line: TikzFragment): TikzFragment =>
+    context.lineIndent.length > 0 ? tikz`${layout(context.lineIndent)}${line}` : line;
+  const lines: TikzFragment[] = [];
   const entryIndexes = items
     .map((item, index) => ({ item, index }))
     .filter((entry) => entry.item.kind === "entry" || entry.item.kind === "disabled-entry")
@@ -446,7 +447,7 @@ function serializeCommentToggleItems(
   for (const [index, item] of items.entries()) {
 
     if (item.kind === "comment") {
-      lines.push(withIndent(normalizeCommentLine(item.text)));
+      lines.push(withIndent(authoredOptionText(normalizeCommentLine(item.text))));
       continue;
     }
 
@@ -455,25 +456,30 @@ function serializeCommentToggleItems(
       continue;
     }
     if (item.kind === "disabled-entry") {
-      lines.push(withIndent(`% ${token},`));
+      lines.push(withIndent(tikz`% ${authoredOptionText(token)},`));
       continue;
     }
 
-    const suffix = index === lastEntryIndex ? "" : ",";
-    lines.push(withIndent(`${token}${suffix}`));
+    const suffix = index === lastEntryIndex ? EMPTY_FRAGMENT : tikz`,`;
+    lines.push(withIndent(tikz`${authoredOptionText(token)}${suffix}`));
   }
 
   if (format === "bare") {
     if (lines.length === 0) {
-      return "";
+      return EMPTY_FRAGMENT;
     }
-    const serialized = lines.join("\n");
-    return `\n${serialized}\n`;
+    const serialized = joinFragments(lines, layout("\n"));
+    return tikz`${layout("\n")}${serialized}${layout("\n")}`;
   }
   if (lines.length === 0) {
-    return "[]";
+    return tikz`[]`;
   }
-  return `[\n${lines.join("\n")}\n]`;
+  return tikz`[${layout("\n")}${joinFragments(lines, layout("\n"))}${layout("\n")}]`;
+}
+
+/** An entry or comment of the option list as the user wrote it, moved to its own line. */
+function authoredOptionText(text: string): TikzFragment {
+  return userText(text, "source-editor");
 }
 
 function applyTreeChildSetProperty(
@@ -571,11 +577,11 @@ function applyMatrixCellSetProperty(
     }
 
     const prefixSpan = resolveMatrixCellOptionPrefixSpan(source, optionSpan, cellSpan, textSpan);
-    const updated = replaceSpan(source, prefixSpan, "");
+    const updated = replaceSpan(source, prefixSpan, EMPTY_FRAGMENT);
     return {
       kind: "success",
       newSource: updated.source,
-      patches: [{ oldSpan: prefixSpan, newSpan: updated.changedSpan, replacement: "" }],
+      patches: [{ oldSpan: prefixSpan, newSpan: updated.changedSpan, replacement: EMPTY_FRAGMENT }],
       changedSourceIds: changedSourceIdsForPropertyTarget(target)
     };
   }
@@ -594,7 +600,7 @@ function applyMatrixCellSetProperty(
   // serialization cannot disturb authored trivia.
   const seedOptions = parseOptionListRaw("[]", textSpan.from);
   const serializedOptions = rewriteOptionListMutations(seedOptions, setMutations, undefined, "bracketed");
-  const insertion = `|${serializedOptions}| `;
+  const insertion = tikz`|${serializedOptions}| `;
   const insertionSpan: Span = { from: textSpan.from, to: textSpan.from };
   const updated = replaceSpan(source, insertionSpan, insertion);
   return {
@@ -641,7 +647,7 @@ function createOptionMutationsFromSetProperty(
   if (removePrimaryKey) {
     mutations.set(normalizedPrimaryKey, { kind: "remove" });
   } else {
-    mutations.set(normalizedPrimaryKey, { kind: "set", value: action.value });
+    mutations.set(normalizedPrimaryKey, { kind: "set", value: userText(action.value, "inspector-value") });
   }
   return mutations;
 }

@@ -46,21 +46,11 @@
 }
 
 .renameInput {
-  height: 22px;
-  padding: 0 6px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg-pane);
-  color: var(--text);
-  font: inherit;
+  composes: field from "./controls.module.css";
+  height: calc(var(--app-ui-scale, 1) * var(--control-h));
   font-size: calc(var(--app-ui-scale, 1) * 12px);
 }
 
-.renameInput:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  outline-offset: -1px;
-  border-color: var(--accent);
-}
 
 .itemActions {
   display: flex;

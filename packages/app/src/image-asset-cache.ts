@@ -15,6 +15,7 @@ import { rasterizePdfAsset } from "./pdf-asset-rasterizer";
 import { getActiveEditorPlatform } from "./platform/current";
 import type { LocalAssetReadResult } from "./platform/types";
 import type { DocumentFileRef } from "./store/types";
+import { isImportedGraphicPath, readImportedGraphic } from "./imported-graphics.js";
 
 type ResolvedImageMimeType = "image/png" | "image/jpeg" | "image/svg+xml";
 type RawAssetMimeType = ResolvedImageMimeType | "application/pdf";
@@ -61,7 +62,7 @@ export async function prepareDocumentGraphicsContext(params: {
   readonly documentFileRef?: DocumentFileRef | null;
 }): Promise<PreparedDocumentGraphicsContext> {
   const platform = getActiveEditorPlatform();
-  const readLocalAsset = platform.files?.readLocalAsset;
+  const readLocalAsset = async (path: string): Promise<LocalAssetReadResult> => readImportedGraphic(platform.persistence, path) ?? await platform.files?.readLocalAsset?.(path) ?? { status: "missing", path };
   const baseDirectory = documentDirectory(params.documentFileRef);
   const includeCandidates = collectIncludeGraphicsCandidates(params.source);
   const entries = new Map<string, PreparedAssetEntry>();
@@ -591,6 +592,7 @@ function documentDirectory(fileRef: DocumentFileRef | null | undefined): string 
 }
 
 function resolveLocalImagePath(filename: string, baseDirectory: string | null): string | null {
+  if (baseDirectory === null && isImportedGraphicPath(filename)) return filename;
   if (isAbsoluteLocalPath(filename)) {
     return normalizeLocalPath(filename);
   }

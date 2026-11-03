@@ -598,11 +598,12 @@ function renderValueEditor(
           value={toPropertyRawValue(declaration)}
           disabled={!writable}
           onCommit={(val) => {
-            const num = Number.parseFloat(val);
+            // A bare number is in the property's unit; anything else ("2cm",
+            // "thick") goes into the source as written.
+            const num = val.trim() === "" ? Number.NaN : Number(val);
             if (!Number.isNaN(num)) {
               onPropertyChange(declaration, property, num);
             } else {
-              // Raw text commit for non-numeric values like "thick"
               onRawValueCommit(declaration, val);
             }
           }}
@@ -809,12 +810,13 @@ function toPropertyRawValue(declaration: StylesCascadeDeclaration): string {
     switch (p.kind) {
       case "color":
         return p.syntaxValue ?? p.value ?? "";
+      // As written in the source ("2cm"), not converted to points.
       case "number":
-        return String(p.value);
+        return sourceValue(declaration) ?? String(p.value);
       case "length":
-        return `${p.value}${p.unit}`;
+        return sourceValue(declaration) ?? `${p.value}${p.unit}`;
       case "lineWidth":
-        return `${p.value}pt`;
+        return sourceValue(declaration) ?? `${p.value}pt`;
       case "dashStyle":
       case "lineCap":
       case "lineJoin":
@@ -842,8 +844,13 @@ function toPropertyRawValue(declaration: StylesCascadeDeclaration): string {
   }
   // Fall back to cssValue or raw source text
   if (declaration.cssValue.length > 0) return declaration.cssValue;
+  return sourceValue(declaration) ?? "";
+}
+
+/** The value after `=` in the declaration's source, if it has one. */
+function sourceValue(declaration: StylesCascadeDeclaration): string | null {
   const raw = declaration.sourceText.trim();
   const eqIndex = raw.indexOf("=");
-  if (eqIndex > 0) return raw.slice(eqIndex + 1).trim();
-  return "";
+  const value = eqIndex > 0 ? raw.slice(eqIndex + 1).trim() : "";
+  return value.length > 0 ? value : null;
 }

@@ -33,7 +33,7 @@ export type FrameStats = {
 
 export type ProfilingEnvironmentMetadata = {
   generatedAtIso: string;
-  appMode: "production" | "development";
+  appMode: "production" | "development" | "core";
   browserProject: string;
   gitCommitSha: string | null;
   tracesDir: string;

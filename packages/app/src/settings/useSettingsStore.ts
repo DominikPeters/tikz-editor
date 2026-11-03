@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { AppSettings } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
-import { loadSettings, saveSettings } from "./storage";
+import { loadSettings, platformDefaultSettings, saveSettings } from "./storage";
 
 type SettingsStore = {
   settings: AppSettings;
@@ -60,7 +60,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     set((state) => {
       const next: AppSettings = {
         ...state.settings,
-        general: { ...DEFAULT_SETTINGS.general },
+        general: { ...platformDefaultSettings().general },
         colorPicker: { ...DEFAULT_SETTINGS.colorPicker }
       };
       saveSettings(next);

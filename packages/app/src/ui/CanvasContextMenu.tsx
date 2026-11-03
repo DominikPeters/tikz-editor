@@ -183,6 +183,16 @@ export function CanvasContextMenu({
   const [position, setPosition] = useState<ContextMenuAnchor>(anchor);
   const [inheritedStyle, setInheritedStyle] = useState<ContextMenuInheritedStyle>({});
 
+  // A layout effect, so it runs before the clamping below rather than undoing it after mount.
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+    setPosition((current) =>
+      current.x === anchor.x && current.y === anchor.y ? current : anchor
+    );
+  }, [anchor, open, target]);
+
   useLayoutEffect(() => {
     if (!open) {
       return;

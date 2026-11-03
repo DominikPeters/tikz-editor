@@ -4783,7 +4783,7 @@ dependencies = [
 
 [[package]]
 name = "tikz-editor"
-version = "0.6.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "block2",
@@ -4813,6 +4813,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "windows-sys 0.61.2",
  "winreg",
 ]
 

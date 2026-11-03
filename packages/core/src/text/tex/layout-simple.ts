@@ -123,6 +123,7 @@ export function layoutSimpleTexParagraph(
     options.width,
     options.colorResolver?.resolve.bind(options.colorResolver),
     {
+      ...(options.listProfile?.enumerateMiniTemplates ? { enumerateMiniTemplates: true } : {}),
       ...(options.listProfile?.leftMarginEmByDepth !== undefined ? { listLeftMarginEmByDepth: options.listProfile.leftMarginEmByDepth } : {}),
       ...(options.listProfile?.bibliographyMargins !== undefined ? { bibliographyMargins: options.listProfile.bibliographyMargins } : {}),
       ...(options.listProfile?.descriptionLabelWidthPt !== undefined ? { descriptionLabelWidthPt: options.listProfile.descriptionLabelWidthPt } : {}),

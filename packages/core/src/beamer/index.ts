@@ -47,13 +47,35 @@ export {
 } from "./structural-edit.js";
 export {
   applyDeckEditAction,
+  applyDeckDocumentEditAction,
   isDeckEditAction,
   type DeckEditAction,
 } from "./deck-edit-actions.js";
+export { isDeckDocumentEditAction, type DeckDocumentEditAction } from "./document-theme-edits.js";
+export {
+  buildDeckDocumentInspector,
+  buildDeckSlideContext,
+  type DeckDocumentInspectorModel,
+  type DeckSlideContext,
+  type DeckThemeCard,
+} from "./deck-document-inspector.js";
+export {
+  documentWithPresentationTheme,
+  planPresentationThemeSwitch,
+  type BeamerPresentationThemeSwitch,
+} from "./theme-switch.js";
+export {
+  BEAMER_PRESENTATION_THEMES,
+  beamerPresentationTheme,
+  type BeamerThemeCatalogEntry,
+  type BeamerThemeGroup,
+} from "./theme/catalog.js";
 export {
   buildDeckFrameInspector,
   buildDeckObjectInspector,
   splitDeckDimension,
+  type DeckInspectorColor,
+  type DeckInspectorCommand,
   type DeckInspectorField,
   type DeckInspectorModel,
   type DeckInspectorWrite,

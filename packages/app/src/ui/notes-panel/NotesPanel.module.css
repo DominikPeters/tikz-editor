@@ -24,7 +24,7 @@
 .label {
   font-size: calc(var(--app-ui-scale, 1) * 10px);
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--label-secondary);
   -webkit-user-select: none;
   user-select: none;
 }
@@ -35,9 +35,9 @@
   min-height: calc(var(--app-ui-scale, 1) * 52px);
   box-sizing: border-box;
   resize: none;
-  border: 1px solid var(--border-light);
-  border-radius: 3px;
-  background: var(--bg-pane);
+  border: 1px solid var(--control-ring);
+  border-radius: var(--radius-field);
+  background: var(--control-bg);
   color: var(--text);
   font-family: var(--font-ui);
   font-size: calc(var(--app-ui-scale, 1) * 12px);
@@ -56,12 +56,12 @@
 }
 
 .field:focus {
-  outline: none;
-  border-color: var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 55%, transparent);
+  outline-offset: 0;
 }
 
 .field::placeholder {
-  color: var(--text-faint);
+  color: var(--label-secondary);
 }
 
 .field[aria-invalid="true"] {
@@ -77,7 +77,7 @@
   margin: 0;
   font-size: calc(var(--app-ui-scale, 1) * 10px);
   line-height: 1.4;
-  color: var(--text-muted);
+  color: var(--label-secondary);
 }
 
 .problem {

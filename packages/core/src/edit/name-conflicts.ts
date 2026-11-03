@@ -1,4 +1,5 @@
 import { requireArrayValue } from "../utils/collections.js";
+import { applyFragments, editedSlice, tikz, userText, type FragmentEdit, type TikzFragment } from "./fragment.js";
 import type { PathItem, Statement } from "../ast/types.js";
 import type { OptionListAst } from "../options/types.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
@@ -15,9 +16,9 @@ const DECLARATION_OPTION_KEYS = new Set([
 
 export function renameSnippetDeclaredNames(
   source: string,
-  snippets: readonly string[],
+  snippets: readonly TikzFragment[],
   parseOptions: EditParseOptions = {}
-): string[] {
+): TikzFragment[] {
   if (snippets.length === 0) {
     return [];
   }
@@ -57,7 +58,7 @@ function collectDeclaredNamesFromSource(source: string, parseOptions: EditParseO
   return names;
 }
 
-function collectDeclaredNamesFromSnippets(snippets: readonly string[]): string[] {
+function collectDeclaredNamesFromSnippets(snippets: readonly TikzFragment[]): string[] {
   const orderedNames: string[] = [];
   const seen = new Set<string>();
 
@@ -257,64 +258,98 @@ function nextAvailableName(baseName: string, usedNames: ReadonlySet<string>): st
 }
 
 function applyNameMappingToSnippet(
-  snippet: string,
+  snippet: TikzFragment,
   mapping: ReadonlyMap<string, string>
-): string {
+): TikzFragment {
   const ordered = [...mapping.entries()].sort((left, right) => right[0].length - left[0].length);
   let rewritten = snippet;
   for (const [oldName, newName] of ordered) {
-    rewritten = rewriteSingleName(rewritten, oldName, newName);
+    // The new name is a node name, derived from the names the document and the snippet already use.
+    rewritten = rewriteSingleName(rewritten, oldName, userText(newName, "node-reference"));
   }
   return rewritten;
 }
 
 function rewriteSingleName(
-  snippet: string,
+  snippet: TikzFragment,
   oldName: string,
-  newName: string
-): string {
+  newName: TikzFragment
+): TikzFragment {
   const escapedOld = escapeRegExp(oldName);
   const coordinatePattern = new RegExp(`\\((\\s*)${escapedOld}(?=(?:\\s*\\)|\\.[^)]*))`, "gu");
   const ofAssignmentPattern = new RegExp(`(\\bof\\s*=\\s*)${escapedOld}(\\b)`, "gu");
   const ofReferencePattern = new RegExp(`(\\bof\\s+)${escapedOld}(\\b)`, "gu");
 
   let rewritten = replaceOptionNameAssignments(snippet, oldName, newName);
-  rewritten = rewritten.replace(coordinatePattern, `($1${newName}`);
-  rewritten = rewritten.replace(ofAssignmentPattern, `$1${newName}$2`);
-  rewritten = rewritten.replace(ofReferencePattern, `$1${newName}$2`);
+  // The name follows the opening parenthesis and its spaces, or the `of` and its `=`.
+  rewritten = replaceMatchedNames(rewritten, coordinatePattern, (match) => 1 + (match[1]?.length ?? 0), oldName, newName, true);
+  rewritten = replaceMatchedNames(rewritten, ofAssignmentPattern, (match) => match[1]?.length ?? 0, oldName, newName, false);
+  rewritten = replaceMatchedNames(rewritten, ofReferencePattern, (match) => match[1]?.length ?? 0, oldName, newName, false);
   return rewritten;
 }
 
-function replaceOptionNameAssignments(
-  source: string,
+/**
+ * Replaces the name each match holds, which starts `nameOffset` characters
+ * into the match and runs to its end (`toMatchEnd`) or for the old name's length.
+ */
+function replaceMatchedNames(
+  text: TikzFragment,
+  pattern: RegExp,
+  nameOffset: (match: RegExpMatchArray) => number,
   oldName: string,
-  newName: string
-): string {
-  return source.replace(DECLARATION_OPTION_KEY_REGEX, (match, prefix: string, rawValue: string) => {
-    const parsed = normalizeNameToken(rawValue);
-    if (parsed !== oldName) {
-      return match;
-    }
-
-    return `${prefix}${rewriteOptionValue(rawValue, newName)}`;
-  });
+  newName: TikzFragment,
+  toMatchEnd: boolean
+): TikzFragment {
+  const edits: FragmentEdit[] = [];
+  for (const match of text.matchAll(pattern)) {
+    const from = match.index + nameOffset(match);
+    edits.push({ span: { from, to: toMatchEnd ? match.index + match[0].length : from + oldName.length }, fragment: newName });
+  }
+  return replaceSpans(text, edits);
 }
 
-function rewriteOptionValue(rawValue: string, newName: string): string {
+function replaceOptionNameAssignments(
+  source: TikzFragment,
+  oldName: string,
+  newName: TikzFragment
+): TikzFragment {
+  const edits: FragmentEdit[] = [];
+  for (const match of source.matchAll(DECLARATION_OPTION_KEY_REGEX)) {
+    const prefix = match[1] ?? "";
+    const rawValue = match[2] ?? "";
+    if (normalizeNameToken(rawValue) !== oldName) {
+      continue;
+    }
+    const from = match.index + prefix.length;
+    edits.push({ span: { from, to: from + rawValue.length }, fragment: rewriteOptionValue(rawValue, newName) });
+  }
+  return replaceSpans(source, edits);
+}
+
+function rewriteOptionValue(rawValue: string, newName: TikzFragment): TikzFragment {
   const trimmed = rawValue.trim();
   if (trimmed.startsWith("{") && trimmed.endsWith("}") && isWrappedBySingleBracePair(trimmed)) {
     const inner = trimmed.slice(1, -1).trim();
     if (inner.startsWith("(") && inner.endsWith(")")) {
-      return `{(${newName})}`;
+      return tikz`{(${newName})}`;
     }
-    return `{${newName}}`;
+    return tikz`{${newName}}`;
   }
 
   if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
-    return `(${newName})`;
+    return tikz`(${newName})`;
   }
 
   return newName;
+}
+
+/** The snippet with the spans replaced: still text its constructors produced. */
+function replaceSpans(text: TikzFragment, edits: readonly FragmentEdit[]): TikzFragment {
+  if (edits.length === 0) {
+    return text;
+  }
+  const edited = applyFragments(text, edits);
+  return editedSlice(edited, 0, edited.length);
 }
 
 function normalizeNameToken(raw: string): string {

@@ -1,7 +1,9 @@
+import { applyFragments, EMPTY_FRAGMENT, layout, sourceSlice, tikz, userText, type TikzFragment } from "../edit/fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { EditActionResult } from "../edit/actions.js";
 import type { SourcePatch } from "../edit/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
+import { rewriteBeamerOptions } from "./option-edits.js";
 import type { Span } from "../ast/types.js";
 import { buildBeamerObjectIndex, type BeamerObjectNode } from "./object-index.js";
 import { scanBeamerDocument } from "./scan.js";
@@ -13,12 +15,15 @@ import {
   type BeamerSyntaxContext,
 } from "./syntax.js";
 import {
-  applyBeamerStructuralEdits,
   beamerObjectDeletionPatch,
   beamerObjectDuplicationPatch,
   type BeamerStructuralEdit,
 } from "./structural-edit.js";
+import { isDeckDocumentEditAction, planDeckDocumentThemeEdit, type DeckDocumentEditAction } from "./document-theme-edits.js";
+import { isDeckPageEditAction, planDeckPageEdit } from "./document-page-edits.js";
+import { planDeckColorEdit } from "./document-color-edits.js";
 import type { BeamerFrameLayout } from "./types.js";
+import { planBeamerListHeadEdit } from "./list-head.js";
 
 /**
  * Deck edit actions: the Beamer analog of the TikZ `EditAction` family
@@ -37,10 +42,25 @@ export type DeckEditAction =
   | { kind: "deckRenameEnvironment"; frameId: string; objectId: string; name: string }
   | { kind: "deckSetEnvironmentTitle"; frameId: string; objectId: string; title: string }
   | { kind: "deckSetOverlaySpec"; frameId: string; objectId: string; spec: string | null }
-  | { kind: "deckSetGraphicsOption"; frameId: string; objectId: string; key: string; value: string | null }
-  | { kind: "deckSetEnvironmentOption"; frameId: string; objectId: string; key: string; value: string | null }
+  | { kind: "deckSetListDefaultOverlay"; frameId: string; objectId: string; spec: string | null }
+  | { kind: "deckSetListLabelTemplate"; frameId: string; objectId: string; template: string | null }
+  | { kind: "deckReplaceGraphics"; frameId: string; objectId: string; path: string }
+  | { kind: "deckSetGraphicsOption"; frameId: string; objectId: string; key: string; value: string | true | null }
+  /**
+   * `true` writes a flag. Keys are case-sensitive (`columns` tells `T` from
+   * `t`); `exclusive` names flags removed when this one is set (alignment).
+   */
+  | {
+      kind: "deckSetEnvironmentOption";
+      frameId: string;
+      objectId: string;
+      key: string;
+      value: string | true | null;
+      exclusive?: readonly string[];
+    }
   | { kind: "deckSetColumnWidth"; frameId: string; objectId: string; width: string }
-  | { kind: "deckSetFrameOption"; frameId: string; key: string; value: string | true | null };
+  | { kind: "deckSetFrameOption"; frameId: string; key: string; value: string | true | null }
+  | DeckDocumentEditAction;
 
 const DECK_EDIT_ACTION_KINDS: ReadonlySet<string> = new Set([
   "deckDeleteObject",
@@ -48,10 +68,20 @@ const DECK_EDIT_ACTION_KINDS: ReadonlySet<string> = new Set([
   "deckRenameEnvironment",
   "deckSetEnvironmentTitle",
   "deckSetOverlaySpec",
+  "deckSetListDefaultOverlay",
+  "deckSetListLabelTemplate",
+  "deckReplaceGraphics",
   "deckSetGraphicsOption",
   "deckSetEnvironmentOption",
   "deckSetColumnWidth",
   "deckSetFrameOption",
+  "deckSetPresentationTheme",
+  "deckSetThemeOption",
+  "deckSetTheme",
+  "deckSetClassOption",
+  "deckSetNavigationSymbols",
+  "deckSetMetadataShort",
+  "deckSetColor",
 ]);
 
 export function isDeckEditAction(action: { kind: string }): action is DeckEditAction {
@@ -77,6 +107,9 @@ export function applyDeckEditAction(
   layout: BeamerFrameLayout,
   action: DeckEditAction
 ): EditActionResult {
+  if (isDeckDocumentEditAction(action)) {
+    return applyDeckDocumentEditAction(source, action);
+  }
   if (layout.frameId !== action.frameId) {
     return { kind: "unsupported", reason: "The targeted frame is not the rendered frame." };
   }
@@ -115,10 +148,22 @@ export function applyDeckEditAction(
       return applySetEnvironmentTitle(source, node, action.title);
     case "deckSetOverlaySpec":
       return applySetOverlaySpec(source, node, action.spec);
+    case "deckSetListDefaultOverlay":
+    case "deckSetListLabelTemplate": {
+      if (node.kind !== "list") return { kind: "unsupported", reason: "Only lists take list defaults." };
+      const context = createBeamerSyntaxContext(source);
+      const pair = environmentBoundariesOf(context, node);
+      if (!pair) return { kind: "unsupported", reason: "The list boundaries were not found." };
+      const plan = planBeamerListHeadEdit(context, pair.begin.span.to, pair.end.span.from, pair.begin.name,
+        action.kind === "deckSetListDefaultOverlay" ? { kind: "overlay", value: action.spec } : { kind: "label", value: action.template });
+      return "reason" in plan ? { kind: "unsupported", reason: plan.reason } : finishEdits(source, plan.edits);
+    }
+    case "deckReplaceGraphics":
+      return applyReplaceGraphics(source, node, action.path);
     case "deckSetGraphicsOption":
       return applySetGraphicsOption(source, node, action.key, action.value);
     case "deckSetEnvironmentOption":
-      return applySetEnvironmentOption(source, node, action.key, action.value);
+      return applySetEnvironmentOption(source, node, action.key, action.value, action.exclusive ?? []);
     case "deckSetColumnWidth":
       return applySetColumnWidth(source, node, action.width);
   }
@@ -138,7 +183,7 @@ function finishEdits(
   const effective = sorted.filter(
     (edit) => source.slice(edit.span.from, edit.span.to) !== edit.insert
   );
-  const newSource = applyBeamerStructuralEdits(source, effective);
+  const newSource = applyFragments(source, effective.map((edit) => ({ span: edit.span, fragment: edit.insert })));
   let delta = 0;
   const patches: SourcePatch[] = effective.map((edit) => {
     const from = edit.span.from + delta;
@@ -227,9 +272,15 @@ function applyRenameEnvironment(
       reason: `Cannot rename ${pair.begin.name} to ${name}.`,
     };
   }
+  // The name is one of the environments in the table above.
+  const renamed = userText(name, "beamer-text");
+  const head = pair.begin.name === "enumerate" && name === "itemize"
+    ? planBeamerListHeadEdit(createBeamerSyntaxContext(source), pair.begin.span.to, pair.end.span.from, "enumerate", { kind: "label", value: null }) : { edits: [] };
+  if ("reason" in head) return { kind: "unsupported", reason: head.reason };
   return finishEdits(source, [
-    { span: pair.begin.nameSpan, insert: name },
-    { span: pair.end.nameSpan, insert: name },
+    { span: pair.begin.nameSpan, insert: renamed },
+    { span: pair.end.nameSpan, insert: renamed },
+    ...head.edits,
   ]);
 }
 
@@ -252,10 +303,11 @@ function applySetEnvironmentTitle(
   const overlay = beamerOverlayArgumentAfter(context, pair.begin.span.to, node.sourceSpan.to);
   const cursor = overlay?.span.to ?? pair.begin.span.to;
   const existing = beamerRequiredArgumentAfter(context, cursor, node.sourceSpan.to);
+  const typed = userText(title, "beamer-text");
   if (existing) {
-    return finishEdits(source, [{ span: existing.contentSpan, insert: title }]);
+    return finishEdits(source, [{ span: existing.contentSpan, insert: typed }]);
   }
-  return finishEdits(source, [{ span: { from: cursor, to: cursor }, insert: `{${title}}` }]);
+  return finishEdits(source, [{ span: { from: cursor, to: cursor }, insert: tikz`{${typed}}` }]);
 }
 
 function applySetOverlaySpec(
@@ -285,24 +337,26 @@ function applySetOverlaySpec(
     return { kind: "unsupported", reason: "This object does not take an overlay specification." };
   }
 
-  const existing = beamerOverlayArgumentAfter(context, anchor, limit);
+  const optionalLabel = node.kind === "item" ? beamerOptionalArgumentAfter(context, anchor, limit) : null;
+  const existing = beamerOverlayArgumentAfter(context, anchor, limit) ??
+    (optionalLabel ? beamerOverlayArgumentAfter(context, optionalLabel.span.to, limit) : null);
   if (normalized.kind === "remove") {
     if (!existing) {
       return finishEdits(source, []);
     }
-    return finishEdits(source, [{ span: existing.span, insert: "" }]);
+    return finishEdits(source, [{ span: existing.span, insert: EMPTY_FRAGMENT }]);
   }
   if (existing) {
     return finishEdits(source, [{ span: existing.contentSpan, insert: normalized.spec }]);
   }
   return finishEdits(source, [
-    { span: { from: anchor, to: anchor }, insert: `<${normalized.spec}>` },
+    { span: { from: anchor, to: anchor }, insert: tikz`<${normalized.spec}>` },
   ]);
 }
 
 function normalizeOverlaySpec(
   spec: string | null
-): { kind: "remove" } | { kind: "set"; spec: string } | { kind: "invalid" } {
+): { kind: "remove" } | { kind: "set"; spec: TikzFragment } | { kind: "invalid" } {
   if (spec == null) {
     return { kind: "remove" };
   }
@@ -316,7 +370,7 @@ function normalizeOverlaySpec(
   if (!isSingleLine(trimmed) || trimmed.includes("<") || trimmed.includes(">")) {
     return { kind: "invalid" };
   }
-  return { kind: "set", spec: trimmed };
+  return { kind: "set", spec: userText(trimmed, "beamer-text") };
 }
 
 /** A parsed `[...]` option list with absolute entry spans. */
@@ -325,7 +379,12 @@ export type OptionListLocation = {
   span: Span;
   /** Span of the source between the brackets. */
   contentSpan: Span;
-  entries: readonly { span: Span; key: string | null; valueSpan: Span | null }[];
+  /**
+   * `key` is lowercased, as the TikZ option parser normalizes it;
+   * `authoredKey` is the spelling in the source, for case-sensitive keys
+   * such as `columns`' `T` and `t`.
+   */
+  entries: readonly { span: Span; key: string | null; authoredKey: string | null; valueSpan: Span | null }[];
 };
 
 export function readOptionList(
@@ -339,11 +398,16 @@ export function readOptionList(
   return {
     span: argument.span,
     contentSpan: argument.contentSpan,
-    entries: ast.entries.map((entry) => ({
-      span: entry.span,
-      key: entry.kind === "kv" || entry.kind === "flag" ? entry.key : null,
-      valueSpan: entry.kind === "kv" ? entry.valueSpan ?? null : null,
-    })),
+    entries: ast.entries.map((entry) => {
+      const named = entry.kind === "kv" || entry.kind === "flag";
+      const keySpan = named ? entry.keySpan : undefined;
+      return {
+        span: entry.span,
+        key: named ? entry.key : null,
+        authoredKey: !named ? null : keySpan ? source.slice(keySpan.from, keySpan.to).trim() : entry.raw.split("=")[0]?.trim() ?? entry.key,
+        valueSpan: entry.kind === "kv" ? entry.valueSpan ?? null : null,
+      };
+    }),
   };
 }
 
@@ -369,17 +433,19 @@ function buildOptionEdits(
   context: OptionListEditContext,
   key: string,
   value: string | true | null,
-  removeKeys: readonly string[] = []
+  removeKeys: readonly string[] = [],
+  caseSensitive = false
 ): { edits: BeamerStructuralEdit[] } | { error: string } {
-  const normalizedKey = key.trim().toLowerCase();
+  const normalizedKey = caseSensitive ? key.trim() : key.trim().toLowerCase();
   if (normalizedKey.length === 0 || !isSingleLine(normalizedKey)) {
     return { error: "Option keys must be single-line and non-empty." };
   }
   if (typeof value === "string" && !isValidOptionValue(value.trim())) {
     return { error: "Option values must be single-line with balanced braces." };
   }
-  const entryText =
-    value === true ? normalizedKey : value != null ? `${normalizedKey}=${value.trim()}` : null;
+  const typedKey = userText(normalizedKey, "beamer-text");
+  const entryText: TikzFragment | null =
+    value === true ? typedKey : value != null ? tikz`${typedKey}=${userText(value.trim(), "beamer-text")}` : null;
 
   const { list } = context;
   if (!list) {
@@ -388,69 +454,27 @@ function buildOptionEdits(
     }
     return {
       edits: [
-        { span: { from: context.insertAt, to: context.insertAt }, insert: `[${entryText}]` },
+        { span: { from: context.insertAt, to: context.insertAt }, insert: tikz`[${entryText}]` },
       ],
     };
   }
 
-  const removedIndexes = new Set<number>();
-  for (const removeKey of removeKeys) {
-    const index = list.entries.findIndex((entry) => entry.key === removeKey);
-    if (index >= 0) {
-      removedIndexes.add(index);
-    }
-  }
-  const targetIndex = list.entries.findIndex((entry) => entry.key === normalizedKey);
-  if (entryText == null && targetIndex >= 0) {
-    removedIndexes.add(targetIndex);
-  }
-
-  if (removedIndexes.size === 0) {
-    if (entryText == null) {
-      return { edits: [] };
-    }
-    if (targetIndex >= 0) {
-      const target = requireArrayValue(list.entries, targetIndex);
-      return source.slice(target.span.from, target.span.to) === entryText
-        ? { edits: [] }
-        : { edits: [{ span: target.span, insert: entryText }] };
-    }
-    const insertAt = list.contentSpan.to;
-    return {
-      edits: [
-        {
-          span: { from: insertAt, to: insertAt },
-          insert: list.entries.length > 0 ? `, ${entryText}` : entryText,
-        },
-      ],
-    };
-  }
-
-  // Removals present: rebuild the surviving entry list in one edit.
-  const surviving = list.entries
-    .map((entry, index) => {
-      if (removedIndexes.has(index)) {
-        return null;
-      }
-      return index === targetIndex && entryText != null
-        ? entryText
-        : source.slice(entry.span.from, entry.span.to);
-    })
-    .filter((text): text is string => text != null);
-  if (entryText != null && targetIndex < 0) {
-    surviving.push(entryText);
-  }
-  if (surviving.length === 0) {
-    return { edits: [{ span: list.span, insert: "" }] };
-  }
-  return { edits: [{ span: list.contentSpan, insert: surviving.join(", ") }] };
+  const keyOf = (entry: OptionListLocation["entries"][number]): string | null =>
+    caseSensitive ? entry.authoredKey : entry.key;
+  const targetIndex = list.entries.map(entry => keyOf(entry) === normalizedKey).lastIndexOf(true);
+  const removedKeys = new Set([...removeKeys, normalizedKey]);
+  return { edits: rewriteBeamerOptions(source, list,
+    (_entry, index) => !removedKeys.has(keyOf(requireArrayValue(list.entries, index)) ?? "") ||
+      (index === targetIndex && entryText !== null),
+    targetIndex >= 0 && entryText !== null ? { index: targetIndex, text: entryText } : undefined,
+    targetIndex < 0 && entryText !== null ? entryText : undefined) };
 }
 
 function applySetGraphicsOption(
   source: string,
   node: BeamerObjectNode,
   key: string,
-  value: string | null
+  value: string | true | null
 ): EditActionResult {
   if (node.kind !== "graphics") {
     return { kind: "unsupported", reason: "Only graphics take image options." };
@@ -462,12 +486,15 @@ function applySetGraphicsOption(
   if (!command) {
     return { kind: "unsupported", reason: "The graphics command was not found." };
   }
-  const optional = beamerOptionalArgumentAfter(context, command.span.to, node.sourceSpan.to);
+  // Options follow an overlay spec: `\includegraphics<2->[width=…]{file}`.
+  const commandEnd = command.starSpan?.to ?? command.span.to;
+  const afterOverlay = beamerOverlayArgumentAfter(context, commandEnd, node.sourceSpan.to)?.span.to ?? commandEnd;
+  const optional = beamerOptionalArgumentAfter(context, afterOverlay, node.sourceSpan.to);
   const result = buildOptionEdits(
     source,
     {
       list: optional ? readOptionList(source, optional) : null,
-      insertAt: command.span.to,
+      insertAt: afterOverlay,
     },
     key,
     value ?? null
@@ -478,14 +505,44 @@ function applySetGraphicsOption(
   return finishEdits(source, result.edits);
 }
 
-/** Option-list edits on an environment's `[...]` (embedded tikz `scale=`). */
+function applyReplaceGraphics(source: string, node: BeamerObjectNode, path: string): EditActionResult {
+  if (node.kind !== "graphics") return { kind: "unsupported", reason: "Only images can be replaced." };
+  if (!path.trim() || /[\\{}%#$^&\r\n]/u.test(path) || !/\.(?:png|jpe?g|svg|pdf)$/iu.test(path)) return { kind: "unsupported", reason: "Choose a PNG, JPEG, SVG or PDF with a literal TeX-compatible path." };
+  const context = createBeamerSyntaxContext(source);
+  const command = context.syntax.controlsIn(node.sourceSpan).find(command => command.name === "includegraphics");
+  if (!command) return { kind: "unsupported", reason: "The image command was not found." };
+  const at = command.starSpan?.to ?? command.span.to;
+  const overlay = beamerOverlayArgumentAfter(context, at, node.sourceSpan.to);
+  const options = beamerOptionalArgumentAfter(context, overlay?.span.to ?? at, node.sourceSpan.to);
+  const file = beamerRequiredArgumentAfter(context, options?.span.to ?? overlay?.span.to ?? at, node.sourceSpan.to);
+  if (!file) return { kind: "unsupported", reason: "The image filename was not found." };
+  const edits: BeamerStructuralEdit[] = [{ span: file.contentSpan, insert: userText(path, "inspector-value") }];
+  for (const comment of context.syntax.comments.filter(comment => file.contentSpan.from <= comment.from && comment.to <= file.contentSpan.to)) {
+    const newline = layout(source.includes("\r\n") ? "\r\n" : "\n");
+    edits.push({ span: { from: file.span.to, to: file.span.to }, insert: tikz`${newline}${sourceSlice(source, comment)}${newline}` });
+  }
+  // A page selection belongs to the old PDF. Replacement PDFs begin on page 1;
+  // non-PDF images must not retain a PDF-only option.
+  if (options) {
+    const plan = buildOptionEdits(source, { list: readOptionList(source, options), insertAt: at }, "page", null);
+    if ("error" in plan) return { kind: "unsupported", reason: plan.error };
+    edits.push(...plan.edits);
+  }
+  return finishEdits(source, edits);
+}
+
+/**
+ * Option-list edits on an environment's first `[...]`: embedded tikz
+ * `scale=`, and the alignment and width options of `columns` and `column`.
+ */
 function applySetEnvironmentOption(
   source: string,
   node: BeamerObjectNode,
   key: string,
-  value: string | null
+  value: string | true | null,
+  exclusive: readonly string[]
 ): EditActionResult {
-  if (node.kind !== "tikzpicture") {
+  if (node.kind !== "tikzpicture" && node.kind !== "columns" && node.kind !== "column") {
     return { kind: "unsupported", reason: "This object does not take environment options." };
   }
   const context = createBeamerSyntaxContext(source);
@@ -501,7 +558,9 @@ function applySetEnvironmentOption(
       insertAt: pair.begin.span.to,
     },
     key,
-    value ?? null
+    value ?? null,
+    value === null ? exclusive : exclusive.filter((flag) => flag !== key),
+    true
   );
   if ("error" in result) {
     return { kind: "unsupported", reason: result.error };
@@ -529,10 +588,17 @@ function applySetColumnWidth(
   const placement = beamerOptionalArgumentAfter(context, pair.begin.span.to, node.sourceSpan.to);
   const cursor = placement?.span.to ?? pair.begin.span.to;
   const existing = beamerRequiredArgumentAfter(context, cursor, node.sourceSpan.to);
+  const typed = userText(trimmed, "beamer-text");
   if (existing) {
-    return finishEdits(source, [{ span: existing.contentSpan, insert: trimmed }]);
+    return finishEdits(source, [{ span: existing.contentSpan, insert: typed }]);
   }
-  return finishEdits(source, [{ span: { from: cursor, to: cursor }, insert: `{${trimmed}}` }]);
+  return finishEdits(source, [{ span: { from: cursor, to: cursor }, insert: tikz`{${typed}}` }]);
+}
+
+export function applyDeckDocumentEditAction(source: string, action: DeckDocumentEditAction): EditActionResult {
+  const document = scanBeamerDocument(source);
+  const plan = action.kind === "deckSetColor" ? planDeckColorEdit(document, action) : isDeckPageEditAction(action) ? planDeckPageEdit(document, action) : planDeckDocumentThemeEdit(document, action);
+  return "reason" in plan ? { kind: "unsupported", reason: plan.reason } : finishEdits(source, plan.edits);
 }
 
 function applySetFrameOption(

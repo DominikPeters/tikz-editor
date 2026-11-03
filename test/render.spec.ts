@@ -516,10 +516,16 @@ describe("render pipeline", () => {
 \end{tikzpicture}`;
     const result = renderTikzToSvg(source);
 
-    const arcMatch = result.svg.svg.match(/A [^ ]+ [^ ]+ ([^ ]+) 0 [01] [^ ]+ [^ ]+/);
+    const arcMatch = result.svg.svg.match(/A ([^ ]+) ([^ ]+) ([^ ]+) 0 [01] [^ ]+ [^ ]+/);
     expect(arcMatch).not.toBeNull();
     if (arcMatch) {
-      expect(Number(arcMatch[1])).toBeLessThan(0);
+      const rx = Number(arcMatch[1]), ry = Number(arcMatch[2]);
+      const angle = Number(arcMatch[3]) * Math.PI / 180;
+      // Swapping the principal radii changes the angle by 90 degrees.
+      // Test the ellipse covariance so either equivalent spelling is valid.
+      expect(Math.max(rx, ry) / Math.min(rx, ry)).toBeCloseTo(2, 3);
+      expect(Math.abs(Math.cos(2 * angle))).toBeLessThan(1e-6);
+      expect((rx * rx - ry * ry) * Math.sin(2 * angle)).toBeGreaterThan(0);
     }
   });
 

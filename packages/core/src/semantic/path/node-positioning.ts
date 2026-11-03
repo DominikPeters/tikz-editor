@@ -10,7 +10,7 @@ import type { OptionListAst } from "../../options/types.js";
 import type { NodeDistanceSpec, NodeDistanceValue, SemanticContext } from "../context.js";
 import { evaluateRawCoordinate } from "../coords/evaluate.js";
 import { parseLength, parseQuantityExpression } from "../coords/parse-length.js";
-import { applyMatrixToVector } from "../transform.js";
+import { applyMatrixToVector, identityMatrix } from "../transform.js";
 import { parseBooleanishNormalized } from "../../utils/booleanish.js";
 import { normalizeOptionValue } from "./shared.js";
 
@@ -97,6 +97,8 @@ export type NodePositioningResolution = {
     targetWorld: WorldPoint;
     targetCenter: WorldPoint;
     legacyOf: boolean;
+    /** The node's own `xshift`/`yshift`, which move the drawn node after it is placed. */
+    additiveOffset: WorldVector;
     span: Span;
   };
 };
@@ -167,7 +169,8 @@ export function parseNodeDistance(raw: string, opts: { allowNegative?: boolean }
 export function resolveNodePositioningTarget(
   options: OptionListAst | undefined,
   context: SemanticContext,
-  fallbackTarget: WorldPoint
+  fallbackTarget: WorldPoint,
+  nodeTransforms: { transform: WorldTransform; prefix: (index: number) => WorldTransform }
 ): NodePositioningResolution {
   if (!options) {
     return { anchorPoint: fallbackTarget, diagnostics: [] };
@@ -179,13 +182,14 @@ export function resolveNodePositioningTarget(
   let onGrid = frame.onGrid;
   let nodeDistance = frame.nodeDistance;
   let relativePlacement: RelativePlacementSpec | null = null;
-  let additiveOffset: WorldVector = makeWorldVector(pt(0), pt(0));
+  let additiveOffset: WorldVector = makeWorldVector(pt(nodeTransforms.transform.e), pt(nodeTransforms.transform.f));
+  // An `anchor=` after the placement key overrides the anchor the placement
+  // implies, as PGF sets both when it reads the options in order.
+  let anchorAfterPlacement = false;
 
-  for (const entry of options.entries) {
+  for (const [index, entry] of options.entries.entries()) {
     if (entry.kind === "flag") {
-      if (entry.key === "centered") {
-        additiveOffset = makeWorldVector(pt(0), pt(0));
-      } else if (entry.key === "on grid") {
+      if (entry.key === "on grid") {
         onGrid = true;
       }
       continue;
@@ -203,6 +207,11 @@ export function resolveNodePositioningTarget(
       continue;
     }
 
+    if (entry.key === "anchor") {
+      anchorAfterPlacement = relativePlacement != null;
+      continue;
+    }
+
     if (entry.key === "node distance") {
       const parsed = parseNodeDistance(entry.valueRaw);
       if (parsed) {
@@ -213,23 +222,10 @@ export function resolveNodePositioningTarget(
       continue;
     }
 
-    if (entry.key === "xshift") {
+    if (entry.key === "xshift" || entry.key === "yshift") {
       const parsed = parseLength(entry.valueRaw, "pt");
-      if (parsed == null || !Number.isFinite(parsed)) {
-        diagnostics.push(`invalid-xshift:${entry.valueRaw}`);
-      } else {
-        additiveOffset = worldVector(additiveOffset.x + parsed, additiveOffset.y);
-      }
-      continue;
-    }
-
-    if (entry.key === "yshift") {
-      const parsed = parseLength(entry.valueRaw, "pt");
-      if (parsed == null || !Number.isFinite(parsed)) {
-        diagnostics.push(`invalid-yshift:${entry.valueRaw}`);
-      } else {
-        additiveOffset = worldVector(additiveOffset.x, additiveOffset.y + parsed);
-      }
+      if (parsed == null || !Number.isFinite(parsed)) diagnostics.push(`invalid-${entry.key}:${entry.valueRaw}`);
+      // Already composed, in order, into nodeTransforms.transform.
       continue;
     }
 
@@ -244,6 +240,7 @@ export function resolveNodePositioningTarget(
         diagnostics.push("invalid-positioning-of-target");
         continue;
       }
+      anchorAfterPlacement = false;
       relativePlacement = {
         direction: directional.direction,
         legacyOf: true,
@@ -256,6 +253,7 @@ export function resolveNodePositioningTarget(
 
     const spec = parseOfPart(entry.valueRaw);
     if (spec) {
+      anchorAfterPlacement = false;
       relativePlacement = {
         direction: directional.direction,
         legacyOf: false,
@@ -266,12 +264,13 @@ export function resolveNodePositioningTarget(
       continue;
     }
 
-    const parsedOffset = parseDirectionalOffset(directional.direction, entry.valueRaw, activeTransform);
+    const parsedOffset = parseDirectionalOffset(directional.direction, entry.valueRaw, identityMatrix());
     if (!parsedOffset) {
       diagnostics.push(`invalid-positioning-shift:${entry.valueRaw}`);
       continue;
     }
-    additiveOffset = worldVector(additiveOffset.x + parsedOffset.x, additiveOffset.y + parsedOffset.y);
+    const offset = applyMatrixToVector(nodeTransforms.prefix(index), parsedOffset);
+    additiveOffset = worldVector(additiveOffset.x + offset.x, additiveOffset.y + offset.y);
   }
 
   let anchorPoint = worldPoint(fallbackTarget.x + additiveOffset.x, fallbackTarget.y + additiveOffset.y);
@@ -288,7 +287,7 @@ export function resolveNodePositioningTarget(
         resolved.anchorPoint.y + additiveOffset.y
       );
     }
-    if (resolved.anchorOverride) {
+    if (resolved.anchorOverride && !anchorAfterPlacement) {
       anchorOverride = resolved.anchorOverride;
     }
     if (resolved.targetWorld) {
@@ -298,6 +297,7 @@ export function resolveNodePositioningTarget(
         targetWorld: resolved.targetWorld,
         targetCenter: resolved.targetCenter ?? resolved.targetWorld,
         legacyOf: relativePlacement.legacyOf,
+        additiveOffset,
         span: relativePlacement.span
       };
     }
@@ -334,6 +334,30 @@ function parseOfPart(raw: string): { shiftRaw: string; targetRaw: string } | nul
     return null;
   }
   return { shiftRaw, targetRaw };
+}
+
+/**
+ * The name a placement option (`right=1cm of A`, `above left={1cm and 2cm} of A.north`,
+ * `right of=A`) places its node relative to, or null for an option that is not a
+ * placement relative to a named node. PGF reads that name as a point with the
+ * transformation undone, so an enclosing `shift` does not move the node.
+ */
+export function positioningTargetNodeName(key: string, valueRaw: string): string | null {
+  const directional = parseDirectionalKey(key);
+  if (!directional) {
+    return null;
+  }
+  const targetRaw = directional.legacyOf ? normalizeOptionValue(valueRaw) : parseOfPart(valueRaw)?.targetRaw;
+  if (!targetRaw) {
+    return null;
+  }
+  const parsed = parseCoordinate(toCoordinateRaw(targetRaw));
+  if (parsed.form !== "named") {
+    return null;
+  }
+  const name = parsed.x.trim();
+  const anchorDot = name.indexOf(".");
+  return anchorDot < 0 ? name : name.slice(0, anchorDot);
 }
 
 function resolveRelativePlacement(

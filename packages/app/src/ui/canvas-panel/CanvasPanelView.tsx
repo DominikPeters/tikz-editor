@@ -203,6 +203,8 @@ type CanvasPanelViewProps = {
   } | null;
   /** While a drawing layer is edited: its slide without it, an SVG of the page under the picture. */
   layerBackdropSvg: string | null;
+  /** The theme gallery's preview of this slide under another theme, drawn over the page. */
+  themePreviewUrl: string | null;
   RULER_SIZE: number;
   magnifierState: MagnifierState | null;
 };
@@ -317,6 +319,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     deckStepper,
     nestedFigureBreadcrumb,
     layerBackdropSvg,
+    themePreviewUrl,
     RULER_SIZE,
     magnifierState
   } = props;
@@ -528,6 +531,16 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                 onFallback={onSvgPatchFallback}
                 hostRef={svgLayerHostRef}
               />
+
+              {themePreviewUrl ? (
+                <img
+                  className={css.themePreview}
+                  data-testid="canvas-theme-preview"
+                  src={themePreviewUrl}
+                  alt=""
+                  draggable={false}
+                />
+              ) : null}
 
               {repeatPreviewModel ? (
                 <svg

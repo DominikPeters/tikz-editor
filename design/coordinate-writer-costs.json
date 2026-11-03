@@ -1,0 +1,541 @@
+{
+  "version": 1,
+  "runtime": "v26.12.0",
+  "cpu": "Apple M1 Pro",
+  "platform": "darwin",
+  "arch": "arm64",
+  "scope": "Core parse/evaluate/edit only; excludes browser painting, worker transport and undo history.",
+  "memory": "GC-retained bytes are V8 heap measurements. Serialized payload sizes describe graph size, not heap overhead. Capture microbench includes weak-cache bookkeeping and the result-reference array.",
+  "cold": "Fresh parse + evaluation + action each sample.",
+  "prepared": "Reused immutable snapshot, analysis view and geometry session; first prepared call reported separately.",
+  "captures": [
+    {
+      "frames": 10000,
+      "uniqueCaptures": 1,
+      "retainedBytes": 81608,
+      "bytesPerFrame": 8.16,
+      "trialBytes": [
+        -73360,
+        81656,
+        81608,
+        80432,
+        81608
+      ]
+    },
+    {
+      "frames": 10000,
+      "uniqueCaptures": 10000,
+      "retainedBytes": 5041112,
+      "bytesPerFrame": 504.11,
+      "trialBytes": [
+        5307096,
+        5038080,
+        5038760,
+        5041112,
+        5041144
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "statements": 100,
+      "varied": false,
+      "sourceBytes": 2512,
+      "retainedSnapshotBytes": 916128,
+      "statementEntries": 100,
+      "uniqueContexts": 1,
+      "serializedContextPayloadBytes": 145,
+      "serializedEntryGraphBytes": 5623,
+      "retainedDeltaAfter20EvaluationsBytes": 180400,
+      "checkpoint": {
+        "coldMs": 1.07,
+        "warmMs": 0
+      },
+      "actions": [
+        {
+          "name": "insertion",
+          "firstPreparedMs": 11.48,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 22.01,
+            "p95Ms": 37.86,
+            "maxMs": 37.86
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 2.82,
+            "p95Ms": 4.67,
+            "maxMs": 4.67
+          }
+        },
+        {
+          "name": "path-point-insertion",
+          "firstPreparedMs": 1.41,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 9.42,
+            "p95Ms": 10.91,
+            "maxMs": 10.91
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 0.07,
+            "p95Ms": 0.28,
+            "maxMs": 0.28
+          }
+        },
+        {
+          "name": "paste",
+          "firstPreparedMs": 18.76,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 25.79,
+            "p95Ms": 28.19,
+            "maxMs": 28.19
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 15.18,
+            "p95Ms": 16.69,
+            "maxMs": 16.69
+          }
+        },
+        {
+          "name": "repeat",
+          "firstPreparedMs": 7.91,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 15.95,
+            "p95Ms": 18.74,
+            "maxMs": 18.74
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 6.27,
+            "p95Ms": 6.75,
+            "maxMs": 6.75
+          }
+        }
+      ]
+    },
+    {
+      "statements": 100,
+      "varied": true,
+      "sourceBytes": 4640,
+      "retainedSnapshotBytes": 1004720,
+      "statementEntries": 100,
+      "uniqueContexts": 80,
+      "serializedContextPayloadBytes": 11047,
+      "serializedEntryGraphBytes": 5859,
+      "retainedDeltaAfter20EvaluationsBytes": 68192,
+      "checkpoint": {
+        "coldMs": 0.99,
+        "warmMs": 0
+      },
+      "actions": [
+        {
+          "name": "insertion",
+          "firstPreparedMs": 11.34,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 31.5,
+            "p95Ms": 44.37,
+            "maxMs": 44.37
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 4.57,
+            "p95Ms": 5.27,
+            "maxMs": 5.27
+          }
+        },
+        {
+          "name": "path-point-insertion",
+          "firstPreparedMs": 0.14,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 13,
+            "p95Ms": 13.72,
+            "maxMs": 13.72
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 0.07,
+            "p95Ms": 0.08,
+            "maxMs": 0.08
+          }
+        },
+        {
+          "name": "paste",
+          "firstPreparedMs": 24.47,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 40.37,
+            "p95Ms": 44.25,
+            "maxMs": 44.25
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 24.37,
+            "p95Ms": 24.9,
+            "maxMs": 24.9
+          }
+        },
+        {
+          "name": "repeat",
+          "firstPreparedMs": 8.71,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 24.99,
+            "p95Ms": 25.91,
+            "maxMs": 25.91
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 8.61,
+            "p95Ms": 9.6,
+            "maxMs": 9.6
+          }
+        }
+      ]
+    },
+    {
+      "statements": 1000,
+      "varied": false,
+      "sourceBytes": 25412,
+      "retainedSnapshotBytes": 8245464,
+      "statementEntries": 1000,
+      "uniqueContexts": 1,
+      "serializedContextPayloadBytes": 145,
+      "serializedEntryGraphBytes": 59862,
+      "retainedDeltaAfter20EvaluationsBytes": -10712,
+      "checkpoint": {
+        "coldMs": 1.66,
+        "warmMs": 0
+      },
+      "actions": [
+        {
+          "name": "insertion",
+          "firstPreparedMs": 33.52,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 191.91,
+            "p95Ms": 260.22,
+            "maxMs": 260.22
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 22.5,
+            "p95Ms": 25.42,
+            "maxMs": 25.42
+          }
+        },
+        {
+          "name": "path-point-insertion",
+          "firstPreparedMs": 0.46,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 81.13,
+            "p95Ms": 98.08,
+            "maxMs": 98.08
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 0.26,
+            "p95Ms": 0.41,
+            "maxMs": 0.41
+          }
+        },
+        {
+          "name": "paste",
+          "firstPreparedMs": 149.26,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 250.11,
+            "p95Ms": 268.84,
+            "maxMs": 268.84
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 147.06,
+            "p95Ms": 170.36,
+            "maxMs": 170.36
+          }
+        },
+        {
+          "name": "repeat",
+          "firstPreparedMs": 62.51,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 162.37,
+            "p95Ms": 180.57,
+            "maxMs": 180.57
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 59.6,
+            "p95Ms": 64.2,
+            "maxMs": 64.2
+          }
+        }
+      ]
+    },
+    {
+      "statements": 1000,
+      "varied": true,
+      "sourceBytes": 46891,
+      "retainedSnapshotBytes": 9286416,
+      "statementEntries": 1000,
+      "uniqueContexts": 800,
+      "serializedContextPayloadBytes": 110409,
+      "serializedEntryGraphBytes": 59862,
+      "retainedDeltaAfter20EvaluationsBytes": -51624,
+      "checkpoint": {
+        "coldMs": 4.45,
+        "warmMs": 0
+      },
+      "actions": [
+        {
+          "name": "insertion",
+          "firstPreparedMs": 57.22,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 308.65,
+            "p95Ms": 385.58,
+            "maxMs": 385.58
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 38.77,
+            "p95Ms": 41.38,
+            "maxMs": 41.38
+          }
+        },
+        {
+          "name": "path-point-insertion",
+          "firstPreparedMs": 0.55,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 120.88,
+            "p95Ms": 139.86,
+            "maxMs": 139.86
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 0.27,
+            "p95Ms": 0.4,
+            "maxMs": 0.4
+          }
+        },
+        {
+          "name": "paste",
+          "firstPreparedMs": 236.49,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 385.81,
+            "p95Ms": 396.42,
+            "maxMs": 396.42
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 231.23,
+            "p95Ms": 251.3,
+            "maxMs": 251.3
+          }
+        },
+        {
+          "name": "repeat",
+          "firstPreparedMs": 83.64,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 266.11,
+            "p95Ms": 454.43,
+            "maxMs": 454.43
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 85.71,
+            "p95Ms": 226.66,
+            "maxMs": 226.66
+          }
+        }
+      ]
+    },
+    {
+      "statements": 5000,
+      "varied": false,
+      "sourceBytes": 130082,
+      "retainedSnapshotBytes": 33555224,
+      "statementEntries": 5000,
+      "uniqueContexts": 1,
+      "serializedContextPayloadBytes": 145,
+      "serializedEntryGraphBytes": 307862,
+      "retainedDeltaAfter20EvaluationsBytes": -160112,
+      "checkpoint": {
+        "coldMs": 6.08,
+        "warmMs": 0
+      },
+      "actions": [
+        {
+          "name": "insertion",
+          "firstPreparedMs": 146.82,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 1010.93,
+            "p95Ms": 1125.62,
+            "maxMs": 1125.62
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 112.75,
+            "p95Ms": 139.5,
+            "maxMs": 139.5
+          }
+        },
+        {
+          "name": "path-point-insertion",
+          "firstPreparedMs": 1.73,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 456.23,
+            "p95Ms": 553.01,
+            "maxMs": 553.01
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 0.97,
+            "p95Ms": 1.53,
+            "maxMs": 1.53
+          }
+        },
+        {
+          "name": "paste",
+          "firstPreparedMs": 822.41,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 1393.45,
+            "p95Ms": 1454.38,
+            "maxMs": 1454.38
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 792.38,
+            "p95Ms": 1764.94,
+            "maxMs": 1764.94
+          }
+        },
+        {
+          "name": "repeat",
+          "firstPreparedMs": 345.47,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 939.97,
+            "p95Ms": 1452.06,
+            "maxMs": 1452.06
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 353.43,
+            "p95Ms": 454.19,
+            "maxMs": 454.19
+          }
+        }
+      ]
+    },
+    {
+      "statements": 5000,
+      "varied": true,
+      "sourceBytes": 237573,
+      "retainedSnapshotBytes": 39433648,
+      "statementEntries": 5000,
+      "uniqueContexts": 4000,
+      "serializedContextPayloadBytes": 552009,
+      "serializedEntryGraphBytes": 307862,
+      "retainedDeltaAfter20EvaluationsBytes": -25880,
+      "checkpoint": {
+        "coldMs": 7.42,
+        "warmMs": 0
+      },
+      "actions": [
+        {
+          "name": "insertion",
+          "firstPreparedMs": 233.31,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 1554.1,
+            "p95Ms": 1659.07,
+            "maxMs": 1659.07
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 192.59,
+            "p95Ms": 219.66,
+            "maxMs": 219.66
+          }
+        },
+        {
+          "name": "path-point-insertion",
+          "firstPreparedMs": 1.89,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 675.2,
+            "p95Ms": 776.78,
+            "maxMs": 776.78
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 1.03,
+            "p95Ms": 1.35,
+            "maxMs": 1.35
+          }
+        },
+        {
+          "name": "paste",
+          "firstPreparedMs": 1380.32,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 2102.49,
+            "p95Ms": 2263.74,
+            "maxMs": 2263.74
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 1239.54,
+            "p95Ms": 1375.36,
+            "maxMs": 1375.36
+          }
+        },
+        {
+          "name": "repeat",
+          "firstPreparedMs": 468.67,
+          "cold": {
+            "samples": 12,
+            "p50Ms": 1340.38,
+            "p95Ms": 1462.09,
+            "maxMs": 1462.09
+          },
+          "prepared": {
+            "samples": 12,
+            "p50Ms": 466.02,
+            "p95Ms": 537.37,
+            "maxMs": 537.37
+          }
+        }
+      ]
+    }
+  ],
+  "measuredAt": "2026-10-22",
+  "entries": {
+    "rows": 100000,
+    "retainedBytes": 5601384,
+    "bytesPerRow": 56.01,
+    "trialBytes": [
+      5602168,
+      5600560,
+      5602752,
+      5601384,
+      5601384
+    ]
+  },
+  "entryCalibrationNote": "Entry rows calibrated in a separate memory-only process on the same machine/runtime; capture and action measurements above are from the original full run."
+}

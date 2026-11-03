@@ -28,6 +28,52 @@ async function setup(input = source, activeRootId = "figure:0") {
 }
 afterEach(() => vi.restoreAllMocks());
 
+it("records consecutive color sides and resets while a frame render is pending", async () => {
+  const source = String.raw`\documentclass{beamer}\begin{document}\begin{frame}Text\end{frame}\end{document}`;
+  const { state } = await setup(source, "frame:0");
+  const foreground = editorReducer(state, { type: "APPLY_EDIT_ACTION", action: { kind: "deckSetColor", role: "palette primary", side: "fg", value: "white" } });
+  const background = editorReducer(foreground, { type: "APPLY_EDIT_ACTION", action: { kind: "deckSetColor", role: "palette primary", side: "bg", value: "red" } });
+  expect(background.source).toContain("fg=white, bg=red");
+  const reset = editorReducer(background, { type: "APPLY_EDIT_ACTION", action: { kind: "deckSetColor", role: "palette primary", side: "fg", value: null } });
+  expect(reset.source).toContain("bg=red");
+  expect(reset.source).not.toContain("fg=white");
+  const undone = editorReducer(reset, { type: "UNDO" });
+  expect(undone.source).toBe(background.source);
+  expect(editorReducer(undone, { type: "UNDO" }).source).toBe(foreground.source);
+  expect(editorReducer(undone, { type: "REDO" }).source).toBe(reset.source);
+});
+
+it("applies page and metadata writes consecutively against current source with separate undo steps", async () => {
+  const source = String.raw`\documentclass{beamer}
+\usetheme{Madrid}
+\title{Long title}
+\begin{document}\begin{frame}Text\end{frame}\end{document}`;
+  const { state } = await setup(source, "frame:0");
+  const sized = editorReducer(state, { type: "APPLY_EDIT_ACTION", action: { kind: "deckSetClassOption", key: "font-size", value: "12" } });
+  expect(sized.source).toContain("[12pt]");
+  const titled = editorReducer(sized, { type: "APPLY_EDIT_ACTION", action: { kind: "deckSetMetadataShort", field: "title", value: "Short" } });
+  expect(titled.source).toContain("\\title[Short]{Long title}");
+  expect(titled.source).toContain("[12pt]");
+  const undo = editorReducer(titled, { type: "UNDO" });
+  expect(undo.source).toBe(sized.source);
+  expect(editorReducer(undo, { type: "UNDO" }).source).toBe(source);
+  expect(editorReducer(undo, { type: "REDO" }).source).toBe(titled.source);
+});
+
+it("executes document theme actions during a pending render and without an active frame", async () => {
+  const empty = String.raw`\documentclass{beamer}\begin{document}\end{document}`;
+  const { state, documentId } = await setup(empty, "frame:0");
+  const edited = editorReducer(state, { type: "CODE_EDITED", source: empty.replace("{beamer}", "[aspectratio=169]{beamer}") });
+  const result = executeDocumentEdit({ ...edited, documentId }, { kind: "deckSetPresentationTheme", name: "Madrid" });
+  expect(result).toMatchObject({ kind: "success" });
+  const next = editorReducer(edited, { type: "APPLY_EDIT_ACTION", action: { kind: "deckSetPresentationTheme", name: "Madrid" } });
+  expect(next.source).toContain(String.raw`\usetheme{Madrid}`);
+  expect(next.source).toContain("aspectratio=169");
+  expect(editorReducer(next, { type: "UNDO" }).source).toBe(edited.source);
+  expect(editorReducer(editorReducer(next, { type: "UNDO" }), { type: "REDO" }).source).toBe(next.source);
+  expect(executeDocumentEdit({ ...edited, documentId }, { kind: "deckSetFrameOption", frameId: "frame:0", key: "plain", value: true })).toMatchObject({ kind: "unsupported" });
+});
+
 it("batches property edits into one revision and undo step, with cleanup in the same edit", async () => {
   const { state } = await setup();
   const action: EditAction = { kind: "setProperties", actions: [

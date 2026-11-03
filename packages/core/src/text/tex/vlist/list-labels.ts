@@ -1,4 +1,5 @@
 import { roundTexPt } from "../fonts/units.js";
+import { enumerateTemplateText } from "../enumerate-template.js";
 import type { TexListLayoutProfile } from "../layout-options.js";
 import type { SimpleTexFontState } from "../ir.js";
 import {
@@ -119,6 +120,7 @@ function texListItemLabelContent(
     return texDefaultItemizeLabelContent(listContext.labelDepth);
   }
   if (listContext.kind === "enumerate") {
+    if (listContext.enumerateTemplate !== undefined) return { kind: "text", text: enumerateTemplateText(listContext.enumerateTemplate, listContext.labelCounter ?? listContext.itemIndex) ?? "" };
     const marker = listProfile?.resolveEnumerateMarker?.(
       listContext.labelCounter ?? listContext.itemIndex,
       listContext.labelDepth

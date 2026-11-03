@@ -69,6 +69,7 @@ import { recordProfilingSourcePanelSyncTiming } from "@tikz-editor/core/profilin
 import type { SceneElement } from "@tikz-editor/core/semantic/types";
 import { NAMED_COLORS } from "@tikz-editor/core/semantic/style/constants";
 import { applySourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
+import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { beamer, tex, tikz } from "@tikz-editor/lang-tikz";
 import { tikzCompletion } from "./tikz-autocomplete";
 import { lookupTikzDocEntry } from "./tikz-docs";
@@ -157,7 +158,7 @@ const sourcePanelExternalSyncAnnotation = Annotation.define<{ nextSource: string
 type PendingExternalSourceSync = {
   nextSource: string;
   sourceRevision: number;
-  lastEditPatches: readonly SourceSyncPatch[] | null;
+  lastEditPatches: readonly SourcePatch[] | null;
   patchChain: SourceSyncPatchStep[] | null;
   coalescedToAnimationFrame: boolean;
 };
@@ -165,7 +166,7 @@ type PendingExternalSourceSync = {
 type SourceSyncPatchStep = {
   baseRevision: number;
   sourceRevision: number;
-  patches: readonly SourceSyncPatch[];
+  patches: readonly SourcePatch[];
 };
 
 type DiagnosticSeverity = "error" | "warning";
@@ -180,11 +181,6 @@ export type DiagnosticInput = {
 };
 
 type Diagnostic = DiagnosticInput;
-type SourceSyncPatch = {
-  oldSpan: { from: number; to: number };
-  newSpan: { from: number; to: number };
-  replacement: string;
-};
 
 type SourceSyncChange = { from: number; to: number; insert: string };
 
@@ -318,7 +314,7 @@ function findExternalSourceSyncAnnotation(
 function buildExternalSourceSyncChanges(
   currentSource: string,
   nextSource: string,
-  lastEditPatches: readonly SourceSyncPatch[] | null
+  lastEditPatches: readonly SourcePatch[] | null
 ): SourceSyncChanges {
   if (
     lastEditPatches &&
@@ -364,7 +360,7 @@ function patchChainMatchesSourceTransition(
   return source === nextSource;
 }
 
-function sourcePatchChanges(patches: readonly SourceSyncPatch[]): SourceSyncChange[] {
+function sourcePatchChanges(patches: readonly SourcePatch[]): SourceSyncChange[] {
   return patches.map((patch) => ({
     from: patch.oldSpan.from,
     to: patch.oldSpan.to,
@@ -403,7 +399,7 @@ export class ExternalSourceSyncManager {
   syncExternalSource(
     nextSource: string,
     sourceRevision: number,
-    lastEditPatches: readonly SourceSyncPatch[] | null,
+    lastEditPatches: readonly SourcePatch[] | null,
     patchChain: readonly SourceSyncPatchStep[] | null,
     coalescedToAnimationFrame: boolean
   ): void {
@@ -486,7 +482,7 @@ function useExternalSourceSync(
   viewRef: RefObject<EditorView | null>,
   source: string,
   sourceRevision: number,
-  lastEditPatches: readonly SourceSyncPatch[] | null,
+  lastEditPatches: readonly SourcePatch[] | null,
   lastEditPatchBaseRevision: number | null,
   coalesceToAnimationFrame: boolean,
   inIdleTime = false,

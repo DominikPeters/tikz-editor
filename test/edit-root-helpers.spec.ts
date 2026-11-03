@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseEditableTargetId, isAdornmentTargetId } from "../packages/core/src/edit/editable-targets.js";
 import { isMatrixCellWritableKey } from "../packages/core/src/edit/matrix-editing.js";
 import { parseTikzForEdit, sourceFingerprintForEdit } from "../packages/core/src/edit/parse-options.js";
-import { formatCoordinate, formatPolarCoordinate } from "../packages/core/src/edit/style.js";
+import { formatCoordinate, formatPolarCoordinate } from "../packages/core/src/edit/writer/format.js";
 
 describe("edit root helper coverage", () => {
   it("reuses parse results from analysis views and sessions", () => {

@@ -1,3 +1,4 @@
+import { userText } from "../packages/core/src/edit/fragment.js";
 import { describe, expect, it } from "vitest";
 
 import { parseOptionListRaw } from "../packages/core/src/options/parse.js";
@@ -6,6 +7,7 @@ import {
   rewriteSourceBackedOptionListMutations,
   serializeOptionEntry
 } from "../packages/core/src/edit/option-mutations.js";
+import { fragment } from "./fragment-helpers.js";
 
 describe("option mutation serialization", () => {
   it("preserves non-bracketed option sites when all entries are removed", () => {
@@ -24,7 +26,7 @@ describe("option mutation serialization", () => {
   it("does not mistake an escaped comma for an option delimiter", () => {
     const source = String.raw`[foo=\,
 ]`;
-    const mutations = new Map([["bar", { kind: "set", value: "true" } as const]]);
+    const mutations = new Map([["bar", { kind: "set", value: fragment("true") } as const]]);
 
     expect(rewriteSourceBackedOptionListMutations(
       source,
@@ -62,7 +64,7 @@ bar
 
   it("does not double the separator when inserting after a trailing comma", () => {
     const source = "[red,]";
-    const mutations = new Map([["thick", { kind: "set", value: "true" } as const]]);
+    const mutations = new Map([["thick", { kind: "set", value: fragment("true") } as const]]);
 
     expect(rewriteSourceBackedOptionListMutations(
       source,
@@ -74,7 +76,7 @@ bar
 
   it("inserts new entries before the requested key", () => {
     const source = "[draw=red, anchor=west, thick]";
-    const mutations = new Map([["below", { kind: "set", value: "of a" } as const]]);
+    const mutations = new Map([["below", { kind: "set", value: fragment("of a") } as const]]);
 
     expect(rewriteSourceBackedOptionListMutations(
       source,
@@ -88,7 +90,7 @@ bar
 
   it("falls back to appending when the requested insertion key is absent", () => {
     const source = "[draw=red]";
-    const mutations = new Map([["below", { kind: "set", value: "of a" } as const]]);
+    const mutations = new Map([["below", { kind: "set", value: fragment("of a") } as const]]);
 
     expect(rewriteSourceBackedOptionListMutations(
       source,
@@ -103,11 +105,11 @@ bar
   it("serializes bare draw colors only for color-like values", () => {
     const drawContext = { bareColorKey: "draw" as const };
 
-    expect(serializeOptionEntry("draw", "{rgb,255:red,1;green,2;blue,3}", drawContext)).toBe(
+    expect(serializeOptionEntry("draw", userText("{rgb,255:red,1;green,2;blue,3}", "inspector-value"), drawContext)).toBe(
       "{rgb,255:red,1;green,2;blue,3}"
     );
-    expect(serializeOptionEntry("draw", "red!30!blue", drawContext)).toBe("red!30!blue");
-    expect(serializeOptionEntry("draw", "not a color expression", drawContext)).toBe(
+    expect(serializeOptionEntry("draw", userText("red!30!blue", "inspector-value"), drawContext)).toBe("red!30!blue");
+    expect(serializeOptionEntry("draw", userText("not a color expression", "inspector-value"), drawContext)).toBe(
       "draw=not a color expression"
     );
   });

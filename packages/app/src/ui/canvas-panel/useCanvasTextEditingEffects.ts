@@ -8,7 +8,7 @@ import {
   textareaOffsetToDocument,
   type DocumentSourceOffset
 } from "@tikz-editor/core/text/source-coordinates";
-import type { SvgBounds, SvgPoint, ViewportPoint } from "../coords/types";
+import type { ClientPoint, SvgBounds, SvgPoint, ViewportBounds, ViewportPoint } from "../coords/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { clientToViewport, svgToViewport } from "../coords/convert";
 import { clientBoundsToViewport, svgBoundsToViewportBounds } from "../coords/text";
@@ -17,6 +17,17 @@ import { clamp } from "./geometry";
 import { applyTextMeasureFont, createVisualTextLayout, resolveVisualLineLeft } from "./text-visual-layout";
 import type { CanvasSnapshot, EditableTextTarget, StateSetter, TextEditingSession, TextSelectionOverlay, TextSelectionOverlayBox } from "./types";
 import type { CanvasTextEditAction } from "./canvas-text-edit-machine";
+
+/** The caret's vertical extent about its client-space centre, as viewport bounds. */
+function caretBoundsInViewport(center: ClientPoint, height: number, viewportRect: DOMRect): ViewportBounds {
+  const viewportCenter = clientToViewport(center, viewportRect);
+  return viewportBounds(
+    px(viewportCenter.x),
+    px(viewportCenter.y - height / 2),
+    px(viewportCenter.x),
+    px(viewportCenter.y + height / 2)
+  );
+}
 
 export type UseCanvasTextEditingEffectsArgs = {
   toolMode: ToolMode;
@@ -500,12 +511,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
               selectionStart: boundedStart,
               selectionEnd: boundedEnd,
               caret: {
-                bounds: viewportBounds(
-                  px(caretCenter.x - viewportRect.left),
-                  px(caretCenter.y - viewportRect.top - height / 2),
-                  px(caretCenter.x - viewportRect.left),
-                  px(caretCenter.y - viewportRect.top + height / 2)
-                ),
+                bounds: caretBoundsInViewport(caretCenter, height, viewportRect),
                 center: clientToViewport(caretCenter, viewportRect),
                 ...(typeof point.rotationDeg === "number" && Number.isFinite(point.rotationDeg) ? { rotationDeg: point.rotationDeg } : {})
               },
@@ -604,12 +610,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
             selectionStart: boundedStart,
             selectionEnd: boundedEnd,
             caret: {
-              bounds: viewportBounds(
-                px(point.clientPoint.x - viewportRect.left),
-                px(point.clientPoint.y - viewportRect.top - height / 2),
-                px(point.clientPoint.x - viewportRect.left),
-                px(point.clientPoint.y - viewportRect.top + height / 2)
-              ),
+              bounds: caretBoundsInViewport(point.clientPoint, height, viewportRect),
               center: clientToViewport(point.clientPoint, viewportRect),
               ...(typeof point.rotationDeg === "number" && Number.isFinite(point.rotationDeg) ? { rotationDeg: point.rotationDeg } : {})
             },

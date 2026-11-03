@@ -7,6 +7,7 @@ import { worldVector } from "../../coords/points.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldTransform } from "../../coords/transforms.js";
+import { worldTransform } from "../../coords/transforms.js";
 import {
   SHADOW_INHERIT_FILL,
   SHADOW_INHERIT_STROKE,
@@ -854,6 +855,16 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
       "invalid-yscale",
       (transform, factor) => multiplyMatrix(transform, scaleMatrix(1, factor))
     )
+  },
+  {
+    keys: ["xslant", "/tikz/xslant"],
+    handle: finiteNumberTransformHandler("invalid-xslant", (transform, factor) =>
+      multiplyMatrix(transform, worldTransform(1, 0, factor, 1, 0, 0)))
+  },
+  {
+    keys: ["yslant", "/tikz/yslant"],
+    handle: finiteNumberTransformHandler("invalid-yslant", (transform, factor) =>
+      multiplyMatrix(transform, worldTransform(1, factor, 0, 1, 0, 0)))
   },
   {
     keys: ["rotate"],

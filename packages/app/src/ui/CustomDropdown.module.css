@@ -4,36 +4,16 @@
 }
 
 .trigger {
-  width: 100%;
-  min-height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  border: 1px solid var(--border-light);
-  border-radius: 2px;
-  background: var(--bg-pane);
-  color: var(--text);
-  font-family: inherit;
-  font-size: calc(var(--app-ui-scale, 1) * 11px);
-  text-align: left;
-  cursor: pointer;
-  padding: 2px 5px;
-  touch-action: manipulation;
+  composes: popUp from "./controls.module.css";
 }
 
 .triggerEditable {
   cursor: text;
+  padding-right: 7px;
 }
 
 .triggerOpen {
-  border-color: var(--border);
-}
-
-.trigger:disabled {
-  color: var(--text-dim);
-  background: var(--btn-disabled-bg);
-  cursor: default;
+  box-shadow: 0 0 0 0.5px var(--control-ring), 0 0 0 3px color-mix(in srgb, var(--control-accent) 30%, transparent);
 }
 
 .triggerValue {
@@ -48,30 +28,19 @@
 }
 
 .triggerCaret {
-  color: var(--text-faint);
-  width: 12px;
-  height: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  composes: popUpIndicator from "./controls.module.css";
 }
 
 .triggerCaretIcon {
-  width: 12px;
-  height: 8px;
-  stroke: currentColor;
-  stroke-width: 1.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  fill: none;
+  composes: popUpIndicatorIcon from "./controls.module.css";
 }
 
 .menu {
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 0.5px solid color-mix(in srgb, var(--text) 22%, transparent);
+  border-radius: 6px;
   background-color: var(--bg-pane);
-  box-shadow: 0 4px 10px color-mix(in srgb, black 20%, transparent);
+  box-shadow: 0 6px 18px color-mix(in srgb, black 20%, transparent);
 }
 
 .menuFixed {
@@ -97,11 +66,11 @@
 
 .option {
   width: 100%;
-  min-height: 24px;
+  min-height: calc(var(--app-ui-scale, 1) * 22px);
   display: flex;
   align-items: center;
-  border: 1px solid transparent;
-  border-radius: 2px;
+  border: 0;
+  border-radius: 4px;
   background-color: transparent;
   color: var(--text);
   font-family: var(--font-ui);
@@ -113,13 +82,11 @@
 }
 
 .option:hover {
-  background: var(--btn-hover-bg);
-  border-color: var(--border-light);
+  background: color-mix(in srgb, var(--control-accent) 14%, transparent);
 }
 
 .optionSelected {
-  background: var(--accent-btn-bg);
-  border-color: var(--accent-btn-border);
+  background: color-mix(in srgb, var(--control-accent) 22%, transparent);
 }
 
 .separator {

@@ -26,13 +26,11 @@ import {
   arrowTipValueLabel,
   dashStylePreviewPreset,
   dashStyleValueLabel,
-  fillModeValueLabel,
   fillPatternPreviewPreset,
   fillPatternValueLabel,
   fillShadingValueLabel,
   isSelectableArrowTipValue,
   isSelectableDashStyleValue,
-  isSelectableFillModeValue,
   isSelectableFillPatternValue,
   isSelectableFillShadingValue,
   isSelectableLineCapValue,
@@ -53,7 +51,6 @@ import {
   shadowPresetValueLabel,
   toArrowTipDropdownOptions,
   toDashStyleDropdownOptions,
-  toFillModeDropdownOptions,
   toFillPatternDropdownOptions,
   toFillShadingDropdownOptions,
   toLineCapDropdownOptions,
@@ -412,7 +409,9 @@ export function renderPathMorphingDecorationDropdown(
   );
 }
 
-export function renderFillModeDropdown(
+// Solid / Gradient / Pattern as a segmented control. A mixed or custom mode
+// leaves every segment unselected.
+export function renderFillModeSegments(
   property: {
     label: string;
     value: FillModePresetId;
@@ -420,26 +419,33 @@ export function renderFillModeDropdown(
   },
   writable: boolean,
   onApply: (value: Exclude<FillModePresetId, "custom">) => void,
-  valueOverride?: FillModeDropdownValue,
-  valueClassName?: string
+  valueOverride?: FillModeDropdownValue
 ) {
-  const dropdownValue: FillModeDropdownValue = valueOverride ?? property.value;
-  const dropdownOptions = toFillModeDropdownOptions(property.options);
-  const displayLabel = fillModeValueLabel(dropdownValue, property.options);
+  const currentValue: FillModeDropdownValue = valueOverride ?? property.value;
   return (
-    <CustomDropdown
-      ariaLabel={property.label}
-      value={dropdownValue}
-      options={dropdownOptions}
-      disabled={!writable}
-      onChange={(nextValue) => {
-        if (!writable || !isSelectableFillModeValue(nextValue)) {
-          return;
-        }
-        onApply(nextValue);
-      }}
-      renderValue={() => <span className={valueClassName}>{displayLabel}</span>}
-    />
+    <div className={css.fillModeSegments} role="radiogroup" aria-label={property.label}>
+      {property.options.map((option) => {
+        const selected = option.value === currentValue;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            className={selected ? `${css.fillModeSegment} ${css.fillModeSegmentOn}` : css.fillModeSegment}
+            disabled={!writable}
+            onClick={() => {
+              if (!writable || selected) {
+                return;
+              }
+              onApply(option.value);
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

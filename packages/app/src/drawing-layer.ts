@@ -2,6 +2,7 @@ import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/doc
 import { beamerOverlayPicturesIn, scanBeamerDocument } from "@tikz-editor/core/beamer/index";
 import { createBeamerSyntaxContext } from "@tikz-editor/core/beamer/syntax";
 import type { BeamerFrameLayout } from "@tikz-editor/core/beamer/types";
+import type { TikzFragment } from "@tikz-editor/core/edit/fragment";
 import type { SessionSnapshot } from "./compute";
 
 /** The layer on a page a drawing tool opens: the last remembered one, else the last. */
@@ -30,7 +31,7 @@ export function deckDrawingLayerRootId(activeRootId: string | null, snapshot: Se
 }
 
 /** A new drawing layer: inserted at `at`, with what the preamble needs for it. */
-export type DrawingLayerInsertion = { at: number; text: string; preamble?: { at: number; text: string } | null };
+export type DrawingLayerInsertion = { at: number; text: TikzFragment; preamble?: { at: number; text: TikzFragment } | null };
 
 /** The source with a drawing layer inserted (`at` counts in the source without it). */
 export function insertDrawingLayer(source: string, insertion: DrawingLayerInsertion): string {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { fragment } from "./fragment-helpers.js";
 
 type MockRenderResult = {
   parse: {
@@ -311,7 +312,7 @@ describe("computeSnapshot edge orchestration", () => {
         {
           oldSpan: { from: 1, to: 2 },
           newSpan: { from: 1, to: 3 },
-          replacement: "xx"
+          replacement: fragment("xx")
         }
       ],
       patchBaseRevision: 1,

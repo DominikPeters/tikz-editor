@@ -1,4 +1,5 @@
 import { requireDefined } from "../../utils/invariants.js";
+import { enumerateTemplateText } from "./enumerate-template.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { parseTexTabular, tabularGroup } from "./tabular/parser.js";
 import type { TexTabular, TexTabularAssignmentFont, TexTabularRegisters } from "./tabular/types.js";
@@ -427,6 +428,7 @@ export interface SimpleTexEnvironmentBoundaryNode extends SimpleTexSourceRange {
   readonly text: string;
   readonly boundary: "begin" | "end";
   readonly name: SimpleTexEnvironmentName;
+  readonly enumerateTemplate?: string;
 }
 
 export interface SimpleTexItemNode extends SimpleTexSourceRange {
@@ -747,6 +749,7 @@ export type SimpleTexBlockItem =
   | SimpleTexPlaceholderBlockItem;
 
 export interface SimpleTexListContext {
+  readonly enumerateTemplate?: string;
   /** Distinguishes adjacent authored lists with the same kind and depth. */
   readonly listStart?: number;
   readonly kind: SimpleTexListKind;
@@ -921,6 +924,7 @@ const paragraphIrSeen = new TexWeightedLruCache<string, true>(1024, 512 * 1024);
 const PARAGRAPH_IR_MAX_SOURCE_LENGTH = 16384;
 
 export interface SimpleTexParagraphIrOptions {
+  readonly enumerateMiniTemplates?: boolean;
   readonly fontSizePt?: number;
   readonly baselineSkipPt?: number;
   readonly namedFontSizes?: Readonly<Record<string, { readonly sizePt: number; readonly baselineSkipPt: number }>>;
@@ -1306,6 +1310,7 @@ function buildSimpleTexParagraphIr(
       text,
       resolveColorAlias ? options?.colorResolverCacheKey : null,
       options?.listLeftMarginEmByDepth ?? null,
+      options?.enumerateMiniTemplates ?? false,
       [...(options?.bibliographyMargins ?? [])],
       options?.descriptionLabelWidthPt ?? null,
       [...(options?.descriptionLabelWidths ?? [])],
@@ -1538,6 +1543,8 @@ function scanSimpleTexIrNodes(
           text: text.slice(index, environmentBoundary.end),
           boundary: environmentBoundary.boundary,
           name: environmentBoundary.name,
+          ...(environmentBoundary.name === "enumerate" && option && enumerateTemplateText(text.slice(option.contentSpan.from, option.contentSpan.to), 1) !== null
+            ? { enumerateTemplate: text.slice(option.contentSpan.from, option.contentSpan.to) } : {}),
           sourceStart,
           sourceEnd: sourceOffset + environmentBoundary.end,
         });
@@ -4515,6 +4522,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
   let unsupportedCommand = false;
   const scanState = { aborted: false };
   interface ActiveSimpleTexList {
+    readonly enumerateTemplate?: string;
     readonly sourceStart: number;
     readonly kind: SimpleTexListKind;
     readonly depth: number;
@@ -4815,6 +4823,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     }
     return {
       kind: activeList.kind,
+      ...(activeList.enumerateTemplate !== undefined ? { enumerateTemplate: activeList.enumerateTemplate } : {}),
       depth: activeList.depth,
       labelDepth: activeList.labelDepth,
       itemIndex: activeList.itemIndex,
@@ -4830,7 +4839,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     };
   };
 
-  const beginList = (kind: SimpleTexListKind, sourceStart: number) => {
+  const beginList = (kind: SimpleTexListKind, sourceStart: number, enumerateTemplate?: string) => {
     const depth = currentQuoteDepth + listStack.length + 1;
     const labelDepth = listStack.filter((entry) => entry.kind === kind).length + 1;
     const margins =
@@ -4857,6 +4866,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     } as const;
     const fontState = listStack.at(-1)?.fontState;
     listStack.push({
+      ...(enumerateTemplate !== undefined ? { enumerateTemplate } : {}),
       sourceStart,
       kind,
       depth,
@@ -5104,7 +5114,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         } else if (isSimpleTexTrivlistEnvironmentName(node.name)) {
           scopeRole = beginTrivlist(node.name);
         } else if (isSimpleTexListEnvironmentName(node.name)) {
-          scopeRole = beginList(node.name, node.sourceStart);
+          scopeRole = beginList(node.name, node.sourceStart, options?.enumerateMiniTemplates ? node.enumerateTemplate : undefined);
           listTopologyStack.push({
             name: node.name,
             beginSpan: { from: node.sourceStart, to: node.sourceEnd },

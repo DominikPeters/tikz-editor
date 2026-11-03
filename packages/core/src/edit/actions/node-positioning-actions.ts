@@ -1,31 +1,31 @@
+import { EMPTY_FRAGMENT, layout, sliceFragment, tikz, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import type { NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import { worldPoint, type WorldPoint } from "../../coords/points.js";
-import { frameTransform, type FrameTransform } from "../../coords/transforms.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { resolveMatrixMode } from "../../semantic/nodes/matrix.js";
 import { parseDirectionalKey } from "../../semantic/path/node-positioning.js";
 import { normalizeOptionValue } from "../../semantic/path/shared.js";
 import type { EditHandlePositioningContext, EvaluateOptions, NodeAnchorTarget } from "../../semantic/types.js";
-import { worldToLocal, localToSourceUnits } from "../coords.js";
-import { CM_PER_PT, formatNumber } from "../format.js";
 import { normalizeOptionKey } from "../option-key.js";
 import { rewriteSourceBackedOptionListMutations, type OptionMutation } from "../option-mutations.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import { resolvePropertyTarget, type PropertyTarget, type PropertyTargetOptionsFormat } from "../property-target.js";
-import { rewritePositioningFromContext } from "../rewrite.js";
 import { collectSourceWorldBounds } from "../snapping/index.js";
 import { applyTextReplacements, parseStatementSnapshot, type TextReplacement } from "../statement-ops.js";
 import type { EditActionResult } from "../actions.js";
+import { createCoordinateWriter } from "../writer/index.js";
 
 export type PositionNodeRelativeToAction = {
   kind: "positionNodeRelativeTo";
   nodeId: string;
   targetNodeName: string;
   targetNodeSourceId: string;
+  /** Keep the node where it is instead of snapping to a cardinal direction. */
+  bypassSnapping?: boolean;
 };
 
 export type ConvertNodePositionToAbsoluteAction = {
@@ -68,7 +68,7 @@ const DIRECTION_ANCHORS: Record<PositioningDirection, { target: string; current:
   "below right": { target: "south east", current: "north west" }
 };
 
-const PLACEMENT_OPTION_KEYS = new Set(["at", "xshift", "yshift"]);
+const PLACEMENT_OPTION_KEYS = new Set(["at", "xshift", "yshift", "shift"]);
 const CARDINAL_SNAP_RATIO = 0.25;
 
 type NodeRef = {
@@ -128,10 +128,11 @@ export function preflightPositionNodeRelativeToAction(
     return unsupportedPreflight(placement.reason);
   }
 
-  const positioningEntry = rewritePositioningFromContext(placement.currentCenter, placement.context);
-  if (!positioningEntry) {
+  const written = createCoordinateWriter(source).positioning(placement.context, placement.currentCenter, { bypassSnapping: parseOptions.bypassSnapping === true });
+  if (written.kind !== "ok") {
     return unsupportedPreflight("Could not serialize relative positioning option.");
   }
+  const positioningEntry = written.fragment;
   if (hasNegativePositioningDistance(positioningEntry)) {
     return unsupportedPreflight("Selected target would require a negative positioning distance.");
   }
@@ -222,11 +223,10 @@ export function applyConvertNodePositionToAbsoluteAction(
     return { kind: "unsupported", reason: absolutePoint.reason };
   }
 
-  const { a, b, c, d, e, f } = positioningHandle.transform;
-  const coordinate = formatPlacementCoordinateFromWorld(
-    absolutePoint.world,
-    frameTransform(a, b, c, d, e, f)
-  );
+  // A new `at` is read where the node's placement is.
+  const written = createCoordinateWriter(source).point({ kind: "context", context: positioningHandle.siteContext }, absolutePoint.world);
+  if (written.kind !== "ok") return { kind: "unsupported", reason: `Cannot write the node's position: ${written.reason}.` };
+  const coordinate = written.fragment;
   const rewritten = rewriteNodePlacementSource({
     source,
     nodeRef: nodeResolution.nodeRef,
@@ -328,14 +328,27 @@ function resolveRelativePlacementContext(input: {
     center: currentCenter,
     bounds: boundsBySource.get(input.nodeSourceId) ?? null
   });
+  // What the evaluator recorded where the node was drawn beats anchors read
+  // off its bounds, which a rotated or round node does not have there.
+  const placement = currentHandle?.handleType === "coordinate" ? currentHandle.nodePlacement : undefined;
+  if (placement) {
+    currentAnchors.set("center", placement.drawnCenter);
+    for (const [anchor, offset] of Object.entries(placement.anchorOffsets)) {
+      currentAnchors.set(anchor, worldPoint(pt(placement.drawnCenter.x + offset.x), pt(placement.drawnCenter.y + offset.y)));
+    }
+  }
   const targetAnchors = resolveAnchorMap({
     anchorTargets: input.semantic.nodeAnchorTargets,
     nodeSourceId: input.targetNodeSourceId,
     center: targetCenter,
     bounds: boundsBySource.get(input.targetNodeSourceId) ?? null
   });
+  // The node's own `xshift`/`yshift` are removed with its placement, so the
+  // positioning has to put it where it is drawn, not where its `at` is; the
+  // anchor offsets are measured from there too.
+  const drawnCenter = currentAnchors.get("center") ?? currentCenter;
   const anchorOffsetsByDirection = buildAnchorOffsetsByDirection({
-    currentCenter,
+    currentCenter: drawnCenter,
     targetCenter,
     currentAnchors,
     targetAnchors,
@@ -347,18 +360,18 @@ function resolveRelativePlacementContext(input: {
 
   return {
     kind: "found",
-    currentCenter,
+    currentCenter: drawnCenter,
     context: {
-      direction: initialDirectionFromCenters(currentCenter, targetCenter),
+      direction: initialDirectionFromCenters(drawnCenter, targetCenter),
       targetNodeName: input.targetNodeName,
       targetCenter,
-      currentCenter,
+      currentCenter: drawnCenter,
       legacyOf: false,
       anchorOffsetsByDirection,
       targetAnchorHW: halfWidth(targetAnchors, targetCenter),
       targetAnchorHH: halfHeight(targetAnchors, targetCenter),
-      currentAnchorHW: halfWidth(currentAnchors, currentCenter),
-      currentAnchorHH: halfHeight(currentAnchors, currentCenter)
+      currentAnchorHW: halfWidth(currentAnchors, drawnCenter),
+      currentAnchorHH: halfHeight(currentAnchors, drawnCenter)
     }
   };
 }
@@ -390,10 +403,10 @@ function rewriteNodePlacementSource(input: {
   source: string;
   nodeRef: NodeRef;
   target: PropertyTarget;
-  placementEntry: string | null;
-  insertAbsoluteAt: string | null;
+  placementEntry: TikzFragment | null;
+  insertAbsoluteAt: TikzFragment | null;
   removeInlineAt: boolean;
-}): { source: string; patches: ReturnType<typeof applyTextReplacements>["patches"] } | null {
+}): { source: EditedSource; patches: ReturnType<typeof applyTextReplacements>["patches"] } | null {
   const replacements: TextReplacement[] = [];
 
   const nodeOptions = input.nodeRef.node.options;
@@ -426,7 +439,7 @@ function rewriteNodePlacementSource(input: {
   if (input.removeInlineAt) {
     const removal = resolveInlineAtRemovalSpan(input.source, input.nodeRef);
     if (removal) {
-      replacements.push({ span: removal, text: "" });
+      replacements.push({ span: removal, text: EMPTY_FRAGMENT });
     }
   }
 
@@ -455,7 +468,7 @@ function rewriteNodePlacementSource(input: {
 
 function buildPlacementMutations(
   options: OptionListAst,
-  placementEntry: string | null
+  placementEntry: TikzFragment | null
 ): Map<string, OptionMutation> {
   const mutations = new Map<string, OptionMutation>();
   for (const entry of options.entries) {
@@ -467,7 +480,8 @@ function buildPlacementMutations(
   if (placementEntry) {
     const equalsIndex = placementEntry.indexOf("=");
     const key = normalizeOptionKey(equalsIndex >= 0 ? placementEntry.slice(0, equalsIndex) : placementEntry);
-    const value = equalsIndex >= 0 ? placementEntry.slice(equalsIndex + 1).trim() : "";
+    const raw = equalsIndex >= 0 ? sliceFragment(placementEntry, equalsIndex + 1) : EMPTY_FRAGMENT;
+    const value = sliceFragment(raw, raw.length - raw.trimStart().length, raw.trimEnd().length);
     mutations.set(key, { kind: "set", value });
   }
   return mutations;
@@ -488,15 +502,15 @@ function optionEntryKey(entry: OptionEntry): string | null {
   return normalizeOptionKey(entry.key);
 }
 
-function wrapSerializedOptions(content: string, format: PropertyTargetOptionsFormat): string {
+function wrapSerializedOptions(content: TikzFragment, format: PropertyTargetOptionsFormat): TikzFragment {
   switch (format) {
     case "bare":
       return content;
     case "braced":
-      return `{${content}}`;
+      return tikz`{${content}}`;
     case "bracketed":
     default:
-      return `[${content}]`;
+      return tikz`[${content}]`;
   }
 }
 
@@ -763,12 +777,12 @@ function findPlacementOption(options: OptionListAst | undefined, key: string): O
   return null;
 }
 
-function buildInlineAtInsertion(source: string, offset: number, coordinate: string): string {
+function buildInlineAtInsertion(source: string, offset: number, coordinate: TikzFragment): TikzFragment {
   const previous = offset > 0 ? source[offset - 1] ?? "" : "";
   const next = offset < source.length ? source[offset] ?? "" : "";
   const leading = previous && !/\s/u.test(previous) ? " " : "";
   const trailing = next && !/\s/u.test(next) && next !== ";" ? " " : "";
-  return `${leading}at ${coordinate}${trailing}`;
+  return tikz`${layout(leading)}at ${coordinate}${layout(trailing)}`;
 }
 
 function resolveInlineAtInsertionOffset(source: string, node: NodeItem): number {
@@ -776,17 +790,6 @@ function resolveInlineAtInsertionOffset(source: string, node: NodeItem): number 
     return node.textSpan.from - 1;
   }
   return node.textSpan.from;
-}
-
-function formatPlacementCoordinateFromWorld(world: WorldPoint, transform?: FrameTransform): string {
-  if (transform) {
-    const local = worldToLocal(world, transform);
-    if (local) {
-      const inSourceUnits = localToSourceUnits(local);
-      return `(${formatNumber(inSourceUnits.x)},${formatNumber(inSourceUnits.y)})`;
-    }
-  }
-  return `(${formatNumber(world.x * CM_PER_PT)},${formatNumber(world.y * CM_PER_PT)})`;
 }
 
 function hasPathAttachment(elements: ReturnType<typeof evaluateTikzFigure>["scene"]["elements"], sourceId: string): boolean {

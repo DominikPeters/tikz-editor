@@ -1,6 +1,7 @@
 import { requireDocumentSession } from "../packages/app/src/store/document-sessions.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { wp } from "./coords-helpers.js";
+import { editedSource, fragment } from "./fragment-helpers.js";
 
 async function loadStoreWithMemoryPersistence(seed?: string): Promise<{
   map: Map<string, string>;
@@ -178,11 +179,11 @@ describe("editor store persistence decisions", () => {
       precomputedSource: state.source,
       precomputedResult: {
         kind: "success",
-        newSource: "committed edit",
+        newSource: editedSource("committed edit"),
         patches: [{
           oldSpan: { from: 0, to: state.source.length },
           newSpan: { from: 0, to: "committed edit".length },
-          replacement: "committed edit"
+          replacement: fragment("committed edit")
         }],
         changedSourceIds: ["path:0"]
       }

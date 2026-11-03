@@ -1,3 +1,4 @@
+import { EMPTY_FRAGMENT, joinFragments, sliceFragment, tikz, unchangedSource, userText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { NodeItem, PathItem, Span, Statement } from "../../ast/types.js";
@@ -49,16 +50,16 @@ export function applyDeleteElementsAction(
     return b.span.to - a.span.to;
   });
 
-  let currentSource = source;
+  let currentSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
 
   for (const target of sorted) {
     const span = normalizeDeleteSpan(currentSource, target.span, target.scope);
-    const updated = replaceSpan(currentSource, span, "");
+    const updated = replaceSpan(currentSource, span, EMPTY_FRAGMENT);
     patches.push({
       oldSpan: span,
       newSpan: updated.changedSpan,
-      replacement: ""
+      replacement: EMPTY_FRAGMENT
     });
     currentSource = updated.source;
   }
@@ -87,7 +88,7 @@ export function applyDeleteAdornmentAction(
   }
 
   const deleteSpan = normalizeAdornmentDeleteSpan(source, resolved.target.optionSpan);
-  const updated = replaceSpan(source, deleteSpan, "");
+  const updated = replaceSpan(source, deleteSpan, EMPTY_FRAGMENT);
   return {
     kind: "success",
     newSource: updated.source,
@@ -96,7 +97,7 @@ export function applyDeleteAdornmentAction(
       {
         oldSpan: deleteSpan,
         newSpan: updated.changedSpan,
-        replacement: ""
+        replacement: EMPTY_FRAGMENT
       }
     ],
     changedSourceIds: [requireDefined(resolved.target.ownerSourceId, "Missing required resolved.target.ownerSourceId")]
@@ -271,9 +272,9 @@ function pruneFitReferencesAfterDelete(
   source: string,
   deletedNodeNames: ReadonlySet<string>,
   parseOptions: EditParseOptions
-): { source: string; patches: SourcePatch[]; changedSourceIds: string[] } {
+): { source: EditedSource; patches: SourcePatch[]; changedSourceIds: string[] } {
   if (deletedNodeNames.size === 0) {
-    return { source, patches: [], changedSourceIds: [] };
+    return { source: unchangedSource(source), patches: [], changedSourceIds: [] };
   }
 
   const parsed = parseTikzForEdit(source, {
@@ -287,7 +288,7 @@ function pruneFitReferencesAfterDelete(
     fitNodeIds.add(node.id);
   }
 
-  let currentSource = source;
+  let currentSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
   const changedSourceIds = new Set<string>();
   for (const fitNodeId of fitNodeIds) {
@@ -303,7 +304,8 @@ function pruneFitReferencesAfterDelete(
       continue;
     }
 
-    const nextFitValue = pruneFitValueRaw(fitEntry.valueRaw, deletedNodeNames);
+    // The value is what the user authored in the node's `fit` option.
+    const nextFitValue = pruneFitValueRaw(userText(fitEntry.valueRaw, "source-editor"), deletedNodeNames);
     if (nextFitValue.kind === "unchanged") {
       continue;
     }
@@ -325,9 +327,9 @@ function pruneFitReferencesAfterDelete(
 }
 
 function pruneFitValueRaw(
-  valueRaw: string,
+  valueRaw: TikzFragment,
   deletedNodeNames: ReadonlySet<string>
-): { kind: "unchanged" } | { kind: "changed"; value: string | null } {
+): { kind: "unchanged" } | { kind: "changed"; value: TikzFragment | null } {
   const trimmed = valueRaw.trim();
   if (trimmed.length === 0) {
     return { kind: "unchanged" };
@@ -338,7 +340,7 @@ function pruneFitValueRaw(
     return { kind: "unchanged" };
   }
 
-  const kept = tokens.filter((token) => !fitTokenReferencesDeletedNode(token, deletedNodeNames));
+  const kept = tokens.filter((token) => !fitTokenReferencesDeletedNode(wrapped.content.slice(token.from, token.to), deletedNodeNames));
   if (kept.length === tokens.length) {
     return { kind: "unchanged" };
   }
@@ -346,10 +348,15 @@ function pruneFitValueRaw(
     return { kind: "changed", value: null };
   }
 
-  const compact = kept.join(" ");
+  // The tokens are the value's own text, found by offset from where the trimmed content starts.
+  const contentStart = valueRaw.length - valueRaw.trimStart().length + (wrapped.hadOuterBraces ? 1 : 0);
+  const compact = joinFragments(
+    kept.map((token) => sliceFragment(valueRaw, contentStart + token.from, contentStart + token.to)),
+    tikz` `
+  );
   return {
     kind: "changed",
-    value: wrapped.hadOuterBraces ? `{${compact}}` : compact
+    value: wrapped.hadOuterBraces ? tikz`{${compact}}` : compact
   };
 }
 
@@ -367,8 +374,8 @@ function fitTokenReferencesDeletedNode(tokenRaw: string, deletedNodeNames: Reado
   return baseName.length > 0 && deletedNodeNames.has(baseName);
 }
 
-function extractTopLevelCoordinateTokens(raw: string): string[] {
-  const tokens: string[] = [];
+function extractTopLevelCoordinateTokens(raw: string): Span[] {
+  const tokens: Span[] = [];
   let start = -1;
   let depth = 0;
   for (let index = 0; index < raw.length; index += 1) {
@@ -391,7 +398,7 @@ function extractTopLevelCoordinateTokens(raw: string): string[] {
       }
       depth -= 1;
       if (depth === 0 && start >= 0) {
-        tokens.push(raw.slice(start, index + 1));
+        tokens.push({ from: start, to: index + 1 });
         start = -1;
       }
     }

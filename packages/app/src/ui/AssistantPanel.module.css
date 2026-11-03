@@ -2,14 +2,12 @@
   background: var(--bg-pane);
 }
 
+/* A toolbar row; the dock tab already names the panel. */
 .header {
-  background: var(--bg-pane);
+  background: transparent;
   height: auto;
   padding: 6px 10px;
-}
-
-.title {
-  font-weight: 700;
+  justify-content: flex-end;
 }
 
 .headerButton {
@@ -232,8 +230,8 @@
 }
 
 .composer textarea:focus {
-  outline: 1px solid var(--accent);
-  border-color: var(--accent);
+  outline: 1px solid var(--control-accent);
+  border-color: var(--control-accent);
 }
 
 .attachments {
@@ -324,7 +322,7 @@
 }
 
 .authButton:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--tab-selected-bg) 60%, transparent);
 }
 
 .authButton:disabled {
@@ -359,7 +357,7 @@
 }
 
 .authButtonLarge:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--tab-selected-bg) 60%, transparent);
 }
 
 .authButtonLarge:disabled {
@@ -386,7 +384,7 @@
   width: 12px;
   height: 12px;
   border: 2px solid var(--border-light);
-  border-top-color: var(--accent);
+  border-top-color: var(--control-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   flex-shrink: 0;
@@ -413,7 +411,7 @@
 }
 
 .modelOptionSelected {
-  background: color-mix(in srgb, var(--accent-btn-bg) 68%, white);
+  background: color-mix(in srgb, var(--control-accent) 12%, var(--bg-pane));
 }
 
 .composerAction {
@@ -432,7 +430,7 @@
 }
 
 .composerAction:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--tab-selected-bg) 60%, transparent);
 }
 
 .composerAction:disabled {
@@ -484,7 +482,7 @@
 }
 
 .installButton:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--tab-selected-bg) 60%, transparent);
 }
 
 .installButton:disabled {
@@ -496,7 +494,7 @@
   width: 10px;
   height: 10px;
   border: 1.5px solid var(--border-light);
-  border-top-color: var(--accent);
+  border-top-color: var(--control-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   flex-shrink: 0;

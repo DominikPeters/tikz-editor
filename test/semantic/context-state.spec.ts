@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { frameToWorldTransform, worldTransform } from "../../packages/core/src/coords/transforms.js";
-import { flp, wb, wp } from "../coords-helpers.js";
+import { flp, wb, wp, testSiteContext, UNITLESS_SPELLING } from "../coords-helpers.js";
 import {
   applyStatementEffectSummary,
   beginStatementEffectTracking,
@@ -213,6 +213,8 @@ function makeEditHandle(id: string, sourceFingerprint: string): EditHandle {
     world: wp(0, 0),
     local: flp(0, 0),
     frame: frameToWorldTransform(1, 0, 0, 1, 0, 0),
+    siteContext: testSiteContext(frameToWorldTransform(1, 0, 0, 1, 0, 0)),
+    spelling: UNITLESS_SPELLING,
     transform: worldTransform(1, 0, 0, 1, 0, 0),
     sourceText: "",
     coordinateForm: "cartesian",

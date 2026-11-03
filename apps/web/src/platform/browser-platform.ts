@@ -95,6 +95,7 @@ const ACCEPT_PPTX_TYPES = [
     }
   }
 ];
+const ACCEPT_GRAPHICS_TYPES = [{ description: "Images and PDF", accept: { "image/png": [".png"], "image/jpeg": [".jpg", ".jpeg"], "image/svg+xml": [".svg"], "application/pdf": [".pdf"] } }];
 
 function createHandleId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -144,7 +145,9 @@ function createIndexedDbHandleStore(): FsHandleStore {
         const tx = db.transaction(storeName, mode);
         const store = tx.objectStore(storeName);
         const request = run(store);
-        request.onsuccess = () => { resolve(request.result); };
+        tx.oncomplete = () => { resolve(request.result); };
+        tx.onabort = () => { reject(tx.error ?? new Error("IndexedDB transaction was aborted.")); };
+        tx.onerror = () => { reject(tx.error ?? new Error("IndexedDB transaction failed.")); };
         request.onerror = () => { reject(request.error ?? new Error("IndexedDB request failed.")); };
       });
     } finally {
@@ -272,8 +275,8 @@ function openTextFileWithInput(): Promise<{ source: string; fileRef: DocumentFil
   return openFileWithInput(".tex,.tikz,.txt,.svg,.ipe,text/plain,image/svg+xml", async (file) => ({ source: await file.text() }));
 }
 
-function openBinaryFileWithInput(): Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef } | null> {
-  return openFileWithInput(".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation", async (file) => ({ bytes: await file.arrayBuffer() }));
+function openBinaryFileWithInput(graphics = false): Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef } | null> {
+  return openFileWithInput(graphics ? ".png,.jpg,.jpeg,.svg,.pdf,image/png,image/jpeg,image/svg+xml,application/pdf" : ".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation", async (file) => ({ bytes: await file.arrayBuffer() }));
 }
 
 function downloadTextFile(text: string, fileName: string): boolean {
@@ -388,14 +391,14 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
     }
   }
 
-  async function openBinaryViaFsApi(): Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef } | null | undefined> {
+  async function openBinaryViaFsApi(graphics = false): Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef } | null | undefined> {
     if (!fsApi?.showOpenFilePicker) {
       return undefined;
     }
     try {
       const handles = await fsApi.showOpenFilePicker({
         multiple: false,
-        types: ACCEPT_PPTX_TYPES
+        types: graphics ? ACCEPT_GRAPHICS_TYPES : ACCEPT_PPTX_TYPES
       });
       const handle = handles[0];
       if (!handle) {
@@ -630,12 +633,22 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
         }
         return await openTextFileWithInput();
       },
-      openBinary: async () => {
-        const fsResult = await openBinaryViaFsApi();
+      openBinary: async (options) => {
+        const fsResult = await openBinaryViaFsApi(options?.kind === "graphics");
         if (fsResult !== undefined) {
           return fsResult;
         }
-        return await openBinaryFileWithInput();
+        return await openBinaryFileWithInput(options?.kind === "graphics");
+      },
+      ...(fsHandleStore ? { storeGraphicAsset: async ({ path, bytes }: { path: string; bytes: ArrayBuffer }) => {
+        await fsHandleStore.save(`graphic:${path}`, new Uint8Array(bytes));
+      } } : {}),
+      readLocalAsset: async path => {
+        const asset = path.startsWith("__tikz_assets__/") ? await fsHandleStore?.load(`graphic:${path}`) : null;
+        if (!(asset instanceof Uint8Array)) return { status: "missing", path };
+        let binary = "";
+        for (const byte of asset) binary += String.fromCharCode(byte);
+        return { status: "ok", path, bytesBase64: btoa(binary), size: asset.byteLength, revision: path };
       },
       saveText: async (text, options) => {
         const mode = options?.mode ?? "save";

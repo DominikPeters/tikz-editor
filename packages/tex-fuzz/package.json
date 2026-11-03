@@ -1,6 +1,6 @@
 {
   "name": "@tikz-editor/tex-fuzz",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@tikz-editor/core": "0.6.0"
+    "@tikz-editor/core": "1.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",

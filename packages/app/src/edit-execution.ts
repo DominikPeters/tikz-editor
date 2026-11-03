@@ -1,5 +1,5 @@
 import { applyEditAction, type EditAction, type EditActionResult } from "@tikz-editor/core/edit/actions";
-import { applyDeckEditAction, beamerOverlayPicturesIn, isDeckEditAction, scanBeamerDocument, type DeckEditAction } from "@tikz-editor/core/beamer/index";
+import { applyDeckEditAction, applyDeckDocumentEditAction, beamerOverlayPicturesIn, isDeckDocumentEditAction, isDeckEditAction, scanBeamerDocument, type DeckEditAction } from "@tikz-editor/core/beamer/index";
 import { createBeamerSyntaxContext } from "@tikz-editor/core/beamer/syntax";
 import { createEditGeometrySession, type EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
@@ -9,6 +9,7 @@ import { maskSourceOutsideSpan, maskTikzPictureSource } from "@tikz-editor/core/
 import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { applySourcePatches, composeSourcePatches } from "@tikz-editor/core/edit/source-patches";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
+import { editedSlice, EMPTY_FRAGMENT } from "@tikz-editor/core/edit/fragment";
 import { drawingLayerOffset, insertDrawingLayer } from "./drawing-layer";
 import { buildEditParseOptions } from "./edit-parse-options";
 import { documentKindForSource } from "./store/workspace-state";
@@ -42,6 +43,7 @@ export function executeDocumentEdit(
   const nested = documentKindForSource(source) === "beamer" && (ref?.kind === "beamer-frame-tikz" || slideOverlay);
   const deck = documentKindForSource(source) === "beamer" && ref?.kind !== "beamer-frame-tikz";
   if (isDeckEditAction(action)) {
+    if (deck && isDeckDocumentEditAction(action)) return applyDeckDocumentEditAction(source, action);
     const frame = snapshot.deck?.activeFrame;
     return deck && frame && snapshot.source === source
       ? applyDeckEditAction(source, frame.layout, action)
@@ -92,7 +94,7 @@ export function executeDocumentEdit(
       const parsed = parseTikz(maskSourceOutsideSpan(replay.source, editedSpan), { recover: true });
       if (onlyEmptyScopes(parsed.figure.body) && !parsed.diagnostics.some(diagnostic => diagnostic.severity === "error")) {
         const removal = beamerDrawingLayerRemovalSpan(replay.source, editedSpan);
-        const removalPatch = { oldSpan: removal, newSpan: { from: removal.from, to: removal.from }, replacement: "" };
+        const removalPatch = { oldSpan: removal, newSpan: { from: removal.from, to: removal.from }, replacement: EMPTY_FRAGMENT };
         const removed = applySourcePatches(replay.source, [removalPatch]);
         if (removed.kind === "success") {
           const removedResult = { ...result, newSource: removed.source,
@@ -111,7 +113,7 @@ export function executeDocumentEdit(
   if (result.patches.some((patch) => patch.oldSpan.from < layerAt || patch.oldSpan.to > end)) {
     return { kind: "error", message: "The figure edit did not apply cleanly." };
   }
-  const replacement = replay.source.slice(layerAt, end + replay.source.length - working.length);
+  const replacement = editedSlice(replay.source, layerAt, end + replay.source.length - working.length);
   let patches: SourcePatch[] = [{ oldSpan: { from: insertion.at, to: insertion.at }, newSpan: { from: insertion.at, to: insertion.at + replacement.length }, replacement }];
   const preamble = insertion.preamble;
   if (preamble) {

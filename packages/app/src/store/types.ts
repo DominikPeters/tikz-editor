@@ -11,6 +11,7 @@ import type {
   AssistantTurnStatus
 } from "../platform/types";
 import type { DocumentKind } from "@tikz-editor/core/document/kind";
+import type { CanvasViewPreferences } from "./canvas-view-preferences";
 
 export type ToolMode =
   | "select"
@@ -156,7 +157,7 @@ export type DocumentSession = {
   lastEditChangedSourceIds: string[] | null;
   lastEditChangeToken: number;
   /** Source patches from the most recent WYSIWYG edit action (for surgical CodeMirror updates). */
-  lastEditPatches: ReadonlyArray<{ oldSpan: { from: number; to: number }; newSpan: { from: number; to: number }; replacement: string }> | null;
+  lastEditPatches: ReadonlyArray<SourcePatch> | null;
   /** Source revision that `lastEditPatches` are based on. */
   lastEditPatchBaseRevision: number | null;
   /** Last warning surfaced by edit-action dispatch (unsupported/error/partial fallback). */
@@ -237,6 +238,8 @@ export type DeckObjectSelection = {
 };
 
 export type WorkspaceEphemeralState = {
+  /** Persisted separately from documents and named panel layouts. */
+  canvasViewPreferences: CanvasViewPreferences;
   // ── canvas slice ─────────────────────────────────────────────────────────────
   toolMode: ToolMode;
   canvasTransform: CanvasTransform;
@@ -249,10 +252,8 @@ export type WorkspaceEphemeralState = {
   activeCanvasTextEditSourceId: string | null;
   /** Structural mask for the active canvas text-editing session (see type). */
   canvasTextEditMask: CanvasTextEditMask | null;
-  showGrid: boolean;
   showTransparencyGrid: boolean;
   snapModes: SnapModes;
-  showRulers: boolean;
   showGuides: boolean;
   showDocumentBounds: boolean;
   freehandSmoothingPx: number;
@@ -316,7 +317,7 @@ export type EditorState = {
   /** Monotonic token incremented when `lastEditChangedSourceIds` is updated. */
   lastEditChangeToken: number;
   /** Source patches from the most recent WYSIWYG edit action (for surgical CodeMirror updates). */
-  lastEditPatches: ReadonlyArray<{ oldSpan: { from: number; to: number }; newSpan: { from: number; to: number }; replacement: string }> | null;
+  lastEditPatches: ReadonlyArray<SourcePatch> | null;
   /** Source revision that `lastEditPatches` are based on. */
   lastEditPatchBaseRevision: number | null;
   /** Last warning surfaced by edit-action dispatch (unsupported/error/partial fallback). */
@@ -341,6 +342,7 @@ export type EditorState = {
   recentDocumentIds: string[];
 
   // ── canvas slice ─────────────────────────────────────────────────────────────
+  canvasViewPreferences: CanvasViewPreferences;
   toolMode: ToolMode;
   canvasTransform: CanvasTransform;
   hoveredElementId: string | null;

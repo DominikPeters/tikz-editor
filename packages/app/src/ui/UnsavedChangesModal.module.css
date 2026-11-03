@@ -1,13 +1,18 @@
 .message {
   margin: 0;
-  font-size: calc(var(--app-ui-scale, 1) * 12px);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
   line-height: 1.4;
   color: var(--text);
 }
 
+:global(html[data-desktop-os="windows"]) .message {
+  font-size: calc(var(--app-ui-scale, 1) * 12px);
+}
+
 .list {
-  margin: 0;
+  margin: 8px 0 0;
   padding-left: 20px;
+  text-align: left;
   max-height: 180px;
   overflow: auto;
   font-size: calc(var(--app-ui-scale, 1) * 12px);

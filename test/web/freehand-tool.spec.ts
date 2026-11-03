@@ -4,13 +4,20 @@ import {
   appendFreehandToolPoint,
   catmullRomToBezierSegments,
   createFreehandToolDraft,
-  generateFreehandToolSource,
+  freehandToolPath,
   resolveFreehandPreviewSegments,
   simplifyFreehandPoints
 } from "../../packages/app/src/ui/canvas-panel/freehand-tool.js";
-import { wp } from "../coords-helpers.js";
+import { identityPoints, wp } from "../coords-helpers.js";
+import { generateComplexPathSource } from "../../packages/core/src/edit/element-templates.js";
 
 const cm = (value: number): number => value * PT_PER_CM;
+
+/** The freehand path as the core writes it in a picture without options. */
+function generateFreehandToolSource(draft: Parameters<typeof freehandToolPath>[0], zoom: number, smoothing: number, options: { strokeColor?: string } = {}): string | null {
+  const path = freehandToolPath(draft, zoom, smoothing);
+  return path && generateComplexPathSource(path.start, path.segments, options, identityPoints);
+}
 
 describe("freehand-tool", () => {
   it("decimates live points with a minimum spacing threshold", () => {

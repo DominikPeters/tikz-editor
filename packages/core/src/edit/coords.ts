@@ -1,8 +1,5 @@
-import type { FrameLocalPoint, FrameLocalVector, SourceCmPoint, WorldPoint, WorldVector } from "../coords/points.js";
-import { cm } from "../coords/scalars.js";
-import { sourceCmPoint } from "../coords/points.js";
+import type { FrameLocalPoint, FrameLocalVector, WorldPoint, WorldVector } from "../coords/points.js";
 import type { FrameTransform } from "../coords/transforms.js";
-import { ptToCm } from "../coords/source.js";
 import { worldToFrameLocal, worldVectorToFrameLocal } from "../coords/frame.js";
 
 /**
@@ -21,13 +18,5 @@ export function worldVectorToFrameLocalPoint(delta: WorldVector, transform: Fram
   return worldVectorToFrameLocal(delta, transform);
 }
 
-/**
- * Convert local coordinates (TeX points) to source units (cm).
- */
-export function frameLocalPtToSourceCmPoint(local: Pick<FrameLocalPoint, "x" | "y"> | Pick<FrameLocalVector, "x" | "y">): SourceCmPoint {
-  return sourceCmPoint(cm(ptToCm(local.x)), cm(ptToCm(local.y)));
-}
-
 export const worldToLocal = worldToFrameLocalPoint;
 export const worldDeltaToLocalDelta = worldVectorToFrameLocalPoint;
-export const localToSourceUnits = frameLocalPtToSourceCmPoint;

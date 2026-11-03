@@ -10,25 +10,27 @@ export function UnsavedChangesModal({
   documentTitles: string[];
   onChoose: (decision: UnsavedChangesDecision) => void;
 }) {
-  const label =
+  // Asked as a question, as AppKit and WinUI phrase it.
+  const question =
     documentTitles.length === 1
-      ? `The document "${documentTitles[0]}" has unsaved changes.`
-      : `${documentTitles.length} documents have unsaved changes.`;
+      ? `Do you want to save the changes made to “${documentTitles[0]}”?`
+      : `Do you want to save the changes to ${documentTitles.length} documents?`;
 
   return (
     <Modal
       onClose={() => { onChoose("cancel"); }}
       closeOnBackdrop={false}
       size="sm"
+      alert
       labelledBy="unsaved-changes-title"
       dataTestId="unsaved-changes-modal"
     >
       <Modal.Header
-        title="Unsaved Changes"
+        title={question}
         titleId="unsaved-changes-title"
       />
       <Modal.Body>
-        <p className={css.message} data-select="text">{label}</p>
+        <p className={css.message} data-select="text">Your changes will be lost if you don’t save them.</p>
         {documentTitles.length > 1 ? (
           <ul className={css.list} data-select="text">
             {documentTitles.map((title, index) => (

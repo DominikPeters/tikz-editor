@@ -158,13 +158,14 @@ export function BuildsPanel() {
 
   return (
     <SidePanel className={inspector.panel ?? ""}>
-      <SidePanel.Header>
-        Overlays
-        {model && model.stepCount > PAGE_SIZE ? <div className={inspector.multiArrangeGroup}>
+      {/* The tab already names the panel; the header only appears to page through long step lists. */}
+      {model && model.stepCount > PAGE_SIZE ? <SidePanel.Header>
+        Steps
+        <div className={inspector.multiArrangeGroup}>
           <button type="button" className={inspector.multiArrangeIconButton} aria-label="Earlier overlay steps" title="Earlier overlay steps" disabled={page === 0} onClick={() => { setPageOverride(page - 1); }}><RiArrowLeftSLine size={14} /></button>
           <button type="button" className={inspector.multiArrangeIconButton} aria-label="Later overlay steps" title="Later overlay steps" disabled={(page + 1) * PAGE_SIZE >= model.stepCount} onClick={() => { setPageOverride(page + 1); }}><RiArrowRightSLine size={14} /></button>
-        </div> : null}
-      </SidePanel.Header>
+        </div>
+      </SidePanel.Header> : null}
       <SidePanel.Content className={css.content ?? ""}>
         {!model ? <p className={inspector.hint}>Select a slide to view its overlays.</p>
           : model.rows.length === 0 ? <p className={inspector.hint}>No overlays on this slide.</p>

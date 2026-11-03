@@ -9,7 +9,7 @@ import { computeSourceFingerprint } from "../packages/core/src/utils/source-fing
 import { makeEmptySnapshot, type SessionSnapshot } from "../packages/app/src/compute.js";
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 import { PT_PER_CM } from "../packages/core/src/edit/format.js";
-import { wp } from "./coords-helpers.js";
+import { wp, testSiteContext, UNITLESS_SPELLING } from "./coords-helpers.js";
 
 // Positional ids can change while the canvas still displays an older scene.
 // These fixtures publish a ready snapshot through the real identity lifecycle
@@ -214,6 +214,8 @@ function makeHandle(
     world,
     local: rest.local ?? world,
     frame: rest.frame ?? transform,
+    siteContext: testSiteContext(rest.frame ?? transform),
+    spelling: UNITLESS_SPELLING,
     transform,
     sourceText: source.slice(sourceSpan.from, sourceSpan.to),
     coordinateForm: "cartesian",

@@ -844,7 +844,9 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
           canvasTransform.scale,
           ROTATE_HANDLE_OFFSET_PX
         );
-        displays.push({
+        // First, so resize handles draw over its stem: the stem runs from the
+        // top-middle resize handle, which a press would otherwise miss.
+        displays.unshift({
           key: `node-handle:${rotateHandleSourceId}:rotate`,
           point: rotateHandlePosition.handleSvg,
           anchor: rotateHandlePosition.anchorSvg,

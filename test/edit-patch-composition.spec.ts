@@ -1,7 +1,8 @@
 import { expect, it } from "vitest";
 import { applySourcePatches, composeSourcePatches } from "../packages/core/src/edit/source-patches.js";
 import type { SourcePatch } from "../packages/core/src/edit/types.js";
-const patch = (from: number, to: number, replacement: string): SourcePatch => ({ oldSpan: { from, to }, newSpan: { from, to: from + replacement.length }, replacement });
+import { fragment } from "./fragment-helpers.js";
+const patch = (from: number, to: number, replacement: string): SourcePatch => ({ oldSpan: { from, to }, newSpan: { from, to: from + replacement.length }, replacement: fragment(replacement) });
 
 it("preserves untouched gaps between sequential edits", () => {
   const source = "first; unchanged; last;";

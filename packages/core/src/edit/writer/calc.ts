@@ -1,20 +1,24 @@
-import { requireArrayValue } from "../utils/collections.js";
-import type { CalcCoordinateEditHandle } from "../semantic/types.js";
-import type { WorldPoint } from "../coords/points.js";
-import { worldVector } from "../coords/points.js";
-import { pt } from "../coords/scalars.js";
-import { ptToCm } from "../coords/source.js";
-import { parseCoordinate } from "../domains/coordinates/parse.js";
-import { parseLength } from "../semantic/coords/parse-length.js";
-import { worldDeltaToLocalDelta } from "./coords.js";
-import { formatNumber } from "./format.js";
+import { requireArrayValue } from "../../utils/collections.js";
+import type { CalcCoordinateEditHandle } from "../../semantic/types.js";
+import type { WorldPoint } from "../../coords/points.js";
+import { worldVector } from "../../coords/points.js";
+import { pt } from "../../coords/scalars.js";
+import { ptToCm } from "../../coords/source.js";
+import { parseCoordinate } from "../../domains/coordinates/parse.js";
+import { parseLength } from "../../semantic/coords/parse-length.js";
+import { worldDeltaToLocalDelta } from "../coords.js";
+import { formatNumber } from "../format.js";
 
 const NUMBER = String.raw`[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?`;
 const SCALAR = new RegExp(`^(\\s*)(${NUMBER})(cm|mm|pt|bp|pc|in|dd|cc|sp)?(\\s*)$`, "u");
 const CARTESIAN = /^\(([^(),]+),([^(),]+)\)$/u;
 
-/** Translate a calc expression without flattening its named references or math. */
-export function rewriteCalcCoordinate(newWorld: WorldPoint, handle: CalcCoordinateEditHandle, source: string): string | null {
+/**
+ * Writer-internal: a calc expression translated without flattening its
+ * named references or math. The offset is read in the handle's frame; it
+ * goes into the expression's last plain term, or a new `+(…)` after it.
+ */
+export function writeCalcCoordinate(newWorld: WorldPoint, handle: CalcCoordinateEditHandle, source: string): string | null {
   const delta = worldDeltaToLocalDelta(worldVector(pt(newWorld.x - handle.world.x), pt(newWorld.y - handle.world.y)), handle.frame);
   if (!delta || !Number.isFinite(delta.x) || !Number.isFinite(delta.y)) return null;
   const raw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);

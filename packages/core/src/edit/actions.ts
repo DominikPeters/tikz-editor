@@ -1,3 +1,4 @@
+import { editedSlice, tikz, unchangedSource, userText, type EditedSource, type TikzFragment } from "./fragment.js";
 import { requireDefined } from "../utils/invariants.js";
 import { ADORNMENT_EDIT_NOOP_REASON } from "./actions/adornment-set-property.js";
 import { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-node-actions.js";
@@ -14,11 +15,14 @@ import { applyEditIntent } from "./apply.js";
 import { computeMinimalReplacementPatch, replaceSpan } from "./patch.js";
 import { PT_PER_CM, type DragFormatPrecision } from "./format.js";
 import {
+  generateComplexPathSource,
   generateElementSource,
   insertElementIntoSource,
   type AnchorReference,
+  type ComplexPathSegment,
   type ElementTemplate
 } from "./element-templates.js";
+import { appendedStatementPoints, CoordinateWriteRefused } from "./new-statement.js";
 import { changedSourceIdsForPropertyTarget, resolvePropertyTarget } from "./property-target.js";
 import type { AlignMode, DistributeAxis } from "./arrange.js";
 import {
@@ -49,7 +53,8 @@ import {
   applyReversePathAction,
   applySetPathPointKindAction,
   applySplitPathAction,
-  applyToggleClosedPathAction
+  applyToggleClosedPathAction,
+  type AppendToPathAction
 } from "./actions/path-editing-actions.js";
 import {
   applyAlignElementsAction,
@@ -135,13 +140,15 @@ export type EditAction =
   | { kind: "toggleClosedPath"; elementId: string; closed: boolean }
   | { kind: "deletePathPoint"; elementId: string; handleId: string }
   | { kind: "setPathPointKind"; elementId: string; handleId: string; pointKind: PathPointKind }
-  | { kind: "appendToPath"; elementId: string; end: "start" | "end"; segmentSource: string }
+  | ({ kind: "appendToPath" } & AppendToPathAction)
   | { kind: "insertPathPoint"; elementId: string; segmentIndex: number; point: WorldPoint }
   | SetPropertyEditAction
   | RotateElementAction
   | { kind: "updateNodeText"; elementId: string; text: string }
   | SetFigureBoundsAction
   | { kind: "addElement"; template: ElementTemplate; at: WorldPoint }
+  /** A new path through world points: what the path and freehand tools draw. */
+  | { kind: "addPath"; start: WorldPoint; startAnchor?: AnchorReference; segments: readonly ComplexPathSegment[]; closed?: boolean; strokeColor?: string }
   | { kind: "deleteElement"; elementId: string }
   | { kind: "deleteElements"; elementIds: string[] }
   | { kind: "deleteAdornment"; targetId: string }
@@ -230,7 +237,7 @@ export function preflightPositionNodeRelativeToAction(
 }
 
 type AnchorNameResolution = {
-  source: string;
+  source: EditedSource;
   anchor: AnchorReference;
   insertedSpan?: Span;
   insertedLength: number;
@@ -268,28 +275,28 @@ export function applyEditAction(
       case "moveHandle": {
         const initial = geometry?.semantic.editHandles.find(handle => handle.id === action.handleId);
         if (initial && Math.hypot(initial.world.x - action.newWorld.x, initial.world.y - action.newWorld.y) < 1e-9) {
-          return { kind: "success", newSource: source, patches: [], changedSourceIds: [initial.sourceRef.sourceId] };
+          return { kind: "success", newSource: unchangedSource(source), patches: [], changedSourceIds: [initial.sourceRef.sourceId] };
         }
         return applyMoveHandle(source, editHandles, action.handleId, action.newWorld, parseOptions);
       }
       case "connectHandle":
         return applyConnectHandle(source, editHandles, action.handleId, action.nodeName, action.nodeSourceId, action.anchor, parseOptions);
       case "splitPath":
-        return applySplitPath(source, editHandles, action, parseOptions);
+        return applySplitPath(source, editHandles, action, parseOptions, evaluateOptions);
       case "joinPaths":
-        return applyJoinPaths(source, action, parseOptions);
+        return applyJoinPaths(source, editHandles, action, parseOptions, evaluateOptions);
       case "reversePath":
-        return applyReversePath(source, action, parseOptions);
+        return applyReversePath(source, editHandles, action, parseOptions, evaluateOptions);
       case "toggleClosedPath":
-        return applyToggleClosedPath(source, action, parseOptions);
+        return applyToggleClosedPath(source, editHandles, action, parseOptions, evaluateOptions);
       case "deletePathPoint":
-        return applyDeletePathPoint(source, editHandles, action, parseOptions);
+        return applyDeletePathPoint(source, editHandles, action, parseOptions, evaluateOptions);
       case "setPathPointKind":
-        return applySetPathPointKind(source, editHandles, action, parseOptions);
+        return applySetPathPointKind(source, editHandles, action, parseOptions, evaluateOptions);
       case "appendToPath":
-        return applyAppendToPathAction(source, action, parseOptions);
+        return applyAppendToPathAction(source, editHandles, action, parseOptions, evaluateOptions);
       case "insertPathPoint":
-        return applyInsertPathPointAction(source, editHandles, action, parseOptions);
+        return applyInsertPathPointAction(source, editHandles, action, parseOptions, evaluateOptions);
       case "moveElement":
         return applyMoveElements(source, editHandles, [action.elementId], action.delta, parseOptions, action.formatPrecision, undefined, geometry);
       case "moveElements":
@@ -310,7 +317,7 @@ export function applyEditAction(
       case "setProperty":
         return applySetProperty(source, action, parseOptions, geometry);
       case "setProperties": {
-        let nextSource = source;
+        let nextSource = unchangedSource(source);
         const steps: SourcePatch[][] = [];
         const changedSourceIds = new Set<string>();
         const skippedHandles: string[] = [];
@@ -335,9 +342,11 @@ export function applyEditAction(
       case "updateNodeText":
         return applyUpdateNodeText(source, action, parseOptions);
       case "setFigureBounds":
-        return applySetFigureBoundsAction(source, action, parseOptions);
+        return applySetFigureBoundsAction(source, action, parseOptions, evaluateOptions, geometry);
       case "addElement":
-        return applyAddElement(source, action.template, action.at, parseOptions);
+        return applyAddElement(source, action.template, action.at, parseOptions, evaluateOptions, geometry);
+      case "addPath":
+        return applyAddPath(source, action, parseOptions, evaluateOptions, geometry);
       case "deleteElement":
         return applyDeleteElementsAction(source, [action.elementId], parseOptions);
       case "deleteElements":
@@ -345,9 +354,9 @@ export function applyEditAction(
       case "deleteAdornment":
         return applyDeleteAdornmentAction(source, action.targetId, parseOptions);
       case "pasteStatements":
-        return applyPasteStatements(source, action, parseOptions);
+        return applyPasteStatements(source, action, parseOptions, evaluateOptions);
       case "duplicateElements":
-        return applyDuplicateElements(source, action, parseOptions);
+        return applyDuplicateElements(source, action, parseOptions, evaluateOptions);
       case "duplicateAdornment":
         return applyDuplicateAdornment(source, action.targetId, parseOptions);
       case "moveAdornment":
@@ -394,7 +403,7 @@ export function applyEditAction(
     rawResult.reason === ADORNMENT_EDIT_NOOP_REASON ||
     rawResult.reason === PATH_ATTACHED_NODE_EDIT_NOOP_REASON ||
     rawResult.reason === "rotateElement would not change the source."
-  ) ? { kind: "success" as const, newSource: source, patches: [] } : rawResult;
+  ) ? { kind: "success" as const, newSource: unchangedSource(source), patches: [] } : rawResult;
   if (geometry && (result.kind === "success" || result.kind === "partial") && (
     result.identityMoves || ["moveHandle", "connectHandle", "moveElement", "moveElements", "resizeElement", "rotateElement",
       "setProperty", "setProperties", "alignElements", "distributeElements", "updateNodeText", "movePathAttachedNode"].includes(action.kind)
@@ -602,10 +611,10 @@ function applyConnectHandle(
     return { kind: "error", message: "Anchor is required for endpoint connection." };
   }
 
-  const replacement =
-    trimmedAnchor === "center"
-      ? `(${trimmedNodeName})`
-      : `(${trimmedNodeName}.${trimmedAnchor})`;
+  const nodeReference = userText(trimmedNodeName, "node-reference");
+  const replacement = trimmedAnchor === "center"
+    ? tikz`(${nodeReference})`
+    : tikz`(${nodeReference}.${userText(trimmedAnchor, "node-reference")})`;
   const adjustedHandleSpan = shiftSpan(handle.sourceRef.sourceSpan, nameResolution.insertedSpan, nameResolution.insertedLength);
   const updated = replaceSpan(nameResolution.source, adjustedHandleSpan, replacement);
   const reordered = moveStatementAfterNamedDefinition(
@@ -621,7 +630,7 @@ function applyConnectHandle(
     const from = nameResolution.insertedSpan.from;
     identityMoves = advanceIdentityMoves(identityMoves, [{ oldSpan: nameResolution.insertedSpan,
       newSpan: { from, to: from + nameResolution.insertedLength },
-      replacement: nameResolution.source.slice(from, from + nameResolution.insertedLength) }]);
+      replacement: editedSlice(nameResolution.source, from, from + nameResolution.insertedLength) }]);
   }
   identityMoves = advanceIdentityMoves(identityMoves, [{ oldSpan: adjustedHandleSpan, newSpan: updated.changedSpan, replacement }]);
   if (reordered) identityMoves = advanceIdentityMoves(identityMoves, reordered.patches, reordered.identityMoves);
@@ -698,7 +707,7 @@ function resolveAnchorNodeName(
   const nodeName = anchor.nodeName.trim();
   if (nodeName) {
     return {
-      source,
+      source: unchangedSource(source),
       anchor: { ...anchor, nodeName },
       insertedLength: 0
     };
@@ -724,7 +733,7 @@ function ensureNodeSourceHasName(
   source: string,
   nodeSourceId: string,
   parseOptions: EditParseOptions
-): { source: string; name: string; insertedSpan?: Span; insertedLength: number } | null {
+): { source: EditedSource; name: string; insertedSpan?: Span; insertedLength: number } | null {
   const snapshot = parseStatementSnapshot(source, parseOptions);
   const ref = snapshot.byId.get(nodeSourceId);
   if (ref?.statement.kind !== "Path") {
@@ -736,7 +745,7 @@ function ensureNodeSourceHasName(
   }
   const existingName = node.name?.trim();
   if (existingName) {
-    return { source, name: existingName, insertedLength: 0 };
+    return { source: unchangedSource(source), name: existingName, insertedLength: 0 };
   }
 
   const name = nextGeneratedNodeName(source);
@@ -744,9 +753,9 @@ function ensureNodeSourceHasName(
   if (insertAt == null) {
     return null;
   }
-  const insertion = ` (${name})`;
+  const insertion = tikz` (${userText(name, "node-reference")})`;
   return {
-    source: source.slice(0, insertAt) + insertion + source.slice(insertAt),
+    source: replaceSpan(source, { from: insertAt, to: insertAt }, insertion).source,
     name,
     insertedSpan: { from: insertAt, to: insertAt },
     insertedLength: insertion.length
@@ -835,51 +844,60 @@ function applySplitPath(
   source: string,
   editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "splitPath" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
-  return applySplitPathAction(source, editHandles, action, parseOptions);
+  return applySplitPathAction(source, editHandles, action, parseOptions, evaluateOptions);
 }
 
 function applyJoinPaths(
   source: string,
+  editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "joinPaths" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
-  return applyJoinPathsAction(source, action, { normalizeElementIds }, parseOptions);
+  return applyJoinPathsAction(source, editHandles, action, { normalizeElementIds }, parseOptions, evaluateOptions);
 }
 
 function applyToggleClosedPath(
   source: string,
+  editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "toggleClosedPath" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
-  return applyToggleClosedPathAction(source, action, parseOptions);
+  return applyToggleClosedPathAction(source, editHandles, action, parseOptions, evaluateOptions);
 }
 
 function applyReversePath(
   source: string,
+  editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "reversePath" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
-  return applyReversePathAction(source, action, parseOptions);
+  return applyReversePathAction(source, editHandles, action, parseOptions, evaluateOptions);
 }
 
 function applyDeletePathPoint(
   source: string,
   editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "deletePathPoint" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
-  return applyDeletePathPointAction(source, editHandles, action, parseOptions);
+  return applyDeletePathPointAction(source, editHandles, action, parseOptions, evaluateOptions);
 }
 
 function applySetPathPointKind(
   source: string,
   editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "setPathPointKind" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
-  return applySetPathPointKindAction(source, editHandles, action, parseOptions);
+  return applySetPathPointKindAction(source, editHandles, action, parseOptions, evaluateOptions);
 }
 
 function applyMoveElements(
@@ -898,27 +916,29 @@ function applyMoveElements(
 function applyPasteStatements(
   source: string,
   action: Extract<EditAction, { kind: "pasteStatements" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
   return applyPasteStatementsAction(source, action, {
     applyMoveElements,
     normalizeElementIds,
     uniqueStrings,
     defaultDuplicateOffsetPt: DEFAULT_DUPLICATE_OFFSET_PT
-  }, parseOptions);
+  }, parseOptions, evaluateOptions);
 }
 
 function applyDuplicateElements(
   source: string,
   action: Extract<EditAction, { kind: "duplicateElements" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
   return applyDuplicateElementsAction(source, action, {
     applyMoveElements,
     normalizeElementIds,
     uniqueStrings,
     defaultDuplicateOffsetPt: DEFAULT_DUPLICATE_OFFSET_PT
-  }, parseOptions);
+  }, parseOptions, evaluateOptions);
 }
 
 function applyDuplicateAdornment(source: string, targetId: string, parseOptions: EditParseOptions): EditActionResult {
@@ -1009,7 +1029,7 @@ function moveStatementAfterNamedDefinition(
   movingStatementId: string,
   name: string,
   parseOptions: EditParseOptions = {}
-): { source: string; patches: SourcePatch[]; identityMoves: IdentityMove[] } | null {
+): { source: EditedSource; patches: SourcePatch[]; identityMoves: IdentityMove[] } | null {
   const snapshot = parseStatementSnapshot(source, parseOptions);
   const movingRef = snapshot.byId.get(movingStatementId);
   if (!movingRef) {
@@ -1146,7 +1166,8 @@ function applyUpdateNodeText(
     return { kind: "unsupported", reason: `No editable node text target found for ${action.elementId}` };
   }
   const { textSpan } = target;
-  const updated = replaceSpan(source, textSpan, action.text);
+  const text = userText(action.text, "node-text");
+  const updated = replaceSpan(source, textSpan, text);
   if (updated.source === source) {
     return { kind: "unsupported", reason: "Node text update would not change the source." };
   }
@@ -1157,7 +1178,7 @@ function applyUpdateNodeText(
       {
         oldSpan: textSpan,
         newSpan: updated.changedSpan,
-        replacement: action.text
+        replacement: text
       }
     ],
     changedSourceIds: target.changedSourceIds
@@ -1168,14 +1189,49 @@ function applyAddElement(
   source: string,
   template: ElementTemplate,
   at: WorldPoint,
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined,
+  geometry: EditGeometrySession | undefined
+): EditActionResult {
+  // Naming anchored nodes leaves the end of the figure, where the element goes, as it is.
+  const points = appendedStatementPoints(source, parseOptions, evaluateOptions, geometry);
+  const resolved = resolveElementTemplateAnchorNames(source, template, parseOptions);
+  return appendStatement(source, resolved.source, () => generateElementSource(resolved.template, at, points), parseOptions);
+}
+
+function applyAddPath(
+  source: string,
+  action: Extract<EditAction, { kind: "addPath" }>,
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined,
+  geometry: EditGeometrySession | undefined
+): EditActionResult {
+  const points = appendedStatementPoints(source, parseOptions, evaluateOptions, geometry);
+  return appendStatement(source, source, () => generateComplexPathSource(action.start, action.segments, {
+    ...(action.closed === undefined ? {} : { closed: action.closed }),
+    ...(action.startAnchor === undefined ? {} : { startAnchor: action.startAnchor }),
+    ...(action.strokeColor === undefined ? {} : { strokeColor: action.strokeColor })
+  }, points), parseOptions);
+}
+
+/** Appends a new statement to the figure of `working` and selects it. */
+function appendStatement(
+  source: string,
+  working: string,
+  build: () => TikzFragment | null,
   parseOptions: EditParseOptions
 ): EditActionResult {
+  let snippet: TikzFragment | null;
+  try {
+    snippet = build();
+  } catch (error) {
+    if (error instanceof CoordinateWriteRefused) return { kind: "unsupported", reason: `Cannot write the new element here: ${error.message}.` };
+    throw error;
+  }
+  if (!snippet) return { kind: "unsupported", reason: "Nothing to add." };
   const beforeStatements = parseStatementSnapshot(source, parseOptions);
-  const resolved = resolveElementTemplateAnchorNames(source, template, parseOptions);
-  const snippet = generateElementSource(resolved.template, at);
-  const parsedForInsertion = parseTikzForEdit(resolved.source, parseOptions);
-
-  const newSource = insertElementIntoSource(resolved.source, snippet, parsedForInsertion.figure.span);
+  const parsedForInsertion = parseTikzForEdit(working, parseOptions);
+  const newSource = insertElementIntoSource(working, snippet, parsedForInsertion.figure.span);
 
   const afterStatements = parseStatementSnapshot(newSource, parseOptions);
   const insertedStatementId = afterStatements.all.find((ref) => !beforeStatements.byId.has(ref.id))?.id;

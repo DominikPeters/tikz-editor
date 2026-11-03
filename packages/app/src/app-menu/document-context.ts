@@ -29,7 +29,7 @@ export function appMenuForDocument(definition: AppMenuDefinition, context: { kin
       // On a slide, Insert's drawing tools open the slide's drawing layer.
       if (!drawing && item.commandId === IDS.SHOW_COMPILED_PICTURE) return [];
       if (!deck && item.commandId === IDS.SHOW_COMPILED_SLIDE) return [];
-      if (item.commandId === IDS.TOGGLE_FIGURES_PANEL) return [{ ...item, label: deck ? "Slides Panel" : "Figures Panel" }];
+      if (item.commandId === IDS.TOGGLE_FIGURES_PANEL) return [{ ...item, label: deck ? "Slides" : "Figures" }];
       if (item.commandId === IDS.CLOSE_DOCUMENT && context.focus && context.focus !== "editor") return [{ ...item, label: "Close Window" }];
       if (item.commandId === IDS.FORMAT_TIKZ && deck) return [{ ...item, label: "Format Source Code" }];
       return [item];

@@ -58,8 +58,8 @@ export type BeamerThemeColor = {
   use?: readonly string[];
   fg?: string;
   bg?: string;
-  fgExpression?: { value: string; span: Span };
-  bgExpression?: { value: string; span: Span };
+  fgExpression?: { value: string; span: Span; authored?: true };
+  bgExpression?: { value: string; span: Span; authored?: true };
   /** Optional unquantized RGB channels used when downstream xcolor mixes. */
   fgRgb?: readonly [number, number, number];
   /**

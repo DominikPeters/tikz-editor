@@ -56,6 +56,7 @@ export { TIKZPICTURE_GLOBAL_TARGET_ID } from "./property-target.js";
 export type {
   ArrowTipWriteTarget,
   InspectorDescriptor,
+  InspectorPaintToggle,
   InspectorProperty,
   InspectorSection,
   InspectorSnapshot,
@@ -314,14 +315,19 @@ function applyForeachVariableReadOnlyToSections(
     return sections;
   }
 
-  return sections.map((section) => ({
-    ...section,
-    properties: section.properties.map((property) =>
+  return sections.map((section) => {
+    const properties = section.properties.map((property) =>
       inspectorPropertyDependsOnForeachVariables(property, options, inlineTarget.foreachVariableNames ?? [])
         ? makeInspectorPropertyForeachReadOnly(property)
         : property
-    )
-  }));
+    );
+    // The checkbox writes the section's colour key, so it follows that row.
+    const colorRow = properties.find((property) => property.id === `${section.id}-color`);
+    const toggle = section.toggle && colorRow?.readOnlyReason === FOREACH_VARIABLE_READONLY_REASON
+      ? { ...section.toggle, write: { ...section.toggle.write, writable: false, reason: FOREACH_VARIABLE_READONLY_REASON } }
+      : section.toggle;
+    return { ...section, properties, ...(toggle === undefined ? {} : { toggle }) };
+  });
 }
 
 function makeInspectorPropertyForeachReadOnly(property: InspectorProperty): InspectorProperty {

@@ -141,11 +141,11 @@
 
 .splitter:hover,
 .splitter:focus-visible {
-  background: var(--accent);
+  background: var(--control-accent);
 }
 
 .splitter:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--control-accent);
   outline-offset: 1px;
 }
 

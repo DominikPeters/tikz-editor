@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
+import { checkCoordinateWrites } from "./check-coordinate-writes.mjs";
 
 const root = process.cwd();
 const targets = [
@@ -479,6 +480,9 @@ function formatTypeScriptDiagnostic(diagnostic) {
 
 checkTexCoordinateOperations();
 checkSourceOffsetOperations();
+for (const message of checkCoordinateWrites(root)) {
+  violations.push({ file: "coordinate writes", reason: message });
+}
 
 if (violations.length > 0) {
   console.error("Coordinate typing guard failed:");

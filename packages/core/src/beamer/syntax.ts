@@ -29,6 +29,21 @@ export interface BeamerEnvironmentBoundary {
   readonly span: Span;
 }
 
+/** Literal argument text with TeX line comments removed. */
+export function beamerSourceValueTokens(context: BeamerSyntaxContext, value: BeamerDelimitedSourceValue): string {
+  let cursor = value.contentSpan.from;
+  let result = "";
+  for (const comment of context.syntax.comments) {
+    if (comment.to <= cursor || comment.from >= value.contentSpan.to) continue;
+    result += context.source.slice(cursor, Math.max(cursor, comment.from));
+    cursor = Math.min(value.contentSpan.to, comment.to);
+    // A TeX line comment consumes its end-of-line token as well.
+    if (context.source[cursor] === "\r") cursor += 1;
+    if (context.source[cursor] === "\n") cursor += 1;
+  }
+  return (result + context.source.slice(cursor, value.contentSpan.to)).trim();
+}
+
 export function createBeamerSyntaxContext(
   source: string,
   structuralMasks: readonly Span[] = [],

@@ -60,6 +60,7 @@ export type SemanticPropertyId =
   | "fill-pattern-option"
   | "fill-radial-inner-color"
   | "fill-radial-outer-color"
+  | "fill-shade"
   | "fill-shading"
   | "grid-step"
   | "grid-xstep"
@@ -213,6 +214,11 @@ const PROPERTY_DEFINITIONS = [
     candidateKeys: ["shade", "shading", ...AXIS_SHADING_CONFLICT_CLEAR_KEYS, ...RADIAL_SHADING_CONFLICT_CLEAR_KEYS, ...BALL_SHADING_CONFLICT_CLEAR_KEYS],
     addable: true,
     addableKind: "fillShading"
+  }),
+  // Only the Fill checkbox writes this (`shade=none`), so it is never looked up by key.
+  property("fill-shade", "Shade", "shade", {
+    defaultReversion: "omit-if-equivalent",
+    cleanup: ["paint-command"]
   }),
   property("fill-pattern", "Pattern", "pattern", { candidateKeys: ["pattern"], addable: true, addableKind: "fillPattern" }),
   property("fill-pattern-option", "Pattern option", "pattern", { candidateKeys: ["pattern"] }),

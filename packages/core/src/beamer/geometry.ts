@@ -4,6 +4,7 @@ import type {
 } from "./types.js";
 import { resolveBeamerTheme } from "./theme/resolve.js";
 import type { ResolvedBeamerTheme } from "./theme/types.js";
+import { beamerClassOptionValue } from "./class-options.js";
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 
@@ -30,7 +31,7 @@ export function resolveBeamerPageGeometry(
   document: BeamerDocumentModel,
   theme: ResolvedBeamerTheme = resolveBeamerTheme(document)
 ): BeamerPageGeometry {
-  const aspectRatio = documentClassOption(document, "aspectratio") ?? "43";
+  const aspectRatio = beamerClassOptionValue(document, "aspectratio") ?? "43";
   const [widthCm, heightCm] =
     pageSizeLookup[aspectRatio] ?? customPageSizeCm(aspectRatio);
   const pageWidth = cmToTexPt(widthCm);
@@ -78,23 +79,6 @@ function resolveHorizontalThemeDimension(
   return dimension.kind === "page-width"
     ? dimension.ratio * pageWidth
     : dimension.valuePt;
-}
-
-function documentClassOption(
-  document: BeamerDocumentModel,
-  key: string
-): string | null {
-  const source = document.preamble.documentClass?.options?.value;
-  if (!source) {
-    return null;
-  }
-  for (const entry of source.split(",")) {
-    const [rawKey, ...rawValue] = entry.split("=");
-    if (rawKey?.trim() === key) {
-      return rawValue.join("=").trim() || null;
-    }
-  }
-  return null;
 }
 
 function customPageSizeCm(aspectRatio: string): readonly [number, number] {

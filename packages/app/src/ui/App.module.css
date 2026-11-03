@@ -45,12 +45,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--accent, #0078d4) 12%, transparent);
-  border: 3px dashed var(--accent, #0078d4);
+  background: color-mix(in srgb, var(--control-accent) 12%, transparent);
+  border: 3px dashed var(--control-accent);
   pointer-events: none;
   font-size: 16px;
   font-weight: 600;
-  color: var(--accent, #0078d4);
+  color: var(--control-accent);
   letter-spacing: 0.01em;
 }
 

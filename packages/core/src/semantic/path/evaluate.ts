@@ -241,6 +241,24 @@ export function evaluatePathStatement(
   pushDiagnostic: DiagnosticPushFn,
   options: PathEvaluationOptions = {}
 ): SceneElement[] {
+  const frameIndex = context.stack.length - 1;
+  const originalFrame = currentFrame(context);
+  try {
+    return evaluatePathInFrame(statement, context, initialStyle, markFeature, pushDiagnostic, options);
+  } finally {
+    // Mid-path options affect subsequent coordinates, never the next path.
+    context.stack[frameIndex] = originalFrame;
+  }
+}
+
+function evaluatePathInFrame(
+  statement: PathStatement,
+  context: SemanticContext,
+  initialStyle: ResolvedStyle,
+  markFeature: FeatureMarkFn,
+  pushDiagnostic: DiagnosticPushFn,
+  options: PathEvaluationOptions
+): SceneElement[] {
   const geometryElements: SceneElement[] = [];
   const behindNodeElements: SceneElement[] = [];
   const frontNodeElements: SceneElement[] = [];
@@ -253,8 +271,8 @@ export function evaluatePathStatement(
     context.currentPoint = null;
     context.pathStartPoint = null;
   }
-  const frame = currentFrame(context);
-  const frameTransform = frame.transform;
+  let frame = currentFrame(context);
+  let frameTransform = frame.transform;
   const initialPlotSettings = applyPlotSettingsFromStyleChain(
     createDefaultPlotSettings(),
     frame.styleChain,
@@ -759,7 +777,7 @@ export function evaluatePathStatement(
 
           const resolvedEdgeStyle = withDependencySource(context, graphStatement.id, () =>
             resolveContextDelta(
-              builder.style,
+              edgePathBaseStyle(builder.style),
               frameTransform,
               edgeOptionLayers,
               frame.customStyles,
@@ -932,6 +950,9 @@ export function evaluatePathStatement(
               picDefinitions: optionPicDefinitions
             };
             builder.style = builder.treeFrameState.style;
+            frame = builder.treeFrameState;
+            frameTransform = frame.transform;
+            context.stack[context.stack.length - 1] = frame;
             builder.statementStyleChain = builder.treeFrameState.styleChain;
             if (builder.activePath) {
               builder.activePath.style = { ...builder.style };
@@ -1496,6 +1517,10 @@ export function evaluatePathStatement(
         if (pathItem.kind !== "EdgeOperation") throw new Error("Unexpected path operation handler");
         const item = pathItem;
         const edgePlan = extractToLikeOptionPlan(mergeToLikePathOptions(item, builder.leadingToLikeOptions));
+        // The merged options carry the path's `to path` keys into the edge;
+        // its style already holds them, so only the edge's own options are
+        // applied after `every edge`.
+        const ownEdgeOptions = item.options ? extractToLikeOptionPlan(item).item.options : undefined;
         const edgeItem: EdgeOperationItem =
           edgePlan.generatedNodes.length > 0
             ? {
@@ -1556,20 +1581,20 @@ export function evaluatePathStatement(
             rawOptions: [drawEdgeOptions]
           });
         }
-        if (edgeItem.options) {
+        if (ownEdgeOptions) {
           edgeOptionLayers.push({
             kind: "command",
             sourceRef: {
               sourceId: edgeItem.id,
-              sourceSpan: edgeItem.optionsSpan ?? item.span,
+              sourceSpan: item.optionsSpan ?? item.span,
               sourceKind: "edge-options",
               label: "edge"
             },
-            rawOptions: [edgeItem.options]
+            rawOptions: [ownEdgeOptions]
           });
         }
         const resolvedEdgeStyle = resolveContextDelta(
-          builder.style,
+          edgePathBaseStyle(builder.style),
           frameTransform,
           edgeOptionLayers,
           frame.customStyles,
@@ -1879,6 +1904,11 @@ export function evaluatePathStatement(
         }
       }
 
+      if (item.relativePrefix && !context.currentPoint) {
+        // TikZ resets its saved point to local (0,0) at each new path.
+        // Keep a leading `+` based there even after its drawn moveto.
+        context.currentPoint = applyMatrix(frameTransform, wp(0, 0));
+      }
       const evaluated: EvaluatedCoordinate =
         evaluateTurnCoordinate(item, builder.currentPointLogical ?? context.currentPoint, frameTransform, builder.lastPlacementSegment, frame.axisBasis) ??
         evaluateCoordinate(item, context);
@@ -2811,6 +2841,13 @@ function resolveNamedCoordinateRewriteHandleId(rawName: string, context: Semanti
     }
   }
   return undefined;
+}
+
+// An edge is a path of its own (`\path[every edge, ...]`): it keeps the
+// colours and settings of the path it is on, but not whether that path draws,
+// fills, shades or clips.
+function edgePathBaseStyle(style: ResolvedStyle): ResolvedStyle {
+  return { ...style, fill: null, fillPattern: null, shadeEnabled: false, drawExplicit: false, clip: false, useAsBoundingBox: false };
 }
 
 function mergeToLikePathOptions<T extends ToOperationItem | EdgeOperationItem>(

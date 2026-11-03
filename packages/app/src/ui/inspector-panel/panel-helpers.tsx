@@ -11,6 +11,7 @@ import {
   type FillPatternMetaOptionKey,
   type FillShadingPresetId,
   type InspectorDescriptor,
+  type InspectorPaintToggle,
   type InspectorProperty,
   type LineCapPresetId,
   type LineJoinPresetId,
@@ -362,6 +363,8 @@ export type MultiInspectorSection = {
   title: string;
   sourceLevel: InspectorDescriptor["sections"][number]["sourceLevel"];
   properties: MultiInspectorProperty[];
+  /** One Stroke/Fill checkbox per selected element, when every element has one. */
+  toggles?: InspectorPaintToggle[];
 };
 
 export type MultiInspectorModel = {
@@ -465,6 +468,22 @@ export const COMPACT_PAIR_IDS = new Set([
   "node-text-align:node-text-width",
   "shadow-xshift:shadow-yshift"
 ]);
+
+// Row label and per-field captions for a numeric pair shown on one row.
+const COMPACT_PAIR_PRESENTATION: Readonly<Record<string, { label: string; captions: readonly [string, string] }>> = {
+  "xshift:yshift": { label: "Shift", captions: ["X", "Y"] },
+  "xscale:yscale": { label: "Scale", captions: ["X", "Y"] },
+  "grid-xstep:grid-ystep": { label: "Per axis", captions: ["X", "Y"] },
+  "node-minimum-width:node-minimum-height": { label: "Min size", captions: ["Width", "Height"] },
+  "shadow-xshift:shadow-yshift": { label: "Offset", captions: ["X", "Y"] }
+};
+
+export function compactPairPresentation(
+  left: { id: string; label: string },
+  right: { id: string; label: string }
+): { label: string; captions: readonly [string, string] } {
+  return COMPACT_PAIR_PRESENTATION[`${left.id}:${right.id}`] ?? { label: "", captions: [left.label, right.label] };
+}
 export type LineWidthDropdownValue = string;
 export type ArrowTipDropdownValue = ArrowTipPresetId | typeof ARROW_TIP_MIXED_OPTION_VALUE;
 export type DashStyleDropdownValue = DashStylePresetId | typeof DASH_STYLE_MIXED_OPTION_VALUE;
@@ -618,11 +637,13 @@ export function buildMultiInspectorModel(descriptors: InspectorDescriptor[], sel
     }
 
     if (properties.length > 0) {
+      const toggles = matchingSections.flatMap((section) => section.toggle ? [section.toggle] : []);
       sections.push({
         id: baseSection.id,
         title: baseSection.title,
         sourceLevel: baseSection.sourceLevel,
-        properties
+        properties,
+        ...(toggles.length === matchingSections.length ? { toggles } : {})
       });
     }
   }
@@ -1435,34 +1456,6 @@ export function nodeFontButtonClass(active: boolean, mixed: boolean): string {
   ]
     .filter(Boolean)
     .join(" ");
-}
-
-export function toFillModeDropdownOptions(
-  options: ReadonlyArray<{ value: Exclude<FillModePresetId, "custom">; label: string }>
-): Array<CustomDropdownOption<FillModeDropdownValue>> {
-  return options.map((option) => ({
-    value: option.value,
-    label: option.label
-  }));
-}
-
-export function fillModeValueLabel(
-  value: FillModeDropdownValue,
-  options: ReadonlyArray<{ value: Exclude<FillModePresetId, "custom">; label: string }>
-): string {
-  if (value === FILL_MODE_MIXED_OPTION_VALUE) {
-    return "Mixed";
-  }
-  if (value === "custom") {
-    return "Custom";
-  }
-  return options.find((option) => option.value === value)?.label ?? "Custom";
-}
-
-export function isSelectableFillModeValue(
-  value: FillModeDropdownValue
-): value is Exclude<FillModePresetId, "custom"> {
-  return value !== "custom" && value !== FILL_MODE_MIXED_OPTION_VALUE;
 }
 
 export function toFillShadingDropdownOptions(

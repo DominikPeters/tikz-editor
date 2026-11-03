@@ -1,3 +1,4 @@
+import { EMPTY_FRAGMENT, sourceSlice, tikz, userText, type TikzFragment } from "../edit/fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
@@ -15,7 +16,7 @@ export type BeamerObjectOverlayTarget = {
 
 const contains = (outer: Span, inner: Span) => outer.from <= inner.from && outer.to >= inner.to;
 const same = (a: Span, b: Span) => a.from === b.from && a.to === b.to;
-const patch = (span: Span, replacement: string): SourcePatch => ({
+const patch = (span: Span, replacement: TikzFragment): SourcePatch => ({
   oldSpan: span, newSpan: { from: span.from, to: span.from + replacement.length }, replacement,
 });
 
@@ -42,7 +43,7 @@ export function beamerObjectOverlayTarget(model: BeamerBuildModel, node: BeamerO
   let removePatches: SourcePatch[] = [];
   if (own && canEditBeamerBuildTiming(own) && own.spec && !relativeDefault) {
     if (nativeRule(own)) {
-      removePatches = [patch(own.spec.source.span, "")];
+      removePatches = [patch(own.spec.source.span, EMPTY_FRAGMENT)];
     } else if (own.command) {
       const command = own.command;
       const branch = requireArrayValue(command.branches, 0);
@@ -55,7 +56,7 @@ export function beamerObjectOverlayTarget(model: BeamerBuildModel, node: BeamerO
       // Keep comments and spacing between the wrapper's tokens.
       let delta = 0;
       removePatches = spans.sort((a, b) => a.from - b.from).map((span) => {
-        const result = patch(span, "");
+        const result = patch(span, EMPTY_FRAGMENT);
         result.newSpan = { from: span.from + delta, to: span.from + delta };
         delta -= span.to - span.from;
         return result;
@@ -67,12 +68,12 @@ export function beamerObjectOverlayTarget(model: BeamerBuildModel, node: BeamerO
     if (own) return beamerBuildSpecPatch(model, own.id, spec);
     if (node.kind === "item") {
       const anchor = node.sourceSpan.from + "\\item".length;
-      return patch({ from: anchor, to: anchor }, `<${spec}>`);
+      return patch({ from: anchor, to: anchor }, tikz`<${userText(spec, "beamer-text")}>`);
     }
     if (node.kind === "block") {
       const begin = syntax.syntax.environmentBoundariesIn(node.sourceSpan).find((entry) => entry.kind === "begin" && entry.span.from === node.sourceSpan.from);
-      return begin ? patch({ from: begin.span.to, to: begin.span.to }, `<${spec}>`) : null;
+      return begin ? patch({ from: begin.span.to, to: begin.span.to }, tikz`<${userText(spec, "beamer-text")}>`) : null;
     }
-    return patch(node.sourceSpan, `\\uncover<${spec}>{${source.slice(node.sourceSpan.from, node.sourceSpan.to)}}`);
+    return patch(node.sourceSpan, tikz`\uncover<${userText(spec, "beamer-text")}>{${sourceSlice(source, node.sourceSpan)}}`);
   } };
 }

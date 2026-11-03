@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Span } from "../packages/core/src/ast/types.js";
 import type { SourcePatch } from "../packages/core/src/edit/types.js";
 import { createIncrementalParseSession, parseTikz } from "../packages/core/src/parser/index.js";
+import { fragment } from "./fragment-helpers.js";
 
 describe("incremental parser session", () => {
   it("infers coalesced source edits and exposes a current syntax tree", () => {
@@ -299,7 +300,7 @@ describe("incremental parser session", () => {
         {
           oldSpan: { from: 0, to: beginToken.length },
           newSpan: { from: 0, to: beginToken.length },
-          replacement: beginToken
+          replacement: fragment(beginToken)
         }
       ],
       changedSourceIds: [statementId],
@@ -390,7 +391,7 @@ describe("incremental parser session", () => {
             from: statementSpan.from,
             to: statementSpan.from + replacement.length
           },
-          replacement
+          replacement: fragment(replacement)
         }
       ],
       changedSourceIds: [statementId],
@@ -503,7 +504,7 @@ describe("incremental parser session", () => {
       includeContextDefinitions: true,
       trigger: "drag-element",
       patches: [
-        { oldSpan: { from: 10, to: 5 }, newSpan: { from: 10, to: 5 }, replacement: "ignored" },
+        { oldSpan: { from: 10, to: 5 }, newSpan: { from: 10, to: 5 }, replacement: fragment("ignored") },
         computeSinglePatch(source, nextSource)
       ],
       changedSourceIds: [" ", statementId, statementId]
@@ -519,7 +520,7 @@ describe("incremental parser session", () => {
       activeFigureId: seeded.activeFigureId,
       includeContextDefinitions: true,
       trigger: "drag-element",
-      patches: [{ oldSpan: { from: 10, to: 5 }, newSpan: { from: 10, to: 5 }, replacement: "ignored" }],
+      patches: [{ oldSpan: { from: 10, to: 5 }, newSpan: { from: 10, to: 5 }, replacement: fragment("ignored") }],
       changedSourceIds: [statementId]
     });
     expect(discardedOnly.stats.strategy).toBe("full");
@@ -604,7 +605,7 @@ describe("incremental parser session", () => {
       activeFigureId: "figure:1",
       includeContextDefinitions: true,
       trigger: "drag-element",
-      patches: [{ oldSpan: { from: 0, to: 0 }, newSpan: { from: 0, to: 0 }, replacement: "" }],
+      patches: [{ oldSpan: { from: 0, to: 0 }, newSpan: { from: 0, to: 0 }, replacement: fragment("") }],
       changedSourceIds: [statementId]
     });
     expect(unchangedMismatch.stats.fallbackReason).toBe("source-unchanged-active-figure-mismatch");
@@ -640,7 +641,7 @@ describe("incremental parser session", () => {
       activeFigureId: "figure:0",
       includeContextDefinitions: true,
       trigger: "drag-element",
-      patches: [{ oldSpan: whitespace, newSpan: whitespace, replacement: source.slice(whitespace.from, whitespace.to) }],
+      patches: [{ oldSpan: whitespace, newSpan: whitespace, replacement: fragment(source.slice(whitespace.from, whitespace.to)) }],
       changedSourceIds: [statementId]
     }).stats.fallbackReason).toBe("patch-overlaps-unknown-statement");
   });
@@ -860,7 +861,7 @@ function computeSinglePatch(oldSource: string, newSource: string): SourcePatch {
   return {
     oldSpan: { from: prefix, to: oldSuffix },
     newSpan: { from: prefix, to: newSuffix },
-    replacement: newSource.slice(prefix, newSuffix)
+    replacement: fragment(newSource.slice(prefix, newSuffix))
   };
 }
 
@@ -893,7 +894,7 @@ function applyReplacements(
     patches.push({
       oldSpan: { ...replacement.span },
       newSpan: { from: newFrom, to: newTo },
-      replacement: replacement.replacement
+      replacement: fragment(replacement.replacement)
     });
     delta += replacement.replacement.length - (replacement.span.to - replacement.span.from);
     cursor = replacement.span.to;

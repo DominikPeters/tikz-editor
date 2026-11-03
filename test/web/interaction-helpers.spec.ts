@@ -15,6 +15,7 @@ import {
   snapPointDeltaToAxisStepMultiples
 } from "../../packages/app/src/ui/canvas-panel/interaction-helpers.js";
 import type { ResizeFrame } from "../../packages/app/src/ui/canvas-panel/resize-frames.js";
+import { identityPoints } from "../coords-helpers.js";
 
 const cm = (value: number): number => value * PT_PER_CM;
 const wp = (x: number, y: number) => worldPoint(pt(x), pt(y));
@@ -27,7 +28,7 @@ it("maps a double-arrow drag to the preview and rendered horizontal dimensions",
   expect(preview.bounds.maxY - preview.bounds.minY).toBeCloseTo(height, 6);
 
   const template = createTemplateForToolDrag("addShape", wp(0, 0), wp(width, height), { selectedAddShape: "double arrow" });
-  const snippet = generateElementSource(template, wp(0, 0));
+  const snippet = generateElementSource(template, wp(0, 0), identityPoints);
   const rendered = renderTikzToSvg(String.raw`\begin{tikzpicture}${snippet}\end{tikzpicture}`);
   const path = rendered.semantic.scene.elements.find(element => element.kind === "Path");
   if (!path || path.kind !== "Path") throw new Error("Expected double-arrow outline");

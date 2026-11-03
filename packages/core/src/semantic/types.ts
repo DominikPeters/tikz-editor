@@ -1,5 +1,5 @@
 import type { AxisBasis } from "./coords/axis-basis.js";
-import type { SiteContext } from "./site-context.js";
+import type { CoordinateSpelling, SiteContext } from "./site-context.js";
 import { isObjectRecord } from "../utils/records.js";
 import type { AdornmentOwnerGeometry, CoordinateForm, Span } from "../ast/types.js";
 import type { DocumentGraphicsResolver } from "../graphics/types.js";
@@ -12,7 +12,8 @@ import type {
   SourceCmPoint,
   SvgPoint,
   WorldBounds,
-  WorldPoint
+  WorldPoint,
+  WorldVector
 } from "../coords/points.js";
 import type { AnchorTransform, FrameTransform, WorldTransform } from "../coords/transforms.js";
 import type { StyleChainEntry } from "./style-chain.js";
@@ -542,6 +543,11 @@ export type EvaluateOptions = {
 
 export type { CoordinateForm };
 
+/**
+ * A `to` curve's angles are read in the coordinates the curve is computed
+ * in: `baseHeading` (degrees) is the heading from start to end there, and
+ * `linear` maps those coordinates to world (the CTM's linear part).
+ */
 export type CurveEditHandleData =
   | {
       kind: "to-angle";
@@ -551,6 +557,7 @@ export type CurveEditHandleData =
       endWorld: WorldPoint;
       relative: boolean;
       baseHeading: number;
+      linear: Readonly<{ a: number; b: number; c: number; d: number }>;
     }
   | {
       kind: "to-bend";
@@ -558,6 +565,7 @@ export type CurveEditHandleData =
       startWorld: WorldPoint;
       endWorld: WorldPoint;
       baseHeading: number;
+      linear: Readonly<{ a: number; b: number; c: number; d: number }>;
     };
 
 export type EditHandleInsertion = {
@@ -602,13 +610,25 @@ export type EditHandlePositioningContext = {
   currentAnchorHH: number;
 };
 
+/**
+ * Where a node was drawn, for editing its placement: the center it ended at
+ * (after its own shifts) and its anchors relative to that center, in world
+ * space (the node's own rotation and scale applied).
+ */
+export type NodePlacementRecord = {
+  drawnCenter: WorldPoint;
+  anchorOffsets: Readonly<Record<string, WorldVector>>;
+};
+
 export type CoordinateSourceUnits = { x?: string; y?: string; radius?: string };
 
 type CoordinateEditHandleBase = EditHandleBase & {
   axisBasis?: AxisBasis;
   /** The raw frame the coordinate was read in; `frame` is it composed for the coordinate's own spelling. */
-  siteContext?: SiteContext;
+  siteContext: SiteContext;
   sourceUnits?: CoordinateSourceUnits;
+  /** On a node's placement handle: where the node was drawn. */
+  nodePlacement?: NodePlacementRecord;
   handleType: "coordinate";
   kind: "node-position" | "path-point" | "path-control";
   insertion?: EditHandleInsertion;
@@ -622,6 +642,8 @@ export type FrameLocalCoordinateEditHandle = CoordinateEditHandleBase & {
   rewriteMode: "direct" | "unsupported";
   local: FrameLocalPoint;
   frame: FrameTransform;
+  /** `frame` is `spelledCoordinateFrame(siteContext, spelling)`. */
+  spelling: CoordinateSpelling;
   relativeBase?: never;
 };
 
@@ -630,6 +652,8 @@ export type RelativeCoordinateEditHandle = CoordinateEditHandleBase & {
   rewriteMode: "delta";
   local: FrameLocalPoint;
   frame: FrameTransform;
+  /** `frame`'s linear part is that of `spelledCoordinateFrame(siteContext, spelling)`. */
+  spelling: CoordinateSpelling;
   relativeBase: WorldPoint;
 };
 
@@ -675,6 +699,8 @@ export type CurveControlEditHandle = EditHandleBase & {
 export type NodePositionEditHandle = EditHandleBase & {
   handleType: "node-positioning";
   kind: "node-position";
+  /** Where an `at` coordinate of this node would be read. */
+  siteContext: SiteContext;
   rewriteMode: "positioning";
   positioningContext: EditHandlePositioningContext;
   local?: never;

@@ -40,6 +40,7 @@ import { benignTextEdit, coldCompute, makeRng, randomTextEdit, singleEdit, type 
 import type { ModuleMock } from "./compute-instances.js";
 import * as glyphOutlines from "../../packages/core/src/text/tex/fonts/glyph-outlines.js";
 import { diffValues } from "./snapshot-diff.js";
+import { fragment } from "../fragment-helpers.js";
 
 export type StoreOpKind =
   | "type" | "action" | "drag" | "drag-start" | "drag-end" | "patches" | "undo" | "redo" | "undo-redo" | "render-now" | "compute" | "deliver" | "drop" | "settle"
@@ -448,7 +449,7 @@ export async function runStoreOps(documents: readonly FuzzDocument[], ops: reado
           const base = stale ? doc.snapshot.source : doc.source;
           const edit = benignTextEdit(base, makeRng(Math.floor(r[0] * 2 ** 31)));
           store.getState().dispatch({ type: "APPLY_SOURCE_PATCHES", baseRevision: stale ? doc.sourceRevision - 1 : doc.sourceRevision,
-            patches: [{ oldSpan: { from: edit.from, to: edit.to }, newSpan: { from: edit.from, to: edit.from + edit.insert.length }, replacement: edit.insert }],
+            patches: [{ oldSpan: { from: edit.from, to: edit.to }, newSpan: { from: edit.from, to: edit.from + edit.insert.length }, replacement: fragment(edit.insert) }],
             changedSourceIds: [], historyMergeKey: r[2] < 0.6 ? "canvas-typing" : undefined });
           harness.gesture = null;
           break;

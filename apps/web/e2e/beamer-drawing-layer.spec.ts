@@ -416,7 +416,7 @@ test("overlay inspector scrubs stay incremental and commit one undo step", async
   await setSource(page, source);
   await page.getByRole("button", { name: "1. Layer", exact: true }).click();
   await page.locator('[data-hit-region-target-id="path:0"]').first().click();
-  const label = page.getByText("X shift", { exact: true }).first();
+  const label = page.getByTitle("X shift", { exact: true }).first();
   await expect(label).toBeVisible();
   const box = (await label.boundingBox())!;
   const initial = { x: box.x + box.width / 2, y: box.y + box.height / 2 };

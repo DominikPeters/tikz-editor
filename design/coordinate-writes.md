@@ -86,7 +86,8 @@ frame).
 
 ### Failure classes (328 cases)
 
-1. **World cm written as source units, no frame** (63: `insertPathPoint`,
+1. **World cm written as source units, no frame** (fixed in phase 4, see
+   coordinate-writer.md; 63 at this inventory: `insertPathPoint`,
    `convertNodePositionToAbsolute`, `setFigureBounds`, center-pivot
    `rotateElement`). Each converts world points with `* CM_PER_PT` and writes
    them unitless.
@@ -139,22 +140,22 @@ frame).
 
 | action | implementation | frame handling | status |
 |---|---|---|---|
-| moveHandle | `rewrite.ts` `rewriteCoordinate` (+ `rewrite-calc.ts`, `frame-coordinate.ts`) | handle `frame` / `detachFrame`; positioning via `rewritePositioning` | pass, except positioning under node transforms (class 4) |
-| moveElement(s) | `move-arrange-actions.ts`, `center-pivot-move.ts`, `calc-move.ts` | per-handle frames via `rewritePreciseFrameCoordinate` | pass, except positioning under node transforms (class 4) |
-| alignElements | `move-arrange-actions.ts` → moveElements | as moveElements | pass, except positioning dependency (class 4) |
+| moveHandle | `rewrite.ts` `rewriteCoordinate` (+ `rewrite-calc.ts`, `frame-coordinate.ts`) | handle `frame` / `detachFrame`; positioning via `writer.positioning` | pass (class 4 done) |
+| moveElement(s) | `move-arrange-actions.ts`, `center-pivot-move.ts`, `calc-move.ts` | per-handle frames via `rewritePreciseFrameCoordinate` | pass (class 4 done) |
+| alignElements | `move-arrange-actions.ts` → moveElements | as moveElements | pass (class 4 done) |
 | distributeElements | `move-arrange-actions.ts` → moveElements | as moveElements | not fuzzed (same machinery as align) |
 | resizeElement | `resize-element.ts` (7 raw `CM_PER_PT`) | local transform for rectangles | pass for rectangle corners; edges, circles, ellipses, node sizes not checked |
 | rotateElement | `rotate-element.ts` | `rewritePreciseFrameCoordinate`; recentered corners in cm | fails (class 1); only rectangles/circles/ellipses supported |
-| addElement | `element-templates.ts` `generateElementSource` | none in core; app inverts `rootTransform` | fails (class 3) |
-| pasteStatements / duplicateElements | `paste-duplicate.ts` | offset planned in identity frame | fails (classes 2, 4) |
-| repeatElements | `repeat.ts` | step planned in identity frame | fails (class 2) |
+| addElement | `element-templates.ts` `generateElementSource` | world points written at the end-gap context (`new-statement.ts`) | pass (class 3 done); radii still `legacyText` |
+| pasteStatements / duplicateElements | `paste-duplicate.ts` | copy inserted, then offset in place by the move machinery | pass (class 2 done); `to` bends partial as for moveElement |
+| repeatElements | `repeat.ts` | loop steps as world vectors, `writer.translated` per coordinate or the scope's `shift` | pass (class 2 done) |
 | insertPathPoint | `path-editing-actions.ts` | none | fails (class 1); refuses scoped paths and paths with options |
-| reversePath / setPathPointKind | `path-editing-actions.ts` | n/a (rewrites existing text) | fail on relative (class 5); refuse scoped paths and paths with options |
-| appendToPath | `path-editing-actions.ts`, source from the app path tool | app inverts `rootTransform` only | fails (class 3); refuses paths with options |
-| positionNodeRelativeTo | `node-positioning-actions.ts` | world anchors, direction from source | fails (class 4) |
+| reversePath / setPathPointKind | `path-editing-actions.ts` | path pieces spelled by `path-pieces.ts`: a relative coordinate after a new point is written again from it | pass (class 5 done); refuse scoped paths and paths with options |
+| appendToPath | `path-editing-actions.ts`, world segments from the app path tool | written in the path's shared frame | pass (class 3 done) |
+| positionNodeRelativeTo | `node-positioning-actions.ts` | `writer.positioning` against recorded anchors | pass (class 4 done); refuses where only a negative distance would fit |
 | convertNodePositionToAbsolute | `node-positioning-actions.ts:783` | `worldToLocal` + `localToSourceUnits` without axis vectors | fails (class 1) |
 | setFigureBounds | `figure-bounds.ts` | none | fails (class 1) |
-| splitPath / joinPaths / deletePathPoint / toggleClosedPath | `path-editing-actions.ts` | reorder existing text | not fuzzed (likely class 5 on relative coordinates) |
+| splitPath / joinPaths / deletePathPoint / toggleClosedPath | `path-editing-actions.ts` | path pieces, as reversePath | not fuzzed; unit-tested on relative coordinates (`test/edit/relative-path-rewrites.spec.ts`); a path starting at a relative coordinate has no handles and is refused. Splitting a closed path opens it at the point, round every edge back to it |
 | moveAdornment | `adornment-actions.ts` | writes label angle/distance | not fuzzed: the expected label position under scaled/rotated frames needs a PGF check first |
 | movePathAttachedNode | `path-attached-node-actions.ts` | takes `pos`, not a world point | out of scope (the app converts pointer to `pos`) |
 | connectHandle | `actions.ts` | writes a node reference, no numbers | out of scope |
@@ -163,9 +164,8 @@ frame).
 
 | site | what it writes | status |
 |---|---|---|
-| `canvas-panel/freehand-tool.ts` `formatPointCm` | freehand curves | fails (class 3) |
-| `canvas-panel/path-tool.ts` → core `generateComplexPathSource` | path tool statements and appended segments | fails (class 3) |
-| `CanvasPanel.tsx` → `templateInPictureCoordinates` | addElement preprocessing | fails (class 3) |
+| `canvas-panel/freehand-tool.ts` | freehand curves | world segments sent as `addPath` (class 3 done) |
+| `canvas-panel/path-tool.ts` | path tool statements and appended segments | world segments, `addPath` / `appendToPath` (class 3 done) |
 | `svg-import-clipping.ts` | coordinates from imported SVG | not fuzzed |
 | `assistant-tool-handlers.ts` (27 raw pt/cm constants) | assistant-generated statements | not fuzzed; intended semantics (world or source units) to decide first |
 

@@ -42,14 +42,14 @@ describe("semantic evaluator / coordinates and path ops", () => {
       }
     });
 
-    it("reports invalid polar and current-point-free relative coordinates", () => {
+    it("reports invalid polar coordinates and accepts a leading relative coordinate", () => {
       const source = String.raw`\begin{tikzpicture}
     \draw +(1,0);
     \draw (bad:1cm) -- (45:bad);
   \end{tikzpicture}`;
       const result = evaluateSemantic(source);
 
-      expect(result.diagnostics.some((diagnostic) => diagnostic.code === "relative-coordinate-without-current-point")).toBe(true);
+      expect(result.diagnostics.some((diagnostic) => diagnostic.code === "relative-coordinate-without-current-point")).toBe(false);
       expect(result.diagnostics.some((diagnostic) => diagnostic.code === "invalid-polar-coordinate:(bad:1cm)")).toBe(true);
       expect(result.diagnostics.some((diagnostic) => diagnostic.code === "invalid-polar-coordinate:(45:bad)")).toBe(true);
     });
@@ -1777,7 +1777,8 @@ describe("semantic evaluator / coordinates and path ops", () => {
       const [loose, bent] = cubics;
       if (loose?.kind === "C" && bent?.kind === "C") {
         const looseDistance = Math.hypot(loose.c1.x, loose.c1.y);
-        expect(looseDistance).toBeCloseTo(44.557, 3);
+        // PGF fixed-point distance, also checked by the independent oracle.
+        expect(looseDistance).toBeCloseTo(44.38284, 2);
         expect(bent.c1.y).toBeLessThan(-28.4528);
         expect(bent.c2.y).toBeLessThan(-28.4528);
       }

@@ -9,7 +9,6 @@ import { svgPoint, viewportPoint, pt, px } from "@tikz-editor/core/coords/index"
 import type { CanvasTransform } from "../../store/types";
 import {
   clientToSvg as typedClientToSvg,
-  clientToWorld as typedClientToWorld,
   svgToWorld as typedSvgToWorld,
   svgToViewport,
   viewportToSvg as typedViewportToSvg,
@@ -109,26 +108,15 @@ export function clientToWorldPoint(
   svgElement: SVGSVGElement | null,
   viewBox: SvgViewBox
 ): WorldPoint | null {
-  return typedClientToWorld(
-    point,
-    svgElement,
-    null,
-    { translateX: 0, translateY: 0, scale: 1 },
-    viewBox
-  );
+  const svg = typedClientToSvg(point, svgElement);
+  return svg ? typedSvgToWorld(svg, viewBox) : null;
 }
 
 export function clientToSvgPoint(
   point: ClientPoint,
   svgElement: SVGSVGElement | null
 ): SvgPoint | null {
-  return typedClientToSvg(
-    point,
-    svgElement,
-    null,
-    { translateX: 0, translateY: 0, scale: 1 },
-    { x: 0, y: 0, width: 0, height: 0 }
-  );
+  return typedClientToSvg(point, svgElement);
 }
 
 export function rotatePointAroundCenter(

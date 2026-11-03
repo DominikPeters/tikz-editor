@@ -3,6 +3,8 @@ mod latex_pdf;
 mod presentation;
 mod update_preferences;
 mod portable;
+mod snap_layout;
+mod windows_accent;
 
 use assistant::{
     AssistantAccountSnapshot, AssistantModelOption, AssistantState, AssistantThreadStatePayload,
@@ -2097,14 +2099,21 @@ fn desktop_open_text(
 fn desktop_open_binary(
     path: Option<String>,
     add_to_recent: Option<bool>,
+    kind: Option<String>,
     app: AppHandle,
 ) -> Result<Option<OpenBinaryPayload>, String> {
     let resolved_path = if let Some(raw_path) = path {
         Some(PathBuf::from(raw_path))
     } else {
-        FileDialog::new()
-            .add_filter("PowerPoint", &["pptx"])
-            .pick_file()
+        if kind.as_deref() == Some("graphics") {
+            FileDialog::new()
+                .add_filter("Images and PDF", &["png", "jpg", "jpeg", "svg", "pdf"])
+                .pick_file()
+        } else {
+            FileDialog::new()
+                .add_filter("PowerPoint", &["pptx"])
+                .pick_file()
+        }
     };
     let Some(path_buf) = resolved_path else {
         return Ok(None);
@@ -3111,6 +3120,8 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            snap_layout::desktop_set_maximize_button_bounds,
+            windows_accent::desktop_accent_palette,
             presentation::desktop_presentation_keep_awake,
             presentation::desktop_prepare_presentation_window,
             update_preferences::desktop_get_automatic_update_checks,

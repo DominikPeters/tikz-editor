@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "windows-frame",
+  "description": "The self-drawn Windows title bar: caption buttons and dragging",
+  "platforms": ["windows"],
+  "windows": ["main"],
+  "permissions": [
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging"
+  ]
+}

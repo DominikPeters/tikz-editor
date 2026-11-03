@@ -1,3 +1,17 @@
+import {
+  applyFragments,
+  editedSlice,
+  EMPTY_FRAGMENT,
+  joinFragments,
+  layout,
+  sliceFragment,
+  sourceSlice,
+  tikz,
+  unchangedSource,
+  type EditedSource,
+  type FragmentEdit,
+  type TikzFragment
+} from "./fragment.js";
 import type { Statement, Span, TikzFigureInventoryItem } from "../ast/types.js";
 import type { SourcePatch } from "./types.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
@@ -26,7 +40,7 @@ export type StatementParentGroup = {
 
 export type TextReplacement = {
   span: Span;
-  text: string;
+  text: TikzFragment;
 };
 
 export type AppliedTextReplacement = {
@@ -168,76 +182,101 @@ export function resolveRootInsertionPoint(source: string, figure?: TikzFigureInv
   };
 }
 
+/** A snippet with `\n` line breaks and no trailing whitespace. */
+export function normalizeSnippet(snippet: TikzFragment): TikzFragment {
+  const lineBreaks = [...snippet.matchAll(/\r\n?/g)].map((match): FragmentEdit => ({
+    span: { from: match.index, to: match.index + match[0].length },
+    fragment: layout("\n")
+  }));
+  const edited = applyFragments(snippet, lineBreaks);
+  return editedSlice(edited, 0, edited.trimEnd().length);
+}
+
 export function formatSnippetsForInsertion(
-  snippets: readonly string[],
+  snippets: readonly TikzFragment[],
   indent: string,
   options?: { trailingNewline?: boolean; newline?: string }
-): { text: string; snippetSpans: Span[] } {
+): { text: TikzFragment; snippetSpans: Span[] } {
   const normalized = snippets
-    .map((snippet) => snippet.replace(/\r\n?/g, "\n").trimEnd())
+    .map(normalizeSnippet)
     .filter((snippet) => snippet.trim().length > 0);
 
   if (normalized.length === 0) {
     return {
-      text: "",
+      text: EMPTY_FRAGMENT,
       snippetSpans: []
     };
   }
 
-  let text = "";
+  const parts: TikzFragment[] = [];
   const snippetSpans: Span[] = [];
   let cursor = 0;
 
   for (const snippet of normalized) {
-    text += "\n";
+    parts.push(layout("\n"));
     cursor += 1;
 
     const start = cursor;
     const formatted = reindentSnippet(snippet, indent);
-    text += formatted;
+    parts.push(formatted);
     cursor += formatted.length;
 
     snippetSpans.push({ from: start, to: cursor });
   }
 
   if (options?.trailingNewline) {
-    const newline = options.newline ?? "\n";
-    text += newline;
+    parts.push(layout(options.newline ?? "\n"));
   }
 
   return {
-    text,
+    text: joinFragments(parts),
     snippetSpans
   };
 }
 
-function reindentSnippet(snippet: string, indent: string): string {
-  const lines = snippet.split("\n");
+/** Part of a fragment is still the text its constructors produced. */
+function cut(text: TikzFragment, from: number, to?: number): TikzFragment {
+  return sliceFragment(text, from, to);
+}
+
+/** The lines of a fragment, each still the text its constructors produced. */
+export function splitLines(text: TikzFragment): TikzFragment[] {
+  const lines: TikzFragment[] = [];
+  let from = 0;
+  for (let index = text.indexOf("\n"); index >= 0; index = text.indexOf("\n", from)) {
+    lines.push(cut(text, from, index));
+    from = index + 1;
+  }
+  lines.push(cut(text, from));
+  return lines;
+}
+
+/** Every line of the snippet re-indented to `indent`, after the least indented line is brought to the margin. */
+export function reindentSnippet(snippet: TikzFragment, indent: string): TikzFragment {
+  const lines = splitLines(snippet);
   const nonEmpty = lines.filter((line) => line.trim().length > 0);
   const minIndent = nonEmpty.reduce((minimum, line) => {
     const current = line.match(/^[ \t]*/)?.[0].length ?? 0;
     return Math.min(minimum, current);
   }, Number.POSITIVE_INFINITY);
   const trimIndent = Number.isFinite(minIndent) ? minIndent : 0;
-  return lines
-    .map((line) => {
-      const stripped = trimIndent > 0 ? line.slice(Math.min(trimIndent, line.length)) : line;
-      return `${indent}${stripped}`;
-    })
-    .join("\n");
+  return joinFragments(
+    lines.map((line) => tikz`${layout(indent)}${trimIndent > 0 ? cut(line, Math.min(trimIndent, line.length)) : line}`),
+    layout("\n")
+  );
 }
 
 export function applyTextReplacements(
   source: string,
   replacements: readonly TextReplacement[]
 ): {
-  source: string;
+  source: EditedSource;
   patches: SourcePatch[];
   applied: AppliedTextReplacement[];
 } {
   if (replacements.length === 0) {
     return {
-      source,
+      source: unchangedSource(source),
       patches: [],
       applied: []
     };
@@ -254,7 +293,7 @@ export function applyTextReplacements(
   const applied: AppliedTextReplacement[] = [];
   let cursor = 0;
   let delta = 0;
-  let output = "";
+  const edits: FragmentEdit[] = [];
 
   for (const replacement of sorted) {
     const oldFrom = clampOffset(replacement.span.from, source.length);
@@ -263,8 +302,7 @@ export function applyTextReplacements(
       throw new Error("Overlapping replacements are not allowed");
     }
 
-    output += source.slice(cursor, oldFrom);
-    output += replacement.text;
+    edits.push({ span: { from: oldFrom, to: oldTo }, fragment: replacement.text });
 
     const newFrom = oldFrom + delta;
     const newTo = newFrom + replacement.text.length;
@@ -281,12 +319,36 @@ export function applyTextReplacements(
     cursor = oldTo;
   }
 
-  output += source.slice(cursor);
   return {
-    source: output,
+    source: applyFragments(source, edits),
     patches,
     applied
   };
+}
+
+/**
+ * Where spans of the old source stand after `patches`, whose old spans are
+ * all against that source (their new spans are not relied on). A span that
+ * starts or ends inside a replaced stretch keeps its offset into it, up to
+ * the replacement's length.
+ */
+export function mapSpansThroughPatches(spans: readonly Span[], patches: readonly SourcePatch[]): Span[] {
+  const sorted = [...patches].sort((left, right) => left.oldSpan.from - right.oldSpan.from || left.oldSpan.to - right.oldSpan.to);
+  const map = (offset: number): number => {
+    let shift = 0;
+    for (const patch of sorted) {
+      if (patch.oldSpan.to <= offset) {
+        shift += patch.replacement.length - (patch.oldSpan.to - patch.oldSpan.from);
+        continue;
+      }
+      if (patch.oldSpan.from < offset) {
+        return patch.oldSpan.from + shift + Math.min(offset - patch.oldSpan.from, patch.replacement.length);
+      }
+      break;
+    }
+    return offset + shift;
+  };
+  return spans.map((span) => ({ from: map(span.from), to: map(span.to) }));
 }
 
 export function shiftSpansAfterReplacement(
@@ -374,8 +436,8 @@ export function mapSpansToStatementIds(source: string, spans: readonly Span[]): 
   return ids;
 }
 
-export function statementSnippet(source: string, ref: StatementRef): string {
-  return source.slice(ref.span.from, ref.span.to);
+export function statementSnippet(source: string, ref: StatementRef): TikzFragment {
+  return sourceSlice(source, ref.span);
 }
 
 function overlapWidth(left: Span, right: Span): number {

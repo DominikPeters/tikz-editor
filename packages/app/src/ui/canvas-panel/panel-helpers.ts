@@ -2,7 +2,7 @@ import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { AdornmentOwnerGeometry, NodeItem, PathItem, Span, Statement } from "@tikz-editor/core/ast/types";
 import type { ResizeRole } from "@tikz-editor/core/edit/actions";
 import { PT_PER_CM } from "@tikz-editor/core/edit/format";
-import { mapWorldTransformToSvgTransform, svgPoint, svgBounds, worldPoint, worldVector, worldTransform, pt } from "@tikz-editor/core/coords/index";
+import { mapWorldTransformToSvgTransform, svgPoint, svgBounds, svgVector, worldPoint, worldVector, worldTransform, pt } from "@tikz-editor/core/coords/index";
 import { parseCoordinateLike, parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
 import { resolveTransformInspectorMutationContextFromOptionEntries } from "@tikz-editor/core/edit/property-write-builders";
 import type { OptionListAst } from "@tikz-editor/core/options/types";
@@ -237,7 +237,7 @@ export function resolveBoundsEdgePointToward(bounds: SvgBounds, from: SvgPoint):
     pt((bounds.minX + bounds.maxX) / 2),
     pt((bounds.minY + bounds.maxY) / 2)
   );
-  const vector = worldVector(pt(from.x - center.x), pt(from.y - center.y));
+  const vector = svgVector(pt(from.x - center.x), pt(from.y - center.y));
   const halfWidth = Math.max((bounds.maxX - bounds.minX) / 2, 1e-6);
   const halfHeight = Math.max((bounds.maxY - bounds.minY) / 2, 1e-6);
   const scale = Math.max(Math.abs(vector.x) / halfWidth, Math.abs(vector.y) / halfHeight);

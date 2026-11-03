@@ -292,7 +292,7 @@ describe("path edit actions", () => {
     expect(missingPath.kind).toBe("unsupported");
   });
 
-  it("splits a cycle-closed polygon into one open path", () => {
+  it("splits a cycle-closed polygon into one open path that keeps every edge", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0) -- (1,1) -- cycle;
 \end{tikzpicture}`;
@@ -306,11 +306,11 @@ describe("path edit actions", () => {
 
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
-    expect(result.newSource).toContain("\\draw (1,0) -- (1,1) -- (0,0);");
+    expect(result.newSource).toContain("\\draw (1,0) -- (1,1) -- (0,0) -- (1,0);");
     expect(result.newSource).not.toContain("cycle");
   });
 
-  it("rejects splitting a curve-cycle path when the opened body cannot be ordered safely", () => {
+  it("splits a curve-cycle path, writing the closing curve out to the first point", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) .. controls (1,0) and (2,1) .. (3,1) .. controls (2,-1) and (1,-1) .. cycle;
 \end{tikzpicture}`;
@@ -322,10 +322,9 @@ describe("path edit actions", () => {
       handleId: handleIdFor(source, rendered, "(3,1)")
     });
 
-    expect(result.kind).toBe("unsupported");
-    if (result.kind === "unsupported") {
-      expect(result.reason).toContain("opened");
-    }
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain(String.raw`\draw (3,1) .. controls (2,-1) and (1,-1) .. (0,0) .. controls (1,0) and (2,1) .. (3,1);`);
   });
 
   it("joins two open paths", () => {
@@ -904,11 +903,12 @@ describe("path edit actions", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0) -- (2,0);
 \end{tikzpicture}`;
-    const result = applyEditAction(source, [], {
+    const result = applyEditAction(source, renderTikzToSvg(source).semantic.editHandles, {
       kind: "appendToPath",
       elementId: "path:0",
       end: "end",
-      segmentSource: "-- (3,0) -- (4,0)"
+      start: wp(2 * PT_PER_CM, 0),
+      segments: [{ kind: "line", to: wp(3 * PT_PER_CM, 0) }, { kind: "line", to: wp(4 * PT_PER_CM, 0) }]
     });
 
     expect(result.kind).toBe("success");
@@ -920,11 +920,13 @@ describe("path edit actions", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0) -- (2,0);
 \end{tikzpicture}`;
-    const result = applyEditAction(source, [], {
+    // Drawn from the path's start outwards: (0,0) to (-1,0) to (-2,0).
+    const result = applyEditAction(source, renderTikzToSvg(source).semantic.editHandles, {
       kind: "appendToPath",
       elementId: "path:0",
       end: "start",
-      segmentSource: "(-2,0) -- (-1,0) --"
+      start: wp(0, 0),
+      segments: [{ kind: "line", to: wp(-1 * PT_PER_CM, 0) }, { kind: "line", to: wp(-2 * PT_PER_CM, 0) }]
     });
 
     expect(result.kind).toBe("success");
@@ -936,20 +938,23 @@ describe("path edit actions", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0) -- (1,1) -- cycle;
 \end{tikzpicture}`;
-    const result = applyEditAction(source, [], {
+    const handles = renderTikzToSvg(source).semantic.editHandles;
+    const result = applyEditAction(source, handles, {
       kind: "appendToPath",
       elementId: "path:0",
       end: "end",
-      segmentSource: "-- (2,0)"
+      start: wp(0, 0),
+      segments: [{ kind: "line", to: wp(2 * PT_PER_CM, 0) }]
     });
 
     expect(result.kind).toBe("unsupported");
 
-    const missing = applyEditAction(source, [], {
+    const missing = applyEditAction(source, handles, {
       kind: "appendToPath",
       elementId: "path:missing",
       end: "end",
-      segmentSource: "-- (2,0)"
+      start: wp(0, 0),
+      segments: [{ kind: "line", to: wp(2 * PT_PER_CM, 0) }]
     });
     expect(missing.kind).toBe("unsupported");
   });

@@ -9,7 +9,7 @@ import { parseTikz } from "../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
 import { collectSourceWorldBounds } from "../packages/core/src/edit/snapping/geometry.js";
 import { applySourcePatches } from "../packages/core/src/edit/source-patches.js";
-import { wb } from "./coords-helpers.js";
+import { wb, testSiteContext, UNITLESS_SPELLING } from "./coords-helpers.js";
 
 export const cm = (v: number) => v * PT_PER_CM;
 
@@ -72,6 +72,8 @@ export function makeHandle(
     world: world,
     local: rest.local ?? world,
     frame: rest.frame ?? transform,
+    siteContext: testSiteContext(rest.frame ?? transform),
+    spelling: UNITLESS_SPELLING,
     transform,
     sourceText: source.slice(span.from, span.to),
     coordinateForm: overrides.coordinateForm ?? "cartesian",

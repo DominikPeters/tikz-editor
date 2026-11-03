@@ -1,26 +1,41 @@
 import { deckPageDerived, deckObjectIndexKey } from "../../deck-page-derived-cache";
 import { deckStepRootKey } from "../../root-key";
-import { useCallback, useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import {
   applyDeckEditAction,
   buildBeamerObjectIndex,
+  buildDeckDocumentInspector,
   buildDeckFrameInspector,
   buildDeckObjectInspector,
+  buildDeckSlideContext,
+  scanBeamerDocument,
+  type DeckDocumentEditAction,
   type BeamerFrameLayout,
+  type BeamerObjectNode,
+  type BeamerThemeCatalogEntry,
+  type DeckDocumentInspectorModel,
   type DeckEditAction,
+  type DeckInspectorCommand,
   type DeckInspectorField,
   type DeckInspectorModel,
   type DeckInspectorWrite,
+  type DeckSlideContext,
 } from "@tikz-editor/core/beamer/index";
+import { Actions } from "flexlayout-react";
 import { useEditorStore } from "../../store/store";
+import { getDockLayoutHandle } from "../DockLayout";
 import { SidePanel } from "../SidePanel";
-import { CustomDropdown } from "../CustomDropdown";
+import { DeckField } from "./deck-fields";
+import { DeckDocumentSections, DeckScopeHeader, DeckSlideInfoSection } from "./DeckDocumentSections";
 import { useInspectorPreviewScrub } from "./useInspectorPreviewScrub";
 import css from "./InspectorPanel.module.css";
+import { replaceSelectedDeckGraphics } from "../deck-graphics-replacement";
 
 /**
  * Deck-mode inspector (Stage 3b): renders `DeckInspectorModel` fields for
- * the selected deck object, or the frame options when nothing is selected.
+ * the selected deck object. With nothing selected it shows two scopes: the
+ * slide's options and context, then the presentation's theme, colors, page
+ * and title info (design/beamer-document-inspector.md).
  * Reuses the tikz inspector's styling and scrub machinery; writes dispatch
  * `DeckEditAction`s through the shared `APPLY_EDIT_ACTION` bookkeeping.
  *
@@ -31,11 +46,14 @@ import css from "./InspectorPanel.module.css";
  * commit one recorded action computed against that frozen base.
  */
 export function DeckInspectorPanel(): JSX.Element {
+  const [replacementError, setReplacementError] = useState<{ documentId: string; objectId: string | null; message: string } | null>(null);
+  const replacing = useRef(false);
   const dispatch = useEditorStore((s) => s.dispatch);
   const source = useEditorStore((s) => s.source);
   const snapshot = useEditorStore((s) => s.snapshot);
   const deckObjectSelection = useEditorStore((s) => s.deckObjectSelection);
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
+  const sourceRevision = useEditorStore((s) => s.sourceRevision);
 
   const activeFrame = snapshot.deck?.activeFrame ?? null;
   const deckDocument = snapshot.deck?.document;
@@ -67,7 +85,9 @@ export function DeckInspectorPanel(): JSX.Element {
       return null;
     }
     if (selectedNode) {
-      return buildDeckObjectInspector(source, selectedNode);
+      // An unsupported object's layout item says why the preview cannot draw it.
+      const message = activeFrame.layout.items.find((item) => item.id === selectedNode.id)?.message;
+      return buildDeckObjectInspector(source, selectedNode, message === undefined ? {} : { message });
     }
     // The render's scan of the deck, rather than scanning it again here.
     return buildDeckFrameInspector(source, activeFrame.frameId, deckDocument);
@@ -75,11 +95,29 @@ export function DeckInspectorPanel(): JSX.Element {
 
   // Keep showing the last model while a re-render is in flight so the panel
   // does not flicker to empty between an edit and its reconciled snapshot.
-  const lastModelRef = useRef<DeckInspectorModel | null>(null);
+  const lastModelRef = useRef<{ documentId: string; rootId: string | null; model: DeckInspectorModel } | null>(null);
   if (model) {
-    lastModelRef.current = model;
+    lastModelRef.current = { documentId: activeDocumentId, rootId: activeRootId, model };
   }
-  const rendered = model ?? lastModelRef.current;
+  const currentDocument = useMemo(() => deckDocument && snapshot.source === source
+    ? deckDocument : scanBeamerDocument(source), [deckDocument, snapshot.source, source]);
+  const previous = lastModelRef.current;
+  const rendered = currentDocument.frames.length === 0 ? null : model ??
+    (previous?.documentId === activeDocumentId && previous.rootId === activeRootId ? previous.model : null);
+
+  // Presentation edits resolve against current source even while rendering
+  // lags behind, and do not require the deck to have any frames.
+  const documentModel = useMemo<DeckDocumentInspectorModel | null>(
+    () => buildDeckDocumentInspector(currentDocument),
+    [currentDocument]
+  );
+  const frameSummary = snapshot.deck?.frames.find((frame) => frame.id === activeRootId) ?? null;
+  const slideContext = useMemo<DeckSlideContext | null>(
+    () => deckDocument && activeRootId
+      ? buildDeckSlideContext(deckDocument, activeRootId, activeFrame?.frameId === activeRootId ? activeFrame.layout : undefined)
+      : null,
+    [activeFrame, activeRootId, deckDocument]
+  );
 
   const frameId = activeFrame?.frameId ?? null;
   const objectId = selectedNode?.id ?? deckObjectSelection?.objectId ?? null;
@@ -89,6 +127,8 @@ export function DeckInspectorPanel(): JSX.Element {
       write: DeckInspectorWrite,
       value: string | number | boolean | null
     ): DeckEditAction | null => {
+      const documentAction = deckDocumentActionForWrite(write, value);
+      if (documentAction) return documentAction;
       if (frameId == null || !fresh) {
         return null;
       }
@@ -97,20 +137,59 @@ export function DeckInspectorPanel(): JSX.Element {
     [frameId, fresh, objectId]
   );
 
+  // Some object ids carry source offsets (an image's ends in its text
+  // range), so an edit that changes the object's length renames it. Object
+  // edits never move its start: remember kind and start, and reselect the
+  // object found there once the edited frame has rendered.
+  const reselectRef = useRef<{
+    documentId: string;
+    frameId: string;
+    kind: BeamerObjectNode["kind"];
+    from: number;
+    /** The pre-edit source, whose render must not settle the reselect. */
+    sourceBefore: string;
+  } | null>(null);
+  const rememberSelection = useCallback((): void => {
+    reselectRef.current = selectedNode && frameId != null
+      ? { documentId: activeDocumentId, frameId, kind: selectedNode.kind, from: selectedNode.sourceSpan.from, sourceBefore: source }
+      : null;
+  }, [activeDocumentId, frameId, selectedNode, source]);
+  useEffect(() => {
+    const pending = reselectRef.current;
+    if (!pending || !fresh || source === pending.sourceBefore) {
+      return;
+    }
+    reselectRef.current = null;
+    if (selectedNode || pending.documentId !== activeDocumentId || pending.frameId !== activeFrame.frameId) {
+      return;
+    }
+    const index = deckPageDerived(activeFrame, source, deckObjectIndexKey, () => buildBeamerObjectIndex({
+      items: activeFrame.layout.items,
+      paragraphs: activeFrame.layout.paragraphs,
+      source,
+    }));
+    const node = index.nodes.find((candidate) => candidate.kind === pending.kind && candidate.sourceSpan.from === pending.from);
+    if (node) {
+      dispatch({ type: "SET_DECK_OBJECT_SELECTION", frameId: pending.frameId, objectId: node.id });
+    }
+  }, [activeDocumentId, activeFrame, dispatch, fresh, selectedNode, source]);
+
   const commit = useCallback(
     (write: DeckInspectorWrite, value: string | number | boolean | null): void => {
       const action = actionFor(write, value);
       if (action) {
+        rememberSelection();
         dispatch({ type: "APPLY_EDIT_ACTION", action });
       }
     },
-    [actionFor, dispatch]
+    [actionFor, dispatch, rememberSelection]
   );
 
   const selectionIds = useMemo(
     () => (objectId != null ? [objectId] : []),
     [objectId]
   );
+  const setFrozenInspectorView = useCallback(() => {}, []);
   const { beginNumberLabelScrub } = useInspectorPreviewScrub({
     dispatch,
     selectedSourceIds: selectionIds,
@@ -118,7 +197,7 @@ export function DeckInspectorPanel(): JSX.Element {
     multiModel: null,
     singlePropertyProvenance: {},
     multiPropertyProvenance: {},
-    setFrozenInspectorView: () => {},
+    setFrozenInspectorView,
   });
 
   const scrubBaseRef = useRef<{
@@ -131,13 +210,14 @@ export function DeckInspectorPanel(): JSX.Element {
       event: ReactPointerEvent<HTMLElement>,
       field: Extract<DeckInspectorField, { kind: "number" }>
     ): void => {
-      if (!fresh || field.value == null) {
+      const write = field.write;
+      if (!fresh || field.value == null || write == null) {
         return;
       }
       const base = { source, layout: activeFrame.layout };
       scrubBaseRef.current = base;
       const buildResult = (next: number) => {
-        const action = actionFor(field.write, next);
+        const action = actionFor(write, next);
         if (!action) {
           return null;
         }
@@ -167,6 +247,7 @@ export function DeckInspectorPanel(): JSX.Element {
           // the precomputed result applies against the current document.
           const built = buildResult(next);
           if (built) {
+            rememberSelection();
             dispatch({
               type: "APPLY_EDIT_ACTION",
               action: built.action,
@@ -178,10 +259,10 @@ export function DeckInspectorPanel(): JSX.Element {
         },
       });
     },
-    [actionFor, activeFrame, beginNumberLabelScrub, dispatch, fresh, source]
+    [actionFor, activeFrame, beginNumberLabelScrub, dispatch, fresh, rememberSelection, source]
   );
 
-  if (!rendered) {
+  if (!rendered && !documentModel) {
     return (
       <SidePanel className={css.panel ?? ""}>
         <SidePanel.Content>
@@ -191,27 +272,83 @@ export function DeckInspectorPanel(): JSX.Element {
     );
   }
 
+  const runCommand = (command: DeckInspectorCommand): void => {
+    if (command.kind === "replaceGraphics") {
+      if (replacing.current) return;
+      replacing.current = true;
+      setReplacementError(null);
+      void replaceSelectedDeckGraphics({ getState: useEditorStore.getState, dispatch, rememberSelection }).then(result => {
+        replacing.current = false;
+        if (result.status === "failed") setReplacementError({ documentId: activeDocumentId, objectId, message: result.reason });
+      });
+      return;
+    }
+    if (command.kind === "enterDrawing") {
+      if (frameId != null) dispatch({ type: "SET_DECK_OBJECT_SELECTION", frameId, objectId: null });
+      dispatch({ type: "SET_ACTIVE_ROOT", rootId: command.rootId });
+      return;
+    }
+    const dock = getDockLayoutHandle();
+    if (dock && !dock.getModel().getNodeById("source")) dock.togglePanel("source");
+    dock?.getModel().doAction(Actions.selectTab("source"));
+    dispatch({ type: "REVEAL_SOURCE", documentId: activeDocumentId, sourceRevision, span: command.span });
+  };
+  const applyTheme = (entry: BeamerThemeCatalogEntry): void => {
+    dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "deckSetPresentationTheme", name: entry.name } });
+  };
+  const frameFieldsDisabled = !fresh;
+  const fieldList = (
+    <fieldset disabled={frameFieldsDisabled} className={css.deckFields}>
+      {rendered == null || rendered.fields.length === 0 ? (
+        <p className={css.hint}>This object has no editable properties yet.</p>
+      ) : (
+        rendered.fields.map((field) => (
+          <DeckField
+            key={`${activeDocumentId}:${objectId ?? frameId}:${field.id}`}
+            field={field}
+            onCommit={commit}
+            onBeginScrub={beginDeckScrub}
+            onCommand={runCommand}
+          />
+        ))
+      )}
+    </fieldset>
+  );
+
+  if (rendered?.target === "object") {
+    return (
+      <SidePanel className={css.panel ?? ""}>
+        <SidePanel.Header>{rendered.title}</SidePanel.Header>
+        <SidePanel.Content className={css.content ?? ""}>
+          <SidePanel.Section>
+            <SidePanel.SectionBody>{fieldList}{replacementError?.documentId === activeDocumentId && replacementError.objectId === objectId ? <p role="alert" className={css.deckReadOnlyReason}>{replacementError.message}</p> : null}</SidePanel.SectionBody>
+          </SidePanel.Section>
+        </SidePanel.Content>
+      </SidePanel>
+    );
+  }
+
   return (
     <SidePanel className={css.panel ?? ""}>
-      <SidePanel.Header>{rendered.title}</SidePanel.Header>
       <SidePanel.Content className={css.content ?? ""}>
-        <SidePanel.SectionBody>
-          <fieldset disabled={activeFrame?.frameId !== activeRootId || activeFrame.step !== Math.min(activeStep, Math.max(1, activeFrame.stepCount))}
-            style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-          {rendered.fields.length === 0 ? (
-            <p className={css.hint}>This object has no editable properties yet.</p>
-          ) : (
-            rendered.fields.map((field) => (
-              <DeckField
-                key={field.id}
-                field={field}
-                onCommit={commit}
-                onBeginScrub={beginDeckScrub}
-              />
-            ))
-          )}
-          </fieldset>
-        </SidePanel.SectionBody>
+        {rendered ? <div className={css.deckScope}>
+          <DeckScopeHeader
+            title={frameSummary ? `Slide ${frameSummary.frameIndex + 1}` : "Slide"}
+            detail={frameSummary?.title ?? null}
+          />
+          <SidePanel.Section>
+            <SidePanel.SectionBody>{fieldList}</SidePanel.SectionBody>
+          </SidePanel.Section>
+          {slideContext ? (
+            <DeckSlideInfoSection context={slideContext} stepCount={frameSummary?.stepCount ?? 1} />
+          ) : null}
+        </div> : null}
+        {documentModel ? (
+          <div className={css.deckScope} data-inspector-panel>
+            <DeckScopeHeader title="Presentation" />
+            <DeckDocumentSections model={documentModel} onCommit={commit} onApplyTheme={applyTheme} onCommand={runCommand} />
+          </div>
+        ) : null}
       </SidePanel.Content>
     </SidePanel>
   );
@@ -219,6 +356,21 @@ export function DeckInspectorPanel(): JSX.Element {
 
 function formatDeckNumber(value: number): string {
   return String(Number(value.toFixed(4)));
+}
+
+function deckDocumentActionForWrite(write: DeckInspectorWrite, value: string | number | boolean | null): DeckDocumentEditAction | null {
+  if (write.kind === "setColor") return { kind: "deckSetColor", role: write.role, side: write.side, value: value === null ? null : String(value) };
+  // An empty choice or a cleared field returns to the default.
+  if (write.kind === "setClassOption") return { kind: "deckSetClassOption", key: write.key, value: value == null || value === "" ? null : String(value) };
+  if (write.kind === "setNavigationSymbols") return { kind: "deckSetNavigationSymbols", visible: value == null || value === "" ? null : value === "shown" };
+  if (write.kind === "setMetadataShort") return { kind: "deckSetMetadataShort", field: write.field, value: value == null || value === "" ? null : String(value) };
+  if (write.kind === "setTheme") return { kind: "deckSetTheme", themeKind: write.themeKind, name: typeof value === "string" && value.length > 0 ? value : null };
+  if (write.kind === "setThemeOption") return { kind: "deckSetThemeOption", key: write.key, value: value === true ? true : typeof value === "string" && value.trim().length > 0 ? value.trim() : null };
+  if (write.kind === "setThemeFlagChoice") {
+    const key = typeof value === "string" && write.keys.includes(value) ? value : null;
+    return { kind: "deckSetThemeOption", key: key ?? write.keys[0] ?? "", value: key ? true : null };
+  }
+  return null;
 }
 
 function deckActionForWrite(
@@ -236,6 +388,17 @@ function deckActionForWrite(
       : String(value);
   };
   switch (write.kind) {
+    case "setListDefaultOverlay":
+      return objectId == null ? null : { kind: "deckSetListDefaultOverlay", frameId, objectId, spec: typeof value === "string" && value.length > 0 ? value : null };
+    case "setListLabelTemplate":
+      return objectId == null ? null : { kind: "deckSetListLabelTemplate", frameId, objectId, template: typeof value === "string" && value.length > 0 ? value : null };
+    case "setColor":
+    case "setClassOption":
+    case "setNavigationSymbols":
+    case "setMetadataShort":
+    case "setTheme":
+    case "setThemeOption":
+    case "setThemeFlagChoice": return deckDocumentActionForWrite(write, value);
     case "renameEnvironment":
       return objectId == null
         ? null
@@ -276,6 +439,24 @@ function deckActionForWrite(
             key: write.key,
             value: dimension(write.suffix),
           };
+    case "setGraphicsFlag":
+      return objectId == null
+        ? null
+        : { kind: "deckSetGraphicsOption", frameId, objectId, key: write.key, value: value === true ? true : null };
+    case "setEnvironmentFlag":
+      return objectId == null
+        ? null
+        : { kind: "deckSetEnvironmentOption", frameId, objectId, key: write.key, value: value === true ? true : null };
+    case "setEnvironmentFlagChoice": {
+      if (objectId == null) {
+        return null;
+      }
+      // "" clears every flag of the choice; a flag replaces the others.
+      const flag = typeof value === "string" ? value : "";
+      return flag.length > 0
+        ? { kind: "deckSetEnvironmentOption", frameId, objectId, key: flag, value: true, exclusive: write.keys }
+        : { kind: "deckSetEnvironmentOption", frameId, objectId, key: write.keys[0] ?? "", value: null, exclusive: write.keys };
+    }
     case "setColumnWidth": {
       if (objectId == null) {
         return null;
@@ -300,164 +481,4 @@ function deckActionForWrite(
     case "setFrameAlignment":
       return { kind: "deckSetFrameOption", frameId, key: String(value), value: true };
   }
-}
-
-function DeckField(props: {
-  field: DeckInspectorField;
-  onCommit: (write: DeckInspectorWrite, value: string | number | boolean | null) => void;
-  onBeginScrub: (
-    event: ReactPointerEvent<HTMLElement>,
-    field: Extract<DeckInspectorField, { kind: "number" }>
-  ) => void;
-}): JSX.Element {
-  const { field, onCommit, onBeginScrub } = props;
-  switch (field.kind) {
-    case "enum":
-      return (
-        <div className={css.property}>
-          <div className={css.propertyLabel}>{field.label}</div>
-          <CustomDropdown
-            ariaLabel={field.label}
-            value={field.value}
-            options={[...field.options]}
-            onChange={(next) => { onCommit(field.write, next); }}
-          />
-        </div>
-      );
-    case "boolean":
-      return (
-        <div className={css.property}>
-          <label className={css.checkboxControl}>
-            <input
-              className={css.checkboxInput}
-              type="checkbox"
-              checked={field.value}
-              onChange={(event) => { onCommit(field.write, event.currentTarget.checked); }}
-            />
-            <span className={css.checkboxLabel}>{field.label}</span>
-          </label>
-        </div>
-      );
-    case "text":
-      return <DeckTextField field={field} onCommit={onCommit} />;
-    case "number":
-      return <DeckNumberField field={field} onCommit={onCommit} onBeginScrub={onBeginScrub} />;
-  }
-}
-
-function DeckTextField(props: {
-  field: Extract<DeckInspectorField, { kind: "text" }>;
-  onCommit: (write: DeckInspectorWrite, value: string) => void;
-}): JSX.Element {
-  const { field, onCommit } = props;
-  const [draft, setDraft] = useState<string | null>(null);
-  const commitDraft = (value: string): void => {
-    setDraft(null);
-    if (value !== field.value) {
-      onCommit(field.write, value);
-    }
-  };
-  return (
-    <div className={css.property}>
-      <div className={css.propertyLabel}>{field.label}</div>
-      <div className={css.controlRow}>
-        <input
-          className={css.textInput}
-          type="text"
-          aria-label={field.label}
-          value={draft ?? field.value}
-          placeholder={field.placeholder}
-          onChange={(event) => { setDraft(event.currentTarget.value); }}
-          onBlur={(event) => {
-            if (draft != null) {
-              commitDraft(event.currentTarget.value);
-            }
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commitDraft(event.currentTarget.value);
-              event.currentTarget.blur();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              setDraft(null);
-              event.currentTarget.blur();
-            }
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function DeckNumberField(props: {
-  field: Extract<DeckInspectorField, { kind: "number" }>;
-  onCommit: (write: DeckInspectorWrite, value: number | null) => void;
-  onBeginScrub: (
-    event: ReactPointerEvent<HTMLElement>,
-    field: Extract<DeckInspectorField, { kind: "number" }>
-  ) => void;
-}): JSX.Element {
-  const { field, onCommit, onBeginScrub } = props;
-  const [draft, setDraft] = useState<string | null>(null);
-  const scrubbable = field.value != null;
-  const commitDraft = (raw: string): void => {
-    setDraft(null);
-    const trimmed = raw.trim();
-    if (trimmed.length === 0) {
-      if (field.value != null) {
-        onCommit(field.write, null);
-      }
-      return;
-    }
-    const parsed = Number(trimmed);
-    if (!Number.isFinite(parsed) || parsed === field.value) {
-      return;
-    }
-    onCommit(field.write, parsed);
-  };
-  return (
-    <div className={css.property}>
-      <div
-        className={
-          scrubbable
-            ? `${css.propertyLabel} ${css.propertyLabelScrubbable}`
-            : css.propertyLabel
-        }
-        onPointerDown={(event) => { onBeginScrub(event, field); }}
-      >
-        {field.label}
-      </div>
-      <div className={css.controlRow}>
-        <input
-          className={css.numberInput}
-          type="number"
-          aria-label={field.label}
-          step={field.step}
-          min={field.min}
-          max={field.max}
-          value={draft ?? (field.value != null ? String(field.value) : "")}
-          placeholder={field.value == null ? "Unset" : undefined}
-          onChange={(event) => { setDraft(event.currentTarget.value); }}
-          onBlur={(event) => {
-            if (draft != null) {
-              commitDraft(event.currentTarget.value);
-            }
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commitDraft(event.currentTarget.value);
-              event.currentTarget.blur();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              setDraft(null);
-              event.currentTarget.blur();
-            }
-          }}
-        />
-        {field.unit ? <span className={css.unitLabel}>{field.unit}</span> : null}
-      </div>
-    </div>
-  );
 }

@@ -34,6 +34,8 @@ import type { ResolvedPattern, ScenePathCommand } from "../../semantic/types.js"
 import { stripEnclosingBraces } from "../../semantic/style/option-utils.js";
 import { parseBooleanishNormalized } from "../../utils/booleanish.js";
 import type { InspectorSectionBuildContext, SectionBuilder } from "./section-builder.js";
+import type { SceneElement } from "../../semantic/types.js";
+import { buildPaintToggle } from "./paint-toggle.js";
 
 export const buildFillSection: SectionBuilder = (context) => {
   const { element } = context;
@@ -291,9 +293,20 @@ export const buildFillSection: SectionBuilder = (context) => {
     id: "fill",
     title: "Fill",
     sourceLevel: "command",
-    properties: fillProperties
+    properties: fillProperties,
+    toggle: buildPaintToggle(context, "fill", {
+      strokeEnabled: element.style.stroke != null && element.style.stroke !== "none",
+      fillEnabled: isFillPaintEnabled(element),
+      colorSyntax: fillColorSyntax
+    })
   };
 };
+
+/** A solid colour, a pattern or a shading: whatever paints the inside. */
+export function isFillPaintEnabled(element: SceneElement): boolean {
+  const fill = element.style.fill?.trim().toLowerCase();
+  return (fill != null && fill.length > 0 && fill !== "none") || element.style.fillPattern != null || element.style.shadeEnabled;
+}
 
 function makeFillPatternNumberProperty(
   context: InspectorSectionBuildContext,

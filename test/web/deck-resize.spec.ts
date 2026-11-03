@@ -69,6 +69,15 @@ beforeEach(async () => {
 afterEach(() => { act(() => { root.unmount(); }); host.remove(); frames.clear(); vi.unstubAllGlobals(); });
 
 describe("canvas resize gestures", () => {
+  it("does not start a resize without a screen CTM", () => {
+    Object.defineProperty(SVGSVGElement.prototype, "getScreenCTM", { configurable: true, value: () => null });
+    const history = useEditorStore.getState().history.length;
+    begin(); pointer("pointermove", 40); flush(); pointer("pointerup", 60);
+    expect(useEditorStore.getState().source).toBe(SOURCE);
+    expect(useEditorStore.getState().history.length).toBe(history);
+    expect(useEditorStore.getState().activeInspectorEditDocumentId).toBeNull();
+  });
+
   it("previews at zoom, commits the release sample once, and supports undo/redo", () => {
     const history = useEditorStore.getState().history.length;
     begin(); pointer("pointermove", 20); pointer("pointermove", 40); flush();

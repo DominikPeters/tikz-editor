@@ -1,3 +1,5 @@
+import { writeLocalLength, writeShiftPair } from "../writer/authored-values.js";
+import { layout, tikz, unchangedSource, type CoordinateText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
@@ -8,16 +10,17 @@ import type { OptionEntry } from "../../options/types.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { worldPoint } from "../../coords/points.js";
 import type { WorldPoint } from "../../coords/points.js";
-import { worldTransform, type FrameTransform } from "../../coords/transforms.js";
-import { isFrameLocalCoordinateEditHandle } from "../../semantic/types.js";
+import type { FrameTransform } from "../../coords/transforms.js";
+import { isCoordinateEditHandle, isFrameLocalCoordinateEditHandle } from "../../semantic/types.js";
 import { planCenteredPivotMoves, type CenteredPivotMovePlan } from "../center-pivot-move.js";
 import { rewritePreciseFrameCoordinate } from "../frame-coordinate.js";
 import { resolveStatementOptionFrame } from "../parent-frame.js";
 import type { EditHandle } from "../../semantic/types.js";
 import { parseCoordinateLike, parseLength } from "../../semantic/coords/parse-length.js";
 import { collectSourceWorldBounds } from "../snapping/index.js";
-import { localToSourceUnits, worldToLocal } from "../coords.js";
-import { CM_PER_PT, formatNumber, pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
+import { createCoordinateWriter, type WriterResult } from "../writer/index.js";
+import { entryContextsForSource, sameSiteContext } from "../../semantic/site-context.js";
+import { formatNumber, pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
 import { computeMinimalReplacementPatch, replaceSpan } from "../patch.js";
 import { correctMovedCoordinateDependencies } from "../calc-move.js";
 import { resolvePropertyTarget } from "../property-target.js";
@@ -34,6 +37,7 @@ import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } fro
 import { normalizeOptionKey } from "../option-key.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "../fit.js";
 import { findPathStatementById, normalizeElementIds, uniqueStrings } from "../statement-find.js";
+import type { SiteContext } from "../../semantic/site-context.js";
 
 const ARRANGE_EPSILON = 1e-6;
 
@@ -100,7 +104,7 @@ export function applyMoveElementsAction(
   // and precision of coordinates, including values that cannot be formatted
   // exactly by the normal coordinate writer.
   if (baseline && Math.abs(delta.x) < 1e-6 && Math.abs(delta.y) < 1e-6) {
-    return { kind: "success", newSource: source, patches: [], changedSourceIds };
+    return { kind: "success", newSource: unchangedSource(source), patches: [], changedSourceIds };
   }
   const nonMatrixElementIds = normalizedIds.filter(
     (elementId) => !matrixElementIdSet.has(elementId) && !scopeElementIdSet.has(elementId) && !treeRootElementIdSet.has(elementId)
@@ -117,7 +121,7 @@ export function applyMoveElementsAction(
     }
   }
 
-  let currentSource = source;
+  let currentSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
   const skippedHandles: string[] = [];
   const reasons: string[] = [];
@@ -271,7 +275,8 @@ export function applyAlignElementsAction(
     return plan;
   }
 
-  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas, parseOptions, geometry);
+  // Aligning is exact: a positioned node is not snapped to a direction.
+  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas, { ...parseOptions, bypassSnapping: true }, geometry);
 }
 
 export function applyDistributeElementsAction(
@@ -295,7 +300,7 @@ export function applyDistributeElementsAction(
     return plan;
   }
 
-  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas, parseOptions, geometry);
+  return applyElementDeltaMapStrict(source, semantic.editHandles, normalizedIds, plan.deltas, { ...parseOptions, bypassSnapping: true }, geometry);
 }
 
 function applyMoveElementsUsingHandleRewrites(
@@ -339,14 +344,14 @@ function applyMoveElementsUsingHandleRewrites(
     return { kind: "unsupported", reason: "Handle span is shared by expanded statements (foreach/macro), cannot move safely." };
   }
 
-  type PendingReplacement = { span: { from: number; to: number }; text: string };
+  type PendingReplacement = { span: { from: number; to: number }; text: TikzFragment };
   const pending: PendingReplacement[] = [...(centerPlan?.replacements ?? [])];
   let deferredDependencies = false;
 
   for (const handle of rewritable) {
     const actualText = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
     if (actualText !== handle.sourceText) {
-      if (centerPlan?.framesBySource.has(handle.sourceRef.sourceId)) return { kind: "unsupported", reason: "Some selected handles are stale. Wait for recompute and try again." };
+      if (centerPlan?.contextsBySource.has(handle.sourceRef.sourceId)) return { kind: "unsupported", reason: "Some selected handles are stale. Wait for recompute and try again." };
       skippedHandles.push(handle.id);
       continue;
     }
@@ -359,13 +364,13 @@ function applyMoveElementsUsingHandleRewrites(
     }
 
     const newWorld: WorldPoint = worldPoint(pt(handle.world.x + delta.x), pt(handle.world.y + delta.y));
-    const frame = centerPlan?.framesBySource.get(handle.sourceRef.sourceId);
-    const text = frame ? rewritePreciseFrameCoordinate(newWorld, handleWithFrame(handle, frame), source, parseOptions.bypassSnapping)
+    const context = centerPlan?.contextsBySource.get(handle.sourceRef.sourceId);
+    const text = context ? rewritePreciseFrameCoordinate(newWorld, handle, source, parseOptions.bypassSnapping, contextFor(handle, context))
       : rewriteCoordinate(newWorld, handle, source, parseOptions.bypassSnapping);
     if (text != null) {
       pending.push({ span: handle.sourceRef.sourceSpan, text });
     } else {
-      if (frame) return { kind: "unsupported", reason: "Could not rewrite every coordinate together with the moved center pivot." };
+      if (context) return { kind: "unsupported", reason: "Could not rewrite every coordinate together with the moved center pivot." };
       skippedHandles.push(handle.id);
     }
   }
@@ -381,7 +386,7 @@ function applyMoveElementsUsingHandleRewrites(
     return right.span.to - left.span.to;
   });
 
-  let currentSource = source;
+  let currentSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
   for (const replacement of pending) {
     const updated = replaceSpan(currentSource, replacement.span, replacement.text);
@@ -414,7 +419,7 @@ function applyMoveMatrixElementsWithPlacementRewrite(
   parseOptions: EditParseOptions,
   geometry?: EditGeometrySession
 ): MoveRewriteBatchResult {
-  let currentSource = source;
+  let currentSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
   const failedElementIds: string[] = [];
   const failureReasons: string[] = [];
@@ -464,7 +469,7 @@ function applyMoveScopeElementsWithTransformRewrite(
   parseOptions: EditParseOptions,
   geometry?: EditGeometrySession
 ): MoveRewriteBatchResult {
-  let currentSource = source;
+  let currentSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
   const failedElementIds: string[] = [];
   const failureReasons: string[] = [];
@@ -506,7 +511,7 @@ function applyMoveScopeElementsWithTransformRewrite(
 }
 
 type ScopeTransformRewriteResult =
-  | { kind: "success"; source: string; patches: SourcePatch[] }
+  | { kind: "success"; source: EditedSource; patches: SourcePatch[] }
   | { kind: "unsupported"; reason: string };
 
 function rewriteSingleScopeTransform(
@@ -554,9 +559,10 @@ export function planOrderedScopeTranslation(
     const localDelta = prefix ? applyInverseLinear(prefix, delta) : null;
     if (old && localDelta) {
       const pair = parseCoordinateLike(shift.entry.valueRaw.trim().replace(/^\{([\s\S]*)\}$/, "$1"));
-      const x = Math.abs(localDelta.x) < 1e-10 && pair ? pair.x : formatScopeShiftValue(old.x + localDelta.x, formatPrecision) ?? "0pt";
-      const y = Math.abs(localDelta.y) < 1e-10 && pair ? pair.y : formatScopeShiftValue(old.y + localDelta.y, formatPrecision) ?? "0pt";
-      return new Map([[normalizeOptionKey(shift.entry.key), { kind: "set", value: `(${x},${y})` }]]);
+      const component = (value: number, delta: number) => Math.abs(delta) < 1e-10 && pair ? null : isZeroShift(value, formatPrecision) ? 0 : value;
+      const value = writeShiftPair(pair, { x: component(old.x + localDelta.x, localDelta.x), y: component(old.y + localDelta.y, localDelta.y) },
+        pointDistanceFormatOptions(formatPrecision));
+      return new Map([[normalizeOptionKey(shift.entry.key), { kind: "set", value }]]);
     }
   }
   const xEntries = keyed.filter(({ key }) => key === "xshift");
@@ -577,8 +583,9 @@ export function planOrderedScopeTranslation(
     [yEntry ? normalizeOptionKey(yEntry.entry.key) : "yshift", oldY + localDelta.y, localDelta.y]
   ] as const) {
     if (Math.abs(correction) < 1e-10 && value !== 0) continue;
-    const formatted = formatScopeShiftValue(value, formatPrecision);
-    mutations.set(key, formatted == null ? { kind: "remove" } : { kind: "set", value: formatted });
+    mutations.set(key, isZeroShift(value, formatPrecision)
+      ? { kind: "remove" }
+      : { kind: "set", value: writeLocalLength(value, pointDistanceFormatOptions(formatPrecision)) });
   }
   return mutations;
 }
@@ -606,9 +613,9 @@ export function mutateOrderedOptionEntries(
   return result;
 }
 
-function formatScopeShiftValue(value: number, formatPrecision: DragFormatPrecision | undefined): string | null {
-  const formatted = formatNumber(value, pointDistanceFormatOptions(formatPrecision));
-  return Number(formatted) === 0 ? null : `${formatted}pt`;
+/** A shift that rounds to nothing where it is written. */
+function isZeroShift(value: number, formatPrecision: DragFormatPrecision | undefined): boolean {
+  return Number(formatNumber(value, pointDistanceFormatOptions(formatPrecision))) === 0;
 }
 
 function applyInverseLinear(linear: Pick<FrameTransform, "a" | "b" | "c" | "d">, point: WorldPoint): WorldPoint | null {
@@ -618,7 +625,7 @@ function applyInverseLinear(linear: Pick<FrameTransform, "a" | "b" | "c" | "d">,
 }
 
 type MatrixPlacementRewriteResult =
-  | { kind: "success"; source: string; patches: SourcePatch[] }
+  | { kind: "success"; source: EditedSource; patches: SourcePatch[] }
   | { kind: "unsupported"; reason: string };
 
 function applyMoveTreeRootElementsWithPlacementRewrite(
@@ -628,7 +635,7 @@ function applyMoveTreeRootElementsWithPlacementRewrite(
   parseOptions: EditParseOptions,
   geometry?: EditGeometrySession
 ): MoveRewriteBatchResult {
-  let currentSource = source;
+  let currentSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
   const failedElementIds: string[] = [];
   const failureReasons: string[] = [];
@@ -700,12 +707,11 @@ function rewriteSingleMatrixPlacement(
     pt((bounds.minX + bounds.maxX) / 2 + delta.x),
     pt((bounds.minY + bounds.maxY) / 2 + delta.y)
   );
-  const nextCoordinate = formatPlacementCoordinateFromWorld(
-    nextCenterWorld,
-    placementHandle?.handleType === "coordinate" && placementHandle.coordinateSpace === "frame-local"
-      ? placementHandle.frame
-      : undefined
-  );
+  const written = placementCoordinate(source, nextCenterWorld, placementHandle, semantic, elementId);
+  if (written.kind !== "ok") {
+    return { kind: "unsupported", reason: `Cannot write the matrix position: ${written.reason}.` };
+  }
+  const nextCoordinate = written.fragment;
 
   const inlineAtCoordinate = findInlineAtCoordinateItem(statement);
   if (inlineAtCoordinate) {
@@ -816,12 +822,11 @@ function rewriteSingleTreeRootPlacement(
     pt(currentPlacementWorld.x + delta.x),
     pt(currentPlacementWorld.y + delta.y)
   );
-  const nextCoordinate = formatPlacementCoordinateFromWorld(
-    nextPlacementWorld,
-    placementHandle?.handleType === "coordinate" && placementHandle.coordinateSpace === "frame-local"
-      ? placementHandle.frame
-      : undefined
-  );
+  const written = placementCoordinate(source, nextPlacementWorld, placementHandle, semantic, elementId);
+  if (written.kind !== "ok") {
+    return { kind: "unsupported", reason: `Cannot write the tree root position: ${written.reason}.` };
+  }
+  const nextCoordinate = written.fragment;
 
   const atOptionEntry = rootNode.options?.entries
     .filter((entry): entry is Extract<typeof entry, { kind: "kv" }> => entry.kind === "kv")
@@ -841,7 +846,7 @@ function rewriteSingleTreeRootPlacement(
   }
 
   if (atOptionEntry) {
-    const rewrittenOption = replaceSourceSpan(source, atOptionEntry.span, `at=${nextCoordinate}`);
+    const rewrittenOption = replaceSourceSpan(source, atOptionEntry.span, tikz`at=${nextCoordinate}`);
     if (rewrittenOption) {
       return { kind: "success", source: rewrittenOption.source, patches: [rewrittenOption.patch] };
     }
@@ -852,7 +857,7 @@ function rewriteSingleTreeRootPlacement(
   }
 
   const insertionOffset = resolveTreeRootNodePlacementInsertionOffset(rootNode, source);
-  const inserted = replaceSourceSpan(source, { from: insertionOffset, to: insertionOffset }, ` at ${nextCoordinate}`);
+  const inserted = replaceSourceSpan(source, { from: insertionOffset, to: insertionOffset }, tikz` at ${nextCoordinate}`);
   if (!inserted) {
     return { kind: "unsupported", reason: `Tree root ${elementId} placement already matches the requested position` };
   }
@@ -906,9 +911,9 @@ function applyElementDeltaMapStrict(
 
   const centerPlan = planCenteredPivotMoves(source, editHandles, deltasBySource, parseOptions, geometry);
   if (centerPlan.kind === "unsupported") return centerPlan;
-  type PendingReplacement = { span: { from: number; to: number }; text: string };
+  type PendingReplacement = { span: { from: number; to: number }; text: TikzFragment };
   const pending: PendingReplacement[] = [...centerPlan.replacements];
-  const replacementBySpan = new Map<string, string>();
+  const replacementBySpan = new Map<string, TikzFragment>();
 
   for (const handle of selectedHandles) {
     const delta = deltasBySource.get(handle.sourceRef.sourceId) ?? { x: 0, y: 0 };
@@ -927,8 +932,8 @@ function applyElementDeltaMapStrict(
     if (handle.rewriteMode === "delta" || handle.handleType === "node-positioning") continue;
 
     const next = worldPoint(pt(handle.world.x + delta.x), pt(handle.world.y + delta.y));
-    const frame = centerPlan.framesBySource.get(handle.sourceRef.sourceId);
-    const text = frame ? rewritePreciseFrameCoordinate(next, handleWithFrame(handle, frame), source) : rewriteCoordinate(next, handle, source);
+    const context = centerPlan.contextsBySource.get(handle.sourceRef.sourceId);
+    const text = context ? rewritePreciseFrameCoordinate(next, handle, source, false, contextFor(handle, context)) : rewriteCoordinate(next, handle, source);
     if (text == null) {
       return {
         kind: "unsupported",
@@ -964,7 +969,7 @@ function applyElementDeltaMapStrict(
     return right.span.to - left.span.to;
   });
 
-  let currentSource = source;
+  let currentSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
   for (const replacement of pending) {
     const updated = replaceSpan(currentSource, replacement.span, replacement.text);
@@ -997,9 +1002,9 @@ function applyElementDeltaMapStrict(
   };
 }
 
-function handleWithFrame(handle: EditHandle, frame: FrameTransform): EditHandle {
-  return isFrameLocalCoordinateEditHandle(handle) ? { ...handle, frame,
-    transform: worldTransform(frame.a, frame.b, frame.c, frame.d, frame.e, frame.f) } : handle;
+/** The moved pivot's context for a coordinate read in it; named references keep their own. */
+function contextFor(handle: EditHandle, context: SiteContext): SiteContext | undefined {
+  return isFrameLocalCoordinateEditHandle(handle) ? context : undefined;
 }
 
 function parseRotateAroundPivotRaw(raw: string): WorldPoint | null {
@@ -1018,8 +1023,8 @@ function parseRotateAroundPivotRaw(raw: string): WorldPoint | null {
 function replaceSourceSpan(
   source: string,
   span: Span,
-  replacement: string
-): { source: string; patch: SourcePatch } | null {
+  replacement: TikzFragment
+): { source: EditedSource; patch: SourcePatch } | null {
   const previous = source.slice(span.from, span.to);
   if (previous === replacement) {
     return null;
@@ -1039,21 +1044,32 @@ function spansEqual(left: Span, right: Span): boolean {
   return left.from === right.from && left.to === right.to;
 }
 
-function buildMatrixInlineAtInsertion(source: string, bodyOpenOffset: number, nextCoordinate: string): string {
+function buildMatrixInlineAtInsertion(source: string, bodyOpenOffset: number, nextCoordinate: TikzFragment): TikzFragment {
   const needsLeadingSpace = !/\s/u.test(source.charAt(bodyOpenOffset - 1));
-  return `${needsLeadingSpace ? " " : ""}at ${nextCoordinate} `;
+  return tikz`${layout(needsLeadingSpace ? " " : "")}at ${nextCoordinate} `;
 }
 
-function formatPlacementCoordinateFromWorld(world: WorldPoint, transform?: EditHandle["frame"]): string {
-  if (transform) {
-    const local = worldToLocal(world, transform);
-    if (local) {
-      const inSourceUnits = localToSourceUnits(local);
-      return `(${formatNumber(inSourceUnits.x)},${formatNumber(inSourceUnits.y)})`;
-    }
+/**
+ * The `at` that places the node at `world`: its own coordinate rewritten in
+ * its spelling, else a new one read where the statement starts.
+ */
+function placementCoordinate(
+  source: string,
+  world: WorldPoint,
+  placementHandle: EditHandle | undefined,
+  semantic: ReturnType<typeof evaluateTikzFigure>,
+  elementId: string
+): WriterResult<CoordinateText> {
+  const writer = createCoordinateWriter(source);
+  if (placementHandle && isCoordinateEditHandle(placementHandle) && placementHandle.rewriteMode === "direct") {
+    return writer.point({ kind: "coordinate", handle: placementHandle }, world);
   }
-
-  return `(${formatNumber(world.x * CM_PER_PT)},${formatNumber(world.y * CM_PER_PT)})`;
+  const contexts = entryContextsForSource(semantic.siteContexts, elementId);
+  const context = contexts[0];
+  if (!context || contexts.some(other => !sameSiteContext(other, context))) {
+    return { kind: "unsupported", reason: "the node is read in a different frame on each pass of a loop" };
+  }
+  return writer.point({ kind: "context", context }, world);
 }
 
 function findPrimaryMatrixNodeItem(statement: PathStatement): NodeItem | null {

@@ -1,16 +1,18 @@
 import { applyEditAction, type EditAction, type ElementTemplate } from "../../packages/core/src/edit/actions.js";
 import { createEditGeometrySession } from "../../packages/core/src/edit/geometry-session.js";
-import { generateComplexPathSource } from "../../packages/core/src/edit/element-templates.js";
 import { PT_PER_CM } from "../../packages/core/src/edit/format.js";
 import { collectSourceWorldBounds } from "../../packages/core/src/edit/snapping/geometry.js";
 import { parseTikz } from "../../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../../packages/core/src/semantic/evaluate.js";
 import { applyMatrix } from "../../packages/core/src/semantic/transform.js";
+import { applyFrameToWorldPoint, applyWorldToFramePoint, invertFrameToWorldTransform } from "../../packages/core/src/coords/frame.js";
+import { frameLocalPoint, pt } from "../../packages/core/src/coords/index.js";
+import { spelledCoordinateFrame } from "../../packages/core/src/semantic/site-context.js";
+import { rotationSense } from "../../packages/core/src/edit/writer/index.js";
 import type { EditHandle } from "../../packages/core/src/semantic/types.js";
 import type { WorldPoint } from "../../packages/core/src/coords/points.js";
-import { generateFreehandToolSource } from "../../packages/app/src/ui/canvas-panel/freehand-tool.js";
-import { generateAppendSegmentSource } from "../../packages/app/src/ui/canvas-panel/path-tool.js";
-import { pathDraftInPictureCoordinates, templateInPictureCoordinates, worldToPictureCoordinates, freehandDraftInPictureCoordinates } from "../../packages/app/src/ui/canvas-panel/picture-coordinates.js";
+import { freehandToolPath } from "../../packages/app/src/ui/canvas-panel/freehand-tool.js";
+import { pathToolAddPathAction, pathToolAppendAction } from "../../packages/app/src/ui/canvas-panel/path-tool.js";
 import { wp } from "../coords-helpers.js";
 
 /**
@@ -30,6 +32,7 @@ export const FRAMES: FrameStack[] = [
   { label: "picture-scale", picture: "scale=2", scope: "", path: "" },
   { label: "picture-flip", picture: "yscale=-1", scope: "", path: "" },
   { label: "picture-shift", picture: "shift={(3,2)}", scope: "", path: "" },
+  { label: "picture-slant", picture: "xslant=.4,yslant=-.2", scope: "", path: "" },
   { label: "scope-rotate-shift", picture: "", scope: "rotate=30,xshift=1cm", path: "" },
   { label: "scope-units", picture: "", scope: "x=1.5cm,y=.8cm", path: "" },
   { label: "path-xyscale", picture: "", scope: "", path: "xscale=2,yscale=.7" },
@@ -55,9 +58,14 @@ export const BODIES: Body[] = [
   { label: "rectangle", text: String.raw`\draw[P] (0,0) rectangle (1.5,1);`, path: true },
   { label: "circle", text: String.raw`\draw[P] (1,1) circle (.5);`, path: true },
   { label: "node", text: String.raw`\node[draw,P] at (1,1) {N};` },
+  { label: "transform-shape-node", text: String.raw`\node[draw,transform shape,P] at (1,1) {N};` },
+  { label: "ellipse", text: String.raw`\draw[P] (1,1) ellipse (1 and .5);`, path: true },
+  { label: "relative-start", text: String.raw`\draw[P] +(1,2) -- ++(1,0) -- ++(0,1);`, path: true },
+  { label: "midpath-options", text: String.raw`\draw[P] (0,0) -- (1,0) [rotate=30] -- (1,1);`, path: true },
   { label: "named-endpoint", text: String.raw`\draw[P] (A.north) -- (1,0);`, path: true },
   { label: "calc", text: String.raw`\draw[P] ($(A)+(1,0)$) -- (0,0);`, path: true },
   { label: "to-bend", text: String.raw`\draw[P] (0,0) to[bend left] (1,1);`, path: true },
+  { label: "to-angles", text: String.raw`\draw[P] (0,0) to[out=40,in=160] (2,1);`, path: true },
   { label: "positioning", text: String.raw`\node[draw,right=of A,P] {R};` }
 ];
 
@@ -138,7 +146,11 @@ export function frameTolerance(frame: FrameStack): number {
 }
 
 function bodyHandles(snapshot: Snapshot, from: number, to: number): EditHandle[] {
-  return snapshot.handles.filter(h => h.sourceRef.sourceSpan.from >= from && h.sourceRef.sourceSpan.from < to);
+  const ids = new Set(snapshot.handles.filter(h => h.sourceRef.sourceSpan.from >= from && h.sourceRef.sourceSpan.from < to)
+    .map(h => h.sourceRef.sourceId));
+  // Synthetic to/bend controls have no coordinate span. They still belong
+  // to the body's source statement and must be exercised, not filtered out.
+  return snapshot.handles.filter(h => ids.has(h.sourceRef.sourceId));
 }
 
 function sourceIdsOf(handles: readonly EditHandle[]): Set<string> {
@@ -261,7 +273,7 @@ const ownHandles = (handles: readonly EditHandle[]) =>
 /** Moving each handle of the body puts that handle under the pointer. */
 function moveHandleCases({ context, frame, body, before, handles }: BodyCase): CaseResult[] {
   return handles.flatMap((handle, index): CaseResult[] => {
-    if (handle.handleType === "curve-control") return [];
+    if (handle.handleType === "curve-control") return curveHandleCase(context, frame, body, before, handle, index);
     const key = `moveHandle|${frame.label}|${body.label}|${index}:${handle.kind}`;
     const target = add(handle.world, randomDelta(caseRandom(key, context.seed)));
     return [runCase(context, frame, key, before, { kind: "moveHandle", handleId: handle.id, newWorld: target, bypassSnapping: true }, next => {
@@ -269,6 +281,38 @@ function moveHandleCases({ context, frame, body, before, handles }: BodyCase): C
       return { expected: [target], actual: moved ? [moved.world] : [] };
     })];
   });
+}
+
+/** Curve controls encode an angle, not a freely positioned Bezier control. */
+function curveHandleCase(context: FuzzContext, frame: FrameStack, body: Body, before: Snapshot,
+  handle: Extract<EditHandle, { handleType: "curve-control" }>, index: number): CaseResult[] {
+  const key = `moveCurveHandle|${frame.label}|${body.label}|${index}:${handle.kind}`;
+  const edit = handle.curveEdit;
+  const local = (point: WorldPoint, anchor: WorldPoint) => {
+    const { a, b, c, d } = edit.linear;
+    const det = a * d - b * c;
+    const x = point.x - anchor.x, y = point.y - anchor.y;
+    return wp((d * x - c * y) / det, (a * y - b * x) / det);
+  };
+  const target = add(handle.world, randomDelta(caseRandom(key, context.seed)));
+  const angle = (point: WorldPoint): number => {
+    if (edit.kind === "to-angle") {
+      const anchor = edit.role === "out" ? edit.startWorld : edit.endWorld;
+      const v = local(point, anchor);
+      return Math.atan2(v.y, v.x) * 180 / Math.PI;
+    }
+    const end = local(edit.endWorld, edit.startWorld), p = local(point, edit.startWorld);
+    const length = Math.hypot(end.x, end.y);
+    const height = ((p.x - end.x / 2) * -end.y + (p.y - end.y / 2) * end.x) / length;
+    return Math.atan2(2 * height, length) * 180 / Math.PI;
+  };
+  return [runCase(context, frame, key, before, { kind: "moveHandle", handleId: handle.id, newWorld: target, bypassSnapping: true }, next => {
+    const moved = next.handles.find(h => h.id === handle.id);
+    if (!moved) return { kind: "fail", detail: "curve handle disappeared" };
+    const error = Math.abs(((angle(moved.world) - angle(target) + 540) % 360) - 180);
+    if (error > 1.01) return { kind: "fail", detail: `authored angle missed by ${error.toFixed(3)} degrees` };
+    return { expected: [edit.startWorld, edit.endWorld], actual: next.handles.filter(h => h.kind === "path-point").map(h => h.world) };
+  })];
 }
 
 /** Moving the body element translates each of its own coordinates by the delta. */
@@ -294,8 +338,8 @@ function duplicateCase({ context, frame, body, before, handles, elementId }: Bod
   }))];
 }
 
-const POLYLINES = new Set(["cartesian", "dimensioned", "mixed-units", "polar", "relative"]);
-const LINE_PATHS = new Set([...POLYLINES, "named-endpoint", "calc"]);
+const POLYLINES = new Set(["cartesian", "dimensioned", "mixed-units", "polar", "relative", "relative-start"]);
+const LINE_PATHS = new Set([...POLYLINES, "named-endpoint", "calc", "midpath-options"]);
 
 /** Inserting a point at a line segment's midpoint adds a point there and keeps the others. */
 function insertPathPointCase({ context, frame, body, before, handles, elementId }: BodyCase): CaseResult[] {
@@ -337,7 +381,35 @@ function setPathPointKindCase({ context, frame, body, before, handles, elementId
  * axis-aligned box to drag, so it gets no case.
  */
 function resizeCases({ context, frame, body, before, handles, elementId }: BodyCase): CaseResult[] {
+  if ((body.label === "circle" || body.label === "ellipse") && elementId) {
+    const handle = handles.find(h => h.kind === "path-point");
+    if (!handle || handle.handleType !== "coordinate") return [];
+    const center = handle.world;
+    const radiusFrame = spelledCoordinateFrame(handle.siteContext, { unitlessX: true, unitlessY: true });
+    return (["right", "top"] as const).map(role => {
+      const key = `resizeElement|${frame.label}|${body.label}|${role}`;
+      const offset = role === "right" ? wp(radiusFrame.a * 2 * PT_PER_CM, radiusFrame.b * 2 * PT_PER_CM)
+        : wp(radiusFrame.c * 2 * PT_PER_CM, radiusFrame.d * 2 * PT_PER_CM);
+      const target = add(center, offset);
+      return runCase(context, frame, key, before, { kind: "resizeElement", elementId, role, newWorld: target }, next => {
+        const shape = next.semantic.scene.elements.find(e => e.sourceRef.sourceId === elementId && (e.kind === "Circle" || e.kind === "Ellipse"));
+        if (shape?.kind !== "Circle" && shape?.kind !== "Ellipse") return { kind: "fail", detail: "resized radii disappeared" };
+        const nextCenter = next.handles.find(h => h.kind === "path-point" && h.sourceRef.sourceId === elementId)?.world;
+        // The handles follow the radius axes, not the world bounding box.
+        // Independently project onto the rendered ellipse along the pointer ray.
+        const theta = (shape.kind === "Ellipse" ? shape.rotation ?? 0 : 0) * Math.PI / 180;
+        const x = Math.cos(theta) * offset.x + Math.sin(theta) * offset.y;
+        const y = -Math.sin(theta) * offset.x + Math.cos(theta) * offset.y;
+        const rx = shape.kind === "Circle" ? shape.radius : shape.rx;
+        const ry = shape.kind === "Circle" ? shape.radius : shape.ry;
+        const norm = Math.hypot(x / rx, y / ry);
+        const boundary = wp(shape.center.x + offset.x / norm, shape.center.y + offset.y / norm);
+        return { expected: [center, target], actual: nextCenter ? [nextCenter, boundary] : [boundary] };
+      });
+    });
+  }
   if ((body.label !== "rectangle" && body.label !== "node") || !elementId || handles.length === 0) return [];
+  // eslint-disable-next-line vitest/no-conditional-tests -- This is RegExp.test, not a conditional test declaration.
   if (body.label === "node" && /rotate/.test(frame.path)) return [];
   const bounds = collectSourceWorldBounds(before.semantic.scene.elements).get(elementId);
   if (!bounds) return [];
@@ -378,8 +450,22 @@ function rotateCase({ context, frame, body, before, elementId }: BodyCase): Case
   const bounds = collectSourceWorldBounds(before.semantic.scene.elements).get(elementId);
   if (!bounds || points.length === 0) return [];
   const pivot = wp((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2);
+  const coordinate = before.handles.find(h => h.sourceRef.sourceId === elementId && h.handleType === "coordinate");
+  const site = coordinate?.handleType === "coordinate" ? coordinate.siteContext : undefined;
+  const ctm = site?.ctm;
+  const inverse = ctm ? invertFrameToWorldTransform(ctm) : null;
+  // The API's angle is authored under a nonconformal parent: no single
+  // local rotation expresses a rigid world turn through stretch or shear.
+  const rotate = (p: WorldPoint) => {
+    if (!ctm || !inverse || !site || rotationSense(site) !== null) return rotateAbout(p, pivot, angle);
+    const local = applyWorldToFramePoint(inverse, p), center = applyWorldToFramePoint(inverse, pivot);
+    const dx = local.x - center.x, dy = local.y - center.y, radians = angle * Math.PI / 180;
+    return applyFrameToWorldPoint(ctm, frameLocalPoint(
+      pt(center.x + dx * Math.cos(radians) - dy * Math.sin(radians)),
+      pt(center.y + dx * Math.sin(radians) + dy * Math.cos(radians))));
+  };
   return [runCase(context, frame, key, before, { kind: "rotateElement", elementId, mode: "center-pivot", angleDeg: angle, baselineSource: before.source }, next => ({
-    expected: points.map(p => rotateAbout(p, pivot, angle)),
+    expected: points.map(rotate),
     actual: scenePoints(next, id => id === elementId)
   }))];
 }
@@ -414,7 +500,7 @@ function alignCases({ context, frame, body, before, elementId }: BodyCase): Case
   });
 }
 
-/** Writing a node's position relative to `A`, or back to absolute, must not move it. */
+/** Writing a node's position relative to `A` must not move where it is drawn, nor back to absolute where it is placed. */
 function positioningCases({ context, frame, body, before, handles, elementId }: BodyCase): CaseResult[] {
   if (!elementId) return [];
   const position = handles.find(h => h.kind === "node-position");
@@ -428,8 +514,13 @@ function positioningCases({ context, frame, body, before, handles, elementId }: 
   }
   if (body.label === "node" && anchorId) {
     const key = `positionNodeRelativeTo|${frame.label}`;
-    return [runCase(context, frame, key, before, { kind: "positionNodeRelativeTo", nodeId: elementId, targetNodeName: "A", targetNodeSourceId: anchorId }, next => ({
-      expected: [position.world], actual: next.handles.filter(h => h.sourceRef.sourceId === elementId && h.kind === "node-position").map(h => h.world)
+    // The node's own shifts give way to the positioning, so where it is drawn is what must stay.
+    const drawnCenter = (snapshot: Snapshot) => {
+      const bounds = collectSourceWorldBounds(snapshot.semantic.scene.elements).get(elementId);
+      return bounds ? [wp((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2)] : [];
+    };
+    return [runCase(context, frame, key, before, { kind: "positionNodeRelativeTo", nodeId: elementId, targetNodeName: "A", targetNodeSourceId: anchorId, bypassSnapping: true }, next => ({
+      expected: drawnCenter(before), actual: drawnCenter(next)
     }))];
   }
   return [];
@@ -442,10 +533,9 @@ function appendToPathCase({ context, frame, body, before, handles, elementId }: 
   const key = `appendToPath|${frame.label}|${body.label}`;
   const last = points[points.length - 1].world;
   const target = add(last, randomDelta(caseRandom(key, context.seed)));
-  const toPicture = worldToPictureCoordinates(before.semantic.scene);
-  const segmentSource = generateAppendSegmentSource(pathDraftInPictureCoordinates({ startWorld: last, segments: [{ kind: "line", to: target }], appendTarget: { elementId, end: "end" } }, toPicture));
-  if (!segmentSource) return [{ key, action: "appendToPath", outcome: { kind: "unsupported", reason: "no segment source" } }];
-  return [runCase(context, frame, key, before, { kind: "appendToPath", elementId, end: "end", segmentSource }, next => ({
+  const append = pathToolAppendAction({ startWorld: last, segments: [{ kind: "line", to: target }], appendTarget: { elementId, end: "end" } });
+  if (!append) return [{ key, action: "appendToPath", outcome: { kind: "unsupported", reason: "no segments" } }];
+  return [runCase(context, frame, key, before, append, next => ({
     expected: [...points.map(h => h.world), target],
     actual: next.handles.filter(h => h.sourceRef.sourceId === elementId).map(h => h.world)
   }))];
@@ -460,62 +550,59 @@ const TEMPLATES: { label: string; template: (at: WorldPoint, other: WorldPoint) 
   { label: "circle", template: (_at, other) => ({ kind: "circle", edge: other }), expected: at => [at] }
 ];
 
-/** A picture-level case: the app writes new statements in picture coordinates. */
-function pictureCase(frame: FrameStack): { before: Snapshot; toPicture: (point: WorldPoint) => WorldPoint; known: Set<string> } | null {
+/** A picture-level case: new statements are appended to the picture. */
+function pictureCase(frame: FrameStack): { before: Snapshot; known: Set<string> } | null {
   if (frame.scope || frame.path) return null;
   const before = evaluate(pictureSource(frame, String.raw`\draw (0,0) -- (1,0);`).source);
-  return { before, toPicture: worldToPictureCoordinates(before.semantic.scene), known: sourceIdsOf(before.handles) };
+  return { before, known: sourceIdsOf(before.handles) };
 }
 
-/**
- * Adding an element puts it where the user clicked. The app maps the click
- * into picture coordinates first, so the case goes through the same mapping.
- */
+/** Adding an element puts it where the user clicked: the action takes world points, as the app sends them. */
 function addElementCases(context: FuzzContext, frame: FrameStack): CaseResult[] {
   const picture = pictureCase(frame);
   if (!picture) return [];
-  const { before, toPicture, known } = picture;
+  const { before, known } = picture;
   return TEMPLATES.map(({ label, template, expected }): CaseResult => {
     const key = `addElement|${frame.label}|${label}`;
     const random = caseRandom(key, context.seed);
     const at = add(wp(PT_PER_CM, PT_PER_CM), randomDelta(random));
     const other = add(at, randomDelta(random));
-    return runCase(context, frame, key, before, { kind: "addElement", at: toPicture(at), template: templateInPictureCoordinates(template(at, other), toPicture) }, next => ({
+    return runCase(context, frame, key, before, { kind: "addElement", at, template: template(at, other) }, next => ({
       expected: expected(at, other), actual: next.handles.filter(h => !known.has(h.sourceRef.sourceId)).map(h => h.world)
     }));
   });
 }
 
-/** The path tool writes its draft (mapped into picture coordinates) as a pasted statement. */
+/** The path tool sends its draft as a new path in world points. */
 function pathToolCase(context: FuzzContext, frame: FrameStack): CaseResult[] {
   const picture = pictureCase(frame);
   if (!picture) return [];
-  const { before, toPicture, known } = picture;
+  const { before, known } = picture;
   const key = `pathTool|${frame.label}`;
   const random = caseRandom(key, context.seed);
   const start = add(wp(PT_PER_CM, PT_PER_CM), randomDelta(random));
   const middle = add(start, randomDelta(random));
   const end = add(middle, randomDelta(random));
-  const snippet = generateComplexPathSource(toPicture(start), [{ kind: "line", to: toPicture(middle) }, { kind: "line", to: toPicture(end) }]);
-  if (!snippet) return [{ key, action: "pathTool", outcome: { kind: "unsupported", reason: "no snippet" } }];
-  return [runCase(context, frame, key, before, { kind: "pasteStatements", snippets: [snippet], delta: wp(0, 0) }, next => ({
+  const addPath = pathToolAddPathAction({ startWorld: start, segments: [{ kind: "line", to: middle }, { kind: "line", to: end }] }, { closed: false });
+  if (!addPath) return [{ key, action: "pathTool", outcome: { kind: "unsupported", reason: "no segments" } }];
+  return [runCase(context, frame, key, before, addPath, next => ({
     expected: [start, middle, end], actual: next.handles.filter(h => !known.has(h.sourceRef.sourceId)).map(h => h.world)
   }))];
 }
 
-/** A freehand stroke starts and ends where the pointer did. */
+/** A freehand stroke, sent as a new path in world points, starts and ends where the pointer did. */
 function freehandCase(context: FuzzContext, frame: FrameStack): CaseResult[] {
   const picture = pictureCase(frame);
   if (!picture) return [];
-  const { before, toPicture, known } = picture;
+  const { before, known } = picture;
   const key = `freehand|${frame.label}`;
   const random = caseRandom(key, context.seed);
   const start = add(wp(PT_PER_CM, PT_PER_CM), randomDelta(random));
   const bend = 1 + random();
   const points = Array.from({ length: 12 }, (_, i) => wp(start.x + i * 4, start.y + bend * 20 * Math.sin(i / 11 * Math.PI)));
-  const snippet = generateFreehandToolSource(freehandDraftInPictureCoordinates({ points, minSampleDistanceWorld: 1 }, toPicture), 1);
-  if (!snippet) return [{ key, action: "freehand", outcome: { kind: "unsupported", reason: "no snippet" } }];
-  return [runCase(context, frame, key, before, { kind: "pasteStatements", snippets: [snippet], delta: wp(0, 0) }, next => ({
+  const path = freehandToolPath({ points, minSampleDistanceWorld: 1 }, 1);
+  if (!path) return [{ key, action: "freehand", outcome: { kind: "unsupported", reason: "no path" } }];
+  return [runCase(context, frame, key, before, { kind: "addPath", start: path.start, segments: path.segments }, next => ({
     expected: [points[0], points[points.length - 1]], actual: next.handles.filter(h => !known.has(h.sourceRef.sourceId)).map(h => h.world)
   }))];
 }
@@ -540,11 +627,56 @@ function figureBoundsCase(context: FuzzContext, frame: FrameStack): CaseResult[]
   })];
 }
 
+/** A singular inverse must refuse writes rather than emit fabricated coordinates. */
+function singularCases(context: FuzzContext, frame: FrameStack): CaseResult[] {
+  const collapsed = { ...frame, picture: `${frame.picture}${frame.picture ? "," : ""}scale=0` };
+  const before = evaluate(pictureSource(collapsed, String.raw`\draw[P] (0,0) -- (1,1);`).source);
+  const handle = before.handles.find(h => h.kind === "path-point");
+  const actions: EditAction[] = [{ kind: "addElement", at: wp(100, 20), template: { kind: "line", to: wp(120, 40) } }];
+  if (handle) actions.push({ kind: "moveHandle", handleId: handle.id, newWorld: wp(100, 20), bypassSnapping: true });
+  return actions.map(action => runCase(context, collapsed, `singular|${frame.label}|${action.kind}`, before, action,
+    () => ({ kind: "fail", detail: "a singular frame accepted a coordinate write" })));
+}
+
+/** Appending reads the state after the last tikzset, not the picture's initial axes. */
+function changedInsertionCases(context: FuzzContext, frame: FrameStack): CaseResult[] {
+  const source = pictureSource(frame, String.raw`\draw[P] (0,0) -- (1,0);`).source
+    .replace("\\end{tikzpicture}", "\\tikzset{x=2cm,y=.7cm}\n\\end{tikzpicture}");
+  const before = evaluate(source), known = sourceIdsOf(before.handles);
+  const key = `insertAfterTikzset|${frame.label}`;
+  const target = add(wp(50, 30), randomDelta(caseRandom(key, context.seed)));
+  return [runCase(context, frame, key, before, { kind: "addElement", at: target, template: { kind: "node", text: "new" } }, next => ({
+    expected: [target], actual: next.handles.filter(h => !known.has(h.sourceRef.sourceId)).map(h => h.world)
+  }))];
+}
+
+/** Raw pasted text reads in the destination scope; its requested offset is world-space. */
+function crossScopePasteCase(context: FuzzContext, frame: FrameStack): CaseResult[] {
+  const source = pictureSource(frame, String.raw`\draw[P] (0,0) -- (1,0);
+\begin{scope}[x=.8cm,y=2cm,rotate=20]
+\draw (3,2) -- (4,2);
+\end{scope}`).source;
+  const before = evaluate(source), known = sourceIdsOf(before.handles);
+  const anchor = before.handles.find(h => h.sourceText === "(3,2)");
+  if (!anchor) throw new Error("missing destination scope anchor");
+  const paste = { kind: "pasteStatements" as const, anchorElementId: anchor.sourceRef.sourceId,
+    snippets: [String.raw`\draw (0,0) -- ++(1,.5);`] };
+  // Zero offset leaves the authored text untouched, an oracle for the gap's geometry.
+  const unshifted = apply(before, { ...paste, delta: wp(0, 0) });
+  if (unshifted.kind !== "success") throw new Error("could not insert raw paste fixture");
+  const key = `pasteAcrossScopes|${frame.label}`;
+  const delta = randomDelta(caseRandom(key, context.seed));
+  const expected = unshifted.next.handles.filter(h => !known.has(h.sourceRef.sourceId)).map(h => add(h.world, delta));
+  return [runCase(context, frame, key, before, { ...paste, delta }, next => ({
+    expected: [...expected, ...before.handles.map(h => h.world)], actual: next.handles.map(h => h.world)
+  }))];
+}
+
 const BODY_CASES = [
   moveHandleCases, moveElementCase, duplicateCase, insertPathPointCase, reversePathCase, setPathPointKindCase,
   resizeCases, rotateCase, repeatCase, alignCases, positioningCases, appendToPathCase
 ];
-const PICTURE_CASES = [addElementCases, pathToolCase, freehandCase, figureBoundsCase];
+const PICTURE_CASES = [addElementCases, pathToolCase, freehandCase, figureBoundsCase, singularCases, changedInsertionCases, crossScopePasteCase];
 
 export function runPointerFuzz(seed: number, frames: readonly FrameStack[] = FRAMES, bodies: readonly Body[] = BODIES): CaseResult[] {
   const context: FuzzContext = { seed, tolerance: new Map() };

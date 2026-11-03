@@ -59,7 +59,8 @@ export function createEditHandle(
   if (evaluated.kind === "transformed") {
     const frame = evaluated.frame;
     const local = evaluated.local;
-    if (!frame || !local) {
+    const spelling = evaluated.spelling;
+    if (!frame || !local || !spelling) {
       return null;
     }
     if (rewriteMode === "delta") {
@@ -74,6 +75,7 @@ export function createEditHandle(
         coordinateSpace: "frame-local",
         local,
         frame,
+        spelling,
         rewriteMode,
         relativeBase
       };
@@ -86,6 +88,7 @@ export function createEditHandle(
       coordinateSpace: "frame-local",
       local,
       frame,
+      spelling,
       rewriteMode
     };
   }

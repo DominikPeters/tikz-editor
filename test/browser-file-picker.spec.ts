@@ -4,6 +4,32 @@ import { createBrowserPlatformAdapter } from "../apps/web/src/platform/browser-p
 
 const storage = { getItem: () => null, setItem() {} };
 
+it("persists binary image bytes through the existing browser handle store", async () => {
+  const values = new Map<string, unknown>();
+  const fsHandleStore = { load: async (key: string) => values.get(key) ?? null, save: async (key: string, value: unknown) => { values.set(key, value); } };
+  const path = "__tikz_assets__/test/image.png";
+  const files = createBrowserPlatformAdapter({ storage, fsApi: {}, fsHandleStore }).files;
+  await files?.storeGraphicAsset?.({ path, bytes: new Uint8Array([1, 2, 3]).buffer });
+  const reloaded = createBrowserPlatformAdapter({ storage, fsApi: {}, fsHandleStore }).files;
+  expect(await reloaded?.readLocalAsset?.(path)).toMatchObject({ status: "ok", bytesBase64: "AQID", size: 3 });
+  expect(await reloaded?.readLocalAsset?.("/outside/file.png")).toMatchObject({ status: "missing" });
+});
+
+it("uses the image filter for graphics without changing PowerPoint import", async () => {
+  const types: string[] = [];
+  vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(function (this: HTMLInputElement) {
+    types.push(this.accept);
+    this.dispatchEvent(new Event("cancel"));
+  });
+  const files = createBrowserPlatformAdapter({ storage, fsApi: {} }).files;
+  await files?.openBinary?.({ kind: "graphics" });
+  await files?.openBinary?.();
+  expect(types[0]).toContain(".png");
+  expect(types[0]).toContain(".pdf");
+  expect(types[0]).not.toContain(".pptx");
+  expect(types[1]).toContain(".pptx");
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
   document.body.replaceChildren();

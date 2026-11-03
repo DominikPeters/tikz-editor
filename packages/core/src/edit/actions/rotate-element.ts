@@ -1,10 +1,12 @@
+import { writeAuthoredAngle } from "../writer/authored-values.js";
+import { editedSlice, option, optionValueFor, sourceSlice, tikz, unchangedSource, type CoordinateText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { createEditGeometrySession, type EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { PathItem, Statement, Span } from "../../ast/types.js";
 import type { OptionEntry } from "../../options/types.js";
 import { pt } from "../../coords/scalars.js";
-import { worldTransform, type FrameTransform } from "../../coords/transforms.js";
+import { frameTransform, worldTransform, type FrameTransform } from "../../coords/transforms.js";
 import { worldPoint, type WorldPoint } from "../../coords/points.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import type {
@@ -17,7 +19,6 @@ import type {
 import { isFrameLocalCoordinateEditHandle } from "../../semantic/types.js";
 import { applyTextReplacements } from "../statement-ops.js";
 import { rewritePreciseFrameCoordinate } from "../frame-coordinate.js";
-import { CM_PER_PT, formatNumber } from "../format.js";
 import { normalizeOptionKey } from "../option-mutations.js";
 import {
   applyOptionMutationsToTarget,
@@ -35,6 +36,8 @@ import {
 import { findPathStatementById } from "../statement-find.js";
 import { applyMatrix, inverseMatrix } from "../../semantic/transform.js";
 import { replaceSpan } from "../patch.js";
+import { createCoordinateWriter, rotationSense } from "../writer/index.js";
+import type { SiteContext } from "../../semantic/site-context.js";
 
 const ROTATE_EPSILON = 1e-6;
 
@@ -107,7 +110,10 @@ function applyPropertyRotate(
   );
   const mutations = action.mode === "origin"
     ? buildOriginRotateMutations(action.angleDeg)
-    : buildPropertyRotateMutations(context, action.angleDeg);
+    : buildPropertyRotateMutations(source, resolvedTarget.target.options?.entries ?? [], context, action.angleDeg);
+  if (!mutations) {
+    return { kind: "unsupported", reason: "Could not find the pivot of the rotation to keep it." };
+  }
   const applied = applyOptionMutationsToTarget(source, resolvedTarget.target, mutations);
   if (!applied) {
     return { kind: "unsupported", reason: "rotateElement would not change the source." };
@@ -167,43 +173,58 @@ function applyCenterPivotRotate(
   }
   const rotation = rotations[0];
   const rotationIndex = rotation ? entries.indexOf(rotation) : entries.length;
-  const prefixFrame = baseline.optionFrame(action.elementId, entries.slice(0, rotationIndex));
+  const prefixContext = baseline.optionContext(action.elementId, entries.slice(0, rotationIndex));
+  const prefixFrame = prefixContext && frameTransform(prefixContext.ctm.a, prefixContext.ctm.b, prefixContext.ctm.c,
+    prefixContext.ctm.d, prefixContext.ctm.e, prefixContext.ctm.f);
   const prefix = prefixFrame && asWorldTransform(prefixFrame);
   const inversePrefix = prefix && inverseMatrix(prefix);
-  if (!prefixFrame || !prefix || !inversePrefix) {
+  if (!prefixContext || !prefixFrame || !prefix || !inversePrefix) {
     return { kind: "unsupported", reason: "Center-pivot rotate requires an invertible coordinate frame." };
   }
-
   const transformContext = resolveTransformInspectorMutationContextFromOptionEntries(
     resolvedTarget.target.options?.entries
   );
   const baseAngleDeg = transformContext.values.rotate;
+  // The gesture turns the world by the change from the authored angle; under
+  // a reflection the option's angle turns the other way.
+  const center = resolveCenterPivot(context);
+  const worldDeltaDeg = normalizeSignedDeg(action.angleDeg - baseAngleDeg);
+  // Where the parent frame is conformal the gesture turns the world, and
+  // under a reflection the option's angle turns the other way. Under stretch
+  // or skew no angle is a world rotation: the gesture's change goes to the
+  // option's own angle, which TikZ composes with the parent.
+  const sense = rotationSense(prefixContext);
+  const deltaDeg = (sense ?? 1) * worldDeltaDeg;
+  const nextAngleDeg = normalizeTinyNumber(baseAngleDeg + deltaDeg);
+  const value = Math.abs(nextAngleDeg) <= ROTATE_EPSILON ? null
+    : createCoordinateWriter(source).rotation(prefixContext, sense === null ? { authored: nextAngleDeg } : { world: sense * nextAngleDeg }, center);
+  if (value?.kind === "unsupported") return { kind: "unsupported", reason: `Center-pivot rotate: ${value.reason}.` };
+  const pivotValue = value?.fragment ?? null;
   // The pivot belongs to the frame at the authored rotation option. Parent
   // stretch/skew still composes with the local rotation, as it does in TikZ.
-  const pivot = applyMatrix(inversePrefix, resolveCenterPivot(context));
-  const deltaDeg = normalizeSignedDeg(action.angleDeg - baseAngleDeg);
-  const rotateMutation = buildCenterPivotRotateMutations(action.angleDeg, pivot);
-  const nextRotation = centerRotationOption(action.angleDeg, pivot, rotation?.span ?? context.target.span);
+  const pivot = applyMatrix(inversePrefix, center);
+  const rotateMutation = buildCenterPivotRotateMutations(pivotValue);
+  const nextRotation = centerRotationOption(pivotValue, rotation?.span ?? context.target.span);
   const nextEntries = rotation
     ? entries.flatMap(entry => entry === rotation ? nextRotation ? [nextRotation] : [] : [entry])
     : nextRotation ? [...entries, nextRotation] : entries;
-  const nextTransform = baseline.optionFrame(action.elementId, nextEntries);
-  if (!nextTransform) {
+  const nextContext = baseline.optionContext(action.elementId, nextEntries);
+  if (!nextContext) {
     return { kind: "unsupported", reason: "Could not resolve the replacement rotation frame." };
   }
   const coordinateRewrites = context.kind === "rectangle"
-    ? buildRectangleCoordinateRewrites(source, context, pivot, deltaDeg, nextTransform, prefixFrame)
-    : buildEllipseLikeCoordinateRewrites(source, context, nextTransform);
+    ? buildRectangleCoordinateRewrites(source, context, pivot, deltaDeg, nextContext, prefixFrame)
+    : buildEllipseLikeCoordinateRewrites(source, context, nextContext);
   if (coordinateRewrites.kind === "unsupported") {
     return coordinateRewrites;
   }
 
-  let nextSource = source;
+  let nextSource = unchangedSource(source);
   const patches: SourcePatch[] = [];
   // Replace the existing rotation in place: moving it past a named style
   // would change the linear part of an ellipse even at the same angle.
-  const optionApplied = rotation && nextRotation
-    ? replaceRotationOption(nextSource, rotation, nextRotation)
+  const optionApplied = rotation && pivotValue
+    ? replaceRotationOption(nextSource, rotation, option("rotate around", pivotValue))
     : applyOptionMutationsToTarget(nextSource, resolvedTarget.target, rotateMutation);
   if (optionApplied) {
     nextSource = optionApplied.source;
@@ -249,15 +270,13 @@ function isRotationOption(entry: OptionEntry): boolean {
   return key === "rotate" || key === "/tikz/rotate" || key === "rotate around" || key === "/tikz/rotate around";
 }
 
-function centerRotationOption(angleDeg: number, pivot: WorldPoint, span: Span): OptionEntry | undefined {
-  const normalizedAngle = normalizeTinyNumber(angleDeg);
-  if (Math.abs(normalizedAngle) <= ROTATE_EPSILON) return undefined;
-  const valueRaw = `{${formatNumber(normalizedAngle, { fractionDigits: 6 })}:${formatWorldPointCoordinateRaw(pivot)}}`;
-  return { kind: "kv", key: "rotate around", valueRaw, raw: `rotate around=${valueRaw}`, span };
+/** `rotate around=…`, or nothing for no rotation. */
+function centerRotationOption(value: CoordinateText | null, span: Span): OptionEntry | undefined {
+  if (value === null) return undefined;
+  return { kind: "kv", key: "rotate around", valueRaw: value, raw: option("rotate around", value), span };
 }
 
-function replaceRotationOption(source: string, rotation: OptionEntry, nextRotation: OptionEntry) {
-  const replacement = nextRotation.raw;
+function replaceRotationOption(source: string, rotation: OptionEntry, replacement: TikzFragment) {
   const updated = replaceSpan(source, rotation.span, replacement);
   if (updated.source === source) return null;
   return {
@@ -266,13 +285,48 @@ function replaceRotationOption(source: string, rotation: OptionEntry, nextRotati
   };
 }
 
+/**
+ * The inspector's rotation: the authored angle, about the pivot the option
+ * already names (copied from the source), with the keys it replaces cleared.
+ */
 function buildPropertyRotateMutations(
+  source: string,
+  entries: readonly OptionEntry[],
   context: TransformInspectorMutationContext,
   angleDeg: number
-): Map<string, OptionMutation> {
-  return transformMutationsToOptionMutations(
-    buildTransformSetPropertyMutations(context, "rotate", angleDeg)
-  );
+): Map<string, OptionMutation> | null {
+  const mutations = new Map<string, OptionMutation>();
+  for (const mutation of buildTransformSetPropertyMutations(context, "rotate", angleDeg)) {
+    for (const clearKey of mutation.clearKeys) {
+      mutations.set(clearKey, { kind: "remove" });
+    }
+    if (mutation.value.length === 0) {
+      mutations.set(mutation.key, { kind: "remove" });
+      continue;
+    }
+    const angle = writeAuthoredAngle(normalizeTinyNumber(angleDeg));
+    if (mutation.key !== "rotate around") {
+      mutations.set(mutation.key, { kind: "set", value: angle });
+      continue;
+    }
+    const pivot = rotateAroundPivot(source, entries);
+    if (!pivot) return null;
+    mutations.set(mutation.key, { kind: "set", value: tikz`{${angle}:${pivot}}` });
+  }
+  return mutations;
+}
+
+/** The pivot an existing `rotate around={angle:pivot}` names, as written. */
+function rotateAroundPivot(source: string, entries: readonly OptionEntry[]): TikzFragment | null {
+  const entry = [...entries].reverse().find(candidate => candidate.kind === "kv" && normalizeOptionKey(candidate.key) === "rotate around");
+  if (entry?.kind !== "kv") return null;
+  const raw = source.slice(entry.span.from, entry.span.to);
+  const colon = raw.indexOf(":");
+  const close = raw.lastIndexOf("}");
+  if (colon < 0 || close <= colon) return null;
+  const from = entry.span.from + colon + 1;
+  const to = entry.span.from + close;
+  return source.slice(from, to).trim().length > 0 ? sourceSlice(source, { from, to }) : null;
 }
 
 function buildOriginRotateMutations(angleDeg: number): Map<string, OptionMutation> {
@@ -284,42 +338,18 @@ function buildOriginRotateMutations(angleDeg: number): Map<string, OptionMutatio
   if (Math.abs(normalizedAngle) <= ROTATE_EPSILON) {
     mutations.set("rotate", { kind: "remove" });
   } else {
-    mutations.set("rotate", { kind: "set", value: formatNumber(normalizedAngle) });
+    mutations.set("rotate", { kind: "set", value: writeAuthoredAngle(normalizedAngle) });
   }
   return mutations;
 }
 
-function buildCenterPivotRotateMutations(angleDeg: number, pivot: WorldPoint): Map<string, OptionMutation> {
-  const normalizedAngle = normalizeTinyNumber(angleDeg);
+function buildCenterPivotRotateMutations(value: CoordinateText | null): Map<string, OptionMutation> {
   const mutations = new Map<string, OptionMutation>();
   for (const key of ROTATE_CLEAR_KEYS) {
     mutations.set(key, { kind: "remove" });
   }
   mutations.set("rotate", { kind: "remove" });
-  if (Math.abs(normalizedAngle) <= ROTATE_EPSILON) {
-    mutations.set("rotate around", { kind: "remove" });
-  } else {
-    mutations.set("rotate around", {
-      kind: "set",
-      value: `{${formatNumber(normalizedAngle, { fractionDigits: 6 })}:${formatWorldPointCoordinateRaw(pivot)}}`
-    });
-  }
-  return mutations;
-}
-
-function transformMutationsToOptionMutations(
-  transformMutations: ReturnType<typeof buildTransformSetPropertyMutations>
-): Map<string, OptionMutation> {
-  const mutations = new Map<string, OptionMutation>();
-  for (const mutation of transformMutations) {
-    for (const clearKey of mutation.clearKeys) {
-      mutations.set(clearKey, { kind: "remove" });
-    }
-    mutations.set(
-      mutation.key,
-      mutation.value.length > 0 ? { kind: "set", value: mutation.value } : { kind: "remove" }
-    );
-  }
+  mutations.set("rotate around", value === null ? { kind: "remove" } : { kind: "set", value: optionValueFor("rotate around", value) });
   return mutations;
 }
 
@@ -457,24 +487,24 @@ function buildRectangleCoordinateRewrites(
   context: RectangleRotateContext,
   pivot: WorldPoint,
   deltaDeg: number,
-  nextTransform: FrameTransform,
+  nextContext: SiteContext,
   prefixFrame: FrameTransform
-): { kind: "success"; replacements: Array<{ span: Span; text: string }> } | { kind: "unsupported"; reason: string } {
+): { kind: "success"; replacements: Array<{ span: Span; text: TikzFragment }> } | { kind: "unsupported"; reason: string } {
   const prefix = asWorldTransform(prefixFrame);
   const inversePrefix = requireDefined(inverseMatrix(prefix), "Missing required inverseMatrix(prefix)");
   const rotateLocalPoint = (point: WorldPoint) => applyMatrix(prefix,
     rotateWorldPointAroundCenter(applyMatrix(inversePrefix, point), pivot, deltaDeg));
   const targetStart = rotateLocalPoint(context.startHandle.world);
   const targetOpposite = rotateLocalPoint(context.oppositeHandle.world);
-  const startRewriteHandle = withFrameTransform(context.startHandle, nextTransform);
-  const oppositeRewriteHandle = withFrameTransform(context.oppositeHandle, nextTransform);
   const replacements = [
     {
-      handle: startRewriteHandle,
+      handle: context.startHandle,
+      context: contextFor(context.startHandle, nextContext),
       newWorld: targetStart
     },
     {
-      handle: oppositeRewriteHandle,
+      handle: context.oppositeHandle,
+      context: contextFor(context.oppositeHandle, nextContext),
       newWorld: targetOpposite
     }
   ];
@@ -485,11 +515,12 @@ function buildRectangleCoordinateRewrites(
 function buildEllipseLikeCoordinateRewrites(
   source: string,
   context: EllipseLikeRotateContext,
-  nextTransform: FrameTransform
-): { kind: "success"; replacements: Array<{ span: Span; text: string }> } | { kind: "unsupported"; reason: string } {
+  nextContext: SiteContext
+): { kind: "success"; replacements: Array<{ span: Span; text: TikzFragment }> } | { kind: "unsupported"; reason: string } {
   return rewriteHandleTargets(source, [
     {
-      handle: withFrameTransform(context.centerHandle, nextTransform),
+      handle: context.centerHandle,
+      context: contextFor(context.centerHandle, nextContext),
       newWorld: context.center
     }
   ]);
@@ -497,9 +528,9 @@ function buildEllipseLikeCoordinateRewrites(
 
 function rewriteHandleTargets(
   source: string,
-  targets: Array<{ handle: EditHandle; newWorld: WorldPoint }>
-): { kind: "success"; replacements: Array<{ span: Span; text: string }> } | { kind: "unsupported"; reason: string } {
-  const replacementBySpan = new Map<string, { span: Span; text: string }>();
+  targets: Array<{ handle: EditHandle; context: SiteContext | undefined; newWorld: WorldPoint }>
+): { kind: "success"; replacements: Array<{ span: Span; text: TikzFragment }> } | { kind: "unsupported"; reason: string } {
+  const replacementBySpan = new Map<string, { span: Span; text: TikzFragment }>();
   for (const target of targets) {
     const handle = target.handle;
     const actualText = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
@@ -507,7 +538,7 @@ function rewriteHandleTargets(
       return { kind: "unsupported", reason: "Some selected handles are stale. Wait for recompute and try again." };
     }
 
-    const text = rewritePreciseFrameCoordinate(target.newWorld, handle, source);
+    const text = rewritePreciseFrameCoordinate(target.newWorld, handle, source, false, target.context);
     if (text == null) {
       return { kind: "unsupported", reason: "Could not rewrite one or more coordinates for center-pivot rotate." };
     }
@@ -530,15 +561,9 @@ function rewriteHandleTargets(
   return { kind: "success", replacements: [...replacementBySpan.values()] };
 }
 
-function withFrameTransform(handle: EditHandle, transform: FrameTransform): EditHandle {
-  if (!isDirectFrameLocalHandle(handle)) {
-    return handle;
-  }
-  return {
-    ...handle,
-    frame: transform,
-    transform: worldTransform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f)
-  };
+/** The frame after the rotation edit, for a direct coordinate read in it. */
+function contextFor(handle: EditHandle, context: SiteContext): SiteContext | undefined {
+  return isDirectFrameLocalHandle(handle) ? context : undefined;
 }
 
 function resolveCenterPivot(context: CenterPivotRotateContext): WorldPoint {
@@ -644,14 +669,12 @@ function rotateWorldPointAroundCenter(point: WorldPoint, center: WorldPoint, deg
   );
 }
 
-function formatWorldPointCoordinateRaw(point: WorldPoint): string {
-  return `(${formatNumber(point.x * CM_PER_PT, { fractionDigits: 6 })},${formatNumber(point.y * CM_PER_PT, { fractionDigits: 6 })})`;
-}
+
 
 function adjustReplacementsForPriorPatches(
-  replacements: Array<{ span: Span; text: string }>,
+  replacements: Array<{ span: Span; text: TikzFragment }>,
   patches: readonly SourcePatch[]
-): Array<{ span: Span; text: string }> {
+): Array<{ span: Span; text: TikzFragment }> {
   let adjusted = replacements;
   for (const patch of patches) {
     const delta = (patch.newSpan.to - patch.newSpan.from) - (patch.oldSpan.to - patch.oldSpan.from);
@@ -687,7 +710,7 @@ function normalizeSignedDeg(value: number): number {
   return normalized;
 }
 
-function computeReplacementPatch(oldSource: string, newSource: string): SourcePatch {
+function computeReplacementPatch(oldSource: string, newSource: EditedSource): SourcePatch {
   const oldLen = oldSource.length;
   const newLen = newSource.length;
   const minLen = Math.min(oldLen, newLen);
@@ -708,6 +731,6 @@ function computeReplacementPatch(oldSource: string, newSource: string): SourcePa
   return {
     oldSpan: { from: prefix, to: oldSuffix },
     newSpan: { from: prefix, to: newSuffix },
-    replacement: newSource.slice(prefix, newSuffix)
+    replacement: editedSlice(newSource, prefix, newSuffix)
   };
 }

@@ -392,6 +392,12 @@ export type PrepareBeamerDocumentOptions = {
   previousSyntax?: TexSyntaxIndex;
   /** Parse afresh, so that the syntax tree is exact even if it has errors. */
   exactSyntax?: boolean;
+  /**
+   * Render as if the presentation theme were switched to this catalog theme
+   * (theme-switch.ts), without changing the source: the theme gallery's
+   * previews. Unknown names are ignored.
+   */
+  presentationTheme?: string;
 };
 
 export type BeamerEmbeddedTikzLayout = {

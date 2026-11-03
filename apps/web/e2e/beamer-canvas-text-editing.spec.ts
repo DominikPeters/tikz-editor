@@ -4,8 +4,10 @@ import { readFileSync } from "node:fs";
 import {
   gotoApp,
   readCodeMirrorText,
+  readCanvasTransform,
   readStoreSource,
   resetStorageBeforeNavigation,
+  setCanvasTransform,
   setSource
 } from "./helpers";
 
@@ -276,6 +278,34 @@ test("opens scope-wide sessions and edits title and list text with undo/redo", a
   const finalSource = titleEdited.replace("List typo", "List fixed");
   await expect.poll(() => readStoreSource(page)).toBe(finalSource);
   await expect.poll(() => readCodeMirrorText(page)).toBe(finalSource);
+});
+
+test("paragraph clicks use the viewport mapping when the interaction SVG has no screen CTM", async ({ page }) => {
+  const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Mapping}
+First paragraph starts here.
+
+Second paragraph ends here.
+\end{frame}
+\end{document}`;
+  await setSource(page, source);
+  await openScopeContaining(page, "First paragraph");
+  const transform = await readCanvasTransform(page);
+  await setCanvasTransform(page, {
+    translateX: transform.translateX + 13,
+    translateY: transform.translateY + 17,
+    scale: transform.scale * 1.1
+  });
+  await page.getByTestId("canvas-interaction-layer").evaluate(element => {
+    Object.defineProperty(element, "getScreenCTM", { configurable: true, value: () => null });
+  });
+  const glyph = page.locator(`[data-testid="canvas-svg-layer"] [data-source-start="${source.indexOf("paragraph")}"]`).first();
+  const box = await glyph.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.click(box!.x + 1, box!.y + box!.height / 2);
+  await page.keyboard.type("X");
+  await expect.poll(() => readStoreSource(page)).toBe(source.replace("First paragraph", "First Xparagraph"));
 });
 
 test("KKT display math caret and highlights align with the rendered glyphs", async ({ page }) => {

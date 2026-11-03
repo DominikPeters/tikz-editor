@@ -1,79 +1,69 @@
+/* Document tabs, as in a macOS window tab bar: equal widths, full-height
+   separators, and the active tab in the window colour. */
 .strip {
   display: flex;
-  align-items: flex-end;
-  gap: 0;
-  padding: 0 8px;
-  padding-top: 4px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-app);
+  align-items: stretch;
+  flex-shrink: 0;
+  height: calc(var(--app-ui-scale, 1) * 24px);
+  box-sizing: content-box;
+  background: var(--bg-tabbar);
+  border-bottom: 1px solid var(--tabbar-divider);
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: none;
 }
 
-:global(html[data-desktop-os="macos"]) .strip {
-  background: transparent;
+.strip::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  box-sizing: border-box;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 0;
-  background: transparent;
-  min-width: 0;
   position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 120px;
+  border-left: 1px solid var(--tabbar-divider);
+  color: var(--label-secondary);
   transition: background 0.05s ease;
-  margin-bottom: -1px;
 }
 
-/* Separator line between inactive tabs */
-.tab::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 1px;
-  background: var(--border);
+.tab:first-child {
+  border-left: 0;
 }
 
-/* Hide separators around the active tab and the last tab */
-.tab:last-child::after,
-.tabActive::after,
-.tab:has(+ .tabActive)::after {
-  display: none;
+.tab:hover:not(.tabActive) {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.tabActive {
+  background: var(--bg-window);
+  color: var(--text);
 }
 
 .tabDragging {
   opacity: 0.5;
 }
 
-.tab:hover:not(.tabActive) {
-  background: color-mix(in srgb, var(--btn-hover-bg) 40%, transparent);
-}
-
-.tabActive {
-  background: var(--bg-pane);
-  border-color: var(--border);
-  border-bottom: 1px solid var(--bg-pane);
-  z-index: 1;
-}
-
 .tabButton {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  max-width: 220px;
+  justify-content: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
   height: 100%;
-  padding: 0;
-  padding-left: 10px;
+  padding: 0 24px;
   border: none;
   background: transparent;
-  color: var(--text);
-  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+}
+
+.tabButton:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 60%, transparent);
+  outline-offset: -2px;
 }
 
 .title {
@@ -83,10 +73,19 @@
   font-size: calc(var(--app-ui-scale, 1) * 11px);
 }
 
+/* The unsaved dot and the close button share the tab's leading corner:
+   the dot shows until the pointer is over the tab. */
 .dirty {
-  fill: var(--accent);
-  flex-shrink: 0;
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  fill: var(--label-secondary);
   display: block;
+}
+
+.tab:hover .dirty {
+  opacity: 0;
 }
 
 .externalChange {
@@ -95,27 +94,119 @@
   display: block;
 }
 
-.close,
+.close {
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--label-secondary);
+  opacity: 0;
+  cursor: default;
+}
+
+.tab:hover .close,
+.close:focus-visible {
+  opacity: 1;
+}
+
+.close:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+
 .add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
   border: none;
+  border-left: 1px solid var(--tabbar-divider);
   background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 4px 8px;
+  color: var(--label-secondary);
+  cursor: default;
 }
 
-.close {
-  padding-left: 6px;
-}
-
-.add {
-  align-self: center;
-}
-
-.close:hover,
 .add:hover {
   color: var(--text);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.close:focus-visible,
+.add:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 60%, transparent);
+  outline-offset: -2px;
+}
+
+/* ── Windows 11: tabs in the title bar ──────────────────────────────────────
+   WindowsTitleBar holds the strip. Tabs keep a fixed width, start at the
+   left and round their top corners; the active one has the command bar's
+   colour, so it joins it. The unsaved dot leads, the close button trails. */
+
+:global(html[data-desktop-os="windows"]) .strip {
+  flex: 0 1 auto;
+  min-width: 0;
+  height: calc(var(--app-ui-scale, 1) * 28px);
+  gap: 1px;
+  border-bottom: 0;
+  background: transparent;
+}
+
+:global(html[data-desktop-os="windows"]) .tab {
+  flex: 0 1 calc(var(--app-ui-scale, 1) * 200px);
+  min-width: 90px;
+  border-left: 0;
+  border-radius: 6px 6px 0 0;
+}
+
+:global(html[data-desktop-os="windows"]) .tab:hover:not(.tabActive) {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+:global(html[data-desktop-os="windows"]) .tabActive {
+  background: var(--bg-commandbar);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent);
+  clip-path: inset(-1px -1px 0 -1px);
+}
+
+:global(html[data-desktop-os="windows"]) .tabButton {
+  justify-content: flex-start;
+  padding: 0 28px 0 22px;
+}
+
+:global(html[data-desktop-os="windows"]) .title {
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+}
+
+:global(html[data-desktop-os="windows"]) .tab:hover .dirty {
+  opacity: 1;
+}
+
+:global(html[data-desktop-os="windows"]) .close {
+  left: auto;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+}
+
+:global(html[data-desktop-os="windows"]) .tabActive .close {
+  opacity: 1;
+}
+
+:global(html[data-desktop-os="windows"]) .add {
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 2px;
+  border-left: 0;
+  border-radius: 4px;
 }

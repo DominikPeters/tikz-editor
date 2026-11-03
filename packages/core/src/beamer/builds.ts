@@ -1,3 +1,4 @@
+import { userText } from "../edit/fragment.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
@@ -266,7 +267,7 @@ export function beamerBuildSpecPatch(model: BeamerBuildModel, rowId: string, val
   const row = model.rows.find((candidate) => candidate.id === rowId);
   if (!row?.editable || !row.spec || !isExplicitBeamerBuildSpec(value)) return null;
   const oldSpan = row.spec.source.contentSpan;
-  const replacement = value.trim();
+  const replacement = userText(value.trim(), "beamer-text");
   return { oldSpan, newSpan: { from: oldSpan.from, to: oldSpan.from + replacement.length }, replacement };
 }
 

@@ -15,13 +15,7 @@ import {
   type SyntheticEvent as ReactSyntheticEvent
 } from "react";
 import { useStableCallback } from "../hooks/useStableCallback";
-import {
-  clientPoint as makeClientPoint,
-  svgPoint as makeSvgPoint,
-  pt,
-  px,
-  viewportPoint
-} from "@tikz-editor/core/coords/index";
+import { clientPoint as makeClientPoint, px } from "@tikz-editor/core/coords/index";
 import {
   getKnuthPlassCaretFromPoint,
   getKnuthPlassLineRangeFromPoint,
@@ -152,7 +146,8 @@ import {
 } from "@tikz-editor/core/text/format-commands";
 import type { CanvasTextEditPlacement } from "../../settings/types";
 import type { CanvasTransform, EditorAction, ToolMode } from "../../store/types";
-import type { ClientPoint, SvgBounds, ViewportPoint } from "../coords/types";
+import type { ClientPoint, SvgBounds, SvgPoint } from "../coords/types";
+import { clientToSvg } from "../coords/convert";
 import { resolveRectHitRegionContentBox } from "../coords/regions";
 import {
   INITIAL_CANVAS_TEXT_EDIT_STATE,
@@ -174,7 +169,7 @@ import type {
   CanvasTextFormatToolbarItem,
   CanvasTextFormatToolbarModel
 } from "./CanvasTextEditPopup";
-import { clamp, clientToSvgPoint, viewportToSvgPoint } from "./geometry";
+import { clamp } from "./geometry";
 import { makeMergeKey, mapPointToRectRegionLocal } from "./panel-helpers";
 import { expandSelectionToMathDelimiters, type TextSelectionRange } from "./text-selection-ranges";
 import {
@@ -678,6 +673,23 @@ function getFallbackTextMeasureContext(): CanvasRenderingContext2D | null {
   return fallbackTextMeasureContext;
 }
 
+/**
+ * A client point in SVG space: through the live SVG element's screen matrix
+ * when there is one, else through the viewport and the canvas transform.
+ */
+function textClientToSvg(
+  clientPoint: ClientPoint,
+  interactionSvgElement: SVGSVGElement | null,
+  viewport: HTMLDivElement | null,
+  svgResult: CanvasSnapshot["svg"],
+  canvasTransform: CanvasTransform
+): SvgPoint | null {
+  const viewportRect = viewport?.getBoundingClientRect() ?? null;
+  return svgResult
+    ? clientToSvg(clientPoint, interactionSvgElement, viewportRect, canvasTransform, svgResult.viewBox)
+    : clientToSvg(clientPoint, interactionSvgElement);
+}
+
 function estimateTextOffsetFromClient(
   target: EditableTextTarget,
   clientPoint: ClientPoint,
@@ -685,14 +697,10 @@ function estimateTextOffsetFromClient(
   viewport: HTMLDivElement | null,
   svgResult: CanvasSnapshot["svg"],
   canvasTransform: CanvasTransform
-): number {
+): number | null {
   const contentBox = resolveRectHitRegionContentBox(target.region);
-  const svgPoint = clientToSvgPoint(clientPoint, interactionSvgElement) ?? (() => {
-    const viewportPoint = viewportPointFromClient(clientPoint, viewport);
-    return svgResult
-      ? viewportToSvgPoint(viewportPoint, canvasTransform, svgResult.viewBox)
-      : makeSvgPoint(pt(clientPoint.x), pt(clientPoint.y));
-  })();
+  const svgPoint = textClientToSvg(clientPoint, interactionSvgElement, viewport, svgResult, canvasTransform);
+  if (!svgPoint) return null;
   const localPoint = mapPointToRectRegionLocal(svgPoint, target.region);
   const ctx = getFallbackTextMeasureContext();
   applyTextMeasureFont(ctx, target.style);
@@ -724,7 +732,7 @@ function estimateTextLineRangeFromClient(
   viewport: HTMLDivElement | null,
   svgResult: CanvasSnapshot["svg"],
   canvasTransform: CanvasTransform
-): TextLineRange {
+): TextLineRange | null {
   const ranges = collectLogicalLineRanges(target.text);
   if (ranges.length === 0) {
     return { start: 0, end: 0 };
@@ -734,12 +742,8 @@ function estimateTextLineRangeFromClient(
   }
 
   const contentBox = resolveRectHitRegionContentBox(target.region);
-  const svgPoint = clientToSvgPoint(clientPoint, interactionSvgElement) ?? (() => {
-    const viewportPoint = viewportPointFromClient(clientPoint, viewport);
-    return svgResult
-      ? viewportToSvgPoint(viewportPoint, canvasTransform, svgResult.viewBox)
-      : makeSvgPoint(pt(clientPoint.x), pt(clientPoint.y));
-  })();
+  const svgPoint = textClientToSvg(clientPoint, interactionSvgElement, viewport, svgResult, canvasTransform);
+  if (!svgPoint) return null;
   const localPoint = mapPointToRectRegionLocal(svgPoint, target.region);
   const yRatio =
     contentBox.height <= 1e-6
@@ -747,14 +751,6 @@ function estimateTextLineRangeFromClient(
       : clamp((localPoint.y - contentBox.y) / contentBox.height, 0, 0.999999);
   const index = Math.min(ranges.length - 1, Math.max(0, Math.floor(yRatio * ranges.length)));
   return ranges[index] ?? requireArrayValue(ranges, ranges.length - 1);
-}
-
-function viewportPointFromClient(clientPoint: ClientPoint, viewport: HTMLDivElement | null): ViewportPoint {
-  const rect = viewport?.getBoundingClientRect();
-  return viewportPoint(
-    px(rect ? clientPoint.x - rect.left : clientPoint.x),
-    px(rect ? clientPoint.y - rect.top : clientPoint.y)
-  );
 }
 
 export function useCanvasTextEditSession(
@@ -1123,15 +1119,7 @@ export function useCanvasTextEditSession(
       if (!paragraphs || paragraphs.length === 0) {
         return null;
       }
-      const svgPoint = clientToSvgPoint(clientPoint, interactionSvgRef.current) ?? (
-        svgResult
-          ? viewportToSvgPoint(
-              viewportPointFromClient(clientPoint, viewportRef.current),
-              canvasTransform,
-              svgResult.viewBox
-            )
-          : null
-      );
+      const svgPoint = textClientToSvg(clientPoint, interactionSvgRef.current, viewportRef.current, svgResult, canvasTransform);
       if (!svgPoint) {
         return paragraphs.find((paragraph) => paragraph.paragraphId === target.paragraphId)
           ?? paragraphs[0];
@@ -1234,7 +1222,7 @@ export function useCanvasTextEditSession(
           svgResult,
           canvasTransform
         );
-        return { offset, selectionRange: null };
+        return offset === null ? null : { offset, selectionRange: null };
       }
       const containerElement = view.containerElement;
       const result = await getKnuthPlassCaretFromPoint(layoutContext, {
@@ -1398,6 +1386,7 @@ export function useCanvasTextEditSession(
             svgResult,
             canvasTransform
           );
+      if (provisionalOffset === null) return;
       const provisionalLineRange = mode === "line"
         ? resolveLogicalLineRangeForOffset(target.text, provisionalOffset)
         : null;

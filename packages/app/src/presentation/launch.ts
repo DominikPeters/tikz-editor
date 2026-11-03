@@ -13,7 +13,7 @@ export function launchPresentation(from: "current" | "beginning", mode?: Present
   void presentationService.start(getActiveDocument(state), setup, frame);
 }
 
-export const NEW_BEAMER_SOURCE = String.raw`\documentclass{beamer}
+export const NEW_BEAMER_SOURCE = String.raw`\documentclass[aspectratio=169]{beamer}
 \title{Untitled Presentation}
 \begin{document}
 

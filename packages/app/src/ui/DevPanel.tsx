@@ -1,3 +1,4 @@
+import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { useMemo, useState } from "react";
 import { capabilityMatrix, type CapabilityRow } from "@tikz-editor/core/capabilities";
 import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
@@ -317,7 +318,7 @@ function EditingTab({
   currentHistoryEntry: ReturnType<typeof useEditorStore.getState>["history"][number] | null;
   handleCount: number;
   lastEditChangedSourceIds: readonly string[] | null;
-  lastEditPatches: ReadonlyArray<{ oldSpan: { from: number; to: number }; newSpan: { from: number; to: number }; replacement: string }> | null;
+  lastEditPatches: ReadonlyArray<SourcePatch> | null;
   lastEditWarningMessage: string | null;
   selectedHandles: readonly EditHandle[];
 }) {

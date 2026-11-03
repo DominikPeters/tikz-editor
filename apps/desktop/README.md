@@ -5,7 +5,11 @@ This package hosts the desktop shell for TikZ Editor using Tauri v2.
 ## Scripts
 
 - `npm run -w @tikz-editor/desktop dev` runs the Vite frontend on port 1420.
-- `npm run -w @tikz-editor/desktop tauri:dev` runs the full Tauri desktop app.
+- `npm run dev:desktop` (from the repository root) runs the full Tauri desktop app
+  with an optimized Rust release build and Vite live refresh. The first launch
+  compiles release dependencies; subsequent frontend edits still refresh immediately.
+- `npm run -w @tikz-editor/desktop tauri:dev` runs the desktop app with a Rust
+  debug build when native debugging is needed.
 - `npm run -w @tikz-editor/desktop tauri:build` creates desktop bundles.
 - `npm run -w @tikz-editor/desktop test:e2e` runs real desktop e2e against a built binary (requires `tauri-driver` in PATH).
 
@@ -54,5 +58,8 @@ It first launches the portable executable without WebDriver to verify that the
 app creates its own profile beside the executable. The WebDriver sessions then
 explicitly reuse that data folder: EdgeDriver otherwise overrides the app's
 profile with a [temporary directory for every session](https://learn.microsoft.com/en-us/microsoft-edge/webdriver/capabilities-edge-options#webviewoptions-object).
-The release and SignPath test workflows sign the portable executable separately
-and include its ZIP alongside the installers. CI artifacts are unsigned.
+The release workflow always includes NSIS/MSI installers and the portable ZIP.
+Its `sign_windows` input defaults to false, so Windows releases can build without
+SignPath access. Enable it to sign the installed executable, installers, and
+portable executable separately. Tauri updater signatures are generated in both
+modes. The SignPath test workflows keep signing enabled. CI artifacts are unsigned.

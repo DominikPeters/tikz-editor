@@ -1,9 +1,10 @@
 import type { SourcePatch } from "./types.js";
+import type { EditedSource } from "./fragment.js";
 import type { IdentityMove } from "./identity-provenance.js";
 
 export type EditActionSuccessResult = {
   kind: "success";
-  newSource: string;
+  newSource: EditedSource;
   patches: SourcePatch[];
   /** Explicit source ownership for structural edits such as reordering. */
   identityMoves?: IdentityMove[];
@@ -14,7 +15,7 @@ export type EditActionSuccessResult = {
 
 export type EditActionPartialResult = {
   kind: "partial";
-  newSource: string;
+  newSource: EditedSource;
   patches: SourcePatch[];
   /** Explicit source ownership for structural edits such as reordering. */
   identityMoves?: IdentityMove[];

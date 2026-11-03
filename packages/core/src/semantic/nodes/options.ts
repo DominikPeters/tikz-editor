@@ -14,6 +14,7 @@ import { normalizeOptionValue } from "./utils.js";
 import { identityMatrix, inverseMatrix, multiplyMatrix } from "../transform.js";
 import type { WorldTransform } from "../../coords/transforms.js";
 import { defaultStyle } from "../style/defaults.js";
+import { evaluateTransformCoordinate } from "../coords/evaluate.js";
 
 export function withDefaultNodePosition(options: OptionListAst | undefined, defaultPos: number | undefined): OptionListAst | undefined {
   if (defaultPos == null) {
@@ -144,7 +145,7 @@ export function resolveNodeOptionScale(
     frame.transform,
     layers,
     cloneCustomStyleRegistry(frame.customStyles),
-    undefined,
+    (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
     [],
     (raw) => resolveContextColorAliasValue(context, raw),
     frame.axisBasis
@@ -197,7 +198,7 @@ export function resolveNodeOptionTransform(
     frame.transform,
     layers,
     cloneCustomStyleRegistry(frame.customStyles),
-    undefined,
+    (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
     [],
     (raw) => resolveContextColorAliasValue(context, raw),
     frame.axisBasis

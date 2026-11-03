@@ -19,6 +19,7 @@ import {
 } from "./canvas-panel/canvas-text-context";
 import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
 import { ACTUAL_SIZE_SCALE, zoomPercentForScale } from "./canvas-zoom";
+import { rangeFillStyle } from "./range-fill";
 
 const ZOOM_LEVELS = [25, 50, 75, 100, 125, 150, 200, 300, 400] as const;
 const MIN_ZOOM_PERCENT = 25;
@@ -331,6 +332,7 @@ export function StatusBar() {
         <input
           className={css.zoomSlider}
           type="range"
+          style={rangeFillStyle(sliderZoomPercent, MIN_ZOOM_PERCENT, maxZoomPercent)}
           min={MIN_ZOOM_PERCENT}
           max={maxZoomPercent}
           step={1}

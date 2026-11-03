@@ -1,10 +1,12 @@
+import { pt } from "../../coords/scalars.js";
+import { canvasLength, EMPTY_FRAGMENT, optionValueFor, sliceFragment, sourceSlice, tikz, userText, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { parseStyleValueAsOptionList } from "../../semantic/style/option-utils.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import type { Span } from "../../ast/types.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
-import { formatNumber, pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
+import { pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
 import { replaceSpan } from "../patch.js";
 import type { PropertyTarget } from "../property-target.js";
 import {
@@ -97,7 +99,7 @@ export function applyAdornmentSetProperty(
   if (removePrimaryKey) {
     mutations.set(key, { kind: "remove" });
   } else {
-    mutations.set(key, { kind: "set", value: action.value });
+    mutations.set(key, { kind: "set", value: userText(action.value, "inspector-value") });
   }
   return applyAdornmentValueRewrite(source, target, undefined, action.elementId, undefined, mutations);
 }
@@ -129,7 +131,7 @@ export function applyAdornmentValueRewrite(
   } else {
     baseOptionMutations.set(distanceKey, {
       kind: "set",
-      value: `${formatNumber(distancePt, pointDistanceFormatOptions(formatPrecision))}pt`
+      value: optionValueFor(distanceKey, canvasLength(pt(distancePt), "pt", pointDistanceFormatOptions(formatPrecision).fractionDigits))
     });
   }
 
@@ -163,10 +165,13 @@ export function applyAdornmentValueRewrite(
         baseOptionMutations
       );
   const optionsRaw = unwrapOptionList(serializedOptions, "[", "]");
+  const angleRaw = overrides?.angleRaw ?? target.angleRaw;
   const replacement = serializeAdornmentValue(
     kind,
-    overrides?.angleRaw ?? target.angleRaw ?? "center",
-    overrides?.textRaw ?? (target.textSpan ? source.slice(target.textSpan.from, target.textSpan.to) : ""),
+    angleRaw === undefined ? tikz`center` : userText(angleRaw, "inspector-value"),
+    overrides?.textRaw !== undefined
+      ? userText(overrides.textRaw, "node-text")
+      : target.textSpan ? sourceSlice(source, target.textSpan) : EMPTY_FRAGMENT,
     optionsRaw
   );
   const updated = replaceSpan(source, target.valueSpan, replacement);
@@ -193,7 +198,7 @@ function rewriteAdornmentPinEdgeOptions(
   authoredOptionSite: SourceBackedAdornmentOptionSite | null,
   pinEdgeRaw: string | null,
   mutations: ReadonlyMap<string, OptionMutation>
-): string | null {
+): TikzFragment | null {
   const pinEdgeEntry = findAuthoredPinEdgeEntry(authoredOptionSite);
   if (pinEdgeEntry?.valueSpan) {
     const valueSpan = pinEdgeEntry.valueSpan;
@@ -201,13 +206,13 @@ function rewriteAdornmentPinEdgeOptions(
     const parsed = parseStyleValueAsOptionList(sourceRaw, valueSpan.from);
     if (parsed) {
       const format = sourceRaw.trim().startsWith("{") ? "braced" : "bare";
-      const rewritten = rewriteSourceBackedOptionListMutations(
+      const rewritten = trimFragment(rewriteSourceBackedOptionListMutations(
         source,
         valueSpan,
         parsed,
         mutations,
         format
-      ).trim();
+      ));
       if (rewritten.length === 0 || rewritten === "{}") {
         return null;
       }
@@ -218,10 +223,10 @@ function rewriteAdornmentPinEdgeOptions(
   // No authored nested option span is available (for example, an inherited
   // pin edge). Normalized serialization is safe for this isolated fragment.
   const parsed = pinEdgeRaw ? parseStyleValueAsOptionList(pinEdgeRaw) : null;
-  const rewritten = rewriteOptionListMutations(
+  const rewritten = trimFragment(cut(rewriteOptionListMutations(
     parsed ?? emptyOptionListAt(0),
     mutations
-  ).slice(1, -1).trim();
+  ), 1, -1));
   return rewritten.length > 0 ? rewritten : null;
 }
 
@@ -316,18 +321,27 @@ function findAdornmentOptionListClose(
   return null;
 }
 
-function unwrapOptionList(source: string, open: string, close: string): string {
+/** Part of an option list fragment is still the text its constructors produced. */
+function cut(fragment: TikzFragment, from: number, to?: number): TikzFragment {
+  return sliceFragment(fragment, from, to);
+}
+
+function trimFragment(fragment: TikzFragment): TikzFragment {
+  return cut(fragment, fragment.length - fragment.trimStart().length, fragment.trimEnd().length);
+}
+
+function unwrapOptionList(source: TikzFragment, open: string, close: string): TikzFragment {
   return source.startsWith(open) && source.endsWith(close)
-    ? source.slice(open.length, -close.length)
+    ? cut(source, open.length, -close.length)
     : source;
 }
 
-function formatPinEdgeOptionValue(raw: string): string {
-  const trimmed = raw.trim();
+function formatPinEdgeOptionValue(raw: TikzFragment): TikzFragment {
+  const trimmed = trimFragment(raw);
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     return trimmed;
   }
-  return `{${trimmed}}`;
+  return tikz`{${trimmed}}`;
 }
 
 function buildPinEdgeMutations(
@@ -349,7 +363,7 @@ function buildPinEdgeMutations(
       mutations.set(dashKey, { kind: "remove" });
     }
     if (normalizedValue !== "solid" && normalizedValue.length > 0) {
-      mutations.set(normalizedValue, { kind: "set", value: "true" });
+      mutations.set(normalizedValue, { kind: "set", value: tikz`true` });
     }
     return mutations;
   }
@@ -360,7 +374,7 @@ function buildPinEdgeMutations(
     "";
   if (targetKey.length > 0) {
     const trimmedValue = value.trim();
-    mutations.set(targetKey, trimmedValue.length === 0 ? { kind: "remove" } : { kind: "set", value });
+    mutations.set(targetKey, trimmedValue.length === 0 ? { kind: "remove" } : { kind: "set", value: userText(value, "inspector-value") });
   }
   return mutations;
 }
@@ -399,25 +413,25 @@ function formatAdornmentAngle(rawDegrees: number): string {
 
 function serializeAdornmentValue(
   kind: "label" | "pin",
-  angleRaw: string,
-  textRaw: string,
-  optionsRaw: string
-): string {
-  const normalizedText = normalizeAdornmentTextRaw(textRaw.trim().length > 0 ? textRaw : "label");
-  const core = `${angleRaw}:${normalizedText}`;
+  angleRaw: TikzFragment,
+  textRaw: TikzFragment,
+  optionsRaw: TikzFragment
+): TikzFragment {
+  const normalizedText = normalizeAdornmentTextRaw(textRaw.trim().length > 0 ? textRaw : tikz`label`);
+  const core = tikz`${angleRaw}:${normalizedText}`;
   if (optionsRaw.trim().length === 0) {
     return core;
   }
-  return `{[${optionsRaw}]${core}}`;
+  return tikz`{[${optionsRaw}]${core}}`;
 }
 
-function normalizeAdornmentTextRaw(textRaw: string): string {
+function normalizeAdornmentTextRaw(textRaw: TikzFragment): TikzFragment {
   const trimmed = textRaw.trim();
   if (trimmed.length === 0) {
-    return "{}";
+    return tikz`{}`;
   }
   if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || !/[,\]]/.test(trimmed)) {
     return textRaw;
   }
-  return `{${trimmed}}`;
+  return tikz`{${trimFragment(textRaw)}}`;
 }

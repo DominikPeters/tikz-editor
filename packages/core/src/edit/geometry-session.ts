@@ -15,6 +15,7 @@ import { restoreSemanticContext, snapshotSemanticContext } from "../semantic/con
 import { collectSourceWorldBounds } from "./snapping/geometry.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
 import { createStatementFrameResolver, type StatementFrameResolver } from "./parent-frame.js";
+import type { SiteContext } from "../semantic/site-context.js";
 
 export type EditGeometrySnapshot = {
   source: string;
@@ -31,6 +32,7 @@ export type EditGeometrySession = EditGeometrySnapshot & {
   measureStatement: (source: string, sourceId: string, parsed?: ParseTikzResult) => SceneElement[];
   parentFrame: (sourceId: string) => FrameTransform | undefined;
   optionFrame: (sourceId: string, entries?: readonly OptionEntry[], includeScopeFinalOptions?: boolean) => FrameTransform | undefined;
+  optionContext: (sourceId: string, entries?: readonly OptionEntry[], includeScopeFinalOptions?: boolean) => SiteContext | undefined;
 };
 
 /**
@@ -117,6 +119,12 @@ export function createEditGeometrySession(
       if (index == null) return;
       prepare(sourceId);
       return frames.get(index)?.options(entries, includeScopeFinalOptions);
+    },
+    optionContext(sourceId, entries, includeScopeFinalOptions) {
+      const index = statementIndex(sourceId);
+      if (index == null) return;
+      prepare(sourceId);
+      return frames.get(index)?.optionContext(entries, includeScopeFinalOptions);
     },
     measure(source, sourceId) {
       if (source === snapshot.source) return snapshot.semantic.scene.elements;

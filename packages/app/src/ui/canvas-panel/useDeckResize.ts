@@ -125,6 +125,7 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
     if (!origin) return;
     // Freeze the view transform as well as the source: reflow must not move the drag origin.
     const inverse = svg.getScreenCTM()?.inverse();
+    if (!inverse) return;
     const pointerId = event.pointerId;
     let frame: number | null = null;
     let latest: PointerEvent | null = null;
@@ -132,8 +133,7 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
       if (session.current !== current) return;
       if (!valid(current)) { stop(false); return; }
       const point = svg.createSVGPoint(); point.x = sample.clientX; point.y = sample.clientY;
-      const next = inverse ? point.matrixTransform(inverse) : clientToSvgPoint(clientPoint(px(sample.clientX), px(sample.clientY)), svg);
-      if (!next) return;
+      const next = point.matrixTransform(inverse);
       current.patches = patchesFor(current.edit.baseSource, target, next.x - origin.x, next.y - origin.y);
       const nextSource = patchedSource(current.edit.baseSource, current.patches);
       if (nextSource === current.edit.latestSource) return;

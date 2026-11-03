@@ -31,7 +31,7 @@ export type PlatformClipboard = {
 
 export type PlatformFileApi = {
   openText?: (options?: { addToRecent?: boolean }) => Promise<{ source: string; fileRef: DocumentFileRef | null } | null>;
-  openBinary?: (options?: { addToRecent?: boolean }) => Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef | null } | null>;
+  openBinary?: (options?: { addToRecent?: boolean; kind?: "graphics" }) => Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef | null } | null>;
   fetchArxivSource?: (idOrUrl: string) => Promise<ArxivSourcePayload>;
   bindOpenRequest?: (
     handler: (opened: { source: string; fileRef: DocumentFileRef | null }) => void
@@ -46,6 +46,8 @@ export type PlatformFileApi = {
   >;
   readLinkedText?: (fileRef: DocumentFileRef) => Promise<LinkedTextReadResult>;
   readLocalAsset?: (path: string) => Promise<LocalAssetReadResult>;
+  /** Persist a selected browser asset without embedding bytes in TeX source. */
+  storeGraphicAsset?: (asset: { path: string; bytes: ArrayBuffer }) => Promise<void>;
   writeLinkedText?: (
     fileRef: DocumentFileRef,
     text: string,
@@ -97,6 +99,12 @@ export type PlatformMenu = {
     commandStates: Partial<Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>>;
     onCommandRun?: MenuCommandHandler;
   }) => Promise<void> | void;
+  /** File › Open Recent for the in-app menu bar; a native menu builds its own. */
+  recentFiles?: {
+    list: () => Promise<readonly string[]>;
+    open: (path: string) => void;
+    clear: () => Promise<void>;
+  };
 };
 
 export type DesktopContextMenuItem =
@@ -128,6 +136,25 @@ export type PlatformWindowApi = {
   showMessage?: (options: { title: string; message: string; kind?: "info" | "warning" | "error" }) => Promise<void> | void;
   openExternalUrl?: (url: string) => Promise<boolean> | boolean;
   setTheme?: (theme: "light" | "dark" | null) => Promise<void>;
+  /** Present when the app draws the title bar itself (Windows). */
+  frame?: PlatformWindowFrame;
+};
+
+/** What the caption buttons of a self-drawn title bar do. */
+export type PlatformWindowFrame = {
+  minimize: () => Promise<void>;
+  toggleMaximize: () => Promise<void>;
+  /** Asks to close, as the system close button would: unsaved changes are checked. */
+  close: () => Promise<void>;
+  isMaximized: () => Promise<boolean>;
+  onMaximizedChange: (listener: (maximized: boolean) => void) => () => void;
+  /** Where the maximise button is, in CSS pixels, so that Windows can offer
+   *  Snap Layouts over it; null removes it. */
+  setMaximizeButtonBounds?: (bounds: { x: number; y: number; width: number; height: number } | null) => void;
+  /** The pointer over the maximise button, which the system now handles. */
+  onMaximizeButtonHover?: (listener: (hovered: boolean) => void) => () => void;
+  /** The system accent's shades as `#rrggbb`: light 3 to dark 3. */
+  accentPalette?: () => Promise<readonly string[] | null>;
 };
 
 export type PlatformHaptics = {

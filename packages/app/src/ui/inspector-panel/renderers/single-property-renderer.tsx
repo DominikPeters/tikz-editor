@@ -18,7 +18,7 @@ type LineWidthDropdownValue
 import {
 renderArrowTipDropdown,
 renderDashStyleDropdown,
-renderFillModeDropdown,
+renderFillModeSegments,
 renderFillPatternDropdown,
 renderFillShadingDropdown,
 renderLineCapDropdown,
@@ -28,6 +28,7 @@ renderPathMorphingDecorationDropdown,
 renderShadowPresetDropdown
 } from "../property-dropdowns";
 import type { RenderPropertyApi } from "../property-renderer-types";
+import { rangeFillStyle } from "../../range-fill";
 export function renderSingleInspectorProperty(property: InspectorProperty, api: RenderPropertyApi) {
   const {
     renderedSinglePropertyProvenance,
@@ -168,34 +169,36 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
       const readoutText = property.displayLabel ?? property.value.toFixed(2);
       return (
         <div key={property.id} className={propertyClassName}>
-          <div className={css.sliderHeaderRow}>
-            <div className={css.propertyLabel}>{property.label}</div>
-            <div className={`${css.sliderReadout} ${valueClassName}`}>{readoutText}</div>
+          <div className={css.propertyLabel}>{property.label}</div>
+          <div className={css.sliderRow}>
+            {maybeWrapWithProvenanceTooltip(
+              provenance,
+              <input
+                className={css.sliderInput}
+                type="range"
+                style={rangeFillStyle(property.value, property.min, property.max)}
+                aria-label={property.label}
+                min={property.min}
+                max={property.max}
+                step={property.step}
+                value={property.value}
+                disabled={!writable}
+                list={property.ticks && property.ticks.length > 0 ? datalistId : undefined}
+                onInput={(event) => {
+                  const next = Number(event.currentTarget.value);
+                  if (!Number.isFinite(next)) return;
+                  applySetProperty(property.write, String(next), { recordInHistory: false });
+                }}
+                onChange={(event) => {
+                  const next = Number(event.currentTarget.value);
+                  if (!Number.isFinite(next)) return;
+                  applySetProperty(property.write, String(next));
+                }}
+              />,
+              true
+            )}
+            <div className={`${css.sliderReadout} ${valueClassName ?? ""}`}>{readoutText}</div>
           </div>
-          {maybeWrapWithProvenanceTooltip(
-            provenance,
-            <input
-              className={css.sliderInput}
-              type="range"
-              min={property.min}
-              max={property.max}
-              step={property.step}
-              value={property.value}
-              disabled={!writable}
-              list={property.ticks && property.ticks.length > 0 ? datalistId : undefined}
-              onInput={(event) => {
-                const next = Number(event.currentTarget.value);
-                if (!Number.isFinite(next)) return;
-                applySetProperty(property.write, String(next), { recordInHistory: false });
-              }}
-              onChange={(event) => {
-                const next = Number(event.currentTarget.value);
-                if (!Number.isFinite(next)) return;
-                applySetProperty(property.write, String(next));
-              }}
-            />,
-            true
-          )}
           {property.ticks && property.ticks.length > 0 ? (
             <datalist id={datalistId}>
               {property.ticks.map((tick) => (
@@ -219,7 +222,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
     if (property.kind === "optionalLength") {
       return (
         <div key={property.id} className={propertyClassName}>
-          {renderSingleOptionalLengthField(property, true, provenance)}
+          {renderSingleOptionalLengthField(property, false, provenance)}
         </div>
       );
     }
@@ -229,9 +232,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
       return (
         <div key={property.id} className={propertyClassName}>
           <div className={css.propertyLabel}>{property.label}</div>
-          {maybeWrapWithProvenanceTooltip(
-            provenance,
-            renderNodeTextAlignToolbar(
+          {renderNodeTextAlignToolbar(
               {
                 value: property.value,
                 mixed: false
@@ -239,9 +240,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
               writable,
               (nextValue: "unset" | "left" | "center" | "right" | "justify") =>
                 { applySetProperty(property.write, nextValue === "unset" ? "" : nextValue, { clearKeys: property.clearKeys }); }
-            ),
-            true
-          )}
+            )}
           {renderReadOnlyReasonNote(readOnlyReason)}
         </div>
       );
@@ -289,9 +288,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
       return (
         <div key={property.id} className={propertyClassName}>
           <div className={css.propertyLabel}>{property.label}</div>
-          {maybeWrapWithProvenanceTooltip(
-            provenance,
-            renderNodeFontToolbar(
+          {renderNodeFontToolbar(
               {
                 family: property.family,
                 familyMixed: false,
@@ -358,9 +355,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
                 ); },
               () => { clearHoverPreviewSession(previewOwnerKey); },
               () => { restoreHoverPreviewBase(previewOwnerKey); }
-            ),
-            true
-          )}
+            )}
           {property.note ? <div className={css.propertyNote}>{property.note}</div> : null}
           {renderReadOnlyReasonNote(readOnlyReason)}
         </div>
@@ -405,23 +400,18 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
       return (
         <div key={property.id} className={propertyClassName}>
           <div className={css.propertyLabel}>{property.label}</div>
-          {maybeWrapWithProvenanceTooltip(
-            provenance,
-            renderFillModeDropdown(
-              {
-                label: property.label,
-                value: property.value,
-                options: property.options
-              },
-              writable,
-              (nextValue) => {
-                applyFillModeValue(property.write, nextValue, property.context);
-                setFillAdvancedOptionsOpen(nextValue !== "solid");
-              },
-              undefined,
-              valueClassName
-            ),
-            true
+          {/* No provenance tooltip: on a segmented control it pops up over whichever segment is hovered. */}
+          {renderFillModeSegments(
+            {
+              label: property.label,
+              value: property.value,
+              options: property.options
+            },
+            writable,
+            (nextValue) => {
+              applyFillModeValue(property.write, nextValue, property.context);
+              setFillAdvancedOptionsOpen(nextValue !== "solid");
+            }
           )}
           {renderReadOnlyReasonNote(readOnlyReason)}
         </div>
@@ -605,6 +595,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
             <input
               className={css.rangeInput}
               type="range"
+              style={rangeFillStyle(property.value, property.min, property.max)}
               min={property.min}
               max={property.max}
               step={property.step}
@@ -799,6 +790,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
               <input
                 className={css.rangeInput}
                 type="range"
+                style={rangeFillStyle(currentRadius, minRadius, maxRadius)}
                 min={minRadius}
                 max={maxRadius}
                 step={property.step}

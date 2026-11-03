@@ -27,6 +27,9 @@ type SheetProps = CommonModalProps & {
   variant?: "sheet";
   size?: SheetSize;
   closeOnBackdrop?: boolean;
+  /** A short question with a few answers: an NSAlert on macOS (app mark,
+   *  centred text, stacked buttons), a ContentDialog on Windows. */
+  alert?: boolean;
 };
 
 type PanelProps = CommonModalProps & {
@@ -64,6 +67,7 @@ function ModalSheet({
   dataTestId,
   closeOnEscape = true,
   closeOnBackdrop = true,
+  alert = false,
   children
 }: SheetProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -107,12 +111,13 @@ function ModalSheet({
     }
   }
 
-  const classes = [css.sheet, SHEET_SIZE_CLASS[size], className].filter(Boolean).join(" ");
+  const classes = [css.sheet, SHEET_SIZE_CLASS[size], alert ? css.alert : "", className].filter(Boolean).join(" ");
 
   return (
     <dialog
       ref={dialogRef}
       className={classes}
+      role={alert ? "alertdialog" : undefined}
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
       data-testid={dataTestId}
