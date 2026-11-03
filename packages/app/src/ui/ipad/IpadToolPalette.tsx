@@ -57,6 +57,37 @@ const EXPANDED_MAIN =
   ((VISIBLE_TOOLS.length + 1) * BUTTON_GAP);
 const EXPANDED_CROSS = BUTTON_SIZE + (PALETTE_PADDING * 2);
 
+const NON_TEXT_INPUT_TYPES: ReadonlySet<string> = new Set([
+  "button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"
+]);
+
+function isTextEntry(element: Element | null): boolean {
+  if (!(element instanceof HTMLElement)) return false;
+  if (element.isContentEditable) return true;
+  if (element instanceof HTMLTextAreaElement) return !element.readOnly;
+  if (element instanceof HTMLInputElement) return !element.readOnly && !NON_TEXT_INPUT_TYPES.has(element.type);
+  return false;
+}
+
+// iPadOS floats its hardware-keyboard shortcut bar over the bottom centre while
+// text has focus, without resizing the visual viewport, so the page cannot
+// measure it — the bottom palette steps aside instead.
+function useTextEntryFocused(): boolean {
+  const [focused, setFocused] = useState(() => typeof document !== "undefined" && isTextEntry(document.activeElement));
+  useEffect(() => {
+    const sync = () => { setFocused(isTextEntry(document.activeElement)); };
+    // focusout fires before activeElement moves to the next target.
+    const syncAfterBlur = () => { queueMicrotask(sync); };
+    document.addEventListener("focusin", sync);
+    document.addEventListener("focusout", syncAfterBlur);
+    return () => {
+      document.removeEventListener("focusin", sync);
+      document.removeEventListener("focusout", syncAfterBlur);
+    };
+  }, []);
+  return focused;
+}
+
 const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
   id: option.value,
   label: option.label,
@@ -274,7 +305,9 @@ export function IpadToolPalette({
     return () => { window.removeEventListener("pointerdown", onPointerDown); };
   }, [openPopup]);
 
+  const textEntryFocused = useTextEntryFocused();
   const isMini = dock.kind === "corner";
+  const tuckedForKeyboard = textEntryFocused && !dragging && dock.kind === "edge" && dock.edge === "bottom";
   const rest = parentSize ? restRect(dock, parentSize.width, parentSize.height, safeAreaBottom) : null;
   const frame: Rect | null = dragging && dragPosition
     ? { x: dragPosition.x, y: dragPosition.y, width: PUCK_SIZE, height: PUCK_SIZE }
@@ -489,6 +522,8 @@ export function IpadToolPalette({
       data-dragging={dragging ? "true" : "false"}
       data-settling={settling && !dragging ? "true" : "false"}
       data-measured={frame ? "true" : "false"}
+      data-keyboard-tucked={tuckedForKeyboard ? "true" : "false"}
+      aria-hidden={tuckedForKeyboard || undefined}
       data-select="chrome"
       data-testid="ipad-tool-palette"
       onTransitionEnd={() => { setSettling(false); }}

@@ -8,6 +8,15 @@
   overflow: visible;
   font-family: var(--ipad-chrome-font);
   visibility: hidden;
+  transition:
+    transform 260ms cubic-bezier(0.3, 1, 0.4, 1),
+    opacity 200ms ease;
+}
+
+.palette[data-keyboard-tucked="true"] {
+  transform: translateY(calc(100% + 12px + var(--ipad-bottom-touch-inset, 0px)));
+  opacity: 0;
+  pointer-events: none;
 }
 
 .palette[data-state="puck"],
