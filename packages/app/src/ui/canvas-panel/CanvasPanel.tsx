@@ -1810,6 +1810,37 @@ export const CanvasPanel = memo(function CanvasPanel({
     }, { once: true });
   }, []);
 
+  // A refit around the panel also changes the zoom, which the stage's
+  // translate transition cannot carry: the figure would resize at once and
+  // then slide. While armed, a zoom change is animated FLIP-style instead —
+  // the new frame is drawn scaled back onto the old one, then transitions.
+  const animateZoomUntilRef = useRef(0);
+  const stageTransformRef = useRef(canvasTransform);
+  useLayoutEffect(() => {
+    const previous = stageTransformRef.current;
+    stageTransformRef.current = canvasTransform;
+    if (
+      performance.now() > animateZoomUntilRef.current ||
+      previous.scale === canvasTransform.scale ||
+      previous.scale <= 0 ||
+      canvasTransform.scale <= 0
+    ) {
+      return;
+    }
+    const viewport = viewportRef.current;
+    const stage = viewport?.querySelector<HTMLElement>('[data-testid="canvas-world-stage"]');
+    if (!viewport || !stage) {
+      return;
+    }
+    const target = stage.style.transform;
+    delete viewport.dataset.canvasPanAnimate;
+    stage.style.transform =
+      `translate(${previous.translateX}px, ${previous.translateY}px) scale(${previous.scale / canvasTransform.scale})`;
+    void stage.offsetWidth;
+    armCanvasPanAnimation();
+    stage.style.transform = target;
+  }, [armCanvasPanAnimation, canvasTransform]);
+
   const animateCanvasPanBy = useCallback((dx: number) => {
     if (Math.abs(dx) < 1) {
       return;
@@ -1854,10 +1885,12 @@ export const CanvasPanel = memo(function CanvasPanel({
     };
 
     // In fit-to-content mode the refit around the panel's inset replaces the
-    // pan; only animate it.
+    // pan; only animate it. The inset is measured after the panel lays out,
+    // so the refit lands a frame or two later.
     if (inspectorOverlayOpen !== wasOpen && fitToContentModeActiveRef.current) {
       pendingRevealRef.current = false;
       panelShiftRef.current = 0;
+      animateZoomUntilRef.current = performance.now() + 500;
       armCanvasPanAnimation();
       return;
     }
