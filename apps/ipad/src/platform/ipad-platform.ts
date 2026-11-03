@@ -11,8 +11,10 @@ import type {
 // platform) before bootstrap() registers the iPad platform adapter — silently
 // discarding the persisted workspace on every launch.
 import { revisionForText } from "@tikz-editor/app/linked-file-sync";
+import { invoke } from "@tauri-apps/api/core";
+import { documentDir, join } from "@tauri-apps/api/path";
 import { message, open, save } from "@tauri-apps/plugin-dialog";
-import { readFile, readTextFile, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { BaseDirectory, readFile, readTextFile, remove, stat, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 type StorageLike = {
@@ -83,6 +85,88 @@ function fileRefFromPath(path: string, fallbackName: string): DocumentFileRef {
   };
 }
 
+const BOOKMARK_STORAGE_KEY = "tikz-editor-ipad-file-bookmarks";
+const MAX_BOOKMARKS = 64;
+
+type FileAccess = {
+  /** Records a persistent grant for a file the user just picked. */
+  remember: (location: string) => Promise<void>;
+  /** The location to read or write; re-grants access after a relaunch. */
+  locate: (location: string) => Promise<string>;
+};
+
+// Files picked in the Files app stay reachable only for the current process;
+// a bookmark keeps the grant across launches and follows renames and moves.
+function createFileAccess(storage: StorageLike | null): FileAccess {
+  const granted = new Map<string, string>();
+
+  const load = (): Record<string, string> => {
+    try {
+      const parsed: unknown = JSON.parse(storage?.getItem(BOOKMARK_STORAGE_KEY) ?? "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+      return Object.fromEntries(
+        Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+      );
+    } catch {
+      return {};
+    }
+  };
+  const store = (location: string, bookmark: string) => {
+    const bookmarks = load();
+    delete bookmarks[location];
+    bookmarks[location] = bookmark;
+    const entries = Object.entries(bookmarks);
+    try {
+      storage?.setItem(BOOKMARK_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries.slice(-MAX_BOOKMARKS))));
+    } catch {
+      // Storage full or unavailable: the grant still lasts for this session.
+    }
+  };
+
+  return {
+    remember: async (location) => {
+      granted.set(location, location);
+      try {
+        store(location, await invoke<string>("ipad_create_bookmark", { location }));
+      } catch {
+        // Outside the native shell (browser dev loop) there is nothing to keep.
+      }
+    },
+    locate: async (location) => {
+      const known = granted.get(location);
+      if (known) return known;
+      const bookmark = load()[location];
+      if (!bookmark) return location;
+      try {
+        const resolved = await invoke<{ url: string; bookmark: string }>("ipad_resolve_bookmark", { bookmark });
+        store(resolved.url, resolved.bookmark);
+        granted.set(location, resolved.url);
+        granted.set(resolved.url, resolved.url);
+        return resolved.url;
+      } catch {
+        return location;
+      }
+    }
+  };
+}
+
+function filePathFromLocation(location: string): string {
+  return location.startsWith("file://") ? decodeURIComponent(new URL(location).pathname) : location;
+}
+
+// On iOS the save dialog first writes an empty file named after the suggestion
+// into the app's Documents folder and exports that; it never removes it.
+async function removeSavePlaceholder(fileName: string, chosen: string | null): Promise<void> {
+  try {
+    const placeholder = await join(await documentDir(), fileName);
+    if (chosen && filePathFromLocation(chosen) === placeholder) return;
+    const info = await stat(fileName, { baseDir: BaseDirectory.Document });
+    if (info.isFile && info.size === 0) await remove(fileName, { baseDir: BaseDirectory.Document });
+  } catch {
+    // Nothing there (or not on iOS): nothing to clean up.
+  }
+}
+
 function arrayBufferFromBytes(bytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
@@ -94,17 +178,18 @@ async function blobPartsToBytes(content: BlobPart[], mimeType: string): Promise<
   return new Uint8Array(await blob.arrayBuffer());
 }
 
-async function readLinkedTextFile(fileRef: DocumentFileRef): Promise<LinkedTextReadResult> {
+async function readLinkedTextFile(access: FileAccess, fileRef: DocumentFileRef): Promise<LinkedTextReadResult> {
   if (fileRef.provider !== "ios-files" || !fileRef.path) {
     return { status: "permission-needed" };
   }
   try {
-    const source = await readTextFile(fileRef.path);
+    const location = await access.locate(fileRef.path);
+    const source = await readTextFile(location);
     return {
       status: "ok",
       source,
       revision: revisionForText(source),
-      fileRef: fileRefFromPath(fileRef.path, fileRef.name)
+      fileRef: fileRefFromPath(location, fileRef.name)
     };
   } catch (error) {
     return {
@@ -115,6 +200,7 @@ async function readLinkedTextFile(fileRef: DocumentFileRef): Promise<LinkedTextR
 }
 
 async function writeLinkedTextFile(
+  access: FileAccess,
   fileRef: DocumentFileRef,
   text: string,
   expectedRevision: FileRevision | null
@@ -123,21 +209,22 @@ async function writeLinkedTextFile(
     return { status: "permission-needed" };
   }
   try {
-    const currentSource = await readTextFile(fileRef.path);
+    const location = await access.locate(fileRef.path);
+    const currentSource = await readTextFile(location);
     const currentRevision = revisionForText(currentSource);
     if (expectedRevision && currentRevision.hash !== expectedRevision.hash) {
       return {
         status: "changed-on-disk",
         source: currentSource,
         revision: currentRevision,
-        fileRef: fileRefFromPath(fileRef.path, fileRef.name)
+        fileRef: fileRefFromPath(location, fileRef.name)
       };
     }
-    await writeTextFile(fileRef.path, text);
+    await writeTextFile(location, text);
     return {
       status: "saved",
       revision: revisionForText(text),
-      fileRef: fileRefFromPath(fileRef.path, fileRef.name)
+      fileRef: fileRefFromPath(location, fileRef.name)
     };
   } catch (error) {
     return {
@@ -170,6 +257,7 @@ async function tryShareExport(content: BlobPart[], options: { fileName: string; 
 
 export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): EditorPlatform {
   const storage = resolveStorage(env);
+  const access = createFileAccess(storage);
   let menuHandler: MenuCommandHandler | null = null;
 
   return {
@@ -233,6 +321,7 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
           return null;
         }
         const source = await readTextFile(path);
+        await access.remember(path);
         return {
           source,
           fileRef: fileRefFromPath(path, "document.tex")
@@ -259,13 +348,14 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
         const currentPath = options?.mode !== "save-as" ? options?.fileRef?.path : null;
         if (currentPath) {
           try {
-            await writeTextFile(currentPath, text);
+            const location = await access.locate(currentPath);
+            await writeTextFile(location, text);
             return {
               status: "saved",
-              fileRef: fileRefFromPath(currentPath, suggestedName)
+              fileRef: fileRefFromPath(location, suggestedName)
             };
           } catch {
-            // Fall through to Save As if scoped access needs to be renewed.
+            // Fall through to Save As when the file can no longer be reached.
           }
         }
 
@@ -273,11 +363,13 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
           defaultPath: suggestedName,
           filters: TEXT_FILTERS
         });
+        await removeSavePlaceholder(suggestedName, path);
         if (!path) {
           return { status: "cancelled", fileRef: options?.fileRef ?? null };
         }
         try {
           await writeTextFile(path, text);
+          await access.remember(path);
           return {
             status: "saved",
             fileRef: fileRefFromPath(path, suggestedName)
@@ -290,8 +382,8 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
           };
         }
       },
-      readLinkedText: readLinkedTextFile,
-      writeLinkedText: writeLinkedTextFile,
+      readLinkedText: (fileRef) => readLinkedTextFile(access, fileRef),
+      writeLinkedText: (fileRef, text, expectedRevision) => writeLinkedTextFile(access, fileRef, text, expectedRevision),
       syncLinkedFileWatches: () => {},
       exportFile: async (content, options) => {
         if (await tryShareExport(content, options)) {
@@ -300,6 +392,7 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
         const path = await save({
           defaultPath: options.fileName
         });
+        await removeSavePlaceholder(options.fileName, path);
         if (!path) {
           return false;
         }
