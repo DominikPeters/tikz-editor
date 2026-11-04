@@ -2577,9 +2577,13 @@ export const CanvasPanel = memo(function CanvasPanel({
     }
     const rect = viewport.getBoundingClientRect();
     const visual = window.visualViewport;
-    const visibleHeight = visual
-      ? Math.min(rect.height, visual.offsetTop + visual.height - rect.top)
-      : rect.height;
+    // The docked source bar covers the canvas above it, the keyboard below it.
+    const bar = viewport.querySelector('[data-testid="canvas-text-edit-popup"][data-surface="bar"]');
+    const visibleHeight = Math.min(
+      rect.height,
+      visual ? visual.offsetTop + visual.height - rect.top : rect.height,
+      bar ? bar.getBoundingClientRect().top - rect.top : rect.height
+    );
     const pad = 24;
     const overflowX = (from: number, to: number, extent: number): number =>
       to > extent - pad ? to - extent * 0.66 : from < pad ? from - extent * 0.34 : 0;

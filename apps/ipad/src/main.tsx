@@ -3,12 +3,14 @@ import { createRoot } from "react-dom/client";
 import { setActiveEditorPlatform } from "@tikz-editor/app/platform/current";
 import { createIpadPlatformAdapter } from "./platform/ipad-platform";
 import { pinPageScroll } from "./pin-page-scroll";
+import { trackKeyboardInset } from "./keyboard-inset";
 import "./ipad.css";
 
 async function bootstrap() {
   document.documentElement.dataset.editorPlatform = "ipad";
   document.documentElement.dataset.pointerProfile = "touch";
   pinPageScroll();
+  trackKeyboardInset();
   setActiveEditorPlatform(createIpadPlatformAdapter());
   const { App } = await import("@tikz-editor/app");
 

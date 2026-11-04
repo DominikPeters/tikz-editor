@@ -342,6 +342,7 @@ export function CanvasTextEditPopup({
             }
       }
       onPointerDown={model.onPopupPointerDown}
+      data-surface={surface}
       data-testid="canvas-text-edit-popup"
       data-text-edit-surface={surface}
       data-text-edit-focus={model.focusSurface}

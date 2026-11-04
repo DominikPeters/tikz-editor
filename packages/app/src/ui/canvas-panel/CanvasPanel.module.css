@@ -603,6 +603,14 @@
   pointer-events: auto;
 }
 
+/* iPad: above the on-screen keyboard (or a hardware keyboard's shortcut bar),
+   and opaque: it covers a large part of the slide, which would otherwise
+   show through the source text. */
+:global(html[data-editor-platform="ipad"]) .textEditBar {
+  bottom: calc(10px + var(--ipad-keyboard-inset, 0px));
+  background: var(--bg-pane);
+}
+
 .textEditBar:focus-within {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border) 50%);
   box-shadow:
