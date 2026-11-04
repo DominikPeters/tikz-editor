@@ -16,6 +16,7 @@
  * Runs are sequences of concrete operations, so a failure replays from its
  * operation list alone and shrinks by dropping operations.
  */
+import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import { worldPoint } from "../../packages/core/src/coords/points.js";
 import { pt } from "../../packages/core/src/coords/scalars.js";
 import { applyEditAction, type EditAction } from "../../packages/core/src/edit/actions.js";
@@ -338,6 +339,10 @@ export async function runOps(documents: readonly FuzzDocument[], ops: readonly F
   };
 
   for (let opIndex = 0; opIndex < ops.length; opIndex += 1) {
+    // Awaiting compute promises alone can monopolize the microtask queue for
+    // minutes. Yield between operations so Vitest can acknowledge reporting
+    // RPCs; races within a single operation retain their prescribed ordering.
+    await yieldToEventLoop();
     const op = ops[opIndex];
     const doc = docs[op.doc % docs.length];
     trace?.(`${opIndex} ${op.kind}${op.kind === "edit" ? ` ${op.note} ${JSON.stringify(op.edit)}` : ""}`);
@@ -900,6 +905,7 @@ export async function generateOps(documents: readonly FuzzDocument[], seed: numb
   const focus: Focus = { doc: 0 };
   const profile: Profile = { wild: seed % 2 === 0 ? 0.1 : 0.5 };
   for (let step = 0; step < steps; step += 1) {
+    await yieldToEventLoop();
     const op = await generateOp(docs, rng, focus, profile);
     ops.push(op);
     advanceModel(docs, op);

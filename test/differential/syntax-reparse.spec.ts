@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { setImmediate } from "node:timers/promises";
 import { describe, expect, it } from "vitest";
 
 import type { Tree } from "@lezer/common";
@@ -121,10 +122,12 @@ describe("syntax index reparse", () => {
     expect(treeShape(reparsed.tree)).toEqual(treeShape(beamerDocumentParser.parse(wrap(after))));
   });
 
-  it("gives the tree of a fresh parse after edits and mask changes", () => {
+  it("gives the tree of a fresh parse after edits and mask changes", async () => {
     const rng = makeRng(SEED);
     let checked = 0;
     for (let index = 0; index < CASES; index += 1) {
+      // Let Vitest process reporting RPCs even when the full fuzz run takes minutes.
+      await setImmediate();
       let source = DOCUMENTS[index % DOCUMENTS.length];
       let masks: Span[] = [];
       let previous: TexSyntaxIndex = buildTexSyntaxIndex(source, beamerDocumentParser);

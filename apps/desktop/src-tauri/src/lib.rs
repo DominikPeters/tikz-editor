@@ -3347,6 +3347,20 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn file_revision_survives_json_roundtrip() {
+        let revision = super::FileRevisionPayload {
+            mtime_ms: Some(1_793_800_000_000.001_5),
+            size: Some(316),
+            hash: "12345678".to_string(),
+        };
+        let json = serde_json::to_string(&revision).unwrap();
+        let restored: super::FileRevisionPayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.mtime_ms, revision.mtime_ms);
+        assert_eq!(restored.size, revision.size);
+        assert_eq!(restored.hash, revision.hash);
+    }
+
     #[cfg(unix)]
     #[test]
     fn linked_alias_events_keep_authored_paths_and_refresh_retargeted_directories() {
