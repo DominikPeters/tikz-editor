@@ -1,6 +1,6 @@
 import { isRecord } from "../../validation";
 import { createDocumentGraphicsResolverFromPreviewBundle } from "@tikz-editor/core/graphics/index";
-import { getDocumentGraphicsPreviewBundle } from "../../image-asset-cache";
+import { documentGraphicsPreviewBundleBytes, getDocumentGraphicsPreviewBundle } from "../../image-asset-cache";
 import type {
   ThumbnailRegisterGraphicsMessage,
   ThumbnailRenderFailure,
@@ -13,13 +13,21 @@ type PendingRequest = {
   resolve: (value: ThumbnailRenderSuccess | ThumbnailRenderFailure) => void;
   reject: (reason?: unknown) => void;
   groupId: string;
+  graphicsPreviewBundleKey: string | undefined;
 };
 
 let sharedWorker: Worker | null = null;
 let workerInitFailed = false;
 const pendingRequests = new Map<string, PendingRequest>();
 const requestIdsByGroup = new Map<string, Set<string>>();
-const registeredGraphicsBundleKeys = new Set<string>();
+// Keep main-thread registration state and worker-owned image data in sync.
+// In-flight bundles are pinned; the current bundle stays warm between the
+// sequential requests in a thumbnail sweep, even if a single image is huge.
+const registeredGraphicsBundles = new Map<string, number>();
+const MAX_GRAPHICS_BUNDLES = 16;
+const MAX_GRAPHICS_BUNDLE_BYTES = 48 * 1024 * 1024;
+let registeredGraphicsBundleBytes = 0;
+let latestGraphicsBundleKey: string | undefined;
 
 function getWorker(): Worker | null {
   if (workerInitFailed) {
@@ -32,6 +40,7 @@ function getWorker(): Worker | null {
     sharedWorker = new Worker(new URL("./thumbnail-render.worker.ts", import.meta.url), { type: "module" });
     sharedWorker.addEventListener("message", onWorkerMessage);
     sharedWorker.addEventListener("error", onWorkerError);
+    sharedWorker.addEventListener("messageerror", onWorkerError);
     return sharedWorker;
   } catch {
     workerInitFailed = true;
@@ -49,13 +58,23 @@ export async function requestThumbnail(request: ThumbnailRenderRequest): Promise
     pendingRequests.set(request.requestId, {
       resolve,
       reject,
-      groupId: request.groupId
+      groupId: request.groupId,
+      graphicsPreviewBundleKey: request.graphicsPreviewBundleKey
     });
     const idsForGroup = requestIdsByGroup.get(request.groupId) ?? new Set<string>();
     idsForGroup.add(request.requestId);
     requestIdsByGroup.set(request.groupId, idsForGroup);
-    registerGraphicsBundleIfNeeded(worker, request.graphicsPreviewBundleKey);
-    worker.postMessage(request);
+    try {
+      registerGraphicsBundleIfNeeded(worker, request.graphicsPreviewBundleKey);
+      worker.postMessage(request);
+      trimGraphicsBundles();
+    } catch (error) {
+      // Structured cloning can fail synchronously. Do not leave the rejected
+      // request (and its promise callbacks) rooted in the shared maps.
+      dropPending(request.requestId, request.groupId);
+      trimGraphicsBundles();
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
   });
 }
 
@@ -63,25 +82,25 @@ export function cancelGroup(groupId: string): void {
   if (!groupId) {
     return;
   }
-  const worker = getWorker();
+  const worker = sharedWorker;
   const ids = requestIdsByGroup.get(groupId);
-  if (ids) {
-    for (const requestId of ids) {
-      const pending = pendingRequests.get(requestId);
-      if (!pending) {
-        continue;
-      }
-      pending.reject(new Error("thumbnail-group-cancelled"));
-      pendingRequests.delete(requestId);
+  if (!ids) return;
+  for (const requestId of ids) {
+    const pending = pendingRequests.get(requestId);
+    if (!pending) {
+      continue;
     }
-    requestIdsByGroup.delete(groupId);
+    pending.reject(new Error("thumbnail-group-cancelled"));
+    pendingRequests.delete(requestId);
   }
+  requestIdsByGroup.delete(groupId);
   if (worker) {
     worker.postMessage({
       type: "cancelGroup",
       groupId
     });
   }
+  trimGraphicsBundles();
 }
 
 function onWorkerMessage(event: MessageEvent<unknown>): void {
@@ -95,6 +114,7 @@ function onWorkerMessage(event: MessageEvent<unknown>): void {
     return;
   }
   dropPending(message.requestId, pending.groupId);
+  trimGraphicsBundles();
   pending.resolve(message);
 }
 
@@ -162,7 +182,9 @@ function onWorkerError(): void {
   workerInitFailed = true;
   sharedWorker.terminate();
   sharedWorker = null;
-  registeredGraphicsBundleKeys.clear();
+  registeredGraphicsBundles.clear();
+  registeredGraphicsBundleBytes = 0;
+  latestGraphicsBundleKey = undefined;
   const pendingIds = [...pendingRequests.keys()];
   for (const requestId of pendingIds) {
     const pending = pendingRequests.get(requestId);
@@ -175,7 +197,14 @@ function onWorkerError(): void {
 }
 
 function registerGraphicsBundleIfNeeded(worker: Worker, cacheKey: string | undefined): void {
-  if (!cacheKey || registeredGraphicsBundleKeys.has(cacheKey)) {
+  if (!cacheKey) {
+    return;
+  }
+  latestGraphicsBundleKey = cacheKey;
+  const existingWeight = registeredGraphicsBundles.get(cacheKey);
+  if (existingWeight !== undefined) {
+    registeredGraphicsBundles.delete(cacheKey);
+    registeredGraphicsBundles.set(cacheKey, existingWeight);
     return;
   }
   const bundle = getDocumentGraphicsPreviewBundle(cacheKey);
@@ -187,7 +216,23 @@ function registerGraphicsBundleIfNeeded(worker: Worker, cacheKey: string | undef
     bundle
   };
   worker.postMessage(message);
-  registeredGraphicsBundleKeys.add(cacheKey);
+  const weight = documentGraphicsPreviewBundleBytes(bundle);
+  registeredGraphicsBundles.set(cacheKey, weight);
+  registeredGraphicsBundleBytes += weight;
+}
+
+function trimGraphicsBundles(): void {
+  if (!sharedWorker || (registeredGraphicsBundles.size <= MAX_GRAPHICS_BUNDLES &&
+    registeredGraphicsBundleBytes <= MAX_GRAPHICS_BUNDLE_BYTES)) return;
+  const pinned = new Set([...pendingRequests.values()].map((request) => request.graphicsPreviewBundleKey));
+  for (const [cacheKey, weight] of registeredGraphicsBundles) {
+    if (registeredGraphicsBundles.size <= MAX_GRAPHICS_BUNDLES &&
+      registeredGraphicsBundleBytes <= MAX_GRAPHICS_BUNDLE_BYTES) break;
+    if (cacheKey === latestGraphicsBundleKey || pinned.has(cacheKey)) continue;
+    sharedWorker.postMessage({ type: "unregisterGraphics", cacheKey });
+    registeredGraphicsBundles.delete(cacheKey);
+    registeredGraphicsBundleBytes -= weight;
+  }
 }
 
 function dropPending(requestId: string, groupId: string): void {

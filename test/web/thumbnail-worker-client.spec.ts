@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const imageAssetCacheMocks = vi.hoisted(() => ({
-  getDocumentGraphicsPreviewBundle: vi.fn()
+  getDocumentGraphicsPreviewBundle: vi.fn(),
+  documentGraphicsPreviewBundleBytes: vi.fn()
 }));
 
 vi.mock("../../packages/app/src/image-asset-cache", () => imageAssetCacheMocks);
@@ -46,6 +47,7 @@ describe("thumbnail-worker-client", () => {
     vi.unstubAllGlobals();
     vi.stubGlobal("Worker", FakeWorker);
     imageAssetCacheMocks.getDocumentGraphicsPreviewBundle.mockReset();
+    imageAssetCacheMocks.documentGraphicsPreviewBundleBytes.mockReset().mockReturnValue(1024);
   });
 
   afterEach(() => {
@@ -95,6 +97,71 @@ describe("thumbnail-worker-client", () => {
       requestId: "req-1",
       svg: "<svg />"
     });
+  });
+
+  it("does not create a worker to cancel an already-finished group", async () => {
+    const client = await import("../../packages/app/src/ui/workers/thumbnail-worker-client");
+    client.cancelGroup("finished");
+    expect(FakeWorker.instances).toHaveLength(0);
+  });
+
+  it("releases pending request bookkeeping when posting a request throws", async () => {
+    const post = vi.spyOn(FakeWorker.prototype, "postMessage").mockImplementationOnce(() => {
+      throw new Error("clone failed");
+    });
+    const client = await import("../../packages/app/src/ui/workers/thumbnail-worker-client");
+    await expect(client.requestThumbnail({ type: "render", requestId: "failed", groupId: "group",
+      source: "", figureId: "figure:0", figureSignature: "signature",
+      parseOptions: { activeRootId: "figure:0", includeContextDefinitions: true } })).rejects.toThrow("clone failed");
+    post.mockClear();
+    client.cancelGroup("group");
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("evicts worker image data by size and registers it again when needed", async () => {
+    imageAssetCacheMocks.documentGraphicsPreviewBundleBytes.mockReturnValue(32 * 1024 * 1024);
+    imageAssetCacheMocks.getDocumentGraphicsPreviewBundle.mockImplementation((cacheKey: string) => ({
+      version: 1, cacheKey, entries: []
+    }));
+    const client = await import("../../packages/app/src/ui/workers/thumbnail-worker-client");
+    let counter = 0;
+    const render = async (key: string) => {
+      const requestId = `req-${counter++}`;
+      const request = { type: "render" as const, requestId, groupId: requestId, source: "", figureId: "figure:0",
+        figureSignature: "signature", graphicsPreviewBundleKey: key,
+        parseOptions: { activeRootId: "figure:0", includeContextDefinitions: true } };
+      const pending = client.requestThumbnail(request);
+      FakeWorker.instances[0].emitMessage({ ...request, type: "result", ok: true, svg: "<svg/>" });
+      await pending;
+    };
+    await render("first");
+    await render("second");
+    const worker = FakeWorker.instances[0];
+    expect(worker.posted).toContainEqual({ type: "unregisterGraphics", cacheKey: "first" });
+    await render("second");
+    expect(worker.posted.filter((message: any) => message.type === "registerGraphics")).toHaveLength(2);
+    await render("first");
+    expect(worker.posted.filter((message: any) => message.type === "registerGraphics")).toHaveLength(3);
+    expect(worker.posted).toContainEqual({ type: "unregisterGraphics", cacheKey: "second" });
+  });
+
+  it("keeps queued image bundles pinned until completion or cancellation", async () => {
+    imageAssetCacheMocks.getDocumentGraphicsPreviewBundle.mockImplementation((cacheKey: string) => ({
+      version: 1, cacheKey, entries: []
+    }));
+    const client = await import("../../packages/app/src/ui/workers/thumbnail-worker-client");
+    const requests = Array.from({ length: 17 }, (_, index) => ({ type: "render" as const, requestId: `req-${index}`,
+      groupId: `group-${index}`, source: "", figureId: "figure:0", figureSignature: "signature",
+      graphicsPreviewBundleKey: `graphics-${index}`,
+      parseOptions: { activeRootId: "figure:0", includeContextDefinitions: true } }));
+    const pending = requests.map((request) => client.requestThumbnail(request));
+    const settled = Promise.allSettled(pending);
+    const worker = FakeWorker.instances[0];
+    expect(worker.posted.filter((message: any) => message.type === "unregisterGraphics")).toHaveLength(0);
+    worker.emitMessage({ ...requests[0], type: "result", ok: true, svg: "<svg/>" });
+    expect(worker.posted).toContainEqual({ type: "unregisterGraphics", cacheKey: "graphics-0" });
+    for (const request of requests.slice(1)) client.cancelGroup(request.groupId);
+    await settled;
   });
 
   it("ignores malformed worker results without consuming the pending request", async () => {

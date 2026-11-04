@@ -73,6 +73,7 @@ import {
 import { expandTexConditionals } from "../conditionals/expand.js";
 import { substituteForeachBindingsWithMap } from "./substitute.js";
 import { readTexControlSequence, skipTexWhitespaceAndComments } from "../parser/tex-lexical.js";
+import { ForeachSnippetParseCache } from "./snippet-parse-cache.js";
 import type {
   ExpansionSourceMap,
   ForeachExpansionDiagnostic,
@@ -457,33 +458,18 @@ function offsetSpan(span: { from: number; to: number } | null, offset: number): 
  * in place and keys its maps by node identity, so no two uses may share nodes.
  */
 const FRAGMENT_PARSE_CACHE_LIMIT = 4096;
-const statementBodyParses = new Map<string, ForeachStatementBodyParseResult>();
-const pathFragmentParses = new Map<string, PathFragmentParseResult>();
-
-function cachedFragmentParse<T>(cache: Map<string, T>, raw: string, span: Span, parse: () => T): T {
-  const key = `${span.from}:${span.to}:${raw}`;
-  let parsed = cache.get(key);
-  if (parsed) {
-    cache.delete(key);
-  } else {
-    parsed = parse();
-    if (cache.size >= FRAGMENT_PARSE_CACHE_LIMIT) {
-      const oldest = cache.keys().next();
-      if (!oldest.done) cache.delete(oldest.value);
-    }
-  }
-  cache.set(key, parsed);
-  return parsed;
-}
+const FRAGMENT_PARSE_CACHE_BYTES = 16 * 1024 * 1024;
+const statementBodyParses = new ForeachSnippetParseCache<ForeachStatementBodyParseResult>(FRAGMENT_PARSE_CACHE_LIMIT, FRAGMENT_PARSE_CACHE_BYTES);
+const pathFragmentParses = new ForeachSnippetParseCache<PathFragmentParseResult>(FRAGMENT_PARSE_CACHE_LIMIT, FRAGMENT_PARSE_CACHE_BYTES);
 
 function parseLoopStatementBody(raw: string, span: Span): ForeachStatementBodyParseResult {
-  const parsed = cachedFragmentParse(statementBodyParses, raw, span, () => parseStatementsFromBodyWithMapping(raw, span));
+  const parsed = statementBodyParses.getOrParse(raw, span, () => parseStatementsFromBodyWithMapping(raw, span));
   const figure = parsed.parseResult.figure;
   return { ...parsed, parseResult: { ...parsed.parseResult, figure: { ...figure, body: structuredClone(figure.body) } } };
 }
 
 function parseLoopPathFragment(raw: string, span: Span): PathFragmentParseResult {
-  const parsed = cachedFragmentParse(pathFragmentParses, raw, span, () => parsePathItemsFromFragmentWithSyntheticMapping(raw, span));
+  const parsed = pathFragmentParses.getOrParse(raw, span, () => parsePathItemsFromFragmentWithSyntheticMapping(raw, span));
   return { ...parsed, value: structuredClone(parsed.value) };
 }
 

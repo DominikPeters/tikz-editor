@@ -4,6 +4,8 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { EditorView } from "@codemirror/view";
+import { undoDepth } from "@codemirror/commands";
 import { renderTikzToSvg } from "../../packages/core/src/render/index.js";
 import { scanBeamerDocument } from "../../packages/core/src/beamer/index.js";
 import { makeInitialState } from "../../packages/app/src/store/reducer.js";
@@ -89,6 +91,28 @@ describe("SourcePanel diagnostics", () => {
     expect(container.textContent).toContain("Unclosed node text; add a closing `}` before the end of the node statement.");
     expect(container.textContent).toContain("Ln 2");
     expect(container.textContent).not.toContain("Statement is missing a trailing semicolon");
+  });
+
+  it("releases source editor undo entries when switching documents", async () => {
+    await act(async () => { root.render(React.createElement(SourcePanel)); });
+    const editor = container.querySelector<HTMLElement>(".cm-editor");
+    expect(editor).not.toBeNull();
+    const view = EditorView.findFromDOM(editor!);
+    expect(view).not.toBeNull();
+    await act(async () => {
+      view!.dispatch({ changes: { from: 0, to: view!.state.doc.length, insert: "first edited document" } });
+    });
+    expect(undoDepth(view!.state)).toBe(1);
+    await act(async () => {
+      useEditorStore.getState().dispatch({ type: "NEW_DOCUMENT", source: "new document" });
+    });
+    expect(EditorView.findFromDOM(editor!)).toBe(view);
+    expect(view!.state.doc.toString()).toBe("new document");
+    expect(undoDepth(view!.state)).toBe(0);
+    await act(async () => {
+      view!.dispatch({ changes: { from: 0, insert: "edited " } });
+    });
+    expect(undoDepth(view!.state)).toBe(1);
   });
 
   it("adapts source-backed Beamer diagnostics for the source panel", () => {
