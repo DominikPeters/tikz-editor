@@ -8,6 +8,7 @@ import {
   RiLayoutLeftLine,
   RiLayoutRightLine,
   RiMoreLine,
+  RiPlayLargeLine,
   RiShareForwardLine
 } from "@remixicon/react";
 import { useShallow } from "zustand/react/shallow";
@@ -58,9 +59,10 @@ export function IpadNavBar({
   updateChip = null
 }: IpadNavBarProps) {
   const [openPopover, setOpenPopover] = useState<NavPopoverId | null>(null);
-  const { documents, activeDocumentId } = useEditorStore(useShallow((s) => ({
+  const { documents, activeDocumentId, deck } = useEditorStore(useShallow((s) => ({
     documents: s.documents,
-    activeDocumentId: s.activeDocumentId
+    activeDocumentId: s.activeDocumentId,
+    deck: s.documentKind === "beamer"
   })));
   const activeDocument = documents[activeDocumentId] ?? null;
 
@@ -219,6 +221,19 @@ export function IpadNavBar({
         >
           <RiArrowGoForwardLine size={21} aria-hidden />
         </button>
+        {deck ? (
+          <button
+            type="button"
+            className={css.iconButton}
+            aria-label="Play"
+            title="Play"
+            disabled={!commandEnabled(APP_MENU_COMMAND_IDS.PRESENT_CURRENT)}
+            onClick={() => { runCommand(APP_MENU_COMMAND_IDS.PRESENT_CURRENT); }}
+            data-testid="ipad-play-button"
+          >
+            <RiPlayLargeLine size={21} aria-hidden />
+          </button>
+        ) : null}
         <button
           type="button"
           className={[css.iconButton, inspectorOpen ? css.iconButtonActive : ""].filter(Boolean).join(" ")}
@@ -303,6 +318,21 @@ export function IpadNavBar({
           }
         >
           <IpadMenu ariaLabel="More">
+            {deck ? (
+              <>
+                <IpadMenuItem
+                  label="Play from Beginning"
+                  disabled={!commandEnabled(APP_MENU_COMMAND_IDS.PRESENT_BEGINNING)}
+                  onSelect={() => { runCommand(APP_MENU_COMMAND_IDS.PRESENT_BEGINNING); }}
+                />
+                <IpadMenuItem
+                  label="Rehearse"
+                  disabled={!commandEnabled(APP_MENU_COMMAND_IDS.PRESENT_REHEARSE)}
+                  onSelect={() => { runCommand(APP_MENU_COMMAND_IDS.PRESENT_REHEARSE); }}
+                />
+                <IpadMenuSeparator />
+              </>
+            ) : null}
             <IpadMenuItem
               label="Show Grid"
               checked={commandChecked(APP_MENU_COMMAND_IDS.TOGGLE_GRID)}

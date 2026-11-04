@@ -140,13 +140,36 @@ fn ipad_resolve_bookmark<R: tauri::Runtime>(
     }
 }
 
+/// Keeps the display from dimming and locking while a presentation runs.
+#[tauri::command]
+fn ipad_keep_awake<R: tauri::Runtime>(app: tauri::AppHandle<R>, active: bool) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        // UIKit: main thread only.
+        app.run_on_main_thread(move || unsafe {
+            use objc2::runtime::{AnyObject, Bool};
+            use objc2::{class, msg_send};
+            let application: *mut AnyObject = msg_send![class!(UIApplication), sharedApplication];
+            if let Some(application) = application.as_ref() {
+                let _: () = msg_send![application, setIdleTimerDisabled: Bool::new(active)];
+            }
+        })
+        .map_err(|error| error.to_string())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (app, active);
+        Ok(())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![ipad_create_bookmark, ipad_resolve_bookmark])
+        .invoke_handler(tauri::generate_handler![ipad_create_bookmark, ipad_resolve_bookmark, ipad_keep_awake])
         .setup(|app| {
             #[cfg(target_os = "ios")]
             if let Some(window) = app.get_webview_window("main") {

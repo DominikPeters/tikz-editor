@@ -30,6 +30,7 @@ import { CanvasPanel } from "./canvas-panel/CanvasPanel";
 import type { EditorCommandRuntime } from "./editor-command-runtime";
 import { RootNavigator } from "./RootNavigator";
 import { insertSlideAfterCurrent } from "../presentation/NewSlideButton";
+import { InAppPresentationHost } from "../presentation/InAppPresentation";
 import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
 import { InspectorPanel } from "./inspector-panel/InspectorPanel";
 import { ObjectsPanel } from "./objects-panel/ObjectsPanel";
@@ -885,6 +886,7 @@ export function IpadEditorShell({
         commandRuntime={commandRuntime}
         onRequestCloseDocument={onRequestCloseDocument}
       />
+      <InAppPresentationHost />
     </div>
   );
 }

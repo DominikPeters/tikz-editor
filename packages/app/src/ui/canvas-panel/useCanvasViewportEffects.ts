@@ -432,6 +432,11 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     };
 
     const beginTouchEventPinch = (event: TouchEvent): boolean => {
+      // Fingers on a layer over the whole editor (the in-app presentation)
+      // are that layer's, even where they are over the canvas.
+      if ((event.target instanceof Element ? event.target : null)?.closest("[data-owns-touches]")) {
+        return false;
+      }
       const ids = viewportTouchPair(event.touches);
       if (!ids) {
         return false;

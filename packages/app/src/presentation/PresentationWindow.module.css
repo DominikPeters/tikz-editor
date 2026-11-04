@@ -221,6 +221,11 @@
   display: flex;
   cursor: none;
   font-family: var(--font-ui);
+  /* Fingers drive the slides (presentation/touch.ts), not page zoom or text selection. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .audience:focus {

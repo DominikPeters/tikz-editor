@@ -1,5 +1,5 @@
 import { isRecord } from "../validation";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { getActiveEditorPlatform } from "../platform/current";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { Modal } from "../ui/Modal";
@@ -12,6 +12,7 @@ import { presentationKeyCommand } from "./keyboard";
 import type { PresentationCommand, PresentationCursor, PresentationRole, PresentationSnapshot, PresentationTransport } from "./types";
 import css from "./PresentationWindow.module.css";
 import { usePresentationSvg } from "./svg";
+import { useAudienceTouchGestures, type AudienceTouchHandlers } from "./touch";
 
 function Slide({ svg, cursor, label }: { svg: string | null; cursor?: PresentationCursor; label: string }) {
   const markup = usePresentationSvg(svg);
@@ -85,7 +86,12 @@ function Splitter({ value, onChange, label, orientation = "vertical" }: { value:
     }} />;
 }
 
-export function PresentationWindow({ role, sessionId }: { role: PresentationRole; sessionId: string }) {
+/**
+ * `embedded`: shown over the editor in the same window (the iPad) instead of
+ * in a window of its own. It then leaves the page's title and appearance to
+ * the editor and keeps keystrokes from reaching the editor underneath.
+ */
+export function PresentationWindow({ role, sessionId, embedded = false }: { role: PresentationRole; sessionId: string; embedded?: boolean }) {
   const [snapshot, setSnapshot] = useState<PresentationSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now);
@@ -111,11 +117,12 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
   useEffect(() => { if (role === "audience") audienceRoot.current?.focus({ preventScroll: true }); }, [role]);
 
   useEffect(() => {
+    if (embedded) return;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => { document.documentElement.dataset.colorScheme = scheme === "dark" || (scheme === "system" && media.matches) ? "dark" : "light"; delete document.documentElement.dataset.canvasInvert; };
     apply(); media.addEventListener("change", apply);
     return () => { media.removeEventListener("change", apply); };
-  }, [scheme]);
+  }, [embedded, scheme]);
   useEffect(() => {
     let disposed = false;
     const api = apiRef.current;
@@ -127,7 +134,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
       if (message.type !== "snapshot") return;
       if (message.snapshot.sequence < (snapshotRef.current?.sequence ?? -1)) return;
       lastSeen.current = Date.now(); setError(null); setSnapshot(message.snapshot);
-      document.title = `${message.snapshot.title} — ${role === "presenter" ? "Presenter" : "Presentation"}`;
+      if (!embedded) document.title = `${message.snapshot.title} — ${role === "presenter" ? "Presenter" : "Presentation"}`;
     }).then(value => {
       if (disposed) { value.close(); return; }
       channel = value; transport.current = value; hello();
@@ -151,7 +158,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
       window.removeEventListener("pagehide", closed); channel?.close(); transport.current = null;
       if (!getActiveEditorPlatform().id.startsWith("desktop")) void api.keepAwake?.(false);
     };
-  }, [role, sessionId]);
+  }, [embedded, role, sessionId]);
   useEffect(() => {
     const timer = window.setInterval(() => { setNow(Date.now()); }, 250);
     hideControls.current = setTimeout(() => { setControlsVisible(false); }, 1800);
@@ -164,6 +171,8 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
   }, []);
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
+      // Over the editor, no key may reach it: Undo would change the deck.
+      if (embedded) event.stopPropagation();
       if (event.defaultPrevented || !snapshotRef.current || snapshotRef.current.ended) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest("input, textarea, select, [contenteditable=true], [role=separator]")) return;
@@ -172,21 +181,36 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
       const command = presentationKeyCommand(event, snapshotRef.current);
       if (command) { event.preventDefault(); send(command); }
     };
-    window.addEventListener("keydown", keyboard);
-    return () => { window.removeEventListener("keydown", keyboard); };
-  }, [role, send]);
+    window.addEventListener("keydown", keyboard, embedded);
+    return () => { window.removeEventListener("keydown", keyboard, embedded); };
+  }, [embedded, role, send]);
+  const showControlsFor = useCallback((ms: number) => {
+    setControlsVisible(true);
+    if (hideControls.current) clearTimeout(hideControls.current);
+    hideControls.current = setTimeout(() => { setControlsVisible(false); }, ms);
+  }, []);
+  const touchHandlers = useRef<AudienceTouchHandlers | null>(null);
+  useLayoutEffect(() => {
+    touchHandlers.current = {
+      next: () => { if (!snapshotRef.current?.ended) send({ type: "next" }); },
+      previous: () => { if (!snapshotRef.current?.ended) send({ type: "previous" }); },
+      end: () => { send({ type: "stop" }); },
+      showControls: () => { showControlsFor(4000); },
+    };
+  }, [send, showControlsFor]);
+  useAudienceTouchGestures(audienceRoot, touchHandlers);
   useEffect(() => {
     try { getActiveEditorPlatform().persistence.save(ARRANGEMENT_KEY, JSON.stringify(arrangement)); }
     catch { /* Layout changes work without persistent storage. */ }
   }, [arrangement]);
 
   if (role === "audience") return <main ref={audienceRoot} tabIndex={0} className={css.audience} style={uiStyle} data-testid="audience-window" data-blank={snapshot?.blank ?? "none"}
-    onPointerMove={() => { setControlsVisible(true); if (hideControls.current) clearTimeout(hideControls.current); hideControls.current = setTimeout(() => { setControlsVisible(false); }, 1800); }}
+    onPointerMove={event => { if (event.pointerType !== "touch") showControlsFor(1800); }}
     onClick={event => { if (!(event.target instanceof Element ? event.target : null)?.closest("button,a") && !snapshot?.ended) send({ type: "next" }); }}>
     {snapshot?.blank === "none" && !snapshot.ended ? <AudienceSlide page={snapshot.current} /> : null}
     {snapshot?.ended ? <div className={css.ended}>Presentation ended</div> : null}
     {controlsVisible && !snapshot?.ended ? <div className={css.audienceControls} data-color-scheme="dark">
-      {!fullscreen && !getActiveEditorPlatform().id.startsWith("desktop") ? <Modal.SecondaryButton onClick={enterFullscreen}>Enter Fullscreen</Modal.SecondaryButton> : null}
+      {!fullscreen && !embedded && !getActiveEditorPlatform().id.startsWith("desktop") ? <Modal.SecondaryButton onClick={enterFullscreen}>Enter Fullscreen</Modal.SecondaryButton> : null}
       <Modal.SecondaryButton onClick={() => { send({ type: "show-presenter" }); }}>Show Presenter View</Modal.SecondaryButton>
       <Modal.SecondaryButton onClick={() => { send({ type: "stop" }); }}>End Presentation</Modal.SecondaryButton>
     </div> : null}
@@ -209,10 +233,13 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
       </div>
       <Modal.SecondaryButton onClick={() => { send({ type: "timer", action: snapshot?.timer.runningSince == null ? "start" : "pause" }); }}>{snapshot?.timer.runningSince != null ? "Pause" : "Start"}</Modal.SecondaryButton>
       <Modal.SecondaryButton onClick={() => { send({ type: "timer", action: "reset" }); }}>Reset</Modal.SecondaryButton>
+      {/* Over the editor the slides and this view share the screen: back to the slides. */}
+      {embedded && snapshot && !snapshot.outputAvailable && !snapshot.ended
+        ? <Modal.SecondaryButton onClick={() => { send({ type: "recover-output" }); }}>Show Slides</Modal.SecondaryButton> : null}
       <Modal.SecondaryButton onClick={() => { send({ type: "stop" }); }}>End Presentation</Modal.SecondaryButton>
     </header>
     {(snapshot?.error || error) ? <div className={css.notice} role="status">{snapshot?.error ?? error}</div> : null}
-    {snapshot && !snapshot.outputAvailable && !snapshot.ended ? <div className={css.notice}><span>Audience output is closed.</span><Modal.SecondaryButton onClick={() => { send({ type: "recover-output" }); }}>Show Audience Window</Modal.SecondaryButton></div> : null}
+    {snapshot && !snapshot.outputAvailable && !snapshot.ended && !embedded ? <div className={css.notice}><span>Audience output is closed.</span><Modal.SecondaryButton onClick={() => { send({ type: "recover-output" }); }}>Show Audience Window</Modal.SecondaryButton></div> : null}
     <div className={css.main} style={mainStyle}>
       <div className={css.previews} data-vertical={vertical || undefined} style={previewsStyle}>
         <section className={css.preview}><h2>Current <span>{current ? `Slide ${current.cursor.frame + 1} / ${snapshot.frames.length} · Build ${current.cursor.step} / ${frame?.steps ?? 1}${current.cursor.continuation > 1 ? ` · Page ${current.cursor.continuation}` : ""}` : ""}</span></h2>

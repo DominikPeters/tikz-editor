@@ -1,0 +1,17 @@
+/* Over everything the editor shows, including its popovers. */
+.host {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #000;
+}
+
+/* The presenter view keeps clear of the status bar and the home indicator. */
+.host[data-role="presenter"] {
+  background: var(--bg-pane);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.host[data-role="presenter"] > * {
+  height: 100%;
+}

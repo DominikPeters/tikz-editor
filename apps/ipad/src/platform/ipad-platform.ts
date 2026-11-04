@@ -11,6 +11,7 @@ import type {
 // platform) before bootstrap() registers the iPad platform adapter — silently
 // discarding the persisted workspace on every launch.
 import { revisionForText } from "@tikz-editor/app/linked-file-sync";
+import { createInAppPresentationApi } from "@tikz-editor/app/presentation";
 import { invoke } from "@tauri-apps/api/core";
 import { documentDir, join } from "@tauri-apps/api/path";
 import { message, open, save } from "@tauri-apps/plugin-dialog";
@@ -262,6 +263,10 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
 
   return {
     id: "ipad-ios-tauri",
+    // One screen: the slides or the presenter view show over the editor.
+    presentation: createInAppPresentationApi({
+      keepAwake: async (active) => { await invoke("ipad_keep_awake", { active }); }
+    }),
     persistence: {
       load: (key) => storage?.getItem(key) ?? null,
       save: (key, value) => {
