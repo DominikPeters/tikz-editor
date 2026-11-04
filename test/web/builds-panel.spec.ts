@@ -74,6 +74,15 @@ afterEach(() => {
 });
 
 describe("Builds panel", () => {
+  it("opens the source panel itself where there is no dock, as on the iPad", () => {
+    if (useEditorStore.getState().showSourcePanel) act(() => { useEditorStore.getState().dispatch({ type: "TOGGLE_PANEL", panel: "source" }); });
+    expect(useEditorStore.getState().showSourcePanel).toBe(false);
+    selectTarget();
+    act(() => { button("Edit in source").click(); });
+    expect(useEditorStore.getState().showSourcePanel).toBe(true);
+    expect(useEditorStore.getState().deckBuildSelection?.revealSource).toBe(true);
+  });
+
   it("sets timing from a cell's context menu and undoes one source patch", () => {
     const cell = host.querySelector<HTMLButtonElement>('[aria-label="Text · Target, step 1: Absent"]')!;
     act(() => { cell.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 100, clientY: 100 })); });

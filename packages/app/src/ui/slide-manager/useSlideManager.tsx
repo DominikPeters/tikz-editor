@@ -1,5 +1,4 @@
 import { getActiveDocument } from "../../store/document-sessions";
-import { Actions } from "flexlayout-react";
 import { useCallback, useEffect, useMemo, useState, type RefObject, type MouseEvent } from "react";
 import { analyzeBeamerSlideMove, copyBeamerSlides, beamerSlideIsEditable, editBeamerSlides, type BeamerSlideMoveAnalysis, type BeamerDocumentModel, type BeamerSlideDestination, type BeamerSlideEdit } from "@tikz-editor/core/beamer/index";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
@@ -8,7 +7,7 @@ import { CANVAS_CONTEXT_MENU_DEFINITION } from "../../context-menu";
 import { useEditorStore } from "../../store/store";
 import { getActiveEditorPlatform } from "../../platform/current";
 import { SlideMoveReview } from "./SlideMoveReview";
-import { getDockLayoutHandle } from "../DockLayout";
+import { openSourcePanel } from "../open-source-panel";
 import { CanvasContextMenu } from "../CanvasContextMenu";
 import type { CommandBindings } from "../editor-command-runtime";
 
@@ -133,9 +132,7 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
         setPending(null);
       }} onReveal={span => {
         setPending(null);
-        const layout = getDockLayoutHandle();
-        if (layout && !layout.getModel().getNodeById("source")) layout.togglePanel("source");
-        layout?.getModel().doAction(Actions.selectTab("source"));
+        openSourcePanel();
         dispatch({ type: "REVEAL_SOURCE", documentId: currentReview.documentId, sourceRevision: currentReview.revision, span });
       }} /> : null,
     menu: menu?.documentId === documentId && menu.revision === doc.sourceRevision ?

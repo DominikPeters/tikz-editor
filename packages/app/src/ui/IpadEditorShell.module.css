@@ -333,7 +333,9 @@
 
 .segmentedControl {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* One column per tab, sized to its label: decks add Overlays as a fourth. */
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
   gap: 2px;
   flex: 1;
   min-width: 0;
@@ -346,7 +348,7 @@
   appearance: none;
   min-width: 0;
   height: 30px;
-  padding: 0 6px;
+  padding: 0 4px;
   border: 0;
   border-radius: 7px;
   background: transparent;

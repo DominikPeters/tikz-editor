@@ -21,9 +21,8 @@ import {
   type DeckInspectorWrite,
   type DeckSlideContext,
 } from "@tikz-editor/core/beamer/index";
-import { Actions } from "flexlayout-react";
 import { useEditorStore } from "../../store/store";
-import { getDockLayoutHandle } from "../DockLayout";
+import { openSourcePanel } from "../open-source-panel";
 import { SidePanel } from "../SidePanel";
 import { DeckField } from "./deck-fields";
 import { DeckDocumentSections, DeckScopeHeader, DeckSlideInfoSection } from "./DeckDocumentSections";
@@ -288,9 +287,7 @@ export function DeckInspectorPanel(): JSX.Element {
       dispatch({ type: "SET_ACTIVE_ROOT", rootId: command.rootId });
       return;
     }
-    const dock = getDockLayoutHandle();
-    if (dock && !dock.getModel().getNodeById("source")) dock.togglePanel("source");
-    dock?.getModel().doAction(Actions.selectTab("source"));
+    openSourcePanel();
     dispatch({ type: "REVEAL_SOURCE", documentId: activeDocumentId, sourceRevision, span: command.span });
   };
   const applyTheme = (entry: BeamerThemeCatalogEntry): void => {

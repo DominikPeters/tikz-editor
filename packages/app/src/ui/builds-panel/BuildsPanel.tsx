@@ -19,7 +19,7 @@ import {
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { useEditorStore } from "../../store/store";
 import { deckStepRootKey } from "../../root-key";
-import { getDockLayoutHandle } from "../DockLayout";
+import { openSourcePanel } from "../open-source-panel";
 import { SidePanel } from "../SidePanel";
 import inspector from "../inspector-panel/InspectorPanel.module.css";
 import objects from "../objects-panel/ObjectsPanel.module.css";
@@ -128,8 +128,7 @@ export function BuildsPanel() {
   const reveal = (row: BeamerBuildRow) => {
     if (!model) return;
     setSelection({ documentId, model, rowId: row.id });
-    const layout = getDockLayoutHandle();
-    if (layout && !layout.getModel().getNodeById("source")) layout.togglePanel("source");
+    openSourcePanel();
     publishSelection(row, true);
   };
   const applyPatch = (patch: SourcePatch | null) => {

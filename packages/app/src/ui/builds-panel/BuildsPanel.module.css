@@ -133,3 +133,38 @@
   font-size: calc(var(--app-ui-scale, 1) * 10px);
   line-height: 1.35;
 }
+
+/* Touch: rows and step cells a finger can hit, and handles that are easy to grab. */
+:global(html[data-editor-platform="ipad"]) .timeline { font-size: 14px; }
+:global(html[data-editor-platform="ipad"]) .timeline thead th {
+  padding-bottom: 6px;
+  font-size: 12px;
+}
+:global(html[data-editor-platform="ipad"]) .timeline thead th:not(:first-child) { width: 38px; }
+:global(html[data-editor-platform="ipad"]) .timeline thead button,
+:global(html[data-editor-platform="ipad"]) .timeline td[data-state] button {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 15px;
+}
+:global(html[data-editor-platform="ipad"]) .rowLabel,
+:global(html[data-editor-platform="ipad"]) .label { min-height: 38px; }
+:global(html[data-editor-platform="ipad"]) .disclosure { flex-basis: 28px; width: 28px; height: 32px; }
+:global(html[data-editor-platform="ipad"]) .timeline tr[data-selected="true"] th { border-radius: 8px 0 0 8px; }
+:global(html[data-editor-platform="ipad"]) .timeline tr[data-selected="true"] td:last-child { border-radius: 0 8px 8px 0; }
+:global(html[data-editor-platform="ipad"]) .timeline td[data-state] button.boundary {
+  top: calc(50% - 13px);
+  width: 12px;
+  height: 26px;
+  border-radius: 4px;
+}
+:global(html[data-editor-platform="ipad"]) .boundary[data-boundary="start"] { left: -5px; }
+:global(html[data-editor-platform="ipad"]) .boundary[data-boundary="end"] { right: -5px; }
+:global(html[data-editor-platform="ipad"]) .legend {
+  gap: 6px 14px;
+  font-size: 12px;
+}
+:global(html[data-editor-platform="ipad"]) .value { font-size: 13px; }
+:global(html[data-editor-platform="ipad"]) .actions { gap: 8px 16px; }
+:global(html[data-editor-platform="ipad"]) .error { font-size: 12px; }

@@ -36,6 +36,7 @@ import { InspectorPanel } from "./inspector-panel/InspectorPanel";
 import { ObjectsPanel } from "./objects-panel/ObjectsPanel";
 import { SourcePanel } from "./source-panel/SourcePanel";
 import { StylesPanel } from "./StylesPanel";
+import { BuildsPanel } from "./builds-panel/BuildsPanel";
 import { IpadDocumentGallery } from "./ipad/IpadDocumentGallery";
 import { IpadNavBar } from "./ipad/IpadNavBar";
 import { IpadMenu, IpadMenuItem, IpadPopover } from "./ipad/IpadPopover";
@@ -52,7 +53,7 @@ import { resolveToolbarToolMode } from "./tool-config";
 import { ACTUAL_SIZE_SCALE, zoomPercentForScale } from "./canvas-zoom";
 import css from "./IpadEditorShell.module.css";
 
-type RightSidebarTab = "inspector" | "objects" | "styles";
+type RightSidebarTab = "inspector" | "objects" | "styles" | "builds";
 
 type IpadEditorShellProps = {
   commandRuntime: EditorCommandRuntime;
@@ -66,6 +67,7 @@ type LayoutPatch = Partial<{
   inspectorVisible: boolean;
   objectsVisible: boolean;
   stylesVisible: boolean;
+  buildsVisible: boolean;
   figuresVisible: boolean;
   assistantVisible: boolean;
   activeRightTab: RightSidebarTab;
@@ -74,9 +76,10 @@ type LayoutPatch = Partial<{
 const RIGHT_PANEL_LABELS: Record<RightSidebarTab, string> = {
   inspector: "Inspector",
   objects: "Objects",
-  styles: "Styles"
+  styles: "Styles",
+  builds: "Overlays"
 };
-const RIGHT_PANEL_TABS: readonly RightSidebarTab[] = ["inspector", "objects", "styles"];
+const RIGHT_PANEL_TABS: readonly RightSidebarTab[] = ["inspector", "objects", "styles", "builds"];
 const SOURCE_PINNED_STORAGE_KEY = "tikz-editor-ipad-source-pinned";
 const SOURCE_WIDTH_STORAGE_KEY = "tikz-editor-ipad-source-width";
 const DEFAULT_SOURCE_COLUMN_WIDTH = 420;
@@ -96,9 +99,9 @@ const IPAD_NUMBERED_TOOL_SHORTCUTS: Record<string, ToolMode> = {
   "0": "addCircle"
 };
 
-// The iPad shell has no assistant or Beamer builds panel yet.
-function coerceRightSidebarTab(tab: RightSidebarTab | "assistant" | "builds"): RightSidebarTab {
-  return tab === "assistant" || tab === "builds" ? "inspector" : tab;
+// The iPad shell has no assistant panel yet; a slide's overlays exist only in decks.
+function coerceRightSidebarTab(tab: RightSidebarTab | "assistant", deck: boolean): RightSidebarTab {
+  return tab === "assistant" || (tab === "builds" && !deck) ? "inspector" : tab;
 }
 
 function readStoredSourceWidth(): number {
@@ -185,6 +188,7 @@ export function IpadEditorShell({
     showInspectorPanel,
     showObjectsPanel,
     showStylesPanel,
+    showBuildsPanel,
     showFiguresPanel,
     showAssistantPanel,
     rightSidebarTab,
@@ -201,6 +205,7 @@ export function IpadEditorShell({
     showInspectorPanel: s.showInspectorPanel,
     showObjectsPanel: s.showObjectsPanel,
     showStylesPanel: s.showStylesPanel,
+    showBuildsPanel: s.showBuildsPanel,
     showFiguresPanel: s.showFiguresPanel,
     showAssistantPanel: s.showAssistantPanel,
     rightSidebarTab: s.rightSidebarTab,
@@ -217,13 +222,16 @@ export function IpadEditorShell({
       inspectorVisible: patch.inspectorVisible ?? showInspectorPanel,
       objectsVisible: patch.objectsVisible ?? showObjectsPanel,
       stylesVisible: patch.stylesVisible ?? showStylesPanel,
+      buildsVisible: patch.buildsVisible ?? showBuildsPanel,
       figuresVisible: patch.figuresVisible ?? showFiguresPanel,
       assistantVisible: false,
-      activeRightTab: patch.activeRightTab ?? coerceRightSidebarTab(rightSidebarTab)
+      activeRightTab: patch.activeRightTab ?? coerceRightSidebarTab(rightSidebarTab, documentKind === "beamer")
     });
   }, [
     dispatch,
+    documentKind,
     rightSidebarTab,
+    showBuildsPanel,
     showFiguresPanel,
     showInspectorPanel,
     showObjectsPanel,
@@ -253,6 +261,7 @@ export function IpadEditorShell({
       inspectorVisible: false,
       objectsVisible: false,
       stylesVisible: false,
+      buildsVisible: false,
       figuresVisible: false,
       assistantVisible: false,
       activeRightTab: "inspector"
@@ -285,10 +294,11 @@ export function IpadEditorShell({
       stylesVisible: showStylesPanel,
       figuresVisible: showFiguresPanel,
       assistantVisible: false,
-      activeRightTab: coerceRightSidebarTab(rightSidebarTab)
+      activeRightTab: coerceRightSidebarTab(rightSidebarTab, documentKind === "beamer")
     });
   }, [
     dispatch,
+    documentKind,
     rightSidebarTab,
     showAssistantPanel,
     showFiguresPanel,
@@ -316,11 +326,12 @@ export function IpadEditorShell({
     dispatch({ type: "REQUEST_ZOOM_SCALE", scale: ACTUAL_SIZE_SCALE });
   }, [dispatch]);
 
-  const activeRightTab = coerceRightSidebarTab(rightSidebarTab);
-  const rightPanelOpen = showInspectorPanel || showObjectsPanel || showStylesPanel;
+  const deckMode = documentKind === "beamer";
+  const activeRightTab = coerceRightSidebarTab(rightSidebarTab, deckMode);
+  const rightPanelOpen = showInspectorPanel || showObjectsPanel || showStylesPanel || (deckMode && showBuildsPanel);
+  const rightPanelTabs = deckMode ? RIGHT_PANEL_TABS : RIGHT_PANEL_TABS.filter((tab) => tab !== "builds");
   const activeRightPanelLabel = RIGHT_PANEL_LABELS[activeRightTab];
   const hasMultipleFigures = hasMultipleRoots(snapshotRoots(snapshot).length);
-  const deckMode = documentKind === "beamer";
   const deckLocked = useEditorStore(s => !!s.documents[s.activeDocumentId]?.assistantLockReason);
   // A deck lists its slides even while it has only one.
   const navigatorAvailable = deckMode || hasMultipleFigures;
@@ -347,7 +358,7 @@ export function IpadEditorShell({
       stylesVisible: current.showStylesPanel,
       figuresVisible: true,
       assistantVisible: false,
-      activeRightTab: coerceRightSidebarTab(current.rightSidebarTab)
+      activeRightTab: coerceRightSidebarTab(current.rightSidebarTab, true)
     });
   }, [activeDocumentId, deckMode, dispatch]);
   const statusText = pendingRequestId ? "Rendering…" : canvasStatusHint;
@@ -471,6 +482,7 @@ export function IpadEditorShell({
       inspectorVisible: tab === "inspector",
       objectsVisible: tab === "objects",
       stylesVisible: tab === "styles",
+      buildsVisible: tab === "builds",
       activeRightTab: tab
     });
   }, [syncLayout]);
@@ -481,6 +493,7 @@ export function IpadEditorShell({
         inspectorVisible: false,
         objectsVisible: false,
         stylesVisible: false,
+        buildsVisible: false,
         activeRightTab
       });
       return;
@@ -493,6 +506,7 @@ export function IpadEditorShell({
       inspectorVisible: false,
       objectsVisible: false,
       stylesVisible: false,
+      buildsVisible: false,
       activeRightTab
     });
   }, [activeRightTab, syncLayout]);
@@ -775,7 +789,7 @@ export function IpadEditorShell({
           >
             <div className={css.floatingPanelHeader} data-select="chrome">
               <div className={css.segmentedControl} role="tablist" aria-label="Right panel">
-                {RIGHT_PANEL_TABS.map((tab) => (
+                {rightPanelTabs.map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -894,7 +908,8 @@ export function IpadEditorShell({
 const RIGHT_PANEL_TAB_COMMANDS: Record<RightSidebarTab, AppMenuCommandId> = {
   inspector: APP_MENU_COMMAND_IDS.TOGGLE_INSPECTOR_PANEL,
   objects: APP_MENU_COMMAND_IDS.TOGGLE_OBJECTS_PANEL,
-  styles: APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL
+  styles: APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL,
+  builds: APP_MENU_COMMAND_IDS.TOGGLE_BUILDS_PANEL
 };
 
 type SourceAccessoryItem = {
@@ -963,6 +978,8 @@ function RightPanel({ activeTab }: { activeTab: RightSidebarTab }) {
       return <ObjectsPanel />;
     case "styles":
       return <StylesPanel />;
+    case "builds":
+      return <BuildsPanel />;
     case "inspector":
     default:
       return <InspectorPanel />;
