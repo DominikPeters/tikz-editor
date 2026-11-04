@@ -30,7 +30,7 @@ interface Window {
   __DESKTOP_E2E_TITLE__?: string;
   __DESKTOP_E2E_CLOSED__: boolean;
   __TIKZ_EDITOR_DESKTOP_TEST_API__: {
-    setBridgeOverride: (bridge: DesktopBridge | null) => void;
+    setBridgeOverride: (bridge: Partial<DesktopBridge> | null) => void;
   };
 }
 }

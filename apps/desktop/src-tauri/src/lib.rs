@@ -3050,6 +3050,23 @@ async fn desktop_assistant_logout(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let context = tauri::generate_context!();
+    #[cfg(all(feature = "webdriver", target_os = "macos"))]
+    let context = {
+        let mut context = context;
+        if env::var("TIKZ_DESKTOP_E2E_SHOW_WINDOW").as_deref() != Ok("1") {
+            for window in &mut context.config_mut().app.windows {
+                window.visible = false;
+                window.focus = false;
+            }
+        }
+        context
+    };
+    #[cfg(feature = "webdriver")]
+    assert_eq!(
+        context.config().identifier,
+        "com.tikz.editor.e2e",
+        "WebDriver builds require tauri.e2e.conf.json to isolate test storage"
+    );
     if let Err(error) = portable::prepare(context.config()) {
         rfd::MessageDialog::new()
             .set_title("Could Not Start Portable TikZ Editor")
@@ -3059,6 +3076,14 @@ pub fn run() {
         return;
     }
     let mut builder = tauri::Builder::default();
+    #[cfg(all(feature = "webdriver", target_os = "macos"))]
+    if env::var("TIKZ_DESKTOP_E2E_SHOW_WINDOW").as_deref() != Ok("1") {
+        builder = builder.activate_ignoring_other_apps(false);
+    }
+    #[cfg(feature = "webdriver")]
+    {
+        builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
+    }
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
@@ -3179,6 +3204,10 @@ pub fn run() {
             desktop_assistant_logout
         ])
         .setup(|app| {
+            #[cfg(all(feature = "webdriver", target_os = "macos"))]
+            if env::var("TIKZ_DESKTOP_E2E_SHOW_WINDOW").as_deref() != Ok("1") {
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
             app.manage(presentation::PresentationPowerState::default());
             #[cfg(target_os = "macos")]
             presentation::install_display_observer(app.handle().clone());

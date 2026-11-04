@@ -11,16 +11,54 @@ This package hosts the desktop shell for TikZ Editor using Tauri v2.
 - `npm run -w @tikz-editor/desktop tauri:dev` runs the desktop app with a Rust
   debug build when native debugging is needed.
 - `npm run -w @tikz-editor/desktop tauri:build` creates desktop bundles.
-- `npm run -w @tikz-editor/desktop test:e2e` runs real desktop e2e against a built binary (requires `tauri-driver` in PATH).
+- `npm run -w @tikz-editor/desktop tauri:build:e2e` builds an isolated app with
+  WebdriverIO's embedded WebDriver server (including optimized Rust code).
+- `npm run -w @tikz-editor/desktop test:e2e` runs desktop e2e against a built
+  binary: embedded WebDriver on macOS, external `tauri-driver` on Windows/Linux.
 
-CI runs native desktop tests on Linux and Windows for pushes to `master` and pull
+CI runs desktop tests on macOS, Linux and Windows for pushes to `master` and pull
 requests. The Windows job runs Rust tests, builds unsigned NSIS and MSI installers,
 and runs the existing desktop WebDriver scenarios using a matching Microsoft Edge
 Driver. Signing credentials are only used by the separate release workflows.
 
 For local Windows e2e runs, install `tauri-driver` and put `msedgedriver.exe` in
 PATH, or set `NATIVE_WEBDRIVER_PATH` to its full path. Its version must match the
-installed WebView2 runtime. macOS is not supported by this test runner.
+installed WebView2 runtime.
+
+## macOS end-to-end tests
+
+From the repository root:
+
+```sh
+npm run -w @tikz-editor/desktop tauri:build:e2e
+npm run test:desktop:e2e
+```
+
+The test-only `webdriver` Cargo feature registers
+[`tauri-plugin-wdio-webdriver`](https://github.com/webdriverio/desktop-mobile/tree/main/packages/tauri-plugin-webdriver).
+Normal builds leave this optional dependency and its HTTP server out. The E2E
+config uses `com.tikz.editor.e2e`, keeping its single-instance registration and
+saved data separate from the installed editor. A feature-enabled binary refuses
+to start with the production identifier. The build writes the usual
+`src-tauri/target/release/tikz-editor` binary; rebuild normally before packaging.
+
+The runner launches the app on a free loopback port and connects with the existing
+`webdriverio` client, then clears the isolated app's browser storage for a fresh
+run. No external driver, WDIO service or frontend plugin is needed. Override the
+binary with `TIKZ_DESKTOP_E2E_APP_PATH`; select the embedded provider explicitly
+on Windows/Linux with `TIKZ_DESKTOP_E2E_DRIVER=embedded` after the E2E build.
+
+These tests run in the real system WebView, but install the deterministic desktop
+bridge for dialogs/files/exports. Embedded pointer and keyboard events are
+synthetic; actual native menus, file pickers and IME need separate native tests.
+The embedded driver does not require macOS Accessibility permission.
+
+On macOS the E2E build starts hidden, without activating the app or taking focus.
+Set `TIKZ_DESKTOP_E2E_SHOW_WINDOW=1` when running tests to show it for debugging.
+The native image scenario uses real PDF/SVG files and native reads/writes, checking
+replacement, cancellation, relative paths with spaces, crop/size preservation,
+undo/redo, PDF page reset, and save/reload. Only the picker result is supplied by
+the test; it does not operate the system file dialog.
 
 ## Portable Windows edition
 

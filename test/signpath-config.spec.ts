@@ -32,6 +32,9 @@ describe("SignPath product metadata restrictions", () => {
       expect(step).toContain('version: ${{ toJSON(steps.metadata.outputs.version) }}');
     }
     expect(action.indexOf('id: metadata')).toBeLessThan(action.indexOf('name: Sign application executable'));
-    expect(action).toContain('bundle --ci --no-binary-patching');
+    const bundleStep = action.split('    - name: Bundle Windows installers\n')[1]?.split('\n    - name: ')[0] ?? '';
+    expect(bundleStep).toContain('$bundleArguments = @("bundle", "--ci")');
+    expect(bundleStep).toMatch(/if \(\$env:SIGNPATH_ENABLED -eq "true"\) \{\s*(?:#[^\n]*\n\s*)?\$bundleArguments \+= "--no-binary-patching"/);
+    expect(bundleStep).toContain('tauri -- @bundleArguments');
   });
 });

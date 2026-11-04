@@ -155,6 +155,9 @@ async function rasterizePdfWithWorkerMode(
         canvas,
         canvasContext,
         viewport,
+        // Imported pages are static assets. Display mode waits for animation
+        // frames, which WKWebView can suspend in a hidden/background window.
+        intent: "print",
       }).promise;
 
       const dataUrl = canvas.toDataURL("image/png");

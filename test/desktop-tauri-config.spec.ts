@@ -34,10 +34,11 @@ describe("desktop Tauri platform config split", () => {
     expect(window.trafficLightPosition).toEqual({ x: 18, y: 21 });
   });
 
-  it("defines Windows-native bundle options in tauri.windows.conf.json", () => {
+  it("defines the custom Windows frame and native bundle options in tauri.windows.conf.json", () => {
     const windows = readConfig("tauri.windows.conf.json");
     const window = firstWindow(windows);
-    expect(window.decorations).toBe(true);
+    expect(window.decorations).toBe(false);
+    expect(window.shadow).toBe(true);
     expect(window.titleBarStyle).toBeUndefined();
     expect(window.hiddenTitle).toBeUndefined();
     expect(window.windowClassname).toBe("TikZEditorMainWindow");

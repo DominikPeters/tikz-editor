@@ -37,6 +37,32 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:ci
 
+  desktop-macos:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+      - run: npm ci
+      - name: Build isolated app with embedded WebDriver
+        run: npm run -w @tikz-editor/desktop tauri:build:e2e -- --ci
+      - name: Run macOS desktop end-to-end tests
+        run: npm run test:desktop:e2e
+      - name: Upload failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos-failure
+          path: ${{ runner.temp }}/tikz-desktop-e2e-failure.png
+          if-no-files-found: ignore
+
   desktop-linux:
     runs-on: ubuntu-latest
     steps:

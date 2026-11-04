@@ -369,7 +369,10 @@ order, written as Beamer's `[<overlay>][labels]`) and image Replace….
   `beamer-presentation-inspector`, `beamer-color-inspector` and
   `beamer-list-image-inspector`. The TikZ edit-action fuzzer does not
   generate deck actions.
-- Not done: a desktop (Tauri) smoke test of Replace….
+- Desktop smoke: `apps/desktop/e2e/desktop-image-scenario.mjs` exercises
+  Replace… with real native PDF/SVG file reads and writes, relative references,
+  cancellation, undo/redo and save/reload. Picker results are supplied by the
+  test; interaction with the system file dialog is not covered.
 
 ## Open questions
 
