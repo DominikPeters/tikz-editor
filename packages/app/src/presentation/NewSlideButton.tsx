@@ -22,6 +22,11 @@ function insertSlide(template: BeamerSlideTemplateId) {
   if (editBeamerSlides(state.source, edit)) state.dispatch({ type: "EDIT_DECK_SLIDES", documentId: state.activeDocumentId, baseRevision: state.sourceRevision, edit });
 }
 
+/** A new slide after the current one, laid out as the last one added. */
+export function insertSlideAfterCurrent() {
+  insertSlide(lastTemplate);
+}
+
 export function NewSlideButton() {
   const kind = useEditorStore(state => state.documentKind);
   const locked = useEditorStore(state => !!state.documents[state.activeDocumentId]?.assistantLockReason);

@@ -5,6 +5,7 @@ import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerp
 import { getActiveEditorPlatform } from "../platform/current";
 import { useEditorStore } from "../store/store";
 import { isInteractiveEdit } from "./compute-trigger";
+import { useNavigatorTouchGestures, type NavigatorTouchHandlers } from "./slide-manager/useNavigatorTouchGestures";
 import { useFigureThumbnails } from "./useFigureThumbnails";
 import { useSlideManager } from "./slide-manager/useSlideManager";
 import css from "./RootNavigator.module.css";
@@ -279,35 +280,40 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
     const next = new Set(collapsed); if (next.has(id)) next.delete(id); else next.add(id);
     collapsedByDocument.set(documentId, next); setCollapsed(next);
   };
-  const dragOver = (event: DragEvent) => {
-    const session = drag.current;
-    if (session?.documentId !== documentId || session.revision !== revision) return;
-    event.preventDefault(); event.dataTransfer.dropEffect = "move";
-    let target = (event.target instanceof Element ? event.target : null)?.closest<HTMLElement>("[data-slide-id], [data-section-id]");
+  // The insertion point under (x, y): a card's or section's near edge, the
+  // gap nearest to it, or the end of the deck.
+  const dropAt = (x: number, y: number, element: Element | null): Drop => {
+    let target = element?.closest<HTMLElement>("[data-slide-id], [data-section-id]") ?? null;
+    if (target && !viewportRef.current?.contains(target)) target = null;
     // Gaps between cards are insertion targets too. Only the space after
     // the last row/card represents the end of the document.
     if (!target) {
       const candidates = Array.from(viewportRef.current?.querySelectorAll<HTMLElement>("[data-slide-id], [data-section-id]") ?? [])
         .map(element => ({ element, rect: element.getBoundingClientRect() }));
       const last = candidates.at(-1)?.rect;
-      if (last && (layout === "strip" ? event.clientX <= last.right : event.clientY <= last.bottom)) {
+      if (last && (layout === "strip" ? x <= last.right : y <= last.bottom)) {
         const distance = (rect: DOMRect) => Math.hypot(
-          Math.max(rect.left - event.clientX, 0, event.clientX - rect.right),
-          Math.max(rect.top - event.clientY, 0, event.clientY - rect.bottom));
+          Math.max(rect.left - x, 0, x - rect.right),
+          Math.max(rect.top - y, 0, y - rect.bottom));
         target = candidates.sort((a, b) => distance(a.rect) - distance(b.rect))[0]?.element ?? null;
       }
     }
-    let next: Drop = { key: "end", edge: "after", destination: { kind: "end" } };
     if (target) {
       const rect = target.getBoundingClientRect();
       const horizontal = layout === "strip" || (layout === "grid" && !target.dataset.sectionId);
-      const edge = (horizontal ? event.clientX < rect.left + rect.width / 2 : event.clientY < rect.top + rect.height / 2) ? "before" : "after";
+      const edge = (horizontal ? x < rect.left + rect.width / 2 : y < rect.top + rect.height / 2) ? "before" : "after";
       const sectionId = target.dataset.sectionId;
       const slideId = target.dataset.slideId;
-      if (sectionId) next = { key: sectionId, edge, destination: { kind: "section", sectionId, edge } };
-      else if (slideId) next = { key: slideId, edge, destination: { kind: edge, frameId: slideId } };
+      if (sectionId) return { key: sectionId, edge, destination: { kind: "section", sectionId, edge } };
+      if (slideId) return { key: slideId, edge, destination: { kind: edge, frameId: slideId } };
     }
-    setDrop(next);
+    return { key: "end", edge: "after", destination: { kind: "end" } };
+  };
+  const dragOver = (event: DragEvent) => {
+    const session = drag.current;
+    if (session?.documentId !== documentId || session.revision !== revision) return;
+    event.preventDefault(); event.dataTransfer.dropEffect = "move";
+    setDrop(dropAt(event.clientX, event.clientY, event.target instanceof Element ? event.target : null));
     const view = viewportRef.current;
     if (view) {
       const rect = view.getBoundingClientRect();
@@ -315,6 +321,42 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
       view.scrollBy(layout === "strip" ? delta(event.clientX, rect.left, rect.right) : 0, layout === "strip" ? 0 : delta(event.clientY, rect.top, rect.bottom));
     }
   };
+  // Touch: a held card opens its menu or, once it moves, drags like the
+  // mouse does (useNavigatorTouchGestures).
+  const touchDrop = useRef<Drop | null>(null);
+  const touchHandlers = useRef<NavigatorTouchHandlers | null>(null);
+  useLayoutEffect(() => {
+    touchHandlers.current = {
+      canLift: id => deckMode && manager.enabled && roots.some(root => root.id === id),
+      openMenu: (_id, card, x, y) => {
+        card.querySelector("button")?.dispatchEvent(new globalThis.MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 2 }));
+      },
+      beginDrag: id => {
+        const ids = manager.ids.includes(id) ? manager.ids : [id];
+        if (!ids.every(value => manager.movable.includes(value))) return false;
+        if (!manager.ids.includes(id)) manager.select(id);
+        drag.current = { documentId, revision, ids, token: `${documentId}:${revision}:${id}` }; setDragging(true);
+        return true;
+      },
+      dragOver: (x, y, element) => {
+        const box = viewportRef.current?.getBoundingClientRect();
+        // Away from the navigator, letting go puts the slide back.
+        const inside = !!box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+        const next = inside ? dropAt(x, y, element) : null;
+        touchDrop.current = next; setDrop(next);
+      },
+      drop: () => {
+        const session = drag.current, target = touchDrop.current;
+        if (session && target && session.documentId === documentId && session.revision === revision) {
+          manager.edit({ kind: "move", frameIds: session.ids, destination: target.destination }, session.revision);
+        }
+        touchDrop.current = null; clearDrag();
+      },
+      cancelDrag: () => { touchDrop.current = null; clearDrag(); },
+      axis: () => layout === "strip" ? "x" : "y",
+    };
+  });
+  useNavigatorTouchGestures(viewportRef, touchHandlers, css.touchGhost ?? "");
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if ((event.target instanceof Element ? event.target : null)?.closest('[role="menu"], dialog, [role="dialog"]')) return;
     const command = event.ctrlKey || event.metaKey;
@@ -375,6 +417,9 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
     }
   };
 
+  // On the iPad a held card is dragged by useNavigatorTouchGestures; an HTML
+  // drag would start iPadOS's own drag session instead.
+  const nativeDrag = typeof document === "undefined" || document.documentElement.dataset.editorPlatform !== "ipad";
   return <div ref={panelRef} className={css.panel} data-testid="figure-navigator" data-slide-manager={deckMode || undefined}
     data-layout={layout} data-dragging={dragging || undefined} onKeyDown={onKeyDown} tabIndex={-1}
     onCopy={event => {
@@ -417,7 +462,7 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
             thumbnail={thumbnails.get(entry.root.thumbnailId)} stepCount={entry.root.stepCount}
             selected={deckMode ? manager.ids.includes(entry.root.id) : activeRootId === entry.root.id}
             active={activeRootId === entry.root.id} drop={drop?.key === entry.root.id ? drop.edge : undefined}
-            draggable={deckMode && manager.enabled && manager.movable.includes(entry.root.id)}
+            draggable={nativeDrag && deckMode && manager.enabled && manager.movable.includes(entry.root.id)}
             aspectRatio={layout === "strip" ? undefined : previewAspectRatio} />)}
         <div className={css.endDrop} data-drop={drop?.key === "end" ? "after" : undefined} aria-hidden="true" />
       </div>

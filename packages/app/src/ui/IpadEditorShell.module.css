@@ -424,9 +424,44 @@
   border-right: 1px solid var(--separator);
 }
 
-.navigatorColumn > * {
+.navigatorColumn > :first-child {
   flex: 1;
   min-height: 0;
+}
+
+/* New Slide: at the end of the strip, at the foot of the column. */
+.figureStrip {
+  display: flex;
+}
+
+.figureStrip > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.navigatorAdd {
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--separator);
+  background: transparent;
+  color: var(--control-accent);
+}
+
+.navigatorColumn .navigatorAdd {
+  border-left: 0;
+  border-top: 1px solid var(--separator);
+}
+
+.navigatorAdd:active:not(:disabled) {
+  background: var(--btn-hover-bg);
+}
+
+.navigatorAdd:disabled {
+  color: var(--text-faint);
 }
 
 .workspace[data-navigator="left"] .zoomChip {

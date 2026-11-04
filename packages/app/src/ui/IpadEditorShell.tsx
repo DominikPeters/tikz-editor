@@ -29,6 +29,7 @@ import type { ToolMode } from "../store/types";
 import { CanvasPanel } from "./canvas-panel/CanvasPanel";
 import type { EditorCommandRuntime } from "./editor-command-runtime";
 import { RootNavigator } from "./RootNavigator";
+import { insertSlideAfterCurrent } from "../presentation/NewSlideButton";
 import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
 import { InspectorPanel } from "./inspector-panel/InspectorPanel";
 import { ObjectsPanel } from "./objects-panel/ObjectsPanel";
@@ -319,6 +320,7 @@ export function IpadEditorShell({
   const activeRightPanelLabel = RIGHT_PANEL_LABELS[activeRightTab];
   const hasMultipleFigures = hasMultipleRoots(snapshotRoots(snapshot).length);
   const deckMode = documentKind === "beamer";
+  const deckLocked = useEditorStore(s => !!s.documents[s.activeDocumentId]?.assistantLockReason);
   // A deck lists its slides even while it has only one.
   const navigatorAvailable = deckMode || hasMultipleFigures;
   const showFigureStrip = navigatorAvailable && showFiguresPanel;
@@ -670,6 +672,19 @@ export function IpadEditorShell({
             data-testid="ipad-navigator"
           >
             <RootNavigator vertical={navigatorDocked} />
+            {deckMode ? (
+              <button
+                type="button"
+                className={css.navigatorAdd}
+                aria-label="New Slide"
+                title="New Slide"
+                disabled={deckLocked}
+                onClick={insertSlideAfterCurrent}
+                data-testid="ipad-new-slide"
+              >
+                <RiAddLine size={20} aria-hidden />
+              </button>
+            ) : null}
           </div>
         ) : null}
 

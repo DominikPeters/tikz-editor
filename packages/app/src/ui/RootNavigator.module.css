@@ -45,3 +45,12 @@
 .dragPreview span { position: absolute; right: 5px; bottom: 5px; background: var(--control-accent); color: #ffffff; padding: 3px 7px; border-radius: 4px; font-size: calc(var(--app-ui-scale, 1) * 11px); }
 
 .dragTitle { padding: 12px; color: var(--label-secondary); font: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Touch: a held card lifts; while dragged it stays as a faint placeholder
+   and a copy follows the finger. */
+.card[data-lifted] .thumb { transition: transform 160ms ease, box-shadow 160ms ease; }
+.card[data-lifted="hold"] .thumb { transform: scale(1.05); box-shadow: 0 6px 18px rgb(0 0 0 / 0.22); }
+.card[data-lifted="drag"] { opacity: 0.35; }
+.touchGhost { position: fixed; left: 0; top: 0; z-index: 10000; pointer-events: none; transform-origin: top left; border-radius: 6px; box-shadow: 0 10px 28px rgb(0 0 0 / 0.28); opacity: 0.95; }
+.touchGhost .thumb { height: 100%; }
+:global(html[data-editor-platform="ipad"]) .thumb { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
