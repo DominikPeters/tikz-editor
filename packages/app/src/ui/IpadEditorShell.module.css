@@ -28,6 +28,7 @@
 }
 
 .workspace {
+  --ipad-navigator-width: 200px;
   position: relative;
   display: flex;
   flex: 1;
@@ -408,6 +409,28 @@
   backdrop-filter: var(--ipad-material-blur);
   box-shadow: var(--ipad-shadow-float);
   animation: figureStripIn 240ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* Landscape: the navigator docks as a column on the left of the canvas. */
+.navigatorColumn {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 var(--ipad-navigator-width);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-pane);
+  border-right: 1px solid var(--separator);
+}
+
+.navigatorColumn > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.workspace[data-navigator="left"] .zoomChip {
+  left: calc(var(--ipad-navigator-width) + 12px);
 }
 
 @keyframes figureStripIn {

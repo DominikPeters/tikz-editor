@@ -13,12 +13,14 @@ type Root = { id: string; span: { from: number; to: number }; label: string; thu
 type Entry = { kind: "frame"; root: Root } | { kind: "section"; id: string; title: string; level: number };
 type Layout = "strip" | "vertical" | "grid";
 type Drop = { key: string; edge: "before" | "after"; destination: BeamerSlideDestination };
+/** Keyed by document and orientation: a strip's scroll means nothing to a column. */
 const scrollByDocument = new Map<string, { left: number; top: number }>();
 const collapsedByDocument = new Map<string, Set<string>>();
 const DRAG_TYPE = "application/x-tikz-editor-slides";
 
 export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
   const documentId = useEditorStore(s => s.activeDocumentId);
+  const scrollKey = `${documentId}\u0000${vertical ? "column" : "row"}`;
   const source = useEditorStore(s => s.source);
   const revision = useEditorStore(s => s.sourceRevision);
   const snapshot = useEditorStore(s => s.snapshot);
@@ -36,6 +38,7 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
   const drag = useRef<{ documentId: string; revision: number; ids: string[]; token: string } | null>(null);
   const lastNavigation = useRef("");
   const lastNavigationDocument = useRef<string | null>(null);
+  const restoredScrollKey = useRef<string | null>(null);
   const lastFocusSource = useRef(source);
   const ownsFocus = useRef(false);
   const [dragging, setDragging] = useState(false);
@@ -100,13 +103,23 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
     ? `f\u0000${entry.root.id}\u0000${entry.root.label}` : `s\u0000${entry.id}\u0000${entry.level}\u0000${entry.title}`).join("\n"), [entries]);
   useEffect(() => {
     setCollapsed(collapsedByDocument.get(documentId) ?? new Set());
+    // Once per document and orientation: run again for the same one (as
+    // StrictMode does), it would undo the reveal below.
+    if (restoredScrollKey.current === scrollKey) return;
+    restoredScrollKey.current = scrollKey;
     const viewport = viewportRef.current;
-    const saved = scrollByDocument.get(documentId);
+    const saved = scrollByDocument.get(scrollKey);
+    if (!saved) {
+      // Start from the top now: the reveal effect below then scrolls to the
+      // active card, and a deferred reset would undo it.
+      if (viewport) { viewport.scrollLeft = 0; viewport.scrollTop = 0; }
+      return;
+    }
     const animation = requestAnimationFrame(() => {
-      if (viewport) { viewport.scrollLeft = saved?.left ?? 0; viewport.scrollTop = saved?.top ?? 0; }
+      if (viewport) { viewport.scrollLeft = saved.left; viewport.scrollTop = saved.top; }
     });
-    return () => { cancelAnimationFrame(animation); };
-  }, [documentId]);
+    return () => { cancelAnimationFrame(animation); restoredScrollKey.current = null; };
+  }, [documentId, scrollKey]);
   useEffect(() => {
     drag.current = null; setDragging(false); setDrop(null);
     dragPreview.current?.remove(); dragPreview.current = null;
@@ -130,7 +143,7 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
         return rect && rect.right >= box.left - 180 && rect.left <= box.right + 180 && rect.bottom >= box.top - 180 && rect.top <= box.bottom + 180;
       });
       setVisibleRootIds(current => current.join() === visible.join() ? current : visible);
-      scrollByDocument.set(documentId, { left: viewport.scrollLeft, top: viewport.scrollTop });
+      scrollByDocument.set(scrollKey, { left: viewport.scrollLeft, top: viewport.scrollTop });
     };
     const schedule = () => { frame ||= requestAnimationFrame(update); };
     const observer = new ResizeObserver(schedule);
@@ -138,18 +151,19 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
     viewport.addEventListener("scroll", schedule, { passive: true });
     schedule();
     return () => { observer.disconnect(); viewport.removeEventListener("scroll", schedule); cancelAnimationFrame(frame); };
-  }, [documentId, shownKey, layout, vertical]);
+  }, [documentId, scrollKey, shownKey, layout, vertical]);
   // Reveal the active card when it or the slides' arrangement changes, not at
   // every edit: scrolling into view measures the layout. Collapsing a section
   // is no reason to reopen it.
   const arrangementKey = useMemo(() => roots.map(root => `${root.id}\u0000${root.label}`).join("\n"), [roots]);
   useEffect(() => {
-    const navigation = `${documentId}:${activeRootId}\n${arrangementKey}`;
+    // Turning the navigator between strip and column reveals the active card too.
+    const navigation = `${scrollKey}:${activeRootId}\n${arrangementKey}`;
     if (lastNavigation.current === navigation) return;
     lastNavigation.current = navigation;
     const switchedDocument = lastNavigationDocument.current !== documentId;
     lastNavigationDocument.current = documentId;
-    if (switchedDocument && scrollByDocument.has(documentId)) return;
+    if (switchedDocument && scrollByDocument.has(scrollKey)) return;
     const frame = model?.frames.find(frame => frame.id === activeRootId);
     if (frame && (collapsed.has(frame.sectionId ?? "") || collapsed.has(frame.subsectionId ?? ""))) {
       setCollapsed(current => {
@@ -157,9 +171,10 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
         collapsedByDocument.set(documentId, next); return next;
       });
     }
-    const scrolling: Partial<Pick<HTMLButtonElement, "scrollIntoView">> | undefined = buttons.current.get(activeRootId ?? "");
-    scrolling?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [activeRootId, arrangementKey, documentId, model, collapsed]);
+    const viewport = viewportRef.current;
+    const card = buttons.current.get(activeRootId ?? "");
+    if (viewport && card) revealInViewport(viewport, card);
+  }, [activeRootId, arrangementKey, documentId, model, collapsed, scrollKey]);
   useEffect(() => {
     const releaseFocus = () => { ownsFocus.current = false; };
     document.addEventListener("pointerdown", releaseFocus, true);
@@ -437,3 +452,18 @@ const SlideCard = memo(function SlideCard({ handlers, buttons, id, label, thumbn
     </button>
   </div>;
 });
+
+/**
+ * Scrolls the navigator's own viewport until the card is in view. Unlike
+ * scrollIntoView, it leaves the workspace and the pinned page where they are.
+ */
+function revealInViewport(viewport: HTMLElement, card: HTMLElement): void {
+  const box = viewport.getBoundingClientRect();
+  const rect = card.getBoundingClientRect();
+  const nearest = (start: number, end: number, boxStart: number, boxEnd: number) =>
+    start < boxStart ? start - boxStart : end > boxEnd ? Math.min(start - boxStart, end - boxEnd) : 0;
+  const dx = nearest(rect.left, rect.right, box.left, box.right);
+  const dy = nearest(rect.top, rect.bottom, box.top, box.bottom);
+  if (dx) viewport.scrollLeft += dx;
+  if (dy) viewport.scrollTop += dy;
+}

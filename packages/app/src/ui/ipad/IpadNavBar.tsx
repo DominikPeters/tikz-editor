@@ -5,6 +5,7 @@ import {
   RiArrowGoForwardLine,
   RiCodeLine,
   RiFunctionLine,
+  RiLayoutLeftLine,
   RiLayoutRightLine,
   RiMoreLine,
   RiShareForwardLine
@@ -30,7 +31,8 @@ export type IpadNavBarProps = {
   inspectorOpen: boolean;
   onToggleInspector: () => void;
   inspectorToggleEnabled: boolean;
-  hasMultipleFigures: boolean;
+  /** "Slides" for a deck, "Figures" for several pictures; null hides the navigator toggle. */
+  navigatorLabel: "Slides" | "Figures" | null;
   showFiguresPanel: boolean;
   onToggleFigures: () => void;
   /** Set while the source editor is the surface being edited: Undo and Redo then act on its typing history. */
@@ -49,7 +51,7 @@ export function IpadNavBar({
   inspectorOpen,
   onToggleInspector,
   inspectorToggleEnabled,
-  hasMultipleFigures,
+  navigatorLabel,
   showFiguresPanel,
   onToggleFigures,
   sourceHistory,
@@ -110,6 +112,22 @@ export function IpadNavBar({
         >
           <RiCodeLine size={21} aria-hidden />
         </button>
+        {navigatorLabel ? (
+          <button
+            type="button"
+            className={[css.iconButton, showFiguresPanel ? css.iconButtonActive : ""].filter(Boolean).join(" ")}
+            aria-label={navigatorLabel}
+            title={navigatorLabel}
+            aria-pressed={showFiguresPanel}
+            onClick={() => {
+              closePopover();
+              onToggleFigures();
+            }}
+            data-testid="ipad-navigator-toggle"
+          >
+            <RiLayoutLeftLine size={21} aria-hidden />
+          </button>
+        ) : null}
       </div>
 
       <div className={css.titleCluster}>
@@ -285,20 +303,6 @@ export function IpadNavBar({
           }
         >
           <IpadMenu ariaLabel="More">
-            {hasMultipleFigures ? (
-              <>
-                <IpadMenuItem
-                  label="Figures"
-                  checked={showFiguresPanel}
-                  onSelect={() => {
-                    closePopover();
-                    onToggleFigures();
-                  }}
-                  testId="ipad-menu-figures"
-                />
-                <IpadMenuSeparator />
-              </>
-            ) : null}
             <IpadMenuItem
               label="Show Grid"
               checked={commandChecked(APP_MENU_COMMAND_IDS.TOGGLE_GRID)}

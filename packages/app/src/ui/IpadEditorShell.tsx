@@ -187,6 +187,8 @@ export function IpadEditorShell({
     showAssistantPanel,
     rightSidebarTab,
     showRulers,
+    documentKind,
+    activeDocumentId,
     dispatch
   } = useEditorStore(useShallow((s) => ({
     toolMode: s.toolMode,
@@ -201,6 +203,8 @@ export function IpadEditorShell({
     showAssistantPanel: s.showAssistantPanel,
     rightSidebarTab: s.rightSidebarTab,
     showRulers: s.showRulers,
+    documentKind: s.documentKind,
+    activeDocumentId: s.activeDocumentId,
     dispatch: s.dispatch
   })));
 
@@ -314,7 +318,35 @@ export function IpadEditorShell({
   const rightPanelOpen = showInspectorPanel || showObjectsPanel || showStylesPanel;
   const activeRightPanelLabel = RIGHT_PANEL_LABELS[activeRightTab];
   const hasMultipleFigures = hasMultipleRoots(snapshotRoots(snapshot).length);
-  const showFigureStrip = hasMultipleFigures && showFiguresPanel;
+  const deckMode = documentKind === "beamer";
+  // A deck lists its slides even while it has only one.
+  const navigatorAvailable = deckMode || hasMultipleFigures;
+  const showFigureStrip = navigatorAvailable && showFiguresPanel;
+  // In landscape the navigator is a column docked on the left, as in Keynote;
+  // in portrait, where the slide leaves room above it, a strip along the top.
+  const landscape = useLandscape();
+  const navigatorDocked = showFigureStrip && landscape;
+
+  // Decks open with their slides showing, as on the desktop.
+  const deckNavigatorShownForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!deckMode || deckNavigatorShownForRef.current === activeDocumentId) return;
+    deckNavigatorShownForRef.current = activeDocumentId;
+    // From the store as it is now: the initial-layout pass above may have
+    // just closed panels this render's values still show open.
+    const current = useEditorStore.getState();
+    if (current.showFiguresPanel) return;
+    dispatch({
+      type: "SYNC_LAYOUT_STATE",
+      sourceVisible: current.showSourcePanel,
+      inspectorVisible: current.showInspectorPanel,
+      objectsVisible: current.showObjectsPanel,
+      stylesVisible: current.showStylesPanel,
+      figuresVisible: true,
+      assistantVisible: false,
+      activeRightTab: coerceRightSidebarTab(current.rightSidebarTab)
+    });
+  }, [activeDocumentId, deckMode, dispatch]);
   const statusText = pendingRequestId ? "Rendering…" : canvasStatusHint;
 
   const toggleSourcePanel = useCallback(() => {
@@ -463,8 +495,8 @@ export function IpadEditorShell({
   }, [activeRightTab, syncLayout]);
 
   const toggleFigures = useCallback(() => {
-    syncLayout({ figuresVisible: hasMultipleFigures ? !showFiguresPanel : false });
-  }, [hasMultipleFigures, showFiguresPanel, syncLayout]);
+    syncLayout({ figuresVisible: navigatorAvailable ? !showFiguresPanel : false });
+  }, [navigatorAvailable, showFiguresPanel, syncLayout]);
 
   const setToolMode = useCallback((nextMode: ToolMode) => {
     dispatch({ type: "SET_TOOL_MODE", mode: resolveToolbarToolMode(toolMode, nextMode) });
@@ -492,7 +524,7 @@ export function IpadEditorShell({
           event.preventDefault();
           return;
         }
-        if (key === "f" && hasMultipleFigures) {
+        if (key === "f" && navigatorAvailable) {
           toggleFigures();
           event.preventDefault();
           return;
@@ -510,7 +542,7 @@ export function IpadEditorShell({
 
     window.addEventListener("keydown", onKeyDown);
     return () => { window.removeEventListener("keydown", onKeyDown); };
-  }, [dispatch, hasMultipleFigures, toggleFigures, toggleRightPanel, toggleSourcePanel]);
+  }, [dispatch, navigatorAvailable, toggleFigures, toggleRightPanel, toggleSourcePanel]);
 
   // How far the floating right panel reaches into the workspace from its right edge.
   const measureRightPanel = useCallback((panel: HTMLElement | null) => {
@@ -613,8 +645,8 @@ export function IpadEditorShell({
           commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_OBJECTS_PANEL].enabled === true ||
           commandRuntime.bindings[APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL].enabled === true
         }
-        hasMultipleFigures={hasMultipleFigures}
-        showFiguresPanel={showFiguresPanel}
+        navigatorLabel={navigatorAvailable ? (deckMode ? "Slides" : "Figures") : null}
+        showFiguresPanel={showFigureStrip}
         onToggleFigures={toggleFigures}
         sourceHistory={showSourcePanel && historySurface === "source" ? sourceEditorHistory : null}
         updateChip={updateChip}
@@ -627,12 +659,17 @@ export function IpadEditorShell({
         data-source-visible={showSourcePanel ? "true" : "false"}
         data-source-pinned={sourcePinned ? "true" : "false"}
         data-right-panel-visible={rightPanelOpen ? "true" : "false"}
-        data-figures-visible={showFigureStrip ? "true" : "false"}
+        data-figures-visible={showFigureStrip && !navigatorDocked ? "true" : "false"}
+        data-navigator={navigatorDocked ? "left" : "none"}
         data-palette-dock={paletteDock.kind === "edge" ? paletteDock.edge : "corner"}
       >
         {showFigureStrip ? (
-          <div className={css.figureStrip} data-select="chrome">
-            <RootNavigator />
+          <div
+            className={navigatorDocked ? css.navigatorColumn : css.figureStrip}
+            data-select="chrome"
+            data-testid="ipad-navigator"
+          >
+            <RootNavigator vertical={navigatorDocked} />
           </div>
         ) : null}
 
@@ -913,4 +950,20 @@ function RightPanel({ activeTab }: { activeTab: RightSidebarTab }) {
     default:
       return <InspectorPanel />;
   }
+}
+
+const LANDSCAPE_QUERY = "(orientation: landscape)";
+
+function subscribeOrientation(onChange: () => void): () => void {
+  const query = window.matchMedia(LANDSCAPE_QUERY);
+  query.addEventListener("change", onChange);
+  return () => { query.removeEventListener("change", onChange); };
+}
+
+function useLandscape(): boolean {
+  return useSyncExternalStore(
+    subscribeOrientation,
+    () => window.matchMedia(LANDSCAPE_QUERY).matches,
+    () => false
+  );
 }
