@@ -24,7 +24,10 @@ function navigateMenu(event: ReactKeyboardEvent<HTMLDivElement>) {
   const index = buttons.findIndex(button => button === event.target);
   if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
     event.preventDefault(); event.stopPropagation();
-    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+    // From the menu itself (index -1, as opened) the arrows reach the first or last item.
+    const next = event.key === "Home" || (index < 0 && event.key === "ArrowDown") ? 0
+      : event.key === "End" || (index < 0 && event.key === "ArrowUp") ? buttons.length - 1
+      : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
     buttons[next]?.focus();
   } else if (event.key === "ArrowLeft" && menu?.parentElement?.classList.contains(css.submenuPopup ?? "")) {
     event.preventDefault(); event.stopPropagation();
@@ -65,7 +68,7 @@ function ContextMenuPopup({
   );
 
   return (
-    <div className={css.menu} role="menu" onKeyDown={navigateMenu}>
+    <div className={css.menu} role="menu" tabIndex={-1} onKeyDown={navigateMenu}>
       {items.map((item, index) => {
         const itemKey = `${path}-${index}`;
         if (item.kind === "separator") {
@@ -100,7 +103,8 @@ function ContextMenuPopup({
                   const popup = event.currentTarget.nextElementSibling;
                   flushSync(() => { setOpenSubmenuKey(itemKey); });
                   if (submenu instanceof HTMLDivElement) positionSubmenu(submenu);
-                  popup?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+                  // The popup itself takes focus, as on open: no item is highlighted until the arrows move.
+                  popup?.querySelector<HTMLElement>('[role="menu"]')?.focus();
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "ArrowRight") {
@@ -238,7 +242,9 @@ export function CanvasContextMenu({
   }, [anchor, containerRef, open, target]);
 
   useEffect(() => {
-    if (open) menuRootRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    // Like a native menu, a freshly opened menu highlights no item; the
+    // menu itself takes focus so the arrow keys still work.
+    if (open) menuRootRef.current?.querySelector<HTMLElement>(`.${css.menu}`)?.focus();
   }, [open]);
 
   useEffect(() => {

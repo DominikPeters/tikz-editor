@@ -64,6 +64,8 @@
 
 .item:focus-visible { outline: 1px solid var(--text-muted); outline-offset: -2px; }
 
+.menu:focus { outline: none; }
+
 .item:hover:not(:disabled) {
   background: var(--btn-hover-bg);
   border-color: var(--border-light);
