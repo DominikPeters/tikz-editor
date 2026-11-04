@@ -36,7 +36,8 @@
       "icons/icon.ico"
     ],
     "iOS": {
-      "minimumSystemVersion": "16.0"
+      "minimumSystemVersion": "16.0",
+      "template": "src-tauri/ios-project.yml"
     }
   }
 }

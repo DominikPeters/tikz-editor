@@ -61,6 +61,7 @@ targets:
         RUST_LOG: info
     settings:
       base:
+        TARGETED_DEVICE_FAMILY: "2"
         ENABLE_BITCODE: false
         ARCHS: [arm64]
         VALID_ARCHS: arm64 

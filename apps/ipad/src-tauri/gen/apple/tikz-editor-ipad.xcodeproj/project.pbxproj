@@ -291,7 +291,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.tikz.editor.ipad;
 				PRODUCT_NAME = "TikZ Editor";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 2;
 				VALID_ARCHS = arm64;
 			};
 			name = debug;
@@ -333,7 +333,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.tikz.editor.ipad;
 				PRODUCT_NAME = "TikZ Editor";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 2;
 				VALID_ARCHS = arm64;
 			};
 			name = release;
