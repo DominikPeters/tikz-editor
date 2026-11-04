@@ -37,6 +37,10 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
   const dragPreview = useRef<HTMLElement | null>(null);
   const drag = useRef<{ documentId: string; revision: number; ids: string[]; token: string } | null>(null);
   const lastNavigation = useRef("");
+  // The viewport's size at the last update, and whether the active card was
+  // then in full view: a resize (an iPad turning) keeps it in view.
+  const lastViewportSize = useRef<string | null>(null);
+  const activeCardShown = useRef(false);
   const lastNavigationDocument = useRef<string | null>(null);
   const restoredScrollKey = useRef<string | null>(null);
   const lastFocusSource = useRef(source);
@@ -137,7 +141,16 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
     const update = () => {
       frame = 0;
       setLayout(vertical || panel.clientWidth < 270 ? "vertical" : panel.clientHeight < 240 ? "strip" : "grid");
+      const size = `${viewport.clientWidth}x${viewport.clientHeight}`;
+      const activeCard = buttons.current.get(activeRootId ?? "");
+      if (activeCard && activeCardShown.current && lastViewportSize.current !== null && lastViewportSize.current !== size) {
+        revealInViewport(viewport, activeCard);
+      }
+      lastViewportSize.current = size;
       const box = viewport.getBoundingClientRect();
+      const activeRect = activeCard?.getBoundingClientRect();
+      activeCardShown.current = !!activeRect && activeRect.left >= box.left - 1 && activeRect.right <= box.right + 1
+        && activeRect.top >= box.top - 1 && activeRect.bottom <= box.bottom + 1;
       const visible = shownIds.filter(id => {
         const rect = buttons.current.get(id)?.getBoundingClientRect();
         return rect && rect.right >= box.left - 180 && rect.left <= box.right + 180 && rect.bottom >= box.top - 180 && rect.top <= box.bottom + 180;
@@ -151,14 +164,15 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
     viewport.addEventListener("scroll", schedule, { passive: true });
     schedule();
     return () => { observer.disconnect(); viewport.removeEventListener("scroll", schedule); cancelAnimationFrame(frame); };
-  }, [documentId, scrollKey, shownKey, layout, vertical]);
+  }, [activeRootId, documentId, scrollKey, shownKey, layout, vertical]);
   // Reveal the active card when it or the slides' arrangement changes, not at
   // every edit: scrolling into view measures the layout. Collapsing a section
   // is no reason to reopen it.
   const arrangementKey = useMemo(() => roots.map(root => `${root.id}\u0000${root.label}`).join("\n"), [roots]);
   useEffect(() => {
-    // Turning the navigator between strip and column reveals the active card too.
-    const navigation = `${scrollKey}:${activeRootId}\n${arrangementKey}`;
+    // Rearranging the cards (strip, column, grid) reveals the active card too,
+    // once they are laid out the new way.
+    const navigation = `${scrollKey}:${layout}:${activeRootId}\n${arrangementKey}`;
     if (lastNavigation.current === navigation) return;
     lastNavigation.current = navigation;
     const switchedDocument = lastNavigationDocument.current !== documentId;
@@ -174,7 +188,7 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
     const viewport = viewportRef.current;
     const card = buttons.current.get(activeRootId ?? "");
     if (viewport && card) revealInViewport(viewport, card);
-  }, [activeRootId, arrangementKey, documentId, model, collapsed, scrollKey]);
+  }, [activeRootId, arrangementKey, documentId, model, collapsed, scrollKey, layout]);
   useEffect(() => {
     const releaseFocus = () => { ownsFocus.current = false; };
     document.addEventListener("pointerdown", releaseFocus, true);
