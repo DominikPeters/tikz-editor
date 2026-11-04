@@ -3559,10 +3559,17 @@ export const CanvasPanel = memo(function CanvasPanel({
     if (selectedId !== undefined) dispatch({ type: "SELECT", id: selectedId, additive: false });
   }, [dispatch, snapshot.scene, snapshot.source, source]);
 
+  // A drag pan is a manual view change: leaving fit-to-content mode keeps the
+  // refit that follows the drag from snapping the view back.
+  const dispatchDragPanTransform = useCallback((transform: CanvasTransform) => {
+    if (fitToContentModeActiveRef.current) setFitToContentModeActive(false);
+    dispatchCanvasTransform(transform);
+  }, [dispatchCanvasTransform, setFitToContentModeActive]);
+
   const dragControllerConfig = useMemo(() => ({
     applyActionWithFeedback,
     dispatch,
-    dispatchCanvasTransform,
+    dispatchCanvasTransform: dispatchDragPanTransform,
     logSnapDebug,
     queueSelectionForAddedElement,
     snapshotSource: snapshot.source,
@@ -3607,7 +3614,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     creationFillColor,
     creationStrokeColor,
     dispatch,
-    dispatchCanvasTransform,
+    dispatchDragPanTransform,
     dragRef,
     finalizeFreehandDraft,
     interactionSvgRef,
