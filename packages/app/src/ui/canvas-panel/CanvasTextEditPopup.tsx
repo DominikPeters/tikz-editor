@@ -371,6 +371,8 @@ export function CanvasTextEditPopup({
             .join(" ")}
           defaultValue={session.text}
           spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
           rows={
             session.editMode === "inline-typo"
               ? 1

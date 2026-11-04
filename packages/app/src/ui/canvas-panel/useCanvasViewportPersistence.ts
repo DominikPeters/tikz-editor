@@ -53,6 +53,8 @@ export type UseCanvasViewportPersistenceArgs = {
   zoomScaleRequestValue: number | null;
   activeCanvasDragKind: CanvasDragKind | null;
   activeSourceScrubSourceId: string | null;
+  /** Typing into a node holds the fit still; it refits once the edit closes. */
+  textEditActive?: boolean;
   snapshotSource: string;
   source: string;
   lastEditChangeToken: number;
@@ -86,6 +88,7 @@ export function useCanvasViewportPersistence({
   zoomScaleRequestValue,
   activeCanvasDragKind,
   activeSourceScrubSourceId,
+  textEditActive = false,
   snapshotSource,
   source,
   lastEditChangeToken,
@@ -455,7 +458,7 @@ export function useCanvasViewportPersistence({
     if (!svgResult) {
       return;
     }
-    if (activeCanvasDragKind || activeSourceScrubSourceId) {
+    if (activeCanvasDragKind || activeSourceScrubSourceId || textEditActive) {
       return;
     }
     if (snapshotSource !== source) {
@@ -475,6 +478,7 @@ export function useCanvasViewportPersistence({
     snapshotSource,
     source,
     svgResult,
+    textEditActive,
     viewportSize.height,
     viewportSize.width
   ]);

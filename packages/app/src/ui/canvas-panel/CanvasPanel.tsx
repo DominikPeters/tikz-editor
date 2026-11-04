@@ -1982,6 +1982,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     canvasTransform
   });
 
+  // Mirrors whether a text edit is open; the session hook runs further down.
+  const [canvasTextEditActive, setCanvasTextEditActive] = useState(false);
   const { maxZoomScale, viewportStateReadyRef } = useCanvasViewportPersistence({
     baseSvgResult,
     svgResult,
@@ -2009,6 +2011,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     zoomScaleRequestValue,
     activeCanvasDragKind,
     activeSourceScrubSourceId,
+    textEditActive: canvasTextEditActive,
     snapshotSource: snapshot.source,
     source,
     lastEditChangeToken,
@@ -2527,6 +2530,67 @@ export const CanvasPanel = memo(function CanvasPanel({
     textEditPlacement,
     dispatch
   });
+
+  const textEditOpen = textEditingSession != null;
+  useLayoutEffect(() => {
+    if (textEditOpen === canvasTextEditActive) return;
+    setCanvasTextEditActive(textEditOpen);
+    // The refit held back while typing lands as one animated zoom.
+    if (!textEditOpen) animateZoomUntilRef.current = performance.now() + 500;
+  }, [canvasTextEditActive, textEditOpen]);
+
+  // With the zoom held, a caret typed past the visible canvas (or under the
+  // on-screen keyboard) is followed by a pan that leaves room to keep typing.
+  // Only once the session has been typed into: opening it must not pan the
+  // node out from under a double tap's second tap. The pan is not animated:
+  // the caret is measured from the rendered text, which mid-transition would
+  // report a position the pan has not reached.
+  const caretFollowSessionKey = textEditingSession?.sourceId ?? null;
+  const caretFollowText = textEditingSession?.text ?? null;
+  const caretFollowRef = useRef<{ key: string | null; text: string | null; typed: boolean }>({
+    key: null,
+    text: null,
+    typed: false
+  });
+  const caretBounds = textEditOpen ? textSelectionOverlay?.caret?.bounds ?? null : null;
+  const caretMinX = caretBounds?.minX ?? null;
+  const caretMinY = caretBounds?.minY ?? null;
+  const caretMaxX = caretBounds?.maxX ?? null;
+  const caretMaxY = caretBounds?.maxY ?? null;
+  useEffect(() => {
+    const follow = caretFollowRef.current;
+    if (follow.key !== caretFollowSessionKey) {
+      caretFollowRef.current = { key: caretFollowSessionKey, text: caretFollowText, typed: false };
+      return;
+    }
+    if (follow.text !== caretFollowText) {
+      follow.text = caretFollowText;
+      follow.typed = true;
+    }
+    const viewport = viewportRef.current;
+    if (
+      !follow.typed ||
+      caretMinX == null || caretMinY == null || caretMaxX == null || caretMaxY == null ||
+      !viewport || dragRef.current
+    ) {
+      return;
+    }
+    const rect = viewport.getBoundingClientRect();
+    const visual = window.visualViewport;
+    const visibleHeight = visual
+      ? Math.min(rect.height, visual.offsetTop + visual.height - rect.top)
+      : rect.height;
+    const pad = 24;
+    const overflowX = (from: number, to: number, extent: number): number =>
+      to > extent - pad ? to - extent * 0.66 : from < pad ? from - extent * 0.34 : 0;
+    const dx = overflowX(caretMinX, caretMaxX, rect.width);
+    const dy = overflowX(caretMinY, caretMaxY, visibleHeight);
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+      return;
+    }
+    const { translateX, translateY, scale } = canvasTransformRef.current;
+    dispatchCanvasTransform({ translateX: translateX - dx, translateY: translateY - dy, scale });
+  }, [caretFollowSessionKey, caretFollowText, caretMaxX, caretMaxY, caretMinX, caretMinY, dispatchCanvasTransform]);
 
   const enterNestedFigure = useCallback(
     (node: BeamerObjectNode): boolean => {
