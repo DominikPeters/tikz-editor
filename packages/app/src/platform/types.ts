@@ -370,6 +370,12 @@ export type EditorPlatform = {
   assistant?: AssistantApi;
   updates?: PlatformUpdateApi;
   latex?: PlatformLatex;
+  /**
+   * False where TikZJax must not run: it executes a TeX engine fetched from a
+   * CDN, which App Store review does not allow. Without native LaTeX, Show
+   * Compiled Picture is then unavailable.
+   */
+  tikzJax?: boolean;
   presentation?: PlatformPresentationApi;
 };
 

@@ -2,6 +2,89 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- No encryption beyond what iOS provides (HTTPS): no export compliance question per upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<!-- .tex and .tikz files open from Files in place: saves go back to the original. -->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>TikZ Source</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.tikz.editor.tikz</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>TeX Source</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>org.tug.tex</string>
+			</array>
+		</dict>
+	</array>
+	<!-- The same type the desktop app exports for .tikz. -->
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.tikz.editor.tikz</string>
+			<key>UTTypeDescription</key>
+			<string>TikZ Source</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>tikz</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/x-tikz</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<!-- iOS declares no type for .tex; imported, so a TeX app that exports one wins. -->
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.tug.tex</string>
+			<key>UTTypeDescription</key>
+			<string>TeX Source</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>tex</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>text/x-tex</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 	<!-- UIKit's scene life cycle; the delegate is registered in src/lib.rs (mod scenes). -->
 	<key>UIApplicationSceneManifest</key>
 	<dict>

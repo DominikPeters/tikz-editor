@@ -14,6 +14,7 @@ import { revisionForText } from "@tikz-editor/app/linked-file-sync";
 import { createInAppPresentationApi } from "@tikz-editor/app/presentation";
 import { createIpadExternalDisplay } from "./external-display";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { documentDir, join } from "@tauri-apps/api/path";
 import { message, open, save } from "@tauri-apps/plugin-dialog";
 import { BaseDirectory, readFile, readTextFile, remove, stat, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
@@ -257,13 +258,63 @@ async function tryShareExport(content: BlobPart[], options: { fileName: string; 
   }
 }
 
+type OpenRequestHandler = (opened: { source: string; fileRef: DocumentFileRef | null }) => void;
+
+/**
+ * Documents opened from Files (src-tauri/src/lib.rs, `opened_files`). The
+ * native side keeps them until asked; here they wait for the editor's
+ * handler, which may not be bound yet at launch or between remounts.
+ */
+function createOpenedFiles(access: FileAccess) {
+  let handler: OpenRequestHandler | null = null;
+  const waiting: string[] = [];
+  let listening = false;
+  const deliver = async () => {
+    while (handler && waiting.length) {
+      const location = waiting.shift();
+      if (!location) break;
+      const current = handler;
+      try {
+        const source = await readTextFile(location);
+        await access.remember(location);
+        current({ source, fileRef: fileRefFromPath(location, "document.tex") });
+      } catch (error) {
+        await message(errorReason(error, "The file could not be read."), { title: "Couldn’t Open the File", kind: "error" }).catch(() => {});
+      }
+    }
+  };
+  const take = async () => {
+    try {
+      waiting.push(...await invoke<string[]>("ipad_take_opened_files"));
+    } catch {
+      // Outside the native shell nothing is ever opened this way.
+    }
+    await deliver();
+  };
+  return {
+    bind(next: OpenRequestHandler) {
+      handler = next;
+      if (!listening) {
+        listening = true;
+        void listen("ipad-open-files", () => { void take(); }).catch(() => {});
+      }
+      void take();
+      return () => {
+        if (handler === next) handler = null;
+      };
+    }
+  };
+}
+
 export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): EditorPlatform {
   const storage = resolveStorage(env);
   const access = createFileAccess(storage);
+  const openedFiles = createOpenedFiles(access);
   let menuHandler: MenuCommandHandler | null = null;
 
   return {
     id: "ipad-ios-tauri",
+    tikzJax: false,
     // One screen: the slides or the presenter view show over the editor.
     presentation: createInAppPresentationApi({
       keepAwake: async (active) => { await invoke("ipad_keep_awake", { active }); },
@@ -315,6 +366,7 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
       }
     },
     files: {
+      bindOpenRequest: (handler) => openedFiles.bind(handler),
       openText: async () => {
         // "scoped" opens the file in place; the default copies it into the
         // sandbox, so saves would land in the copy and never reach Files.

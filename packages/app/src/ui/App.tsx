@@ -602,7 +602,7 @@ function EditorApp() {
     onOpenFromArxiv: handleOpenFromArxivCommand,
     onOpenSvgExport: handleOpenSvgExportCommand,
     onOpenPngExport: handleOpenPngExportCommand,
-    onShowCompiledPicture: handleShowCompiledPictureCommand,
+    ...(platform.latex || platform.tikzJax !== false ? { onShowCompiledPicture: handleShowCompiledPictureCommand } : {}),
     ...(platform.latex?.compileToPdf ? { onShowCompiledSlide: handleShowCompiledSlideCommand } : {}),
     onOpenSettings: handleOpenSettingsCommand,
     onCheckForUpdates: handleCheckForUpdatesCommand,
@@ -1644,6 +1644,13 @@ function EditorApp() {
           if (typeof alertFn === "function") {
             alertFn(resolved.message);
           }
+          return;
+        }
+        // Opening a file that is already open (again from Files, say) shows it.
+        const path = resolved.fileRef?.path;
+        const open = path ? Object.values(useEditorStore.getState().documents).find((doc) => doc?.fileRef?.path === path) : undefined;
+        if (open) {
+          dispatch({ type: "SWITCH_DOCUMENT", documentId: open.id });
           return;
         }
         dispatch({ type: "NEW_DOCUMENT", source: resolved.source, title: resolved.title });

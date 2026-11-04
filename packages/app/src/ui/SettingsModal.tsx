@@ -6,16 +6,18 @@ import {
   EDITOR_FONT_SIZE_OPTIONS, UI_FONT_SIZE_OPTIONS, MIN_FORMATTER_MAX_LINE_LENGTH, MAX_FORMATTER_MAX_LINE_LENGTH,
 } from "../settings/types";
 import { Modal } from "./Modal";
+import { Acknowledgements } from "../acknowledgements/Acknowledgements";
 import css from "./SettingsModal.module.css";
 import { rangeFillStyle } from "./range-fill";
 
-type CategoryId = "general" | "editor" | "canvas";
+type CategoryId = "general" | "editor" | "canvas" | "acknowledgements";
 
 // Icons for the macOS toolbar tabs and the Windows navigation list.
 const CATEGORIES: { id: CategoryId; label: string; icon: string }[] = [
   { id: "general", label: "General", icon: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8" },
   { id: "editor", label: "Code Editor", icon: "M9 4c-2 0-3 1-3 3v2c0 1.5-1 3-2.5 3C5 12 6 13.5 6 15v2c0 2 1 3 3 3M15 4c2 0 3 1 3 3v2c0 1.5 1 3 2.5 3-1.5 0-2.5 1.5-2.5 3v2c0 2-1 3-3 3" },
-  { id: "canvas", label: "Canvas", icon: "M5.5 3.5h13a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2zM3.5 9.5h17M3.5 14.5h17M9.5 3.5v17M14.5 3.5v17" }
+  { id: "canvas", label: "Canvas", icon: "M5.5 3.5h13a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2zM3.5 9.5h17M3.5 14.5h17M9.5 3.5v17M14.5 3.5v17" },
+  { id: "acknowledgements", label: "Thanks", icon: "M12 20.5s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 8a4.3 4.3 0 0 1 7.5 2.5c0 5.4-7.5 10-7.5 10z" }
 ];
 
 let rememberedCategory: CategoryId = "general";
@@ -64,7 +66,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       setFormatterMaxLineLengthInput(null);
       return;
     }
-    resetCanvasSettings();
+    if (activeCategory === "canvas") resetCanvasSettings();
   };
 
   return (
@@ -400,6 +402,13 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     Reset to Defaults
                   </button>
                 </div>
+              </div>
+            )}
+
+            {activeCategory === "acknowledgements" && (
+              <div className={css.panel}>
+                <div className={css.panelTitle}>Thanks</div>
+                <Acknowledgements />
               </div>
             )}
           </div>

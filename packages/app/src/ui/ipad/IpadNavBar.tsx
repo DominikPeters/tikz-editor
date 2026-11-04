@@ -165,12 +165,13 @@ export function IpadNavBar({
               disabled={!commandEnabled(APP_MENU_COMMAND_IDS.SAVE_DOCUMENT_AS)}
               onSelect={() => { runCommand(APP_MENU_COMMAND_IDS.SAVE_DOCUMENT_AS); }}
             />
-            <IpadMenuSeparator />
-            <IpadMenuItem
-              label="Show Compiled Picture"
-              disabled={!commandEnabled(APP_MENU_COMMAND_IDS.SHOW_COMPILED_PICTURE)}
-              onSelect={() => { runCommand(APP_MENU_COMMAND_IDS.SHOW_COMPILED_PICTURE); }}
-            />
+            {commandEnabled(APP_MENU_COMMAND_IDS.SHOW_COMPILED_PICTURE) ? <>
+              <IpadMenuSeparator />
+              <IpadMenuItem
+                label="Show Compiled Picture"
+                onSelect={() => { runCommand(APP_MENU_COMMAND_IDS.SHOW_COMPILED_PICTURE); }}
+              />
+            </> : null}
             <IpadMenuSeparator />
             <IpadMenuItem
               label="Close Document"

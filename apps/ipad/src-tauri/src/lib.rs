@@ -1,6 +1,10 @@
 #[cfg(target_os = "ios")]
 use tauri::Manager;
 
+/// The app, for code UIKit calls on its own (scene delegates) to emit events.
+#[cfg(target_os = "ios")]
+static APP: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+
 /// WKWebView's scroll view insets its content by the safe area on its own, which
 /// shrinks the layout viewport while `env(safe-area-inset-*)` still reports the
 /// insets — the CSS then pads a second time and leaves a dead strip at the bottom.
@@ -101,6 +105,94 @@ mod bookmarks {
     }
 }
 
+/// Documents opened from Files ("Open in TikZ Editor", or tapping a .tex or
+/// .tikz file) arrive as URLs through the scene delegate, possibly before the
+/// page is listening. They wait here until the page takes them
+/// (`ipad_take_opened_files`); the `ipad-open-files` event tells it to look.
+#[cfg(target_os = "ios")]
+mod opened_files {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyObject, Bool};
+    use objc2_foundation::NSString;
+    use std::sync::Mutex;
+    use tauri::Emitter;
+
+    pub const EVENT: &str = "ipad-open-files";
+
+    pub struct Opened {
+        pub url: String,
+        pub path: String,
+    }
+
+    static PENDING: Mutex<Vec<Opened>> = Mutex::new(Vec::new());
+
+    fn string(value: *mut NSString) -> Option<String> {
+        unsafe { value.as_ref() }.map(|value| value.to_string())
+    }
+
+    /// `contexts`: an NSSet of UIOpenURLContext. Main thread.
+    pub unsafe fn receive(contexts: *mut AnyObject) {
+        if contexts.is_null() {
+            return;
+        }
+        let mut received = false;
+        unsafe {
+            let all: *mut AnyObject = msg_send![contexts, allObjects];
+            let count: usize = msg_send![all, count];
+            for index in 0..count {
+                let context: *mut AnyObject = msg_send![all, objectAtIndex: index];
+                let url: *mut AnyObject = msg_send![context, URL];
+                if url.is_null() {
+                    continue;
+                }
+                let file: Bool = msg_send![url, isFileURL];
+                if !file.as_bool() {
+                    continue;
+                }
+                // Opened in place, the file stays in its provider and is
+                // reachable only through this grant (a copy in the Inbox
+                // needs none, and the call is harmless there).
+                let _: Bool = msg_send![url, startAccessingSecurityScopedResource];
+                let absolute: *mut NSString = msg_send![url, absoluteString];
+                let path: *mut NSString = msg_send![url, path];
+                if let (Some(url), Some(path)) = (string(absolute), string(path)) {
+                    if let Ok(mut pending) = PENDING.lock() {
+                        pending.push(Opened { url, path });
+                        received = true;
+                    }
+                }
+            }
+        }
+        if received {
+            if let Some(app) = crate::APP.get() {
+                let _ = app.emit(EVENT, ());
+            }
+        }
+    }
+
+    pub fn take() -> Vec<Opened> {
+        PENDING.lock().map(|mut pending| std::mem::take(&mut *pending)).unwrap_or_default()
+    }
+}
+
+/// The documents opened from Files since the page last asked, as file URLs.
+#[tauri::command]
+fn ipad_take_opened_files<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Vec<String> {
+    #[cfg(target_os = "ios")]
+    {
+        use tauri_plugin_fs::FsExt;
+        opened_files::take()
+            .into_iter()
+            .filter_map(|opened| app.fs_scope().allow_file(&opened.path).ok().map(|_| opened.url))
+            .collect()
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = app;
+        Vec::new()
+    }
+}
+
 #[derive(serde::Serialize)]
 struct ResolvedBookmark {
     url: String,
@@ -176,8 +268,22 @@ mod scenes {
                 sel!(sceneDidDisconnect:),
                 scene_did_disconnect as unsafe extern "C-unwind" fn(_, _, _),
             );
+            builder.add_method(
+                sel!(scene:openURLContexts:),
+                scene_open_url_contexts as unsafe extern "C-unwind" fn(_, _, _, _),
+            );
         }
         builder.register();
+    }
+
+    /// A document opened from Files or another app while the editor runs.
+    unsafe extern "C-unwind" fn scene_open_url_contexts(
+        _this: &AnyObject,
+        _cmd: Sel,
+        _scene: *mut AnyObject,
+        contexts: *mut AnyObject,
+    ) {
+        unsafe { crate::opened_files::receive(contexts) };
     }
 
     unsafe extern "C-unwind" fn scene_will_connect(
@@ -185,10 +291,15 @@ mod scenes {
         _cmd: Sel,
         scene: *mut AnyObject,
         _session: *mut AnyObject,
-        _options: *mut AnyObject,
+        options: *mut AnyObject,
     ) {
         if scene.is_null() {
             return;
+        }
+        // A document that launched the app arrives with the connection.
+        if !options.is_null() {
+            let contexts: *mut AnyObject = unsafe { msg_send![options, URLContexts] };
+            unsafe { crate::opened_files::receive(contexts) };
         }
         let _: *mut AnyObject = unsafe { msg_send![scene, retain] };
         let previous = EDITOR_SCENE.swap(scene, Ordering::SeqCst);
@@ -247,7 +358,6 @@ mod external_display {
     use objc2_foundation::NSString;
     use std::ffi::CStr;
     use std::sync::atomic::{AtomicPtr, Ordering};
-    use std::sync::OnceLock;
     use tauri::Emitter;
 
     /// The class `Info.ios.plist` names for the external display's scene.
@@ -256,21 +366,16 @@ mod external_display {
     /// UIScrollViewContentInsetAdjustmentNever
     const INSET_ADJUSTMENT_NEVER: isize = 2;
 
-    static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
     static SCENE: AtomicPtr<AnyObject> = AtomicPtr::new(std::ptr::null_mut());
     static WINDOW: AtomicPtr<AnyObject> = AtomicPtr::new(std::ptr::null_mut());
     static WEBVIEW: AtomicPtr<AnyObject> = AtomicPtr::new(std::ptr::null_mut());
-
-    pub fn set_app(app: tauri::AppHandle) {
-        let _ = APP.set(app);
-    }
 
     pub fn connected() -> bool {
         !SCENE.load(Ordering::SeqCst).is_null()
     }
 
     fn announce(connected: bool) {
-        if let Some(app) = APP.get() {
+        if let Some(app) = crate::APP.get() {
             let _ = app.emit(EVENT, connected);
         }
     }
@@ -503,6 +608,7 @@ pub fn run() {
             ipad_create_bookmark,
             ipad_resolve_bookmark,
             ipad_keep_awake,
+            ipad_take_opened_files,
             ipad_full_screen,
             ipad_external_display_connected,
             ipad_external_show,
@@ -510,7 +616,7 @@ pub fn run() {
         ])
         .setup(|app| {
             #[cfg(target_os = "ios")]
-            external_display::set_app(app.handle().clone());
+            let _ = APP.set(app.handle().clone());
             #[cfg(target_os = "ios")]
             if let Some(window) = app.get_webview_window("main") {
                 let_page_own_safe_area(&window);
