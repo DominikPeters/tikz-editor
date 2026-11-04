@@ -55,22 +55,58 @@ mod macos_accessibility {
         NSNotification, NSNotificationCenter, NSNotificationName, NSObjectProtocol,
         NSOperationQueue,
     };
+    use std::ffi::{c_char, c_int, c_void, CStr};
+    use std::sync::OnceLock;
 
     pub const PREFERS_NON_BLINKING_TEXT_INSERTION_INDICATOR_CHANGED_EVENT: &str =
         "desktop-prefers-non-blinking-text-insertion-indicator-changed";
 
-    #[link(name = "Accessibility", kind = "framework")]
     extern "C" {
-        pub static AXPrefersNonBlinkingTextInsertionIndicatorDidChangeNotification:
-            &'static NSNotificationName;
-        fn AXPrefersNonBlinkingTextInsertionIndicator() -> ObjcBool;
+        fn dlopen(path: *const c_char, mode: c_int) -> *mut c_void;
+        fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
+    }
+
+    // These symbols were introduced in macOS 15. Resolving them dynamically
+    // keeps older SDKs linkable and older systems able to launch the editor.
+    fn accessibility_symbol(name: &CStr) -> *mut c_void {
+        static FRAMEWORK: OnceLock<usize> = OnceLock::new();
+        let handle = *FRAMEWORK.get_or_init(|| unsafe {
+            // RTLD_LAZY | RTLD_LOCAL; retain the handle for the process lifetime.
+            dlopen(
+                c"/System/Library/Frameworks/Accessibility.framework/Accessibility".as_ptr(),
+                0x1 | 0x4,
+            ) as usize
+        });
+        if handle == 0 {
+            return std::ptr::null_mut();
+        }
+        unsafe { dlsym(handle as *mut c_void, name.as_ptr()) }
     }
 
     pub fn prefers_non_blinking_text_insertion_indicator() -> bool {
-        unsafe { AXPrefersNonBlinkingTextInsertionIndicator().as_bool() }
+        type Getter = unsafe extern "C" fn() -> ObjcBool;
+        static GETTER: OnceLock<Option<Getter>> = OnceLock::new();
+        let getter = GETTER.get_or_init(|| {
+            let symbol = accessibility_symbol(c"AXPrefersNonBlinkingTextInsertionIndicator");
+            if symbol.is_null() {
+                None
+            } else {
+                // The framework exports this symbol with Getter's C ABI.
+                Some(unsafe { std::mem::transmute::<*mut c_void, Getter>(symbol) })
+            }
+        });
+        getter.is_some_and(|get| unsafe { get().as_bool() })
     }
 
-    pub fn install_observer(app: AppHandle) -> Retained<ProtocolObject<dyn NSObjectProtocol>> {
+    pub fn install_observer(app: AppHandle) -> Option<Retained<ProtocolObject<dyn NSObjectProtocol>>> {
+        let symbol = accessibility_symbol(
+            c"AXPrefersNonBlinkingTextInsertionIndicatorDidChangeNotification",
+        );
+        if symbol.is_null() {
+            return None;
+        }
+        // dlsym returns the address of the exported NSString* variable.
+        let name = unsafe { symbol.cast::<*const NSNotificationName>().read().as_ref() }?;
         let center = NSNotificationCenter::defaultCenter();
         let queue = NSOperationQueue::mainQueue();
         let block = RcBlock::new(move |_notification: NonNull<NSNotification>| {
@@ -80,14 +116,14 @@ mod macos_accessibility {
                 value,
             );
         });
-        unsafe {
+        Some(unsafe {
             center.addObserverForName_object_queue_usingBlock(
-                Some(AXPrefersNonBlinkingTextInsertionIndicatorDidChangeNotification),
+                Some(name),
                 None,
                 Some(&queue),
                 &block,
             )
-        }
+        })
     }
 }
 
@@ -3256,8 +3292,9 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             {
-                let observer = macos_accessibility::install_observer(app.handle().clone());
-                std::mem::forget(observer);
+                if let Some(observer) = macos_accessibility::install_observer(app.handle().clone()) {
+                    std::mem::forget(observer);
+                }
             }
 
             #[cfg(target_os = "macos")]

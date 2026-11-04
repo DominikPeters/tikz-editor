@@ -198,7 +198,10 @@ async function waitForDriverReady(driverProcess) {
 }
 
 async function createSession(application) {
-  const deadline = Date.now() + 20_000;
+  // Native WebKitGTK can take longer than ten seconds to start on a cold CI
+  // runner. Timing out early leaves its first app alive during the next attempt.
+  const connectionTimeout = provider === "embedded" ? 10_000 : 120_000;
+  const deadline = Date.now() + connectionTimeout;
   let lastError = null;
   let warnedCapabilityFallback = false;
   // EdgeDriver otherwise overrides the app's profile with a fresh temporary
@@ -234,7 +237,7 @@ async function createSession(application) {
           path: "/",
           capabilities,
           connectionRetryCount: 0,
-          connectionRetryTimeout: 10_000,
+          connectionRetryTimeout: connectionTimeout,
           // WDIO 9's Undici can duplicate an explicit Content-Length on Node 26
           // ("88, 88"). Fetch computes the correct length from the JSON body.
           transformRequest: request => {

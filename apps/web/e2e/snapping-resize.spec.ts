@@ -123,7 +123,7 @@ test("an unrelated source edit cancels the rectangle resize baseline", async ({ 
   await expect(page.locator("g[class*='snapOverlay']")).toHaveCount(0);
 });
 
-test("snap feedback identifies anonymous reference objects with restrained labels", async ({ page }) => {
+test("snap feedback identifies anonymous reference objects with restrained labels", async ({ page }, testInfo) => {
   const start = await startResize(page);
   await moveResize(page, start, 0.1, 0.94);
   await expect(page.getByTestId("snap-reference").first()).toBeVisible();
@@ -136,6 +136,6 @@ test("snap feedback identifies anonymous reference objects with restrained label
   }));
   expect(colors.fill).toBe("rgb(255, 255, 255)");
   expect(colors.text).not.toBe("rgb(255, 255, 255)");
-  await page.screenshot({ path: "/private/tmp/tikz-snap-feedback-light.png" });
+  await page.screenshot({ path: testInfo.outputPath("snap-feedback-light.png") });
   await finishResize(page);
 });
