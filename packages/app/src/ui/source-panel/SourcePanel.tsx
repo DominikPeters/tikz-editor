@@ -1151,9 +1151,13 @@ export function SourcePanel() {
       selected.sourceRevision !== sourceRevision ||
       (view.hasFocus && !selected.revealSource)) return;
     ignoreNextSelectionSyncRef.current = true;
+    const { from, to } = selected.sourceSpan;
     dispatchSelectionWithStableHorizontalScroll(view, {
-      selection: { anchor: selected.sourceSpan.from, head: selected.sourceSpan.to },
-      annotations: [Transaction.addToHistory.of(false)], scrollIntoView: true
+      selection: { anchor: from, head: to },
+      annotations: [Transaction.addToHistory.of(false)],
+      // Asked to show the rule: put it in the middle. Following a selection
+      // made elsewhere scrolls only as far as it must.
+      ...(selected.revealSource ? { effects: revealInMiddle(from, to) } : { scrollIntoView: true })
     });
     if (selected.revealSource) view.focus();
   }, [activeDocumentId, activeRootId, deckBuildSelection, showSourcePanel, sourceRevision]);
@@ -1167,7 +1171,7 @@ export function SourcePanel() {
     ignoreNextSelectionSyncRef.current = true;
     dispatchSelectionWithStableHorizontalScroll(view, {
       selection: { anchor: sourceReveal.span.from, head: sourceReveal.span.to },
-      annotations: [Transaction.addToHistory.of(false)], scrollIntoView: true,
+      annotations: [Transaction.addToHistory.of(false)], effects: revealInMiddle(sourceReveal.span.from, sourceReveal.span.to),
     });
     view.focus();
   }, [sourceReveal, activeDocumentId, sourceRevision, showSourcePanel]);
@@ -1198,7 +1202,7 @@ export function SourcePanel() {
     dispatchSelectionWithStableHorizontalScroll(view, {
       selection: { anchor: item.sourceSpan.from, head: item.sourceSpan.to },
       annotations: [Transaction.addToHistory.of(false)],
-      scrollIntoView: true
+      effects: revealInMiddle(item.sourceSpan.from, item.sourceSpan.to)
     });
     view.focus();
   }, [activeDocumentId, deckObjectSelection, showSourcePanel, snapshot.deck, snapshot.source, source]);
@@ -1946,6 +1950,11 @@ function normalizeSelectionAnchorHead(anchor: number, head: number, length: numb
     anchor: clamp(Math.floor(anchor), 0, length),
     head: clamp(Math.floor(head), 0, length)
   };
+}
+
+/** Scrolls a revealed span to the middle of the editor, as Show in Source should. */
+function revealInMiddle(from: number, to: number) {
+  return EditorView.scrollIntoView(EditorSelection.range(from, to), { y: "center" });
 }
 
 function dispatchSelectionWithStableHorizontalScroll(
