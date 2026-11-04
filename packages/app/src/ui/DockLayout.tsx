@@ -3,16 +3,14 @@ import { Activity, Suspense, memo, useCallback, useEffect, useMemo, useRef, useS
 import { Layout, Model, Actions, DockLocation, TabSetNode, type IJsonModel, type TabNode } from "flexlayout-react";
 import { useEditorStore } from "../store/store";
 import type { EditorAction } from "../store/types";
-import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { getActiveEditorPlatform } from "../platform/current";
 import { loadDockLayout, saveDockLayout } from "../store/workspace-storage";
 import { SourcePanel } from "./source-panel/SourcePanel";
 import { CanvasPanel } from "./canvas-panel/CanvasPanel";
 import { RootNavigator } from "./RootNavigator";
-import { InspectorPanel } from "./inspector-panel/InspectorPanel";
+import { InspectorPanelSwitch } from "./inspector-panel/InspectorPanelSwitch";
 import { BuildsPanel } from "./builds-panel/BuildsPanel";
 import { NotesPanel } from "./notes-panel/NotesPanel";
-import { DeckInspectorPanel } from "./inspector-panel/DeckInspectorPanel";
 import { ObjectsPanel } from "./objects-panel/ObjectsPanel";
 import { StylesPanel } from "./StylesPanel";
 import { AssistantPanel } from "./AssistantPanel";
@@ -412,26 +410,9 @@ function WhileTabVisible({ node, children }: { node: TabNode; children: ReactNod
 const MemoSourcePanel = memo(SourcePanel);
 const MemoCanvasPanel = memo(CanvasPanel);
 const MemoRootNavigator = memo(RootNavigator);
-const MemoInspectorPanel = memo(InspectorPanel);
-const MemoDeckInspectorPanel = memo(DeckInspectorPanel);
 const MemoBuildsPanel = memo(BuildsPanel);
 const MemoNotesPanel = memo(NotesPanel);
 
-/**
- * Deck mode gets the deck object/frame inspector, tikz the full one.
- * Mode is a function of (document kind, active root): a beamer document
- * editing a nested tikzpicture root behaves as a tikz editor.
- */
-function InspectorPanelSwitch() {
-  const documentKind = useEditorStore((s) => s.documentKind);
-  const nestedFigureActive = useEditorStore(
-    (s) => parseDocumentRootId(s.activeRootId ?? "")?.kind === "beamer-frame-tikz" ||
-      (s.snapshot.overlayLayer != null && (s.selectedElementIds.size > 0 || (s.toolMode !== "select" && s.toolMode !== "magnify")))
-  );
-  return documentKind === "beamer" && !nestedFigureActive
-    ? <MemoDeckInspectorPanel />
-    : <MemoInspectorPanel />;
-}
 const MemoObjectsPanel = memo(ObjectsPanel);
 const MemoStylesPanel = memo(StylesPanel);
 const MemoAssistantPanel = memo(AssistantPanel);

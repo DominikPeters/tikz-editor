@@ -32,7 +32,7 @@ import { RootNavigator } from "./RootNavigator";
 import { insertSlideAfterCurrent } from "../presentation/NewSlideButton";
 import { InAppPresentationHost } from "../presentation/InAppPresentation";
 import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
-import { InspectorPanel } from "./inspector-panel/InspectorPanel";
+import { InspectorPanelSwitch } from "./inspector-panel/InspectorPanelSwitch";
 import { ObjectsPanel } from "./objects-panel/ObjectsPanel";
 import { SourcePanel } from "./source-panel/SourcePanel";
 import { StylesPanel } from "./StylesPanel";
@@ -982,7 +982,7 @@ function RightPanel({ activeTab }: { activeTab: RightSidebarTab }) {
       return <BuildsPanel />;
     case "inspector":
     default:
-      return <InspectorPanel />;
+      return <InspectorPanelSwitch />;
   }
 }
 

@@ -8,6 +8,7 @@ import type {
   DeckThemeCard,
   DeckInspectorCommand,
 } from "@tikz-editor/core/beamer/index";
+import { useEditorStore } from "../../store/store";
 import { SidePanel } from "../SidePanel";
 import { getDockLayoutHandle } from "../DockLayout";
 import { ThemeGalleryPopover } from "../theme-gallery/ThemeGalleryPopover";
@@ -30,9 +31,25 @@ export function DeckScopeHeader(props: { title: string; detail?: string | null }
 
 function revealDockPanel(id: "builds" | "notes"): void {
   const dock = getDockLayoutHandle();
-  if (!dock) return;
-  if (!dock.getModel().getNodeById(id)) dock.togglePanel(id);
-  dock.getModel().doAction(Actions.selectTab(id));
+  if (dock) {
+    if (!dock.getModel().getNodeById(id)) dock.togglePanel(id);
+    dock.getModel().doAction(Actions.selectTab(id));
+    return;
+  }
+  // The iPad's floating panel shows one tab at a time; Overlays is one of them.
+  if (id !== "builds") return;
+  const { dispatch, ...ui } = useEditorStore.getState();
+  dispatch({
+    type: "SYNC_LAYOUT_STATE",
+    sourceVisible: ui.showSourcePanel,
+    inspectorVisible: false,
+    objectsVisible: false,
+    stylesVisible: false,
+    buildsVisible: true,
+    figuresVisible: ui.showFiguresPanel,
+    assistantVisible: ui.showAssistantPanel,
+    activeRightTab: "builds",
+  });
 }
 
 export function DeckSlideInfoSection(props: {
@@ -40,6 +57,8 @@ export function DeckSlideInfoSection(props: {
   stepCount: number;
 }): JSX.Element {
   const { context, stepCount } = props;
+  // Speaker notes have a panel in the desktop dock only.
+  const notesPanel = getDockLayoutHandle() != null;
   return (
     <SidePanel.Section collapseId="deck-inspector:slide-info">
       <SidePanel.SectionHeader>Info</SidePanel.SectionHeader>
@@ -56,7 +75,7 @@ export function DeckSlideInfoSection(props: {
             label="Notes"
             value={context.noteCount === 0 ? "None" : context.noteCount === 1 ? "1 note" : `${context.noteCount} notes`}
             dim={context.noteCount === 0}
-            action={{ label: "Notes", run: () => { revealDockPanel("notes"); } }}
+            action={notesPanel ? { label: "Notes", run: () => { revealDockPanel("notes"); } } : undefined}
           />
           {context.issues.length > 0 ? (
             <ul className={css.deckIssues}>
@@ -75,7 +94,7 @@ function InfoRow(props: {
   label: string;
   value: string;
   dim?: boolean;
-  action?: { label: string; run: () => void };
+  action?: { label: string; run: () => void } | undefined;
 }): JSX.Element {
   const { label, value, dim, action } = props;
   return (
