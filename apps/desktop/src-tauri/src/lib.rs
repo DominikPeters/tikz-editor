@@ -306,6 +306,8 @@ struct LatexAvailabilityStatus {
 
 #[derive(Serialize)]
 struct OpenTextPayload {
+    #[serde(rename = "sourceLine", skip_serializing_if = "Option::is_none")]
+    source_line: Option<u32>,
     source: String,
     path: String,
     name: String,
@@ -632,6 +634,15 @@ fn has_supported_association_extension(path: &Path) -> bool {
     matches!(ext.to_ascii_lowercase().as_str(), "tikz" | "tex")
 }
 
+// One-based source line for external editor handoff; never treated as a path.
+fn associated_source_line(args: &[String]) -> Option<u32> {
+    args.iter().skip(1).find_map(|arg| {
+        let value = arg.strip_prefix("--source-line=")?;
+        if value.is_empty() || !value.bytes().all(|c| c.is_ascii_digit()) { return None; }
+        value.parse::<u32>().ok().filter(|line| *line > 0 && *line <= i32::MAX as u32)
+    })
+}
+
 fn collect_associated_file_paths(args: &[String], cwd: Option<&str>) -> Vec<PathBuf> {
     let base_dir = cwd.map(PathBuf::from);
     let mut seen: HashSet<String> = HashSet::new();
@@ -639,7 +650,7 @@ fn collect_associated_file_paths(args: &[String], cwd: Option<&str>) -> Vec<Path
 
     for arg in args.iter().skip(1) {
         let trimmed = arg.trim();
-        if trimmed.is_empty() {
+        if trimmed.is_empty() || trimmed.starts_with("--source-line=") {
             continue;
         }
 
@@ -700,6 +711,7 @@ fn read_open_text_payload_from_path(path: &Path) -> Result<OpenTextPayload, Stri
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| "document.tex".to_string());
     Ok(OpenTextPayload {
+        source_line: None,
         source,
         path: path_string,
         name,
@@ -1111,7 +1123,7 @@ fn enqueue_pending_open_results(
 
 fn process_associated_open_requests(app: &AppHandle, args: &[String], cwd: Option<&str>) {
     let candidates = collect_associated_file_paths(args, cwd);
-    process_associated_file_paths(app, candidates);
+    process_associated_file_paths_at_line(app, candidates, associated_source_line(args));
 }
 
 fn process_associated_open_urls(app: &AppHandle, urls: &[Url]) {
@@ -1120,6 +1132,10 @@ fn process_associated_open_urls(app: &AppHandle, urls: &[Url]) {
 }
 
 fn process_associated_file_paths(app: &AppHandle, candidates: Vec<PathBuf>) {
+    process_associated_file_paths_at_line(app, candidates, None);
+}
+
+fn process_associated_file_paths_at_line(app: &AppHandle, candidates: Vec<PathBuf>, source_line: Option<u32>) {
     if candidates.is_empty() {
         return;
     }
@@ -1129,7 +1145,8 @@ fn process_associated_file_paths(app: &AppHandle, candidates: Vec<PathBuf>) {
 
     for path in candidates {
         match read_open_text_payload_from_path(&path) {
-            Ok(payload) => {
+            Ok(mut payload) => {
+                payload.source_line = source_line;
                 add_recent_file(app, payload.path.clone());
                 successes.push(payload);
             }
@@ -3519,7 +3536,7 @@ mod tests {
     }
 
     use super::{
-        changed_watched_paths_for_event, collect_associated_file_paths,
+        associated_source_line, changed_watched_paths_for_event, collect_associated_file_paths,
         collect_associated_file_paths_from_urls, embed_local_svg_image_refs,
         has_supported_association_extension, map_unsaved_changes_dialog_result,
         validate_external_url,
@@ -3566,6 +3583,15 @@ mod tests {
         assert!(!has_supported_association_extension(Path::new(
             "/tmp/diagram.svg"
         )));
+    }
+
+    #[test]
+    fn external_source_line_is_bounded_and_not_a_path() {
+        for (value, expected) in [("12", Some(12)), ("0", None), ("-1", None),
+            ("1.5", None), ("9999999999999", None), ("1.tex", None)] {
+            let args = vec!["tikz-editor".into(), format!("--source-line={value}"), "paper.tex".into()];
+            assert_eq!(associated_source_line(&args), expected);
+        }
     }
 
     #[test]

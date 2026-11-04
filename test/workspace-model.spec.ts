@@ -37,6 +37,13 @@ describe("workspace model", () => {
     expect(closedOnlyTab.source).toBe(DEFAULT_SOURCE);
   });
 
+  it("opens directly onto an externally selected figure", () => {
+    const source = String.raw`\begin{tikzpicture}\node{First};\end{tikzpicture}
+\begin{tikzpicture}\node{Second};\end{tikzpicture}`;
+    const state = editorReducer(makeInitialState(), { type: "NEW_DOCUMENT", source, activeRootId: "figure:1" });
+    expect(state.documents[state.activeDocumentId]?.activeRootId).toBe("figure:1");
+  });
+
   it("creates and switches documents", () => {
     const initial = makeInitialState();
     const withSecond = editorReducer(initial, { type: "NEW_DOCUMENT", source: "\\draw (0,0)--(1,0);", title: "Doc B" });

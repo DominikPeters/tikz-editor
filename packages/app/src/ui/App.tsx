@@ -51,6 +51,8 @@ import { collectDirtyDocumentIdsForIntent, type CloseIntent } from "./close-guar
 import { OPEN_EXAMPLE_CATALOG, type TikzOpenExample } from "./examples/open-example-catalog";
 import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
 import type { AssistantEvent, UpdateInfo, UpdateInstallProgress } from "../platform/types";
+import { rootAtSourceLine } from "../external-source-location";
+import { sameDocumentFileRef, revisionForText } from "../linked-file-sync";
 import { resolveOpenedFileForDocument, dataTransferHasFilePayload } from "./svg-import";
 import type { AssistantComposerImageAttachment } from "./assistant-image-attachments";
 import { useClosedDocumentAssistantCleanup } from "./useClosedDocumentAssistantCleanup";
@@ -1644,8 +1646,26 @@ function EditorApp() {
           }
           return;
         }
-        dispatch({ type: "NEW_DOCUMENT", source: resolved.source, title: resolved.title });
-        dispatch({ type: "MARK_DOCUMENT_SAVED", fileRef: resolved.fileRef });
+        const existing = resolved.fileRef
+          ? Object.values(useEditorStore.getState().documents).find(doc => doc && sameDocumentFileRef(doc.fileRef, resolved.fileRef))
+          : undefined;
+        const rootId = rootAtSourceLine(resolved.source, opened.sourceLine);
+        if (existing) {
+          dispatch({ type: "SWITCH_DOCUMENT", documentId: existing.id });
+          if (existing.dirty && existing.source !== resolved.source) {
+            // Preserve in-progress visual edits when another app opens the same
+            // file. Its line numbers may refer to a different disk revision.
+            if (opened.sourceLine !== undefined) globalThis.alert("This file already has unsaved changes in TikZ Editor. Save or resolve those changes before selecting a figure from another editor.");
+            return;
+          }
+          if (existing.source !== resolved.source) dispatch({ type: "REPLACE_DOCUMENT_SOURCE_FROM_DISK",
+            documentId: existing.id, source: resolved.source, fileRef: resolved.fileRef,
+            diskRevision: revisionForText(resolved.source) });
+          if (rootId) dispatch({ type: "SET_ACTIVE_ROOT", documentId: existing.id, rootId });
+        } else {
+          dispatch({ type: "NEW_DOCUMENT", source: resolved.source, title: resolved.title, activeRootId: rootId });
+          dispatch({ type: "MARK_DOCUMENT_SAVED", fileRef: resolved.fileRef });
+        }
       })();
     });
     return typeof unbind === "function" ? unbind : undefined;

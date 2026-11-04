@@ -370,7 +370,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const untitledCount = Object.values(workspace.documents).filter((doc) => doc != null && doc.fileRef == null).length + 1;
       const next = createDocumentSession({
         source: action.source ?? DEFAULT_SOURCE,
-        title: action.title ?? `Untitled ${untitledCount}`
+        title: action.title ?? `Untitled ${untitledCount}`,
+        activeRootId: action.activeRootId ?? null
       });
       workspace = {
         ...workspace,

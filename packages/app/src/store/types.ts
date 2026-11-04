@@ -411,7 +411,7 @@ export type EditorAction =
   | { type: "CODE_EDITED"; source: string }
   | { type: "SET_ACTIVE_ROOT"; rootId: string | null; documentId?: string }
   | { type: "SET_DRAWING_LAYER"; rootId: string }
-  | { type: "NEW_DOCUMENT"; source?: string; title?: string }
+  | { type: "NEW_DOCUMENT"; source?: string; title?: string; activeRootId?: string | null }
   | { type: "SWITCH_DOCUMENT"; documentId: string }
   | { type: "CLOSE_DOCUMENT"; documentId?: string }
   | { type: "CLOSE_ALL_DOCUMENTS" }

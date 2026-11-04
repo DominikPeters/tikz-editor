@@ -101,3 +101,15 @@ Its `sign_windows` input defaults to false, so Windows releases can build withou
 SignPath access. Enable it to sign the installed executable, installers, and
 portable executable separately. Tauri updater signatures are generated in both
 modes. The SignPath test workflows keep signing enabled. CI artifacts are unsigned.
+
+## Open a figure from another editor
+
+Desktop launch requests accept `--source-line=N /absolute/paper.tex`, where N is
+one-based and identifies the line containing the literal picture's beginning.
+The same arguments are forwarded to an already-running instance. The file opens
+as a linked document with its original preamble and formatting, and the matching
+figure (or a picture in a Beamer frame) is selected. Ambiguous/missing locations
+do not select another root in an existing document. Reopening a linked file
+reuses its tab; unsaved edits are preserved and a conflicting disk version must
+be resolved before applying the requested selection. This interface is used by
+TeXstudio Espresso's live-preview figure action.

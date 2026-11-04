@@ -34,7 +34,7 @@ export type PlatformFileApi = {
   openBinary?: (options?: { addToRecent?: boolean; kind?: "graphics" }) => Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef | null } | null>;
   fetchArxivSource?: (idOrUrl: string) => Promise<ArxivSourcePayload>;
   bindOpenRequest?: (
-    handler: (opened: { source: string; fileRef: DocumentFileRef | null }) => void
+    handler: (opened: { source: string; fileRef: DocumentFileRef | null; sourceLine?: number }) => void
   ) => (() => void) | void;
   saveText?: (
     text: string,
