@@ -15,6 +15,7 @@ import {
   Transaction,
   StateEffect,
   StateField,
+  type Extension,
   type Range,
   type Text
 } from "@codemirror/state";
@@ -22,6 +23,7 @@ import {
   defaultKeymap,
   deleteLine,
   history,
+  historyField,
   historyKeymap,
   isolateHistory,
   indentLess,
@@ -899,6 +901,8 @@ export function SourcePanel() {
   }, [snapshot.scene, snapshot.parseResult]);
 
   // ── Initialize CodeMirror ───────────────────────────────────────────────────
+  // The document the editor's typing history belongs to.
+  const historyDocumentIdRef = useRef(activeDocumentId);
   useEffect(() => {
     if (!editorRef.current) return;
 
@@ -996,9 +1000,7 @@ export function SourcePanel() {
           ]
         });
 
-    const state = CMState.create({
-      doc: source,
-      extensions: [
+    const extensions = [
         // basicSetup equivalent, minus autocompletion() (we add our own above)
         lineNumbers(),
         highlightActiveLineGutter(),
@@ -1070,14 +1072,17 @@ export function SourcePanel() {
         sourceHoverBridge,
         externalSourceSyncPlugin,
         updateListener
-      ]
-    });
+      ];
+    const state = restoreParkedSourceState(historyDocumentIdRef.current, source, extensions) ??
+      CMState.create({ doc: source, extensions });
 
     const view = new EditorView({ state, parent: editorRef.current });
     viewRef.current = view;
+    publishSourceEditorHistory({ canUndo: undoDepth(state) > 0, canRedo: redoDepth(state) > 0 });
 
     return () => {
       dispatch({ type: "SET_ACTIVE_SOURCE_SCRUB", sourceId: null });
+      parkSourceState(historyDocumentIdRef.current, view.state);
       view.destroy();
       viewRef.current = null;
       publishSourceEditorHistory(null);
@@ -1087,7 +1092,6 @@ export function SourcePanel() {
 
   // One editor view serves every document. Typing history from the previous
   // document cannot apply to the next one, so start it afresh.
-  const historyDocumentIdRef = useRef(activeDocumentId);
   useEffect(() => {
     const view = viewRef.current;
     if (!view || historyDocumentIdRef.current === activeDocumentId) return;
@@ -1950,6 +1954,42 @@ function normalizeSelectionAnchorHead(anchor: number, head: number, length: numb
     anchor: clamp(Math.floor(anchor), 0, length),
     head: clamp(Math.floor(head), 0, length)
   };
+}
+
+/**
+ * Closing the source panel (the iPad's float especially) unmounts the editor.
+ * Its text, selection and typing history wait here, so that reopening it for
+ * the same document can still undo what was typed before.
+ */
+let parkedSourceState: { documentId: string; json: unknown } | null = null;
+
+export function parkSourceState(documentId: string, state: CMState): void {
+  parkedSourceState = { documentId, json: state.toJSON({ history: historyField }) };
+}
+
+export function restoreParkedSourceState(documentId: string, source: string, extensions: Extension[]): CMState | null {
+  const parked = parkedSourceState;
+  parkedSourceState = null;
+  if (parked?.documentId !== documentId) return null;
+  let state: CMState;
+  try {
+    state = CMState.fromJSON(parked.json, { extensions }, { history: historyField });
+  } catch {
+    return null;
+  }
+  // Edits made while the panel was closed (on the canvas, say) arrive as one
+  // change outside the history, as they would have with the panel open.
+  const before = state.doc.toString();
+  if (before === source) return state;
+  let start = 0;
+  while (start < before.length && start < source.length && before[start] === source[start]) start++;
+  let end = 0;
+  while (end < before.length - start && end < source.length - start &&
+    before[before.length - 1 - end] === source[source.length - 1 - end]) end++;
+  return state.update({
+    changes: { from: start, to: before.length - end, insert: source.slice(start, source.length - end) },
+    annotations: [Transaction.addToHistory.of(false)]
+  }).state;
 }
 
 /** Scrolls a revealed span to the middle of the editor, as Show in Source should. */
