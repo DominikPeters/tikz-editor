@@ -140,6 +140,100 @@ fn ipad_resolve_bookmark<R: tauri::Runtime>(
     }
 }
 
+/// The app runs on UIKit's scene life cycle (the `UIApplicationSceneManifest`
+/// in `Info.ios.plist`), which apps built with the iOS 27 SDK must, while tao
+/// stays in its classic mode: there it creates the editor's window before any
+/// scene exists and never offers more windows (iPadOS's "new window" would
+/// open an empty one). The scene delegate below gives that window to the
+/// app's scene once both exist.
+#[cfg(target_os = "ios")]
+mod scenes {
+    use objc2::runtime::{AnyClass, AnyObject, AnyProtocol, ClassBuilder, Sel};
+    use objc2::{msg_send, sel};
+    use std::ffi::CStr;
+    use std::sync::atomic::{AtomicPtr, Ordering};
+
+    /// The class `Info.ios.plist` names for the app's scene.
+    const DELEGATE_CLASS: &CStr = c"TikzEditorSceneDelegate";
+
+    static EDITOR_WINDOW: AtomicPtr<AnyObject> = AtomicPtr::new(std::ptr::null_mut());
+    static EDITOR_SCENE: AtomicPtr<AnyObject> = AtomicPtr::new(std::ptr::null_mut());
+
+    /// Registers the delegate class; UIKit looks it up by name when the
+    /// scene connects, after launch.
+    pub fn register_delegate() {
+        let Some(superclass) = AnyClass::get(c"UIResponder") else { return };
+        let Some(mut builder) = ClassBuilder::new(DELEGATE_CLASS, superclass) else { return };
+        if let Some(protocol) = AnyProtocol::get(c"UIWindowSceneDelegate") {
+            builder.add_protocol(protocol);
+        }
+        unsafe {
+            builder.add_method(
+                sel!(scene:willConnectToSession:options:),
+                scene_will_connect as unsafe extern "C-unwind" fn(_, _, _, _, _),
+            );
+            builder.add_method(
+                sel!(sceneDidDisconnect:),
+                scene_did_disconnect as unsafe extern "C-unwind" fn(_, _, _),
+            );
+        }
+        builder.register();
+    }
+
+    unsafe extern "C-unwind" fn scene_will_connect(
+        _this: &AnyObject,
+        _cmd: Sel,
+        scene: *mut AnyObject,
+        _session: *mut AnyObject,
+        _options: *mut AnyObject,
+    ) {
+        if scene.is_null() {
+            return;
+        }
+        let _: *mut AnyObject = unsafe { msg_send![scene, retain] };
+        let previous = EDITOR_SCENE.swap(scene, Ordering::SeqCst);
+        if !previous.is_null() {
+            let _: () = unsafe { msg_send![previous, release] };
+        }
+        unsafe { attach() };
+    }
+
+    unsafe extern "C-unwind" fn scene_did_disconnect(_this: &AnyObject, _cmd: Sel, scene: *mut AnyObject) {
+        if EDITOR_SCENE.compare_exchange(scene, std::ptr::null_mut(), Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            let _: () = unsafe { msg_send![scene, release] };
+        }
+    }
+
+    /// The UIWindow tao made for the editor (the web view's window).
+    pub unsafe fn remember_editor_window(window: *mut AnyObject) {
+        if window.is_null() {
+            return;
+        }
+        let _: *mut AnyObject = unsafe { msg_send![window, retain] };
+        let previous = EDITOR_WINDOW.swap(window, Ordering::SeqCst);
+        if !previous.is_null() {
+            let _: () = unsafe { msg_send![previous, release] };
+        }
+        unsafe { attach() };
+    }
+
+    /// Main thread only, like everything UIKit.
+    unsafe fn attach() {
+        let window = EDITOR_WINDOW.load(Ordering::SeqCst);
+        let scene = EDITOR_SCENE.load(Ordering::SeqCst);
+        if window.is_null() || scene.is_null() {
+            return;
+        }
+        unsafe {
+            let current: *mut AnyObject = msg_send![window, windowScene];
+            if current != scene {
+                let _: () = msg_send![window, setWindowScene: scene];
+            }
+            let _: () = msg_send![window, makeKeyAndVisible];
+        }
+    }
+}
+
 /// Keeps the display from dimming and locking while a presentation runs.
 #[tauri::command]
 fn ipad_keep_awake<R: tauri::Runtime>(app: tauri::AppHandle<R>, active: bool) -> Result<(), String> {
@@ -165,6 +259,8 @@ fn ipad_keep_awake<R: tauri::Runtime>(app: tauri::AppHandle<R>, active: bool) ->
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "ios")]
+    scenes::register_delegate();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -174,6 +270,13 @@ pub fn run() {
             #[cfg(target_os = "ios")]
             if let Some(window) = app.get_webview_window("main") {
                 let_page_own_safe_area(&window);
+                let _ = window.with_webview(|webview| unsafe {
+                    use objc2::msg_send;
+                    use objc2::runtime::AnyObject;
+                    let wk_webview = &*webview.inner().cast::<AnyObject>();
+                    let ui_window: *mut AnyObject = msg_send![wk_webview, window];
+                    scenes::remember_editor_window(ui_window);
+                });
             }
             #[cfg(not(target_os = "ios"))]
             let _ = app;
