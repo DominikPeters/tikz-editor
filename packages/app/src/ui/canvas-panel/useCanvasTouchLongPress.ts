@@ -1,6 +1,9 @@
 import { useEffect, type RefObject } from "react";
 
 const LONG_PRESS_MS = 500;
+// Empty canvas arms the marquee first (TOUCH_MARQUEE_HOLD_MS); its menu waits
+// long enough that a hold-then-drag reliably becomes a selection box.
+const EMPTY_CANVAS_LONG_PRESS_MS = 1000;
 const MOVE_TOLERANCE_PX = 10;
 const CLICK_SUPPRESS_WINDOW_MS = 900;
 
@@ -97,7 +100,7 @@ export function useCanvasTouchLongPress(
         target: event.target,
         startX: event.clientX,
         startY: event.clientY,
-        timer: window.setTimeout(fireLongPress, LONG_PRESS_MS)
+        timer: window.setTimeout(fireLongPress, isEmptyCanvas(event.target, viewport) ? EMPTY_CANVAS_LONG_PRESS_MS : LONG_PRESS_MS)
       };
     };
 
@@ -156,4 +159,9 @@ export function useCanvasTouchLongPress(
       clearPending();
     };
   }, [enabled, viewportRef]);
+}
+
+function isEmptyCanvas(target: EventTarget, viewport: HTMLElement): boolean {
+  return target === viewport ||
+    (target instanceof Element && target.getAttribute("data-testid") === "canvas-interaction-layer");
 }

@@ -32,6 +32,8 @@ import type {
   ValueSetter
 } from "./types";
 
+/** A finger held still on empty canvas this long arms the marquee. */
+const TOUCH_MARQUEE_HOLD_MS = 400;
 export type UseCanvasToolInteractionsArgs = {
   viewportRef: RefObject<HTMLDivElement | null>;
   toolMode: ToolMode;
@@ -628,7 +630,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
             event.preventDefault();
             return;
           }
-          // On touch: moving immediately pans the canvas; marquee only opens after a long press.
+          // On touch: moving immediately pans the canvas; marquee only opens after a hold.
           const touchWorldPointerId = event.pointerId;
           const touchClientPoint = makeClientPoint(px(event.clientX), px(event.clientY));
           const timer = setTimeout(() => {
@@ -636,7 +638,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
               pendingTouchViewportRef.current = null;
               startMarqueeSelection(touchWorldPointerId, touchClientPoint, additiveSelection);
             }
-          }, 400);
+          }, TOUCH_MARQUEE_HOLD_MS);
           pendingTouchViewportRef.current = {
             pointerId: touchWorldPointerId,
             startClient: touchClientPoint,
@@ -755,6 +757,12 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
         if (toolMode !== "magnify") {
           onInteractionPointerDown(event);
         }
+        return;
+      }
+      // A finger on the margin acts as on the drawing: a drag pans, a hold
+      // arms the marquee.
+      if (event.pointerType === "touch") {
+        onInteractionPointerDown(event);
         return;
       }
       closeTextEditingSession();
