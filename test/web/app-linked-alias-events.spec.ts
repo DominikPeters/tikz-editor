@@ -1,11 +1,12 @@
 /** @vitest-environment jsdom */
 
 import { requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { promisify } from "node:util";
 import { act } from "react";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import { mountFileApp, unmountFileApp } from "./app-file-operations-fixtures";
@@ -22,6 +23,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 const previousPlatform = getActiveEditorPlatform();
 const previousState = useEditorStore.getState();
+const compileNativeEvents = promisify(execFile);
 let temp: string;
 let nativeEvents: string;
 beforeAll(async () => {
@@ -36,8 +38,10 @@ let mut paths = args[1..].iter().map(|path| (path.clone(), linked_watch_identity
 for path in changed_linked_paths_for_event(&args[..1], &mut paths) { println!("{}", path.display()); } }`;
   const rust = join(temp, "native-events.rs");
   await writeFile(rust, program);
-  execFileSync("rustc", ["--edition=2021", rust, "-o", nativeEvents]);
-});
+  // A cold rustc can exceed Vitest's default 10s hook budget on a busy runner.
+  // Keep compilation asynchronous and bounded independently of the app test.
+  await compileNativeEvents("rustc", ["--edition=2021", rust, "-o", nativeEvents], { timeout: 45_000 });
+}, 60_000);
 afterEach(async () => {
   vi.useRealTimers();
   await unmountFileApp();
