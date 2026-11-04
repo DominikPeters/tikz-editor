@@ -49,6 +49,18 @@ describe("in-app presentation platform", () => {
     await windows.close();
   });
 
+  it("fills the screen only while the slides show on it", async () => {
+    const calls: boolean[] = [];
+    const api = createInAppPresentationApi({ fullScreen: active => { calls.push(active); return Promise.resolve(); } });
+    const windows = await api.open("f", OPTIONS, () => {});
+    expect(calls).toEqual([true]);
+    await windows.showPresenter();
+    expect(calls).toEqual([true, false]);
+    await windows.recoverOutput(null);
+    await windows.close();
+    expect(calls).toEqual([true, false, true, false]);
+  });
+
   it("keeps the display awake while anyone asks", async () => {
     const calls: boolean[] = [];
     const api = createInAppPresentationApi({ keepAwake: active => { calls.push(active); return Promise.resolve(); } });

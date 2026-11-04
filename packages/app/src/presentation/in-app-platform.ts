@@ -79,8 +79,25 @@ function sendSlidesTo(display: InAppExternalDisplay, sessionId: string): () => v
   };
 }
 
-export function createInAppPresentationApi(native: { keepAwake?: (active: boolean) => Promise<void>; externalDisplay?: InAppExternalDisplay } = {}): PlatformPresentationApi {
+export type InAppNative = {
+  keepAwake?: (active: boolean) => Promise<void>;
+  /** The slides fill the screen: hide the status bar and the like. */
+  fullScreen?: (active: boolean) => Promise<void>;
+  externalDisplay?: InAppExternalDisplay;
+};
+
+export function createInAppPresentationApi(native: InAppNative = {}): PlatformPresentationApi {
   const external = native.externalDisplay;
+  if (native.fullScreen) {
+    const fullScreen = native.fullScreen;
+    let filling = false;
+    inAppPresentationView.subscribe(() => {
+      const next = currentView?.role === "audience";
+      if (next === filling) return;
+      filling = next;
+      void fullScreen(next).catch(() => {});
+    });
+  }
   // The service and each view ask to keep the display awake; it stays awake
   // while any of them does.
   let awake = 0;

@@ -267,6 +267,7 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
     // One screen: the slides or the presenter view show over the editor.
     presentation: createInAppPresentationApi({
       keepAwake: async (active) => { await invoke("ipad_keep_awake", { active }); },
+      fullScreen: async (active) => { await invoke("ipad_full_screen", { active }); },
       externalDisplay: createIpadExternalDisplay()
     }),
     persistence: {

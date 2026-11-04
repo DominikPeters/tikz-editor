@@ -461,6 +461,33 @@ fn ipad_keep_awake<R: tauri::Runtime>(app: tauri::AppHandle<R>, active: bool) ->
     }
 }
 
+/// While the slides fill the screen: no status bar, and the home indicator
+/// fades until the screen is touched near it.
+#[tauri::command]
+fn ipad_full_screen<R: tauri::Runtime>(window: tauri::WebviewWindow<R>, active: bool) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        // with_webview runs on the main thread. The view controller is tao's,
+        // which keeps both preferences and asks UIKit to apply them.
+        window
+            .with_webview(move |webview| unsafe {
+                use objc2::runtime::{AnyObject, Bool};
+                use objc2::msg_send;
+                let controller = webview.view_controller().cast::<AnyObject>();
+                if let Some(controller) = controller.as_ref() {
+                    let _: () = msg_send![controller, setPrefersStatusBarHidden: Bool::new(active)];
+                    let _: () = msg_send![controller, setPrefersHomeIndicatorAutoHidden: Bool::new(active)];
+                }
+            })
+            .map_err(|error| error.to_string())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (window, active);
+        Ok(())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "ios")]
@@ -476,6 +503,7 @@ pub fn run() {
             ipad_create_bookmark,
             ipad_resolve_bookmark,
             ipad_keep_awake,
+            ipad_full_screen,
             ipad_external_display_connected,
             ipad_external_show,
             ipad_external_hide
