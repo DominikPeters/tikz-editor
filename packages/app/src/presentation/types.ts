@@ -58,7 +58,8 @@ export type PlatformPresentationApi = {
   identifyDisplays?(): Promise<void>;
   connect(sessionId: string, receive: (message: PresentationMessage) => void): Promise<PresentationTransport>;
   /** Browser implementations reserve popups synchronously before their first await. */
-  open(sessionId: string, options: PresentationOptions, onOutputLost: () => void): Promise<PresentationWindows>;
+  /** `onOutputRestored`: the platform brought the slides back on its own (a display plugged in again). */
+  open(sessionId: string, options: PresentationOptions, onOutputLost: () => void, onOutputRestored?: () => void): Promise<PresentationWindows>;
   keepAwake?(active: boolean): Promise<void>;
   enterFullscreen?(): Promise<void>;
   onFocus?(receive: () => void): Promise<() => void | Promise<void>>;

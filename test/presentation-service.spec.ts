@@ -13,22 +13,23 @@ function deferred() { let resolve!: () => void; const promise = new Promise<void
 describe("presentation ownership and lifecycle", () => {
   let service: PresentationService;
   const original = useEditorStore.getState();
-  let messages: PresentationMessage[], receive: (message: PresentationMessage) => void, lost: () => void;
+  let messages: PresentationMessage[], receive: (message: PresentationMessage) => void, lost: () => void, restored: (() => void) | undefined;
+  let saved: string[];
   let power: boolean[], firstClose: ReturnType<typeof deferred>;
   let slowClose = false;
   beforeEach(() => {
-    messages = []; power = []; firstClose = deferred(); slowClose = false;
+    messages = []; power = []; saved = []; firstClose = deferred(); slowClose = false;
     let opens = 0;
     const api: PlatformPresentationApi = {
       displays: () => Promise.resolve([]),
       connect: (_id, handler) => { receive = handler; return Promise.resolve({ send: message => { messages.push(message); }, close() {} }); },
-      open: (_id, _options, outputLost) => {
-        const first = opens++ === 0; lost = outputLost;
+      open: (_id, _options, outputLost, outputRestored) => {
+        const first = opens++ === 0; lost = outputLost; restored = outputRestored;
         return Promise.resolve({ close: () => first && slowClose ? firstClose.promise : Promise.resolve(), showPresenter() {}, closeView() {}, recoverOutput() {}, swapDisplays() {} });
       },
       keepAwake: active => { power.push(active); return Promise.resolve(); },
     };
-    setActiveEditorPlatform({ id: "presentation-owner-test", presentation: api, persistence: { load: () => null, save() {} } });
+    setActiveEditorPlatform({ id: "presentation-owner-test", presentation: api, persistence: { load: () => null, save: key => { saved.push(key); } } });
     useEditorStore.setState(makeInitialState());
     useEditorStore.getState().dispatch({ type: "NEW_DOCUMENT", source: SOURCE });
     service = new PresentationService();
@@ -56,6 +57,21 @@ describe("presentation ownership and lifecycle", () => {
     expect(messages.at(-1)?.type).toBe("alive");
     service.command({ type: "recover-output" });
     await vi.waitFor(() => expect(service.getState().snapshot!.outputAvailable).toBe(true));
+  });
+
+  it("takes the output back when the platform restores it, as when a display is plugged in again", async () => {
+    const doc = getActiveDocument(useEditorStore.getState());
+    await service.start(doc, OPTIONS, 0);
+    lost();
+    expect(service.getState().snapshot!.outputAvailable).toBe(false);
+    restored?.();
+    expect(service.getState().snapshot!.outputAvailable).toBe(true);
+  });
+
+  it("does not remember a one-off mode such as a rehearsal for the next presentation", async () => {
+    const doc = getActiveDocument(useEditorStore.getState());
+    await service.start(doc, { ...OPTIONS, mode: "rehearse" }, 0);
+    expect(saved).not.toContain("tikz-editor:presentation-options");
   });
 
   it("waits for an older session to release its power assertion before acquiring the next one", async () => {

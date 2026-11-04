@@ -74,7 +74,6 @@ export class PresentationService {
 
   async start(document: DocumentSession, options: PresentationOptions, frame: number): Promise<void> {
     if (this.controller) return;
-    savePresentationOptions(options);
     const api = getActiveEditorPlatform().presentation ?? createBrowserPresentationApi();
     const sessionId = crypto.randomUUID();
     const emptyRenderer = { frames: [], page: () => Promise.reject(new Error("No document")), pageCount: () => Promise.resolve(0) };
@@ -85,7 +84,9 @@ export class PresentationService {
     this.unsubscribeController = controller.subscribe(this.publish);
     this.update({ snapshot: controller.getSnapshot(), error: null });
     const connection = api.connect(sessionId, this.receive);
-    const opening = api.open(sessionId, options, () => { if (this.controller === controller) { this.outputNeedsSelection = true; controller.setOutputAvailable(false); } });
+    const opening = api.open(sessionId, options,
+      () => { if (this.controller === controller) { this.outputNeedsSelection = true; controller.setOutputAvailable(false); } },
+      () => { if (this.controller === controller) { this.outputNeedsSelection = false; controller.setOutputAvailable(true); } });
     // Attach rejection handlers immediately; either native operation can fail first.
     try {
       const [transport, windows] = await Promise.all([connection, opening]);

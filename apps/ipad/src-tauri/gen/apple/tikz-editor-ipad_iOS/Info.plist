@@ -55,6 +55,15 @@
 					<string>TikzEditorSceneDelegate</string>
 				</dict>
 			</array>
+			<key>UIWindowSceneSessionRoleExternalDisplayNonInteractive</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Slides</string>
+					<key>UISceneDelegateClassName</key>
+					<string>TikzEditorExternalDisplayDelegate</string>
+				</dict>
+			</array>
 		</dict>
 	</dict>
 </dict>
