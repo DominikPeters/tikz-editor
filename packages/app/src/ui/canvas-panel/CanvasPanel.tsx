@@ -1999,7 +1999,9 @@ export const CanvasPanel = memo(function CanvasPanel({
     activeRootId,
     viewportRootId,
     // A layer's snapshot names its picture's own root (`figure:0`).
-    snapshotActiveRootId: overlayLayer && snapshot.source === source ? activeRootId : snapshot.activeRootId,
+    // A drawing layer's and a nested picture's parser root is local (figure:0);
+    // a current snapshot of either stands for the document root being edited.
+    snapshotActiveRootId: (overlayLayer || isNestedFigureMode) && snapshot.source === source ? activeRootId : snapshot.activeRootId,
     tabOrder,
     canvasTransform,
     fitToContentModeActive,

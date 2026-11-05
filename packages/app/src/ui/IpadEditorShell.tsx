@@ -329,6 +329,8 @@ export function IpadEditorShell({
     dispatch({ type: "REQUEST_FIT_TO_CONTENT" });
   }, [dispatch]);
   const fitToContentModeActive = useEditorStore((s) => s.fitToContentModeActive);
+  // A slide is fitted as a page; a picture opened from it fits like any figure.
+  const slideView = useEditorStore((s) => s.documentKind === "beamer" && s.snapshot.deck != null);
   const zoomToActualSize = useCallback(() => {
     setZoomMenuOpen(false);
     dispatch({ type: "REQUEST_ZOOM_SCALE", scale: ACTUAL_SIZE_SCALE });
@@ -893,7 +895,7 @@ export function IpadEditorShell({
                 onSelect={zoomToActualSize}
               />
               <IpadMenuItem
-                label={deckMode ? "Fit Slide" : "Fit to Content"}
+                label={slideView ? "Fit Slide" : "Fit to Content"}
                 icon={<RiAspectRatioLine size={18} />}
                 checked={fitToContentModeActive}
                 disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.FIT_TO_CONTENT].enabled}
@@ -901,7 +903,7 @@ export function IpadEditorShell({
               />
             </IpadMenu>
           </IpadPopover>
-          {deckMode && !fitToContentModeActive ? (
+          {slideView && !fitToContentModeActive ? (
             <button
               type="button"
               className={css.fitChipButton}
