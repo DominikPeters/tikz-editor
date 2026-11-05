@@ -444,7 +444,7 @@ function EditorApp() {
         titles.length === 1
           ? `The document "${titles[0]}" has unsaved changes.`
           : `${titles.length} documents have unsaved changes.`;
-      void confirmNative(message).then((decision) => {
+      void confirmNative(message, titles).then((decision) => {
         void handleUnsavedDecision(decision, { intent, dirtyDocumentIds });
       });
       return;

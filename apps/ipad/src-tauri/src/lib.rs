@@ -593,6 +593,97 @@ fn ipad_full_screen<R: tauri::Runtime>(window: tauri::WebviewWindow<R>, active: 
     }
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AlertButton {
+    title: String,
+    /// "default", "cancel" or "destructive", as UIAlertAction.Style.
+    #[serde(default)]
+    style: Option<String>,
+    /// The bold action Return triggers.
+    #[serde(default)]
+    preferred: bool,
+}
+
+/// A UIAlertController; resolves to the index of the tapped button.
+#[tauri::command]
+async fn ipad_alert<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    title: String,
+    message: Option<String>,
+    buttons: Vec<AlertButton>,
+) -> Result<usize, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let (sender, receiver) = std::sync::mpsc::channel::<usize>();
+        window
+            .with_webview(move |webview| unsafe {
+                use objc2::runtime::{AnyObject, Bool};
+                use objc2::{class, msg_send};
+                use objc2_foundation::NSString;
+                let Some(controller) = webview.view_controller().cast::<AnyObject>().as_ref() else {
+                    return;
+                };
+                let title = NSString::from_str(&title);
+                let message = message.as_deref().map(NSString::from_str);
+                let message_ptr: *const NSString = message.as_deref().map_or(std::ptr::null(), |m| m as *const _);
+                // UIAlertControllerStyleAlert
+                let alert: *mut AnyObject = msg_send![
+                    class!(UIAlertController),
+                    alertControllerWithTitle: &*title,
+                    message: message_ptr,
+                    preferredStyle: 1isize
+                ];
+                for (index, button) in buttons.iter().enumerate() {
+                    let style: isize = match button.style.as_deref() {
+                        Some("cancel") => 1,
+                        Some("destructive") => 2,
+                        _ => 0,
+                    };
+                    let sender = sender.clone();
+                    let handler = block2::RcBlock::new(move |_action: *mut AnyObject| {
+                        let _ = sender.send(index);
+                    });
+                    let label = NSString::from_str(&button.title);
+                    let action: *mut AnyObject = msg_send![
+                        class!(UIAlertAction),
+                        actionWithTitle: &*label,
+                        style: style,
+                        handler: &*handler
+                    ];
+                    let _: () = msg_send![alert, addAction: action];
+                    if button.preferred {
+                        let _: () = msg_send![alert, setPreferredAction: action];
+                    }
+                }
+                // Present over whatever is already presented (a sheet, the file picker).
+                let mut presenter: *const AnyObject = controller;
+                loop {
+                    let next: *mut AnyObject = msg_send![presenter, presentedViewController];
+                    if next.is_null() {
+                        break;
+                    }
+                    presenter = next;
+                }
+                let _: () = msg_send![
+                    presenter,
+                    presentViewController: alert,
+                    animated: Bool::YES,
+                    completion: None::<&block2::Block<dyn Fn()>>
+                ];
+            })
+            .map_err(|error| error.to_string())?;
+        tauri::async_runtime::spawn_blocking(move || receiver.recv().map_err(|error| error.to_string()))
+            .await
+            .map_err(|error| error.to_string())?
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (window, title, message, buttons);
+        Err("Native alerts exist only on iOS".into())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "ios")]
@@ -610,6 +701,7 @@ pub fn run() {
             ipad_keep_awake,
             ipad_take_opened_files,
             ipad_full_screen,
+            ipad_alert,
             ipad_external_display_connected,
             ipad_external_show,
             ipad_external_hide

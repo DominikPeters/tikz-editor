@@ -658,6 +658,9 @@ export const CanvasPanel = memo(function CanvasPanel({
   const [equationModalTarget, setEquationModalTarget] = useState<EquationNodeTarget | null>(null);
   const [expandedDensePathSourceId, setExpandedDensePathSourceId] = useState<string | null>(null);
   const fitToContentModeActiveRef = useRef(fitToContentModeActive);
+  const stickyFitRef = useRef(false);
+  const fitScaleRef = useRef<number | null>(null);
+  const canvasFitToContentScale = useEditorStore((s) => s.canvasFitToContentScale);
   const applyActionWithFeedbackRef = useRef<((
     action: EditAction,
     historyMergeKey?: string,
@@ -3328,6 +3331,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     computeAutoScaleForImportedTikz
   });
 
+  stickyFitRef.current = snapshot.deck != null;
+  fitScaleRef.current = canvasFitToContentScale;
   useCanvasViewportEffects({
     // The view box of a slide and of its drawing layer are the same page in
     // different coordinates; switching between them must not shift the view.
@@ -3351,7 +3356,9 @@ export const CanvasPanel = memo(function CanvasPanel({
     MIN_SCALE,
     MAX_SCALE: maxZoomScale,
     setFitToContentModeActive,
-    requestFitToContent
+    requestFitToContent,
+    stickyFitRef,
+    fitScaleRef
   });
 
   // Touch long-press opens the same context menu as right-click. iOS WebKit
@@ -3566,6 +3573,8 @@ export const CanvasPanel = memo(function CanvasPanel({
   // A drag pan is a manual view change: leaving fit-to-content mode keeps the
   // refit that follows the drag from snapping the view back.
   const dispatchDragPanTransform = useCallback((transform: CanvasTransform) => {
+    // A slide at fit stays put; zoom in first to move around it.
+    if (stickyFitRef.current && fitToContentModeActiveRef.current) return;
     if (fitToContentModeActiveRef.current) setFitToContentModeActive(false);
     dispatchCanvasTransform(transform);
   }, [dispatchCanvasTransform, setFitToContentModeActive]);

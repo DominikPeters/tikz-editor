@@ -52,6 +52,8 @@ export type ThumbnailRenderSuccess = {
   figureId: string;
   figureSignature: string;
   svg: string;
+  /** Deck renders: the number of frames in the document. */
+  frameCount?: number;
 };
 
 export type ThumbnailRenderFailure = {

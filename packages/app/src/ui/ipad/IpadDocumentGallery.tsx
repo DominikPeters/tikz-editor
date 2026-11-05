@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { RiAddLine, RiCloseLine, RiDraftLine, RiFolderOpenLine } from "@remixicon/react";
+import { RiAddLine, RiArrowLeftSLine, RiCloseLine, RiDraftLine, RiFolderOpenLine } from "@remixicon/react";
+import { detectDocumentKind } from "@tikz-editor/core/document/kind";
 import { useShallow } from "zustand/react/shallow";
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../../app-menu";
 import { useEditorStore } from "../../store/store";
@@ -42,7 +43,8 @@ export function IpadDocumentGallery({
         source: doc.source,
         activeRootId: doc.activeRootId,
         snapshotSvg: doc.snapshot.svg?.svg ?? null,
-        snapshotSource: doc.snapshot.source
+        snapshotSource: doc.snapshot.source,
+        deck: detectDocumentKind(doc.source) === "beamer"
       });
     }
     return list;
@@ -57,10 +59,26 @@ export function IpadDocumentGallery({
     onClose();
   }, [activeDocumentId, dispatch, onClose]);
 
+  // The gallery stays up behind the file picker or the examples sheet and
+  // goes once the command brings in a document; a cancelled pick leaves it.
   const runCommand = useCallback((commandId: AppMenuCommandId) => {
-    onClose();
     commandRuntime.runCommand(commandId, "platform");
-  }, [commandRuntime, onClose]);
+  }, [commandRuntime]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const known = new Set(useEditorStore.getState().tabOrder);
+    return useEditorStore.subscribe((state, previous) => {
+      if (state.tabOrder === previous.tabOrder) {
+        return;
+      }
+      if (state.tabOrder.some((id) => !known.has(id))) {
+        onClose();
+      }
+    });
+  }, [onClose, open]);
 
   const commandEnabled = useCallback((commandId: AppMenuCommandId): boolean => {
     return commandRuntime.bindings[commandId].enabled === true;
@@ -86,6 +104,7 @@ export function IpadDocumentGallery({
   if (!open) {
     return null;
   }
+  const activeTitle = (activeDocumentId ? documents[activeDocumentId]?.title : undefined) ?? "Back";
 
   return (
     <div
@@ -99,7 +118,16 @@ export function IpadDocumentGallery({
       data-testid="ipad-document-gallery"
     >
       <header className={css.header}>
-        <h2 className={css.title}>Documents</h2>
+        <button
+          type="button"
+          className={css.backButton}
+          onClick={onClose}
+          aria-label={`Back to ${activeTitle}`}
+          data-testid="ipad-gallery-close"
+        >
+          <RiArrowLeftSLine size={30} aria-hidden />
+          <span className={css.backLabel}>{activeTitle}</span>
+        </button>
         <div className={css.headerActions}>
           <button
             type="button"
@@ -131,16 +159,7 @@ export function IpadDocumentGallery({
             Open Example…
           </button>
         </div>
-        <button
-          type="button"
-          className={css.closeButton}
-          onClick={onClose}
-          aria-label="Close documents"
-          title="Close documents"
-          data-testid="ipad-gallery-close"
-        >
-          <RiCloseLine size={22} aria-hidden />
-        </button>
+        <h2 className={css.title}>Documents</h2>
       </header>
 
       <div className={css.grid} role="list" aria-label="Open documents">
@@ -160,12 +179,17 @@ export function IpadDocumentGallery({
                 aria-current={active ? "true" : undefined}
                 data-testid={`ipad-gallery-document-${doc.id}`}
               >
-                <span className={css.thumb} aria-hidden>
+                <span className={[css.thumb, doc.deck ? css.thumbDeck : ""].filter(Boolean).join(" ")} aria-hidden>
                   {thumbnail ? (
-                    <img src={thumbnail} alt="" draggable={false} />
+                    <img src={thumbnail.url} alt="" draggable={false} />
                   ) : (
                     <RiDraftLine size={38} />
                   )}
+                  {thumbnail?.frameCount != null ? (
+                    <span className={css.slideCount}>
+                      {thumbnail.frameCount === 1 ? "1 slide" : `${thumbnail.frameCount} slides`}
+                    </span>
+                  ) : null}
                 </span>
                 <span className={css.cardLabel}>
                   <span className={css.cardTitle}>{doc.title}</span>

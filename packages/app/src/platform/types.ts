@@ -132,7 +132,7 @@ export type PlatformWindowApi = {
   setDocumentState?: (state: { title?: string; dirty?: boolean }) => void;
   bindCloseRequest?: (handler: () => void) => (() => void) | void;
   close?: () => Promise<void> | void;
-  confirmUnsavedChanges?: (message: string) => Promise<"save" | "discard" | "cancel">;
+  confirmUnsavedChanges?: (message: string, documentTitles: string[]) => Promise<"save" | "discard" | "cancel">;
   showMessage?: (options: { title: string; message: string; kind?: "info" | "warning" | "error" }) => Promise<void> | void;
   openExternalUrl?: (url: string) => Promise<boolean> | boolean;
   setTheme?: (theme: "light" | "dark" | null) => Promise<void>;

@@ -196,6 +196,15 @@ export function PresentationWindow({ role, sessionId, embedded = false }: { role
       previous: () => { if (!snapshotRef.current?.ended) send({ type: "previous" }); },
       end: () => { send({ type: "stop" }); },
       showControls: () => { showControlsFor(4000); },
+      slideRect: () => {
+        // The image letterboxes the page (object-fit: contain) inside its box.
+        const image = audienceRoot.current?.querySelector<HTMLImageElement>("img");
+        if (!image?.naturalWidth || !image.naturalHeight) return null;
+        const box = image.getBoundingClientRect();
+        const scale = Math.min(box.width / image.naturalWidth, box.height / image.naturalHeight);
+        const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+        return new DOMRect(box.left + (box.width - width) / 2, box.top + (box.height - height) / 2, width, height);
+      },
     };
   }, [send, showControlsFor]);
   useAudienceTouchGestures(audienceRoot, touchHandlers);

@@ -97,19 +97,17 @@ export function IpadMenuItem({
   return (
     <button
       type="button"
-      role="menuitem"
+      role={checked === undefined ? "menuitem" : "menuitemcheckbox"}
+      aria-checked={checked}
       className={css.menuItem}
       disabled={disabled}
       onClick={onSelect}
       data-testid={testId}
     >
-      {checked !== undefined ? (
-        <span className={css.menuItemCheck} aria-hidden>
-          {checked ? <RiCheckLine size={17} /> : null}
-        </span>
-      ) : null}
       <span className={css.menuItemLabel}>{label}</span>
-      {icon ? <span className={css.menuItemIcon} aria-hidden>{icon}</span> : null}
+      {checked ? (
+        <span className={css.menuItemCheck} aria-hidden><RiCheckLine size={18} /></span>
+      ) : icon ? <span className={css.menuItemIcon} aria-hidden>{icon}</span> : null}
     </button>
   );
 }

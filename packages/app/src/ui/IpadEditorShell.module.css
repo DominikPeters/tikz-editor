@@ -509,6 +509,8 @@
   left: 12px;
   bottom: 12px;
   z-index: 45;
+  display: flex;
+  gap: 8px;
   font-family: var(--ipad-chrome-font);
   transition:
     bottom 260ms cubic-bezier(0.22, 1.1, 0.36, 1),
@@ -540,8 +542,41 @@
   color: var(--text);
 }
 
+.fitChipButton {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ipad-material-thick);
+  -webkit-backdrop-filter: var(--ipad-material-blur);
+  backdrop-filter: var(--ipad-material-blur);
+  box-shadow: var(--ipad-shadow-float);
+  color: var(--control-accent);
+  animation: fitChipIn 200ms ease-out;
+}
+
+.fitChipButton:active {
+  opacity: 0.5;
+}
+
+@keyframes fitChipIn {
+  from {
+    opacity: 0;
+    scale: 0.8;
+  }
+}
+
 .zoomChipRaised {
   bottom: 80px;
+}
+
+/* Its menu opens over the tool palette. */
+.zoomChipMenuOpen {
+  z-index: 55;
 }
 
 /* Keep the right panel clear of a palette docked along the top or bottom edge

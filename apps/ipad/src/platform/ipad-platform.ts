@@ -13,6 +13,7 @@ import type {
 import { revisionForText } from "@tikz-editor/app/linked-file-sync";
 import { createInAppPresentationApi } from "@tikz-editor/app/presentation";
 import { createIpadExternalDisplay } from "./external-display";
+import { nativeAlert } from "./native-alert";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { documentDir, join } from "@tauri-apps/api/path";
@@ -352,6 +353,17 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
       setDocumentState: ({ title, dirty }) => {
         const baseTitle = title ?? "TikZ Editor";
         document.title = dirty ? `• ${baseTitle}` : baseTitle;
+      },
+      confirmUnsavedChanges: async (_message, titles) => {
+        const question = titles.length === 1
+          ? `Do you want to save the changes made to “${titles[0]}”?`
+          : `Do you want to save the changes to ${titles.length} documents?`;
+        const choice = await nativeAlert(question, "Your changes will be lost if you don’t save them.", [
+          { title: "Save", preferred: true },
+          { title: "Don’t Save", style: "destructive" },
+          { title: "Cancel", style: "cancel" }
+        ]).catch(() => 2);
+        return (["save", "discard", "cancel"] as const)[choice] ?? "cancel";
       },
       showMessage: async ({ title, message: body, kind }) => {
         await message(body, { title, ...(kind === undefined ? {} : { kind }) });

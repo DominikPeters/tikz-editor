@@ -107,10 +107,12 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise
       ? createDocumentGraphicsResolverFromPreviewBundle(previewBundle)
       : undefined;
     const { withTexGlyphOutlines } = await import("@tikz-editor/core/text/tex/fonts/glyph-outlines");
+    let frameCount: number | undefined;
     const svg = await withTexGlyphOutlines(async () => {
       if (request.deckFrameIndex != null) {
         const { prepareBeamerDocument } = await import("@tikz-editor/core/beamer/index");
         const prepared = prepareBeamerDocument(request.source, request.presentationTheme === undefined ? {} : { presentationTheme: request.presentationTheme });
+        frameCount = prepared.document.frames.length;
         const finalStep = Math.max(1, prepared.frameStepCount(request.deckFrameIndex));
         const step = request.deckStep === undefined ? finalStep : Math.min(Math.max(1, request.deckStep), finalStep);
         return (await prepared.renderFrame({
@@ -139,7 +141,8 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise
       groupId: request.groupId,
       figureId: request.figureId,
       figureSignature: request.figureSignature,
-      svg
+      svg,
+      ...(frameCount === undefined ? {} : { frameCount })
     };
   } catch (error) {
     return {
@@ -207,7 +210,9 @@ function parseWorkerResponse(value: unknown): ThumbnailWorkerResponseMessage | n
     typeof value.groupId !== "string" || typeof value.figureId !== "string" || typeof value.figureSignature !== "string") return null;
   const identity = { type: "result" as const, requestId: value.requestId, groupId: value.groupId,
     figureId: value.figureId, figureSignature: value.figureSignature };
-  if (value.ok === true && typeof value.svg === "string") return { ...identity, ok: true, svg: value.svg };
+  if (value.ok === true && typeof value.svg === "string") {
+    return { ...identity, ok: true, svg: value.svg, ...(typeof value.frameCount === "number" ? { frameCount: value.frameCount } : {}) };
+  }
   if (value.ok === false && typeof value.error === "string") return { ...identity, ok: false, error: value.error };
   return null;
 }

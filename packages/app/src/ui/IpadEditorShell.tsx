@@ -321,6 +321,12 @@ export function IpadEditorShell({
     setZoomMenuOpen(false);
     commandRuntime.runCommand(commandId, "platform");
   }, [commandRuntime]);
+  // Fit is a mode to return to, not a toggle: choosing it again keeps it.
+  const fitToContent = useCallback(() => {
+    setZoomMenuOpen(false);
+    dispatch({ type: "REQUEST_FIT_TO_CONTENT" });
+  }, [dispatch]);
+  const fitToContentModeActive = useEditorStore((s) => s.fitToContentModeActive);
   const zoomToActualSize = useCallback(() => {
     setZoomMenuOpen(false);
     dispatch({ type: "REQUEST_ZOOM_SCALE", scale: ACTUAL_SIZE_SCALE });
@@ -838,7 +844,8 @@ export function IpadEditorShell({
             (paletteDock.kind === "corner" && paletteDock.corner === "bottom-left" && !showSourcePanel) ||
             (paletteDock.kind === "edge" && paletteDock.edge === "bottom" && showSourcePanel)
               ? css.zoomChipRaised
-              : ""
+              : "",
+            zoomMenuOpen ? css.zoomChipMenuOpen : ""
           ].filter(Boolean).join(" ")}
           style={zoomChipShiftLeft != null ? { left: zoomChipShiftLeft } : undefined}
           data-select="chrome"
@@ -884,13 +891,26 @@ export function IpadEditorShell({
                 onSelect={zoomToActualSize}
               />
               <IpadMenuItem
-                label="Fit to Content"
+                label={deckMode ? "Fit Slide" : "Fit to Content"}
                 icon={<RiAspectRatioLine size={18} />}
+                checked={fitToContentModeActive}
                 disabled={!commandRuntime.bindings[APP_MENU_COMMAND_IDS.FIT_TO_CONTENT].enabled}
-                onSelect={() => { runZoomCommand(APP_MENU_COMMAND_IDS.FIT_TO_CONTENT); }}
+                onSelect={fitToContent}
               />
             </IpadMenu>
           </IpadPopover>
+          {deckMode && !fitToContentModeActive ? (
+            <button
+              type="button"
+              className={css.fitChipButton}
+              onClick={fitToContent}
+              aria-label="Fit Slide"
+              title="Fit Slide"
+              data-testid="ipad-fit-button"
+            >
+              <RiAspectRatioLine size={18} aria-hidden />
+            </button>
+          ) : null}
         </div>
       </div>
 

@@ -2,14 +2,20 @@ import { useEffect, type RefObject } from "react";
 
 // As in Keynote for iPad: a tap or a swipe to the left advances, a swipe to
 // the right goes back, and pinching ends the presentation. Holding a finger
-// still shows the controls.
+// still shows the controls. As in a book reader, a tap on the left quarter of
+// the slide goes back; a tap on the black around the slide shows the controls.
 const TAP_SLOP_PX = 10;
 const SWIPE_PX = 40;
 const HOLD_MS = 500;
 const PINCH_END_RATIO = 0.6;
 const CLICK_SUPPRESS_MS = 600;
+const BACK_ZONE = 0.25;
 
-export type AudienceTouchHandlers = { next(): void; previous(): void; end(): void; showControls(): void };
+export type AudienceTouchHandlers = {
+  next(): void; previous(): void; end(): void; showControls(): void;
+  /** Where the slide is drawn, in client coordinates; null for the whole surface. */
+  slideRect?(): DOMRect | null;
+};
 
 type Touch = { startX: number; startY: number; x: number; y: number };
 
@@ -70,7 +76,12 @@ export function useAudienceTouchGestures(target: RefObject<HTMLElement | null>, 
       if (Math.abs(dx) > SWIPE_PX && Math.abs(dx) > Math.abs(dy)) {
         if (dx < 0) handlers.current?.next(); else handlers.current?.previous();
       } else if (Math.hypot(dx, dy) <= TAP_SLOP_PX) {
-        handlers.current?.next();
+        const current = handlers.current;
+        const slide = current?.slideRect?.() ?? element.getBoundingClientRect();
+        const { x, y } = touch;
+        if (x < slide.left || x > slide.right || y < slide.top || y > slide.bottom) current?.showControls();
+        else if (x < slide.left + slide.width * BACK_ZONE) current?.previous();
+        else current?.next();
       }
     };
     const cancel = (event: PointerEvent) => {

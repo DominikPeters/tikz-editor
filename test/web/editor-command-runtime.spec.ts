@@ -234,6 +234,15 @@ describe("editor-command-runtime", () => {
     expect(dispatch).toHaveBeenLastCalledWith({ type: "SET_FIT_TO_CONTENT_MODE", active: false });
   });
 
+  it("zooms and fits a deck, whose slide renders without a figure svg", () => {
+    const dispatch = vi.fn<(action: EditorAction) => void>();
+    const snapshot = { ...makeSnapshot(renderTikzToSvg(SOURCE)), svg: null, deck: {} } as unknown as ReturnType<typeof makeSnapshot>;
+    const runtime = createEditorCommandRuntime(makeInput({ dispatch, snapshot, selectedElementIds: new Set() }));
+    for (const id of [APP_MENU_COMMAND_IDS.ZOOM_IN, APP_MENU_COMMAND_IDS.ZOOM_OUT, APP_MENU_COMMAND_IDS.FIT_TO_CONTENT]) {
+      expect(runtime.bindings[id].enabled).toBe(true);
+    }
+  });
+
   it("routes rotate-left through grouped transform edits", () => {
     const dispatch = vi.fn<(action: EditorAction) => void>();
     const source = String.raw`\begin{tikzpicture}

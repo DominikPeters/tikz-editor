@@ -580,6 +580,17 @@
   background: color-mix(in srgb, black 34%, transparent);
 }
 
+/* The dimming fades in with the sheet rather than landing at once. */
+:global(html[data-editor-platform="ipad"]) .sheet[open]::backdrop {
+  animation: ipadBackdropIn 280ms ease-out;
+}
+
+@keyframes ipadBackdropIn {
+  from {
+    opacity: 0;
+  }
+}
+
 :global(html[data-editor-platform="ipad"]) .sheet[open] {
   animation: ipadSheetIn 280ms cubic-bezier(0.22, 1.1, 0.36, 1);
 }

@@ -29,6 +29,13 @@ export type UseCanvasViewportEffectsArgs = {
   MAX_SCALE: number;
   setFitToContentModeActive: ValueSetter<boolean>;
   requestFitToContent: () => void;
+  /**
+   * A slide is a page, not an infinite canvas: at fit, two fingers only zoom
+   * (a pan does nothing), and pinching back to fit size returns to fit mode.
+   */
+  stickyFitRef?: MutableRefObject<boolean>;
+  /** The scale fit to content would use, for the snap back. */
+  fitScaleRef?: MutableRefObject<number | null>;
 };
 
 export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
@@ -51,7 +58,9 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     MIN_SCALE,
     MAX_SCALE,
     setFitToContentModeActive,
-    requestFitToContent
+    requestFitToContent,
+    stickyFitRef,
+    fitScaleRef
   } = args;
   const dispatchTransformRef = useRef(dispatchCanvasTransform);
   const previousViewBoxContextRef = useRef(args.canvasContextKey);
@@ -165,8 +174,22 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
           baseScale: number;
           baseSvgPoint: SvgPoint;
           baseDistance: number;
+          /** Started at fit on a slide: still holding fit until the fingers spread or close. */
+          holdingFit: boolean;
         }
       | null = null;
+    // A slide pinch that left fit returns to it when it ends at or below fit size.
+    let pinchLeftStickyFit = false;
+    const finishPinchGesture = () => {
+      if (!pinchLeftStickyFit) {
+        return;
+      }
+      pinchLeftStickyFit = false;
+      const fitScale = fitScaleRef?.current;
+      if (stickyFitRef?.current && fitScale != null && canvasTransformRef.current.scale <= fitScale * 1.06) {
+        requestFitToContent();
+      }
+    };
 
     const clearPendingTouchViewport = () => {
       const pending = pendingTouchViewportRef.current;
@@ -201,7 +224,11 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       stopPinchEvent(event);
     };
 
-    const beginPinchGestureFromPoints = (first: ClientPoint, second: ClientPoint) => {
+    const beginPinchGestureFromPoints = (
+      first: ClientPoint,
+      second: ClientPoint,
+      holdFit = (stickyFitRef?.current ?? false) && fitToContentModeActiveRef.current
+    ) => {
       const currentSvg = svgResultRef.current;
       if (!currentSvg) {
         pinchGesture = null;
@@ -217,7 +244,8 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       pinchGesture = {
         baseScale: currentTransform.scale,
         baseSvgPoint: viewportToSvgPoint(center, currentTransform, currentSvg.viewBox),
-        baseDistance: distance
+        baseDistance: distance,
+        holdingFit: holdFit
       };
     };
 
@@ -238,6 +266,18 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       const distance = touchDistance(first, second);
       if (!Number.isFinite(distance) || distance <= 0) {
         return;
+      }
+      if (pinchGesture.holdingFit) {
+        if (Math.abs(distance / pinchGesture.baseDistance - 1) < 0.08) {
+          return;
+        }
+        // Zoom from here on, anchored where the fingers are now.
+        pinchLeftStickyFit = true;
+        beginPinchGestureFromPoints(first, second, false);
+        return;
+      }
+      if (stickyFitRef?.current) {
+        pinchLeftStickyFit = true;
       }
       const center = midpointLocal(first, second, viewport);
       const nextScale = clamp(
@@ -307,6 +347,9 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
         return;
       }
 
+      if (stickyFitRef?.current && fitToContentModeActiveRef.current) {
+        return;
+      }
       dispatchTransformRef.current({
         translateX: currentTransform.translateX - event.deltaX,
         translateY: currentTransform.translateY - event.deltaY,
@@ -397,6 +440,9 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
         suppressTapUntilTouchesEnd = false;
       }
       pinchGesture = null;
+      if (activeTouchPointers.size === 0) {
+        finishPinchGesture();
+      }
       if (wasPinching) {
         stopPinchEvent(event);
       }
@@ -473,6 +519,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
           touchEventPinchActive = false;
           touchEventPinchIds = null;
           suppressTapUntilTouchesEnd = false;
+          finishPinchGesture();
         }
         stopPinchEvent(event);
         return true;
@@ -553,6 +600,8 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     fitToContentModeActiveRef,
     pendingTouchViewportRef,
     requestFitToContent,
+    stickyFitRef,
+    fitScaleRef,
     setDragState,
     setFitToContentModeActive,
     svgResultRef,

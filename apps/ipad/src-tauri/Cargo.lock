@@ -3691,6 +3691,7 @@ name = "tikz-editor-ipad"
 version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
+ "block2",
  "objc2",
  "objc2-foundation",
  "serde",

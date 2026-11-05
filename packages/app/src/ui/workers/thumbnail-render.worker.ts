@@ -56,8 +56,9 @@ async function pumpQueue(): Promise<void> {
   busy = true;
   try {
     const graphicsResolver = resolveGraphicsResolver(next.graphicsPreviewBundleKey);
+    let frameCount: number | undefined;
     const svg = await withTexGlyphOutlines(async () => next.deckFrameIndex != null
-      ? await renderDeckFrameThumbnail(next.source, next.deckFrameIndex, graphicsResolver, next.presentationTheme, next.deckStep)
+      ? await renderDeckFrameThumbnail(next.source, next.deckFrameIndex, graphicsResolver, next.presentationTheme, next.deckStep, (count) => { frameCount = count; })
       : (await renderTikzToSvgAsync(next.source, {
           parse: {
             recover: next.parseOptions.recover ?? true,
@@ -81,7 +82,8 @@ async function pumpQueue(): Promise<void> {
       groupId: next.groupId,
       figureId: next.figureId,
       figureSignature: next.figureSignature,
-      svg
+      svg,
+      ...(frameCount === undefined ? {} : { frameCount })
     };
     self.postMessage(response);
   } catch (error) {
@@ -170,9 +172,11 @@ async function renderDeckFrameThumbnail(
   frameIndex: number,
   graphicsResolver: DocumentGraphicsResolver | undefined,
   presentationTheme: string | undefined,
-  requestedStep: number | undefined
+  requestedStep: number | undefined,
+  reportFrameCount: (count: number) => void
 ): Promise<string> {
   const prepared = preparedDeck(source, presentationTheme);
+  reportFrameCount(prepared.document.frames.length);
   // Sorter thumbnails show the frame's final overlay step (handout view).
   const finalStep = Math.max(1, prepared.frameStepCount(frameIndex));
   const step = requestedStep === undefined ? finalStep : Math.min(Math.max(1, requestedStep), finalStep);

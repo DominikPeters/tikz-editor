@@ -926,7 +926,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
       run: () => onConvertNodePositionToAbsolute?.()
     },
     [APP_MENU_COMMAND_IDS.FIT_TO_CONTENT]: {
-      enabled: snapshot.svg != null,
+      enabled: snapshot.svg != null || snapshot.deck != null,
       checked: fitToContentModeActive,
       run: () => {
         if (fitToContentModeActive) {
@@ -937,11 +937,11 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
       }
     },
     [APP_MENU_COMMAND_IDS.ZOOM_IN]: {
-      enabled: snapshot.svg != null,
+      enabled: snapshot.svg != null || snapshot.deck != null,
       run: () => { dispatch({ type: "REQUEST_ZOOM", direction: "in" }); }
     },
     [APP_MENU_COMMAND_IDS.ZOOM_OUT]: {
-      enabled: snapshot.svg != null,
+      enabled: snapshot.svg != null || snapshot.deck != null,
       run: () => { dispatch({ type: "REQUEST_ZOOM", direction: "out" }); }
     },
     [APP_MENU_COMMAND_IDS.TOGGLE_GRID]: {
