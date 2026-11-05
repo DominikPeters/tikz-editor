@@ -3,6 +3,7 @@ import { createBeamerTexMathFontProfile, createBeamerTexTextFontProfile } from "
 import { expandMacroBindingsMapped } from "@tikz-editor/core/macros";
 import { createIdentityMappedText } from "@tikz-editor/core/text/source-map";
 import { computerModernTexMetricProvider, createTexDerivedInlineMathBoxProvider, layoutSimpleTexParagraph, renderTexParagraphSvgBody, texLength } from "@tikz-editor/core/text/tex";
+import { withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
 import { BoundedLru } from "../bounded-lru";
 import { prepareDocumentGraphicsContext, type PreparedDocumentGraphicsContext } from "../image-asset-cache";
 import type { DocumentFileRef } from "../store/types";
@@ -87,13 +88,18 @@ export class BeamerPresentationRenderer implements PresentationRenderer {
     }
     const promise = this.renderQueue.then(async () => {
       signal.throwIfAborted();
-      const result = await this.prepared.renderFrame({ frameIndex: cursor.frame, step: cursor.step, continuation: cursor.continuation,
-        graphicsResolver: this.graphics.resolver, cooperative: { signal, budgetMs: 4, yieldControl: yieldToBrowser } });
+      // Glyph outlines load on first use; a page painted before they arrive
+      // would show those glyphs blank, and stay cached that way.
+      const { result, notesSvg } = await withTexGlyphOutlines(async () => {
+        const rendered = await this.prepared.renderFrame({ frameIndex: cursor.frame, step: cursor.step, continuation: cursor.continuation,
+          graphicsResolver: this.graphics.resolver, cooperative: { signal, budgetMs: 4, yieldControl: yieldToBrowser } });
+        return { result: rendered, notesSvg: renderNotes(this.prepared, cursor, this.graphics) };
+      });
       signal.throwIfAborted();
       const frame = this.frames[cursor.frame];
       if (!frame) throw new RangeError(`Missing presentation frame ${cursor.frame}`);
       this.counts.set(cursor.frame, (result.layout.continuation?.count ?? 1) + frame.steps - 1);
-      const page: PresentationPage = { cursor, svg: result.svg.svg, notesSvg: renderNotes(this.prepared, cursor, this.graphics) };
+      const page: PresentationPage = { cursor, svg: result.svg.svg, notesSvg };
       await decodeSvg(page.svg, signal);
       signal.throwIfAborted();
       this.cache.set(key, page, (page.svg.length + (page.notesSvg?.length ?? 0)) * 2);
