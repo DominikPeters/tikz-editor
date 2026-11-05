@@ -8,6 +8,137 @@ export type TikzOpenExample = {
 
 export const OPEN_EXAMPLE_CATALOG: readonly TikzOpenExample[] = [
   {
+    id: "beamer-lecture",
+    title: "Lecture Slides",
+    description: "A Beamer deck with a theorem, a graph and step-by-step reveals.",
+    featureLabels: ["beamer", "overlays", "columns"],
+    source: String.raw`\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+\usepackage{amsmath,amssymb,tikz}
+\usetikzlibrary{arrows.meta}
+\title{Shortest Paths}
+\subtitle{A lecture in four slides}
+\author{Your Name}
+\institute{Your University}
+\date{Spring Term}
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{The problem}
+  \begin{itemize}
+    \item<1-> A directed graph with nonnegative edge weights
+    \item<2-> A source vertex $s$
+    \item<3-> Wanted: the distance $d(v)$ from $s$ to every vertex $v$
+  \end{itemize}
+  \begin{block}<4->{Observation}
+    The closest unsettled vertex already has its final distance.
+  \end{block}
+\end{frame}
+
+\begin{frame}{An example}
+  \begin{columns}
+    \begin{column}{0.5\textwidth}
+      \begin{tikzpicture}[>=Stealth, vertex/.style={circle, draw, fill=blue!10, minimum size=8mm}]
+        \node[vertex] (s) at (0,0) {$s$};
+        \node[vertex] (a) at (2,1.2) {$a$};
+        \node[vertex] (b) at (2,-1.2) {$b$};
+        \node[vertex] (t) at (4,0) {$t$};
+        \draw[->] (s) -- node[above left] {2} (a);
+        \draw[->] (s) -- node[below left] {5} (b);
+        \draw[->] (a) -- node[right] {1} (b);
+        \draw[->] (a) -- node[above right] {6} (t);
+        \draw[->] (b) -- node[below right] {2} (t);
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{enumerate}
+        \item Settle $s$: $d(a)=2$, $d(b)=5$
+        \item Settle $a$: $d(b)=3$, $d(t)=8$
+        \item Settle $b$: $d(t)=5$
+      \end{enumerate}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Why it works}
+  \begin{theorem}
+    When a vertex $u$ is settled, $d(u)$ is the length of a shortest path from $s$ to $u$.
+  \end{theorem}
+  \begin{proof}
+    Any other path to $u$ leaves the settled set through a vertex at least as far as $u$,
+    and the remaining edges have nonnegative weight.
+  \end{proof}
+\end{frame}
+
+\end{document}`
+  },
+  {
+    id: "beamer-talk",
+    title: "Talk with Columns",
+    description: "A short Beamer talk with blocks side by side.",
+    featureLabels: ["beamer", "blocks", "columns"],
+    source: String.raw`\documentclass{beamer}
+\usetheme{Boadilla}
+\usecolortheme{orchid}
+\usepackage{tikz}
+\title{Building a Diagram Step by Step}
+\author{Your Name}
+\date{}
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{A cycle, one step at a time}
+  \begin{columns}
+    \begin{column}{0.45\textwidth}
+      \begin{tikzpicture}[thick, every node/.style={circle, draw, fill=orange!20, minimum size=9mm}]
+        \node (1) at (90:1.6) {1};
+        \node (2) at (210:1.6) {2};
+        \node (3) at (330:1.6) {3};
+        \draw (1) -- (2) -- (3) -- (1);
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.55\textwidth}
+      \begin{itemize}[<+->]
+        \item Start at vertex 1
+        \item Walk to 2, then to 3
+        \item Return to 1: a cycle of length three
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Two columns}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Before}
+        \begin{itemize}
+          \item Sketch on paper
+          \item Retype coordinates
+          \item Recompile, repeat
+        \end{itemize}
+      \end{block}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{exampleblock}{After}
+        \begin{itemize}
+          \item Drag on the slide
+          \item The source updates
+          \item No recompiling
+        \end{itemize}
+      \end{exampleblock}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\end{document}`
+  },
+  {
     id: "axes",
     title: "Coordinate Axes",
     description: "Axes with two plotted functions.",

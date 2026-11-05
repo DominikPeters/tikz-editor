@@ -25,6 +25,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { SvgRenderModel } from "@tikz-editor/core/svg";
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../app-menu";
 import { useEditorStore } from "../store/store";
+import { getActiveEditorPlatform } from "../platform/current";
 import type { ToolMode } from "../store/types";
 import { CanvasPanel } from "./canvas-panel/CanvasPanel";
 import type { EditorCommandRuntime } from "./editor-command-runtime";
@@ -168,7 +169,8 @@ export function IpadEditorShell({
   const [sourceColumnWidth, setSourceColumnWidth] = useState(readStoredSourceWidth);
   const [sourceResizing, setSourceResizing] = useState(false);
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
-  const [documentGalleryOpen, setDocumentGalleryOpen] = useState(false);
+  // A fresh install starts on the documents screen, with the examples one tap away.
+  const [documentGalleryOpen, setDocumentGalleryOpen] = useState(isFirstLaunch);
   const [paletteDock, setPaletteDock] = useState<PaletteDock>({ kind: "edge", edge: "bottom" });
   const [rightPanelInset, setRightPanelInset] = useState(0);
   // Which history the nav bar's Undo and Redo act on: the source editor's
@@ -984,6 +986,23 @@ function SourceAccessoryBar() {
       ))}
     </div>
   );
+}
+
+const LAUNCHED_KEY = "tikz-editor:ipad-launched";
+
+let firstLaunch: boolean | null = null;
+
+/** Asked once per page load (StrictMode runs state initializers twice). */
+function isFirstLaunch(): boolean {
+  if (firstLaunch != null) return firstLaunch;
+  try {
+    const persistence = getActiveEditorPlatform().persistence;
+    firstLaunch = persistence.load(LAUNCHED_KEY) == null;
+    if (firstLaunch) persistence.save(LAUNCHED_KEY, "1");
+  } catch {
+    firstLaunch = false;
+  }
+  return firstLaunch;
 }
 
 // Subscribes on its own so pinch and pan frames re-render only the label.

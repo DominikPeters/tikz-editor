@@ -126,3 +126,30 @@
   white-space: nowrap;
 }
 
+
+/* A narrow window (Stage Manager, Split View): the buttons keep their size
+   and order, and the title gives way. */
+@media (max-width: 620px) {
+  .navBar {
+    gap: 2px;
+    padding: 0 4px;
+  }
+
+  .cluster {
+    flex: 0 0 auto;
+  }
+
+  .titleCluster {
+    flex: 1 1 0;
+  }
+
+  .iconButton {
+    width: 38px;
+    flex-shrink: 0;
+  }
+
+  .titleButton {
+    max-width: 100%;
+    padding: 0 6px;
+  }
+}

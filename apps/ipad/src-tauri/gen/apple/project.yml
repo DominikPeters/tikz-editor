@@ -51,7 +51,7 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 0.2.0
+        CFBundleShortVersionString: 1.1.0
         CFBundleVersion: "1"
     entitlements:
       path: tikz-editor-ipad_iOS/tikz-editor-ipad_iOS.entitlements

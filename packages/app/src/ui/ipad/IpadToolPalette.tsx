@@ -172,6 +172,18 @@ function restRect(dock: PaletteDock, parentWidth: number, parentHeight: number, 
   return { x, y, width, height };
 }
 
+function fittingDock(dock: PaletteDock, parentWidth: number, parentHeight: number, safeAreaBottom: number): PaletteDock {
+  if (dock.kind !== "edge") {
+    return dock;
+  }
+  const horizontal = dock.edge === "top" || dock.edge === "bottom";
+  const room = horizontal ? parentWidth - (EDGE_MARGIN * 2) : parentHeight - (EDGE_MARGIN * 2) - safeAreaBottom;
+  if (room >= EXPANDED_MAIN) {
+    return dock;
+  }
+  return horizontal ? { kind: "edge", edge: "right" } : { kind: "edge", edge: "bottom" };
+}
+
 /** Space the docked palette covers along the workspace's right and bottom edges. */
 export function paletteFitInsets(dock: PaletteDock): { right: number; bottom: number } {
   if (dock.kind !== "edge") {
@@ -229,7 +241,7 @@ export function IpadToolPalette({
 }) {
   const paletteRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
-  const [dock, setDock] = useState<PaletteDock>(readStoredDock);
+  const [chosenDock, setDock] = useState<PaletteDock>(readStoredDock);
   const [parentSize, setParentSize] = useState<{ width: number; height: number } | null>(null);
   const [safeAreaBottom, setSafeAreaBottom] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -256,13 +268,6 @@ export function IpadToolPalette({
   const applyDock = useCallback((nextDock: PaletteDock) => {
     setDock(nextDock);
     storeDock(nextDock);
-    onDockChange?.(nextDock);
-  }, [onDockChange]);
-
-  useEffect(() => {
-    onDockChange?.(dock);
-    // Announce the restored dock once on mount; applyDock covers later changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useLayoutEffect(() => {
@@ -304,6 +309,16 @@ export function IpadToolPalette({
     window.addEventListener("pointerdown", onPointerDown);
     return () => { window.removeEventListener("pointerdown", onPointerDown); };
   }, [openPopup]);
+
+  // The dock as shown: in a window too narrow (or short) for the bar along the
+  // chosen edge, it stands along a side (or the bottom) until there is room.
+  const dock = parentSize ? fittingDock(chosenDock, parentSize.width, parentSize.height, safeAreaBottom) : chosenDock;
+  const dockKey = dock.kind === "edge" ? dock.edge : dock.corner;
+  useEffect(() => {
+    onDockChange?.(dock);
+    // dockKey names the dock; the object itself is rebuilt every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dockKey, onDockChange]);
 
   const textEntryFocused = useTextEntryFocused();
   const isMini = dock.kind === "corner";

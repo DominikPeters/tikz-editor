@@ -1,6 +1,7 @@
 import type { TikzOpenExample } from "./open-example-catalog";
 import type { renderTikzToSvgAsync as renderTikzToSvgAsyncType } from "@tikz-editor/core/render/index";
 import { withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
+import { detectDocumentKind } from "@tikz-editor/core/document/kind";
 
 export type OpenExamplePreview = {
   exampleId: string;
@@ -17,6 +18,9 @@ export async function renderOpenExamplePreviewWithRenderer(
   renderTikzToSvgAsync: RenderTikzToSvgAsync
 ): Promise<OpenExamplePreview> {
   try {
+    if (detectDocumentKind(example.source) === "beamer") {
+      return await renderDeckPreview(example);
+    }
     const result = await withTexGlyphOutlines(() => renderTikzToSvgAsync(example.source, {
       parse: { recover: true },
       svg: { padding: 18 }
@@ -54,6 +58,22 @@ export async function renderOpenExamplePreviewWithRenderer(
       errorMessage: error instanceof Error ? error.message : String(error)
     };
   }
+}
+
+/** A deck previews as its first slide, fully built. */
+async function renderDeckPreview(example: TikzOpenExample): Promise<OpenExamplePreview> {
+  const { prepareBeamerDocument } = await import("@tikz-editor/core/beamer/index");
+  const prepared = prepareBeamerDocument(example.source);
+  const step = Math.max(1, prepared.frameStepCount(0));
+  const result = await withTexGlyphOutlines(() => prepared.renderFrame({ frameIndex: 0, step }));
+  const errors = result.diagnostics.filter((diagnostic) => diagnostic.severity === "error");
+  return {
+    exampleId: example.id,
+    svg: result.svg.svg.replace(/ data-paragraph-id="[^"]*"/gu, ""),
+    warningCount: result.diagnostics.filter((diagnostic) => diagnostic.severity === "warning").length,
+    errorCount: errors.length,
+    errorMessage: errors[0]?.message ?? null
+  };
 }
 
 export async function renderOpenExamplePreviews(
