@@ -265,6 +265,8 @@ export function App() {
       <main className="landingPage">
         <Hero />
         <EditorStory />
+        <Support />
+        <PrivacyPolicy />
         <CodeSigningPolicy />
       </main>
       <TikzDevFooter />
@@ -299,6 +301,10 @@ function TikzDevFooter() {
         <a href="https://github.com/DominikPeters/tikz-editor">GitHub</a>
         <span aria-hidden="true">·</span>
         <a href="https://github.com/DominikPeters/tikz-editor/issues">Feedback and issues</a>
+        <span aria-hidden="true">·</span>
+        <a href="#support">Support</a>
+        <span aria-hidden="true">·</span>
+        <a href="#privacy">Privacy</a>
         <span aria-hidden="true">·</span>
         <a href="#code-signing-policy">Code signing</a>
         <span aria-hidden="true">·</span>
@@ -741,8 +747,8 @@ function HowItWorksSection() {
 
 function CodeSigningPolicy() {
   return (
-    <section className="landingCodeSigningPolicy" id="code-signing-policy" aria-labelledby="code-signing-policy-title">
-      <div className="landingCodeSigningPolicyInner">
+    <section className="landingNotice" id="code-signing-policy" aria-labelledby="code-signing-policy-title">
+      <div className="landingNoticeInner">
         <h2 id="code-signing-policy-title">Code signing policy</h2>
         <p>
           Code signing for Windows releases is currently disabled. When enabled, free code signing is
@@ -753,16 +759,53 @@ function CodeSigningPolicy() {
         <p>
           Official macOS releases: Code signed by Dominik Peters.
         </p>
+      </div>
+    </section>
+  );
+}
+
+function PrivacyPolicy() {
+  return (
+    <section className="landingNotice" id="privacy" aria-labelledby="privacy-title">
+      <div className="landingNoticeInner">
+        <h2 id="privacy-title">Privacy policy</h2>
         <p>
-          <strong>Privacy policy:</strong> Unless deactivated during install or from the settings menu, on startup, 
+          TikZ Editor does not collect personal data. It has no accounts, analytics, advertising, or tracking,
+          and your documents stay on your device or wherever you choose to save them.
+        </p>
+        <p>
+          <strong>Desktop app:</strong> Unless deactivated during install or from the settings menu, on startup,
           the desktop app requests information about the most recent available version from{" "}
           <code>tikz.dev</code>. The server receives standard connection information such as the IP address,
           but the request contains no documents, TikZ source, usage analytics, or persistent identifiers.
         </p>
         <p>
-          Other network requests are made only when the user invokes a networked feature, such as opening a
+          <strong>iPad app:</strong> The iPad app makes no network requests of its own. Documents are kept in
+          the app&apos;s storage on the iPad or in the Files locations you choose; files in iCloud Drive or
+          another cloud service are synced by that service under its own terms.
+        </p>
+        <p>
+          Other network requests are made only when you invoke a networked feature, such as opening a
           paper from arXiv, using Codex assistance, previewing with TikZJax, following an external link, or
           downloading an update.
+        </p>
+        <p>
+          Questions about privacy: <a href="mailto:mail@dominik-peters.de">mail@dominik-peters.de</a>.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function Support() {
+  return (
+    <section className="landingNotice" id="support" aria-labelledby="support-title">
+      <div className="landingNoticeInner">
+        <h2 id="support-title">Support</h2>
+        <p>
+          To report a problem or suggest a feature, please{" "}
+          <a href="https://github.com/DominikPeters/tikz-editor/issues">open an issue on GitHub</a> or email{" "}
+          <a href="mailto:mail@dominik-peters.de">mail@dominik-peters.de</a>.
         </p>
       </div>
     </section>

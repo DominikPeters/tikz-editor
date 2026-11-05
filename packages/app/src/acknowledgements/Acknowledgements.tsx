@@ -4,7 +4,7 @@ import { isRecord } from "../validation";
 import dataUrl from "./third-party.generated.json?url";
 import css from "./Acknowledgements.module.css";
 
-export const PRIVACY_POLICY_URL = "https://tikz.dev/editor/";
+export const PRIVACY_POLICY_URL = "https://tikz.dev/editor/#privacy";
 
 type Entry = { name: string; version?: string; license: string; text: number[] };
 type Data = { fonts: Entry[]; npm: Entry[]; crates: Entry[]; texts: string[] };

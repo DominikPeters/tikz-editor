@@ -3,51 +3,75 @@
 import type { ReleaseDownloadMetadata } from "../release-downloads";
 
 export const releaseDownloadMetadata: ReleaseDownloadMetadata = {
-  "version": "1.0.0",
-  "tagName": "app-v1.0.0",
-  "name": "TikZ Editor v1.0.0",
-  "publishedAt": "2026-10-23T10:15:09Z",
-  "url": "https://github.com/DominikPeters/tikz-editor/releases/tag/app-v1.0.0",
+  "version": "1.1.0",
+  "tagName": "app-v1.1.0",
+  "name": "TikZ Editor v1.1.0",
+  "publishedAt": "2026-11-04T21:41:52Z",
+  "url": "https://github.com/DominikPeters/tikz-editor/releases/tag/app-v1.1.0",
   "downloads": [
     {
       "platform": "mac",
       "arch": "arm64",
       "format": "dmg",
-      "name": "TikZ.Editor_1.0.0_aarch64.dmg",
-      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.0.0/TikZ.Editor_1.0.0_aarch64.dmg",
-      "sizeBytes": 17435179
+      "name": "TikZ.Editor_1.1.0_aarch64.dmg",
+      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.1.0/TikZ.Editor_1.1.0_aarch64.dmg",
+      "sizeBytes": 17510143
     },
     {
       "platform": "mac",
       "arch": "x64",
       "format": "dmg",
-      "name": "TikZ.Editor_1.0.0_x64.dmg",
-      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.0.0/TikZ.Editor_1.0.0_x64.dmg",
-      "sizeBytes": 17849244
+      "name": "TikZ.Editor_1.1.0_x64.dmg",
+      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.1.0/TikZ.Editor_1.1.0_x64.dmg",
+      "sizeBytes": 17918642
+    },
+    {
+      "platform": "windows",
+      "arch": "x64",
+      "format": "exe",
+      "name": "TikZ.Editor_1.1.0_x64-setup.exe",
+      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.1.0/TikZ.Editor_1.1.0_x64-setup.exe",
+      "sizeBytes": 14787333
+    },
+    {
+      "platform": "windows",
+      "arch": "x64",
+      "format": "msi",
+      "name": "TikZ.Editor_1.1.0_x64_en-US.msi",
+      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.1.0/TikZ.Editor_1.1.0_x64_en-US.msi",
+      "sizeBytes": 16998400
+    },
+    {
+      "platform": "windows",
+      "arch": "x64",
+      "format": "zip",
+      "name": "TikZ.Editor_1.1.0_x64-portable.zip",
+      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.1.0/TikZ.Editor_1.1.0_x64-portable.zip",
+      "sizeBytes": 16979542
     },
     {
       "platform": "linux",
       "arch": "x64",
       "format": "appimage",
-      "name": "TikZ.Editor_1.0.0_amd64.AppImage",
-      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.0.0/TikZ.Editor_1.0.0_amd64.AppImage",
-      "sizeBytes": 96913912
+      "name": "TikZ.Editor_1.1.0_amd64.AppImage",
+      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.1.0/TikZ.Editor_1.1.0_amd64.AppImage",
+      "sizeBytes": 96995832
     },
     {
       "platform": "linux",
       "arch": "x64",
       "format": "deb",
-      "name": "TikZ.Editor_1.0.0_amd64.deb",
-      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.0.0/TikZ.Editor_1.0.0_amd64.deb",
-      "sizeBytes": 19194254
+      "name": "TikZ.Editor_1.1.0_amd64.deb",
+      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.1.0/TikZ.Editor_1.1.0_amd64.deb",
+      "sizeBytes": 19255260
     },
     {
       "platform": "linux",
       "arch": "x64",
       "format": "rpm",
-      "name": "TikZ.Editor-1.0.0-1.x86_64.rpm",
-      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.0.0/TikZ.Editor-1.0.0-1.x86_64.rpm",
-      "sizeBytes": 19198888
+      "name": "TikZ.Editor-1.1.0-1.x86_64.rpm",
+      "url": "https://github.com/DominikPeters/tikz-editor/releases/download/app-v1.1.0/TikZ.Editor-1.1.0-1.x86_64.rpm",
+      "sizeBytes": 19262247
     }
   ]
 };

@@ -1,6 +1,6 @@
 name: tikz-editor-ipad
 options:
-  bundleIdPrefix: com.tikz.editor.ipad
+  bundleIdPrefix: com.tikz.editor
   deploymentTarget:
     iOS: 16.0
 fileGroups: [../../src]
@@ -11,7 +11,7 @@ settingGroups:
   app:
     base:
       PRODUCT_NAME: TikZ Editor
-      PRODUCT_BUNDLE_IDENTIFIER: com.tikz.editor.ipad
+      PRODUCT_BUNDLE_IDENTIFIER: com.tikz.editor
 targetTemplates:
   app:
     type: application
@@ -52,7 +52,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         CFBundleShortVersionString: 0.2.0
-        CFBundleVersion: "0.2.0"
+        CFBundleVersion: "1"
     entitlements:
       path: tikz-editor-ipad_iOS/tikz-editor-ipad_iOS.entitlements
     scheme:

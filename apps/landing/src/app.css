@@ -1270,19 +1270,19 @@ select {
   color: var(--landing-teal);
 }
 
-.landingCodeSigningPolicy {
+.landingNotice {
   padding: clamp(22px, 3vw, 34px) 0;
   border-top: 1px solid var(--landing-line);
   background: var(--landing-bg);
   scroll-margin-top: calc(var(--landing-header-height) + 18px);
 }
 
-.landingCodeSigningPolicyInner {
+.landingNoticeInner {
   width: min(720px, calc(100vw - 32px));
   margin: 0 auto;
 }
 
-.landingCodeSigningPolicy h2 {
+.landingNotice h2 {
   margin: 0 0 10px;
   color: var(--landing-ink);
   font-size: 1.1rem;
@@ -1290,22 +1290,22 @@ select {
   font-weight: 700;
 }
 
-.landingCodeSigningPolicy p {
+.landingNotice p {
   margin: 0;
   color: var(--landing-muted);
   font-size: 0.85rem;
   line-height: 1.55;
 }
 
-.landingCodeSigningPolicy p + p {
+.landingNotice p + p {
   margin-top: 10px;
 }
 
-.landingCodeSigningPolicy a {
+.landingNotice a {
   color: var(--landing-blue);
 }
 
-.landingCodeSigningPolicy a:hover {
+.landingNotice a:hover {
   color: var(--landing-teal);
 }
 

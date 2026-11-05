@@ -288,7 +288,7 @@
 					"$(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME)",
 					"$(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.tikz.editor.ipad;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tikz.editor;
 				PRODUCT_NAME = "TikZ Editor";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 2;
@@ -330,7 +330,7 @@
 					"$(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME)",
 					"$(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.tikz.editor.ipad;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tikz.editor;
 				PRODUCT_NAME = "TikZ Editor";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 2;
