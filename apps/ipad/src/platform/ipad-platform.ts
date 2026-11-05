@@ -362,7 +362,11 @@ export function createIpadPlatformAdapter(env: IpadPlatformEnvironment = {}): Ed
           { title: "Save", preferred: true },
           { title: "Don’t Save", style: "destructive" },
           { title: "Cancel", style: "cancel" }
-        ]).catch(() => 2);
+        ]).catch(() => {
+          // Outside the app shell (the browser dev loop) there is no UIKit alert.
+          const discard = typeof globalThis.confirm === "function" && globalThis.confirm(`${question}\n\nOK discards the changes.`);
+          return discard ? 1 : 2;
+        });
         return (["save", "discard", "cancel"] as const)[choice] ?? "cancel";
       },
       showMessage: async ({ title, message: body, kind }) => {

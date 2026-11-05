@@ -4,6 +4,7 @@ import { detectDocumentKind } from "@tikz-editor/core/document/kind";
 import { useShallow } from "zustand/react/shallow";
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../../app-menu";
 import { useEditorStore } from "../../store/store";
+import { DEFAULT_SOURCE } from "../../store/workspace-state";
 import type { EditorCommandRuntime } from "../editor-command-runtime";
 import { useDocumentThumbnails, type DocumentThumbnailSource } from "./useDocumentThumbnails";
 import css from "./IpadDocumentGallery.module.css";
@@ -30,7 +31,7 @@ export function IpadDocumentGallery({
   })));
 
   const galleryDocuments = useMemo(() => {
-    const list: Array<DocumentThumbnailSource & { title: string; dirty: boolean }> = [];
+    const list: Array<DocumentThumbnailSource & { title: string; dirty: boolean; blank: boolean }> = [];
     for (const id of tabOrder) {
       const doc = documents[id];
       if (!doc) {
@@ -44,7 +45,8 @@ export function IpadDocumentGallery({
         activeRootId: doc.activeRootId,
         snapshotSvg: doc.snapshot.svg?.svg ?? null,
         snapshotSource: doc.snapshot.source,
-        deck: detectDocumentKind(doc.source) === "beamer"
+        deck: detectDocumentKind(doc.source) === "beamer",
+        blank: !doc.dirty && doc.fileRef == null && doc.source === DEFAULT_SOURCE
       });
     }
     return list;
@@ -74,7 +76,8 @@ export function IpadDocumentGallery({
       if (state.tabOrder === previous.tabOrder) {
         return;
       }
-      if (state.tabOrder.some((id) => !known.has(id))) {
+      // A count that grows: closing the last document swaps in a fresh one, which is not a document arriving.
+      if (state.tabOrder.length > previous.tabOrder.length && state.tabOrder.some((id) => !known.has(id))) {
         onClose();
       }
     });
@@ -196,7 +199,8 @@ export function IpadDocumentGallery({
                   {doc.dirty ? <span className={css.dirtyDot} aria-label="Unsaved changes" /> : null}
                 </span>
               </button>
-              {galleryDocuments.length > 1 ? (
+              {/* The last document can close too (a fresh one replaces it), unless it is already that. */}
+              {galleryDocuments.length > 1 || !doc.blank ? (
                 <button
                   type="button"
                   className={css.cardClose}
