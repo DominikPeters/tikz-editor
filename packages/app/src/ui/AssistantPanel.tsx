@@ -82,7 +82,8 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const nextAttachmentIdRef = useRef(0);
-  const pendingImageAttachmentsRef = useRef<AssistantComposerImageAttachment[]>([]);
+  const attachmentUrlsRef = useRef(new Set<string>());
+  const attachmentLifecycleRef = useRef({ disposed: false });
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
 
@@ -161,14 +162,13 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   }, [assistantApi, metaRequested]);
 
   useEffect(() => {
-    pendingImageAttachmentsRef.current = pendingImageAttachments;
-  }, [pendingImageAttachments]);
-
-  useEffect(() => {
+    const lifecycle = { disposed: false };
+    attachmentLifecycleRef.current = lifecycle;
+    const urls = attachmentUrlsRef.current;
     return () => {
-      for (const attachment of pendingImageAttachmentsRef.current) {
-        URL.revokeObjectURL(attachment.previewUrl);
-      }
+      lifecycle.disposed = true;
+      for (const url of urls) URL.revokeObjectURL(url);
+      urls.clear();
     };
   }, []);
 
@@ -416,6 +416,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
       await onSubmitPrompt(nextPrompt, selectedModel === AUTO_MODEL_VALUE ? null : selectedModel, attachmentsForTurn);
       for (const attachment of attachmentsForTurn) {
         URL.revokeObjectURL(attachment.previewUrl);
+        attachmentUrlsRef.current.delete(attachment.previewUrl);
       }
       setPrompt("");
       setPendingImageAttachments([]);
@@ -549,6 +550,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
                     className={css.attachmentRemove}
                     onClick={() => {
                       URL.revokeObjectURL(attachment.previewUrl);
+                      attachmentUrlsRef.current.delete(attachment.previewUrl);
                       setPendingImageAttachments((current) => current.filter((item) => item.id !== attachment.id));
                       setExpandedAttachmentId((current) => (current === attachment.id ? null : current));
                     }}
@@ -575,18 +577,25 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
                 return;
               }
               event.preventDefault();
+              const lifecycle = attachmentLifecycleRef.current;
               void (async () => {
                 try {
                   const normalized = await Promise.all(
                     images.map((file, index) => normalizePastedImageForAssistant(file, index))
                   );
-                  const prepared: AssistantComposerImageAttachment[] = normalized.map((item) => ({
-                    id: `attachment-${Date.now()}-${nextAttachmentIdRef.current++}`,
-                    blob: item.blob,
-                    mimeType: item.mimeType,
-                    fileName: item.fileName,
-                    previewUrl: URL.createObjectURL(item.blob)
-                  }));
+                  // Image normalization can finish after the panel has closed.
+                  if (lifecycle.disposed) return;
+                  const prepared: AssistantComposerImageAttachment[] = normalized.map((item) => {
+                    const previewUrl = URL.createObjectURL(item.blob);
+                    attachmentUrlsRef.current.add(previewUrl);
+                    return {
+                      id: `attachment-${Date.now()}-${nextAttachmentIdRef.current++}`,
+                      blob: item.blob,
+                      mimeType: item.mimeType,
+                      fileName: item.fileName,
+                      previewUrl
+                    };
+                  });
                   setPendingImageAttachments((current) => [...current, ...prepared]);
                 } catch {
                   // Ignore failed clipboard images and keep composer editable.

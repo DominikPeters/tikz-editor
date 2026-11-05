@@ -25,7 +25,7 @@ export type DesktopPlatformEnvironment = {
 type BrowserLikeGlobal = typeof globalThis & {
   __TIKZ_EDITOR_DESKTOP_PLATFORM_ENV__?: DesktopPlatformEnvironment;
   __TIKZ_EDITOR_DESKTOP_TEST_API__?: {
-    setBridgeOverride: (bridge: DesktopBridge | null) => void;
+    setBridgeOverride: (bridge: Partial<DesktopBridge> | null) => void;
     dispatchCommand: (commandId: AppMenuCommandId) => boolean;
     triggerOpenRequest: (opened: DesktopOpenTextResult) => void;
     triggerWindowCloseRequest: () => void;
@@ -86,9 +86,9 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
   const getBridge = () => bridgeOverride ?? readInjectedTestEnvironment().bridge ?? mergedEnv.bridge ?? defaultBridge;
   let menuHandler: MenuCommandHandler | null = null;
   const contextMenuHandlersByRequestId = new Map<string, MenuCommandHandler>();
-  let openRequestHandler: ((opened: { source: string; fileRef: DocumentFileRef | null }) => void) | null = null;
+  let openRequestHandler: ((opened: { source: string; fileRef: DocumentFileRef | null; sourceLine?: number }) => void) | null = null;
   let closeRequestHandler: (() => void) | null = null;
-  const pendingOpenedBuffer: Array<{ source: string; fileRef: DocumentFileRef | null }> = [];
+  const pendingOpenedBuffer: Array<{ source: string; fileRef: DocumentFileRef | null; sourceLine?: number }> = [];
   const pendingOpenFailureBuffer: DesktopOpenTextFailureResult[] = [];
   let windowCloseUnlistenPromise: Promise<(() => void) | null> | null = null;
   let contextMenuCommandUnlistenPromise: Promise<(() => void) | null> | null = null;
@@ -110,6 +110,7 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
       }
       openRequestHandler?.({
         source: opened.source,
+        ...(opened.sourceLine === undefined ? {} : { sourceLine: opened.sourceLine }),
         fileRef: toDesktopFileRef(opened.path, opened.name)
       });
       nativeMenuManager.refreshRecents();
@@ -179,6 +180,7 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
       for (const opened of pendingOpens) {
         pendingOpenedBuffer.push({
           source: opened.source,
+          ...(opened.sourceLine === undefined ? {} : { sourceLine: opened.sourceLine }),
           fileRef: toDesktopFileRef(opened.path, opened.name)
         });
       }
@@ -225,7 +227,7 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
 
   (globalThis as BrowserLikeGlobal).__TIKZ_EDITOR_DESKTOP_TEST_API__ = {
     setBridgeOverride: (bridge) => {
-      bridgeOverride = bridge;
+      bridgeOverride = bridge ? { ...defaultBridge, ...bridge } : null;
     },
     dispatchCommand: (commandId) => {
       if (!menuHandler) {
@@ -237,6 +239,7 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
     triggerOpenRequest: (opened) => {
       openRequestHandler?.({
         source: opened.source,
+        ...(opened.sourceLine === undefined ? {} : { sourceLine: opened.sourceLine }),
         fileRef: toDesktopFileRef(opened.path, opened.name)
       });
     },
@@ -396,6 +399,7 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
         nativeMenuManager.refreshRecents();
         return {
           source: opened.source,
+          ...(opened.sourceLine === undefined ? {} : { sourceLine: opened.sourceLine }),
           fileRef: toDesktopFileRef(opened.path, opened.name)
         };
       },

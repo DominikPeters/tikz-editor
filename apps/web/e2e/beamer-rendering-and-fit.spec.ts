@@ -28,25 +28,25 @@ test("fits a Beamer page with a small margin and keeps it centered after resizin
   await gotoApp(page); await setSource(page, source);
   await page.getByTestId("figure-navigator").getByRole("button", { name: "1. Fit", exact: true }).click();
   const viewport = page.getByTestId("canvas-viewport");
-  const stage = page.getByTestId("canvas-world-stage");
-  const margin = async () => {
-    const outer = (await viewport.boundingBox())!;
-    const inner = (await stage.boundingBox())!;
-    return { horizontal: (outer.width - inner.width) / 2, vertical: (outer.height - inner.height) / 2,
+  const fitGeometry = () => viewport.evaluate(element => {
+    // Read both boxes in one layout state, then wait for the ResizeObserver
+    // and React fit update to settle all three invariants together.
+    const outer = element.getBoundingClientRect();
+    const inner = element.querySelector('[data-testid="canvas-world-stage"]')?.getBoundingClientRect();
+    if (!inner) return null;
+    return { margin: Math.min((outer.width - inner.width) / 2, (outer.height - inner.height) / 2),
       x: inner.x + inner.width / 2 - outer.x - outer.width / 2,
       y: inner.y + inner.height / 2 - outer.y - outer.height / 2 };
-  };
+  });
   const fit = page.getByRole("button", { name: "Fit to content", exact: true });
   if (await fit.getAttribute("aria-pressed") === "true") await fit.click();
   await fit.click();
   for (const size of [{ width: 1280, height: 800 }, { width: 1600, height: 900 }]) {
     await page.setViewportSize(size);
-    await expect.poll(async () => {
-      const value = await margin();
-      return Math.min(value.horizontal, value.vertical);
-    }).toBeCloseTo(12, 0);
-    const value = await margin();
-    expect(value.x).toBeCloseTo(0, 0);
-    expect(value.y).toBeCloseTo(0, 0);
+    await expect.poll(fitGeometry).toEqual({
+      margin: expect.closeTo(12, 0),
+      x: expect.closeTo(0, 0),
+      y: expect.closeTo(0, 0)
+    });
   }
 });

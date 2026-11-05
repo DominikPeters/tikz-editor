@@ -7,6 +7,24 @@ import { wp } from "./coords-helpers.js";
 import { cm, expectPatchesReconstructSource } from "./edit-actions-helpers.js";
 
 describe("applyEditAction - rotateElement", () => {
+  it.each([
+    "rotate around=30:(2,1)",
+    "rotate around={30:(2,1)}",
+    "/tikz/rotate around=30:(2,1)",
+    "/tikz/rotate around={30:(2,1)}"
+  ])("keeps the authored pivot while changing %s", authored => {
+    const source = String.raw`\begin{tikzpicture}\draw[blue,${authored},line width=1pt] (0,0) rectangle (1,1);\end{tikzpicture}`;
+    const result = applyEditAction(source, [], {
+      kind: "rotateElement", elementId: "path:0", mode: "property", angleDeg: 50
+    });
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expect(result.newSource).toContain("rotate around={50:(2,1)}");
+    expect(result.newSource).toContain("blue");
+    expect(result.newSource).toContain("line width=1pt");
+    expectPatchesReconstructSource(source, result);
+  });
+
   it("converts an explicit rectangle to center-pivot rotate without changing its visual pose", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw[rotate=32] (2.85,1.03) rectangle (3.33,0.55);

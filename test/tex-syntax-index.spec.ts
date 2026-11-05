@@ -11,7 +11,9 @@ import {
   buildTexSyntaxIndex,
   getTexSyntaxIndex,
   matchTexSyntaxEnvironments,
+  type TexSyntaxIndex,
 } from "../packages/core/src/text/tex/syntax-index.js";
+import { collectTestGarbage } from "./setup/gc.js";
 
 describe("shared TeX syntax index", () => {
   it("indexes controls, stars, trivia, and nested arguments", () => {
@@ -220,6 +222,49 @@ literal % \end{frame}`;
     }
     expect(reused).toHaveLength(12);
     for (const length of reused) expect(length).toBeGreaterThan(document.length / 2);
+  });
+
+  it.each([200000, 600000])("bounds retained syntax history for unrelated %i-character documents", async (length) => {
+    const parser = beamerDocumentParser.configure({});
+    const references: WeakRef<TexSyntaxIndex>[] = [];
+    for (let index = 0; index < 8; index++) {
+      // Distinct first/last characters prevent replacing the previous index
+      // as an edit of the same document, exercising separate history entries.
+      references.push(new WeakRef(getTexSyntaxIndex(String.fromCharCode(97 + index).repeat(length), parser)));
+    }
+    await collectTestGarbage();
+    const retained = references.filter(reference => reference.deref()).length;
+    // Normal indexes can be owned by both the reusable cache and history,
+    // each with its own byte budget; oversized indexes only live in history.
+    expect(retained).toBeLessThanOrEqual(length === 600000 ? 1 : 4);
+    expect(retained).toBeGreaterThan(0);
+    // Keep the WeakMap owner alive through collection as it is in the app.
+    expect(parser.topNode.name).toBe(beamerDocumentParser.topNode.name);
+  });
+
+  it("keeps an oversized active document available for incremental edits between fragment parses", () => {
+    const parser = beamerDocumentParser.configure({});
+    let source = `${"% padding\n".repeat(60000)}\\begin{frame}Text\\end{frame}`;
+    getTexSyntaxIndex(source, parser);
+    const reused: number[] = [];
+    const createParse = LRParser.prototype.createParse;
+    LRParser.prototype.createParse = function (input, fragments, ranges) {
+      if (this === parser && input.length > 500000) {
+        reused.push(fragments.reduce((sum, fragment) => sum + fragment.to - fragment.from, 0));
+      }
+      return createParse.call(this, input, fragments, ranges);
+    };
+    try {
+      for (let edit = 0; edit < 3; edit++) {
+        for (let fragment = 0; fragment < 12; fragment++) getTexSyntaxIndex(`caption ${fragment}`, parser);
+        source = source.replace("Text", `Text${edit}`);
+        getTexSyntaxIndex(source, parser);
+      }
+    } finally {
+      LRParser.prototype.createParse = createParse;
+    }
+    expect(reused).toHaveLength(3);
+    for (const length of reused) expect(length).toBeGreaterThan(source.length / 2);
   });
 
   it("keys the bounded cache by parser identity as well as source", () => {

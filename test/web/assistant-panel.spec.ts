@@ -137,6 +137,21 @@ describe("AssistantPanel image paste", () => {
     expect(firstChild?.dataset.testid).toBe("assistant-attachments");
   });
 
+  it("does not allocate an image URL when paste normalization finishes after closing the panel", async () => {
+    let finish!: (value: Awaited<ReturnType<typeof normalizePastedImageForAssistant>>) => void;
+    vi.mocked(normalizePastedImageForAssistant).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    const createUrl = vi.spyOn(URL, "createObjectURL");
+    const textarea = container.querySelector('[data-testid="assistant-prompt"]') as HTMLTextAreaElement;
+    const file = new File(["image"], "clip.png", { type: "image/png" });
+    dispatchPaste(textarea, [{ kind: "file", type: "image/png", getAsFile: () => file }]);
+    await act(async () => { root.render(null); });
+    await act(async () => {
+      finish({ blob: file, mimeType: "image/png", fileName: "clip.png" });
+      await Promise.resolve();
+    });
+    expect(createUrl).not.toHaveBeenCalled();
+  });
+
   it("shows attached image thumbnails in user message history", async () => {
     const state = useEditorStore.getState();
     const docId = state.activeDocumentId;

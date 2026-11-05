@@ -1,6 +1,8 @@
 import { writeAuthoredAngle } from "../writer/authored-values.js";
 import { editedSlice, option, optionValueFor, sourceSlice, tikz, unchangedSource, type CoordinateText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
+import { splitAllAtTopLevel } from "../../domains/coordinates/parse.js";
+import { stripEnclosingBraces } from "../../semantic/style/option-utils.js";
 import { createEditGeometrySession, type EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { PathItem, Statement, Span } from "../../ast/types.js";
@@ -318,15 +320,22 @@ function buildPropertyRotateMutations(
 
 /** The pivot an existing `rotate around={angle:pivot}` names, as written. */
 function rotateAroundPivot(source: string, entries: readonly OptionEntry[]): TikzFragment | null {
-  const entry = [...entries].reverse().find(candidate => candidate.kind === "kv" && normalizeOptionKey(candidate.key) === "rotate around");
-  if (entry?.kind !== "kv") return null;
-  const raw = source.slice(entry.span.from, entry.span.to);
-  const colon = raw.indexOf(":");
-  const close = raw.lastIndexOf("}");
-  if (colon < 0 || close <= colon) return null;
-  const from = entry.span.from + colon + 1;
-  const to = entry.span.from + close;
-  return source.slice(from, to).trim().length > 0 ? sourceSlice(source, { from, to }) : null;
+  const entry = [...entries].reverse().find(candidate => {
+    if (candidate.kind !== "kv") return false;
+    const key = normalizeOptionKey(candidate.key);
+    return key === "rotate around" || key === "/tikz/rotate around";
+  });
+  if (entry?.kind !== "kv" || !entry.valueSpan) return null;
+  const raw = source.slice(entry.valueSpan.from, entry.valueSpan.to);
+  const parts = splitAllAtTopLevel(stripEnclosingBraces(raw), ":");
+  if (parts.length !== 2) return null;
+  const pivot = parts[1]?.trim();
+  if (!pivot) return null;
+  const offset = raw.lastIndexOf(pivot);
+  if (offset < 0) return null;
+  const from = entry.valueSpan.from + offset;
+  const to = from + pivot.length;
+  return sourceSlice(source, { from, to });
 }
 
 function buildOriginRotateMutations(angleDeg: number): Map<string, OptionMutation> {

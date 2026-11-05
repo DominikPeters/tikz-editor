@@ -191,6 +191,29 @@ function makeMockBridge() {
 }
 
 describe("desktop shell flows", () => {
+  it("can override the image picker while retaining native asset reads", async () => {
+    const mock = makeMockBridge();
+    const readLocalAsset = vi.fn(async (filePath: string) => ({ status: "missing" as const, path: filePath }));
+    const platform = createDesktopPlatformAdapter({
+      storage: { getItem: () => null, setItem: () => undefined },
+      bridge: { ...mock.bridge, readLocalAsset }
+    });
+    const api = (globalThis as typeof globalThis & {
+      __TIKZ_EDITOR_DESKTOP_TEST_API__: { setBridgeOverride: (bridge: Partial<DesktopBridge> | null) => void };
+    }).__TIKZ_EDITOR_DESKTOP_TEST_API__;
+    const picker = vi.fn(async () => null);
+    api.setBridgeOverride({ openBinary: picker });
+    try {
+      expect(await platform.files?.openBinary?.({ kind: "graphics", addToRecent: false })).toBeNull();
+      expect(picker).toHaveBeenCalledWith(null, { kind: "graphics", addToRecent: false });
+      expect(await platform.files?.readLocalAsset?.("/tmp/image.svg")).toEqual({ status: "missing", path: "/tmp/image.svg" });
+      expect(readLocalAsset).toHaveBeenCalledWith("/tmp/image.svg");
+    } finally {
+      api.setBridgeOverride(null);
+    }
+    expect(await platform.files?.openBinary?.()).not.toBeNull();
+  });
+
   it("bridges native menu command events to app commands", async () => {
     const mock = makeMockBridge();
     const platform = createDesktopPlatformAdapter({

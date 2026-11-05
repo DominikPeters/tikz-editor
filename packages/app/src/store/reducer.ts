@@ -370,7 +370,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const untitledCount = Object.values(workspace.documents).filter((doc) => doc != null && doc.fileRef == null).length + 1;
       const next = createDocumentSession({
         source: action.source ?? DEFAULT_SOURCE,
-        title: action.title ?? `Untitled ${untitledCount}`
+        title: action.title ?? `Untitled ${untitledCount}`,
+        activeRootId: action.activeRootId ?? null
       });
       workspace = {
         ...workspace,
@@ -435,6 +436,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (!hasDocument(workspace.documents, closeId)) {
         return state;
       }
+      const stepPrefix = `${closeId}::`;
+      ui = {
+        ...ui,
+        deckStepByRootKey: Object.fromEntries(
+          Object.entries(ui.deckStepByRootKey).filter(([key]) => !key.startsWith(stepPrefix))
+        )
+      };
       const nextOrder = workspace.tabOrder.filter((id) => id !== closeId);
       const nextDocs = { ...workspace.documents };
       delete nextDocs[closeId];
@@ -466,6 +474,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
 
     case "CLOSE_ALL_DOCUMENTS": {
       const replacement = createUntitledDocumentSession();
+      ui = { ...ui, deckStepByRootKey: {} };
       workspace = {
         ...workspace,
         documents: { [replacement.id]: replacement },

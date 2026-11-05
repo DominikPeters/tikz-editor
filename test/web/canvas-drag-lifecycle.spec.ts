@@ -221,6 +221,7 @@ describe("canvas drag ownership and cancellation", () => {
     await act(async () => setDragState(elementDrag()));
     await act(async () => { pointer("pointermove"); flush(); });
     expect(state().source).not.toBe(BASE); expect(state().history).toBe(history);
+    const previewChangedSourceIds = state().lastEditChangedSourceIds;
     await act(async () => {
       if (interruption === "unmount") root.unmount();
       else if (interruption === "blur") window.dispatchEvent(new Event("blur"));
@@ -229,6 +230,7 @@ describe("canvas drag ownership and cancellation", () => {
       flush();
     });
     expect(state().source).toBe(BASE); expect(state().historyIndex).toBe(index); expect(state().history).toBe(history);
+    expect(state().lastEditChangedSourceIds).toEqual(previewChangedSourceIds);
     dispatch({ type: "REDO" }); expect(state().source).toBe(BASE);
   });
   it("discards a queued final move on cancellation", async () => {
@@ -294,7 +296,18 @@ describe("canvas drag ownership and cancellation", () => {
     expect(state().history).toHaveLength(historyLength);
     await act(async () => ready());
     expect(state().snapshot.editHandles.at(-1)!.editingId).toBe(identity);
-    await act(async () => pointer("pointerup", 1, target));
+    const rollbackChangedSourceIds: Array<string[] | null> = [];
+    const unsubscribe = useEditorStore.subscribe((next, previous) => {
+      if (previous.source !== next.source && next.source === fixture.source) {
+        rollbackChangedSourceIds.push(next.lastEditChangedSourceIds);
+      }
+    });
+    try {
+      await act(async () => pointer("pointerup", 1, target));
+    } finally {
+      unsubscribe();
+    }
+    expect(rollbackChangedSourceIds).toEqual([["path:0"]]);
     expect(state().source).toBe(preview);
     expect(state().history).toHaveLength(historyLength + 1);
     expect(state().history.at(-1)?.sourceBefore).toBe(fixture.source);

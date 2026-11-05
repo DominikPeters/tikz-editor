@@ -84,28 +84,50 @@ export function PdfPageView({ pdf, page, label, className, pageClassName, onErro
 
 function renderPage(pdf: PdfDocument, number: number, box: Box, className: string | undefined): RenderedPage {
   let cancelled = false;
+  const isCancelled = () => cancelled;
   let cancelTask: (() => void) | null = null;
+  let canvas: HTMLCanvasElement | null = null;
+  let cleanupPage: (() => void) | null = null;
+  const release = () => {
+    // The old visible page stays painted until its replacement is ready.
+    if (canvas && !canvas.isConnected) { canvas.width = 0; canvas.height = 0; }
+    cleanupPage?.();
+    cleanupPage = null;
+  };
   const done = pdf.getPage(number).then(async (pdfPage) => {
-    if (cancelled) throw new PageRenderCancelled();
-    const natural = pdfPage.getViewport({ scale: 1 });
-    const fit = Math.min(box.width / natural.width, box.height / natural.height);
-    const viewport = pdfPage.getViewport({ scale: fit * box.pixelRatio });
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.floor(viewport.width));
-    canvas.height = Math.max(1, Math.floor(viewport.height));
-    canvas.style.width = `${canvas.width / box.pixelRatio}px`;
-    canvas.style.height = `${canvas.height / box.pixelRatio}px`;
-    if (className) canvas.className = className;
-    const canvasContext = canvas.getContext("2d");
-    if (!canvasContext) throw new Error("PDF rendering requires a 2D canvas context.");
-    const task = pdfPage.render({ canvas, canvasContext, viewport });
-    cancelTask = () => { task.cancel(); };
-    await task.promise;
-    return canvas;
+    cleanupPage = () => { pdfPage.cleanup(); };
+    if (cancelled) { release(); throw new PageRenderCancelled(); }
+    try {
+      const natural = pdfPage.getViewport({ scale: 1 });
+      const fit = Math.min(box.width / natural.width, box.height / natural.height);
+      const viewport = pdfPage.getViewport({ scale: fit * box.pixelRatio });
+      canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.floor(viewport.width));
+      canvas.height = Math.max(1, Math.floor(viewport.height));
+      canvas.style.width = `${canvas.width / box.pixelRatio}px`;
+      canvas.style.height = `${canvas.height / box.pixelRatio}px`;
+      if (className) canvas.className = className;
+      const canvasContext = canvas.getContext("2d");
+      if (!canvasContext) throw new Error("PDF rendering requires a 2D canvas context.");
+      const task = pdfPage.render({ canvas, canvasContext, viewport });
+      cancelTask = () => { task.cancel(); };
+      await task.promise;
+      if (isCancelled()) throw new PageRenderCancelled();
+      return canvas;
+    } catch (error) {
+      release();
+      throw error;
+    } finally {
+      cancelTask = null;
+    }
   });
   // A neighbour may be cancelled before anyone waits on it.
   done.catch(() => null);
-  return { done, cancel: () => { cancelled = true; cancelTask?.(); } };
+  return { done, cancel: () => {
+    cancelled = true;
+    if (cancelTask) cancelTask();
+    else release();
+  } };
 }
 
 /** A page dropped before pdf.js began drawing it; pdf.js names its own cancellations alike. */

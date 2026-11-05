@@ -15,6 +15,8 @@ import type { FileRevision } from "@tikz-editor/app/store/types";
 import type { Update } from "@tauri-apps/plugin-updater";
 
 export type DesktopOpenTextResult = {
+  /** One-based source line requested by another local editor. */
+  sourceLine?: number;
   source: string;
   path: string;
   name: string;

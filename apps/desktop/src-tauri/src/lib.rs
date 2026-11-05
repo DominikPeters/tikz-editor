@@ -55,22 +55,58 @@ mod macos_accessibility {
         NSNotification, NSNotificationCenter, NSNotificationName, NSObjectProtocol,
         NSOperationQueue,
     };
+    use std::ffi::{c_char, c_int, c_void, CStr};
+    use std::sync::OnceLock;
 
     pub const PREFERS_NON_BLINKING_TEXT_INSERTION_INDICATOR_CHANGED_EVENT: &str =
         "desktop-prefers-non-blinking-text-insertion-indicator-changed";
 
-    #[link(name = "Accessibility", kind = "framework")]
     extern "C" {
-        pub static AXPrefersNonBlinkingTextInsertionIndicatorDidChangeNotification:
-            &'static NSNotificationName;
-        fn AXPrefersNonBlinkingTextInsertionIndicator() -> ObjcBool;
+        fn dlopen(path: *const c_char, mode: c_int) -> *mut c_void;
+        fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
+    }
+
+    // These symbols were introduced in macOS 15. Resolving them dynamically
+    // keeps older SDKs linkable and older systems able to launch the editor.
+    fn accessibility_symbol(name: &CStr) -> *mut c_void {
+        static FRAMEWORK: OnceLock<usize> = OnceLock::new();
+        let handle = *FRAMEWORK.get_or_init(|| unsafe {
+            // RTLD_LAZY | RTLD_LOCAL; retain the handle for the process lifetime.
+            dlopen(
+                c"/System/Library/Frameworks/Accessibility.framework/Accessibility".as_ptr(),
+                0x1 | 0x4,
+            ) as usize
+        });
+        if handle == 0 {
+            return std::ptr::null_mut();
+        }
+        unsafe { dlsym(handle as *mut c_void, name.as_ptr()) }
     }
 
     pub fn prefers_non_blinking_text_insertion_indicator() -> bool {
-        unsafe { AXPrefersNonBlinkingTextInsertionIndicator().as_bool() }
+        type Getter = unsafe extern "C" fn() -> ObjcBool;
+        static GETTER: OnceLock<Option<Getter>> = OnceLock::new();
+        let getter = GETTER.get_or_init(|| {
+            let symbol = accessibility_symbol(c"AXPrefersNonBlinkingTextInsertionIndicator");
+            if symbol.is_null() {
+                None
+            } else {
+                // The framework exports this symbol with Getter's C ABI.
+                Some(unsafe { std::mem::transmute::<*mut c_void, Getter>(symbol) })
+            }
+        });
+        getter.is_some_and(|get| unsafe { get().as_bool() })
     }
 
-    pub fn install_observer(app: AppHandle) -> Retained<ProtocolObject<dyn NSObjectProtocol>> {
+    pub fn install_observer(app: AppHandle) -> Option<Retained<ProtocolObject<dyn NSObjectProtocol>>> {
+        let symbol = accessibility_symbol(
+            c"AXPrefersNonBlinkingTextInsertionIndicatorDidChangeNotification",
+        );
+        if symbol.is_null() {
+            return None;
+        }
+        // dlsym returns the address of the exported NSString* variable.
+        let name = unsafe { symbol.cast::<*const NSNotificationName>().read().as_ref() }?;
         let center = NSNotificationCenter::defaultCenter();
         let queue = NSOperationQueue::mainQueue();
         let block = RcBlock::new(move |_notification: NonNull<NSNotification>| {
@@ -80,14 +116,14 @@ mod macos_accessibility {
                 value,
             );
         });
-        unsafe {
+        Some(unsafe {
             center.addObserverForName_object_queue_usingBlock(
-                Some(AXPrefersNonBlinkingTextInsertionIndicatorDidChangeNotification),
+                Some(name),
                 None,
                 Some(&queue),
                 &block,
             )
-        }
+        })
     }
 }
 
@@ -270,6 +306,8 @@ struct LatexAvailabilityStatus {
 
 #[derive(Serialize)]
 struct OpenTextPayload {
+    #[serde(rename = "sourceLine", skip_serializing_if = "Option::is_none")]
+    source_line: Option<u32>,
     source: String,
     path: String,
     name: String,
@@ -596,6 +634,15 @@ fn has_supported_association_extension(path: &Path) -> bool {
     matches!(ext.to_ascii_lowercase().as_str(), "tikz" | "tex")
 }
 
+// One-based source line for external editor handoff; never treated as a path.
+fn associated_source_line(args: &[String]) -> Option<u32> {
+    args.iter().skip(1).find_map(|arg| {
+        let value = arg.strip_prefix("--source-line=")?;
+        if value.is_empty() || !value.bytes().all(|c| c.is_ascii_digit()) { return None; }
+        value.parse::<u32>().ok().filter(|line| *line > 0 && *line <= i32::MAX as u32)
+    })
+}
+
 fn collect_associated_file_paths(args: &[String], cwd: Option<&str>) -> Vec<PathBuf> {
     let base_dir = cwd.map(PathBuf::from);
     let mut seen: HashSet<String> = HashSet::new();
@@ -603,7 +650,7 @@ fn collect_associated_file_paths(args: &[String], cwd: Option<&str>) -> Vec<Path
 
     for arg in args.iter().skip(1) {
         let trimmed = arg.trim();
-        if trimmed.is_empty() {
+        if trimmed.is_empty() || trimmed.starts_with("--source-line=") {
             continue;
         }
 
@@ -664,6 +711,7 @@ fn read_open_text_payload_from_path(path: &Path) -> Result<OpenTextPayload, Stri
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| "document.tex".to_string());
     Ok(OpenTextPayload {
+        source_line: None,
         source,
         path: path_string,
         name,
@@ -1075,7 +1123,7 @@ fn enqueue_pending_open_results(
 
 fn process_associated_open_requests(app: &AppHandle, args: &[String], cwd: Option<&str>) {
     let candidates = collect_associated_file_paths(args, cwd);
-    process_associated_file_paths(app, candidates);
+    process_associated_file_paths_at_line(app, candidates, associated_source_line(args));
 }
 
 fn process_associated_open_urls(app: &AppHandle, urls: &[Url]) {
@@ -1084,6 +1132,10 @@ fn process_associated_open_urls(app: &AppHandle, urls: &[Url]) {
 }
 
 fn process_associated_file_paths(app: &AppHandle, candidates: Vec<PathBuf>) {
+    process_associated_file_paths_at_line(app, candidates, None);
+}
+
+fn process_associated_file_paths_at_line(app: &AppHandle, candidates: Vec<PathBuf>, source_line: Option<u32>) {
     if candidates.is_empty() {
         return;
     }
@@ -1093,7 +1145,8 @@ fn process_associated_file_paths(app: &AppHandle, candidates: Vec<PathBuf>) {
 
     for path in candidates {
         match read_open_text_payload_from_path(&path) {
-            Ok(payload) => {
+            Ok(mut payload) => {
+                payload.source_line = source_line;
                 add_recent_file(app, payload.path.clone());
                 successes.push(payload);
             }
@@ -3050,6 +3103,23 @@ async fn desktop_assistant_logout(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let context = tauri::generate_context!();
+    #[cfg(all(feature = "webdriver", target_os = "macos"))]
+    let context = {
+        let mut context = context;
+        if env::var("TIKZ_DESKTOP_E2E_SHOW_WINDOW").as_deref() != Ok("1") {
+            for window in &mut context.config_mut().app.windows {
+                window.visible = false;
+                window.focus = false;
+            }
+        }
+        context
+    };
+    #[cfg(feature = "webdriver")]
+    assert_eq!(
+        context.config().identifier,
+        "com.tikz.editor.e2e",
+        "WebDriver builds require tauri.e2e.conf.json to isolate test storage"
+    );
     if let Err(error) = portable::prepare(context.config()) {
         rfd::MessageDialog::new()
             .set_title("Could Not Start Portable TikZ Editor")
@@ -3059,6 +3129,14 @@ pub fn run() {
         return;
     }
     let mut builder = tauri::Builder::default();
+    #[cfg(all(feature = "webdriver", target_os = "macos"))]
+    if env::var("TIKZ_DESKTOP_E2E_SHOW_WINDOW").as_deref() != Ok("1") {
+        builder = builder.activate_ignoring_other_apps(false);
+    }
+    #[cfg(feature = "webdriver")]
+    {
+        builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
+    }
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
@@ -3179,6 +3257,10 @@ pub fn run() {
             desktop_assistant_logout
         ])
         .setup(|app| {
+            #[cfg(all(feature = "webdriver", target_os = "macos"))]
+            if env::var("TIKZ_DESKTOP_E2E_SHOW_WINDOW").as_deref() != Ok("1") {
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
             app.manage(presentation::PresentationPowerState::default());
             #[cfg(target_os = "macos")]
             presentation::install_display_observer(app.handle().clone());
@@ -3227,8 +3309,9 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             {
-                let observer = macos_accessibility::install_observer(app.handle().clone());
-                std::mem::forget(observer);
+                if let Some(observer) = macos_accessibility::install_observer(app.handle().clone()) {
+                    std::mem::forget(observer);
+                }
             }
 
             #[cfg(target_os = "macos")]
@@ -3281,6 +3364,20 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn file_revision_survives_json_roundtrip() {
+        let revision = super::FileRevisionPayload {
+            mtime_ms: Some(1_793_800_000_000.001_5),
+            size: Some(316),
+            hash: "12345678".to_string(),
+        };
+        let json = serde_json::to_string(&revision).unwrap();
+        let restored: super::FileRevisionPayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.mtime_ms, revision.mtime_ms);
+        assert_eq!(restored.size, revision.size);
+        assert_eq!(restored.hash, revision.hash);
+    }
+
     #[cfg(unix)]
     #[test]
     fn linked_alias_events_keep_authored_paths_and_refresh_retargeted_directories() {
@@ -3439,7 +3536,7 @@ mod tests {
     }
 
     use super::{
-        changed_watched_paths_for_event, collect_associated_file_paths,
+        associated_source_line, changed_watched_paths_for_event, collect_associated_file_paths,
         collect_associated_file_paths_from_urls, embed_local_svg_image_refs,
         has_supported_association_extension, map_unsaved_changes_dialog_result,
         validate_external_url,
@@ -3486,6 +3583,15 @@ mod tests {
         assert!(!has_supported_association_extension(Path::new(
             "/tmp/diagram.svg"
         )));
+    }
+
+    #[test]
+    fn external_source_line_is_bounded_and_not_a_path() {
+        for (value, expected) in [("12", Some(12)), ("0", None), ("-1", None),
+            ("1.5", None), ("9999999999999", None), ("1.tex", None)] {
+            let args = vec!["tikz-editor".into(), format!("--source-line={value}"), "paper.tex".into()];
+            assert_eq!(associated_source_line(&args), expected);
+        }
     }
 
     #[test]

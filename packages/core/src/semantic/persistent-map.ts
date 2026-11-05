@@ -81,6 +81,7 @@ export class PersistentMap<K, V> implements Map<K, V> {
 
   snapshot(): PersistentMapSnapshot<K, V> {
     this.state.sealed = true;
+    compactMaterializedState(this.state);
     return this.state;
   }
 
@@ -144,7 +145,10 @@ function createRootState<K, V>(): PersistentMapState<K, V> {
 }
 
 function materializeState<K, V>(state: PersistentMapState<K, V>): Map<K, V> {
-  if (state.materialized) return state.materialized;
+  if (state.materialized) {
+    compactMaterializedState(state);
+    return state.materialized;
+  }
   const pending: PersistentMapState<K, V>[] = [];
   let current: PersistentMapState<K, V> | null = state;
   while (current && !current.materialized) {
@@ -169,7 +173,18 @@ function materializeState<K, V>(state: PersistentMapState<K, V>): Map<K, V> {
     }
   }
   state.materialized = materialized;
+  compactMaterializedState(state);
   return materialized;
+}
+
+/** A sealed flat snapshot no longer needs the historical layers it replaced. */
+function compactMaterializedState<K, V>(state: PersistentMapState<K, V>): void {
+  if (!state.sealed || !state.materialized) return;
+  // Writes to a sealed state fork a child, so the complete materialized map
+  // stays authoritative. Other live snapshots still own their own ancestors;
+  // the current version need not pin overwritten values from every drag frame.
+  state.parent = null;
+  state.entries.clear();
 }
 
 function mapEntry<K, V>(map: ReadonlyMap<K, V>, key: K): { found: true; value: V } | { found: false } {

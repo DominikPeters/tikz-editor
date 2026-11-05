@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { APP_MENU_COMMAND_IDS, type EditorPlatform } from "../packages/app/src/index.js";
 import { createBrowserPlatformAdapter } from "../apps/web/src/platform/browser-platform.js";
 import { createDesktopPlatformAdapter } from "../apps/desktop/src/platform/desktop-platform.js";
@@ -227,6 +227,18 @@ describe("platform adapter contracts", () => {
         provider: "desktop-fs"
       }
     });
+  });
+
+  it("preserves a queued external source-line selection", async () => {
+    let pending = [{ source: "paper", path: "/tmp/café paper.tex", name: "paper.tex", sourceLine: 284 }];
+    const platform = createDesktopPlatformAdapter({ bridge: makeDesktopBridge({
+      takePendingOpenRequests: async () => { const result = pending; pending = []; return result; }
+    }) });
+    const received: Array<{ source: string; sourceLine?: number }> = [];
+    const unbind = platform.files?.bindOpenRequest?.(opened => received.push(opened));
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    expect(received[0]?.sourceLine).toBe(284);
+    if (typeof unbind === "function") unbind();
   });
 
   it("desktop adapter bindOpenRequest receives test open requests", async () => {

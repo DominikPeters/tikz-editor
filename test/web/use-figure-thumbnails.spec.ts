@@ -573,6 +573,27 @@ describe("useFigureThumbnails", () => {
     expect(vi.mocked(requestThumbnail)).toHaveBeenCalledTimes(2);
   });
 
+  it("discards stale fallbacks when leaving a document or removing a figure", async () => {
+    let latest: ReadonlyMap<string, string> = new Map();
+    const onUpdate = (value: ReadonlyMap<string, string>) => { latest = value; };
+    const figure = { id: "figure:0", span: { from: 0, to: 1 } };
+    const render = async (documentKey: string, figures: FigureEntry[], url: string | null) => {
+      await act(async () => {
+        root.render(createElement(Harness, { source: "a", figures, documentKey, maxToRender: 0,
+          externalThumbnail: { figureId: figure.id, url }, onUpdate }));
+      });
+    };
+    await render("first", [figure], "data:old");
+    expect(latest.get(figure.id)).toBe("data:old");
+    await render("first", [], null);
+    await render("first", [figure], null);
+    expect(latest.size).toBe(0);
+    await render("first", [figure], "data:old");
+    await render("second", [figure], "data:other");
+    await render("first", [figure], null);
+    expect(latest.size).toBe(0);
+  });
+
   it("invalidates thumbnails and forwards the graphics preview bundle key", async () => {
     vi.mocked(requestThumbnail).mockImplementation(async (request) => ({
       type: "result",

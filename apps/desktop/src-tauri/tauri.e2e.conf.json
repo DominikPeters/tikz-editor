@@ -1,0 +1,6 @@
+{
+  "identifier": "com.tikz.editor.e2e",
+  "bundle": {
+    "createUpdaterArtifacts": false
+  }
+}

@@ -37,6 +37,13 @@ describe("workspace model", () => {
     expect(closedOnlyTab.source).toBe(DEFAULT_SOURCE);
   });
 
+  it("opens directly onto an externally selected figure", () => {
+    const source = String.raw`\begin{tikzpicture}\node{First};\end{tikzpicture}
+\begin{tikzpicture}\node{Second};\end{tikzpicture}`;
+    const state = editorReducer(makeInitialState(), { type: "NEW_DOCUMENT", source, activeRootId: "figure:1" });
+    expect(state.documents[state.activeDocumentId]?.activeRootId).toBe("figure:1");
+  });
+
   it("creates and switches documents", () => {
     const initial = makeInitialState();
     const withSecond = editorReducer(initial, { type: "NEW_DOCUMENT", source: "\\draw (0,0)--(1,0);", title: "Doc B" });
@@ -92,6 +99,31 @@ describe("workspace model", () => {
     const closedAll = editorReducer(closedActive, { type: "CLOSE_ALL_DOCUMENTS" });
     expect(closedAll.tabOrder).toHaveLength(1);
     expect(closedAll.documents[closedAll.activeDocumentId]?.title).toContain("Untitled");
+  });
+
+  it("retires closed-document overlay steps while keeping the other document's nested-picture step", () => {
+    const initial = makeInitialState();
+    const firstId = initial.activeDocumentId;
+    const first = editorReducer(initial, { type: "SET_DECK_STEP", rootId: "frame:0", step: 2 });
+    const second = editorReducer(first, { type: "NEW_DOCUMENT" });
+    const secondId = second.activeDocumentId;
+    const stepped = editorReducer(second, { type: "SET_DECK_STEP", rootId: "frame:3:tikzpicture:0", step: 4 });
+    expect(stepped.deckStepByRootKey).toEqual({ [`${firstId}::frame:0`]: 2, [`${secondId}::frame:3`]: 4 });
+
+    const closed = editorReducer(stepped, { type: "CLOSE_DOCUMENT", documentId: firstId });
+    expect(closed.activeDocumentId).toBe(secondId);
+    expect(closed.deckStepByRootKey).toEqual({ [`${secondId}::frame:3`]: 4 });
+    expect(editorReducer(closed, { type: "CLOSE_DOCUMENT", documentId: firstId })).toBe(closed);
+  });
+
+  it("drops overlay-step records when replacing the only tab or closing all tabs", () => {
+    const stepped = editorReducer(makeInitialState(), { type: "SET_DECK_STEP", rootId: "frame:0", step: 2 });
+    expect(editorReducer(stepped, { type: "CLOSE_DOCUMENT" }).deckStepByRootKey).toEqual({});
+
+    const second = editorReducer(stepped, { type: "NEW_DOCUMENT" });
+    const bothStepped = editorReducer(second, { type: "SET_DECK_STEP", rootId: "frame:1", step: 3 });
+    expect(Object.keys(bothStepped.deckStepByRootKey)).toHaveLength(2);
+    expect(editorReducer(bothStepped, { type: "CLOSE_ALL_DOCUMENTS" }).deckStepByRootKey).toEqual({});
   });
 
   it("tracks dirty and save transitions per document", () => {

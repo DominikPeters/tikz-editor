@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { remote } from "webdriverio";
 import { installDeterministicBridgeInPage } from "../src/platform/e2e-mock-bridge.ts";
+import { scenarioDesktopImages } from "./desktop-image-scenario.mjs";
 
 if (shouldRerunUnderXvfb()) {
   const result = spawnSync("xvfb-run", ["-a", process.execPath, ...process.argv.slice(1)], {
@@ -22,30 +24,50 @@ if (shouldRerunUnderXvfb()) {
 }
 
 const appPath = resolveAppBinary();
+const provider = process.env.TIKZ_DESKTOP_E2E_DRIVER ?? (process.platform === "darwin" ? "embedded" : "external");
+if (provider !== "embedded" && provider !== "external") {
+  throw new Error("TIKZ_DESKTOP_E2E_DRIVER must be embedded or external.");
+}
+const buildCommand = provider === "embedded" ? "npm run tauri:build:e2e" : "npm run tauri:build -- --no-bundle";
+const backgroundMac = provider === "embedded" && process.platform === "darwin" && process.env.TIKZ_DESKTOP_E2E_SHOW_WINDOW !== "1";
 
 if (!fs.existsSync(appPath)) {
-  throw new Error(`Desktop binary not found at ${appPath}. Run "npm run tauri:build -- --no-bundle" first.`);
+  throw new Error(`Desktop binary not found at ${appPath}. Run "${buildCommand}" first.`);
 }
 
-const driverProbe = spawnSync("tauri-driver", ["--help"], { encoding: "utf8" });
-if (driverProbe.error) {
-  throw new Error("tauri-driver is required for desktop e2e. Install it with: cargo install tauri-driver --locked");
+const driverPort = provider === "embedded" ? await unusedLocalPort() : 4444;
+if (provider === "external" && await isPortOpen(driverPort)) {
+  throw new Error(`WebDriver port ${driverPort} is already in use.`);
 }
-if (driverProbe.status !== 0) {
-  const output = `${driverProbe.stdout ?? ""}\n${driverProbe.stderr ?? ""}`.toLowerCase();
-  if (output.includes("not supported on this platform")) {
-    console.log("Skipping desktop e2e: tauri-driver is not supported on this platform.");
-    process.exit(0);
+let driver;
+if (provider === "embedded") {
+  driver = spawn(appPath, [], {
+    env: { ...process.env, TAURI_WEBDRIVER_PORT: String(driverPort) },
+    stdio: "pipe"
+  });
+} else {
+  const driverProbe = spawnSync("tauri-driver", ["--help"], { encoding: "utf8" });
+  if (driverProbe.error) {
+    throw new Error("tauri-driver is required for desktop e2e. Install it with: cargo install tauri-driver --locked");
   }
-  throw new Error(`tauri-driver check failed:\n${driverProbe.stderr ?? driverProbe.stdout ?? ""}`);
+  if (driverProbe.status !== 0) {
+    const output = `${driverProbe.stdout ?? ""}\n${driverProbe.stderr ?? ""}`.toLowerCase();
+    if (output.includes("not supported on this platform")) {
+      throw new Error("tauri-driver is unsupported here. Build with tauri:build:e2e and use TIKZ_DESKTOP_E2E_DRIVER=embedded.");
+    }
+    throw new Error(`tauri-driver check failed:\n${driverProbe.stderr ?? driverProbe.stdout ?? ""}`);
+  }
+
+  const nativeDriver = resolveNativeDriver();
+  const driverArgs = nativeDriver ? ["--native-driver", nativeDriver] : [];
+  driver = spawn("tauri-driver", driverArgs, {
+    stdio: "pipe"
+  });
 }
 
-const nativeDriver = resolveNativeDriver();
-const driverArgs = nativeDriver ? ["--native-driver", nativeDriver] : [];
-const driver = spawn("tauri-driver", driverArgs, {
-  stdio: "pipe"
-});
-
+let launchError;
+driver.on("error", error => { launchError = error; });
+driver.stdout.on("data", chunk => { process.stdout.write(chunk); });
 driver.stderr.on("data", (chunk) => {
   process.stderr.write(chunk);
 });
@@ -54,6 +76,17 @@ let browser;
 try {
   await waitForDriverReady(driver);
   browser = await createSession(appPath);
+  await waitForEditor(browser);
+  if (provider === "embedded") {
+    const identifier = await browser.execute(() => window.__TAURI_INTERNALS__.invoke("plugin:app|identifier"));
+    assert.equal(identifier, "com.tikz.editor.e2e", `Use ${buildCommand} to build an isolated test app.`);
+    if (backgroundMac) await expectBackgroundWindow(browser);
+    // WKWebView reuses the app's profile between runs, unlike the external
+    // drivers' temporary profiles. Reset only the isolated E2E app's storage.
+    await browser.execute(() => { localStorage.clear(); sessionStorage.clear(); });
+    await browser.refresh();
+    await waitForEditor(browser);
+  }
   if (process.env.TIKZ_DESKTOP_E2E_PORTABLE === "1") {
     await scenarioPortableStorage(browser);
   }
@@ -61,7 +94,7 @@ try {
   const scenarios = [
     ["boot and tab lifecycle", scenarioBootAndTabLifecycle],
     ["native menu dispatch", scenarioNativeMenuDispatch],
-    ["quit menu availability", scenarioQuitMenuAvailability],
+    ["quit command availability", scenarioQuitMenuAvailability],
     ["native quit command close guard", scenarioNativeQuitCommandCloseGuard],
     ["isolation and restore", scenarioIsolationAndRestore],
     ["example open", scenarioExampleOpen],
@@ -71,7 +104,11 @@ try {
     ["close all dirty documents with save", scenarioCloseAllDirtyDocumentsWithSave],
     ["export smoke", scenarioExportSmoke],
     ["export payload details", scenarioExportPayloadDetails],
-    ["unsaved guard", scenarioUnsavedGuard]
+    ["unsaved guard", scenarioUnsavedGuard],
+    ["native image replacement, save and reload", browserInstance => scenarioDesktopImages(browserInstance, {
+      dispatchCommand,
+      restoreBridge: () => installDeterministicBridge(browserInstance)
+    })]
   ];
 
   const runStartedAt = Date.now();
@@ -88,7 +125,17 @@ try {
       throw error;
     }
   }
+  if (backgroundMac) await expectBackgroundWindow(browser);
   console.log(`[desktop-e2e] Completed ${passed}/${scenarios.length} scenarios in ${Date.now() - runStartedAt}ms`);
+} catch (error) {
+  if (browser) {
+    const screenshot = path.join(process.env.RUNNER_TEMP ?? os.tmpdir(), "tikz-desktop-e2e-failure.png");
+    await browser.saveScreenshot(screenshot).then(
+      () => console.error(`[desktop-e2e] Failure screenshot: ${screenshot}`),
+      screenshotError => console.error("[desktop-e2e] Could not capture failure screenshot:", screenshotError)
+    );
+  }
+  throw error;
 } finally {
   await browser?.deleteSession().catch(() => undefined);
   if (process.platform === "win32" && driver.pid) {
@@ -138,19 +185,23 @@ function shouldRerunUnderXvfb() {
 async function waitForDriverReady(driverProcess) {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    if (await isPortOpen(4444)) {
+    if (launchError) throw launchError;
+    if (await isPortOpen(driverPort)) {
       return;
     }
-    if (driverProcess.exitCode != null) {
-      throw new Error(`tauri-driver exited early with code ${driverProcess.exitCode}`);
+    if (driverProcess.exitCode != null || driverProcess.signalCode != null) {
+      throw new Error(`Desktop WebDriver exited early with code ${driverProcess.exitCode}. Build with ${buildCommand}.`);
     }
     await delay(250);
   }
-  throw new Error("Timed out waiting for tauri-driver to become ready.");
+  throw new Error(`Timed out waiting for ${provider} WebDriver on port ${driverPort}. Build with ${buildCommand}.`);
 }
 
 async function createSession(application) {
-  const deadline = Date.now() + 20_000;
+  // Native WebKitGTK can take longer than ten seconds to start on a cold CI
+  // runner. Timing out early leaves its first app alive during the next attempt.
+  const connectionTimeout = provider === "embedded" ? 10_000 : 120_000;
+  const deadline = Date.now() + connectionTimeout;
   let lastError = null;
   let warnedCapabilityFallback = false;
   // EdgeDriver otherwise overrides the app's profile with a fresh temporary
@@ -158,7 +209,7 @@ async function createSession(application) {
   const portableOptions = process.platform === "win32" && process.env.TIKZ_DESKTOP_E2E_PORTABLE === "1"
     ? { webviewOptions: { userDataFolder: path.join(path.dirname(application), "tikz-editor-data") } }
     : {};
-  const capabilityCandidates = [
+  const capabilityCandidates = provider === "embedded" ? [{ "wdio:enforceWebDriverClassic": true }] : [
     {
       "tauri:options": {
         application,
@@ -182,14 +233,22 @@ async function createSession(application) {
       try {
         return await remote({
           hostname: "127.0.0.1",
-          port: 4444,
+          port: driverPort,
           path: "/",
           capabilities,
+          connectionRetryCount: 0,
+          connectionRetryTimeout: connectionTimeout,
+          // WDIO 9's Undici can duplicate an explicit Content-Length on Node 26
+          // ("88, 88"). Fetch computes the correct length from the JSON body.
+          transformRequest: request => {
+            request.headers.delete("content-length");
+            return request;
+          },
           logLevel: "error"
         });
       } catch (error) {
         lastError = error;
-        if (!warnedCapabilityFallback && index === 0) {
+        if (!warnedCapabilityFallback && index === 0 && capabilityCandidates.length > 1) {
           warnedCapabilityFallback = true;
           console.warn("Desktop e2e: falling back to legacy WebDriver capabilities after initial session rejection.");
         }
@@ -202,6 +261,20 @@ async function createSession(application) {
 
 async function installDeterministicBridge(browserInstance) {
   await browserInstance.execute(installDeterministicBridgeInPage);
+}
+
+async function waitForEditor(browserInstance) {
+  await browserInstance.waitUntil(async () => await browserInstance.execute(() => Boolean(
+    window.__TIKZ_EDITOR_APP_TEST_API__ && window.__TIKZ_EDITOR_DESKTOP_TEST_API__
+  )), { timeout: 30_000, timeoutMsg: "Desktop editor did not finish starting." });
+}
+
+async function expectBackgroundWindow(browserInstance) {
+  const state = await browserInstance.execute(async () => ({
+    visible: await window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" }),
+    focused: await window.__TAURI_INTERNALS__.invoke("plugin:window|is_focused", { label: "main" })
+  }));
+  assert.deepEqual(state, { visible: false, focused: false }, "macOS tests should run without foregrounding their window");
 }
 
 async function scenarioPortableStorage(browserInstance) {
@@ -254,30 +327,28 @@ async function scenarioQuitMenuAvailability(browserInstance) {
       fileItems: fileSection?.items.map((item) => ({
         kind: item.kind,
         label: "label" in item ? item.label : null,
+        accelerator: "accelerator" in item ? item.accelerator : null,
         commandId: "commandId" in item ? item.commandId : null
       })) ?? []
     };
   });
   const quitItem = fileItems.find((item) => item.commandId === "file.quit-app");
-  if (/(mac|iphone|ipad)/i.test(platform)) {
-    assert.equal(quitItem, undefined, "macOS should keep Quit in the native application menu, not File");
-    return;
-  }
+  // This API exposes the command definition. On macOS the native menu adapter
+  // moves Quit to the application menu; placement is covered by native-quit-menu.
+  const windows = /win/i.test(platform);
   assert.deepEqual(
     quitItem,
     {
       kind: "command",
-      label: "Quit",
+      label: windows ? "Exit" : "Quit",
+      accelerator: windows ? "Alt+F4" : "CmdOrCtrl+Q",
       commandId: "file.quit-app"
     },
-    "Windows/Linux desktop File menu should expose Quit"
+    "Desktop should expose the platform's guarded quit command"
   );
 }
 
 async function scenarioNativeQuitCommandCloseGuard(browserInstance) {
-  if (await isMacDesktop(browserInstance)) {
-    return;
-  }
   await setDesktopClosedFlag(browserInstance, false);
   await clearUnsavedDecisions(browserInstance);
   await setSource(browserInstance, "\\draw (15,15)--(16,16); % dirty-quit-cancel");
@@ -297,11 +368,6 @@ async function scenarioNativeQuitCommandCloseGuard(browserInstance) {
   closed = await browserInstance.execute(() => window.__DESKTOP_E2E_CLOSED__);
   assert.equal(closed, true, "discarding changes from Quit should request desktop window close");
   await clearUnsavedDecisions(browserInstance);
-}
-
-async function isMacDesktop(browserInstance) {
-  const platform = await browserInstance.execute(() => navigator.platform);
-  return /(mac|iphone|ipad)/i.test(platform);
 }
 
 async function scenarioIsolationAndRestore(browserInstance) {
@@ -666,6 +732,17 @@ async function expectTextContains(browserInstance, selector, snippet) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function unusedLocalPort() {
+  const server = net.createServer();
+  return await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const port = server.address().port;
+      server.close(error => error ? reject(error) : resolve(port));
+    });
+  });
 }
 
 async function isPortOpen(port) {
