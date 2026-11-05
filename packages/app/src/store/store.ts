@@ -189,8 +189,10 @@ function ensureBeforeUnloadSaveHandler(): void {
   window.addEventListener("beforeunload", flushPendingWorkspaceSave);
   window.addEventListener("pagehide", flushPendingWorkspaceSave);
   // iOS suspends a backgrounded app, and may end it, without either event.
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") flushPendingWorkspaceSave();
-  });
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flushPendingWorkspaceSave();
+    });
+  }
   hasBeforeUnloadSaveHandler = true;
 }
