@@ -29,6 +29,26 @@ const joinsOracle = JSON.parse(readFileSync(new URL("./fixtures/beamer/overlay-p
 };
 
 describe("Beamer overlay pictures", () => {
+  it.each(["", "block", "itemize"])("paints overlapping inline pictures in source order inside %s", async environment => {
+    const content = String.raw`Alpha\begin{tikzpicture}[remember picture,overlay]\fill[magenta] (0,0) circle[radius=1cm];\end{tikzpicture}Omega`;
+    const body = environment === "block" ? `\\begin{block}{Title}${content}\\end{block}`
+      : environment === "itemize" ? `\\begin{itemize}\\item ${content}\\end{itemize}` : content;
+    const input = `\\documentclass{beamer}\\usepackage{tikz}\\begin{document}\\begin{frame}${body}\\end{frame}\\end{document}`;
+    const rendered = await renderBeamerFrame(input);
+    expect(rendered.diagnostics).toEqual([]);
+    const parts = rendered.svg.model.parts;
+    const before = parts.findIndex(part => part.markup.includes(`data-source-start="${input.indexOf("Alpha")}"`));
+    const picture = parts.findIndex(part => part.sourceId.includes(":overlay-picture:"));
+    const after = parts.findIndex(part => part.markup.includes(`data-source-start="${input.indexOf("Omega")}"`));
+    expect(before).toBeGreaterThanOrEqual(0);
+    expect(picture).toBeGreaterThan(before);
+    expect(after).toBeGreaterThan(picture);
+    expect(new Set(parts.map(part => part.partId)).size).toBe(parts.length);
+    for (const word of ["Alpha", "Omega"]) {
+      expect(rendered.svg.svg.match(new RegExp(`data-source-start="${input.indexOf(word)}"`, "g"))).toHaveLength(1);
+    }
+  });
+
   it.each(pauseOracle.pages)("matches LuaLaTeX for a drawing layer after a closed pause, step $step", async ({ step, trace }) => {
     expect(createHash("sha256").update(pauseSource).digest("hex")).toBe(pauseOracle.sourceSha256);
     const rendered = await renderBeamerFrame(pauseSource, { step });

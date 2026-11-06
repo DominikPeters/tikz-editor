@@ -49,12 +49,17 @@ export interface RenderTexParagraphSvgBodyOptions<
   readonly alignment?: TexParagraphAlignment | null;
   readonly baseFontSizePt?: TexLength;
   readonly textFontProfile?: TexTextFontProfile;
+  /** Paint a source slice without relaying out its already positioned boxes. */
+  readonly paintSourceRange?: { readonly from: number; readonly to: number };
+  readonly paintUnmapped?: boolean;
 }
 
 type ResolvedTexSvgRenderContext = {
   readonly metricProvider: TexMetricProvider;
   readonly baseFontSizePt: TexLength;
   readonly textFontProfile: TexTextFontProfile;
+  readonly paintSourceRange?: { readonly from: number; readonly to: number };
+  readonly paintUnmapped: boolean;
 };
 
 /**
@@ -106,14 +111,22 @@ export function renderTexParagraphSvgBody<
 function resolveTexSvgRenderContext(
   options: Pick<
     RenderTexParagraphSvgBodyOptions,
-    "metricProvider" | "baseFontSizePt" | "textFontProfile"
+    "metricProvider" | "baseFontSizePt" | "textFontProfile" | "paintSourceRange" | "paintUnmapped"
   >
 ): ResolvedTexSvgRenderContext {
   return {
     metricProvider: options.metricProvider,
     baseFontSizePt: options.baseFontSizePt ?? DEFAULT_TEX_SVG_BASE_FONT_SIZE_PT,
     textFontProfile: options.textFontProfile ?? luaLatexDefaultTextFontProfile,
+    ...(options.paintSourceRange ? { paintSourceRange: options.paintSourceRange } : {}),
+    paintUnmapped: options.paintUnmapped ?? true,
   };
+}
+
+function paintTexSource(context: ResolvedTexSvgRenderContext, start: number | undefined): boolean {
+  if (!context.paintSourceRange) return true;
+  if (start === undefined || !Number.isFinite(start)) return context.paintUnmapped;
+  return context.paintSourceRange.from <= start && start < context.paintSourceRange.to;
 }
 
 function renderTexVListSvgContent<Space extends SourceCoordinateSpace>(
@@ -184,6 +197,11 @@ function renderTexVListItemsSvgContent<Space extends SourceCoordinateSpace>(
 ): string[] {
   const pieces: string[] = [];
   for (const item of items) {
+    if (item.item.kind !== "paragraph" && item.item.kind !== "vbox") {
+      const command = item.item.kind === "hbox" && item.item.role?.kind === "list-label"
+        ? item.item.role.itemCommandSpan : undefined;
+      if (!paintTexSource(options.context, command?.start ?? item.item.sourceSpan?.start)) continue;
+    }
     if (item.item.kind === "paragraph") {
       const pathKey = texVListPathKey(item.path);
       const assignedLineIndices = options.paragraphLineIndicesByPath.get(pathKey);
@@ -285,6 +303,8 @@ function renderTexReportLineSvg<Space extends SourceCoordinateSpace>(
   renderedLines: Set<number>
 ): string {
   renderedLines.add(line.lineIndex);
+  if (options.context.paintSourceRange && !line.segments.some(segment =>
+    paintTexSource(options.context, segment.sourceStartRaw === undefined ? undefined : Number(segment.sourceStartRaw)))) return "";
   const font = options.context.metricProvider.resolveFont({
     atPt: options.context.baseFontSizePt,
   });
@@ -308,6 +328,7 @@ function renderTexReportLineSvg<Space extends SourceCoordinateSpace>(
     `<rect x="${formatPt(lineBoxLeft)}" y="0" width="${formatPt(texLength(report.width))}" height="${formatPt(lineBoxHeight)}" fill="transparent" />`,
   ];
   for (const segment of line.segments) {
+    if (!paintTexSource(options.context, segment.sourceStartRaw === undefined ? undefined : Number(segment.sourceStartRaw))) continue;
     if (options.skipListLabelSegments && segment.role === "list-label") {
       continue;
     }

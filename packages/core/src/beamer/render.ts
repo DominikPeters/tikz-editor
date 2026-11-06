@@ -1,3 +1,4 @@
+import { interleaveBeamerPicturePaint, type BeamerPicturePaintOwner } from "./picture-paint.js";
 import { projectBeamerInlinePictures, type BeamerInlinePicture } from "./inline-pictures.js";
 import { projectBeamerTikzSource } from "./overlay.js";
 import { beamerDateBindings, beamerMetadataWithDefaultDate, projectBeamerDateRegisters, type BeamerCompilationDate } from "./date.js";
@@ -652,6 +653,7 @@ async function renderBeamerFrameStep(params: {
     scopedTheme: createBeamerScopedTheme(document, theme, frame.bodySpan),
     tikzLayer: beamerTikzLayerState(source) === "ours",
     overlayPictures: beamerOverlayPicturesIn({ source, syntax: context.syntax }, frame.bodySpan),
+    paragraphPaint: new Map(),
     crampedLists: shrink != null || (frame.options?.entries.some(entry => entry.key === "squeeze") ?? false),
     ...(allowFrameBreaks != null ? { continuationBreaks: collectBeamerContinuationBreaks(context.syntax, frame) } : {}),
     footnotes: buildBeamerFrameFootnotes(document, context.syntax, frame, context.overlaysByFrameId, step, theme.templates.block.id.includes("/rounded")),
@@ -672,6 +674,7 @@ async function renderBeamerFrameStep(params: {
     }
   };
   collectExtracted(bodyIr.children);
+  const picturePaintOwners: BeamerPicturePaintOwner[] = [];
   const inlinePictures: BeamerInlinePicture[] = [];
   for (const root of frame.children) {
     if (extractedPictures.has(root.span.from) || references.overlayPictures?.some(p => p.span.from === root.span.from)) continue;
@@ -944,6 +947,7 @@ async function renderBeamerFrameStep(params: {
     for (const paragraph of paragraphs.slice(bodyParagraphStart)) {
       const origin = beamerOverlayPictureOrigin(paragraph, paragraph.bounds, picture.span);
       if (!origin) continue;
+      picturePaintOwners.push({ paragraphId: paragraph.paragraphId, span: picture.span, sourceId: picture.tikz.id });
       emitEmbeddedTikz({ tikz: picture.tikz, x: origin.x, y: origin.y - picture.tikz.height,
         parentId: items.find(item => item.paragraphId === paragraph.paragraphId)?.parentId ?? null,
         items, embeddedTikz, modelBuilder: bodyModelBuilder });
@@ -1005,6 +1009,7 @@ async function renderBeamerFrameStep(params: {
   }
   await emitBeamerOverlayPictures({
     overlays: bodyIr.overlays, step,
+    picturePaintOwners,
     context: { source, syntax: context.syntax },
     frameId: frame.id,
     frameIndex,
@@ -1021,14 +1026,14 @@ async function renderBeamerFrameStep(params: {
     ...(params.drawingLayer !== undefined ? { drawingLayer: params.drawingLayer } : {}),
     ...(params.work !== undefined ? { work: params.work } : {}),
   });
-  const model = modelBuilder.build({
+  const model = interleaveBeamerPicturePaint(modelBuilder.build({
     viewBox: page.page,
     defs: [],
     diagnostics: diagnostics.map((diagnostic) => ({
       code: diagnostic.code ?? "beamer-render",
       message: diagnostic.message,
     })),
-  });
+  }), picturePaintOwners, references.paragraphPaint ?? new Map());
   // The body parser labels picture roots with span-local ids; the document
   // root ids (`frame:i:tikzpicture:j`, nested figure addressing) come from
   // the scan model. Rebind each published picture item to the scan child
@@ -3566,6 +3571,7 @@ async function prepareEmbeddedTikz(params: {
  */
 async function emitBeamerOverlayPictures(params: {
   context: BeamerSyntaxContext;
+  picturePaintOwners: BeamerPicturePaintOwner[];
   overlays: BeamerOverlayModel;
   step: number;
   frameId: string;
@@ -3600,6 +3606,7 @@ async function emitBeamerOverlayPictures(params: {
     // A shrunk body scales its boxes; the picture is drawn at its box's place.
     const origin = params.bodyTransform ? transformBeamerPoint(params.bodyTransform, intrinsic) : intrinsic;
     const rootId = formatDocumentRootId({ kind: "beamer-frame-tikz", frameIndex: params.frameIndex, index, layer: true });
+    params.picturePaintOwners.push({ paragraphId: paragraph.paragraphId, span: picture.span, sourceId: `${params.frameId}:overlay-picture:${index}` });
     if (rootId === params.drawingLayer) {
       // Its editor paints it; an empty group keeps its place in the page's order.
       emitEmbeddedTikz({
@@ -4196,6 +4203,20 @@ function layoutParagraph(params: {
       itemIndex: item.itemIndex,
     })),
   }]);
+  const svgOptions = {
+    lineHeightPt: texLength(params.font.lineHeightPt),
+    vlistLayout: documentResult.vlistLayout,
+    metricProvider, textFontProfile, baseFontSizePt: fontSize, alignment,
+  } as const;
+  const renderPaint = (range?: Span, paintUnmapped = true): string => hideOverlayPaintInSvg(
+    renderTexParagraphSvgBody(documentResult.report, { ...svgOptions,
+      ...(range ? { paintSourceRange: range, paintUnmapped } : {}) }), params.hiddenSourceSpans ?? []);
+  const svgBody = renderPaint();
+  const pictures = [...(params.references.overlayPictures ?? []), ...(params.references.inlinePictures ?? [])];
+  if (pictures.some(picture => params.sourceSpan.from <= picture.span.from && picture.span.to <= params.sourceSpan.to)) {
+    params.references.paragraphPaint ??= new Map();
+    params.references.paragraphPaint.set(params.paragraphId, { sourceSpan: params.sourceSpan, whole: svgBody, render: renderPaint });
+  }
   return {
     height,
     layout: {
@@ -4239,17 +4260,7 @@ function layoutParagraph(params: {
         : {}),
       ...(listStructure.length ? { listStructure } : {}),
     },
-    svgBody: hideOverlayPaintInSvg(
-      renderTexParagraphSvgBody(documentResult.report, {
-        lineHeightPt: texLength(params.font.lineHeightPt),
-        vlistLayout: documentResult.vlistLayout,
-        metricProvider,
-        textFontProfile,
-        baseFontSizePt: fontSize,
-        alignment,
-      }),
-      params.hiddenSourceSpans ?? []
-    ),
+    svgBody,
     listMarkers: documentResult.vlistLayout.boxReport.items
       .filter((item) =>
         item.hboxRole?.kind === "list-label" &&
