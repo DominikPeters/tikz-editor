@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "title": "Aliased declarations across frame flow",
+  "fidelity": [
+    {
+      "id": "aliased-macro-across-flow",
+      "file": "aliased-macro-across-flow.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "aliased-macro-across-flow",
+      "sourceSha256": "715c92a1943fa45fc8e5d808464cef65f6a28700173dbfaa2595ce8c9825cb4b",
+      "oracleText": [
+        "Before:7ticks.",
+        "Inside:8ticks.",
+        "After:9ticks."
+      ]
+    }
+  ],
+  "recognition": []
+}

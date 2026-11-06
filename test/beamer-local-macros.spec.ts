@@ -28,9 +28,9 @@ describe("source-ordered local macro execution", () => {
     const origin = result.sourceMap.charOrigins[result.text.indexOf("Direct")];
     expect(origin).toMatchObject({ kind: "macro-argument", from: String.raw`\newcommand{\unit}{ms}`.length + source.indexOf("Direct") });
   });
-  it("carries frame-local declarations across structural flow and resolves declaration aliases between frames", async () => {
+  it.each(["\\renewcommand", "\\change"])("carries %s across structural flow and resolves declaration aliases between frames", async declaration => {
     const source = String.raw`\documentclass{beamer}\newcommand{\unit}{ms}\let\change\renewcommand
-\begin{document}\begin{frame}\renewcommand{\unit}{ticks}Before:7\unit.\begin{block}{Panel}Inside:8\unit.\end{block}After:9\unit.\end{frame}
+\begin{document}\begin{frame}${declaration}{\unit}{ticks}Before:7\unit.\begin{block}{Panel}Inside:8\unit.\end{block}After:9\unit.\end{frame}
 \change{\unit}{s}\begin{frame}Next:10\unit.\end{frame}\end{document}`;
     const prepared = prepareBeamerDocument(source);
     expect(text(await prepared.renderFrame({ frameIndex: 1 }))).toContain("Next:10s.");

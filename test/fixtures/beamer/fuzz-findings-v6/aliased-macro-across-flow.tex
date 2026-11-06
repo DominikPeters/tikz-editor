@@ -1,0 +1,13 @@
+\documentclass{beamer}
+\setbeamertemplate{navigation symbols}{}
+\newcommand{\unit}{ms}
+\let\change\renewcommand
+\date{}
+\begin{document}
+\begin{frame}[t]
+\change{\unit}{ticks}
+Before:7\unit.
+\begin{block}{Panel}Inside:8\unit.\end{block}
+After:9\unit.
+\end{frame}
+\end{document}

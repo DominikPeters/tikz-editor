@@ -647,13 +647,14 @@ async function renderBeamerFrameStep(params: {
     ...theme.diagnostics,
   ];
   diagnostics.push(...bodyIr.diagnostics, ...context.references.diagnostics);
+  const inheritedMacroDeclarations = [...macroBindings.values()].some(binding => /\\(?:newcommand|renewcommand|providecommand|def|let)\b/u.test(binding.kind === "text" ? binding.value : binding.body));
   const references: BeamerReferenceContext = {
     compilationDate: context.compilationDate,
     tocSections: document.sections,
     currentSectionId: frame.sectionId,
     ...context.references, step, theme, renderDiagnostics: diagnostics,
     scopedTheme: createBeamerScopedTheme(document, theme, frame.bodySpan),
-    macroBindingsAt: offset => offset >= frame.bodySpan.from && /\\(?:newcommand|renewcommand|providecommand|def|let)\b/u.test(source.slice(frame.bodySpan.from, offset))
+    macroBindingsAt: offset => offset >= frame.bodySpan.from && (inheritedMacroDeclarations || /\\(?:newcommand|renewcommand|providecommand|def|let)\b/u.test(source.slice(frame.bodySpan.from, offset)))
       ? context.macroBindingsAt(offset) : macroBindings,
     tikzLayer: beamerTikzLayerState(source) === "ours",
     overlayPictures: beamerOverlayPicturesIn({ source, syntax: context.syntax }, frame.bodySpan),
