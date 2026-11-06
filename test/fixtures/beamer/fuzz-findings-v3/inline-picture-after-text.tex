@@ -1,0 +1,33 @@
+\documentclass[17pt,aspectratio=43]{beamer}
+\usepackage{tikz}
+\usetheme{Boadilla}
+\definecolor{fuzzpaint}{RGB}{255,0,255}
+\definecolor{fuzzsecond}{RGB}{18,137,67}
+\setbeamertemplate{navigation symbols}{}
+\title{Probe}
+\year=2026\month=11\day=5
+\date{}
+\newcommand{\editprobetext}{EditAlpha}
+\definecolor{editpaint}{RGB}{0,128,255}
+% edit-comment: coalesced-59-🖉
+% edit-date
+\year=2024\month=11\day=6
+\begin{document}
+\begin{frame}\raggedleft {\raggedright \editprobetext\par}\par \raggedright Alpha\par Omega is the conclusion.\end{frame}
+\begin{frame}{EditTitleB}
+\begin{tikzpicture}[remember picture,overlay,rotate=0]
+% edit-overlay
+\fill[editpaint] (-0.2,0) rectangle (0.2,0.6);
+\fill[editpaint,rotate=-25] (0,0) ellipse[x radius=.325cm,y radius=.35cm];
+\draw (0,0) .. controls (.4,.8) and (1,-.3) .. (1.5,.4);
+\node<2> at (0,0) {EditNode};
+\end{tikzpicture}
+\end{frame}
+\begin{frame}EditNeighbor
+\begin{tikzpicture}
+% edit-bounds
+\fill[editpaint] (-3,0) rectangle (3,0.6);
+\fill[editpaint,rotate=-25] (0,0) ellipse[x radius=.325cm,y radius=.35cm];
+\end{tikzpicture}
+\end{frame}
+\end{document}

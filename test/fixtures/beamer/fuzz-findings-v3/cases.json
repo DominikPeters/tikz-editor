@@ -1,0 +1,85 @@
+{
+  "formatVersion": 1,
+  "title": "Known fidelity failures exposed by editing campaigns",
+  "fidelity": [
+    {
+      "id": "inline-picture-after-text",
+      "file": "inline-picture-after-text.tex",
+      "frame": 3,
+      "pages": 1,
+      "family": "inline-picture-flow",
+      "sourceSha256": "a6bdbc50184741a29871ef62a7e3476b5c7b7d88d6e59d542cd1a478a0752d58",
+      "oracleText": [
+        "EditNeighbor"
+      ],
+      "description": "Known glyph-position mismatch against independent LuaLaTeX; strict gates remain failing.",
+      "paintColors": [
+        {
+          "color": "#0080ff",
+          "visible": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inline-picture-after-text-reduced",
+      "file": "inline-picture-after-text-reduced.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "inline-picture-flow",
+      "sourceSha256": "1ff3be4fbdc3b0187dc8dcc211d062d3f16197dbef7e043f4ff8f6e210b736de",
+      "oracleText": [
+        "EditNeighbor"
+      ],
+      "description": "Known glyph-position mismatch against independent LuaLaTeX; strict gates remain failing.",
+      "paintColors": [
+        {
+          "color": "#0080ff",
+          "visible": [
+            true
+          ]
+        }
+      ],
+      "reduction": {
+        "key": "mismatch:LuaLaTeX structural contract:maxAbsoluteGlyphDyPt",
+        "attempts": 32,
+        "accepted": 8,
+        "budgetExhausted": true,
+        "verifiedTrial": "trial-0024"
+      }
+    },
+    {
+      "id": "titlepage-after-prose",
+      "file": "titlepage-after-prose.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "titlepage-flow",
+      "sourceSha256": "4da881a80134fd052bc49d586ac571071dadf1afb946fe1da6e1ce529d7835c5",
+      "oracleText": [
+        "Probe"
+      ],
+      "description": "Known glyph-position mismatch against independent LuaLaTeX; strict gates remain failing."
+    },
+    {
+      "id": "titlepage-after-prose-reduced",
+      "file": "titlepage-after-prose-reduced.tex",
+      "frame": 1,
+      "pages": 1,
+      "family": "titlepage-flow",
+      "sourceSha256": "3f19b3936b7f896f29959db57e836917d5083b10448ad182f6da6d3e1bf01209",
+      "oracleText": [
+        "Probe"
+      ],
+      "description": "Known glyph-position mismatch against independent LuaLaTeX; strict gates remain failing.",
+      "reduction": {
+        "key": "mismatch:LuaLaTeX structural contract:maxAbsoluteGlyphDyPt",
+        "attempts": 33,
+        "accepted": 11,
+        "budgetExhausted": false,
+        "verifiedTrial": "trial-0020"
+      }
+    }
+  ],
+  "recognition": []
+}
