@@ -1,7 +1,8 @@
 # Fidelity findings from editing sequences
 
-These are **known failures**, preserved with strict comparison gates. They are
-not included in the passing frozen-oracle campaign. Each source was compiled
+These findings are **fixed as of 2026-11-07** under the original strict
+comparison gates. Their independent TeX traces now participate in the passing
+frozen-oracle campaign. Each source was compiled
 independently with LuaLaTeX; the minimized sources were verified again after
 reduction. SHA-256 hashes and reduction budgets are recorded in `cases.json`.
 
@@ -28,7 +29,11 @@ node scripts/compare-beamer-priorities.mjs \
   --out-dir artifacts/beamer-fuzz/findings-v3
 ```
 
-That command intentionally exits nonzero while the renderer issues remain.
+All four sources now pass. The picture fix retains shared paragraph ownership;
+the title-page fix carries the preceding depth through the opening empty box.
+The reduced title-page source now pins the compilation calendar so replay does
+not change at midnight. Its original reduction hash remains in `cases.json`;
+the original 214-byte reduction size below predates that calendar pin.
 To continue reducing the inline example:
 
 ```sh

@@ -67,18 +67,19 @@
       "frame": 1,
       "pages": 1,
       "family": "titlepage-flow",
-      "sourceSha256": "3f19b3936b7f896f29959db57e836917d5083b10448ad182f6da6d3e1bf01209",
+      "sourceSha256": "696d23d94b6392d3d57f70c70d1e0bc09b9f7eb9b396db9757c4cf6f6bef0d99",
       "oracleText": [
         "Probe"
       ],
-      "description": "Known glyph-position mismatch against independent LuaLaTeX; strict gates remain failing.",
+      "description": "Regression for title-page vertical glue after prose, with the compilation calendar pinned for replay.",
       "reduction": {
         "key": "mismatch:LuaLaTeX structural contract:maxAbsoluteGlyphDyPt",
         "attempts": 33,
         "accepted": 11,
         "budgetExhausted": false,
         "verifiedTrial": "trial-0020"
-      }
+      },
+      "originalReducedSourceSha256": "3f19b3936b7f896f29959db57e836917d5083b10448ad182f6da6d3e1bf01209"
     }
   ],
   "recognition": []

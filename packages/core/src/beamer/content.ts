@@ -183,6 +183,12 @@ export function parseBeamerFrameBody(
       index = endIndex;
       continue;
     }
+    if (token.name === "tikzpicture" && tikzNode && pictureSharesParagraph(source, cursor, token.span.from, end.span.to, frame.bodySpan.to)) {
+      // A source newline is a space, not a paragraph break. Keep ordinary
+      // pictures beside prose in the shared TeX paragraph frontend.
+      index = endIndex;
+      continue;
+    }
     pushTextNode(source, { from: cursor, to: token.span.from }, frame.id, children);
     children.push(
       tikzNode ??
@@ -687,6 +693,15 @@ function isIgnorableFrameSource(source: string, span: Span): boolean {
     .slice(span.from, span.to)
     .replace(/%[^\r\n]*(?:\r?\n|$)/gu, "")
     .trim() === "";
+}
+
+function pictureSharesParagraph(source: string, from: number, begin: number, end: number, to: number): boolean {
+  const clean = (text: string) => text.replace(/%[^\r\n]*(?:\r?\n|$)/gu, "");
+  const boundary = /\\par(?![A-Za-z@])|\r?\n[ \t]*\r?\n/gu;
+  const before = clean(source.slice(from, begin)).split(boundary).at(-1) ?? "";
+  if (before.replace(/\\(?:relax|centering|raggedright|raggedleft)(?![A-Za-z@])/gu, "").trim()) return true;
+  const after = (clean(source.slice(end, to)).split(boundary)[0] ?? "").trim();
+  return after.length > 0 && !/^\\(?:begin|end|titlepage|maketitle|tableofcontents|vspace|vfill|smallskip|medskip|bigskip)(?![A-Za-z@])/u.test(after);
 }
 
 function frameTikzFlowNode(params: {

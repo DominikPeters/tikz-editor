@@ -43,8 +43,10 @@ export function positionPreparedFrameFlow(
       continue;
     }
     if (item.kind === "title-page") {
+      // The template starts with an empty vbox. Its baseline glue consumes
+      // the preceding depth, just like any other box in TeX's vertical list.
       const contentTop =
-        cursor + item.titlePage.leadingFillWeight * fillUnit;
+        cursor - (item.titlePage.plan.style === "colorbox" || item.titlePage.plan.style === "rounded" ? previousDepth ?? 0 : 0) + item.titlePage.leadingFillWeight * fillUnit;
       const visualBottom =
         contentTop + item.titlePage.naturalHeight;
       items.push({
