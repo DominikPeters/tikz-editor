@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   BEAMER_FRAME_ORACLE_VERSION,
   beamerPageTraceLuaSource,
-  buildBeamerFrameProbeSource,
+  buildBeamerFrameProbeSource, needsBeamerPrefixReplay,
   fileSha256,
   firstVersionLine,
   parseBeamerClassVersion,
@@ -275,7 +275,7 @@ async function main() {
     from: document.preamble.span.to, to: selectedFrame.span.from,
   }).some(control => control.name === "caption");
   const hasContents = beamerControlSequencesIn(beamerSyntaxContext(source), { from: 0, to: source.length }).some(control => control.name === "tableofcontents");
-  const deckContext = previousCaptions || hasContents || document.frames.some(frame => frame.options?.allowFrameBreaks != null || !frame.endSpan) ? collectBeamerDeckContext({
+  const deckContext = needsBeamerPrefixReplay(source, document, frameIndex) || previousCaptions || hasContents || document.frames.some(frame => frame.options?.allowFrameBreaks != null || !frame.endSpan) ? collectBeamerDeckContext({
     source, document, inputPath: options.inputPath, sourceDir: options.sourceDir ?? dirname(options.inputPath),
     texRoot: options.texRoot, cacheDir: join(repoRoot, "artifacts", "beamer-full-deck-context"),
   }) : null;
@@ -351,7 +351,7 @@ async function main() {
       frameSpan: probe.frame.span,
       frameTitle: probe.frame.title?.value ?? null,
       compiledPage: pageNumber,
-      compilationScope: "original-preamble-and-selected-source-frame",
+      compilationScope: needsBeamerPrefixReplay(source, document, frameIndex) ? "original-prefix-and-selected-source-frame" : "original-preamble-and-selected-source-frame",
       sourceDirectory: options.sourceDir ?? dirname(options.inputPath),
       texRoot: options.texRoot,
       ...(deckContext ? { frameCounterContext: { kind: "full-authored-tex-deck", beforeFrameNumber: deckContext.frames[frameIndex].beforeFrameNumber, firstPage: deckContext.frames[frameIndex].firstPage, totalFrames: deckContext.totalFrames, cached: deckContext.cached, cacheDirectory: deckContext.cacheDirectory } } : {}),

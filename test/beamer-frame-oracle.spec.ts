@@ -10,7 +10,7 @@ import {
   selectBeamerOraclePage,
   beamerPageTraceLuaSource,
   beamerProbeInstrumentation,
-  buildBeamerFrameProbeSource,
+  buildBeamerFrameProbeSource, needsBeamerPrefixReplay,
   buildBeamerNavigationSeed,
   parseBeamerPageTraceTsv,
   parseBeamerClassVersion,
@@ -138,6 +138,51 @@ TIKZ_BEAMER_CONTEXT E 1 3 4`, nav, 2);
     }
   }, 40_000);
 
+  it("replays prior TeX for body macro changes without recording discarded frames", () => {
+    const source = String.raw`\documentclass{beamer}\newcommand{\unit}{ms}\let\changeunit\renewcommand
+\begin{document}\begin{frame}Before.\end{frame}
+\changeunit{\unit}{s}\begin{frame}After: 12\unit.\end{frame}\end{document}`;
+    const document = scanBeamerDocument(source);
+    expect(needsBeamerPrefixReplay(source, document, 0)).toBe(false);
+    expect(needsBeamerPrefixReplay(source, document, 1)).toBe(true);
+    const probe = buildBeamerFrameProbeSource(source, document, 1);
+    expect(probe.source).toContain(String.raw`\changeunit{\unit}{s}`);
+    expect(probe.source).toContain(String.raw`\DiscardShipoutBox`);
+    expect(probe.source.indexOf("Before.")).toBeLessThan(probe.source.indexOf("TIKZ_BEAMER_DIM"));
+    expect(probe.source.indexOf(String.raw`\RemoveFromHook`)).toBeLessThan(probe.source.indexOf("After:"));
+  });
+
+  it.skipIf(!runOracleIntegration)("matches full-deck glyph traces after macro redefinitions, aliasing and local restoration", () => {
+    const directory = mkdtempSync(join(tmpdir(), "beamer-macro-context-"));
+    try {
+      const source = String.raw`\documentclass{beamer}
+\usepackage{tikz}\setbeamertemplate{navigation symbols}{}
+\newcommand{\unit}{ms}\newcommand{\labelled}[1]{#1: \unit}\let\changeunit\renewcommand
+\begin{document}
+\begin{frame}\labelled{Before}\only<2>{Later}\end{frame}
+\let\oldunit\unit\changeunit{\unit}{s}
+\begin{frame}\labelled{After} Previous: \oldunit.
+{\renewcommand{\unit}{ticks} Local: \unit.}\par
+Restored: \unit. Page: \insertpagenumber\end{frame}
+\renewcommand{\unit}{min}\begin{frame}Future: \unit\end{frame}
+\end{document}`;
+      const input = join(directory, "deck.tex"); writeFileSync(input, source);
+      const isolated = spawnSync(process.execPath, ["scripts/probe-beamer-frame.mjs", "--input", input, "--frame", "2", "--out-dir", directory, "--name", "isolated", "--trace-only"], { encoding: "utf8", timeout: 45_000 });
+      expect(isolated.status, isolated.stderr).toBe(0);
+      const isolatedTrace = parseBeamerPageTraceTsv(readFileSync(join(directory, "isolated/beamer-page-trace.tsv"), "utf8"));
+      writeFileSync(join(directory, "whole.tex"), source.replace(String.raw`\begin{document}`, `${beamerProbeInstrumentation()}\n${String.raw`\begin{document}`}`));
+      writeFileSync(join(directory, "beamer-page-trace.lua"), beamerPageTraceLuaSource());
+      for (let pass = 0; pass < 2; pass++) execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", `--output-directory=${directory}`, "--no-shell-escape", "whole.tex"], { cwd: directory, env: { ...process.env, TEXMFVAR: "/private/tmp", TEXMFCACHE: "/private/tmp", TIKZ_BEAMER_TRACE_DIR: directory }, stdio: "ignore", timeout: 30_000 });
+      const full = parseBeamerPageTraceTsv(readFileSync(join(directory, "beamer-page-trace.tsv"), "utf8"));
+      expect(full.pages).toHaveLength(4);
+      expect(isolatedTrace.pages).toHaveLength(1);
+      // Box addresses differ because isolation adds bookkeeping nodes. Compare
+      // every glyph's code, font, paint, transform and scaled-point geometry.
+      const glyphData = (glyphs: readonly unknown[]) => glyphs.map(glyph => Object.fromEntries(Object.entries(glyph as Record<string, unknown>).filter(([key]) => key !== "path")));
+      expect(glyphData(isolatedTrace.pages[0].glyphs)).toEqual(glyphData(full.pages[2].glyphs));
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  }, 90_000);
+
   it("builds a single-frame probe while retaining the source preamble", () => {
     const source = String.raw`\documentclass[aspectratio=169]{beamer}
 \newcommand{\term}{oracle}
@@ -164,7 +209,8 @@ TIKZ_BEAMER_CONTEXT E 1 3 4`, nav, 2);
     expect(probe.navSource).toContain(
       String.raw`\gdef \inserttotalframenumber {2}`
     );
-    expect(probe.source).not.toContain("not selected");
+    expect(probe.source).toContain("not selected");
+    expect(probe.source.indexOf("not selected")).toBeLessThan(probe.source.indexOf(String.raw`\RemoveFromHook`));
     expect(probe.source.match(/\\begin\{document\}/gu)).toHaveLength(1);
     expect(probe.source).toContain("TIKZ_BEAMER_DIM paperWidth");
   });
@@ -184,15 +230,10 @@ TIKZ_BEAMER_CONTEXT E 1 3 4`, nav, 2);
     const probe = buildBeamerFrameProbeSource(source, document, 1);
     const nav = buildBeamerNavigationSeed(source, document);
 
-    expect(probe.source).toContain(String.raw`\setcounter{section}{1}`);
-    expect(probe.source).toContain(String.raw`\setcounter{subsection}{1}`);
-    expect(probe.source).toContain(String.raw`\setcounter{subsectionslide}{1}`);
-    expect(probe.source).toContain(
-      String.raw`\def\insertsectionhead{Foundations}`
-    );
-    expect(probe.source).toContain(
-      String.raw`\def\insertsubsectionhead{Overview}`
-    );
+    expect(probe.source).toContain(String.raw`\section[Foundations]{Long Foundations}`);
+    expect(probe.source).toContain(String.raw`\subsection[Overview]{Long Overview}`);
+    expect(probe.source).not.toContain(String.raw`\section{Geometry}`);
+    expect(probe.source).toContain(String.raw`\DiscardShipoutBox`);
     expect(nav).toContain(
       String.raw`\sectionentry {1}{Foundations}{1}{Foundations}{0}`
     );

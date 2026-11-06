@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-export const BEAMER_FRAME_ORACLE_VERSION = 10;
+export const BEAMER_FRAME_ORACLE_VERSION = 12;
 export const SP_PER_TEX_POINT = 65_536;
 
 const PROBE_DIMENSIONS = [
@@ -418,6 +418,13 @@ export function isCompleteBeamerOracleFrame(source, frame) {
     /^\\maketitle\s*$/u.test(source.slice(frame.span.from, frame.span.to)));
 }
 
+// Replay the complete earlier body through TeX. Macro aliases and effects
+// hidden in commands make a declaration-name allowlist insufficient.
+export function needsBeamerPrefixReplay(source, document, frameIndex) {
+  const frame = document.frames[frameIndex];
+  return !!frame && source.slice(document.documentBodySpan.from, frame.span.from).trim().length > 0;
+}
+
 export function buildBeamerFrameProbeSource(
   source,
   document,
@@ -443,6 +450,8 @@ export function buildBeamerFrameProbeSource(
     document.preamble.span.to
   );
   const frameSource = source.slice(frame.span.from, frame.span.to);
+  const replayPrefix = needsBeamerPrefixReplay(source, document, frameIndex);
+  const prefix = replayPrefix ? source.slice(document.documentBodySpan.from, frame.span.from) : "";
   const navigationState = buildBeamerFrameNavigationState(
     source,
     document,
@@ -458,15 +467,19 @@ export function buildBeamerFrameProbeSource(
     navSource: buildBeamerNavigationSeed(source, document, deckContext),
     source: `${preamble.trimEnd()}
 
-${beamerProbeInstrumentation()}
+${replayPrefix ? "" : beamerProbeInstrumentation()}
 
 \\begin{document}
+${replayPrefix ? `\\AddToHook{shipout/before}[tikzeditor-context]{\\DiscardShipoutBox}
+${prefix}
+\\RemoveFromHook{shipout/before}[tikzeditor-context]
+${beamerProbeInstrumentation()}` : ""}
 \\setcounter{framenumber}{${deckContext?.frames[frameIndex]?.beforeFrameNumber ?? frameIndex}}
 ${deckContext ? `\\setcounter{page}{${deckContext.frames[frameIndex].firstPage}}` : ""}
 ${deckContext?.frames[frameIndex].beforeFigureNumber !== undefined ? `\\setcounter{figure}{${deckContext.frames[frameIndex].beforeFigureNumber}}\\setcounter{table}{${deckContext.frames[frameIndex].beforeTableNumber}}` : ""}
 \\def\\inserttotalframenumber{${deckContext?.totalFrames ?? document.frames.length}}
-${navigationState}
-${theoremCounterState}
+${replayPrefix ? "" : navigationState}
+${replayPrefix ? "" : theoremCounterState}
 ${frameSource}
 \\end{document}
 `,

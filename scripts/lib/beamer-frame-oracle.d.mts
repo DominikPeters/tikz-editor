@@ -40,6 +40,7 @@ export interface BeamerDeckCounterContext {
   readonly tocSource?: string;
   readonly frames: readonly { readonly beforeFrameNumber: number; readonly afterFrameNumber: number; readonly firstPage: number; readonly lastPage: number }[];
 }
+export function needsBeamerPrefixReplay(source: string, document: BeamerDocumentModel, frameIndex: number): boolean;
 export function buildBeamerFrameProbeSource(
   source: string,
   document: BeamerDocumentModel,
