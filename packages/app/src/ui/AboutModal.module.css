@@ -36,22 +36,10 @@
 }
 
 .logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   width: 82px;
   height: 82px;
-  border-radius: 10px;
-  background: #24509a;
-  color: white;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 58px;
-  line-height: 1;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 16%, transparent);
-}
-
-.logoSlash {
-  transform: translateY(-1px);
+  object-fit: contain;
 }
 
 .title {

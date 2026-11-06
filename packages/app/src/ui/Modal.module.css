@@ -352,15 +352,11 @@
 }
 
 .alert .header::before {
-  content: "\\t";
+  content: "";
+  flex-shrink: 0;
   width: 64px;
   height: 64px;
-  border-radius: 14px;
-  background: #24509a;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
-  color: #ffffff;
-  font: 44px/64px Georgia, "Times New Roman", serif;
-  text-align: center;
+  background: url("../assets/app-icon-256.png") center / contain no-repeat;
 }
 
 .alert .headerText {

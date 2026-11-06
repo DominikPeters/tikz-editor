@@ -1,3 +1,4 @@
+import appIcon from "../assets/app-icon-256.png";
 import { Modal } from "./Modal";
 import css from "./AboutModal.module.css";
 
@@ -32,10 +33,7 @@ export function AboutModal({ onClose }: AboutModalProps) {
             </svg>
           </button>
 
-          <div className={css.logo} aria-hidden="true">
-            <span className={css.logoSlash}>{"\\"}</span>
-            <span>t</span>
-          </div>
+          <img className={css.logo} src={appIcon} width={82} height={82} alt="" draggable={false} />
 
           <h2 id="about-title" className={css.title}>
             <span className={css.titleStrong}>TikZ Editor</span>{" "}

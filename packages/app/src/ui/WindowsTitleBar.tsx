@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { PlatformWindowFrame } from "../platform/types";
+import appIcon from "../assets/app-icon-32.png";
 import css from "./WindowsTitleBar.module.css";
 
 const ACCENT_SHADES = ["light3", "light2", "light1", "base", "dark1", "dark2", "dark3"] as const;
@@ -64,7 +65,7 @@ export function WindowsTitleBar({ frame, children }: { frame: PlatformWindowFram
 
   return (
     <div className={css.titleBar} data-tauri-drag-region data-select="chrome" data-testid="windows-title-bar">
-      <span className={css.appMark} aria-hidden="true" data-tauri-drag-region>{"\\t"}</span>
+      <img className={css.appMark} src={appIcon} width={16} height={16} alt="" draggable={false} data-tauri-drag-region />
       {children}
       <div className={css.dragSpace} data-tauri-drag-region />
       <div className={css.captions}>

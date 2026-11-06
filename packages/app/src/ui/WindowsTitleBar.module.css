@@ -18,11 +18,7 @@
   width: 16px;
   height: 16px;
   margin-right: 8px;
-  border-radius: 4px;
-  background: #24509a;
-  color: #ffffff;
-  font: 12px/16px Georgia, "Times New Roman", serif;
-  text-align: center;
+  object-fit: contain;
 }
 
 .dragSpace {
