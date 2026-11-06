@@ -259,7 +259,7 @@ unsupported and recorded. PNG/SVG dimensions need no extra tool; JPEG dimensions
 ImageMagick and PDF assets use `pdfinfo`/`pdftoppm`.
 
 Full comparison needs `lualatex`, `kpsewhich`, `pdfinfo`, `rsvg-convert`, `magick`
-and `pdftoppm`. `--structural-only` needs just the first three. Optional
+and `pdftocairo`. `--structural-only` needs just the first three. Optional
 `--vector-oracle` also needs dvisvgm with working PDF conversion. MuPDF text
 extraction is optional; Lua shipout tracing supplies the structural oracle.
 The runner builds core output when stale, records tool versions, and starts an
@@ -281,3 +281,82 @@ from a recorder-backed full-deck compilation and restore those seeds on each
 pass. The corpus fingerprint includes the full-deck context helper. See the
 [breadth-deck LuaLaTeX audit](../design/beamer-breadth-decks-lualatex.md) for
 exhaustive paired results, known trace limitations and the next gap reductions.
+
+## Seeded Beamer interaction fuzzing
+
+```sh
+npm run compare:beamer-fuzz -- --profile broad --seed 20261105 --cases 128
+```
+
+This is a document-level differential fuzzer, separate from the text/math
+fuzzers. The default `broad` profile (generator version 2) starts with all 33
+families, then samples additional combinations. Independent axes include eight
+font sizes, two aspect ratios, three themes, four column alignments, column
+widths, prose lengths, rectangle/triangle/circle/ellipse geometry, scales and
+rotations. Families cover alignment environments, pictures in lists and blocks,
+multiple pictures, math with prose, scoped declarations, overlapping paint,
+relative and union overlays, nested visibility wrappers and independent overlay
+programs. Animated cases include a page after the last closed range, so incorrect
+persistent paint cannot hide behind an early endpoint. Expected color visibility
+comes from the generated program independently of the renderer's overlay decoder.
+Dates use literal TeX registers; only date families vary those registers.
+
+Use `--profile smoke --cases 38` for the original, narrower 23-family grammar.
+Broad cases deliberately explore combinations beyond established passing coverage;
+new renderer limitations remain failures rather than being excluded by generation.
+Seeds, generator version and SHA-256, source uniqueness, page totals, family
+counts and document axes are recorded in the manifest and `coverage.json`.
+Saved sources are the authoritative replay input across generator revisions.
+For a longer soak, repeat seeds sequentially or use at most two comparison
+workers. Set `MAGICK_THREAD_LIMIT=1 OMP_NUM_THREADS=1` when running workers to
+avoid multiplying image-tool threads. For example:
+
+```sh
+for seed in 20261106 20261107 20261108 20261109; do
+  MAGICK_THREAD_LIMIT=1 OMP_NUM_THREADS=1 npm run compare:beamer-fuzz -- \
+    --seed "$seed" --cases 128 --out-dir "artifacts/beamer-fuzz/seed-$seed"
+done
+```
+
+Each generated `.tex` file and the manifest are saved in
+`artifacts/beamer-fuzz/cases/`. Every overlay page is checked against LuaLaTeX;
+page count, glyph/font/position/rule geometry, diagnostics, and explicit flat
+TikZ paint are independent gates. Unique RGB paint masks compare the entire
+painted footprint rather than treating matching text as evidence for a drawing.
+An absent oracle paint witness is an invalid reference, not a passing empty
+comparison. Failures exit nonzero and remain in the report/gallery.
+
+Fifteen representative failures from the broad v2 campaign are preserved as
+regressions in `test/fixtures/beamer/fuzz-findings-v2/`, with SHA-checked sources,
+generation provenance and independent LuaLaTeX snapshots in the ordinary tests.
+Run `npm run compare:beamer-fuzz-regressions` for the strict live text-and-paint
+comparison, including overlapping remembered pictures and large projected list labels.
+
+Use `--generate-only` to inspect a generated corpus without compiling. Replay a
+single saved failure through the existing runner:
+
+```sh
+node scripts/compare-beamer-priorities.mjs --manifest artifacts/beamer-fuzz/cases/cases.json --cases v2-seed-20261105-0005-draw-overlay --out-dir artifacts/beamer-fuzz/replay
+```
+
+The nightly/manual TeX fuzz workflow runs Beamer differential checks as a
+separate strict job with a changing seed and uploads the complete failing
+sources and comparison artifacts. The frozen wave-5 regression corpus is run
+with `npm run compare:beamer-campaign-wave5`; its independent TeX snapshots also
+participate in ordinary tests. The generator uses a bounded document grammar; it does not claim coverage of
+arbitrary TeX macro programs. Each case renders native pages and compiles its
+LuaLaTeX reference once, then compares every page against that reference. Cached
+page selection verifies the source SHA and page trace; all gates still run.
+
+The raster paint gate permits differences only where both images have a color
+boundary within one pixel (including glyph edges). It requires zero mismatches
+outside those shared boundary bands, and retains raw pixel differences in the
+report. This accounts for Poppler/librsvg raster rounding and font hinting while
+rejecting missing shapes, new interior holes and larger displacements. Glyph and
+rule geometry checks retain their original point tolerances.
+
+The Beamer PDF comparison raster uses Poppler’s Cairo backend (`pdftocairo`),
+matching the Cairo rasterizer used by `rsvg-convert` for native SVG. Splash
+(`pdftoppm`) quantizes antialias coverage differently at narrow triangle tips.
+This backend choice retains the independent TeX PDF and all point, visibility,
+paint-interior and one-pixel shared-boundary gates unchanged.

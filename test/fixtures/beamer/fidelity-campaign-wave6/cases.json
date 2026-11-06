@@ -1,0 +1,140 @@
+{
+  "formatVersion": 1,
+  "title": "Beamer soak regressions: column block baseline and paint boundaries",
+  "fidelity": [
+    {
+      "id": "block-column-leading",
+      "file": "block-column-leading.tex",
+      "frame": 1,
+      "family": "column-block-baseline",
+      "pages": 1,
+      "oracleText": [
+        "Block",
+        "Neighbor"
+      ],
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "id": "block-column-leading-top",
+      "file": "block-column-leading-top.tex",
+      "frame": 1,
+      "family": "column-block-baseline",
+      "pages": 1,
+      "oracleText": [
+        "Block",
+        "Neighbor"
+      ],
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "id": "block-column-leading-bottom",
+      "file": "block-column-leading-bottom.tex",
+      "frame": 1,
+      "family": "column-block-baseline",
+      "pages": 1,
+      "oracleText": [
+        "Block",
+        "Neighbor"
+      ],
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "id": "block-column-leading-capital-t",
+      "file": "block-column-leading-capital-t.tex",
+      "frame": 1,
+      "family": "column-block-baseline",
+      "pages": 1,
+      "oracleText": [
+        "Block",
+        "Neighbor"
+      ],
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "id": "block-column-leading-rounded",
+      "file": "block-column-leading-rounded.tex",
+      "frame": 1,
+      "family": "column-block-baseline",
+      "pages": 1,
+      "oracleText": [
+        "Block",
+        "Neighbor"
+      ],
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "id": "block-column-mixed-body",
+      "file": "block-column-mixed-body.tex",
+      "frame": 1,
+      "family": "column-block-baseline",
+      "pages": 1,
+      "oracleText": [
+        "Block",
+        "Neighbor"
+      ],
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "id": "block-column-after-prose",
+      "file": "block-column-after-prose.tex",
+      "frame": 1,
+      "family": "column-block-baseline",
+      "pages": 1,
+      "oracleText": [
+        "Block",
+        "Neighbor"
+      ],
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true
+          ]
+        }
+      ]
+    }
+  ],
+  "recognition": []
+}

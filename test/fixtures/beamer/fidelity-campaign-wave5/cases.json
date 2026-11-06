@@ -1,0 +1,477 @@
+{
+  "formatVersion": 1,
+  "title": "Beamer text, picture, alignment and overlay interactions",
+  "fidelity": [
+    {
+      "id": "alignment",
+      "file": "alignment.tex",
+      "frame": 1,
+      "family": "alignment",
+      "pages": 1,
+      "choices": {
+        "alignment": "raggedleft",
+        "spec": "2-3",
+        "width": 3,
+        "height": 1
+      },
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "column-alignment",
+      "file": "column-alignment.tex",
+      "frame": 1,
+      "family": "column-alignment",
+      "pages": 1,
+      "choices": {
+        "alignment": "centering",
+        "spec": "2-",
+        "width": 3,
+        "height": 1
+      },
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "column-picture",
+      "file": "column-picture.tex",
+      "frame": 1,
+      "family": "column-picture",
+      "pages": 1,
+      "choices": {
+        "alignment": "centering",
+        "spec": "2-",
+        "width": 2,
+        "height": 2
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "mixed-center",
+      "file": "mixed-center.tex",
+      "frame": 1,
+      "family": "mixed-center",
+      "pages": 1,
+      "choices": {
+        "alignment": "raggedleft",
+        "spec": "2-",
+        "width": 3,
+        "height": 1
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "block-picture",
+      "file": "block-picture.tex",
+      "frame": 1,
+      "family": "block-picture",
+      "pages": 1,
+      "choices": {
+        "alignment": "centering",
+        "spec": "2-2",
+        "width": 1,
+        "height": 1
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "draw-overlay",
+      "file": "draw-overlay.tex",
+      "frame": 1,
+      "family": "draw-overlay",
+      "pages": 2,
+      "choices": {
+        "alignment": "raggedleft",
+        "spec": "2-",
+        "width": 3,
+        "height": 2
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "node-overlay",
+      "file": "node-overlay.tex",
+      "frame": 1,
+      "family": "node-overlay",
+      "pages": 4,
+      "choices": {
+        "alignment": "raggedleft",
+        "spec": "3-4",
+        "width": 3,
+        "height": 1
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "only-in-picture",
+      "file": "only-in-picture.tex",
+      "frame": 1,
+      "family": "only-in-picture",
+      "pages": 3,
+      "choices": {
+        "alignment": "raggedright",
+        "spec": "3-",
+        "width": 3,
+        "height": 1
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            false,
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "uncover-in-picture",
+      "file": "uncover-in-picture.tex",
+      "frame": 1,
+      "family": "uncover-in-picture",
+      "pages": 3,
+      "choices": {
+        "alignment": "raggedright",
+        "spec": "3-3",
+        "width": 1,
+        "height": 1
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            false,
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "outer-overlay",
+      "file": "outer-overlay.tex",
+      "frame": 1,
+      "family": "outer-overlay",
+      "pages": 2,
+      "choices": {
+        "alignment": "raggedleft",
+        "spec": "2-",
+        "width": 1,
+        "height": 1
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "date",
+      "file": "date.tex",
+      "frame": 1,
+      "family": "date",
+      "pages": 1,
+      "choices": {
+        "alignment": "raggedright",
+        "spec": "2-2",
+        "width": 3,
+        "height": 1
+      },
+      "oracleText": [
+        "November",
+        "2026"
+      ]
+    },
+    {
+      "id": "default-date",
+      "file": "default-date.tex",
+      "frame": 1,
+      "family": "default-date",
+      "pages": 1,
+      "choices": {
+        "alignment": "centering",
+        "spec": "2-",
+        "width": 1,
+        "height": 2
+      },
+      "oracleText": [
+        "November",
+        "2026"
+      ]
+    },
+    {
+      "id": "mixed-alignment",
+      "file": "mixed-alignment.tex",
+      "frame": 1,
+      "family": "mixed-alignment",
+      "pages": 1,
+      "choices": {
+        "alignment": "centering",
+        "spec": "2-",
+        "width": 3,
+        "height": 2
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "path-options-overlay",
+      "file": "path-options-overlay.tex",
+      "frame": 1,
+      "family": "path-options-overlay",
+      "pages": 2,
+      "choices": {
+        "alignment": "raggedright",
+        "spec": "2-2",
+        "width": 2,
+        "height": 2
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "relative-overlays",
+      "file": "relative-overlays.tex",
+      "frame": 1,
+      "family": "relative-overlays",
+      "pages": 2,
+      "choices": {
+        "alignment": "raggedright",
+        "spec": "3-",
+        "width": 1,
+        "height": 1
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "nested-overlays",
+      "file": "nested-overlays.tex",
+      "frame": 1,
+      "family": "nested-overlays",
+      "pages": 3,
+      "choices": {
+        "alignment": "raggedright",
+        "spec": "3-3",
+        "width": 1,
+        "height": 1
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            false,
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "alt-in-picture",
+      "file": "alt-in-picture.tex",
+      "frame": 1,
+      "family": "alt-in-picture",
+      "pages": 2,
+      "choices": {
+        "alignment": "raggedright",
+        "spec": "3-3",
+        "width": 2,
+        "height": 2
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "visible-in-picture",
+      "file": "visible-in-picture.tex",
+      "frame": 1,
+      "family": "visible-in-picture",
+      "pages": 2,
+      "choices": {
+        "alignment": "centering",
+        "spec": "2-",
+        "width": 1,
+        "height": 1
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "invisible-in-picture",
+      "file": "invisible-in-picture.tex",
+      "frame": 1,
+      "family": "invisible-in-picture",
+      "pages": 4,
+      "choices": {
+        "alignment": "centering",
+        "spec": "3-4",
+        "width": 1,
+        "height": 2
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            true,
+            true,
+            false,
+            false
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "overlay-flow",
+      "file": "overlay-flow.tex",
+      "frame": 1,
+      "family": "overlay-flow",
+      "pages": 2,
+      "choices": {
+        "alignment": "raggedright",
+        "spec": "3-",
+        "width": 2,
+        "height": 1
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    },
+    {
+      "id": "column-overlay-flow",
+      "file": "column-overlay-flow.tex",
+      "frame": 1,
+      "family": "column-overlay-flow",
+      "pages": 2,
+      "choices": {
+        "alignment": "centering",
+        "spec": "3-4",
+        "width": 1,
+        "height": 2
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true
+          ]
+        }
+      ],
+      "oracleText": []
+    }
+  ],
+  "recognition": []
+}

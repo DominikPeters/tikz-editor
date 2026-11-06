@@ -10,7 +10,7 @@ import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/i
 import { buildNativeBeamerPageTrace, compareBeamerPageTraces, type OracleBeamerPageTrace } from "../scripts/lib/beamer-frame-compare.mjs";
 import { priorityFidelityFailures } from "../scripts/lib/beamer-priority-contracts.mjs";
 
-for (const campaign of ["fidelity-campaign", "fidelity-campaign-wave2", "fidelity-campaign-wave3", "fidelity-campaign-wave4"]) {
+for (const campaign of ["fidelity-campaign", "fidelity-campaign-wave2", "fidelity-campaign-wave3", "fidelity-campaign-wave4", "fidelity-campaign-wave5", "fidelity-campaign-wave6", "fuzz-findings-v2"]) {
   const root = new URL(`./fixtures/beamer/${campaign}/`, import.meta.url);
   const manifest = JSON.parse(readFileSync(new URL("cases.json", root), "utf8")) as { fidelity: { id: string; file: string; frame: number; pages: number }[] };
 

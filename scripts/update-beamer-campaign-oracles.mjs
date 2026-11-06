@@ -19,7 +19,9 @@ for (const fixture of manifest.fidelity) {
     // Box trees aid live diagnosis; the offline contract consumes glyphs and rules.
     return { ...trace, boxes: [] };
   });
-  const snapshot = { sourceSha256: result.sourceSha256, engine: "LuaLaTeX / TeX Live 2025", provenance: "compare-beamer-priorities.mjs, valid content witnesses and matching page counts", pages };
+  const comparison = JSON.parse(readFileSync(join(run, result.snapshots[0].report), "utf8"));
+  const oracle = JSON.parse(readFileSync(join(dirname(join(run, result.snapshots[0].report)), comparison.oracle.report), "utf8"));
+  const snapshot = { sourceSha256: result.sourceSha256, engine: oracle.environment.engineBanner, provenance: "compare-beamer-priorities.mjs, valid content witnesses and matching page counts", pages };
   writeFileSync(input.replace(/\.tex$/u, ".oracle.json"), JSON.stringify(snapshot, null, 2) + "\n");
 }
 console.log(`Pinned ${manifest.fidelity.length} independent TeX traces.`);

@@ -99,6 +99,7 @@
     "scan:beamer-corpus": "node scripts/scan-beamer-corpus.mjs",
     "probe:beamer-frame": "npm run -w @tikz-editor/core build && node scripts/probe-beamer-frame.mjs",
     "compare:beamer-fuzz": "node scripts/compare-beamer-fuzz.mjs",
+    "compare:beamer-fuzz-regressions": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/fuzz-findings-v2/cases.json --out-dir artifacts/beamer-fuzz/regressions",
     "compare:beamer-frame": "node scripts/compare-beamer-frame.mjs",
     "compare:beamer-priorities": "node scripts/compare-beamer-priorities.mjs",
     "compare:beamer-corpus": "node scripts/compare-beamer-corpus.mjs",
@@ -135,6 +136,7 @@
     "compare:beamer-followups": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/corpus-followups/cases.json --out-dir artifacts/beamer-followup-conformance",
     "check:beamer-breadth": "node scripts/check-beamer-breadth.mjs",
     "render:beamer-breadth": "node scripts/compare-beamer-corpus.mjs --index test/fixtures/beamer/breadth-decks/manifest.json --frames all --steps all --timeout-seconds 180 --out-dir artifacts/beamer-breadth-decks/native --strict",
+    "compare:beamer-campaign-wave5": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/fidelity-campaign-wave5/cases.json --out-dir artifacts/beamer-fidelity-campaign/wave5",
     "compare:beamer-campaign-wave2": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/fidelity-campaign-wave2/cases.json --out-dir artifacts/beamer-fidelity-campaign/wave2/verified",
     "compare:beamer-campaign": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/fidelity-campaign/cases.json --out-dir artifacts/beamer-fidelity-campaign/wave1"
   },
