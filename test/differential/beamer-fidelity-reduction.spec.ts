@@ -46,6 +46,11 @@ describe.runIf(process.env.BEAMER_FIDELITY_REDUCE_INPUT)("independent LuaLaTeX f
       finally { writeFileSync(join(out, "trials.json"), JSON.stringify(trials, null, 2) + "\n"); }
     };
     const reduced = await reduceBeamerEditSequence(initial, { run,
+      // The independent predicate above already requires valid TeX, source
+      // identity, visible witnesses and the same mismatch category. Literal
+      // native output can be the bug itself; the warm/cold reducer's default
+      // no-literal acceptance guard would prevent reducing those failures.
+      acceptSource: async () => true,
       budget: Number(process.env.BEAMER_FIDELITY_REDUCE_BUDGET ?? 32), onProgress: progress => {
       writeFileSync(join(out, "reduced.tex"), progress.sequence.source);
       writeFileSync(join(out, "reduction.json"), JSON.stringify(progress, null, 2) + "\n");
