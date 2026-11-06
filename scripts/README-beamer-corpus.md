@@ -416,3 +416,21 @@ npm run fuzz:beamer-edits -- \
   --replay artifacts/beamer-edit-fuzz/seed-20261121/case-0000.reduced.json \
   --out-dir artifacts/beamer-edit-fuzz/replay-0000 --reduce-budget 128
 ```
+
+The same balanced-source reducer can use an independent LuaLaTeX structural
+predicate for a saved fidelity mismatch:
+
+```sh
+npm run reduce:beamer-fidelity -- --input path/to/failing.tex \
+  --anchor 'unique source text in the frame' --witness 'visible text' \
+  --out-dir artifacts/beamer-fidelity-reduction/example --budget 32
+```
+
+The anchor must identify exactly one frame and stays with that frame if earlier
+frames are removed. The witness defaults to the anchor; use a separate witness
+when the anchor is a command such as `\titlepage`. Each trial independently
+compiles TeX, verifies its source SHA, page correspondence and visible witness,
+and rejects native diagnostics. It preserves the original structural failure
+field (for example glyph y placement). Invalid TeX trials are recorded and
+rejected. `original.tex`, `reduced.tex`, `reduction.json`, and every trial's source,
+TeX evidence and comparison are retained. Budget exhaustion is explicit.

@@ -98,6 +98,7 @@
     "harvest:beamer-corpus": "node scripts/harvest-beamer-corpus.mjs",
     "scan:beamer-corpus": "node scripts/scan-beamer-corpus.mjs",
     "probe:beamer-frame": "npm run -w @tikz-editor/core build && node scripts/probe-beamer-frame.mjs",
+    "reduce:beamer-fidelity": "node scripts/reduce-beamer-fidelity.mjs",
     "fuzz:beamer-edits": "node scripts/fuzz-beamer-edits.mjs",
     "compare:beamer-fuzz": "node scripts/compare-beamer-fuzz.mjs",
     "compare:beamer-fuzz-regressions": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/fuzz-findings-v2/cases.json --out-dir artifacts/beamer-fuzz/regressions",
