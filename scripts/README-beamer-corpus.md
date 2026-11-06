@@ -360,3 +360,59 @@ matching the Cairo rasterizer used by `rsvg-convert` for native SVG. Splash
 (`pdftoppm`) quantizes antialias coverage differently at narrow triangle tips.
 This backend choice retains the independent TeX PDF and all point, visibility,
 paint-interior and one-pixel shared-boundary gates unchanged.
+
+## Editing-sequence differential fuzzing
+
+```sh
+npm run fuzz:beamer-edits -- --seed 20261121 --cases 128 --steps 48 \
+  --out-dir artifacts/beamer-edit-fuzz/seed-20261121
+```
+
+This campaign wraps the broad generator's documents in three-frame decks and
+adds explicit text and drawing probes. Seeded recipes change class font size,
+aspect ratio, themes, scoped alignment, dates, macro text, picture dimensions,
+rotation, path overlays, colors, frame titles and source offsets (including
+astral characters). An ordinary-picture probe includes a rotated ellipse following an
+editable rectangle to exercise picture-bounds dependencies; mutations also
+open that picture in its own editing view. Recipes also navigate
+frames/overlay steps, prewarm neighbors, edit drawing layers, undo/redo, mask
+text, cancel work and race old/new renders.
+
+The existing compute differential harness compares every shown or claimed warm
+snapshot with a render in a fresh module instance. Scene geometry, SVG, source
+maps, layout, diagnostics and cache output are checked by the same established
+comparison contract. This detects cache/editing inconsistencies; the independent
+LuaLaTeX campaign above checks fidelity to TeX. Use both. Reach counters record
+actual incremental parse/evaluation strategies, patch application, cache claims,
+prewarming, races, drawing layers and suffix reuse. Long campaigns fail their
+coverage gate if required paths were never exercised.
+
+One invocation uses one Vitest worker. Run sequentially or with at most two
+heavy workers overall. `--cases` counts generated documents; `--steps` counts
+attempted semantic mutations, with navigation and other operations added around
+them. Ordinary tests run a small smoke campaign and deliberate corruption checks.
+
+Every case saves its exact starting `.tex`, semantic recipe `.json`, materialized
+`.ops.json`, source hash, recipe hash, harness fingerprint and comparison counts.
+`report.json` is updated atomically after each case; interrupted runs retain the
+next case's input. Existing reports are never overwritten. Failures retain the
+original recipe, concrete operations and failing source before reduction begins.
+`--max-failures` bounds how many failures are collected (default 5), and a stopped
+campaign is explicitly incomplete.
+
+A differential mismatch automatically undergoes bounded operation and balanced
+source reduction (`--reduce-budget 48`). Recipes rematerialize offsets against
+each candidate source rather than applying stale ranges. Reductions must preserve
+the render/check category and exact first differing output path; exceptions are classified separately and
+cannot replace a mismatch. Source reductions additionally require a diagnostic-free
+cold render without literal fallback paint. Every accepted reduction is saved, and the final candidate is replayed
+again. The report records accepted reductions and budget exhaustion; it does not
+claim a globally minimal counterexample.
+
+Replay and, if it still fails, reduce a saved original or reduced recipe:
+
+```sh
+npm run fuzz:beamer-edits -- \
+  --replay artifacts/beamer-edit-fuzz/seed-20261121/case-0000.reduced.json \
+  --out-dir artifacts/beamer-edit-fuzz/replay-0000 --reduce-budget 128
+```
