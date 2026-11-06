@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { execOracleTool as execFileSync, spawnOracleTool as spawnSync } from "./lib/oracle-tool-process.mjs";
 import {
   mkdirSync,
   copyFileSync,

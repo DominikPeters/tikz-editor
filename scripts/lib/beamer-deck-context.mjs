@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execOracleTool as execFileSync } from "./oracle-tool-process.mjs";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileSha256, isCompleteBeamerOracleFrame } from "./beamer-frame-oracle.mjs";
