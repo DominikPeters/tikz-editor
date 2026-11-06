@@ -87,3 +87,44 @@ jobs:
           path: artifacts/tex-fuzz
           if-no-files-found: warn
           retention-days: 30
+
+  beamer-differential:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '17 2 * * *'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Beamer oracle and raster tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y texlive-luatex texlive-latex-extra texlive-fonts-recommended texlive-pictures dvisvgm librsvg2-bin imagemagick poppler-utils mupdf-tools
+          if ! command -v magick >/dev/null; then
+            # ImageMagick 6 exposes convert/compare as separate commands.
+            mkdir -p "$RUNNER_TEMP/beamer-bin"
+            cat > "$RUNNER_TEMP/beamer-bin/magick" <<'SH'
+          #!/bin/sh
+          if [ "$1" = compare ]; then
+            shift
+            exec compare "$@"
+          fi
+          exec convert "$@"
+          SH
+            chmod +x "$RUNNER_TEMP/beamer-bin/magick"
+            echo "$RUNNER_TEMP/beamer-bin" >> "$GITHUB_PATH"
+          fi
+          luaotfload-tool --update
+      - run: npm run build
+      - name: Seeded Beamer, TikZ and overlay differential comparisons
+        run: npm run compare:beamer-fuzz -- --cases 38 --seed ${{ github.run_number }} --out-dir artifacts/beamer-fuzz/nightly
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: beamer-fuzz-${{ github.run_id }}
+          path: artifacts/beamer-fuzz
+          if-no-files-found: error
+          retention-days: 14

@@ -922,3 +922,16 @@ function dimension(sp) {
     texPt: sp / SP_PER_TEX_POINT,
   };
 }
+
+/** Select another page from the SAME independently compiled frame. Never let
+ * renderer page counts or a stale source choose an unrelated reference. */
+export function selectBeamerOraclePage(report, page, sourceSha256) {
+  if (report.input.sha256 !== sourceSha256) throw new Error("Cached oracle source SHA does not match.");
+  if (!Number.isSafeInteger(page) || page < 1 || page > report.pdf.pageCount ||
+      !report.tex.pages[page - 1] || !report.pageTrace.pages[page - 1]) throw new Error("Cached oracle has no requested page.");
+  const selected = structuredClone(report);
+  selected.input.compiledPage = page;
+  selected.tex.selectedPage = selected.tex.pages[page - 1];
+  selected.pageTrace.selectedPage = selected.pageTrace.pages[page - 1];
+  return selected;
+}

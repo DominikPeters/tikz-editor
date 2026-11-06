@@ -60,3 +60,51 @@ export function paintContractFailures(paint) {
   return (paint?.samples ?? []).filter(sample => !Number.isFinite(sample.maxChannelDelta) || sample.maxChannelDelta > paint.tolerance)
     .map(sample => `Block paint ${sample.id}: RGB delta ${sample.maxChannelDelta} exceeds ${paint.tolerance}`);
 }
+
+/** Compare the complete footprint of a fixture's unique flat TikZ paint.
+ * Independent of text tracing and its deliberately untraced PGF regions. */
+export function compareColorMasks(nativePng, oraclePng, width, height, colors = []) {
+  if (!colors.length) return [];
+  const read = path => execFileSync("magick", [path, "-alpha", "off", "-depth", "8", "rgb:-"], { maxBuffer: width * height * 3 + 1 });
+  const native = read(nativePng), oracle = read(oraclePng);
+  if (native.length !== width * height * 3 || oracle.length !== native.length) throw new Error("Invalid paint mask dimensions.");
+  return colors.map(({ color }) => compareColorPixels(native, oracle, color, width));
+}
+
+export function compareColorPixels(native, oracle, color, width) {
+  if (!/^#[0-9a-f]{6}$/iu.test(color)) throw new Error("Invalid paint-mask color.");
+  if (native.length !== oracle.length || native.length % 3 !== 0) throw new Error("Invalid RGB pixels.");
+  const target = [1, 3, 5].map(index => Number.parseInt(color.slice(index, index + 2), 16));
+  const matches = (pixels, index) => target.every((channel, offset) => Math.abs(pixels[index + offset] - channel) <= 2);
+  const pixelCount = native.length / 3;
+  const edgeTolerancePx = width === undefined ? 0 : 1;
+  const gridWidth = width ?? pixelCount;
+  if (!Number.isSafeInteger(gridWidth) || gridWidth <= 0 || pixelCount % gridWidth !== 0) throw new Error("Invalid mask width.");
+  const gridHeight = pixelCount / gridWidth;
+  const nativeMask = new Uint8Array(pixelCount), oracleMask = new Uint8Array(pixelCount);
+  let nativePixels = 0, oraclePixels = 0, disagreement = 0, interiorDisagreement = 0;
+  for (let index = 0; index < pixelCount; index++) {
+    nativeMask[index] = Number(matches(native, index * 3));
+    oracleMask[index] = Number(matches(oracle, index * 3));
+    nativePixels += nativeMask[index];
+    oraclePixels += oracleMask[index];
+  }
+  const nearBoundary = (mask, index) => {
+    const x = index % gridWidth, y = Math.floor(index / gridWidth);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx, ny = y + dy;
+      const neighbor = nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight ? 0 : mask[ny * gridWidth + nx];
+      if (neighbor !== mask[index]) return true;
+    }
+    return false;
+  };
+  for (let index = 0; index < pixelCount; index++) {
+    if (nativeMask[index] === oracleMask[index]) continue;
+    disagreement++;
+    // Poppler hints text and rounds fill edges differently from librsvg.
+    // Ignore only disagreements in BOTH masks' one-pixel boundary bands.
+    // A new hole or missing shape inside otherwise matching paint still fails.
+    if (!edgeTolerancePx || !nearBoundary(nativeMask, index) || !nearBoundary(oracleMask, index)) interiorDisagreement++;
+  }
+  return { color, nativePixels, oraclePixels, disagreement, relativeDifference: disagreement / Math.max(nativePixels, oraclePixels, 1), edgeTolerancePx, interiorDisagreement };
+}

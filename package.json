@@ -98,6 +98,7 @@
     "harvest:beamer-corpus": "node scripts/harvest-beamer-corpus.mjs",
     "scan:beamer-corpus": "node scripts/scan-beamer-corpus.mjs",
     "probe:beamer-frame": "npm run -w @tikz-editor/core build && node scripts/probe-beamer-frame.mjs",
+    "compare:beamer-fuzz": "node scripts/compare-beamer-fuzz.mjs",
     "compare:beamer-frame": "node scripts/compare-beamer-frame.mjs",
     "compare:beamer-priorities": "node scripts/compare-beamer-priorities.mjs",
     "compare:beamer-corpus": "node scripts/compare-beamer-corpus.mjs",

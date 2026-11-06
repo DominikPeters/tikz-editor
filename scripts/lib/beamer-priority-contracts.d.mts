@@ -10,14 +10,16 @@ export interface PriorityFixture {
   readonly images?: number;
   readonly oracleText?: readonly string[];
   readonly oracleTextByPage?: readonly (readonly string[])[];
+  readonly paintColors?: readonly { readonly color: string; readonly visible: readonly boolean[] }[];
   readonly paintProbes?: readonly import("./beamer-paint-compare.mjs").BeamerPaintProbe[];
 }
 export function priorityFidelityFailures(report: {
   readonly input: { readonly overlayStepCount: number; readonly pageCount?: number };
   readonly oracle: { readonly page: { readonly pageCount: number } };
   readonly structural: { readonly summary: BeamerStructuralComparison["summary"] } | null;
+  readonly colorMasks?: readonly { readonly color: string; readonly nativePixels: number; readonly oraclePixels: number; readonly relativeDifference: number; readonly edgeTolerancePx?: number; readonly interiorDisagreement?: number }[] | null;
   readonly paint?: import("./beamer-paint-compare.mjs").BeamerPaintComparison | null;
-}, fixture: Pick<PriorityFixture, "pages" | "images" | "paintProbes">, imageCount?: number): string[];
+}, fixture: Pick<PriorityFixture, "pages" | "images" | "paintProbes" | "paintColors">, imageCount?: number, page?: number): string[];
 export function priorityOracleFailures(oracle: {
   readonly pdf: { readonly pageCount: number };
   readonly pageTrace: { readonly pages: readonly { readonly glyphs: readonly { readonly code: number }[] }[] };
@@ -29,3 +31,4 @@ export function unsupportedCodeFailures(options: {
   readonly trace: NativeBeamerPageTrace;
   readonly requiredText: readonly string[];
 }): string[];
+export function priorityManifestFailures(fixtures: readonly { readonly id: string; readonly file: string }[]): string[];

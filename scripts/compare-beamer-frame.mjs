@@ -3,14 +3,17 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   mkdirSync,
+  copyFileSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
+import { createHash } from "node:crypto";
+import { selectBeamerOraclePage } from "./lib/beamer-frame-oracle.mjs";
 import { ensureDistBuildFresh } from "./ensure-dist-build.mjs";
-import { compareBlockPaint, paintContractFailures } from "./lib/beamer-paint-compare.mjs";
+import { compareColorMasks, compareBlockPaint, paintContractFailures } from "./lib/beamer-paint-compare.mjs";
 import {
   buildNativeBeamerPageTrace,
   compareBeamerPageTraces,
@@ -243,7 +246,10 @@ export function rasterizePdfPage(
   const outputPrefix = outputPath.endsWith(".png")
     ? outputPath.slice(0, -".png".length)
     : outputPath;
-  runRequired("pdftoppm", [
+  // Use Cairo for both independent PDF paint and native SVG paint. Splash's
+  // coverage quantization can turn a narrow triangle tip fully opaque two
+  // pixels before Cairo, despite identical vector geometry.
+  runRequired("pdftocairo", [
     "-png",
     "-f",
     String(pageNumber),
@@ -395,11 +401,31 @@ export async function compareBeamerFrame(options, runtime = {}) {
   const rendererSvg = join(runDir, "renderer.svg");
   writeFileSync(rendererSvg, render.svg.svg, "utf8");
 
-  const oracleDir = runOracle(options, runDir, materializedInput);
+  const sourceSha256 = createHash("sha256").update(source).digest("hex");
+  const oracleKey = JSON.stringify([sourceSha256, options.frameNumber, options.sourceDir ?? dirname(options.inputPath), options.texRoot ?? null, options.pdfOnly, options.structuralOnly]);
+  const cachedOracle = options.pdfOnly ? runtime.oracleCache?.get(oracleKey) : null;
+  let oracleDir, oracleReport;
+  if (cachedOracle) {
+    oracleDir = join(runDir, "oracle", "frame");
+    mkdirSync(oracleDir, { recursive: true });
+    oracleReport = selectBeamerOraclePage(cachedOracle.report, selectedPage, sourceSha256);
+    // Keep original evidence inspectable and make this page's selection explicit.
+    for (const [name, file] of Object.entries(oracleReport.artifacts)) {
+      if (name === "pdf") copyFileSync(join(cachedOracle.directory, file), join(oracleDir, "probe.pdf"));
+      else oracleReport.artifacts[name] = relative(oracleDir, resolve(cachedOracle.directory, file));
+    }
+    oracleReport.artifacts.pdf = "probe.pdf";
+    oracleReport.reusedFrom = relative(oracleDir, join(cachedOracle.directory, "report.json"));
+    writeFileSync(join(oracleDir, "report.json"), JSON.stringify(oracleReport, null, 2) + "\n");
+  } else {
+    oracleDir = runOracle(options, runDir, materializedInput);
+    oracleReport = JSON.parse(readFileSync(join(oracleDir, "report.json"), "utf8"));
+    if (options.pdfOnly && runtime.oracleCache) {
+      if (oracleReport.input.sha256 !== sourceSha256) throw new Error("Oracle source SHA does not match input.");
+      runtime.oracleCache.set(oracleKey, { directory: oracleDir, report: oracleReport });
+    }
+  }
   const oracleSvg = join(oracleDir, "probe.svg");
-  const oracleReport = JSON.parse(
-    readFileSync(join(oracleDir, "report.json"), "utf8")
-  );
   if (oracleReport.pdf.pageCount !== pageCount || selectedPage < 1 || selectedPage > pageCount) {
     // Preserve evidence before failing. Different counts provide no valid
     // one-to-one mapping, so do not compare an arbitrary pair of pages.
@@ -510,11 +536,13 @@ export async function compareBeamerFrame(options, runtime = {}) {
     structural: structuralComparison,
     paint: options.structuralOnly ? null : compareBlockPaint(render, nativePageTrace, oraclePageTrace,
       join(runDir, "renderer.png"), join(runDir, "oracle.png"), options.width, rasterHeight, options.paintProbes),
+    colorMasks: options.structuralOnly ? null : compareColorMasks(join(runDir, "renderer.png"), join(runDir, "oracle.png"), options.width, rasterHeight, options.paintColors),
     raster: options.structuralOnly ? null : {
       width: options.width,
       height: rasterHeight,
       background: "white",
       normalizedRmse: rasterRmse(join(runDir, "oracle.png"), join(runDir, "renderer.png")),
+      oracleBackend: "pdftocairo",
     },
     artifacts: {
       input: "input.tex",

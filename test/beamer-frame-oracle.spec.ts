@@ -7,6 +7,7 @@ import { collectBeamerDeckContext, instrumentBeamerDeckCounters, parseBeamerDeck
 
 import { scanBeamerDocument } from "../packages/core/src/index.js";
 import {
+  selectBeamerOraclePage,
   beamerPageTraceLuaSource,
   beamerProbeInstrumentation,
   buildBeamerFrameProbeSource,
@@ -22,6 +23,21 @@ const runOracleIntegration = process.env.BEAMER_ORACLE_TESTS === "1" &&
   spawnSync("lualatex", ["--version"], { stdio: "ignore" }).status === 0;
 
 describe("Beamer frame oracle", () => {
+  it("reuses only the requested page of an unchanged independently compiled source", () => {
+    const original = { input: { sha256: "source-a", compiledPage: 1 }, pdf: { pageCount: 2 },
+      tex: { pages: [{ id: "geometry-1" }, { id: "geometry-2" }], selectedPage: { id: "geometry-1" } },
+      pageTrace: { pages: [{ id: "glyphs-1" }, { id: "glyphs-2" }], selectedPage: { id: "glyphs-1" } } };
+    const selected = selectBeamerOraclePage(original, 2, "source-a");
+    expect(selected.input.compiledPage).toBe(2);
+    expect(selected.tex.selectedPage.id).toBe("geometry-2");
+    expect(selected.pageTrace.selectedPage.id).toBe("glyphs-2");
+    expect(original.input.compiledPage).toBe(1);
+    expect(original.pageTrace.selectedPage.id).toBe("glyphs-1");
+    expect(() => selectBeamerOraclePage(original, 1, "source-b")).toThrow("SHA");
+    expect(() => selectBeamerOraclePage(original, 3, "source-a")).toThrow("page");
+    expect(() => selectBeamerOraclePage({ ...original, pageTrace: { ...original.pageTrace, pages: [] } }, 2, "source-a")).toThrow("page");
+  });
+
   it("probes and instruments document-level maketitle while rejecting truncated environments", () => {
     const source = String.raw`\documentclass{beamer}\usetheme{metropolis}
 \title{Command title}\begin{document}\maketitle

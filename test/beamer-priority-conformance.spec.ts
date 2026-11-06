@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { prepareBeamerDocument, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
 import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/index.js";
 import { buildNativeBeamerPageTrace, type BeamerStructuralComparison } from "../scripts/lib/beamer-frame-compare.mjs";
-import { priorityFidelityFailures, priorityOracleFailures, unsupportedCodeFailures, type PriorityFixture } from "../scripts/lib/beamer-priority-contracts.mjs";
-import { paintContractFailures } from "../scripts/lib/beamer-paint-compare.mjs";
+import { priorityManifestFailures, priorityFidelityFailures, priorityOracleFailures, unsupportedCodeFailures, type PriorityFixture } from "../scripts/lib/beamer-priority-contracts.mjs";
+import { compareColorPixels, paintContractFailures } from "../scripts/lib/beamer-paint-compare.mjs";
 
 const root = new URL("./fixtures/beamer/corpus-priorities/", import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL("cases.json", root), "utf8")) as {
@@ -22,6 +22,12 @@ function comparison(summary = perfectSummary()) {
 function tracedPage(text: string) { return { glyphs: [...text].map(char => ({ code: char.codePointAt(0)! })) }; }
 
 describe("Beamer corpus-priority reproduction contracts", () => {
+  it("rejects case-only identities and filenames while allowing shared source frames", () => {
+    expect(priorityManifestFailures([{ id: "top", file: "columns.tex" }, { id: "bottom", file: "columns.tex" }])).toEqual([]);
+    expect(priorityManifestFailures([{ id: "t", file: "top.tex" }, { id: "T", file: "capital-t.tex" }])).toContainEqual(expect.stringContaining("ID collision"));
+    expect(priorityManifestFailures([{ id: "top", file: "case-t.tex" }, { id: "capital-t", file: "case-T.tex" }])).toContainEqual(expect.stringContaining("filename collision"));
+  });
+
   it("keeps fixture frames complete and code recognition separate from fidelity", () => {
     const flow = scanBeamerDocument(readFileSync(new URL("flow.tex", root), "utf8"));
     const code = scanBeamerDocument(codeSource);
@@ -64,6 +70,41 @@ describe("Beamer corpus-priority reproduction contracts", () => {
     expect(priorityFidelityFailures({ ...comparison(), paint: { tolerance: 2, samples: [] } }, fixture)).toHaveLength(1);
     expect(priorityFidelityFailures({ ...comparison(), paint: { tolerance: 2, samples: [{ id: "canvas", maxChannelDelta: 0 }] } }, fixture)).toEqual([]);
     expect(priorityFidelityFailures({ ...comparison(), paint: { tolerance: 2, samples: [{ id: "canvas", maxChannelDelta: 26 }] } }, fixture)).toContainEqual(expect.stringContaining("RGB delta 26"));
+  });
+
+  it("compares colored footprints spatially, including black and white", () => {
+    const native = new Uint8Array([255, 0, 255, 0, 0, 0, 255, 255, 255]);
+    const shifted = new Uint8Array([0, 0, 0, 255, 0, 255, 255, 255, 255]);
+    expect(compareColorPixels(native, native, "#ff00ff").relativeDifference).toBe(0);
+    expect(compareColorPixels(native, shifted, "#ff00ff").disagreement).toBe(2);
+    expect(compareColorPixels(native, native, "#000000").nativePixels).toBe(1);
+    expect(compareColorPixels(native, native, "#ffffff").nativePixels).toBe(1);
+  });
+
+  it("allows shared raster edges but rejects interior holes and larger shifts", () => {
+    const image = (shift = 0) => {
+      const pixels = new Uint8Array(11 * 11 * 3).fill(255);
+      for (let y = 2; y <= 8; y++) for (let x = 2 + shift; x <= 8 + shift; x++) pixels[(y * 11 + x) * 3 + 1] = 0;
+      return pixels;
+    };
+    const oracle = image();
+    expect(compareColorPixels(image(1), oracle, "#ff00ff", 11).interiorDisagreement).toBe(0);
+    expect(compareColorPixels(image(2), oracle, "#ff00ff", 11).interiorDisagreement).toBeGreaterThan(0);
+    const hole = image();
+    hole[(5 * 11 + 5) * 3 + 1] = 255;
+    expect(compareColorPixels(hole, oracle, "#ff00ff", 11).interiorDisagreement).toBe(1);
+    expect(compareColorPixels(new Uint8Array(oracle.length).fill(255), oracle, "#ff00ff", 11).interiorDisagreement).toBeGreaterThan(0);
+  });
+
+  it("requires independent paint witnesses and rejects missing or shifted paths even with perfect glyphs", () => {
+    const fixture = { pages: 1, paintColors: [{ color: "#ff00ff", visible: [true] }] };
+    const mask = { color: "#ff00ff", nativePixels: 100, oraclePixels: 100, relativeDifference: 0 };
+    expect(priorityFidelityFailures({ ...comparison(), colorMasks: [mask] }, fixture)).toEqual([]);
+    expect(priorityFidelityFailures(comparison(), fixture)).toContainEqual(expect.stringContaining("raster comparison is required"));
+    expect(priorityFidelityFailures({ ...comparison(), colorMasks: [{ ...mask, nativePixels: 0, oraclePixels: 0 }] }, fixture)).toContainEqual(expect.stringContaining("Oracle is missing"));
+    expect(priorityFidelityFailures({ ...comparison(), colorMasks: [{ ...mask, relativeDifference: 1 }] }, fixture)).toContainEqual(expect.stringContaining("Paint mask"));
+    expect(priorityFidelityFailures({ ...comparison(), colorMasks: [{ ...mask, relativeDifference: NaN }] }, fixture)).toContainEqual(expect.stringContaining("Paint mask"));
+    expect(priorityFidelityFailures({ ...comparison(), colorMasks: [mask] }, { ...fixture, paintColors: [{ color: "#ff00ff", visible: [false] }] })).toContainEqual(expect.stringContaining("unexpectedly paints"));
   });
 
   it("withholds glyph comparisons when states or continuation pages have no correspondence", () => {

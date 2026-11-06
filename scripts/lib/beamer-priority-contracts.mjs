@@ -2,7 +2,7 @@ import { structuralContractFailures } from "../compare-beamer-frame.mjs";
 import { paintContractFailures } from "./beamer-paint-compare.mjs";
 
 /** The same exact contract as the single-frame comparator, never a baseline of known bugs. */
-export function priorityFidelityFailures(report, fixture, imageCount = 0) {
+export function priorityFidelityFailures(report, fixture, imageCount = 0, page = 1) {
   const failures = [];
   if (report.oracle.page.pageCount !== fixture.pages) failures.push(`oracle pages=${report.oracle.page.pageCount}, fixture expects ${fixture.pages}`);
   const nativePageCount = report.input.pageCount ?? report.input.overlayStepCount;
@@ -14,6 +14,20 @@ export function priorityFidelityFailures(report, fixture, imageCount = 0) {
     if (!report.paint?.samples.some(sample => sample.id === probe.id)) failures.push(`Required paint probe ${probe.id} was not measured (use raster comparison).`);
   }
   if (fixture.images != null && imageCount !== fixture.images) failures.push(`SVG images=${imageCount}, expected ${fixture.images}`);
+  for (const probe of fixture.paintColors ?? []) {
+    const mask = report.colorMasks?.find(mask => mask.color === probe.color);
+    if (!mask) { failures.push(`Missing color mask ${probe.color}; raster comparison is required.`); continue; }
+    const visible = probe.visible[page - 1];
+    if (visible === undefined) failures.push(`Missing paint visibility expectation for page ${page}.`);
+    if (visible && mask.oraclePixels < 20) failures.push(`Oracle is missing required paint ${probe.color}.`);
+    if (!visible && mask.oraclePixels !== 0) failures.push(`Oracle unexpectedly paints ${probe.color}.`);
+    if (!Number.isFinite(mask.relativeDifference)) failures.push(`Paint mask ${probe.color}: invalid raster difference.`);
+    if (mask.interiorDisagreement !== undefined) {
+      if ((mask.edgeTolerancePx !== 0 && mask.edgeTolerancePx !== 1) || !Number.isSafeInteger(mask.interiorDisagreement) || mask.interiorDisagreement !== 0) {
+        failures.push(`Paint mask ${probe.color}: ${mask.interiorDisagreement} pixels differ outside the shared ${mask.edgeTolerancePx}px edge bands (expected 0).`);
+      }
+    } else if (mask.relativeDifference > .03) failures.push(`Paint mask ${probe.color}: ${(100 * mask.relativeDifference).toFixed(2)}% differs (maximum 3%).`);
+  }
   return failures;
 }
 
@@ -43,5 +57,23 @@ export function unsupportedCodeFailures({ source, span, render, trace, requiredT
   for (const text of requiredText) if (!body.includes(text)) failures.push(`Supported sibling text is missing: ${text}`);
   if (render.layout.stepCount !== 1) failures.push("Commands printed inside code changed the overlay count.");
   if (!source.slice(span.from, span.to).startsWith("\\begin{")) failures.push("Invalid recognition fixture source span.");
+  return failures;
+}
+
+/** Fixture identities and filenames must stay distinct on native file systems. */
+export function priorityManifestFailures(fixtures) {
+  const failures = [], ids = new Map(), files = new Map();
+  for (const fixture of fixtures) {
+    if (typeof fixture.id !== "string" || !fixture.id || typeof fixture.file !== "string" || !fixture.file) {
+      failures.push("Each fixture requires a nonempty id and source filename.");
+      continue;
+    }
+    const id = fixture.id.toLowerCase(), file = fixture.file.toLowerCase();
+    if (ids.has(id)) failures.push(`Case-insensitive fixture ID collision: ${ids.get(id)} and ${fixture.id}.`);
+    ids.set(id, fixture.id);
+    // Multiple frames may intentionally use exactly the same source file.
+    if (files.has(file) && files.get(file) !== fixture.file) failures.push(`Case-insensitive source filename collision: ${files.get(file)} and ${fixture.file}.`);
+    files.set(file, fixture.file);
+  }
   return failures;
 }

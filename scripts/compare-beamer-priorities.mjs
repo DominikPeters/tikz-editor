@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { compareBeamerFrame, loadCoreRenderer, rasterizePdfPage, rasterizeSvg } from "./compare-beamer-frame.mjs";
 import { buildNativeBeamerPageTrace } from "./lib/beamer-frame-compare.mjs";
 import { corpusGraphicsResolver, sha256 } from "./lib/beamer-corpus.mjs";
-import { priorityFidelityFailures, priorityOracleFailures, unsupportedCodeFailures } from "./lib/beamer-priority-contracts.mjs";
+import { priorityManifestFailures, priorityFidelityFailures, priorityOracleFailures, unsupportedCodeFailures } from "./lib/beamer-priority-contracts.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const defaultManifest = join(repoRoot, "test/fixtures/beamer/corpus-priorities/cases.json");
@@ -47,6 +47,18 @@ function addSnapshotPreviews(outDir, result) {
     if (!snapshot.svg) continue;
     const svgPath = join(outDir, snapshot.svg);
     const directory = dirname(svgPath);
+    const comparison = readJson(join(outDir, snapshot.report));
+    // Reuse the exact rasters that passed the live paint gate. Rendering them
+    // again for the gallery doubles the cost of multi-page fuzz campaigns.
+    const nativeRaster = comparison.artifacts?.rendererPng;
+    const oracleRaster = comparison.artifacts?.oraclePng;
+    if (comparison.structural && nativeRaster && oracleRaster &&
+        existsSync(join(directory, nativeRaster)) && existsSync(join(directory, oracleRaster))) {
+      snapshot.nativePreview = relative(outDir, join(directory, nativeRaster));
+      snapshot.correspondence = "matched";
+      snapshot.oraclePreviews = [{ page: comparison.input.compiledPage, png: relative(outDir, join(directory, oracleRaster)) }];
+      continue;
+    }
     const svg = readFileSync(svgPath, "utf8");
     const viewBox = /\bviewBox="([^"]+)"/u.exec(svg)?.[1].trim().split(/[\s,]+/u).map(Number);
     if (!viewBox || viewBox.length !== 4 || !viewBox.every(Number.isFinite) || viewBox[2] <= 0 || viewBox[3] <= 0) throw new Error(`Invalid SVG viewBox: ${snapshot.svg}`);
@@ -57,7 +69,6 @@ function addSnapshotPreviews(outDir, result) {
     snapshot.nativePreview = relative(outDir, nativePng);
     snapshot.oraclePreviews = [];
     if (!snapshot.oraclePdf) continue;
-    const comparison = readJson(join(outDir, snapshot.report));
     const paired = comparison.structural != null;
     snapshot.correspondence = paired ? "matched" : "unmatched";
     const pages = paired
@@ -102,6 +113,8 @@ async function main(argv) {
   if (options.refreshGallery) { refreshGallery(options.outDir, options.raster); return; }
   const fixtureRoot = dirname(options.manifest);
   const manifest = readJson(options.manifest);
+  const manifestFailures = priorityManifestFailures([...manifest.fidelity, ...manifest.recognition]);
+  if (manifestFailures.length) throw new Error(manifestFailures.join("\n"));
   const catalog = [...manifest.fidelity.map(fixture => ({ kind: "fidelity", fixture })), ...manifest.recognition.map(fixture => ({ kind: "recognition", fixture }))];
   if (options.cases?.some(id => !catalog.some(c => c.fixture.id === id))) throw new Error("Unknown case ID.");
   const selected = catalog.filter(c => (options.kind === "all" || options.kind === c.kind) && (!options.cases || options.cases.includes(c.fixture.id)));
@@ -150,17 +163,21 @@ async function main(argv) {
         writeJson(join(directory, "recognition.json"), { fixture, failures: result.failures, expectedSpan: { from, to }, diagnostics: render.diagnostics, unsupportedItems: render.layout.items.filter(i => i.kind === "unsupported"), trace });
         result.snapshots.push({ page: 1, report: relative(options.outDir, join(directory, "recognition.json")), svg: relative(options.outDir, join(directory, "renderer.svg")) });
       } else {
+        const assetDirectory = join(options.outDir, `${fixture.id}-assets`);
+        mkdirSync(assetDirectory, { recursive: true });
+        const graphics = corpusGraphicsResolver(source, inputPath, assetDirectory);
+        const framePages = await prepared.renderFramePages({ frameIndex: fixture.frame - 1, graphicsResolver: graphics.resolver });
+        const oracleCache = new Map();
         for (let page = 1; page <= fixture.pages; page++) {
           const name = `${fixture.id}-state-${page}`;
           const directory = join(options.outDir, name);
           mkdirSync(join(directory, "assets"), { recursive: true });
-          const graphics = corpusGraphicsResolver(source, inputPath, join(directory, "assets"));
           const comparisonPath = join(directory, "report.json");
           // A failed retry must not reuse a previous successful comparison.
           rmSync(comparisonPath, { force: true });
           let error = null;
           try {
-            await compareBeamerFrame({ inputPath, frameNumber: fixture.frame, pageNumber: page, outDir: options.outDir, name, width: fixture.width ?? 1600, themeVariant: {}, structuralOnly: !options.raster, pdfOnly: true, assertStructural: false, paintProbes: fixture.paintProbes }, { source, preparedDocument: prepared, coreRenderer: core, graphicsResolver: graphics.resolver });
+            await compareBeamerFrame({ inputPath, frameNumber: fixture.frame, pageNumber: page, outDir: options.outDir, name, width: fixture.width ?? 1600, themeVariant: {}, structuralOnly: !options.raster, pdfOnly: true, assertStructural: false, paintProbes: fixture.paintProbes, paintColors: fixture.paintColors }, { source, preparedDocument: prepared, framePages, oracleCache, coreRenderer: core, graphicsResolver: graphics.resolver });
           } catch (caught) { error = caught.message; }
           if (!existsSync(comparisonPath)) throw new Error(error ?? "Comparator did not write a report.");
           const comparison = readJson(comparisonPath);
@@ -168,7 +185,8 @@ async function main(argv) {
           const invalidOracle = priorityOracleFailures(oracle, fixture);
           const svgPath = join(directory, "renderer.svg");
           const imageCount = (readFileSync(svgPath, "utf8").match(/<image\b/gu) ?? []).length;
-          const failures = priorityFidelityFailures(comparison, fixture, imageCount);
+          const failures = priorityFidelityFailures(comparison, fixture, imageCount, page);
+          if (comparison.renderer?.diagnostics?.length) failures.push(`Renderer diagnostics: ${comparison.renderer.diagnostics.map(d => d.code).join(", ")}`);
           if (error && comparison.status !== "page-count-mismatch") failures.push(error);
           const assets = graphics.report();
           for (const asset of assets) if (asset.status !== "resolved") failures.push(`Asset ${asset.filename}: ${asset.status}`);

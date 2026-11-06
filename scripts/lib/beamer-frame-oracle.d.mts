@@ -102,3 +102,9 @@ export function summarizeMutoolStructuredText(value: unknown): {
 };
 export function fileSha256(path: string): string;
 export function firstVersionLine(output: unknown): string;
+export function selectBeamerOraclePage<T extends {
+  input: { sha256: string; compiledPage: number };
+  pdf: { pageCount: number };
+  tex: { pages: readonly unknown[]; selectedPage: unknown };
+  pageTrace: { pages: readonly unknown[]; selectedPage: unknown };
+}>(report: T, page: number, sourceSha256: string): T;

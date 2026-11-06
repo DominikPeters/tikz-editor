@@ -13,3 +13,15 @@ export interface BeamerPaintProbe {
 export function blockPaintProbes(render: RenderBeamerFrameResult, native: NativeBeamerPageTrace, oracle: Pick<OracleBeamerPageTrace, "glyphs">): { id: string; x: number; y: number }[];
 export function compareBlockPaint(render: RenderBeamerFrameResult, native: NativeBeamerPageTrace, oracle: OracleBeamerPageTrace, nativePng: string, oraclePng: string, width: number, height: number, additionalProbes?: readonly BeamerPaintProbe[]): BeamerPaintComparison;
 export function paintContractFailures(paint?: BeamerPaintComparison | null): string[];
+
+export interface BeamerColorMaskComparison {
+  readonly color: string;
+  readonly nativePixels: number;
+  readonly oraclePixels: number;
+  readonly disagreement: number;
+  readonly relativeDifference: number;
+  readonly edgeTolerancePx: number;
+  readonly interiorDisagreement: number;
+}
+export function compareColorPixels(native: Uint8Array, oracle: Uint8Array, color: string, width?: number): BeamerColorMaskComparison;
+export function compareColorMasks(nativePng: string, oraclePng: string, width: number, height: number, colors?: readonly { readonly color: string }[]): BeamerColorMaskComparison[];
