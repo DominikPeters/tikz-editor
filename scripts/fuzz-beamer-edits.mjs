@@ -9,6 +9,7 @@ import { fuzzHash, openBeamerFuzzCorpus, mutateBeamerCorpusSequence, validateEdi
 import { BEAMER_COVERAGE_SCOPE, readFuzzCoverage, summarizeFuzzCoverage } from "./lib/fuzz-coverage.mjs";
 import { runFuzzProcess } from "./lib/fuzz-process.mjs";
 const { values } = parseArgs({ options: {
+  profile: { type: "string", default: "broad" },
   seed: { type: "string", default: "20261106" }, cases: { type: "string", default: "128" }, steps: { type: "string", default: "48" },
   "out-dir": { type: "string", default: "artifacts/beamer-edit-fuzz" }, replay: { type: "string" },
   "reduce-budget": { type: "string", default: "48" }, "max-failures": { type: "string", default: "5" },
@@ -36,7 +37,7 @@ function visit(directory) {
 }
 visit("packages/core/src"); visit("packages/app/src");
 const implementationSha256 = implementation.digest("hex");
-const harnessFiles = ["scripts/fuzz-beamer-edits.mjs", "scripts/lib/beamer-edit-sequences.mjs", "scripts/lib/beamer-fuzz-corpus.mjs", "scripts/lib/fuzz-coverage.mjs", "scripts/lib/fuzz-process.mjs", "scripts/lib/beamer-fuzz-cases.mjs", "scripts/lib/beamer-fuzz-broad.mjs", "test/differential/beamer-edit-campaign.spec.ts", "test/differential/beamer-edit-fuzz.ts", "test/differential/compute-fuzz.ts", "test/differential/compute-instances.ts", "vitest.config.ts", "package-lock.json"];
+const harnessFiles = ["scripts/fuzz-beamer-edits.mjs", "scripts/lib/beamer-edit-sequences.mjs", "scripts/lib/beamer-fuzz-corpus.mjs", "scripts/lib/fuzz-coverage.mjs", "scripts/lib/fuzz-process.mjs", "scripts/lib/beamer-fuzz-cases.mjs", "scripts/lib/beamer-fuzz-broad.mjs", "scripts/lib/beamer-fuzz-intricate.mjs", "test/differential/beamer-edit-campaign.spec.ts", "test/differential/beamer-edit-fuzz.ts", "test/differential/compute-fuzz.ts", "test/differential/compute-instances.ts", "vitest.config.ts", "package-lock.json"];
 const harnessSha256 = fuzzHash(Buffer.concat(harnessFiles.map(path => readFileSync(path))));
 const profile = { schema: 1, implementationSha256, harnessSha256, node: process.version, v8: process.versions.v8,
   vitest: read("node_modules/vitest/package.json").version, coverageV8: read("node_modules/@vitest/coverage-v8/package.json").version, scope: BEAMER_COVERAGE_SCOPE };
@@ -45,14 +46,14 @@ const corpus = openBeamerFuzzCorpus(resolve(values.corpus), namespace);
 const initial = corpus.active().sort((a, b) => Number(a.measured) - Number(b.measured) || Number(a.status === "passed") - Number(b.status === "passed") || a.id.localeCompare(b.id));
 const jobs = values.replay ? [{ sequence: validateEditSequence(read(resolve(values.replay))), origin: "replay" }]
   : [...initial.slice(0, values["corpus-replays"]).map(entry => ({ sequence: entry.sequence, origin: "corpus-replay", parent: entry.id })),
-    ...generateBeamerFuzzCases({ seed: values.seed, cases: Math.max(33, values.cases) }).slice(0, values.cases).map((entry, index) => ({
+    ...generateBeamerFuzzCases({ seed: values.seed, cases: values.profile === "intricate" ? values.cases : Math.max(33, values.cases), profile: values.profile }).slice(0, values.cases).map((entry, index) => ({
       sequence: generateBeamerEditSequence(withEditProbes(entry.source), entry.fixture.family, (values.seed + index * 7919) >>> 0, values.steps), origin: "fresh" })),
     ...Array.from({ length: values.mutations }, (_, mutation) => ({ origin: "mutation", mutation }))];
 const controller = new AbortController();
 const interrupt = () => controller.abort(); process.on("SIGINT", interrupt); process.on("SIGTERM", interrupt);
 const hit = new Set(), all = new Set(), reach = {}, edits = {}, results = [], coverageFailures = [];
 const limits = { caseTimeoutMs: values["case-timeout-ms"], reductionTimeoutMs: values["reduction-timeout-ms"], heapMb: values["heap-mb"], memoryLimitKind: "V8 old-space per Node isolate; not total RSS or native tool memory", workers: 1 };
-const report = { formatVersion: 2, status: "running", seed: values.seed, profile, namespace, limits, plannedCases: jobs.length,
+const report = { formatVersion: 2, status: "running", seed: values.seed, generationProfile: values.profile, profile, namespace, limits, plannedCases: jobs.length,
   corpusDirectory: resolve(values.corpus), initialCorpus: initial.map(entry => entry.id), results, reach, edits, comparisons: 0, coverageFailures };
 function save() {
   report.sourceCoverage = summarizeFuzzCoverage(hit, all);

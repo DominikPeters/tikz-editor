@@ -90,8 +90,9 @@ export function mutateBeamerCorpusSequence(parent, seed) {
   if (random(4) === 0 && sequence.actions.length < 512) sequence.actions.splice(index, 0, { kind: "neighbors" });
   // Exercise combinations outside the original template grammar, without moving probe identities.
   if (random(3) === 0) {
-    const begin = sequence.source.indexOf("\\begin{frame}");
-    const start = begin + "\\begin{frame}".length, end = sequence.source.indexOf("\\end{frame}", start);
+    const header = /\\begin\{frame\}(?:\[[^\]]*\])?(?:\{[^}]*\})?(?:\{[^}]*\})?/u.exec(sequence.source);
+    const begin = header?.index ?? -1;
+    const start = begin + (header?.[0].length ?? 0), end = sequence.source.indexOf("\\end{frame}", start);
     if (begin >= 0 && end > start) {
       const environment = ["center", "flushleft", "flushright"][random(3)];
       sequence.source = sequence.source.slice(0, start) + `\\begin{${environment}}` + sequence.source.slice(start, end) + `\\end{${environment}}` + sequence.source.slice(end);

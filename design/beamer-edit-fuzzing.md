@@ -22,6 +22,25 @@ boundaries, edit modes, neighborhood scheduling and alignment environments.
 Full concrete inputs and parent identities are saved before execution, so
 replay does not depend on later corpus membership or scheduling.
 
+The default `broad` profile keeps 33 small interaction controls and fills the
+remaining fresh cases with the recursive version-3 grammar. `--profile intricate`
+selects only recursive decks. They contain two to four authored frames with
+nested flow, math, tables, larger TikZ diagrams and overlays. Macro plans sample
+formatting definitions, expansion chains, optional/default arguments, aliases,
+local restoration and redefinitions between frames. Saved choices include the
+flow tree and macro timeline. Editing probes preserve frame options and are
+located after the authored deck; sequences revisit earlier frames in reverse
+order to exercise macro-context caches.
+
+The corresponding `compare:beamer-fuzz` profile independently checks every
+frame and overlay state with LuaLaTeX. It exposed two new reduced renderer
+[findings](../test/fixtures/beamer/fuzz-findings-v4/README.md). It also exposed
+an oracle-context omission: reference probes now replay the original source
+prefix through TeX while discarding earlier pages, so aliases and redefinitions
+are executed by the independent engine. A full-deck trace integration test
+checks the result. These fidelity findings remain red; comparison tolerances
+are unchanged.
+
 ## Resource limits and failure classification
 
 Each case runs in its own supervised Node/Vitest process with one test worker.
@@ -119,7 +138,7 @@ npm run fuzz:beamer-edits -- \
 
 The nightly/weekly `beamer-edit-feedback` CI job restores and saves the corpus,
 runs one worker, and uploads both corpus observations and complete campaign
-artifacts on failure. Nightly runs use 33 fresh sequences with 28 edits;
+artifacts on failure. Nightly runs use 49 fresh sequences with 28 edits;
 weekly runs use 64 sequences with 96 edits. Both add bounded corpus replays and
 16 mutations. This job tests cache consistency; the separate Beamer LuaLaTeX
 job continues checking rendering fidelity.
@@ -158,3 +177,27 @@ feature-reach totals, coverage unions and corpus preservation from saved files.
 Local evidence is under `artifacts/beamer-edit-fuzz/hardening/`, including
 `verification.json`, `audit.mjs` and `final-audit.log`; raw per-case V8 coverage,
 recipes, concrete operations and worker logs are retained in each campaign.
+
+## Recursive-grammar verification: 2026-11-06
+
+The [verification record](beamer-intricate-fuzzing-results.json) covers six
+recursive decks, all 22 authored frames and 40 overlay states. Every reference
+compiled and retained its declared frame/text/paint witnesses. The strict
+comparison reported 22 failing frame cases; these share causes and are not
+claimed as 22 independent bugs. Two renderer issues were isolated in small,
+independently compiled fixtures: local macro redefinition and columns within a
+block. Both remain strict failing reproductions.
+
+The original recursive editing pilot passed 350 warm/cold comparisons across
+six decks; the final varied-macro plan passed another 119 across two decks.
+These agreements coexist with independent TeX mismatches. The 256-seed grammar
+check observed 77 parent/child interactions within its nesting/node budgets.
+All 62 targeted tests and 18 live oracle tests passed, including exact
+rematerialization of 163 legacy editing recipes and full-deck glyph equivalence
+after alias-based redefinition. Type checking and production lint passed.
+
+Raw sources, sampled trees, macro plans, all page comparisons and the gallery
+are in `artifacts/beamer-fuzz/intricate-macro-grammar/`. `audit.mjs` and
+`verification.json` verify generator/source fingerprints, frame/page identity,
+visible oracle witnesses and overlay-paint visibility. The two reduced findings
+are in `test/fixtures/beamer/fuzz-findings-v4/`.

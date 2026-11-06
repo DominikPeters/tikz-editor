@@ -28,7 +28,7 @@ describe("generated Beamer edit differential campaign", () => {
     let comparisons = 0;
     const results: Array<{ id: string; status: string; comparisons: number; sourceSha256: string; sequenceSha256: string; key?: string; reduction?: { attempts: number; accepted: number; beforeActions: number; afterActions: number; beforeChars: number; afterChars: number; budgetExhausted: boolean }; error?: string }> = [];
     const fingerprint = createHash("sha256");
-    for (const path of ["test/differential/beamer-edit-fuzz.ts", "test/differential/compute-fuzz.ts", "test/differential/compute-instances.ts", "scripts/lib/beamer-fuzz-broad.mjs", "scripts/lib/beamer-fuzz-cases.mjs", "scripts/lib/beamer-edit-sequences.mjs"]) fingerprint.update(readFileSync(path));
+    for (const path of ["test/differential/beamer-edit-fuzz.ts", "test/differential/compute-fuzz.ts", "test/differential/compute-instances.ts", "scripts/lib/beamer-fuzz-broad.mjs", "scripts/lib/beamer-fuzz-cases.mjs", "scripts/lib/beamer-fuzz-intricate.mjs", "scripts/lib/beamer-edit-sequences.mjs"]) fingerprint.update(readFileSync(path));
     const harnessSha256 = fingerprint.digest("hex");
     const implementation = createHash("sha256");
     const visit = (directory: string): void => {

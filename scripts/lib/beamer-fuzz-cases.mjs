@@ -1,3 +1,5 @@
+import { generateIntricateBeamerCases, INTRICATE_FAMILIES } from "./beamer-fuzz-intricate.mjs";
+export { INTRICATE_FAMILIES };
 import { BROAD_ONLY_FAMILIES, BEAMER_FUZZ_GENERATOR_VERSION, generateBroadBeamerCases } from "./beamer-fuzz-broad.mjs";
 export { BEAMER_FUZZ_GENERATOR_VERSION };
 // Small, valid documents crossing Beamer's text/flow/TikZ boundaries.
@@ -6,10 +8,15 @@ export const BEAMER_FUZZ_SMOKE_FAMILIES = ["alignment", "column-alignment", "col
 export const BEAMER_FUZZ_FAMILIES = [...BEAMER_FUZZ_SMOKE_FAMILIES, ...BROAD_ONLY_FAMILIES];
 
 export function generateBeamerFuzzCases({ seed = 20261105, cases = 48, profile = "broad" } = {}) {
+  if (profile === "intricate") return generateIntricateBeamerCases({ seed, cases });
   const families = profile === "smoke" ? BEAMER_FUZZ_SMOKE_FAMILIES : BEAMER_FUZZ_FAMILIES;
-  if (!["smoke", "broad"].includes(profile)) throw new Error(`Unknown Beamer fuzz profile ${profile}.`);
+  if (!["smoke", "broad", "intricate", "controls"].includes(profile)) throw new Error(`Unknown Beamer fuzz profile ${profile}.`);
   if (!Number.isSafeInteger(seed) || !Number.isSafeInteger(cases) || cases < families.length) throw new Error(`Require an integer seed and at least ${families.length} cases.`);
-  if (profile === "broad") return generateBroadBeamerCases({ seed, cases, families });
+  if (profile === "controls") return generateBroadBeamerCases({ seed, cases, families });
+  if (profile === "broad") {
+    const controls = generateBroadBeamerCases({ seed, cases: families.length, families });
+    return cases === families.length ? controls : [...controls, ...generateIntricateBeamerCases({ seed, cases: cases - families.length, offset: families.length })];
+  }
   return generateSmokeCases({ seed, cases });
 }
 

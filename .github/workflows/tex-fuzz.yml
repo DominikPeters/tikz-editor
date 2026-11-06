@@ -120,7 +120,7 @@ jobs:
           luaotfload-tool --update
       - run: npm run build
       - name: Seeded Beamer, TikZ and overlay differential comparisons
-        run: npm run compare:beamer-fuzz -- --cases 38 --seed ${{ github.run_number }} --out-dir artifacts/beamer-fuzz/nightly
+        run: npm run compare:beamer-fuzz -- --cases 45 --seed ${{ github.run_number }} --out-dir artifacts/beamer-fuzz/nightly
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -147,7 +147,7 @@ jobs:
       - name: Isolated Beamer edit fuzz with measured coverage feedback
         id: campaign
         run: |
-          edit_cases=33
+          edit_cases=49
           edit_steps=28
           if [ '${{ github.event.schedule }}' = '43 3 * * 0' ]; then
             edit_cases=64

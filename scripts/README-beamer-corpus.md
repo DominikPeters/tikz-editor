@@ -289,8 +289,8 @@ npm run compare:beamer-fuzz -- --profile broad --seed 20261105 --cases 128
 ```
 
 This is a document-level differential fuzzer, separate from the text/math
-fuzzers. The default `broad` profile (generator version 2) starts with all 33
-families, then samples additional combinations. Independent axes include eight
+fuzzers. The default `broad` profile (generator version 3) starts with all 33
+small control families, then composes recursive cases. The control axes include eight
 font sizes, two aspect ratios, three themes, four column alignments, column
 widths, prose lengths, rectangle/triangle/circle/ellipse geometry, scales and
 rotations. Families cover alignment environments, pictures in lists and blocks,
@@ -300,6 +300,33 @@ programs. Animated cases include a page after the last closed range, so incorrec
 persistent paint cannot hide behind an early endpoint. Expected color visibility
 comes from the generated program independently of the renderer's overlay decoder.
 Dates use literal TeX registers; only date families vary those registers.
+
+Beyond those 33 controls, `broad` now generates recursive whole-deck cases.
+Use `--profile controls` to replay the former version-2 grammar, or
+`--profile intricate --cases 6` to generate only recursive cases. Intricate
+cases compose columns, blocks, nested lists, scoped typography, tables, math,
+TikZ graphs/scopes/loops/clipping and overlay programs, with explicit depth,
+node and list-nesting budgets. Each deck contains two to four authored frames.
+The manifest tests every authored frame and every expected overlay state.
+
+Macros are part of the generated language: sampled formatting bodies, one- to
+three-layer expansion chains, two-argument calls, macro-valued optional defaults,
+`\let` aliases, local changes/restoration, and redefinitions between frames.
+Declarations are used in visible content. Later frames check both current meaning
+and the original meaning retained by aliases. The JSON recipe records the tree,
+production interactions, macro plan and frame witnesses independently of native
+rendering. Small strictly failing reductions are in
+[`fuzz-findings-v4`](../test/fixtures/beamer/fuzz-findings-v4/README.md).
+
+```sh
+npm run compare:beamer-fuzz -- --profile intricate --seed 20261106 --cases 24 \
+  --out-dir artifacts/beamer-fuzz/recursive-study
+npm run fuzz:beamer-edits -- --profile intricate --seed 20261106 --cases 24 \
+  --steps 48 --out-dir artifacts/beamer-edit-fuzz/recursive-study
+```
+
+Independent comparison currently reports unresolved renderer mismatches in these
+richer cases. Warm/cold agreement alone does not establish correct TeX behavior.
 
 Use `--profile smoke --cases 38` for the original, narrower 23-family grammar.
 Broad cases deliberately explore combinations beyond established passing coverage;

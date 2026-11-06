@@ -35,7 +35,7 @@ export function withEditProbes(source) {
 `;
   const themed = /\\usetheme\{/u.test(source) ? source : source.replace("\\usepackage{tikz}", "\\usepackage{tikz}\n\\usetheme{default}");
   return themed.replace("\\begin{document}", preamble + "\\begin{document}")
-    .replace("\\begin{frame}", "\\begin{frame}\\raggedright \\editprobetext\\par ")
+    .replace(/(\\begin\{frame\}(?:\[[^\]]*\])?(?:\{[^}]*\})?(?:\{[^}]*\})?)/u, "$1\\raggedright \\editprobetext\\par ")
     .replace("\\end{document}", probe + "\\end{document}");
 }
 
@@ -85,11 +85,21 @@ const VALUES = {
 
 export function generateBeamerEditSequence(source, family, seed, steps) {
   const random = makeRng(seed), pick = values => values[Math.floor(random() * values.length)];
+  const frameAt = marker => {
+    const position = source.indexOf(marker);
+    return position < 0 ? null : [...source.slice(0, position).matchAll(/\\begin\{frame\}/gu)].length - 1;
+  };
+  const overlayFrame = frameAt("% edit-layer-probe") ?? frameAt("% edit-overlay") ?? 1;
+  const boundsFrame = frameAt("% edit-bounds") ?? 2;
   const actions = [{ kind: "navigate", frame: 0, step: 1 }, { kind: "neighbors" },
-    { kind: "navigate", frame: 1, step: 2 }, { kind: "layer", enabled: true },
+    { kind: "navigate", frame: overlayFrame, step: 2 }, { kind: "layer", enabled: true },
     { kind: "set", field: "width", value: "0.2", mode: "typing", render: true },
     { kind: "set", field: "width", value: "1", mode: "typing", render: true },
     { kind: "navigate", frame: 0, step: 1 }];
+  if (overlayFrame > 1) {
+    for (let frame = overlayFrame - 1; frame > 0; frame--) actions.push({ kind: "navigate", frame, step: 1 });
+    actions.push({ kind: "navigate", frame: 0, step: 1 });
+  }
   let current = source;
   for (let index = 0; index < steps; index++) {
     const field = index < EDIT_FIELDS.length ? EDIT_FIELDS[index] : pick(EDIT_FIELDS);
@@ -97,7 +107,7 @@ export function generateBeamerEditSequence(source, family, seed, steps) {
     if (!choices.length) continue;
     const value = pick(choices);
     const probe = ["width", "rotation", "overlay", "title"].includes(field);
-    actions.push({ kind: "navigate", frame: field === "bounds-width" ? 2 : probe ? 1 : 0, step: 1 + Math.floor(random() * 4), ...(field === "bounds-width" ? { picture: true } : {}) });
+    actions.push({ kind: "navigate", frame: field === "bounds-width" ? boundsFrame : probe ? overlayFrame : 0, step: 1 + Math.floor(random() * 4), ...(field === "bounds-width" ? { picture: true } : {}) });
     if (probe) actions.push({ kind: "layer", enabled: true });
     const mode = index % 7 === 3 ? pick(["typing", "command"]) : pick(["typing", "typing", "command", "race"]);
     actions.push({ kind: "set", field, value, mode, render: index % 7 !== 3 });
@@ -114,6 +124,7 @@ export function generateBeamerEditSequence(source, family, seed, steps) {
     // Generate undo as a round trip so its modeled source remains current.
     if (index % 8 === 6) actions.push({ kind: "undo" }, { kind: "undo" });
   }
-  actions.push({ kind: "navigate", frame: 1, step: 2 }, { kind: "navigate", frame: 0, step: 1 }, { kind: "render" });
+  if (overlayFrame > 1) for (let frame = overlayFrame - 1; frame > 0; frame--) actions.push({ kind: "navigate", frame, step: 1 });
+  actions.push({ kind: "navigate", frame: overlayFrame, step: 2 }, { kind: "navigate", frame: 0, step: 1 }, { kind: "render" });
   return { formatVersion: 1, probeVersion: source.includes("% edit-bounds") ? 2 : 1, seed, family, source, actions };
 }
