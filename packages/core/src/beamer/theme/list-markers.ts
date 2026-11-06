@@ -10,6 +10,7 @@ import type {
   ResolvedBeamerTheme,
 } from "./types.js";
 import { resolveBeamerThemeColor } from "./resolve.js";
+import { beamerNamedFontSize } from "./font-sizes.js";
 
 const WHITE = "#ffffff";
 const BLACK = "#000000";
@@ -120,10 +121,9 @@ export function resolveBeamerEnumerateMarker(
     texLength(bodyFont.sizePt),
     fontProfile.metricProvider
   );
-  const projectedFont = fontProfile.metricProvider.resolveFont({
-    fontId: "lmsans8-regular",
-    atPt: texLength(family === "ball" ? 6 : 8),
-  });
+  const projectedSize = beamerNamedFontSize(String(theme.options["class-font-size"] ?? "11"), family === "ball" ? "tiny" : "scriptsize");
+  const projectedFont = fontProfile.resolveTextFont(fontProfile.defaultFontState,
+    texLength(projectedSize.sizePt), fontProfile.metricProvider);
   const text = String(itemIndex);
   const projectedRun = fontProfile.metricProvider.shapeText(text, projectedFont);
   const textWidthEm = Number(projectedRun.width) / bodyFont.sizePt;
@@ -138,11 +138,6 @@ export function resolveBeamerEnumerateMarker(
     0,
     ...projectedGlyphs.map((glyph) => Number(glyph.depth))
   );
-  const referenceProjectedCenterPt =
-    ((projectedFont.data.chars["49"]?.height ?? 0) -
-      (projectedFont.data.chars["49"]?.depth ?? 0)) *
-    Number(projectedFont.atPt) /
-    2;
   const projectedCenterPt =
     (projectedHeight - projectedDepth) / 2;
   const xHeightEm = resolvedBodyFont.data.fontdimen.xheight;
@@ -228,12 +223,12 @@ export function resolveBeamerEnumerateMarker(
   const boxWidthEm = 2 * xHeightEm;
   const sphereSizeEm = 1.06 * xHeightEm;
   // beamerbaseauxtemplates.sty's projected-ball pgfpicture spans
-  // (-1ex,-.65ex)..(1ex,1ex). The transformed bigsphere paint is a strict
-  // sub-rectangle of that picture; these factors are the resulting PGF
-  // transform in ex units, locked down against the shipout trace.
+  // (-1ex,-.65ex)..(1ex,1ex), with its default baseline at the bottom.
+  // The 1.75-scaled bigsphere shading has independent ink bounds; these
+  // factors follow the PGF transform rather than its unscaled trace rule.
   const paintXEm = 0.0725 * xHeightEm;
-  const paintTopFromBaselineEm = -0.7825 * xHeightEm;
-  const paintYEm = xHeightEm + paintTopFromBaselineEm;
+  const paintTopFromBaselineEm = -(0.65 + 1.75 * .53) * xHeightEm;
+  const paintYEm = 1.65 * xHeightEm + paintTopFromBaselineEm;
   const background =
     resolveBeamerThemeColor(theme, projectedRole).bg ??
     resolveBeamerThemeColor(theme, "item").fg ??
@@ -244,24 +239,23 @@ export function resolveBeamerEnumerateMarker(
   const canvas =
     resolveBeamerThemeColor(theme, "normal text").bg ?? WHITE;
   const size = sphereSizeEm * bodyFont.sizePt * 100;
-  // The shipout rule records the unscaled bigsphere box above, while the
-  // template paints it through \pgftransformscale{1.75}. Keep those two
-  // geometries separate so structural tracing and raster paint both match.
+  // The picture's logical box and its scaled shading have distinct bounds.
+  // Shipout tracing includes the PDF matrix around the shading rule.
   const visualSize = 1.75 * size;
   const visualX =
     (boxWidthEm * bodyFont.sizePt * 100 - visualSize) / 2;
   const visualTop =
-    -1.5525 * xHeightEm * bodyFont.sizePt * 100;
+    paintTopFromBaselineEm * bodyFont.sizePt * 100;
 
   return withInMarginEnumerateOffset(theme, xHeightEm, {
     widthEm: boxWidthEm,
-    heightEm: xHeightEm,
-    depthEm: 0.65 * xHeightEm,
+    heightEm: 1.65 * xHeightEm,
+    depthEm: 0,
     paintBoundsEm: {
       x: paintXEm,
       y: paintYEm,
-      width: sphereSizeEm,
-      height: sphereSizeEm,
+      width: 1.75 * sphereSizeEm,
+      height: 1.75 * sphereSizeEm,
     },
     projectedText: {
       text,
@@ -270,9 +264,7 @@ export function resolveBeamerEnumerateMarker(
       color: foreground,
       xEm: (boxWidthEm - textWidthEm) / 2,
       baselineOffsetEm:
-        (-0.33509 * xHeightEm * bodyFont.sizePt +
-          projectedCenterPt -
-          referenceProjectedCenterPt) /
+        (-0.65 * xHeightEm * bodyFont.sizePt - .5 + projectedCenterPt) /
         bodyFont.sizePt,
     },
     svgBody: sphereSvgBody({

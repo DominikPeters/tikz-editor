@@ -243,6 +243,9 @@ function buildTexLineReport(
       const box = texMathBoxFromWrapper(run.wrapper, params.mathBoxes);
       ascent = texLength(Math.max(ascent, box?.height ?? texLength(0)));
       descent = texLength(Math.max(descent, box?.depth ?? texLength(0)));
+      // The zero-width copy of a margin label contributes line metrics,
+      // not a second editable/painted math segment beside the real label.
+      if (run.role === "list-label" && width === 0 && run.sourceStart === run.sourceEnd && box?.source === "") continue;
       segments.push({
         runIndex: run.runIndex,
         kind: "math",

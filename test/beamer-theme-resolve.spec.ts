@@ -11,6 +11,13 @@ import {
 } from "../packages/core/src/beamer/index.js";
 
 describe("Beamer theme resolution", () => {
+  it.each([[8, 5], [9, 5], [10, 5], [11, 6], [12, 6], [14, 6], [17, 8], [20, 10]])("uses class %s's tiny size for a projected ball label", (classSize, tinySize) => {
+    const theme = resolveBeamerTheme(scanBeamerDocument(`\\documentclass[${classSize}pt]{beamer}\\usetheme{Madrid}\\begin{document}\\begin{frame}A\\end{frame}\\end{document}`));
+    const marker = resolveBeamerEnumerateMarker(theme, 1, 1)!;
+    expect(marker.projectedText?.fontSizePt).toBe(tinySize);
+    expect(marker.depthEm).toBe(0);
+  });
+
   it("plans the class-default title, block, and triangle templates", () => {
     const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`
 \documentclass[11pt,aspectratio=169]{beamer}
@@ -122,11 +129,11 @@ describe("Beamer theme resolution", () => {
     const enumerateMarker = resolveBeamerEnumerateMarker(theme, 3, 1);
     expect(enumerateMarker).toEqual(expect.objectContaining({
       widthEm: expect.closeTo(0.888, 6),
-      heightEm: expect.closeTo(0.444, 6),
-      depthEm: expect.closeTo(0.2886, 6),
+      heightEm: expect.closeTo(0.7326, 6),
+      depthEm: 0,
       paintBoundsEm: expect.objectContaining({
-        width: expect.closeTo(0.47064, 6),
-        height: expect.closeTo(0.47064, 6),
+        width: expect.closeTo(0.82362, 6),
+        height: expect.closeTo(0.82362, 6),
       }),
       projectedText: expect.objectContaining({
         text: "3",

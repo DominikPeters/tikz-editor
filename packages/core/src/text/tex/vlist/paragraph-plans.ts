@@ -241,9 +241,10 @@ export function prepareTexLayoutParagraphsFromVList(
         spaceGlueProfile,
         inlinePrefixItems: [
           ...listAttachments.inlineLabelItems,
-          ...texEmptyListItemLinePrefix({
+          ...texMarginListItemLinePrefix({
             segment,
             hasMarginLabel: listAttachments.marginLabel !== undefined,
+            metrics: listAttachments.marginLabelHBox?.box.metrics,
           }),
           ...quotationPrefix.inlinePrefixItems,
           ...(leadingInterwordSpace ? [leadingInterwordSpace] : []),
@@ -298,17 +299,18 @@ export function prepareTexLayoutParagraphsFromVList(
   };
 }
 
-function texEmptyListItemLinePrefix(params: {
+function texMarginListItemLinePrefix(params: {
   readonly segment: SimpleTexParagraphSegment;
   readonly hasMarginLabel: boolean;
+  readonly metrics?: { readonly height: TexLength; readonly depth: TexLength } | undefined;
 }): readonly TexLayoutInlineItem[] {
   if (
-    !params.hasMarginLabel ||
-    params.segment.text.length > 0 ||
-    params.segment.nodes.length > 0
+    !params.hasMarginLabel
   ) {
     return [];
   }
+  // LaTeX unboxes the margin label in horizontal mode: zero width, but
+  // its height/depth still contribute to the first line.
   const sourceStart = params.segment.sourceStart;
   return [{
     kind: "math",
@@ -328,10 +330,17 @@ function texEmptyListItemLinePrefix(params: {
       contentStart: sourceStart,
       contentEnd: sourceStart,
       width: texLength(0),
-      height: texLength(0),
-      depth: texLength(0),
+      height: params.metrics?.height ?? texLength(0),
+      depth: params.metrics?.depth ?? texLength(0),
       caretStops: [texHBoxX(0)],
     },
+  }, {
+    // LaTeX's everypar unboxes the zero-width label and then inserts a
+    // zero penalty. A first oversized picture can break after the label.
+    kind: "penalty",
+    sourceStart,
+    sourceEnd: sourceStart,
+    penalty: 0,
   }];
 }
 
