@@ -701,6 +701,7 @@ function paragraphInputFromSimpleTexBlock(
       : {}),
     ...(block.alignment !== undefined ? { alignment: block.alignment } : {}),
     ...(block.alignmentProfile !== undefined ? { alignmentProfile: block.alignmentProfile } : {}),
+    ...(block.alignmentGroupState !== undefined ? { alignmentGroupState: block.alignmentGroupState } : {}),
     quoteDepth: block.quoteDepth,
     quotationDepth: block.quotationDepth,
     ...(block.listContext !== undefined ? { listContext: block.listContext } : {}),

@@ -637,6 +637,12 @@ export interface SimpleTexParagraphBlock {
   readonly alignment?: TexParagraphAlignment;
   readonly alignmentProfile?: TexAlignmentProfile;
   readonly quoteDepth: number;
+  /** Paragraph registers restored by an ordinary brace group. An empty
+   * state restores the enclosing layout's ambient alignment. */
+  readonly alignmentGroupState?: {
+    readonly alignment?: TexParagraphAlignment;
+    readonly alignmentProfile?: TexAlignmentProfile;
+  };
   readonly quotationDepth: number;
   readonly listContext?: SimpleTexListContext;
   readonly scopePath?: readonly SimpleTexScopePathRole[];
@@ -1714,6 +1720,11 @@ function scanSimpleTexIrNodes(
           sourceEnd: sourceOffset + paragraphCommand.end,
         });
         index = paragraphCommand.end;
+        continue;
+      }
+      const relaxEnd = scanSimpleTexControlWord(text, index, "relax");
+      if (relaxEnd !== null) {
+        index = skipSimpleTexControlWordSpaces(text, relaxEnd);
         continue;
       }
       if (fontCommand) {
@@ -4212,8 +4223,10 @@ function scanSimpleTexGroup(
     resolveColorAlias
   );
   const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
-  const blockChildren = childScan.nodes.some(node => node.kind === "display-math") &&
-    childScan.nodes.every(node => isSimpleTexInlineNode(node) || node.kind === "display-math" || node.kind === "paragraph-break")
+  const blockChildren = (childScan.nodes.some(node => node.kind === "display-math") ||
+      (childScan.nodes.some(node => node.kind === "alignment" || node.kind === "paragraph-break") &&
+       !childScan.nodes.some(node => node.kind === "font-declaration"))) &&
+    childScan.nodes.every(node => isSimpleTexInlineNode(node) || node.kind === "display-math" || node.kind === "paragraph-break" || node.kind === "alignment")
     ? childScan.nodes : undefined;
   return {
     ...(blockChildren ? { blockChildren } : {}),
@@ -4501,6 +4514,24 @@ function buildSimpleTexParagraphBlocksFromNodes(
     return { ...declaration, sizePt: sizeState.sizePt, ...(sizeState.baselineSkip !== undefined ? { baselineSkipPt: sizeState.baselineSkip } : {}) };
   });
   sourceNodes = resolveSizeNodes(sourceNodes);
+  type AlignmentState = NonNullable<SimpleTexParagraphBlock["alignmentGroupState"]>;
+  let alignmentState: AlignmentState = {};
+  const alignmentScopes: AlignmentState[] = [];
+  const alignmentHistory: { from: number; state: AlignmentState }[] = [{ from: sourceOffset, state: alignmentState }];
+  const hasAlignmentGroups = sourceNodes.some(node => node.kind === "style-declaration" && node.sizeScope?.name === "");
+  for (const node of sourceNodes) {
+    if (node.kind === "style-declaration" && node.sizeScope?.boundary === "begin") alignmentScopes.push(alignmentState);
+    if (node.kind === "alignment") alignmentState = { alignment: node.alignment, alignmentProfile: node.alignmentProfile };
+    if (node.kind === "style-declaration" && node.sizeScope?.boundary === "end") alignmentState = alignmentScopes.pop() ?? {};
+    alignmentHistory.push({ from: node.sourceEnd, state: alignmentState });
+  }
+  const alignmentAt = (offset: number): AlignmentState => {
+    for (let i = alignmentHistory.length - 1; i >= 0; i--) {
+      const entry = requireArrayValue(alignmentHistory, i);
+      if (entry.from <= offset) return entry.state;
+    }
+    return {};
+  };
   const sizeAt = (offset: number): SizeState => {
     for (let i = sizeHistory.length - 1; i >= 0; i -= 1) if (requireArrayValue(sizeHistory, i).from <= offset) return requireArrayValue(sizeHistory, i).state;
     return requireArrayValue(sizeHistory, 0).state;
@@ -4688,6 +4719,11 @@ function buildSimpleTexParagraphBlocksFromNodes(
     alignmentProfile?: TexAlignmentProfile,
     allowEmptyListItem = false
   ) => {
+    const scopedAlignment = hasAlignmentGroups ? alignmentAt(rawEnd) : undefined;
+    if (scopedAlignment) {
+      alignment = scopedAlignment.alignment;
+      alignmentProfile = scopedAlignment.alignmentProfile;
+    }
     let start = rawStart;
     let end = rawEnd;
     while (
@@ -4768,6 +4804,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
           : {}),
         ...(alignment !== undefined ? { alignment: alignment } : {}),
         ...(alignmentProfile !== undefined ? { alignmentProfile: alignmentProfile } : {}),
+        ...(scopedAlignment ? { alignmentGroupState: scopedAlignment } : {}),
         quoteDepth,
         quotationDepth,
         ...(listContext !== undefined ? { listContext: listContext } : {}),
@@ -5357,6 +5394,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
     }
 
     if (node.kind === "noindent" || node.kind === "alignment") {
+      if (node.kind === "alignment" && hasAlignmentGroups) {
+        index += 1;
+        continue;
+      }
       unsupportedCommand = true;
       scanState.aborted = true;
       break;

@@ -194,6 +194,10 @@ export interface TexParagraphInput extends SimpleTexSegmentInput {
   readonly verticalAdjustments?: readonly TexGlueItem[];
   readonly alignment?: TexParagraphAlignment;
   readonly alignmentProfile?: TexAlignmentProfile;
+  readonly alignmentGroupState?: {
+    readonly alignment?: TexParagraphAlignment;
+    readonly alignmentProfile?: TexAlignmentProfile;
+  };
   readonly spaceGlueProfile?: TexSpaceGlueProfile;
   readonly tikzTextWidthNode?: boolean;
   readonly sourceHitPolicy?: "caret" | "source-range";

@@ -7,6 +7,7 @@ import {
   createSimpleTexLayoutDocumentIr,
   createSimpleTexLayoutDocumentIrFromPreparation,
   luaLatexDefaultTextFontProfile,
+  layoutSimpleTexParagraph,
   prepareSimpleTexLayoutDocument,
   prepareTexLayoutParagraphsFromVList,
   parseSimpleTexParagraphIr,
@@ -24,6 +25,27 @@ import {
 } from "../packages/core/src/text/tex/vlist/index.js";
 
 describe("simple TeX paragraph IR", () => {
+  it("keeps ordinary paragraph groups scoped and ignores TeX's relax primitive", () => {
+    const source = String.raw`\relax{\raggedleft Alpha\par}Omega`;
+    const ir = parseSimpleTexParagraphIr(source);
+    expect(ir.unsupportedCommand).toBe(false);
+    expect(ir.blocks).toHaveLength(2);
+    const result = layoutSimpleTexParagraph(source, { width: 200, alignment: "ragged-right", tikzTextWidthNode: false });
+    expect(result.supported).toBe(true);
+    expect(result.report?.lines).toHaveLength(2);
+    expect(Number(result.report?.lines[0]?.xStart)).toBeGreaterThan(150);
+    expect(Number(result.report?.lines[1]?.xStart)).toBe(0);
+    expect(result.report?.lines.map(line => line.segments.map(segment => segment.text).join(""))).toEqual(["Alpha", "Omega"]);
+  });
+
+  it("restores a surrounding declaration after a nested paragraph group", () => {
+    const source = String.raw`\centering {\raggedleft Alpha\par}Omega`;
+    const result = layoutSimpleTexParagraph(source, { width: 200, alignment: "ragged-right", tikzTextWidthNode: false });
+    expect(result.supported).toBe(true);
+    const last = result.report!.lines.at(-1)!;
+    expect(Number(last.xStart)).toBeCloseTo((200 - Number(last.naturalWidth)) / 2, 3);
+  });
+
   it("analyzes fallback eligibility and IR in one pass", () => {
     const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \textit{Beta}`, 120);
 

@@ -47,10 +47,15 @@ export class TexParagraphLayoutState {
   }
 
   public resolveParagraph(params: {
-    readonly paragraph: Pick<SimpleTexParagraphBlock, "alignment" | "alignmentProfile">;
+    readonly paragraph: Pick<SimpleTexParagraphBlock, "alignment" | "alignmentProfile" | "alignmentGroupState">;
     readonly scopePolicy: TexParagraphScopePolicy;
     readonly finalParagraphInNode: boolean;
   }): TexParagraphLayoutStateResult {
+    const groupState = params.paragraph.alignmentGroupState;
+    if (groupState) {
+      this.activeAlignment = groupState.alignment ?? this.defaultAlignment;
+      this.activeAlignmentProfile = groupState.alignmentProfile;
+    }
     const finalHyphenDemerits = params.scopePolicy.resetFinalHyphenDemeritsFromAlignment
       ? texFinalHyphenDemeritsForAlignment(
           this.activeAlignment,
