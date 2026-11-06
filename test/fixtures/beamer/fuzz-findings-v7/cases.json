@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "title": "Remaining recursive flow interactions",
+  "fidelity": [
+    {
+      "id": "block-inside-list",
+      "file": "block-inside-list.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before",
+        "Panel",
+        "Inside",
+        "After"
+      ],
+      "family": "block-inside-list",
+      "sourceSha256": "4e0530b8d7f9dc8c0cc5dafa8bde385ada1c6c7635ca04700369e2f79e5cfaec"
+    },
+    {
+      "id": "grouped-columns",
+      "file": "grouped-columns.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right"
+      ],
+      "family": "grouped-columns",
+      "sourceSha256": "822807591e333fbb3819dd71a79126168e16cba12004703c0c9a632a8d096a82"
+    }
+  ],
+  "recognition": []
+}
