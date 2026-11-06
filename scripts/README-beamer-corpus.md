@@ -387,21 +387,38 @@ actual incremental parse/evaluation strategies, patch application, cache claims,
 prewarming, races, drawing layers and suffix reuse. Long campaigns fail their
 coverage gate if required paths were never exercised.
 
-One invocation uses one Vitest worker. Run sequentially or with at most two
-heavy workers overall. `--cases` counts generated documents; `--steps` counts
-attempted semantic mutations, with navigation and other operations added around
-them. Ordinary tests run a small smoke campaign and deliberate corruption checks.
+The CLI supervises a separate process for each case with one Vitest worker.
+Run sequentially or with at most two heavy workers overall. `--cases` counts
+fresh generated documents; `--steps` counts attempted semantic mutations, with
+navigation and other operations added around them. Bounded corpus replays and
+`--mutations` add further sequences. Ordinary tests run a small smoke campaign
+and deliberate corruption checks.
 
-Every case saves its exact starting `.tex`, semantic recipe `.json`, materialized
-`.ops.json`, source hash, recipe hash, harness fingerprint and comparison counts.
-`report.json` is updated atomically after each case; interrupted runs retain the
-next case's input. Existing reports are never overwritten. Failures retain the
-original recipe, concrete operations and failing source before reduction begins.
+Each child collects actual V8 source coverage. New branch/function/statement
+features retain an input in the persistent corpus; mutations use its distilled
+active set. Coverage observations are isolated by implementation/toolchain and
+harness fingerprints. Existing reach counters remain independent gates.
+The [operational guide](../design/beamer-edit-fuzzing.md) describes coverage
+scope, corpus persistence, CI scheduling, replay and all resource limits.
+
+Defaults are 180 seconds per case and 1536 MiB of V8 old-space per Node isolate
+(the heap setting does not cap total RSS or native tool memory). Timeouts, OOM,
+excessive output and harness errors remain distinct findings. The parent kills
+the child process group on POSIX and can continue with the next saved input.
+
+Every case saves `case-NNNN/input.tex` and `input.json` before starting its
+worker. The worker additionally saves concrete operations, source/recipe hashes,
+harness fingerprints and comparison counts under `case-NNNN/worker/` when it
+starts. `report.json` is updated atomically after each case; interrupted runs
+retain the current case's input. Existing reports are never overwritten. Mismatches
+retain the original recipe, concrete operations and failing source before reduction begins.
 `--max-failures` bounds how many failures are collected (default 5), and a stopped
 campaign is explicitly incomplete.
 
 A differential mismatch automatically undergoes bounded operation and balanced
-source reduction (`--reduce-budget 48`). Recipes rematerialize offsets against
+source reduction (`--reduce-budget 48`) in a separate supervised process with
+a 300-second default deadline (`--reduction-timeout-ms`). Its artifacts are in
+`case-NNNN/reduction/`. Recipes rematerialize offsets against
 each candidate source rather than applying stale ranges. Reductions must preserve
 the render/check category and exact first differing output path; exceptions are classified separately and
 cannot replace a mismatch. Source reductions additionally require a diagnostic-free
@@ -413,7 +430,7 @@ Replay and, if it still fails, reduce a saved original or reduced recipe:
 
 ```sh
 npm run fuzz:beamer-edits -- \
-  --replay artifacts/beamer-edit-fuzz/seed-20261121/case-0000.reduced.json \
+  --replay artifacts/beamer-edit-fuzz/seed-20261121/case-0000/reduction/case-0000.reduced.json \
   --out-dir artifacts/beamer-edit-fuzz/replay-0000 --reduce-budget 128
 ```
 
@@ -434,3 +451,8 @@ and rejects native diagnostics. It preserves the original structural failure
 field (for example glyph y placement). Invalid TeX trials are recorded and
 rejected. `original.tex`, `reduced.tex`, `reduction.json`, and every trial's source,
 TeX evidence and comparison are retained. Budget exhaustion is explicit.
+
+The independent reducer also has a 600-second outer deadline (`--timeout-ms`)
+and configurable `--heap-mb`; `worker.log` and `process.json` retain its output
+and exit classification. Individual Beamer oracle subprocess calls default to
+120 seconds (`TIKZ_ORACLE_TOOL_TIMEOUT_MS`). Expired oracle trials are rejected.

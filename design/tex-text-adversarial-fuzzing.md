@@ -108,6 +108,11 @@ trace comparison now also feeds shared finding artifacts and shrinking. It
 remains diagnostic by default; display composition and raster comparisons still
 use the legacy diagnostic runners.
 
+The dedicated [Beamer editing campaign](beamer-edit-fuzzing.md) now runs each
+case in a supervised process, collects V8 source coverage, and retains a
+persistent coverage-guided corpus with greedy distillation. Its nightly/weekly
+CI job complements the independent LuaLaTeX fidelity job.
+
 The generated edit-sequence suite runs cases through the real app compute
 adapter and compares genuinely reused parser/semantic stages with a fresh full
 render. The standalone CLI still uses its lightweight model adapter, and TeX

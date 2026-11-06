@@ -128,3 +128,43 @@ jobs:
           path: artifacts/beamer-fuzz
           if-no-files-found: error
           retention-days: 14
+
+  beamer-edit-feedback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache/restore@v4
+        with:
+          path: artifacts/beamer-edit-corpus
+          key: beamer-edit-corpus-${{ runner.os }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: beamer-edit-corpus-${{ runner.os }}-v1-
+      - name: Isolated Beamer edit fuzz with measured coverage feedback
+        id: campaign
+        run: |
+          edit_cases=33
+          edit_steps=28
+          if [ '${{ github.event.schedule }}' = '43 3 * * 0' ]; then
+            edit_cases=64
+            edit_steps=96
+          fi
+          npm run fuzz:beamer-edits -- --cases "$edit_cases" --steps "$edit_steps" --seed ${{ github.run_number }} --corpus-replays 8 --mutations 16 --max-failures 3 --out-dir artifacts/beamer-edit-fuzz/ci
+      - uses: actions/cache/save@v4
+        if: ${{ always() && (steps.campaign.outcome == 'success' || steps.campaign.outcome == 'failure') }}
+        with:
+          path: artifacts/beamer-edit-corpus
+          key: beamer-edit-corpus-${{ runner.os }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: beamer-edit-feedback-${{ github.run_id }}
+          path: |
+            artifacts/beamer-edit-fuzz
+            artifacts/beamer-edit-corpus
+          if-no-files-found: warn
+          retention-days: 30
