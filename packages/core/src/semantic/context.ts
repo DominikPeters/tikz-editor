@@ -240,6 +240,7 @@ export type SemanticStatementEffectSummary = {
   requiresSequentialContext: boolean;
   /** What the statement added to the picture's bounds, for statements a replay reuses. */
   extendsPictureBounds: WorldBounds | null;
+  dependsOnPictureBounds?: boolean;
   /** Elements the statement appended to named paths (`name path`). */
   appendsNamedPaths: Array<{ key: string; elements: SceneElement[] }>;
   /** Node names the statement added to named node sets. */
@@ -286,6 +287,7 @@ type SemanticStatementEffectTracker = {
   consumedNamedResources: Map<string, SemanticStatementConsumedResource>;
   opaqueReasons: Set<SemanticDependencyOpaqueReason>;
   pictureBounds: WorldBounds | null;
+  dependsOnPictureBounds?: boolean;
   appendedNamedPaths: Map<string, SceneElement[]>;
   addedNamedNodeSetMembers: Map<string, Set<string>>;
   namedCoordinateRewriteHandles: Map<string, string>;
@@ -881,6 +883,10 @@ export function beginStatementEffectTracking(context: SemanticContext): void {
   };
 }
 
+export function recordPictureBoundsDependency(context: SemanticContext): void {
+  if (context.statementEffectTracker) context.statementEffectTracker.dependsOnPictureBounds = true;
+}
+
 function unionBounds(left: WorldBounds | null, right: WorldBounds): WorldBounds {
   return left
     ? worldBounds(pt(Math.min(left.minX, right.minX)), pt(Math.min(left.minY, right.minY)), pt(Math.max(left.maxX, right.maxX)), pt(Math.max(left.maxY, right.maxY)))
@@ -949,6 +955,7 @@ export function endStatementEffectTracking(
     nextPathStartPoint: context.pathStartPoint ? { ...context.pathStartPoint } : null,
     requiresSequentialContext: options.requiresSequentialContext,
     extendsPictureBounds: tracker.pictureBounds ? { ...tracker.pictureBounds } : null,
+    ...(tracker.dependsOnPictureBounds ? { dependsOnPictureBounds: true } : {}),
     appendsNamedPaths: [...tracker.appendedNamedPaths].map(([key, elements]) => ({ key, elements: [...elements] })),
     addsNamedNodeSetMembers: [...tracker.addedNamedNodeSetMembers].map(([key, members]) => ({ key, members: [...members] })),
     producesNamedCoordinateRewriteHandles: [...tracker.namedCoordinateRewriteHandles].map(([key, handleId]) => ({ key, handleId })),

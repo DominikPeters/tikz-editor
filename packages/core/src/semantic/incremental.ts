@@ -863,7 +863,7 @@ function isSuffixFragmentSelectiveSafe(
   fragment: SemanticStatementFragment
 ): boolean {
   const { effectSummary } = fragment;
-  if (effectSummary.opaqueReasons.includes("macro-origin")) {
+  if (effectSummary.opaqueReasons.includes("macro-origin") || effectSummary.dependsOnPictureBounds) {
     return false;
   }
   return (

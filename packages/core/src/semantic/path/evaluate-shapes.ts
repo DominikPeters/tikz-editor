@@ -1,8 +1,9 @@
 import { worldPoint } from "../../coords/points.js";
-import type { WorldPoint } from "../../coords/points.js";
+import type { WorldPoint, WorldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { ResolvedStyle, SceneElement, ScenePath } from "../types.js";
 import type { StyleChainEntry } from "../style-chain.js";
+import { registerEllipseProtocol } from "./picture-bounds.js";
 import { applyMatrixToVector } from "../transform.js";
 import {
   appendCircleSubpath,
@@ -18,12 +19,16 @@ export type EllipseGeometry = {
   rx: number;
   ry: number;
   rotation: number;
+  /** Authored axes survive the SVD, including rotations of a circle. PGF
+   * measures its four cubic segments using these axes' control points. */
+  boundingAxes?: readonly [WorldVector, WorldVector];
 };
 
 export type CircleOrEllipseGeometry =
   | {
       kind: "circle";
       radius: number;
+      boundingAxes?: readonly [WorldVector, WorldVector];
     }
   | ({
       kind: "ellipse";
@@ -36,7 +41,7 @@ export function transformCircleGeometry(
   const transformed = transformEllipseGeometry(radius, radius, 0, transform);
   const tolerance = Math.max(transformed.rx, transformed.ry) * 1e-6;
   if (Math.abs(transformed.rx - transformed.ry) <= tolerance) {
-    return { kind: "circle", radius: (transformed.rx + transformed.ry) / 2 };
+    return { kind: "circle", radius: (transformed.rx + transformed.ry) / 2, boundingAxes: transformed.boundingAxes };
   }
   return { kind: "ellipse", ...transformed };
 }
@@ -46,7 +51,7 @@ export function transformEllipseGeometry(
   ry: number,
   rotation: number,
   transform: { a: number; b: number; c: number; d: number }
-): EllipseGeometry {
+): EllipseGeometry & { boundingAxes: readonly [WorldVector, WorldVector] } {
   const theta = (rotation * Math.PI) / 180;
   const cos = Math.cos(theta);
   const sin = Math.sin(theta);
@@ -55,6 +60,7 @@ export function transformEllipseGeometry(
   const axisY = worldPoint(pt(-ry * sin), pt(ry * cos));
   const transformedAxisX = applyMatrixToVector(transform, axisX);
   const transformedAxisY = applyMatrixToVector(transform, axisY);
+  const boundingAxes = [transformedAxisX, transformedAxisY] as const;
 
   const s11 = transformedAxisX.x * transformedAxisX.x + transformedAxisY.x * transformedAxisY.x;
   const s12 = transformedAxisX.x * transformedAxisX.y + transformedAxisY.x * transformedAxisY.y;
@@ -68,14 +74,15 @@ export function transformEllipseGeometry(
   const minor = Math.sqrt(lambda2);
 
   if (!Number.isFinite(major) || !Number.isFinite(minor) || major <= 1e-9 || minor <= 1e-9) {
-    return { rx, ry, rotation };
+    return { rx, ry, rotation, boundingAxes };
   }
 
   const rotationRadians = Math.abs(lambda1 - lambda2) <= 1e-9 ? 0 : 0.5 * Math.atan2(2 * s12, s11 - s22);
   return {
     rx: major,
     ry: minor,
-    rotation: normalizeDegrees((rotationRadians * 180) / Math.PI)
+    rotation: normalizeDegrees((rotationRadians * 180) / Math.PI),
+    boundingAxes
   };
 }
 
@@ -116,17 +123,32 @@ export function emitCircleOrEllipse(params: {
     markFeature
   } = params;
 
+  const recordPath = (path: ScenePath, start: number) => {
+    if (!geometry.boundingAxes) return;
+    const move = path.commands[start];
+    if (move) registerEllipseProtocol(move, center, geometry.boundingAxes, -1);
+    const first = path.commands[start + 1], second = path.commands[start + 2];
+    if (first && second) {
+      registerEllipseProtocol(first, center, geometry.boundingAxes, 0);
+      registerEllipseProtocol(second, center, geometry.boundingAxes, 1);
+    }
+  };
+
   if (geometry.kind === "circle") {
     markFeature("shape_circle", "supported");
     if (shouldCompoundFilledSubpaths) {
       const nextPath = ensurePathForSubpath(activePath, statementId, itemId, style, styleChain, span);
       markPathShapeHint(nextPath, "circle");
+      const start = nextPath.commands.length;
       appendCircleSubpath(nextPath.commands, center, geometry.radius);
+      recordPath(nextPath, start);
       markFeature("svg_path", "supported");
       return nextPath;
     }
     markFeature("svg_circle", "supported");
-    geometryElements.push(makeCircleElement(statementId, itemId, center, geometry.radius, style, styleChain, span));
+    const element = makeCircleElement(statementId, itemId, center, geometry.radius, style, styleChain, span);
+    if (geometry.boundingAxes) registerEllipseProtocol(element, center, geometry.boundingAxes);
+    geometryElements.push(element);
     return activePath;
   }
 
@@ -134,10 +156,14 @@ export function emitCircleOrEllipse(params: {
   if (shouldCompoundFilledSubpaths) {
     const nextPath = ensurePathForSubpath(activePath, statementId, itemId, style, styleChain, span);
     markPathShapeHint(nextPath, "ellipse");
+    const start = nextPath.commands.length;
     appendEllipseSubpath(nextPath.commands, center, geometry.rx, geometry.ry, geometry.rotation);
+    recordPath(nextPath, start);
     markFeature("svg_path", "supported");
     return nextPath;
   }
-  geometryElements.push(makeEllipseElement(statementId, itemId, center, geometry.rx, geometry.ry, style, styleChain, span, geometry.rotation));
+  const element = makeEllipseElement(statementId, itemId, center, geometry.rx, geometry.ry, style, styleChain, span, geometry.rotation);
+  if (geometry.boundingAxes) registerEllipseProtocol(element, center, geometry.boundingAxes);
+  geometryElements.push(element);
   return activePath;
 }

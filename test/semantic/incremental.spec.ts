@@ -13,6 +13,19 @@ import type { Statement } from "../../packages/core/src/ast/types.js";
 import { wp } from "../coords-helpers.js";
 
 describe("semantic incremental evaluation", () => {
+  it("remeasures a later rotated ellipse when an earlier path changes its picture-bound context", () => {
+    const source = String.raw`\begin{tikzpicture}
+\fill (-5,0) rectangle (5,.1);
+\fill[rotate=-25] (0,0) ellipse[x radius=.325cm,y radius=.35cm];
+\end{tikzpicture}`;
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ source, figure: parseTikz(source).figure });
+    const next = source.replace("(-5,0) rectangle (5,.1)", "(-.05,0) rectangle (.05,.1)");
+    const figure = parseTikz(next).figure;
+    const warm = session.evaluate({ source: next, figure, hints: { trigger: "drag-element", changedSourceIds: ["path:0"] } });
+    expect(warm.semantic.scene).toEqual(evaluateTikzFigure(figure, next).scene);
+  });
+
   it.each(["overlay", "overlay=false", "/tikz/overlay={true}"])("replays a constant picture flag incrementally (%s)", flag => {
     const source = `\\begin{tikzpicture}[${flag}]\n` +
       Array.from({ length: 24 }, (_, index) => `\\draw (${index},0) -- (${index},1);`).join("\n") + "\n\\end{tikzpicture}";

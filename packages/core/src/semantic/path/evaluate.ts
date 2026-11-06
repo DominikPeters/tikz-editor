@@ -1,3 +1,4 @@
+import { computePgfPictureBounds, copyPgfPictureProtocol, hasPgfPictureBoundsDependency } from "./picture-bounds.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { currentFrame } from "../context.js";
 import { coordinateTransform, type AxisBasis } from "../coords/axis-basis.js";
@@ -11,6 +12,7 @@ import { parseTikz } from "../../parser/index.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import {
   extendPictureBounds,
+  recordPictureBoundsDependency,
   readNamedCoordinate,
   readNamedNodeGeometry,
   resolveContextColorAliasValue,
@@ -2696,7 +2698,8 @@ function evaluatePathInFrame(
       pushDiagnostic
     );
   }
-  const currentPathBounds = computeBounds(geometryElements);
+  if (hasPgfPictureBoundsDependency(geometryElements)) recordPictureBoundsDependency(context);
+  const currentPathBounds = computePgfPictureBounds(geometryElements, context.pictureBounds, computeBounds);
   const inheritedClipChain = frame.clipChain;
   let outputClipChain = inheritedClipChain;
 
@@ -2729,7 +2732,7 @@ function evaluatePathInFrame(
     }
   }
   if (!builder.style.clip && !builder.style.useAsBoundingBox && !builder.style.overlay && frame.pictureSizeRelevant) {
-    extendPictureBounds(context, computeBounds(statementElements));
+    extendPictureBounds(context, computePgfPictureBounds(statementElements, context.pictureBounds, computeBounds));
   }
 
   return statementElements;
@@ -2807,14 +2810,18 @@ function clonePathCommands(commands: readonly ScenePathCommand[]): ScenePathComm
 }
 
 function attachClipChainToElements(elements: readonly SceneElement[], clipChain: readonly SceneClipPath[]): SceneElement[] {
-  return elements.map((element) => ({
-    ...element,
-    clipChain: clipChain.map((clipPath) => ({
-      ...clipPath,
-      sourceRef: { ...clipPath.sourceRef },
-      commands: clonePathCommands(clipPath.commands)
-    }))
-  }));
+  return elements.map((element) => {
+    const clipped: SceneElement = {
+      ...element,
+      clipChain: clipChain.map((clipPath) => ({
+        ...clipPath,
+        sourceRef: { ...clipPath.sourceRef },
+        commands: clonePathCommands(clipPath.commands)
+      }))
+    };
+    copyPgfPictureProtocol(element, clipped);
+    return clipped;
+  });
 }
 
 
