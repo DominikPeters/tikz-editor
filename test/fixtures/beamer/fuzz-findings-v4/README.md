@@ -1,8 +1,8 @@
 # Recursive-grammar fidelity findings
 
 These are small, independently compiled reproductions found while expanding the
-Beamer grammar. They remain **known failures with strict comparison gates**,
-and are excluded from the passing frozen-oracle collection.
+Beamer grammar. They are **fixed as of 2026-11-07 under the original strict gates**,
+and now participate in the passing frozen-oracle collection.
 
 - `local-macro-redefinition.tex`: the native renderer expands the target of a
   frame-local `\renewcommand` as ordinary text. The declaration leaks into the
@@ -22,7 +22,7 @@ node scripts/compare-beamer-priorities.mjs \
   --out-dir artifacts/beamer-fuzz/replay-findings-v4
 ```
 
-This intentionally exits nonzero until the renderer bugs are fixed. Complex
+Both reduced sources now pass. Complex
 cases can have several simultaneous failures; a failing frame is not counted
 as a distinct bug. The broader generated galleries retain those untriaged
 cases alongside these two isolated findings.

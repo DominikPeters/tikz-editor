@@ -90,7 +90,7 @@ export type BeamerBlockBodyNode = {
   options?: BeamerDelimitedSourceValue;
   title: BeamerDelimitedSourceValue;
   bodySpan: Span;
-  children: BeamerLeafFlowNode[];
+  children: BeamerFrameBodyNode[];
 };
 
 export type BeamerTheoremBodyNode = {
@@ -112,7 +112,7 @@ export type BeamerTheoremBodyNode = {
   title: BeamerDelimitedSourceValue;
   titleMapped: MappedText;
   bodySpan: Span;
-  children: BeamerLeafFlowNode[];
+  children: BeamerFrameBodyNode[];
 };
 
 export type BeamerColumnFlowNode =
@@ -172,6 +172,8 @@ export type BeamerFrameBodyIr = {
 };
 
 export type ParseBeamerFrameBodyParams = {
+  /** Block text owns picture/trivlist boxes through the shared text frontend. */
+  preserveInlinePictures?: boolean;
   source: string;
   frame: BeamerFrameModel;
   document?: BeamerDocumentModel;

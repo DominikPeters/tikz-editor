@@ -27,7 +27,6 @@ import type {
   BeamerColumnsBodyNode,
   BeamerFrameBodyIr,
   BeamerFrameBodyNode,
-  BeamerLeafFlowNode,
   BeamerParagraphBodyNode,
   BeamerTitlePageBodyNode,
   BeamerTheoremBodyNode,
@@ -157,6 +156,10 @@ export function parseBeamerFrameBody(
       break;
     }
     const end = requireArrayValue(tokens, endIndex);
+    if (params.preserveInlinePictures && ["tikzpicture", "center", "flushleft", "flushright"].includes(token.name)) {
+      index = endIndex;
+      continue;
+    }
     if (isInsideNativeTextFlow(context, token.span.from, overlays)) {
       // Lists, alignment environments and ordinary groups own their inline
       // boxes. Extracting a nested picture would split their TeX scope.
@@ -363,7 +366,7 @@ function parseTheorem(params: {
     value: titleMapped.text,
   };
   const bodySpan = { from: cursor, to: end.span.from };
-  const children = parseBlockLeafContent(context, bodySpan,
+  const children = parseBlockContent(context, bodySpan,
     `${ownerId}:theorem:${nodeIndex}`, params.overlays, params.theoremOccurrences);
   return {
     kind: "theorem",
@@ -789,7 +792,7 @@ function parseBlock(params: {
       kind: "block", packageBox: "tcolorbox", environment: "block", id,
       span: { from: begin.span.from, to: end.span.to }, beginSpan: begin.span, endSpan: end.span,
       ...(options !== undefined ? { options } : {}), title: parsed.title, bodySpan,
-      children: parseBlockLeafContent(context, bodySpan, id, params.overlays, params.theoremOccurrences),
+      children: parseBlockContent(context, bodySpan, id, params.overlays, params.theoremOccurrences),
     };
   }
   // An action spec (`\begin{block}<2->`) precedes the title; visibility is
@@ -828,7 +831,7 @@ function parseBlock(params: {
     from: fallbackTitle.span.to,
     to: end.span.from,
   };
-  const children = parseBlockLeafContent(context, bodySpan,
+  const children = parseBlockContent(context, bodySpan,
     `${ownerId}:block:${nodeIndex}`, params.overlays, params.theoremOccurrences);
   return {
     kind: "block",
@@ -844,35 +847,21 @@ function parseBlock(params: {
   };
 }
 
-/** Keep an unsupported block child local without swallowing supported siblings. */
-function parseBlockLeafContent(
+/** Reuse flow composition inside blocks; text leaves still own inline boxes. */
+function parseBlockContent(
   context: BeamerSyntaxContext,
   bodySpan: Span,
   ownerId: string,
   overlays: BeamerOverlayModel,
   theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>
-): BeamerLeafFlowNode[] {
-  const tokens = beamerEnvironmentBoundariesIn(context, bodySpan);
-  const children: BeamerLeafFlowNode[] = [];
-  let cursor = bodySpan.from;
-  for (let index = 0; index < tokens.length; index += 1) {
-    const token = requireArrayValue(tokens, index);
-    // Beamer block leaves do not recursively lower package boxes. Keep their
-    // complete source local instead of feeding begin/end tokens to prose.
-    const endIndex = token.kind === "begin" && token.name === "tcolorbox"
-      ? matchingEnvironmentEnd(tokens, index)
-      : findUnsupportedEnvironmentEndIndex(context, tokens, index, overlays, theoremOccurrences);
-    if (endIndex < 0) continue;
-    const begin = requireArrayValue(tokens, index);
-    const span = { from: begin.span.from, to: requireArrayValue(tokens, endIndex).span.to };
-    pushTextNode(context.source, { from: cursor, to: span.from }, ownerId, children);
-    children.push({ kind: "unsupported", id: `${ownerId}:unsupported:${span.from}`,
-      span, message: `The ${begin.name} environment is not supported in this preview.` });
-    cursor = span.to;
-    index = endIndex;
-  }
-  pushTextNode(context.source, { from: cursor, to: bodySpan.to }, ownerId, children);
-  return children;
+): BeamerFrameBodyNode[] {
+  return parseBeamerFrameBody({ source: context.source, syntax: context.syntax, preserveInlinePictures: true,
+    frame: { kind: "frame", id: ownerId, sourceOrder: 0, span: bodySpan,
+      beginSpan: { from: bodySpan.from, to: bodySpan.from }, endSpan: { from: bodySpan.to, to: bodySpan.to },
+      headerSpan: { from: bodySpan.from, to: bodySpan.from }, bodySpan,
+      sectionId: null, subsectionId: null, children: [] },
+    overlays, theoremOccurrences,
+  }).children;
 }
 
 function parseColumns(params: {

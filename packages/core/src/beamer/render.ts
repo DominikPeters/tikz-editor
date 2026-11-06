@@ -729,6 +729,8 @@ async function renderBeamerFrameStep(params: {
   let contentBounds = availableContentBounds;
   let bodyTransform: BeamerPaintTransform | undefined;
   const bodyModelBuilder = createSvgModelBuilder();
+  references.frameLayout = { paperHeight: page.page.height, textHeight: page.page.height - chrome.headlineInset - chrome.bottomInset,
+    plain: frame.options?.plain ?? false, metadata };
   const preparedFrameFlow = await prepareFrameFlow({
     source,
     children: bodyIr.children,
@@ -894,7 +896,9 @@ async function renderBeamerFrameStep(params: {
           bounds: { x: availableContentBounds.x, y: frameBlockTop + placement.contentTop,
             width: availableContentBounds.width, height: item.height } });
       } else {
-        emitPreparedBlock({
+        await emitPreparedBlock({
+          spacing, embeddedTikz, paperWidth: page.page.width,
+          ...(params.work !== undefined ? { work: params.work } : {}),
           prepared: placement.item.block,
           x: availableContentBounds.x,
           y: frameBlockTop + placement.contentTop,
@@ -1605,7 +1609,7 @@ async function prepareFrameFlow(params: {
       continue;
     }
     if (node.kind === "block" || node.kind === "theorem") {
-      const block = runBeamerRenderOperation(params.work, () => prepareBlock({
+      const block = await runBeamerRenderOperation(params.work, () => prepareBlock({
         source: params.source,
         node,
         width: params.textWidth,
@@ -1618,6 +1622,7 @@ async function prepareFrameFlow(params: {
         ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
         paperWidth: params.paperWidth,
         diagnostics: params.diagnostics,
+        ...(params.work !== undefined ? { work: params.work } : {}),
       }));
       if (block) {
         result.push({
@@ -2154,13 +2159,13 @@ function suppressCenteredTikzTopGlueAfterNormalDisplay(
   };
 }
 
-function prepareBlock(params: Parameters<typeof prepareBlockWithTheme>[0]): PreparedBlock | null {
+async function prepareBlock(params: Parameters<typeof prepareBlockWithTheme>[0]): Promise<PreparedBlock | null> {
   const theme = params.references.scopedTheme?.at(params.node.span.from) ?? params.theme;
-  const block = prepareBlockWithTheme({ ...params, theme, references: { ...params.references, theme } });
+  const block = await prepareBlockWithTheme({ ...params, theme, references: { ...params.references, theme } });
   return block ? { ...block, theme } : null;
 }
 
-function prepareBlockWithTheme(params: {
+async function prepareBlockWithTheme(params: {
   source: string;
   node: BeamerBlockBodyNode | BeamerTheoremBodyNode;
   width: number;
@@ -2173,7 +2178,8 @@ function prepareBlockWithTheme(params: {
   graphicsResolver?: DocumentGraphicsResolver;
   paperWidth: number;
   diagnostics: Diagnostic[];
-}): PreparedBlock | null {
+  work?: BeamerRenderWork;
+}): Promise<PreparedBlock | null> {
   if (params.node.kind === "block" && params.node.packageBox === "tcolorbox") return prepareTcolorbox(params);
   const plan = planBeamerBlockTemplate({
     environment: params.node.kind === "theorem"
@@ -2289,7 +2295,22 @@ function prepareBlockWithTheme(params: {
     ? layoutBody(onlyChild, `${params.node.id}:body`)
     : null;
   let bodyFlow: PreparedBlock["bodyFlow"] = null;
-  if (!body && params.node.children.length > 0) {
+  if (!body && params.node.children.some(child => child.kind !== "paragraph" && child.kind !== "unsupported")) {
+    const flow = await prepareFrameFlow({ source: params.source, children: params.node.children,
+      textWidth: params.width, paperWidth: params.paperWidth, leftSidebarWidth: params.leftSidebarWidth,
+      ...requireDefined(params.references.frameLayout, "Expected the enclosing frame geometry"),
+      availableHeight: Number.POSITIVE_INFINITY, diagnostics: params.diagnostics,
+      theme: { ...params.theme, fonts: { ...params.theme.fonts, "normal-text": theoremBodyFont } },
+      macroBindings: params.macroBindings, references: params.references, overlays: params.overlays, step: params.step,
+      ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+      ...(params.work !== undefined ? { work: params.work } : {}),
+    });
+    const positioned = positionPreparedFrameFlow(flow, theoremBodyFont.lineHeightPt);
+    const origin = positioned.items[0]?.visualTop ?? 0;
+    bodyFlow = { extent: positioned.extent - origin, items: positioned.items.map(item => ({ ...item,
+      contentTop: item.contentTop - origin, referenceY: item.referenceY - origin,
+      visualTop: item.visualTop - origin, visualBottom: item.visualBottom - origin })) };
+  } else if (!body && params.node.children.length > 0) {
     const flow: PreparedFrameFlowItem[] = [];
     for (const child of params.node.children) {
       const visibility = resolveBeamerOverlaySpanVisibility(params.overlays, child.span, params.step);
@@ -2403,7 +2424,12 @@ function prepareBlockWithTheme(params: {
           ? geometry.bodyFirstBaselineSkipPt - paragraphStartingMaterialHeight(firstBody)
           : 1) + geometry.bodyInitialVSkipEx * fontXHeightPt(params.theme.fonts[plan.bodyFontRole])
       : geometry.bodyTopPaddingPt;
-  const bodyBoxHeight = bodyBaselineInset + bodyExtent - (firstBody ? paragraphEndingMaterialDepth(firstBody) : 0);
+  const lastFlowItem = bodyFlow?.items.at(-1)?.item;
+  const bodyEndingDepth = body ? paragraphEndingMaterialDepth(body)
+    : lastFlowItem?.kind === "columns" ? lastFlowItem.box.depth
+    : lastFlowItem?.kind === "paragraph" ? paragraphEndingMaterialDepth(lastFlowItem.paragraph)
+    : lastFlowItem?.kind === "block" ? lastFlowItem.endingDepth : 0;
+  const bodyBoxHeight = bodyBaselineInset + bodyExtent - bodyEndingDepth;
   const titleBodyInterline = params.theme.fonts[plan.bodyFontRole].lineHeightPt - (geometry.titleExtraHeightPt > 0 ? 0 : titleDepth) - bodyBoxHeight;
   const titleBodyGap = plan.style === "default" && geometry.flowBoxHeight === "title-ascent"
     ? titleBodyInterline >= 0 ? titleBodyInterline : 1
@@ -2448,8 +2474,8 @@ function prepareBlockWithTheme(params: {
         ? titleAscent + geometry.roundedTopInsetPt
         : naturalHeight,
     endingDepth:
-      geometry.flowEndingDepth === "body-last-line" && body
-        ? paragraphLastLineDepth(body)
+      geometry.flowEndingDepth === "body-last-line"
+        ? body ? paragraphLastLineDepth(body) : bodyEndingDepth
         : 0,
   };
 }
@@ -2490,7 +2516,7 @@ function prepareTcolorbox(params: Parameters<typeof prepareBlock>[0]): PreparedB
     flowBoxHeight: geometry.heightPt, endingDepth: plan.afterBalanced ? .3 * font.lineHeightPt : 0 };
 }
 
-function emitPreparedBlock(params: {
+async function emitPreparedBlock(params: {
   prepared: PreparedBlock;
   x: number;
   y: number;
@@ -2500,7 +2526,11 @@ function emitPreparedBlock(params: {
   modelBuilder: ReturnType<typeof createSvgModelBuilder>;
   theme: ResolvedBeamerTheme;
   visibility?: "visible" | "hidden";
-}): void {
+  spacing: BeamerSpacingLayout[];
+  embeddedTikz: BeamerEmbeddedTikzLayout[];
+  paperWidth: number;
+  work?: BeamerRenderWork;
+}): Promise<void> {
   const block = params.prepared;
   params = { ...params, theme: block.theme ?? params.theme };
   if (block.packageBox) {
@@ -2607,25 +2637,8 @@ function emitPreparedBlock(params: {
   });
 
   const childIds = [block.title.layout.paragraphId];
-  const bodyParagraphs = block.body
-    ? [{ paragraph: block.body, top: 0, visibility: "visible" as const }]
-    : (block.bodyFlow?.items ?? []).flatMap(({ item, contentTop }) => {
-        if (item.kind === "unsupported") {
-          if (item.visibility !== "hidden" && params.visibility !== "hidden") {
-            emitUnsupportedPlaceholder({
-              placeholder: item.placeholder, x: params.x,
-              y: params.y + block.bodyParagraphTop + contentTop,
-              parentId: block.node.id, items: params.items, modelBuilder: params.modelBuilder,
-            });
-            childIds.push(item.placeholder.id);
-          }
-          return [];
-        }
-        return item.kind === "paragraph"
-          ? [{ paragraph: item.paragraph, top: contentTop, visibility: item.visibility }]
-          : [];
-      });
-  for (const [bodyIndex, entry] of bodyParagraphs.entries()) {
+  const paragraphCount = block.body ? 1 : (block.bodyFlow?.items.filter(p => p.item.kind === "paragraph").length ?? 0);
+  const emitBody = (entry: { paragraph: LaidParagraph; top: number; visibility: "visible" | "hidden" }, bodyIndex: number) => {
     const body = entry.paragraph;
     const visibility = params.visibility === "hidden" || entry.visibility === "hidden" ? "hidden" : "visible";
     const bodyY = params.y + block.bodyParagraphTop + entry.top;
@@ -2678,7 +2691,7 @@ function emitPreparedBlock(params: {
         visibility
       ),
     });
-    if (block.node.kind === "theorem" && block.node.qed && bodyIndex === bodyParagraphs.length - 1) {
+    if (block.node.kind === "theorem" && block.node.qed && bodyIndex === paragraphCount - 1) {
       const qedRects = proofQedRectangles({
         block: { ...block, body },
         bodyY,
@@ -2710,7 +2723,44 @@ function emitPreparedBlock(params: {
         ),
       });
     }
+  };
+  let paragraphIndex = 0;
+  if (block.body) emitBody({ paragraph: block.body, top: 0, visibility: "visible" }, paragraphIndex++);
+  for (const placement of block.bodyFlow?.items ?? []) {
+    const item = placement.item;
+    if (params.work) await params.work.checkpoint();
+    if (item.kind === "paragraph") {
+      emitBody({ paragraph: item.paragraph, top: placement.contentTop,
+        visibility: item.visibility === "hidden" ? "hidden" : "visible" }, paragraphIndex++);
+      continue;
+    }
+    if ((params.visibility === "hidden" || item.visibility === "hidden") && item.kind !== "block") continue;
+    if (item.kind === "unsupported") {
+      emitUnsupportedPlaceholder({ placeholder: item.placeholder, x: params.x,
+        y: params.y + block.bodyParagraphTop + placement.contentTop, parentId: block.node.id,
+        items: params.items, modelBuilder: params.modelBuilder });
+      childIds.push(item.placeholder.id);
+    } else if (item.kind === "columns") {
+      await emitPreparedColumns({ prepared: item, referenceY: params.y + block.bodyParagraphTop + placement.referenceY,
+        spacing: params.spacing, bounds: { x: params.x, y: params.y + block.bodyParagraphTop, width: block.width, height: block.bodyBackgroundHeight },
+        paperWidth: params.paperWidth, items: params.items, paragraphs: params.paragraphs,
+        embeddedTikz: params.embeddedTikz, modelBuilder: params.modelBuilder, theme: params.theme,
+        ...(params.work !== undefined ? { work: params.work } : {}) });
+      childIds.push(item.node.id);
+    } else if (item.kind === "block") {
+      await emitPreparedBlock({ ...params, prepared: item.block, x: params.x,
+        y: params.y + block.bodyParagraphTop + placement.contentTop, parentId: block.node.id, visibility: params.visibility === "hidden" || item.visibility === "hidden" ? "hidden" : "visible" });
+      childIds.push(item.node.id);
+    } else if (item.kind === "tikzpicture") {
+      // Reuse paragraph-owned picture painting so source ownership and ordered
+      // paint splitting remain identical to ordinary block text.
+      const x = params.x + (item.tikz.horizontalAlignment === "center" ? (block.width - item.tikz.width) / 2 : item.tikz.horizontalAlignment === "right" ? block.width - item.tikz.width : 0);
+      const y = params.y + block.bodyParagraphTop + placement.contentTop + item.contentInsetTop;
+      emitEmbeddedTikz({ tikz: item.tikz, x, y, parentId: block.node.id,
+        items: params.items, embeddedTikz: params.embeddedTikz, modelBuilder: params.modelBuilder });
+    }
   }
+
 
   params.items.push({
     id: block.node.id,
@@ -3126,7 +3176,9 @@ async function emitPreparedColumns(params: {
             ? flowItem.trailingSkipPt
             : 0);
       } else if (flowItem.kind === "block") {
-        emitPreparedBlock({
+        await emitPreparedBlock({
+          spacing: params.spacing, embeddedTikz: params.embeddedTikz, paperWidth: params.paperWidth,
+          ...(params.work !== undefined ? { work: params.work } : {}),
           prepared: flowItem.block,
           x,
           y: flowY,
@@ -3379,7 +3431,7 @@ async function prepareColumnFlowNode(params: {
     };
   }
   if (node.kind === "block" || node.kind === "theorem") {
-    const block = runBeamerRenderOperation(params.work, () => prepareBlock({
+    const block = await runBeamerRenderOperation(params.work, () => prepareBlock({
       source,
       node,
       width,
@@ -3392,6 +3444,7 @@ async function prepareColumnFlowNode(params: {
       ...(graphicsResolver !== undefined ? { graphicsResolver } : {}),
       paperWidth,
       diagnostics,
+      ...(params.work !== undefined ? { work: params.work } : {}),
     }));
     return block
       ? { kind: "block", visibility, block, height: block.naturalHeight }
