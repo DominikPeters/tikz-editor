@@ -1,7 +1,7 @@
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import { scanTexRecovery, type TexVirtualCloser } from "../text/tex/recovery.js";
-import type { BeamerFrameBodyIr } from "./content-types.js";
+import type { BeamerFrameBodyIr, BeamerFrameBodyNode, BeamerColumnFlowNode } from "./content-types.js";
 import type {
   BeamerEditScope,
   BeamerRecovery,
@@ -55,18 +55,19 @@ export function collectBeamerEditScopes(
       });
     }
   }
-  for (const node of bodyIr.children) {
-    if (node.kind !== "columns") {
-      continue;
+  const visit = (nodes: readonly (BeamerFrameBodyNode | BeamerColumnFlowNode)[]) => {
+    for (const node of nodes) {
+      if (node.kind === "columns") {
+        for (const column of node.columns) {
+          scopes.push({ kind: "column", id: `${column.id}:scope`, span: column.bodySpan });
+          visit(column.children);
+        }
+      } else if (node.kind === "block" || node.kind === "theorem") {
+        visit(node.children);
+      }
     }
-    for (const column of node.columns) {
-      scopes.push({
-        kind: "column",
-        id: `${column.id}:scope`,
-        span: column.bodySpan,
-      });
-    }
-  }
+  };
+  visit(bodyIr.children);
   scopes.push({
     kind: "frame-body",
     id: `${frame.id}:scope:body`,
