@@ -1,0 +1,9 @@
+\documentclass{beamer}
+\newcommand{\unit}{ms}
+\begin{document}
+\begin{frame}
+Before: 12\unit.\par
+{\renewcommand{\unit}{ticks}Local: 7\unit.\par}
+Restored: 11\unit.
+\end{frame}
+\end{document}

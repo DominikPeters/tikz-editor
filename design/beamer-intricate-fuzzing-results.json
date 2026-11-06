@@ -1,0 +1,119 @@
+{
+  "verifiedAt": "2026-11-06T20:53:02.745Z",
+  "seed": 20261106,
+  "generatorVersion": 3,
+  "generatorSha256": "c3eaa0e1d20afda8f38a7f9786b8576c47a5ca1777c7be6958900f0968ada3cd",
+  "documents": 6,
+  "frames": 22,
+  "states": 40,
+  "invalidOracles": 0,
+  "mismatchingFrames": 22,
+  "confirmedReducedRendererBugs": [
+    "local-macro-redefinition",
+    "columns-inside-block"
+  ],
+  "structural": {
+    "recursiveCases": 6,
+    "nodeCounts": [
+      17,
+      10,
+      20,
+      19,
+      20,
+      9
+    ],
+    "depths": [
+      3,
+      4,
+      5
+    ],
+    "features": [
+      "alignment",
+      "block",
+      "columns",
+      "diagram",
+      "equation",
+      "group",
+      "list",
+      "macro-arguments",
+      "macro-composition",
+      "macro-frame-redefinition",
+      "macro-let-alias",
+      "macro-local-redefinition",
+      "macro-optional-default",
+      "overlay",
+      "overlay-sentinels",
+      "paragraph",
+      "sequence",
+      "table",
+      "tikz-clip",
+      "tikz-curved-edges",
+      "tikz-edges",
+      "tikz-foreach",
+      "tikz-scope"
+    ],
+    "interactions": [
+      "alignment>alignment",
+      "alignment>diagram",
+      "alignment>paragraph",
+      "block>block",
+      "block>diagram",
+      "block>equation",
+      "block>list",
+      "block>paragraph",
+      "block>sequence",
+      "columns>alignment",
+      "columns>block",
+      "columns>diagram",
+      "columns>equation",
+      "columns>list",
+      "columns>overlay",
+      "columns>paragraph",
+      "columns>table",
+      "group>equation",
+      "group>group",
+      "group>paragraph",
+      "group>sequence",
+      "group>table",
+      "list>alignment",
+      "list>block",
+      "list>columns",
+      "list>diagram",
+      "list>equation",
+      "list>group",
+      "list>list",
+      "list>overlay",
+      "list>paragraph",
+      "list>sequence",
+      "list>table",
+      "overlay>columns",
+      "overlay>diagram",
+      "overlay>table",
+      "sequence>block",
+      "sequence>columns",
+      "sequence>list",
+      "sequence>paragraph",
+      "sequence>table"
+    ]
+  },
+  "editing": [
+    {
+      "directory": "artifacts/beamer-edit-fuzz/intricate-20261106",
+      "cases": 6,
+      "comparisons": 350
+    },
+    {
+      "directory": "artifacts/beamer-edit-fuzz/intricate-macro-plan",
+      "cases": 2,
+      "comparisons": 119
+    }
+  ],
+  "tests": {
+    "targeted": 62,
+    "liveOracle": 18,
+    "typecheck": "passed",
+    "productionLint": "passed",
+    "legacyRecipesAudited": 163
+  },
+  "knownFindingsManifest": "test/fixtures/beamer/fuzz-findings-v4/cases.json"
+}
