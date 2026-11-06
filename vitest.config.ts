@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
 import path from "path";
+import { BEAMER_COVERAGE_SCOPE } from "./scripts/lib/fuzz-coverage.mjs";
 import { fileURLToPath } from "node:url";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
@@ -28,7 +29,8 @@ export default defineConfig({
         "**/generated-*.ts",
         "packages/lezer-tex/src/grammar/**",
         "packages/lezer-tikz/src/grammar/**"
-      ]
+      ],
+      ...(process.env.BEAMER_EDIT_FUZZ_COVERAGE_DIRECTORY ? { enabled: true, all: true, reportOnFailure: true, reporter: ["json", "json-summary"], reportsDirectory: process.env.BEAMER_EDIT_FUZZ_COVERAGE_DIRECTORY, include: [...BEAMER_COVERAGE_SCOPE] } : {}),
     }
   },
   resolve: {

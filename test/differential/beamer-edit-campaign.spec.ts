@@ -28,7 +28,7 @@ describe("generated Beamer edit differential campaign", () => {
     let comparisons = 0;
     const results: Array<{ id: string; status: string; comparisons: number; sourceSha256: string; sequenceSha256: string; key?: string; reduction?: { attempts: number; accepted: number; beforeActions: number; afterActions: number; beforeChars: number; afterChars: number; budgetExhausted: boolean }; error?: string }> = [];
     const fingerprint = createHash("sha256");
-    for (const path of ["test/differential/beamer-edit-fuzz.ts", "test/differential/compute-fuzz.ts", "test/differential/compute-instances.ts", "scripts/lib/beamer-fuzz-broad.mjs", "scripts/lib/beamer-fuzz-cases.mjs"]) fingerprint.update(readFileSync(path));
+    for (const path of ["test/differential/beamer-edit-fuzz.ts", "test/differential/compute-fuzz.ts", "test/differential/compute-instances.ts", "scripts/lib/beamer-fuzz-broad.mjs", "scripts/lib/beamer-fuzz-cases.mjs", "scripts/lib/beamer-edit-sequences.mjs"]) fingerprint.update(readFileSync(path));
     const harnessSha256 = fingerprint.digest("hex");
     const implementation = createHash("sha256");
     const visit = (directory: string): void => {
@@ -65,7 +65,7 @@ describe("generated Beamer edit differential campaign", () => {
         write(`${id}.failure.json`, result.failure);
         writeFileSync(join(out, `${id}.failing-state.tex`), result.failure.request.source);
         entry.key = beamerFailureKey(result.failure);
-        if (entry.status === "mismatch") {
+        if (entry.status === "mismatch" && process.env.BEAMER_EDIT_FUZZ_SKIP_REDUCTION !== "1") {
           try {
             const reduced = await reduceBeamerEditSequence(sequence, { budget: numeric("BEAMER_EDIT_FUZZ_REDUCE_BUDGET", 48), onProgress: progress => {
               write(`${id}.reduced.json`, progress.sequence); write(`${id}.reduction.json`, progress);
