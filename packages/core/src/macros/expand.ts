@@ -94,6 +94,12 @@ export function expandMacroBindingsMapped(
   return current;
 }
 
+/** Expand only the next bound invocation, leaving its replacement and tail
+ * available for a caller that executes declarations in source order. */
+export function expandFirstMacroBindingMapped(input: MappedText, bindings: ReadonlyMap<string, MacroBinding>): MappedText {
+  return substituteSingleMappedPass(input, bindings, undefined, true);
+}
+
 export function isControlSequenceToken(raw: string): boolean {
   return /^\\[A-Za-z@]+$/.test(raw.trim());
 }
@@ -171,7 +177,8 @@ function substituteSinglePass(
 function substituteSingleMappedPass(
   input: MappedText,
   bindings: ReadonlyMap<string, MacroBinding>,
-  trace: MacroExpansionTraceEvent[] | undefined
+  trace: MacroExpansionTraceEvent[] | undefined,
+  firstOnly = false
 ): MappedText {
   const parts: MappedText[] = [];
   let cursor = 0;
@@ -244,6 +251,7 @@ function substituteSingleMappedPass(
     }
 
     cursor = consumedUntil;
+    if (firstOnly) break;
     CONTROL_SEQUENCE_REGEX.lastIndex = cursor;
     match = CONTROL_SEQUENCE_REGEX.exec(input.text);
   }

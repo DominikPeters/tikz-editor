@@ -1,3 +1,4 @@
+import type { MacroBinding } from "../macros/types.js";
 import type { BeamerParagraphPaint } from "./picture-paint.js";
 import type { BeamerCompilationDate } from "./date.js";
 import type { BeamerInlinePicture } from "./inline-pictures.js";
@@ -50,6 +51,7 @@ export type BeamerReferenceIndex = {
 };
 
 export type BeamerReferenceContext = BeamerReferenceIndex & {
+  macroBindingsAt?: (offset: number) => ReadonlyMap<string, MacroBinding>;
   tocSections?: readonly BeamerSectionModel[];
   currentSectionId?: string | null;
   /** Live item separation for Beamer shrink/squeeze frames. */

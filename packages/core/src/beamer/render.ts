@@ -1,3 +1,4 @@
+import { expandBeamerLocalMacros } from "./local-macros.js";
 import { interleaveBeamerPicturePaint, type BeamerPicturePaintOwner } from "./picture-paint.js";
 import { projectBeamerInlinePictures, type BeamerInlinePicture } from "./inline-pictures.js";
 import { projectBeamerTikzSource } from "./overlay.js";
@@ -34,7 +35,6 @@ import type { Diagnostic } from "../diagnostics/types.js";
 import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import {
   collectMacroBindings,
-  expandMacroBindingsMapped,
   type MacroBinding,
 } from "../macros/index.js";
 import { renderTikzToSvgAsync, type RenderTikzToSvgResult } from "../render/index.js";
@@ -293,6 +293,7 @@ type BeamerRenderContext = {
   readonly syntax: TexSyntaxIndex;
   readonly document: BeamerDocumentModel;
   readonly theme: ResolvedBeamerTheme;
+  readonly macroBindingsAt: (offset: number) => ReadonlyMap<string, MacroBinding>;
   readonly macroBindingsForFrame: (frame: BeamerFrameModel) => ReadonlyMap<string, MacroBinding>;
   readonly references: BeamerReferenceIndex;
   readonly overlaysByFrameId: ReadonlyMap<string, BeamerOverlayModel>;
@@ -319,7 +320,22 @@ function createBeamerRenderContext(
   // Only the theme sees the switched uses; spans elsewhere stay the source's.
   const theme = resolveBeamerTheme(themeSwitch ? documentWithPresentationTheme(document, themeSwitch) : document);
   const dateBindings = beamerDateBindings(document, syntaxContext);
-  const frameMacroBindings = new Map<string, ReadonlyMap<string, MacroBinding>>();
+  const pointMacroBindings = new Map<number, ReadonlyMap<string, MacroBinding>>();
+  const bindingsAt = (offset: number): ReadonlyMap<string, MacroBinding> => {
+    const cached = pointMacroBindings.get(offset);
+    if (cached) return cached;
+    const prefix = source.slice(0, offset);
+    let collected = collectMacroBindings(collectContextDefinitions(prefix));
+    // A callable or alias can execute a declaration whose command name never
+    // appears at the call site. Replay the supported macro stream in that case.
+    if ([...collected.values()].some(binding => /\\(?:newcommand|renewcommand|providecommand|def|let)\b/u.test(binding.kind === "text" ? binding.value : binding.body))) {
+      collected = new Map(expandBeamerLocalMacros(createIdentityMappedText(prefix), new Map(), true).bindings);
+    }
+    collected.delete("\\arraystretch");
+    for (const [name, binding] of dateBindings.bindings) if (!collected.has(name)) collected.set(name, binding);
+    pointMacroBindings.set(offset, collected);
+    return collected;
+  };
   const overlaysByFrameId = new Map(document.frames.map((frame) => {
     const overlays = scanBeamerFrameOverlays(source, frame, syntaxContext.syntax);
     return [frame.id, frame.options?.allowFrameBreaks == null ? overlays : { ...overlays, stepCount: 1 }] as const;
@@ -331,22 +347,8 @@ function createBeamerRenderContext(
     syntax: syntaxContext.syntax,
     document,
     theme,
-    macroBindingsForFrame: frame => {
-      let bindings = frameMacroBindings.get(frame.id);
-      if (!bindings) {
-        // Resolve the context at this frame, while the document scope is open.
-        // Definitions in earlier closed frames/groups must not leak into it.
-        const collected = collectMacroBindings(collectContextDefinitions(source.slice(0, frame.span.from)));
-        // The table frontend evaluates this kernel register and its local
-        // assignments. Expanding it as a user macro would rewrite the target
-        // of a later \renewcommand{\arraystretch}{...} into its numeric value.
-        collected.delete("\\arraystretch");
-        for (const [name, binding] of dateBindings.bindings) if (!collected.has(name)) collected.set(name, binding);
-        bindings = collected;
-        frameMacroBindings.set(frame.id, bindings);
-      }
-      return bindings;
-    },
+    macroBindingsAt: bindingsAt,
+    macroBindingsForFrame: frame => bindingsAt(frame.span.from),
     references: buildBeamerReferenceIndex(document, syntaxContext.syntax, overlaysByFrameId),
     overlaysByFrameId,
     page: resolveBeamerPageGeometry(document, theme),
@@ -651,6 +653,8 @@ async function renderBeamerFrameStep(params: {
     currentSectionId: frame.sectionId,
     ...context.references, step, theme, renderDiagnostics: diagnostics,
     scopedTheme: createBeamerScopedTheme(document, theme, frame.bodySpan),
+    macroBindingsAt: offset => offset >= frame.bodySpan.from && /\\(?:newcommand|renewcommand|providecommand|def|let)\b/u.test(source.slice(frame.bodySpan.from, offset))
+      ? context.macroBindingsAt(offset) : macroBindings,
     tikzLayer: beamerTikzLayerState(source) === "ours",
     overlayPictures: beamerOverlayPicturesIn({ source, syntax: context.syntax }, frame.bodySpan),
     paragraphPaint: new Map(),
@@ -3945,9 +3949,8 @@ function layoutParagraph(params: {
         ? "ragged-left"
         : "ragged-right";
   params = { ...params, mapped: projectBeamerPreformatted(params.mapped, params.references.source, params.references.renderDiagnostics, params.references.theme, params.font) };
-  let mapped = params.macroBindings
-    ? expandMacroBindingsMapped(params.mapped, params.macroBindings)
-    : params.mapped;
+  const visibleMacros = params.references.macroBindingsAt?.(params.sourceSpan.from) ?? params.macroBindings;
+  let mapped = visibleMacros ? expandBeamerLocalMacros(params.mapped, visibleMacros).mapped : params.mapped;
   if (params.role === "body" && params.alignment !== "left") {
     // A declaration carried across an extracted picture retains LaTeX's
     // infinite margin glue, rather than generic finite alignment skips.
