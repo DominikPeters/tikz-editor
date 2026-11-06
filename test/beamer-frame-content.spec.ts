@@ -70,8 +70,10 @@ describe("Beamer frame content frontend", () => {
       "list",
     ]);
     expect(columns.columns[1]?.children.map((node) => node.kind)).toEqual([
-      "tikzpicture",
+      "paragraph", // Preserve the minipage paragraph around the inline picture.
     ]);
+    const pictureParagraph = columns.columns[1]?.children[0];
+    expect(source.slice(pictureParagraph.span.from, pictureParagraph.span.to)).toContain(String.raw`\begin{tikzpicture}`);
     for (const column of columns.columns) {
       for (const node of column.children) {
         expect(source.slice(node.span.from, node.span.to).trim()).not.toBe("");

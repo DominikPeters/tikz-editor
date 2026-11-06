@@ -96,6 +96,8 @@ export type PreparedColumnFlowItem =
       visibility: BeamerOverlayVisibility;
       paragraph: LaidParagraph;
       leadingSkipPt?: number;
+      startsWithVerticalEnvironment?: boolean;
+      startsWithAlignmentEnvironment?: boolean;
       advanceHeight: number;
       trailingSkipPt: number;
     }
@@ -111,7 +113,7 @@ export type PreparedColumnFlowItem =
       visibility: BeamerOverlayVisibility;
       id: string;
       sourceSpan: Span;
-      horizontalAlignment: "left" | "center";
+      horizontalAlignment: "left" | "center" | "right";
       width: number;
       height: number;
       model: BeamerEmbeddedTikzLayout["model"];

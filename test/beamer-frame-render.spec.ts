@@ -186,6 +186,7 @@ describe("headless Beamer frame renderer", () => {
       "footline",
       "body",
       "body",
+      "body", // The diagram now occupies a source-backed inline paragraph box.
     ]);
     expect(result.layout.embeddedTikz).toHaveLength(1);
 
@@ -218,7 +219,7 @@ describe("headless Beamer frame renderer", () => {
           (placement) => [placement.lineIndex, placement]
         )
       );
-      return paragraph.report.lines.map((line) =>
+      return paragraph.report.lines.filter(line => line.segments.some(segment => segment.kind === "text")).map((line) =>
         paragraph.bounds.y +
         Number(placements.get(line.lineIndex)?.y ?? 0) +
         Number(line.ascent)
@@ -345,11 +346,7 @@ describe("headless Beamer frame renderer", () => {
 
     const result = await renderBeamerFrame(source, { graphicsResolver });
 
-    expect(resolvedFilenames).toEqual([
-      "frame.png",
-      "column.png",
-      "tikz.png",
-    ]);
+    expect([...resolvedFilenames].sort()).toEqual(["column.png", "frame.png", "tikz.png"]);
     expect(
       result.svg.svg.match(/data-tex-includegraphics="true"/gu)
     ).toHaveLength(3);

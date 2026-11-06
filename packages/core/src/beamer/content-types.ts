@@ -18,7 +18,7 @@ export type BeamerParagraphBodyNode = {
   kind: "paragraph";
   id: string;
   span: Span;
-  alignment?: "left" | "center";
+  alignment?: "left" | "center" | "right";
 };
 
 export type BeamerTitlePageBodyNode = {
@@ -56,7 +56,7 @@ export type BeamerTikzBodyNode = {
   /** Full flow span, including an owning center environment when present. */
   span: Span;
   root: BeamerTikzPictureRoot;
-  horizontalAlignment: "left" | "center";
+  horizontalAlignment: "left" | "center" | "right";
 };
 
 export type BeamerUnsupportedBodyNode = {

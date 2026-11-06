@@ -23,6 +23,9 @@ function featuresSupportedBy(layer: CapabilityLayer): readonly FeatureId[] {
   // Measured titles/subtitles, eight class display/list profiles and columns; preamble color roles and basic tcolorbox
   // composition have separate document-renderer contracts.
   // Measured stock/modern headings and class-sized list/math flow share frame flow.
+  // Seeded LuaLaTeX interaction probes cover picture/paragraph alignment in frames,
+  // columns and blocks, default dates, and absolute/relative/nested TikZ overlays.
+  // These extend frame flow/titlepages and the existing overlay picture contract.
   // Footer/sidebar metadata, stock contents, fixed overlay areas, centering and
   // modern progress paint extend that bounded flow contract. Dove/serif and
   // professionalfonts extend the registered stock theme/color/font contracts.

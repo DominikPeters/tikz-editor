@@ -135,6 +135,8 @@ export function parseBeamerFrameBody(
       (token.name !== "columns" &&
         token.name !== "tikzpicture" &&
         token.name !== "center" &&
+        token.name !== "flushleft" &&
+        token.name !== "flushright" &&
         token.name !== "tcolorbox" &&
         !isProofEnvironment(token.name) &&
         !theoremOccurrences.has(token.span.from) &&
@@ -155,6 +157,12 @@ export function parseBeamerFrameBody(
       break;
     }
     const end = requireArrayValue(tokens, endIndex);
+    if (isInsideNativeTextFlow(context, token.span.from, overlays)) {
+      // Lists, alignment environments and ordinary groups own their inline
+      // boxes. Extracting a nested picture would split their TeX scope.
+      index = endIndex;
+      continue;
+    }
     const tikzNode = frameTikzFlowNode({
       source,
       context,
@@ -164,7 +172,7 @@ export function parseBeamerFrameBody(
       nodeIndex,
     });
     if (
-      (token.name === "tikzpicture" || token.name === "center") &&
+      ["tikzpicture", "center", "flushleft", "flushright"].includes(token.name) &&
       !tikzNode
     ) {
       // An ordinary center environment remains owned by the generic TeX
@@ -172,7 +180,7 @@ export function parseBeamerFrameBody(
       // TikZ picture.
       // Overlay pictures stay in the paragraph as one zero-sized box.
       // Their inner environments belong to TikZ, not to frame flow.
-      if (token.name === "tikzpicture") index = endIndex;
+      index = endIndex;
       continue;
     }
     pushTextNode(source, { from: cursor, to: token.span.from }, frame.id, children);
@@ -226,7 +234,7 @@ export function parseBeamerFrameBody(
     kind: "frame-body",
     frameId: frame.id,
     span: frame.bodySpan,
-    children: applyStandaloneAlignment(source, splitStandaloneFrameCommands(context, frame.id, children)),
+    children: applyStandaloneAlignment(context, splitStandaloneFrameCommands(context, frame.id, children)),
     overlays,
     diagnostics,
   };
@@ -234,15 +242,28 @@ export function parseBeamerFrameBody(
 
 /** A declaration before an extracted picture still governs the following
  * frame material. It contributes no line or trivlist spacing of its own. */
-function applyStandaloneAlignment(source: string, children: BeamerFrameBodyNode[]): BeamerFrameBodyNode[] {
-  let alignment: "left" | "center" = "left";
-  return children.flatMap<BeamerFrameBodyNode>(node => {
-    if (node.kind === "paragraph") {
-      const declaration = /^\s*\\(centering|raggedright)\s*$/u.exec(source.slice(node.span.from, node.span.to).replace(/%[^\n]*/gu, ""));
-      if (declaration) { alignment = declaration[1] === "centering" ? "center" : "left"; return []; }
-      return [alignment === "center" ? { ...node, alignment } : node];
+function applyStandaloneAlignment<T extends BeamerFrameBodyNode | BeamerColumnFlowNode>(context: BeamerSyntaxContext, children: T[]): T[] {
+  if (!children.length) return children;
+  const { source } = context;
+  const declarations = beamerControlSequencesIn(context, { from: requireArrayValue(children, 0).span.from, to: requireArrayValue(children, children.length - 1).span.to })
+    .filter(command => ["centering", "raggedright", "raggedleft"].includes(command.name));
+  return children.flatMap<T>(node => {
+    let alignment: "left" | "center" | "right" = "left";
+    for (const command of declarations) {
+      if (command.from >= node.span.from) break;
+      let scope = context.syntax.tree.resolveInner(command.from + 1, 1);
+      let closedScope = false;
+      while (scope.parent) {
+        if ((scope.name === "Group" || scope.name === "Environment") && scope.to <= node.span.from) { closedScope = true; break; }
+        scope = scope.parent;
+      }
+      if (!closedScope) alignment = command.name === "centering" ? "center" : command.name === "raggedleft" ? "right" : "left";
     }
-    if (node.kind === "tikzpicture" && alignment === "center") return [{ ...node, horizontalAlignment: "center" as const }];
+    if (node.kind === "paragraph") {
+      if (/^\s*\\(?:centering|raggedright|raggedleft)\s*$/u.test(source.slice(node.span.from, node.span.to).replace(/%[^\n]*/gu, ""))) return [];
+      return [alignment !== "left" ? { ...node, alignment } : node];
+    }
+    if (node.kind === "tikzpicture" && alignment !== "left") return [{ ...node, horizontalAlignment: alignment }];
     return [node];
   });
 }
@@ -1144,21 +1165,8 @@ function parseColumnFlow(
     index = endIndex;
   }
 
-  for (const root of scanTikzRootsInSpan(context, frameId, bodySpan)) {
-    // An overlay picture is an empty box in the text around it.
-    if (readBeamerOverlayPicture(context, root.span)) continue;
-    structural.push({
-      span: root.span,
-      node: {
-        kind: "tikzpicture",
-        id: `${frameId}:column:${columnIndex}:tikz:${nodeIndex}`,
-        span: root.span,
-        root,
-        horizontalAlignment: "left",
-      },
-    });
-    nodeIndex += 1;
-  }
+  // Pictures in a minipage remain inline boxes. Extracting them here loses
+  // paragraph breaks, declarations and interline glue around animated pictures.
 
   for (const command of beamerControlSequencesIn(context, bodySpan)) {
     const node = verticalSpaceNode(context, command, bodySpan.to, `${frameId}:column:${columnIndex}:vspace:${nodeIndex}`);
@@ -1196,7 +1204,7 @@ function parseColumnFlow(
     `${frameId}:column:${columnIndex}`,
     result
   );
-  return result;
+  return applyStandaloneAlignment(context, result);
 }
 
 function scanTikzRootsInSpan(

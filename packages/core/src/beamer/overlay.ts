@@ -4,6 +4,7 @@ import type { Span } from "../ast/types.js";
 import {
   concatMappedText,
   createGeneratedMappedText,
+  createIdentityMappedText,
   sliceMappedText,
   type MappedText,
 } from "../text/source-map.js";
@@ -16,7 +17,7 @@ import {
   beamerEnvironmentBoundariesIn,
   type BeamerSyntaxContext,
 } from "./syntax.js";
-import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
+import { matchTexSyntaxEnvironments, type TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import type {
   BeamerDelimitedSourceValue,
   BeamerFrameModel,
@@ -196,6 +197,9 @@ export function scanBeamerFrameOverlays(
   const explicitItemCommands = new Set<number>();
   const overprints: Array<{ span: Span; contentSpan: Span; width?: BeamerDelimitedSourceValue }> = [];
   const environmentBoundaries = beamerEnvironmentBoundariesIn(context, frame.bodySpan);
+  const tikzRanges = [...matchTexSyntaxEnvironments(context.syntax).values()]
+    .filter(pair => pair.name === "tikzpicture" && pair.span.from >= frame.bodySpan.from && pair.span.to <= frame.bodySpan.to)
+    .map(pair => pair.span);
   const overprintStarts: typeof environmentBoundaries[number][] = [];
   for (const boundary of environmentBoundaries) {
     if (boundary.name !== "overprint") continue;
@@ -239,6 +243,22 @@ export function scanBeamerFrameOverlays(
         const content = command.name !== "label" && target
           ? beamerRequiredArgumentAfter(context, target.span.to, frame.bodySpan.to) : null;
         pending.push({ kind: "reference", sourceOrder: command.from, rawSpec, ...(content?.contentSpan !== undefined ? { contentSpan: content.contentSpan } : {}) });
+      }
+      continue;
+    }
+    // PGF's path frontend implements <spec> as \alt<spec>{path}{nothing}.
+    // Include these in the same source-ordered decoder as relative Beamer specs.
+    const picture = ["path", "draw", "fill", "filldraw", "shade", "shadedraw", "clip", "node", "coordinate", "matrix", "pic"].includes(command.name)
+      ? tikzRanges.find(span => span.from < command.from && command.from < span.to) : undefined;
+    if (picture) {
+      const optional = command.name === "path" ? beamerOptionalArgumentAfter(context, command.to, frame.bodySpan.to) : null;
+      const rawSpec = beamerOverlayArgumentAfter(context, optional?.span.to ?? command.to, frame.bodySpan.to);
+      const end = rawSpec ? tikzStatementEnd(source, rawSpec.span.to, picture.to) : null;
+      if (rawSpec && end !== null) {
+        const span = { from: command.from, to: end };
+        pending.push({ kind: "command", sourceOrder: command.from, rawSpec,
+          command: { kind: "only", span, commandSpan: { from: command.from, to: command.to },
+            branches: [{ span, contentSpan: span, value: source.slice(span.from, span.to) }], syntaxSpans: [rawSpec.span] } });
       }
       continue;
     }
@@ -1041,4 +1061,31 @@ function mergeSpans(spans: readonly Span[]): Span[] {
     }
   }
   return result;
+}
+
+/** A TikZ path's semicolon is outside label groups, options and comments. */
+function tikzStatementEnd(source: string, from: number, to: number): number | null {
+  let braces = 0, brackets = 0;
+  for (let cursor = from; cursor < to; cursor++) {
+    const character = source[cursor];
+    if (character === "%") { const newline = source.indexOf("\n", cursor); if (newline < 0) return null; cursor = newline; continue; }
+    if (character === "\\") { cursor++; continue; }
+    if (character === "{") braces++;
+    if (character === "}") { if (braces === 0) return null; braces--; }
+    if (character === "[" && braces === 0) brackets++;
+    if (character === "]" && braces === 0 && brackets > 0) brackets--;
+    if (character === ";" && braces === 0 && brackets === 0) return cursor + 1;
+  }
+  return null;
+}
+
+/** Project without changing offsets: scene/edit spans still address authored source. */
+export function projectBeamerTikzSource(source: string, span: Span, model: BeamerOverlayModel, step: number): string {
+  const projected = projectBeamerOverlayText(createIdentityMappedText(source.slice(span.from, span.to), span.from), span, model, step).mapped;
+  const characters = source.slice(span.from, span.to).replace(/[^\n]/g, " ").split("");
+  for (let index = 0; index < projected.text.length; index++) {
+    const origin = projected.sourceMap.charOrigins[index];
+    if (origin?.kind === "direct" && origin.from >= span.from && origin.from < span.to) characters[origin.from - span.from] = projected.text.charAt(index);
+  }
+  return source.slice(0, span.from) + characters.join("") + source.slice(span.to);
 }

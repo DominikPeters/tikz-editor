@@ -36,7 +36,7 @@ export function emitEmbeddedTikz(params: {
     sourceSpan: tikz.sourceSpan,
     bounds,
     viewBox: tikz.viewBox,
-    model,
+    model: tikz.visibility === "hidden" ? { ...model, parts: [] } : model,
   });
   params.items.push({
     id: tikz.id,
@@ -46,6 +46,7 @@ export function emitEmbeddedTikz(params: {
     sourceSpan: tikz.sourceSpan,
     bounds,
     parentId: params.parentId,
+    visibility: tikz.visibility === "hidden" ? "hidden" : "visible",
   });
   params.modelBuilder.addPart({
     basePartId: tikz.id,
@@ -54,7 +55,7 @@ export function emitEmbeddedTikz(params: {
     markup:
       `<g transform="translate(${fmt(translateX)} ${fmt(translateY)}) scale(${fmt(scale)})">` +
       innerDefs +
-      innerBody +
+      (tikz.visibility === "hidden" ? "" : innerBody) +
       `</g>`,
   });
 }

@@ -101,8 +101,8 @@ export const FEATURE_IDS = [
   "beamer_document_inspector", // Safe document-scoped theme, page, navigation, short-metadata and color-side edits.
   "beamer_list_templates", // Source-backed enumerate mini templates, list reveal and safe list conversion.
   "beamer_frame_shrink", // Stock shrink/squeeze arithmetic and body paint transforms.
-  "beamer_frame_flow", // Measured headings, metadata chrome, stock contents, fixed overlay areas and vertical composition.
-  "beamer_titlepages", // Measured stock and modern titlepage templates and metadata.
+  "beamer_frame_flow", // Measured headings, metadata, paragraph alignment and embedded pictures across frame/column/block flow.
+  "beamer_titlepages", // Measured stock/modern titlepages, authored metadata and the default compilation date.
   "beamer_theme_colors", // Ordered preamble and scoped frame-local block color roles and aliases.
   "beamer_tcolorbox", // Ordinary unbroken standard-skin package boxes.
   "beamer_slide_manager", // Authored frame insertion, dependency-aware reorder with concrete effect checks, duplication, clipboard paste and deletion.

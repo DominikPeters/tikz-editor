@@ -1,3 +1,5 @@
+import type { BeamerCompilationDate } from "./date.js";
+import type { BeamerInlinePicture } from "./inline-pictures.js";
 import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { BeamerOverlayPicture } from "./overlay-pictures.js";
@@ -54,6 +56,7 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   arrayPackage?: boolean;
   tableRegisters?: TexTabularRegisters;
   step: number;
+  compilationDate?: BeamerCompilationDate;
   footnotes?: BeamerFootnoteIndex;
   continuationBreaks?: BeamerContinuationBreaks;
   theme?: ResolvedBeamerTheme;
@@ -62,6 +65,7 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   tikzLayer?: boolean;
   /** The frame's overlay pictures, by document span: paragraphs set each as an empty box. */
   overlayPictures?: readonly BeamerOverlayPicture[];
+  inlinePictures?: readonly BeamerInlinePicture[];
   /** Owned by the current render; the prepared document index stays immutable. */
   renderDiagnostics: Diagnostic[];
 };
