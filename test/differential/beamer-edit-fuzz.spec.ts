@@ -23,6 +23,13 @@ describe("Beamer semantic edit recipes", () => {
     }
   });
 
+  it("retains the frozen compilation calendar while reducing source", () => {
+    const source = sequence().source;
+    const candidates = beamerSourceCandidates(source);
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const candidate of candidates) expect(candidate).toContain(String.raw`\year=2026\month=11\day=6`);
+  });
+
   it("rematerializes offsets when an earlier edit is removed", () => {
     const full = sequence();
     const trimmed = { ...full, actions: full.actions.filter(action => action.kind !== "set" || action.field !== "text") };

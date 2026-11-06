@@ -57,6 +57,13 @@ describe("Beamer corpus-priority reproduction contracts", () => {
     expect(priorityOracleFailures({ pdf: { pageCount: 1 }, pageTrace: { pages: [tracedPage("Title only")] } }, { pages: 1, oracleText: ["Alpha"] })).toContain("oracle is missing witness Alpha");
   });
 
+  it("matches text witnesses through TeX presentation ligatures while retaining raw glyph evidence", () => {
+    const oracle = { pdf: { pageCount: 1 }, pageTrace: { pages: [tracedPage("ofﬁceoverﬂow")] } };
+    expect(priorityOracleFailures(oracle, { pages: 1, oracleText: ["officeoverflow"], oracleTextByPage: [["officeoverflow"]] })).toEqual([]);
+    expect(priorityOracleFailures(oracle, { pages: 1, oracleText: ["officeunderflow"] })).toHaveLength(1);
+    expect(oracle.pageTrace.pages[0].glyphs.some(glyph => glyph.code === 0xFB01)).toBe(true);
+  });
+
   it("rejects incorrect block fills independently of matching glyph geometry", () => {
     const paint = { tolerance: 2, samples: [{ id: "example:block-body", maxChannelDelta: 31 }] };
     expect(priorityFidelityFailures({ ...comparison(), paint }, { pages: 1 })).toContainEqual(expect.stringContaining("Block paint example:block-body"));

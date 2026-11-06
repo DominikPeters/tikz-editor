@@ -73,6 +73,7 @@ export function beamerSourceCandidates(source: string): string[] {
   }
   const preambleEnd = source.indexOf("\\begin{document}");
   if (preambleEnd >= 0) for (const match of source.slice(0, preambleEnd).matchAll(/^\\(?:title|date|definecolor|newcommand|usetheme|setbeamertemplate|year|month|day)[^\n]*\n/gmu)) {
+    if (/\\(?:year|month|day)\b/u.test(match[0])) continue;
     candidates.push(source.slice(0, match.index) + source.slice(match.index + match[0].length));
   }
   for (const match of source.matchAll(/^%[^\n]*\n/gmu)) candidates.push(source.slice(0, match.index) + source.slice(match.index + match[0].length));

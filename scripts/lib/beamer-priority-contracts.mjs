@@ -35,10 +35,14 @@ export function priorityFidelityFailures(report, fixture, imageCount = 0, page =
 export function priorityOracleFailures(oracle, fixture) {
   const failures = [];
   const pages = oracle.pageTrace.pages.map(page => page.glyphs.map(g => String.fromCodePoint(g.code)).join(""));
-  const all = pages.join("");
-  for (const text of fixture.oracleText ?? []) if (!all.includes(text)) failures.push(`oracle is missing witness ${text}`);
+  // LuaLaTeX reports presentation ligatures as single glyph code points.
+  // Witness identity uses their spelling; strict font/glyph geometry below
+  // continues comparing the original, unnormalized traces.
+  const witnessText = text => text.replace(/[\uFB00-\uFB06]/gu, char => char.normalize("NFKC"));
+  const all = witnessText(pages.join(""));
+  for (const text of fixture.oracleText ?? []) if (!all.includes(witnessText(text))) failures.push(`oracle is missing witness ${text}`);
   for (const [index, required] of (fixture.oracleTextByPage ?? []).entries()) {
-    for (const text of required) if (!pages[index]?.includes(text)) failures.push(`oracle page ${index + 1} is missing witness ${text}`);
+    for (const text of required) if (!witnessText(pages[index] ?? "").includes(witnessText(text))) failures.push(`oracle page ${index + 1} is missing witness ${text}`);
   }
   if (oracle.pdf.pageCount !== fixture.pages) failures.push(`oracle pages=${oracle.pdf.pageCount}, fixture expects ${fixture.pages}`);
   return failures;
