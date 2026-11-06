@@ -1257,9 +1257,13 @@ function renderChrome(params: {
         primitive.sourceSpan.from <= pause.span.from && pause.span.to <= primitive.sourceSpan.to) },
       params.step
     ) : { mapped: mappedTemplateText(primitive), hiddenSourceSpans: [] };
+    const templateMapped = primitive.unbreakable ? concatMappedText([
+      createGeneratedMappedText("\\mbox{", "Beamer short metadata hbox", primitive.sourceSpan), projection.mapped,
+      createGeneratedMappedText("}", "Beamer short metadata hbox", primitive.sourceSpan),
+    ]) : projection.mapped;
     const mapped = primitive.fontRole === "frame-title" && params.continuationSuffix != null
       ? concatMappedText([projection.mapped, createGeneratedMappedText(params.continuationSuffix, "Beamer continuation title", primitive.sourceSpan)])
-      : projection.mapped;
+      : templateMapped;
     const font = theme.fonts[primitive.fontRole];
     const laid = layoutParagraph({
       mapped,

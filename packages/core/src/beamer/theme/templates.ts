@@ -437,7 +437,7 @@ function planInfolinesFootline(
     kind: "text", id: `${context.frame.id}:footline:author`, sourceSpan: author?.contentSpan ?? context.frame.span,
     bounds: { x: 0, y, width: third, height: paintHeight },
     source: { kind: "derived", text: authorText, sourceSpan: author?.contentSpan ?? context.frame.span },
-    fontRole: "footline", colorRole: "author in head/foot", alignment: "center", verticalAlignment: "center", baselineY,
+    unbreakable: true, fontRole: "footline", colorRole: "author in head/foot", alignment: "center", verticalAlignment: "center", baselineY,
   });
   const title = context.document.preamble.metadata.title;
   if (title) {
@@ -457,6 +457,7 @@ function planInfolinesFootline(
       },
       fontRole: "footline",
       colorRole: "title in head/foot",
+      unbreakable: true,
       alignment: "center",
       verticalAlignment: "center",
       baselineY,

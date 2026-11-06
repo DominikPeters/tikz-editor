@@ -640,13 +640,12 @@ ${opening}
     // LuaLaTeX frame keeps identical glyphs/fonts and <0.00014pt Y error.
     expect(body.bounds.y).toBeCloseTo(64.501105, 6);
     expect(titleBaseline).toBeCloseTo(20.142303, 6);
-    const footlineSpaces =
-      footlineTitle.report.lines[0]?.segments
-        .filter((segment) => segment.kind === "space")
-        .map((segment) => Number(segment.width)) ?? [];
-    expect(footlineSpaces).toHaveLength(2);
-    expect(footlineSpaces[0]).toBeCloseTo(2.124, 6);
-    expect(footlineSpaces[1]).toBeCloseTo(2.124, 6);
+    // Beamer short metadata is an unbreakable hbox. Its natural width keeps
+    // the two interword spaces at the font's 2.124pt spacing.
+    expect(footlineTitle.report.lines).toHaveLength(1);
+    expect(footlineTitle.report.lines[0].naturalWidth).toBeCloseTo(93.258, 6);
+    expect(footlineTitle.report.lines[0].segments.map(segment => segment.text).join(""))
+      .toBe("The Karush-Kuhn-Tucker Theorem");
     expect(baselines).toHaveLength(4);
     // LuaTeX's .7/.3 baselineskip struts are 623900/267389 scaled points.
     expect(rows[1].height).toBeCloseTo(623900 / 65536, 6);

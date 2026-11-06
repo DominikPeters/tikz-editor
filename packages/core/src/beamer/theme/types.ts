@@ -266,6 +266,8 @@ export type BeamerTemplatePrimitive =
       justify?: boolean;
       /** Templates such as sidebar metadata preserve whole-word wrapping. */
       disableAutomaticHyphenation?: boolean;
+      /** Stock short metadata is set in an unbreakable TeX hbox. */
+      unbreakable?: boolean;
     }
   | {
       kind: "vector";
