@@ -4821,14 +4821,15 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const explicitBaselineSkip = activeList !== undefined && (endSize.selectionFrom ?? -1) > activeList.sourceStart;
       const ancestorListLabels: SimpleTexListContext[] = [];
       if (scopeStack.some(role => role.kind === "list" || role.kind === "trivlist")) {
-        ancestorListLabels.push(...inheritedItemLabels.map(label => ({ ...label, inherited: true, totalLeftMarginEm: 0 })));
+        const inheritedMargin = inheritedItemLabels.at(-1)?.totalLeftMarginEm ?? 0;
+        ancestorListLabels.push(...inheritedItemLabels.map(label => ({ ...label, inherited: true, totalLeftMarginEm: label.totalLeftMarginEm - inheritedMargin })));
         inheritedItemLabels = [];
       }
       for (let depthIndex = 0; depthIndex < listStack.length - 1; depthIndex++) {
         const parent = listStack[depthIndex];
         const pending = pendingListLabels[depthIndex + 1];
         if (!parent || !pending?.show || parent.itemIndex <= 0) continue;
-        ancestorListLabels.push({ kind: parent.kind, depth: parent.depth, labelDepth: parent.labelDepth,
+        ancestorListLabels.push({ fontDepth: listStack.slice(0, depthIndex + 1).filter(entry => entry.kind === "itemize" || entry.kind === "enumerate").length, kind: parent.kind, depth: parent.depth, labelDepth: parent.labelDepth,
           itemIndex: parent.itemIndex, labelCounter: parent.labelCounter, showLabel: true,
           ownLeftMarginEm: parent.ownLeftMarginEm, totalLeftMarginEm: parent.totalLeftMarginEm,
           fontSizePt: parent.fontSizePt, labelFontSizePt: parent.labelFontSizePt ?? parent.fontSizePt, listStart: parent.sourceStart,
@@ -5463,7 +5464,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         for (const [depthIndex, list] of listStack.entries()) {
           const pending = depthIndex === listStack.length - 1 ? { show: pendingListShowLabel, label: pendingListLabel } : pendingListLabels[depthIndex + 1];
           if (!pending?.show || list.itemIndex <= 0) continue;
-          consumedItemLabels.push({ kind: list.kind, depth: list.depth, labelDepth: list.labelDepth,
+          consumedItemLabels.push({ fontDepth: listStack.slice(0, depthIndex + 1).filter(entry => entry.kind === "itemize" || entry.kind === "enumerate").length, kind: list.kind, depth: list.depth, labelDepth: list.labelDepth,
             itemIndex: list.itemIndex, labelCounter: list.labelCounter, showLabel: true,
             ownLeftMarginEm: list.ownLeftMarginEm, totalLeftMarginEm: list.totalLeftMarginEm,
             fontSizePt: list.fontSizePt, labelFontSizePt: list.labelFontSizePt ?? list.fontSizePt, listStart: list.sourceStart,

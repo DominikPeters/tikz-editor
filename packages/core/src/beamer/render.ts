@@ -258,6 +258,7 @@ function beamerListLayoutProfile(
     ...BEAMER_LIST_LAYOUT_PROFILE,
     trivlistTopsepPt: beamerTrivlistSpacing(theme).naturalPt,
     sizeOverrides: beamerListSizeOverrides(theme),
+    dimensionFontSizePt: beamerNamedFontSize(classSize, "normalsize").sizePt,
     paragraphSkipPt: Number(theme.options["paragraph-skip-pt"] ?? 0),
     selectBodyFontBeforeList: true,
     enumerateMiniTemplates: true,
@@ -4279,7 +4280,7 @@ function layoutParagraph(params: {
       if (box.consumedItemLabels?.length && external.labelTargetOffset !== undefined && params.references.inlineFlowItemLabels) {
         const transfer = { targetOffset: external.labelTargetOffset, labels: box.consumedItemLabels.map(label => {
           const owner = label.itemCommandSpan ? projectInputRange(mapped.sourceMap, label.itemCommandSpan.start, label.itemCommandSpan.end) : undefined;
-          return { ...label, ...(owner?.kind === "source-range" ? { originalItemCommandSpan: { start: owner.from, end: owner.to } } : {}) };
+          return { ...label, fontDepth: (label.fontDepth ?? label.depth) + (params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0), ...(owner?.kind === "source-range" ? { originalItemCommandSpan: { start: owner.from, end: owner.to } } : {}) };
         }) };
         if (JSON.stringify(params.references.inlineFlowItemLabels.get(external.span.from)) !== JSON.stringify(transfer)) {
           params.references.inlineFlowItemLabels.set(external.span.from, transfer);
@@ -4291,7 +4292,7 @@ function layoutParagraph(params: {
       const depth = item.kind === "block" ? item.block.endingDepth : item.box.depth;
       const advance = item.kind === "block" ? item.block.naturalHeight : item.box.height + item.box.depth;
       const after = item.kind === "block" ? item.block.plan.geometry.afterSkipPt : 0;
-      return [{ kind: "hbox", role: { kind: "external-flow", baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
+      return [{ kind: "hbox", role: { kind: "external-flow", ...(box.consumedItemLabels ? { pendingListBoundaries: box.consumedItemLabels } : {}), baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
         advance: texLength(advance), box: { metrics: { width: texLength(0), height: texLength(height), depth: texLength(depth) }, renderItems: [] } },
         ...(after ? [{ kind: "glue" as const, size: texLength(after), origin: { kind: "external-flow-after" as const } }] : [])];
     },
@@ -4337,6 +4338,7 @@ function layoutParagraph(params: {
     ...(params.initialPreviousDepth !== undefined ? { initialPreviousDepth: params.initialPreviousDepth } : {}),
     listProfile: {
       ...(params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE),
+      fontDepthOffset: params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0,
       ...(params.listProfile?.bodyFontSizePtByDepth ? {
         bodyFontSizePtByDepth: params.listProfile.bodyFontSizePtByDepth.slice(params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0),
       } : {}),

@@ -50,13 +50,23 @@ function texHBoxAttachmentsByPath(
   for (const attachment of attachments) {
     const key = texVListPathKey(attachment.vlistPath);
     const previous = hboxesByPath.get(key) ?? [];
-    if (previous.some(hbox => hbox.role?.kind !== "list-label" || attachment.hbox.role?.kind !== "list-label" ||
-      hbox.role.depth === attachment.hbox.role.depth && hbox.role.itemIndex === attachment.hbox.role.itemIndex)) {
+    if (previous.some(hbox => sameHBoxAttachmentOwner(hbox, attachment.hbox))) {
       throw new Error(`TeX vlist hbox attachments contain duplicate path ${key}.`);
     }
     hboxesByPath.set(key, [...previous, attachment.hbox]);
   }
   return hboxesByPath;
+}
+
+/** Transferred labels can share a local depth/index with the new minipage's
+ * own list. Source command ownership distinguishes those physical labels. */
+function sameHBoxAttachmentOwner(left: TexHBoxItem, right: TexHBoxItem): boolean {
+  const a = left.role, b = right.role;
+  if (a?.kind !== "list-label" || b?.kind !== "list-label") return true;
+  if (!!a.originalItemCommandSpan !== !!b.originalItemCommandSpan) return false;
+  const aSpan = a.originalItemCommandSpan ?? a.itemCommandSpan;
+  const bSpan = b.originalItemCommandSpan ?? b.itemCommandSpan;
+  return aSpan && bSpan ? aSpan.start === bSpan.start && aSpan.end === bSpan.end : a.depth === b.depth && a.itemIndex === b.itemIndex;
 }
 
 interface TexHBoxAttachmentItemsResult {

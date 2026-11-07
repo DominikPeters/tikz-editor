@@ -36,6 +36,7 @@ import { texLength, type TexLength } from "../coordinates.js";
 import type { TexDimensionContext } from "../dimensions.js";
 
 export interface LowerSimpleTexBlockItemsToVListOptions {
+  readonly listDimensionFontSizePt?: number;
   readonly commitPostDisplayParagraph?: (sourceEnd: number) => boolean;
   readonly resolveBlockBox?: (box: SimpleTexBoxBlockItem) => readonly TexVListItem[] | undefined;
   readonly font?: ResolvedTexFont;
@@ -373,7 +374,7 @@ function scopedDisplayMathTargetWidth(
     return width;
   }
   const marginWidth = scopePath.reduce((sum, role) => {
-    const layout = texVBoxLayoutForScopeRole(role, font);
+    const layout = texVBoxLayoutForScopeRole(role, font, options.listDimensionFontSizePt);
     return texLength(sum + layout.leftMarginWidth + layout.rightMarginWidth);
   }, texLength(0));
   return texLength(Math.max(0, width - marginWidth));

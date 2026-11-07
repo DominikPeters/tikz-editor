@@ -218,7 +218,7 @@ export interface TexParagraphItem {
   readonly paragraph: TexParagraphInput;
 }
 
-export type TexHBoxRole = { readonly kind: "external-flow"; readonly baselineSkipPt?: TexLength } | {
+export type TexHBoxRole = { readonly kind: "external-flow"; readonly pendingListBoundaries?: readonly SimpleTexListContext[]; readonly baselineSkipPt?: TexLength } | {
   readonly kind: "list-label";
   readonly markerPaint?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly traceAsGlyph: boolean };
   readonly labelKind: TexVBoxListItemLabelKind;

@@ -36,7 +36,7 @@ export function texListItemLayoutForParagraph(
   const labelContent = texListItemLabelContent(paragraph, listProfile);
   const labelRightEdge = texListItemLabelRightEdge(stack);
   const descriptionIndent = texListItemDescriptionIndent(stack, paragraph, beamerDescription);
-  const labelColor = listProfile?.resolveLabelColor?.(paragraph.listContext.kind, paragraph.listContext.labelDepth, paragraph.listContext.depth);
+  const labelColor = listProfile?.resolveLabelColor?.(paragraph.listContext.kind, paragraph.listContext.labelDepth, (paragraph.listContext.fontDepth ?? paragraph.listContext.depth) + (paragraph.listContext.inherited ? 0 : listProfile.fontDepthOffset ?? 0));
   const articleDescription = labelKind === "description" && !beamerDescription;
   const labelFontState: SimpleTexFontState | undefined = labelColor || paragraph.listContext.kind === "bibliography" || labelKind === "description"
     ? {
@@ -111,7 +111,7 @@ function texListItemLabelContent(
   }
   if (listContext.kind === "itemize") {
     const markers = listProfile?.itemizeMarkersByDepth;
-    const marker = listProfile?.resolveItemizeMarker?.(listContext.labelDepth, listContext.labelFontSizePt ?? paragraph.fontSizePt, listContext.fontDepth ?? listContext.depth) ?? markers?.[
+    const marker = listProfile?.resolveItemizeMarker?.(listContext.labelDepth, listContext.labelFontSizePt ?? paragraph.fontSizePt, (listContext.fontDepth ?? listContext.depth) + (listContext.inherited ? 0 : listProfile.fontDepthOffset ?? 0)) ?? markers?.[
       Math.max(0, Math.min(listContext.labelDepth - 1, markers.length - 1))
     ];
     if (marker) {

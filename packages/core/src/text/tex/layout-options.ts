@@ -66,6 +66,9 @@ export interface TexListMarkerProfile {
  * selected `\@listi`, `\@listii`, and `\@listiii`.
  */
 export interface TexListLayoutProfile {
+  /** Class-owned list dimensions are assigned before later font changes. */
+  readonly dimensionFontSizePt?: number;
+  readonly fontDepthOffset?: number;
   /** Beamer loads enumerate.sty's literal mini templates. */
   readonly enumerateMiniTemplates?: boolean;
   readonly resolveEnumerateText?: (counters: readonly number[], labelDepth: number) => string | undefined;

@@ -50,10 +50,11 @@ export function resolveBeamerItemizeMarkers(
     fontId: "cmsy10",
     atPt: texLength(font.sizePt),
   });
+  const tiny = beamerNamedFontSize(String(theme.options["class-font-size"] ?? "11"), "tiny");
   const tinySymbolFont = fontProfile.metricProvider.resolveFont({
-    // umsa.fd selects msam7 for the 6pt `\tiny` size used by Boadilla.
-    fontId: "msam7",
-    atPt: texLength(6),
+    // umsa.fd selects msam5 below 6pt and msam7 for the larger tiny sizes.
+    fontId: tiny.sizePt < 6 ? "msam5" : "msam7",
+    atPt: texLength(tiny.sizePt),
   });
   const canvas =
     resolveBeamerThemeColor(theme, "normal text").bg ?? WHITE;
@@ -67,7 +68,7 @@ export function resolveBeamerItemizeMarkers(
     // The sphere helper selects \normalsize, and the deeper square
     // templates select \small independently of the list body's size.
     const markerSizePt = family === "ball"
-      ? theme.fonts["normal-text"].sizePt
+      ? beamerNamedFontSize(String(theme.options["class-font-size"] ?? "11"), "normalsize").sizePt
       : family === "square" && index > 0 ? 10 : font.sizePt;
     const markerXHeightEm = markerSizePt === font.sizePt ? xHeightEm : fontProfile.resolveTextFont(
       fontProfile.defaultFontState, texLength(markerSizePt), fontProfile.metricProvider
