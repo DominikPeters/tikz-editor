@@ -69,7 +69,7 @@ test("columns alignment, column placement and image flags write their options", 
 });
 
 test("Edit Drawing opens the picture for editing", async ({ page }) => {
-  await select(page, "column:1:tikz:0", "Drawing");
+  await select(page, ":tikzpicture:0", "Drawing");
   await page.getByRole("button", { name: "Edit Drawing" }).click();
   await expect(page.getByTestId("nested-figure-breadcrumb")).toBeVisible();
   expect(await readStoreSource(page)).toBe(SOURCE);
