@@ -46,7 +46,7 @@ export interface TexParagraphScopeContext {
 export function texParagraphScopeContext(
   ancestors: readonly TexVBoxItem[]
 ): TexParagraphScopeContext {
-  const listItemLayout = ancestors.at(-1)?.layout?.listItem;
+  const listItemLayout = ancestors.filter(ancestor => ancestor.layout?.listItem !== undefined).at(-1)?.layout?.listItem;
   return {
     policy: texParagraphScopePolicy(ancestors),
     layout: texParagraphScopeLayout(ancestors),

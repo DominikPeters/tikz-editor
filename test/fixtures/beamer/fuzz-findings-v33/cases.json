@@ -1,0 +1,36 @@
+{
+  "formatVersion": 1,
+  "fidelity": [
+    {
+      "id": "standalone",
+      "file": "standalone.tex",
+      "frame": 1,
+      "pages": 4,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    },
+    {
+      "id": "centered-columns",
+      "file": "centered-columns.tex",
+      "frame": 1,
+      "pages": 4,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    },
+    {
+      "id": "top-columns",
+      "file": "top-columns.tex",
+      "frame": 1,
+      "pages": 4,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    }
+  ],
+  "recognition": []
+}

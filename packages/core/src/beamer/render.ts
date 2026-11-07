@@ -3702,7 +3702,10 @@ async function prepareColumnFlowNode(params: {
         // that empty line, then inserts normal interline glue before its first box.
         (initialPreviousDepth === undefined && params.leadingDisplayBaselineSkipPt !== 0 && /^\s*\\begin\s*\{(?:center|flushleft|flushright|itemize|enumerate|description)\}/u.test(projection.mapped.text)
           ? (() => {
-              const skip = Math.round((paragraphStartingBaselineSkip(paragraph, bodyFont.lineHeightPt) - Number(paragraph.layout.report.lines[0]?.ascent ?? 0)) * 65_536) / 65_536;
+              const baseline = firstMaterial?.hboxRole?.kind === "external-flow"
+                ? firstMaterial.hboxRole.baselineSkipPt ?? paragraphStartingBaselineSkip(paragraph, bodyFont.lineHeightPt)
+                : paragraphStartingBaselineSkip(paragraph, bodyFont.lineHeightPt);
+              const skip = Math.round((baseline - paragraphStartingMaterialHeight(paragraph)) * 65_536) / 65_536;
               return skip >= 0 ? skip : 1;
             })() : 0),
       // A plain TeX paragraph contributes its line hboxes, not the TikZ-node

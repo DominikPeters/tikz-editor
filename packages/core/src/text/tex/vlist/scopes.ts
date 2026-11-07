@@ -135,7 +135,7 @@ function enrichListItemFrameFromParagraph(
   if (item.kind !== "paragraph" || item.paragraph.listContext?.showLabel !== true) {
     return;
   }
-  const listItemFrame = stack.at(-1);
+  const listItemFrame = stack.filter(frame => frame.role.kind === "list-item").at(-1);
   if (listItemFrame?.role.kind !== "list-item") {
     return;
   }

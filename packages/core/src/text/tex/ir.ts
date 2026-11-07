@@ -4562,9 +4562,26 @@ function buildSimpleTexParagraphBlocksFromNodes(
   type AlignmentState = NonNullable<SimpleTexParagraphBlock["alignmentGroupState"]>;
   let alignmentState: AlignmentState = {};
   const alignmentScopes: AlignmentState[] = [];
+  const alignmentEnvironments: { outer: AlignmentState; item?: AlignmentState }[] = [];
   const alignmentHistory: { from: number; state: AlignmentState }[] = [{ from: sourceOffset, state: alignmentState }];
-  const hasAlignmentGroups = sourceNodes.some(node => node.kind === "style-declaration" && node.sizeScope?.name === "");
+  const hasAlignmentGroups = options?.groupListItemBodies || sourceNodes.some(node => node.kind === "style-declaration" && node.sizeScope?.name === "");
   for (const node of sourceNodes) {
+    if (node.kind === "environment-boundary") {
+      if (node.boundary === "begin") {
+        alignmentEnvironments.push({ outer: alignmentState });
+        if (isSimpleTexTrivlistEnvironmentName(node.name)) alignmentState = {
+          alignment: simpleTexTrivlistAlignment(node.name), alignmentProfile: "latex-declaration",
+        };
+        else if (options?.groupListItemBodies && isSimpleTexListEnvironmentName(node.name)) alignmentState = { alignment: "ragged-right" };
+      } else alignmentState = alignmentEnvironments.pop()?.outer ?? {};
+    }
+    if (node.kind === "item" && options?.groupListItemBodies) {
+      const environment = alignmentEnvironments.at(-1);
+      if (environment) {
+        alignmentState = environment.item ?? alignmentState;
+        environment.item = alignmentState;
+      }
+    }
     if (node.kind === "style-declaration" && node.sizeScope?.boundary === "begin") alignmentScopes.push(alignmentState);
     if (node.kind === "alignment") alignmentState = { alignment: node.alignment, alignmentProfile: node.alignmentProfile };
     if (node.kind === "style-declaration" && node.sizeScope?.boundary === "end") alignmentState = alignmentScopes.pop() ?? {};
