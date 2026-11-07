@@ -66,14 +66,15 @@ export function texVBoxLayoutForScopeRole(
     };
   }
 
-  const leftMarginWidth = texLength(role.totalLeftMarginEm * dimensionFontSizePt);
+  const listDimensionSize = role.listKind === "bibliography" ? Number(font.atPt) : dimensionFontSizePt;
+  const leftMarginWidth = texLength(role.totalLeftMarginEm * listDimensionSize);
   return {
     leftMarginWidth,
     rightMarginWidth: texLength(0),
     list: {
-      ownLeftMarginWidth: texLength(role.ownLeftMarginEm * dimensionFontSizePt),
-      labelRightEdge: texLength(role.totalLeftMarginEm * dimensionFontSizePt - 0.5 * dimensionFontSizePt),
-      descriptionLabelSepWidth: texLength(role.listKind === "bibliography" ? 0 : 0.5 * dimensionFontSizePt),
+      ownLeftMarginWidth: texLength(role.ownLeftMarginEm * listDimensionSize),
+      labelRightEdge: texLength(role.totalLeftMarginEm * listDimensionSize - 0.5 * listDimensionSize),
+      descriptionLabelSepWidth: texLength(role.listKind === "bibliography" ? 0 : 0.5 * listDimensionSize),
     },
     paragraphPolicy: {
       resetInheritedAlignment: true,
