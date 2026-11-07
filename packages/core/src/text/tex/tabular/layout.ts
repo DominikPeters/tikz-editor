@@ -127,7 +127,7 @@ export function layoutTexTabularBox(params: TableLayoutParams): TexMathBox {
   };
   const registers: TexTabularRegisters = { ...params.tabularProfile?.registers, ...params.fontState.tabularRegisters };
   const sep = dimension(registers.tabcolsep, 6); const ruleWidth = dimension(registers.arrayrulewidth, .4); const doubleSep = dimension(registers.doublerulesep, 2);
-  const normalSkip = params.fontState.sizePt === undefined ? params.tabularProfile?.baselineSkipPt ?? baselineForSize(font.atPt) : baselineForSize(font.atPt);
+  const normalSkip = params.fontState.baselineSkipPt ?? (params.fontState.sizePt === undefined ? params.tabularProfile?.baselineSkipPt ?? baselineForSize(font.atPt) : baselineForSize(font.atPt));
   const stretch = registers.arraystretch ?? 1;
   const strutHeight = fractionPt(fractionPt(normalSkip, .7) + dimension(registers.extrarowheight, 0), stretch);
   const strutDepth = fractionPt(fractionPt(normalSkip, .3), stretch);

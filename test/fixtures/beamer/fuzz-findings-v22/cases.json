@@ -1,0 +1,40 @@
+{
+  "formatVersion": 1,
+  "title": "Table struts under implicit list fonts",
+  "fidelity": [
+    {
+      "id": "depth-one",
+      "file": "depth-one.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "MethodCostError"
+      ]
+    },
+    {
+      "id": "depth-two",
+      "file": "depth-two.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "MethodCostError"
+      ]
+    },
+    {
+      "id": "explicit-baseline",
+      "file": "explicit-baseline.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "MethodCostError"
+      ]
+    }
+  ],
+  "recognition": []
+}

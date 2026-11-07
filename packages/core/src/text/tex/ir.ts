@@ -4817,6 +4817,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       // after any intervening group has restored its font.
       const startSize = labelOnly ? endSize : sizeAt(start);
       const explicitFontSize = activeList !== undefined && (startSize.selectionFrom ?? -1) > activeList.sourceStart;
+      const initialBaselineSkip = activeList && !explicitFontSize ? activeList.baselineSkipPt : startSize.baselineSkip;
       const explicitBaselineSkip = activeList !== undefined && (endSize.selectionFrom ?? -1) > activeList.sourceStart;
       const ancestorListLabels: SimpleTexListContext[] = [];
       if (scopeStack.some(role => role.kind === "list" || role.kind === "trivlist")) {
@@ -4842,9 +4843,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
         sourceStart: start,
         sourceEnd: end,
         nodes,
-        ...((listContext && inheritedFontState) || sizeAt(start).color !== undefined ? { inheritedFontState: {
+        ...((listContext && inheritedFontState) || sizeAt(start).color !== undefined || initialBaselineSkip !== undefined ? { inheritedFontState: {
           ...(listContext && inheritedFontState ? { family: inheritedFontState.family, series: inheritedFontState.series, shape: inheritedFontState.shape } : {}),
           ...(sizeAt(start).color !== undefined ? { color: sizeAt(start).color } : {}),
+          ...(initialBaselineSkip !== undefined ? { baselineSkipPt: initialBaselineSkip } : {}),
         } } : {}),
         ...(activeList && !explicitFontSize ? { fontSizePt: activeList.fontSizePt } : { fontSizePt: startSize.sizePt }),
         ...(explicitFontSize ? { explicitFontSize: true } : {}),
