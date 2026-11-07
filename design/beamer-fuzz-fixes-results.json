@@ -1,0 +1,254 @@
+{
+  "date": "2026-11-07",
+  "scope": "Fix original four reduced renderer findings and investigate further recursive Beamer failures",
+  "fixedFindings": [
+    "inline ordinary picture shares surrounding prose paragraph",
+    "title page following prose clears preceding depth",
+    "local macro declarations protect target/body tokens and restore scope",
+    "columns within blocks compose measured height and depth",
+    "short infolines metadata uses an unbreakable hbox",
+    "macro bindings remain visible across structural flow",
+    "declaration aliases execute between frames",
+    "declaration aliases inside frames remain visible across flow",
+    "nested column editing scopes follow recursive block composition",
+    "natural top-aligned frame skip remains present when later content overflows"
+  ],
+  "strictLiveRegressions": [
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v3/cases.json",
+      "cases": 4,
+      "passed": 4,
+      "artifact": "artifacts/beamer-fuzz/fixes-v3-calendar-pinned"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v4/cases.json",
+      "cases": 2,
+      "passed": 2,
+      "artifact": "artifacts/beamer-fuzz/fixes-v4-box-depth"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v5/cases.json",
+      "cases": 3,
+      "passed": 3,
+      "artifact": "artifacts/beamer-fuzz/fixes-v5-verified"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v6/cases.json",
+      "cases": 1,
+      "passed": 1,
+      "artifact": "artifacts/beamer-fuzz/alias-flow-fixed"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v8/cases.json",
+      "cases": 1,
+      "passed": 1,
+      "artifact": "artifacts/beamer-fuzz/top-skip-fixed"
+    }
+  ],
+  "freshFidelity": {
+    "seed": 20261107,
+    "documents": 12,
+    "frames": 39,
+    "states": 81,
+    "passedFrames": 27,
+    "failedFrames": 12,
+    "oracleValidationErrors": [],
+    "generatorSha256": "c3eaa0e1d20afda8f38a7f9786b8576c47a5ca1777c7be6958900f0968ada3cd",
+    "manifestSha256": "4cdf68ee966d73740b35600b0a3d0ef6fe0af45e4b8e9a1613c9c0bb19ce3029",
+    "parentChildInteractions": 52,
+    "artifact": "artifacts/beamer-fuzz/fixes-fresh-intricate",
+    "interpretation": "All twelve richly composed first frames still fail; all twenty-seven subsequent frames pass. Frame failures are not distinct bug counts.",
+    "phase": "after the main fixes, before the final overfull-frame top-skip correction"
+  },
+  "remainingReducedFindings": {
+    "manifest": "test/fixtures/beamer/fuzz-findings-v7/cases.json",
+    "cases": [
+      "block-inside-list",
+      "grouped-columns"
+    ],
+    "validReferences": 2,
+    "strictMismatches": 2,
+    "artifact": "artifacts/beamer-fuzz/remaining-flow-verified"
+  },
+  "harnessFixes": [
+    "freeze calendar assignments during source reduction",
+    "normalize Latin presentation ligatures only for witness spelling, preserving raw glyph contracts",
+    "use the independent validity predicate when reducing literal native output"
+  ],
+  "validation": {
+    "focusedTestFiles": 81,
+    "focusedPassedTests": 1402,
+    "focusedSkippedTests": 8,
+    "fullSuiteBeforeFinalCorrections": {
+      "files": 523,
+      "passedFiles": 517,
+      "failedFiles": 4,
+      "passedTests": 8305,
+      "failedTests": 7,
+      "note": "The full run started before final alias/scope corrections and preview regeneration. All seven failures pass in the fresh 81-file validation."
+    },
+    "focusedLog": "/tmp/fixes-final-after-overflow.log",
+    "typecheck": "passed",
+    "productionLint": "passed",
+    "typecheckLog": "/tmp/fixes-final-overflow-typecheck.log",
+    "productionLintLog": "/tmp/fixes-final-overflow-lint.log"
+  },
+  "automaticReduction": {
+    "originalBytes": 5919,
+    "reducedBytes": 3344,
+    "reducedSourceSha256": "dbcc2337578011d112b1b39c06d96c7ab21a28381ab3f5bde356659ac52fbbf1",
+    "attempts": 16,
+    "accepted": 3,
+    "key": "mismatch:LuaLaTeX structural contract:unmatchedOracleRules",
+    "budgetExhausted": true,
+    "finalReproductionVerified": true,
+    "artifact": "artifacts/beamer-fuzz/fresh-nested-reduction-corrected",
+    "note": "Bounded reduction, not a minimality claim. The old acceptance guard accepted zero candidates in 32 attempts; the corrected predicate accepted three in sixteen.",
+    "continuation": {
+      "originalBytes": 3344,
+      "reducedBytes": 2095,
+      "attempts": 48,
+      "accepted": 5,
+      "budgetExhausted": true,
+      "key": "mismatch:LuaLaTeX structural contract:unmatchedOracleRules",
+      "finalReproductionVerified": true,
+      "artifact": "artifacts/beamer-fuzz/fresh-nested-reduction-continuation"
+    },
+    "limitation": "The reducer preserves a mismatch category and valid visible TeX, not proven root-cause identity. Template/preamble reductions can expose other missing rules, so no additional distinct bug is claimed from the automated reduction."
+  },
+  "editingSoak": {
+    "status": "complete",
+    "sequences": 8,
+    "comparisons": 729,
+    "implementationSha256": "01f24ee5ec148316b2e3c281fc13ca0d4642c0f4e3ac87368f7062511cfc08ca",
+    "harnessSha256": "e3bbfec39c202a0632bfa9e01c8f45bce3e2983e1f3a19538a9ba9e65eeb2bcf",
+    "workers": 1,
+    "sourceCoverage": {
+      "branches": {
+        "covered": 7161,
+        "total": 11177,
+        "percent": 64.06907041245415
+      },
+      "functions": {
+        "covered": 1466,
+        "total": 3018,
+        "percent": 48.57521537442015
+      },
+      "statements": {
+        "covered": 34392,
+        "total": 82828,
+        "percent": 41.52219056357753
+      }
+    },
+    "edits": {
+      "width": 29,
+      "text": 13,
+      "class-font": 10,
+      "aspect": 19,
+      "theme": 15,
+      "comment": 36,
+      "alignment": 8,
+      "date": 9,
+      "rotation": 17,
+      "overlay": 13,
+      "color": 13,
+      "title": 16,
+      "scope": 19,
+      "bounds-width": 14
+    },
+    "reach": {
+      "deck:render": 570,
+      "deck:prewarm": 49,
+      "layer:shown": 257,
+      "parse:incremental": 68,
+      "patches:rebased": 113,
+      "semantic:incremental:selective": 53,
+      "suffix:skipped": 53,
+      "deck:claimed": 36,
+      "deck:current": 66,
+      "race": 27,
+      "parse:full:patch-source-id-mismatch": 37,
+      "semantic:full:full": 45,
+      "semantic:incremental:suffix": 15,
+      "tikz:full": 46,
+      "parse:full:statement-parse-error": 8,
+      "aborted": 2,
+      "layer:slide-layout-reused": 1
+    },
+    "errors": [],
+    "artifact": "artifacts/beamer-edit-fuzz/fixes-recursive-validation",
+    "phase": "before the final overfull-frame top-skip correction"
+  },
+  "editedIndependentChecks": {
+    "cases": 3,
+    "passedBeforeOverflowFix": 2,
+    "failedBeforeOverflowFix": 1,
+    "passedAfterOverflowFix": 3,
+    "sourceMaterialization": "Saved semantic recipes, source mutations checked against recorded concrete operations including undo.",
+    "artifact": "artifacts/beamer-fuzz/edited-final-contexts",
+    "newBug": "20pt edited context body shifted by 3.486241pt; reduced to overfull top-aligned frame natural skip",
+    "reducedBeforeMaxGlyphDyPt": 5.690458,
+    "reducedAfterMaxGlyphDyPt": 9.3e-05
+  },
+  "postOverflowEditingReplay": {
+    "status": "complete",
+    "sequences": 1,
+    "comparisons": 90,
+    "implementationSha256": "ddff45e54614e9ca63bde5caf8114b5b3e573aa4dc02e3cee921f84bc6b7a413",
+    "harnessSha256": "e3bbfec39c202a0632bfa9e01c8f45bce3e2983e1f3a19538a9ba9e65eeb2bcf",
+    "workers": 1,
+    "sourceCoverage": {
+      "branches": {
+        "covered": 6594,
+        "total": 10598,
+        "percent": 62.219286657859975
+      },
+      "functions": {
+        "covered": 1431,
+        "total": 3018,
+        "percent": 47.415506958250496
+      },
+      "statements": {
+        "covered": 33314,
+        "total": 82828,
+        "percent": 40.22069831457961
+      }
+    },
+    "edits": {
+      "width": 4,
+      "text": 2,
+      "class-font": 1,
+      "aspect": 1,
+      "theme": 2,
+      "comment": 7,
+      "alignment": 1,
+      "date": 1,
+      "rotation": 1,
+      "overlay": 1,
+      "color": 2,
+      "title": 2,
+      "scope": 3,
+      "bounds-width": 1
+    },
+    "reach": {
+      "deck:render": 74,
+      "deck:prewarm": 6,
+      "layer:shown": 27,
+      "parse:incremental": 8,
+      "patches:rebased": 12,
+      "semantic:incremental:selective": 7,
+      "suffix:skipped": 7,
+      "deck:claimed": 6,
+      "deck:current": 10,
+      "parse:full:patch-source-id-mismatch": 3,
+      "semantic:full:full": 4,
+      "parse:full:statement-parse-error": 1,
+      "semantic:incremental:suffix": 1,
+      "tikz:full": 4,
+      "race": 1,
+      "layer:slide-layout-reused": 1
+    },
+    "errors": [],
+    "artifact": "artifacts/beamer-edit-fuzz/overflow-fix-replay"
+  }
+}

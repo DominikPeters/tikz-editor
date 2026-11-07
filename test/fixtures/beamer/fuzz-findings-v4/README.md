@@ -13,7 +13,7 @@ and now participate in the passing frozen-oracle collection.
   an interaction failure between two individually supported flow constructs.
 
 These are hand-reduced reproductions, not claims of global minimality. Both
-compile with LuaLaTeX, preserve visible text witnesses and fail the original
+compile with LuaLaTeX, preserve visible text witnesses and originally failed the
 strict glyph/layout contract. Source hashes are recorded in `cases.json`.
 
 ```sh
