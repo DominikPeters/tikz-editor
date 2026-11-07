@@ -2452,7 +2452,10 @@ async function prepareBlockWithTheme(params: {
       ...(params.work !== undefined ? { work: params.work } : {}),
     });
     const positioned = positionPreparedFrameFlow(flow, theoremBodyFont.lineHeightPt);
-    const origin = positioned.items[0]?.visualTop ?? 0;
+    const first = positioned.items[0];
+    // Keep the negative head skip of T columns. Their visual top can be
+    // above the physical hbox that establishes this body's reference.
+    const origin = first?.item.kind === "columns" ? first.referenceY - first.item.box.height : first?.contentTop ?? 0;
     bodyFlow = { extent: positioned.extent - origin, items: positioned.items.map(item => ({ ...item,
       contentTop: item.contentTop - origin, referenceY: item.referenceY - origin,
       visualTop: item.visualTop - origin, visualBottom: item.visualBottom - origin })) };
@@ -2503,9 +2506,16 @@ async function prepareBlockWithTheme(params: {
   }
   const firstFlowItem = bodyFlow?.items[0]?.item;
   const firstBody = body ?? (firstFlowItem?.kind === "paragraph" ? firstFlowItem.paragraph : null);
+  const terminalBodyFlow = bodyFlow?.items.at(-1)?.item;
+  // Rounded bodies end a minipage, whose terminal unskip removes the last
+  // list/block skip. Intermediate body items retain that glue.
+  const terminalBodySkip = plan.style === "rounded"
+    ? terminalBodyFlow?.kind === "paragraph" ? terminalBodyFlow.trailingListGlue.naturalPt
+      : terminalBodyFlow?.kind === "block" ? terminalBodyFlow.block.plan.geometry.afterSkipPt : 0
+    : 0;
   const bodyExtent = body ? (plan.style === "default"
     ? paragraphMaterialExtent(body) + trailingScopedBeamerListSkip(createIdentityMappedText(params.source.slice(params.node.bodySpan.from, params.node.bodySpan.to), params.node.bodySpan.from), params.references, theoremBodyFont)
-    : paragraphLineExtent(body)) : bodyFlow?.extent ?? 0;
+    : paragraphLineExtent(body)) : (bodyFlow?.extent ?? 0) - terminalBodySkip;
   const titleLine = title.layout.report.lines[0];
   const titleAscent = Number(titleLine?.ascent ?? firstLineBaselineOffset(title));
   const titleDepth = Number(titleLine?.descent ?? 0);

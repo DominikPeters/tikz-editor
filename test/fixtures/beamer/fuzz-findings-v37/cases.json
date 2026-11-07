@@ -1,0 +1,36 @@
+{
+  "formatVersion": 1,
+  "fidelity": [
+    {
+      "id": "original-column",
+      "file": "original-column.tex",
+      "frame": 1,
+      "pages": 4,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    },
+    {
+      "id": "nested-blocks",
+      "file": "nested-blocks.tex",
+      "frame": 1,
+      "pages": 4,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    },
+    {
+      "id": "single-block",
+      "file": "single-block.tex",
+      "frame": 1,
+      "pages": 4,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    }
+  ],
+  "recognition": []
+}

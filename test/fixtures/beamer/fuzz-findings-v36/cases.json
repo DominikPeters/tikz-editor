@@ -1,0 +1,39 @@
+{
+  "formatVersion": 1,
+  "fidelity": [
+    {
+      "id": "top-negative",
+      "file": "top-negative.tex",
+      "frame": 1,
+      "pages": 4,
+      "oracleText": [
+        "Before.",
+        "Witness.",
+        "Geometricuncertainty"
+      ]
+    },
+    {
+      "id": "top-reference",
+      "file": "top-reference.tex",
+      "frame": 1,
+      "pages": 4,
+      "oracleText": [
+        "Before.",
+        "Witness.",
+        "Geometricuncertainty"
+      ]
+    },
+    {
+      "id": "centered",
+      "file": "centered.tex",
+      "frame": 1,
+      "pages": 4,
+      "oracleText": [
+        "Before.",
+        "Witness.",
+        "Geometricuncertainty"
+      ]
+    }
+  ],
+  "recognition": []
+}
