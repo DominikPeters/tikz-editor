@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "fidelity": [
+    {
+      "id": "nested-short",
+      "file": "nested-short.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    },
+    {
+      "id": "plain-description",
+      "file": "plain-description.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    }
+  ],
+  "recognition": []
+}

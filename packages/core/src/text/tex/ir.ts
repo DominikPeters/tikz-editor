@@ -617,6 +617,8 @@ export interface SimpleTexTokenLiteralInfo {
 }
 
 export interface SimpleTexParagraphBlock {
+  /** Active list identities, including ancestors flattened out of scopePath. */
+  readonly listSourceStarts?: readonly number[];
   readonly shipsEmptyLine?: boolean;
   readonly explicitFontSize?: boolean;
   readonly explicitBaselineSkip?: boolean;
@@ -4849,6 +4851,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       }
       for (const role of scopeStack) if (role.kind === "trivlist") trivlistsWithParagraph.add(role);
       const block: SimpleTexParagraphBlock = {
+        ...(listStack.length ? { listSourceStarts: listStack.map(list => list.sourceStart) } : {}),
         ...(shipsEmptyLine ? { shipsEmptyLine: true } : {}),
         text: textSliceAtSourceOffsets(start, end),
         sourceStart: start,
