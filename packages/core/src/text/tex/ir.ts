@@ -728,6 +728,7 @@ export interface SimpleTexDisplayMathBlockItem extends SimpleTexSourceRange, Sim
 }
 
 export interface SimpleTexBoxBlockItem extends SimpleTexSourceRange {
+  readonly consumedItemLabels?: readonly SimpleTexListContext[];
   readonly kind: "box";
   readonly text: string;
   readonly command: SimpleTexBoxCommandName;
@@ -761,6 +762,9 @@ export type SimpleTexBlockItem =
   | SimpleTexPlaceholderBlockItem;
 
 export interface SimpleTexListContext {
+  /** Deferred label transferred from a surrounding minipage scope. */
+  readonly inherited?: boolean;
+  readonly originalItemCommandSpan?: { readonly start: number; readonly end: number };
   /** Itemize/enumerate nesting excludes descriptions (Beamer \@itemdepth). */
   readonly fontDepth?: number;
   readonly labelFontSizePt?: TexLength;
@@ -942,6 +946,8 @@ const paragraphIrSeen = new TexWeightedLruCache<string, true>(1024, 512 * 1024);
 const PARAGRAPH_IR_MAX_SOURCE_LENGTH = 16384;
 
 export interface SimpleTexParagraphIrOptions {
+  readonly boxesClearingPendingItemLabels?: readonly number[];
+  readonly inheritedItemLabels?: readonly SimpleTexListContext[];
   readonly listBodyFontSizes?: readonly (number | undefined)[];
   readonly listBodyBaselineSkips?: readonly (number | undefined)[];
   readonly enumerateMiniTemplates?: boolean;
@@ -1334,7 +1340,7 @@ function buildSimpleTexParagraphIr(
       [...(options?.bibliographyMargins ?? [])],
       options?.descriptionLabelWidthPt ?? null,
       [...(options?.descriptionLabelWidths ?? [])],
-      options?.fontSizePt, options?.baselineSkipPt, options?.namedFontSizes, options?.listBodyFontSizes, options?.listBodyBaselineSkips,
+      options?.boxesClearingPendingItemLabels, options?.inheritedItemLabels, options?.fontSizePt, options?.baselineSkipPt, options?.namedFontSizes, options?.listBodyFontSizes, options?.listBodyBaselineSkips,
     ])
     : null;
   if (key !== null) {
@@ -4813,6 +4819,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const explicitFontSize = activeList !== undefined && (startSize.selectionFrom ?? -1) > activeList.sourceStart;
       const explicitBaselineSkip = activeList !== undefined && (endSize.selectionFrom ?? -1) > activeList.sourceStart;
       const ancestorListLabels: SimpleTexListContext[] = [];
+      if (scopeStack.some(role => role.kind === "list" || role.kind === "trivlist")) {
+        ancestorListLabels.push(...inheritedItemLabels.map(label => ({ ...label, inherited: true, totalLeftMarginEm: 0 })));
+        inheritedItemLabels = [];
+      }
       for (let depthIndex = 0; depthIndex < listStack.length - 1; depthIndex++) {
         const parent = listStack[depthIndex];
         const pending = pendingListLabels[depthIndex + 1];
@@ -5025,6 +5035,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     };
   };
 
+  let inheritedItemLabels = [...(options?.inheritedItemLabels ?? [])];
   let prefix = consumeParagraphPrefix(0);
   let blockStart = sourceStartForNodeIndex(prefix.start);
   let currentNoIndent = prefix.noIndent;
@@ -5445,6 +5456,24 @@ function buildSimpleTexParagraphBlocksFromNodes(
         scanState.aborted = true;
         break;
       }
+      const consumedItemLabels: SimpleTexListContext[] = [];
+      if (options?.boxesClearingPendingItemLabels?.includes(node.sourceStart)) {
+        for (const [depthIndex, list] of listStack.entries()) {
+          const pending = depthIndex === listStack.length - 1 ? { show: pendingListShowLabel, label: pendingListLabel } : pendingListLabels[depthIndex + 1];
+          if (!pending?.show || list.itemIndex <= 0) continue;
+          consumedItemLabels.push({ kind: list.kind, depth: list.depth, labelDepth: list.labelDepth,
+            itemIndex: list.itemIndex, labelCounter: list.labelCounter, showLabel: true,
+            ownLeftMarginEm: list.ownLeftMarginEm, totalLeftMarginEm: list.totalLeftMarginEm,
+            fontSizePt: list.fontSizePt, labelFontSizePt: list.labelFontSizePt ?? list.fontSizePt, listStart: list.sourceStart,
+            ...(list.itemCommandSpan ? { itemCommandSpan: list.itemCommandSpan } : {}),
+            ...(list.enumerateTemplate ? { enumerateTemplate: list.enumerateTemplate } : {}),
+            ...(list.kind === "enumerate" ? { enumerateCounters: listStack.slice(0, depthIndex + 1).filter(entry => entry.kind === "enumerate").map(entry => entry.labelCounter) } : {}),
+            ...(pending.label ? { label: pending.label } : {}) });
+        }
+        pendingListShowLabel = false;
+        pendingListLabel = undefined;
+        for (const pending of pendingListLabels) { pending.show = false; pending.label = undefined; }
+      }
       const body = rebaseSimpleTexBoxBody(node.body, blocks.length);
       blocks.push(...body.blocks);
       items.push({
@@ -5460,6 +5489,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         contentEnd: node.contentEnd,
         ...currentSimpleTexBlockItemScope(),
         items: body.items,
+        ...(consumedItemLabels.length ? { consumedItemLabels } : {}),
       });
       unsupportedCommand ||= node.body.unsupportedCommand;
       prefix = consumeParagraphPrefix(index + 1);

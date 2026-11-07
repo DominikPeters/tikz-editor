@@ -22,6 +22,7 @@ import type {
 import {
   analyzeSimpleTexParagraph,
   type SimpleTexListTopology,
+  type SimpleTexParagraphIrOptions,
   type SimpleTexMathNode,
   type SimpleTexNode,
   type TexParagraphAlignment,
@@ -47,6 +48,8 @@ import {
 } from "./dimensions.js";
 
 export interface TexParagraphLayoutOptions {
+  readonly boxesClearingPendingItemLabels?: readonly number[];
+  readonly inheritedItemLabels?: SimpleTexParagraphIrOptions["inheritedItemLabels"];
   readonly commitPostDisplayParagraph?: NonNullable<TexLayoutIrOptions["commitPostDisplayParagraph"]>;
   readonly resolveBlockBox?: NonNullable<TexLayoutIrOptions["resolveBlockBox"]>;
   readonly namedFontSizes?: TexLayoutIrOptions["namedFontSizes"];
@@ -133,6 +136,8 @@ export function layoutSimpleTexParagraph(
       ...(options.colorResolver?.cacheKey !== undefined ? { colorResolverCacheKey: options.colorResolver.cacheKey } : {}),
       ...(options.listProfile?.bodyFontSizePtByDepth ? { listBodyFontSizes: options.listProfile.bodyFontSizePtByDepth } : {}),
       ...(options.listProfile?.bodyBaselineSkipPtByDepth ? { listBodyBaselineSkips: options.listProfile.bodyBaselineSkipPtByDepth } : {}),
+      ...(options.inheritedItemLabels ? { inheritedItemLabels: options.inheritedItemLabels } : {}),
+      ...(options.boxesClearingPendingItemLabels ? { boxesClearingPendingItemLabels: options.boxesClearingPendingItemLabels } : {}),
       fontSizePt: font.atPt,
       ...(options.baselineSkip !== undefined ? { baselineSkipPt: options.baselineSkip } : {}),
       ...(options.namedFontSizes !== undefined ? { namedFontSizes: options.namedFontSizes } : {}),

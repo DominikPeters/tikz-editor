@@ -229,6 +229,7 @@ export type TexHBoxRole = { readonly kind: "external-flow"; readonly baselineSki
   readonly itemIndex: number;
   /** Source owner of the list item, independent of its list-local ordinal. */
   readonly itemCommandSpan?: TexSourceSpan;
+  readonly originalItemCommandSpan?: TexSourceSpan;
   readonly blockIndex: number;
 } | {
   readonly kind: "display-align-row";

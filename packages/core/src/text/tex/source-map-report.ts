@@ -669,7 +669,7 @@ function remapTexVListBoxReportItem(
 
 function remapTexHBoxRole(role: TexHBoxRole, sourceMap: TextSourceMap): TexHBoxRole {
   return role.kind === "list-label" && role.itemCommandSpan
-    ? { ...role, itemCommandSpan: mapTexSourceSpan(role.itemCommandSpan, sourceMap) }
+    ? { ...role, itemCommandSpan: role.originalItemCommandSpan ?? mapTexSourceSpan(role.itemCommandSpan, sourceMap) }
     : role;
 }
 

@@ -1,0 +1,91 @@
+{
+  "formatVersion": 1,
+  "title": "Final block in a column list",
+  "fidelity": [
+    {
+      "id": "b-direct",
+      "file": "b-direct.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Acenteredline.",
+        "Neighbor."
+      ]
+    },
+    {
+      "id": "b-nested",
+      "file": "b-nested.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Acenteredline.",
+        "Neighbor."
+      ]
+    },
+    {
+      "id": "T-direct",
+      "file": "T-direct.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Acenteredline.",
+        "Neighbor."
+      ]
+    },
+    {
+      "id": "T-nested",
+      "file": "T-nested.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Acenteredline.",
+        "Neighbor."
+      ]
+    },
+    {
+      "id": "b-plain-body",
+      "file": "b-plain-body.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Acenteredline.",
+        "Neighbor."
+      ]
+    },
+    {
+      "id": "b-actions-plain-body",
+      "file": "b-actions-plain-body.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Acenteredline.",
+        "Neighbor."
+      ]
+    },
+    {
+      "id": "b-actions-center",
+      "file": "b-actions-center.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Neighbor."
+      ]
+    },
+    {
+      "id": "top-actions-center",
+      "file": "top-actions-center.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Neighbor."
+      ]
+    }
+  ],
+  "recognition": []
+}

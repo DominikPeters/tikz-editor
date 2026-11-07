@@ -1,5 +1,5 @@
 import { beamerItemActionCommitsParagraph } from "./item-actions.js";
-import { projectBeamerInlineFlow } from "./inline-flow.js";
+import { projectBeamerInlineFlow, beamerBoxesClearingPendingItemLabels } from "./inline-flow.js";
 import { matchTexSyntaxEnvironments } from "../text/tex/syntax-index.js";
 import type { SimpleTexBoxBlockItem } from "../text/tex/ir.js";
 import type { TexVListItem } from "../text/tex/vlist/types.js";
@@ -1489,7 +1489,9 @@ async function prepareInlineFlow(params: {
   references: BeamerReferenceContext; macroBindings: ReadonlyMap<string, MacroBinding>;
   textWidth: number; paperWidth: number; leftSidebarWidth: number; overlays: BeamerOverlayModel;
   step: number; diagnostics: Diagnostic[]; graphicsResolver?: DocumentGraphicsResolver; work?: BeamerRenderWork;
+  resolvePendingLabels?: boolean;
 }): Promise<void> {
+  params.references.inlineFlowItemLabels ??= new Map();
   const context = createBeamerSyntaxContext(params.source);
   const extracted = new Set<number>();
   const collect = (nodes: readonly (BeamerFrameBodyNode | BeamerColumnFlowNode)[]) => {
@@ -1522,7 +1524,25 @@ async function prepareInlineFlow(params: {
     const flow = await prepareFrameFlow({ ...params, children: ir.children, theme, textWidth: width,
       ...requireDefined(params.references.frameLayout, "Expected enclosing frame geometry"), availableHeight: Number.POSITIVE_INFINITY });
     const item = flow.find(item => item.kind === "block" || item.kind === "columns");
-    if (item?.kind === "block" || item?.kind === "columns") params.references.inlineFlow?.push({ span, item, width });
+    if (item?.kind === "block" || item?.kind === "columns") {
+      const labelTargetOffset = environments.filter(child => ["itemize", "enumerate", "description", "center", "flushleft", "flushright"].includes(child.name) &&
+        child.begin.span.from > span.from && child.end.span.to < span.to && resolveBeamerOverlaySpanVisibility(params.overlays, child.begin.span, params.step) !== "removed")
+        .sort((a, b) => a.begin.span.from - b.begin.span.from)[0]?.begin.span.from;
+      const replacement = { span, item, width, ...(labelTargetOffset !== undefined ? { labelTargetOffset } : {}) };
+      const index = params.references.inlineFlow?.findIndex(box => box.span.from === span.from) ?? -1;
+      if (index >= 0 && params.references.inlineFlow) params.references.inlineFlow[index] = replacement;
+      else params.references.inlineFlow?.push(replacement);
+    }
+  }
+  if (params.resolvePendingLabels !== false && params.references.inlineFlow?.some(box => box.labelTargetOffset !== undefined)) {
+    for (let attempt = 0; attempt <= candidates.length; attempt++) {
+      const revision = params.references.inlineFlowLabelRevision ?? 0;
+      await prepareFrameFlow({ ...params, children: params.bodyIr.children, textWidth: params.textWidth,
+        theme: params.theme, diagnostics: [], ...requireDefined(params.references.frameLayout, "Expected enclosing frame geometry"), availableHeight: Number.POSITIVE_INFINITY });
+      if ((params.references.inlineFlowLabelRevision ?? 0) === revision) break;
+      if (attempt === candidates.length) throw new Error("Deferred Beamer item label transfer did not stabilize");
+      await prepareInlineFlow({ ...params, resolvePendingLabels: false });
+    }
   }
 }
 
@@ -3664,7 +3684,11 @@ async function prepareColumnFlowNode(params: {
       // on the other hand, intentionally carry their vertical list glue.
       advanceHeight: node.kind === "paragraph"
         ? paragraphMaterialExtent(paragraph)
-        : paragraph.height,
+        : (() => {
+            const last = paragraph.layout.vlistLayout.boxReport.items.at(-1);
+            // endminipage's unskip removes a terminal structural smallskip.
+            return paragraph.height - (last?.itemKind === "glue" && last.glue?.origin?.kind === "external-flow-after" ? Number(last.height) : 0);
+          })(),
       // minipage's terminal \unskip drops the final trivlist skip; retain it
       // only when another flow item follows, as for the list's trailing glue.
       trailingSkipPt: node.kind === "list" ? trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont)
@@ -4235,12 +4259,24 @@ function layoutParagraph(params: {
   // It selects the short display skip, without a frame-leading baseline.
   blockDisplayProfile.leadingDisplay = { emptyLineBaselineSkipPt: 0 };
   const layoutOptions = {
+    boxesClearingPendingItemLabels: beamerBoxesClearingPendingItemLabels(mapped, params.references.inlineFlow ?? []),
+    inheritedItemLabels: [...(params.references.inlineFlowItemLabels?.values() ?? [])].filter(transfer => mapped.sourceMap.charOrigins.some(origin => origin.kind === "direct" && origin.from === transfer.targetOffset)).flatMap(transfer => transfer.labels),
     commitPostDisplayParagraph: (sourceEnd: number) => params.references.itemActionCommitsParagraph?.(mapped, sourceEnd) ?? false,
     namedFontSizes: Object.fromEntries(namedSizes.map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),
     resolveBlockBox: (box: SimpleTexBoxBlockItem): readonly TexVListItem[] | undefined => {
       const origin = mapped.sourceMap.charOrigins[box.sourceStart];
       const external = origin?.kind === "direct" ? params.references.inlineFlow?.find(item => item.span.from === origin.from && Math.abs(item.width - params.bounds.width) < .001) ?? params.references.inlineFlow?.find(item => item.span.from === origin.from) : undefined;
       if (!external) return undefined;
+      if (box.consumedItemLabels?.length && external.labelTargetOffset !== undefined && params.references.inlineFlowItemLabels) {
+        const transfer = { targetOffset: external.labelTargetOffset, labels: box.consumedItemLabels.map(label => {
+          const owner = label.itemCommandSpan ? projectInputRange(mapped.sourceMap, label.itemCommandSpan.start, label.itemCommandSpan.end) : undefined;
+          return { ...label, ...(owner?.kind === "source-range" ? { originalItemCommandSpan: { start: owner.from, end: owner.to } } : {}) };
+        }) };
+        if (JSON.stringify(params.references.inlineFlowItemLabels.get(external.span.from)) !== JSON.stringify(transfer)) {
+          params.references.inlineFlowItemLabels.set(external.span.from, transfer);
+          params.references.inlineFlowLabelRevision = (params.references.inlineFlowLabelRevision ?? 0) + 1;
+        }
+      }
       const item = external.item;
       const height = item.kind === "block" ? item.block.flowBoxHeight : item.box.height;
       const depth = item.kind === "block" ? item.block.endingDepth : item.box.depth;

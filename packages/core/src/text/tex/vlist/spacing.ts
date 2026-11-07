@@ -279,6 +279,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
       listVerticalSkipBefore = texLength(listVerticalSkipBefore + (listProfile?.paragraphSkipPt ?? 0));
     }
     if (!state.previousEmittedListContext) for (const ancestor of paragraph.ancestorListLabels ?? []) {
+      if (ancestor.inherited) continue;
       const profile = listProfileForContext(listProfile, ancestor);
       const skip = texArticleOutsideListBoundarySkip(startsListInVerticalMode, font, profile, ancestor.depth);
       listVerticalSkipBefore = texLength(Math.max(listVerticalSkipBefore, skip));
@@ -287,6 +288,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
     // A child list can be the first material of a new parent item. Its
     // topsep and the parent's itemsep meet through LaTeX's addvspace.
     for (const ancestor of paragraph.ancestorListLabels ?? []) {
+      if (ancestor.inherited) continue;
       const previous = state.previousEmittedListContext;
       if (previous?.depth !== ancestor.depth || previous.listStart !== ancestor.listStart || previous.itemIndex === ancestor.itemIndex) continue;
       // @trivlist sees @inlabel and @donoparitem emits no child topsep.

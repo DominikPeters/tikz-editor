@@ -334,6 +334,7 @@ function texMarginListLabelHBoxFromLayoutLabel(
       labelDepth: listContext.labelDepth,
       itemIndex: listContext.itemIndex,
       ...(listContext.itemCommandSpan ? { itemCommandSpan: listContext.itemCommandSpan } : {}),
+      ...(listContext.originalItemCommandSpan ? { originalItemCommandSpan: listContext.originalItemCommandSpan } : {}),
       blockIndex,
     },
     x: texVListLocalXFromOrigin(labelLeft, paragraphOriginX),

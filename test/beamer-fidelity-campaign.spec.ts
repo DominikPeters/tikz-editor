@@ -10,7 +10,7 @@ import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/i
 import { buildNativeBeamerPageTrace, compareBeamerPageTraces, type OracleBeamerPageTrace } from "../scripts/lib/beamer-frame-compare.mjs";
 import { priorityFidelityFailures } from "../scripts/lib/beamer-priority-contracts.mjs";
 
-for (const campaign of ["fidelity-campaign", "fidelity-campaign-wave2", "fidelity-campaign-wave3", "fidelity-campaign-wave4", "fidelity-campaign-wave5", "fidelity-campaign-wave6", "fuzz-findings-v2", "fuzz-findings-v3", "fuzz-findings-v4", "fuzz-findings-v5", "fuzz-findings-v6", "fuzz-findings-v7", "fuzz-findings-v8", "fuzz-findings-v9", "fuzz-findings-v10", "fuzz-findings-v11", "fuzz-findings-v12", "fuzz-findings-v13", "fuzz-findings-v14", "fuzz-findings-v15", "fuzz-findings-v16"]) {
+for (const campaign of ["fidelity-campaign", "fidelity-campaign-wave2", "fidelity-campaign-wave3", "fidelity-campaign-wave4", "fidelity-campaign-wave5", "fidelity-campaign-wave6", "fuzz-findings-v2", "fuzz-findings-v3", "fuzz-findings-v4", "fuzz-findings-v5", "fuzz-findings-v6", "fuzz-findings-v7", "fuzz-findings-v8", "fuzz-findings-v9", "fuzz-findings-v10", "fuzz-findings-v11", "fuzz-findings-v12", "fuzz-findings-v13", "fuzz-findings-v14", "fuzz-findings-v15", "fuzz-findings-v16", "fuzz-findings-v17"]) {
   const root = new URL(`./fixtures/beamer/${campaign}/`, import.meta.url);
   const manifest = JSON.parse(readFileSync(new URL("cases.json", root), "utf8")) as { fidelity: { id: string; file: string; frame: number; pages: number }[] };
 
