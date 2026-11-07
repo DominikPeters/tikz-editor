@@ -639,17 +639,17 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
   {
     keys: ["node font", "font"],
     handle: ({ valueRaw, style, transform }) => {
-      const parsed = parseFontStyle(valueRaw);
+      const parsed = parseFontStyle(valueRaw, style.fontContext?.namedSizes);
       if (!parsed) {
         return { style, transform, diagnostics: [] };
       }
       return {
         style: {
           ...style,
-          fontStyle: parsed.fontStyle ?? "normal",
-          fontWeight: parsed.fontWeight ?? "normal",
-          fontFamily: parsed.fontFamily ?? "serif",
-          fontSize: parsed.fontSize ?? DEFAULT_TEXT_FONT_SIZE
+          fontStyle: parsed.fontStyle ?? style.fontContext?.fontStyle ?? "normal",
+          fontWeight: parsed.fontWeight ?? style.fontContext?.fontWeight ?? "normal",
+          fontFamily: parsed.fontFamily ?? style.fontContext?.fontFamily ?? "serif",
+          fontSize: parsed.fontSize ?? style.fontContext?.fontSize ?? DEFAULT_TEXT_FONT_SIZE
         },
         transform,
         diagnostics: []

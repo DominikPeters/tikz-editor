@@ -55,7 +55,7 @@ export function resolveNodeLayout(
   const charWidth = fontSize * 0.7;
   const lineHeight = fontSize * 1.05;
   const parseNodeLength = (raw: string): number | null =>
-    parseLength(raw, "pt", { unitFactors: { em: fontSize } });
+    parseLength(raw, "pt", { unitFactors: { em: style.fontContext?.fontSize ?? fontSize } });
 
   const defaultInner = requireDefined(parseNodeLength(".3333em"), "Expected an internal layout value");
   let innerXSep = defaultInner;

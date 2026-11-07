@@ -253,9 +253,15 @@ export function createSemanticEvaluationRun(
   const diagnostics: Diagnostic[] = [];
   const featureUsage = initializeFeatureUsage();
   markForeachFeaturesFromFigure(figure, featureUsage);
-  const initialFont = opts.initialFont ? parseFontStyle(opts.initialFont) : null;
+  const initialFont = opts.initialFont ? parseFontStyle(opts.initialFont, opts.namedFontSizes) : null;
+  const initialStyle = initialFont ? { ...defaultStyle(), ...initialFont } : defaultStyle();
+  if (initialFont || opts.namedFontSizes) initialStyle.fontContext = {
+    fontSize: initialStyle.fontSize, fontFamily: initialStyle.fontFamily,
+    fontStyle: initialStyle.fontStyle, fontWeight: initialStyle.fontWeight,
+    ...(opts.namedFontSizes ? { namedSizes: opts.namedFontSizes } : {}),
+  };
   const context = createSemanticContext(
-    initialFont ? { ...defaultStyle(), ...initialFont } : defaultStyle(),
+    initialStyle,
     opts.initialTransform ?? identityMatrix(),
     opts.textEngine ?? null,
     source,

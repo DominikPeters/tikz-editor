@@ -465,6 +465,12 @@ export type ResolvedStyle = {
   fontStyle: "normal" | "italic";
   fontWeight: "normal" | "bold";
   fontFamily: "serif" | "sans" | "monospace";
+  /** Ambient TeX font, independent of the last /tikz/font assignment. */
+  fontContext?: {
+    fontSize: number; fontStyle: "normal" | "italic"; fontWeight: "normal" | "bold";
+    fontFamily: "serif" | "sans" | "monospace";
+    namedSizes?: Readonly<Record<string, number>>;
+  };
   doubleStroke: boolean;
   doubleDistance: number;
   doubleLineCenterDistance: number | null;
@@ -535,6 +541,7 @@ export type EvaluateOptions = {
   currentPage?: { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number };
   /** The font the picture's surroundings set (a `font=` value), before its own options. */
   initialFont?: string;
+  namedFontSizes?: Readonly<Record<string, number>>;
   /** Options the picture's environment implies, applied before its own (a `tikzlayer`'s). */
   pictureOptions?: string;
   /** Placement of the picture's origin in an enclosing scene. */
