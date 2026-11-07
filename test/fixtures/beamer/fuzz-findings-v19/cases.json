@@ -1,0 +1,74 @@
+{
+  "formatVersion": 1,
+  "title": "Closed composed nested flow",
+  "fidelity": [
+    {
+      "id": "v3-seed-20261107-0000-nested-flow",
+      "frame": 1,
+      "family": "intricate-nested-flow",
+      "pages": 5,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ]
+      ],
+      "file": "v3-seed-20261107-0000-nested-flow.tex"
+    }
+  ],
+  "recognition": []
+}

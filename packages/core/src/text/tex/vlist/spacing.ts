@@ -126,6 +126,7 @@ interface SimpleTexParagraphVerticalSkipState {
   readonly quotePartopsepByDepth: Map<number, boolean>;
   readonly trivlistPartopsepByScope: Map<TexTrivlistScopeRole, boolean>;
   readonly listPartopsepByDepth: Map<number, boolean>;
+  readonly noParListDepths: Set<number>;
   readonly emittedListItemKeys: Set<string>;
   emittedParagraphCount: number;
   hasInterveningPenalty: boolean;
@@ -251,6 +252,12 @@ function planSimpleTexParagraphVerticalSkipsInto(
 
     const paragraph = item.paragraph;
     const scope = paragraphScopeFromVListAncestors(item, ancestors, state);
+    // @trivlist inherits @inlabel when a list starts as an item's first
+    // material. Its @noparlist suppresses endtrivlist's closing topsep too.
+    for (const ancestor of paragraph.ancestorListLabels ?? []) {
+      if (ancestor.inherited) continue;
+      for (let depth = ancestor.depth + 1; depth <= (scope.listContext?.depth ?? 0); depth++) state.noParListDepths.add(depth);
+    }
     const resolvedListProfile = listProfileForContext(
       listProfileForContext(listProfile, state.previousEmittedListContext),
       scope.listContext
@@ -383,6 +390,7 @@ function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphV
     quotePartopsepByDepth: new Map(),
     trivlistPartopsepByScope: new Map(),
     listPartopsepByDepth: new Map(),
+    noParListDepths: new Set(),
     emittedListItemKeys: new Set(),
     emittedParagraphCount: 0,
     hasInterveningPenalty: false,
@@ -2134,6 +2142,7 @@ function texArticleListExitBoundarySkip(
     for (let depth = previousDepth; depth > 0; depth -= 1) {
       const usesPartopsep = state.listPartopsepByDepth.get(depth) ?? false;
       state.listPartopsepByDepth.delete(depth);
+      if (state.noParListDepths.delete(depth)) continue;
       size = texLength(Math.max(
         size,
         texArticleOutsideListBoundarySkip(
@@ -2151,6 +2160,7 @@ function texArticleListExitBoundarySkip(
   for (let depth = previousDepth; depth > currentDepth; depth -= 1) {
     const usesPartopsep = state.listPartopsepByDepth.get(depth) ?? false;
     state.listPartopsepByDepth.delete(depth);
+    if (state.noParListDepths.delete(depth)) continue;
     const depthSize = depth <= 1
       ? texArticleOutsideListBoundarySkip(
           usesPartopsep,

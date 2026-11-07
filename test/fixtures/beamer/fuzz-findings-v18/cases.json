@@ -12,6 +12,17 @@
         "Neighbor.",
         "Aftertext."
       ]
+    },
+    {
+      "id": "cramped",
+      "file": "cramped.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Neighbor.",
+        "Aftertext."
+      ]
     }
   ],
   "recognition": []
