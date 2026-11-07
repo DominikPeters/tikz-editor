@@ -193,7 +193,10 @@ export function prepareTexLayoutParagraphsFromVList(
         ...(!suppressAncestorBreakMargins && paragraph.listContext !== undefined ? { listContext: paragraph.listContext } : {}),
         ...(!suppressAncestorBreakMargins && scopeContext.listItemLayout !== undefined ? { listItemLayout: scopeContext.listItemLayout } : {}),
         font: scopeContext.listItemLayout?.label?.content.kind === "marker" ? params.font :
-          paragraph.listContext?.labelFontSizePt !== undefined ? textFontProfile.resolveTextFont(textFontProfile.defaultFontState, paragraph.listContext.labelFontSizePt, params.metricProvider) : paragraphFont,
+          paragraph.listContext?.labelFontSizePt !== undefined ? textFontProfile.resolveTextFont(
+            { ...textFontProfile.defaultFontState, ...paragraph.inheritedFontState },
+            paragraph.listContext.labelFontSizePt, params.metricProvider
+          ) : paragraphFont,
         metricProvider: params.metricProvider,
         spaceGlueProfile,
         inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
