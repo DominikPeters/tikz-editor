@@ -362,6 +362,20 @@ describe("simple TeX paragraph IR", () => {
     expect(analyzeSimpleTexResources(source).graphics.map((resource) => resource.options.clip)).toEqual([true, false, true]);
   });
 
+  it("discovers graphics whose arguments are separated by spaces or comments", () => {
+    const source = String.raw`\includegraphics [width=1cm] {a.png}
+\includegraphics * [clip=false] {b.png}
+\includegraphics <2-> % spec
+  [scale=2]
+  {c.png}`;
+    const graphics = analyzeSimpleTexResources(source).graphics;
+
+    expect(graphics.map((resource) => resource.filename)).toEqual(["a.png", "b.png", "c.png"]);
+    expect(graphics.map((resource) => resource.options.raw)).toEqual(["width=1cm", "clip=false", "scale=2"]);
+    expect(graphics[1]?.options.clip).toBe(false);
+    expect(graphics[2]?.sourceEnd).toBe(source.length);
+  });
+
   it("discovers source-backed graphics resources and parses PDF pages once", () => {
     const source = String.raw`% \includegraphics{ignored.pdf}
 \node {A \includegraphics[page={2}]{fig.pdf}};

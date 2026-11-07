@@ -102,9 +102,13 @@ EndMathEnvironment {
   EndCommand MathEnvironmentName Star? "}"
 }
 
+// TeX skips spaces (and comments) between every part: after the control
+// word, in \@ifstar/\@ifnextchar lookahead, and before an undelimited argument.
 IncludeGraphicsCommand {
-  IncludeGraphicsCmd Star? OverlaySpecification? OptionalArgument* Group
+  IncludeGraphicsCmd ArgumentGap (Star ArgumentGap)? (OverlaySpecification ArgumentGap)? (OptionalArgument ArgumentGap)* Group
 }
+
+ArgumentGap { (Whitespace | Comment)* }
 
 GenericCommand {
   ControlSequence
