@@ -336,6 +336,8 @@ export interface SimpleTexGraphicsOptions {
   readonly trim?: SimpleTexGraphicsTrim;
   readonly viewport?: SimpleTexGraphicsViewport;
   readonly clip?: boolean;
+  /** graphicx's draft key: a framed box with the file name instead of the image. */
+  readonly draft?: boolean;
   /** graphicx reads these left to right: size keys before an angle size the
    * image itself, an angle and later keys transform the result. */
   readonly sizeKeys?: SimpleTexGraphicsSizeKey[];
@@ -3400,6 +3402,7 @@ function parseSimpleTexGraphicsOptions(
   let viewport: SimpleTexGraphicsViewport | undefined;
   // Set before the keys are read, so an explicit clip=false still wins.
   let clip: boolean | undefined = starred ? true : undefined;
+  let draft: boolean | undefined;
   const sizeKeys: SimpleTexGraphicsSizeKey[] = [];
   let origin: string | undefined;
   for (const entry of optionList?.entries ?? []) {
@@ -3488,6 +3491,9 @@ function parseSimpleTexGraphicsOptions(
     if (key === "clip") {
       clip = !hasValue || simpleTexBooleanOptionValue(value);
     }
+    if (key === "draft") {
+      draft = !hasValue || simpleTexBooleanOptionValue(value);
+    }
   }
   return {
     ...(width !== undefined ? { width: width } : {}),
@@ -3498,6 +3504,7 @@ function parseSimpleTexGraphicsOptions(
     ...(trim ? { trim: trim } : {}),
     ...(viewport ? { viewport: viewport } : {}),
     ...(clip !== undefined ? { clip: clip } : {}),
+    ...(draft !== undefined ? { draft } : {}),
     ...(sizeKeys.length ? { sizeKeys } : {}),
     ...(origin !== undefined ? { origin } : {}),
     ...(optionList ? { optionList: optionList } : {}),

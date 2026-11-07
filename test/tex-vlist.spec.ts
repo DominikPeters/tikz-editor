@@ -2190,6 +2190,31 @@ describe("TeX vlist lowering", () => {
     expect(boxes[0]?.box.svgBody).toContain('data-tex-includegraphics-status="missing"');
   });
 
+  it("draws graphicx's draft box for the draft key and for unreadable files", () => {
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "draft",
+      resolve: (request) => request.filename === "missing.png"
+        ? { status: "missing" }
+        : { status: "resolved", mimeType: "image/png", dataBase64: "AA==", naturalWidthPt: 100.37474, naturalHeightPt: 50.18736, revision: "1" },
+    };
+    const block = parseSimpleTexParagraphIr(String.raw`\includegraphics[draft,width=4cm]{q.png}\includegraphics[draft=false]{q.png}\includegraphics{missing.png}`).blocks[0]!;
+    const boxes = simpleTexInlineNodesToLayoutItems(block.nodes, block.sourceStart, block.sourceEnd, 10,
+      computerModernTexMetricProvider, "font", undefined, undefined, luaLatexDefaultTextFontProfile, graphicsResolver)
+      .flatMap((item) => item.kind === "text-box" && item.command === "includegraphics" ? [item.box] : []);
+
+    expect(boxes).toHaveLength(3);
+    expect(boxes[0]?.width).toBeCloseTo(113.81102, 4);
+    expect(boxes[0]?.svgBody).toContain('data-tex-includegraphics-status="draft"');
+    expect(boxes[0]?.svgBody).not.toContain("<image");
+    // Four 0.4pt rules and the typewriter label's glyphs.
+    expect(boxes[0]?.svgBody?.match(/<rect /gu) ?? []).toHaveLength(4);
+    expect(boxes[0]?.svgBody).toMatch(/<path|<use/u);
+    expect(boxes[0]?.graphics?.[0]?.asset.status).toBe("resolved");
+    expect(boxes[1]?.svgBody).toContain("<image");
+    expect(boxes[2]?.svgBody).toContain('data-tex-includegraphics-status="missing"');
+    expect(boxes[2]?.svgBody).toMatch(/<path|<use/u);
+  });
+
   it("runs graphicx's size and rotation keys left to right as pdflatex does", () => {
     // Boxes measured with pdflatex for a 100x50 px PNG (100bp x 50bp).
     const graphicsResolver: DocumentGraphicsResolver = {

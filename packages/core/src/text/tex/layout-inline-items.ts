@@ -3,6 +3,7 @@ import { layoutTexTabularBox } from "./tabular/layout.js";
 import { layoutTexTransformBox } from "./text-box-transform.js";
 import { composeGraphicxMatrices, graphicxFactorProduct, graphicxScaled, graphicxScaleRatio, graphicxSvgMatrix, graphicxTransformGeometry, IDENTITY_GRAPHICX_MATRIX, type GraphicxBoxExtent, type GraphicxTransformSpec } from "./graphicx-geometry.js";
 import { parseOptionListRaw } from "../../options/parse.js";
+import { renderTexMathHListSvgBody } from "./math/render-svg.js";
 import type { TexTabularLayoutProfile } from "./tabular/types.js";
 import {
   defaultTexTextFontProfile,
@@ -717,6 +718,7 @@ export function simpleTexSegmentToLayoutItems(
         options: token.graphicsOptions ?? { raw: "" },
         ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}),
         ...(dimensionContext ? { dimensionContext: texDimensionContextForFont(dimensionContext, activeFont) } : {}),
+        draftLabel: (label) => texIncludeGraphicsDraftLabel({ label, fontState: token.fontState, at: token.sourceStart, atPt, metricProvider, spaceGlueProfile, textFontProfile }),
       });
       items.push({
         kind: "text-box",
@@ -1228,6 +1230,8 @@ function texIncludeGraphicsBox(params: {
   readonly options: SimpleTexGraphicsOptions;
   readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly dimensionContext?: TexDimensionContext;
+  /** Typesets a draft box's ` \ttfamily <file>` label in the surrounding font. */
+  readonly draftLabel?: (label: string) => TexIncludeGraphicsDraftLabel | null;
 }): TexMathBox {
   const resolution = params.graphicsResolver?.resolve({
     filename: params.filename,
@@ -1255,7 +1259,7 @@ function texIncludeGraphicsBox(params: {
   const placeholderReason = resolution.status === "resolved"
     ? "Could not determine image dimensions."
     : resolution.status === "unsupported" ? resolution.reason : undefined;
-  const svgBody = resolution.status === "resolved" && assetNatural
+  const svgBody = resolution.status === "resolved" && assetNatural && params.options.draft !== true
     ? renderTexIncludeGraphicsImageSvgBody({
         sourceSpan,
         filename: params.filename,
@@ -1273,8 +1277,9 @@ function texIncludeGraphicsBox(params: {
         filename: params.filename,
         width: size.width,
         height: size.height,
-        status: resolution.status === "resolved" ? "unsupported" : resolution.status,
-        ...(placeholderReason !== undefined ? { reason: placeholderReason } : {}),
+        status: resolution.status === "resolved" && assetNatural ? "draft" : resolution.status === "resolved" ? "unsupported" : resolution.status,
+        ...(placeholderReason !== undefined && !(resolution.status === "resolved" && assetNatural) ? { reason: placeholderReason } : {}),
+        label: texIncludeGraphicsSafeDraftLabel(params.draftLabel, params.filename),
       });
   let extent: GraphicxBoxExtent = { width: size.width, height: size.height, depth: 0 };
   let matrix = IDENTITY_GRAPHICX_MATRIX;
@@ -1544,24 +1549,84 @@ function renderTexIncludeGraphicsImageSvgBody(params: {
   ].join("");
 }
 
+type TexIncludeGraphicsDraftLabel = { readonly width: number; readonly height: number; readonly depth: number; readonly svgBody: string };
+
+/** The label is decoration: a file name the text engine cannot set leaves an unlabelled frame. */
+function texIncludeGraphicsSafeDraftLabel(
+  draftLabel: ((label: string) => TexIncludeGraphicsDraftLabel | null) | undefined,
+  filename: string
+): TexIncludeGraphicsDraftLabel | null {
+  try {
+    return draftLabel?.(filename) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The label hbox of graphics.sty's draft box: ` \ttfamily<file>`, a space in the surrounding font. */
+function texIncludeGraphicsDraftLabel(params: {
+  readonly label: string;
+  readonly fontState: SimpleTexFontState;
+  readonly at: number;
+  readonly atPt: TexLength;
+  readonly metricProvider: TexMetricProvider;
+  readonly spaceGlueProfile: TexSpaceGlueProfile;
+  readonly textFontProfile: TexTextFontProfile;
+}): TexIncludeGraphicsDraftLabel | null {
+  const at = params.at;
+  // TeX drops a comment through its line end while reading the file name.
+  const label = params.label.replace(/(?<!\\)%[^\n]*(?:\n[ \t]*)?/gu, "").trim();
+  if (!label) return null;
+  const nodes: SimpleTexInlineNode[] = [
+    { kind: "space", text: " ", sourceStart: at, sourceEnd: at },
+    { kind: "font-declaration", command: "ttfamily", text: "\\ttfamily", sourceStart: at, sourceEnd: at },
+    { kind: "text", text: label, sourceStart: at, sourceEnd: at },
+  ];
+  const items = simpleTexInlineTokensToLayoutItems({
+    tokens: simpleTexInlineNodesToTokens(nodes, params.fontState),
+    atPt: params.atPt,
+    metricProvider: params.metricProvider,
+    spaceGlueProfile: params.spaceGlueProfile,
+    textFontProfile: params.textFontProfile,
+    trimEdges: false,
+  });
+  const hlist = texMBoxHListFromLayoutItems({ items, sourceSpan: { start: at, end: at }, metricProvider: params.metricProvider });
+  if (!hlist) return null;
+  const fontProfile = { ...defaultTexMathFontProfile, metricProvider: params.metricProvider, textFontProfile: params.textFontProfile };
+  return { width: hlist.width, height: hlist.height, depth: hlist.depth, svgBody: renderTexMathHListSvgBody(hlist, { fontProfile }) };
+}
+
+/**
+ * graphics.sty's draft box (\Gin@setfile), which pdftex.def also uses for a
+ * file it cannot read: 0.4pt rules around the requested size, and the label
+ * \rlap-ed at the left, centred by \vss between the top and bottom rules.
+ */
 function renderTexIncludeGraphicsPlaceholderSvgBody(params: {
   readonly sourceSpan: { readonly start: number; readonly end: number };
   readonly filename: string;
   readonly width: TexLength;
   readonly height: TexLength;
-  readonly status: "missing" | "unsupported";
+  readonly status: "missing" | "unsupported" | "draft";
   readonly reason?: string;
+  readonly label: TexIncludeGraphicsDraftLabel | null;
 }): string {
-  const width = params.width * TEX_SVG_UNIT_SCALE;
-  const height = params.height * TEX_SVG_UNIT_SCALE;
-  const y = -height;
+  const rule = 0.4;
+  const width = Number(params.width);
+  const height = Number(params.height);
+  const unit = (value: number) => formatTexSvgNumber(value * TEX_SVG_UNIT_SCALE);
+  const rect = (x: number, y: number, w: number, h: number) => `<rect x="${unit(x)}" y="${unit(y)}" width="${unit(w)}" height="${unit(h)}" />`;
   const reasonAttr = params.reason
     ? ` data-tex-includegraphics-reason="${escapeTexSvgAttribute(params.reason)}"`
     : "";
+  const label = params.label;
+  const baseline = label ? -height + rule + (height - 2 * rule - label.height - label.depth) / 2 + label.height : 0;
   return [
-    `<g data-tex-includegraphics="placeholder" data-tex-includegraphics-status="${params.status}" data-source-start="${params.sourceSpan.start}" data-source-end="${params.sourceSpan.end}" data-tex-includegraphics-filename="${escapeTexSvgAttribute(params.filename)}"${reasonAttr}>`,
-    `<rect x="0" y="${formatTexSvgNumber(y)}" width="${formatTexSvgNumber(width)}" height="${formatTexSvgNumber(height)}" fill="none" stroke="currentColor" stroke-width="40" />`,
-    `<path d="M0 ${formatTexSvgNumber(y)} L${formatTexSvgNumber(width)} 0 M${formatTexSvgNumber(width)} ${formatTexSvgNumber(y)} L0 0" fill="none" stroke="currentColor" stroke-width="40" />`,
+    `<g data-tex-includegraphics="placeholder" data-tex-includegraphics-status="${params.status}" data-source-start="${params.sourceSpan.start}" data-source-end="${params.sourceSpan.end}" data-tex-includegraphics-filename="${escapeTexSvgAttribute(params.filename)}"${reasonAttr} fill="currentColor">`,
+    rect(0, -height, rule, height),
+    rect(width - rule, -height, rule, height),
+    rect(0, -height, width, rule),
+    rect(0, -rule, width, rule),
+    label ? `<g transform="translate(0 ${unit(baseline)})">${label.svgBody}</g>` : "",
     `</g>`,
   ].join("");
 }
@@ -2017,6 +2082,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         options: token.graphicsOptions ?? { raw: "" },
         ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
         ...(params.dimensionContext ? { dimensionContext: texDimensionContextForFont(params.dimensionContext, activeFont) } : {}),
+        draftLabel: (label) => texIncludeGraphicsDraftLabel({ label, fontState: token.fontState, at: token.sourceStart, atPt: params.atPt, metricProvider: params.metricProvider, spaceGlueProfile: params.spaceGlueProfile, textFontProfile: params.textFontProfile }),
       });
       items.push({
         kind: "text-box",
