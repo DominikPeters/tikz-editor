@@ -1,0 +1,108 @@
+\documentclass[9pt,aspectratio=169]{beamer}
+\usepackage{tikz}
+\usetheme{Boadilla}
+\setbeamertemplate{navigation symbols}{}
+\title{Incremental analysis: experiments and bounds}
+\subtitle{Generated interaction study}
+\author{Research group}
+\date{}
+\year=2026\month=11\day=5
+\newcommand{\fuzzlayerA}[1]{\textit{#1}}
+\newcommand{\fuzzlayerB}[1]{\fuzzlayerA{#1}}
+\newcommand{\fuzzterm}[1]{\fuzzlayerB{#1}}
+\newcommand{\fuzzpair}[2]{\fuzzterm{#1}: #2}
+\newcommand{\fuzzunit}{ms}
+\let\fuzzoriginalunit\fuzzunit
+\newcommand{\fuzzcoefficient}{3}
+\newcommand{\fuzzscale}[2][\fuzzcoefficient]{#1\,#2}
+\definecolor{fuzzpaint}{RGB}{255,0,255}
+\definecolor{fuzzsecond}{RGB}{18,137,67}
+\tikzset{fuzzvertex/.style={draw,rounded corners=1pt,fill=blue!10,inner sep=1pt,minimum width=.35cm,minimum height=.25cm}}
+\begin{document}
+\section{Incremental analysis}
+\begin{frame}[t,shrink=5]{Incremental analysis}{Composed dependencies}
+\fuzzpair{Experiment}{Timing: 12\fuzzunit; estimate $\fuzzscale{x}+\fuzzscale[2]{y}$.}\par
+{\renewcommand{\fuzzunit}{samples}\let\fuzzterm\textrm\fuzzpair{LocalScope}{Timing: 7\fuzzunit.}\par}
+\fuzzpair{RestoredScope}{Timing: 11\fuzzunit.}\par
+\uncover<1,3>{\begin{columns}[onlytextwidth,t]
+\begin{column}{0.54\textwidth}
+\begin{description}
+\item<1->[Stage 1] \begin{tikzpicture}[font=\scriptsize]
+\begin{scope}[scale=0.8,rotate=0]
+
+
+\node[fuzzvertex] (g3n0) at (0.000,0) {A};
+\node[fuzzvertex] (g3n1) at (1.400,0) {B};
+\node[fuzzvertex] (g3n2) at (2.800,0) {C};
+\node[fuzzvertex] (g3n3) at (4.200,0) {D};
+\node[fuzzvertex] (g3n4) at (0.000,-0.65) {E};
+\node[fuzzvertex] (g3n5) at (1.400,-0.65) {F};
+\node[fuzzvertex] (g3n6) at (2.800,-0.65) {G};
+\begin{scope}[xshift=.5pt,yshift=-.5pt]
+\draw<2->[->,thick] (g3n0) -- (g3n1);
+\draw<2->[->,thick] (g3n1) -- (g3n2);
+\draw<2->[->,thick] (g3n2) -- (g3n3);
+\draw<2->[->,thick] (g3n3) -- (g3n4);
+\draw<2->[->,thick] (g3n4) -- (g3n5);
+\draw<2->[->,thick] (g3n5) -- (g3n6);
+\draw[blue] (0,-.9) .. controls (1.260,-.3) and (2.940,-1.1) .. (4.200,-.8);
+\end{scope}
+\end{scope}
+\end{tikzpicture}
+\item<2->[Stage 2] {\scriptsize\color{black}\raggedright
+{\scriptsize\color{blue}\raggedright
+\textbf{A narrow column} can change line breaking even when the underlying expression is unchanged. The final diagram records the order in which information crosses the partition. The estimate is $\alpha+\beta$.\par}\par}
+\end{description}
+\end{column}
+\begin{column}{0.42\textwidth}
+\begin{exampleblock}{Message passing}
+\begin{tikzpicture}[font=\scriptsize]
+\begin{scope}[scale=1,rotate=17]
+\clip (-.4,-1) rectangle (4.595,.5);
+
+\node[fuzzvertex] (g8n0) at (0.000,0) {A};
+\node[fuzzvertex] (g8n1) at (1.365,0) {B};
+\node[fuzzvertex] (g8n2) at (2.730,0) {C};
+\node[fuzzvertex] (g8n3) at (4.095,0) {D};
+\node[fuzzvertex] (g8n4) at (0.000,-0.65) {E};
+\begin{scope}[xshift=.5pt,yshift=-.5pt]
+\draw<2->[->,thick] (g8n0) -- (g8n1);
+\draw<2->[->,thick] (g8n1) to[bend left=20] (g8n2);
+\draw<2->[->,thick] (g8n2) -- (g8n3);
+\draw<2->[->,thick] (g8n3) to[bend left=20] (g8n4);
+\draw[blue] (0,-.9) .. controls (1.228,-.3) and (2.866,-1.1) .. (4.095,-.8);
+\end{scope}
+\end{scope}
+\end{tikzpicture}
+\end{exampleblock}
+\end{column}
+\end{columns}}
+\par \begin{tikzpicture}[font=\scriptsize]
+\fill<2-3>[fuzzpaint] (0,0) rectangle (.8,.3);
+\fill<3->[fuzzsecond] (1,0) rectangle (1.8,.3);
+\node[anchor=west] at (2,0.15) {Witness};
+\end{tikzpicture}
+\only<4>{}
+\end{frame}
+\renewcommand{\fuzzunit}{Hz}
+\renewcommand{\fuzzcoefficient}{2}
+\renewcommand{\fuzzterm}[1]{{\textit{#1}}}
+\section{Incremental analysis}
+\begin{frame}[t]{Message passing}
+\fuzzpair{MacroStageB}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{columns}[T]\begin{column}{.46\textwidth}A local update can change the measurements used by several neighboring components.\end{column}\begin{column}{.46\textwidth}\begin{itemize}\item Input state\item Updated state\end{itemize}\end{column}\end{columns}
+\end{frame}
+\renewcommand{\fuzzunit}{steps}
+\renewcommand{\fuzzcoefficient}{3}
+\renewcommand{\fuzzterm}[1]{{\textbf{#1}}}
+\section{Geometric uncertainty}
+\begin{frame}[t]{Iterative refinement}
+\fuzzpair{MacroStageC}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{block}{Follow-up}\fuzzterm{A revised value} depends on the preceding frame.\end{block}
+\[r_{k+1}=r_k-\alpha d_k\]
+\end{frame}
+\end{document}

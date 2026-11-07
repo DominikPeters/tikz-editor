@@ -1,0 +1,126 @@
+\documentclass[9pt,aspectratio=43]{beamer}
+\usepackage{tikz}
+\usetheme{Boadilla}
+\setbeamertemplate{navigation symbols}{}
+\title{Message passing: experiments and bounds}
+\subtitle{Generated interaction study}
+\author{Research group}
+\date{}
+\year=2026\month=11\day=5
+\newcommand{\fuzzlayerA}[1]{\textbf{#1}}
+\newcommand{\fuzzterm}[1]{\fuzzlayerA{#1}}
+\newcommand{\fuzzpair}[2]{\fuzzterm{#1}: #2}
+\newcommand{\fuzzunit}{steps}
+\let\fuzzoriginalunit\fuzzunit
+\newcommand{\fuzzcoefficient}{4}
+\newcommand{\fuzzscale}[2][\fuzzcoefficient]{#1\,#2}
+\definecolor{fuzzpaint}{RGB}{255,0,255}
+\definecolor{fuzzsecond}{RGB}{18,137,67}
+\tikzset{fuzzvertex/.style={draw,rounded corners=1pt,fill=blue!10,inner sep=1pt,minimum width=.35cm,minimum height=.25cm}}
+\begin{document}
+\section{Message passing}
+\begin{frame}[t,shrink=5]{Message passing}{Composed dependencies}
+\fuzzpair{Experiment}{Timing: 12\fuzzunit; estimate $\fuzzscale{x}+\fuzzscale[2]{y}$.}\par
+{\renewcommand{\fuzzunit}{cycles}\let\fuzzterm\textit\fuzzpair{LocalScope}{Timing: 7\fuzzunit.}\par}
+\fuzzpair{RestoredScope}{Timing: 11\fuzzunit.}\par
+\begin{enumerate}
+\item \begin{description}
+\item<1->[Stage 1] {\scriptsize\color{blue}\centering
+\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]\par}
+\item<2->[Stage 2] \begin{itemize}
+\item \textbf{The final diagram} records the order in which information crosses the partition.  The estimate is $x_i+x_{i+1}$.
+\end{itemize}
+\item<3->[Stage 3] {\scriptsize\color{blue}\raggedleft
+\begin{tabular}{lrr}Method&Cost&Error\\\hline
+Global0&27&15\\
+Fresh1&10&24\\
+Global2&11&14\\
+\end{tabular}\par}
+\end{description}
+\item \begin{columns}[onlytextwidth,t]
+\begin{column}{0.62\textwidth}
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize]
+\begin{scope}[scale=0.8,rotate=-12]
+
+\foreach \x in {0,1,2,3} {\draw[gray!30] (\x*1.400,-.8)--(\x*1.400,.35);}
+\node[fuzzvertex] (g10n0) at (0.000,0) {A};
+\node[fuzzvertex] (g10n1) at (1.400,0) {B};
+\node[fuzzvertex] (g10n2) at (2.800,0) {C};
+\node[fuzzvertex] (g10n3) at (4.200,0) {D};
+\node[fuzzvertex] (g10n4) at (0.000,-0.65) {E};
+\begin{scope}[xshift=.5pt,yshift=-.5pt]
+\draw<1->[->,thick] (g10n0) -- (g10n1);
+\draw<1->[->,thick] (g10n1) -- (g10n2);
+\draw<1->[->,thick] (g10n2) -- (g10n3);
+\draw<1->[->,thick] (g10n3) -- (g10n4);
+\draw[blue] (0,-.9) .. controls (1.260,-.3) and (2.940,-1.1) .. (4.200,-.8);
+\end{scope}
+\end{scope}
+\end{tikzpicture}
+\end{center}
+\end{column}
+\begin{column}{0.34\textwidth}
+\begin{block}{Constraint propagation}
+\textrm{The next pass} must preserve the boundary conditions while revisiting dependent values. The next pass must preserve the boundary conditions while revisiting dependent values. The estimate is $\sum_{i=1}^{n}x_i$.
+\end{block}
+\end{column}
+\end{columns}
+\item \begin{description}
+\item[Stage 1] \begin{tabular}{lrr}Method&Cost&Error\\\hline
+Local0&23&27\\
+Fresh1&21&2\\
+Local2&13&13\\
+\end{tabular}
+\item[Stage 2] \begin{alertblock}{Incremental analysis}
+\textit{The final diagram} records the order in which information crosses the partition.  The estimate is $\sum_{i=1}^{n}x_i$.
+\end{alertblock}
+\item[Stage 3] \begin{enumerate}
+\item \begin{tabular}{lrr}Method&Cost&Error\\\hline
+Local0&15&12\\
+Fresh1&20&8\\
+Global2&17&12\\
+Local3&5&3\\
+\end{tabular}
+\end{enumerate}
+\end{description}
+\end{enumerate}
+\par \begin{tikzpicture}[font=\scriptsize]
+\fill<2-3>[fuzzpaint] (0,0) rectangle (.8,.3);
+\fill<3->[fuzzsecond] (1,0) rectangle (1.8,.3);
+\node[anchor=west] at (2,0.15) {Witness};
+\end{tikzpicture}
+\only<4>{}
+\end{frame}
+\renewcommand{\fuzzunit}{Hz}
+\renewcommand{\fuzzcoefficient}{2}
+\renewcommand{\fuzzterm}[1]{{\textbf{#1}}}
+\section{Cache invalidation}
+\begin{frame}[t]{Iterative refinement}
+\fuzzpair{MacroStageB}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{columns}[T]\begin{column}{.46\textwidth}A narrow column can change line breaking even when the underlying expression is unchanged.\end{column}\begin{column}{.46\textwidth}\begin{itemize}\item Input state\item Updated state\end{itemize}\end{column}\end{columns}
+\end{frame}
+\renewcommand{\fuzzunit}{min}
+\renewcommand{\fuzzcoefficient}{3}
+\renewcommand{\fuzzterm}[1]{{\textit{#1}}}
+\section{Constraint propagation}
+\begin{frame}[t]{Iterative refinement}
+\fuzzpair{MacroStageC}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{block}{Follow-up}\fuzzterm{A revised value} depends on the preceding frame.\end{block}
+\[r_{k+1}=r_k-\alpha d_k\]
+\end{frame}
+\renewcommand{\fuzzunit}{Hz}
+\renewcommand{\fuzzcoefficient}{4}
+\renewcommand{\fuzzterm}[1]{{\textit{#1}}}
+\section{Message passing}
+\begin{frame}[t]{Message passing}
+\fuzzpair{MacroStageD}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{columns}[T]\begin{column}{.46\textwidth}The final diagram records the order in which information crosses the partition.\end{column}\begin{column}{.46\textwidth}\begin{itemize}\item Input state\item Updated state\end{itemize}\end{column}\end{columns}
+\end{frame}
+\end{document}
