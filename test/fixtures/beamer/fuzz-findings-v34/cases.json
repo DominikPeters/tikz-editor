@@ -1,0 +1,36 @@
+{
+  "formatVersion": 1,
+  "fidelity": [
+    {
+      "id": "threshold",
+      "file": "threshold.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    },
+    {
+      "id": "narrower",
+      "file": "narrower.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    },
+    {
+      "id": "wider",
+      "file": "wider.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    }
+  ],
+  "recognition": []
+}

@@ -617,6 +617,8 @@ export interface SimpleTexTokenLiteralInfo {
 }
 
 export interface SimpleTexParagraphBlock {
+  /** Active font quad when TeX measures the line before a display. */
+  readonly preDisplayFontSizePt?: TexLength;
   /** Active list identities, including ancestors flattened out of scopePath. */
   readonly listSourceStarts?: readonly number[];
   readonly shipsEmptyLine?: boolean;
@@ -4889,6 +4891,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
       }
       for (const role of scopeStack) if (role.kind === "trivlist") trivlistsWithParagraph.add(role);
       const block: SimpleTexParagraphBlock = {
+        ...(beforeDisplay ? { preDisplayFontSizePt: activeList && (endSize.selectionFrom ?? -1) < activeList.sourceStart
+          ? activeList.fontSizePt : endSize.sizePt } : {}),
         ...(listStack.length ? { listSourceStarts: listStack.map(list => list.sourceStart) } : {}),
         ...(shipsEmptyLine ? { shipsEmptyLine: true } : {}),
         text: textSliceAtSourceOffsets(start, end),

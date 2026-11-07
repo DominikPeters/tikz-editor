@@ -181,7 +181,13 @@ export function layoutTexVListFromCombinedParagraphReport(
   const paragraphLineAssignments = texVListParagraphLineAssignmentsFromSpans(
     options.combined.paragraphLineSpans
   );
+  const preDisplayFonts = new Map(texVListParagraphEntries(document.items).map(({ item }) => [item.blockIndex, item.paragraph.preDisplayFontSizePt]));
+  const preDisplayFontSizes = new Map(options.combined.paragraphLineSpans.flatMap(span => {
+    const size = preDisplayFonts.get(span.blockIndex), line = span.lineIndices.at(-1);
+    return size !== undefined && line !== undefined ? [[line, size] as const] : [];
+  }));
   const builtReport = buildTexParagraphReport({
+    preDisplayFontSizes,
     paragraphId: options.paragraphId,
     width: options.width,
     alignment: options.alignment,

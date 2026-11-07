@@ -80,6 +80,7 @@ export function buildTexParagraphReport(params: {
   linebreakingMode: "feasible" | "overfull";
   layoutMode: KnuthPlassLayoutMode;
   font: ResolvedTexFont;
+  preDisplayFontSizes?: ReadonlyMap<number, TexLength>;
   metricProvider: TexMetricProvider;
   errors: readonly string[];
 }): TexParagraphReportBuildResult {
@@ -94,7 +95,10 @@ export function buildTexParagraphReport(params: {
   // Coalescing probes and final segment construction may inspect the same
   // math box several times. Normalize it once within this report build.
   const lineParams = { ...params, mathBoxes: new WeakMap<object, TexMathBox>() };
-  const builtLines = params.lines.map((line) => buildTexLineReport(line, lineParams));
+  const builtLines = params.lines.map((line) => buildTexLineReport(line, {
+    ...lineParams,
+    ...(params.preDisplayFontSizes?.has(line.lineIndex) ? { preDisplayFontSizePt: params.preDisplayFontSizes.get(line.lineIndex) } : {}),
+  }));
   return {
     report: {
       paragraphId: params.paragraphId,
@@ -125,6 +129,7 @@ function buildTexLineReport(
     runWidths: ReadonlyMap<number, TexLength>;
     lineLabels: ReadonlyMap<number, TexLineLabel>;
     font: ResolvedTexFont;
+    preDisplayFontSizePt?: TexLength | undefined;
     mathBoxes: WeakMap<object, TexMathBox>;
   }
 ): { readonly report: LineReport<"layout">; readonly lineBox: TexLineBox } {
@@ -432,7 +437,7 @@ function buildTexLineReport(
         depth: texLength(report.descent),
       },
       ...(report.break?.lineLeading !== undefined ? { lineLeading: report.break.lineLeading } : {}),
-      preDisplaySize: texLinePreDisplaySize(report, params.font),
+      preDisplaySize: texLinePreDisplaySize(report, params.preDisplayFontSizePt ?? params.font.atPt),
     },
   };
 }
@@ -585,7 +590,7 @@ function adjustedTexGlueWidth(
 
 function texLinePreDisplaySize(
   line: LineReport<"layout">,
-  font: ResolvedTexFont
+  atPt: TexLength
 ): TexLength {
   const latexArticleListLeftMarginEm = 2.5;
   if (line.spaceCount > 0 && Math.abs(line.glueSetRatio) > 1e-9) {
@@ -593,10 +598,10 @@ function texLinePreDisplaySize(
   }
   if (texLineHasInlineListLabel(line)) {
     return texLength(roundTexPt(
-      Math.max(0, line.xEnd + 2 * font.atPt - latexArticleListLeftMarginEm * font.atPt)
+      Math.max(0, line.xEnd + 2 * atPt - latexArticleListLeftMarginEm * atPt)
     ));
   }
-  return texLength(roundTexPt(Math.max(0, line.xEnd - line.xStart) + 2 * font.atPt));
+  return texLength(roundTexPt(Math.max(0, line.xEnd - line.xStart) + 2 * atPt));
 }
 
 function texLineHasInlineListLabel(line: LineReport<"layout">): boolean {
