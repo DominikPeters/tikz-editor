@@ -3466,6 +3466,7 @@ async function prepareColumnContent(params: {
       ...(params.work !== undefined ? { work: params.work } : {}),
       // T's \colheadskip ships the leading empty line before \vskip-1ex.
       // A first display selects short skips without another baseline skip.
+      firstInColumn: flow.length === 0,
       ...(column.alignment === "T" && flow.length === 0 ? { leadingDisplayBaselineSkipPt: 0 } : {}),
     });
     if (prepared) {
@@ -3502,6 +3503,13 @@ async function prepareColumnContent(params: {
     }
   }
 
+  const terminal = flow.at(-1);
+  if (terminal?.kind === "paragraph") {
+    const last = terminal.paragraph.layout.vlistLayout.boxReport.items.at(-1);
+    // Only endminipage removes the terminal skip. Intermediate paragraphs
+    // retain below-display and structural glue before following flow boxes.
+    if (last?.itemKind === "glue") terminal.advanceHeight -= Number(last.height);
+  }
   const naturalHeight = flow.reduce(
     (height, item, index) =>
       height + ((item.kind === "paragraph" || item.kind === "block" || item.kind === "columns") ? item.leadingSkipPt ?? 0 : 0) +
@@ -3544,6 +3552,7 @@ async function prepareColumnFlowNode(params: {
   listProfile: TexListLayoutProfile;
   initialPreviousDepth?: number;
   leadingDisplayBaselineSkipPt?: number;
+  firstInColumn?: boolean;
   macroBindings: ReadonlyMap<string, MacroBinding>;
   references: BeamerReferenceContext;
   leftSidebarWidth: number;
@@ -3625,11 +3634,11 @@ async function prepareColumnFlowNode(params: {
       overlays,
       step
     );
-    const paragraph = runBeamerRenderOperation(params.work, () => layoutParagraph({
+    const layoutParams = {
       mapped: projection.mapped,
       sourceSpan: node.span,
       paragraphId: node.id,
-      role: "body",
+      role: "body" as const,
       bounds: { x: 0, y: 0, width, height: 0 },
       font: bodyFont,
       colorResolver: beamerAlertColorResolver(theme),
@@ -3642,7 +3651,13 @@ async function prepareColumnFlowNode(params: {
       hiddenSourceSpans: projection.hiddenSourceSpans,
       ...(graphicsResolver !== undefined ? { graphicsResolver } : {}),
       paperWidth,
-    }));
+    };
+    let paragraph = runBeamerRenderOperation(params.work, () => layoutParagraph(layoutParams));
+    const firstMaterial = paragraph?.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "glue" && item.itemKind !== "penalty" && item.itemKind !== "vbox");
+    const startsWithDisplay = firstMaterial?.hboxRole?.kind === "display-empty-line" && firstMaterial.hboxRole.position === "before-display";
+    if (paragraph && params.firstInColumn && startsWithDisplay && params.leadingDisplayBaselineSkipPt !== 0) {
+      paragraph = runBeamerRenderOperation(params.work, () => layoutParagraph({ ...layoutParams, leadingDisplayBaselineSkipPt: 0 }));
+    }
     if (!paragraph) {
       if (!hasProjectedContent(source, node.span, overlays, step, references)) {
         return null;
@@ -3669,7 +3684,7 @@ async function prepareColumnFlowNode(params: {
       kind: "paragraph",
       visibility,
       paragraph,
-      startsWithVerticalEnvironment: /^\s*\\begin\s*\{(?:center|flushleft|flushright|itemize|enumerate|description)\}/u.test(projection.mapped.text),
+      startsWithVerticalEnvironment: startsWithDisplay || /^\s*\\begin\s*\{(?:center|flushleft|flushright|itemize|enumerate|description)\}/u.test(projection.mapped.text),
       startsWithAlignmentEnvironment: /^\s*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(projection.mapped.text),
       leadingSkipPt: leadingBeamerTrivlistAdjustment(projection.mapped.text, paragraph, params.listProfile.trivlistTopsepPt) +
         // A column minipage starts with \leavevmode. A leading trivlist ends
@@ -3682,13 +3697,7 @@ async function prepareColumnFlowNode(params: {
       // A plain TeX paragraph contributes its line hboxes, not the TikZ-node
       // strut carried by the shared text frontend's enclosing vlist. Lists,
       // on the other hand, intentionally carry their vertical list glue.
-      advanceHeight: node.kind === "paragraph"
-        ? paragraphMaterialExtent(paragraph)
-        : (() => {
-            const last = paragraph.layout.vlistLayout.boxReport.items.at(-1);
-            // endminipage's unskip removes a terminal structural smallskip.
-            return paragraph.height - (last?.itemKind === "glue" && last.glue?.origin?.kind === "external-flow-after" ? Number(last.height) : 0);
-          })(),
+      advanceHeight: node.kind === "paragraph" ? paragraphMaterialExtent(paragraph) : paragraph.height,
       // minipage's terminal \unskip drops the final trivlist skip; retain it
       // only when another flow item follows, as for the list's trailing glue.
       trailingSkipPt: node.kind === "list" ? trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont)

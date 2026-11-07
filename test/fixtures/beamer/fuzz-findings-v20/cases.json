@@ -1,0 +1,95 @@
+{
+  "formatVersion": 1,
+  "title": "Display at end of column minipage",
+  "fidelity": [
+    {
+      "id": "top-normal",
+      "file": "top-normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Neighbortext."
+      ]
+    },
+    {
+      "id": "top-script",
+      "file": "top-script.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Neighbortext."
+      ]
+    },
+    {
+      "id": "baseline-normal",
+      "file": "baseline-normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Neighbortext."
+      ]
+    },
+    {
+      "id": "baseline-script",
+      "file": "baseline-script.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Neighbortext."
+      ]
+    },
+    {
+      "id": "center-normal",
+      "file": "center-normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Neighbortext."
+      ]
+    },
+    {
+      "id": "center-script",
+      "file": "center-script.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Neighbortext."
+      ]
+    },
+    {
+      "id": "bottom-normal",
+      "file": "bottom-normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Neighbortext."
+      ]
+    },
+    {
+      "id": "bottom-script",
+      "file": "bottom-script.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Neighbortext."
+      ]
+    }
+  ],
+  "recognition": []
+}

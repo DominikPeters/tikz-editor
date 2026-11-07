@@ -1,0 +1,133 @@
+{
+  "formatVersion": 1,
+  "title": "Closed display-column compositions",
+  "fidelity": [
+    {
+      "id": "v3-seed-20261107-0004-scoped-typography",
+      "frame": 1,
+      "family": "intricate-scoped-typography",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ]
+      ],
+      "file": "v3-seed-20261107-0004-scoped-typography.tex"
+    },
+    {
+      "id": "v3-seed-20261107-0007-diagram-build",
+      "frame": 1,
+      "family": "intricate-diagram-build",
+      "pages": 5,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11Hz"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11Hz"
+        ]
+      ],
+      "file": "v3-seed-20261107-0007-diagram-build.tex"
+    }
+  ],
+  "recognition": []
+}
