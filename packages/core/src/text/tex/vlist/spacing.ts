@@ -1164,7 +1164,9 @@ function resolveDisplayMathVerticalGlueInItems(
       plainParagraphInterlinePending = true;
       previousDisplayMaterialMetrics = item.box.metrics;
       previousDepthSuppressed = false;
-    } else if (item.kind !== "penalty" && !isBoundaryTransparentHBox(item)) {
+    } else if (item.kind !== "penalty" &&
+        !(item.kind === "glue" && item.origin?.kind === "external-flow-after") &&
+        !isBoundaryTransparentHBox(item)) {
       plainParagraphInterlinePending = false;
     }
     items.push(item);

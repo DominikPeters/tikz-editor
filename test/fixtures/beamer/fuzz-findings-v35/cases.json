@@ -1,0 +1,83 @@
+{
+  "formatVersion": 1,
+  "fidelity": [
+    {
+      "id": "block",
+      "file": "block.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Before.",
+        "Witness.",
+        "Ablock"
+      ]
+    },
+    {
+      "id": "alertblock",
+      "file": "alertblock.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Before.",
+        "Witness.",
+        "Ablock"
+      ]
+    },
+    {
+      "id": "exampleblock",
+      "file": "exampleblock.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Before.",
+        "Witness.",
+        "Ablock"
+      ]
+    },
+    {
+      "id": "column-c",
+      "file": "column-c.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Before.",
+        "Witness.",
+        "Righttext."
+      ]
+    },
+    {
+      "id": "column-T",
+      "file": "column-T.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Before.",
+        "Witness.",
+        "Righttext."
+      ]
+    },
+    {
+      "id": "column-b",
+      "file": "column-b.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Before.",
+        "Witness.",
+        "Righttext."
+      ]
+    },
+    {
+      "id": "original-left",
+      "file": "original-left.tex",
+      "frame": 1,
+      "pages": 4,
+      "oracleText": [
+        "Before.",
+        "Witness.",
+        "Righttext."
+      ]
+    }
+  ],
+  "recognition": []
+}

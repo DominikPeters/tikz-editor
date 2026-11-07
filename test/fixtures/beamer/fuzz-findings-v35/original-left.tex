@@ -1,0 +1,43 @@
+\documentclass[11pt,aspectratio=43]{beamer}
+\usepackage{tikz}
+\usetheme{Madrid}
+\setbeamertemplate{navigation symbols}{}
+\title{Constraint propagation: experiments and bounds}
+\subtitle{Generated interaction study}
+\author{Research group}
+\date{}
+\year=2026\month=11\day=5
+\newcommand{\fuzzlayerA}[1]{\textit{#1}}
+\newcommand{\fuzzterm}[1]{\fuzzlayerA{#1}}
+\newcommand{\fuzzpair}[2]{\fuzzterm{#1}: #2}
+\newcommand{\fuzzunit}{steps}
+\let\fuzzoriginalunit\fuzzunit
+\newcommand{\fuzzcoefficient}{1}
+\newcommand{\fuzzscale}[2][\fuzzcoefficient]{#1\,#2}
+\definecolor{fuzzpaint}{RGB}{255,0,255}
+\definecolor{fuzzsecond}{RGB}{18,137,67}
+\tikzset{fuzzvertex/.style={draw,rounded corners=1pt,fill=blue!10,inner sep=1pt,minimum width=.35cm,minimum height=.25cm}}
+\begin{document}\begin{frame}[t,shrink=5]{Pending label}
+Before.\par\begin{columns}[onlytextwidth,c]\begin{column}{0.38\textwidth}
+\begin{enumerate}
+\item<1-> \begin{description}
+\item[Stage 1] \begin{tabular}{lrr}Method&Cost&Error\\\hline
+Fresh0&24&22\\
+Cached1&16&18\\
+\end{tabular}
+\item[Stage 2] \textrm{A local update} can change the measurements used by several neighboring components.  The estimate is $\frac{a+b}{1+c}$.
+\end{description}
+\item<2-> \begin{description}
+\item[Stage 1] \uncover<2->{\[E=\sum_{i=1}^{n}w_i x_i\]}
+\item[Stage 2] \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]
+\end{description}
+\item<3-> \begin{exampleblock}{Incremental analysis}
+\begin{tabular}{lrr}Method&Cost&Error\\\hline
+Global0&15&26\\
+Local1&10&26\\
+Cached2&0&3\\
+Fresh3&18&2\\
+\end{tabular}
+\end{exampleblock}
+\end{enumerate}
+\end{column}\begin{column}{.58\textwidth}Right text.\end{column}\end{columns}\par Witness.\only<4>{}\end{frame}\end{document}

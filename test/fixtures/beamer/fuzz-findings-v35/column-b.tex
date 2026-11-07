@@ -1,0 +1,12 @@
+\documentclass[11pt]{beamer}
+\usetheme{Madrid}\setbeamertemplate{navigation symbols}{}
+\begin{document}\begin{frame}[t]{Pending block label}
+Before.\par
+\begin{columns}[onlytextwidth,b]\begin{column}{.46\textwidth}\begin{enumerate}
+\item<1-> First item.
+\item<2-> \begin{exampleblock}{A block}
+\begin{tabular}{lrr}Method&Cost&Error\\\hline Global0&15&26\\Local1&10&26\\Cached2&0&3\\Fresh3&18&2\\\end{tabular}
+\end{exampleblock}
+\end{enumerate}\end{column}\begin{column}{.50\textwidth}Right text.\end{column}\end{columns}
+Witness.\par\only<3>{}
+\end{frame}\end{document}
