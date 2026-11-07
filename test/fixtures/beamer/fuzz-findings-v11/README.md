@@ -19,4 +19,5 @@ rejected that hypothesis: it already recorded the hidden layout correctly.
 The mismatch was in native label geometry, which prevented exact covered-glyph
 matching. The fix changes the native layout and retains the original oracle.
 
-The open campaign observations remain in `design/beamer-failure-ledger.json`.
+All original campaign observations now pass live checks; their failure history
+remains in `design/beamer-failure-ledger.json`.

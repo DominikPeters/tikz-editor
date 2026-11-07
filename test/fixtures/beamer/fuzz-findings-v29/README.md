@@ -9,3 +9,5 @@ from a list that has ended.
 
 A longer variant exposed a separate top-aligned frame glue-compression bug. It
 remains saved under `artifacts/beamer-fuzz/nested-description-display/cases/`.
+V30 corrected it; the original frame now passes every state in the final live
+campaign (see `design/beamer-failure-status.md`).

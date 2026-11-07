@@ -10,5 +10,6 @@ environments and item-action groups restore their own declarations. A column's
 initial interline glue uses its first physical box's height and active baseline,
 which can differ from the first later prose report.
 
-The original complex source still has a separate final pending-label height
-failure; these reductions do not close it.
+At this checkpoint the original complex source still had a separate final
+pending-label height failure. V35 corrected it; the original now passes every
+state in the final live campaign (see `design/beamer-failure-status.md`).

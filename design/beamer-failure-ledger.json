@@ -7,9 +7,9 @@
       "id": "intricate-macro-grammar:v3-seed-20261106-0000-nested-flow",
       "campaign": "artifacts/beamer-fuzz/intricate-macro-grammar/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0000-nested-flow",
         "file": "v3-seed-20261106-0000-nested-flow.tex",
@@ -71,27 +71,9 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedOracleTextLines=18 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=6.137475 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=0.844158 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=6.087976 (maximum 0.01)",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=6.137475 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=0.844158 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=6.277738 (maximum 0.01)",
-        "State 3: unmatchedOracleTextLines=2 (expected 0)",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=6.137475 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=0.71212 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=6.277738 (maximum 0.01)",
-        "State 4: unmatchedOracleTextLines=2 (expected 0)",
-        "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=6.137475 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=0.71212 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=6.277738 (maximum 0.01)"
-      ]
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0000-nested-flow-frame-2",
@@ -99,7 +81,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0000-nested-flow-frame-2",
         "file": "v3-seed-20261106-0000-nested-flow.tex",
@@ -118,7 +100,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0000-nested-flow-frame-3",
@@ -126,7 +110,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0000-nested-flow-frame-3",
         "file": "v3-seed-20261106-0000-nested-flow.tex",
@@ -146,7 +130,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0000-nested-flow-frame-4",
@@ -154,7 +140,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0000-nested-flow-frame-4",
         "file": "v3-seed-20261106-0000-nested-flow.tex",
@@ -173,15 +159,17 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0001-diagram-build",
       "campaign": "artifacts/beamer-fuzz/intricate-macro-grammar/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0001-diagram-build",
         "file": "v3-seed-20261106-0001-diagram-build.tex",
@@ -248,32 +236,9 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedOracleRules=2 (expected 0)",
-        "State 1: unmatchedOracleTextLines=2 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=2.411477 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=8.455799 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=1.974393 (maximum 0.01)",
-        "State 2: unmatchedOracleRules=2 (expected 0)",
-        "State 2: unmatchedOracleTextLines=2 (expected 0)",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=2.411477 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=8.455799 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=1.974393 (maximum 0.01)",
-        "State 3: unmatchedOracleRules=2 (expected 0)",
-        "State 3: unmatchedOracleTextLines=2 (expected 0)",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=2.411477 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=8.455799 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=1.974393 (maximum 0.01)",
-        "State 4: unmatchedOracleRules=2 (expected 0)",
-        "State 4: unmatchedOracleTextLines=2 (expected 0)",
-        "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=2.411477 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=8.455799 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=1.974393 (maximum 0.01)"
-      ]
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0001-diagram-build-frame-2",
@@ -281,7 +246,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0001-diagram-build-frame-2",
         "file": "v3-seed-20261106-0001-diagram-build.tex",
@@ -298,7 +263,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0001-diagram-build-frame-3",
@@ -306,7 +273,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0001-diagram-build-frame-3",
         "file": "v3-seed-20261106-0001-diagram-build.tex",
@@ -326,7 +293,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0001-diagram-build-frame-4",
@@ -334,7 +303,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0001-diagram-build-frame-4",
         "file": "v3-seed-20261106-0001-diagram-build.tex",
@@ -351,7 +320,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0002-math-layout",
@@ -359,7 +330,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0002-math-layout",
         "file": "v3-seed-20261106-0002-math-layout.tex",
@@ -422,7 +393,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0002-math-layout-frame-2",
@@ -430,7 +403,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0002-math-layout-frame-2",
         "file": "v3-seed-20261106-0002-math-layout.tex",
@@ -447,7 +420,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0002-math-layout-frame-3",
@@ -455,7 +430,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0002-math-layout-frame-3",
         "file": "v3-seed-20261106-0002-math-layout.tex",
@@ -472,7 +447,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0002-math-layout-frame-4",
@@ -480,7 +457,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0002-math-layout-frame-4",
         "file": "v3-seed-20261106-0002-math-layout.tex",
@@ -497,15 +474,17 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0003-table-flow",
       "campaign": "artifacts/beamer-fuzz/intricate-macro-grammar/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0003-table-flow",
         "file": "v3-seed-20261106-0003-table-flow.tex",
@@ -572,36 +551,9 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedOracleRules=1 (expected 0)",
-        "State 1: unmatchedOracleTextLines=44 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=2.265296 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=0.816141 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=2.279956 (maximum 0.01)",
-        "State 1: renderer diagnostics",
-        "State 2: unmatchedOracleRules=3 (expected 0)",
-        "State 2: unmatchedOracleTextLines=33 (expected 0)",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=2.265296 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=0.852915 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=2.279956 (maximum 0.01)",
-        "State 2: renderer diagnostics",
-        "State 3: unmatchedOracleRules=4 (expected 0)",
-        "State 3: unmatchedOracleTextLines=25 (expected 0)",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=2.265296 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=0.852915 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=2.279956 (maximum 0.01)",
-        "State 3: renderer diagnostics",
-        "State 4: unmatchedOracleRules=4 (expected 0)",
-        "State 4: unmatchedOracleTextLines=25 (expected 0)",
-        "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=2.265296 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=0.852915 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=2.279956 (maximum 0.01)",
-        "State 4: renderer diagnostics"
-      ]
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0003-table-flow-frame-2",
@@ -609,7 +561,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0003-table-flow-frame-2",
         "file": "v3-seed-20261106-0003-table-flow.tex",
@@ -626,7 +578,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0003-table-flow-frame-3",
@@ -634,7 +588,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0003-table-flow-frame-3",
         "file": "v3-seed-20261106-0003-table-flow.tex",
@@ -651,7 +605,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0003-table-flow-frame-4",
@@ -659,7 +615,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0003-table-flow-frame-4",
         "file": "v3-seed-20261106-0003-table-flow.tex",
@@ -676,15 +632,17 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0004-scoped-typography",
       "campaign": "artifacts/beamer-fuzz/intricate-macro-grammar/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0004-scoped-typography",
         "file": "v3-seed-20261106-0004-scoped-typography.tex",
@@ -743,25 +701,9 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedOracleTextLines=7 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=1.227589 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=1.29277 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=0.6076 (maximum 0.01)",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=1.067652 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=1.124334 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=0.600997 (maximum 0.01)",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=1.067652 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=1.124334 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=0.600997 (maximum 0.01)",
-        "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=1.227589 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=1.29277 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=0.6076 (maximum 0.01)"
-      ]
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0004-scoped-typography-frame-2",
@@ -769,7 +711,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0004-scoped-typography-frame-2",
         "file": "v3-seed-20261106-0004-scoped-typography.tex",
@@ -786,7 +728,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0004-scoped-typography-frame-3",
@@ -794,7 +738,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0004-scoped-typography-frame-3",
         "file": "v3-seed-20261106-0004-scoped-typography.tex",
@@ -811,7 +755,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0005-overlay-composition",
@@ -819,7 +765,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0005-overlay-composition",
         "file": "v3-seed-20261106-0005-overlay-composition.tex",
@@ -870,7 +816,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0005-overlay-composition-frame-2",
@@ -878,7 +826,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0005-overlay-composition-frame-2",
         "file": "v3-seed-20261106-0005-overlay-composition.tex",
@@ -895,7 +843,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0005-overlay-composition-frame-3",
@@ -903,7 +853,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-block-minipage-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0005-overlay-composition-frame-3",
         "file": "v3-seed-20261106-0005-overlay-composition.tex",
@@ -920,7 +870,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0000-nested-flow",
@@ -928,7 +880,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/block-interline-space-retry/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0000-nested-flow",
         "file": "v3-seed-20261107-0000-nested-flow.tex",
@@ -1005,15 +957,17 @@
         }
       ],
       "currentFailures": [],
-      "liveClosure": "artifacts/beamer-fuzz/v19-live/report.json"
+      "liveClosure": "artifacts/beamer-fuzz/v19-live/report.json",
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0001-diagram-build",
       "campaign": "artifacts/beamer-fuzz/fixes-fresh-intricate/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/block-interline-space-retry/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0001-diagram-build",
         "file": "v3-seed-20261107-0001-diagram-build.tex",
@@ -1089,45 +1043,17 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedOracleTextLines=33 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=0.809661 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=1.802724 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=1.232071 (maximum 0.01)",
-        "State 2: unmatchedNativeRectangles=1 (expected 0)",
-        "State 2: unmatchedOracleTextLines=3 (expected 0)",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=39.556723 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=1.805571 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=1.232071 (maximum 0.01)",
-        "State 3: unmatchedNativeRectangles=1 (expected 0)",
-        "State 3: unmatchedOracleTextLines=3 (expected 0)",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=39.556723 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=1.805571 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=1.232071 (maximum 0.01)",
-        "State 4: unmatchedNativeRectangles=1 (expected 0)",
-        "State 4: unmatchedOracleTextLines=3 (expected 0)",
-        "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=39.556723 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=1.805571 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=1.232071 (maximum 0.01)",
-        "State 5: unmatchedNativeRectangles=1 (expected 0)",
-        "State 5: unmatchedOracleTextLines=3 (expected 0)",
-        "State 5: transformMatch=false",
-        "State 5: maxRectangleEdgeDeltaPt=39.556723 (maximum 0.01)",
-        "State 5: maxAbsoluteGlyphDxPt=1.805571 (maximum 0.02)",
-        "State 5: maxAbsoluteGlyphDyPt=1.232071 (maximum 0.01)"
-      ]
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0002-math-layout",
       "campaign": "artifacts/beamer-fuzz/fixes-fresh-intricate/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/block-interline-space-retry/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0002-math-layout",
         "file": "v3-seed-20261107-0002-math-layout.tex",
@@ -1200,42 +1126,17 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedNativeRectangles=1 (expected 0)",
-        "State 1: unmatchedOracleTextLines=65 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxAbsoluteGlyphDxPt=1.792156 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=0.336871 (maximum 0.01)",
-        "State 2: unmatchedOracleTextLines=30 (expected 0)",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=1.391809 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=2.955674 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=1.941719 (maximum 0.01)",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=1.431736 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=1.446484 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=1.245379 (maximum 0.01)",
-        "State 4: unmatchedNativeRectangles=1 (expected 0)",
-        "State 4: unmatchedOracleTextLines=3 (expected 0)",
-        "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=147.578302 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=1.446484 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=1.245379 (maximum 0.01)",
-        "State 5: unmatchedNativeRectangles=1 (expected 0)",
-        "State 5: unmatchedOracleTextLines=3 (expected 0)",
-        "State 5: transformMatch=false",
-        "State 5: maxRectangleEdgeDeltaPt=147.578302 (maximum 0.01)",
-        "State 5: maxAbsoluteGlyphDxPt=1.446484 (maximum 0.02)",
-        "State 5: maxAbsoluteGlyphDyPt=1.245379 (maximum 0.01)"
-      ]
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0003-table-flow",
       "campaign": "artifacts/beamer-fuzz/fixes-fresh-intricate/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/block-interline-space-retry/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0003-table-flow",
         "file": "v3-seed-20261107-0003-table-flow.tex",
@@ -1298,39 +1199,17 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedOracleTextLines=24 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=1.985307 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=1.186255 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=1.953281 (maximum 0.01)",
-        "State 2: unmatchedOracleRules=1 (expected 0)",
-        "State 2: unmatchedOracleTextLines=8 (expected 0)",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=26.53767 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=26.505871 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=3.373482 (maximum 0.01)",
-        "State 3: unmatchedOracleRules=1 (expected 0)",
-        "State 3: unmatchedOracleTextLines=1 (expected 0)",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=26.53767 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=26.505871 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=3.373482 (maximum 0.01)",
-        "State 4: unmatchedOracleRules=1 (expected 0)",
-        "State 4: unmatchedOracleTextLines=1 (expected 0)",
-        "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=26.53767 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=26.505871 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=3.373482 (maximum 0.01)"
-      ]
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0004-scoped-typography",
       "campaign": "artifacts/beamer-fuzz/fixes-fresh-intricate/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/block-interline-space-retry/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0004-scoped-typography",
         "file": "v3-seed-20261107-0004-scoped-typography.tex",
@@ -1373,20 +1252,17 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedOracleTextLines=2 (expected 0)",
-        "State 2: maxAbsoluteGlyphDyPt=5.1377 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDyPt=5.698168 (maximum 0.01)",
-        "State 4: unmatchedOracleTextLines=2 (expected 0)"
-      ]
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0005-overlay-composition",
       "campaign": "artifacts/beamer-fuzz/fixes-fresh-intricate/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/block-interline-space-retry/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0005-overlay-composition",
         "file": "v3-seed-20261107-0005-overlay-composition.tex",
@@ -1442,25 +1318,9 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedOracleTextLines=25 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=1.808848 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=3.904525 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=1.757656 (maximum 0.01)",
-        "State 2: unmatchedOracleTextLines=34 (expected 0)",
-        "State 2: transformMatch=false",
-        "State 2: maxAbsoluteGlyphDxPt=2.546737 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=0.477887 (maximum 0.01)",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=2.454914 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=3.977178 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=2.085676 (maximum 0.01)",
-        "State 4: unmatchedOracleTextLines=34 (expected 0)",
-        "State 4: transformMatch=false",
-        "State 4: maxAbsoluteGlyphDxPt=2.546737 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=0.477887 (maximum 0.01)"
-      ]
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0006-nested-flow",
@@ -1468,7 +1328,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/block-interline-space-retry/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0006-nested-flow",
         "file": "v3-seed-20261107-0006-nested-flow.tex",
@@ -1527,15 +1387,17 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0007-diagram-build",
       "campaign": "artifacts/beamer-fuzz/fixes-fresh-intricate/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/block-interline-space-retry/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0007-diagram-build",
         "file": "v3-seed-20261107-0007-diagram-build.tex",
@@ -1610,36 +1472,17 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedOracleTextLines=15 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxAbsoluteGlyphDxPt=4.955797 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=2.88772 (maximum 0.01)",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=2.801575 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=6.014954 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=2.88772 (maximum 0.01)",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=2.801575 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=6.014954 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=2.88772 (maximum 0.01)",
-        "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=2.801575 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=6.014954 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=2.88772 (maximum 0.01)",
-        "State 5: transformMatch=false",
-        "State 5: maxRectangleEdgeDeltaPt=2.801575 (maximum 0.01)",
-        "State 5: maxAbsoluteGlyphDxPt=6.014954 (maximum 0.02)",
-        "State 5: maxAbsoluteGlyphDyPt=2.88772 (maximum 0.01)"
-      ]
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0008-math-layout",
       "campaign": "artifacts/beamer-fuzz/fixes-fresh-intricate/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/block-interline-space-retry/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0008-math-layout",
         "file": "v3-seed-20261107-0008-math-layout.tex",
@@ -1714,41 +1557,17 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedOracleTextLines=9 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=1.383023 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=6.162072 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=8.864408 (maximum 0.01)",
-        "State 2: unmatchedOracleTextLines=1 (expected 0)",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=4.319807 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=7.678817 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=8.864408 (maximum 0.01)",
-        "State 3: unmatchedOracleTextLines=1 (expected 0)",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=4.319807 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=7.678817 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=8.864408 (maximum 0.01)",
-        "State 4: unmatchedOracleTextLines=1 (expected 0)",
-        "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=4.319807 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=7.678817 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=8.864408 (maximum 0.01)",
-        "State 5: unmatchedOracleTextLines=1 (expected 0)",
-        "State 5: transformMatch=false",
-        "State 5: maxRectangleEdgeDeltaPt=4.319807 (maximum 0.01)",
-        "State 5: maxAbsoluteGlyphDxPt=7.678817 (maximum 0.02)",
-        "State 5: maxAbsoluteGlyphDyPt=8.864408 (maximum 0.01)"
-      ]
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0009-table-flow",
       "campaign": "artifacts/beamer-fuzz/fixes-fresh-intricate/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/block-interline-space-retry/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0009-table-flow",
         "file": "v3-seed-20261107-0009-table-flow.tex",
@@ -1824,36 +1643,9 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedOracleTextLines=40 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=6.203491 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=6.072909 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=3.035333 (maximum 0.01)",
-        "State 2: unmatchedOracleTextLines=11 (expected 0)",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=6.247516 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=6.116934 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=3.231819 (maximum 0.01)",
-        "State 3: unmatchedNativeTextLines=2 (expected 0)",
-        "State 3: unmatchedOracleTextLines=1 (expected 0)",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=6.247516 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=6.116934 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=3.231819 (maximum 0.01)",
-        "State 4: unmatchedNativeTextLines=2 (expected 0)",
-        "State 4: unmatchedOracleTextLines=1 (expected 0)",
-        "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=6.247516 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=6.116934 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=3.231819 (maximum 0.01)",
-        "State 5: unmatchedNativeTextLines=2 (expected 0)",
-        "State 5: unmatchedOracleTextLines=1 (expected 0)",
-        "State 5: transformMatch=false",
-        "State 5: maxRectangleEdgeDeltaPt=6.247516 (maximum 0.01)",
-        "State 5: maxAbsoluteGlyphDxPt=6.116934 (maximum 0.02)",
-        "State 5: maxAbsoluteGlyphDyPt=3.231819 (maximum 0.01)"
-      ]
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0010-scoped-typography",
@@ -1861,7 +1653,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/block-interline-space-retry/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0010-scoped-typography",
         "file": "v3-seed-20261107-0010-scoped-typography.tex",
@@ -1904,7 +1696,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0011-overlay-composition",
@@ -1912,7 +1706,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/block-interline-space-retry/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0011-overlay-composition",
         "file": "v3-seed-20261107-0011-overlay-composition.tex",
@@ -1964,7 +1758,9 @@
           "failures": []
         }
       ],
-      "currentFailures": []
+      "currentFailures": [],
+      "currentLiveReport": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "finalVerification": "live independent LuaLaTeX structural and paint checks; every original overlay state"
     },
     {
       "id": "beamer-fuzz:block-inside-list",
@@ -2024,18 +1820,20 @@
     "older": {
       "frames": 22,
       "states": 40,
-      "passed": 18,
-      "failed": 4,
-      "report": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json"
+      "passed": 22,
+      "failed": 0,
+      "report": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "verification": "Final frozen renderer; live independent LuaLaTeX structural and paint checks passed"
     },
     "newer": {
       "frames": 39,
       "states": 81,
-      "passed": 35,
-      "failed": 4,
-      "report": "artifacts/beamer-fuzz/centered-display-current/report.json"
+      "passed": 39,
+      "failed": 0,
+      "report": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "verification": "Final frozen renderer; live independent LuaLaTeX structural and paint checks passed"
     },
-    "note": "Strict saved-trace replays; independent live rechecks required before closing full compositions."
+    "note": "Both original campaigns pass on the same final frozen renderer: 61 frames and 121 overlay states. Counts are observations, not distinct bugs."
   },
   "additionalControls": [
     {
@@ -2143,6 +1941,51 @@
       "manifest": "test/fixtures/beamer/fuzz-findings-v28/cases.json",
       "result": "10/10 strict live pass; every overlay checked",
       "report": "artifacts/beamer-fuzz/v28-declaration-spacing/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v29/cases.json",
+      "result": "2/2 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v29-list-identity-verified/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v30/cases.json",
+      "result": "1/1 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v30-ancestor-flex-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v31/cases.json",
+      "result": "6/6 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v31-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v32/cases.json",
+      "result": "1/1 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v32-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v33/cases.json",
+      "result": "3/3 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v33-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v34/cases.json",
+      "result": "3/3 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v34-verified-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v35/cases.json",
+      "result": "7/7 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v35-interline/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v36/cases.json",
+      "result": "3/3 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v36-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v37/cases.json",
+      "result": "3/3 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v37-live/report.json"
     }
   ],
   "regressionGate": {
@@ -2162,13 +2005,23 @@
       "scope": "Before final explicit display-boundary hook"
     },
     "latestFocusedRun": {
-      "run": "/tmp/v28-focused-tests.log",
-      "passed": 602,
+      "run": "/tmp/block-following-interline-verified-tests.log",
+      "passed": 626,
       "failed": 0
     },
-    "finalFullSuite": "Not yet run on final source",
-    "typecheck": "/tmp/empty-trivlist-typecheck.log (passed before final font-declaration adjustment)",
-    "productionLint": "/tmp/nested-block-context-lint.log (passed before V28)",
+    "finalFullSuite": {
+      "run": "/tmp/beamer-final-full-suite-verified.log",
+      "status": "passed",
+      "passed": 8552,
+      "failed": 0,
+      "skipped": 23,
+      "todo": 1,
+      "testFilesPassed": 524,
+      "testFilesSkipped": 2,
+      "exitCode": 0
+    },
+    "typecheck": "/tmp/beamer-final-typecheck-verified.log (passed all package gates)",
+    "productionLint": "/tmp/beamer-final-production-lint-verified.log (passed)",
     "laterBroadRun": {
       "run": "/tmp/nested-block-context-broad-tests.log",
       "passed": 1822,
@@ -2180,6 +2033,50 @@
       "run": "/tmp/v28-pinned-tests.log",
       "passed": 302,
       "failed": 0
+    },
+    "latestBroadRun": {
+      "run": "/tmp/trivlist-column-broad-tests.log",
+      "passed": 1824,
+      "failed": 0,
+      "skipped": 7,
+      "scope": "Before final font-quad and block-minipage changes"
+    },
+    "latestLabelFocusedRun": {
+      "run": "/tmp/trivlist-label-tests.log",
+      "passed": 533,
+      "failed": 0
+    },
+    "latestPinnedFidelity": {
+      "run": "/tmp/block-minipage-pinned-tests.log",
+      "passed": 331,
+      "failed": 0
+    },
+    "firstFinalFullSuite": {
+      "run": "/tmp/beamer-final-full-suite.log",
+      "passed": 8508,
+      "failed": 2,
+      "skipped": 23,
+      "todo": 1,
+      "failures": [
+        "Italic article labels became upright when sizing captured label fonts (regression; fixed in 74465bb0).",
+        "Expanded corpus exposed outdent across an overlay argument boundary, leaving an item outside its list (fixed in d0f97a39 with three reduced controls)."
+      ]
+    },
+    "finalGateRepairs": {
+      "run": "/tmp/final-gate-repairs-tests.log",
+      "passed": 445,
+      "failed": 0,
+      "includes": "All 392 independent fidelity cases, both reproduced failures, and three new argument-boundary regressions."
+    },
+    "firstFinalProductionLint": {
+      "run": "/tmp/beamer-final-production-lint.log",
+      "failed": 1,
+      "reason": "prefer-nullish-coalescing on an optional boolean OR; clarified the boolean test without changing semantics."
+    },
+    "finalPinnedFidelity": {
+      "passed": 392,
+      "failed": 0,
+      "verification": "Included in the final full repository suite"
     }
   },
   "knownUnverifiedSupportGaps": [
@@ -2191,5 +2088,67 @@
     "V24 initial structural agreement did not close the original: marker visibility and eight block paint probes still failed. The final V24 live run passes all five states.",
     "V28 controls initially had three failures (font-only declaration paragraphs and a single centered character before display); all ten controls pass after fixes.",
     "Eight original failed frame observations remain: four older and four newer. Saved-trace passes require live checks before closure."
+  ],
+  "additionalLiveClosures": [
+    {
+      "fixture": "v3-seed-20261106-0002-math-layout",
+      "report": "artifacts/beamer-fuzz/legacy-math-closure/verified/report.json",
+      "result": "All four states pass live structural/paint checks; pinned full-source trace still to add."
+    }
+  ],
+  "additionalOpenReductions": [],
+  "operationalIncidents": [
+    {
+      "type": "overlapping dist builds",
+      "run": "artifacts/beamer-fuzz/v34-live",
+      "result": "Renderer import failed before comparison. Rerun v34-verified-live after build completion passes all three controls."
+    },
+    {
+      "type": "disk exhaustion",
+      "run": "artifacts/beamer-fuzz/block-following-interline-current",
+      "tests": "/tmp/block-following-interline-tests.log",
+      "result": "Replay stopped partway; tests could not collect. Neither is valid fidelity/test evidence. Recovered 1.71GiB by deleting reproducible passing replay graphics; losslessly compressed 3920 old diagnostics to recover another 2.37GiB. Original sources, TeX references, all failure details, and every state summary retained. The complete retry passes 39 frames/81 states, and subsequent focused tests pass."
+    }
+  ],
+  "finalRendererCheckpoint": {
+    "sourceFingerprint": "810c9071e9cb0eaa9582f39a3be5d7c3b66704320aebdf59fbfb989b77c5fc32",
+    "previousAcceptanceFingerprint": "a5538e6bd25f800e6f8b49cb5e769a7ab4128193104452005b1acad8e6276aea",
+    "scope": "all core sources and independent comparison adapter",
+    "changesSincePreviousAcceptance": [
+      "74465bb0 article label style",
+      "d0f97a39 argument-boundary outdent",
+      "7ec74152 boolean lint clarification"
+    ],
+    "liveCampaigns": [
+      "original-20261106-post-gates-live",
+      "original-20261107-post-gates-live"
+    ]
+  },
+  "finalLiveVerification": {
+    "older": {
+      "report": "artifacts/beamer-fuzz/original-20261106-post-gates-live/report.json",
+      "status": "complete",
+      "passed": 22,
+      "failed": 0,
+      "states": 40,
+      "pinnedManifest": "test/fixtures/beamer/fuzz-original-seed-20261106/cases.json"
+    },
+    "newer": {
+      "report": "artifacts/beamer-fuzz/original-20261107-post-gates-live/report.json",
+      "status": "complete",
+      "pinnedManifest": "test/fixtures/beamer/fuzz-original-seed-20261107/cases.json",
+      "passed": 39,
+      "failed": 0,
+      "states": 81
+    }
+  },
+  "finalAcceptance": "Passed: all 61 original frames / 121 overlay states live, all 392 pinned fidelity cases, full repository suite, typecheck and production lint. Source fingerprint and original source hashes verified; no tolerance relaxation or oracle exclusions for these campaigns.",
+  "knownOracleLimitations": [
+    {
+      "fixture": "test/fixtures/beamer/fuzz-findings-v2/large-relative-overlay-glyph-edge.tex",
+      "status": "Original 1600px paint-mask mismatch retained; the fixture explicitly uses 3200px and passes the same strict zero-interior-disagreement contract.",
+      "reason": "One pixel in a letter counter changes mask membership at 1600px. This raster-resolution limitation is separate from the 61 original complex frames accepted above.",
+      "reference": "test/fixtures/beamer/fuzz-findings-v2/README.md"
+    }
   ]
 }

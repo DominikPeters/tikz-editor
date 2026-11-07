@@ -24,8 +24,8 @@ node scripts/compare-beamer-priorities.mjs \
 
 Both reduced sources now pass. Complex
 cases can have several simultaneous failures; a failing frame is not counted
-as a distinct bug. The broader generated galleries retain those untriaged
-cases alongside these two isolated findings.
+as a distinct bug. Those broader generated cases were subsequently repaired and all 61 original
+frames now pass live checks; see `design/beamer-failure-status.md`.
 
 Macro redefinitions also exposed an oracle bug, fixed separately: isolating a
 later frame previously omitted preceding body declarations. The oracle now

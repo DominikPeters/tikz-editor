@@ -8,4 +8,5 @@ original column failed.
 
 All three cases and twelve states pass strict live checks in
 `artifacts/beamer-fuzz/v37-live`. These corrections make every older saved
-frame pass. Full live verification of both original campaigns remains required.
+frame pass. Both original campaigns now pass every state live on the final
+renderer (see `design/beamer-failure-status.md`).

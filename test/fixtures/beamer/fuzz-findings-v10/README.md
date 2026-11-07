@@ -15,4 +15,5 @@ The Bézier controls deliberately test PGF picture bounds, which include control
 points and can exceed the curve's ink bounds. This keeps the correct image
 layout separate from tight rendered-path bounds.
 
-Other compositions remain tracked in `design/beamer-failure-ledger.json`.
+All original compositions now pass live checks; their failure history remains
+in `design/beamer-failure-ledger.json`.

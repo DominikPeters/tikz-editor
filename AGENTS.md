@@ -39,6 +39,13 @@ Use `npm run lint:prod` as the production lint gate. `npm run lint` is a noisy f
 ## Renderer Comparison
 Use `npm run compare:renderers -- --input path/to/snippet.tex` for focused TeX-vs-editor checks. Use `npm run compare:pgf-docs -- --source-file ...` for PGF manual snippet galleries.
 
+### Fidelity reporting
+- Disclose every known unresolved failure and incomplete or blocked check whenever reporting fuzzing results. Keep the current ledger and reproductions linked; do not omit failures when reporting successful fixes.
+- Distinguish distinct bugs from failing frames/states, and native warm/cold edit parity from independent TeX fidelity. A clean limited run does not mean other saved campaigns are clean.
+- Preserve original failing sources and source hashes. Passing reductions do not close a failure: the original case must pass every state and the independent live paint/structural checks.
+- Report oracle or tolerance changes separately with evidence. Interrupted runs and renderer/oracle errors are not successful comparisons.
+- Keep long fuzzing/validation campaigns to at most two heavy jobs unless the user requests otherwise. Serialize builds before loading comparison renderers.
+
 ## Profiling Scripts
 Performance profiling scripts live in `apps/web/profiling/`, e.g.
 ```
