@@ -4566,7 +4566,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
   const alignmentScopes: AlignmentState[] = [];
   const alignmentEnvironments: { outer: AlignmentState; item?: AlignmentState }[] = [];
   const alignmentHistory: { from: number; state: AlignmentState }[] = [{ from: sourceOffset, state: alignmentState }];
-  const hasAlignmentGroups = options?.groupListItemBodies || sourceNodes.some(node => node.kind === "style-declaration" && node.sizeScope?.name === "");
+  const hasAlignmentGroups = options?.groupListItemBodies === true || sourceNodes.some(node => node.kind === "style-declaration" && node.sizeScope?.name === "");
   for (const node of sourceNodes) {
     if (node.kind === "environment-boundary") {
       if (node.boundary === "begin") {
