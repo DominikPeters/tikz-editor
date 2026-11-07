@@ -45,14 +45,16 @@ export function attachTexHBoxesBeforeVListParagraphs(
 
 function texHBoxAttachmentsByPath(
   attachments: readonly TexHBoxBeforeParagraphAttachment[]
-): ReadonlyMap<string, TexHBoxItem> {
-  const hboxesByPath = new Map<string, TexHBoxItem>();
+): ReadonlyMap<string, readonly TexHBoxItem[]> {
+  const hboxesByPath = new Map<string, TexHBoxItem[]>();
   for (const attachment of attachments) {
     const key = texVListPathKey(attachment.vlistPath);
-    if (hboxesByPath.has(key)) {
+    const previous = hboxesByPath.get(key) ?? [];
+    if (previous.some(hbox => hbox.role?.kind !== "list-label" || attachment.hbox.role?.kind !== "list-label" ||
+      hbox.role.depth === attachment.hbox.role.depth && hbox.role.itemIndex === attachment.hbox.role.itemIndex)) {
       throw new Error(`TeX vlist hbox attachments contain duplicate path ${key}.`);
     }
-    hboxesByPath.set(key, attachment.hbox);
+    hboxesByPath.set(key, [...previous, attachment.hbox]);
   }
   return hboxesByPath;
 }
@@ -64,7 +66,7 @@ interface TexHBoxAttachmentItemsResult {
 
 function attachTexHBoxesBeforeVListParagraphItems(
   items: readonly TexVListItem[],
-  hboxesByPath: ReadonlyMap<string, TexHBoxItem>,
+  hboxesByPath: ReadonlyMap<string, readonly TexHBoxItem[]>,
   originalPathPrefix: readonly number[],
   outputPathPrefix: readonly number[],
   usedAttachmentKeys: Set<string>
@@ -91,9 +93,9 @@ function attachTexHBoxesBeforeVListParagraphItems(
     }
     if (item.kind === "paragraph") {
       const key = texVListPathKey(originalPath);
-      const hbox = hboxesByPath.get(key);
-      if (hbox) {
-        outputItems.push(hbox);
+      const hboxes = hboxesByPath.get(key);
+      if (hboxes) {
+        outputItems.push(...hboxes);
         usedAttachmentKeys.add(key);
       }
       const outputPath = [...outputPathPrefix, outputItems.length];
@@ -113,7 +115,7 @@ function attachTexHBoxesBeforeVListParagraphItems(
 }
 
 function assertAllHBoxAttachmentsUsed(
-  hboxesByPath: ReadonlyMap<string, TexHBoxItem>,
+  hboxesByPath: ReadonlyMap<string, readonly TexHBoxItem[]>,
   usedAttachmentKeys: ReadonlySet<string>
 ): void {
   for (const key of hboxesByPath.keys()) {

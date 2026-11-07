@@ -37,6 +37,10 @@ export function emitEmbeddedTikz(params: {
     bounds,
     viewBox: tikz.viewBox,
     model: tikz.visibility === "hidden" ? { ...model, parts: [] } : model,
+    coveredModel: namespaceSvgModel({ ...tikz.model, parts: [
+      ...(tikz.visibility === "hidden" ? tikz.model.parts : []),
+      ...(tikz.coveredModel?.parts ?? []),
+    ] }, tikz.id),
   });
   params.items.push({
     id: tikz.id,

@@ -71,6 +71,7 @@ export function texListItemParagraphAttachments(params: {
   readonly textFontProfile?: TexTextFontProfile;
   /** Absolute origin of the paragraph's containing VList. */
   readonly paragraphOriginX: TexVListX;
+  readonly followLineAlignment?: boolean;
 }): TexListItemParagraphAttachments {
   const listItemLabel = params.segmentIndex === 0 && params.listContext?.showLabel === true
     ? params.listItemLayout?.label
@@ -113,7 +114,8 @@ export function texListItemParagraphAttachments(params: {
         params.blockIndex,
         listItemLabel,
         params.metricProvider,
-        params.paragraphOriginX
+        params.paragraphOriginX,
+        params.followLineAlignment
       )
     : undefined;
   // Beamer's description column: a label wider than it starts where the
@@ -299,7 +301,8 @@ function texMarginListLabelHBoxFromLayoutLabel(
   blockIndex: number,
   labelBox: TexVBoxListItemLabelBox,
   metricProvider: TexMetricProvider,
-  paragraphOriginX: TexVListX
+  paragraphOriginX: TexVListX,
+  followLineAlignment?: boolean
 ): TexHBoxItem {
   const box = texLayoutLabelHBoxContent(label, metricProvider);
   const labelLeft = texVListX(
@@ -317,6 +320,13 @@ function texMarginListLabelHBoxFromLayoutLabel(
       : {}),
     role: {
       kind: "list-label",
+      ...(label.marker ? { markerPaint: {
+        x: (label.marker.profile.paintBoundsEm?.x ?? 0) * label.marker.atPt,
+        y: (label.marker.profile.paintBoundsEm?.y ?? 0) * label.marker.atPt,
+        width: (label.marker.profile.paintBoundsEm?.width ?? label.marker.profile.widthEm) * label.marker.atPt,
+        height: (label.marker.profile.paintBoundsEm?.height ?? label.marker.profile.heightEm + label.marker.profile.depthEm) * label.marker.atPt,
+        traceAsGlyph: label.marker.profile.traceAsGlyph ?? label.marker.profile.glyph != null,
+      } } : {}),
       labelKind: labelBox.kind,
       placement: labelBox.placement,
       listKind: listContext.kind,
@@ -332,6 +342,7 @@ function texMarginListLabelHBoxFromLayoutLabel(
     verticalPlacement: {
       kind: "paragraph-first-line-baseline",
       blockIndex,
+      ...(followLineAlignment ? { paragraphOriginX } : {}),
     },
     box: {
       metrics: box.metrics,

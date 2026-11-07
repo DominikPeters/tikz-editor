@@ -129,6 +129,8 @@ interface SimpleTexParagraphVerticalSkipState {
   readonly emittedListItemKeys: Set<string>;
   emittedParagraphCount: number;
   hasInterveningPenalty: boolean;
+  externalAfterSkip: number;
+  externalPendingParskip?: number;
 }
 
 type TexTrivlistScopeRole = Extract<TexVBoxRole, { readonly kind: "trivlist" }>;
@@ -179,6 +181,34 @@ function planSimpleTexParagraphVerticalSkipsInto(
       );
       continue;
     }
+    if (item.kind === "hbox" && item.role?.kind === "external-flow") {
+      const scope = ancestors.length ? ancestors : item.scopePath ?? [];
+      const list = lastVListAncestorRole(scope, "list");
+      const listItem = lastVListAncestorRole(scope, "list-item");
+      if (list && listItem && (!state.previousEmittedListContext ||
+          state.previousEmittedListContext.listStart !== list.sourceStart ||
+          state.previousEmittedListContext.itemIndex !== listItem.itemIndex)) {
+        const blockIndex = -3_000_000 - (item.sourceSpan?.start ?? 0);
+        const boundary: TexParagraphItem = { kind: "paragraph", blockIndex,
+          sourceSpan: item.sourceSpan ?? { start: 0, end: 0 },
+          paragraph: { blockIndex, text: "", sourceSpan: item.sourceSpan ?? { start: 0, end: 0 }, nodes: [], noIndent: true,
+            startsAfterExplicitPar: true, quoteDepth: 0, ...(item.scopePath ? { scopePath: item.scopePath } : {}) } };
+        planSimpleTexParagraphVerticalSkipsInto([boundary], font, listProfile, state, skips, ancestors, pathPrefix);
+        const skip = skips.at(-1);
+        if (skip) {
+          const profile = listProfileForContext(listProfile, state.previousEmittedListContext);
+          const parskip = texArticleListParagraphSkip(list.depth, font, profile);
+          skips[skips.length - 1] = { ...skip, listSize: texLength(Math.max(0, skip.listSize - parskip)),
+            size: texLength(Math.max(0, skip.size - parskip)), vlistPath: path };
+          state.externalPendingParskip = Number(parskip);
+        }
+      }
+      continue;
+    }
+    if (item.kind === "glue" && item.origin?.kind === "external-flow-after") {
+      state.externalAfterSkip = Number(item.size);
+      continue;
+    }
     if (item.kind === "penalty") {
       state.hasInterveningPenalty = true;
       continue;
@@ -188,12 +218,13 @@ function planSimpleTexParagraphVerticalSkipsInto(
       continue;
     }
     if (isDisplayEmptyLineHBox(item)) {
-      const quoteDepth = ancestors.filter((role) => role.kind === "quote").length;
-      const trivlistScopes = ancestors.filter(
+      const scope = ancestors.length ? ancestors : item.scopePath ?? [];
+      const quoteDepth = scope.filter((role) => role.kind === "quote").length;
+      const trivlistScopes = scope.filter(
         (role): role is TexTrivlistScopeRole => role.kind === "trivlist"
       );
-      const listRole = lastVListAncestorRole(ancestors, "list");
-      const listItemRole = lastVListAncestorRole(ancestors, "list-item");
+      const listRole = lastVListAncestorRole(scope, "list");
+      const listItemRole = lastVListAncestorRole(scope, "list-item");
       state.previousEmittedQuoteDepth = quoteDepth;
       state.previousEmittedQuotationDepth = 0;
       state.previousEmittedTrivlistScopes = trivlistScopes;
@@ -205,6 +236,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
             itemIndex: listItemRole?.itemIndex ?? 0,
             ownLeftMarginEm: listRole.ownLeftMarginEm,
             totalLeftMarginEm: listRole.totalLeftMarginEm,
+            ...(listRole.fontSizePt !== undefined ? { fontSizePt: listRole.fontSizePt } : {}),
+            ...(listRole.sourceStart !== undefined ? { listStart: listRole.sourceStart } : {}),
             showLabel: false,
           }
         : undefined;
@@ -245,6 +278,34 @@ function planSimpleTexParagraphVerticalSkipsInto(
     if (hasPreviousEmittedParagraph && !state.previousEmittedListContext && !scope.listContext && !followsDisplay) {
       listVerticalSkipBefore = texLength(listVerticalSkipBefore + (listProfile?.paragraphSkipPt ?? 0));
     }
+    if (!state.previousEmittedListContext) for (const ancestor of paragraph.ancestorListLabels ?? []) {
+      const profile = listProfileForContext(listProfile, ancestor);
+      const skip = texArticleOutsideListBoundarySkip(startsListInVerticalMode, font, profile, ancestor.depth);
+      listVerticalSkipBefore = texLength(Math.max(listVerticalSkipBefore, skip));
+      state.listPartopsepByDepth.set(ancestor.depth, startsListInVerticalMode);
+    }
+    // A child list can be the first material of a new parent item. Its
+    // topsep and the parent's itemsep meet through LaTeX's addvspace.
+    for (const ancestor of paragraph.ancestorListLabels ?? []) {
+      const previous = state.previousEmittedListContext;
+      if (previous?.depth !== ancestor.depth || previous.listStart !== ancestor.listStart || previous.itemIndex === ancestor.itemIndex) continue;
+      // @trivlist sees @inlabel and @donoparitem emits no child topsep.
+      // Only the parent item boundary survives (important for shrink).
+      listVerticalSkipBefore = texArticleListItemBoundarySkip(ancestor.depth, font, listProfileForContext(listProfile, ancestor));
+    }
+    // LaTeX's next item/end-list uses \addvspace: the larger of that
+    // boundary and an immediately preceding block's smallskip survives.
+    if (state.externalAfterSkip && !state.hasInterveningPenalty &&
+        state.previousEmittedListContext != null &&
+        (scope.listContext?.depth !== state.previousEmittedListContext.depth ||
+         scope.listContext.itemIndex !== state.previousEmittedListContext.itemIndex)) {
+      listVerticalSkipBefore = texLength(Math.max(0, Number(listVerticalSkipBefore) - state.externalAfterSkip));
+    }
+    if (state.externalPendingParskip && scope.listContext?.itemIndex === state.previousEmittedListContext?.itemIndex) {
+      listVerticalSkipBefore = texLength(Number(listVerticalSkipBefore) + state.externalPendingParskip);
+    }
+    delete state.externalPendingParskip;
+    state.externalAfterSkip = 0;
     const listFlex = followsDisplay || suppressInitialTopsep
       ? { stretch: texLength(0), shrink: texLength(0) }
       : texProfileListVerticalGlueFlex(
@@ -254,7 +315,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
           exitsTrivlistScope,
           resolvedListProfile
         );
-    const quoteVerticalSkipBefore = followsDisplay
+    const quoteVerticalSkipBefore = followsDisplay || suppressInitialTopsep
       ? texLength(0)
       : texArticleQuoteVerticalSkipBefore(
           state,
@@ -266,7 +327,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
           state.previousEmittedListContext !== undefined || scope.listContext !== undefined,
           font
         );
-    const trivlistVerticalSkipBefore = followsDisplay
+    const trivlistVerticalSkipBefore = followsDisplay || suppressInitialTopsep
       ? texLength(0)
       : texArticleTrivlistVerticalSkipBefore(
           state,
@@ -323,6 +384,7 @@ function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphV
     emittedListItemKeys: new Set(),
     emittedParagraphCount: 0,
     hasInterveningPenalty: false,
+    externalAfterSkip: 0,
   };
 }
 
@@ -363,9 +425,9 @@ function paragraphScopeFromVListAncestors(
         showLabel: item.paragraph.listContext?.showLabel ??
           !state.emittedListItemKeys.has(listItemKey),
         ...(item.paragraph.listContext?.label !== undefined ? { label: item.paragraph.listContext.label } : {}),
-        ...(item.paragraph.listContext?.fontSizePt !== undefined ? { fontSizePt: item.paragraph.listContext.fontSizePt } : {}),
+        ...((item.paragraph.listContext?.fontSizePt ?? listRole.fontSizePt) !== undefined ? { fontSizePt: item.paragraph.listContext?.fontSizePt ?? listRole.fontSizePt } : {}),
         ...(item.paragraph.listContext?.spacing !== undefined ? { spacing: item.paragraph.listContext.spacing } : {}),
-        ...(item.paragraph.listContext?.listStart !== undefined ? { listStart: item.paragraph.listContext.listStart } : {}),
+        ...((item.paragraph.listContext?.listStart ?? listRole.sourceStart) !== undefined ? { listStart: item.paragraph.listContext?.listStart ?? listRole.sourceStart } : {}),
       },
     };
   }
@@ -433,7 +495,7 @@ function addParagraphVerticalGlueToItems(
       });
       continue;
     }
-    if (item.kind === "paragraph") {
+    if (item.kind === "paragraph" || item.kind === "hbox" && item.role?.kind === "external-flow") {
       const skip = verticalSkipByPath.get(texVListPathKey(path));
       if (skip) {
         items.push(...paragraphBoundaryGlueItems(item, skip));
@@ -445,7 +507,7 @@ function addParagraphVerticalGlueToItems(
 }
 
 function paragraphBoundaryGlueItems(
-  item: TexParagraphItem | TexVBoxItem,
+  item: TexParagraphItem | TexVBoxItem | TexHBoxItem,
   skip: SimpleTexParagraphVerticalSkip
 ): TexGlueItem[] {
   const scopePath = item.kind === "paragraph" ? texVBoxRolePathForParagraph(item.paragraph) : item.scopePath ?? [];
@@ -809,6 +871,19 @@ function resolveDisplayMathVerticalGlueInItems(
       if (previousDepthSuppressed) plainParagraphInterlinePending = false;
       continue;
     }
+    if (item.kind === "hbox" && item.role?.kind === "external-flow") {
+      const depth = previousParagraphMeasurement ? texParagraphLastLineDepth(previousParagraphMeasurement) : previousDisplayMaterialMetrics?.depth;
+      if (depth !== undefined && !previousDepthSuppressed) {
+        items.push({ kind: "glue", size: texInterlineGlueSize(depth, item.box.metrics.height, item.role.baselineSkipPt ?? options.lineHeight) });
+      }
+      items.push(item);
+      previousParagraphMeasurement = undefined;
+      previousDisplayMaterialMetrics = item.box.metrics;
+      previousDepthSuppressed = false;
+      plainParagraphInterlinePending = true;
+      paragraphBoundaryInterlineAlreadyInserted = false;
+      continue;
+    }
     if (item.kind === "paragraph") {
       const paragraphMeasurement = paragraphMeasurements.get(texVListPathKey(path));
       const previousDepth = previousParagraphMeasurement
@@ -832,15 +907,13 @@ function resolveDisplayMathVerticalGlueInItems(
         // adjacency the measurer enforces, and the label's y derives from
         // the cursor at the pair. Interline glue belongs above the pair,
         // never between the label and its paragraph.
-        const attachedLabel = items.at(-1);
-        if (
-          attachedLabel?.kind === "hbox" &&
-          attachedLabel.verticalPlacement?.kind === "paragraph-first-line-baseline"
-        ) {
-          items.splice(items.length - 1, 0, interlineGlue);
-        } else {
-          items.push(interlineGlue);
+        let insertion = items.length;
+        while (insertion > 0) {
+          const attached = items[insertion - 1];
+          if (attached?.kind !== "hbox" || attached.verticalPlacement?.kind !== "paragraph-first-line-baseline") break;
+          insertion--;
         }
+        items.splice(insertion, 0, interlineGlue);
       }
       previousParagraphMeasurement = paragraphMeasurement;
       previousDisplayMaterialMetrics = undefined;
@@ -1649,7 +1722,7 @@ function paragraphBoundaryInterlineKind(
 }
 
 function plainParagraphBoundaryInterlineGlueItem(
-  item: TexParagraphItem | TexVBoxItem,
+  item: TexParagraphItem | TexVBoxItem | TexHBoxItem,
   size: TexLength
 ): TexGlueItem {
   const scopePath = item.kind === "paragraph"

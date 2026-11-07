@@ -89,7 +89,17 @@ export type PreparedTitlePage = {
   trailingFillWeight: number;
 };
 
+export type PreparedColumns = {
+  baselineSkip?: number;
+  kind: "columns";
+  visibility: BeamerOverlayVisibility;
+  node: BeamerColumnsBodyNode;
+  columns: PreparedColumnContent[];
+  box: Pick<ColumnVerticalBox, "height" | "depth">;
+};
+
 export type PreparedColumnFlowItem =
+  | (PreparedColumns & { height: number; leadingSkipPt?: number })
   | PreparedUnsupportedFlowItem
   | {
       kind: "paragraph";
@@ -117,6 +127,7 @@ export type PreparedColumnFlowItem =
       width: number;
       height: number;
       model: BeamerEmbeddedTikzLayout["model"];
+      coveredModel?: BeamerEmbeddedTikzLayout["model"];
       viewBox: BeamerEmbeddedTikzLayout["viewBox"];
     }
   | {
@@ -172,13 +183,7 @@ export type PreparedFrameFlowItem =
        */
       trailingVerticalSpacePreviousDepth: number | null;
     }
-  | {
-      kind: "columns";
-      visibility: BeamerOverlayVisibility;
-      node: BeamerColumnsBodyNode;
-      columns: PreparedColumnContent[];
-      box: Pick<ColumnVerticalBox, "height" | "depth">;
-    }
+  | PreparedColumns
   | {
       kind: "block";
       visibility: BeamerOverlayVisibility;

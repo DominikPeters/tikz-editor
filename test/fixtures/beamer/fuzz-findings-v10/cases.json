@@ -1,0 +1,320 @@
+{
+  "formatVersion": 1,
+  "title": "Expanded list and picture regressions",
+  "fidelity": [
+    {
+      "id": "item-block-Madrid-itemize-bare",
+      "file": "item-block-Madrid-itemize-bare.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Inside.",
+        "Outside."
+      ]
+    },
+    {
+      "id": "item-block-Madrid-enumerate-bare",
+      "file": "item-block-Madrid-enumerate-bare.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Inside.",
+        "Outside."
+      ]
+    },
+    {
+      "id": "item-block-Madrid-description-bare",
+      "file": "item-block-Madrid-description-bare.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Inside.",
+        "Outside."
+      ]
+    },
+    {
+      "id": "item-block-Madrid-itemize-prose",
+      "file": "item-block-Madrid-itemize-prose.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Inside.",
+        "Outside."
+      ]
+    },
+    {
+      "id": "item-block-Madrid-enumerate-prose",
+      "file": "item-block-Madrid-enumerate-prose.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Inside.",
+        "Outside."
+      ]
+    },
+    {
+      "id": "item-block-Madrid-description-prose",
+      "file": "item-block-Madrid-description-prose.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Inside.",
+        "Outside."
+      ]
+    },
+    {
+      "id": "item-block-default-itemize-bare",
+      "file": "item-block-default-itemize-bare.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Inside.",
+        "Outside."
+      ]
+    },
+    {
+      "id": "item-block-default-enumerate-bare",
+      "file": "item-block-default-enumerate-bare.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Inside.",
+        "Outside."
+      ]
+    },
+    {
+      "id": "item-block-default-description-bare",
+      "file": "item-block-default-description-bare.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Inside.",
+        "Outside."
+      ]
+    },
+    {
+      "id": "item-block-default-itemize-prose",
+      "file": "item-block-default-itemize-prose.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Inside.",
+        "Outside."
+      ]
+    },
+    {
+      "id": "item-block-default-enumerate-prose",
+      "file": "item-block-default-enumerate-prose.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Inside.",
+        "Outside."
+      ]
+    },
+    {
+      "id": "item-block-default-description-prose",
+      "file": "item-block-default-description-prose.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Inside.",
+        "Outside."
+      ]
+    },
+    {
+      "id": "picture-tail-direct",
+      "file": "picture-tail-direct.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "After."
+      ]
+    },
+    {
+      "id": "picture-tail-enumerate",
+      "file": "picture-tail-enumerate.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "After."
+      ]
+    },
+    {
+      "id": "picture-tail-itemize",
+      "file": "picture-tail-itemize.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "After."
+      ]
+    },
+    {
+      "id": "scoped-lists-picture-shrink",
+      "file": "scoped-lists-picture-shrink.tex",
+      "frame": 1,
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11steps"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ]
+      ]
+    },
+    {
+      "id": "nested-head-itemize-enumerate-normal",
+      "file": "nested-head-itemize-enumerate-normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-head-itemize-enumerate-small",
+      "file": "nested-head-itemize-enumerate-small.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-head-itemize-itemize-normal",
+      "file": "nested-head-itemize-itemize-normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-head-itemize-itemize-small",
+      "file": "nested-head-itemize-itemize-small.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-head-description-enumerate-normal",
+      "file": "nested-head-description-enumerate-normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-head-description-enumerate-small",
+      "file": "nested-head-description-enumerate-small.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-head-description-itemize-normal",
+      "file": "nested-head-description-itemize-normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-head-description-itemize-small",
+      "file": "nested-head-description-itemize-small.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    }
+  ],
+  "recognition": []
+}

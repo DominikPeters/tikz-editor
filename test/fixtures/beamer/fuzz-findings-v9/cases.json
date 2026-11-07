@@ -1,0 +1,115 @@
+{
+  "formatVersion": 1,
+  "title": "Recursive flow, font context and overlay geometry",
+  "fidelity": [
+    {
+      "id": "nested-columns",
+      "file": "nested-columns.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor"
+      ]
+    },
+    {
+      "id": "ambient-tikz-font",
+      "file": "ambient-tikz-font.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Witness"
+      ]
+    },
+    {
+      "id": "rounded-leading-display",
+      "file": "rounded-leading-display.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "After."
+      ]
+    },
+    {
+      "id": "action-description-display-tail",
+      "file": "action-description-display-tail.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "After."
+      ]
+    },
+    {
+      "id": "action-itemize-display-tail",
+      "file": "action-itemize-display-tail.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "After."
+      ]
+    },
+    {
+      "id": "covered-columns-shrink",
+      "file": "covered-columns-shrink.tex",
+      "frame": 1,
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7cycles",
+        "11Hz"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ]
+      ]
+    }
+  ],
+  "recognition": []
+}

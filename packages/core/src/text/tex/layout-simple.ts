@@ -47,6 +47,8 @@ import {
 } from "./dimensions.js";
 
 export interface TexParagraphLayoutOptions {
+  readonly commitPostDisplayParagraph?: NonNullable<TexLayoutIrOptions["commitPostDisplayParagraph"]>;
+  readonly resolveBlockBox?: NonNullable<TexLayoutIrOptions["resolveBlockBox"]>;
   readonly namedFontSizes?: TexLayoutIrOptions["namedFontSizes"];
   readonly paragraphId?: string;
   readonly width: number;
@@ -129,6 +131,8 @@ export function layoutSimpleTexParagraph(
       ...(options.listProfile?.descriptionLabelWidthPt !== undefined ? { descriptionLabelWidthPt: options.listProfile.descriptionLabelWidthPt } : {}),
       ...(options.listProfile?.descriptionLabelWidths !== undefined ? { descriptionLabelWidths: options.listProfile.descriptionLabelWidths } : {}),
       ...(options.colorResolver?.cacheKey !== undefined ? { colorResolverCacheKey: options.colorResolver.cacheKey } : {}),
+      ...(options.listProfile?.bodyFontSizePtByDepth ? { listBodyFontSizes: options.listProfile.bodyFontSizePtByDepth } : {}),
+      ...(options.listProfile?.bodyBaselineSkipPtByDepth ? { listBodyBaselineSkips: options.listProfile.bodyBaselineSkipPtByDepth } : {}),
       fontSizePt: font.atPt,
       ...(options.baselineSkip !== undefined ? { baselineSkipPt: options.baselineSkip } : {}),
       ...(options.namedFontSizes !== undefined ? { namedFontSizes: options.namedFontSizes } : {}),

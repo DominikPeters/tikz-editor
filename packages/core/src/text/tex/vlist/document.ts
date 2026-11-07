@@ -66,6 +66,8 @@ export function prepareSimpleTexLayoutScope(
   const metricProvider = params.metricProvider ?? computerModernTexMetricProvider;
   const baseVList = params.items
     ? lowerSimpleTexBlockItemsToVList(params.items, {
+      ...(params.options.commitPostDisplayParagraph !== undefined ? { commitPostDisplayParagraph: params.options.commitPostDisplayParagraph } : {}),
+      ...(params.options.resolveBlockBox !== undefined ? { resolveBlockBox: params.options.resolveBlockBox } : {}),
         font: params.font,
         ...(params.options.mathBoxProvider !== undefined ? { mathBoxProvider: params.options.mathBoxProvider } : {}),
         ...(params.options.graphicsResolver !== undefined ? { graphicsResolver: params.options.graphicsResolver } : {}),

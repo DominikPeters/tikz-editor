@@ -65,6 +65,7 @@ export type TexDimenExpr = TexLength | string;
 export type TexDisplayMathSkipVariant = "normal" | "short";
 
 export type TexGlueOrigin =
+  | { readonly kind: "external-flow-after" }
   | {
       readonly kind: "explicit-command";
       readonly command: SimpleTexVerticalGlueCommandName;
@@ -175,6 +176,7 @@ export interface TexHorizontalLayout {
 }
 
 export interface TexVListParagraphHorizontalLayout {
+  readonly firstLineXStart?: TexVListX;
   readonly baselineSkip?: TexLength;
   readonly blockIndex: number;
   readonly vlistPath: readonly number[];
@@ -201,6 +203,7 @@ export interface TexParagraphInput extends SimpleTexSegmentInput {
   readonly spaceGlueProfile?: TexSpaceGlueProfile;
   readonly tikzTextWidthNode?: boolean;
   readonly sourceHitPolicy?: "caret" | "source-range";
+  readonly ancestorListLabels?: readonly SimpleTexListContext[];
   readonly listContext?: SimpleTexListContext;
   readonly scopePath?: readonly TexVBoxRole[];
   readonly ignoreAncestorBreakMargins?: boolean;
@@ -215,8 +218,9 @@ export interface TexParagraphItem {
   readonly paragraph: TexParagraphInput;
 }
 
-export type TexHBoxRole = {
+export type TexHBoxRole = { readonly kind: "external-flow"; readonly baselineSkipPt?: TexLength } | {
   readonly kind: "list-label";
+  readonly markerPaint?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly traceAsGlyph: boolean };
   readonly labelKind: TexVBoxListItemLabelKind;
   readonly placement: TexVBoxListItemLabelPlacement;
   readonly listKind: SimpleTexListKind;
@@ -249,6 +253,7 @@ export interface TexHBoxItem {
   readonly affectsVBoxBaseline?: boolean;
   readonly verticalPlacement?: {
     readonly kind: "paragraph-first-line-baseline";
+    readonly paragraphOriginX?: TexVListX;
     readonly blockIndex: number;
   };
   readonly box: TexHorizontalLayout;
@@ -268,6 +273,7 @@ export type TexVBoxRole =
       readonly listKind: SimpleTexListKind;
       readonly depth: number;
       readonly labelDepth: number;
+      readonly fontSizePt?: TexLength;
       readonly ownLeftMarginEm: number;
       readonly totalLeftMarginEm: number;
     }
@@ -574,6 +580,7 @@ export interface TexVListParagraphLineOffset {
 }
 
 export interface TexVListParagraphBoxMeasurement {
+  readonly firstLineXStart?: TexVListX;
   readonly baselineSkip?: TexLength;
   readonly blockIndex: number;
   readonly vlistPath: readonly number[];

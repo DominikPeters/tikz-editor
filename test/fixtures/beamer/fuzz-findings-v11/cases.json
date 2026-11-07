@@ -1,0 +1,336 @@
+{
+  "formatVersion": 1,
+  "title": "Nested column references, covered labels, and scoped first lines",
+  "fidelity": [
+    {
+      "id": "nested-top-top",
+      "file": "nested-top-top.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-top-baseline",
+      "file": "nested-top-baseline.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-top-center",
+      "file": "nested-top-center.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-top-bottom",
+      "file": "nested-top-bottom.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-baseline-top",
+      "file": "nested-baseline-top.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-baseline-baseline",
+      "file": "nested-baseline-baseline.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-baseline-center",
+      "file": "nested-baseline-center.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-baseline-bottom",
+      "file": "nested-baseline-bottom.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-center-top",
+      "file": "nested-center-top.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-center-baseline",
+      "file": "nested-center-baseline.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-center-center",
+      "file": "nested-center-center.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-center-bottom",
+      "file": "nested-center-bottom.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-bottom-top",
+      "file": "nested-bottom-top.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-bottom-baseline",
+      "file": "nested-bottom-baseline.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-bottom-center",
+      "file": "nested-bottom-center.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-bottom-bottom",
+      "file": "nested-bottom-bottom.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "covered-visible",
+      "file": "covered-visible.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "After."
+      ],
+      "oracleTextByPage": [
+        [
+          "Left",
+          "Right",
+          "After."
+        ],
+        [
+          "After."
+        ]
+      ]
+    },
+    {
+      "id": "covered-uncover",
+      "file": "covered-uncover.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "After."
+      ],
+      "oracleTextByPage": [
+        [
+          "Left",
+          "Right",
+          "After."
+        ],
+        [
+          "After."
+        ]
+      ]
+    },
+    {
+      "id": "covered-only",
+      "file": "covered-only.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "After."
+      ],
+      "oracleTextByPage": [
+        [
+          "Left",
+          "Right",
+          "After."
+        ],
+        [
+          "After."
+        ]
+      ]
+    },
+    {
+      "id": "scoped-11-body",
+      "file": "scoped-11-body.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second"
+      ]
+    },
+    {
+      "id": "scoped-11-columns",
+      "file": "scoped-11-columns.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second"
+      ]
+    },
+    {
+      "id": "scoped-12-body",
+      "file": "scoped-12-body.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second"
+      ]
+    },
+    {
+      "id": "scoped-12-columns",
+      "file": "scoped-12-columns.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second"
+      ]
+    },
+    {
+      "id": "covered-visible-resumed-text",
+      "file": "covered-visible-resumed-text.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "After."
+      ],
+      "oracleTextByPage": [
+        [
+          "Left",
+          "Right",
+          "Inside.",
+          "After."
+        ],
+        [
+          "After."
+        ]
+      ]
+    },
+    {
+      "id": "covered-uncover-resumed-text",
+      "file": "covered-uncover-resumed-text.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "After."
+      ],
+      "oracleTextByPage": [
+        [
+          "Left",
+          "Right",
+          "Inside.",
+          "After."
+        ],
+        [
+          "After."
+        ]
+      ]
+    }
+  ],
+  "recognition": []
+}

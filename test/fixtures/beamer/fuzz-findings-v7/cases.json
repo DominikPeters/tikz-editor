@@ -26,6 +26,18 @@
         "Right"
       ],
       "family": "grouped-columns",
+      "sourceSha256": "0393b379baf83af3abd5805a9b3dce9cb80682861a2dfbd68ee70712e3d526bb"
+    },
+    {
+      "id": "columns-in-subtitle",
+      "file": "columns-in-subtitle.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right"
+      ],
+      "family": "columns-in-subtitle",
       "sourceSha256": "822807591e333fbb3819dd71a79126168e16cba12004703c0c9a632a8d096a82"
     }
   ],

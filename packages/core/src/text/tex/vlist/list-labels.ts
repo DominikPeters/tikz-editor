@@ -111,7 +111,7 @@ function texListItemLabelContent(
   }
   if (listContext.kind === "itemize") {
     const markers = listProfile?.itemizeMarkersByDepth;
-    const marker = listProfile?.resolveItemizeMarker?.(listContext.labelDepth, paragraph.fontSizePt, listContext.depth) ?? markers?.[
+    const marker = listProfile?.resolveItemizeMarker?.(listContext.labelDepth, listContext.labelFontSizePt ?? paragraph.fontSizePt, listContext.fontDepth ?? listContext.depth) ?? markers?.[
       Math.max(0, Math.min(listContext.labelDepth - 1, markers.length - 1))
     ];
     if (marker) {
@@ -123,7 +123,8 @@ function texListItemLabelContent(
     if (listContext.enumerateTemplate !== undefined) return { kind: "text", text: enumerateTemplateText(listContext.enumerateTemplate, listContext.labelCounter ?? listContext.itemIndex) ?? "" };
     const marker = listProfile?.resolveEnumerateMarker?.(
       listContext.labelCounter ?? listContext.itemIndex,
-      listContext.labelDepth
+      listContext.labelDepth,
+      listContext.labelFontSizePt ?? paragraph.fontSizePt ?? listContext.fontSizePt
     );
     if (marker) {
       return { kind: "marker", marker };

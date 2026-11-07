@@ -64,18 +64,18 @@ function applyListBodyFonts(vlist: TexVListDocument, profile?: TexListLayoutProf
     }
     if (item.kind !== "paragraph") continue;
     const context = item.paragraph.listContext;
-    if (context && context.kind !== "bibliography") {
-      const depth = context.depth - 1;
+    if (context && (context.kind === "itemize" || context.kind === "enumerate")) {
+      const depth = (context.fontDepth ?? context.depth) - 1;
       const size = profile?.bodyFontSizePtByDepth?.[depth];
-      const nextDepth = nextParagraph?.paragraph.listContext?.depth;
+      const nextDepth = nextParagraph?.paragraph.listContext?.fontDepth ?? nextParagraph?.paragraph.listContext?.depth;
       // Beamer selects the incoming list font before \list ends the current
       // paragraph. An explicit \par has already committed its baseline grid.
       const endingDepth = profile?.selectBodyFontBeforeList && nextDepth != null && nextDepth > depth + 1 &&
         !nextParagraph?.paragraph.startsAfterExplicitPar ? nextDepth - 1 : depth;
       const skip = profile?.bodyBaselineSkipPtByDepth?.[endingDepth];
       items[index] = { ...item, paragraph: { ...item.paragraph,
-        ...(size != null ? { fontSizePt: texLength(size) } : {}),
-        ...(skip != null ? { baselineSkip: texLength(skip) } : {}),
+        ...(size != null && !item.paragraph.explicitFontSize ? { fontSizePt: texLength(size) } : {}),
+        ...(skip != null && !item.paragraph.explicitBaselineSkip ? { baselineSkip: texLength(skip) } : {}),
       } };
     }
     nextParagraph = item;

@@ -4,6 +4,8 @@ import { roundTexPt } from "../fonts/units.js";
 import {
   texLength,
   texVListLocalY,
+  texVListLocalX,
+  texVListX,
   texVListY,
   type TexLength,
 } from "../coordinates.js";
@@ -41,8 +43,10 @@ export function createTexVListParagraphHorizontalLayoutsFromLineBoxes(params: {
     report: params.report,
     paragraphLayouts: params.paragraphLineAssignments.map((assignment) => {
       const baselineSkip = params.baselineSkips?.get(assignment.blockIndex);
+      const firstLine = params.report.lines.find(line => line.lineIndex === assignment.lineIndices[0]);
       return {
       ...(baselineSkip !== undefined ? { baselineSkip } : {}),
+      ...(firstLine ? { firstLineXStart: texVListX(Number(firstLine.xStart)) } : {}),
       blockIndex: assignment.blockIndex,
       vlistPath: assignment.vlistPath,
       lineIndices: assignment.lineIndices,
@@ -134,6 +138,7 @@ export function texVListParagraphMeasurementFromHorizontalLayout(
   let precedingAdjustmentSize = texLength(0);
   return {
     ...(paragraph.baselineSkip !== undefined ? { baselineSkip: paragraph.baselineSkip } : {}),
+    ...(paragraph.firstLineXStart !== undefined ? { firstLineXStart: paragraph.firstLineXStart } : {}),
     blockIndex: paragraph.blockIndex,
     vlistPath: paragraph.vlistPath,
     lineIndices,
@@ -260,7 +265,13 @@ export function createMeasuredParagraphVListMeasurer(
       item.verticalPlacement?.kind === "paragraph-first-line-baseline"
     ) {
       const blockIndex = item.verticalPlacement.blockIndex;
-      const nextItem = items[index + 1];
+      let nextIndex = index + 1;
+      while (nextIndex < items.length) {
+        const candidate = items[nextIndex];
+        if (candidate?.kind !== "hbox" || candidate.verticalPlacement?.kind !== "paragraph-first-line-baseline" || candidate.verticalPlacement.blockIndex !== blockIndex) break;
+        nextIndex++;
+      }
+      const nextItem = items[nextIndex];
       if (nextItem?.kind !== "paragraph" || nextItem.blockIndex !== blockIndex) {
         throw new Error(
           `TeX paragraph-baseline hbox for block ${blockIndex} is not immediately before its paragraph.`
@@ -277,7 +288,8 @@ export function createMeasuredParagraphVListMeasurer(
         firstLine.y + (firstLine.metrics?.height ?? measurement.standardMetrics.height)
       );
       return {
-        ...(item.x !== undefined ? { x: item.x } : {}),
+        ...(item.x !== undefined ? { x: item.verticalPlacement.paragraphOriginX !== undefined && measurement.firstLineXStart !== undefined
+          ? texVListLocalX(roundTexPt(item.x + measurement.firstLineXStart - item.verticalPlacement.paragraphOriginX)) : item.x } : {}),
         y: texVListY(roundTexPt(cursor + paragraphBaseline - item.box.metrics.height)),
         metrics: item.box.metrics,
         advance: item.advance ?? texLength(0),

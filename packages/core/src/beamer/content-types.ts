@@ -116,6 +116,7 @@ export type BeamerTheoremBodyNode = {
 };
 
 export type BeamerColumnFlowNode =
+  | BeamerColumnsBodyNode
   | BeamerLeafFlowNode
   | BeamerBlockBodyNode
   | BeamerTheoremBodyNode;

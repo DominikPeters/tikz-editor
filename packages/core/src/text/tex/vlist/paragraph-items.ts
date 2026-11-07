@@ -1,7 +1,7 @@
 import type { TexListLayoutProfile } from "../layout-options.js";
 import type { TexTabularLayoutProfile } from "../tabular/types.js";
 import type { ResolvedTexFont, TexMetricProvider } from "../fonts/types.js";
-import type { TexTextFontProfile } from "../fonts/text-profile.js";
+import { defaultTexTextFontProfile, type TexTextFontProfile } from "../fonts/text-profile.js";
 import type { DocumentGraphicsResolver } from "../../../graphics/types.js";
 import {
   simpleTexSegmentToLayoutItems,
@@ -31,7 +31,7 @@ export function texLayoutItemsForParagraphPlan(
     params.metricProvider,
     plan.spaceGlueProfile,
     params.mathBoxProvider,
-    plan.inheritedFontState ? { ...params.textFontProfile?.defaultFontState, ...plan.inheritedFontState } : params.textFontProfile?.defaultFontState,
+    plan.inheritedFontState ? { ...(params.textFontProfile ?? defaultTexTextFontProfile).defaultFontState, ...plan.inheritedFontState } : params.textFontProfile?.defaultFontState,
     params.textFontProfile,
     params.graphicsResolver,
     params.dimensionContext,

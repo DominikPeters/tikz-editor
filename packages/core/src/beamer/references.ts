@@ -1,3 +1,4 @@
+import type { BeamerInlineFlow } from "./inline-flow.js";
 import type { MacroBinding } from "../macros/types.js";
 import type { BeamerParagraphPaint } from "./picture-paint.js";
 import type { BeamerCompilationDate } from "./date.js";
@@ -51,6 +52,10 @@ export type BeamerReferenceIndex = {
 };
 
 export type BeamerReferenceContext = BeamerReferenceIndex & {
+  itemActionCommitsParagraph?: (mapped: MappedText, sourceEnd: number) => boolean;
+  layoutFailures?: Map<number, string>;
+  inlineFlow?: BeamerInlineFlow[];
+  ambientTextAt?: ((offset: number) => string) & { itemDepthAt?: (offset: number) => number };
   macroBindingsAt?: (offset: number) => ReadonlyMap<string, MacroBinding>;
   frameLayout?: { paperHeight: number; textHeight: number; plain: boolean; metadata: Partial<Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>> };
   tocSections?: readonly BeamerSectionModel[];

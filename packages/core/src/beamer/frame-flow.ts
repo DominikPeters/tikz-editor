@@ -165,7 +165,7 @@ export function positionPreparedFrameFlow(
     const glue = verticalInterlineGlue(
       previousDepth,
       item.box.height,
-      baselineSkip
+      item.baselineSkip ?? baselineSkip
     );
     const referenceY = cursor + glue + item.box.height;
     const columnTops = item.columns.map(
@@ -219,14 +219,14 @@ export function paragraphStartingMaterialHeight(
   paragraph: LaidParagraph
 ): number {
   const first = paragraph.layout.vlistLayout.boxReport.items.find(
-    (item) => item.itemKind !== "glue" && item.itemKind !== "penalty"
+    (item) => item.itemKind !== "glue" && item.itemKind !== "penalty" && item.itemKind !== "vbox"
   );
-  if (first?.itemKind === "hbox") {
+  if (first?.itemKind === "hbox" && first.hboxRole?.kind !== "list-label") {
     // A frame-leading display is preceded by Beamer's shipped empty line.
     // Its zero-sized hbox sits after one baseline of explicit vertical
     // material, so the outer frame vbox references the bottom of that prefix
     // rather than the ascent of the later first prose line.
-    return Number(first.y + first.height);
+    return Number(first.hboxRole?.kind === "external-flow" ? first.height : first.y + first.height);
   }
   const firstLine = paragraph.layout.report.lines[0];
   if (firstLine) {
@@ -279,7 +279,7 @@ export function trailingBeamerTrivlistSkip(source: string, topsepPt = 9): number
   return /^(?:\s|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? topsepPt : 0;
 }
 
-export function trailingBeamerListSkip(source: string): number {
+export function trailingBeamerListSkip(source: string, topsepPt = 3): number {
   const endPattern =
     /\\end\s*\{\s*(?:itemize|enumerate|description)\s*\}/gu;
   let lastEnd = -1;
@@ -290,7 +290,7 @@ export function trailingBeamerListSkip(source: string): number {
     return 0;
   }
   const suffix = source.slice(lastEnd);
-  return /^(?:\s|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? 3 : 0;
+  return /^(?:\s|\}|\\par(?![A-Za-z@])|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? topsepPt : 0;
 }
 
 export function leadingBeamerTrivlistAdjustment(
@@ -321,6 +321,8 @@ function verticalInterlineGlue(
   baselineSkip: number
 ): number {
   if (previousDepth == null) return 0;
+  // TeX compares assigned dimensions in scaled points, not binary floats.
   const candidate = baselineSkip - previousDepth - height;
-  return candidate >= 0 ? candidate : TEX_LINE_SKIP_PT;
+  const assignedCandidate = Math.round(candidate * 65_536) / 65_536;
+  return assignedCandidate >= 0 ? Math.max(0, candidate) : TEX_LINE_SKIP_PT;
 }

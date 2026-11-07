@@ -104,7 +104,8 @@ export function resolveBeamerItemizeMarkers(
 export function resolveBeamerEnumerateMarker(
   theme: ResolvedBeamerTheme,
   itemIndex: number,
-  labelDepth: number
+  labelDepth: number,
+  ambientSizePt?: number
 ): TexListMarkerProfile | undefined {
   const template = theme.templates.enumerations[
     Math.max(0, Math.min(labelDepth - 1, theme.templates.enumerations.length - 1))
@@ -118,7 +119,7 @@ export function resolveBeamerEnumerateMarker(
   const fontProfile = createBeamerTexTextFontProfile(bodyFont);
   const resolvedBodyFont = fontProfile.resolveTextFont(
     fontProfile.defaultFontState,
-    texLength(bodyFont.sizePt),
+    texLength(ambientSizePt ?? bodyFont.sizePt),
     fontProfile.metricProvider
   );
   const projectedSize = beamerNamedFontSize(String(theme.options["class-font-size"] ?? "11"), family === "ball" ? "tiny" : "scriptsize");
@@ -140,7 +141,10 @@ export function resolveBeamerEnumerateMarker(
   );
   const projectedCenterPt =
     (projectedHeight - projectedDepth) / 2;
-  const xHeightEm = resolvedBodyFont.data.fontdimen.xheight;
+  const xHeightEm = resolvedBodyFont.data.fontdimen.xheight * (ambientSizePt ?? bodyFont.sizePt) / bodyFont.sizePt;
+  const normalSize = beamerNamedFontSize(String(theme.options["class-font-size"] ?? "11"), "normalsize").sizePt;
+  const normalFont = fontProfile.resolveTextFont(fontProfile.defaultFontState, texLength(normalSize), fontProfile.metricProvider);
+  const shadingXHeightEm = normalFont.data.fontdimen.xheight * normalSize / bodyFont.sizePt;
   if (family === "circle") {
     const projectedXHeightPt =
       projectedFont.data.fontdimen.xheight * Number(projectedFont.atPt);
@@ -221,13 +225,13 @@ export function resolveBeamerEnumerateMarker(
     });
   }
   const boxWidthEm = 2 * xHeightEm;
-  const sphereSizeEm = 1.06 * xHeightEm;
+  const sphereSizeEm = 1.06 * shadingXHeightEm;
   // beamerbaseauxtemplates.sty's projected-ball pgfpicture spans
   // (-1ex,-.65ex)..(1ex,1ex), with its default baseline at the bottom.
   // The 1.75-scaled bigsphere shading has independent ink bounds; these
   // factors follow the PGF transform rather than its unscaled trace rule.
-  const paintXEm = 0.0725 * xHeightEm;
-  const paintTopFromBaselineEm = -(0.65 + 1.75 * .53) * xHeightEm;
+  const paintXEm = (boxWidthEm - 1.75 * sphereSizeEm) / 2;
+  const paintTopFromBaselineEm = -0.65 * xHeightEm - 1.75 * .53 * shadingXHeightEm;
   const paintYEm = 1.65 * xHeightEm + paintTopFromBaselineEm;
   const background =
     resolveBeamerThemeColor(theme, projectedRole).bg ??

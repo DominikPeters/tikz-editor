@@ -407,6 +407,8 @@ export type BeamerEmbeddedTikzLayout = {
   bounds: BeamerRect;
   viewBox: SvgViewBox;
   model: SvgRenderModel;
+  /** Covered parts retain geometry and glyphs without painting. */
+  coveredModel?: SvgRenderModel;
   /** A TikZ `overlay` picture: drawn where it is on the page, taking no room in the text. */
   overlay?: BeamerOverlayPictureLayout;
 };

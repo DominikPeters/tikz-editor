@@ -1,3 +1,5 @@
+import type { SimpleTexBoxBlockItem } from "./ir.js";
+import type { TexVListItem } from "./vlist/types.js";
 import type { TexTabularLayoutProfile } from "./tabular/types.js";
 import type { TexTextFontProfile } from "./fonts/text-profile.js";
 import type { SimpleTexListKind, SimpleTexParagraphIrOptions, TexSpaceGlueProfile } from "./ir.js";
@@ -107,7 +109,8 @@ export interface TexListLayoutProfile {
   readonly resolveItemizeMarker?: (labelDepth: number, fontSizePt: number | undefined, listDepth?: number) => TexListMarkerProfile | undefined;
   readonly resolveEnumerateMarker?: (
     itemIndex: number,
-    labelDepth: number
+    labelDepth: number,
+    fontSizePt?: number
   ) => TexListMarkerProfile | undefined;
   /** Class-owned label color, independent of the surrounding list body. */
   readonly resolveLabelColor?: (kind: SimpleTexListKind, labelDepth: number, listDepth: number) => string | undefined;
@@ -148,6 +151,9 @@ export interface TexDisplayMathLayoutProfile {
 }
 
 export interface TexLayoutIrOptions {
+  /** A containing class environment can commit the horizontal mode resumed by a display. */
+  readonly commitPostDisplayParagraph?: (sourceEnd: number) => boolean;
+  readonly resolveBlockBox?: (box: SimpleTexBoxBlockItem) => readonly TexVListItem[] | undefined;
   readonly namedFontSizes?: SimpleTexParagraphIrOptions["namedFontSizes"];
   readonly width?: TexLength;
   /** Ambient TeX dimension registers, resolved before inline box lowering. */

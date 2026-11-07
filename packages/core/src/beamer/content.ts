@@ -143,6 +143,30 @@ export function parseBeamerFrameBody(
     ) {
       continue;
     }
+    // A group containing structural flow owns the whole group. Recurse inside
+    // its delimiters rather than sending Beamer environments to the text IR.
+    let ancestor = context.syntax.tree.resolveInner(token.span.from + 1, 1);
+    let group: { from: number; to: number } | null = null;
+    let textContainer = false;
+    while (ancestor.parent) {
+      ancestor = ancestor.parent;
+      if (ancestor.from < frame.bodySpan.from) break;
+      if (ancestor.name === "Environment" && ancestor.from < token.span.from) {
+        const name = context.syntax.environmentBoundaryByStart.get(ancestor.from)?.name;
+        if (name && (LIST_ENVIRONMENTS.has(name) || ["tikzpicture", "center", "flushleft", "flushright", "minipage"].includes(name))) textContainer = true;
+      }
+      if (ancestor.name === "Group" && ancestor.from < token.span.from && !overlays.commands.some(command => command.branches.some(branch => branch.span.from === ancestor.from && branch.span.to === ancestor.to))) group = { from: ancestor.from, to: ancestor.to };
+    }
+    if (group && !textContainer && (token.name === "columns" || isBlockEnvironment(token.name))) {
+      pushTextNode(source, { from: cursor, to: group.from }, frame.id, children);
+      const bodySpan = { from: group.from + 1, to: group.to - 1 };
+      const nested = parseBeamerFrameBody({ ...params, frame: { ...frame, id: `${frame.id}:group:${group.from}`, span: group, bodySpan } });
+      children.push(...nested.children);
+      diagnostics.push(...nested.diagnostics);
+      cursor = group.to;
+      while (index + 1 < tokens.length && requireArrayValue(tokens, index + 1).span.from < group.to) index++;
+      continue;
+    }
     const endIndex = matchingEnvironmentEnd(tokens, index);
     if (endIndex < 0) {
       diagnostics.push({
@@ -160,7 +184,7 @@ export function parseBeamerFrameBody(
       index = endIndex;
       continue;
     }
-    if (isInsideNativeTextFlow(context, token.span.from, overlays)) {
+    if (isInsideNativeTextFlow(context, token.span.from, overlays, frame.bodySpan.from)) {
       // Lists, alignment environments and ordinary groups own their inline
       // boxes. Extracting a nested picture would split their TeX scope.
       index = endIndex;
@@ -1098,6 +1122,17 @@ function parseColumnFlow(
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = requireArrayValue(tokens, index);
+    if (token.kind === "begin" && token.name === "columns" && !isInsideNativeTextFlow(context, token.span.from, overlays, bodySpan.from)) {
+      const endIndex = matchingEnvironmentEnd(tokens, index);
+      if (endIndex >= 0) {
+        const node = parseColumns({ context, frameId: `${frameId}:column:${columnIndex}`, begin: token,
+          end: requireArrayValue(tokens, endIndex), tokens: tokens.slice(index + 1, endIndex),
+          diagnostics, nodeIndex: nodeIndex++, theoremOccurrences, theoremTemplate, overlays });
+        structural.push({ span: node.span, node });
+        index = endIndex;
+      }
+      continue;
+    }
     if (
       token.kind !== "begin" ||
       (
@@ -1114,6 +1149,7 @@ function parseColumnFlow(
       continue;
     }
     const end = requireArrayValue(tokens, endIndex);
+    if (isInsideNativeTextFlow(context, token.span.from, overlays, bodySpan.from)) { index = endIndex; continue; }
     const node = isProofEnvironment(token.name) ||
         theoremOccurrences.has(token.span.from)
       ? parseTheorem({
@@ -1299,10 +1335,12 @@ function trimSpan(source: string, span: Span): Span {
 function isInsideNativeTextFlow(
   context: BeamerSyntaxContext,
   offset: number,
-  overlays: BeamerOverlayModel
+  overlays: BeamerOverlayModel,
+  ownerFrom = 0
 ): boolean {
   let node = context.syntax.tree.resolveInner(offset + 1, 1);
   while (node.parent) {
+    if (node.from < ownerFrom) break;
     if (["InlineMath", "DisplayMath", "MathEnvironment"].includes(node.name)) {
       return true;
     }

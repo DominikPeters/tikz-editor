@@ -568,7 +568,7 @@ export function simpleTexSegmentToLayoutItems(
 
     if (token.kind === "math") {
       const box = mathBoxProvider?.getInlineMathBox({
-        ...(token.fontState.sizePt !== undefined ? { atPt: token.fontState.sizePt } : {}),
+        atPt: token.fontState.sizePt ?? atPt,
         source: token.text,
         content: token.content ?? "",
         delimiter: token.delimiter ?? "dollar",
@@ -1869,7 +1869,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
 
     if (token.kind === "math") {
       const box = params.mathBoxProvider?.getInlineMathBox({
-        ...(token.fontState.sizePt !== undefined ? { atPt: token.fontState.sizePt } : {}),
+        atPt: token.fontState.sizePt ?? params.atPt,
         source: token.text,
         content: token.content ?? "",
         delimiter: token.delimiter ?? "dollar",

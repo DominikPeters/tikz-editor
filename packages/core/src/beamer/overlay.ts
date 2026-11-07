@@ -197,7 +197,8 @@ export function scanBeamerFrameOverlays(
   const explicitItemCommands = new Set<number>();
   const overprints: Array<{ span: Span; contentSpan: Span; width?: BeamerDelimitedSourceValue }> = [];
   const environmentBoundaries = beamerEnvironmentBoundariesIn(context, frame.bodySpan);
-  const tikzRanges = [...matchTexSyntaxEnvironments(context.syntax).values()]
+  const environmentPairs = [...matchTexSyntaxEnvironments(context.syntax).values()];
+  const tikzRanges = environmentPairs
     .filter(pair => pair.name === "tikzpicture" && pair.span.from >= frame.bodySpan.from && pair.span.to <= frame.bodySpan.to)
     .map(pair => pair.span);
   const overprintStarts: typeof environmentBoundaries[number][] = [];
@@ -296,7 +297,20 @@ export function scanBeamerFrameOverlays(
               const bodyStart = label?.span.to ?? overlay?.span.to ?? item.to;
               return bodyStart <= command.from && !source.slice(bodyStart, command.from).replace(/%[^\n]*(?:\n|$)/gu, "").trim();
             }) : undefined;
-        if (leadingItem) parsed.command = { ...parsed.command, leadingItemCommandSpan: { from: leadingItem.from, to: leadingItem.to } };
+        const body = parsed.command.branches[0]?.contentSpan;
+        const content = body ? source.slice(body.from, body.to) : "";
+        const columns = /\\begin\s*\{columns\}/u.exec(content);
+        const prefix = columns ? content.slice(0, columns.index)
+          .replace(/%[^\n]*/gu, "")
+          .replace(/\\color(?:\s*\[[^\]]*\])?\s*\{[^{}]*\}/gu, "")
+          .replace(/\\(?:tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge|rmfamily|sffamily|ttfamily|bfseries|mdseries|itshape|upshape|slshape|normalfont|centering|raggedleft|raggedright)(?![A-Za-z@])/gu, "")
+          .replace(/[{}\s]/gu, "") : undefined;
+        const columnsPair = body && columns ? environmentPairs.find(pair => pair.begin.span.from === body.from + columns.index) : undefined;
+        const tail = columnsPair && body ? source.slice(columnsPair.end.span.to, body.to)
+          .replace(/%[^\n]*/gu, "").replace(/\\par(?![A-Za-z@])/gu, "").replace(/[{}\s]/gu, "") : undefined;
+        // A leading columns hbox never enters the item's horizontal mode.
+        // Its pending label resumes outside the visibility wrapper.
+        if (leadingItem && !(prefix === "" && tail === "")) parsed.command = { ...parsed.command, leadingItemCommandSpan: { from: leadingItem.from, to: leadingItem.to } };
         pending.push({
           kind: "command",
           sourceOrder: command.from,

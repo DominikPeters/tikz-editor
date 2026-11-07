@@ -1,0 +1,139 @@
+{
+  "formatVersion": 1,
+  "title": "Parent items beginning with nested lists after scoped fractions",
+  "fidelity": [
+    {
+      "id": "11-body-fraction-nested",
+      "file": "11-body-fraction-nested.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second",
+        "Tail"
+      ]
+    },
+    {
+      "id": "11-columns-fraction-nested",
+      "file": "11-columns-fraction-nested.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second",
+        "Tail"
+      ]
+    },
+    {
+      "id": "12-body-fraction-nested",
+      "file": "12-body-fraction-nested.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second",
+        "Tail"
+      ]
+    },
+    {
+      "id": "12-columns-fraction-nested",
+      "file": "12-columns-fraction-nested.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second",
+        "Tail"
+      ]
+    },
+    {
+      "id": "madrid-11-body-fraction-nested",
+      "file": "madrid-11-body-fraction-nested.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second",
+        "Tail"
+      ]
+    },
+    {
+      "id": "madrid-11-columns-fraction-nested",
+      "file": "madrid-11-columns-fraction-nested.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second",
+        "Tail"
+      ]
+    },
+    {
+      "id": "madrid-12-body-fraction-nested",
+      "file": "madrid-12-body-fraction-nested.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second",
+        "Tail"
+      ]
+    },
+    {
+      "id": "madrid-12-columns-fraction-nested",
+      "file": "madrid-12-columns-fraction-nested.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second",
+        "Tail"
+      ]
+    },
+    {
+      "id": "madrid-11-body-fraction-nested-shrink",
+      "file": "madrid-11-body-fraction-nested-shrink.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second",
+        "Tail"
+      ]
+    },
+    {
+      "id": "boadilla-11-body-fraction-nested-shrink",
+      "file": "boadilla-11-body-fraction-nested-shrink.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second",
+        "Tail"
+      ]
+    },
+    {
+      "id": "madrid-11-columns-fraction-nested-shrink",
+      "file": "madrid-11-columns-fraction-nested-shrink.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second",
+        "Tail"
+      ]
+    },
+    {
+      "id": "boadilla-11-columns-fraction-nested-shrink",
+      "file": "boadilla-11-columns-fraction-nested-shrink.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Short",
+        "Second",
+        "Tail"
+      ]
+    }
+  ],
+  "recognition": []
+}

@@ -320,6 +320,11 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
   for (const paintedEmbedded of render.layout.embeddedTikz) {
     const transformed = paintedEmbedded.transformedLayout;
     const embedded = transformed ? { ...paintedEmbedded, bounds: transformed.intrinsicBounds } : paintedEmbedded;
+    if (embedded.coveredModel) {
+      const covered = nativeEmbeddedTikzGlyphs({ ...embedded, model: embedded.coveredModel }, metricProvider);
+      if (transformed) transformTraceGlyphRange(covered, 0, transformed.paintTransform);
+      coveredGlyphs.push(...covered);
+    }
     const embeddedGlyphs = nativeEmbeddedTikzGlyphs(
       embedded,
       metricProvider

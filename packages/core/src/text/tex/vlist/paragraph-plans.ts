@@ -1,3 +1,5 @@
+import { texVBoxLayoutForScopeRole } from "./scope-roles.js";
+import { texListItemLayoutForParagraph } from "./list-labels.js";
 import type { KnuthPlassLayoutMode } from "../../knuth-plass/index.js";
 import type { ResolvedTexFont, TexMetricProvider } from "../fonts/types.js";
 import { defaultTexTextFontProfile } from "../fonts/text-profile.js";
@@ -57,7 +59,7 @@ export interface TexLayoutParagraphPreparation {
 }
 
 export interface TexLayoutParagraphPlan {
-  readonly inheritedFontState?: Pick<SimpleTexFontState, "family" | "series" | "shape">;
+  readonly inheritedFontState?: Partial<SimpleTexFontState>;
   readonly fontSizePt?: TexLength;
   readonly blockIndex: number;
   readonly vlistPath: readonly number[];
@@ -184,7 +186,8 @@ export function prepareTexLayoutParagraphsFromVList(
         segmentIndex,
         ...(!suppressAncestorBreakMargins && paragraph.listContext !== undefined ? { listContext: paragraph.listContext } : {}),
         ...(!suppressAncestorBreakMargins && scopeContext.listItemLayout !== undefined ? { listItemLayout: scopeContext.listItemLayout } : {}),
-        font: scopeContext.listItemLayout?.label?.content.kind === "marker" ? params.font : paragraphFont,
+        font: scopeContext.listItemLayout?.label?.content.kind === "marker" ? params.font :
+          paragraph.listContext?.labelFontSizePt !== undefined ? textFontProfile.resolveTextFont(textFontProfile.defaultFontState, paragraph.listContext.labelFontSizePt, params.metricProvider) : paragraphFont,
         metricProvider: params.metricProvider,
         spaceGlueProfile,
         inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
@@ -192,7 +195,26 @@ export function prepareTexLayoutParagraphsFromVList(
         ...(params.options.mathBoxProvider !== undefined ? { mathBoxProvider: params.options.mathBoxProvider } : {}),
         ...(params.options.textFontProfile !== undefined ? { textFontProfile: params.options.textFontProfile } : {}),
         paragraphOriginX: texVListX(scopeContext.layout.leftMarginWidth),
+        followLineAlignment: paragraphStateResult.alignment === "center" || paragraphStateResult.alignment === "ragged-left",
       });
+      if (segmentIndex === 0 && !suppressAncestorBreakMargins) for (const ancestor of paragraph.ancestorListLabels ?? []) {
+        const context = { ...ancestor, ...(ancestor.labelFontSizePt !== undefined ? { fontSizePt: ancestor.labelFontSizePt } : {}) };
+        const parentScope = texVBoxLayoutForScopeRole({ kind: "list", listKind: context.kind,
+          depth: context.depth, labelDepth: context.labelDepth, ownLeftMarginEm: context.ownLeftMarginEm,
+          totalLeftMarginEm: context.totalLeftMarginEm }, params.font);
+        const labelLayout = texListItemLayoutForParagraph([{ layout: parentScope }],
+          { ...paragraph, listContext: context, ...(context.fontSizePt !== undefined ? { fontSizePt: context.fontSizePt } : {}) }, params.options.listProfile);
+        if (!labelLayout) continue;
+        const attachment = texListItemParagraphAttachments({ blockIndex, segmentIndex, listContext: context,
+          listItemLayout: labelLayout, font: labelLayout.label?.content.kind === "marker" ? params.font :
+            textFontProfile.resolveTextFont(textFontProfile.defaultFontState, context.fontSizePt ?? params.font.atPt, params.metricProvider),
+          metricProvider: params.metricProvider,
+          spaceGlueProfile, inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
+          ...(params.options.textFontProfile ? { textFontProfile: params.options.textFontProfile } : {}),
+          paragraphOriginX: texVListX(scopeContext.layout.leftMarginWidth),
+          followLineAlignment: paragraphStateResult.alignment === "center" || paragraphStateResult.alignment === "ragged-left" });
+        if (attachment.marginLabelHBox) marginLabelHBoxAttachments.push({ vlistPath: entry.path, hbox: attachment.marginLabelHBox });
+      }
       if (listAttachments.marginLabelHBox) {
         marginLabelHBoxAttachments.push({
           vlistPath: entry.path,

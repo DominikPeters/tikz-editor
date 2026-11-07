@@ -36,6 +36,8 @@ import { texLength, type TexLength } from "../coordinates.js";
 import type { TexDimensionContext } from "../dimensions.js";
 
 export interface LowerSimpleTexBlockItemsToVListOptions {
+  readonly commitPostDisplayParagraph?: (sourceEnd: number) => boolean;
+  readonly resolveBlockBox?: (box: SimpleTexBoxBlockItem) => readonly TexVListItem[] | undefined;
   readonly font?: ResolvedTexFont;
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly graphicsResolver?: DocumentGraphicsResolver;
@@ -61,7 +63,7 @@ export function lowerSimpleTexBlockItemsToVList(
 ): TexVListDocument {
   const items: TexVListItem[] = [];
   let equationNumber = 0;
-  for (const item of attachPostDisplayVSpace(blockItems)) {
+  for (const item of attachPostDisplayVSpace(blockItems, options.commitPostDisplayParagraph)) {
     if (item.kind === "hbox") {
       items.push(item);
       continue;
@@ -79,6 +81,12 @@ export function lowerSimpleTexBlockItemsToVList(
       continue;
     }
     if (item.kind === "box") {
+      const external = options.resolveBlockBox?.(item);
+      if (external) {
+        const scopePath = scopePathForVerticalBlockItem(item);
+        items.push(...external.map(box => ({ ...box, ...(scopePath ? { scopePath } : {}) })));
+        continue;
+      }
       items.push(vboxItemFromSimpleTexBox(item, options));
       continue;
     }
@@ -458,11 +466,16 @@ function glueItemFromSimpleTexVerticalGlue(
  * zero-sized line, followed by the adjustment, before the list box.
  */
 function attachPostDisplayVSpace(
-  blockItems: readonly SimpleTexBlockItem[]
+  blockItems: readonly SimpleTexBlockItem[],
+  commitPostDisplayParagraph?: (sourceEnd: number) => boolean
 ): readonly (SimpleTexBlockItem | TexHBoxItem)[] {
   const output: Array<SimpleTexBlockItem | TexHBoxItem> = [];
   for (let index = 0; index < blockItems.length; index += 1) {
     const display = blockItems[index];
+    if (display?.kind === "display-math" && commitPostDisplayParagraph?.(display.sourceEnd)) {
+      output.push(display, postDisplayEmptyLineHBox(display, display.sourceEnd));
+      continue;
+    }
     const glue = blockItems[index + 1];
     const paragraph = blockItems[index + 2];
     const resumedParagraph = blockItems[index + 1];
@@ -671,6 +684,8 @@ function paragraphInputFromSimpleTexBlock(
     sourceSpan: sourceSpanFromBlock(block),
     nodes: block.nodes,
     ...(block.inheritedFontState ? { inheritedFontState: block.inheritedFontState } : {}),
+    ...(block.explicitFontSize ? { explicitFontSize: true } : {}),
+    ...(block.explicitBaselineSkip ? { explicitBaselineSkip: true } : {}),
     ...(block.fontSizePt !== undefined ? { fontSizePt: block.fontSizePt } : {}),
     ...(block.baselineSkip !== undefined ? { baselineSkip: block.baselineSkip } : {}),
     ...(block.verticalAdjustments && block.verticalAdjustments.length > 0
@@ -704,6 +719,7 @@ function paragraphInputFromSimpleTexBlock(
     ...(block.alignmentGroupState !== undefined ? { alignmentGroupState: block.alignmentGroupState } : {}),
     quoteDepth: block.quoteDepth,
     quotationDepth: block.quotationDepth,
+    ...(block.ancestorListLabels ? { ancestorListLabels: block.ancestorListLabels } : {}),
     ...(block.listContext !== undefined ? { listContext: block.listContext } : {}),
     ...(scopePath ? { scopePath: scopePath } : {}),
     ...(useFontSpaceGlueProfile ? { spaceGlueProfile: "font" as const } : {}),

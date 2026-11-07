@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "title": "Shrinking structural boxes inside items",
+  "fidelity": [
+    {
+      "id": "madrid",
+      "file": "madrid.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "centered",
+        "After."
+      ]
+    },
+    {
+      "id": "boadilla",
+      "file": "boadilla.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "centered",
+        "After."
+      ]
+    }
+  ],
+  "recognition": []
+}

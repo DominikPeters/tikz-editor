@@ -1,0 +1,47 @@
+{
+  "formatVersion": 1,
+  "title": "Successive display-only list items",
+  "fidelity": [
+    {
+      "id": "enumerate-plain",
+      "file": "enumerate-plain.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After."
+      ]
+    },
+    {
+      "id": "enumerate-actions",
+      "file": "enumerate-actions.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "Before.",
+        "After."
+      ]
+    },
+    {
+      "id": "itemize-plain",
+      "file": "itemize-plain.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After."
+      ]
+    },
+    {
+      "id": "itemize-actions",
+      "file": "itemize-actions.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "Before.",
+        "After."
+      ]
+    }
+  ],
+  "recognition": []
+}
