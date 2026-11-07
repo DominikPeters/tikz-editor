@@ -187,7 +187,7 @@ export function prepareTexLayoutParagraphsFromVList(
       const consumerOffset = params.options.listProfile?.groupItemBodies
         ? segment.nodes.find(hasMaterial)?.sourceStart ?? segment.sourceEnd : undefined;
       const listAttachments = texListItemParagraphAttachments({
-        consumerOffset,
+        ...(consumerOffset !== undefined ? { consumerOffset } : {}),
         blockIndex,
         segmentIndex,
         ...(!suppressAncestorBreakMargins && paragraph.listContext !== undefined ? { listContext: paragraph.listContext } : {}),
@@ -212,7 +212,8 @@ export function prepareTexLayoutParagraphsFromVList(
         const labelLayout = texListItemLayoutForParagraph([{ layout: parentScope }],
           { ...paragraph, listContext: context, ...(context.fontSizePt !== undefined ? { fontSizePt: context.fontSizePt } : {}) }, params.options.listProfile);
         if (!labelLayout) continue;
-        const attachment = texListItemParagraphAttachments({ blockIndex, segmentIndex, listContext: context, consumerOffset,
+        const attachment = texListItemParagraphAttachments({ blockIndex, segmentIndex, listContext: context,
+          ...(consumerOffset !== undefined ? { consumerOffset } : {}),
           listItemLayout: labelLayout, font: labelLayout.label?.content.kind === "marker" ? params.font :
             textFontProfile.resolveTextFont(textFontProfile.defaultFontState, context.fontSizePt ?? params.font.atPt, params.metricProvider),
           metricProvider: params.metricProvider,
