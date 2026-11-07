@@ -492,7 +492,7 @@ function optionNumberField(args: {
 
 /**
  * `\includegraphics[options]{file}`. Offers the options the text engine
- * draws (text/tex/ir.ts); `angle` and friends are not drawn, so not offered.
+ * draws (text/tex/ir.ts) and the inspector edits; `angle` is drawn but not offered yet.
  * An overlay spec (`\includegraphics<2->`) belongs to the builds panel.
  */
 function graphicsFields(

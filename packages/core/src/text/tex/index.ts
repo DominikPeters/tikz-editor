@@ -64,6 +64,7 @@ export {
   type SimpleTexFontState,
   type SimpleTexGroupNode,
   type SimpleTexGraphicsOptions,
+  type SimpleTexGraphicsSizeKey,
   type SimpleTexGraphicsPageOption,
   type SimpleTexGraphicsResource,
   type SimpleTexGraphicsTrim,

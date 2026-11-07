@@ -13,6 +13,7 @@ import { defaultTexMathFontProfile } from "./math/font-profile.js";
 import type { TexMathHList, TexMathHListItem } from "./math/layout.js";
 import { renderTexMathHListSvgBody } from "./math/render-svg.js";
 import { renderTexParagraphSvgBody } from "./render-svg.js";
+import { graphicxBounds, graphicxFactorProduct, graphicxPoint, graphicxScaled, graphicxSvgMatrix, graphicxTransformGeometry, type GraphicxGeometry } from "./graphicx-geometry.js";
 import type { TexTabularLayoutProfile } from "./tabular/types.js";
 
 interface TransformLayoutParams {
@@ -28,15 +29,10 @@ interface TransformLayoutParams {
   readonly tabularProfile?: TexTabularLayoutProfile;
   readonly listProfile?: TexListLayoutProfile;
 }
-type Matrix = readonly [number, number, number, number, number, number];
-type Geometry = { width: number; height: number; depth: number; matrix: Matrix };
-const scaled = (n: number): TexLength => texLength(Math.round(n * 65536) / 65536);
-const factorProduct = (length: number, factor: number): TexLength => texLength(Math.trunc(Math.round(length * 65536) * Math.round(factor * 65536) / 65536) / 65536);
-const point = (m: Matrix, x: number, y: number) => ({ x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] });
-function bounds(m: Matrix, x: number, y: number, width: number, height: number) {
-  const corners = [point(m, x, y), point(m, x + width, y), point(m, x, y + height), point(m, x + width, y + height)];
-  return { left: Math.min(...corners.map(p => p.x)), right: Math.max(...corners.map(p => p.x)), top: Math.min(...corners.map(p => p.y)), bottom: Math.max(...corners.map(p => p.y)) };
-}
+const scaled = graphicxScaled;
+const factorProduct = graphicxFactorProduct;
+const point = graphicxPoint;
+const bounds = graphicxBounds;
 function fontProfile(params: TransformLayoutParams) { return { ...defaultTexMathFontProfile, metricProvider: params.metricProvider, textFontProfile: params.textFontProfile }; }
 function baselineSkip(fontSize: number, params: TransformLayoutParams): number {
   if (params.fontState.baselineSkipPt !== undefined) return params.fontState.baselineSkipPt;
@@ -117,7 +113,7 @@ function contents(params: TransformLayoutParams): { hlist: TexMathHList; carets:
   return { hlist, carets };
 }
 
-function geometry(params: TransformLayoutParams, body: TexMathHList): Geometry {
+function geometry(params: TransformLayoutParams, body: TexMathHList): GraphicxGeometry {
   const font = params.textFontProfile.resolveTextFont(params.fontState, params.atPt, params.metricProvider);
   const context = texDimensionContextForFont(params.dimensionContext ?? { linewidth: texLength(100), textwidth: texLength(100), columnwidth: texLength(100), paperwidth: texLength(100), em: font.atPt, ex: texLength(0) }, font);
   const dimension = (raw: string): number => {
@@ -127,54 +123,7 @@ function geometry(params: TransformLayoutParams, body: TexMathHList): Geometry {
     if (value === null || !Number.isFinite(value)) throw new Error(`Unsupported graphicx dimension ${raw}.`);
     return scaled(value);
   };
-  const spec = params.node.parameters;
-  if (spec.kind !== "rotate") {
-    const ratio = (target: string, original: number) => {
-      if (!original) throw new Error("Cannot resize a zero-extent box.");
-      // graphics.sty Gscale@div enlarges the numerator before integer division,
-      // and truncates the denominator independently. Direct floating division
-      // does not reproduce the package's selected PDF matrix or box dimensions.
-      let numerator = Math.round(dimension(target) * 65536);
-      let count = numerator < 0 ? -65536 : 65536;
-      numerator = Math.abs(numerator);
-      if (numerator > 0) {
-        while (count >= 2 && numerator < 8192 * 65536) {
-          numerator *= 2;
-          count = Math.trunc(count / 2);
-        }
-        const denominator = Math.trunc(Math.round(original * 65536) / count);
-        if (!denominator) throw new Error("Cannot resize this box extent.");
-        numerator = Math.trunc(numerator / denominator);
-      }
-      return Number((numerator / 65536).toFixed(5));
-    };
-    const x = spec.kind === "scale" ? spec.x : spec.width.trim() === "!" ? undefined : ratio(spec.width, body.width);
-    const y = spec.kind === "scale" ? spec.y : spec.height.trim() === "!" ? undefined : ratio(spec.height, spec.totalHeight ? body.height + body.depth : body.height);
-    const scaleX = x ?? y ?? 1;
-    const scaleY = y ?? x ?? 1;
-    const width = factorProduct(body.width, Math.abs(scaleX));
-    return { width, height: factorProduct(scaleY >= 0 ? body.height : body.depth, Math.abs(scaleY)), depth: factorProduct(scaleY >= 0 ? body.depth : body.height, Math.abs(scaleY)), matrix: [scaleX, 0, 0, scaleY, scaleX < 0 ? width : 0, 0] };
-  }
-  let pivotX: number = spec.options ? factorProduct(body.width, .5) : 0;
-  let pivotY: number = spec.options ? factorProduct(body.height - body.depth, .5) : 0;
-  let angle = spec.angle;
-  for (const option of spec.options?.entries ?? []) {
-    if (option.kind === "unknown") throw new Error("Unsupported rotation option.");
-    const value = option.kind === "kv" ? option.valueRaw.trim().replace(/^\{(.*)\}$/u, "$1") : "c";
-    if (option.key === "origin") for (const char of value) {
-      if (char === "l") pivotX = 0; else if (char === "r") pivotX = body.width; else if (char === "t") pivotY = body.height; else if (char === "b") pivotY = -Number(body.depth); else if (char === "B") pivotY = 0; else if (char !== "c") throw new Error("Unsupported rotation origin.");
-    }
-    else if (option.key === "x") pivotX = dimension(value);
-    else if (option.key === "y") pivotY = dimension(value);
-    else if (option.key === "units" && Number.isFinite(Number(value)) && Number(value) !== 0) angle = spec.angle * 360 / Number(value);
-    else throw new Error(`Unsupported rotation option ${option.key}.`);
-  }
-  const radians = angle * Math.PI / 180; const cosine = Math.cos(radians); const sine = Math.sin(radians);
-  const rotation: Matrix = [Math.abs(cosine) < 1e-12 ? 0 : cosine, Math.abs(sine) < 1e-12 ? 0 : -sine, Math.abs(sine) < 1e-12 ? 0 : sine, Math.abs(cosine) < 1e-12 ? 0 : cosine, 0, 0];
-  const relative = bounds(rotation, -Number(pivotX), pivotY - body.height, body.width, body.height + body.depth);
-  const pivot = point(rotation, pivotX, -Number(pivotY));
-  const matrix: Matrix = [rotation[0], rotation[1], rotation[2], rotation[3], -pivot.x - relative.left, -pivot.y - pivotY];
-  return { width: scaled(relative.right - relative.left), height: scaled(-relative.top + pivotY), depth: scaled(relative.bottom - pivotY), matrix };
+  return graphicxTransformGeometry(params.node.parameters, body, dimension);
 }
 
 export function layoutTexTransformBox(params: TransformLayoutParams): TexMathBox {
@@ -183,6 +132,6 @@ export function layoutTexTransformBox(params: TransformLayoutParams): TexMathBox
     const origin = point(matrix, entry.x, entry.y); const extent = bounds(matrix, entry.hitBounds.xStart, entry.hitBounds.yStart, entry.hitBounds.xEnd - entry.hitBounds.xStart, entry.hitBounds.yEnd - entry.hitBounds.yStart);
     return { ...entry, x: texHBoxX(origin.x), y: texHBoxY(origin.y), height: texLength(origin.y - extent.top), depth: texLength(extent.bottom - origin.y), hitBounds: { xStart: texHBoxX(extent.left), xEnd: texHBoxX(extent.right), yStart: texHBoxY(extent.top), yEnd: texHBoxY(extent.bottom) } };
   });
-  const svgMatrix = [...matrix.slice(0, 4), matrix[4] * 100, matrix[5] * 100].map(value => Math.abs(value) < 1e-12 ? 0 : Number(value.toFixed(10))).join(" ");
+  const svgMatrix = graphicxSvgMatrix(matrix, 100);
   return { source: params.node.text, content: params.node.content, sourceKind: "text", sourceStart: params.node.sourceStart, sourceEnd: params.node.sourceEnd, contentStart: params.node.contentStart, contentEnd: params.node.contentEnd, width: texLength(transformed.width), height: texLength(transformed.height), depth: texLength(transformed.depth), fontProfile: fontProfile(params), svgBody: `<g data-tex-transform="${params.node.command}" data-source-start="${params.node.sourceStart}" data-source-end="${params.node.sourceEnd}" transform="matrix(${svgMatrix})">${renderTexMathHListSvgBody(hlist, { fontProfile: fontProfile(params) })}</g>`, caretMap: { sourceStart: params.node.sourceStart, sourceEnd: params.node.sourceEnd, contentStart: params.node.contentStart, contentEnd: params.node.contentEnd, entries } };
 }

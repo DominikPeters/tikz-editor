@@ -336,8 +336,18 @@ export interface SimpleTexGraphicsOptions {
   readonly trim?: SimpleTexGraphicsTrim;
   readonly viewport?: SimpleTexGraphicsViewport;
   readonly clip?: boolean;
+  /** graphicx reads these left to right: size keys before an angle size the
+   * image itself, an angle and later keys transform the result. */
+  readonly sizeKeys?: SimpleTexGraphicsSizeKey[];
+  /** Applies to every angle, wherever it appears (\Gin@erotate expands late). */
+  readonly origin?: string;
   readonly raw: string;
 }
+
+export type SimpleTexGraphicsSizeKey =
+  /** `null` is graphicx's `!`: reset to the natural size. */
+  | { readonly key: "width" | "height" | "totalheight"; readonly value: TexDimensionExpression | null }
+  | { readonly key: "scale" | "angle"; readonly value: number };
 
 export type SimpleTexGraphicsPageOption =
   | {
@@ -3381,10 +3391,26 @@ function parseSimpleTexGraphicsOptions(
   let viewport: SimpleTexGraphicsViewport | undefined;
   // Set before the keys are read, so an explicit clip=false still wins.
   let clip: boolean | undefined = starred ? true : undefined;
+  const sizeKeys: SimpleTexGraphicsSizeKey[] = [];
+  let origin: string | undefined;
   for (const entry of optionList?.entries ?? []) {
     const key = entry.kind === "unknown" ? "" : entry.key;
     const value = entry.kind === "kv" ? entry.valueRaw : "";
     const hasValue = entry.kind === "kv";
+    if ((key === "width" || key === "height" || key === "totalheight") && hasValue) {
+      const bare = stripSingleSimpleTexBraceLayer(value).trim();
+      const parsed = bare === "!" ? null : parseTexDimensionExpression(bare);
+      if (bare === "!" || parsed !== null) sizeKeys.push({ key, value: parsed });
+    }
+    if ((key === "scale" || key === "angle") && hasValue) {
+      const parsed = Number(stripSingleSimpleTexBraceLayer(value).trim());
+      if (Number.isFinite(parsed) && (key === "angle" || parsed > 0)) sizeKeys.push({ key, value: parsed });
+    }
+    if (key === "origin") {
+      const parsed = hasValue ? stripSingleSimpleTexBraceLayer(value).trim() : "c";
+      if (/^[lrcbtB]+$/u.test(parsed)) origin = parsed;
+      continue;
+    }
     if (key === "width") {
       const parsed = parseTexDimensionExpression(value);
       if (parsed !== null) {
@@ -3459,6 +3485,8 @@ function parseSimpleTexGraphicsOptions(
     ...(trim ? { trim: trim } : {}),
     ...(viewport ? { viewport: viewport } : {}),
     ...(clip !== undefined ? { clip: clip } : {}),
+    ...(sizeKeys.length ? { sizeKeys } : {}),
+    ...(origin !== undefined ? { origin } : {}),
     ...(optionList ? { optionList: optionList } : {}),
     raw: optionList?.raw.slice(1, -1) ?? "",
   };

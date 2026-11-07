@@ -339,6 +339,24 @@ A\includegraphics<1>[width=20pt]{first.png}\includegraphics<2->{second.png}B
     expect(graphic.bounds.width).toBeCloseTo(20, 6);
   });
 
+  it("bounds a rotated image by its transformed box", async () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}
+\includegraphics[angle=90,width=1cm]{a.png}
+\end{frame}
+\end{document}`;
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "rotated-graphics",
+      resolve: () => ({ status: "resolved", mimeType: "image/png", dataBase64: "AA==", naturalWidthPt: 40, naturalHeightPt: 20, revision: "1" }),
+    };
+    const result = await renderBeamerFrame(source, { graphicsResolver });
+    const graphic = result.layout.graphics[0]!;
+    expect(graphic.bounds.width).toBeCloseTo(28.45274, 3);
+    expect(graphic.bounds.height).toBeCloseTo(56.9055, 3);
+    expect(result.svg.svg).toContain('data-tex-includegraphics-transform="true"');
+  });
+
   it("warns that beamer reads an includegraphics star as the filename", async () => {
     const source = String.raw`\documentclass{beamer}
 \begin{document}
@@ -458,17 +476,18 @@ A\includegraphics<1>[width=20pt]{first.png}\includegraphics<2->{second.png}B
       (graphic) => graphic.asset.filename === "paper.png"
     );
 
+    // TeX lengths are whole scaled points (2^-16 pt).
     expect(frameGraphic?.bounds.width).toBeCloseTo(
       result.layout.page.textArea.width * 0.5,
-      6
+      4
     );
     expect(columnGraphic?.bounds.width).toBeCloseTo(
       result.layout.page.textArea.width * 0.4 * 0.5,
-      6
+      4
     );
     expect(paperGraphic?.bounds.width).toBeCloseTo(
       result.layout.page.page.width * 0.1,
-      6
+      4
     );
     expect(result.diagnostics).toEqual([]);
   });

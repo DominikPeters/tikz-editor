@@ -81,8 +81,9 @@ describe("image corner resizing", () => {
     const nextSource = apply(source, beamerImageResizePatches(source, target, 1.5));
     expect(nextSource).toBe(source.replace(options, expected));
     const next = (await render(nextSource)).graphics[0];
-    expect(next.bounds.width).toBeCloseTo(target.bounds.width * 1.5, 3);
-    expect(next.bounds.height).toBeCloseTo(target.bounds.height * 1.5, 3);
+    // graphicx's \Gscale@div and factor products truncate to scaled points.
+    expect(next.bounds.width).toBeCloseTo(target.bounds.width * 1.5, 2);
+    expect(next.bounds.height).toBeCloseTo(target.bounds.height * 1.5, 2);
   });
   it("adds scale to natural-size images without rewriting the filename", async () => {
     for (const options of ["", "[clip]", "[]"]) {

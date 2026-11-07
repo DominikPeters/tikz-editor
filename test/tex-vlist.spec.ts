@@ -2188,6 +2188,40 @@ describe("TeX vlist lowering", () => {
     expect(boxes[0]?.box.svgBody).toContain('data-tex-includegraphics-status="missing"');
   });
 
+  it("runs graphicx's size and rotation keys left to right as pdflatex does", () => {
+    // Boxes measured with pdflatex for a 100x50 px PNG (100bp x 50bp).
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "graphicx-keys",
+      resolve: () => ({ status: "resolved", mimeType: "image/png", dataBase64: "", naturalWidthPt: 100.37474, naturalHeightPt: 50.18736, revision: "1" }),
+    };
+    const cases: Array<readonly [string, number, number, number]> = [
+      ["height=2cm", 113.81909, 56.9055, 0],
+      ["width=3cm,height=1cm,keepaspectratio", 56.90648, 28.45323, 0],
+      ["width=2cm,width=!", 100.37474, 50.18736, 0],
+      ["scale=2,width=1cm", 28.45094, 14.22546, 0],
+      ["angle=90", 50.18736, 100.37474, 0],
+      ["angle=-90", 50.18736, 0, 100.37474],
+      ["angle=90,width=1cm", 28.45323, 56.90648, 0],
+      ["width=1cm,angle=90", 14.22623, 28.45274, 0],
+      ["angle=-90,totalheight=1cm", 14.22623, 0, 28.45247],
+      ["origin=c,angle=90", 50.18736, 75.28105, 25.09369],
+      ["angle=90,scale=2", 100.37473, 200.74948, 0],
+    ];
+    for (const [options, width, height, depth] of cases) {
+      const block = parseSimpleTexParagraphIr(`\\includegraphics[${options}]{t.png}`).blocks[0]!;
+      const item = simpleTexInlineNodesToLayoutItems(block.nodes, block.sourceStart, block.sourceEnd, 10,
+        computerModernTexMetricProvider, "font", undefined, undefined, luaLatexDefaultTextFontProfile, graphicsResolver)
+        .find((candidate) => candidate.kind === "text-box" && candidate.command === "includegraphics");
+      const box = item?.kind === "text-box" ? item.box : undefined;
+      // Within 3sp: unit conversion here rounds where TeX's \scan_dimen truncates.
+      expect(box?.width, options).toBeCloseTo(width, 4);
+      expect(box?.height, options).toBeCloseTo(height, 4);
+      expect(box?.depth, options).toBeCloseTo(depth, 4);
+      expect(box?.graphics?.[0]?.height).toBeCloseTo(height + depth, 4);
+      if (options.includes("angle")) expect(box?.svgBody).toContain("data-tex-includegraphics-transform");
+    }
+  });
+
   it("lays out text-mode raisebox with natural and explicit dimensions", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`\mbox{g}\raisebox{3pt}{g}\raisebox{3pt}[2pt][4pt]{g}`

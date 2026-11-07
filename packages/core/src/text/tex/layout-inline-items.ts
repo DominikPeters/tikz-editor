@@ -1,6 +1,8 @@
 import type { TexListLayoutProfile } from "./layout-options.js";
 import { layoutTexTabularBox } from "./tabular/layout.js";
 import { layoutTexTransformBox } from "./text-box-transform.js";
+import { composeGraphicxMatrices, graphicxFactorProduct, graphicxScaled, graphicxScaleRatio, graphicxSvgMatrix, graphicxTransformGeometry, IDENTITY_GRAPHICX_MATRIX, type GraphicxBoxExtent, type GraphicxTransformSpec } from "./graphicx-geometry.js";
+import { parseOptionListRaw } from "../../options/parse.js";
 import type { TexTabularLayoutProfile } from "./tabular/types.js";
 import {
   defaultTexTextFontProfile,
@@ -37,6 +39,7 @@ import {
   type SimpleTexDisplayMathDelimiter,
   type SimpleTexFontState,
   type SimpleTexGraphicsOptions,
+  type SimpleTexGraphicsSizeKey,
   type SimpleTexGraphicsViewport,
   type SimpleTexInlineNode,
   type SimpleTexParagraphSegment,
@@ -71,6 +74,7 @@ import {
   resolveTexDimensionExpression,
   texDimensionContextForFont,
   type TexDimensionContext,
+  type TexDimensionExpression,
 } from "./dimensions.js";
 
 const TEX_LATEX_FBOX_RULE_PT = texLength(0.4);
@@ -1244,17 +1248,11 @@ function texIncludeGraphicsBox(params: {
   const cropRect = assetNatural
     ? texIncludeGraphicsCropRect(params.options, assetNatural)
     : null;
-  const displayNatural = assetNatural
-    ? {
-        width: texLength((cropRect?.width ?? assetNatural.width) * (params.options.scale ?? 1)),
-        height: texLength((cropRect?.height ?? assetNatural.height) * (params.options.scale ?? 1)),
-      }
-    : null;
-  const size = texIncludeGraphicsTargetSize(
-    params.options,
-    displayNatural,
-    params.dimensionContext
-  );
+  const natural = assetNatural
+    ? { width: cropRect?.width ?? assetNatural.width, height: cropRect?.height ?? assetNatural.height }
+    : { width: texLength(TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT), height: texLength(TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT) };
+  const program = texIncludeGraphicsProgram(params.options, natural, params.dimensionContext, assetNatural === null);
+  const size = program.inner;
   const sourceSpan = { start: params.sourceStart, end: params.sourceEnd };
   const placeholderReason = resolution.status === "resolved"
     ? "Could not determine image dimensions."
@@ -1280,8 +1278,19 @@ function texIncludeGraphicsBox(params: {
         status: resolution.status === "resolved" ? "unsupported" : resolution.status,
         ...(placeholderReason !== undefined ? { reason: placeholderReason } : {}),
       });
-  const width = roundTexPt(size.width);
-  const height = roundTexPt(size.height);
+  let extent: GraphicxBoxExtent = { width: size.width, height: size.height, depth: 0 };
+  let matrix = IDENTITY_GRAPHICX_MATRIX;
+  for (const transform of program.transforms) {
+    const geometry = graphicxTransformGeometry(transform, extent, (raw) => Number.parseFloat(raw));
+    matrix = composeGraphicxMatrices(geometry.matrix, matrix);
+    extent = geometry;
+  }
+  const transformedSvgBody = program.transforms.length
+    ? `<g data-tex-includegraphics-transform="true" transform="matrix(${graphicxSvgMatrix(matrix, TEX_SVG_UNIT_SCALE)})">${svgBody}</g>`
+    : svgBody;
+  const width = roundTexPt(texLength(extent.width));
+  const height = roundTexPt(texLength(extent.height));
+  const depth = roundTexPt(texLength(extent.depth));
   const asset = texIncludeGraphicsLayoutAsset(
     params.filename,
     resolution,
@@ -1297,7 +1306,7 @@ function texIncludeGraphicsBox(params: {
     contentEnd: params.filenameEnd,
     width,
     height,
-    depth: texLength(0),
+    depth,
     caretStops: texMBoxCaretStops(
       params.sourceStart,
       params.sourceEnd,
@@ -1311,7 +1320,7 @@ function texIncludeGraphicsBox(params: {
       xStart: texHBoxX(0),
       xEnd: texHBoxX(width),
     }],
-    svgBody,
+    svgBody: transformedSvgBody,
     graphics: [{
       asset,
       sourceSpan,
@@ -1324,7 +1333,7 @@ function texIncludeGraphicsBox(params: {
       x: texHBoxX(0),
       y: texHBoxY(0 - height),
       width,
-      height,
+      height: texLength(height + depth),
       ...(cropRect
         ? {
             crop: {
@@ -1375,67 +1384,79 @@ function texIncludeGraphicsLayoutAsset(
   };
 }
 
-function texIncludeGraphicsTargetSize(
-  options: {
-    readonly width?: SimpleTexGraphicsOptions["width"];
-    readonly height?: SimpleTexGraphicsOptions["height"];
-    readonly scale?: number;
-    readonly keepAspectRatio?: boolean;
-  },
-  natural: { readonly width: TexLength; readonly height: TexLength } | null,
-  dimensionContext?: TexDimensionContext
-): { readonly width: TexLength; readonly height: TexLength } {
-  const requestedWidth = finitePositive(
-    options.width && dimensionContext
-      ? resolveTexDimensionExpression(options.width, dimensionContext)
-      : options.width?.kind === "absolute"
-        ? options.width.value
-        : undefined
-  );
-  const requestedHeight = finitePositive(
-    options.height && dimensionContext
-      ? resolveTexDimensionExpression(options.height, dimensionContext)
-      : options.height?.kind === "absolute"
-        ? options.height.value
-        : undefined
-  );
-  const base = natural ?? {
-    width: texLength(TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT * (options.scale ?? 1)),
-    height: texLength(TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT * (options.scale ?? 1)),
+/**
+ * graphicx's key program (graphicx.sty \Gin@ii, \Gin@esetsize): size keys
+ * read before any angle set the image's own requested size; an angle, or a
+ * scale after the first transform, wraps the result in \rotatebox or
+ * \scalebox, and size keys read after it become a final \resizebox.
+ */
+function texIncludeGraphicsProgram(
+  options: SimpleTexGraphicsOptions,
+  natural: { readonly width: TexLength; readonly height: TexLength },
+  dimensionContext?: TexDimensionContext,
+  /** Without a natural size, a placeholder keeps its fallback extent on an unrequested side. */
+  placeholder = false
+): { readonly inner: { readonly width: TexLength; readonly height: TexLength }; readonly transforms: readonly GraphicxTransformSpec[] } {
+  const keys: readonly SimpleTexGraphicsSizeKey[] = options.sizeKeys ?? [
+    ...(options.scale !== undefined ? [{ key: "scale" as const, value: options.scale }] : []),
+    ...(options.width ? [{ key: "width" as const, value: options.width }] : []),
+    ...(options.height ? [{ key: "height" as const, value: options.height }] : []),
+  ];
+  const length = (value: TexDimensionExpression | null): number | null => {
+    if (value === null) return null;
+    const resolved = dimensionContext ? resolveTexDimensionExpression(value, dimensionContext) : value.kind === "absolute" ? value.value : null;
+    return resolved !== null && Number.isFinite(resolved) && resolved > 0 ? graphicxScaled(resolved) : null;
   };
-  if (requestedWidth !== null && requestedHeight !== null) {
-    if (options.keepAspectRatio && base.width > 0 && base.height > 0) {
-      const scale = Math.min(requestedWidth / base.width, requestedHeight / base.height);
-      return {
-        width: texLength(roundTexPt(base.width * scale)),
-        height: texLength(roundTexPt(base.height * scale)),
+  const iso = options.keepAspectRatio === true;
+  // \Gin@eresize is expanded when the resize runs: any totalheight key counts.
+  const totalHeight = keys.some((entry) => entry.key === "totalheight");
+  const rotationOptions = options.origin !== undefined ? parseOptionListRaw(`[origin=${options.origin}]`) : undefined;
+  let requested = (): { width: TexLength; height: TexLength } => natural;
+  let transformed = false;
+  let width: number | null = null;
+  let height: number | null = null;
+  const transforms: GraphicxTransformSpec[] = [];
+  const setSize = () => {
+    const w = width; const h = height;
+    width = null; height = null;
+    if (w === null && h === null) return;
+    if (transformed) {
+      transforms.push({ kind: "resize", width: w === null ? "!" : `${w}pt`, height: h === null ? "!" : `${h}pt`, totalHeight, keepAspectRatio: iso });
+    } else if (w !== null && h !== null && placeholder && !iso) {
+      // \Gin@nosize: the requested size becomes the natural size.
+      requested = () => ({ width: texLength(w), height: texLength(h) });
+    } else if (w !== null && h !== null) {
+      requested = () => {
+        let x = graphicxScaleRatio(w, natural.width);
+        let y = graphicxScaleRatio(h, natural.height);
+        if (iso) { if (y > x) y = x; else x = y; }
+        return { width: graphicxFactorProduct(natural.width, x), height: graphicxFactorProduct(natural.height, y) };
       };
+    } else if (w !== null) {
+      requested = () => ({ width: texLength(w), height: placeholder ? natural.height : graphicxFactorProduct(natural.height, graphicxScaleRatio(w, natural.width)) });
+    } else if (h !== null) {
+      requested = () => ({ width: placeholder ? natural.width : graphicxFactorProduct(natural.width, graphicxScaleRatio(h, natural.height)), height: texLength(h) });
     }
-    return {
-      width: texLength(roundTexPt(requestedWidth)),
-      height: texLength(roundTexPt(requestedHeight)),
-    };
-  }
-  if (requestedWidth !== null) {
-    return {
-      width: texLength(roundTexPt(requestedWidth)),
-      height: texLength(roundTexPt(natural ? requestedWidth * (base.height / base.width) : TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT)),
-    };
-  }
-  if (requestedHeight !== null) {
-    return {
-      width: texLength(roundTexPt(natural ? requestedHeight * (base.width / base.height) : TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT)),
-      height: texLength(roundTexPt(requestedHeight)),
-    };
-  }
-  return {
-    width: texLength(roundTexPt(base.width)),
-    height: texLength(roundTexPt(base.height)),
   };
-}
-
-function finitePositive<T extends number>(value: T | undefined): T | null {
-  return value !== undefined && Number.isFinite(value) && value > 0 ? value : null;
+  for (const entry of keys) {
+    switch (entry.key) {
+      case "width": width = length(entry.value); break;
+      case "height": case "totalheight": height = length(entry.value); break;
+      case "scale": {
+        const factor = entry.value;
+        if (transformed) transforms.push({ kind: "scale", x: factor, y: factor });
+        else requested = () => ({ width: graphicxFactorProduct(natural.width, factor), height: graphicxFactorProduct(natural.height, factor) });
+        transformed = true;
+        break;
+      }
+      case "angle":
+        setSize();
+        transformed = true;
+        transforms.push({ kind: "rotate", angle: entry.value, ...(rotationOptions ? { options: rotationOptions } : {}) });
+    }
+  }
+  setSize();
+  return { inner: requested(), transforms };
 }
 
 type TexIncludeGraphicsCropRect = {
