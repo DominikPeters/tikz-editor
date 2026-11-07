@@ -1242,7 +1242,7 @@ function simpleTexGraphicsNodeFromSyntax(
   text: string,
   syntax: SyntaxNodeRef
 ): SimpleTexIncludeGraphicsNode | null {
-  const option = syntax.node.getChild("OptionalArgument");
+  const [option, upper] = syntax.node.getChildren("OptionalArgument");
   const filenameGroup = syntax.node.getChild("Group");
   if (
     !filenameGroup ||
@@ -1267,7 +1267,9 @@ function simpleTexGraphicsNodeFromSyntax(
     filename: text.slice(filenameStart, filenameEnd).trim(),
     filenameStart,
     filenameEnd,
-    options: parseSimpleTexGraphicsOptions(optionList, syntax.node.getChild("Star") !== null),
+    options: option && upper
+      ? parseSimpleTexGraphicsCornerOptions(text.slice(option.from + 1, option.to - 1), text.slice(upper.from + 1, upper.to - 1), syntax.node.getChild("Star") !== null)
+      : parseSimpleTexGraphicsOptions(optionList, syntax.node.getChild("Star") !== null),
     sourceStart: syntax.from,
     sourceEnd: syntax.to,
   };
@@ -3351,6 +3353,13 @@ function scanSimpleTexIncludeGraphicsCommand(
     );
     cursor = skipSimpleTexControlWordSpaces(text, optionsArgument.end);
   }
+  let corners: SimpleTexGraphicsOptions | null = null;
+  if (optionList && text[cursor] === "[") {
+    const upper = scanSimpleTexOptionalBracketArgument(text, cursor);
+    if (!upper) return null;
+    corners = parseSimpleTexGraphicsCornerOptions(optionList.raw.slice(1, -1), upper.content, starred);
+    cursor = skipSimpleTexControlWordSpaces(text, upper.end);
+  }
 
   const groupStart = cursor;
   if (text[groupStart] !== "{") {
@@ -3370,7 +3379,7 @@ function scanSimpleTexIncludeGraphicsCommand(
       filename: text.slice(filenameStart, filenameEnd).trim(),
       filenameStart: sourceOffset + filenameStart,
       filenameEnd: sourceOffset + filenameEnd,
-      options: parseSimpleTexGraphicsOptions(optionList, starred),
+      options: corners ?? parseSimpleTexGraphicsOptions(optionList, starred),
       sourceStart: sourceOffset + start,
       sourceEnd: sourceOffset + groupEnd,
     },
@@ -3448,9 +3457,12 @@ function parseSimpleTexGraphicsOptions(
         : invalidSimpleTexGraphicsPageOption(value);
       continue;
     }
+    // trim, viewport and bb (pdftex.def: "equivalent to viewport") all set
+    // \Gin@viewport@code: the last one wins.
     if (key === "trim") {
       const parsed = parseSimpleTexGraphicsQuad(value);
       if (parsed) {
+        viewport = undefined;
         trim = {
           left: parsed[0],
           bottom: parsed[1],
@@ -3460,9 +3472,10 @@ function parseSimpleTexGraphicsOptions(
       }
       continue;
     }
-    if (key === "viewport") {
+    if (key === "viewport" || key === "bb") {
       const parsed = parseSimpleTexGraphicsQuad(value);
       if (parsed) {
+        trim = undefined;
         viewport = {
           llx: parsed[0],
           lly: parsed[1],
@@ -3489,6 +3502,27 @@ function parseSimpleTexGraphicsOptions(
     ...(origin !== undefined ? { origin } : {}),
     ...(optionList ? { optionList: optionList } : {}),
     raw: optionList?.raw.slice(1, -1) ?? "",
+  };
+}
+
+/**
+ * graphics.sty's `\includegraphics[llx,lly][urx,ury]{file}`, which graphicx
+ * keeps whenever two optional arguments appear; pdftex.def reads the corners
+ * as a viewport (\Gin@iii@vp), with bp as the default unit.
+ */
+function parseSimpleTexGraphicsCornerOptions(lower: string, upper: string, starred: boolean): SimpleTexGraphicsOptions {
+  const pair = (raw: string) => {
+    const parts = raw.split(",");
+    if (parts.length !== 2) return null;
+    const values = parts.map((part) => parseSimpleTexGraphicsDimension(part));
+    return values[0] != null && values[1] != null ? [values[0], values[1]] as const : null;
+  };
+  const ll = pair(lower);
+  const ur = pair(upper);
+  return {
+    ...(ll && ur ? { viewport: { llx: ll[0], lly: ll[1], urx: ur[0], ury: ur[1] } } : {}),
+    ...(starred ? { clip: true } : {}),
+    raw: "",
   };
 }
 

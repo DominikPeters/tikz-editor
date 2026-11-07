@@ -79,7 +79,8 @@ import {
 
 const TEX_LATEX_FBOX_RULE_PT = texLength(0.4);
 const TEX_LATEX_FBOX_SEP_PT = texLength(3);
-const TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT = texLength(28.4527559055);
+// pdftex.def: a file it cannot read is drawn in draft mode with a 0 0 72 72 bounding box.
+const TEX_INCLUDEGRAPHICS_MISSING_SIZE_PT = texLength(4736286 / 65536); // 72bp
 const TEX_SVG_UNIT_SCALE = 100;
 
 export interface TexLayoutTextItem {
@@ -1245,13 +1246,10 @@ function texIncludeGraphicsBox(params: {
           height: texLength(resolution.naturalHeightPt),
         }
       : null;
-  const cropRect = assetNatural
-    ? texIncludeGraphicsCropRect(params.options, assetNatural)
-    : null;
-  const natural = assetNatural
-    ? { width: cropRect?.width ?? assetNatural.width, height: cropRect?.height ?? assetNatural.height }
-    : { width: texLength(TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT), height: texLength(TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT) };
-  const program = texIncludeGraphicsProgram(params.options, natural, params.dimensionContext, assetNatural === null);
+  const fileBox = assetNatural ?? { width: TEX_INCLUDEGRAPHICS_MISSING_SIZE_PT, height: TEX_INCLUDEGRAPHICS_MISSING_SIZE_PT };
+  const cropRect = texIncludeGraphicsCropRect(params.options, fileBox);
+  const natural = { width: cropRect?.width ?? fileBox.width, height: cropRect?.height ?? fileBox.height };
+  const program = texIncludeGraphicsProgram(params.options, natural, params.dimensionContext);
   const size = program.inner;
   const sourceSpan = { start: params.sourceStart, end: params.sourceEnd };
   const placeholderReason = resolution.status === "resolved"
@@ -1393,9 +1391,7 @@ function texIncludeGraphicsLayoutAsset(
 function texIncludeGraphicsProgram(
   options: SimpleTexGraphicsOptions,
   natural: { readonly width: TexLength; readonly height: TexLength },
-  dimensionContext?: TexDimensionContext,
-  /** Without a natural size, a placeholder keeps its fallback extent on an unrequested side. */
-  placeholder = false
+  dimensionContext?: TexDimensionContext
 ): { readonly inner: { readonly width: TexLength; readonly height: TexLength }; readonly transforms: readonly GraphicxTransformSpec[] } {
   const keys: readonly SimpleTexGraphicsSizeKey[] = options.sizeKeys ?? [
     ...(options.scale !== undefined ? [{ key: "scale" as const, value: options.scale }] : []),
@@ -1422,9 +1418,6 @@ function texIncludeGraphicsProgram(
     if (w === null && h === null) return;
     if (transformed) {
       transforms.push({ kind: "resize", width: w === null ? "!" : `${w}pt`, height: h === null ? "!" : `${h}pt`, totalHeight, keepAspectRatio: iso });
-    } else if (w !== null && h !== null && placeholder && !iso) {
-      // \Gin@nosize: the requested size becomes the natural size.
-      requested = () => ({ width: texLength(w), height: texLength(h) });
     } else if (w !== null && h !== null) {
       requested = () => {
         let x = graphicxScaleRatio(w, natural.width);
@@ -1433,9 +1426,9 @@ function texIncludeGraphicsProgram(
         return { width: graphicxFactorProduct(natural.width, x), height: graphicxFactorProduct(natural.height, y) };
       };
     } else if (w !== null) {
-      requested = () => ({ width: texLength(w), height: placeholder ? natural.height : graphicxFactorProduct(natural.height, graphicxScaleRatio(w, natural.width)) });
+      requested = () => ({ width: texLength(w), height: graphicxFactorProduct(natural.height, graphicxScaleRatio(w, natural.width)) });
     } else if (h !== null) {
-      requested = () => ({ width: placeholder ? natural.width : graphicxFactorProduct(natural.width, graphicxScaleRatio(h, natural.height)), height: texLength(h) });
+      requested = () => ({ width: graphicxFactorProduct(natural.width, graphicxScaleRatio(h, natural.height)), height: texLength(h) });
     }
   };
   for (const entry of keys) {

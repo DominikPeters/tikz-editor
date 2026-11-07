@@ -336,12 +336,8 @@ describe("simple TeX paragraph IR", () => {
       top: 15 * bp,
     });
     expect(graphics[0]?.options.clip).toBe(true);
-    expect(graphics[1]?.options.trim).toEqual({
-      left: 10 * bp,
-      bottom: 5 * bp,
-      right: 20 * bp,
-      top: 15 * bp,
-    });
+    // trim and viewport both set \Gin@viewport@code: the later viewport wins.
+    expect(graphics[1]?.options.trim).toBeUndefined();
     expect(graphics[1]?.options.clip).toBe(false);
     expect(graphics[1]?.options.viewport).toEqual({
       llx: 10 * bp,
@@ -350,6 +346,23 @@ describe("simple TeX paragraph IR", () => {
       ury: 65 * bp,
     });
     expect(graphics[1]?.options.raw).toBe("trim={10 5 20 15},clip=false,viewport=10 5 100 65");
+  });
+
+  it("reads bb as pdftex's viewport, the corner form as a viewport, and the last crop key", () => {
+    const source = String.raw`\includegraphics[bb=10 5 60 45]{a}\includegraphics[viewport=1 2 3 4,trim=1 1 1 1]{b}\includegraphics*[1in,2][3cm,4]{c}`;
+    const bp = 72.27 / 72;
+    const inline = parseSimpleTexParagraphIr(source).nodes.filter((node) => node.kind === "includegraphics").map((node) => node.options);
+    const discovered = analyzeSimpleTexResources(source).graphics.map((resource) => resource.options);
+
+    for (const options of [inline, discovered]) {
+      expect(options[0]?.viewport).toEqual({ llx: 10 * bp, lly: 5 * bp, urx: 60 * bp, ury: 45 * bp });
+      expect(options[1]?.viewport).toBeUndefined();
+      expect(options[1]?.trim).toEqual({ left: bp, bottom: bp, right: bp, top: bp });
+      expect(options[2]?.viewport?.llx).toBeCloseTo(72.27, 5);
+      expect(options[2]?.viewport?.lly).toBeCloseTo(2 * bp, 5);
+      expect(options[2]?.viewport?.urx).toBeCloseTo(3 * 72.27 / 2.54, 5);
+      expect(options[2]?.clip).toBe(true);
+    }
   });
 
   it("reads the includegraphics star as clip before the keys", () => {

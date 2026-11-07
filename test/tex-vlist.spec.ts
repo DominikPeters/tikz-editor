@@ -2154,7 +2154,7 @@ describe("TeX vlist lowering", () => {
     expect(boxes[0]?.box.svgBody).not.toContain("/tmp/fig.png");
   });
 
-  it("lays out missing includegraphics placeholders with draft-like fallback dimensions", () => {
+  it("lays out missing includegraphics as pdftex's 72bp draft box", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`\includegraphics{missing}\includegraphics[width=20pt]{missing}\includegraphics[height=12pt]{missing}\includegraphics[width=20pt,height=12pt]{missing}`
     );
@@ -2176,14 +2176,16 @@ describe("TeX vlist lowering", () => {
       : [];
 
     expect(boxes).toHaveLength(4);
-    expect(boxes[0]?.box.width).toBeCloseTo(28.452756, 5);
-    expect(boxes[0]?.box.height).toBeCloseTo(28.452756, 5);
+    // pdftex.def reads an unreadable file as `0 0 72 72` and scales it like an image.
+    expect(boxes[0]?.box.width).toBeCloseTo(72.26999, 5);
+    expect(boxes[0]?.box.height).toBeCloseTo(72.26999, 5);
+    // Measured with pdflatex for a missing file.
     expect(boxes[1]?.box.width).toBeCloseTo(20, 6);
-    expect(boxes[1]?.box.height).toBeCloseTo(28.452756, 5);
-    expect(boxes[2]?.box.width).toBeCloseTo(28.452756, 5);
+    expect(boxes[1]?.box.height).toBeCloseTo(19.99951, 5);
+    expect(boxes[2]?.box.width).toBeCloseTo(11.99904, 5);
     expect(boxes[2]?.box.height).toBeCloseTo(12, 6);
-    expect(boxes[3]?.box.width).toBeCloseTo(20, 6);
-    expect(boxes[3]?.box.height).toBeCloseTo(12, 6);
+    expect(boxes[3]?.box.width).toBeCloseTo(19.99951, 5);
+    expect(boxes[3]?.box.height).toBeCloseTo(11.99904, 5);
     expect(boxes[0]?.box.svgBody).toContain('data-tex-includegraphics="placeholder"');
     expect(boxes[0]?.box.svgBody).toContain('data-tex-includegraphics-status="missing"');
   });
