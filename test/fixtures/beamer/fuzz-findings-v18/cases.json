@@ -1,0 +1,18 @@
+{
+  "formatVersion": 1,
+  "title": "Grandchild list before an outer block item",
+  "fidelity": [
+    {
+      "id": "normal",
+      "file": "normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Panel",
+        "Neighbor.",
+        "Aftertext."
+      ]
+    }
+  ],
+  "recognition": []
+}

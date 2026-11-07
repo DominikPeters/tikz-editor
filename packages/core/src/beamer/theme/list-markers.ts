@@ -226,13 +226,16 @@ export function resolveBeamerEnumerateMarker(
   }
   const boxWidthEm = 2 * xHeightEm;
   const sphereSizeEm = 1.06 * shadingXHeightEm;
+  const sphereScale = labelDepth === 1 ? 1.75 : 1.4;
+  const bottomEx = labelDepth === 1 ? .65 : .55;
+  const textRaisePt = labelDepth === 1 ? .5 : 0;
   // beamerbaseauxtemplates.sty's projected-ball pgfpicture spans
-  // (-1ex,-.65ex)..(1ex,1ex), with its default baseline at the bottom.
-  // The 1.75-scaled bigsphere shading has independent ink bounds; these
-  // factors follow the PGF transform rather than its unscaled trace rule.
-  const paintXEm = (boxWidthEm - 1.75 * sphereSizeEm) / 2;
-  const paintTopFromBaselineEm = -0.65 * xHeightEm - 1.75 * .53 * shadingXHeightEm;
-  const paintYEm = 1.65 * xHeightEm + paintTopFromBaselineEm;
+  // (-1ex,-.65ex)..(1ex,1ex) at level one and uses -.55ex below
+  // deeper labels. The shading scales by 1.75 / 1.4 independently of that
+  // logical box; only the first-level projected number is raised by .5pt.
+  const paintXEm = (boxWidthEm - sphereScale * sphereSizeEm) / 2;
+  const paintTopFromBaselineEm = -bottomEx * xHeightEm - sphereScale * .53 * shadingXHeightEm;
+  const paintYEm = (1 + bottomEx) * xHeightEm + paintTopFromBaselineEm;
   const background =
     resolveBeamerThemeColor(theme, projectedRole).bg ??
     resolveBeamerThemeColor(theme, "item").fg ??
@@ -245,7 +248,7 @@ export function resolveBeamerEnumerateMarker(
   const size = sphereSizeEm * bodyFont.sizePt * 100;
   // The picture's logical box and its scaled shading have distinct bounds.
   // Shipout tracing includes the PDF matrix around the shading rule.
-  const visualSize = 1.75 * size;
+  const visualSize = sphereScale * size;
   const visualX =
     (boxWidthEm * bodyFont.sizePt * 100 - visualSize) / 2;
   const visualTop =
@@ -253,13 +256,13 @@ export function resolveBeamerEnumerateMarker(
 
   return withInMarginEnumerateOffset(theme, xHeightEm, {
     widthEm: boxWidthEm,
-    heightEm: 1.65 * xHeightEm,
+    heightEm: (1 + bottomEx) * xHeightEm,
     depthEm: 0,
     paintBoundsEm: {
       x: paintXEm,
       y: paintYEm,
-      width: 1.75 * sphereSizeEm,
-      height: 1.75 * sphereSizeEm,
+      width: sphereScale * sphereSizeEm,
+      height: sphereScale * sphereSizeEm,
     },
     projectedText: {
       text,
@@ -268,7 +271,7 @@ export function resolveBeamerEnumerateMarker(
       color: foreground,
       xEm: (boxWidthEm - textWidthEm) / 2,
       baselineOffsetEm:
-        (-0.65 * xHeightEm * bodyFont.sizePt - .5 + projectedCenterPt) /
+        (-bottomEx * xHeightEm * bodyFont.sizePt - textRaisePt + projectedCenterPt) /
         bodyFont.sizePt,
     },
     svgBody: sphereSvgBody({
