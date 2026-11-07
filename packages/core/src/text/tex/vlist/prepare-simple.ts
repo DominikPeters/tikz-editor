@@ -70,8 +70,10 @@ function applyListBodyFonts(vlist: TexVListDocument, profile?: TexListLayoutProf
       const nextDepth = nextParagraph?.paragraph.listContext?.fontDepth ?? nextParagraph?.paragraph.listContext?.depth;
       // Beamer selects the incoming list font before \list ends the current
       // paragraph. An explicit \par has already committed its baseline grid.
+      const startsNewParentItem = nextParagraph?.paragraph.ancestorListLabels?.some(label =>
+        label.depth === context.depth && label.itemIndex !== context.itemIndex);
       const endingDepth = profile?.selectBodyFontBeforeList && nextDepth != null && nextDepth > depth + 1 &&
-        !nextParagraph?.paragraph.startsAfterExplicitPar ? nextDepth - 1 : depth;
+        !startsNewParentItem && !nextParagraph?.paragraph.startsAfterExplicitPar ? nextDepth - 1 : depth;
       const skip = profile?.bodyBaselineSkipPtByDepth?.[endingDepth];
       items[index] = { ...item, paragraph: { ...item.paragraph,
         ...(size != null && !item.paragraph.explicitFontSize ? { fontSizePt: texLength(size) } : {}),

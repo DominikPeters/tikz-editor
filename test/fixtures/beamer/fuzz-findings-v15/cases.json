@@ -1,0 +1,47 @@
+{
+  "formatVersion": 1,
+  "title": "Multiline paragraphs before nested-list entry",
+  "fidelity": [
+    {
+      "id": "plain-new-item",
+      "file": "plain-new-item.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Neighbor.",
+        "Childtext."
+      ]
+    },
+    {
+      "id": "plain-same-item",
+      "file": "plain-same-item.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Neighbor.",
+        "Childtext."
+      ]
+    },
+    {
+      "id": "action-new-item",
+      "file": "action-new-item.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Neighbor.",
+        "Childtext."
+      ]
+    },
+    {
+      "id": "action-same-item",
+      "file": "action-same-item.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Neighbor.",
+        "Childtext."
+      ]
+    }
+  ],
+  "recognition": []
+}

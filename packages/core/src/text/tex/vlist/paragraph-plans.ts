@@ -197,6 +197,7 @@ export function prepareTexLayoutParagraphsFromVList(
         paragraphOriginX: texVListX(scopeContext.layout.leftMarginWidth),
         followLineAlignment: paragraphStateResult.alignment === "center" || paragraphStateResult.alignment === "ragged-left",
       });
+      const ancestorLabelMetrics: { height: TexLength; depth: TexLength }[] = [];
       if (segmentIndex === 0 && !suppressAncestorBreakMargins) for (const ancestor of paragraph.ancestorListLabels ?? []) {
         const context = { ...ancestor, ...(ancestor.labelFontSizePt !== undefined ? { fontSizePt: ancestor.labelFontSizePt } : {}) };
         const parentScope = texVBoxLayoutForScopeRole({ kind: "list", listKind: context.kind,
@@ -213,7 +214,10 @@ export function prepareTexLayoutParagraphsFromVList(
           ...(params.options.textFontProfile ? { textFontProfile: params.options.textFontProfile } : {}),
           paragraphOriginX: texVListX(scopeContext.layout.leftMarginWidth),
           followLineAlignment: paragraphStateResult.alignment === "center" || paragraphStateResult.alignment === "ragged-left" });
-        if (attachment.marginLabelHBox) marginLabelHBoxAttachments.push({ vlistPath: entry.path, hbox: attachment.marginLabelHBox });
+        if (attachment.marginLabelHBox) {
+          marginLabelHBoxAttachments.push({ vlistPath: entry.path, hbox: attachment.marginLabelHBox });
+          ancestorLabelMetrics.push(attachment.marginLabelHBox.box.metrics);
+        }
       }
       if (listAttachments.marginLabelHBox) {
         marginLabelHBoxAttachments.push({
@@ -265,8 +269,11 @@ export function prepareTexLayoutParagraphsFromVList(
           ...listAttachments.inlineLabelItems,
           ...texMarginListItemLinePrefix({
             segment,
-            hasMarginLabel: listAttachments.marginLabel !== undefined,
-            metrics: listAttachments.marginLabelHBox?.box.metrics,
+            hasMarginLabel: listAttachments.marginLabel !== undefined || ancestorLabelMetrics.length > 0,
+            metrics: {
+              height: texLength(Math.max(listAttachments.marginLabelHBox?.box.metrics.height ?? 0, ...ancestorLabelMetrics.map(metrics => Number(metrics.height)))),
+              depth: texLength(Math.max(listAttachments.marginLabelHBox?.box.metrics.depth ?? 0, ...ancestorLabelMetrics.map(metrics => Number(metrics.depth)))),
+            },
           }),
           ...quotationPrefix.inlinePrefixItems,
           ...(leadingInterwordSpace ? [leadingInterwordSpace] : []),

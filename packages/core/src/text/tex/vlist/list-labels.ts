@@ -129,9 +129,10 @@ function texListItemLabelContent(
     if (marker) {
       return { kind: "marker", marker };
     }
+    const classLabel = listProfile?.resolveEnumerateText?.(listContext.enumerateCounters ?? [listContext.labelCounter ?? listContext.itemIndex], listContext.labelDepth);
     return {
       kind: "text",
-      text: texDefaultEnumerateLabelText(listContext.labelCounter ?? listContext.itemIndex, listContext.labelDepth),
+      text: classLabel ?? texDefaultEnumerateLabelText(listContext.labelCounter ?? listContext.itemIndex, listContext.labelDepth),
     };
   }
   return undefined;

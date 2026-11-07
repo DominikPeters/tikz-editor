@@ -591,30 +591,30 @@ function materializeDisplayMathVerticalGlueInItems(
       continue;
     }
     if (item.kind === "display-math") {
-      if (index === 0 && profile.leadingDisplay) {
-        items.push(leadingDisplayEmptyLineGlue(item, profile));
+      if ((index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay) {
+        items.push(leadingDisplayEmptyLineGlue(item, profile, index > 0));
         items.push(displayEmptyLineHBox(item, "before-display"));
       }
       items.push(displayMathBoundaryGlueItem(
         item,
         "above",
         profile,
-        index === 0 && profile.leadingDisplay ? "short" : undefined
+        (index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay ? "short" : undefined
       ));
       items.push(item);
       items.push(displayMathBoundaryGlueItem(item, "below", profile));
       continue;
     }
     if (item.kind === "display-alignment") {
-      if (index === 0 && profile.leadingDisplay) {
-        items.push(leadingDisplayEmptyLineGlue(item, profile));
+      if ((index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay) {
+        items.push(leadingDisplayEmptyLineGlue(item, profile, index > 0));
         items.push(displayEmptyLineHBox(item, "before-display"));
       }
       items.push(displayMathBoundaryGlueItem(
         item,
         "above",
         profile,
-        index === 0 && profile.leadingDisplay ? "short" : undefined
+        (index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay ? "short" : undefined
       ));
       items.push(...displayAlignmentMaterialItems(item, displayMathProfileForItem(item, profile)));
       items.push(displayMathBoundaryGlueItem(item, "below", profile));
@@ -686,7 +686,8 @@ function displayMathBoundaryGlueItem(
 
 function leadingDisplayEmptyLineGlue(
   item: TexDisplayMathItem | TexDisplayAlignmentItem,
-  profile: TexDisplayMathLayoutProfile
+  profile: TexDisplayMathLayoutProfile,
+  isInterior: boolean
 ): TexGlueItem {
   return {
     kind: "glue",
@@ -695,10 +696,11 @@ function leadingDisplayEmptyLineGlue(
     origin: {
       kind: "display-math-interline",
       side: "above",
+      ...(isInterior ? { purpose: "leading-empty-line-baseline" as const } : {}),
     },
     // A containing environment may already ship the leading line and request
     // zero additional baseline (for example Beamer column[T]'s colheadskip).
-    size: texLength(profile.leadingDisplay?.emptyLineBaselineSkipPt === 0
+    size: texLength(!isInterior && profile.leadingDisplay?.emptyLineBaselineSkipPt === 0
       ? 0 : item.baselineSkip ?? profile.leadingDisplay?.emptyLineBaselineSkipPt ?? 0),
     stretchOrder: "normal",
     shrinkOrder: "normal",
@@ -1025,6 +1027,12 @@ function resolveDisplayMathVerticalGlueInItems(
           paragraphBoundaryInterlineAlreadyInserted = true;
         }
       }
+      continue;
+    }
+    if (item.kind === "glue" && item.origin?.kind === "display-math-interline" &&
+        item.origin.purpose === "leading-empty-line-baseline") {
+      const depth = previousParagraphMeasurement ? texParagraphLastLineDepth(previousParagraphMeasurement) : previousDisplayMaterialMetrics?.depth;
+      items.push(depth !== undefined && !previousDepthSuppressed ? { ...item, size: texInterlineGlueSize(depth, texLength(0), item.size) } : item);
       continue;
     }
     if (

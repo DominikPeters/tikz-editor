@@ -104,7 +104,7 @@ export type TexGlueOrigin =
   | {
       readonly kind: "display-math-interline";
       readonly side: "above" | "below";
-      readonly purpose?: undefined;
+      readonly purpose?: "leading-empty-line-baseline";
     }
   | {
       readonly kind: "display-alignment-intertext-skip";

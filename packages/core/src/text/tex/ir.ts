@@ -707,6 +707,7 @@ export interface SimpleTexPlaceholderBlockItem extends SimpleTexSourceRange {
 }
 
 export interface SimpleTexDisplayMathState {
+  readonly startsAfterExplicitPar?: boolean;
   readonly fontSizePt?: TexLength;
   readonly baselineSkip?: TexLength;
   /** Only class size commands that assign display registers replace this state. */
@@ -764,6 +765,7 @@ export interface SimpleTexListContext {
   readonly fontDepth?: number;
   readonly labelFontSizePt?: TexLength;
   readonly enumerateTemplate?: string;
+  readonly enumerateCounters?: readonly number[];
   /** Distinguishes adjacent authored lists with the same kind and depth. */
   readonly listStart?: number;
   readonly kind: SimpleTexListKind;
@@ -4820,6 +4822,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
           ownLeftMarginEm: parent.ownLeftMarginEm, totalLeftMarginEm: parent.totalLeftMarginEm,
           fontSizePt: parent.fontSizePt, labelFontSizePt: parent.labelFontSizePt ?? parent.fontSizePt, listStart: parent.sourceStart,
           ...(parent.itemCommandSpan ? { itemCommandSpan: parent.itemCommandSpan } : {}),
+          ...(parent.kind === "enumerate" ? { enumerateCounters: listStack.slice(0, depthIndex + 1).filter(entry => entry.kind === "enumerate").map(entry => entry.labelCounter) } : {}),
           ...(parent.enumerateTemplate ? { enumerateTemplate: parent.enumerateTemplate } : {}),
           ...(pending.label ? { label: pending.label } : {}) });
         pending.show = false;
@@ -4910,6 +4913,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     }
     return {
       kind: activeList.kind,
+      ...(activeList.kind === "enumerate" ? { enumerateCounters: listStack.filter(entry => entry.kind === "enumerate").map(entry => entry.labelCounter) } : {}),
       fontDepth: listStack.filter(entry => entry.kind === "itemize" || entry.kind === "enumerate").length,
       ...(activeList.enumerateTemplate !== undefined ? { enumerateTemplate: activeList.enumerateTemplate } : {}),
       depth: activeList.depth,
@@ -5157,6 +5161,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       items.push({
         kind: "display-math",
         fontSizePt: displaySize,
+        ...(previousParagraphBlockEnd !== undefined && hasExplicitParagraphBoundaryBetween(previousParagraphBlockEnd, node.sourceStart) ? { startsAfterExplicitPar: true } : {}),
         ...(displaySkip !== undefined ? { baselineSkip: displaySkip } : {}),
         ...(displayState.displaySkipCommand !== undefined ? { displaySkipCommand: displayState.displaySkipCommand } : {}),
         normalFontSizePt,

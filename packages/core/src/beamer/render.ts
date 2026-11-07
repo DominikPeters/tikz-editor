@@ -261,6 +261,7 @@ function beamerListLayoutProfile(
     paragraphSkipPt: Number(theme.options["paragraph-skip-pt"] ?? 0),
     selectBodyFontBeforeList: true,
     enumerateMiniTemplates: true,
+    resolveEnumerateText: (counters, depth) => theme.templates.enumerations[depth - 1]?.id.endsWith("/default") ? counters.join(".") + (depth === 1 ? "." : "") : undefined,
     bodyFontSizePtByDepth: [undefined, small.sizePt, footnotesize.sizePt],
     bodyBaselineSkipPtByDepth: [undefined, small.lineHeightPt * Number(theme.options["line-spread"] ?? 1), footnotesize.lineHeightPt * Number(theme.options["line-spread"] ?? 1)],
     leftMarginEmByDepth: theme.dimensions.listLeftMarginEmByDepth,

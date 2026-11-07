@@ -68,6 +68,7 @@ export interface TexListMarkerProfile {
 export interface TexListLayoutProfile {
   /** Beamer loads enumerate.sty's literal mini templates. */
   readonly enumerateMiniTemplates?: boolean;
+  readonly resolveEnumerateText?: (counters: readonly number[], labelDepth: number) => string | undefined;
   /** Ambient paragraph glue, outside lists (which install their own parsep). */
   readonly paragraphSkipPt?: number;
   /** Beamer selects the incoming list body font before ending the preceding paragraph. */

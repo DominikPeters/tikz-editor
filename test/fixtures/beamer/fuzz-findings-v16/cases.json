@@ -1,0 +1,27 @@
+{
+  "formatVersion": 1,
+  "title": "Display to columns boundary",
+  "fidelity": [
+    {
+      "id": "without-display",
+      "file": "without-display.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Beforetext.",
+        "Aftertext."
+      ]
+    },
+    {
+      "id": "with-display",
+      "file": "with-display.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Beforetext.",
+        "Aftertext."
+      ]
+    }
+  ],
+  "recognition": []
+}
