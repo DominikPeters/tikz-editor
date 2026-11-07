@@ -14,7 +14,8 @@ import {
 } from "./deck-edit-actions.js";
 import type { BeamerObjectNode } from "./object-index.js";
 import type { Span } from "../ast/types.js";
-import type { BeamerDocumentModel } from "./types.js";
+import type { BeamerDocumentModel, BeamerFrameLayout } from "./types.js";
+import { beamerImageCropTarget, beamerImageCropUnit } from "./deck-crop.js";
 import type { BeamerThemeKind } from "./types.js";
 import type { BeamerChromeMetadataField } from "./theme/chrome-metadata.js";
 import { readBeamerListHead } from "./list-head.js";
@@ -47,6 +48,8 @@ export type DeckInspectorWrite =
       suffix: string;
     }
   | { kind: "setEnvironmentOption"; key: string; suffix: string }
+  /** One side of an image crop, entered in a unit of `unitPt` points. */
+  | { kind: "setGraphicsCrop"; side: "left" | "right" | "top" | "bottom"; unitPt: number }
   /** A flag in an image's or environment's options: present or absent. */
   | { kind: "setGraphicsFlag"; key: string }
   | { kind: "setEnvironmentFlag"; key: string }
@@ -109,8 +112,14 @@ export type DeckInspectorField = { readOnly?: { reason: string; span: Span } } &
       id: string;
       label: string;
       value: boolean;
+      /** In the value column under an empty row label, as the TikZ inspector does. */
+      inset?: true;
       write: DeckInspectorWrite | null;
     }
+  /** Two numbers on one row, captioned by their own labels (Left/Right). */
+  | { kind: "pair"; id: string; label: string; fields: readonly [DeckInspectorNumberField, DeckInspectorNumberField]; write: null }
+  /** A file name with its full path as a tooltip and a command beside it. */
+  | { kind: "file"; id: string; label: string; value: string; name: string; command: DeckInspectorCommand; commandLabel: string; commandAriaLabel: string; write: null }
   | {
       kind: "color";
       id: string;
@@ -127,17 +136,29 @@ export type DeckInspectorField = { readOnly?: { reason: string; span: Span } } &
       origin: "theme" | "preamble";
       write: DeckInspectorWrite | null;
     }
-  | { kind: "button"; id: string; label: string; command: DeckInspectorCommand; write: null }
+  | { kind: "button"; id: string; label: string; command: DeckInspectorCommand; inset?: true; write: null }
   /** A warning about the object, such as why the preview cannot draw it. */
   | { kind: "message"; id: string; text: string; write: null }
   /** Read-only source text, shown verbatim. */
   | { kind: "code"; id: string; label: string; text: string; write: null });
 
+export type DeckInspectorNumberField = Extract<DeckInspectorField, { kind: "number" }>;
+
+/** A titled group of rows; `action` sits at the header's trailing end (Reset). */
+export type DeckInspectorSection = {
+  id: string;
+  title: string | null;
+  action?: { label: string; command: DeckInspectorCommand };
+  fields: DeckInspectorField[];
+};
+
 export type DeckInspectorModel = {
   target: "object" | "frame";
   /** Panel header, e.g. "Block", "Image", "Frame". */
   title: string;
+  /** Every row, in order; `sections` groups the same rows when present. */
   fields: DeckInspectorField[];
+  sections?: DeckInspectorSection[];
 };
 
 /** Splits `0.63\textwidth` / `3cm` / `90` into number + suffix, else null. */
@@ -180,10 +201,14 @@ const OBJECT_TITLES: Partial<Record<BeamerObjectNode["kind"], string>> = {
 export function buildDeckObjectInspector(
   source: string,
   node: BeamerObjectNode,
-  extra: { message?: string } = {}
+  extra: { message?: string; layout?: BeamerFrameLayout } = {}
 ): DeckInspectorModel {
   const context = createBeamerSyntaxContext(source);
   const fields: DeckInspectorField[] = [];
+  if (node.kind === "graphics") {
+    const sections = graphicsSections(context, node, extra.layout);
+    return { target: "object", title: OBJECT_TITLES[node.kind] ?? "Object", fields: sections.flatMap((section) => section.fields), sections };
+  }
   switch (node.kind) {
     case "block":
       fields.push(...blockFields(context, node));
@@ -199,9 +224,6 @@ export function buildDeckObjectInspector(
       break;
     case "column":
       fields.push(...columnFields(context, node));
-      break;
-    case "graphics":
-      fields.push(...graphicsFields(context, node));
       break;
     case "tikzpicture":
       fields.push(...tikzFields(context, node));
@@ -498,10 +520,20 @@ function optionNumberField(args: {
  * draws (text/tex/ir.ts) and the inspector edits; `angle` is drawn but not offered yet.
  * An overlay spec (`\includegraphics<2->`) belongs to the builds panel.
  */
-function graphicsFields(
+const DIMENSION_UNIT_NAMES: Readonly<Record<string, string>> = {
+  "\\textwidth": "× text width",
+  "\\linewidth": "× line width",
+  "\\columnwidth": "× column width",
+  "\\paperwidth": "× paper width",
+  "\\textheight": "× text height",
+  "\\paperheight": "× paper height",
+};
+
+function graphicsSections(
   context: BeamerSyntaxContext,
-  node: BeamerObjectNode
-): DeckInspectorField[] {
+  node: BeamerObjectNode,
+  layout: BeamerFrameLayout | undefined
+): DeckInspectorSection[] {
   const command = context.syntax
     .controlsIn(node.sourceSpan)
     .find((control) => control.name === "includegraphics");
@@ -530,64 +562,57 @@ function graphicsFields(
   };
   const hasFlag = (key: string): boolean => {
     const entry = [...list?.entries ?? []].reverse().find(candidate => candidate.key === key);
-    if (!entry) return false;
+    if (!entry) return key === "clip" && command.starSpan != null;
     const raw = entry.valueSpan ? context.source.slice(entry.valueSpan.from, entry.valueSpan.to).trim().toLowerCase() : "";
     return !["false", "0", "no"].includes(raw);
   };
   const path = file?.value.trim() ?? "";
-  const fields: DeckInspectorField[] = [
-    { kind: "text", id: "file", label: "File", value: path, write: null },
-    { kind: "button", id: "replace-image", label: "Replace Image…", command: { kind: "replaceGraphics" }, write: null },
-    { kind: "button", id: "crop-image", label: "Crop Image", command: { kind: "cropGraphics" }, write: null },
-  ];
-  if (list?.entries.some((entry) => entry.key === "trim" || entry.key === "viewport" || entry.key === "bb")) {
-    fields.push({ kind: "button", id: "reset-crop", label: "Reset Crop", command: { kind: "resetGraphicsCrop" }, write: null });
-  }
-  const numberFields: Array<readonly [string, string, string]> = [
-    ["width", "Width", "\\textwidth"],
-    ["height", "Height", "\\textheight"],
-    ["scale", "Scale", ""],
-  ];
+
+  const imageFields: DeckInspectorField[] = [{
+    kind: "file", id: "file", label: "File", value: path, name: path.split(/[\\/]/u).at(-1) ?? path,
+    command: { kind: "replaceGraphics" }, commandLabel: "Replace…", commandAriaLabel: "Replace Image…", write: null,
+  }];
   if (/\.pdf$/iu.test(path)) {
-    numberFields.push(["page", "Page", ""]);
+    const page = optionNumberField({ id: "page", label: "Page", raw: rawValue("page"), defaultSuffix: "",
+      write: (suffix) => ({ kind: "setGraphicsOption", key: "page", suffix }) });
+    if (page?.kind === "number") imageFields.push({ ...page, value: page.value ?? 1, step: 1, min: 1 });
   }
-  for (const [id, label, defaultSuffix] of numberFields) {
-    const field = optionNumberField({
-      id,
-      label,
-      raw: rawValue(id),
-      defaultSuffix,
-      write: (suffix) => ({ kind: "setGraphicsOption", key: id, suffix }),
+
+  const sizeFields: DeckInspectorField[] = [];
+  for (const [id, label, defaultSuffix] of [["width", "Width", "\\textwidth"], ["height", "Height", "\\textheight"], ["scale", "Scale", ""]] as const) {
+    const field = optionNumberField({ id, label, raw: rawValue(id), defaultSuffix,
+      write: (suffix) => ({ kind: "setGraphicsOption", key: id, suffix }) });
+    if (field?.kind !== "number") continue;
+    // An unset size shows only its placeholder; set units read as words.
+    const { unit, ...rest } = field;
+    const shown = field.value == null || unit === undefined ? undefined : DIMENSION_UNIT_NAMES[unit] ?? unit;
+    sizeFields.push(shown === undefined ? rest : { ...rest, unit: shown });
+  }
+  sizeFields.push({ kind: "boolean", id: "keepaspectratio", label: "Keep aspect ratio", inset: true,
+    value: hasFlag("keepaspectratio"), write: { kind: "setGraphicsFlag", key: "keepaspectratio" } });
+
+  const target = layout ? beamerImageCropTarget(context.source, layout, node.id) : null;
+  const cropped = list?.entries.some((entry) => entry.key === "trim" || entry.key === "viewport" || entry.key === "bb") ?? false;
+  const cropFields: DeckInspectorField[] = [];
+  if (target) {
+    cropFields.push({ kind: "button", id: "crop-image", label: "Edit Crop", inset: true, command: { kind: "cropGraphics" }, write: null });
+    const unit = beamerImageCropUnit(context.source, target);
+    const side = (id: "left" | "right" | "top" | "bottom", label: string): DeckInspectorNumberField => ({
+      kind: "number", id: `crop-${id}`, label, value: Number((target.crop[id] / unit.pt).toFixed(2)), step: unit.name === "bp" || unit.name === "pt" ? 1 : 0.1,
+      min: 0, unit: unit.name, placeholder: "0", write: { kind: "setGraphicsCrop", side: id, unitPt: unit.pt },
     });
-    if (field) {
-      fields.push(field.kind === "number" && id === "page" ? { ...field, value: field.value ?? 1, step: 1, min: 1 } : field);
-    }
+    cropFields.push(
+      { kind: "pair", id: "crop-horizontal", label: "Trim", fields: [side("left", "Left"), side("right", "Right")], write: null },
+      { kind: "pair", id: "crop-vertical", label: "", fields: [side("top", "Top"), side("bottom", "Bottom")], write: null },
+    );
   }
-  fields.push(
-    {
-      kind: "boolean",
-      id: "keepaspectratio",
-      label: "Keep aspect ratio",
-      value: hasFlag("keepaspectratio"),
-      write: { kind: "setGraphicsFlag", key: "keepaspectratio" },
-    },
-    {
-      kind: "text",
-      id: "trim",
-      label: "Trim",
-      value: rawValue("trim") ?? "",
-      placeholder: "left bottom right top",
-      write: { kind: "setGraphicsOption", key: "trim", suffix: "" },
-    },
-    {
-      kind: "boolean",
-      id: "clip",
-      label: "Clip to trim",
-      value: hasFlag("clip"),
-      write: { kind: "setGraphicsFlag", key: "clip" },
-    },
-  );
-  return fields;
+  cropFields.push({ kind: "boolean", id: "clip", label: "Clip", inset: true, value: hasFlag("clip"), write: { kind: "setGraphicsFlag", key: "clip" } });
+
+  return [
+    { id: "image", title: null, fields: imageFields },
+    { id: "size", title: "Size", fields: sizeFields },
+    { id: "crop", title: "Crop", ...(cropped && target ? { action: { label: "Reset", command: { kind: "resetGraphicsCrop" } } } : {}), fields: cropFields },
+  ];
 }
 
 function tikzFields(

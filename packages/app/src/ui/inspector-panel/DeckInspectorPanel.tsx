@@ -3,7 +3,6 @@ import { deckStepRootKey } from "../../root-key";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import {
   applyDeckEditAction,
-  beamerImageCropTarget,
   buildBeamerObjectIndex,
   buildDeckDocumentInspector,
   buildDeckFrameInspector,
@@ -89,7 +88,7 @@ export function DeckInspectorPanel(): JSX.Element {
     if (selectedNode) {
       // An unsupported object's layout item says why the preview cannot draw it.
       const message = activeFrame.layout.items.find((item) => item.id === selectedNode.id)?.message;
-      return buildDeckObjectInspector(source, selectedNode, message === undefined ? {} : { message });
+      return buildDeckObjectInspector(source, selectedNode, { layout: activeFrame.layout, ...(message === undefined ? {} : { message }) });
     }
     // The render's scan of the deck, rather than scanning it again here.
     return buildDeckFrameInspector(source, activeFrame.frameId, deckDocument);
@@ -125,8 +124,7 @@ export function DeckInspectorPanel(): JSX.Element {
   const objectId = selectedNode?.id ?? deckObjectSelection?.objectId ?? null;
   const crop = useDeckCropStore((s) => s.crop);
   const cropping = selectedNode?.kind === "graphics" && deckCropMatches(crop, activeFrame?.layout ?? null);
-  const cropAvailable = useMemo(() => fresh && selectedNode?.kind === "graphics" && beamerImageCropTarget(source, activeFrame.layout, selectedNode.id) != null,
-    [activeFrame, fresh, selectedNode, source]);
+
 
   const actionFor = useCallback(
     (
@@ -315,7 +313,7 @@ export function DeckInspectorPanel(): JSX.Element {
       {rendered == null || rendered.fields.length === 0 ? (
         <p className={css.hint}>This object has no editable properties yet.</p>
       ) : (
-        rendered.fields.flatMap((field) => field.id !== "crop-image" ? [field] : cropAvailable ? [cropping ? { ...field, label: "Done Cropping" } : field] : []).map((field) => (
+        rendered.fields.map((field) => (
           <DeckField
             key={`${activeDocumentId}:${objectId ?? frameId}:${field.id}`}
             field={field}
@@ -328,6 +326,45 @@ export function DeckInspectorPanel(): JSX.Element {
     </fieldset>
   );
 
+  // Crop mode turns its own button into the way out.
+  const shownField = (field: DeckInspectorField): DeckInspectorField =>
+    field.id === "crop-image" && field.kind === "button" && cropping ? { ...field, label: "Done" } : field;
+  const replacementAlert = replacementError?.documentId === activeDocumentId && replacementError.objectId === objectId
+    ? <p role="alert" className={css.deckReadOnlyReason}>{replacementError.message}</p> : null;
+  if (rendered?.target === "object" && rendered.sections) {
+    return (
+      <SidePanel className={css.panel ?? ""}>
+        <SidePanel.Header>{rendered.title}</SidePanel.Header>
+        <SidePanel.Content className={css.content ?? ""}>
+          <fieldset disabled={frameFieldsDisabled} className={css.deckFieldset}>
+            {rendered.sections.map((section) => (
+              <SidePanel.Section key={section.id}>
+                {section.title ? (
+                  <SidePanel.SectionHeader accessory={section.action ? (
+                    <button type="button" className={css.moreOptionsToggle} onClick={() => { if (section.action) runCommand(section.action.command); }}>
+                      {section.action.label}
+                    </button>
+                  ) : null}>{section.title}</SidePanel.SectionHeader>
+                ) : null}
+                <SidePanel.SectionBody className={css.deckFields ?? ""}>
+                  {section.fields.map((field) => (
+                    <DeckField
+                      key={`${activeDocumentId}:${objectId ?? frameId}:${field.id}`}
+                      field={shownField(field)}
+                      onCommit={commit}
+                      onBeginScrub={beginDeckScrub}
+                      onCommand={runCommand}
+                    />
+                  ))}
+                  {section.id === "image" ? replacementAlert : null}
+                </SidePanel.SectionBody>
+              </SidePanel.Section>
+            ))}
+          </fieldset>
+        </SidePanel.Content>
+      </SidePanel>
+    );
+  }
   if (rendered?.target === "object") {
     return (
       <SidePanel className={css.panel ?? ""}>
@@ -452,6 +489,10 @@ function deckActionForWrite(
             key: write.key,
             value: dimension(write.suffix),
           };
+    case "setGraphicsCrop":
+      return objectId == null
+        ? null
+        : { kind: "deckSetGraphicsCrop", frameId, objectId, side: write.side, valuePt: typeof value === "number" ? value * write.unitPt : null };
     case "setGraphicsFlag":
       return objectId == null
         ? null

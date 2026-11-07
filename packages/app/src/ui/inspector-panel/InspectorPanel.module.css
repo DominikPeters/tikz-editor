@@ -1349,3 +1349,23 @@
 .deckFields .numberInput {
   min-width: calc(var(--app-ui-scale, 1) * 52px);
 }
+
+/* An image's file: its name, the full path as a tooltip, and Replace… */
+.deckFileName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  color: var(--text);
+}
+
+/* A sectioned object inspector: the fieldset only disables, sections lay out. */
+.deckFieldset {
+  display: contents;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}

@@ -70,7 +70,8 @@ function DeckFieldControl(props: DeckFieldProps): JSX.Element {
       );
     case "boolean":
       return (
-        <div className={`${css.property} ${css.deckBooleanProperty}`}>
+        <div className={field.inset ? css.property : `${css.property} ${css.deckBooleanProperty}`}>
+          {field.inset ? <div className={css.propertyLabel} /> : null}
           <label className={css.checkboxControl}>
             <input
               className={css.checkboxInput}
@@ -89,9 +90,36 @@ function DeckFieldControl(props: DeckFieldProps): JSX.Element {
       return <DeckNumberField field={field} onCommit={commit} {...(onBeginScrub ? { onBeginScrub } : {})} />;
     case "color":
       return <DeckColorField field={field} onCommit={onCommit} />;
+    case "pair":
+      return (
+        <div className={css.property}>
+          <div className={css.propertyLabel}>{field.label}</div>
+          <div className={css.compactNumberPair}>
+            {field.fields.map((part) => (
+              <DeckNumberField key={part.id} field={part} compact
+                onCommit={(value) => { if (part.write) onCommit(part.write, value); }}
+                {...(onBeginScrub ? { onBeginScrub } : {})} />
+            ))}
+          </div>
+        </div>
+      );
+    case "file":
+      return (
+        <div className={css.property}>
+          <div className={css.propertyLabel}>{field.label}</div>
+          <div className={css.controlRow}>
+            <span className={css.deckFileName} title={field.value}>{field.name || "—"}</span>
+            <button type="button" className={css.deckCommandButton} aria-label={field.commandAriaLabel}
+              disabled={onCommand == null} onClick={() => { onCommand?.(field.command); }}>
+              {field.commandLabel}
+            </button>
+          </div>
+        </div>
+      );
     case "button":
       return (
-        <div className={`${css.property} ${css.deckBooleanProperty}`}>
+        <div className={field.inset ? css.property : `${css.property} ${css.deckBooleanProperty}`}>
+          {field.inset ? <div className={css.propertyLabel} /> : null}
           <button
             type="button"
             className={css.deckCommandButton}
@@ -169,8 +197,10 @@ function DeckNumberField(props: {
   field: Extract<DeckInspectorField, { kind: "number" }>;
   onCommit: (value: number | null) => void;
   onBeginScrub?: DeckFieldScrub;
+  /** One field of a pair: its label is a caption under the input. */
+  compact?: boolean;
 }): JSX.Element {
-  const { field, onCommit, onBeginScrub } = props;
+  const { field, onCommit, onBeginScrub, compact = false } = props;
   const [draft, setDraft] = useState<string | null>(null);
   const skipBlur = useRef(false);
   const scrubbable = field.value != null && field.write != null && onBeginScrub != null;
@@ -189,18 +219,16 @@ function DeckNumberField(props: {
     }
     onCommit(parsed);
   };
-  return (
-    <div className={css.property}>
-      <div
-        className={
-          scrubbable
-            ? `${css.propertyLabel} ${css.propertyLabelScrubbable}`
-            : css.propertyLabel
-        }
-        onPointerDown={(event) => { if (scrubbable) onBeginScrub(event, field); }}
-      >
-        {field.label}
-      </div>
+  const labelClass = compact ? css.fieldCaption : css.propertyLabel;
+  const label = (
+    <div
+      className={scrubbable ? `${labelClass} ${css.propertyLabelScrubbable}` : labelClass}
+      onPointerDown={(event) => { if (scrubbable) onBeginScrub(event, field); }}
+    >
+      {field.label}
+    </div>
+  );
+  const control = (
       <div className={css.controlRow}>
         <input
           className={css.numberInput}
@@ -236,8 +264,10 @@ function DeckNumberField(props: {
         />
         {field.unit ? <span className={css.unitLabel}>{field.unit}</span> : null}
       </div>
-    </div>
   );
+  return compact
+    ? <div className={css.compactNumberField}>{control}{label}</div>
+    : <div className={css.property}>{label}{control}</div>;
 }
 
 /**

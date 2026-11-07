@@ -114,10 +114,12 @@ describe("deck inspector models", () => {
     });
 
     const graphics = buildDeckObjectInspector(SOURCE, fx.nodeOfKind("graphics"));
+    // The unit reads as words; the write keeps the authored register.
     expect(fieldById(graphics.fields, "width")).toMatchObject({
       kind: "number",
       value: 0.63,
-      unit: "\\textwidth",
+      unit: "× text width",
+      write: { kind: "setGraphicsOption", key: "width", suffix: "\\textwidth" },
     });
     expect(fieldById(graphics.fields, "height")).toMatchObject({
       kind: "number",

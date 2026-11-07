@@ -2,8 +2,8 @@ import { applyFragments, EMPTY_FRAGMENT, layout, sourceSlice, tikz, userText, ty
 import { requireArrayValue } from "../utils/collections.js";
 import type { EditActionResult } from "../edit/actions.js";
 import type { SourcePatch } from "../edit/types.js";
-import { parseOptionListRaw } from "../options/parse.js";
-import { rewriteBeamerOptions } from "./option-edits.js";
+import { readOptionList, rewriteBeamerOptions, type OptionListLocation } from "./option-edits.js";
+import { beamerImageCropPatches, beamerImageCropTarget, type BeamerImageCrop } from "./deck-crop.js";
 import type { Span } from "../ast/types.js";
 import { buildBeamerObjectIndex, type BeamerObjectNode } from "./object-index.js";
 import { scanBeamerDocument } from "./scan.js";
@@ -46,6 +46,8 @@ export type DeckEditAction =
   | { kind: "deckSetListLabelTemplate"; frameId: string; objectId: string; template: string | null }
   | { kind: "deckReplaceGraphics"; frameId: string; objectId: string; path: string }
   | { kind: "deckSetGraphicsOption"; frameId: string; objectId: string; key: string; value: string | true | null }
+  /** One side of an image's crop, in points; the image keeps its drawn scale. */
+  | { kind: "deckSetGraphicsCrop"; frameId: string; objectId: string; side: keyof BeamerImageCrop; valuePt: number | null }
   /**
    * `true` writes a flag. Keys are case-sensitive (`columns` tells `T` from
    * `t`); `exclusive` names flags removed when this one is set (alignment).
@@ -72,6 +74,7 @@ const DECK_EDIT_ACTION_KINDS: ReadonlySet<string> = new Set([
   "deckSetListLabelTemplate",
   "deckReplaceGraphics",
   "deckSetGraphicsOption",
+  "deckSetGraphicsCrop",
   "deckSetEnvironmentOption",
   "deckSetColumnWidth",
   "deckSetFrameOption",
@@ -162,6 +165,17 @@ export function applyDeckEditAction(
       return applyReplaceGraphics(source, node, action.path);
     case "deckSetGraphicsOption":
       return applySetGraphicsOption(source, node, action.key, action.value);
+    case "deckSetGraphicsCrop": {
+      const target = node.kind === "graphics" ? beamerImageCropTarget(source, layout, node.id) : null;
+      if (!target) return { kind: "unsupported", reason: "This image cannot be cropped here." };
+      const value = Math.max(0, action.valuePt ?? 0);
+      const crop = { ...target.crop, [action.side]: value };
+      const horizontal = action.side === "left" || action.side === "right";
+      const kept = horizontal ? target.natural.width - crop.left - crop.right : target.natural.height - crop.top - crop.bottom;
+      if (!(kept > 0)) return { kind: "unsupported", reason: "The crop leaves nothing of the image." };
+      const patches = beamerImageCropPatches(source, target, crop);
+      return { kind: "success", newSource: applyFragments(source, patches.map((patch) => ({ span: patch.oldSpan, fragment: patch.replacement }))), patches };
+    }
     case "deckSetEnvironmentOption":
       return applySetEnvironmentOption(source, node, action.key, action.value, action.exclusive ?? []);
     case "deckSetColumnWidth":
@@ -374,42 +388,7 @@ function normalizeOverlaySpec(
 }
 
 /** A parsed `[...]` option list with absolute entry spans. */
-export type OptionListLocation = {
-  /** Span including the brackets. */
-  span: Span;
-  /** Span of the source between the brackets. */
-  contentSpan: Span;
-  /**
-   * `key` is lowercased, as the TikZ option parser normalizes it;
-   * `authoredKey` is the spelling in the source, for case-sensitive keys
-   * such as `columns`' `T` and `t`.
-   */
-  entries: readonly { span: Span; key: string | null; authoredKey: string | null; valueSpan: Span | null }[];
-};
-
-export function readOptionList(
-  source: string,
-  argument: { span: Span; contentSpan: Span }
-): OptionListLocation {
-  const ast = parseOptionListRaw(
-    source.slice(argument.span.from, argument.span.to),
-    argument.span.from
-  );
-  return {
-    span: argument.span,
-    contentSpan: argument.contentSpan,
-    entries: ast.entries.map((entry) => {
-      const named = entry.kind === "kv" || entry.kind === "flag";
-      const keySpan = named ? entry.keySpan : undefined;
-      return {
-        span: entry.span,
-        key: named ? entry.key : null,
-        authoredKey: !named ? null : keySpan ? source.slice(keySpan.from, keySpan.to).trim() : entry.raw.split("=")[0]?.trim() ?? entry.key,
-        valueSpan: entry.kind === "kv" ? entry.valueSpan ?? null : null,
-      };
-    }),
-  };
-}
+export { readOptionList, type OptionListLocation } from "./option-edits.js";
 
 function isValidOptionValue(value: string): boolean {
   if (!isSingleLine(value) || !hasBalancedBraces(value)) {

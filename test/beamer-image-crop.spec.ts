@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { beamerImageCropDrag, beamerImageCropPatches, beamerImageCropTarget, prepareBeamerDocument } from "../packages/core/src/beamer/index.js";
+import { applyDeckEditAction, beamerImageCropDrag, beamerImageCropPatches, beamerImageCropTarget, buildBeamerObjectIndex, buildDeckObjectInspector, prepareBeamerDocument, type DeckInspectorField } from "../packages/core/src/beamer/index.js";
 import type { DocumentGraphicsResolver } from "../packages/core/src/graphics/index.js";
 import type { SourcePatch } from "../packages/core/src/edit/types.js";
 
@@ -73,5 +73,27 @@ describe("image cropping", () => {
     const squeezed = beamerImageCropDrag(before, "e", -1e6, 0);
     expect((120 - squeezed.left - squeezed.right) * before.scale.x).toBeCloseTo(4, 6);
     expect(beamerImageCropDrag(before, "move", 30, 30)).toEqual(before.crop);
+  });
+
+  it("groups the image inspector into file, size and crop sections with crop fields in the author's unit", async () => {
+    const source = document(String.raw`\includegraphics[width=0.5\textwidth, trim=1cm 0 0 0, clip]{demo.png}`);
+    const layout = (await prepareBeamerDocument(source).renderFrame({ frameIndex: 0, step: 1, graphicsResolver: resolver })).layout;
+    const node = buildBeamerObjectIndex({ ...layout, source }).nodes.find((candidate) => candidate.kind === "graphics")!;
+    const model = buildDeckObjectInspector(source, node, { layout });
+    expect(model.sections?.map((section) => [section.title, section.action?.label ?? null, section.fields.map((field) => field.id)])).toEqual([
+      [null, null, ["file"]],
+      ["Size", null, ["width", "height", "scale", "keepaspectratio"]],
+      ["Crop", "Reset", ["crop-image", "crop-horizontal", "crop-vertical", "clip"]],
+    ]);
+    expect(model.fields.find((field) => field.id === "file")).toMatchObject({ kind: "file", name: "demo.png", commandLabel: "Replace…" });
+    const pair = model.fields.find((field) => field.id === "crop-horizontal") as Extract<DeckInspectorField, { kind: "pair" }>;
+    expect(pair.fields.map((field) => [field.label, field.value, field.unit])).toEqual([["Left", 1, "cm"], ["Right", 0, "cm"]]);
+
+    const write = pair.fields[1].write;
+    if (write?.kind !== "setGraphicsCrop") throw new Error("expected a crop write");
+    const result = applyDeckEditAction(source, layout, { kind: "deckSetGraphicsCrop", frameId: layout.frameId, objectId: node.id, side: write.side, valuePt: 0.5 * write.unitPt });
+    if (result.kind !== "success") throw new Error("expected the crop to apply");
+    expect(result.newSource).toContain("trim=1cm 0cm 0.5cm 0cm, clip");
+    expect((await target(result.newSource))!.scale.x).toBeCloseTo((await target(source))!.scale.x, 3);
   });
 });

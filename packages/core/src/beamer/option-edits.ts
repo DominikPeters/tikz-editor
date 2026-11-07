@@ -52,3 +52,41 @@ export function rewriteBeamerOptions(
   trivia({ from: cursor, to: argument.contentSpan.to }, false);
   return [{ span: argument.contentSpan, insert: joinFragments(parts, tikz``) }];
 }
+
+export type OptionListLocation = {
+  /** Span including the brackets. */
+  span: Span;
+  /** Span of the source between the brackets. */
+  contentSpan: Span;
+  /**
+   * `key` is lowercased, as the TikZ option parser normalizes it;
+   * `authoredKey` is the spelling in the source, for case-sensitive keys
+   * such as `columns`' `T` and `t`.
+   */
+  entries: readonly { span: Span; key: string | null; authoredKey: string | null; valueSpan: Span | null }[];
+};
+
+export function readOptionList(
+  source: string,
+  argument: { span: Span; contentSpan: Span }
+): OptionListLocation {
+  const ast = parseOptionListRaw(
+    source.slice(argument.span.from, argument.span.to),
+    argument.span.from
+  );
+  return {
+    span: argument.span,
+    contentSpan: argument.contentSpan,
+    entries: ast.entries.map((entry) => {
+      const named = entry.kind === "kv" || entry.kind === "flag";
+      const keySpan = named ? entry.keySpan : undefined;
+      return {
+        span: entry.span,
+        key: named ? entry.key : null,
+        authoredKey: !named ? null : keySpan ? source.slice(keySpan.from, keySpan.to).trim() : entry.raw.split("=")[0]?.trim() ?? entry.key,
+        valueSpan: entry.kind === "kv" ? entry.valueSpan ?? null : null,
+      };
+    }),
+  };
+}
+

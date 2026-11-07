@@ -41,7 +41,7 @@ test.beforeEach(async ({ page }) => {
   await page.locator(".cm-line").filter({ hasText: "\\begin{frame}{Crop}" }).click();
   await selectImage(page);
   // An unreadable image cannot be cropped faithfully.
-  await expect(page.getByRole("button", { name: "Crop Image", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Edit Crop", exact: true })).toHaveCount(0);
   const chooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Replace Image…", exact: true }).click();
   await (await chooser).setFiles({ name: "Halves.svg", mimeType: "image/svg+xml", buffer: Buffer.from(SVG) });
@@ -51,10 +51,10 @@ test.beforeEach(async ({ page }) => {
 
 test("crops from an edge, moves the image in its window, and undoes each drag", async ({ page }) => {
   const original = await readStoreSource(page);
-  await page.getByRole("button", { name: "Crop Image", exact: true }).click();
+  await page.getByRole("button", { name: "Edit Crop", exact: true }).click();
   await expect(page.getByTestId("deck-crop-overlay")).toBeVisible();
   await expect(page.getByTestId("deck-crop-ghost")).toBeAttached();
-  await expect(page.getByRole("button", { name: "Done Cropping", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Done", exact: true })).toBeVisible();
 
   const right = await page.getByTestId("deck-crop-e").boundingBox();
   const left = await page.getByTestId("deck-crop-w").boundingBox();
@@ -84,13 +84,13 @@ test("double-click reopens crop only for a cropped image, and Reset Crop restore
   await image(page).dblclick({ force: true });
   await expect(page.getByTestId("deck-crop-overlay")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Crop Image", exact: true }).click();
+  await page.getByRole("button", { name: "Edit Crop", exact: true }).click();
   const top = await page.getByTestId("deck-crop-n").boundingBox();
   const bottom = await page.getByTestId("deck-crop-s").boundingBox();
   if (!top || !bottom) throw new Error("Missing crop handles");
   await drag(page, "deck-crop-n", 0, (bottom.y - top.y) / 4);
   await expect.poll(() => readStoreSource(page)).toContain(", clip]");
-  await page.getByRole("button", { name: "Done Cropping", exact: true }).click();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByTestId("deck-crop-overlay")).toHaveCount(0);
 
   await selectImage(page);
@@ -99,7 +99,7 @@ test("double-click reopens crop only for a cropped image, and Reset Crop restore
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("deck-crop-overlay")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Reset Crop", exact: true }).click();
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect.poll(() => readStoreSource(page)).toMatch(/\\includegraphics\[width=4(?:\.0+)?cm, clip\]\{[^}]*Halves\.svg\}/u);
   await expectSourceCanvasConsistency(page);
 });

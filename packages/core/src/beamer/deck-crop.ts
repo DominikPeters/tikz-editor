@@ -2,7 +2,7 @@ import { plainNumber, sourceSlice, tikz, EMPTY_FRAGMENT, type TikzFragment } fro
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import { texDimensionUnitFactor } from "../text/tex/dimensions.js";
-import { readOptionList } from "./deck-edit-actions.js";
+import { readOptionList } from "./option-edits.js";
 import { beamerOptionalArgumentAfter, beamerOverlayArgumentAfter, createBeamerSyntaxContext } from "./syntax.js";
 import type { BeamerFrameLayout, BeamerRect } from "./types.js";
 
@@ -169,6 +169,20 @@ function cropValue(source: string, target: BeamerImageCropTarget, crop: BeamerIm
     ? tikz`${formatNumber(value / unit.factor)}${sourceSlice(source, unit.span)}`
     : formatNumber(value / BP));
   return tikz`${parts[0] ?? EMPTY_FRAGMENT} ${parts[1] ?? EMPTY_FRAGMENT} ${parts[2] ?? EMPTY_FRAGMENT} ${parts[3] ?? EMPTY_FRAGMENT}`;
+}
+
+/** The unit crop values are written in: the author's, when they share one, else bp. */
+export function beamerImageCropUnit(source: string, target: BeamerImageCropTarget): { readonly name: string; readonly pt: number } {
+  const key = target.plan.key;
+  if (key) {
+    const raw = source.slice(key.valueSpan.from, key.valueSpan.to);
+    const units = [...raw.matchAll(new RegExp(String.raw`(${NUMBER})\s*([a-zA-Z]{2})?`, "gu"))]
+      .filter((match) => match[2] !== undefined || Number(match[1]) !== 0);
+    const name = units[0]?.[2];
+    const pt = name ? texDimensionUnitFactor(name) : null;
+    if (name && pt !== null && units.every((match) => match[2] === name)) return { name, pt };
+  }
+  return { name: "bp", pt: BP };
 }
 
 function edit(span: Span, replacement: TikzFragment) { return { span, replacement }; }

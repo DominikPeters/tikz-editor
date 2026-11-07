@@ -103,7 +103,8 @@ describe("deck object fields", () => {
     expect(field(image, "width")).toMatchObject({ value: 0.5 });
     expect(field(image, "page")).toMatchObject({ value: 1, step: 1 });
     expect(field(image, "keepaspectratio")).toMatchObject({ value: true });
-    expect(field(image, "trim")).toMatchObject({ value: "1 2 3 4" });
+    // An unreadable file has no natural size to crop against: only Clip remains.
+    expect(image.some((entry) => entry.id === "crop-horizontal" || entry.id === "crop-image")).toBe(false);
     expect(field(image, "clip")).toMatchObject({ value: true });
     // Neither is drawn by the preview, so neither is offered.
     expect(image.some((entry) => entry.id === "angle" || entry.id === "overlay")).toBe(false);
