@@ -81,10 +81,11 @@ describe("image asset read ownership", () => {
     const older = prepareDocumentGraphicsContext(params);
     invalidateImageAssetPath(`${directory}/fig.svg`);
     const newer = await prepareDocumentGraphicsContext(params);
-    pending.resolve({ status: "missing", path: `${directory}/fig.png` });
+    pending.resolve({ status: "missing", path: `${directory}/fig.pdf` });
     await older;
     const cached = await prepareDocumentGraphicsContext(params);
-    expect(read).toHaveBeenCalledTimes(5);
+    // The obsolete first read, then the nine lookup candidates once.
+    expect(read).toHaveBeenCalledTimes(10);
     expect(cached.previewBundle.entries).toEqual(newer.previewBundle.entries);
     expect(cached.previewBundle.entries[0].resolution.status).toBe("resolved");
   });

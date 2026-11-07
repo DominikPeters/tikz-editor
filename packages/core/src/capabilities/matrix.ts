@@ -657,7 +657,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     edit: "none",
     fixtures: ["node_text_includegraphics"],
     notes:
-      "V1 supports PNG/JPEG/SVG inline graphics, trim/clip/viewport rendering, and desktop PDF graphics rasterized through the app asset resolver. Desktop resolves local assets; browser and unresolved assets render placeholders."
+      "PNG/JPEG/SVG and rasterized PDF graphics. graphicx keys run left to right as in graphicx.sty (width/height/totalheight/scale/angle/origin/keepaspectratio, `!`), trim/viewport/bb (pdftex.def) with clip and the star, the two-bracket corner form, draft boxes, Beamer overlay specifications, and \\graphicspath lookup in \\Gin@extensions order. Unreadable files draw pdftex's 72bp draft box; undrawn keys are reported as warnings."
   },
   text_tabular: {
     parser: "partial",

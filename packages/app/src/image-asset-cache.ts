@@ -5,7 +5,7 @@ import type {
   DocumentGraphicsResolveRequest,
   DocumentGraphicsResolver,
 } from "@tikz-editor/core/graphics";
-import { documentGraphicsPreviewRequestKey } from "@tikz-editor/core/graphics";
+import { documentGraphicsPreviewRequestKey, texGraphicsPathPrefixes } from "@tikz-editor/core/graphics";
 import {
   analyzeSimpleTexResources,
   type SimpleTexGraphicsOptions,
@@ -40,6 +40,11 @@ type PathCacheEntry = {
 };
 
 const SUPPORTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".svg", ".pdf"] as const;
+// pdftex.def's \Gin@extensions, restricted to the formats the preview reads,
+// in LaTeX's order; SVG is the preview's own addition and comes last.
+const LOOKUP_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg", ".PDF", ".PNG", ".JPG", ".JPEG", ".svg"] as const;
+// Image formats LaTeX names by extension that the preview cannot draw.
+const UNSUPPORTED_IMAGE_EXTENSIONS: ReadonlySet<string> = new Set([".eps", ".ps", ".mps", ".gif", ".tif", ".tiff", ".bmp", ".webp", ".jbig2", ".jb2", ".heic"]);
 const TEX_PT_PER_BP = 72.27 / 72;
 const MAX_PREVIEW_BUNDLES = 8;
 // Documents can be closed without reloading the app. Keep reusable image data
@@ -70,6 +75,7 @@ export async function prepareDocumentGraphicsContext(params: {
   const platform = getActiveEditorPlatform();
   const readLocalAsset = async (path: string): Promise<LocalAssetReadResult> => readImportedGraphic(platform.persistence, path) ?? await platform.files?.readLocalAsset?.(path) ?? { status: "missing", path };
   const baseDirectory = documentDirectory(params.documentFileRef);
+  const prefixes = texGraphicsPathPrefixes(params.source);
   const includeCandidates = collectIncludeGraphicsCandidates(params.source);
   const entries = new Map<string, PreparedAssetEntry>();
 
@@ -78,6 +84,7 @@ export async function prepareDocumentGraphicsContext(params: {
       filename: include.filename,
       options: include.options,
       baseDirectory,
+      prefixes,
     });
     if (entries.has(requestKey)) {
       continue;
@@ -86,6 +93,7 @@ export async function prepareDocumentGraphicsContext(params: {
       filename: include.filename,
       options: include.options,
       baseDirectory,
+      prefixes,
       readLocalAsset,
     });
     entries.set(requestKey, {
@@ -106,6 +114,7 @@ export async function prepareDocumentGraphicsContext(params: {
         filename: request.filename,
         options: request.options,
         baseDirectory,
+        prefixes,
       });
       const prepared = entries.get(requestKey);
       if (prepared) {
@@ -113,7 +122,8 @@ export async function prepareDocumentGraphicsContext(params: {
       }
       return placeholderResolutionForUnpreparedRequest(
         request.filename,
-        baseDirectory
+        baseDirectory,
+        prefixes
       );
     },
   };
@@ -139,8 +149,9 @@ export function documentGraphicsWatchPaths(params: {
   readonly documentFileRef?: DocumentFileRef | null;
 }): string[] {
   const baseDirectory = documentDirectory(params.documentFileRef);
+  const prefixes = texGraphicsPathPrefixes(params.source);
   const paths = collectIncludeGraphicsCandidates(params.source).flatMap((include) => {
-    const descriptor = includeGraphicsPathDescriptor(include.filename, baseDirectory);
+    const descriptor = includeGraphicsPathDescriptor(include.filename, baseDirectory, prefixes);
     return descriptor?.kind === "unsupported" ? [descriptor.path] : descriptor?.candidates ?? [];
   });
   return [...new Set(paths)].sort();
@@ -182,9 +193,10 @@ async function resolveIncludeGraphicsAsset(params: {
   readonly filename: string;
   readonly options: SimpleTexGraphicsOptions;
   readonly baseDirectory: string | null;
+  readonly prefixes: readonly string[];
   readonly readLocalAsset: ((path: string) => Promise<LocalAssetReadResult>) | undefined;
 }): Promise<DocumentGraphicsResolution> {
-  const descriptor = includeGraphicsPathDescriptor(params.filename, params.baseDirectory);
+  const descriptor = includeGraphicsPathDescriptor(params.filename, params.baseDirectory, params.prefixes);
   if (!descriptor) {
     return {
       status: "missing",
@@ -218,7 +230,7 @@ async function resolveIncludeGraphicsAsset(params: {
       if (cached.resolution.status === "resolved") {
         return cached.resolution;
       }
-      if (descriptor.kind === "explicit") {
+      if (descriptor.kind === "explicit" && (descriptor.candidates.length === 1 || cached.resolution.status !== "missing")) {
         return cached.resolution;
       }
       continue;
@@ -252,7 +264,7 @@ async function resolveIncludeGraphicsAsset(params: {
     if (entry.resolution.status === "resolved") {
       return entry.resolution;
     }
-    if (descriptor.kind === "explicit") {
+    if (descriptor.kind === "explicit" && (descriptor.candidates.length === 1 || entry.resolution.status !== "missing")) {
       return entry.resolution;
     }
   }
@@ -406,9 +418,10 @@ async function pdfPathCacheEntryFromRead(
 
 function placeholderResolutionForUnpreparedRequest(
   filename: string,
-  baseDirectory: string | null
+  baseDirectory: string | null,
+  prefixes: readonly string[]
 ): DocumentGraphicsResolution {
-  const descriptor = includeGraphicsPathDescriptor(filename, baseDirectory);
+  const descriptor = includeGraphicsPathDescriptor(filename, baseDirectory, prefixes);
   if (descriptor?.kind === "unsupported") {
     return {
       status: "unsupported",
@@ -517,13 +530,15 @@ function includeGraphicsRequestKey(params: {
   readonly filename: string;
   readonly options: SimpleTexGraphicsOptions;
   readonly baseDirectory: string | null;
+  readonly prefixes: readonly string[];
 }): string {
   const normalizedFilename = params.filename.trim();
-  const descriptor = includeGraphicsPathDescriptor(normalizedFilename, params.baseDirectory);
+  const descriptor = includeGraphicsPathDescriptor(normalizedFilename, params.baseDirectory, params.prefixes);
   const needsOptions = descriptor?.kind === "extensionless" ||
     (descriptor?.kind === "explicit" && extensionForPath(descriptor.candidates[0] ?? "") === ".pdf");
   return [
     params.baseDirectory ?? "",
+    params.prefixes.join("\u0000"),
     normalizedFilename,
     needsOptions ? pdfPageCacheDiscriminator(params.options) : "",
   ].join("\n");
@@ -552,9 +567,16 @@ function resolvePdfPageOption(options: SimpleTexGraphicsOptions):
   };
 }
 
+/**
+ * graphics.sty's lookup (\Ginclude@graphics): the name as written, then
+ * each \graphicspath prefix. A name without a recognised extension tries
+ * \Gin@extensions in order, each across every prefix, so `plot.v2` finds
+ * `plot.v2.pdf` and a `.pdf` wins over a `.png` of the same name.
+ */
 function includeGraphicsPathDescriptor(
   filename: string,
-  baseDirectory: string | null
+  baseDirectory: string | null,
+  prefixes: readonly string[] = []
 ):
   | { readonly kind: "explicit"; readonly candidates: readonly string[] }
   | { readonly kind: "extensionless"; readonly candidates: readonly string[] }
@@ -564,27 +586,27 @@ function includeGraphicsPathDescriptor(
   if (!trimmed || isRemoteUrl(trimmed)) {
     return null;
   }
-  const path = resolveLocalImagePath(trimmed, baseDirectory);
+  const names = isAbsoluteLocalPath(trimmed) || isImportedGraphicPath(trimmed)
+    ? [trimmed]
+    : [...new Set([trimmed, ...prefixes.map((prefix) => `${prefix}${trimmed}`)])];
+  const bases = [...new Set(names.flatMap((name) => {
+    const path = resolveLocalImagePath(name, baseDirectory);
+    return path ? [path] : [];
+  }))];
+  const path = bases[0];
   if (!path) {
     return null;
   }
   const extension = extensionForPath(path);
-  if (extension) {
-    if (!new Set<string>(SUPPORTED_EXTENSIONS).has(extension)) {
-      return {
-        kind: "unsupported",
-        path,
-        extension,
-      };
-    }
-    return {
-      kind: "explicit",
-      candidates: [path],
-    };
+  if (extension && new Set<string>(SUPPORTED_EXTENSIONS).has(extension)) {
+    return { kind: "explicit", candidates: bases };
+  }
+  if (extension && UNSUPPORTED_IMAGE_EXTENSIONS.has(extension)) {
+    return { kind: "unsupported", path, extension };
   }
   return {
     kind: "extensionless",
-    candidates: SUPPORTED_EXTENSIONS.map((supportedExtension) => `${path}${supportedExtension}`),
+    candidates: LOOKUP_EXTENSIONS.flatMap((lookupExtension) => bases.map((base) => `${base}${lookupExtension}`)),
   };
 }
 

@@ -105,19 +105,10 @@ describe("image asset cache", () => {
       sourceEnd: 21,
     });
 
-    expect(reads).toEqual([
-      "/tmp/tikz/fig.png",
-      "/tmp/tikz/fig.jpg",
-      "/tmp/tikz/fig.jpeg",
-      "/tmp/tikz/fig.svg",
-    ]);
-    expect(watched).toEqual([
-      "/tmp/tikz/fig.jpeg",
-      "/tmp/tikz/fig.jpg",
-      "/tmp/tikz/fig.pdf",
-      "/tmp/tikz/fig.png",
-      "/tmp/tikz/fig.svg",
-    ]);
+    // pdftex.def's \Gin@extensions order; SVG is the preview's addition.
+    const lookup = [".pdf", ".png", ".jpg", ".jpeg", ".PDF", ".PNG", ".JPG", ".JPEG", ".svg"].map((extension) => `/tmp/tikz/fig${extension}`);
+    expect(reads).toEqual(lookup);
+    expect(watched).toEqual([...lookup].sort());
     expect(resolution).toMatchObject({
       status: "resolved",
       mimeType: "image/svg+xml",
@@ -126,6 +117,41 @@ describe("image asset cache", () => {
       dataBase64: svgBase64,
     });
     owner.dispose();
+  });
+
+  it("searches \\graphicspath prefixes extension by extension, as graphics.sty does", async () => {
+    const documentFileRef: DocumentFileRef = { kind: "file", name: "main.tex", path: "/tmp/gp/main.tex", provider: "desktop-fs" };
+    const svg = (width: number) => Buffer.from(`<svg width="${width}pt" height="5pt" viewBox="0 0 ${width} 5"></svg>`).toString("base64");
+    // A same-named PNG in a later directory beats an SVG beside the document:
+    // \Gin@extensions is the outer loop. The dotted name keeps `.v2` as part of its base.
+    const files = new Map([
+      ["/tmp/gp/plot.v2.svg", svg(10)],
+      ["/tmp/shared/plot.v2.png", svg(20)],
+      ["/tmp/shared/logo.svg", svg(30)],
+    ]);
+    const reads: string[] = [];
+    setTestPlatform({
+      files: {
+        readLocalAsset: async (path) => {
+          reads.push(path);
+          const bytes = files.get(path);
+          // The PNG is served as SVG bytes: a missing PNG decoder must not matter here.
+          return bytes ? { status: "ok", path: path.replace(/\.png$/u, ".svg"), bytesBase64: bytes, size: bytes.length, revision: path } : { status: "missing", path };
+        },
+      },
+    });
+    const source = String.raw`\graphicspath{{figures/}{../shared/}}
+\node {\includegraphics{plot.v2}};
+\node {\includegraphics{logo.svg}};`;
+    const resolver = await prepareDocumentGraphicsResolver({ source, documentFileRef });
+    const resolve = (filename: string) => resolver.resolve({ filename, options: graphicsOptions(""), source, sourceStart: 0, sourceEnd: 0 });
+
+    expect(resolve("plot.v2")).toMatchObject({ status: "resolved", naturalWidthPt: 20 });
+    expect(resolve("logo.svg")).toMatchObject({ status: "resolved", naturalWidthPt: 30 });
+    expect(reads.slice(0, 5)).toEqual([
+      "/tmp/gp/plot.v2.pdf", "/tmp/gp/figures/plot.v2.pdf", "/tmp/shared/plot.v2.pdf",
+      "/tmp/gp/plot.v2.png", "/tmp/gp/figures/plot.v2.png",
+    ]);
   });
 
   it("reuses native image assets across trim and clip variants", async () => {
