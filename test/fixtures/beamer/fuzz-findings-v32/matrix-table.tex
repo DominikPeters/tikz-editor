@@ -1,0 +1,14 @@
+\documentclass[11pt]{beamer}
+\usetheme{Madrid}\setbeamertemplate{navigation symbols}{}
+\begin{document}\begin{frame}[t]{Block display}
+Before.\par
+\begin{itemize}\item \begin{columns}[onlytextwidth,b]
+\begin{column}{.46\textwidth}\begin{alertblock}{Cache invalidation}
+\begin{enumerate}
+\item \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]
+\item \begin{tabular}{lrr}Method&Cost&Error\\\hline Cached0&9&17\\Local1&10&13\\\end{tabular}
+\end{enumerate}\end{alertblock}\end{column}
+\begin{column}{.50\textwidth}Right prose.\end{column}
+\end{columns}\end{itemize}
+Witness.\par
+\end{frame}\end{document}

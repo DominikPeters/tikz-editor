@@ -1,0 +1,17 @@
+{
+  "formatVersion": 1,
+  "fidelity": [
+    {
+      "id": "matrix-table",
+      "file": "matrix-table.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "Witness.",
+        "Cacheinvalidation"
+      ]
+    }
+  ],
+  "recognition": []
+}

@@ -272,7 +272,10 @@ function planSimpleTexParagraphVerticalSkipsInto(
     });
     let parentTransitionFlex: { stretch: TexLength; shrink: TexLength } | undefined;
     let listVerticalSkipBefore: TexLength;
-    if (followsDisplay || suppressInitialTopsep) listVerticalSkipBefore = texLength(0);
+    if (suppressInitialTopsep) listVerticalSkipBefore = texLength(0);
+    else if (followsDisplay) listVerticalSkipBefore = state.previousEmittedListContext && scope.listContext &&
+      (state.previousEmittedListContext.listStart !== scope.listContext.listStart || state.previousEmittedListContext.itemIndex !== scope.listContext.itemIndex)
+      ? texArticleListParagraphSkip(scope.listContext.depth, font, resolvedListProfile) : texLength(0);
     else if (parentTransition) {
       const parentProfile = listProfileForContext(listProfile, parentTransition);
       const previous = state.previousEmittedListContext;
