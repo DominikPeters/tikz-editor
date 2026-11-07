@@ -72,6 +72,15 @@ describe("structural keys: nesting items", () => {
     const start = lines(R`\begin{itemize}`, R`\item Top`, R`\begin{itemize}`, R`\item ‸Lone`, R`\end{itemize}`, R`\item Last`, R`\end{itemize}`);
     expect(run(start, nest("unnest"))).toBe(lines(R`\begin{itemize}`, R`\item Top`, R`\item ‸Lone`, R`\item Last`, R`\end{itemize}`));
   });
+
+  it.each(["alt<1-2>", "only<1->", "visible<1->"])("keeps items inside a %s argument when outdenting", (command) => {
+    const nested = lines(R`\begin{itemize}`, R`\item ‸Nested`, R`\item Other`, R`\end{itemize}`);
+    const wrapper = `\\${command}{${nested}}${command.startsWith("alt") ? "{Alternative}" : ""}`;
+    const start = lines(R`\begin{itemize}`, R`\item Parent`, wrapper, R`\end{itemize}`);
+    const { source } = parseMarkedSource(start);
+    expect(buildEditTree(source).nodes.filter(node => node.kind === "list")).toHaveLength(2);
+    expect(run(start, nest("unnest"))).toBe(start);
+  });
 });
 
 describe("structural keys: the list toggle", () => {

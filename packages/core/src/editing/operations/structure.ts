@@ -526,6 +526,15 @@ export function indentItems(view: EditView, start: Position, end: Position, dire
   if (!first || first.list.node !== last?.list.node || last.index < first.index) {
     return { kind: "none" };
   }
+  if (direction === "unnest") {
+    const parentSlot = editNodeAt(tree.nodes, first.list.node).parent;
+    // Lifting an item across an argument/branch boundary leaves its item
+    // token inside that argument, outside any list there. Only a list
+    // directly contained by a parent item can move up one level.
+    if (parentSlot == null || editNodeAt(tree.nodes, editSlotAt(tree.slots, parentSlot).node).kind !== "item") {
+      return { kind: "none" };
+    }
+  }
   const moved = { from: first.item.commandSpan.from, to: requireArrayValue(last.list.items, last.index).contentSpan.to };
   if (direction === "nest" && !nestable(view, first.list.node, moved.from, moved.to)) {
     return { kind: "none" };
