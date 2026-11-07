@@ -90,15 +90,13 @@ describe("canvas object overlays", () => {
     expect(apply(source, value.removePatches)).toBe(document(String.raw`\includegraphics{a.png}`));
   });
 
-  it("does not wrap a figure's unsupported native overlay syntax", async () => {
+  it("retimes and removes an image's native overlay specification", async () => {
     const source = document(String.raw`\includegraphics<2->[width=2cm]{a.png}`);
-    const from = source.indexOf("\\includegraphics");
-    const model = buildBeamerBuildModel(source, "frame:0")!;
-    const node = { id: "figure", kind: "graphics", sourceSpan: { from, to: source.indexOf("\n\\end{frame}") }, bounds: { x: 0, y: 0, width: 1, height: 1 }, parentId: null, childIds: [] } as const;
-    const value = beamerObjectOverlayTarget(model, node);
-    expect(value.canSet).toBe(false);
-    expect(value.row?.kind).toBe("unsupported");
-    expect(value.removePatches).toEqual([]);
+    const value = await target(source, "graphics", 2);
+    expect(value.canSet).toBe(true);
+    expect(value.row?.command?.kind).toBe("only");
+    expect(apply(source, [value.setSpec("3-")!])).toBe(source.replace("<2->", "<3->"));
+    expect(apply(source, value.removePatches)).toBe(source.replace("<2->", ""));
   });
 
   it("does not remove a numeric override if that would advance a shared relative counter", async () => {

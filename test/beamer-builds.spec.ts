@@ -62,6 +62,12 @@ describe("source-backed Beamer builds", () => {
     expect(beamerBuildRange(disjoint.rows[0])).toBeNull();
   });
 
+  it("labels an image by its file through a native overlay specification", () => {
+    const model = modelFor(deck(String.raw`\includegraphics<2->[width=2cm]{figures/chart.png}`));
+    expect(model.rows.map((row) => row.label)).toEqual(["Image · chart.png"]);
+    expect(model.stepCount).toBe(2);
+  });
+
   it("labels source content and keeps disappearing content in the inventory", () => {
     const model = modelFor(deck(String.raw`\begin{itemize}
 \item<2-> Second point

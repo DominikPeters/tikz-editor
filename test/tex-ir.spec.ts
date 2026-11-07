@@ -352,6 +352,16 @@ describe("simple TeX paragraph IR", () => {
     expect(graphics[1]?.options.raw).toBe("trim={10 5 20 15},clip=false,viewport=10 5 100 65");
   });
 
+  it("reads the includegraphics star as clip before the keys", () => {
+    const source = String.raw`\includegraphics*[trim=1 2 3 4]{fig}\includegraphics*[clip=false]{fig}\includegraphics*{fig}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const graphics = parsed.nodes.filter((node) => node.kind === "includegraphics");
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(graphics.map((node) => node.options.clip)).toEqual([true, false, true]);
+    expect(analyzeSimpleTexResources(source).graphics.map((resource) => resource.options.clip)).toEqual([true, false, true]);
+  });
+
   it("discovers source-backed graphics resources and parses PDF pages once", () => {
     const source = String.raw`% \includegraphics{ignored.pdf}
 \node {A \includegraphics[page={2}]{fig.pdf}};

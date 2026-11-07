@@ -311,6 +311,45 @@ describe("headless Beamer frame renderer", () => {
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
+  it("shows overlay-qualified graphics only on their slides, as beamer's \\only does", async () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}
+A\includegraphics<1>[width=20pt]{first.png}\includegraphics<2->{second.png}B
+\begin{tikzpicture}\node {\includegraphics<+>{picture.png}};\end{tikzpicture}
+\end{frame}
+\end{document}`;
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "overlay-graphics",
+      resolve: (request) => ({ status: "resolved", mimeType: "image/png", dataBase64: "AA==", naturalWidthPt: 40, naturalHeightPt: 20, revision: request.filename }),
+    };
+    const document = prepareBeamerDocument(source);
+    const drawn = async (step: number) => {
+      const page = await document.renderFrame({ frameIndex: 0, step, graphicsResolver });
+      return [...page.svg.svg.matchAll(/data-tex-includegraphics-filename="([^"]*)"/gu)].map((match) => match[1]);
+    };
+
+    // Absolute specifications do not advance beamerpauses: <+> is slide 1.
+    expect(document.frameStepCount(0)).toBe(2);
+    expect(await drawn(1)).toEqual(["first.png", "picture.png"]);
+    expect(await drawn(2)).toEqual(["second.png"]);
+    const first = await document.renderFrame({ frameIndex: 0, step: 1, graphicsResolver });
+    const graphic = first.layout.graphics[0]!;
+    expect(source.slice(graphic.sourceSpan.from, graphic.sourceSpan.to)).toBe(String.raw`\includegraphics<1>[width=20pt]{first.png}`);
+    expect(graphic.bounds.width).toBeCloseTo(20, 6);
+  });
+
+  it("warns that beamer reads an includegraphics star as the filename", async () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}
+\includegraphics*[viewport=0 0 10 10]{a.png}
+\end{frame}
+\end{document}`;
+    const result = await renderBeamerFrame(source);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain("beamer-includegraphics-star");
+  });
+
   it("uses one document graphics resolver across frame flow, columns, and embedded TikZ", async () => {
     const source = String.raw`\documentclass{beamer}
 \begin{document}

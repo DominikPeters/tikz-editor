@@ -1257,7 +1257,7 @@ function simpleTexGraphicsNodeFromSyntax(
     filename: text.slice(filenameStart, filenameEnd).trim(),
     filenameStart,
     filenameEnd,
-    options: parseSimpleTexGraphicsOptions(optionList),
+    options: parseSimpleTexGraphicsOptions(optionList, syntax.node.getChild("Star") !== null),
     sourceStart: syntax.from,
     sourceEnd: syntax.to,
   };
@@ -3326,6 +3326,9 @@ function scanSimpleTexIncludeGraphicsCommand(
   }
 
   let cursor = skipSimpleTexControlWordSpaces(text, commandEnd);
+  // graphicx: the star form "just adds clip to the list of keys".
+  const starred = text[cursor] === "*";
+  if (starred) cursor = skipSimpleTexControlWordSpaces(text, cursor + 1);
   let optionList: OptionListAst | undefined;
   if (text[cursor] === "[") {
     const optionsArgument = scanSimpleTexOptionalBracketArgument(text, cursor);
@@ -3357,7 +3360,7 @@ function scanSimpleTexIncludeGraphicsCommand(
       filename: text.slice(filenameStart, filenameEnd).trim(),
       filenameStart: sourceOffset + filenameStart,
       filenameEnd: sourceOffset + filenameEnd,
-      options: parseSimpleTexGraphicsOptions(optionList),
+      options: parseSimpleTexGraphicsOptions(optionList, starred),
       sourceStart: sourceOffset + start,
       sourceEnd: sourceOffset + groupEnd,
     },
@@ -3366,7 +3369,8 @@ function scanSimpleTexIncludeGraphicsCommand(
 }
 
 function parseSimpleTexGraphicsOptions(
-  optionList?: OptionListAst
+  optionList?: OptionListAst,
+  starred = false
 ): SimpleTexGraphicsOptions {
   let width: TexDimensionExpression | undefined;
   let height: TexDimensionExpression | undefined;
@@ -3375,7 +3379,8 @@ function parseSimpleTexGraphicsOptions(
   let page: SimpleTexGraphicsPageOption | undefined;
   let trim: SimpleTexGraphicsTrim | undefined;
   let viewport: SimpleTexGraphicsViewport | undefined;
-  let clip: boolean | undefined;
+  // Set before the keys are read, so an explicit clip=false still wins.
+  let clip: boolean | undefined = starred ? true : undefined;
   for (const entry of optionList?.entries ?? []) {
     const key = entry.kind === "unknown" ? "" : entry.key;
     const value = entry.kind === "kv" ? entry.valueRaw : "";

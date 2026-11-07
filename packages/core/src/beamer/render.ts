@@ -621,6 +621,12 @@ async function renderBeamerFrameStep(params: {
     ...theme.diagnostics,
   ];
   diagnostics.push(...bodyIr.diagnostics, ...context.references.diagnostics);
+  // beamerbasemisc.sty redefines \includegraphics without a star: TeX reads
+  // `*` as the filename. The preview keeps graphicx's clip meaning.
+  for (const control of context.syntax.controlsIn(frame.bodySpan)) {
+    if (control.name === "includegraphics" && control.starSpan) diagnostics.push({ severity: "warning", code: "beamer-includegraphics-star",
+      message: "Beamer's \\includegraphics has no star form; LaTeX reads the star as the file name. Use the clip option instead.", span: control.span });
+  }
   const inheritedMacroDeclarations = [...macroBindings.values()].some(binding => /\\(?:newcommand|renewcommand|providecommand|def|let)\b/u.test(binding.kind === "text" ? binding.value : binding.body));
   const references: BeamerReferenceContext = {
     ambientTextAt: createBeamerAmbientText(source),

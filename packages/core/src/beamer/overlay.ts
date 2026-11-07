@@ -263,6 +263,23 @@ export function scanBeamerFrameOverlays(
       }
       continue;
     }
+    // beamerbasemisc.sty: \includegraphics<spec>[opts]{file} is
+    // \only<spec>{\includegraphics[opts]{file}}. The spec must follow the
+    // name directly; beamer's redefinition reads a star as the filename.
+    if (command.name === "includegraphics" && !command.starred) {
+      const rawSpec = beamerOverlayArgumentAfter(context, command.to, frame.bodySpan.to);
+      let end = rawSpec?.span.to ?? null;
+      for (let optional = end === null ? null : beamerOptionalArgumentAfter(context, end, frame.bodySpan.to); optional && end !== null;
+        optional = beamerOptionalArgumentAfter(context, end, frame.bodySpan.to)) end = optional.span.to;
+      const file = end === null ? null : beamerRequiredArgumentAfter(context, end, frame.bodySpan.to);
+      if (rawSpec && file) {
+        const span = { from: command.from, to: file.span.to };
+        pending.push({ kind: "command", sourceOrder: command.from, rawSpec,
+          command: { kind: "only", span, commandSpan: { from: command.from, to: command.to },
+            branches: [{ span, contentSpan: span, value: source.slice(span.from, span.to) }], syntaxSpans: [rawSpec.span] } });
+      }
+      continue;
+    }
     if (OVERLAY_SWITCH_COMMANDS.has(command.name)) {
       const rawSpec = beamerOverlayArgumentAfter(context, command.to, frame.bodySpan.to);
       const parsed = rawSpec && parseOverlaySwitch(context, frame.bodySpan.to, command, rawSpec);

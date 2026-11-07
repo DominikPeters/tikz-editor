@@ -111,8 +111,9 @@ function contentLabel(context: BeamerSyntaxContext, span: Span): string {
     if (["itemize", "enumerate", "description"].includes(begin.name)) return `List · ${excerpt(raw) || "Empty list"}`;
   }
   if (firstControl?.name === "includegraphics") {
-    const optional = beamerOptionalArgumentAfter(context, firstControl.span.to, span.to);
-    const file = beamerRequiredArgumentAfter(context, optional?.span.to ?? firstControl.span.to, span.to);
+    const overlay = beamerOverlayArgumentAfter(context, firstControl.span.to, span.to);
+    const optional = beamerOptionalArgumentAfter(context, overlay?.span.to ?? firstControl.span.to, span.to);
+    const file = beamerRequiredArgumentAfter(context, optional?.span.to ?? overlay?.span.to ?? firstControl.span.to, span.to);
     if (file && !context.source.slice(file.span.to, span.to).trim()) return `Image · ${file.value.split(/[\\/]/u).at(-1) ?? file.value}`;
   }
   const group = /\n\s*\n/u.test(raw) || boundaries.filter((entry) => entry.kind === "begin").length > 1;

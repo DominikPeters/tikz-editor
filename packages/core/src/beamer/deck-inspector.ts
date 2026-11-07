@@ -493,8 +493,7 @@ function optionNumberField(args: {
 /**
  * `\includegraphics[options]{file}`. Offers the options the text engine
  * draws (text/tex/ir.ts); `angle` and friends are not drawn, so not offered.
- * Nor is an overlay spec: the preview does not draw `\includegraphics<2->`
- * yet. Reading still steps over one, so such an image keeps its options.
+ * An overlay spec (`\includegraphics<2->`) belongs to the builds panel.
  */
 function graphicsFields(
   context: BeamerSyntaxContext,
