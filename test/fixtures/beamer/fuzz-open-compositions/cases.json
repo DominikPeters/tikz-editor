@@ -1,0 +1,1154 @@
+{
+  "formatVersion": 1,
+  "title": "Unresolved recursive compositions (strict, independently compiled failures)",
+  "fidelity": [
+    {
+      "id": "v3-seed-20261106-0000-nested-flow",
+      "frame": 1,
+      "family": "intricate-nested-flow",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7cycles",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ]
+      ],
+      "file": "v3-seed-20261106-0000-nested-flow.tex"
+    },
+    {
+      "id": "v3-seed-20261106-0001-diagram-build",
+      "frame": 1,
+      "family": "intricate-diagram-build",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7ticks",
+        "11steps"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11steps"
+        ]
+      ],
+      "file": "v3-seed-20261106-0001-diagram-build.tex"
+    },
+    {
+      "id": "v3-seed-20261106-0002-math-layout",
+      "frame": 1,
+      "family": "intricate-math-layout",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7cycles",
+        "11steps"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11steps"
+        ]
+      ],
+      "file": "v3-seed-20261106-0002-math-layout.tex"
+    },
+    {
+      "id": "v3-seed-20261106-0003-table-flow",
+      "frame": 1,
+      "family": "intricate-table-flow",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7cycles",
+        "11Hz"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ]
+      ],
+      "file": "v3-seed-20261106-0003-table-flow.tex"
+    },
+    {
+      "id": "v3-seed-20261106-0004-scoped-typography",
+      "frame": 1,
+      "family": "intricate-scoped-typography",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ]
+      ],
+      "file": "v3-seed-20261106-0004-scoped-typography.tex"
+    },
+    {
+      "id": "v3-seed-20261106-0005-overlay-composition",
+      "frame": 1,
+      "family": "intricate-overlay-composition",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ]
+      ],
+      "file": "v3-seed-20261106-0005-overlay-composition.tex"
+    },
+    {
+      "id": "v3-seed-20261107-0000-nested-flow",
+      "frame": 1,
+      "family": "intricate-nested-flow",
+      "pages": 5,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ]
+      ],
+      "file": "v3-seed-20261107-0000-nested-flow.tex"
+    },
+    {
+      "id": "v3-seed-20261107-0001-diagram-build",
+      "frame": 1,
+      "family": "intricate-diagram-build",
+      "pages": 5,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11steps"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ]
+      ],
+      "file": "v3-seed-20261107-0001-diagram-build.tex"
+    },
+    {
+      "id": "v3-seed-20261107-0002-math-layout",
+      "frame": 1,
+      "family": "intricate-math-layout",
+      "pages": 5,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ]
+      ],
+      "file": "v3-seed-20261107-0002-math-layout.tex"
+    },
+    {
+      "id": "v3-seed-20261107-0003-table-flow",
+      "frame": 1,
+      "family": "intricate-table-flow",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11steps"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ]
+      ],
+      "file": "v3-seed-20261107-0003-table-flow.tex"
+    },
+    {
+      "id": "v3-seed-20261107-0004-scoped-typography",
+      "frame": 1,
+      "family": "intricate-scoped-typography",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ]
+      ],
+      "file": "v3-seed-20261107-0004-scoped-typography.tex"
+    },
+    {
+      "id": "v3-seed-20261107-0005-overlay-composition",
+      "frame": 1,
+      "family": "intricate-overlay-composition",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7cycles",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ]
+      ],
+      "file": "v3-seed-20261107-0005-overlay-composition.tex"
+    },
+    {
+      "id": "v3-seed-20261107-0006-nested-flow",
+      "frame": 1,
+      "family": "intricate-nested-flow",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7ticks",
+        "11Hz"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11Hz"
+        ]
+      ],
+      "file": "v3-seed-20261107-0006-nested-flow.tex"
+    },
+    {
+      "id": "v3-seed-20261107-0007-diagram-build",
+      "frame": 1,
+      "family": "intricate-diagram-build",
+      "pages": 5,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11Hz"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11Hz"
+        ]
+      ],
+      "file": "v3-seed-20261107-0007-diagram-build.tex"
+    },
+    {
+      "id": "v3-seed-20261107-0008-math-layout",
+      "frame": 1,
+      "family": "intricate-math-layout",
+      "pages": 5,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7cycles",
+        "11Hz"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11Hz"
+        ]
+      ],
+      "file": "v3-seed-20261107-0008-math-layout.tex"
+    },
+    {
+      "id": "v3-seed-20261107-0009-table-flow",
+      "frame": 1,
+      "family": "intricate-table-flow",
+      "pages": 5,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11steps"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ]
+      ],
+      "file": "v3-seed-20261107-0009-table-flow.tex"
+    },
+    {
+      "id": "v3-seed-20261107-0010-scoped-typography",
+      "frame": 1,
+      "family": "intricate-scoped-typography",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11steps"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ]
+      ],
+      "file": "v3-seed-20261107-0010-scoped-typography.tex"
+    },
+    {
+      "id": "nested-list-head-itemize-enumerate-normal",
+      "file": "nested-list-head-itemize-enumerate-normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-list-head-itemize-enumerate-small",
+      "file": "nested-list-head-itemize-enumerate-small.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-list-head-itemize-itemize-normal",
+      "file": "nested-list-head-itemize-itemize-normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-list-head-itemize-itemize-small",
+      "file": "nested-list-head-itemize-itemize-small.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-list-head-description-enumerate-normal",
+      "file": "nested-list-head-description-enumerate-normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-list-head-description-enumerate-small",
+      "file": "nested-list-head-description-enumerate-small.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-list-head-description-itemize-normal",
+      "file": "nested-list-head-description-itemize-normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "nested-list-head-description-itemize-small",
+      "file": "nested-list-head-description-itemize-small.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "First",
+        "Second"
+      ]
+    }
+  ],
+  "recognition": []
+}

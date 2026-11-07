@@ -1,0 +1,102 @@
+\documentclass[11pt,aspectratio=43]{beamer}
+\usepackage{tikz}
+\usetheme{Madrid}
+\setbeamertemplate{navigation symbols}{}
+\title{Cache invalidation: experiments and bounds}
+\subtitle{Generated interaction study}
+\author{Research group}
+\date{}
+\year=2026\month=11\day=5
+\newcommand{\fuzzlayerA}[1]{\textit{#1}}
+\newcommand{\fuzzlayerB}[1]{\fuzzlayerA{#1}}
+\newcommand{\fuzzlayerC}[1]{\fuzzlayerB{#1}}
+\newcommand{\fuzzterm}[1]{\fuzzlayerC{#1}}
+\newcommand{\fuzzpair}[2]{\fuzzterm{#1}: #2}
+\newcommand{\fuzzunit}{ms}
+\let\fuzzoriginalunit\fuzzunit
+\newcommand{\fuzzcoefficient}{1}
+\newcommand{\fuzzscale}[2][\fuzzcoefficient]{#1\,#2}
+\definecolor{fuzzpaint}{RGB}{255,0,255}
+\definecolor{fuzzsecond}{RGB}{18,137,67}
+\tikzset{fuzzvertex/.style={draw,rounded corners=1pt,fill=blue!10,inner sep=1pt,minimum width=.35cm,minimum height=.25cm}}
+\begin{document}
+\section{Cache invalidation}
+\begin{frame}[t,shrink=5]{Cache invalidation}{Composed dependencies}
+\fuzzpair{Experiment}{Timing: 12\fuzzunit; estimate $\fuzzscale{x}+\fuzzscale[2]{y}$.}\par
+{\renewcommand{\fuzzunit}{samples}\let\fuzzterm\textbf\fuzzpair{LocalScope}{Timing: 7\fuzzunit.}\par}
+\fuzzpair{RestoredScope}{Timing: 11\fuzzunit.}\par
+{\small\color{black}\raggedright
+\begin{itemize}
+\item<1-> \begin{enumerate}
+\item<1-> \textrm{We compare the} proposed solution with a reference computed from the complete input.  The estimate is $\frac{a+b}{1+c}$.
+\item<2-> \only<1-2>{\[\begin{aligned}a+b&=c\\ d-e&=f\end{aligned}\]}
+\item<2-> \visible<2-3>{{\scriptsize\color{teal}\centering
+\begin{columns}[onlytextwidth,b]
+\begin{column}{0.46\textwidth}
+\[\begin{aligned}a+b&=c\\ d-e&=f\end{aligned}\]
+\end{column}
+\begin{column}{0.50\textwidth}
+\begin{tikzpicture}[font=\scriptsize]
+\begin{scope}[scale=0.8,rotate=17]
+
+\foreach \x in {0,1,2,3} {\draw[gray!30] (\x*1.100,-.8)--(\x*1.100,.35);}
+\node[fuzzvertex] (g10n0) at (0.000,0) {A};
+\node[fuzzvertex] (g10n1) at (1.100,0) {B};
+\node[fuzzvertex] (g10n2) at (2.200,0) {C};
+\node[fuzzvertex] (g10n3) at (3.300,0) {D};
+\node[fuzzvertex] (g10n4) at (0.000,-0.65) {E};
+\node[fuzzvertex] (g10n5) at (1.100,-0.65) {F};
+\begin{scope}[xshift=.5pt,yshift=-.5pt]
+\draw<1->[->,thick] (g10n0) -- (g10n1);
+\draw<1->[->,thick] (g10n1) to[bend left=20] (g10n2);
+\draw<1->[->,thick] (g10n2) -- (g10n3);
+\draw<1->[->,thick] (g10n3) to[bend left=20] (g10n4);
+\draw<1->[->,thick] (g10n4) -- (g10n5);
+\draw[blue] (0,-.9) .. controls (0.990,-.3) and (2.310,-1.1) .. (3.300,-.8);
+\end{scope}
+\end{scope}
+\end{tikzpicture}
+\end{column}
+\end{columns}\par}}
+\end{enumerate}
+\item<2-> \alt<2->{\textbf{A narrow column} can change line breaking even when the underlying expression is unchanged. The next pass must preserve the boundary conditions while revisiting dependent values. The estimate is $\frac{a+b}{1+c}$.}{Alternative estimate $x_0$.}
+\end{itemize}\par}
+\par \begin{tikzpicture}[font=\scriptsize]
+\fill<2-3>[fuzzpaint] (0,0) rectangle (.8,.3);
+\fill<3->[fuzzsecond] (1,0) rectangle (1.8,.3);
+\node[anchor=west] at (2,0.15) {Witness};
+\end{tikzpicture}
+\only<4>{}
+\end{frame}
+\renewcommand{\fuzzunit}{us}
+\renewcommand{\fuzzcoefficient}{2}
+\renewcommand{\fuzzterm}[1]{{\textbf{#1}}}
+\section{Geometric uncertainty}
+\begin{frame}[t]{Incremental analysis}
+\fuzzpair{MacroStageB}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{columns}[T]\begin{column}{.46\textwidth}A narrow column can change line breaking even when the underlying expression is unchanged.\end{column}\begin{column}{.46\textwidth}\begin{itemize}\item Input state\item Updated state\end{itemize}\end{column}\end{columns}
+\end{frame}
+\renewcommand{\fuzzunit}{steps}
+\renewcommand{\fuzzcoefficient}{3}
+\renewcommand{\fuzzterm}[1]{{\textbf{#1}}}
+\section{Constraint propagation}
+\begin{frame}[t]{Cache invalidation}
+\fuzzpair{MacroStageC}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{block}{Follow-up}\fuzzterm{A revised value} depends on the preceding frame.\end{block}
+\[r_{k+1}=r_k-\alpha d_k\]
+\end{frame}
+\renewcommand{\fuzzunit}{us}
+\renewcommand{\fuzzcoefficient}{4}
+\renewcommand{\fuzzterm}[1]{{\textbf{#1}}}
+\section{Iterative refinement}
+\begin{frame}[t]{Incremental analysis}
+\fuzzpair{MacroStageD}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{columns}[T]\begin{column}{.46\textwidth}Intermediate results carry both a numerical estimate and an explicit dependency set.\end{column}\begin{column}{.46\textwidth}\begin{itemize}\item Input state\item Updated state\end{itemize}\end{column}\end{columns}
+\end{frame}
+\end{document}
