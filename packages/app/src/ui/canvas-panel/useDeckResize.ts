@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { clientPoint, px } from "@tikz-editor/core/coords/index";
-import { beamerColumnResizePatches, beamerImageResizePatches, beamerSpacingResizePatches, type BeamerSpacingTarget, type BeamerColumnDivider, type BeamerFrameLayout, type BeamerImageResizeTarget } from "@tikz-editor/core/beamer/index";
+import { beamerColumnResizePatches, beamerImageCropDrag, beamerImageCropPatches, beamerImageResizePatches, beamerSpacingResizePatches, type BeamerSpacingTarget, type BeamerColumnDivider, type BeamerFrameLayout, type BeamerImageCropHandle, type BeamerImageCropTarget, type BeamerImageResizeTarget } from "@tikz-editor/core/beamer/index";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { beginDocumentEdit, canContinueDocumentEdit, restoreDocumentEdit, trackDocumentEdit, type DocumentEditSession } from "../../edit-session";
 import { useEditorStore } from "../../store/store";
@@ -9,7 +9,8 @@ import { clientToSvgPoint } from "./geometry";
 
 export type DeckResizeTarget = { kind: "columns"; divider: BeamerColumnDivider }
   | { kind: "spacing"; spacing: BeamerSpacingTarget }
-  | { kind: "image"; image: BeamerImageResizeTarget; corner: "nw" | "ne" | "sw" | "se" };
+  | { kind: "image"; image: BeamerImageResizeTarget; corner: "nw" | "ne" | "sw" | "se" }
+  | { kind: "crop"; crop: BeamerImageCropTarget; handle: BeamerImageCropHandle };
 type Session = {
   edit: DocumentEditSession;
   step: number;
@@ -21,6 +22,7 @@ type Session = {
 function patchesFor(source: string, target: DeckResizeTarget, dx: number, dy: number): SourcePatch[] {
   if (target.kind === "columns") return beamerColumnResizePatches(source, target.divider, dx);
   if (target.kind === "spacing") return beamerSpacingResizePatches(source, target.spacing, dy);
+  if (target.kind === "crop") return beamerImageCropPatches(source, target.crop, beamerImageCropDrag(target.crop, target.handle, dx, dy));
   const { width, height } = target.image.bounds;
   const sx = target.corner.endsWith("e") ? 1 : -1;
   const sy = target.corner.startsWith("s") ? 1 : -1;
@@ -97,7 +99,8 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
     if (state.sourceRevision !== initial.sourceRevision || state.activeCanvasTextEditSourceId) return null;
     pendingSelection.current = null;
     const edit = beginDocumentEdit(state, []);
-    const imageFrom = target.kind === "image" ? layout.graphics.find((item) => item.itemId === target.image.objectId)?.sourceSpan.from : undefined;
+    const imageFrom = target.kind === "image" ? layout.graphics.find((item) => item.itemId === target.image.objectId)?.sourceSpan.from
+      : target.kind === "crop" ? target.crop.sourceStart : undefined;
     return { edit, ...(imageFrom !== undefined ? { imageFrom: imageFrom } : {}), step: state.deckStepByRootKey[deckStepRootKey(edit.documentId, layout.frameId)] ?? 1,
       patches: [], cleanup: () => {} };
   };

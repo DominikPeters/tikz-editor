@@ -59,6 +59,9 @@ export type DeckInspectorWrite =
 /** What a button field does; the app runs it, there is no source write. */
 export type DeckInspectorCommand =
   | { kind: "replaceGraphics" }
+  /** Toggle crop mode on the canvas. */
+  | { kind: "cropGraphics" }
+  | { kind: "resetGraphicsCrop" }
   | { kind: "enterDrawing"; rootId: string }
   | { kind: "revealSource"; span: Span };
 
@@ -535,7 +538,11 @@ function graphicsFields(
   const fields: DeckInspectorField[] = [
     { kind: "text", id: "file", label: "File", value: path, write: null },
     { kind: "button", id: "replace-image", label: "Replace Image…", command: { kind: "replaceGraphics" }, write: null },
+    { kind: "button", id: "crop-image", label: "Crop Image", command: { kind: "cropGraphics" }, write: null },
   ];
+  if (list?.entries.some((entry) => entry.key === "trim" || entry.key === "viewport" || entry.key === "bb")) {
+    fields.push({ kind: "button", id: "reset-crop", label: "Reset Crop", command: { kind: "resetGraphicsCrop" }, write: null });
+  }
   const numberFields: Array<readonly [string, string, string]> = [
     ["width", "Width", "\\textwidth"],
     ["height", "Height", "\\textheight"],

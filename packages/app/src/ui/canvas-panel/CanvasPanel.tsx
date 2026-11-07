@@ -36,6 +36,7 @@ resolvePropertyTargetFromParseResult
 import type { SnapLine } from "@tikz-editor/core/edit/snapping";
 import {
   beamerObjectAtOffset,
+  beamerImageCropTarget,
   beamerObjectDuplicationPatch,
   buildBeamerCaretStopDomain,
   buildBeamerObjectIndex,
@@ -69,6 +70,7 @@ import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/doc
 import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
 import { DeckResizeOverlay } from "./DeckResizeOverlay";
+import { startDeckCrop } from "./deck-crop-store";
 import { CanvasPanelView } from "./CanvasPanelView";
 import { useDeckOverlayContextMenu } from "./useDeckOverlayContextMenu";
 import { useCanvasContextMenuController,useCanvasContextMenuState } from "./useCanvasContextMenus";
@@ -3013,6 +3015,15 @@ export const CanvasPanel = memo(function CanvasPanel({
       const node = deckObjectIndex?.byId.get(objectId);
       if (!node || !enterNestedFigure(node)) {
         selectDeckObject(objectId);
+        // Double-clicking an image that is already cropped reopens its crop.
+        const layout = deckActiveFrame?.layout;
+        const graphic = layout?.graphics.find((item) => item.itemId === objectId);
+        if (layout && deckFrameFresh && node?.kind === "graphics" && (graphic?.options.trim || graphic?.options.viewport) &&
+          beamerImageCropTarget(snapshot.source, layout, objectId)) {
+          // After this press's release: the overlay must not become the click's
+          // target, which would read as a click on the background.
+          window.addEventListener("pointerup", () => { window.setTimeout(() => { startDeckCrop(layout, objectId); }, 0); }, { once: true });
+        }
       }
     },
     closeTextEditingSession,

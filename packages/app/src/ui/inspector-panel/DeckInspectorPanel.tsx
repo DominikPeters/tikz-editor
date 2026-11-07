@@ -3,6 +3,7 @@ import { deckStepRootKey } from "../../root-key";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import {
   applyDeckEditAction,
+  beamerImageCropTarget,
   buildBeamerObjectIndex,
   buildDeckDocumentInspector,
   buildDeckFrameInspector,
@@ -29,6 +30,8 @@ import { DeckDocumentSections, DeckScopeHeader, DeckSlideInfoSection } from "./D
 import { useInspectorPreviewScrub } from "./useInspectorPreviewScrub";
 import css from "./InspectorPanel.module.css";
 import { replaceSelectedDeckGraphics } from "../deck-graphics-replacement";
+import { resetSelectedDeckGraphicsCrop } from "../deck-graphics-crop";
+import { deckCropMatches, startDeckCrop, stopDeckCrop, useDeckCropStore } from "../canvas-panel/deck-crop-store";
 
 /**
  * Deck-mode inspector (Stage 3b): renders `DeckInspectorModel` fields for
@@ -120,6 +123,10 @@ export function DeckInspectorPanel(): JSX.Element {
 
   const frameId = activeFrame?.frameId ?? null;
   const objectId = selectedNode?.id ?? deckObjectSelection?.objectId ?? null;
+  const crop = useDeckCropStore((s) => s.crop);
+  const cropping = selectedNode?.kind === "graphics" && deckCropMatches(crop, activeFrame?.layout ?? null);
+  const cropAvailable = useMemo(() => fresh && selectedNode?.kind === "graphics" && beamerImageCropTarget(source, activeFrame.layout, selectedNode.id) != null,
+    [activeFrame, fresh, selectedNode, source]);
 
   const actionFor = useCallback(
     (
@@ -272,6 +279,15 @@ export function DeckInspectorPanel(): JSX.Element {
   }
 
   const runCommand = (command: DeckInspectorCommand): void => {
+    if (command.kind === "cropGraphics") {
+      if (cropping) stopDeckCrop();
+      else if (fresh && objectId != null) startDeckCrop(activeFrame.layout, objectId);
+      return;
+    }
+    if (command.kind === "resetGraphicsCrop") {
+      resetSelectedDeckGraphicsCrop({ getState: useEditorStore.getState, dispatch });
+      return;
+    }
     if (command.kind === "replaceGraphics") {
       if (replacing.current) return;
       replacing.current = true;
@@ -299,7 +315,7 @@ export function DeckInspectorPanel(): JSX.Element {
       {rendered == null || rendered.fields.length === 0 ? (
         <p className={css.hint}>This object has no editable properties yet.</p>
       ) : (
-        rendered.fields.map((field) => (
+        rendered.fields.flatMap((field) => field.id !== "crop-image" ? [field] : cropAvailable ? [cropping ? { ...field, label: "Done Cropping" } : field] : []).map((field) => (
           <DeckField
             key={`${activeDocumentId}:${objectId ?? frameId}:${field.id}`}
             field={field}

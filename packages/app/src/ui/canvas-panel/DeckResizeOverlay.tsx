@@ -1,7 +1,9 @@
-import { useMemo, type KeyboardEvent, type RefObject } from "react";
-import { beamerColumnDividers, beamerImageResizeTarget, beamerSpacingTargets, type BeamerFrameLayout, type BeamerObjectIndex, type BeamerObjectNode } from "@tikz-editor/core/beamer/index";
+import { useEffect, useMemo, type KeyboardEvent, type RefObject } from "react";
+import { beamerColumnDividers, beamerImageCropTarget, beamerImageResizeTarget, beamerSpacingTargets, type BeamerFrameLayout, type BeamerObjectIndex, type BeamerObjectNode } from "@tikz-editor/core/beamer/index";
 import { useEditorStore } from "../../store/store";
 import { useDeckResize, type DeckResizeTarget } from "./useDeckResize";
+import { DeckCropOverlay } from "./DeckCropOverlay";
+import { deckCropMatches, stopDeckCrop, useDeckCropStore } from "./deck-crop-store";
 import css from "./CanvasPanel.module.css";
 
 export function DeckResizeOverlay({ source, layout, index, selected, scale, svgRef, closeText }: {
@@ -12,7 +14,32 @@ export function DeckResizeOverlay({ source, layout, index, selected, scale, svgR
   const toolMode = useEditorStore((s) => s.toolMode);
   const { dragging, begin, nudge } = useDeckResize({ source, layout, svgRef, closeText });
   const dividers = useMemo(() => layout && index ? beamerColumnDividers(source, layout, index) : [], [source, layout, index]);
-  const image = useMemo(() => layout && selected?.kind === "graphics" ? beamerImageResizeTarget(source, layout, selected.id) : null, [source, layout, selected]);
+  const crop = useDeckCropStore((s) => s.crop);
+  const cropping = selected?.kind === "graphics" && deckCropMatches(crop, layout);
+  const cropTarget = useMemo(() => layout && cropping ? beamerImageCropTarget(source, layout, selected.id) : null, [source, layout, selected, cropping]);
+  const image = useMemo(() => layout && selected?.kind === "graphics" && !cropping ? beamerImageResizeTarget(source, layout, selected.id) : null, [source, layout, selected, cropping]);
+  // Crop mode ends once its image is no longer selected (another object, the
+  // background, another frame) or can no longer be cropped. A drag's own
+  // reflow reselects the image by its source position first.
+  useEffect(() => {
+    if (!crop || dragging || !layout || source !== useEditorStore.getState().snapshot.source) return;
+    const selection = useEditorStore.getState().deckObjectSelection;
+    if (!deckCropMatches(crop, layout) || !selection || !beamerImageCropTarget(source, layout, selection.objectId)) stopDeckCrop();
+  }, [crop, dragging, layout, selected, source]);
+  // Return or Escape leaves crop mode wherever focus is: a drag's reflow can
+  // replace the focused handle.
+  useEffect(() => {
+    if (!cropTarget || dragging) return;
+    const key = (event: globalThis.KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if ((event.key !== "Escape" && event.key !== "Enter") || event.defaultPrevented || target?.isContentEditable ||
+        target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "BUTTON" || target?.closest(".cm-editor")) return;
+      event.preventDefault(); event.stopPropagation();
+      stopDeckCrop();
+    };
+    window.addEventListener("keydown", key, true);
+    return () => { window.removeEventListener("keydown", key, true); };
+  }, [cropTarget, dragging]);
   const spacing = useMemo(() => layout ? beamerSpacingTargets(source, layout) : [], [source, layout]);
   const onKeyDown = (event: KeyboardEvent<SVGElement>, target: DeckResizeTarget) => {
     const step = event.shiftKey ? 10 : 1;
@@ -60,6 +87,7 @@ export function DeckResizeOverlay({ source, layout, index, selected, scale, svgR
         <rect x={x - 14 / scale} y={end - 1.5 / scale} width={12 / scale} height={3 / scale} rx={1.5 / scale} className={css.deckSpacingGrip} />
       </g>;
     })}
+    {cropTarget ? <DeckCropOverlay layout={layout} target={cropTarget} scale={scale} begin={begin} onKeyDown={onKeyDown} /> : null}
     {image ? (["nw", "ne", "sw", "se"] as const).map((corner) => {
       const target: DeckResizeTarget = { kind: "image", image, corner };
       const x = image.bounds.x + (corner.endsWith("e") ? image.bounds.width : 0);
