@@ -297,6 +297,8 @@ export type BeamerParagraphLayout = {
    * the atom's full source span in the enclosing scope session.
    */
   atomicRenderSpans: BeamerAtomicRenderSpan[];
+  /** Whole-container covering also hides labels owned outside this source range. */
+  visibility?: "visible" | "hidden";
   /** Source ranges laid out for covered overlays but omitted from paint. */
   hiddenSourceSpans?: readonly Span[];
   /** Source-backed but non-direct ranges, such as explicit custom-macro arguments. */

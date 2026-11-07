@@ -824,7 +824,7 @@ function nativeVListLabelGlyphs(
         positioned.item.kind === "hbox" &&
         positioned.item.role?.kind === "list-label"
       ) {
-        const isCovered =
+        const isCovered = paragraph.visibility === "hidden" ||
           paragraph.hiddenListItemIndices?.includes(
             positioned.item.role.itemIndex
           ) === true ||

@@ -56,7 +56,7 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   itemActionCommitsParagraph?: (mapped: MappedText, sourceEnd: number) => boolean;
   layoutFailures?: Map<number, string>;
   inlineFlow?: BeamerInlineFlow[];
-  inlineFlowLabelRevision?: number;
+  inlineFlowLabelState?: { revision: number };
   inlineFlowItemLabels?: Map<number, { targetOffset: number; labels: readonly SimpleTexListContext[] }>;
   blockThemeAt?: (offset: number) => ResolvedBeamerTheme;
   ambientTextAt?: ((offset: number) => string) & { itemDepthAt?: (offset: number) => number };

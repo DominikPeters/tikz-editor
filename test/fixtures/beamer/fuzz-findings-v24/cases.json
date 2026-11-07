@@ -1,0 +1,74 @@
+{
+  "formatVersion": 1,
+  "title": "Closed nested list/block/table composition",
+  "fidelity": [
+    {
+      "id": "v3-seed-20261107-0001-diagram-build",
+      "frame": 1,
+      "family": "intricate-diagram-build",
+      "pages": 5,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11steps"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ]
+      ],
+      "file": "v3-seed-20261107-0001-diagram-build.tex"
+    }
+  ],
+  "recognition": []
+}

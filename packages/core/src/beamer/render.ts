@@ -1495,6 +1495,7 @@ async function prepareInlineFlow(params: {
   resolvePendingLabels?: boolean;
 }): Promise<void> {
   params.references.inlineFlowItemLabels ??= new Map();
+  params.references.inlineFlowLabelState ??= { revision: 0 };
   const context = createBeamerSyntaxContext(params.source);
   const extracted = new Set<number>();
   const collect = (nodes: readonly (BeamerFrameBodyNode | BeamerColumnFlowNode)[]) => {
@@ -1539,10 +1540,10 @@ async function prepareInlineFlow(params: {
   }
   if (params.resolvePendingLabels !== false && params.references.inlineFlow?.some(box => box.labelTargetOffset !== undefined)) {
     for (let attempt = 0; attempt <= candidates.length; attempt++) {
-      const revision = params.references.inlineFlowLabelRevision ?? 0;
+      const revision = params.references.inlineFlowLabelState.revision;
       await prepareFrameFlow({ ...params, children: params.bodyIr.children, textWidth: params.textWidth,
         theme: params.theme, diagnostics: [], ...requireDefined(params.references.frameLayout, "Expected enclosing frame geometry"), availableHeight: Number.POSITIVE_INFINITY });
-      if ((params.references.inlineFlowLabelRevision ?? 0) === revision) break;
+      if (params.references.inlineFlowLabelState.revision === revision) break;
       if (attempt === candidates.length) throw new Error("Deferred Beamer item label transfer did not stabilize");
       await prepareInlineFlow({ ...params, resolvePendingLabels: false });
     }
@@ -2746,6 +2747,7 @@ async function emitPreparedBlock(params: {
   const titleX = params.x + block.titleXOffset;
   const titleY = params.y + block.titleTop;
   if (params.visibility === "hidden") {
+    block.title.layout.visibility = "hidden";
     block.title.layout.hiddenSourceSpans = [block.node.span];
   }
   positionParagraphLayout(
@@ -2784,6 +2786,7 @@ async function emitPreparedBlock(params: {
     const visibility = params.visibility === "hidden" || entry.visibility === "hidden" ? "hidden" : "visible";
     const bodyY = params.y + block.bodyParagraphTop + entry.top;
     if (visibility === "hidden") {
+      body.layout.visibility = "hidden";
       body.layout.hiddenSourceSpans = [body.layout.sourceSpan];
     }
     positionParagraphLayout(
@@ -2928,7 +2931,7 @@ function emitPreparedTcolorbox(params: Parameters<typeof emitPreparedBlock>[0]):
   ] as const) {
     if (!paragraph) continue;
     const x = params.x + dx, y = params.y + dy;
-    if (hidden) paragraph.layout.hiddenSourceSpans = [paragraph.layout.sourceSpan];
+    if (hidden) { paragraph.layout.visibility = "hidden"; paragraph.layout.hiddenSourceSpans = [paragraph.layout.sourceSpan]; }
     positionParagraphLayout(paragraph.layout, svgPoint(pt(x), pt(y)), paragraphLineExtent(paragraph));
     params.paragraphs.push(paragraph.layout);
     childIds.push(paragraph.layout.paragraphId);
@@ -3166,7 +3169,7 @@ function emitFrameParagraph(params: {
 }): void {
   const laid = params.prepared.paragraph;
   const visibility = params.prepared.visibility === "hidden" ? "hidden" : "visible";
-  if (visibility === "hidden") laid.layout.hiddenSourceSpans = [laid.layout.sourceSpan];
+  if (visibility === "hidden") { laid.layout.visibility = "hidden"; laid.layout.hiddenSourceSpans = [laid.layout.sourceSpan]; }
   positionParagraphLayout(
     laid.layout,
     svgPoint(pt(params.x), pt(params.y)),
@@ -3275,7 +3278,7 @@ async function emitPreparedColumns(params: {
       } else if (flowItem.kind === "paragraph") {
         const laid = flowItem.paragraph;
         const visibility = covered || flowItem.visibility === "hidden" ? "hidden" : "visible";
-        if (visibility === "hidden") laid.layout.hiddenSourceSpans = [laid.layout.sourceSpan];
+        if (visibility === "hidden") { laid.layout.visibility = "hidden"; laid.layout.hiddenSourceSpans = [laid.layout.sourceSpan]; }
         positionParagraphLayout(
           laid.layout,
           svgPoint(pt(x), pt(flowY)),
@@ -4029,6 +4032,13 @@ function paragraphLineExtent(paragraph: LaidParagraph): number {
       bottom = Math.max(bottom, Number(item.y + item.height + item.depth));
     }
   }
+  const visitExternal = (items: typeof paragraph.layout.vlistLayout.items): void => {
+    for (const item of items) {
+      if (item.item.kind === "hbox" && item.item.role?.kind === "external-flow") bottom = Math.max(bottom, Number(item.y) + Number(item.item.advance ?? item.metrics.height + item.metrics.depth));
+      if (item.children) visitExternal(item.children);
+    }
+  };
+  visitExternal(paragraph.layout.vlistLayout.items);
   // Block bodies are minipages: \endminipage removes the terminal display
   // skip with \unskip. The final painted equation still contributes its box.
   return bottom || paragraphMaterialExtent(paragraph);
@@ -4286,7 +4296,7 @@ function layoutParagraph(params: {
         }) };
         if (JSON.stringify(params.references.inlineFlowItemLabels.get(external.span.from)) !== JSON.stringify(transfer)) {
           params.references.inlineFlowItemLabels.set(external.span.from, transfer);
-          params.references.inlineFlowLabelRevision = (params.references.inlineFlowLabelRevision ?? 0) + 1;
+          if (params.references.inlineFlowLabelState) params.references.inlineFlowLabelState.revision += 1;
         }
       }
       const item = external.item;

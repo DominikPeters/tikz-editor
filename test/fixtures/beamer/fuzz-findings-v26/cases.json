@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "title": "Label transfers through cloned block render context",
+  "fidelity": [
+    {
+      "id": "plain",
+      "file": "plain.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Outer"
+      ]
+    },
+    {
+      "id": "overlay",
+      "file": "overlay.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Outer"
+      ]
+    }
+  ],
+  "recognition": []
+}
