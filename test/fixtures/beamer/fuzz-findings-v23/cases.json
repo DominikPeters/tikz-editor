@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "title": "New parent item begins a child list after another child list",
+  "fidelity": [
+    {
+      "id": "normal",
+      "file": "normal.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Panel"
+      ]
+    },
+    {
+      "id": "cramped",
+      "file": "cramped.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Panel"
+      ]
+    }
+  ],
+  "recognition": []
+}

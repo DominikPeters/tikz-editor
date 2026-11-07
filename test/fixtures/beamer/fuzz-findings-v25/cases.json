@@ -1,0 +1,66 @@
+{
+  "formatVersion": 1,
+  "title": "Closed overlay composition with nested parent transitions",
+  "fidelity": [
+    {
+      "id": "v3-seed-20261107-0005-overlay-composition",
+      "frame": 1,
+      "family": "intricate-overlay-composition",
+      "pages": 4,
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7cycles",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ]
+      ],
+      "file": "v3-seed-20261107-0005-overlay-composition.tex"
+    }
+  ],
+  "recognition": []
+}

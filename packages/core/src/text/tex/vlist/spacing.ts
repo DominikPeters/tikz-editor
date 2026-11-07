@@ -127,6 +127,7 @@ interface SimpleTexParagraphVerticalSkipState {
   readonly trivlistPartopsepByScope: Map<TexTrivlistScopeRole, boolean>;
   readonly listPartopsepByDepth: Map<number, boolean>;
   readonly noParListDepths: Set<number>;
+  readonly lastListItemsByDepth: Map<number, { listStart: number | undefined; itemIndex: number }>;
   readonly emittedListItemKeys: Set<string>;
   emittedParagraphCount: number;
   hasInterveningPenalty: boolean;
@@ -242,6 +243,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
             showLabel: false,
           }
         : undefined;
+      rememberListItemsAtDepth(state, scope);
       state.previousEmittedContentKind = "paragraph";
       state.emittedParagraphCount += 1;
       continue;
@@ -252,12 +254,6 @@ function planSimpleTexParagraphVerticalSkipsInto(
 
     const paragraph = item.paragraph;
     const scope = paragraphScopeFromVListAncestors(item, ancestors, state);
-    // @trivlist inherits @inlabel when a list starts as an item's first
-    // material. Its @noparlist suppresses endtrivlist's closing topsep too.
-    for (const ancestor of paragraph.ancestorListLabels ?? []) {
-      if (ancestor.inherited) continue;
-      for (let depth = ancestor.depth + 1; depth <= (scope.listContext?.depth ?? 0); depth++) state.noParListDepths.add(depth);
-    }
     const resolvedListProfile = listProfileForContext(
       listProfileForContext(listProfile, state.previousEmittedListContext),
       scope.listContext
@@ -270,37 +266,42 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const exitsTrivlistScope =
       state.previousEmittedTrivlistScopes.length > scope.trivlistScopes.length;
     const suppressInitialTopsep = !hasPreviousEmittedParagraph && listProfile?.suppressInitialTopsep === true;
-    let listVerticalSkipBefore = followsDisplay || suppressInitialTopsep
-      ? texLength(0)
-      : texArticleListVerticalSkipBefore(
-          state,
-          state.previousEmittedListContext,
-          scope.listContext,
-          hasPreviousEmittedParagraph,
-          startsListInVerticalMode,
-          exitsTrivlistScope,
-          font,
-          resolvedListProfile
-        );
+    const parentTransition = paragraph.ancestorListLabels?.find(ancestor => {
+      const previous = state.lastListItemsByDepth.get(ancestor.depth);
+      return !ancestor.inherited && previous !== undefined && previous.listStart === ancestor.listStart && previous.itemIndex !== ancestor.itemIndex;
+    });
+    let parentTransitionFlex: { stretch: TexLength; shrink: TexLength } | undefined;
+    let listVerticalSkipBefore: TexLength;
+    if (followsDisplay || suppressInitialTopsep) listVerticalSkipBefore = texLength(0);
+    else if (parentTransition) {
+      const parentProfile = listProfileForContext(listProfile, parentTransition);
+      const previous = state.previousEmittedListContext;
+      const closing = previous && previous.depth > parentTransition.depth
+        ? texArticleListExitBoundarySkip(state, previous.depth, parentTransition.depth, font, resolvedListProfile) : texLength(0);
+      const itemSkip = texArticleListItemBoundarySkip(parentTransition.depth, font, parentProfile);
+      listVerticalSkipBefore = texLength(Math.max(closing, itemSkip));
+      if (itemSkip >= closing) parentTransitionFlex = texProfileListVerticalGlueFlex(
+        { ...parentTransition, itemIndex: state.lastListItemsByDepth.get(parentTransition.depth)?.itemIndex ?? 0 },
+        parentTransition, hasPreviousEmittedParagraph, false, parentProfile);
+    } else listVerticalSkipBefore = texArticleListVerticalSkipBefore(
+      state, state.previousEmittedListContext, scope.listContext,
+      hasPreviousEmittedParagraph, startsListInVerticalMode, exitsTrivlistScope,
+      font, resolvedListProfile);
+    // @trivlist inherits @inlabel when a list starts as an item's first
+    // material. Its @noparlist suppresses endtrivlist's closing topsep too.
+    for (const ancestor of paragraph.ancestorListLabels ?? []) {
+      if (ancestor.inherited) continue;
+      for (let depth = ancestor.depth + 1; depth <= (scope.listContext?.depth ?? 0); depth++) state.noParListDepths.add(depth);
+    }
     if (hasPreviousEmittedParagraph && !state.previousEmittedListContext && !scope.listContext && !followsDisplay) {
       listVerticalSkipBefore = texLength(listVerticalSkipBefore + (listProfile?.paragraphSkipPt ?? 0));
     }
-    if (!state.previousEmittedListContext) for (const ancestor of paragraph.ancestorListLabels ?? []) {
+    if (!state.previousEmittedListContext && !suppressInitialTopsep) for (const ancestor of paragraph.ancestorListLabels ?? []) {
       if (ancestor.inherited) continue;
       const profile = listProfileForContext(listProfile, ancestor);
       const skip = texArticleOutsideListBoundarySkip(startsListInVerticalMode, font, profile, ancestor.depth);
       listVerticalSkipBefore = texLength(Math.max(listVerticalSkipBefore, skip));
       state.listPartopsepByDepth.set(ancestor.depth, startsListInVerticalMode);
-    }
-    // A child list can be the first material of a new parent item. Its
-    // topsep and the parent's itemsep meet through LaTeX's addvspace.
-    for (const ancestor of paragraph.ancestorListLabels ?? []) {
-      if (ancestor.inherited) continue;
-      const previous = state.previousEmittedListContext;
-      if (previous?.depth !== ancestor.depth || previous.listStart !== ancestor.listStart || previous.itemIndex === ancestor.itemIndex) continue;
-      // @trivlist sees @inlabel and @donoparitem emits no child topsep.
-      // Only the parent item boundary survives (important for shrink).
-      listVerticalSkipBefore = texArticleListItemBoundarySkip(ancestor.depth, font, listProfileForContext(listProfile, ancestor));
     }
     // LaTeX's next item/end-list uses \addvspace: the larger of that
     // boundary and an immediately preceding block's smallskip survives.
@@ -317,7 +318,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
     state.externalAfterSkip = 0;
     const listFlex = followsDisplay || suppressInitialTopsep
       ? { stretch: texLength(0), shrink: texLength(0) }
-      : texProfileListVerticalGlueFlex(
+      : parentTransitionFlex ?? texProfileListVerticalGlueFlex(
           state.previousEmittedListContext,
           scope.listContext,
           hasPreviousEmittedParagraph,
@@ -371,12 +372,22 @@ function planSimpleTexParagraphVerticalSkipsInto(
     state.previousEmittedQuotationDepth = scope.quotationDepth;
     state.previousEmittedTrivlistScopes = scope.trivlistScopes;
     state.previousEmittedListContext = scope.listContext;
+    rememberListItemsAtDepth(state, ancestors.length ? ancestors : item.paragraph.scopePath ?? []);
+    for (const ancestor of paragraph.ancestorListLabels ?? []) if (!ancestor.inherited) state.lastListItemsByDepth.set(ancestor.depth, { listStart: ancestor.listStart, itemIndex: ancestor.itemIndex });
     if (scope.listItemKey) {
       state.emittedListItemKeys.add(scope.listItemKey);
     }
     state.emittedParagraphCount += 1;
     state.previousEmittedContentKind = "paragraph";
     state.hasInterveningPenalty = false;
+  }
+}
+
+function rememberListItemsAtDepth(state: SimpleTexParagraphVerticalSkipState, roles: readonly TexVBoxRole[]): void {
+  for (const role of roles) {
+    if (role.kind !== "list") continue;
+    const item = roles.find(candidate => candidate.kind === "list-item" && candidate.depth === role.depth);
+    if (item?.kind === "list-item") state.lastListItemsByDepth.set(role.depth, { listStart: role.sourceStart, itemIndex: item.itemIndex });
   }
 }
 
@@ -391,6 +402,7 @@ function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphV
     trivlistPartopsepByScope: new Map(),
     listPartopsepByDepth: new Map(),
     noParListDepths: new Set(),
+    lastListItemsByDepth: new Map(),
     emittedListItemKeys: new Set(),
     emittedParagraphCount: 0,
     hasInterveningPenalty: false,
