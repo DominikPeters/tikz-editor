@@ -4789,8 +4789,9 @@ function resolveFrameVerticalPacking(
   );
   if (alignment === "top") {
     // beamerbaseframe.sty gives top-aligned frames a natural .2cm top skip;
-    // their finite stretch is dominated by the bottom `1fill`.
-    const topOffset = Math.min(TOP_ALIGNED_FRAME_SKIP_PT, freeHeight);
+    // their finite stretch is dominated by the bottom `1fill`. Its natural
+    // size remains present even when the frame is overfull (there is no shrink).
+    const topOffset = TOP_ALIGNED_FRAME_SKIP_PT;
     return {
       topOffset,
       fillUnit:

@@ -22,4 +22,18 @@ describe("renderer fuzz findings", () => {
       expect(scope?.kind).toBe("column");
     }
   });
+  it("keeps the first baseline of a top-aligned frame when later lines overflow", async () => {
+    const source = readFileSync(new URL("./fixtures/beamer/fuzz-findings-v8/overflow-top-skip.tex", import.meta.url), "utf8");
+    const short = source.replace(/One\.[\s\S]*?(?=\\end\{frame\})/u, "One.\n");
+    const baseline = async (text: string) => {
+      const page = await prepareBeamerDocument(text).renderFrame();
+      const body = page.layout.paragraphs.find(paragraph => paragraph.role === "body");
+      expect(body).toBeDefined();
+      const line = body!.report.lines[0];
+      const placement = body!.vlistLayout.linePlacements.find(item => item.lineIndex === line.lineIndex)!;
+      return body!.bounds.y + Number(placement.y) + Number(line.ascent);
+    };
+    expect(await baseline(source)).toBeCloseTo(await baseline(short), 6);
+  });
+
 });
