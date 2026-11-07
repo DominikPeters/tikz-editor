@@ -10,7 +10,7 @@ import { loadCoreRenderer, structuralContractFailures } from "./compare-beamer-f
 import { buildNativeBeamerPageTrace, compareBeamerPageTraces } from "./lib/beamer-frame-compare.mjs";
 import { priorityOracleFailures } from "./lib/beamer-priority-contracts.mjs";
 
-const { values } = parseArgs({ options: { run: { type: "string" }, out: { type: "string" } } });
+const { values } = parseArgs({ options: { run: { type: "string" }, out: { type: "string" }, "keep-passing-artifacts": { type: "boolean", default: false } } });
 if (!values.run || !values.out) throw Error("Require --run and --out");
 const root = resolve(values.run), out = resolve(values.out);
 mkdirSync(out, { recursive: true });
@@ -36,6 +36,7 @@ if (sourceFingerprint() !== fingerprint) throw Error("Sources changed during bui
 const report = { kind: "saved-independent-structural-replay", sourceRun: root,
   gitHead: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   sourceFingerprint: fingerprint,
+  artifactPolicy: values["keep-passing-artifacts"] ? "all-states" : "failed-states-only",
   status: "running", results: [], passed: 0, failed: 0, states: 0 };
 const save = () => writeFileSync(join(out, "report.json"), JSON.stringify(report, null, 2) + "\n");
 save();
@@ -57,9 +58,14 @@ for (const entry of saved.results) {
     const failures = structuralContractFailures(comparison.summary);
     const state = { page: snapshot.page, sourceSha256: hash, summary: comparison.summary,
       diagnostics: page.diagnostics, literal: page.svg.svg.includes("data-tex-literal="), failures };
-    const target = join(out, entry.id + "-" + snapshot.page); mkdirSync(target, { recursive: true });
-    writeFileSync(join(target, "comparison.json"), JSON.stringify(comparison, null, 2) + "\n");
-    writeFileSync(join(target, "renderer.svg"), page.svg.svg);
+    // The complete summary and input hash remain in report.json. Passing
+    // diagnostics can be regenerated from the retained independent campaign;
+    // keep every failure, without accumulating gigabytes of repeated passes.
+    if (values["keep-passing-artifacts"] || failures.length || page.diagnostics.length || state.literal) {
+      const target = join(out, entry.id + "-" + snapshot.page); mkdirSync(target, { recursive: true });
+      writeFileSync(join(target, "comparison.json"), JSON.stringify(comparison, null, 2) + "\n");
+      writeFileSync(join(target, "renderer.svg"), page.svg.svg);
+    }
     result.states.push(state); report.states++;
     result.failures.push(...failures.map(failure => `State ${snapshot.page}: ${failure}`));
     if (page.diagnostics.length) result.failures.push(`State ${snapshot.page}: renderer diagnostics`);
