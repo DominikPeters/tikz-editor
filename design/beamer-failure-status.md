@@ -1,87 +1,68 @@
 # Beamer fidelity failure accounting
 
-The earlier updates mixed distinct renderer bugs, failing frame observations,
-and successful warm/cold comparisons. “Zero mismatches” in an editing run only
-meant its two native render paths agreed; it did not establish agreement with
-LuaLaTeX. That wording overstated the evidence. The original richer campaigns
-were not clean, and their outstanding failures should have been stated every
-time a fix was reported.
+Earlier reports mixed distinct bugs, failing frame observations, and successful
+warm/cold comparisons. Native warm/cold agreement does not establish LuaLaTeX
+fidelity. The complex campaigns were never clean, and the outstanding failures
+should have been disclosed whenever fixes were reported.
 
-## Saved observations
+## Current acceptance status
 
-- Seed 20261106: 22 frames, 40 states; the baseline at commit f65c9e8d passed
-  16 frames and failed six.
-- Seed 20261107: 39 frames, 81 states; the same baseline passed 27 frames and
-  failed the 12 richly composed first frames. The other frames are materially
-  simpler. Their success is not evidence that the compositions work.
-- Two earlier reduced v7 observations both failed. One was mislabeled: the
-  original `grouped-columns.tex` put its group immediately after the frame title,
-  so Beamer parsed it as a subtitle. The original is retained separately as
-  `columns-in-subtitle.tex`; the corrected body repro adds `\relax`.
+| Saved campaign | Baseline passing | Current passing | Still failing | States checked |
+| --- | ---: | ---: | ---: | ---: |
+| Seed 20261106 | 16/22 | 17/22 | 5 | 40 |
+| Seed 20261107 | 27/39 | 30/39 | 9 | 81 |
 
-These are observations, not a count of independent bugs. A frame can contain
-multiple bugs, and one bug can affect many frames/states. Exact per-observation
-results and report locations are recorded in `beamer-failure-ledger.json`.
-Unresolved campaign sources are preserved in
-`test/fixtures/beamer/fuzz-open-compositions/cases.json`; they must not silently
-become part of the passing frozen collection or have their tolerances widened.
+These are frame observations, not counts of distinct bugs. One frame can contain
+several bugs, and one bug can affect several frames. Current numbers come from
+strict saved independent TeX traces, not live paint reruns of the full campaigns.
+Every original failure and its latest status/report is in
+`beamer-failure-ledger.json`. Initial failing sources and reduction controls are
+retained under `test/fixtures/beamer/fuzz-open-compositions/`.
 
-## Root causes established during the current investigation
+## Corrections verified by independent reductions
 
-- Structural columns were not recursively prepared within columns.
-- Native text containers (lists, brace groups, subtitles) could not host Beamer
-  structural boxes; environment delimiters became literal output.
-- Formatting declaration scopes and interleaved alignment/size/color declarations
-  were not consistently retained across those structural boundaries.
-- Embedded TikZ font commands used standalone class sizes and reset ambient
-  family/weight. Font-relative node padding also used the node text font where
-  PGF uses the ambient font.
-- Inline math could use the outer paragraph size despite a smaller list font.
-- Description nesting incorrectly advanced the itemize/enumerate font-depth
-  counter. Nesting across structural boxes also lost font context.
-- A covered columns container retained space but dropped its paragraph/TikZ
-  layout records, preventing strict verification of the hidden geometry.
-- An overlay item ending in display math lost the empty resumed paragraph that
-  Beamer's closing action environment commits.
-- Top-aligned shrinking frames omitted natural top skip and included that skip
-  in the amount of space available to the scaled body.
-- A rounded block beginning directly with display math selected the normal
-  above-display skip instead of the short skip (an 11pt error in the reduction).
+- Recursive columns and structural blocks inside lists, groups, and subtitles;
+  preservation of surrounding font, color, alignment, width, and overlay scope.
+- Ambient TikZ font selection and em-based node padding, plus PGF cubic picture
+  bounds that include control points.
+- List font depth excluding descriptions, inline math sizes, pending parent/child
+  labels, captured label fonts, projected marker paint, and label alignment.
+- Nested-column reference baselines, inherited ragged-right declarations, and
+  covered geometry retained for strict hidden-glyph checks.
+- Paragraph/list/block boundary glue, cramped nested-list entry, list closing
+  skips after scoped formatting, leading block/minipage center spacing, and
+  inline structural width in shrinking frames.
+- Overlay item action closing order after display math: next-item and end-list
+  boundaries differ. Following prose also needs the resumed empty line's list
+  scope, without an invented leading word space.
 
-Independent small controls have verified several of these corrections. The
-entire complex campaigns remain the acceptance gate; a passing reduction does
-not close a failing campaign observation.
+Live controls: V7 3/3, V9 6/6, V10 24/24, V11 25/25, V12 12/12,
+V13 2/2, V14 4/4. All overlay states and unchanged strict contracts were checked;
+source-hash-checked traces are pinned as regressions. Passing reductions do not
+close the 14 still-failing complex observations.
 
-## Additional failing controls retained during reduction
+Two investigation corrections are retained explicitly: the original grouped
+columns repro was actually a subtitle; both it and the corrected body case are
+preserved. The suspected hidden-label oracle bug was rejected: the oracle was
+correct and renderer label geometry was wrong. No oracle exclusions or tolerance
+relaxations were used to make these cases pass.
 
-The block-in-list reduction originally had prose before its block. Expanding
-it to a block as the first item content revealed incorrect empty-paragraph,
-label placement, and boundary glue behavior. Description lists under scoped
-font sizes also expose incorrect horizontal margin conversion. Both are open
-until their strict independent controls pass. Existing complex frames still
-show further geometry/font mismatches; those are not dismissed as complexity
-or treated as fixed by the smaller controls.
+## Remaining work
 
-## Verification rules
+The five older and nine newer first-frame compositions still fail geometry,
+shrink transforms, and/or covered-glyph matching. Reduced cases are needed for
+remaining multiline list font/baseline and mixed display/column boundaries.
+All failures remain open until their original frames pass every state, followed
+by live raster/paint checks. Current independent controls cover many interactions
+but do not establish arbitrary TeX support. Unverified support and oracle coverage
+gaps are listed separately in the ledger.
 
-Use independent LuaLaTeX traces, source identity checks, every overlay state,
-and the unchanged strict structural contract. Saved-trace replays accelerate
-triage; final passing cases also need the live raster/paint checks. The replay
-records a source fingerprint and rejects a run if source changes during it.
-Per-state exceptions remain failures and do not prevent later cases being
-examined. Regression tests, typecheck, and production lint are separate gates.
+## Regression gates
 
-## Verification checkpoint during fixes
-
-The older saved campaign remains 16/22 passing; the newer is 29/39 passing
-(40 and 81 states respectively). Two previously failing composed frames now
-pass every overlay state. V7's three corrected/preserved controls, V9's six
-controls, the 12 expanded list/block cases, and the three curved-picture block
-cases pass live comparisons. Separate reductions exposed eight failing nested
-list-head controls; a pending-label ownership correction is under verification.
-Their source inputs are also preserved in the open-composition manifest.
-
-Two isolated corrections have been committed separately: `058ba08f` retains
-ambient TikZ font context and em geometry; `9c690754` includes cubic control
-points in PGF picture bounds. The larger recursive-flow work remains under
-verification. This checkpoint is not a claim that the full campaigns are clean.
+The intermediate full suite had 8,331 passing tests and four failures: three
+alignment regressions and one generated-preview mismatch. Those were fixed;
+the subsequent broad run passed 1,759 tests with seven skipped. After the final
+explicit display-boundary correction, 365 focused tests passed. A final full
+suite is still required. Typecheck and production lint results are separate
+from renderer fidelity. Source-fingerprinted saved replays reject source changes
+during a run; per-state exceptions remain failures and later cases still run.

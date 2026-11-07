@@ -1148,6 +1148,255 @@
         "First",
         "Second"
       ]
+    },
+    {
+      "id": "nested-columns-top-top",
+      "file": "nested-columns-top-top.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-top-baseline",
+      "file": "nested-columns-top-baseline.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-top-center",
+      "file": "nested-columns-top-center.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-top-bottom",
+      "file": "nested-columns-top-bottom.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-baseline-top",
+      "file": "nested-columns-baseline-top.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-baseline-baseline",
+      "file": "nested-columns-baseline-baseline.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-baseline-center",
+      "file": "nested-columns-baseline-center.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-baseline-bottom",
+      "file": "nested-columns-baseline-bottom.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-center-top",
+      "file": "nested-columns-center-top.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-center-baseline",
+      "file": "nested-columns-center-baseline.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-center-center",
+      "file": "nested-columns-center-center.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-center-bottom",
+      "file": "nested-columns-center-bottom.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-bottom-top",
+      "file": "nested-columns-bottom-top.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-bottom-baseline",
+      "file": "nested-columns-bottom-baseline.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-bottom-center",
+      "file": "nested-columns-bottom-center.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "nested-columns-bottom-bottom",
+      "file": "nested-columns-bottom-bottom.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Left",
+        "Right",
+        "Neighbor",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "covered-item-columns-visible",
+      "file": "covered-item-columns-visible.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "After."
+      ],
+      "oracleTextByPage": [
+        [
+          "Left",
+          "Right",
+          "After."
+        ],
+        [
+          "After."
+        ]
+      ]
+    },
+    {
+      "id": "covered-item-columns-uncover",
+      "file": "covered-item-columns-uncover.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "After."
+      ],
+      "oracleTextByPage": [
+        [
+          "Left",
+          "Right",
+          "After."
+        ],
+        [
+          "After."
+        ]
+      ]
+    },
+    {
+      "id": "covered-item-columns-only",
+      "file": "covered-item-columns-only.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "After."
+      ],
+      "oracleTextByPage": [
+        [
+          "Left",
+          "Right",
+          "After."
+        ],
+        [
+          "After."
+        ]
+      ]
     }
   ],
   "recognition": []
