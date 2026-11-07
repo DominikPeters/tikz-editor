@@ -84,6 +84,8 @@ export interface TexListLayoutProfile {
   /** Class-owned body font switches; omitted depths inherit the ambient font. */
   readonly bodyFontSizePtByDepth?: readonly (number | undefined)[];
   readonly bodyBaselineSkipPtByDepth?: readonly (number | undefined)[];
+  readonly bodyDisplaySkipCommandByDepth?: SimpleTexParagraphIrOptions["listBodyDisplaySkipCommands"];
+  readonly groupItemBodies?: boolean;
   /** LaTeX suppresses the first list's opening glue in a fresh minipage. */
   readonly suppressInitialTopsep?: boolean;
   readonly leftMarginEmByDepth: readonly number[];

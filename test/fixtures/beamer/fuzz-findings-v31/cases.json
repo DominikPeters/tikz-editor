@@ -1,0 +1,66 @@
+{
+  "formatVersion": 1,
+  "fidelity": [
+    {
+      "id": "continuing-parent",
+      "file": "continuing-parent.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    },
+    {
+      "id": "continuing-parent-plain",
+      "file": "continuing-parent-plain.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    },
+    {
+      "id": "explicit-fontsize",
+      "file": "explicit-fontsize.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    },
+    {
+      "id": "explicit-normal",
+      "file": "explicit-normal.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    },
+    {
+      "id": "explicit-footnote",
+      "file": "explicit-footnote.tex",
+      "frame": 1,
+      "pages": 3,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    },
+    {
+      "id": "third-level",
+      "file": "third-level.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    }
+  ],
+  "recognition": []
+}

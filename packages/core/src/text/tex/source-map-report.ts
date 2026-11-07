@@ -668,8 +668,10 @@ function remapTexVListBoxReportItem(
 }
 
 function remapTexHBoxRole(role: TexHBoxRole, sourceMap: TextSourceMap): TexHBoxRole {
+  const consumer = role.kind === "list-label" && role.consumerOffset !== undefined ? sourceMap.charOrigins[role.consumerOffset] : undefined;
   return role.kind === "list-label" && role.itemCommandSpan
-    ? { ...role, itemCommandSpan: role.originalItemCommandSpan ?? mapTexSourceSpan(role.itemCommandSpan, sourceMap) }
+    ? { ...role, itemCommandSpan: role.originalItemCommandSpan ?? mapTexSourceSpan(role.itemCommandSpan, sourceMap),
+      ...(role.consumerOffset !== undefined ? { consumerOffset: consumer?.kind === "direct" ? consumer.from : mapInputOffset(sourceMap, role.consumerOffset) } : {}) }
     : role;
 }
 

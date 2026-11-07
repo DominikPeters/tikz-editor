@@ -72,6 +72,7 @@ export function texListItemParagraphAttachments(params: {
   /** Absolute origin of the paragraph's containing VList. */
   readonly paragraphOriginX: TexVListX;
   readonly followLineAlignment?: boolean;
+  readonly consumerOffset?: number;
 }): TexListItemParagraphAttachments {
   const listItemLabel = params.segmentIndex === 0 && params.listContext?.showLabel === true
     ? params.listItemLayout?.label
@@ -115,7 +116,8 @@ export function texListItemParagraphAttachments(params: {
         listItemLabel,
         params.metricProvider,
         params.paragraphOriginX,
-        params.followLineAlignment
+        params.followLineAlignment,
+        params.consumerOffset
       )
     : undefined;
   // Beamer's description column: a label wider than it starts where the
@@ -302,7 +304,8 @@ function texMarginListLabelHBoxFromLayoutLabel(
   labelBox: TexVBoxListItemLabelBox,
   metricProvider: TexMetricProvider,
   paragraphOriginX: TexVListX,
-  followLineAlignment?: boolean
+  followLineAlignment?: boolean,
+  consumerOffset?: number
 ): TexHBoxItem {
   const box = texLayoutLabelHBoxContent(label, metricProvider);
   const labelLeft = texVListX(
@@ -320,6 +323,7 @@ function texMarginListLabelHBoxFromLayoutLabel(
       : {}),
     role: {
       kind: "list-label",
+      ...(consumerOffset !== undefined ? { consumerOffset } : {}),
       ...(label.marker ? { markerPaint: {
         x: (label.marker.profile.paintBoundsEm?.x ?? 0) * label.marker.atPt,
         y: (label.marker.profile.paintBoundsEm?.y ?? 0) * label.marker.atPt,

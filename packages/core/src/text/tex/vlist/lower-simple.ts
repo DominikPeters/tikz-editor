@@ -485,9 +485,13 @@ function attachPostDisplayVSpace(
     const exitsDisplayList = displayList?.kind === "list" && displayList.sourceStart !== undefined && resumedParagraph?.kind === "paragraph" &&
       !(resumedParagraph.block.listSourceStarts ??
         resumedParagraph.block.scopePath?.filter(role => role.kind === "list").map(role => role.sourceStart))?.includes(displayList.sourceStart);
+    const displayItem = display?.kind === "display-math"
+      ? display.scopePath?.filter(role => role.kind === "list-item").at(-1) : undefined;
+    const changesParentItem = displayItem?.kind === "list-item" && resumedParagraph?.kind === "paragraph" &&
+      resumedParagraph.block.ancestorListLabels?.some(label => label.depth === displayItem.depth && label.itemIndex !== displayItem.itemIndex);
     if (display?.kind === "display-math" && resumedParagraph?.kind === "paragraph" &&
       resumedParagraph.block.listContext?.listStart !== undefined &&
-      resumedParagraph.block.listContext.listStart >= display.sourceEnd && !resumedParagraph.block.startsAfterExplicitPar && !exitsDisplayList) {
+      resumedParagraph.block.listContext.listStart >= display.sourceEnd && !resumedParagraph.block.startsAfterExplicitPar && !exitsDisplayList && !changesParentItem) {
       // \list ends the horizontal mode resumed by \]: ship its zero-sized
       // paragraph before the list's topsep and first item, even without vspace.
       // An intervening endlist already cleaned up that resumed paragraph.

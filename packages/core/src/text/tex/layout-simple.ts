@@ -136,6 +136,8 @@ export function layoutSimpleTexParagraph(
       ...(options.colorResolver?.cacheKey !== undefined ? { colorResolverCacheKey: options.colorResolver.cacheKey } : {}),
       ...(options.listProfile?.bodyFontSizePtByDepth ? { listBodyFontSizes: options.listProfile.bodyFontSizePtByDepth } : {}),
       ...(options.listProfile?.bodyBaselineSkipPtByDepth ? { listBodyBaselineSkips: options.listProfile.bodyBaselineSkipPtByDepth } : {}),
+      ...(options.listProfile?.bodyDisplaySkipCommandByDepth ? { listBodyDisplaySkipCommands: options.listProfile.bodyDisplaySkipCommandByDepth } : {}),
+      ...(options.listProfile?.groupItemBodies ? { groupListItemBodies: true } : {}),
       ...(options.inheritedItemLabels ? { inheritedItemLabels: options.inheritedItemLabels } : {}),
       ...(options.boxesClearingPendingItemLabels ? { boxesClearingPendingItemLabels: options.boxesClearingPendingItemLabels } : {}),
       fontSizePt: font.atPt,

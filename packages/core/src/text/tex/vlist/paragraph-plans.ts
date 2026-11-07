@@ -27,6 +27,7 @@ import {
   splitSimpleTexParagraphSegments,
   type SimpleTexParagraphSegment,
   type SimpleTexFontState,
+  type SimpleTexInlineNode,
   type TexAlignmentProfile,
   type TexParagraphAlignment,
   type TexSpaceGlueProfile,
@@ -181,7 +182,12 @@ export function prepareTexLayoutParagraphsFromVList(
     }
 
     for (const [segmentIndex, segment] of segments.entries()) {
+      const hasMaterial = (node: SimpleTexInlineNode): boolean => node.kind === "group"
+        ? node.children.some(hasMaterial) : !["space", "comment", "style-declaration", "font-declaration"].includes(node.kind);
+      const consumerOffset = params.options.listProfile?.groupItemBodies
+        ? segment.nodes.find(hasMaterial)?.sourceStart ?? segment.sourceEnd : undefined;
       const listAttachments = texListItemParagraphAttachments({
+        consumerOffset,
         blockIndex,
         segmentIndex,
         ...(!suppressAncestorBreakMargins && paragraph.listContext !== undefined ? { listContext: paragraph.listContext } : {}),
@@ -206,7 +212,7 @@ export function prepareTexLayoutParagraphsFromVList(
         const labelLayout = texListItemLayoutForParagraph([{ layout: parentScope }],
           { ...paragraph, listContext: context, ...(context.fontSizePt !== undefined ? { fontSizePt: context.fontSizePt } : {}) }, params.options.listProfile);
         if (!labelLayout) continue;
-        const attachment = texListItemParagraphAttachments({ blockIndex, segmentIndex, listContext: context,
+        const attachment = texListItemParagraphAttachments({ blockIndex, segmentIndex, listContext: context, consumerOffset,
           listItemLayout: labelLayout, font: labelLayout.label?.content.kind === "marker" ? params.font :
             textFontProfile.resolveTextFont(textFontProfile.defaultFontState, context.fontSizePt ?? params.font.atPt, params.metricProvider),
           metricProvider: params.metricProvider,

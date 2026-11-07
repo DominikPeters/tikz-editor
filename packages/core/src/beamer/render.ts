@@ -206,6 +206,7 @@ const TOP_ALIGNED_FRAME_SKIP_PT = 0.2 * TEX_POINTS_PER_CM;
 // \topsep=3pt/2pt/2pt, \partopsep=0pt, \parsep=0pt, and first-level
 // \itemsep=3pt. The deeper itemsep values alias their zero parsep.
 const BEAMER_LIST_LAYOUT_PROFILE: TexListLayoutProfile = {
+  groupItemBodies: true,
   trivlistTopsepPt: 9,
   // Beamer globally zeros \partopsep after size11.clo is loaded.
   trivlistPartopsepPt: 0,
@@ -265,6 +266,7 @@ function beamerListLayoutProfile(
     enumerateMiniTemplates: true,
     resolveEnumerateText: (counters, depth) => theme.templates.enumerations[depth - 1]?.id.endsWith("/default") ? counters.join(".") + (depth === 1 ? "." : "") : undefined,
     bodyFontSizePtByDepth: [undefined, small.sizePt, footnotesize.sizePt],
+    bodyDisplaySkipCommandByDepth: [undefined, "small", "footnotesize"],
     bodyBaselineSkipPtByDepth: [undefined, small.lineHeightPt * Number(theme.options["line-spread"] ?? 1), footnotesize.lineHeightPt * Number(theme.options["line-spread"] ?? 1)],
     leftMarginEmByDepth: theme.dimensions.listLeftMarginEmByDepth,
     itemizeMarkersByDepth: resolveBeamerItemizeMarkers(theme),
@@ -633,7 +635,7 @@ async function renderBeamerFrameStep(params: {
     overlayPictures: beamerOverlayPicturesIn({ source, syntax: context.syntax }, frame.bodySpan),
     paragraphPaint: new Map(),
     layoutFailures: new Map(),
-    itemActionCommitsParagraph: (mapped, sourceEnd) => beamerItemActionCommitsParagraph(mapped, sourceEnd, bodyIr.overlays.items),
+    itemActionCommitsParagraph: (mapped, sourceEnd) => beamerItemActionCommitsParagraph(mapped, sourceEnd, bodyIr.overlays.items, bodyIr.overlays.commands),
     crampedLists: shrink != null || (frame.options?.entries.some(entry => entry.key === "squeeze") ?? false),
     ...(allowFrameBreaks != null ? { continuationBreaks: collectBeamerContinuationBreaks(context.syntax, frame) } : {}),
     footnotes: buildBeamerFrameFootnotes(document, context.syntax, frame, context.overlaysByFrameId, step, theme.templates.block.id.includes("/rounded")),
@@ -4360,6 +4362,9 @@ function layoutParagraph(params: {
       ...(params.listProfile?.bodyBaselineSkipPtByDepth ? {
         bodyBaselineSkipPtByDepth: params.listProfile.bodyBaselineSkipPtByDepth.slice(params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0),
       } : {}),
+      ...(params.listProfile?.bodyDisplaySkipCommandByDepth ? {
+        bodyDisplaySkipCommandByDepth: params.listProfile.bodyDisplaySkipCommandByDepth.slice(params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0),
+      } : {}),
       ...(referenceProjection.bibliographyMargins !== undefined ? { bibliographyMargins: referenceProjection.bibliographyMargins } : {}),
       ...(descriptionLabelWidths.size > 0 ? { descriptionLabelWidths } : {}),
       bibliographyParsepPt: (leadingSize?.command ?? namedSize?.command) === "small"
@@ -4485,6 +4490,19 @@ function layoutParagraph(params: {
     vlistLayout: remapTexVListLayoutSourceMap(result.vlistLayout, mapped.sourceMap),
     listStructure: remapSimpleTexListStructureSourceMap(result.listStructure, mapped.sourceMap),
   };
+  // Pending labels execute where their first paragraph starts, which can be
+  // inside covered content even when the owning item command is outside it.
+  const coveredLabels = documentResult.vlistLayout.boxReport.items.filter(item => {
+    const role = item.hboxRole;
+    if (role?.kind !== "list-label" || role.consumerOffset === undefined) return false;
+    const offset = role.consumerOffset;
+    return params.hiddenSourceSpans?.some(span => span.from <= offset && offset < span.to);
+  });
+  if (coveredLabels.length) params = { ...params, hiddenSourceSpans: [
+    ...params.hiddenSourceSpans ?? [],
+    ...coveredLabels.flatMap(item => item.hboxRole?.kind === "list-label" ?
+      [item.hboxRole.itemCommandSpan, item.sourceSpan].filter(span => span !== undefined).map(span => ({ from: span.start, to: span.end })) : []),
+  ] };
   const height =
     documentResult.vlistLayout.metrics.height + documentResult.vlistLayout.metrics.depth;
   const macroArgumentRuns = collectMappedMacroArgumentRuns(mapped).filter((run) =>
