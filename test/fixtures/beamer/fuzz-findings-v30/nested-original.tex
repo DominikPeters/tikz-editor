@@ -1,0 +1,22 @@
+\documentclass[11pt,aspectratio=169]{beamer}
+\usetheme{Madrid}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Boundary}
+Before.\par
+\begin{description}
+\item[Stage 1] \begin{itemize}
+\item<1-> \begin{description}
+\item[Stage 1] \[\begin{aligned}a+b&=c\\ d-e&=f\end{aligned}\]
+\item[Stage 2] \[\begin{aligned}a+b&=c\\ d-e&=f\end{aligned}\]
+\end{description}
+\item<2-> \begin{itemize}
+\item<1-> \textit{Intermediate results carry} both a numerical estimate and an explicit dependency set. A local update can change the measurements used by several neighboring components. The estimate is $\frac{a+b}{1+c}$.
+\item<2-> \textit{A local update} can change the measurements used by several neighboring components. The estimate is $x_i+x_{i+1}$.
+\end{itemize}
+\end{itemize}
+\item[Stage 2] After lists.
+\end{description}
+Witness.\par
+\end{frame}
+\end{document}

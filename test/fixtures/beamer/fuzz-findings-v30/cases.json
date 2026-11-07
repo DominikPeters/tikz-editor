@@ -1,0 +1,16 @@
+{
+  "formatVersion": 1,
+  "fidelity": [
+    {
+      "id": "nested-original",
+      "file": "nested-original.tex",
+      "frame": 1,
+      "pages": 2,
+      "oracleText": [
+        "Before.",
+        "Witness."
+      ]
+    }
+  ],
+  "recognition": []
+}

@@ -296,10 +296,12 @@ function planSimpleTexParagraphVerticalSkipsInto(
     if (hasPreviousEmittedParagraph && !state.previousEmittedListContext && !scope.listContext && !followsDisplay) {
       listVerticalSkipBefore = texLength(listVerticalSkipBefore + (listProfile?.paragraphSkipPt ?? 0));
     }
+    let outsideListBoundary: SimpleTexListContext | undefined;
     if (!state.previousEmittedListContext && !suppressInitialTopsep) for (const ancestor of paragraph.ancestorListLabels ?? []) {
       if (ancestor.inherited) continue;
       const profile = listProfileForContext(listProfile, ancestor);
       const skip = texArticleOutsideListBoundarySkip(startsListInVerticalMode, font, profile, ancestor.depth);
+      if (skip > listVerticalSkipBefore) outsideListBoundary = ancestor;
       listVerticalSkipBefore = texLength(Math.max(listVerticalSkipBefore, skip));
       state.listPartopsepByDepth.set(ancestor.depth, startsListInVerticalMode);
     }
@@ -318,7 +320,10 @@ function planSimpleTexParagraphVerticalSkipsInto(
     state.externalAfterSkip = 0;
     const listFlex = followsDisplay || suppressInitialTopsep
       ? { stretch: texLength(0), shrink: texLength(0) }
-      : parentTransitionFlex ?? texProfileListVerticalGlueFlex(
+      : outsideListBoundary ? texProfileListVerticalGlueFlex(
+          undefined, outsideListBoundary, hasPreviousEmittedParagraph, false,
+          listProfileForContext(listProfile, outsideListBoundary)
+        ) : parentTransitionFlex ?? texProfileListVerticalGlueFlex(
           state.previousEmittedListContext,
           scope.listContext,
           hasPreviousEmittedParagraph,

@@ -779,7 +779,9 @@ async function renderBeamerFrameStep(params: {
     paperHeight: page.page.height,
     textHeight: page.page.height - chrome.headlineInset - chrome.bottomInset,
     plain: frame.options?.plain ?? false,
-    availableHeight: allowFrameBreaks == null && !shrink ? availableContentBounds.height : Number.POSITIVE_INFINITY,
+    availableHeight: allowFrameBreaks == null && !shrink
+      ? Math.max(0, availableContentBounds.height - (frame.options?.alignment === "top" ? TOP_ALIGNED_FRAME_SKIP_PT : 0))
+      : Number.POSITIVE_INFINITY,
     diagnostics,
     theme,
     metadata,
