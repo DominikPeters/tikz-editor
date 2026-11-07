@@ -5,7 +5,7 @@ import type { SourcePatch } from "../edit/types.js";
 import { parseTexDimensionExpression } from "../text/tex/dimensions.js";
 import { environmentBoundariesOf, readOptionList } from "./deck-edit-actions.js";
 import { buildBeamerObjectIndex, type BeamerObjectIndex, type BeamerObjectNode } from "./object-index.js";
-import { beamerOptionalArgumentAfter, beamerRequiredArgumentAfter, createBeamerSyntaxContext } from "./syntax.js";
+import { beamerOptionalArgumentAfter, beamerOverlayArgumentAfter, beamerRequiredArgumentAfter, createBeamerSyntaxContext } from "./syntax.js";
 import { resolveBeamerColumnWidth } from "./column-dimensions.js";
 import type { BeamerFrameLayout, BeamerRect } from "./types.js";
 
@@ -81,12 +81,16 @@ export function beamerImageResizeTarget(source: string, layout: BeamerFrameLayou
   const context = createBeamerSyntaxContext(source);
   const command = context.syntax.controlsIn(graphic.sourceSpan).find((item) => item.name === "includegraphics");
   if (!command) return null;
-  const optional = beamerOptionalArgumentAfter(context, command.span.to, graphic.sourceSpan.to);
+  // Options follow a star and an overlay specification: `\includegraphics<2->[…]{…}`.
+  const commandEnd = command.starSpan?.to ?? command.span.to;
+  const afterOverlay = beamerOverlayArgumentAfter(context, commandEnd, graphic.sourceSpan.to)?.span.to ?? commandEnd;
+  const optional = beamerOptionalArgumentAfter(context, afterOverlay, graphic.sourceSpan.to);
   const list = optional ? readOptionList(source, optional) : null;
   const entries = list?.entries ?? [];
-  // These options change sizing/rotation in TeX but are not rendered here yet.
-  if (entries.some((entry) => ["angle", "totalheight", "natwidth", "natheight", "bb"].includes(entry.key ?? ""))) return null;
-  const dimensions = entries.filter((entry) => entry.key === "width" || entry.key === "height");
+  // pdftex and LuaTeX reject these; the preview does not draw them.
+  if (entries.some((entry) => ["natwidth", "natheight", "bbllx", "bblly", "bburx", "bbury"].includes(entry.key ?? ""))) return null;
+  // A uniform factor commutes with rotation and cropping, so every size key scales.
+  const dimensions = entries.filter((entry) => entry.key === "width" || entry.key === "height" || entry.key === "totalheight");
   const sizes = dimensions.length ? dimensions : entries.filter((entry) => entry.key === "scale");
   const values: NumericValue[] = [];
   for (const entry of sizes) {
@@ -97,7 +101,7 @@ export function beamerImageResizeTarget(source: string, layout: BeamerFrameLayou
   return { objectId, bounds: graphic.bounds, values,
     ...(values.length ? {} : { insertScale: list
       ? { at: list.contentSpan.to, prefix: entries.length ? tikz`, scale=` : tikz`scale=`, suffix: tikz`` }
-      : { at: command.span.to, prefix: tikz`[scale=`, suffix: tikz`]` } }) };
+      : { at: afterOverlay, prefix: tikz`[scale=`, suffix: tikz`]` } }) };
 }
 
 function numericPatches(source: string, edits: { span: Span; replacement: TikzFragment }[]): SourcePatch[] {

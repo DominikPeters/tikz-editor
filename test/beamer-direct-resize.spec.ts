@@ -73,6 +73,8 @@ describe("image corner resizing", () => {
     ["width=3cm,height=1cm", "width=4.5cm,height=1.5cm"],
     ["scale=.5", "scale=.75"],
     ["trim=1pt 2pt 3pt 4pt,clip,width=3cm", "trim=1pt 2pt 3pt 4pt,clip,width=4.5cm"],
+    ["angle=90,width=2cm", "angle=90,width=3cm"],
+    ["totalheight=2cm,bb=0 0 60 30", "totalheight=3cm,bb=0 0 60 30"],
   ])("preserves aspect and source options for %s", async (options, expected) => {
     const source = document(String.raw`\includegraphics[${options}]{demo.png}`);
     const layout = await render(source);
@@ -84,6 +86,12 @@ describe("image corner resizing", () => {
     // graphicx's \Gscale@div and factor products truncate to scaled points.
     expect(next.bounds.width).toBeCloseTo(target.bounds.width * 1.5, 2);
     expect(next.bounds.height).toBeCloseTo(target.bounds.height * 1.5, 2);
+  });
+  it("inserts scale after an image's overlay specification", async () => {
+    const source = document(String.raw`\includegraphics<1->{demo.png}`);
+    const layout = await render(source);
+    const target = beamerImageResizeTarget(source, layout, layout.graphics[0].itemId)!;
+    expect(apply(source, beamerImageResizePatches(source, target, 1.5))).toBe(source.replace("<1->", "<1->[scale=1.5]"));
   });
   it("adds scale to natural-size images without rewriting the filename", async () => {
     for (const options of ["", "[clip]", "[]"]) {
@@ -104,7 +112,7 @@ describe("image corner resizing", () => {
     expect(nextSource).toContain("width=.75\\linewidth");
     expect((await render(nextSource)).graphics[0].bounds.width).toBeCloseTo(target.bounds.width * 1.5, 3);
   });
-  it.each(["width=\\customwidth", "width=2cm,width=3cm", "angle=45,width=3cm", "totalheight=2cm", "scale={.5}"])("leaves unsupported sizing %s to source editing", async (options) => {
+  it.each(["width=\\customwidth", "width=2cm,width=3cm", "natwidth=90,width=3cm", "scale={.5}"])("leaves unsupported sizing %s to source editing", async (options) => {
     const source = document(String.raw`\includegraphics[${options}]{demo.png}`);
     const layout = await render(source);
     expect(beamerImageResizeTarget(source, layout, layout.graphics[0].itemId)).toBeNull();
