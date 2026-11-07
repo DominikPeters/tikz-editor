@@ -98,7 +98,7 @@ export function computePgfPictureBounds(
     const protocol = ellipseProtocols.get(element);
     if (protocol) {
       for (const event of protocol) add(event);
-    } else if (element.kind === "Path" && element.commands.some(command => ellipseProtocols.has(command))) {
+    } else if (element.kind === "Path" && element.commands.some(command => command.kind === "C" || ellipseProtocols.has(command))) {
       let current: WorldPoint | undefined;
       for (const command of element.commands) {
         const arc = ellipseProtocols.get(command);
