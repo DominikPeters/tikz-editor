@@ -9,7 +9,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "mismatch",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0000-nested-flow",
         "file": "v3-seed-20261106-0000-nested-flow.tex",
@@ -99,7 +99,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0000-nested-flow-frame-2",
         "file": "v3-seed-20261106-0000-nested-flow.tex",
@@ -126,7 +126,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0000-nested-flow-frame-3",
         "file": "v3-seed-20261106-0000-nested-flow.tex",
@@ -154,7 +154,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0000-nested-flow-frame-4",
         "file": "v3-seed-20261106-0000-nested-flow.tex",
@@ -181,7 +181,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "mismatch",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0001-diagram-build",
         "file": "v3-seed-20261106-0001-diagram-build.tex",
@@ -252,27 +252,27 @@
         "State 1: unmatchedOracleRules=2 (expected 0)",
         "State 1: unmatchedOracleTextLines=2 (expected 0)",
         "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=7.842676 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=27.49989 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=5.738779 (maximum 0.01)",
+        "State 1: maxRectangleEdgeDeltaPt=2.411477 (maximum 0.01)",
+        "State 1: maxAbsoluteGlyphDxPt=8.455799 (maximum 0.02)",
+        "State 1: maxAbsoluteGlyphDyPt=1.974393 (maximum 0.01)",
         "State 2: unmatchedOracleRules=2 (expected 0)",
         "State 2: unmatchedOracleTextLines=2 (expected 0)",
         "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=7.842676 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=27.49989 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=5.738779 (maximum 0.01)",
+        "State 2: maxRectangleEdgeDeltaPt=2.411477 (maximum 0.01)",
+        "State 2: maxAbsoluteGlyphDxPt=8.455799 (maximum 0.02)",
+        "State 2: maxAbsoluteGlyphDyPt=1.974393 (maximum 0.01)",
         "State 3: unmatchedOracleRules=2 (expected 0)",
         "State 3: unmatchedOracleTextLines=2 (expected 0)",
         "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=7.842676 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=27.49989 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=5.738779 (maximum 0.01)",
+        "State 3: maxRectangleEdgeDeltaPt=2.411477 (maximum 0.01)",
+        "State 3: maxAbsoluteGlyphDxPt=8.455799 (maximum 0.02)",
+        "State 3: maxAbsoluteGlyphDyPt=1.974393 (maximum 0.01)",
         "State 4: unmatchedOracleRules=2 (expected 0)",
         "State 4: unmatchedOracleTextLines=2 (expected 0)",
         "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=7.842676 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=27.49989 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=5.738779 (maximum 0.01)"
+        "State 4: maxRectangleEdgeDeltaPt=2.411477 (maximum 0.01)",
+        "State 4: maxAbsoluteGlyphDxPt=8.455799 (maximum 0.02)",
+        "State 4: maxAbsoluteGlyphDyPt=1.974393 (maximum 0.01)"
       ]
     },
     {
@@ -281,7 +281,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0001-diagram-build-frame-2",
         "file": "v3-seed-20261106-0001-diagram-build.tex",
@@ -306,7 +306,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0001-diagram-build-frame-3",
         "file": "v3-seed-20261106-0001-diagram-build.tex",
@@ -334,7 +334,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0001-diagram-build-frame-4",
         "file": "v3-seed-20261106-0001-diagram-build.tex",
@@ -357,9 +357,9 @@
       "id": "intricate-macro-grammar:v3-seed-20261106-0002-math-layout",
       "campaign": "artifacts/beamer-fuzz/intricate-macro-grammar/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0002-math-layout",
         "file": "v3-seed-20261106-0002-math-layout.tex",
@@ -422,35 +422,7 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedNativeTextLines=1 (expected 0)",
-        "State 1: unmatchedOracleTextLines=10 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=43.227502 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=1247.058818 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=1273.999385 (maximum 0.01)",
-        "State 2: unmatchedNativeTextLines=1 (expected 0)",
-        "State 2: unmatchedOracleTextLines=5 (expected 0)",
-        "State 2: fontMatch=false",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=43.227502 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=1247.058818 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=1273.999385 (maximum 0.01)",
-        "State 3: unmatchedNativeTextLines=2 (expected 0)",
-        "State 3: unmatchedOracleTextLines=1 (expected 0)",
-        "State 3: fontMatch=false",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=43.227502 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=23.551598 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=29.216991 (maximum 0.01)",
-        "State 4: unmatchedNativeTextLines=2 (expected 0)",
-        "State 4: unmatchedOracleTextLines=1 (expected 0)",
-        "State 4: fontMatch=false",
-        "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=43.227502 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=23.551598 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=29.216991 (maximum 0.01)"
-      ]
+      "currentFailures": []
     },
     {
       "id": "intricate-macro-grammar:v3-seed-20261106-0002-math-layout-frame-2",
@@ -458,7 +430,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0002-math-layout-frame-2",
         "file": "v3-seed-20261106-0002-math-layout.tex",
@@ -483,7 +455,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0002-math-layout-frame-3",
         "file": "v3-seed-20261106-0002-math-layout.tex",
@@ -508,7 +480,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0002-math-layout-frame-4",
         "file": "v3-seed-20261106-0002-math-layout.tex",
@@ -533,7 +505,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "mismatch",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0003-table-flow",
         "file": "v3-seed-20261106-0003-table-flow.tex",
@@ -604,30 +576,30 @@
         "State 1: unmatchedOracleRules=1 (expected 0)",
         "State 1: unmatchedOracleTextLines=44 (expected 0)",
         "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=10.959197 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=5.126791 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=11.051253 (maximum 0.01)",
+        "State 1: maxRectangleEdgeDeltaPt=2.265296 (maximum 0.01)",
+        "State 1: maxAbsoluteGlyphDxPt=0.816141 (maximum 0.02)",
+        "State 1: maxAbsoluteGlyphDyPt=2.279956 (maximum 0.01)",
         "State 1: renderer diagnostics",
         "State 2: unmatchedOracleRules=3 (expected 0)",
         "State 2: unmatchedOracleTextLines=33 (expected 0)",
         "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=10.959197 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=5.36168 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=11.051253 (maximum 0.01)",
+        "State 2: maxRectangleEdgeDeltaPt=2.265296 (maximum 0.01)",
+        "State 2: maxAbsoluteGlyphDxPt=0.852915 (maximum 0.02)",
+        "State 2: maxAbsoluteGlyphDyPt=2.279956 (maximum 0.01)",
         "State 2: renderer diagnostics",
         "State 3: unmatchedOracleRules=4 (expected 0)",
         "State 3: unmatchedOracleTextLines=25 (expected 0)",
         "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=10.959197 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=5.36168 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=11.051253 (maximum 0.01)",
+        "State 3: maxRectangleEdgeDeltaPt=2.265296 (maximum 0.01)",
+        "State 3: maxAbsoluteGlyphDxPt=0.852915 (maximum 0.02)",
+        "State 3: maxAbsoluteGlyphDyPt=2.279956 (maximum 0.01)",
         "State 3: renderer diagnostics",
         "State 4: unmatchedOracleRules=4 (expected 0)",
         "State 4: unmatchedOracleTextLines=25 (expected 0)",
         "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=10.959197 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=5.36168 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=11.051253 (maximum 0.01)",
+        "State 4: maxRectangleEdgeDeltaPt=2.265296 (maximum 0.01)",
+        "State 4: maxAbsoluteGlyphDxPt=0.852915 (maximum 0.02)",
+        "State 4: maxAbsoluteGlyphDyPt=2.279956 (maximum 0.01)",
         "State 4: renderer diagnostics"
       ]
     },
@@ -637,7 +609,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0003-table-flow-frame-2",
         "file": "v3-seed-20261106-0003-table-flow.tex",
@@ -662,7 +634,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0003-table-flow-frame-3",
         "file": "v3-seed-20261106-0003-table-flow.tex",
@@ -687,7 +659,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0003-table-flow-frame-4",
         "file": "v3-seed-20261106-0003-table-flow.tex",
@@ -712,7 +684,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "mismatch",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0004-scoped-typography",
         "file": "v3-seed-20261106-0004-scoped-typography.tex",
@@ -774,21 +746,21 @@
       "currentFailures": [
         "State 1: unmatchedOracleTextLines=7 (expected 0)",
         "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=9.212907 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=9.718919 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=0.743803 (maximum 0.01)",
+        "State 1: maxRectangleEdgeDeltaPt=1.227589 (maximum 0.01)",
+        "State 1: maxAbsoluteGlyphDxPt=1.29277 (maximum 0.02)",
+        "State 1: maxAbsoluteGlyphDyPt=0.6076 (maximum 0.01)",
         "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=9.524934 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=12.028799 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=2.473935 (maximum 0.01)",
+        "State 2: maxRectangleEdgeDeltaPt=1.067652 (maximum 0.01)",
+        "State 2: maxAbsoluteGlyphDxPt=1.124334 (maximum 0.02)",
+        "State 2: maxAbsoluteGlyphDyPt=0.600997 (maximum 0.01)",
         "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=9.524934 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=12.028799 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=2.473935 (maximum 0.01)",
+        "State 3: maxRectangleEdgeDeltaPt=1.067652 (maximum 0.01)",
+        "State 3: maxAbsoluteGlyphDxPt=1.124334 (maximum 0.02)",
+        "State 3: maxAbsoluteGlyphDyPt=0.600997 (maximum 0.01)",
         "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=9.212907 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=9.718919 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=0.743803 (maximum 0.01)"
+        "State 4: maxRectangleEdgeDeltaPt=1.227589 (maximum 0.01)",
+        "State 4: maxAbsoluteGlyphDxPt=1.29277 (maximum 0.02)",
+        "State 4: maxAbsoluteGlyphDyPt=0.6076 (maximum 0.01)"
       ]
     },
     {
@@ -797,7 +769,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0004-scoped-typography-frame-2",
         "file": "v3-seed-20261106-0004-scoped-typography.tex",
@@ -822,7 +794,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0004-scoped-typography-frame-3",
         "file": "v3-seed-20261106-0004-scoped-typography.tex",
@@ -847,7 +819,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0005-overlay-composition",
         "file": "v3-seed-20261106-0005-overlay-composition.tex",
@@ -906,7 +878,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0005-overlay-composition-frame-2",
         "file": "v3-seed-20261106-0005-overlay-composition.tex",
@@ -931,7 +903,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json",
       "fixture": {
         "id": "v3-seed-20261106-0005-overlay-composition-frame-3",
         "file": "v3-seed-20261106-0005-overlay-composition.tex",
@@ -954,9 +926,9 @@
       "id": "fixes-fresh-intricate:v3-seed-20261107-0000-nested-flow",
       "campaign": "artifacts/beamer-fuzz/fixes-fresh-intricate/comparison",
       "observedStatus": "mismatch",
-      "currentStatus": "mismatch",
+      "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0000-nested-flow",
         "file": "v3-seed-20261107-0000-nested-flow.tex",
@@ -1032,30 +1004,8 @@
           "failures": []
         }
       ],
-      "currentFailures": [
-        "State 1: unmatchedOracleTextLines=27 (expected 0)",
-        "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=3.874349 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=3.423812 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=3.912911 (maximum 0.01)",
-        "State 2: unmatchedOracleTextLines=3 (expected 0)",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=17.382525 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=3.423812 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=5.37891 (maximum 0.01)",
-        "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=17.382525 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=3.423812 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=5.37891 (maximum 0.01)",
-        "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=17.382525 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=3.423812 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=5.37891 (maximum 0.01)",
-        "State 5: transformMatch=false",
-        "State 5: maxRectangleEdgeDeltaPt=17.382525 (maximum 0.01)",
-        "State 5: maxAbsoluteGlyphDxPt=3.423812 (maximum 0.02)",
-        "State 5: maxAbsoluteGlyphDyPt=5.37891 (maximum 0.01)"
-      ]
+      "currentFailures": [],
+      "liveClosure": "artifacts/beamer-fuzz/v19-live/report.json"
     },
     {
       "id": "fixes-fresh-intricate:v3-seed-20261107-0001-diagram-build",
@@ -1063,7 +1013,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "mismatch",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0001-diagram-build",
         "file": "v3-seed-20261107-0001-diagram-build.tex",
@@ -1142,33 +1092,33 @@
       "currentFailures": [
         "State 1: unmatchedOracleTextLines=33 (expected 0)",
         "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=2.248984 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=5.008588 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=3.423517 (maximum 0.01)",
-        "State 2: unmatchedNativeRectangles=3 (expected 0)",
-        "State 2: unmatchedOracleTextLines=2 (expected 0)",
+        "State 1: maxRectangleEdgeDeltaPt=0.809661 (maximum 0.01)",
+        "State 1: maxAbsoluteGlyphDxPt=1.802724 (maximum 0.02)",
+        "State 1: maxAbsoluteGlyphDyPt=1.232071 (maximum 0.01)",
+        "State 2: unmatchedNativeRectangles=1 (expected 0)",
+        "State 2: unmatchedOracleTextLines=3 (expected 0)",
         "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=106.151663 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=14.520662 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=16.221363 (maximum 0.01)",
-        "State 3: unmatchedNativeRectangles=3 (expected 0)",
-        "State 3: unmatchedOracleTextLines=2 (expected 0)",
+        "State 2: maxRectangleEdgeDeltaPt=39.556723 (maximum 0.01)",
+        "State 2: maxAbsoluteGlyphDxPt=1.805571 (maximum 0.02)",
+        "State 2: maxAbsoluteGlyphDyPt=1.232071 (maximum 0.01)",
+        "State 3: unmatchedNativeRectangles=1 (expected 0)",
+        "State 3: unmatchedOracleTextLines=3 (expected 0)",
         "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=106.151663 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=14.520662 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=16.221363 (maximum 0.01)",
-        "State 4: unmatchedNativeRectangles=3 (expected 0)",
-        "State 4: unmatchedOracleTextLines=2 (expected 0)",
+        "State 3: maxRectangleEdgeDeltaPt=39.556723 (maximum 0.01)",
+        "State 3: maxAbsoluteGlyphDxPt=1.805571 (maximum 0.02)",
+        "State 3: maxAbsoluteGlyphDyPt=1.232071 (maximum 0.01)",
+        "State 4: unmatchedNativeRectangles=1 (expected 0)",
+        "State 4: unmatchedOracleTextLines=3 (expected 0)",
         "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=106.151663 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=14.520662 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=16.221363 (maximum 0.01)",
-        "State 5: unmatchedNativeRectangles=3 (expected 0)",
-        "State 5: unmatchedOracleTextLines=2 (expected 0)",
+        "State 4: maxRectangleEdgeDeltaPt=39.556723 (maximum 0.01)",
+        "State 4: maxAbsoluteGlyphDxPt=1.805571 (maximum 0.02)",
+        "State 4: maxAbsoluteGlyphDyPt=1.232071 (maximum 0.01)",
+        "State 5: unmatchedNativeRectangles=1 (expected 0)",
+        "State 5: unmatchedOracleTextLines=3 (expected 0)",
         "State 5: transformMatch=false",
-        "State 5: maxRectangleEdgeDeltaPt=106.151663 (maximum 0.01)",
-        "State 5: maxAbsoluteGlyphDxPt=14.520662 (maximum 0.02)",
-        "State 5: maxAbsoluteGlyphDyPt=16.221363 (maximum 0.01)"
+        "State 5: maxRectangleEdgeDeltaPt=39.556723 (maximum 0.01)",
+        "State 5: maxAbsoluteGlyphDxPt=1.805571 (maximum 0.02)",
+        "State 5: maxAbsoluteGlyphDyPt=1.232071 (maximum 0.01)"
       ]
     },
     {
@@ -1177,7 +1127,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "mismatch",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0002-math-layout",
         "file": "v3-seed-20261107-0002-math-layout.tex",
@@ -1254,29 +1204,29 @@
         "State 1: unmatchedNativeRectangles=1 (expected 0)",
         "State 1: unmatchedOracleTextLines=65 (expected 0)",
         "State 1: transformMatch=false",
-        "State 1: maxAbsoluteGlyphDxPt=4.354695 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=0.818719 (maximum 0.01)",
+        "State 1: maxAbsoluteGlyphDxPt=1.792156 (maximum 0.02)",
+        "State 1: maxAbsoluteGlyphDyPt=0.336871 (maximum 0.01)",
         "State 2: unmatchedOracleTextLines=30 (expected 0)",
         "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=3.38177 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=7.181613 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=3.339289 (maximum 0.01)",
+        "State 2: maxRectangleEdgeDeltaPt=1.391809 (maximum 0.01)",
+        "State 2: maxAbsoluteGlyphDxPt=2.955674 (maximum 0.02)",
+        "State 2: maxAbsoluteGlyphDyPt=1.941719 (maximum 0.01)",
         "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=22.564649 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=5.993505 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=4.567411 (maximum 0.01)",
+        "State 3: maxRectangleEdgeDeltaPt=1.431736 (maximum 0.01)",
+        "State 3: maxAbsoluteGlyphDxPt=1.446484 (maximum 0.02)",
+        "State 3: maxAbsoluteGlyphDyPt=1.245379 (maximum 0.01)",
         "State 4: unmatchedNativeRectangles=1 (expected 0)",
         "State 4: unmatchedOracleTextLines=3 (expected 0)",
         "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=147.856432 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=5.993505 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=4.567411 (maximum 0.01)",
+        "State 4: maxRectangleEdgeDeltaPt=147.578302 (maximum 0.01)",
+        "State 4: maxAbsoluteGlyphDxPt=1.446484 (maximum 0.02)",
+        "State 4: maxAbsoluteGlyphDyPt=1.245379 (maximum 0.01)",
         "State 5: unmatchedNativeRectangles=1 (expected 0)",
         "State 5: unmatchedOracleTextLines=3 (expected 0)",
         "State 5: transformMatch=false",
-        "State 5: maxRectangleEdgeDeltaPt=147.856432 (maximum 0.01)",
-        "State 5: maxAbsoluteGlyphDxPt=5.993505 (maximum 0.02)",
-        "State 5: maxAbsoluteGlyphDyPt=4.567411 (maximum 0.01)"
+        "State 5: maxRectangleEdgeDeltaPt=147.578302 (maximum 0.01)",
+        "State 5: maxAbsoluteGlyphDxPt=1.446484 (maximum 0.02)",
+        "State 5: maxAbsoluteGlyphDyPt=1.245379 (maximum 0.01)"
       ]
     },
     {
@@ -1285,7 +1235,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "mismatch",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0003-table-flow",
         "file": "v3-seed-20261107-0003-table-flow.tex",
@@ -1351,27 +1301,27 @@
       "currentFailures": [
         "State 1: unmatchedOracleTextLines=24 (expected 0)",
         "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=1.985309 (maximum 0.01)",
+        "State 1: maxRectangleEdgeDeltaPt=1.985307 (maximum 0.01)",
         "State 1: maxAbsoluteGlyphDxPt=1.186255 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=1.953283 (maximum 0.01)",
+        "State 1: maxAbsoluteGlyphDyPt=1.953281 (maximum 0.01)",
         "State 2: unmatchedOracleRules=1 (expected 0)",
         "State 2: unmatchedOracleTextLines=8 (expected 0)",
         "State 2: transformMatch=false",
         "State 2: maxRectangleEdgeDeltaPt=26.53767 (maximum 0.01)",
         "State 2: maxAbsoluteGlyphDxPt=26.505871 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=3.373484 (maximum 0.01)",
+        "State 2: maxAbsoluteGlyphDyPt=3.373482 (maximum 0.01)",
         "State 3: unmatchedOracleRules=1 (expected 0)",
         "State 3: unmatchedOracleTextLines=1 (expected 0)",
         "State 3: transformMatch=false",
         "State 3: maxRectangleEdgeDeltaPt=26.53767 (maximum 0.01)",
         "State 3: maxAbsoluteGlyphDxPt=26.505871 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=3.373484 (maximum 0.01)",
+        "State 3: maxAbsoluteGlyphDyPt=3.373482 (maximum 0.01)",
         "State 4: unmatchedOracleRules=1 (expected 0)",
         "State 4: unmatchedOracleTextLines=1 (expected 0)",
         "State 4: transformMatch=false",
         "State 4: maxRectangleEdgeDeltaPt=26.53767 (maximum 0.01)",
         "State 4: maxAbsoluteGlyphDxPt=26.505871 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=3.373484 (maximum 0.01)"
+        "State 4: maxAbsoluteGlyphDyPt=3.373482 (maximum 0.01)"
       ]
     },
     {
@@ -1380,7 +1330,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "mismatch",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0004-scoped-typography",
         "file": "v3-seed-20261107-0004-scoped-typography.tex",
@@ -1424,17 +1374,10 @@
         }
       ],
       "currentFailures": [
-        "State 1: unmatchedOracleTextLines=4 (expected 0)",
-        "State 1: maxAbsoluteGlyphDyPt=1.902145 (maximum 0.01)",
-        "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=1.534637 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=2.434862 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=6.287039 (maximum 0.01)",
-        "State 3: maxRectangleEdgeDeltaPt=1.902118 (maximum 0.01)",
+        "State 1: unmatchedOracleTextLines=2 (expected 0)",
+        "State 2: maxAbsoluteGlyphDyPt=5.1377 (maximum 0.01)",
         "State 3: maxAbsoluteGlyphDyPt=5.698168 (maximum 0.01)",
-        "State 4: unmatchedOracleTextLines=2 (expected 0)",
-        "State 4: maxRectangleEdgeDeltaPt=1.902118 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDyPt=1.902119 (maximum 0.01)"
+        "State 4: unmatchedOracleTextLines=2 (expected 0)"
       ]
     },
     {
@@ -1443,7 +1386,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "mismatch",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0005-overlay-composition",
         "file": "v3-seed-20261107-0005-overlay-composition.tex",
@@ -1525,7 +1468,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0006-nested-flow",
         "file": "v3-seed-20261107-0006-nested-flow.tex",
@@ -1592,7 +1535,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "mismatch",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0007-diagram-build",
         "file": "v3-seed-20261107-0007-diagram-build.tex",
@@ -1670,24 +1613,24 @@
       "currentFailures": [
         "State 1: unmatchedOracleTextLines=15 (expected 0)",
         "State 1: transformMatch=false",
-        "State 1: maxAbsoluteGlyphDxPt=7.35879 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=2.097767 (maximum 0.01)",
+        "State 1: maxAbsoluteGlyphDxPt=4.955797 (maximum 0.02)",
+        "State 1: maxAbsoluteGlyphDyPt=2.88772 (maximum 0.01)",
         "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=1.969872 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=8.931336 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=2.097767 (maximum 0.01)",
+        "State 2: maxRectangleEdgeDeltaPt=2.801575 (maximum 0.01)",
+        "State 2: maxAbsoluteGlyphDxPt=6.014954 (maximum 0.02)",
+        "State 2: maxAbsoluteGlyphDyPt=2.88772 (maximum 0.01)",
         "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=1.969872 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=8.931336 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=2.097767 (maximum 0.01)",
+        "State 3: maxRectangleEdgeDeltaPt=2.801575 (maximum 0.01)",
+        "State 3: maxAbsoluteGlyphDxPt=6.014954 (maximum 0.02)",
+        "State 3: maxAbsoluteGlyphDyPt=2.88772 (maximum 0.01)",
         "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=1.969872 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=8.931336 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=2.097767 (maximum 0.01)",
+        "State 4: maxRectangleEdgeDeltaPt=2.801575 (maximum 0.01)",
+        "State 4: maxAbsoluteGlyphDxPt=6.014954 (maximum 0.02)",
+        "State 4: maxAbsoluteGlyphDyPt=2.88772 (maximum 0.01)",
         "State 5: transformMatch=false",
-        "State 5: maxRectangleEdgeDeltaPt=1.969872 (maximum 0.01)",
-        "State 5: maxAbsoluteGlyphDxPt=8.931336 (maximum 0.02)",
-        "State 5: maxAbsoluteGlyphDyPt=2.097767 (maximum 0.01)"
+        "State 5: maxRectangleEdgeDeltaPt=2.801575 (maximum 0.01)",
+        "State 5: maxAbsoluteGlyphDxPt=6.014954 (maximum 0.02)",
+        "State 5: maxAbsoluteGlyphDyPt=2.88772 (maximum 0.01)"
       ]
     },
     {
@@ -1696,7 +1639,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "mismatch",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0008-math-layout",
         "file": "v3-seed-20261107-0008-math-layout.tex",
@@ -1772,27 +1715,31 @@
         }
       ],
       "currentFailures": [
-        "State 1: unmatchedOracleTextLines=8 (expected 0)",
+        "State 1: unmatchedOracleTextLines=9 (expected 0)",
         "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=3.249136 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=28.800264 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=47.708965 (maximum 0.01)",
+        "State 1: maxRectangleEdgeDeltaPt=1.383023 (maximum 0.01)",
+        "State 1: maxAbsoluteGlyphDxPt=6.162072 (maximum 0.02)",
+        "State 1: maxAbsoluteGlyphDyPt=8.864408 (maximum 0.01)",
+        "State 2: unmatchedOracleTextLines=1 (expected 0)",
         "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=10.148481 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=28.800264 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=47.708965 (maximum 0.01)",
+        "State 2: maxRectangleEdgeDeltaPt=4.319807 (maximum 0.01)",
+        "State 2: maxAbsoluteGlyphDxPt=7.678817 (maximum 0.02)",
+        "State 2: maxAbsoluteGlyphDyPt=8.864408 (maximum 0.01)",
+        "State 3: unmatchedOracleTextLines=1 (expected 0)",
         "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=10.148481 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=28.800264 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=47.708965 (maximum 0.01)",
+        "State 3: maxRectangleEdgeDeltaPt=4.319807 (maximum 0.01)",
+        "State 3: maxAbsoluteGlyphDxPt=7.678817 (maximum 0.02)",
+        "State 3: maxAbsoluteGlyphDyPt=8.864408 (maximum 0.01)",
+        "State 4: unmatchedOracleTextLines=1 (expected 0)",
         "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=10.148481 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=28.800264 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=47.708965 (maximum 0.01)",
+        "State 4: maxRectangleEdgeDeltaPt=4.319807 (maximum 0.01)",
+        "State 4: maxAbsoluteGlyphDxPt=7.678817 (maximum 0.02)",
+        "State 4: maxAbsoluteGlyphDyPt=8.864408 (maximum 0.01)",
+        "State 5: unmatchedOracleTextLines=1 (expected 0)",
         "State 5: transformMatch=false",
-        "State 5: maxRectangleEdgeDeltaPt=10.148481 (maximum 0.01)",
-        "State 5: maxAbsoluteGlyphDxPt=28.800264 (maximum 0.02)",
-        "State 5: maxAbsoluteGlyphDyPt=47.708965 (maximum 0.01)"
+        "State 5: maxRectangleEdgeDeltaPt=4.319807 (maximum 0.01)",
+        "State 5: maxAbsoluteGlyphDxPt=7.678817 (maximum 0.02)",
+        "State 5: maxAbsoluteGlyphDyPt=8.864408 (maximum 0.01)"
       ]
     },
     {
@@ -1801,7 +1748,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "mismatch",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0009-table-flow",
         "file": "v3-seed-20261107-0009-table-flow.tex",
@@ -1880,32 +1827,32 @@
       "currentFailures": [
         "State 1: unmatchedOracleTextLines=40 (expected 0)",
         "State 1: transformMatch=false",
-        "State 1: maxRectangleEdgeDeltaPt=6.425687 (maximum 0.01)",
-        "State 1: maxAbsoluteGlyphDxPt=6.290426 (maximum 0.02)",
-        "State 1: maxAbsoluteGlyphDyPt=3.119195 (maximum 0.01)",
+        "State 1: maxRectangleEdgeDeltaPt=6.203491 (maximum 0.01)",
+        "State 1: maxAbsoluteGlyphDxPt=6.072909 (maximum 0.02)",
+        "State 1: maxAbsoluteGlyphDyPt=3.035333 (maximum 0.01)",
         "State 2: unmatchedOracleTextLines=11 (expected 0)",
         "State 2: transformMatch=false",
-        "State 2: maxRectangleEdgeDeltaPt=6.471288 (maximum 0.01)",
-        "State 2: maxAbsoluteGlyphDxPt=6.336029 (maximum 0.02)",
-        "State 2: maxAbsoluteGlyphDyPt=3.592641 (maximum 0.01)",
+        "State 2: maxRectangleEdgeDeltaPt=6.247516 (maximum 0.01)",
+        "State 2: maxAbsoluteGlyphDxPt=6.116934 (maximum 0.02)",
+        "State 2: maxAbsoluteGlyphDyPt=3.231819 (maximum 0.01)",
         "State 3: unmatchedNativeTextLines=2 (expected 0)",
         "State 3: unmatchedOracleTextLines=1 (expected 0)",
         "State 3: transformMatch=false",
-        "State 3: maxRectangleEdgeDeltaPt=6.471288 (maximum 0.01)",
-        "State 3: maxAbsoluteGlyphDxPt=6.336029 (maximum 0.02)",
-        "State 3: maxAbsoluteGlyphDyPt=3.592641 (maximum 0.01)",
+        "State 3: maxRectangleEdgeDeltaPt=6.247516 (maximum 0.01)",
+        "State 3: maxAbsoluteGlyphDxPt=6.116934 (maximum 0.02)",
+        "State 3: maxAbsoluteGlyphDyPt=3.231819 (maximum 0.01)",
         "State 4: unmatchedNativeTextLines=2 (expected 0)",
         "State 4: unmatchedOracleTextLines=1 (expected 0)",
         "State 4: transformMatch=false",
-        "State 4: maxRectangleEdgeDeltaPt=6.471288 (maximum 0.01)",
-        "State 4: maxAbsoluteGlyphDxPt=6.336029 (maximum 0.02)",
-        "State 4: maxAbsoluteGlyphDyPt=3.592641 (maximum 0.01)",
+        "State 4: maxRectangleEdgeDeltaPt=6.247516 (maximum 0.01)",
+        "State 4: maxAbsoluteGlyphDxPt=6.116934 (maximum 0.02)",
+        "State 4: maxAbsoluteGlyphDyPt=3.231819 (maximum 0.01)",
         "State 5: unmatchedNativeTextLines=2 (expected 0)",
         "State 5: unmatchedOracleTextLines=1 (expected 0)",
         "State 5: transformMatch=false",
-        "State 5: maxRectangleEdgeDeltaPt=6.471288 (maximum 0.01)",
-        "State 5: maxAbsoluteGlyphDxPt=6.336029 (maximum 0.02)",
-        "State 5: maxAbsoluteGlyphDyPt=3.592641 (maximum 0.01)"
+        "State 5: maxRectangleEdgeDeltaPt=6.247516 (maximum 0.01)",
+        "State 5: maxAbsoluteGlyphDxPt=6.116934 (maximum 0.02)",
+        "State 5: maxAbsoluteGlyphDyPt=3.231819 (maximum 0.01)"
       ]
     },
     {
@@ -1914,7 +1861,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0010-scoped-typography",
         "file": "v3-seed-20261107-0010-scoped-typography.tex",
@@ -1965,7 +1912,7 @@
       "observedStatus": "mismatch",
       "currentStatus": "passed",
       "notes": [],
-      "currentReplay": "artifacts/beamer-fuzz/recursive-action-current/report.json",
+      "currentReplay": "artifacts/beamer-fuzz/noparlist-current/report.json",
       "fixture": {
         "id": "v3-seed-20261107-0011-overlay-composition",
         "file": "v3-seed-20261107-0011-overlay-composition.tex",
@@ -2077,16 +2024,16 @@
     "older": {
       "frames": 22,
       "states": 40,
-      "passed": 17,
-      "failed": 5,
-      "report": "artifacts/beamer-fuzz/legacy-recursive-action-current/report.json"
+      "passed": 18,
+      "failed": 4,
+      "report": "artifacts/beamer-fuzz/legacy-centered-display-current/report.json"
     },
     "newer": {
       "frames": 39,
       "states": 81,
-      "passed": 30,
-      "failed": 9,
-      "report": "artifacts/beamer-fuzz/recursive-action-current/report.json"
+      "passed": 35,
+      "failed": 4,
+      "report": "artifacts/beamer-fuzz/centered-display-current/report.json"
     },
     "note": "Strict saved-trace replays; independent live rechecks required before closing full compositions."
   },
@@ -2126,6 +2073,76 @@
       "manifest": "test/fixtures/beamer/fuzz-findings-v14/cases.json",
       "result": "4/4 strict live pass; all overlay states checked",
       "report": "artifacts/beamer-fuzz/v14-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v15/cases.json",
+      "result": "4/4 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v15-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v16/cases.json",
+      "result": "2/2 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v16-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v17/cases.json",
+      "result": "8/8 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v17-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v18/cases.json",
+      "result": "2/2 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v18-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v19/cases.json",
+      "result": "1/1 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v19-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v20/cases.json",
+      "result": "8/8 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v20-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v21/cases.json",
+      "result": "2/2 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v21-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v22/cases.json",
+      "result": "6/6 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v22-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v23/cases.json",
+      "result": "2/2 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v23-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v24/cases.json",
+      "result": "1/1 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v24-final-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v25/cases.json",
+      "result": "1/1 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v25-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v26/cases.json",
+      "result": "2/2 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v26-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v27/cases.json",
+      "result": "8/8 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v27-live/report.json"
+    },
+    {
+      "manifest": "test/fixtures/beamer/fuzz-findings-v28/cases.json",
+      "result": "10/10 strict live pass; every overlay checked",
+      "report": "artifacts/beamer-fuzz/v28-declaration-spacing/report.json"
     }
   ],
   "regressionGate": {
@@ -2145,15 +2162,34 @@
       "scope": "Before final explicit display-boundary hook"
     },
     "latestFocusedRun": {
-      "run": "/tmp/display-complete-scope-regressions.log",
-      "passed": 365,
+      "run": "/tmp/v28-focused-tests.log",
+      "passed": 602,
       "failed": 0
     },
-    "finalFullSuite": "Not yet run on final source"
+    "finalFullSuite": "Not yet run on final source",
+    "typecheck": "/tmp/empty-trivlist-typecheck.log (passed before final font-declaration adjustment)",
+    "productionLint": "/tmp/nested-block-context-lint.log (passed before V28)",
+    "laterBroadRun": {
+      "run": "/tmp/nested-block-context-broad-tests.log",
+      "passed": 1822,
+      "failed": 2,
+      "skipped": 7,
+      "failures": "Two bibliography class-dimension regressions; fixed in 5f916ee1 and verified by bibliography/focused tests."
+    },
+    "pinnedAlignmentControls": {
+      "run": "/tmp/v28-pinned-tests.log",
+      "passed": 302,
+      "failed": 0
+    }
   },
   "knownUnverifiedSupportGaps": [
     "Generic brace groups with a bare font declaration and block-level children still hit the frontend restriction. Not yet independently reduced.",
     "Non-default heading struts and class-specific named sizes in overlay-picture node text need further independent checks.",
     "Rounded-block width comparisons do not directly trace rounded background edges; centered text caught the pre-shrink width bug but simple prose alone could miss it."
+  ],
+  "verificationCorrections": [
+    "V24 initial structural agreement did not close the original: marker visibility and eight block paint probes still failed. The final V24 live run passes all five states.",
+    "V28 controls initially had three failures (font-only declaration paragraphs and a single centered character before display); all ten controls pass after fixes.",
+    "Eight original failed frame observations remain: four older and four newer. Saved-trace passes require live checks before closure."
   ]
 }
