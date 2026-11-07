@@ -68,7 +68,9 @@ Display rows:
     } });
     const images = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider).rectangles.filter(rect => rect.role === "image");
     expect(images).toHaveLength(1);
-    expect(images[0]).toMatchObject({ width: 40, height: 40 });
+    // graphicx truncates the 40/50 scale factor to 16.16 fixed point, as pdflatex does.
+    expect(images[0]?.width).toBeCloseTo(40, 5);
+    expect(images[0]?.height).toBeCloseTo(39.99939, 5);
     expect(render.diagnostics).toEqual([]);
   });
 

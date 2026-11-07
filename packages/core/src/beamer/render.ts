@@ -40,6 +40,7 @@ import { projectBeamerCaptions } from "./captions.js";
 import { pt, svgPoint, svgRect, type SvgPoint, type SvgRect } from "../coords/index.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import type { DocumentGraphicsResolver } from "../graphics/types.js";
+import { includeGraphicsDiagnostics } from "../graphics/diagnostics.js";
 import {
   collectMacroBindings,
   type MacroBinding,
@@ -627,6 +628,7 @@ async function renderBeamerFrameStep(params: {
     if (control.name === "includegraphics" && control.starSpan) diagnostics.push({ severity: "warning", code: "beamer-includegraphics-star",
       message: "Beamer's \\includegraphics has no star form; LaTeX reads the star as the file name. Use the clip option instead.", span: control.span });
   }
+  diagnostics.push(...includeGraphicsDiagnostics(source, frame.bodySpan));
   const inheritedMacroDeclarations = [...macroBindings.values()].some(binding => /\\(?:newcommand|renewcommand|providecommand|def|let)\b/u.test(binding.kind === "text" ? binding.value : binding.body));
   const references: BeamerReferenceContext = {
     ambientTextAt: createBeamerAmbientText(source),
@@ -3817,6 +3819,8 @@ async function prepareEmbeddedTikz(params: {
     ...rendered.parse.diagnostics,
     ...rendered.semantic.diagnostics,
   ]) {
+    // The frame reports image keys at their own source spans.
+    if (diagnostic.code?.startsWith("includegraphics-")) continue;
     params.diagnostics.push({
       severity: diagnostic.severity,
       ...(diagnostic.code !== undefined ? { code: diagnostic.code } : {}),
@@ -3914,6 +3918,7 @@ async function emitBeamerOverlayPictures(params: {
       }
     );
     for (const diagnostic of [...rendered.parse.diagnostics, ...rendered.semantic.diagnostics]) {
+      if (diagnostic.code?.startsWith("includegraphics-")) continue;
       params.diagnostics.push({ severity: diagnostic.severity, ...(diagnostic.code !== undefined ? { code: diagnostic.code } : {}), message: diagnostic.message, span: picture.span });
     }
     const viewBox = rendered.svg.viewBox;

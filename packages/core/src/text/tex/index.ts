@@ -65,6 +65,7 @@ export {
   type SimpleTexGroupNode,
   type SimpleTexGraphicsOptions,
   type SimpleTexGraphicsSizeKey,
+  type SimpleTexGraphicsIgnoredKey,
   type SimpleTexGraphicsPageOption,
   type SimpleTexGraphicsResource,
   type SimpleTexGraphicsTrim,

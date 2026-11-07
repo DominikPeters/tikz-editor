@@ -389,10 +389,10 @@ describe("Beamer canvas editing contract", () => {
           corpusSource.slice(graphic.filenameSpan.from, graphic.filenameSpan.to)
         )
       ).toEqual(["plots/loss-curve", "diagrams/architecture", "photos/team"]);
-      // width=3cm, height=2cm, scale=0.5 of the 28.45pt placeholder.
+      // width=3cm, height=2cm, scale=0.5 of pdftex's 72bp box for a missing file.
       expect(graphics[0].bounds.width).toBeCloseTo(85.36, 1);
       expect(graphics[1].bounds.height).toBeCloseTo(56.91, 1);
-      expect(graphics[2].bounds.width).toBeCloseTo(14.23, 1);
+      expect(graphics[2].bounds.width).toBeCloseTo(36.13, 1);
       for (const graphic of graphics) {
         expect(graphic.caretPolicy).toBe("filename-linear");
         expect(graphic.asset.status).toBe("missing");

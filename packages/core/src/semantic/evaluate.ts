@@ -19,6 +19,7 @@ import type {
   Statement
 } from "../ast/types.js";
 import { pt } from "../coords/scalars.js";
+import { includeGraphicsDiagnostics } from "../graphics/diagnostics.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import { initializeFeatureUsage, markFeatureUsage as markFeature, mergeFeatureUsage } from "./feature-usage.js";
 export { initializeFeatureUsage } from "./feature-usage.js";
@@ -289,6 +290,7 @@ export function createSemanticEvaluationRun(
       span: diagnostic.span
     });
   }
+  diagnostics.push(...includeGraphicsDiagnostics(source, figure.span));
 
   for (const statement of prePictureContextStatements) {
     const contextStatement = remapPrePictureContextStatement(statement, expanded.statementSourceMaps.get(statement));

@@ -343,8 +343,19 @@ export interface SimpleTexGraphicsOptions {
   readonly sizeKeys?: SimpleTexGraphicsSizeKey[];
   /** Applies to every angle, wherever it appears (\Gin@erotate expands late). */
   readonly origin?: string;
+  /** Keys that change LaTeX's output but not the preview's, in source order. */
+  readonly ignored?: SimpleTexGraphicsIgnoredKey[];
   readonly raw: string;
 }
+
+export type SimpleTexGraphicsIgnoredKey = {
+  readonly key: string;
+  readonly raw: string;
+  readonly span: { readonly from: number; readonly to: number };
+  /** unknown: keyval error; driver: rejected by pdftex.def/luatex.def;
+   * invalid: a value the preview cannot read; undrawn: valid but not applied. */
+  readonly reason: "unknown" | "driver" | "invalid" | "undrawn";
+};
 
 export type SimpleTexGraphicsSizeKey =
   /** `null` is graphicx's `!`: reset to the natural size. */
@@ -3405,7 +3416,10 @@ function parseSimpleTexGraphicsOptions(
   let draft: boolean | undefined;
   const sizeKeys: SimpleTexGraphicsSizeKey[] = [];
   let origin: string | undefined;
+  const ignored: SimpleTexGraphicsIgnoredKey[] = [];
   for (const entry of optionList?.entries ?? []) {
+    const reason = simpleTexGraphicsIgnoredKey(entry);
+    if (reason) ignored.push({ key: entry.kind === "unknown" ? "" : entry.key, raw: entry.raw, span: entry.span, reason });
     const key = entry.kind === "unknown" ? "" : entry.key;
     const value = entry.kind === "kv" ? entry.valueRaw : "";
     const hasValue = entry.kind === "kv";
@@ -3507,9 +3521,35 @@ function parseSimpleTexGraphicsOptions(
     ...(draft !== undefined ? { draft } : {}),
     ...(sizeKeys.length ? { sizeKeys } : {}),
     ...(origin !== undefined ? { origin } : {}),
+    ...(ignored.length ? { ignored } : {}),
     ...(optionList ? { optionList: optionList } : {}),
     raw: optionList?.raw.slice(1, -1) ?? "",
   };
+}
+
+// graphicx.sty's Gin keys, by what the preview does with them.
+const GRAPHICS_SILENT_KEYS: ReadonlySet<string> = new Set(["alt", "actualtext", "artifact", "quiet", "hiresbb", "interpolate"]);
+const GRAPHICS_DRIVER_KEYS: ReadonlySet<string> = new Set(["bbllx", "bblly", "bburx", "bbury", "natwidth", "natheight"]);
+const GRAPHICS_UNDRAWN_KEYS: ReadonlySet<string> = new Set(["pagebox", "decodearray", "type", "ext", "read", "command"]);
+const GRAPHICS_BOOLEAN_KEYS: ReadonlySet<string> = new Set(["keepaspectratio", "clip", "draft"]);
+
+function simpleTexGraphicsIgnoredKey(entry: OptionListAst["entries"][number]): SimpleTexGraphicsIgnoredKey["reason"] | null {
+  if (entry.kind === "unknown") return "unknown";
+  const key = entry.key;
+  const value = entry.kind === "kv" ? stripSingleSimpleTexBraceLayer(entry.valueRaw).trim() : null;
+  if (GRAPHICS_SILENT_KEYS.has(key) || GRAPHICS_BOOLEAN_KEYS.has(key)) return null;
+  if (GRAPHICS_DRIVER_KEYS.has(key)) return "driver";
+  if (GRAPHICS_UNDRAWN_KEYS.has(key)) return key === "pagebox" && value === "cropbox" ? null : "undrawn";
+  switch (key) {
+    case "width": case "height": case "totalheight":
+      return value !== null && (value === "!" || parseTexDimensionExpression(value) !== null) ? null : "invalid";
+    case "scale": return value !== null && Number(value) > 0 ? null : "invalid";
+    case "angle": return value !== null && value !== "" && Number.isFinite(Number(value)) ? null : "invalid";
+    case "origin": return value === null || /^[lrcbtB]+$/u.test(value) ? null : "invalid";
+    case "page": return value !== null && /^\d+$/u.test(value) && Number(value) >= 1 ? null : "invalid";
+    case "trim": case "viewport": case "bb": return value !== null && parseSimpleTexGraphicsQuad(value) ? null : "invalid";
+    default: return "unknown";
+  }
 }
 
 /**
