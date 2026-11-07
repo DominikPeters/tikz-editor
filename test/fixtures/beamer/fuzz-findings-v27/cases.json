@@ -1,0 +1,101 @@
+{
+  "formatVersion": 1,
+  "title": "Nested Rose/Orchid background context",
+  "fidelity": [
+    {
+      "id": "boadilla-block",
+      "file": "boadilla-block.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Outer",
+        "Panel",
+        "Beforechild.",
+        "Afterchild."
+      ]
+    },
+    {
+      "id": "boadilla-alertblock",
+      "file": "boadilla-alertblock.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Outer",
+        "Panel",
+        "Beforechild.",
+        "Afterchild."
+      ]
+    },
+    {
+      "id": "boadilla-exampleblock",
+      "file": "boadilla-exampleblock.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Outer",
+        "Panel",
+        "Beforechild.",
+        "Afterchild."
+      ]
+    },
+    {
+      "id": "boadilla-later-alert-color",
+      "file": "boadilla-later-alert-color.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Outer",
+        "Panel",
+        "Insidechild."
+      ]
+    },
+    {
+      "id": "madrid-block",
+      "file": "madrid-block.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Outer",
+        "Panel",
+        "Beforechild.",
+        "Afterchild."
+      ]
+    },
+    {
+      "id": "madrid-alertblock",
+      "file": "madrid-alertblock.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Outer",
+        "Panel",
+        "Beforechild.",
+        "Afterchild."
+      ]
+    },
+    {
+      "id": "madrid-exampleblock",
+      "file": "madrid-exampleblock.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Outer",
+        "Panel",
+        "Beforechild.",
+        "Afterchild."
+      ]
+    },
+    {
+      "id": "madrid-later-alert-color",
+      "file": "madrid-later-alert-color.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Outer",
+        "Panel",
+        "Insidechild."
+      ]
+    }
+  ],
+  "recognition": []
+}

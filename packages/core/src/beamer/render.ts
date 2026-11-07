@@ -1,3 +1,4 @@
+import { createBeamerAmbientBlockTheme } from "./ambient-block-theme.js";
 import { beamerItemActionCommitsParagraph } from "./item-actions.js";
 import { projectBeamerInlineFlow, beamerBoxesClearingPendingItemLabels } from "./inline-flow.js";
 import { matchTexSyntaxEnvironments } from "../text/tex/syntax-index.js";
@@ -645,6 +646,7 @@ async function renderBeamerFrameStep(params: {
     }),
   };
   references.inlineFlow = [];
+  references.blockThemeAt = createBeamerAmbientBlockTheme(source, offset => references.scopedTheme?.at(offset) ?? theme);
   references.frameLayout = { paperHeight: page.page.height, textHeight: page.page.height,
     plain: frame.options?.plain ?? false, metadata };
   const metadataMeasurements: { value: NonNullable<BeamerFrameModel["title"]>; role: BeamerThemeFontRole; width: number }[] = [];
@@ -2298,7 +2300,7 @@ function suppressCenteredTikzTopGlueAfterNormalDisplay(
 }
 
 async function prepareBlock(params: Parameters<typeof prepareBlockWithTheme>[0]): Promise<PreparedBlock | null> {
-  const theme = ambientTextTheme(params.references.scopedTheme?.at(params.node.span.from) ?? params.theme,
+  const theme = ambientTextTheme(params.references.blockThemeAt?.(params.node.span.from) ?? params.references.scopedTheme?.at(params.node.span.from) ?? params.theme,
     params.references.ambientTextAt?.(params.node.span.from) ?? "");
   const block = await prepareBlockWithTheme({ ...params, theme, references: { ...params.references, theme } });
   return block ? { ...block, theme } : null;

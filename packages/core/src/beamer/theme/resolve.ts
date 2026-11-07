@@ -152,6 +152,13 @@ export function resolveBeamerTheme(
   };
 }
 
+/** Preserve unrounded xcolor channels when entering another color scope. */
+export function resolveBeamerThemeColorRgb(theme: ResolvedBeamerTheme, role: string, field: "fg" | "bg"): BeamerColorRgb | null {
+  let channels: BeamerColorRgb | null = null;
+  resolveBeamerColorRecord(theme.colors, theme.colorAliases ?? {}, theme.colorAliasRgb ?? {}, role, (name, rgb) => { if (name === field) channels = rgb; });
+  return channels;
+}
+
 /** Resolve a Beamer color role through its parent chain. */
 export function resolveBeamerThemeColor(
   theme: ResolvedBeamerTheme,
@@ -187,6 +194,7 @@ function resolveBeamerColorRecord(colors: Readonly<Record<string, BeamerThemeCol
     const roleName = match && roleNameForAlias(requireArrayValue(match, 1));
     const field = match?.[2];
     if (roleName && (field === "fg" || field === "bg")) return roleRgb(roleName, field, seen);
+    if (alias === "bg" && !aliasRgb.bg && !aliases.bg) return roleRgb("normal text", "bg", seen);
     return aliasRgb[alias] ?? (aliases[alias] ? resolveBeamerColorExpressionRgb(aliases[alias], () => null) : null);
   });
   const roleRgb = (name: string, field: "fg" | "bg", ancestors: ReadonlySet<string>): BeamerColorRgb | null => {
@@ -1128,15 +1136,11 @@ const colorThemeAppliers = new Map<string, ComponentApplier>([
   }],
   ["orchid", (state, use) => {
     markApplied(state, "color-theme", "orchid", use);
-    const canvas = rgbChannelsFromHex(resolveMutableThemeColor(state, "normal text").bg ?? WHITE);
-    for (const [suffix, role, fallback] of [
-      ["", "structure", "#3333b3"],
-      [" alerted", "alerted text", "#ff0000"],
-      [" example", "example text", "#008000"],
-    ] as const) {
-      const titleRgb = mixRgbChannels(mutableThemeForegroundRgb(state, role, fallback), BLACK_RGB, 75);
-      state.colors[`block title${suffix}`] = { fg: WHITE, bg: rgbChannelsToHex(titleRgb) };
-      state.colors[`block body${suffix}`] = { parent: "normal text", bg: xcolorMixRgb(titleRgb, canvas, 10) };
+    for (const [suffix, role] of [["", "structure"], [" alerted", "alerted text"], [" example", "example text"]] as const) {
+      state.colors[`block title${suffix}`] = { fg: WHITE, use: [role],
+        bgExpression: { value: `${role}.fg!75!black`, span: { from: 0, to: 0 } } };
+      state.colors[`block body${suffix}`] = { parent: "normal text", use: [`block title${suffix}`],
+        bgExpression: { value: `block title${suffix}.bg!10!bg`, span: { from: 0, to: 0 } } };
     }
   }],
   ["seahorse", (state, use) => {
@@ -1322,47 +1326,18 @@ function applyWolverineColors(state: MutableTheme, use: BeamerThemeUse): void {
 
 function applyRoseColors(state: MutableTheme, use: BeamerThemeUse): void {
   markApplied(state, "color-theme", "rose", use);
-  const normal = resolveMutableThemeColor(state, "normal text");
-  const structure = resolveMutableThemeColor(state, "structure");
-  const alerted = resolveMutableThemeColor(state, "alerted text");
-  const example = resolveMutableThemeColor(state, "example text");
-  const canvas = normal.bg ?? WHITE;
-  const canvasRgb = rgbChannelsFromHex(canvas);
-  const applyBlockFamily = (
-    suffix: "" | " alerted" | " example",
-    foreground: string,
-    foregroundRgb: RgbChannels
-  ) => {
-    const titleBackgroundRgb = mixRgbChannels(
-      foregroundRgb,
-      canvasRgb,
-      20
-    );
-    const titleBackground = rgbChannelsToHex(titleBackgroundRgb);
+  // beamercolorthemerose.sty evaluates these expressions at use time;
+  // bg is the current enclosing Beamer color, including another block body.
+  for (const [suffix, role] of [["", "structure"], [" alerted", "alerted text"], [" example", "example text"]] as const) {
     state.colors[`block title${suffix}`] = {
-      fg: foreground,
-      bg: titleBackground,
+      use: [role], fgExpression: { value: `${role}.fg`, span: { from: 0, to: 0 } },
+      bgExpression: { value: `${role}.fg!20!bg`, span: { from: 0, to: 0 } },
     };
     state.colors[`block body${suffix}`] = {
-      parent: "normal text",
-      bg: xcolorMixRgb(titleBackgroundRgb, canvasRgb, 50),
+      parent: "normal text", use: [`block title${suffix}`],
+      bgExpression: { value: `block title${suffix}.bg!50!bg`, span: { from: 0, to: 0 } },
     };
-  };
-  applyBlockFamily(
-    "",
-    structure.fg ?? "#3333b3",
-    mutableThemeForegroundRgb(state, "structure", "#3333b3")
-  );
-  applyBlockFamily(
-    " alerted",
-    alerted.fg ?? "#ff0000",
-    mutableThemeForegroundRgb(state, "alerted text", "#ff0000")
-  );
-  applyBlockFamily(
-    " example",
-    example.fg ?? "#008000",
-    mutableThemeForegroundRgb(state, "example text", "#008000")
-  );
+  }
 }
 
 function applyDolphinColors(state: MutableTheme, use: BeamerThemeUse): void {

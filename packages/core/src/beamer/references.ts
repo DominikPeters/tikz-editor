@@ -58,6 +58,7 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   inlineFlow?: BeamerInlineFlow[];
   inlineFlowLabelRevision?: number;
   inlineFlowItemLabels?: Map<number, { targetOffset: number; labels: readonly SimpleTexListContext[] }>;
+  blockThemeAt?: (offset: number) => ResolvedBeamerTheme;
   ambientTextAt?: ((offset: number) => string) & { itemDepthAt?: (offset: number) => number };
   macroBindingsAt?: (offset: number) => ReadonlyMap<string, MacroBinding>;
   frameLayout?: { paperHeight: number; textHeight: number; plain: boolean; metadata: Partial<Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>> };
