@@ -107,7 +107,7 @@ export type PreparedColumnFlowItem =
       paragraph: LaidParagraph;
       leadingSkipPt?: number;
       startsWithVerticalEnvironment?: boolean;
-      startsWithAlignmentEnvironment?: boolean;
+      replacesColumnHeadSkip?: boolean;
       advanceHeight: number;
       trailingSkipPt: number;
     }

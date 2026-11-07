@@ -697,6 +697,7 @@ function paragraphInputFromSimpleTexBlock(
         }
       : {}),
     noIndent: block.noIndent,
+    ...(block.shipsEmptyLine ? { shipsEmptyLine: true } : {}),
     ...(block.startsAfterExplicitPar === true
       ? { startsAfterExplicitPar: true }
       : {}),

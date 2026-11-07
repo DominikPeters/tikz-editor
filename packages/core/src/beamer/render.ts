@@ -3691,7 +3691,8 @@ async function prepareColumnFlowNode(params: {
       visibility,
       paragraph,
       startsWithVerticalEnvironment: startsWithDisplay || /^\s*\\begin\s*\{(?:center|flushleft|flushright|itemize|enumerate|description)\}/u.test(projection.mapped.text),
-      startsWithAlignmentEnvironment: /^\s*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(projection.mapped.text),
+      replacesColumnHeadSkip: /^\s*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(projection.mapped.text) &&
+        !paragraph.layout.vlistLayout.boxReport.items.some(item => item.role?.kind === "trivlist" && item.role.noParList),
       leadingSkipPt: leadingBeamerTrivlistAdjustment(projection.mapped.text, paragraph, params.listProfile.trivlistTopsepPt) +
         // A column minipage starts with \leavevmode. A leading trivlist ends
         // that empty line, then inserts normal interline glue before its first box.
@@ -3931,7 +3932,7 @@ function measureColumnVerticalBox(
   font: BeamerThemeFont
 ): ColumnVerticalBox {
   if (alignment === "T") {
-    const xHeight = flow[0]?.kind === "paragraph" && flow[0].startsWithAlignmentEnvironment ? 0 : fontXHeightPt(font);
+    const xHeight = flow[0]?.kind === "paragraph" && flow[0].replacesColumnHeadSkip ? 0 : fontXHeightPt(font);
     // beamerbaseframecomponents.sty selects a top-aligned minipage and emits
     // `\vskip-1ex\nointerlineskip`. The artificial leading empty line gives
     // the vtop zero height; the content can therefore protrude above its

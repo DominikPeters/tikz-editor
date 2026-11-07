@@ -185,6 +185,7 @@ export interface TexVListParagraphHorizontalLayout {
 }
 
 export interface TexParagraphInput extends SimpleTexSegmentInput {
+  readonly shipsEmptyLine?: boolean;
   readonly fontSizePt?: TexLength;
   readonly baselineSkip?: TexLength;
   readonly blockIndex: number;
@@ -264,6 +265,7 @@ export type TexVBoxRole =
   | { readonly kind: "quote"; readonly depth: number }
   | {
       readonly kind: "trivlist";
+      readonly noParList?: boolean;
       readonly envName: SimpleTexTrivlistEnvironmentName;
       readonly depth: number;
       readonly alignment: TexParagraphAlignment;

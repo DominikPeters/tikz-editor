@@ -122,6 +122,7 @@ export type SimpleTexScopePathRole =
   | { readonly kind: "quote"; readonly depth: number }
   | {
       readonly kind: "trivlist";
+      readonly noParList?: boolean;
       readonly envName: SimpleTexTrivlistEnvironmentName;
       readonly depth: number;
       readonly alignment: TexParagraphAlignment;
@@ -616,6 +617,7 @@ export interface SimpleTexTokenLiteralInfo {
 }
 
 export interface SimpleTexParagraphBlock {
+  readonly shipsEmptyLine?: boolean;
   readonly explicitFontSize?: boolean;
   readonly explicitBaselineSkip?: boolean;
   /** List-scoped declarations inherited before this source-owned paragraph. */
@@ -4750,7 +4752,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
     quotationDepth: number,
     alignment?: TexParagraphAlignment,
     alignmentProfile?: TexAlignmentProfile,
-    allowEmptyListItem = false
+    allowEmptyListItem = false,
+    beforeDisplay = false
   ) => {
     const scopedAlignment = hasAlignmentGroups ? alignmentAt(rawEnd) : undefined;
     if (scopedAlignment) {
@@ -4771,13 +4774,18 @@ function buildSimpleTexParagraphBlocksFromNodes(
     ) {
       end -= 1;
     }
-    if (start < end || (allowEmptyListItem && pendingListShowLabel)) {
+    const leadingTrivlist = scopeStack.filter(role => role.kind === "trivlist").at(-1);
+    const inlineNodes = simpleTexInlineNodesForRange(sourceNodes, start, end);
+    const hasOnlyDeclarations = inlineNodes.every(node => ["space", "comment", "style-declaration", "font-declaration"].includes(node.kind));
+    const shipsEmptyLine = beforeDisplay && hasOnlyDeclarations && leadingTrivlist !== undefined && !trivlistsWithParagraph.has(leadingTrivlist);
+    const permitsEmpty = allowEmptyListItem && pendingListShowLabel || shipsEmptyLine;
+    if (start < end || permitsEmpty) {
       const listContext = currentSimpleTexListContext();
       const startsAfterExplicitPar = previousParagraphBlockEnd !== undefined &&
         hasExplicitParagraphBoundaryBetween(previousParagraphBlockEnd, rawStart);
       const scopePath = currentSimpleTexScopePath();
       let nodes = simpleTexInlineNodesAfterHorizontalVSpace(
-        simpleTexInlineNodesForRange(sourceNodes, start, end),
+        inlineNodes,
         pendingParagraphVerticalAdjustments
       );
       const activeList = listStack.at(-1);
@@ -4791,7 +4799,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       }
       // Declarations in vertical mode select registers without creating an
       // empty prose paragraph (notably assignments before the first item).
-      if (nodes.every(node => ["space", "comment", "style-declaration", "font-declaration"].includes(node.kind)) && !(allowEmptyListItem && pendingListShowLabel)) return;
+      if (nodes.every(node => ["space", "comment", "style-declaration", "font-declaration"].includes(node.kind)) && !permitsEmpty) return;
       if (listStack.length > 0 && !listContext) {
         // Material before a list's first `\item` fails to compile in LaTeX
         // ("perhaps a missing \item"), so it is outside the supported
@@ -4839,7 +4847,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
           ...(pending.label ? { label: pending.label } : {}) });
         pending.show = false;
       }
+      for (const role of scopeStack) if (role.kind === "trivlist") trivlistsWithParagraph.add(role);
       const block: SimpleTexParagraphBlock = {
+        ...(shipsEmptyLine ? { shipsEmptyLine: true } : {}),
         text: textSliceAtSourceOffsets(start, end),
         sourceStart: start,
         sourceEnd: end,
@@ -5032,6 +5042,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     const depth = scopeStack.filter((role) => role.kind === "trivlist").length + 1;
     return {
       kind: "trivlist",
+      ...(pendingListShowLabel || inheritedItemLabels.length > 0 ? { noParList: true } : {}),
       envName: name,
       depth,
       alignment: simpleTexTrivlistAlignment(name),
@@ -5039,6 +5050,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
   };
 
   let inheritedItemLabels = [...(options?.inheritedItemLabels ?? [])];
+  const trivlistsWithParagraph = new Set<SimpleTexScopePathRole>();
   let prefix = consumeParagraphPrefix(0);
   let blockStart = sourceStartForNodeIndex(prefix.start);
   let currentNoIndent = prefix.noIndent;
@@ -5162,6 +5174,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         currentQuotationDepth,
         prefix.alignment,
         prefix.alignmentProfile,
+        true,
         true
       );
       if (scanState.aborted) {

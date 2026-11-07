@@ -269,7 +269,7 @@ export function prepareTexLayoutParagraphsFromVList(
           ...listAttachments.inlineLabelItems,
           ...texMarginListItemLinePrefix({
             segment,
-            hasMarginLabel: listAttachments.marginLabel !== undefined || ancestorLabelMetrics.length > 0,
+            hasMarginLabel: listAttachments.marginLabel !== undefined || ancestorLabelMetrics.length > 0 || (segmentIndex === 0 && paragraph.shipsEmptyLine === true),
             metrics: {
               height: texLength(Math.max(listAttachments.marginLabelHBox?.box.metrics.height ?? 0, ...ancestorLabelMetrics.map(metrics => Number(metrics.height)))),
               depth: texLength(Math.max(listAttachments.marginLabelHBox?.box.metrics.depth ?? 0, ...ancestorLabelMetrics.map(metrics => Number(metrics.depth)))),

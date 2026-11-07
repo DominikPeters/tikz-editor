@@ -1,0 +1,120 @@
+{
+  "formatVersion": 1,
+  "title": "Pending description label consumed by a centered column display",
+  "fidelity": [
+    {
+      "id": "label-display",
+      "file": "label-display.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Panel",
+        "Righttext."
+      ]
+    },
+    {
+      "id": "label-prose-display",
+      "file": "label-prose-display.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Panel",
+        "Righttext."
+      ]
+    },
+    {
+      "id": "plain-display",
+      "file": "plain-display.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Panel",
+        "Righttext."
+      ]
+    },
+    {
+      "id": "label-font-display",
+      "file": "label-font-display.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Panel"
+      ]
+    },
+    {
+      "id": "plain-font-display",
+      "file": "plain-font-display.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Panel"
+      ]
+    },
+    {
+      "id": "flushleft-plain",
+      "file": "flushleft-plain.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Panel"
+      ]
+    },
+    {
+      "id": "flushleft-label",
+      "file": "flushleft-label.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Panel"
+      ]
+    },
+    {
+      "id": "flushright-plain",
+      "file": "flushright-plain.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Panel"
+      ]
+    },
+    {
+      "id": "flushright-label",
+      "file": "flushright-label.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Panel"
+      ]
+    },
+    {
+      "id": "plain-short-prose",
+      "file": "plain-short-prose.tex",
+      "frame": 1,
+      "pages": 1,
+      "oracleText": [
+        "Before.",
+        "After.",
+        "Panel"
+      ]
+    }
+  ],
+  "recognition": []
+}

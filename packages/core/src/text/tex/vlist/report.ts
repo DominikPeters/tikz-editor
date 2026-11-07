@@ -267,14 +267,19 @@ export function layoutTexVListFromHorizontalParagraphs(
   );
   return layoutTexVListFromMeasuredParagraphs(document, {
     ...options,
-    paragraphMeasurements: options.paragraphLayouts.map((paragraph) =>
-      texVListParagraphMeasurementFromHorizontalLayout(
-        paragraph,
-        paragraphsByPath.get(
-          texVListPathKey(paragraph.vlistPath)
-        )?.verticalAdjustments
-      )
-    ),
+    paragraphMeasurements: options.paragraphLayouts.map((paragraph) => {
+      const input = paragraphsByPath.get(texVListPathKey(paragraph.vlistPath));
+      const measurement = texVListParagraphMeasurementFromHorizontalLayout(paragraph, input?.verticalAdjustments);
+      const trivlist = input?.scopePath?.filter(role => role.kind === "trivlist").at(-1);
+      const alignment = input?.alignment ?? (trivlist?.kind === "trivlist" ? trivlist.alignment : undefined);
+      // LaTeX alignment declarations stretch infinite glue before the line,
+      // even for a single glyph or an empty label box. TeX records maxdimen
+      // pre_display_size, selecting the normal above-display skip.
+      const hasLeadingInfiniteGlue = (trivlist !== undefined || input?.alignmentProfile === "latex-declaration") &&
+        (alignment === "center" || alignment === "ragged-left");
+      return hasLeadingInfiniteGlue
+        ? { ...measurement, lastLinePreDisplaySize: texLength(Number.POSITIVE_INFINITY) } : measurement;
+    }),
   });
 }
 

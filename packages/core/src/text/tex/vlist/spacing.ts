@@ -1910,7 +1910,7 @@ function texArticleTrivlistVerticalSkipBefore(
   let entrySize = texLength(0);
   for (let index = commonPrefixLength; index < currentScopes.length; index += 1) {
     const scope = currentScopes[index];
-    if (!scope) {
+    if (!scope || scope.noParList) {
       continue;
     }
     const usesPartopsep =
@@ -2067,7 +2067,7 @@ function texArticleTrivlistExitBoundarySkip(
   let size = texLength(0);
   for (let index = previousScopes.length - 1; index >= commonPrefixLength; index -= 1) {
     const scope = previousScopes[index];
-    if (!scope) {
+    if (!scope || scope.noParList) {
       continue;
     }
     const usesPartopsep = state.trivlistPartopsepByScope.get(scope) ?? false;
