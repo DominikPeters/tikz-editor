@@ -1,0 +1,323 @@
+{
+  "schema": 1,
+  "scope": [
+    "source rewriting, identity, undo/redo",
+    "incremental SVG and browser DOM",
+    "async document/revision ownership",
+    "text and image resource lifetimes"
+  ],
+  "auditedCommit": "d1a084606abbaaf33d177702da821ec7f87971e3",
+  "auditCommits": [
+    "d1a084606abbaaf33d177702da821ec7f87971e3 Normalize absent thumbnail asset keys for strict types",
+    "9fe2f6b0ff8d3b6042b5929c718a1727d88a01eb Guard grouping against hidden local named path dependencies",
+    "78ecfb70075ebfa6b00959e7fef212d62dee3a06 Register reviewed source-preserving fragment slices",
+    "42199e12fda7d50f7fc305b0d0e18970d5fafdcd Use configured DOM typings in export ownership tests",
+    "1652185ed896c3884f745a8f6d56b067cad28dff Check incremental SVG DOM against fresh rendering across transitions",
+    "c125ec4925cb2092724dd05729446f3c9bdb2e82 Preserve authored comments and line endings in structural edits",
+    "7fc7010bc8a7599bda9bff598c234331426ff94c Refresh gallery thumbnails for source root and image changes",
+    "e9f15183433f768629b9649883906f365aa66b0f Retain graphics preview assets with live snapshots",
+    "c069c7310cbef232d38e62175a15fd13b53d21f8 Discard obsolete export work and retain displayed PNG previews",
+    "79e161c38bc198c265ca565a1840b8569496c631 Namespace SVG attributes without rewriting visible text",
+    "86a80393faf254c28a20d01f5975cf11981c80fc Preserve intervening external edits when confirming linked file saves",
+    "d0ab8562e84a749bde24fa1a0fa98c605854d26e Restore focused scope identity through undo and redo",
+    "bd49f1ac18cbb54c64647f7bd61db733e54cf045 Isolate presentation launches and serialize resource cleanup",
+    "2be4488e7a3fc236e48754e6c3ba0c77554bc4f1 Keep canvas text input and pointer requests in their owning session",
+    "8c357ef54c8c8a0d84ef75cd736a74965d5cb0cc Fix parser validation and semantic checkpoint state"
+  ],
+  "checks": {
+    "typecheckAndCoreBuild": {
+      "status": "passed",
+      "command": "npm run typecheck",
+      "log": "/tmp/tikz-four-audits-typecheck.log"
+    },
+    "productionAndChangedTestLint": {
+      "status": "passed",
+      "log": "/tmp/tikz-four-audits-lint-final.log"
+    },
+    "fullVitest": {
+      "passed": 8716,
+      "failed": 24,
+      "skipped": 25,
+      "todo": 1,
+      "filesPassed": 537,
+      "filesFailed": 3,
+      "filesSkipped": 2,
+      "command": "npx vitest run --reporter=dot --maxWorkers=2",
+      "log": "/tmp/tikz-four-audits-full-vitest.log"
+    },
+    "preAuditBaseline": {
+      "passed": 404,
+      "failed": 24,
+      "sameFailureNames": true,
+      "log": "/tmp/tikz-four-audits-baseline-failures.log",
+      "construction": {
+        "repositoryBase": "649ddcb6",
+        "earlierCompletedAuditCommits": [
+          "8c357ef5",
+          "2be4488e",
+          "bd49f1ac",
+          "86a80393"
+        ],
+        "existingUserChangesApplied": true,
+        "isolatedDirectory": "/tmp/tikz-four-audits-baseline.4xuz5vta"
+      }
+    },
+    "linkedFileNativeTests": {
+      "passed": 2,
+      "command": "cargo test --lib linked_write_confirmation --offline",
+      "log": "/tmp/tikz-linked-write-rust-precommit.log"
+    },
+    "chromiumSvg": {
+      "structuralTransitions": 147,
+      "rasterTransitions": 18,
+      "exactPixelTolerance": 0,
+      "namespaceReproductions": [
+        {
+          "name": "literal-id",
+          "sourceHash": "5d17a0b0a626535d47b59079ee10a470e7867dcc2bda70587b6d02a90da94838",
+          "before": {
+            "expectedText": " id=\"example\" href=\"#fake\" url(#fake)",
+            "actualText": " id=\"tikz-picture-example\" href=\"#fake\" url(#fake)",
+            "pixelDifference": 948
+          },
+          "after": {
+            "expectedText": " id=\"example\" href=\"#fake\" url(#fake)",
+            "actualText": " id=\"example\" href=\"#fake\" url(#fake)",
+            "pixelDifference": 0
+          }
+        },
+        {
+          "name": "literal-url",
+          "sourceHash": "6fd420140ec1831c40d89557591fc778f75b171c88c022014691ed6ba68283f7",
+          "before": {
+            "expectedText": "url(#paint)",
+            "actualText": "url(#tikz-picture-paint)",
+            "pixelDifference": 670
+          },
+          "after": {
+            "expectedText": "url(#paint)",
+            "actualText": "url(#paint)",
+            "pixelDifference": 0
+          }
+        }
+      ],
+      "report": "/tmp/tikz-svg-dom-audit/report.json",
+      "reproductions": "/tmp/tikz-svg-dom-audit/namespace-reproductions.json",
+      "harness": "/tmp/tikz-svg-dom-audit/isolated.mjs",
+      "oracleCorrections": "/tmp/tikz-svg-dom-audit/oracle-corrections.json"
+    }
+  },
+  "unresolvedFailureCounts": {
+    "savedBeamerFidelityCases": 19,
+    "watchPathExpectationCases": 1,
+    "resizePrecisionCases": 4,
+    "distinctBugCount": "Not inferred from failing cases or overlay states."
+  },
+  "unresolvedFailures": [
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v29: independent TeX regressions > nested-short",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v29/nested-short.tex",
+      "sourceSha256": "bb4a81a4cb32b4e28127973135f1e0f0683555b32bec6a44571721a18098bd6c",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v29/nested-short.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v29/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v29: independent TeX regressions > plain-description",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v29/plain-description.tex",
+      "sourceSha256": "12c7a574b0590287fba1060a00fe1cf81ea54c5b1627accbeacd39ff55ef2484",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v29/plain-description.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v29/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v30: independent TeX regressions > nested-original",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v30/nested-original.tex",
+      "sourceSha256": "c1614012178b2a3d8ea73954d92a2f4b6573490ecb3638ec6b2caf2c0a4b4f94",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v30/nested-original.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v30/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v31: independent TeX regressions > continuing-parent",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v31/continuing-parent.tex",
+      "sourceSha256": "3c231c1c5135908d7e1fd615285dd8b33430d5e0d37c83556977aab18d7fd023",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v31/continuing-parent.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v31/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v31: independent TeX regressions > continuing-parent-plain",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v31/continuing-parent-plain.tex",
+      "sourceSha256": "4865d521c19ea96645262b6dd9b3a42c74bbe5883b64379778b4faec65057a27",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v31/continuing-parent-plain.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v31/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v31: independent TeX regressions > explicit-fontsize",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v31/explicit-fontsize.tex",
+      "sourceSha256": "b66c8efbd3e4d6c1fd7dfa9337afe3563d49da73f5daead70f3a28f522b96ddb",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v31/explicit-fontsize.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v31/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v31: independent TeX regressions > explicit-footnote",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v31/explicit-footnote.tex",
+      "sourceSha256": "a38ca81dac5ee5043694b4c9aed7a2bb679f0a8fa0a613fd847d9f93fcf01157",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v31/explicit-footnote.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v31/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v31: independent TeX regressions > explicit-normal",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v31/explicit-normal.tex",
+      "sourceSha256": "6571c5c55478584caa42dfcdfcfad5985e00d49be1717037a9d9f1a4b4c99472",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v31/explicit-normal.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v31/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v31: independent TeX regressions > third-level",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v31/third-level.tex",
+      "sourceSha256": "15f45ef5ff65835b03246ce7ac73e18011d4bff15d86f76fbcbb77eabda170d5",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v31/third-level.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v31/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v32: independent TeX regressions > matrix-table",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v32/matrix-table.tex",
+      "sourceSha256": "598868006096b1d3008bdfa82383d0d64c70388cd14bc439d75e32525301bb15",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v32/matrix-table.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v32/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v34: independent TeX regressions > narrower",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v34/narrower.tex",
+      "sourceSha256": "7b17361fce6850c35e6e874b55d3319e5197d499e2a181e48d4b669653201276",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v34/narrower.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v34/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v34: independent TeX regressions > threshold",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v34/threshold.tex",
+      "sourceSha256": "311cbc5d2de1271627daf9bef185f25d9726548acb47896429a92ec2d66a3762",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v34/threshold.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v34/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v34: independent TeX regressions > wider",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v34/wider.tex",
+      "sourceSha256": "eae4e2228d71bfd3362bb7a2ed570b4af18535400d343b83bab2bb196508f885",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v34/wider.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v34/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v35: independent TeX regressions > alertblock",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v35/alertblock.tex",
+      "sourceSha256": "4d7ea887f22ca7c5934ca099c5c91381e8dc2cfd08546986f4920ed598aa565f",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v35/alertblock.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v35/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v35: independent TeX regressions > block",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v35/block.tex",
+      "sourceSha256": "0d804e57da0e15ffcbf9c20027b2b1237fa245680c67e41db34a39d3728f75cb",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v35/block.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v35/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v35: independent TeX regressions > column-T",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v35/column-T.tex",
+      "sourceSha256": "495b124adc68e351f220a32124add132d0e7d41a51a85d4b891ce82dfea25188",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v35/column-T.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v35/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v35: independent TeX regressions > column-b",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v35/column-b.tex",
+      "sourceSha256": "ad2494559c531c837b3c4e7012919c9b817b64d34371fd5c53caa2311d6bd6fd",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v35/column-b.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v35/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v35: independent TeX regressions > column-c",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v35/column-c.tex",
+      "sourceSha256": "ee33976ad4c8dbdcf94dd605fe52697f63ed63bd99ead2775ba300fe0653685c",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v35/column-c.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v35/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/beamer-fidelity-campaign.spec.ts > fuzz-findings-v35: independent TeX regressions > exampleblock",
+      "reproducedBeforeFourAudits": true,
+      "source": "test/fixtures/beamer/fuzz-findings-v35/exampleblock.tex",
+      "sourceSha256": "8932648ab984baabecec96637cefe3ec8e9690deceee5f859b287e852e832806",
+      "savedOracle": "test/fixtures/beamer/fuzz-findings-v35/exampleblock.oracle.json",
+      "manifest": "test/fixtures/beamer/fuzz-findings-v35/cases.json",
+      "observedFailure": "unmatchedNativeTextLines=1; unmatchedOracleTextLines=1"
+    },
+    {
+      "test": "test/web/app-asset-watch-ownership.spec.ts > active App asset watch ownership > updates watch paths on source changes and Save As directory changes",
+      "reproducedBeforeFourAudits": true,
+      "observedFailure": "Actual watch paths include uppercase JPEG/JPG/PDF/PNG alternatives omitted by the expectation."
+    },
+    {
+      "test": "test/web/deck-resize.spec.ts > canvas resize gestures > resizes from the ne image corner and retains selection after reflow",
+      "reproducedBeforeFourAudits": true,
+      "observedFailure": "Image height differs by 0.0009155 pt; assertion permits 0.0005 pt."
+    },
+    {
+      "test": "test/web/deck-resize.spec.ts > canvas resize gestures > resizes from the nw image corner and retains selection after reflow",
+      "reproducedBeforeFourAudits": true,
+      "observedFailure": "Image height differs by 0.0009155 pt; assertion permits 0.0005 pt."
+    },
+    {
+      "test": "test/web/deck-resize.spec.ts > canvas resize gestures > resizes from the se image corner and retains selection after reflow",
+      "reproducedBeforeFourAudits": true,
+      "observedFailure": "Image height differs by 0.0009155 pt; assertion permits 0.0005 pt."
+    },
+    {
+      "test": "test/web/deck-resize.spec.ts > canvas resize gestures > resizes from the sw image corner and retains selection after reflow",
+      "reproducedBeforeFourAudits": true,
+      "observedFailure": "Image height differs by 0.0009155 pt; assertion permits 0.0005 pt."
+    }
+  ],
+  "existingBeamerFailureLedger": "design/beamer-failure-ledger.json",
+  "limits": [
+    "Full Vitest is not green: all 24 failures above remain unresolved and reproduce before these four audits.",
+    "Saved Beamer oracles were replayed; this audit did not run a fresh independent TeX structural/paint campaign.",
+    "Chromium checks used isolated SVG surfaces, not full app-shell end-to-end tests or other browser engines.",
+    "Native export dialogs were not exercised; async ownership checks use controlled delayed promises.",
+    "Passing limited edit comparisons does not establish that other saved fuzz campaigns are clean.",
+    "Browser oracle setup corrections are recorded separately; original models/hashes and initial reports were preserved; no tolerance was relaxed."
+  ]
+}
