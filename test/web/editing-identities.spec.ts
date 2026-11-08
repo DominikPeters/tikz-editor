@@ -70,6 +70,22 @@ describe("document editing identities", () => {
     expect(entries(state).map(entry => entry.id)).toEqual([original[1], original[2], original[0]]);
   });
 
+  it("restores the focused scope through reorder, undo, and redo", () => {
+    let state = setup(wrap(`\\begin{scope}\n${a}\n\\end{scope}\n\\begin{scope}\n${b}\n\\end{scope}`));
+    const original = state.source;
+    state = editorReducer(state, { type: "SET_FOCUSED_SCOPE", scopeId: "scope:0" });
+    state = ready(editorReducer(state, { type: "APPLY_EDIT_ACTION", action: { kind: "reorderElements", elementIds: ["scope:0"], direction: "bringToFront" } }));
+    const reordered = state.source;
+    expect(reordered).not.toBe(original);
+    expect(state.focusedScopeId).toBe("scope:2");
+    state = ready(editorReducer(state, { type: "UNDO" }));
+    expect(state.source).toBe(original);
+    expect(state.focusedScopeId).toBe("scope:0");
+    state = ready(editorReducer(state, { type: "REDO" }));
+    expect(state.source).toBe(reordered);
+    expect(state.focusedScopeId).toBe("scope:2");
+  });
+
   it("gives duplicated objects new identities and restores them through undo/redo", () => {
     let state = setup(); const original = entries(state).map(entry => entry.id);
     state = ready(editorReducer(state, { type: "APPLY_EDIT_ACTION", action: { kind: "duplicateElements", elementIds: ["path:0"], delta: wp(0, 0) } }));

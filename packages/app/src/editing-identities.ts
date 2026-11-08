@@ -122,10 +122,12 @@ export function withEditingHandleIdentities(snapshot: SessionSnapshot, state: Ed
  * and reconciliation run when the existing compute pipeline supplies a snapshot. */
 export function updateDocumentIdentities(before: DocumentSession, after: DocumentSession): DocumentSession {
   if (before.source === after.source) {
-    if (before.selectedElementIds === after.selectedElementIds || !after.editingIdentities) return after;
+    if ((before.selectedElementIds === after.selectedElementIds && before.focusedScopeId === after.focusedScopeId) || !after.editingIdentities) return after;
     const bySource = new Map(after.editingIdentities.entries.map(entry => [entry.sourceId, entry.id]));
-    const identities = { ...after.editingIdentities, selection: after.snapshot.source === after.source ? null
-      : [...after.selectedElementIds].flatMap(id => bySource.get(id) ?? []) };
+    const identities = { ...after.editingIdentities,
+      selection: before.selectedElementIds === after.selectedElementIds ? after.editingIdentities.selection
+        : after.snapshot.source === after.source ? null : [...after.selectedElementIds].flatMap(id => bySource.get(id) ?? []),
+      focused: after.focusedScopeId ? bySource.get(after.focusedScopeId) ?? null : null };
     return { ...after, editingIdentities: identities,
       editingIdentityRoots: { ...after.editingIdentityRoots, [identities.rootId ?? ""]: identities } };
   }
