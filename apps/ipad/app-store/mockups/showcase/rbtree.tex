@@ -1,0 +1,22 @@
+\definecolor{tb}{HTML}{1A458F}
+\definecolor{to}{HTML}{D2652D}
+\definecolor{tt}{HTML}{2A8C7B}
+\definecolor{tr}{HTML}{B8322A}
+\begin{tikzpicture}[
+  level distance=13mm,
+  level 1/.style={sibling distance=36mm},
+  level 2/.style={sibling distance=18mm},
+  level 3/.style={sibling distance=10mm},
+  every node/.style={circle,minimum size=7.5mm,inner sep=0pt,text=white,font=\small},
+  B/.style={fill=black!85},
+  R/.style={fill=tr},
+  edge from parent/.style={draw,line width=1pt,black!60}]
+  \node[B] {13}
+    child { node[R] {8}
+      child { node[B] {1} child[missing] child { node[R] {6} } }
+      child { node[B] {11} } }
+    child { node[R] {17}
+      child { node[B] {15} }
+      child { node[B] {25}
+        child { node[R] {22} } child { node[R] {27} } } };
+\end{tikzpicture}

@@ -1,0 +1,18 @@
+\definecolor{tb}{HTML}{1A458F}
+\definecolor{to}{HTML}{D2652D}
+\definecolor{tt}{HTML}{2A8C7B}
+\definecolor{tr}{HTML}{B8322A}
+\begin{tikzpicture}[
+  v/.style={circle,draw=black!80,line width=1pt,minimum size=7mm,inner sep=0pt},
+  a/.style={v,fill=tb,text=white},
+  b/.style={v,fill=to},
+  c/.style={v,fill=tt!45},
+  every path/.style={line width=1.1pt,black!70}]
+  \foreach \i/\s in {0/a,1/b,2/a,3/b,4/c}
+    \node[\s] (o\i) at ({90+72*\i}:2.4) {};
+  \foreach \i/\s in {0/b,1/c,2/c,3/a,4/a}
+    \node[\s] (i\i) at ({90+72*\i}:1.15) {};
+  \draw (o0)--(o1)--(o2)--(o3)--(o4)--(o0);
+  \foreach \i in {0,...,4} \draw (o\i)--(i\i);
+  \draw (i0)--(i2)--(i4)--(i1)--(i3)--(i0);
+\end{tikzpicture}

@@ -1,0 +1,16 @@
+\definecolor{tb}{HTML}{1A458F}
+\definecolor{to}{HTML}{D2652D}
+\definecolor{tt}{HTML}{2A8C7B}
+\definecolor{tr}{HTML}{B8322A}
+\begin{tikzpicture}[line width=1.1pt,scale=1.2]
+  \coordinate (A) at (0,0); \coordinate (B) at (5,0); \coordinate (C) at (1.6,3);
+  \fill[tb!8] (A)--(B)--(C)--cycle;
+  \draw[to] (2.5,0.593) circle (2.569);
+  \draw[tb] (A)--(B)--(C)--cycle;
+  \draw[tt] (1.933,1.160) circle (1.160);
+  \fill[to] (2.5,0.593) circle (1.6pt);
+  \fill[tt] (1.933,1.160) circle (1.6pt);
+  \draw[tb,line width=0.8pt] (0.6,0) arc (0:61.9:0.6);
+  \node at (25:0.95) {$\alpha$};
+  \node[below left] at (A) {$A$}; \node[below right] at (B) {$B$}; \node[above] at (C) {$C$};
+\end{tikzpicture}

@@ -1,0 +1,19 @@
+\definecolor{tb}{HTML}{1A458F}
+\definecolor{to}{HTML}{D2652D}
+\definecolor{tt}{HTML}{2A8C7B}
+\definecolor{tr}{HTML}{B8322A}
+\begin{tikzpicture}[x=2.6cm,y=2cm,>=Stealth,line width=0.9pt,
+  every node/.style={font=\large}]
+  \node (P) at (0,0) {$P$};
+  \node (A) at (1,0) {$A$};
+  \node (B) at (0,-1) {$B$};
+  \node (C) at (1,-1) {$C$};
+  \node (X) at (-0.8,0.8) {$X$};
+  \draw[->] (P) -- node[above] {$p_1$} (A);
+  \draw[->] (P) -- node[left] {$p_2$} (B);
+  \draw[->] (A) -- node[right] {$f$} (C);
+  \draw[->] (B) -- node[below] {$g$} (C);
+  \draw[->,tb] (X) to[bend left=20] node[above] {$x_1$} (A);
+  \draw[->,tb] (X) to[bend right=20] node[left] {$x_2$} (B);
+  \draw[->,dashed,to] (X) -- node[above right=-2pt] {$\exists!\,u$} (P);
+\end{tikzpicture}

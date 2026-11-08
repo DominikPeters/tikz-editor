@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>App Store frames</title>
+<style>
+  :root {
+    --bg: #faf7f4;
+    --ink: #171b1d;
+    --muted: #4d5658;
+    --faint: #737d7c;
+    --line: #d0c8be;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #888; font-family: var(--font); }
+  .frame { width: 2752px; height: 2064px; position: relative; overflow: hidden; background: var(--bg); color: var(--ink); margin-bottom: 40px; }
+  h1 { font-weight: 650; letter-spacing: -0.02em; line-height: 1.06; }
+  .sub { color: var(--muted); line-height: 1.3; }
+
+  /* Caption block, top left or centered. */
+  .caption { position: absolute; left: 190px; top: 150px; width: 2400px; }
+  .caption.centered { left: 0; right: 0; width: auto; text-align: center; }
+  .caption h1 { font-size: 116px; }
+  .caption .sub { font-size: 58px; margin-top: 26px; }
+
+  /* iPad bezel; the screen is 4:3 like the screenshots. */
+  .ipad { position: absolute; background: #1c1c1e; border-radius: 96px; padding: 44px;
+    box-shadow: 0 0 0 5px #3a3a3c inset, 0 40px 90px rgba(40,30,20,.18), 0 6px 18px rgba(40,30,20,.12); }
+  .ipad img { display: block; width: 100%; border-radius: 54px; }
+
+  /* A panel cut out of a screenshot, enlarged and lifted off the device. */
+  .card { position: absolute; overflow: hidden; border-radius: 36px; background: #fff; border: 3px solid var(--line);
+    box-shadow: 0 40px 100px rgba(40,30,20,.22), 0 6px 18px rgba(40,30,20,.12); }
+  .card > img { position: absolute; display: block; max-width: none; }
+
+  .opener .left { position: absolute; left: 170px; top: 0; bottom: 0; width: 1080px; display: flex; flex-direction: column; justify-content: center; }
+  .opener h1 { font-size: 176px; }
+  .opener .lead { font-size: 76px; color: var(--muted); margin: 36px 0 100px; line-height: 1.25; }
+  .opener ul { list-style: none; padding: 0; font-size: 66px; line-height: 1.25; }
+  .opener li { padding: 36px 0; border-top: 3px solid var(--line); }
+  .opener li:last-child { border-bottom: 3px solid var(--line); }
+  .opener li span { color: var(--faint); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const S = name => `shots/${name}`;
+// Card showing the rectangle [sx, sy, sw, sh] (source pixels of a 2752-wide screenshot), scaled by k.
+const card = (src, [sx, sy, sw, sh], k, left, top) =>
+  `<div class="card" style="left:${left}px;top:${top}px;width:${sw * k}px;height:${sh * k}px">
+     <img src="${src}" style="width:${2752 * k}px;left:${-sx * k}px;top:${-sy * k}px"></div>`;
+const ipad = (src, width, left, top) =>
+  `<div class="ipad" style="width:${width}px;left:${left}px;top:${top}px"><img src="${src}"></div>`;
+const caption = (title, sub, cls = "") =>
+  `<div class="caption ${cls}"><h1>${title}</h1><p class="sub">${sub}</p></div>`;
+
+const frames = [
+  ["01-opener", "opener", `
+    <div class="left">
+      <h1>TikZ Editor</h1>
+      <p class="lead">Visual editing for TikZ figures<br>and Beamer slides.</p>
+      <ul>
+        <li>Free and open source <span>(MIT)</span></li>
+        <li>Runs on the iPad, <span>also offline</span></li>
+        <li>No account, <span>no data collected</span></li>
+        <li>Export SVG, PDF, PNG, <span>or LaTeX</span></li>
+      </ul>
+    </div>
+    ${ipad(S("01-slides.png"), 2000, 1420, 300)}`],
+  ["02-beamer", "", `
+    ${caption("Edit, then present", "Beamer slides next to their .tex source, with overlays. Present on the iPad or an external display.")}
+    ${ipad(S("06b-beamer-source-raised.png"), 1900, 120, 470)}
+    ${ipad(S("05-presenting.png"), 1180, 1470, 1230)}`],
+  ["03-source", "", `
+    ${caption("Source and canvas", "Edit the TikZ code or the drawing, and the other one updates.")}
+    ${ipad(S("04b-canvas.png"), 2050, 880, 520)}
+    ${card(S("04-source.png"), [0, 165, 1180, 860], 1.15, 150, 620)}`],
+  ["04-inspector", "", `
+    ${caption("Inspector", "Shape, size, stroke, fill, and font for the selected object.")}
+    ${ipad(S("02-inspector.png"), 2050, 300, 560)}
+    ${card(S("02-inspector.png"), [2050, 180, 690, 1700], 1.1, 1780, 130)}`],
+  ["05-documents", "", `
+    ${caption("Open .tex and .tikz files", "From the Files app, or start from one of the examples.", "centered")}
+    ${ipad(S("03-documents.png"), 2300, 226, 520)}`],
+];
+document.getElementById("root").innerHTML =
+  frames.map(([id, cls, inner]) => `<div id="${id}" class="frame ${cls}">${inner}</div>`).join("");
+</script>
+</body>
+</html>
