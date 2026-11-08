@@ -4,9 +4,11 @@ import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { OptionListAst } from "../../options/types.js";
-import { evaluateTikzFigure } from "../../semantic/evaluate.js";
-import type { SemanticDependencyGraph } from "../../semantic/dependencies.js";
+import { evaluateTikzFigure, type EvaluateTikzResult } from "../../semantic/evaluate.js";
+import type { SemanticDependencyGraph, SemanticDependencyResourceKind } from "../../semantic/dependencies.js";
+import { collectPathIntersectionDirectives } from "../../semantic/path/intersections.js";
 import type { Statement, Span } from "../../ast/types.js";
+import { walkStatements } from "../../ast/walk.js";
 import { parseEditableTargetId } from "../editable-targets.js";
 import { normalizeOptionKey } from "../option-key.js";
 import type { EditParseOptions } from "../parse-options.js";
@@ -56,7 +58,18 @@ export function applyGroupElementsAction(
   const selectedOrdered = parentRefs.filter((ref) => selectedIdSet.has(ref.id));
 
   const siblingIds = parentRefs.map((ref) => ref.id);
-  const constraints = collectSiblingDependencyConstraints(source, siblingIds, parseOptions, geometry);
+  const { constraints, semantic } = collectSiblingDependencyConstraints(source, parentRefs, parseOptions, geometry);
+  for (const constraint of constraints) {
+    if (constraint.resourceKind !== "named-path" || !selectedIdSet.has(constraint.before) || selectedIdSet.has(constraint.after)) continue;
+    // Wrapping an existing scope does not shorten its paths' local lifetime.
+    if (snapshot.byId.get(constraint.before)?.statement.kind !== "Path") continue;
+    const options = semantic.scene.elements.filter(element => element.sourceRef.sourceId === constraint.before)
+      .flatMap(element => element.styleChain.flatMap(layer => layer.rawOptions));
+    const names = collectPathIntersectionDirectives(options);
+    if (names.namedPathNames.length === 0 || names.namedPathNames.some(name => !names.globalNamedPathNames.includes(name))) {
+      return { kind: "unsupported", reason: "Grouping would hide a local named path used outside the group. Include its consumers in the selection, or explicitly use `name path global`." };
+    }
+  }
   const unselectedIds = siblingIds.filter((id) => !selectedIdSet.has(id));
   const oldIndexById = new Map<string, number>();
   for (let index = 0; index < siblingIds.length; index += 1) {
@@ -207,6 +220,7 @@ type GroupReplacement = {
 type DependencyConstraint = {
   before: string;
   after: string;
+  resourceKind: SemanticDependencyResourceKind;
 };
 
 function buildGroupingCandidates(
@@ -291,21 +305,24 @@ function preservesDependencyOrder(
 
 function collectSiblingDependencyConstraints(
   source: string,
-  siblingIds: readonly string[],
+  siblings: readonly StatementRef[],
   parseOptions: EditParseOptions,
   geometry?: EditGeometrySession
-): DependencyConstraint[] {
-  const siblingIdSet = new Set(siblingIds);
+): { constraints: DependencyConstraint[]; semantic: EvaluateTikzResult } {
+  const siblingOwners = new Map<string, string>();
+  for (const sibling of siblings) {
+    walkStatements([sibling.statement], { onStatement: statement => { siblingOwners.set(statement.id, sibling.id); } });
+  }
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
   });
   const semantic = geometry?.semantic ?? evaluateTikzFigure(parsed.figure, source);
-  return collectConstraintsFromDependencyGraph(semantic.dependencies, siblingIdSet);
+  return { constraints: collectConstraintsFromDependencyGraph(semantic.dependencies, siblingOwners), semantic };
 }
 
 function collectConstraintsFromDependencyGraph(
   graph: SemanticDependencyGraph,
-  siblingIds: ReadonlySet<string>
+  siblingOwners: ReadonlyMap<string, string>
 ): DependencyConstraint[] {
   const nodesById = new Map(graph.nodes.map((node) => [node.id, node] as const));
   const producersByResourceId = new Map<string, Set<string>>();
@@ -318,11 +335,13 @@ function collectConstraintsFromDependencyGraph(
       if (!fromNode || !toNode || fromNode.kind !== "source" || toNode.kind !== "resource") {
         continue;
       }
+      const owner = siblingOwners.get(fromNode.sourceId);
+      if (!owner) continue;
       const producers = producersByResourceId.get(edge.to);
       if (producers) {
-        producers.add(fromNode.sourceId);
+        producers.add(owner);
       } else {
-        producersByResourceId.set(edge.to, new Set([fromNode.sourceId]));
+        producersByResourceId.set(edge.to, new Set([owner]));
       }
       continue;
     }
@@ -332,38 +351,40 @@ function collectConstraintsFromDependencyGraph(
     if (!fromNode || !toNode || fromNode.kind !== "resource" || toNode.kind !== "source") {
       continue;
     }
+    const owner = siblingOwners.get(toNode.sourceId);
+    if (!owner) continue;
     const consumers = consumersByResourceId.get(edge.from);
     if (consumers) {
-      consumers.add(toNode.sourceId);
+      consumers.add(owner);
     } else {
-      consumersByResourceId.set(edge.from, new Set([toNode.sourceId]));
+      consumersByResourceId.set(edge.from, new Set([owner]));
     }
   }
 
   const constraints: DependencyConstraint[] = [];
   const seen = new Set<string>();
   for (const [resourceId, producers] of producersByResourceId.entries()) {
+    const resource = nodesById.get(resourceId);
+    if (resource?.kind !== "resource") continue;
     const consumers = consumersByResourceId.get(resourceId);
     if (!consumers || producers.size === 0 || consumers.size === 0) {
       continue;
     }
 
     for (const producer of producers) {
-      if (!siblingIds.has(producer)) {
-        continue;
-      }
       for (const consumer of consumers) {
-        if (!siblingIds.has(consumer) || producer === consumer) {
+        if (producer === consumer) {
           continue;
         }
-        const key = `${producer}->${consumer}`;
+        const key = `${resource.resourceKind}:${producer}->${consumer}`;
         if (seen.has(key)) {
           continue;
         }
         seen.add(key);
         constraints.push({
           before: producer,
-          after: consumer
+          after: consumer,
+          resourceKind: resource.resourceKind
         });
       }
     }
