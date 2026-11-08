@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
 import {
   exportPngDownload,
@@ -6,6 +6,7 @@ import {
   renderPngExport
 } from "./export-commands";
 import { Modal } from "./Modal";
+import { useAsyncOwnership } from "./hooks/useAsyncOwnership";
 import css from "./PngExportModal.module.css";
 
 const DEFAULT_FILE_NAME = "tikz-export.png";
@@ -49,6 +50,26 @@ export function PngExportModal({ svgResult, onClose }: PngExportModalProps) {
   const [showRefreshOverlay, setShowRefreshOverlay] = useState(false);
 
   const effectiveDpi = useMemo(() => normalizePngExportDpi(parseDpiInput(dpiInput)), [dpiInput]);
+  const exportOwner = useMemo(() => ({ effectiveDpi, svgResult, transparentBackground }), [effectiveDpi, svgResult, transparentBackground]);
+  const captureOwner = useAsyncOwnership(exportOwner);
+  const previewUrls = useRef(new Set<string>());
+
+  useEffect(() => { setDownloadPending(false); }, [exportOwner]);
+  useEffect(() => {
+    const displayed = preview.status === "ready" ? preview.url : preview.status === "loading" ? preview.previousUrl : null;
+    for (const url of previewUrls.current) {
+      if (url === displayed) continue;
+      URL.revokeObjectURL(url);
+      previewUrls.current.delete(url);
+    }
+  }, [preview]);
+  useEffect(() => {
+    const urls = previewUrls.current;
+    return () => {
+      for (const url of urls) URL.revokeObjectURL(url);
+      urls.clear();
+    };
+  }, []);
 
   useEffect(() => {
     rememberedDpi = dpiInput;
@@ -60,7 +81,7 @@ export function PngExportModal({ svgResult, onClose }: PngExportModalProps) {
 
   useEffect(() => {
     let active = true;
-    let nextPreviewUrl: string | null = null;
+    const isCurrent = captureOwner();
 
     setPreview((current) => ({
       status: "loading",
@@ -92,10 +113,11 @@ export function PngExportModal({ svgResult, onClose }: PngExportModalProps) {
       fileName: DEFAULT_FILE_NAME
     }).then(
       (result) => {
-        if (!active) {
+        if (!active || !isCurrent()) {
           return;
         }
-        nextPreviewUrl = URL.createObjectURL(result.blob);
+        const nextPreviewUrl = URL.createObjectURL(result.blob);
+        previewUrls.current.add(nextPreviewUrl);
         setPreview({
           status: "ready",
           url: nextPreviewUrl,
@@ -105,7 +127,7 @@ export function PngExportModal({ svgResult, onClose }: PngExportModalProps) {
         });
       },
       (error: unknown) => {
-        if (!active) {
+        if (!active || !isCurrent()) {
           return;
         }
         setPreview({
@@ -117,11 +139,8 @@ export function PngExportModal({ svgResult, onClose }: PngExportModalProps) {
 
     return () => {
       active = false;
-      if (nextPreviewUrl) {
-        URL.revokeObjectURL(nextPreviewUrl);
-      }
     };
-  }, [effectiveDpi, svgResult, transparentBackground]);
+  }, [captureOwner, effectiveDpi, svgResult, transparentBackground]);
 
   useEffect(() => {
     if (!(preview.status === "loading" && preview.previousUrl)) {
@@ -141,17 +160,18 @@ export function PngExportModal({ svgResult, onClose }: PngExportModalProps) {
 
   const handleExport = async () => {
     setDownloadPending(true);
+    const isCurrent = captureOwner();
     try {
       const exported = await exportPngDownload(svgResult, {
         dpi: effectiveDpi,
         transparentBackground,
         fileName: DEFAULT_FILE_NAME
       });
-      if (exported) {
+      if (exported && isCurrent()) {
         onClose();
       }
     } finally {
-      setDownloadPending(false);
+      if (isCurrent()) setDownloadPending(false);
     }
   };
 

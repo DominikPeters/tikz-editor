@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import type { EmitSvgResult } from "@tikz-editor/core/svg/index";
 import {
   copySvgText,
@@ -10,6 +10,7 @@ import {
   type SvgTransformPreset
 } from "./export-commands";
 import { Modal } from "./Modal";
+import { useAsyncOwnership } from "./hooks/useAsyncOwnership";
 import css from "./SvgExportModal.module.css";
 
 const DEFAULT_FILE_NAME = "tikz-export.svg";
@@ -33,6 +34,8 @@ type SvgExportModalProps = {
 };
 
 export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
+  const captureOwner = useAsyncOwnership(svgResult);
+  const markupVersion = useRef(0);
   const [fileName, setFileName] = useState(rememberedFileName);
   const [markup, setMarkup] = useState("");
   const [baselineMarkup, setBaselineMarkup] = useState("");
@@ -50,14 +53,19 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
 
   useEffect(() => {
     let active = true;
+    const isCurrent = captureOwner();
     setLoadingMarkup(true);
     setLoadError(null);
     setOptimizerState({ status: "loading" });
     setCopyFeedback(null);
+    ++markupVersion.current;
+    setActiveTransform(null);
+    setCopyPending(false);
+    setDownloadPending(false);
 
     void serializeSvgForExport(svgResult).then(
       (text) => {
-        if (!active) {
+        if (!active || !isCurrent()) {
           return;
         }
         setMarkup(text);
@@ -65,7 +73,7 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
         setLoadingMarkup(false);
       },
       (error: unknown) => {
-        if (!active) {
+        if (!active || !isCurrent()) {
           return;
         }
         setLoadError(error instanceof Error ? error.message : String(error));
@@ -75,12 +83,12 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
 
     void preloadSvgOptimizer().then(
       () => {
-        if (active) {
+        if (active && isCurrent()) {
           setOptimizerState({ status: "ready" });
         }
       },
       (error: unknown) => {
-        if (active) {
+        if (active && isCurrent()) {
           setOptimizerState({
             status: "error",
             message: error instanceof Error ? error.message : String(error)
@@ -92,7 +100,7 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
     return () => {
       active = false;
     };
-  }, [svgResult]);
+  }, [captureOwner, svgResult]);
 
   useEffect(() => {
     if (!copyFeedback) {
@@ -110,19 +118,26 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
   const lineCount = markup.length === 0 ? 0 : markup.split(/\r?\n/).length;
   const hasEdits = markup !== baselineMarkup;
 
+  const captureMarkupOwner = () => {
+    const isOwner = captureOwner();
+    const version = markupVersion.current;
+    return () => isOwner() && markupVersion.current === version;
+  };
+
   const handleTransform = async (preset: SvgTransformPreset) => {
     if (optimizerState.status !== "ready") {
       return;
     }
     setActiveTransform(preset);
     setCopyFeedback(null);
+    const isCurrent = captureMarkupOwner();
     try {
       const nextMarkup = await transformSvgMarkup(markup, preset);
-      setMarkup(nextMarkup);
+      if (isCurrent()) setMarkup(nextMarkup);
     } catch (error) {
-      setCopyFeedback(error instanceof Error ? error.message : String(error));
+      if (isCurrent()) setCopyFeedback(error instanceof Error ? error.message : String(error));
     } finally {
-      setActiveTransform(null);
+      if (isCurrent()) setActiveTransform(null);
     }
   };
 
@@ -132,11 +147,12 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
     }
     setCopyPending(true);
     setCopyFeedback(null);
+    const isCurrent = captureMarkupOwner();
     try {
       const copied = await copySvgText(markup);
-      setCopyFeedback(copied ? "Copied SVG markup." : "Clipboard export failed.");
+      if (isCurrent()) setCopyFeedback(copied ? "Copied SVG markup." : "Clipboard export failed.");
     } finally {
-      setCopyPending(false);
+      if (isCurrent()) setCopyPending(false);
     }
   };
 
@@ -145,18 +161,23 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
       return;
     }
     setDownloadPending(true);
+    const isCurrent = captureMarkupOwner();
     try {
       const exported = await downloadSvgMarkup(markup, { fileName });
-      if (exported) {
+      if (exported && isCurrent()) {
         onClose();
       }
     } finally {
-      setDownloadPending(false);
+      if (isCurrent()) setDownloadPending(false);
     }
   };
 
   const handleMarkupChange = (nextMarkup: string) => {
+    ++markupVersion.current;
     setMarkup(nextMarkup);
+    setActiveTransform(null);
+    setCopyPending(false);
+    setDownloadPending(false);
     setCopyFeedback(null);
   };
 
@@ -235,8 +256,7 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
                   <Modal.GhostButton
                     disabled={loadingMarkup || !hasEdits}
                     onClick={() => {
-                      setMarkup(baselineMarkup);
-                      setCopyFeedback(null);
+                      handleMarkupChange(baselineMarkup);
                     }}
                   >
                     Reset
