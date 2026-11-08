@@ -21,6 +21,7 @@ import type { EditHandle, SceneFigure } from "@tikz-editor/core/semantic/types";
 import { renderTikzToSvgAsync, createRenderNodeTextValidator, type RenderDiagnostic } from "@tikz-editor/core/render/index";
 import type { NodeTextEngine } from "@tikz-editor/core/text/types";
 import type { TextLayoutContext } from "@tikz-editor/core/text/layout-context";
+import type { DocumentGraphicsPreviewBundle } from "@tikz-editor/core/graphics";
 import { runTextRenderOperation, retainSceneTextLayout } from "@tikz-editor/core/text/render-scope";
 import { patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
@@ -79,6 +80,8 @@ export type SessionSnapshot = {
    * document revision. Thumbnail workers register the bundle separately.
    */
   graphicsPreviewBundleKey?: string | null;
+  /** Own the bytes for this live result, independently of reusable cache eviction. */
+  graphicsPreviewBundle?: DocumentGraphicsPreviewBundle | null;
   incremental: SessionSnapshotIncrementalInfo | null;
   /** Present for Beamer decks; an overlay may additionally supply editing geometry. */
   deck: DeckSnapshot | null;
@@ -273,6 +276,7 @@ export function makeEmptySnapshot(source: string = ""): SessionSnapshot {
     semanticResult: null,
     textLayoutContext: null,
     graphicsPreviewBundleKey: null,
+    graphicsPreviewBundle: null,
     incremental: null,
     deck: null
   };
@@ -402,6 +406,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
         semanticResult: result.semantic,
         textLayoutContext: result.textLayoutContext,
         graphicsPreviewBundleKey: result.graphicsPreviewBundleKey,
+        graphicsPreviewBundle: result.graphicsPreviewBundle,
         deck: null,
         incremental: {
           trigger,
@@ -522,6 +527,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
       semanticResult: result.semantic,
       textLayoutContext: result.textLayoutContext,
       graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
+      graphicsPreviewBundle: graphicsContext.previewBundle,
       incremental: null,
       deck: null
     };
@@ -563,6 +569,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
       semanticResult: null,
       textLayoutContext: null,
       graphicsPreviewBundleKey: null,
+      graphicsPreviewBundle: null,
       incremental: null,
       deck: null
     };
@@ -653,6 +660,7 @@ export function isDeckSnapshotCurrent(snapshot: SessionSnapshot, request: Comput
 function deckSnapshot(session: DeckComputeSession, frame: DeckActiveFrame, revision: number): SessionSnapshot {
   return { ...makeEmptySnapshot(session.source), revision, activeRootId: frame.frameId,
     graphicsPreviewBundleKey: session.graphicsContext.previewBundle.cacheKey,
+    graphicsPreviewBundle: session.graphicsContext.previewBundle,
     deck: { cacheEpoch: session.epoch, frames: session.frames, document: session.prepared.document,
       activeFrame: frame, diagnostics: session.prepared.document.diagnostics, exactParse: session.parseExact } };
 }
@@ -961,6 +969,7 @@ async function computeDeckSnapshot(
     semanticResult: null,
     textLayoutContext: null,
     graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
+    graphicsPreviewBundle: graphicsContext.previewBundle,
     incremental: null,
     deck: {
       cacheEpoch: session.epoch,
@@ -1093,6 +1102,7 @@ async function computeNestedTikzSnapshot(
     semanticResult: result.semantic,
     textLayoutContext: result.textLayoutContext,
     graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
+    graphicsPreviewBundle: graphicsContext.previewBundle,
     incremental: null,
     deck: null
   };
@@ -1339,6 +1349,7 @@ async function computeSnapshotIncremental(
   renderDiagnostics: RenderDiagnostic[];
   phaseDurationsMs: Record<string, number>;
   graphicsPreviewBundleKey: string;
+  graphicsPreviewBundle: DocumentGraphicsPreviewBundle;
   textLayoutContext: TextLayoutContext | null;
 }> {
   const phases: Record<string, number> = {};
@@ -1489,6 +1500,7 @@ async function computeSnapshotIncremental(
     renderDiagnostics: [],
     phaseDurationsMs: phases,
     graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
+    graphicsPreviewBundle: graphicsContext.previewBundle,
     textLayoutContext: cache.text
   };
 }

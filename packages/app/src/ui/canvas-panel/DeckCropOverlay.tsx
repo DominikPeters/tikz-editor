@@ -20,15 +20,16 @@ const HANDLES: readonly { handle: Exclude<BeamerImageCropHandle, "move">; x: num
 /** The whole image behind its crop window, from the same data the slide was drawn with. */
 function useImageHref(layout: BeamerFrameLayout, target: BeamerImageCropTarget): string | null {
   const bundleKey = useEditorStore((s) => s.snapshot.graphicsPreviewBundleKey ?? null);
+  const ownedBundle = useEditorStore((s) => s.snapshot.graphicsPreviewBundle ?? null);
   return useMemo(() => {
     const graphic = layout.graphics.find((item) => item.itemId === target.objectId);
-    const bundle = bundleKey ? getDocumentGraphicsPreviewBundle(bundleKey) : null;
+    const bundle = ownedBundle?.cacheKey === bundleKey ? ownedBundle : bundleKey ? getDocumentGraphicsPreviewBundle(bundleKey) : null;
     if (!graphic || !bundle) return null;
     const resolution = createDocumentGraphicsResolverFromPreviewBundle(bundle).resolve({
       filename: target.filename, options: graphic.options, source: "", sourceStart: graphic.sourceSpan.from, sourceEnd: graphic.sourceSpan.to,
     });
     return resolution.status === "resolved" && resolution.dataBase64 ? `data:${resolution.mimeType};base64,${resolution.dataBase64}` : null;
-  }, [bundleKey, layout, target.filename, target.objectId]);
+  }, [bundleKey, ownedBundle, layout, target.filename, target.objectId]);
 }
 
 export function DeckCropOverlay({ layout, target, scale, begin, onKeyDown }: {

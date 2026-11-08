@@ -88,12 +88,14 @@ function SlideLayoutGallery({ current, onChoose }: { current: BeamerSlideTemplat
   const source = useEditorStore(state => state.source);
   const documentId = useEditorStore(state => state.activeDocumentId);
   const graphicsPreviewBundleKey = useEditorStore(state => state.snapshot.graphicsPreviewBundleKey);
+  const graphicsPreviewBundle = useEditorStore(state => state.snapshot.graphicsPreviewBundle);
   const document = useMemo(() => scanBeamerDocument(source), [source]);
   const prefix = source.slice(0, document.frames[0]?.span.from ?? document.documentBodySpan.to);
   const preview = useMemo(() => layoutPreviewDeck(prefix), [prefix]);
   const thumbnails = useFigureThumbnails(preview.source, preview.roots, {
     documentKey: `${documentId}:slide-layouts`, maxToRender: preview.roots.length,
     ...(graphicsPreviewBundleKey === undefined ? {} : { graphicsPreviewBundleKey }),
+    ...(graphicsPreviewBundle === undefined ? {} : { graphicsPreviewBundle }),
   });
   const aspectRatio = useMemo(() => {
     const { page } = resolveBeamerPageGeometry(document);

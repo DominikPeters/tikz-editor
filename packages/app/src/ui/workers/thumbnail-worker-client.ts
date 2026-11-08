@@ -1,5 +1,6 @@
 import { isRecord } from "../../validation";
 import { createDocumentGraphicsResolverFromPreviewBundle } from "@tikz-editor/core/graphics/index";
+import type { DocumentGraphicsPreviewBundle } from "@tikz-editor/core/graphics/index";
 import { documentGraphicsPreviewBundleBytes, getDocumentGraphicsPreviewBundle } from "../../image-asset-cache";
 import type {
   ThumbnailRegisterGraphicsMessage,
@@ -48,10 +49,14 @@ function getWorker(): Worker | null {
   }
 }
 
-export async function requestThumbnail(request: ThumbnailRenderRequest): Promise<ThumbnailRenderSuccess | ThumbnailRenderFailure> {
+/** Snapshot-owned bytes survive reusable-cache eviction; register them once per worker. */
+export async function requestThumbnail(
+  request: ThumbnailRenderRequest,
+  graphicsPreviewBundle?: DocumentGraphicsPreviewBundle
+): Promise<ThumbnailRenderSuccess | ThumbnailRenderFailure> {
   const worker = getWorker();
   if (!worker) {
-    return renderThumbnailFallback(request);
+    return renderThumbnailFallback(request, graphicsPreviewBundle);
   }
 
   return new Promise<ThumbnailRenderSuccess | ThumbnailRenderFailure>((resolve, reject) => {
@@ -65,7 +70,7 @@ export async function requestThumbnail(request: ThumbnailRenderRequest): Promise
     idsForGroup.add(request.requestId);
     requestIdsByGroup.set(request.groupId, idsForGroup);
     try {
-      registerGraphicsBundleIfNeeded(worker, request.graphicsPreviewBundleKey);
+      registerGraphicsBundleIfNeeded(worker, request.graphicsPreviewBundleKey, graphicsPreviewBundle);
       worker.postMessage(request);
       trimGraphicsBundles();
     } catch (error) {
@@ -118,10 +123,10 @@ function onWorkerMessage(event: MessageEvent<unknown>): void {
   pending.resolve(message);
 }
 
-async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise<ThumbnailRenderSuccess | ThumbnailRenderFailure> {
+async function renderThumbnailFallback(request: ThumbnailRenderRequest, ownedBundle?: DocumentGraphicsPreviewBundle): Promise<ThumbnailRenderSuccess | ThumbnailRenderFailure> {
   try {
     const previewBundle = request.graphicsPreviewBundleKey
-      ? getDocumentGraphicsPreviewBundle(request.graphicsPreviewBundleKey)
+      ? ownedBundle?.cacheKey === request.graphicsPreviewBundleKey ? ownedBundle : getDocumentGraphicsPreviewBundle(request.graphicsPreviewBundleKey)
       : null;
     const graphicsResolver = previewBundle
       ? createDocumentGraphicsResolverFromPreviewBundle(previewBundle)
@@ -199,7 +204,7 @@ function onWorkerError(): void {
   }
 }
 
-function registerGraphicsBundleIfNeeded(worker: Worker, cacheKey: string | undefined): void {
+function registerGraphicsBundleIfNeeded(worker: Worker, cacheKey: string | undefined, ownedBundle?: DocumentGraphicsPreviewBundle): void {
   if (!cacheKey) {
     return;
   }
@@ -210,7 +215,7 @@ function registerGraphicsBundleIfNeeded(worker: Worker, cacheKey: string | undef
     registeredGraphicsBundles.set(cacheKey, existingWeight);
     return;
   }
-  const bundle = getDocumentGraphicsPreviewBundle(cacheKey);
+  const bundle = ownedBundle?.cacheKey === cacheKey ? ownedBundle : getDocumentGraphicsPreviewBundle(cacheKey);
   if (!bundle) {
     return;
   }

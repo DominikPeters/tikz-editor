@@ -62,6 +62,7 @@ export function ThemeGalleryPopover(props: {
   const pageBox = snapshot.deck?.activeFrame?.viewBox;
   const slideAspect = pageBox ? `${pageBox.width} / ${pageBox.height}` : undefined;
   const graphicsKey = snapshot.graphicsPreviewBundleKey ?? null;
+  const graphicsBundle = snapshot.graphicsPreviewBundle ?? undefined;
   const current = frames.find((frame) => frame.id === activeRootId) ?? null;
   // The title slide is the first frame that typesets one; else the first frame.
   const title = frames.find((frame) => /\\(titlepage|maketitle)\b/u.test(source.slice(frame.span.from, frame.span.to))) ?? frames[0] ?? null;
@@ -105,7 +106,7 @@ export function ThemeGalleryPopover(props: {
             ...(frame.step === undefined ? {} : { deckStep: frame.step }),
             presentationTheme: entry.name,
             parseOptions: { recover: true, activeRootId: `theme-gallery:${entry.id}`, includeContextDefinitions: true },
-          }).catch(() => null);
+          }, graphicsBundle).catch(() => null);
           if (isCancelled()) return;
           if (result?.ok) {
             const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(result.svg)}`;
@@ -116,7 +117,7 @@ export function ThemeGalleryPopover(props: {
       }
     })();
     return () => { run.cancelled = true; cancelGroup(groupId); };
-  }, [currentFrame, currentThemeId, graphicsKey, keyFor, source, titleFrame]);
+  }, [currentFrame, currentThemeId, graphicsBundle, graphicsKey, keyFor, source, titleFrame]);
 
   // The canvas shows the previewed theme's current slide once it is rendered.
   const currentId = current?.id ?? null;

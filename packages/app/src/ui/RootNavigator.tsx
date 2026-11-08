@@ -235,6 +235,7 @@ export function RootNavigator({ vertical = false }: { vertical?: boolean }) {
   const priorities = useMemo(() => [...new Set([...visibleIds, ...roots.filter(root => root.id === activeRootId).map(root => root.thumbnailId)])], [visibleIds, roots, activeRootId]);
   const thumbnails = useFigureThumbnails(model ? model.source : snapshot.source, thumbnailRoots, {
     documentKey: documentId, ...(snapshot.graphicsPreviewBundleKey === undefined ? {} : { graphicsPreviewBundleKey: snapshot.graphicsPreviewBundleKey }),
+    ...(snapshot.graphicsPreviewBundle === undefined ? {} : { graphicsPreviewBundle: snapshot.graphicsPreviewBundle }),
     priorityFigureIds: priorities, maxToRender: Math.max(8, visibleIds.length + 4),
     ...(externalThumbnail === undefined ? {} : { externalThumbnail }),
   });

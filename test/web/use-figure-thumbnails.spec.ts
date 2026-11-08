@@ -5,6 +5,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetFigureThumbnailStateForTests, useFigureThumbnails } from "../../packages/app/src/ui/useFigureThumbnails";
+import type { DocumentGraphicsPreviewBundle } from "../../packages/core/src/graphics/index";
 
 vi.mock("../../packages/app/src/ui/workers/thumbnail-worker-client", () => ({
   requestThumbnail: vi.fn(),
@@ -37,6 +38,7 @@ function Harness(props: {
   figures: readonly FigureEntry[];
   documentKey?: string;
   graphicsPreviewBundleKey?: string | null;
+  graphicsPreviewBundle?: DocumentGraphicsPreviewBundle | null;
   priorityFigureIds?: readonly string[];
   maxToRender?: number;
   externalThumbnail?: { figureId: string; deckFrameIndex?: number; url: string | null };
@@ -45,6 +47,7 @@ function Harness(props: {
   const thumbnails = useFigureThumbnails(props.source, props.figures, {
     documentKey: props.documentKey,
     graphicsPreviewBundleKey: props.graphicsPreviewBundleKey,
+    graphicsPreviewBundle: props.graphicsPreviewBundle,
     priorityFigureIds: props.priorityFigureIds,
     maxToRender: props.maxToRender ?? 4,
     externalThumbnail: props.externalThumbnail
@@ -594,7 +597,7 @@ describe("useFigureThumbnails", () => {
     expect(latest.size).toBe(0);
   });
 
-  it("invalidates thumbnails and forwards the graphics preview bundle key", async () => {
+  it("invalidates thumbnails and forwards snapshot-owned graphics with the bundle key", async () => {
     vi.mocked(requestThumbnail).mockImplementation(async (request) => ({
       type: "result",
       ok: true,
@@ -608,6 +611,8 @@ describe("useFigureThumbnails", () => {
     const figures = [
       { id: "figure:0", span: { from: 0, to: source.length } }
     ] as const;
+    const firstBundle: DocumentGraphicsPreviewBundle = { version: 1, cacheKey: "graphics:r1", entries: [] };
+    const nextBundle: DocumentGraphicsPreviewBundle = { version: 1, cacheKey: "graphics:r2", entries: [] };
 
     await act(async () => {
       root.render(createElement(Harness, {
@@ -615,6 +620,7 @@ describe("useFigureThumbnails", () => {
         figures,
         documentKey: "document-images",
         graphicsPreviewBundleKey: "graphics:r1",
+        graphicsPreviewBundle: firstBundle,
         onUpdate: () => undefined
       }));
       vi.runOnlyPendingTimers();
@@ -623,6 +629,7 @@ describe("useFigureThumbnails", () => {
     await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 1);
     expect(vi.mocked(requestThumbnail).mock.calls[0]?.[0])
       .toMatchObject({ graphicsPreviewBundleKey: "graphics:r1" });
+    expect(vi.mocked(requestThumbnail).mock.calls[0]?.[1]).toBe(firstBundle);
 
     await act(async () => {
       root.render(createElement(Harness, {
@@ -630,6 +637,7 @@ describe("useFigureThumbnails", () => {
         figures,
         documentKey: "document-images",
         graphicsPreviewBundleKey: "graphics:r2",
+        graphicsPreviewBundle: nextBundle,
         onUpdate: () => undefined
       }));
       vi.runOnlyPendingTimers();
@@ -638,6 +646,7 @@ describe("useFigureThumbnails", () => {
     await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 2);
     expect(vi.mocked(requestThumbnail).mock.calls[1]?.[0])
       .toMatchObject({ graphicsPreviewBundleKey: "graphics:r2" });
+    expect(vi.mocked(requestThumbnail).mock.calls[1]?.[1]).toBe(nextBundle);
   });
 });
 

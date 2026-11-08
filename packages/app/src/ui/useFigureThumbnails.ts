@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
 import { cancelGroup, requestThumbnail } from "./workers/thumbnail-worker-client";
 import type { ThumbnailRenderRequest } from "./workers/thumbnail-worker-types";
+import type { DocumentGraphicsPreviewBundle } from "@tikz-editor/core/graphics";
 import { BoundedLru } from "../bounded-lru";
 
 /**
@@ -19,6 +20,7 @@ type FigureEntry = ThumbnailRootEntry;
 type UseFigureThumbnailsOptions = {
   documentKey?: string;
   graphicsPreviewBundleKey?: string | null;
+  graphicsPreviewBundle?: DocumentGraphicsPreviewBundle | null;
   priorityFigureIds?: readonly string[];
   maxToRender?: number;
   /** Reuse an existing render without caching it as a final-overlay thumbnail. */
@@ -89,6 +91,7 @@ export function useFigureThumbnails(
   const {
     documentKey = "__default__",
     graphicsPreviewBundleKey = null,
+    graphicsPreviewBundle = null,
     priorityFigureIds = EMPTY_PRIORITY_FIGURE_IDS,
     maxToRender = 8,
     externalThumbnail
@@ -223,7 +226,7 @@ export function useFigureThumbnails(
         },
         svgOptions: { padding: 8 }
       };
-      const promise: Promise<string | null> = requestThumbnail(request)
+      const promise: Promise<string | null> = (graphicsPreviewBundle ? requestThumbnail(request, graphicsPreviewBundle) : requestThumbnail(request))
         .then((result) => result.ok ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(result.svg)}` : null)
         .catch(() => null)
         .then((url) => {
@@ -283,7 +286,7 @@ export function useFigureThumbnails(
         window.clearTimeout(timer.id);
       }
     };
-  }, [documentKey, externalDeckFrameIndex, externalFigureId, figureSignatures, figures, graphicsPreviewBundleKey, maxToRender, priorityFigureIds, source]);
+  }, [documentKey, externalDeckFrameIndex, externalFigureId, figureSignatures, figures, graphicsPreviewBundle, graphicsPreviewBundleKey, maxToRender, priorityFigureIds, source]);
 
   useEffect(() => {
     const live = liveRequestsRef.current;

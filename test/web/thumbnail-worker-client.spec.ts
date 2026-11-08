@@ -105,6 +105,21 @@ describe("thumbnail-worker-client", () => {
     expect(FakeWorker.instances).toHaveLength(0);
   });
 
+  it("registers snapshot-owned image data after its reusable bundle has been evicted", async () => {
+    imageAssetCacheMocks.getDocumentGraphicsPreviewBundle.mockReturnValue(null);
+    const client = await import("../../packages/app/src/ui/workers/thumbnail-worker-client");
+    const bundle = { version: 1 as const, cacheKey: "snapshot-owned", entries: [] };
+    const request = { type: "render" as const, requestId: "owned", groupId: "owned", source: "",
+      figureId: "figure:0", figureSignature: "owned", graphicsPreviewBundleKey: bundle.cacheKey,
+      parseOptions: { activeRootId: "figure:0", includeContextDefinitions: true } };
+    const pending = client.requestThumbnail(request, bundle);
+    const worker = FakeWorker.instances[0];
+    expect(worker.posted).toEqual([{ type: "registerGraphics", bundle }, request]);
+    expect(worker.posted[1]).not.toHaveProperty("graphicsPreviewBundle");
+    worker.emitMessage({ ...request, type: "result", ok: true, svg: "<svg/>" });
+    await pending;
+  });
+
   it("releases pending request bookkeeping when posting a request throws", async () => {
     const post = vi.spyOn(FakeWorker.prototype, "postMessage").mockImplementationOnce(() => {
       throw new Error("clone failed");
