@@ -7,6 +7,27 @@ import { computeSnapshot } from "../packages/app/src/compute";
 function ids(svg: string) { return [...svg.matchAll(/\sid=["']([^"']+)["']/gu)].map(match => match[1]); }
 
 describe("embedded SVG definition namespaces", () => {
+  it("does not treat literal text or quoted attribute content as definitions", () => {
+    const base = renderTikzToSvg(String.raw`\begin{tikzpicture}\draw (0,0)--(1,1);\end{tikzpicture}`).svg.model;
+    const markup = `<g data-note=' id="fake"'><text> id="example" href="#fake" url(#fake)</text><!-- id="comment" --><![CDATA[ id="cdata" ]]></g>`;
+    const model = { ...base, parts: [{ ...base.parts[0], markup, fingerprint: markup }] };
+    expect(namespaceSvgModel(model, "picture")).toBe(model);
+  });
+
+  it("rewrites reference attributes without changing displayed text or descriptive attributes", () => {
+    const base = renderTikzToSvg(String.raw`\begin{tikzpicture}\draw (0,0)--(1,1);\end{tikzpicture}`).svg.model;
+    const markup = `<g id="label" aria-label="url(#paint)" data-note=' id="fake" url(#paint)'>` +
+      `<title> id="example" href="#paint" url(#paint)</title>` +
+      `<text fill="url(#paint)">url(#paint)</text><use href="#glyph"/></g>`;
+    const model = { ...base, defs: ['<linearGradient id="paint"/><path id="glyph"/>'],
+      parts: [{ ...base.parts[0], markup, fingerprint: markup }] };
+    const scoped = namespaceSvgModel(model, "picture");
+    expect(scoped.parts[0].markup).toContain('<g id="tikz-picture-label" aria-label="url(#paint)" data-note=\' id="fake" url(#paint)\'>');
+    expect(scoped.parts[0].markup).toContain('<title> id="example" href="#paint" url(#paint)</title>');
+    expect(scoped.parts[0].markup).toContain('<text fill="url(#tikz-picture-paint)">url(#paint)</text>');
+    expect(scoped.parts[0].markup).toContain('<use href="#tikz-picture-glyph"/>');
+  });
+
   it("rewrites owned definitions, URL fragments, uses and accessibility references", () => {
     const base = renderTikzToSvg(String.raw`\begin{tikzpicture}\draw (0,0)--(1,1);\end{tikzpicture}`).svg.model;
     const model = { ...base, defs: ['<linearGradient id="paint"/><clipPath id="clip"/><path id="glyph"/>'], parts: [
