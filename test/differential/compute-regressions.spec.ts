@@ -34,6 +34,20 @@ const picture = String.raw`\documentclass{article}
 `;
 
 describe("compute shortcuts match cold renders", () => {
+  it.each([false, true])("redraws references when a renamed coordinate becomes their provider (previous provider: %s)", async existing => {
+    const source = "\\begin{tikzpicture}\n" + (existing ? "\\coordinate (b) at (1,1);\n" : "") +
+      "\\coordinate (a) at (5,5);\n" +
+      Array.from({ length: 24 }, (_, index) => `\\draw (${index},0) -- (${index},1);`).join("\n") +
+      "\n\\draw (b) -- (10,10);\n\\end{tikzpicture}";
+    const next = source.replace("(a) at (5,5)", "(b) at (5,5)");
+    const warm = await freshComputeModule();
+    for (const [sourceRevision, text] of [source, next, source, next].entries()) {
+      const request: ComputeRequest = { id: `rename-${sourceRevision}`, documentId: "renamed-provider", source: text,
+        sourceRevision, activeRootId: "figure:0", inferSourceChanges: true };
+      expect(compareResponses(await coldCompute(request), await warm.computeSnapshot(request))).toEqual([]);
+    }
+  });
+
   it("keeps circle and ellipse ids when text above them changes", async () => {
     const edited = picture.replace("(0,0) --", "(0.19,0) --");
     await expectLastMatchesCold([

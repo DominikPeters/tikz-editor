@@ -15,6 +15,7 @@ import {
 } from "./shared.js";
 import { scanTikzFigures } from "./figure-scan.js";
 import { incrementProfilingCounter } from "../profiling.js";
+import { rememberNodeTextValidator, validateNodeText } from "./node-text-validation.js";
 
 export type NodeTextValidationContext = {
   node: NodeItem;
@@ -86,22 +87,7 @@ export function parseTikz(input: string, opts: ParseTikzOptions = {}): ParseTikz
     }
   }
 
-  const nodeTextValidator = opts.nodeTextValidator;
-  if (nodeTextValidator) {
-    const allNodes = collectNodeItems(mapped.figure.body);
-    for (const node of allNodes) {
-      const issue = nodeTextValidator({ node, source: input });
-      if (!issue) {
-        continue;
-      }
-      diagnostics.push({
-        severity: "error",
-        code: issue.code ?? "invalid-node-tex",
-        message: issue.message,
-        span: node.textSpan
-      });
-    }
-  }
+  diagnostics.push(...validateNodeText(mapped.figure, input, opts.nodeTextValidator));
 
   diagnostics.sort(compareDiagnosticPosition);
 
@@ -112,7 +98,7 @@ export function parseTikz(input: string, opts: ParseTikzOptions = {}): ParseTikz
     }
   }
 
-  return {
+  return rememberNodeTextValidator({
     source: input,
     tree,
     figure: mapped.figure,
@@ -120,7 +106,7 @@ export function parseTikz(input: string, opts: ParseTikzOptions = {}): ParseTikz
     activeFigureId: mapped.activeFigureId,
     diagnostics,
     features: FeatureFlags
-  };
+  }, opts.nodeTextValidator);
 }
 
 export function applyStructuralMasks(

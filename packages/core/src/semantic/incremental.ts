@@ -21,7 +21,7 @@ import {
 } from "./context.js";
 import type { StyleChainEntry, StyleSourceRef } from "./style-chain.js";
 import { collectGeometryInvalidation, replaceSourceDependencies } from "./dependencies.js";
-import { restoreSemanticSymbolUses, type SemanticSymbolResolver, type SemanticSymbolResolverState } from "./symbol-resolver.js";
+import { restoreSemanticSymbolUses, type SemanticSymbolDefinition, type SemanticSymbolResolver, type SemanticSymbolResolverState } from "./symbol-resolver.js";
 import {
   collectNodeAnchorTargets,
   computeBounds,
@@ -48,6 +48,7 @@ import type { WorldBounds } from "../coords/points.js";
 import { documentDiffPatch } from "../edit/patch.js";
 import { patchesMatchSourceTransition } from "../edit/source-patches.js";
 import { createSceneSourceBinder, createSourceSpanResolver, sceneSourceExtent } from "./source-bindings.js";
+import { PersistentMap } from "./persistent-map.js";
 
 export type IncrementalSemanticTrigger = "drag-element" | "drag-handle" | "other";
 export type IncrementalSemanticReplayMode = "full" | "suffix" | "selective";
@@ -69,6 +70,7 @@ export type IncrementalSemanticFallbackReason =
   | "missing-changed-source-ids"
   | "no-previous-cache"
   | "statement-structure-changed"
+  | "initial-state-changed"
   | "stateful-graphics-state"
   | "opaque-dependency"
   | "unmapped-affected-source"
@@ -156,6 +158,13 @@ type CachedSemanticRun = {
   nodeAnchorTargets: EvaluateTikzResult["nodeAnchorTargets"];
 };
 
+type InitialSemanticState = {
+  valueKey: string;
+  textEngine: EvaluateOptions["textEngine"];
+  graphicsKey: string | null;
+};
+type CachedSemanticState = CachedSemanticRun & { initialState: InitialSemanticState };
+
 type SelectiveReplayPlan = {
   restoreIndex: number;
   corridorEndIndex: number;
@@ -170,7 +179,7 @@ export function createIncrementalSemanticSession(
   return createSession(defaultOptions, null);
 }
 
-function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticRun | null): IncrementalSemanticSession {
+function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticState | null): IncrementalSemanticSession {
   let cached = initial;
   let version = 0;
 
@@ -180,6 +189,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
       ...defaultOptions,
       ...input.options
     };
+    const initialState = initialSemanticState(input.figure, input.source, options);
     const run = createSemanticEvaluationRun(input.figure, input.source, options);
     const statementCount = run.expandedFigureBody.length;
     const statementIds = run.expandedFigureBody.map((statement) => statement.id);
@@ -192,11 +202,12 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
         statementIds,
         "stateful-graphics-state"
       );
-      if (version === runVersion) cached = full.cached;
+      if (version === runVersion) cached = { ...full.cached, initialState };
       return full.output;
     }
 
-    const fallback = decideFallbackReason(hints, cached, statementIds);
+    const fallback = cached && !sameInitialSemanticState(cached.initialState, initialState)
+      ? "initial-state-changed" : decideFallbackReason(hints, cached, statementIds);
     // Only text around the picture changed: every evaluated statement stands,
     // moved. Restore the end of the last run and rebind it to the new source.
     const moved = fallback === "missing-changed-source-ids" && cached ? movedOnlyPatches(cached, run, input, statementIds) : null;
@@ -215,10 +226,16 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
           affectedStatementCount: 0,
           checkpointPreparation: "reused"
         });
-        if (version === runVersion) cached = shifted.cached;
+        if (version === runVersion) cached = { ...shifted.cached, initialState };
         return shifted.output;
       } catch {
-        // Evaluate in full below.
+        // Restoring the old final checkpoint already changed this run. A
+        // failed source rebind must never feed that state into a full replay.
+        const full = yield* evaluateFullyAndCache(
+          createSemanticEvaluationRun(input.figure, input.source, options), statementIds, "restore-failed"
+        );
+        if (version === runVersion) cached = { ...full.cached, initialState };
+        return full.output;
       }
     }
     if (fallback) {
@@ -227,7 +244,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
         statementIds,
         fallback
       );
-      if (version === runVersion) cached = full.cached;
+      if (version === runVersion) cached = { ...full.cached, initialState };
       return full.output;
     }
 
@@ -259,7 +276,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
         statementIds,
         "opaque-dependency"
       );
-      if (version === runVersion) cached = full.cached;
+      if (version === runVersion) cached = { ...full.cached, initialState };
       return full.output;
     }
 
@@ -280,7 +297,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
         statementIds,
         "unmapped-affected-source"
       );
-      if (version === runVersion) cached = full.cached;
+      if (version === runVersion) cached = { ...full.cached, initialState };
       return full.output;
     }
 
@@ -298,7 +315,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
         statementIds,
         "checkpoint-missing"
       );
-      if (version === runVersion) cached = full.cached;
+      if (version === runVersion) cached = { ...full.cached, initialState };
       return full.output;
     }
 
@@ -320,7 +337,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
           startCheckpoint,
           checkpointPreparation
         });
-        if (version === runVersion) cached = selective.cached;
+        if (version === runVersion) cached = { ...selective.cached, initialState };
         return { ...selective.output, invalidatedSourceIds: invalidation.affectedSourceIds };
       } catch {
         try {
@@ -337,7 +354,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
             fallbackReason: "selective-replay-error",
             checkpointPreparation
           });
-          if (version === runVersion) cached = suffix.cached;
+          if (version === runVersion) cached = { ...suffix.cached, initialState };
           return { ...suffix.output, invalidatedSourceIds: invalidation.affectedSourceIds };
         } catch {
           const full = yield* evaluateFullyAndCache(
@@ -345,7 +362,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
             statementIds,
             "runtime-error"
           );
-          if (version === runVersion) cached = full.cached;
+          if (version === runVersion) cached = { ...full.cached, initialState };
           return full.output;
         }
       }
@@ -364,7 +381,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
         affectedStatementCount: new Set(affectedStatementIndices).size,
         checkpointPreparation
       });
-      if (version === runVersion) cached = suffix.cached;
+      if (version === runVersion) cached = { ...suffix.cached, initialState };
       return { ...suffix.output, invalidatedSourceIds: invalidation.affectedSourceIds };
     } catch {
       const full = yield* evaluateFullyAndCache(
@@ -372,7 +389,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
         statementIds,
         "runtime-error"
       );
-      if (version === runVersion) cached = full.cached;
+      if (version === runVersion) cached = { ...full.cached, initialState };
       return full.output;
     }
   };
@@ -386,6 +403,22 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
       cached = null;
     }
   };
+}
+
+function initialSemanticState(figure: TikzFigure, source: string, options: EvaluateOptions): InitialSemanticState {
+  // Ownership fingerprints change every edit; resource resolvers may be new
+  // objects with the same content key. Neither alone invalidates geometry.
+  const { sourceFingerprint: _sourceFingerprint, textEngine, graphicsResolver, ...values } = options;
+  return {
+    valueKey: JSON.stringify([values, figure.options?.raw ?? null,
+      figure.body.filter(statement => statement.span.to <= figure.span.from).map(statement => source.slice(statement.span.from, statement.span.to))]),
+    textEngine: textEngine ?? null,
+    graphicsKey: graphicsResolver?.cacheKey ?? null
+  };
+}
+
+function sameInitialSemanticState(left: InitialSemanticState, right: InitialSemanticState): boolean {
+  return left.valueKey === right.valueKey && left.textEngine === right.textEngine && left.graphicsKey === right.graphicsKey;
 }
 
 function* evaluateFullyAndCache(
@@ -618,6 +651,19 @@ function* evaluateSelectively(args: {
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
     nextFragments[statementIndex] = createStatementFragment(evaluated, run.context);
     yield;
+  }
+  for (let statementIndex = restoreIndex; statementIndex <= corridorEndIndex; statementIndex++) {
+    const producedNames = (summary: SemanticStatementEffectSummary) => JSON.stringify([
+      summary.producesNamedCoordinates.map(entry => entry.key).sort(),
+      summary.producesNamedNodeGeometries.map(entry => entry.key).sort(),
+      [...summary.producesNamedPaths].sort()
+    ]);
+    if (producedNames(requireArrayValue(previous.statementFragments, statementIndex).effectSummary) !==
+      producedNames(requireArrayValue(nextFragments, statementIndex).effectSummary)) {
+      // The old graph has no edge from this statement to consumers of a name
+      // it did not previously define. Re-evaluate the suffix to discover them.
+      throw new Error("Selective replay changed the produced resource names");
+    }
   }
   const previousCorridorHandleCount = countFragmentEditHandles(
     previous.statementFragments,
@@ -897,8 +943,8 @@ function corridorEffectsStand(
       || Boolean(left.exitsScope) !== Boolean(right.exitsScope)
       || left.requiresSequentialContext !== right.requiresSequentialContext
       // Named path elements carry the source they were bound to.
-      || left.appendsNamedPaths.length > 0
-      || right.appendsNamedPaths.length > 0
+      || left.writesNamedPaths.length > 0
+      || right.writesNamedPaths.length > 0
       || !sameEffects(left, right)
     ) {
       return false;
@@ -1135,12 +1181,35 @@ function createCheckpointBinder(
       ? entries : bound;
   };
   const provenance = (lists: ProvenanceOptionList[]) => {
-    const bound = lists.map(list => authored(list.sourceRef) ? { ...list, sourceRef: binder.metadata(list.sourceRef) } : list);
-    return bound.every((list, index) => list.sourceRef === requireArrayValue(lists, index).sourceRef) ? lists : bound;
+    const bound = lists.map(list => authored(list.sourceRef)
+      ? { ...list, sourceRef: binder.metadata(list.sourceRef), options: list.sourceRef.identityRef ? list.options : binder.metadata(list.options) } : list);
+    return bound.every((list, index) => list.sourceRef === requireArrayValue(lists, index).sourceRef && list.options === requireArrayValue(lists, index).options) ? lists : bound;
   };
+  function mapValues<K, V>(values: PersistentMap<K, V>, bind: (value: V) => V): PersistentMap<K, V>;
+  function mapValues<K, V>(values: Map<K, V>, bind: (value: V) => V): Map<K, V>;
+  function mapValues<K, V>(values: Map<K, V>, bind: (value: V) => V): Map<K, V> {
+    let next: Map<K, V> | undefined;
+    for (const [key, value] of values) {
+      const updated = bind(value);
+      if (updated === value) continue;
+      next ??= values instanceof PersistentMap ? values.fork() : new Map(values);
+      next.set(key, updated);
+    }
+    return next ?? values;
+  }
   const frame = (current: SemanticContextFrame): SemanticContextFrame => {
     const next: SemanticContextFrame = {
       ...current,
+      customStyles: mapValues(current.customStyles, provenance),
+      picDefinitions: mapValues(current.picDefinitions, definition => {
+        const codes = definition.codes.map(code => authored(code.sourceRef)
+          ? binder.metadata(code) : code);
+        return codes.every((code, index) => code === definition.codes[index]) ? definition : { ...definition, codes };
+      }),
+      macroBindings: mapValues(current.macroBindings, binding => {
+        const provenance = binding.provenance.map(origin => run.sourceStatementSpanById.has(origin.definitionId) ? binder.metadata(origin) : origin);
+        return provenance.every((origin, index) => origin === binding.provenance[index]) ? binding : { ...binding, provenance };
+      }),
       styleChain: chain(current.styleChain),
       clipChain: current.clipChain.map(clip => authored(clip.sourceRef) ? { ...clip, sourceRef: binder.metadata(clip.sourceRef) } : clip),
       everyPathStyles: provenance(current.everyPathStyles),
@@ -1160,7 +1229,16 @@ function createCheckpointBinder(
   return (checkpoint) => {
     let result = bound.get(checkpoint);
     if (!result) {
-      result = { ...checkpoint, stack: checkpoint.stack.map(frame) };
+      const symbols = checkpoint.symbolResolverState;
+      const definition = (value: SemanticSymbolDefinition) =>
+        run.sourceStatementSpanById.has(value.statementId) ? binder.metadata(value) : value;
+      result = { ...checkpoint, stack: checkpoint.stack.map(frame), symbolResolverState: {
+        ...symbols,
+        scopes: symbols.scopes.map(scope => ({
+          macro: mapValues(scope.macro, definition), color: mapValues(scope.color, definition),
+          style: mapValues(scope.style, definition), key: mapValues(scope.key, definition), library: mapValues(scope.library, definition)
+        }))
+      } };
       bound.set(checkpoint, result);
     }
     return result;

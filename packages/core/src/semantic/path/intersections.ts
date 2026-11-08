@@ -6,7 +6,7 @@ import { splitAllAtTopLevel } from "../../domains/coordinates/parse.js";
 import type { Span } from "../../ast/types.js";
 import type { OptionListAst } from "../../options/types.js";
 import {
-  appendNamedPathElements,
+  writeNamedPathElements,
   readNamedPath,
   type SemanticContext,
   writeContextMacroBinding,
@@ -60,12 +60,14 @@ export type NameIntersectionsDirective = {
 
 export type PathIntersectionDirectives = {
   namedPathNames: string[];
+  globalNamedPathNames: string[];
   nameIntersections?: NameIntersectionsDirective;
   diagnostics: string[];
 };
 
 export function collectPathIntersectionDirectives(optionLists: OptionListAst[]): PathIntersectionDirectives {
   const namedPathNames: string[] = [];
+  const globalNamedPathNames = new Set<string>();
   const diagnostics: string[] = [];
   let nameIntersections: NameIntersectionsDirective | undefined;
 
@@ -79,6 +81,8 @@ export function collectPathIntersectionDirectives(optionLists: OptionListAst[]):
         const pathName = normalizePathName(entry.valueRaw);
         if (pathName.length > 0) {
           namedPathNames.push(pathName);
+          if (entry.key === "name path global") globalNamedPathNames.add(pathName);
+          else globalNamedPathNames.delete(pathName);
         }
         continue;
       }
@@ -97,6 +101,7 @@ export function collectPathIntersectionDirectives(optionLists: OptionListAst[]):
 
   return {
     namedPathNames: Array.from(new Set(namedPathNames)),
+    globalNamedPathNames: [...globalNamedPathNames],
     ...(nameIntersections === undefined ? {} : { nameIntersections: nameIntersections }),
     diagnostics
   };
@@ -149,7 +154,7 @@ export function applyNameIntersectionsDirective(directive: NameIntersectionsDire
   return diagnostics;
 }
 
-export function registerNamedPath(pathName: string, elements: SceneElement[], context: SemanticContext): boolean {
+export function registerNamedPath(pathName: string, elements: SceneElement[], context: SemanticContext, global = false): boolean {
   const normalizedName = normalizePathName(pathName);
   if (normalizedName.length === 0) {
     return false;
@@ -158,7 +163,7 @@ export function registerNamedPath(pathName: string, elements: SceneElement[], co
   const scopedName = applyNameScope(normalizedName, context);
   const geometryElements = elements.filter(isGeometricElement);
   const producerSourceIds = new Set(geometryElements.map((element) => element.sourceRef.sourceId));
-  appendNamedPathElements(context, scopedName, geometryElements, producerSourceIds);
+  writeNamedPathElements(context, scopedName, geometryElements, producerSourceIds, global);
   return true;
 }
 

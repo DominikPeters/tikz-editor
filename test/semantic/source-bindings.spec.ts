@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseTikz } from "../../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../../packages/core/src/semantic/evaluate.js";
 import { createIncrementalSemanticSession } from "../../packages/core/src/semantic/incremental.js";
-import { createSourceSpanResolver } from "../../packages/core/src/semantic/source-bindings.js";
+import { createSceneSourceBinder, createSourceSpanResolver } from "../../packages/core/src/semantic/source-bindings.js";
 import { createTexNodeTextEngine } from "../../packages/core/src/text/tex-node-text-engine.js";
 import { retainSceneTextLayout } from "../../packages/core/src/text/render-scope.js";
 import { getTextLayoutReportProvider } from "../../packages/core/src/text/layout-context.js";
@@ -11,6 +11,13 @@ import { diffSvgModels } from "../../packages/core/src/svg/patch.js";
 import { fragment } from "../fragment-helpers.js";
 
 describe("semantic source bindings", () => {
+  it("preserves unchanged metadata so checkpoint definitions do not fork on every edit", () => {
+    const metadata = { sourceSpan: { from: 0, to: 4 }, label: "definition" };
+    const binder = createSceneSourceBinder(createSourceSpanResolver([
+      { oldSpan: { from: 10, to: 11 }, newSpan: { from: 10, to: 12 }, replacement: fragment("ab") }
+    ]), "current");
+    expect(binder.metadata(metadata)).toBe(metadata);
+  });
   it("reuses text SVG while resolving current and previous caret reports independently", async () => {
     const source = String.raw`\begin{tikzpicture}
 \node at (0,0) {A};

@@ -1083,6 +1083,7 @@ function evaluateStatement(
       });
     }
 
+    // Named paths outlive this temporary style frame, in the enclosing scope.
     pushFrame(context, {
       style: resolved.style,
       styleChain: resolved.chain,
@@ -1128,7 +1129,7 @@ function evaluateStatement(
       treeDeferredGrowthFunction: frameMeta.treeDeferredGrowthFunction,
       treeDeferredEdgeFromParentPath: frameMeta.treeDeferredEdgeFromParentPath,
       treeDeferredEdgeFromParentMacro: frameMeta.treeDeferredEdgeFromParentMacro
-    });
+    }, { shareNamedPaths: true });
     const previousTraceCollector = context.macroTraceCollector;
     const statementMacroTrace: MacroExpansionTraceEvent[] = [];
     context.macroTraceCollector = statementMacroTrace;
@@ -1172,7 +1173,7 @@ function evaluateStatement(
       }
       parent.pictureSizeRelevant = currentFrame(context).pictureSizeRelevant;
       for (const name of intersectionDirectives.namedPathNames) {
-        registerNamedPath(name, elements, context);
+        registerNamedPath(name, elements, context, intersectionDirectives.globalNamedPathNames.includes(name));
       }
       const originStack = extractStatementMacroOriginStack(statementMacroTrace);
       if (originStack.length > 0) {

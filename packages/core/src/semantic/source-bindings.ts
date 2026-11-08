@@ -47,7 +47,8 @@ export function createSceneSourceBinder(resolveSpan: (span: Span) => Span, sourc
       return result;
     }
     if ("from" in value && typeof value.from === "number" && "to" in value && typeof value.to === "number" && Object.keys(value).length === 2) {
-      const result = resolveSpan({ from: value.from, to: value.to });
+      const span = resolveSpan({ from: value.from, to: value.to });
+      const result = span.from === value.from && span.to === value.to ? value : span;
       rebound.set(value, result);
       return result;
     }

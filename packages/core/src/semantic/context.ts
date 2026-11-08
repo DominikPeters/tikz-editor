@@ -183,6 +183,8 @@ export type SemanticContext = {
   namedCoordinateRewriteHandles: PersistentMap<string, string>;
   namedNodeGeometries: PersistentMap<string, NamedNodeGeometry>;
   namedPaths: PersistentMap<string, SceneElement[]>;
+  /** Enclosing named-path registries; null denotes a temporary path frame. */
+  namedPathFrames: Array<PersistentMap<string, SceneElement[]> | null>;
   currentPoint: WorldPoint | null;
   pathStartPoint: WorldPoint | null;
   textEngine: NodeTextEngine | null;
@@ -241,8 +243,8 @@ export type SemanticStatementEffectSummary = {
   /** What the statement added to the picture's bounds, for statements a replay reuses. */
   extendsPictureBounds: WorldBounds | null;
   dependsOnPictureBounds?: boolean;
-  /** Elements the statement appended to named paths (`name path`). */
-  appendsNamedPaths: Array<{ key: string; elements: SceneElement[] }>;
+  /** Named path assignments that survive the statement's temporary frames. */
+  writesNamedPaths: Array<{ key: string; elements: SceneElement[]; global: boolean }>;
   /** Node names the statement added to named node sets. */
   addsNamedNodeSetMembers: Array<{ key: string; members: string[] }>;
   /** Handles that edit the statement's named coordinates where they are referenced. */
@@ -262,6 +264,7 @@ export type SemanticContextSnapshot = {
   namedCoordinateRewriteHandlesState: PersistentMapSnapshot<string, string>;
   namedNodeGeometriesState: PersistentMapSnapshot<string, NamedNodeGeometry>;
   namedPathsState: PersistentMapSnapshot<string, SceneElement[]>;
+  namedPathFrameStates: Array<PersistentMapSnapshot<string, SceneElement[]> | null>;
   currentPoint: WorldPoint | null;
   pathStartPoint: WorldPoint | null;
   editHandles: EditHandle[] | null;
@@ -288,7 +291,8 @@ type SemanticStatementEffectTracker = {
   opaqueReasons: Set<SemanticDependencyOpaqueReason>;
   pictureBounds: WorldBounds | null;
   dependsOnPictureBounds?: boolean;
-  appendedNamedPaths: Map<string, SceneElement[]>;
+  namedPathWrites: Map<string, { elements: SceneElement[]; global: boolean }>;
+  globalNamedPathWrites: Map<string, SceneElement[]>;
   addedNamedNodeSetMembers: Map<string, Set<string>>;
   namedCoordinateRewriteHandles: Map<string, string>;
 };
@@ -384,6 +388,7 @@ export function createSemanticContext(
     namedCoordinateRewriteHandles: new PersistentMap<string, string>(),
     namedNodeGeometries: new PersistentMap<string, NamedNodeGeometry>(),
     namedPaths: new PersistentMap<string, SceneElement[]>(),
+    namedPathFrames: [],
     currentPoint: null,
     pathStartPoint: null,
     textEngine,
@@ -436,7 +441,13 @@ export function currentFrame(context: SemanticContext): SemanticContextFrame {
   return frame;
 }
 
-export function pushFrame(context: SemanticContext, frame: SemanticContextFrame): void {
+export function pushFrame(
+  context: SemanticContext,
+  frame: SemanticContextFrame,
+  options: { shareNamedPaths?: boolean } = {}
+): void {
+  context.namedPathFrames.push(options.shareNamedPaths ? null : context.namedPaths);
+  if (!options.shareNamedPaths) context.namedPaths = context.namedPaths.fork();
   context.stack.push(frame);
   pushSemanticSymbolScope(context.symbolResolver);
 }
@@ -444,6 +455,8 @@ export function pushFrame(context: SemanticContext, frame: SemanticContextFrame)
 export function popFrame(context: SemanticContext): void {
   if (context.stack.length > 1) {
     context.stack.pop();
+    const namedPaths = context.namedPathFrames.pop();
+    if (namedPaths) context.namedPaths = namedPaths;
     popSemanticSymbolScope(context.symbolResolver);
   }
 }
@@ -477,6 +490,7 @@ export function snapshotSemanticContext(
     namedCoordinateRewriteHandlesState: context.namedCoordinateRewriteHandles.snapshot(),
     namedNodeGeometriesState: context.namedNodeGeometries.snapshot(),
     namedPathsState: context.namedPaths.snapshot(),
+    namedPathFrameStates: context.namedPathFrames.map(paths => paths?.snapshot() ?? null),
     currentPoint: context.currentPoint ? { ...context.currentPoint } : null,
     pathStartPoint: context.pathStartPoint ? { ...context.pathStartPoint } : null,
     editHandles:
@@ -503,6 +517,7 @@ export function restoreSemanticContext(
   context.namedCoordinateRewriteHandles.restore(snapshot.namedCoordinateRewriteHandlesState);
   context.namedNodeGeometries.restore(snapshot.namedNodeGeometriesState);
   context.namedPaths.restore(snapshot.namedPathsState);
+  context.namedPathFrames = snapshot.namedPathFrameStates.map(state => state ? new PersistentMap(state) : null);
   context.currentPoint = snapshot.currentPoint ? { ...snapshot.currentPoint } : null;
   context.pathStartPoint = snapshot.pathStartPoint ? { ...snapshot.pathStartPoint } : null;
   if (snapshot.editHandles) {
@@ -839,18 +854,23 @@ export function readNamedNodeGeometry(
   return geometry;
 }
 
-export function appendNamedPathElements(
+export function writeNamedPathElements(
   context: SemanticContext,
   name: string,
   elements: SceneElement[],
-  producerSourceIds: Iterable<string>
+  producerSourceIds: Iterable<string>,
+  global = false
 ): void {
-  const existing = context.namedPaths.get(name) ?? [];
-  context.namedPaths.set(name, [...existing, ...elements]);
+  const stored = [...elements];
+  context.namedPaths.set(name, stored);
+  if (global) {
+    for (const paths of context.namedPathFrames) paths?.set(name, stored);
+  }
   const tracker = context.statementEffectTracker;
   if (tracker) {
     tracker.producedNamedPaths.add(name);
-    tracker.appendedNamedPaths.set(name, [...(tracker.appendedNamedPaths.get(name) ?? []), ...elements]);
+    tracker.namedPathWrites.set(name, { elements: stored, global });
+    if (global) tracker.globalNamedPathWrites.set(name, stored);
   }
   for (const sourceId of producerSourceIds) {
     context.dependencyBuilder.addProducer(sourceId, "named-path", name);
@@ -877,7 +897,8 @@ export function beginStatementEffectTracking(context: SemanticContext): void {
     consumedNamedResources: new Map<string, SemanticStatementConsumedResource>(),
     opaqueReasons: new Set<SemanticDependencyOpaqueReason>(),
     pictureBounds: null,
-    appendedNamedPaths: new Map<string, SceneElement[]>(),
+    namedPathWrites: new Map(),
+    globalNamedPathWrites: new Map(),
     addedNamedNodeSetMembers: new Map<string, Set<string>>(),
     namedCoordinateRewriteHandles: new Map<string, string>()
   };
@@ -926,7 +947,7 @@ export function endStatementEffectTracking(
       nextPathStartPoint: context.pathStartPoint ? { ...context.pathStartPoint } : null,
       requiresSequentialContext: options.requiresSequentialContext,
       extendsPictureBounds: null,
-      appendsNamedPaths: [],
+      writesNamedPaths: [],
       addsNamedNodeSetMembers: [],
       producesNamedCoordinateRewriteHandles: [],
       suffixSkipKind: "unsafe",
@@ -956,7 +977,13 @@ export function endStatementEffectTracking(
     requiresSequentialContext: options.requiresSequentialContext,
     extendsPictureBounds: tracker.pictureBounds ? { ...tracker.pictureBounds } : null,
     ...(tracker.dependsOnPictureBounds ? { dependsOnPictureBounds: true } : {}),
-    appendsNamedPaths: [...tracker.appendedNamedPaths].map(([key, elements]) => ({ key, elements: [...elements] })),
+    writesNamedPaths: [
+      // Pics may define globals and then shadow them locally. Replay the global
+      // assignments, and only those local assignments still visible at exit.
+      ...[...tracker.globalNamedPathWrites].map(([key, elements]) => ({ key, elements, global: true })),
+      ...[...tracker.namedPathWrites].flatMap(([key, write]) =>
+        !write.global && context.namedPaths.get(key) === write.elements ? [{ key, ...write }] : [])
+    ],
     addsNamedNodeSetMembers: [...tracker.addedNamedNodeSetMembers].map(([key, members]) => ({ key, members: [...members] })),
     producesNamedCoordinateRewriteHandles: [...tracker.namedCoordinateRewriteHandles].map(([key, handleId]) => ({ key, handleId })),
     suffixSkipKind: "unsafe",
@@ -990,8 +1017,8 @@ export function applyStatementEffectSummary(
   for (const producedPath of summary.producesNamedPaths) {
     recordDependencyProducer(context, "named-path", producedPath, sourceId);
   }
-  for (const appended of summary.appendsNamedPaths) {
-    context.namedPaths.set(appended.key, [...(context.namedPaths.get(appended.key) ?? []), ...appended.elements]);
+  for (const write of summary.writesNamedPaths) {
+    writeNamedPathElements(context, write.key, write.elements, [], write.global);
   }
   for (const added of summary.addsNamedNodeSetMembers) {
     addNamedNodeSetMembers(context, added.key, added.members);
