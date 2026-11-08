@@ -8,6 +8,8 @@ export interface PriorityFixture {
   readonly family: string;
   readonly pages: number;
   readonly images?: number;
+  readonly imagesByPage?: readonly number[];
+  readonly paintImages?: boolean;
   readonly oracleText?: readonly string[];
   readonly oracleTextByPage?: readonly (readonly string[])[];
   readonly paintColors?: readonly { readonly color: string; readonly visible: readonly boolean[] }[];

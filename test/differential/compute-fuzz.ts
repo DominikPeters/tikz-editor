@@ -32,6 +32,8 @@ import { createBeamerSyntaxContext } from "../../packages/core/src/beamer/syntax
 import { freshComputeModule, type ComputeModule } from "./compute-instances.js";
 import { diffValues } from "./snapshot-diff.js";
 import { fragment } from "../fragment-helpers.js";
+import { fuzzGraphicsDocumentFileRef } from "./graphics-platform.js";
+import type { DocumentFileRef } from "../../packages/app/src/store/types.js";
 
 export type FuzzDocument = { label: string; source: string };
 
@@ -148,6 +150,7 @@ export function compareResponses(expected: ComputeResponse, actual: { snapshot: 
 
 type DocState = {
   documentId: string;
+  fileRef: DocumentFileRef | null;
   source: string;
   revision: number;
   root: string | null;
@@ -175,6 +178,7 @@ function requestFor(doc: DocState): ComputeRequest {
   return {
     id: `warm-${++requestCounter}`,
     documentId: doc.documentId,
+    documentFileRef: doc.fileRef,
     kind: "render",
     source: doc.source,
     sourceRevision: doc.revision,
@@ -251,8 +255,8 @@ function yieldingWork(abortAfter: number | null) {
   };
 }
 
-function count(reach: FuzzReach, key: string): void {
-  reach[key] = (reach[key] ?? 0) + 1;
+function count(reach: FuzzReach, key: string, amount = 1): void {
+  reach[key] = (reach[key] ?? 0) + amount;
 }
 
 function recordReach(reach: FuzzReach, snapshot: SessionSnapshot): void {
@@ -297,6 +301,11 @@ export async function runOps(documents: readonly FuzzDocument[], ops: readonly F
     { shown = true }: { shown?: boolean } = {}): Promise<SessionSnapshot> => {
     comparisons += 1;
     recordReach(reach, actual.snapshot);
+    if (request.source.includes("fuzz-images/")) {
+      const svg = actual.snapshot.deck?.activeFrame?.svg ?? actual.snapshot.svg?.svg ?? "";
+      if (/data-tex-includegraphics-status="(?:missing|unsupported)"/u.test(svg)) throw new Mismatch("image-assets", request, ["Controlled image was unresolved"]);
+      count(reach, "graphics:resolved", (svg.match(/<image\b/gu) ?? []).length);
+    }
     const incremental = actual.snapshot.incremental;
     trace?.(`  ${what}: ${incremental ? `${incremental.parseStrategy}${incremental.parseFallbackReason ? `(${incremental.parseFallbackReason})` : ""} ${incremental.strategy}` : actual.snapshot.deck ? "deck" : "full"}`);
     const expected = await coldCompute(request);
@@ -382,6 +391,7 @@ export async function runOps(documents: readonly FuzzDocument[], ops: readonly F
             // The store claims a completed page before scheduling a render.
             const request = requestFor(doc);
             const claimed = warm.claimCachedDeckSnapshot({ id: request.id, documentId: doc.documentId, source: doc.source,
+              documentFileRef: doc.fileRef,
               sourceRevision: doc.revision, activeRootId: doc.root, deckStep: doc.step,
               drawingLayerRootId: doc.drawingLayer, includeDrawingLayer: true });
             if (claimed) {
@@ -521,6 +531,7 @@ function isDeckSource(source: string): boolean {
 function initialDocState(document: FuzzDocument, index: number): DocState {
   return {
     documentId: `doc-${index}`,
+    fileRef: fuzzGraphicsDocumentFileRef(document.source),
     source: document.source,
     revision: 0,
     root: null,

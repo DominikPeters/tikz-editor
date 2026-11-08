@@ -1,0 +1,280 @@
+{
+  "formatVersion": 1,
+  "generatorVersion": 4,
+  "generatorSha256": "642ebfd74e9ad451d6c8ac391a065222f5d63ccd48c5251b12e4da414d9a0616",
+  "graphicsAssets": {
+    "sha256": "1cb78fb505370d7c8cb8cb3f06f025d5821fa2f442ea3a4bb51c6ec95fd36fda",
+    "files": {
+      "fuzz-images/nested/pattern.pdf": "247604c6a975c26abe0c95bb02e362cc5a231458f77ec5343f140f6f28e323fb",
+      "fuzz-images/page-1.png": "bbbf4b9419c77af72f75a12bbf539c92c5cd7a018151b437b467da5249fa7f34",
+      "fuzz-images/page-2.png": "9643adfba81c4ee874bc01503c0b616e8a033a249955b651f540bdff16f5bf7e",
+      "fuzz-images/pages.pdf": "247604c6a975c26abe0c95bb02e362cc5a231458f77ec5343f140f6f28e323fb",
+      "fuzz-images/pattern.png": "3b50aa9b6a29955b6e9c7560964dd9b9869c311a2203c5ab0f153163524a2d1e",
+      "fuzz-images/pattern.v2.png": "3b50aa9b6a29955b6e9c7560964dd9b9869c311a2203c5ab0f153163524a2d1e",
+      "fuzz-images/photo.jpg": "c1545d354166bae121ead92fa402a63cc7583e54d7388c5414e39aad83e64e06"
+    }
+  },
+  "coverage": {
+    "cases": 8,
+    "frames": 8,
+    "uniqueSources": 8,
+    "pages": 11,
+    "families": {
+      "image-block": 1,
+      "image-column": 1,
+      "image-inline": 1,
+      "image-key-order": 1,
+      "image-lookup": 1,
+      "image-node": 1,
+      "image-overlay": 1,
+      "image-pdf-pages": 1
+    },
+    "structural": {
+      "recursiveCases": 0,
+      "nodeCounts": [],
+      "depths": [],
+      "features": [],
+      "interactions": []
+    },
+    "documentAxes": {
+      "fontSize": [],
+      "aspectRatio": [],
+      "theme": []
+    }
+  },
+  "profile": "images",
+  "title": "Includegraphics fuzz seed 20261108: immutable replay",
+  "seed": 20261108,
+  "fidelity": [
+    {
+      "id": "v4-seed-20261108-0000-image-inline",
+      "file": "v4-seed-20261108-0000-image-inline.tex",
+      "frame": 1,
+      "family": "image-inline",
+      "pages": 1,
+      "paintImages": true,
+      "imagesByPage": [
+        1
+      ],
+      "choices": {
+        "alignment": "top",
+        "spec": "1",
+        "width": 20,
+        "height": 0,
+        "images": [
+          {
+            "filename": "fuzz-images/pattern.v2",
+            "options": [
+              "origin=c",
+              "angle=-30",
+              "totalheight=18pt"
+            ],
+            "source": "\\includegraphics[origin=c,angle=-30,totalheight=18pt]{fuzz-images/pattern.v2}"
+          }
+        ]
+      },
+      "oracleText": [
+        "Before",
+        "after."
+      ]
+    },
+    {
+      "id": "v4-seed-20261108-0001-image-column",
+      "file": "v4-seed-20261108-0001-image-column.tex",
+      "frame": 1,
+      "family": "image-column",
+      "pages": 1,
+      "paintImages": true,
+      "imagesByPage": [
+        1
+      ],
+      "choices": {
+        "alignment": "top",
+        "spec": "1",
+        "width": 20,
+        "height": 0,
+        "images": [
+          {
+            "filename": "fuzz-images/photo.jpg",
+            "options": [
+              "origin=c",
+              "angle=-30",
+              "totalheight=18pt"
+            ],
+            "source": "\\includegraphics[origin=c,angle=-30,totalheight=18pt]{fuzz-images/photo.jpg}"
+          }
+        ]
+      },
+      "oracleText": [
+        "Before",
+        "after."
+      ]
+    },
+    {
+      "id": "v4-seed-20261108-0002-image-block",
+      "file": "v4-seed-20261108-0002-image-block.tex",
+      "frame": 1,
+      "family": "image-block",
+      "pages": 1,
+      "paintImages": true,
+      "imagesByPage": [
+        1
+      ],
+      "choices": {
+        "alignment": "top",
+        "spec": "1",
+        "width": 20,
+        "height": 0,
+        "images": [
+          {
+            "filename": "fuzz-images/pattern.png",
+            "options": [
+              "trim=2 1 3 2",
+              "viewport=1 1 20 14",
+              "clip=false"
+            ],
+            "source": "\\includegraphics[trim=2 1 3 2,viewport=1 1 20 14,clip=false]{fuzz-images/pattern.png}"
+          }
+        ]
+      },
+      "oracleText": [
+        "Before",
+        "after."
+      ]
+    },
+    {
+      "id": "v4-seed-20261108-0003-image-node",
+      "file": "v4-seed-20261108-0003-image-node.tex",
+      "frame": 1,
+      "family": "image-node",
+      "pages": 1,
+      "paintImages": true,
+      "imagesByPage": [
+        1
+      ],
+      "choices": {
+        "alignment": "top",
+        "spec": "1",
+        "width": 20,
+        "height": 0,
+        "images": [
+          {
+            "filename": "fuzz-images/pages.pdf",
+            "options": [
+              "page=1",
+              "bb=1 1 20 14",
+              "clip"
+            ],
+            "source": "\\includegraphics % image argument\n[page=1,bb=1 1 20 14,clip] % image argument\n{fuzz-images/pages.pdf}"
+          }
+        ]
+      },
+      "oracleText": [
+        "Before",
+        "after."
+      ]
+    },
+    {
+      "id": "v4-seed-20261108-0004-image-overlay",
+      "file": "v4-seed-20261108-0004-image-overlay.tex",
+      "frame": 1,
+      "family": "image-overlay",
+      "pages": 4,
+      "paintImages": true,
+      "imagesByPage": [
+        0,
+        1,
+        1,
+        0
+      ],
+      "choices": {
+        "alignment": "top",
+        "spec": "2-3",
+        "width": 20,
+        "height": 0,
+        "images": [
+          {
+            "filename": "fuzz-images/photo.jpg",
+            "options": [
+              "trim=2 1 3 2",
+              "clip",
+              "width=20pt"
+            ],
+            "source": "\\includegraphics % image argument\n[trim=2 1 3 2,clip,width=20pt] % image argument\n{fuzz-images/photo.jpg}"
+          }
+        ]
+      },
+      "oracleText": [
+        "Before",
+        "after."
+      ]
+    },
+    {
+      "id": "v4-seed-20261108-0005-image-lookup",
+      "file": "v4-seed-20261108-0005-image-lookup.tex",
+      "frame": 1,
+      "family": "image-lookup",
+      "pages": 1,
+      "paintImages": true,
+      "imagesByPage": [
+        2
+      ],
+      "choices": {
+        "alignment": "top",
+        "spec": "1",
+        "width": 20,
+        "height": 0,
+        "images": []
+      },
+      "oracleText": [
+        "Before",
+        "after."
+      ]
+    },
+    {
+      "id": "v4-seed-20261108-0006-image-pdf-pages",
+      "file": "v4-seed-20261108-0006-image-pdf-pages.tex",
+      "frame": 1,
+      "family": "image-pdf-pages",
+      "pages": 1,
+      "paintImages": true,
+      "imagesByPage": [
+        2
+      ],
+      "choices": {
+        "alignment": "top",
+        "spec": "1",
+        "width": 20,
+        "height": 0,
+        "images": []
+      },
+      "oracleText": [
+        "Before",
+        "after."
+      ]
+    },
+    {
+      "id": "v4-seed-20261108-0007-image-key-order",
+      "file": "v4-seed-20261108-0007-image-key-order.tex",
+      "frame": 1,
+      "family": "image-key-order",
+      "pages": 1,
+      "paintImages": true,
+      "imagesByPage": [
+        2
+      ],
+      "choices": {
+        "alignment": "top",
+        "spec": "1",
+        "width": 20,
+        "height": 0,
+        "images": []
+      },
+      "oracleText": [
+        "Before",
+        "after."
+      ]
+    }
+  ],
+  "recognition": []
+}

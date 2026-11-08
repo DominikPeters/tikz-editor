@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, delimiter, dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { ensureDistBuildFresh } from "./ensure-dist-build.mjs";
+import { corpusGraphicsResolver } from "./lib/beamer-corpus.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PDF_RASTER_DPI = 600;
@@ -100,7 +101,11 @@ export async function compareTikzRenderers(options = {}) {
     report.outputs.rendererInput = rendererInputPath;
   }
 
-  const rendered = await (renderAsync ?? renderSync)(rendererCode, { parse: { recover: true } });
+  const assetDirectory = join(runDir, "native-assets");
+  mkdirSync(assetDirectory, { recursive: true });
+  const graphics = corpusGraphicsResolver(rendererCode, resolve(options.inputPath ?? "input.tex"), assetDirectory);
+  const rendered = await (renderAsync ?? renderSync)(rendererCode, { parse: { recover: true }, graphicsResolver: graphics.resolver });
+  report.renderer.assets = graphics.report();
   report.renderer.parseDiagnostics = rendered.parse.diagnostics;
   report.renderer.semanticDiagnostics = rendered.semantic.diagnostics;
   report.renderer.svgDiagnostics = rendered.svg.diagnostics;
@@ -139,7 +144,7 @@ export async function compareTikzRenderers(options = {}) {
   report.outputs.latexTex = latexTexPath;
 
   if (!useDvisvgmReference) {
-    const latexCompile = compileLatex(latexTexPath, runDir, report.tools);
+    const latexCompile = compileLatex(latexTexPath, runDir, report.tools, dirname(resolve(options.inputPath ?? "input.tex")));
     report.latex.compiled = latexCompile.ok;
     report.latex.compiler = latexCompile.compiler ?? null;
     if (!latexCompile.ok) {
@@ -158,7 +163,7 @@ export async function compareTikzRenderers(options = {}) {
       }
     }
   } else {
-    const dviCompile = compileLatexToDvi(latexTexPath, runDir, report.tools);
+    const dviCompile = compileLatexToDvi(latexTexPath, runDir, report.tools, dirname(resolve(options.inputPath ?? "input.tex")));
     report.latex.compiled = dviCompile.ok;
     report.latex.compiler = dviCompile.compiler ?? null;
     if (!dviCompile.ok) {
@@ -386,6 +391,7 @@ function wrapTikzForStandalone(code, referenceMode, latexContext = {}) {
   const lines = [
     `\\documentclass[${standaloneClassOptions}]{standalone}`,
     "\\usepackage{tikz}",
+    "\\usepackage{graphicx}",
     preamble,
     "\\begin{document}",
     bodyWithPre,
@@ -540,7 +546,7 @@ function sanitizeRendererPreamble(value) {
   return kept.join("\n");
 }
 
-function compileLatex(texPath, cwd, tools) {
+function compileLatex(texPath, cwd, tools, sourceDirectory) {
   if (!tools.pdflatex) {
     return {
       ok: false,
@@ -549,7 +555,7 @@ function compileLatex(texPath, cwd, tools) {
     };
   }
 
-  const result = runCommand("pdflatex", ["-interaction=nonstopmode", "-halt-on-error", "-file-line-error", basename(texPath)], { cwd });
+  const result = runCommand("pdflatex", ["-interaction=nonstopmode", "-halt-on-error", "-file-line-error", basename(texPath)], { cwd, env: { ...process.env, TEXINPUTS: `${sourceDirectory}${delimiter}${process.env.TEXINPUTS ?? ""}` } });
   if (!result.ok) {
     return {
       ok: false,
@@ -574,7 +580,7 @@ function compileLatex(texPath, cwd, tools) {
   };
 }
 
-function compileLatexToDvi(texPath, cwd, tools) {
+function compileLatexToDvi(texPath, cwd, tools, sourceDirectory) {
   const texFileName = basename(texPath);
   let command = "";
   let args = [];
@@ -593,7 +599,7 @@ function compileLatexToDvi(texPath, cwd, tools) {
     };
   }
 
-  const result = runCommand(command, args, { cwd });
+  const result = runCommand(command, args, { cwd, env: { ...process.env, TEXINPUTS: `${sourceDirectory}${delimiter}${process.env.TEXINPUTS ?? ""}` } });
   if (!result.ok) {
     return {
       ok: false,
@@ -953,6 +959,7 @@ function convertDviToSvg(dviPath, svgPath, tools) {
 function runCommand(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
+    env: options.env,
     encoding: "utf8"
   });
   return {

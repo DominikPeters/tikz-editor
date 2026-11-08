@@ -1,4 +1,5 @@
 import { generateIntricateBeamerCases, INTRICATE_FAMILIES } from "./beamer-fuzz-intricate.mjs";
+import { generateImageBeamerCases } from "./beamer-fuzz-images.mjs";
 export { INTRICATE_FAMILIES };
 import { BROAD_ONLY_FAMILIES, BEAMER_FUZZ_GENERATOR_VERSION, generateBroadBeamerCases } from "./beamer-fuzz-broad.mjs";
 export { BEAMER_FUZZ_GENERATOR_VERSION };
@@ -8,6 +9,7 @@ export const BEAMER_FUZZ_SMOKE_FAMILIES = ["alignment", "column-alignment", "col
 export const BEAMER_FUZZ_FAMILIES = [...BEAMER_FUZZ_SMOKE_FAMILIES, ...BROAD_ONLY_FAMILIES];
 
 export function generateBeamerFuzzCases({ seed = 20261105, cases = 48, profile = "broad" } = {}) {
+  if (profile === "images") return generateImageBeamerCases({ seed, cases });
   if (profile === "intricate") return generateIntricateBeamerCases({ seed, cases });
   const families = profile === "smoke" ? BEAMER_FUZZ_SMOKE_FAMILIES : BEAMER_FUZZ_FAMILIES;
   if (!["smoke", "broad", "intricate", "controls"].includes(profile)) throw new Error(`Unknown Beamer fuzz profile ${profile}.`);

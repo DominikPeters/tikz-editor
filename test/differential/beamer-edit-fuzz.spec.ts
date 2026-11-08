@@ -64,6 +64,17 @@ describe("Beamer semantic edit recipes", () => {
     expect(result.reach["suffix:skipped"] ?? 0).toBeGreaterThan(0);
   }, 30_000);
 
+  it("loads real PNG, JPEG and PDF pages during warm/cold image edit comparisons", async () => {
+    const cases = generateBeamerFuzzCases({ seed: 20261108, cases: 8, profile: "images" });
+    for (const index of [0, 1, 6]) {
+      const entry = cases[index]!;
+      const input = generateBeamerEditSequence(withEditProbes(entry.source), entry.fixture.family, 20261108, 2);
+      const result = await runBeamerEditSequence(input);
+      expect(result.failure, entry.id).toBeNull();
+      expect(result.reach["graphics:resolved"], entry.id).toBeGreaterThan(0);
+    }
+  }, 60_000);
+
   it("detects stale SVG reuse and preserves its failure while reducing", async () => {
     const factory = async () => {
       const module = await freshComputeModule();

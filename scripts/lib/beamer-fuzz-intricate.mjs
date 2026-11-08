@@ -1,7 +1,8 @@
+import { imageProduction } from "./beamer-fuzz-images.mjs";
 // Typed flow grammar: recursive block productions respect list depth and the
 // available column width. Decisions are made before rendering, independently
 // of either the native parser or TeX. Record the tree for auditing and replay.
-export const INTRICATE_FAMILIES = ["nested-flow", "diagram-build", "math-layout", "table-flow", "scoped-typography", "overlay-composition"];
+export const INTRICATE_FAMILIES = ["nested-flow", "diagram-build", "math-layout", "table-flow", "scoped-typography", "overlay-composition", "image-layout"];
 const TOPICS = ["Constraint propagation", "Cache invalidation", "Iterative refinement", "Message passing", "Geometric uncertainty", "Incremental analysis"];
 const CLAUSES = [
   "A local update can change the measurements used by several neighboring components.",
@@ -29,18 +30,24 @@ export function generateIntricateBeamerCases({ seed, cases, offset = 0 }) {
       if (parent) pairs.add(`${parent}>${kind}`);
       const result = { id: nextId++, kind, ...extra }; productions.push(result); return result;
     };
-    const leaves = ["paragraph", "paragraph", "diagram", "equation", "table"];
+    const leaves = ["paragraph", "paragraph", "diagram", "equation", "table", "image", "image-node"];
     const expand = (depth, context, parent, forced, allowance = budget) => {
       const containers = ["group", "alignment", "block", "overlay", "sequence", ...(context.listDepth < 3 ? ["list", "list"] : []), ...(context.columnDepth < 2 && context.width > 4 && allowance >= 3 ? ["columns"] : [])];
       let kind = forced ?? (allowance <= 1 || depth >= maxDepth ? pick(leaves) : pick(depth < 3 ? containers : [...containers, ...leaves]));
       if (!forced && depth === 1 && allowance >= 5) kind = pick(containers.filter(value => ["columns", "list", "sequence"].includes(value)));
       if (!forced && !anchored && (allowance <= 1 || depth >= 3)) {
-        kind = { "nested-flow": "paragraph", "diagram-build": "diagram", "math-layout": "equation", "table-flow": "table", "scoped-typography": "paragraph", "overlay-composition": "diagram" }[family];
+        kind = { "nested-flow": "paragraph", "diagram-build": "diagram", "math-layout": "equation", "table-flow": "table", "scoped-typography": "paragraph", "overlay-composition": "diagram", "image-layout": "image" }[family];
         anchored = true;
       }
       const result = node(kind, depth, parent);
       let divisor = 1;
       const child = (ctx = context, force) => expand(depth + 1, ctx, kind, force, Math.max(1, Math.floor((allowance - 1) / divisor)));
+      if (kind === "image" || kind === "image-node") {
+        result.image = imageProduction(random);
+        for (const option of result.image.options) count(`graphics-key:${option.split("=")[0]}`);
+        count(`graphics-format:${result.image.filename.split(".").at(-1)}`);
+        return result;
+      }
       if (kind === "paragraph") Object.assign(result, { sentences: [pick(CLAUSES), ...(random(3) === 0 ? [pick(CLAUSES)] : [])], math: pick(["x_i+x_{i+1}", "\\alpha+\\beta", "\\frac{a+b}{1+c}", "\\sum_{i=1}^{n}x_i"]), emphasis: pick(["textbf", "textit", "textrm"]) });
       else if (kind === "diagram") Object.assign(result, { width: Math.min(context.width * .75, 4.2), vertices: 4 + random(4), rotation: pick([0, -12, 17]), scale: pick([.8, 1, 1.1]), curve: Boolean(random(2)), clip: random(3) === 0, loop: Boolean(random(2)), overlay: random(2) ? "2-" : "1-", diagramId: result.id });
       else if (kind === "equation") result.expression = pick(["E=\\sum_{i=1}^{n}w_i x_i", "\\begin{aligned}a+b&=c\\\\ d-e&=f\\end{aligned}", "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}\\begin{pmatrix}x\\\\y\\end{pmatrix}"]);
@@ -66,7 +73,7 @@ export function generateIntricateBeamerCases({ seed, cases, offset = 0 }) {
     };
     // A sampled spine ensures substantial interaction depth; all descendants
     // still select independently from the grammar, rather than fixed templates.
-    const rootKind = { "nested-flow": "columns", "diagram-build": "block", "math-layout": "list", "table-flow": "columns", "scoped-typography": "group", "overlay-composition": "overlay" }[family];
+    const rootKind = { "nested-flow": "columns", "diagram-build": "block", "math-layout": "list", "table-flow": "columns", "scoped-typography": "group", "overlay-composition": "overlay", "image-layout": "columns" }[family];
     const tree = expand(0, { listDepth: 0, columnDepth: 0, width: aspectRatio === 169 ? 13 : 10 }, null, rootKind);
     const diagram = n => {
       const gap = n.width / 3, prefix = `g${n.diagramId}`;
@@ -89,6 +96,8 @@ ${edges.join('\n')}
     const emit = n => {
       const inner = () => n.children.map(emit).join('\n\\par\n');
       switch (n.kind) {
+        case "image": return `Before ${n.image.source} after.`;
+        case "image-node": return `\\begin{tikzpicture}\\node[draw] {${n.image.source}};\\end{tikzpicture}`;
         case "paragraph": return `\\${n.emphasis}{${n.sentences[0].split(' ').slice(0, 3).join(' ')}} ${n.sentences[0].split(' ').slice(3).join(' ')} ${n.sentences.slice(1).join(' ')} The estimate is $${n.math}$.`;
         case "diagram": return diagram(n);
         case "equation": return `\\[${n.expression}\\]`;
@@ -132,7 +141,7 @@ ${edges.join('\n')}
 \\fuzzpair{FrameRestored}{Timing: 8\\fuzzunit; estimate $\\fuzzscale{x}$.}\\par
 ${i % 2 ? `\\begin{block}{Follow-up}\\fuzzterm{A revised value} depends on the preceding frame.\\end{block}\n\\[r_{k+1}=r_k-\\alpha d_k\\]` : `\\begin{columns}[T]\\begin{column}{.46\\textwidth}${pick(CLAUSES)}\\end{column}\\begin{column}{.46\\textwidth}\\begin{itemize}\\item Input state\\item Updated state\\end{itemize}\\end{column}\\end{columns}`}
 \\end{frame}`; }).join('\n');
-    const id = `v3-seed-${seed}-${String(index).padStart(4, '0')}-${family}`;
+    const id = `v4-seed-${seed}-${String(index).padStart(4, '0')}-${family}`;
     const source = `\\documentclass[${fontSize}pt,aspectratio=${aspectRatio}]{beamer}
 \\usepackage{tikz}
 \\usetheme{${theme}}
@@ -168,9 +177,9 @@ ${context}
     // The last state must follow every closed range endpoint.
     const pages = Math.max(4, pageCount);
     const finalSource = pages === pageCount ? source : source.replace(`\\only<${pageCount}>{}`, `\\only<${pages}>{}`);
-    return { id, source: finalSource, additionalFixtures: contextFixtures.map(entry => ({ id: `${id}-frame-${entry.frame}`, file: id + '.tex', frame: entry.frame, family: 'intricate-macro-context', pages: 1, choices: { alignment: 'mixed', spec: '1', width: 0, height: 0 }, oracleText: [entry.witness, `12${entry.unit}`, `9${initialUnit}`, '5local', `8${entry.unit}`] })), fixture: { id, file: id + '.tex', frame: 1, family: `intricate-${family}`, pages,
+    return { id, source: finalSource, additionalFixtures: contextFixtures.map(entry => ({ id: `${id}-frame-${entry.frame}`, file: id + '.tex', frame: entry.frame, family: 'intricate-macro-context', pages: 1, choices: { alignment: 'mixed', spec: '1', width: 0, height: 0 }, oracleText: [entry.witness, `12${entry.unit}`, `9${initialUnit}`, '5local', `8${entry.unit}`] })), fixture: { id, file: id + '.tex', frame: 1, family: `intricate-${family}`, pages, paintImages: true,
       choices: { alignment: 'mixed', spec: 'composed', width: 0, height: 0, fontSize, aspectRatio, theme,
-        grammar: { version: 3, seed, index, maxDepth, budget, nodes: productions.length, depth: maxObservedDepth, frameCount: contextFrames, macroPlan: { initialUnit, localUnit, initialStyle, localStyle, chainDepth, coefficient, stages: contextFixtures }, features, pairs: [...pairs].sort(), tree } },
+        grammar: { version: 4, seed, index, maxDepth, budget, nodes: productions.length, depth: maxObservedDepth, frameCount: contextFrames, macroPlan: { initialUnit, localUnit, initialStyle, localStyle, chainDepth, coefficient, stages: contextFixtures }, features, pairs: [...pairs].sort(), tree } },
       paintColors: [{ color: '#ff00ff', visible: Array.from({ length: pages }, (_, i) => i + 1 >= 2 && i + 1 <= 3) }, { color: '#128943', visible: Array.from({ length: pages }, (_, i) => i + 1 >= 3) }],
       oracleText: ['Experiment', 'Witness', `7${localUnit}`, `11${initialUnit}`], oracleTextByPage: Array.from({ length: pages }, () => ['Experiment', 'Witness', `7${localUnit}`, `11${initialUnit}`]) } };
   });

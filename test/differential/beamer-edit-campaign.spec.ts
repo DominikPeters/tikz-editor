@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { generateBeamerFuzzCases } from "../../scripts/lib/beamer-fuzz-cases.mjs";
+import { FUZZ_GRAPHICS_ASSET_SHA256, stageFuzzGraphicsAssets } from "../../scripts/lib/fuzz-graphics-assets.mjs";
 import { EDIT_FIELDS, beamerFailureKey, generateBeamerEditSequence, materializeBeamerEdits, reduceBeamerEditSequence,
   runBeamerEditSequence, sourceHash, withEditProbes, type BeamerEditSequence } from "./beamer-edit-fuzz.js";
 import type { FuzzReach } from "./compute-fuzz.js";
@@ -15,6 +16,7 @@ describe("generated Beamer edit differential campaign", () => {
     const seed = numeric("BEAMER_EDIT_FUZZ_SEED", 20261106), count = numeric("BEAMER_EDIT_FUZZ_CASES", 2), steps = numeric("BEAMER_EDIT_FUZZ_STEPS", 14);
     const out = process.env.BEAMER_EDIT_FUZZ_OUT ?? mkdtempSync(join(tmpdir(), "beamer-edit-fuzz-"));
     mkdirSync(out, { recursive: true });
+    stageFuzzGraphicsAssets(out);
     const write = (file: string, value: unknown) => { const path = join(out, file); writeFileSync(path + ".tmp", JSON.stringify(value, null, 2) + "\n"); renameSync(path + ".tmp", path); };
     const replay = process.env.BEAMER_EDIT_FUZZ_REPLAY;
     const cases = replay ? [JSON.parse(readFileSync(replay, "utf8")) as BeamerEditSequence]
@@ -28,7 +30,7 @@ describe("generated Beamer edit differential campaign", () => {
     let comparisons = 0;
     const results: Array<{ id: string; status: string; comparisons: number; sourceSha256: string; sequenceSha256: string; key?: string; reduction?: { attempts: number; accepted: number; beforeActions: number; afterActions: number; beforeChars: number; afterChars: number; budgetExhausted: boolean }; error?: string }> = [];
     const fingerprint = createHash("sha256");
-    for (const path of ["test/differential/beamer-edit-fuzz.ts", "test/differential/compute-fuzz.ts", "test/differential/compute-instances.ts", "scripts/lib/beamer-fuzz-broad.mjs", "scripts/lib/beamer-fuzz-cases.mjs", "scripts/lib/beamer-fuzz-intricate.mjs", "scripts/lib/beamer-edit-sequences.mjs"]) fingerprint.update(readFileSync(path));
+    for (const path of ["test/differential/beamer-edit-fuzz.ts", "test/differential/compute-fuzz.ts", "test/differential/compute-instances.ts", "test/differential/graphics-platform.ts", "packages/tex-fuzz/src/graphics.ts", "scripts/lib/fuzz-graphics-assets.mjs", "scripts/lib/beamer-fuzz-broad.mjs", "scripts/lib/beamer-fuzz-cases.mjs", "scripts/lib/beamer-fuzz-intricate.mjs", "scripts/lib/beamer-fuzz-images.mjs", "scripts/lib/beamer-edit-sequences.mjs"]) fingerprint.update(readFileSync(path));
     const harnessSha256 = fingerprint.digest("hex");
     const implementation = createHash("sha256");
     const visit = (directory: string): void => {
@@ -41,7 +43,7 @@ describe("generated Beamer edit differential campaign", () => {
     visit("packages/core/src"); visit("packages/app/src");
     const implementationSha256 = implementation.digest("hex");
     const gitHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-    const report = (status: string) => ({ formatVersion: 1, status, seed: replay ? cases[0]!.seed : seed, plannedCases: cases.length, steps: replay ? cases[0]!.actions.filter(action => action.kind === "set").length : steps, harnessSha256, implementationSha256, gitHead,
+    const report = (status: string) => ({ formatVersion: 1, status, seed: replay ? cases[0]!.seed : seed, plannedCases: cases.length, steps: replay ? cases[0]!.actions.filter(action => action.kind === "set").length : steps, harnessSha256, implementationSha256, graphicsAssetsSha256: FUZZ_GRAPHICS_ASSET_SHA256, gitHead,
       completed: results.length, passed: results.filter(r => r.status === "passed").length, failed: results.filter(r => r.status === "mismatch").length,
       errors: results.filter(r => r.status === "error").length, comparisons, reach, edits, families, coverageFailures, results });
     write("report.json", report("running"));

@@ -87,3 +87,11 @@ The harness currently targets the supported simple TeX paragraph regime:
 - Alignment declarations are supported as paragraph prefixes, including after `\par` or blank paragraph boundaries; declarations in the middle of a paragraph still fall back.
 - Paragraph-prefix declaration cases are currently diagnostic coverage rather than a clean gate: `\raggedright`, `\centering`, and `\raggedleft` still expose TeX line-breaking/discretionary selection differences in very loose TikZ node paragraphs.
 - SVG glyph traces decode glyph names by pairing TeX and our glyph streams, so the trace is a structural/layout oracle, not a standalone semantic TeX extractor.
+
+## Image grammar extension (November 2026)
+
+Use `--case-mode images` for controlled PNG/JPEG/PDF cases. Image mode checks
+all cases with an independent TeX PDF paint reference and exits unsuccessfully
+on findings or errors. The [image status and ledger](includegraphics-fuzzing.md)
+describe the changed comparison adapters, unchanged numeric tolerances, exact
+replays, and nine currently open paint observations.

@@ -19,3 +19,4 @@ export * from "./projection.js";
 export * from "./random.js";
 export * from "./shrink.js";
 export * from "./supported-generation.js";
+export { createTexFuzzGraphicsResolver, generateTexFuzzGraphicsNode, TEX_FUZZ_GRAPHICS_PROGRAMS } from "./graphics.js";

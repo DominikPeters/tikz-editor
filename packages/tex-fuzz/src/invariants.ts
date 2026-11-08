@@ -7,6 +7,7 @@ import {
   texLength,
 } from "@tikz-editor/core/text/tex/index.js";
 import { flattenPositionedTexVListItems } from "@tikz-editor/core/text/tex/vlist/index.js";
+import { createTexFuzzGraphicsResolver } from "./graphics.js";
 import type {
   TexFuzzCase,
   TexFuzzFingerprint,
@@ -139,6 +140,7 @@ function semanticProseLeaves(caseData: TexFuzzCase): readonly SemanticProseLeaf[
         case "math":
         case "display-math":
         case "rule":
+        case "includegraphics":
         case "paragraph-break":
         case "noindent":
         case "alignment":
@@ -307,6 +309,7 @@ function visibleContentObligations(caseData: TexFuzzCase): readonly ContentOblig
           return;
         case "accent":
         case "math":
+        case "includegraphics":
         case "oracle-command":
           add(path, node.kind);
           return;
@@ -467,6 +470,10 @@ export function checkTexFuzzLayoutResultInvariants(
         ...(result.vlistLayout === undefined ? {} : { vlistLayout: result.vlistLayout }),
       });
       findings.push(...checkTexFuzzPaintedMathContent(caseData, width, svgBody));
+      const images = visibleContentObligations(caseData).filter((item) => item.kind === "includegraphics").length;
+      const paintedImages = [...svgBody.matchAll(/data-tex-includegraphics="(?:true|placeholder)"/gu)].length;
+      if (images !== paintedImages) add("image-paint-count", "paragraph/content/includegraphics", { expected: images, actual: paintedImages });
+      if (/data-tex-includegraphics-status="(?:missing|unsupported)"/u.test(svgBody)) add("image-asset-unresolved", "paragraph/content/includegraphics", {});
     }
   }
   return findings;
@@ -500,6 +507,7 @@ export function checkTexFuzzPaintedMathContent(
 
 function layoutInvariantFindings(caseData: TexFuzzCase): readonly TexFuzzObservation[] {
   const mathBoxProvider = createTexDerivedInlineMathBoxProvider();
+  const graphicsResolver = createTexFuzzGraphicsResolver(caseData.source);
   const findings: TexFuzzObservation[] = [];
   const results = TEX_FUZZ_HARD_INVARIANT_WIDTHS.flatMap((width) => {
     try {
@@ -510,6 +518,7 @@ function layoutInvariantFindings(caseData: TexFuzzCase): readonly TexFuzzObserva
           fallbackPolicy: "placeholder" as const,
           hyphenator: noHyphenation,
           mathBoxProvider,
+          graphicsResolver,
         }),
       }];
     } catch (error) {
@@ -532,6 +541,7 @@ function layoutInvariantFindings(caseData: TexFuzzCase): readonly TexFuzzObserva
       fallbackPolicy: "placeholder" as const,
       hyphenator: noHyphenation,
       mathBoxProvider,
+      graphicsResolver,
     });
   } catch (error) {
     findings.push({

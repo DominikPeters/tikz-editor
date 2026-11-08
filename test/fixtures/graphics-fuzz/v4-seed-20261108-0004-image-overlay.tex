@@ -1,0 +1,12 @@
+\documentclass{beamer}
+\usepackage{tikz}
+\graphicspath{{fuzz-images/}{fuzz-images/nested/}}
+\setbeamertemplate{navigation symbols}{}
+\date{}
+\begin{document}
+\begin{frame}[t]{Images}
+Before \includegraphics<2-3> % image argument
+[trim=2 1 3 2,clip,width=20pt] % image argument
+{fuzz-images/photo.jpg} after.\only<4>{}
+\end{frame}
+\end{document}

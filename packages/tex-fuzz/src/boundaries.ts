@@ -4,6 +4,7 @@ import {
 import type { ParagraphLayoutReport } from "@tikz-editor/core/text/knuth-plass/paragraph/report.js";
 import type { TexFuzzCase, TexFuzzObservation } from "./model.js";
 import { checkTexFuzzLayoutResultInvariants } from "./invariants.js";
+import { createTexFuzzGraphicsResolver } from "./graphics.js";
 
 /** Probe measured wrapping/overfull boundaries instead of only round widths. */
 export function texFuzzBoundaryWidths(report: ParagraphLayoutReport): readonly number[] {
@@ -22,6 +23,7 @@ export function checkTexFuzzBoundaryInvariants(caseData: TexFuzzCase): readonly 
   const provider = createTexDerivedInlineMathBoxProvider();
   const layout = (width: number) => layoutSimpleTexParagraph(caseData.source, {
     width, fallbackPolicy: "placeholder", hyphenator: { hyphenate: () => [] }, mathBoxProvider: provider,
+    graphicsResolver: createTexFuzzGraphicsResolver(caseData.source),
   });
   const reference = layout(480);
   if (!reference.report) return [];

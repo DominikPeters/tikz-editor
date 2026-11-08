@@ -3,6 +3,7 @@ import {
   layoutSimpleTexParagraph,
 } from "@tikz-editor/core/text/tex/index.js";
 import { generateTexFuzzCase } from "./generate.js";
+import { createTexFuzzGraphicsResolver } from "./graphics.js";
 import type { TexFuzzCase, TexFuzzFeatureId } from "./model.js";
 
 const noHyphenation = { hyphenate: (): number[] => [] };
@@ -72,6 +73,7 @@ export function classifyTexFuzzLayoutResultSupport(
  */
 export function classifyTexFuzzNativeSupport(caseData: TexFuzzCase): TexFuzzSupportClassification {
   const mathBoxProvider = createTexDerivedInlineMathBoxProvider();
+  const graphicsResolver = createTexFuzzGraphicsResolver(caseData.source);
   for (const width of TEX_FUZZ_SUPPORTED_GENERATION_WIDTHS) {
     try {
       const result = layoutSimpleTexParagraph(caseData.source, {
@@ -79,6 +81,7 @@ export function classifyTexFuzzNativeSupport(caseData: TexFuzzCase): TexFuzzSupp
         fallbackPolicy: "placeholder",
         hyphenator: noHyphenation,
         mathBoxProvider,
+        graphicsResolver,
       });
       const classification = classifyTexFuzzLayoutResultSupport(result, width);
       if (!classification.supported) return classification;

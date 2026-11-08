@@ -14,6 +14,7 @@ export function compareBeamerFrame(options: {
   width: number; themeVariant?: Readonly<Record<string, string>>; sourceDir?: string; texRoot?: string;
   structuralOnly?: boolean; pdfOnly?: boolean; assertStructural?: boolean;
   paintProbes?: readonly BeamerPaintProbe[];
+  paintImages?: boolean;
   paintColors?: readonly { color: string; visible: readonly boolean[] }[];
 }, runtime?: { source?: string; coreRenderer?: BeamerCoreRenderer }): Promise<{
   report: {

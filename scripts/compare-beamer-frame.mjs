@@ -13,6 +13,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { selectBeamerOraclePage } from "./lib/beamer-frame-oracle.mjs";
 import { ensureDistBuildFresh } from "./ensure-dist-build.mjs";
+import { corpusGraphicsResolver } from "./lib/beamer-corpus.mjs";
 import { compareColorMasks, compareBlockPaint, paintContractFailures } from "./lib/beamer-paint-compare.mjs";
 import {
   buildNativeBeamerPageTrace,
@@ -386,12 +387,15 @@ export async function compareBeamerFrame(options, runtime = {}) {
   writeFileSync(materializedInput, source, "utf8");
 
   const coreRenderer = runtime.coreRenderer ?? await loadCoreRenderer();
+  const assetDir = join(runDir, "native-assets");
+  mkdirSync(assetDir, { recursive: true });
+  const graphicsResolver = runtime.graphicsResolver ?? corpusGraphicsResolver(source, options.inputPath, assetDir).resolver;
   const { computerModernTexMetricProvider } = coreRenderer;
   const preparedDocument = runtime.preparedDocument ??
     coreRenderer.prepareBeamerDocument(source);
   const framePages = runtime.framePages ?? await preparedDocument.renderFramePages({
     frameIndex: options.frameNumber - 1,
-    graphicsResolver: runtime.graphicsResolver,
+    graphicsResolver,
   });
   const stepCount = framePages.stepCount;
   const pageCount = framePages.pageCount ?? framePages.pages.length;
@@ -535,7 +539,7 @@ export async function compareBeamerFrame(options, runtime = {}) {
     },
     structural: structuralComparison,
     paint: options.structuralOnly ? null : compareBlockPaint(render, nativePageTrace, oraclePageTrace,
-      join(runDir, "renderer.png"), join(runDir, "oracle.png"), options.width, rasterHeight, options.paintProbes),
+      join(runDir, "renderer.png"), join(runDir, "oracle.png"), options.width, rasterHeight, options.paintProbes, options.paintImages),
     colorMasks: options.structuralOnly ? null : compareColorMasks(join(runDir, "renderer.png"), join(runDir, "oracle.png"), options.width, rasterHeight, options.paintColors),
     raster: options.structuralOnly ? null : {
       width: options.width,

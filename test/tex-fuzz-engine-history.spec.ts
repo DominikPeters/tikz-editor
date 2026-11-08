@@ -43,4 +43,15 @@ describe("production TeX engine fuzz histories", () => {
     const findings = await checkTexFuzzEngineHistory(document, { engine: { ...actual, layoutContext: {} } });
     expect(findings.map((finding) => finding.fingerprint.code)).toContain("engine-history-missing-metadata");
   });
+
+  it("still rejects corrupted image placement identity after normalizing engine owners", async () => {
+    const actual = await createTexFuzzFreshEngine();
+    const engine = { ...actual, renderFromCache: (key: string) => {
+      const payload = actual.renderFromCache(key);
+      return payload ? { ...payload, graphicsPlacements: payload.graphicsPlacements?.map(placement => ({ ...placement, id: `${placement.id}:wrong` })) } : null;
+    } };
+    const value = caseFromTexFuzzAst([{ kind: "includegraphics", filename: "fuzz-images/pattern.png", options: [] }]);
+    const findings = await checkTexFuzzEngineHistory(value, { engine });
+    expect(findings.map(finding => finding.fingerprint.code)).toContain("engine-history-fresh-mismatch");
+  });
 });

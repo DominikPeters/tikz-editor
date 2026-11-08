@@ -13,7 +13,8 @@ export function priorityFidelityFailures(report, fixture, imageCount = 0, page =
   for (const probe of fixture.paintProbes ?? []) {
     if (!report.paint?.samples.some(sample => sample.id === probe.id)) failures.push(`Required paint probe ${probe.id} was not measured (use raster comparison).`);
   }
-  if (fixture.images != null && imageCount !== fixture.images) failures.push(`SVG images=${imageCount}, expected ${fixture.images}`);
+  const expectedImages = fixture.imagesByPage?.[page - 1] ?? fixture.images;
+  if (expectedImages != null && imageCount !== expectedImages) failures.push(`SVG images=${imageCount}, expected ${expectedImages}`);
   for (const probe of fixture.paintColors ?? []) {
     const mask = report.colorMasks?.find(mask => mask.color === probe.color);
     if (!mask) { failures.push(`Missing color mask ${probe.color}; raster comparison is required.`); continue; }

@@ -22,6 +22,8 @@ function rawGeneratedWeights(scope: "inline" | "document"): Readonly<Record<stri
     if (definition.support === "oracle-canary" || COVERAGE_ALIAS_FEATURES.has(definition.id)) continue;
     const documentFeature = definition.mode === "document" || definition.id.startsWith("math.display.");
     if (scope === "inline" && documentFeature) continue;
+    // Option/format tags describe image programs, not independent productions.
+    if (definition.id.startsWith("graphics.") && definition.id !== "graphics.includegraphics") continue;
     let weight = 100;
     if (definition.id.startsWith("text.font-command.")) weight = 28;
     else if (definition.id.startsWith("text.font-declaration.")) weight = 18;

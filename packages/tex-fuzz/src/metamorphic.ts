@@ -8,6 +8,7 @@ import {
 } from "@tikz-editor/core/text/tex/index.js";
 import type { TexFuzzCase, TexFuzzNode, TexFuzzObservation } from "./model.js";
 import { printTexFuzzAst } from "./print.js";
+import { createTexFuzzGraphicsResolver } from "./graphics.js";
 
 export type TexFuzzMetamorphicObservable =
   | "supported-classification"
@@ -126,6 +127,7 @@ function defaultMetamorphicLayout(source: string, width: number): TexParagraphLa
     fallbackPolicy: "placeholder",
     hyphenator: { hyphenate: () => [] },
     mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    graphicsResolver: createTexFuzzGraphicsResolver(source),
   });
 }
 

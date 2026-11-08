@@ -9,6 +9,7 @@ import {
 } from "@tikz-editor/core/text/tex/index.js";
 import type { TexFuzzFeatureId } from "./model.js";
 import { TEX_FUZZ_MATH_SYMBOLS } from "./math-symbols.js";
+import { TEX_FUZZ_GRAPHICS_KEYS } from "./graphics.js";
 
 export type TexFuzzFeatureMode = "text" | "math" | "mixed" | "document" | "oracle";
 export type TexFuzzFeatureCategory =
@@ -64,6 +65,7 @@ const BASE_FEATURE_DEFINITIONS = {
   "box.raisebox": definition("box.raisebox", ["inline-kind:raisebox"], ["raisebox"], "text", "box"),
   "box.rule": definition("box.rule", ["inline-kind:rule"], ["rule"], "text", "box"),
   "box.tabular": definition("box.tabular", ["inline-kind:tabular"], ["tabular"], "text", "box"),
+  "graphics.includegraphics": definition("graphics.includegraphics", ["inline-kind:includegraphics"], ["includegraphics"], "text", "box"),
   "document.paragraph-break": definition("document.paragraph-break", ["control-kind:paragraph-break"], ["paragraph-break"], "document", "document"),
   "document.noindent": definition("document.noindent", ["control-kind:noindent"], ["noindent"], "document", "document"),
   "document.item": definition("document.item", ["control-kind:item"], ["item"], "document", "document"),
@@ -80,6 +82,15 @@ const BASE_FEATURE_DEFINITIONS = {
 } satisfies Readonly<Partial<Record<TexFuzzFeatureId, TexFuzzFeatureDefinition>>>;
 
 const GENERATED_FEATURE_DEFINITIONS: readonly (readonly [TexFuzzFeatureId, TexFuzzFeatureDefinition])[] = [
+  ...TEX_FUZZ_GRAPHICS_KEYS.map((key) => {
+    const id = `graphics.key.${key}` as const;
+    return [id, definition(id, [], ["includegraphics"], "text", "box")] as const;
+  }),
+  ...(["png", "jpg", "pdf"] as const).map((format) => {
+    const id = `graphics.format.${format}` as const;
+    return [id, definition(id, [], ["includegraphics"], "text", "box")] as const;
+  }),
+  ...(["graphics.star", "graphics.corners"] as const).map((id) => [id, definition(id, [], ["includegraphics"], "text", "box")] as const),
   ...TEX_FUZZ_MATH_SYMBOLS.map((symbol) => {
     const id = `math.symbol.${symbol}` as const;
     return [id, definition(id, [], [`math-symbol:${symbol}`], "math", "math")] as const;
@@ -176,7 +187,6 @@ function mathCommandDefinition(
 
 export const TEX_FUZZ_EXPLICIT_EXCLUSIONS: Readonly<Record<string, string>> = {
   "inline-kind:comment": "Source-trivia coverage is exercised by parser tests rather than semantic generation.",
-  "inline-kind:includegraphics": "Requires a controlled asset resolver.",
   "inline-kind:literal": "Produced by malformed parsing rather than valid AST generation.",
   "control-kind:unsupported-command": "Used only as an oracle classification canary.",
 };

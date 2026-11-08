@@ -22,6 +22,7 @@ import {
   TEX_FUZZ_PROFILES,
 } from "./profiles.js";
 import { TexFuzzRandom } from "./random.js";
+import { generateTexFuzzGraphicsNode, TEX_FUZZ_GRAPHICS_KEYS } from "./graphics.js";
 
 const WORDS = ["Alpha", "Beta", "café", "naïve", "über", "Ωmega", "façade", "coöperate"] as const;
 const FONT_COMMANDS = ["textnormal", "textit", "textbf", "textmd", "textsl", "texttt", "textup", "textrm", "textsf", "textsc", "emph"] as const satisfies readonly TexFuzzFontCommand[];
@@ -192,6 +193,7 @@ function inlineNode(random: TexFuzzRandom, path: string, depth: number, context:
     { value: "raisebox", weight: featureWeight(context, "box.raisebox") },
     { value: "rule", weight: featureWeight(context, "box.rule") },
     { value: "tabular", weight: featureWeight(context, "box.tabular") },
+    { value: "includegraphics", weight: featureWeight(context, "graphics.includegraphics") },
     { value: "math", weight: featureWeight(context, "math.inline") },
     { value: "accent", weight: featureWeight(context, "text.accent") },
     { value: "line-break", weight: featureWeight(context, "text.line-break") },
@@ -271,6 +273,7 @@ function inlineNode(random: TexFuzzRandom, path: string, depth: number, context:
       };
     case "rule": return { kind: "rule", ...(random.boolean(`${path}/raise-present`) ? { raise: dimension(random, `${path}/raise`) } : {}), width: dimension(random, `${path}/rule-width`, { nonNegative: true }), height: dimension(random, `${path}/rule-height`, { nonNegative: true }) };
     case "tabular": return tabularNode(random, `${path}/tabular`);
+    case "includegraphics": return generateTexFuzzGraphicsNode(random, path);
     case "math": return { kind: "math", body: generateTexFuzzMathNode(random, `${path}/math`, Math.min(4, Math.max(1, depth - 1))), delimiter: random.boolean(`${path}/math-delimiter`) ? "dollar" : "paren" };
     case "accent": return { kind: "accent", command: random.pick(`${path}/accent`, ["'", "`", "^"] as const), base: "e" };
     case "line-break":
@@ -403,6 +406,13 @@ function nodeFeatures(node: TexFuzzNode, features: Set<TexFuzzFeatureId>): void 
     case "transform-box": features.add(`box.transform.${node.command}`); break;
     case "raisebox": features.add("box.raisebox"); break;
     case "rule": features.add("box.rule"); break;
+    case "includegraphics":
+      features.add("graphics.includegraphics");
+      features.add(`graphics.format.${node.filename.endsWith(".pdf") ? "pdf" : node.filename.endsWith(".jpg") ? "jpg" : "png"}`);
+      if (node.starred) features.add("graphics.star");
+      if (node.corners) features.add("graphics.corners");
+      for (const key of TEX_FUZZ_GRAPHICS_KEYS) if (node.options.some((option) => option === key || option.startsWith(`${key}=`))) features.add(`graphics.key.${key}`);
+      break;
     case "tabular":
       features.add("box.tabular");
       node.cells.forEach((row) => {

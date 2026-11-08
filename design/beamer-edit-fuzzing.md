@@ -23,7 +23,7 @@ Full concrete inputs and parent identities are saved before execution, so
 replay does not depend on later corpus membership or scheduling.
 
 The default `broad` profile keeps 33 small interaction controls and fills the
-remaining fresh cases with the recursive version-3 grammar. `--profile intricate`
+remaining fresh cases with the recursive version-4 grammar. `--profile intricate`
 selects only recursive decks. They contain two to four authored frames with
 nested flow, math, tables, larger TikZ diagrams and overlays. Macro plans sample
 formatting definitions, expansion chains, optional/default arguments, aliases,
@@ -40,6 +40,12 @@ prefix through TeX while discarding earlier pages, so aliases and redefinitions
 are executed by the independent engine. A full-deck trace integration test
 checks the result. The reduced findings were subsequently fixed under the
 original comparison tolerances; complex generated failures remain visible.
+
+The image extension adds PNG/JPEG/PDF leaves and a focused `--profile images`.
+Its controlled filesystem adapter exercises real lookup, decoding and cache
+behavior. Node PDF paint uses pinned Poppler pages. See the separate
+[image verification ledger](includegraphics-fuzzing.md), including open article
+paint observations; native edit parity does not establish independent TeX fidelity.
 
 ## Resource limits and failure classification
 

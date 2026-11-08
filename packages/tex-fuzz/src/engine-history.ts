@@ -6,6 +6,7 @@ import { getTexVListLayout } from "@tikz-editor/core/text/tex/vlist/registry.js"
 import type { TextLayoutContext } from "@tikz-editor/core/text/layout-context.js";
 import type { NodeTextEngine, NodeTextMeasureRequest, NodeTextMetrics } from "@tikz-editor/core/text/types.js";
 import type { TexFuzzCase, TexFuzzObservation } from "./model.js";
+import { createTexFuzzGraphicsResolver } from "./graphics.js";
 
 /** A new profile identity creates a genuinely independent render/layout cache. */
 export function createTexFuzzFreshEngine(): Promise<NodeTextEngine> {
@@ -15,6 +16,9 @@ export function createTexFuzzFreshEngine(): Promise<NodeTextEngine> {
 function canonicalSnapshot(value: unknown): string {
   return JSON.stringify(value, (key: string, current: unknown): unknown => {
     if (key === "paragraphId" || key === "cacheKey" || key === "renderKey") return;
+    // Placement IDs retain their source/line identity, but their owner uses
+    // the same per-engine paragraph counter excluded above.
+    if (key === "id" && typeof current === "string") return current.replace(/^tex:\d+(?=:graphics:)/u, "tex:owned");
     return typeof current === "string"
       ? current.replace(/data-paragraph-id="[^"]*"/g, 'data-paragraph-id="owned"') : current;
   });
@@ -54,6 +58,7 @@ export async function checkTexFuzzEngineHistory(
   const request = (text: string, offset = 0): NodeTextMeasureRequest => ({
     text, textWidthPt: 160, fontSizePt: 10, fontFamily: "serif", fontStyle: "normal", fontWeight: "normal",
     sourceMap: createIdentityMappedText(text, offset).sourceMap,
+    graphicsResolver: createTexFuzzGraphicsResolver(text),
   });
   const initial = request(caseData.source);
   const scope = engine.createRenderScope?.();

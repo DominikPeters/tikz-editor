@@ -1,0 +1,2 @@
+# PDF cross-reference records contain significant fixed-width trailing spaces.
+*.pdf binary

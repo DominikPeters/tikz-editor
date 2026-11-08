@@ -2,7 +2,7 @@ import type { SimpleTexDisplayMathDelimiter } from "@tikz-editor/core/text/tex/i
 import type { TexFuzzMathSymbol } from "./math-symbols.js";
 
 export const TEX_FUZZ_SCHEMA_VERSION = 1 as const;
-export const TEX_FUZZ_GENERATOR_VERSION = "shared-adversarial-v3";
+export const TEX_FUZZ_GENERATOR_VERSION = "shared-adversarial-v4-images";
 
 export type TexFuzzFeatureId =
   | "text.literal"
@@ -35,6 +35,11 @@ export type TexFuzzFeatureId =
   | "box.raisebox"
   | "box.rule"
   | "box.tabular"
+  | "graphics.includegraphics"
+  | `graphics.key.${"width" | "height" | "totalheight" | "scale" | "angle" | "origin" | "keepaspectratio" | "trim" | "viewport" | "bb" | "clip" | "draft" | "page"}`
+  | `graphics.format.${"png" | "jpg" | "pdf"}`
+  | "graphics.star"
+  | "graphics.corners"
   | "document.paragraph-break"
   | "document.noindent"
   | `document.alignment.${"centering" | "raggedright" | "raggedleft"}`
@@ -159,6 +164,8 @@ type TexFuzzMathContent =
   | { readonly body: TexFuzzMathNode; readonly content?: never };
 
 export type TexFuzzNode =
+  | { readonly kind: "includegraphics"; readonly filename: string; readonly options: readonly string[]; readonly starred?: boolean;
+      readonly gap?: " " | " % image argument\n"; readonly corners?: readonly [string, string] }
   | { readonly kind: "text"; readonly value: string }
   | { readonly kind: "space"; readonly nonBreaking: boolean }
   | { readonly kind: "group"; readonly children: readonly TexFuzzNode[] }

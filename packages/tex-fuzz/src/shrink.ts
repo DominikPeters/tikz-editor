@@ -99,6 +99,11 @@ function mathCandidates(node: TexFuzzMathNode): readonly TexFuzzMathNode[] {
 
 function nodeCandidates(node: TexFuzzNode): readonly TexFuzzNode[] {
   const candidates: TexFuzzNode[] = [];
+  if (node.kind === "includegraphics") {
+    node.options.forEach((_, index) => { candidates.push({ ...node, options: node.options.filter((_, at) => at !== index) }); });
+    if (node.starred) candidates.push({ ...node, starred: false });
+    if (node.corners) { const { corners: _corners, ...rest } = node; candidates.push(rest); }
+  }
   if (node.kind === "text" && node.value !== "x") {
     candidates.push({ kind: "text", value: "x" });
   }

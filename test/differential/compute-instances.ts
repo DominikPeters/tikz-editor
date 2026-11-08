@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 
 import * as glyphOutlines from "../../packages/core/src/text/tex/fonts/glyph-outlines.js";
+import { graphicsFuzzPlatform, graphicsFuzzPdfRasterizer } from "./graphics-platform.js";
 
 export type ComputeModule = typeof import("../../packages/app/src/compute.js");
 
@@ -21,6 +22,10 @@ export async function freshComputeModule(mocks: readonly ModuleMock[] = []): Pro
   vi.doMock(GLYPH_OUTLINES, () => glyphOutlines);
   for (const mock of mocks) vi.doMock(mock.path, mock.factory as never);
   try {
+    const platform = await import("../../packages/app/src/platform/current.js");
+    platform.setActiveEditorPlatform(graphicsFuzzPlatform(platform.getActiveEditorPlatform()));
+    const pdf = await import("../../packages/app/src/pdf-asset-rasterizer.js");
+    pdf.setPdfAssetRasterizerForTests(graphicsFuzzPdfRasterizer);
     return await import("../../packages/app/src/compute.js");
   } finally {
     vi.resetModules();

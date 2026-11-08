@@ -10,6 +10,7 @@ import {
 } from "../scripts/lib/beamer-frame-compare.mjs";
 import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/index.js";
 import { renderBeamerFrame } from "../packages/core/src/beamer/index.js";
+import { createTexFuzzGraphicsResolver } from "../packages/tex-fuzz/src/graphics.js";
 
 const COORDINATE_SYSTEM = {
   unit: "tex-pt",
@@ -72,6 +73,28 @@ Display rows:
     expect(images[0]?.width).toBeCloseTo(40, 5);
     expect(images[0]?.height).toBeCloseTo(39.99939, 5);
     expect(render.diagnostics).toEqual([]);
+  });
+
+  it("traces unclipped image paint through a shifted viewBox", async () => {
+    const render = await renderBeamerFrame(String.raw`\documentclass{beamer}\begin{document}\begin{frame}Before \includegraphics[trim=2 1 3 2,viewport=1 1 20 14,clip=false]{fuzz-images/pattern.png} after.\end{frame}\end{document}`, { graphicsResolver: createTexFuzzGraphicsResolver() });
+    const images = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider).rectangles.filter(rect => rect.role === "image");
+    expect(images).toHaveLength(1);
+    const graphic = render.layout.graphics[0]!;
+    expect(images[0]!.x).toBeCloseTo(graphic.bounds.x - 72.27 / 72, 5);
+    expect(images[0]!.y).toBeCloseTo(graphic.bounds.y - 2 * 72.27 / 72, 5);
+    expect(images[0]!.width).toBeCloseTo(24 * 72.27 / 72, 5);
+    expect(images[0]!.height).toBeCloseTo(16 * 72.27 / 72, 5);
+  });
+
+  it("retains image rectangles and glyph paint axes inside rotated TikZ nodes", async () => {
+    const render = await renderBeamerFrame(String.raw`\documentclass{beamer}\usepackage{tikz}\begin{document}\begin{frame}\begin{tikzpicture}\node[rotate=15]{Before \includegraphics[width=20pt]{fuzz-images/pattern.png} after.};\end{tikzpicture}\end{frame}\end{document}`, { graphicsResolver: createTexFuzzGraphicsResolver() });
+    const trace = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider);
+    expect(trace.rectangles.filter(rect => rect.role === "image")).toHaveLength(1);
+    const glyphs = trace.glyphs.filter(glyph => glyph.role === "embedded-tikz");
+    expect(glyphs.length).toBeGreaterThan(1);
+    expect(glyphs[0]!.transform?.[0]).toBeCloseTo(Math.cos(Math.PI / 12), 4);
+    expect(glyphs[0]!.transform?.[1]).toBeCloseTo(-Math.sin(Math.PI / 12), 4);
+    expect(glyphs[1]!.y).toBeLessThan(glyphs[0]!.y);
   });
 
   it("traces native display math rules alongside theme rectangles", async () => {

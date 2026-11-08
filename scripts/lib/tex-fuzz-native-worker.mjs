@@ -2,6 +2,7 @@ import { parentPort } from "node:worker_threads";
 import {
   classifyTexFuzzNativeSupport, checkTexFuzzHardInvariants, checkTexFuzzBoundaryInvariants, checkTexFuzzEngineHistory,
   checkTexFuzzMetamorphicInvariants, createTexFuzzFreshEngine,
+  createTexFuzzGraphicsResolver,
 } from "../../packages/tex-fuzz/dist/index.js";
 
 import { layoutSimpleTexParagraph } from "../../packages/core/dist/text/tex/index.js";
@@ -19,6 +20,7 @@ parentPort.on("message", async ({ caseData, checks }) => {
     if (checks.paragraphWidth !== undefined) {
       const result = layoutSimpleTexParagraph(caseData.source, {
         width: checks.paragraphWidth, alignment: "justified", hyphenator: { hyphenate: () => [] },
+        graphicsResolver: createTexFuzzGraphicsResolver(caseData.source),
       });
       finish({ paragraphReport: result.report }); return;
     }

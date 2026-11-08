@@ -1,0 +1,12 @@
+\documentclass{beamer}
+\usepackage{tikz}
+\graphicspath{{fuzz-images/}{fuzz-images/nested/}}
+\setbeamertemplate{navigation symbols}{}
+\date{}
+\begin{document}
+\begin{frame}[t]{Images}
+\begin{tikzpicture}\node[draw,rotate=15] {Before \includegraphics % image argument
+[page=1,bb=1 1 20 14,clip] % image argument
+{fuzz-images/pages.pdf} after.};\end{tikzpicture}
+\end{frame}
+\end{document}

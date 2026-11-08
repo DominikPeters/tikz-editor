@@ -9,6 +9,7 @@ function visibleWords(node: TexFuzzNode): string[] {
     case "math":
     case "display-math": return ["math"];
     case "rule":
+    case "includegraphics":
     case "vertical-rule": return ["rule"];
     case "line-break":
     case "paragraph-break": return [];

@@ -280,6 +280,13 @@ function printNodes(
       case "rule":
         output.source += `\\rule${node.raise ? `[${printDimension(node.raise)}]` : ""}{${printDimension(node.width)}}{${printDimension(node.height)}}`;
         break;
+      case "includegraphics": {
+        const gap = node.gap ?? "";
+        const options = node.corners ? `[${node.corners[0]}]${gap}[${node.corners[1]}]`
+          : node.options.length ? `[${node.options.join(",")}]` : "";
+        output.source += `\\includegraphics${node.starred ? "*" : ""}${gap}${options}${gap}{${node.filename}}`;
+        break;
+      }
       case "tabular":
         if (node.columns.length === 0 || node.cells.length === 0 || node.cells.some((row) => row.length !== node.columns.length)) {
           throw new Error("Cannot print an empty or ragged tabular.");

@@ -320,6 +320,15 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
   for (const paintedEmbedded of render.layout.embeddedTikz) {
     const transformed = paintedEmbedded.transformedLayout;
     const embedded = transformed ? { ...paintedEmbedded, bounds: transformed.intrinsicBounds } : paintedEmbedded;
+    const imageStart = rectangles.length;
+    const scale = embedded.bounds.width / embedded.viewBox.width;
+    const pageTransform = [scale, 0, 0, scale, embedded.bounds.x - embedded.viewBox.x * scale, embedded.bounds.y - embedded.viewBox.y * scale];
+    for (const [partIndex, part] of embedded.model.parts.entries()) {
+      rectangles.push(...nativeSvgImageRectangles(part.markup, pageTransform).map((rect, index) => ({
+        id: `${embedded.itemId}:image:${partIndex}:${index}`, role: "image", ...rect,
+      })));
+    }
+    if (transformed) transformTraceRectRange(rectangles, imageStart, transformed.paintTransform);
     if (embedded.coveredModel) {
       const covered = nativeEmbeddedTikzGlyphs({ ...embedded, model: embedded.coveredModel }, metricProvider);
       if (transformed) transformTraceGlyphRange(covered, 0, transformed.paintTransform);
@@ -445,166 +454,41 @@ function canonicalNativeGlyphLines(glyphs, lines) {
 
 function nativeEmbeddedTikzGlyphs(embedded, metricProvider) {
   const scale = embedded.bounds.width / embedded.viewBox.width;
-  const pageTransform = [
-    scale,
-    0,
-    0,
-    scale,
-    embedded.bounds.x - embedded.viewBox.x * scale,
-    embedded.bounds.y - embedded.viewBox.y * scale,
-  ];
+  const pageTransform = [scale, 0, 0, scale, embedded.bounds.x - embedded.viewBox.x * scale, embedded.bounds.y - embedded.viewBox.y * scale];
   const glyphs = [];
   for (const part of embedded.model.parts) {
-    const textContexts = [];
-    const stack = [{
-      transform: pageTransform,
-      relativeTransform: null,
-      textContext: null,
-    }];
+    const stack = [pageTransform];
     for (const match of part.markup.matchAll(/<\/?[^>]+>/gu)) {
       const tag = match[0];
-      if (tag.startsWith("</")) {
-        if (stack.length > 1) {
-          stack.pop();
-        }
-        continue;
-      }
-      const tagName = /^<([A-Za-z][\w:-]*)/u.exec(tag)?.[1]?.toLowerCase();
-      if (!tagName) {
-        continue;
-      }
-      let localTransform = identityMatrix();
-      if (tagName === "svg") {
-        localTransform = svgViewportTransform(tag);
-      }
-      const explicitTransform = parseSvgTransform(
-        readSvgAttribute(tag, "transform") ?? ""
-      );
-      localTransform = multiplyMatrices(localTransform, explicitTransform);
-      const parent = stack.at(-1);
-      const transform = multiplyMatrices(parent.transform, localTransform);
-      const startsTextContext =
-        tagName === "svg" &&
-        readSvgAttribute(tag, "data-text-renderer") === "tex";
-      const textContext = startsTextContext
-        ? {
-            glyphs: [],
-            rotated:
-              Math.abs(parent.transform[1]) > 1e-6 ||
-              Math.abs(parent.transform[2]) > 1e-6,
-          }
-        : parent.textContext;
-      if (startsTextContext) {
-        textContexts.push(textContext);
-      }
-      const relativeTransform = startsTextContext
-        ? localTransform
-        : parent.relativeTransform
-          ? multiplyMatrices(parent.relativeTransform, localTransform)
-          : null;
-      if (tagName === "path") {
+      if (tag.startsWith("</")) { if (stack.length > 1) stack.pop(); continue; }
+      const name = /^<([A-Za-z][\w:-]*)/u.exec(tag)?.[1]?.toLowerCase();
+      if (!name) continue;
+      const explicit = parseSvgTransform(readSvgAttribute(tag, "transform") ?? "");
+      const local = name === "svg" ? multiplyMatrices(explicit, svgViewportTransform(tag)) : explicit;
+      const transform = multiplyMatrices(stack.at(-1), local);
+      if (name === "path") {
         const fontId = readSvgAttribute(tag, "data-tex-font");
         const code = Number(readSvgAttribute(tag, "data-tex-glyph"));
         if (fontId && Number.isFinite(code)) {
           const atPt = 10 * Math.hypot(transform[0], transform[1]);
           const font = metricProvider.resolveFont({ fontId, atPt });
           const metric = font.data.chars[String(code)];
-          const baseline = transformPoint(transform, 0, 0);
-          const candidate = {
+          // The Lua oracle records the PDF paint transform, including PGF's
+          // rotation. Retain those axes and the transformed glyph origins.
+          glyphs.push(finalizeEmbeddedGlyph({
             code: normalizeGlyphCode(code),
-            baseline,
-            relativeBaseline: relativeTransform
-              ? transformPoint(relativeTransform, 0, 0)
-              : null,
-            effectiveScale: atPt / 10,
             width: round((metric?.width ?? 0) * font.atPt),
             height: round((metric?.height ?? 0) * font.atPt),
             depth: round((metric?.depth ?? 0) * font.atPt),
-            fontName: normalizeFontName(font.id),
-            fontSize: round(font.atPt),
-          };
-          if (textContext) {
-            textContext.glyphs.push(candidate);
-          } else {
-            glyphs.push(finalizeEmbeddedGlyph(candidate, baseline));
-          }
+            fontName: normalizeFontName(font.id), fontSize: round(font.atPt),
+            transform: transform.slice(0, 4).map(value => round(value / (atPt / 10))),
+          }, transformPoint(transform, 0, 0)));
         }
       }
-      if (!tag.endsWith("/>") && !isVoidSvgElement(tagName)) {
-        stack.push({
-          transform,
-          relativeTransform,
-          textContext,
-        });
-      }
-    }
-    for (const textContext of textContexts) {
-      const anchor = textContext.glyphs[0];
-      for (const candidate of textContext.glyphs) {
-        let baseline = candidate.baseline;
-        if (
-          textContext.rotated &&
-          anchor?.relativeBaseline &&
-          candidate.relativeBaseline
-        ) {
-          // Lua's pre-shipout node trace sees PGF's text box before the PDF
-          // literal rotates its ink: the box origin is transformed, while
-          // glyph advances remain on TeX's horizontal baselines. Preserve
-          // that oracle coordinate system here instead of comparing it to
-          // the post-transform visual path positions.
-          const parentScale =
-            anchor.effectiveScale /
-            relativePointScale(anchor, textContext.glyphs);
-          baseline = {
-            x:
-              anchor.baseline.x +
-              (
-                candidate.relativeBaseline.x -
-                anchor.relativeBaseline.x
-              ) *
-              parentScale,
-            y:
-              anchor.baseline.y +
-              (
-                candidate.relativeBaseline.y -
-                anchor.relativeBaseline.y
-              ) *
-              parentScale,
-          };
-        }
-        glyphs.push(finalizeEmbeddedGlyph(candidate, baseline));
-      }
+      if (!tag.endsWith("/>") && !isVoidSvgElement(name)) stack.push(transform);
     }
   }
   return glyphs;
-}
-
-function relativePointScale(anchor, glyphs) {
-  const peer = glyphs.find((candidate) => {
-    if (!anchor.relativeBaseline || !candidate.relativeBaseline) {
-      return false;
-    }
-    return (
-      Math.abs(candidate.relativeBaseline.x - anchor.relativeBaseline.x) >
-        1e-6 ||
-      Math.abs(candidate.relativeBaseline.y - anchor.relativeBaseline.y) >
-        1e-6
-    );
-  });
-  if (!peer || !anchor.relativeBaseline || !peer.relativeBaseline) {
-    return anchor.effectiveScale;
-  }
-  const relativeDistance = Math.hypot(
-    peer.relativeBaseline.x - anchor.relativeBaseline.x,
-    peer.relativeBaseline.y - anchor.relativeBaseline.y
-  );
-  const pageDistance = Math.hypot(
-    peer.baseline.x - anchor.baseline.x,
-    peer.baseline.y - anchor.baseline.y
-  );
-  return relativeDistance > 0
-    ? anchor.effectiveScale * relativeDistance / pageDistance
-    : anchor.effectiveScale;
 }
 
 function finalizeEmbeddedGlyph(candidate, baseline) {
@@ -617,6 +501,7 @@ function finalizeEmbeddedGlyph(candidate, baseline) {
     depth: candidate.depth,
     fontName: candidate.fontName,
     fontSize: candidate.fontSize,
+    ...(nonIdentityAxes(candidate.transform) ? { transform: candidate.transform } : {}),
   };
 }
 
@@ -640,6 +525,9 @@ function svgViewportTransform(tag) {
     return translationMatrix(x, y);
   }
   const scale = Math.min(width / viewBox[2], height / viewBox[3]);
+  if (readSvgAttribute(tag, "preserveAspectRatio") === "none") {
+    return [width / viewBox[2], 0, 0, height / viewBox[3], x - viewBox[0] * width / viewBox[2], y - viewBox[1] * height / viewBox[3]];
+  }
   const extraX = width - viewBox[2] * scale;
   const extraY = height - viewBox[3] * scale;
   return [
@@ -1231,7 +1119,6 @@ function oracleLine(glyphs, baselineY) {
 
 function featuresFromNativeMathSvg(params) {
   const glyphs = []; const rules = []; const transforms = [identityMatrix()];
-  const graphics = [false], imageViewports = [false];
   const transformedRect = (matrix, x, y, width, height) => {
     const corners = [[x,y], [x+width,y], [x,y+height], [x+width,y+height]].map(([a,b]) => transformPoint(matrix,a,b));
     const left = Math.min(...corners.map(p => p.x)); const top = Math.min(...corners.map(p => p.y));
@@ -1239,16 +1126,9 @@ function featuresFromNativeMathSvg(params) {
   };
   for (const match of params.svgBody.matchAll(/<\/?[A-Za-z][^>]*>/gu)) {
     const tag = match[0];
-    if (tag.startsWith("</")) { if (transforms.length > 1) { transforms.pop(); graphics.pop(); imageViewports.pop(); } continue; }
+    if (tag.startsWith("</")) { if (transforms.length > 1) transforms.pop(); continue; }
     const name = /^<([\w:-]+)/u.exec(tag)?.[1];
     const local = parseSvgTransform(readSvgAttribute(tag, "transform") ?? ""); const transform = multiplyMatrices(transforms.at(-1), local);
-    const graphic = graphics.at(-1) || readSvgAttribute(tag, "data-tex-includegraphics") === "true";
-    const viewport = graphic && name === "svg" && readSvgAttribute(tag, "overflow") === "hidden" && readSvgAttribute(tag, "viewBox") != null;
-    if (viewport && !imageViewports.at(-1)) {
-      // Cropped graphicx raster content paints through this viewport. The
-      // nested image retains intrinsic dimensions in viewBox coordinates.
-      rules.push({ role: "image", ...transformedRect(transform, numericSvgAttribute(tag, "x", 0), numericSvgAttribute(tag, "y", 0), Number(readSvgAttribute(tag, "width")), Number(readSvgAttribute(tag, "height"))) });
-    }
     if (name === "path") {
       const fontId = readSvgAttribute(tag, "data-tex-font"); const code = Number(readSvgAttribute(tag, "data-tex-glyph"));
       const explicitSize = Number(readSvgAttribute(tag, "data-tex-font-at-pt"));
@@ -1258,14 +1138,40 @@ function featuresFromNativeMathSvg(params) {
         const origin = transformPoint(transform, 0, 0); const axes = transform.slice(0,4).map(value => round(value / (atPt * 10)));
         glyphs.push({ code:normalizeGlyphCode(code), x:round(params.originX + origin.x / 100), y:round(params.baselineY + origin.y / 100), width:round((metric?.width ?? 0) * font.atPt), height:round((metric?.height ?? 0) * font.atPt), depth:round((metric?.depth ?? 0) * font.atPt), fontName:normalizeFontName(font.id), fontSize:round(font.atPt), ...(nonIdentityAxes(axes) ? {transform:axes} : {}) });
       }
-    } else if (name === "rect" || name === "image") {
-      const role = name === "image" ? "image" : readSvgAttribute(tag,"data-tex-rule");
+    } else if (name === "rect") {
+      const role = readSvgAttribute(tag,"data-tex-rule");
       const x = numericSvgAttribute(tag,"x",0); const y = numericSvgAttribute(tag,"y",0); const width = Number(readSvgAttribute(tag,"width")); const height = Number(readSvgAttribute(tag,"height"));
-      if (role && !imageViewports.at(-1) && Number.isFinite(width) && Number.isFinite(height)) rules.push({role, ...transformedRect(transform,x,y,width,height)});
+      if (role && Number.isFinite(width) && Number.isFinite(height)) rules.push({role, ...transformedRect(transform,x,y,width,height)});
     }
-    if (!tag.endsWith("/>") && !isVoidSvgElement(name)) { transforms.push(transform); graphics.push(graphic); imageViewports.push(imageViewports.at(-1) || viewport); }
+    if (!tag.endsWith("/>") && !isVoidSvgElement(name)) transforms.push(transform);
   }
-  return {glyphs,rules};
+  // Image viewports can leave overflow visible. Trace the full transformed
+  // image there, and the viewport only when clipping actually applies.
+  return {glyphs,rules: [...rules, ...nativeSvgImageRectangles(params.svgBody).map(rect => ({
+    role: "image", x: round(params.originX + rect.x / 100), y: round(params.baselineY + rect.y / 100), width: round(rect.width / 100), height: round(rect.height / 100),
+  }))]};
+}
+
+function nativeSvgImageRectangles(svg, initialTransform = identityMatrix()) {
+  const rectangles = [], stack = [{ transform: initialTransform, clipped: false, hidden: false, graphic: false }];
+  const append = (matrix, x, y, width, height) => {
+    const points = [[x, y], [x + width, y], [x, y + height], [x + width, y + height]].map(([a, b]) => transformPoint(matrix, a, b));
+    const left = Math.min(...points.map(point => point.x)), top = Math.min(...points.map(point => point.y));
+    rectangles.push({ x: round(left), y: round(top), width: round(Math.max(...points.map(point => point.x)) - left), height: round(Math.max(...points.map(point => point.y)) - top) });
+  };
+  for (const match of svg.matchAll(/<\/?[A-Za-z][^>]*>/gu)) {
+    const tag = match[0];
+    if (tag.startsWith("</")) { if (stack.length > 1) stack.pop(); continue; }
+    const name = /^<([\w:-]+)/u.exec(tag)?.[1], parent = stack.at(-1);
+    const explicit = multiplyMatrices(parent.transform, parseSvgTransform(readSvgAttribute(tag, "transform") ?? ""));
+    const hidden = parent.hidden || readSvgAttribute(tag, "visibility") === "hidden" || readSvgAttribute(tag, "opacity") === "0";
+    const graphic = parent.graphic || readSvgAttribute(tag, "data-tex-includegraphics") === "true";
+    const viewport = graphic && name === "svg" && readSvgAttribute(tag, "overflow") === "hidden" && readSvgAttribute(tag, "viewBox") != null;
+    if (!hidden && !parent.clipped && (viewport || name === "image")) append(explicit, numericSvgAttribute(tag, "x", 0), numericSvgAttribute(tag, "y", 0), Number(readSvgAttribute(tag, "width")), Number(readSvgAttribute(tag, "height")));
+    const transform = name === "svg" ? multiplyMatrices(explicit, svgViewportTransform(tag)) : explicit;
+    if (!tag.endsWith("/>") && !isVoidSvgElement(name)) stack.push({ transform, clipped: parent.clipped || viewport, hidden, graphic });
+  }
+  return rectangles;
 }
 
 function parseTranslateScale(transform) {

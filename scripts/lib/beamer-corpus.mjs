@@ -118,7 +118,8 @@ export function corpusGraphicsResolver(source, inputPath, assetDir) {
   const baseDir = dirname(inputPath);
   const directories = [baseDir];
   const paths = /\\graphicspath\s*\{((?:\s*\{[^{}]*\}\s*)+)\}/gu;
-  for (const match of source.replace(/(?<!\\)%[^\n]*/gu, "").matchAll(paths)) {
+  const declared = [...source.replace(/(?<!\\)%[^\n]*/gu, "").matchAll(paths)].at(-1);
+  for (const match of declared ? [declared] : []) {
     for (const group of match[1].matchAll(/\{([^{}]*)\}/gu)) directories.push(resolve(baseDir, group[1]));
   }
   const assets = new Map();
@@ -129,8 +130,11 @@ export function corpusGraphicsResolver(source, inputPath, assetDir) {
       const page = request.options.page?.pageNumber ?? 1;
       const key = `${filename}\n${page}`;
       if (assets.has(key)) return assets.get(key).resolution;
-      const extensions = extname(filename) ? [""] : [".pdf", ".png", ".jpg", ".jpeg", ".svg"];
-      const candidates = directories.flatMap((directory) => extensions.map((extension) => resolve(directory, filename + extension)));
+      const known = new Set([".pdf", ".png", ".jpg", ".jpeg", ".svg", ".eps", ".mps", ".ps"]);
+      const extensions = known.has(extname(filename).toLowerCase()) ? [""] : [".pdf", ".png", ".jpg", ".jpeg", ".PDF", ".PNG", ".JPG", ".JPEG", ".svg"];
+      // graphics.sty searches every directory for one extension before trying
+      // the next; a dotted basename can still be extensionless.
+      const candidates = extensions.flatMap((extension) => directories.map((directory) => resolve(directory, filename + extension)));
       const path = candidates.find((candidate) => existsSync(candidate) && statSync(candidate).isFile());
       let resolution = { status: "missing" };
       if (/[\\#$]/u.test(filename)) resolution = { status: "unsupported", reason: "dynamic-filename" };

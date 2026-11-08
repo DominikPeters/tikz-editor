@@ -1,0 +1,22 @@
+\documentclass{article}
+\usepackage[paperwidth=360pt,paperheight=180pt,margin=0pt]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{tikz}
+\pagestyle{empty}
+\makeatletter
+\newbox\tracebox
+\let\trace@orig@fig@continue\tikz@fig@continue
+\def\tikz@fig@continue{%
+  \global\setbox\tracebox=\copy\pgfnodeparttextbox%
+  \trace@orig@fig@continue%
+}
+\makeatother
+\begin{document}
+\pdfvariable horigin=0pt\pdfvariable vorigin=0pt\setbox0=\hbox{\begin{tikzpicture}[x=1pt,y=1pt]
+\node[text width=100pt, align=left, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\parindent=15pt}] at (0,0) {Before \includegraphics* % image argument
+[origin=c,angle=-30,totalheight=12pt] % image argument
+{fuzz-images/pattern.v2} after.};
+\end{tikzpicture}}\shipout\vbox{\offinterlineskip\copy\tracebox}
+\directlua{dofile("trace.lua")}
+\end{document}

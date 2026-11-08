@@ -36,8 +36,13 @@ function pixelRgb(path, x, y) {
   return values;
 }
 
-export function compareBlockPaint(render, nativeTrace, oracleTrace, nativePng, oraclePng, width, height, additionalProbes = []) {
+export function compareBlockPaint(render, nativeTrace, oracleTrace, nativePng, oraclePng, width, height, additionalProbes = [], paintImages = false) {
   const automaticProbes = blockPaintProbes(render, nativeTrace, oracleTrace);
+  if (paintImages) for (const graphic of nativeTrace.rectangles.filter(rect => rect.role === "image")) {
+    for (const [row, y] of [.25, .75].entries()) for (const [column, x] of [.25, .75].entries()) {
+      automaticProbes.push({ id: `${graphic.id}:image:${row}:${column}`, x: graphic.x + graphic.width * x, y: graphic.y + graphic.height * y });
+    }
+  }
   const ids = new Set(automaticProbes.map(probe => probe.id));
   for (const probe of additionalProbes) {
     if (typeof probe.id !== "string" || !probe.id || ids.has(probe.id) || !Number.isFinite(probe.x) || !Number.isFinite(probe.y) ||

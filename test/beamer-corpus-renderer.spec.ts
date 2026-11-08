@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { corpusEntries, corpusGallery, corpusGraphicsResolver, loadCorpusSource, sampleIndices, summarizeCorpus, type CorpusDeck } from "../scripts/lib/beamer-corpus.mjs";
+import { stageFuzzGraphicsAssets } from "../scripts/lib/fuzz-graphics-assets.mjs";
 
 const temporaryDirectories: string[] = [];
 function temporaryDirectory() {
@@ -86,6 +87,21 @@ TAIL
       expect(vector.naturalHeightPt).toBeCloseTo(144.54);
     }
     expect(graphics.report()).toHaveLength(4);
+  });
+
+  it("uses extension priority across paths, dotted basenames, and the last graphicspath", () => {
+    const directory = temporaryDirectory();
+    stageFuzzGraphicsAssets(directory);
+    mkdirSync(join(directory, "rendered"));
+    mkdirSync(join(directory, "reset"));
+    const request = { filename: "pattern", options: { raw: "" }, source: "", sourceStart: 0, sourceEnd: 0 };
+    const graphics = corpusGraphicsResolver(String.raw`\graphicspath{{unused/}}\graphicspath{{fuzz-images/}{fuzz-images/nested/}}`, join(directory, "main.tex"), join(directory, "rendered"));
+    expect(graphics.resolver.resolve(request).status).toBe("resolved");
+    expect(graphics.report()[0].path).toBe(join(directory, "fuzz-images/nested/pattern.pdf"));
+    expect(graphics.resolver.resolve({ ...request, filename: "pattern.v2" }).status).toBe("resolved");
+    expect(graphics.report()[1].path).toBe(join(directory, "fuzz-images/pattern.v2.png"));
+    const reset = corpusGraphicsResolver(String.raw`\graphicspath{{fuzz-images/}}\graphicspath{{unused/}}`, join(directory, "main.tex"), join(directory, "reset"));
+    expect(reset.resolver.resolve(request).status).toBe("missing");
   });
 
   it("keeps oracle failures and undiscovered frames outside the fidelity denominator", () => {

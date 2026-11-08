@@ -1,0 +1,10 @@
+\documentclass{beamer}
+\usepackage{tikz}
+\graphicspath{{fuzz-images/}{fuzz-images/nested/}}
+\setbeamertemplate{navigation symbols}{}
+\date{}
+\begin{document}
+\begin{frame}[t]{Images}
+Before \includegraphics[width=18pt,angle=90]{fuzz-images/pattern.png} \includegraphics[angle=90,width=18pt]{fuzz-images/pattern.png} after.
+\end{frame}
+\end{document}

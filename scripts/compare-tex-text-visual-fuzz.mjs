@@ -7,6 +7,8 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadTexFuzzModules } from "./lib/tex-fuzz-loader.mjs";
+import { stageFuzzGraphicsAssets, FUZZ_GRAPHICS_ASSET_SHA256 } from "./lib/fuzz-graphics-assets.mjs";
+import { compareColorMasks } from "./lib/beamer-paint-compare.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const distEntry = join(repoRoot, "packages/core/dist/text/tex/index.js");
@@ -70,7 +72,7 @@ Options:
   --scale <px-per-pt>     Raster scale. Default: ${defaultScale}.
   --out-dir <dir>         Artifact root. Default: artifacts/tex-text-visual-fuzz.
   --cache-dir <dir>       TeX oracle cache root. Default: artifacts/tex-text-visual-fuzz-cache.
-  --case-mode <mode>      Case generator: broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, mask-box, frame-box, box, box-hard, or mixed. Default: ${defaultCaseMode}.
+  --case-mode <mode>      Case generator: broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, mask-box, frame-box, box, box-hard, images, or mixed. Default: ${defaultCaseMode}.
   --no-cache              Disable the TeX oracle cache for this run.
   --refresh-cache         Rebuild TeX oracle entries even if cached artifacts exist.
   --threshold-ratio <n>   Flag ours-vs-TeX AE above n times TeX-vs-TeX AE. Default: ${defaultThresholdRatio}.
@@ -247,8 +249,9 @@ function parseArgs(argv) {
     "box",
     "box-hard",
     "mixed",
+    "images",
   ].includes(options.caseMode)) {
-    throw new Error("--case-mode must be broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, mask-box, frame-box, box, box-hard, or mixed.");
+    throw new Error("--case-mode must be broad, ligatures, quote, alignment-env, style, list, vertical-glue, rule, inline-rule, mask-box, frame-box, box, box-hard, images, or mixed.");
   }
   return options;
 }
@@ -1093,7 +1096,7 @@ function texFuzzMetadata(generated) {
 function projectGeneratedProseCase(texFuzz, generated) {
   const projectNodes = (nodes) => nodes.flatMap((node) => {
     if (node.kind === "text") return [{ ...node, value: node.value.replaceAll("Ω", "Omega") }];
-    if (["space", "accent", "math"].includes(node.kind)) return [node];
+    if (["space", "accent", "math", "includegraphics"].includes(node.kind)) return [node];
     if (["group", "font", "font-declaration", "color"].includes(node.kind)) {
       return [{ ...node, children: projectNodes(node.children) }];
     }
@@ -1112,6 +1115,8 @@ function projectGeneratedProseCase(texFuzz, generated) {
 }
 
 function generateCaseForMode(index, random, mode, generatedTexFuzzCase) {
+  if (mode === "images") return { ...generateCase(index, random), feature: "includegraphics",
+    text: generatedTexFuzzCase.source, texFuzz: texFuzzMetadata(generatedTexFuzzCase) };
   if (mode === "ligatures") {
     return generateLigatureCase(index, random);
   }
@@ -1182,7 +1187,7 @@ function escapeXml(value) {
     .replaceAll('"', "&quot;");
 }
 
-function renderGlyphRun(text, font, x, baseline, computerModernTexMetricProvider) {
+function renderGlyphRun(text, font, x, baseline, computerModernTexMetricProvider, glyphOutline) {
   const shaped = computerModernTexMetricProvider.shapeText(text, font);
   const pieces = [];
   let cursor = x;
@@ -1191,7 +1196,7 @@ function renderGlyphRun(text, font, x, baseline, computerModernTexMetricProvider
       cursor += item.width;
       continue;
     }
-    const path = font.data.glyphs?.[String(item.code)] ?? "";
+    const path = glyphOutline(font.id, item.code);
     if (path && item.code !== 32) {
       pieces.push(
         `<path d="${escapeXml(path)}" transform="translate(${formatPt(cursor)} ${formatPt(baseline)})" />`
@@ -1202,8 +1207,8 @@ function renderGlyphRun(text, font, x, baseline, computerModernTexMetricProvider
   return pieces.join("");
 }
 
-function renderGlyphCode(code, font, x, baseline) {
-  const path = font.data.glyphs?.[String(code)] ?? "";
+function renderGlyphCode(code, font, x, baseline, glyphOutline) {
+  const path = glyphOutline(font.id, code);
   if (!path || code === 32) {
     return "";
   }
@@ -1326,7 +1331,8 @@ function renderOursSvg(caseData, layout, pageWidth, pageHeight, deps) {
           segment.glyphCode,
           segmentFont,
           segment.x - left,
-          baseline
+          baseline,
+          deps.texGlyphOutline
         ));
       } else {
         pieces.push(
@@ -1335,7 +1341,8 @@ function renderOursSvg(caseData, layout, pageWidth, pageHeight, deps) {
             segmentFont,
             segment.x - left,
             baseline,
-            deps.computerModernTexMetricProvider
+            deps.computerModernTexMetricProvider,
+            deps.texGlyphOutline
           )
         );
       }
@@ -1833,9 +1840,11 @@ function lineEndX(line) {
 }
 
 function buildTexDocument(caseData, pageWidth, pageHeight) {
+  const directBox = caseData.feature === "includegraphics";
   return String.raw`\documentclass{article}
 \usepackage[paperwidth=${formatPt(pageWidth)}pt,paperheight=${formatPt(pageHeight)}pt,margin=0pt]{geometry}
 \usepackage{amsmath,amssymb}
+\usepackage{graphicx}
 \usepackage{tikz}
 \pagestyle{empty}
 \makeatletter
@@ -1847,9 +1856,9 @@ function buildTexDocument(caseData, pageWidth, pageHeight) {
 }
 \makeatother
 \begin{document}
-\noindent\begin{tikzpicture}[x=1pt,y=1pt]
+${directBox ? String.raw`\pdfvariable horigin=0pt\pdfvariable vorigin=0pt\setbox0=\hbox{` : String.raw`\noindent`}\begin{tikzpicture}[x=1pt,y=1pt]
 \node[text width=${formatPt(caseData.width)}pt, align=${caseData.alignment.tikz}, inner sep=0pt, outer sep=0pt, anchor=north west, execute at begin node={\parindent=${formatPt(caseData.parindent)}pt}] at (0,0) {${caseData.text}};
-\end{tikzpicture}
+\end{tikzpicture}${directBox ? String.raw`}\shipout\vbox{\offinterlineskip\copy\tracebox}` : ""}
 \directlua{dofile("trace.lua")}
 \end{document}
 `;
@@ -1859,6 +1868,8 @@ function texOracleCacheKey(caseData, pageWidth, pageHeight) {
   return createHash("sha256")
     .update(JSON.stringify({
       version: 6,
+      directParagraphShipout: caseData.feature === "includegraphics",
+      graphicsAssetsSha256: FUZZ_GRAPHICS_ASSET_SHA256,
       text: caseData.text,
       width: caseData.width,
       parindent: caseData.parindent,
@@ -1902,6 +1913,7 @@ function copyTexOracleArtifacts(from, to) {
 }
 
 function ensureTexOracle(caseData, pageWidth, pageHeight, paths, options) {
+  stageFuzzGraphicsAssets(paths.caseDir);
   const texSource = buildTexDocument(caseData, pageWidth, pageHeight);
   writeFileSync(join(paths.caseDir, "trace.lua"), texTraceLuaSource(), "utf8");
   if (!options.cache) {
@@ -2268,13 +2280,17 @@ async function main() {
     throw new Error("Missing core dist files. Run `npm run -w @tikz-editor/core build` first.");
   }
   requireCommands(["lualatex", "pdftocairo", "dvisvgm", "rsvg-convert", "magick"]);
+  if (options.caseMode === "images") requireCommands(["pdftoppm"]);
 
   const deps = {
     ...(await import(distEntry)),
     ...(await import(mathDistEntry)),
     ...(await import(parseLengthEntry)),
+    ...(await import(join(repoRoot, "packages/core/dist/text/tex/fonts/glyph-outlines.js"))),
   };
+  await deps.loadAllTexGlyphOutlines();
   const texFuzz = await loadTexFuzzModules();
+  if (options.caseMode === "images") { options.flagVisualDiff = true; options.rasterControlSample = null; }
   const requestedCaseCount = options.inputPath ? 1 : options.cases;
   const runLabel = options.inputPath ? "focused-input" : `seed-${options.seed}`;
   const runDir = join(resolve(options.outDir), `${runLabel}-cases-${requestedCaseCount}-scale-${options.scale}-${timestampSlug()}`);
@@ -2284,7 +2300,7 @@ async function main() {
   const cases = options.inputPath
     ? [{
         id: "case-001",
-        feature: "focused-input",
+        feature: options.caseMode === "images" ? "includegraphics" : "focused-input",
         text: readFileSync(options.inputPath, "utf8"),
         width: options.width,
         parindent: options.parindent,
@@ -2299,6 +2315,14 @@ async function main() {
             depth: 4,
             size: 6,
           }));
+          if (options.caseMode === "images") {
+            const image = texFuzz.generateTexFuzzGraphicsNode(new texFuzz.TexFuzzRandom(caseSeed), "image");
+            const wrapped = index % 3 === 0 ? { kind: "box", command: "fbox", children: [image] }
+              : index % 3 === 1 ? { kind: "font", command: "textbf", children: [image] } : image;
+            return generateCaseForMode(index, random, options.caseMode, texFuzz.caseFromTexFuzzAst([
+              { kind: "text", value: "Before " }, wrapped, { kind: "text", value: " after." },
+            ], { seed: caseSeed }));
+          }
           return generateCaseForMode(index, random, options.caseMode, generated);
         }
       );
@@ -2329,6 +2353,7 @@ async function main() {
       parindent: caseData.parindent,
       tikzTextWidthNode: true,
       mathBoxProvider: deps.createTexDerivedInlineMathBoxProvider(),
+      graphicsResolver: texFuzz.createTexFuzzGraphicsResolver(caseData.text),
     });
     if (!layout.supported || !layout.report) {
       errors.push({ id: caseData.id, error: layout.fallbackReason ?? "unsupported" });
@@ -2370,7 +2395,12 @@ async function main() {
       pageHeight,
       scale: options.scale,
     }, null, 2), "utf8");
-    writeFileSync(oursSvgPath, renderOursSvg(caseData, layout, pageWidth, pageHeight, deps), "utf8");
+    const oursSvg = renderOursSvg(caseData, layout, pageWidth, pageHeight, deps);
+    writeFileSync(oursSvgPath, oursSvg, "utf8");
+    if (/data-tex-includegraphics-status="(?:missing|unsupported)"/u.test(oursSvg)) {
+      errors.push({ id: caseData.id, error: "Unresolved image asset" });
+      continue;
+    }
 
     try {
       const oracle = ensureTexOracle(
@@ -2442,6 +2472,7 @@ async function main() {
       let texNoiseRmse = null;
       let oursRmse = null;
       let ratio = null;
+      let imagePaint = [];
       if (rasterSelected) {
         rasterize(oursSvgPath, oursPngPath, widthPx, heightPx);
         rasterize(texPdfToCairoSvgPath, texPdfToCairoPngPath, widthPx, heightPx);
@@ -2453,9 +2484,19 @@ async function main() {
         ratio = texNoiseAe.normalized && texNoiseAe.normalized > 0
           ? oursAe.normalized / texNoiseAe.normalized
           : null;
+        if (options.caseMode === "images") {
+          // Check the actual TeX PDF: SVG conversion can shift bitmap samples,
+          // and dvisvgm image symbols depend on the consumer's <use> sizing.
+          const reference = join(caseDir, "tex-pdf-paint");
+          execFileSync("pdftoppm", ["-png", "-singlefile", "-scale-to-x", String(widthPx), "-scale-to-y", String(heightPx), texOraclePaths.pdfPath, reference]);
+          imagePaint = compareColorMasks(oursPngPath, `${reference}.png`, widthPx, heightPx,
+            ["#df2020", "#20b8cf", "#e8b020", "#2846aa"].map(color => ({ color })));
+        }
       }
-      const visualFlagged = rasterSelected && ratio !== null && ratio > options.thresholdRatio;
-      const flagged = traceFlagged || (options.flagVisualDiff && visualFlagged);
+      const imagePaintFlagged = imagePaint.some(mask => mask.interiorDisagreement > 0);
+      const visualFlagged = rasterSelected && (ratio !== null ? ratio > options.thresholdRatio
+        : (oursAe?.normalized ?? 0) > 0 && (texNoiseAe?.normalized ?? 0) === 0);
+      const flagged = traceFlagged || imagePaintFlagged || (options.flagVisualDiff && visualFlagged);
       if (rasterSelected && (flagged || visualFlagged)) {
         execFileSync("magick", [
           texPdfToCairoPngPath,
@@ -2501,6 +2542,8 @@ async function main() {
         rasterSelectionReason,
         traceFlagged,
         visualFlagged,
+        imagePaintFlagged,
+        imagePaint,
         flagged,
       };
       rows.push(row);
@@ -2526,6 +2569,7 @@ async function main() {
     runDir,
     seed: options.seed,
     texFuzzGeneratorVersion: texFuzz.TEX_FUZZ_GENERATOR_VERSION,
+    graphicsAssetsSha256: FUZZ_GRAPHICS_ASSET_SHA256,
     texFuzzFeatures: [...new Set(cases.flatMap((entry) => entry.texFuzz?.features ?? []))].sort(),
     casesRequested: requestedCaseCount,
     casesCompleted: rows.length,
@@ -2553,6 +2597,7 @@ async function main() {
   writeFileSync(join(runDir, "summary.json"), JSON.stringify({ ...summary, rows }, null, 2), "utf8");
   writeCsv(rows, join(runDir, "summary.csv"));
   console.log(JSON.stringify(summary, null, 2));
+  if (options.caseMode === "images" && (errors.length || summary.flagged.length)) process.exitCode = 1;
 }
 
 main().catch((error) => {

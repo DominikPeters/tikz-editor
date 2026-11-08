@@ -11,7 +11,7 @@ export interface BeamerPaintProbe {
   readonly y: number;
 }
 export function blockPaintProbes(render: RenderBeamerFrameResult, native: NativeBeamerPageTrace, oracle: Pick<OracleBeamerPageTrace, "glyphs">): { id: string; x: number; y: number }[];
-export function compareBlockPaint(render: RenderBeamerFrameResult, native: NativeBeamerPageTrace, oracle: OracleBeamerPageTrace, nativePng: string, oraclePng: string, width: number, height: number, additionalProbes?: readonly BeamerPaintProbe[]): BeamerPaintComparison;
+export function compareBlockPaint(render: RenderBeamerFrameResult, native: NativeBeamerPageTrace, oracle: OracleBeamerPageTrace, nativePng: string, oraclePng: string, width: number, height: number, additionalProbes?: readonly BeamerPaintProbe[], paintImages?: boolean): BeamerPaintComparison;
 export function paintContractFailures(paint?: BeamerPaintComparison | null): string[];
 
 export interface BeamerColorMaskComparison {

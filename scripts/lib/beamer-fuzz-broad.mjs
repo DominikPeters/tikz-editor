@@ -5,7 +5,7 @@ export const BROAD_ONLY_FAMILIES = [
   "overlapping-shapes", "picture-transforms", "scoped-alignment", "multi-picture",
   "math-prose", "two-overlay-programs",
 ];
-export const BEAMER_FUZZ_GENERATOR_VERSION = 3;
+export const BEAMER_FUZZ_GENERATOR_VERSION = 4;
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export function generateBroadBeamerCases({ seed, cases, families }) {

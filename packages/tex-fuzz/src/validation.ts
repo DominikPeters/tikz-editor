@@ -28,7 +28,7 @@ const featureIds: ReadonlySet<string> = new Set(Object.values(TEX_FUZZ_FEATURE_D
 export function isTexFuzzFeatureId(value: unknown): value is TexFuzzFeatureId {
   return typeof value === "string" && featureIds.has(value);
 }
-const NODE_KINDS = ["text", "space", "group", "font", "font-declaration", "style-declaration", "color", "math", "display-math", "accent", "line-break", "box", "dimension-box", "raisebox", "transform-box", "rule", "tabular", "paragraph-break", "noindent", "alignment", "environment", "item", "vertical-glue", "penalty", "vertical-rule", "document-box", "oracle-command"] as const;
+const NODE_KINDS = ["includegraphics", "text", "space", "group", "font", "font-declaration", "style-declaration", "color", "math", "display-math", "accent", "line-break", "box", "dimension-box", "raisebox", "transform-box", "rule", "tabular", "paragraph-break", "noindent", "alignment", "environment", "item", "vertical-glue", "penalty", "vertical-rule", "document-box", "oracle-command"] as const;
 const MATH_KINDS = ["atom", "group", "sequence", "fraction", "radical", "script", "accent", "alphabet", "line", "left-right", "operator", "stackrel", "xarrow", "matrix", "text"] as const;
 const FONT_COMMANDS = ["textnormal", "textit", "textbf", "textmd", "textsl", "texttt", "textup", "textrm", "textsf", "textsc", "emph"] as const;
 const FONT_DECLARATIONS = ["normalfont", "bfseries", "mdseries", "rmfamily", "sffamily", "ttfamily", "itshape", "slshape", "upshape", "scshape", "it", "bf", "rm", "sf", "sl", "sc", "tt", "em"] as const;
@@ -91,6 +91,9 @@ function isNode(value: unknown): value is TexFuzzNode {
     case "raisebox": return isDimension(value.lift) && optional(value, "height", isDimension) && optional(value, "depth", isDimension) && isNodes(value.children);
     case "transform-box": return isNodes(value.children) && ((value.command === "rotatebox" && isNumber(value.angle)) || (value.command === "scalebox" && isNumber(value.scale) && optional(value, "verticalScale", isNumber)) || (value.command === "resizebox" && isResizeDimension(value.width) && isResizeDimension(value.height) && optional(value, "totalHeight", isBoolean)) || value.command === "reflectbox");
     case "rule": return optional(value, "raise", isDimension) && isDimension(value.width) && isDimension(value.height);
+    case "includegraphics": return isString(value.filename) && isArrayOf(value.options, isString) && optional(value, "starred", isBoolean)
+      && optional(value, "gap", entry => oneOf(entry, [" ", " % image argument\n"]))
+      && optional(value, "corners", entry => isArrayOf(entry, isString) && entry.length === 2);
     case "tabular": return isArrayOf(value.columns, (entry): entry is "l" | "c" | "r" => oneOf(entry, ["l", "c", "r"])) && optional(value, "position", isPosition) && isArrayOf(value.cells, isNodes);
     case "paragraph-break": return oneOf(value.command, ["par", "blank-line"]);
     case "noindent": return true;

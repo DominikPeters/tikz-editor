@@ -6,6 +6,7 @@ import { performance } from "node:perf_hooks";
 import { promisify } from "node:util";
 import { TexFuzzDiskCache, texFuzzCacheKey } from "./tex-fuzz-cache.mjs";
 import { texOracleEnv } from "./tex-oracle.mjs";
+import { stageFuzzGraphicsAssets, FUZZ_GRAPHICS_ASSET_SHA256 } from "./fuzz-graphics-assets.mjs";
 
 const execFileAsync = promisify(execFile);
 export const TEX_FUZZ_ORACLE_RUNNER_VERSION = "batched-support-v2";
@@ -57,6 +58,7 @@ function runOneBatch(cases, options) {
   const directory = mkdtempSync(join(tmpdir(), "tikz-tex-fuzz-oracle-"));
   const started = performance.now();
   try {
+    stageFuzzGraphicsAssets(directory);
     writeFileSync(join(directory, "oracle.tex"), oracleDocument(cases, options.preamble), "utf8");
     execFileSync(options.engine, ["--interaction=batchmode", "--halt-on-error", "--draftmode", "oracle.tex"], {
       cwd: directory, env: texOracleEnv(), stdio: "ignore", timeout: options.timeoutMs, maxBuffer: 20 * 1024 * 1024,
@@ -72,6 +74,7 @@ async function runOneBatchAsync(cases, options) {
   const directory = mkdtempSync(join(tmpdir(), "tikz-tex-fuzz-oracle-"));
   const started = performance.now();
   try {
+    stageFuzzGraphicsAssets(directory);
     writeFileSync(join(directory, "oracle.tex"), oracleDocument(cases, options.preamble), "utf8");
     await execFileAsync(options.engine, ["--interaction=batchmode", "--halt-on-error", "--draftmode", "oracle.tex"], {
       cwd: directory, env: texOracleEnv(), timeout: options.timeoutMs, maxBuffer: 20 * 1024 * 1024, signal: options.signal,
@@ -124,6 +127,7 @@ export function texFuzzOracleEnvironment(engine = "lualatex", options = {}) {
     node: process.version,
     platform: `${process.platform}-${process.arch}`,
     runnerVersion: TEX_FUZZ_ORACLE_RUNNER_VERSION,
+    graphicsAssetsSha256: FUZZ_GRAPHICS_ASSET_SHA256,
   };
 }
 
