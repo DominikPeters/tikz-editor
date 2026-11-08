@@ -128,7 +128,7 @@
   "unresolvedImageFindings": [],
   "notEstablished": [
     "No large image fuzz soak or independent TeX run of the recursive image grammar.",
-    "Native edit checks use pinned Poppler PDF pages in Node; they do not validate the browser PDF.js rasterizer.",
+    "Native edit checks use pinned Poppler PDF pages. Separate real Chromium/WebKit PDF.js tests now cover the controlled two-page PDF; broader PDF/browser coverage is not established.",
     "This focused run does not close or revalidate other saved campaigns."
   ],
   "verification": {
@@ -884,5 +884,73 @@
       "mupdf": "1.28.6"
     },
     "historical72DpiPagesRetained": true
+  },
+  "ciIntegration": {
+    "workflow": ".github/workflows/image-fidelity.yml",
+    "calledBy": [
+      ".github/workflows/ci.yml: PR and master push",
+      ".github/workflows/tex-fuzz.yml: daily and manual"
+    ],
+    "seed": 20261108,
+    "hostedRun": "Configured, not triggered from this local task",
+    "localValidation": {
+      "environment": "artifacts/includegraphics/ci-validation/environment.json",
+      "oracleTests": {
+        "report": "artifacts/includegraphics/ci-validation/oracle-tests.json",
+        "passed": 9,
+        "skipped": 0
+      },
+      "article": {
+        "report": "artifacts/includegraphics/ci-validation/article/seed-20261108-cases-16-scale-4-2026-11-08T13-51-22-282Z/summary.json",
+        "cases": 16,
+        "flagged": 0,
+        "errors": [],
+        "scale": 4
+      },
+      "beamer": {
+        "report": "artifacts/includegraphics/ci-validation/beamer/comparison/report.json",
+        "passed": 8,
+        "failed": 0,
+        "states": 11
+      }
+    },
+    "artifactRetentionDays": 14,
+    "skipGuard": "Required oracle report must have zero pending tests and at least nine total tests."
+  },
+  "browserValidation": {
+    "baselineCommit": "cea71040",
+    "spec": "apps/web/e2e/beamer-pdf-image.spec.ts",
+    "specSha256": "a20986759dd504ec7fcd6232aab8fa55243ad226b68032c41f684f98967b032d",
+    "engines": [
+      "chromium",
+      "webkit"
+    ],
+    "initial": {
+      "passed": 3,
+      "failed": 1,
+      "failure": "WebKit retargeted a crop drag compatibility click to the SVG background, clearing the restored selection and exiting crop mode.",
+      "log": "artifacts/includegraphics/pdf-browser-ci/before-fix/playwright.log",
+      "screenshot": "artifacts/includegraphics/pdf-browser-ci/before-fix/webkit-crop.png"
+    },
+    "final": {
+      "passed": 4,
+      "failed": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "log": "artifacts/includegraphics/pdf-browser-ci/playwright-final.log",
+      "report": "artifacts/includegraphics/pdf-browser-ci/playwright-report.json"
+    },
+    "mocks": "Only native file-picker availability is disabled to exercise the regular browser file-input fallback; PDF.js, workers, assets, persistence and rendered pixels use the real app.",
+    "additionalSvgCropRegressions": {
+      "passed": 4,
+      "failed": 0,
+      "log": "artifacts/includegraphics/pdf-browser-ci/svg-crop-regressions.log"
+    },
+    "paletteChannelTolerance": 4,
+    "dimensions": "Exact 48x32 and 32x48 PDF.js raster dimensions; 24x16 PNG replacement",
+    "workflow": ".github/workflows/ci.yml:pdf-browser",
+    "hostedRun": "Chromium/WebKit matrix configured; hosted runners not triggered locally",
+    "productionFix": "useDeckResize consumes the drag compatibility click so WebKit retains the image selection and crop mode; listener expires before the next genuine click.",
+    "initialTrace": "Initial timeout trace archive was incomplete; source, log and screenshot are retained."
   }
 }

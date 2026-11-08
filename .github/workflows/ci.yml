@@ -10,6 +10,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  image-fidelity:
+    uses: ./.github/workflows/image-fidelity.yml
+
+  pdf-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    env:
+      PLAYWRIGHT_BROWSERS: ${{ matrix.browser }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Real PDF.js image editing, history and reload
+        run: npm run test:e2e -- beamer-pdf-image.spec.ts --workers=1 --reporter=line,json
+        env:
+          PLAYWRIGHT_OUTPUT_DIR: ${{ runner.temp }}/pdf-browser-${{ matrix.browser }}
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ runner.temp }}/pdf-browser-${{ matrix.browser }}/report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pdf-browser-${{ matrix.browser }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/pdf-browser-${{ matrix.browser }}
+          if-no-files-found: ignore
+          retention-days: 14
+
   test:
     runs-on: ubuntu-latest
     steps:

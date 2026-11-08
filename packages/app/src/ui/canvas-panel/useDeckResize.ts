@@ -154,7 +154,18 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
       latest = sample;
       frame ??= requestAnimationFrame(() => { frame = null; if (latest) preview(latest); });
     };
-    const up = (sample: PointerEvent) => { if (sample.pointerId === pointerId) { preview(sample); stop(true); } };
+    const up = (sample: PointerEvent) => {
+      if (sample.pointerId !== pointerId) return;
+      preview(sample);
+      stop(true);
+      // WebKit can retarget the drag's compatibility click to the capturing
+      // SVG, where it looks like a background click and clears the restored
+      // image selection. Consume that click, then remove the listener even
+      // when the browser generates no click, so the next real click works.
+      const consumeClick = (click: MouseEvent) => { click.preventDefault(); click.stopPropagation(); };
+      window.addEventListener("click", consumeClick, { capture: true, once: true });
+      setTimeout(() => { window.removeEventListener("click", consumeClick, true); }, 0);
+    };
     const cancel = (sample: PointerEvent) => { if (sample.pointerId === pointerId) stop(false); };
     const blur = () => { stop(false); };
     const key = (sample: KeyboardEvent) => {

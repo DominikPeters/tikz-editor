@@ -1,0 +1,93 @@
+name: Image fidelity
+
+on:
+  workflow_call:
+    inputs:
+      seed:
+        type: string
+        default: "20261108"
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: Seed for the bounded image comparison campaign
+        type: string
+        default: "20261108"
+
+permissions:
+  contents: read
+
+jobs:
+  image-oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      IMAGE_FUZZ_SEED: ${{ inputs.seed }}
+      TEX_FUZZ_ORACLE_TESTS: "1"
+      TEX_FUZZ_IMAGE_PAINT_OUT: artifacts/image-fidelity/original-regressions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install independent TeX and image paint tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y texlive-luatex texlive-latex-extra texlive-fonts-recommended texlive-pictures dvisvgm librsvg2-bin imagemagick poppler-utils mupdf-tools
+          if ! command -v magick >/dev/null; then
+            mkdir -p "$RUNNER_TEMP/image-bin"
+            cat > "$RUNNER_TEMP/image-bin/magick" <<'SH'
+          #!/bin/sh
+          if [ "$1" = compare ]; then
+            shift
+            exec compare "$@"
+          fi
+          exec convert "$@"
+          SH
+            chmod +x "$RUNNER_TEMP/image-bin/magick"
+            echo "$RUNNER_TEMP/image-bin" >> "$GITHUB_PATH"
+          fi
+          luaotfload-tool --update
+      - run: npm run build:tex-fuzz
+      - name: Validate tools and record reproduction environment
+        run: |
+          mkdir -p artifacts/image-fidelity
+          node --input-type=module <<'JS'
+          import { execFileSync, spawnSync } from "node:child_process";
+          import { writeFileSync } from "node:fs";
+          import { FUZZ_GRAPHICS_ASSET_SHA256 } from "./scripts/lib/fuzz-graphics-assets.mjs";
+          const commands = [["node", ["--version"]], ["lualatex", ["--version"]], ["dvisvgm", ["--version"]], ["mutool", ["-v"]], ["pdftoppm", ["-v"]], ["rsvg-convert", ["--version"]], ["magick", ["--version"]]];
+          const versions = Object.fromEntries(commands.map(([command, args]) => {
+            const result = spawnSync(command, args, { encoding: "utf8", timeout: 10000 });
+            if (result.status !== 0) throw new Error(`Required image oracle tool failed: ${command}`);
+            return [command, `${result.stdout}${result.stderr}`.trim().split("\n")[0]];
+          }));
+          writeFileSync("artifacts/image-fidelity/environment.json", JSON.stringify({
+            gitHead: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+            seed: process.env.IMAGE_FUZZ_SEED, graphicsAssetsSha256: FUZZ_GRAPHICS_ASSET_SHA256,
+            platform: process.platform, arch: process.arch, versions,
+          }, null, 2) + "\n");
+          JS
+      - name: Live image grammar and original paint regressions
+        run: |
+          mkdir -p artifacts/image-fidelity
+          npx vitest run test/tex-fuzz-graphics.spec.ts test/tex-fuzz-image-paint.spec.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=artifacts/image-fidelity/oracle-tests.json
+          node --input-type=module <<'JS'
+          import { readFileSync } from "node:fs";
+          const report = JSON.parse(readFileSync("artifacts/image-fidelity/oracle-tests.json", "utf8"));
+          if (report.numPendingTests !== 0 || report.numTotalTests < 9) {
+            throw new Error("Image oracle suites must run every test, including the live TeX paint regressions.");
+          }
+          JS
+      - name: Bounded article image comparison
+        run: node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --cases 16 --seed "$IMAGE_FUZZ_SEED" --scale 4 --out-dir artifacts/image-fidelity/article --cache-dir artifacts/image-fidelity/oracle-cache
+      - name: Bounded Beamer image and overlay comparison
+        run: node scripts/compare-beamer-fuzz.mjs --profile images --cases 8 --seed "$IMAGE_FUZZ_SEED" --out-dir artifacts/image-fidelity/beamer
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: image-fidelity-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/image-fidelity
+          if-no-files-found: error
+          retention-days: 14

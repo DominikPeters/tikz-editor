@@ -43,3 +43,13 @@ are separate checks; passing one does not establish the other.
 failure. `article-findings/` preserves every originally flagged snippet and its
 exact TeX oracle document; hashes, original paint failures, per-case geometry,
 closure evidence and replay commands are in the ledger.
+
+The PR/nightly image fidelity workflow runs the live oracle regressions and both
+bounded campaigns, and retains reproduction artifacts for 14 days. The separate
+Chromium/WebKit browser matrix imports `pages.pdf` through the real file chooser
+and PDF.js path and verifies page/crop/resize/history/replacement/reload pixels.
+Run those browser tests locally with:
+
+```
+PLAYWRIGHT_BROWSERS=chromium,webkit npm run test:e2e -- beamer-pdf-image.spec.ts --workers=1
+```

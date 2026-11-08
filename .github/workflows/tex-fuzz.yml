@@ -11,6 +11,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  image-fidelity:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '17 2 * * *'
+    uses: ./.github/workflows/image-fidelity.yml
+
   nightly:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '17 2 * * *'
     runs-on: ubuntu-24.04
