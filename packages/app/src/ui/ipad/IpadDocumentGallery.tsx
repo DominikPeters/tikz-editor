@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { RiAddLine, RiArrowLeftSLine, RiCloseLine, RiDraftLine, RiFolderOpenLine } from "@remixicon/react";
 import { detectDocumentKind } from "@tikz-editor/core/document/kind";
 import { useShallow } from "zustand/react/shallow";
@@ -165,7 +165,12 @@ export function IpadDocumentGallery({
         <h2 className={css.title}>Documents</h2>
       </header>
 
-      <div className={css.grid} role="list" aria-label="Open documents">
+      <div
+        className={css.grid}
+        style={galleryGridStyle(galleryDocuments.length)}
+        role="list"
+        aria-label="Open documents"
+      >
         {galleryDocuments.map((doc) => {
           const active = doc.id === activeDocumentId;
           const thumbnail = thumbnails.get(doc.id) ?? null;
@@ -218,4 +223,10 @@ export function IpadDocumentGallery({
       </div>
     </div>
   );
+}
+
+/** Fewer open documents get larger cards; past a dozen the grid stays at its densest. */
+function galleryGridStyle(count: number): CSSProperties & { "--gallery-card-min": string } {
+  const min = count <= 2 ? 360 : count <= 8 ? 300 : count <= 12 ? 240 : 190;
+  return { "--gallery-card-min": `${min}px` };
 }
