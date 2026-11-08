@@ -3,6 +3,7 @@ import { requireArrayValue } from "../utils/collections.js";
 import type { EditActionResult } from "../edit/actions.js";
 import type { SourcePatch } from "../edit/types.js";
 import { readOptionList, rewriteBeamerOptions, type OptionListLocation } from "./option-edits.js";
+import { beamerGraphicsInsertionEdits, type BeamerGraphicsPlacement } from "./deck-insert-graphics.js";
 import { beamerImageCropPatches, beamerImageCropTarget, type BeamerImageCrop } from "./deck-crop.js";
 import type { Span } from "../ast/types.js";
 import { buildBeamerObjectIndex, type BeamerObjectNode } from "./object-index.js";
@@ -62,6 +63,8 @@ export type DeckEditAction =
     }
   | { kind: "deckSetColumnWidth"; frameId: string; objectId: string; width: string }
   | { kind: "deckSetFrameOption"; frameId: string; key: string; value: string | true | null }
+  /** A new `\includegraphics`; `widthFraction` of `\linewidth`, or null for natural size. */
+  | { kind: "deckInsertGraphics"; frameId: string; path: string; widthFraction: number | null; placement: BeamerGraphicsPlacement }
   | DeckDocumentEditAction;
 
 const DECK_EDIT_ACTION_KINDS: ReadonlySet<string> = new Set([
@@ -78,6 +81,7 @@ const DECK_EDIT_ACTION_KINDS: ReadonlySet<string> = new Set([
   "deckSetEnvironmentOption",
   "deckSetColumnWidth",
   "deckSetFrameOption",
+  "deckInsertGraphics",
   "deckSetPresentationTheme",
   "deckSetThemeOption",
   "deckSetTheme",
@@ -118,6 +122,10 @@ export function applyDeckEditAction(
   }
   if (action.kind === "deckSetFrameOption") {
     return applySetFrameOption(source, action);
+  }
+  if (action.kind === "deckInsertGraphics") {
+    const plan = beamerGraphicsInsertionEdits(source, layout, action.path, action.widthFraction, action.placement);
+    return "reason" in plan ? { kind: "unsupported", reason: plan.reason } : finishEdits(source, plan.edits);
   }
 
   const index = buildBeamerObjectIndex({

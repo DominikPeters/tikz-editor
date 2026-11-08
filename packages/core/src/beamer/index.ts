@@ -150,6 +150,7 @@ export { beamerColumnDividers, beamerColumnResizePatches, beamerImageResizeTarge
   type BeamerColumnDivider, type BeamerImageResizeTarget } from "./deck-resize.js";
 
 export { beamerImageCropTarget, beamerImageCropPatches, beamerImageCropDrag, beamerImageCropUnit, type BeamerImageCrop, type BeamerImageCropTarget, type BeamerImageCropHandle } from "./deck-crop.js";
+export { isLiteralGraphicsPath, type BeamerGraphicsPlacement } from "./deck-insert-graphics.js";
 export { beamerSpacingTargets, beamerSpacingResizePatches, type BeamerSpacingTarget } from "./deck-spacing.js";
 export { BEAMER_SLIDE_TEMPLATES, beamerSlideTemplates, beamerSlideTemplateFrame, type BeamerSlideTemplate, type BeamerSlideTemplateId, type BeamerSlideTemplateFrame } from "./slide-templates.js";
 export { copyBeamerSlides, editBeamerSlides, beamerSlideIsEditable, beamerSlideSourceSpan, type BeamerSlideEdit, type BeamerSlideDestination, type BeamerSlideEditResult } from "./slide-manager.js";
