@@ -45,6 +45,9 @@ export function IpadDocumentGallery({
         activeRootId: doc.activeRootId,
         snapshotSvg: doc.snapshot.svg?.svg ?? null,
         snapshotSource: doc.snapshot.source,
+        snapshotActiveRootId: doc.snapshot.activeRootId,
+        graphicsPreviewBundleKey: doc.snapshot.graphicsPreviewBundleKey,
+        graphicsPreviewBundle: doc.snapshot.graphicsPreviewBundle ?? null,
         deck: detectDocumentKind(doc.source) === "beamer",
         blank: !doc.dirty && doc.fileRef == null && doc.source === DEFAULT_SOURCE
       });

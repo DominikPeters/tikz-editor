@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
+import type { DocumentGraphicsPreviewBundle } from "@tikz-editor/core/graphics/index";
 import { cancelGroup, requestThumbnail } from "../workers/thumbnail-worker-client";
 
 export type DocumentThumbnailSource = {
@@ -8,6 +10,9 @@ export type DocumentThumbnailSource = {
   /** Last computed snapshot SVG; a no-cost fast path while it is still current. */
   snapshotSvg: string | null;
   snapshotSource: string | null;
+  snapshotActiveRootId: string | null;
+  graphicsPreviewBundleKey?: string | null;
+  graphicsPreviewBundle?: DocumentGraphicsPreviewBundle | null;
   /** A deck shows its first slide. */
   deck: boolean;
 };
@@ -23,8 +28,9 @@ const MAX_CACHE_ENTRIES = 48;
 let galleryGroupCounter = 0;
 let galleryRequestCounter = 0;
 
-function sourceSignature(source: string): string {
-  return `${source.length}:${source.slice(0, 48)}:${source.slice(-48)}`;
+function renderSignature(doc: DocumentThumbnailSource): string {
+  return JSON.stringify([computeSourceFingerprint(doc.source), doc.deck ? "deck:0" : doc.activeRootId ?? "figure:0",
+    doc.graphicsPreviewBundle?.cacheKey ?? doc.graphicsPreviewBundleKey ?? null]);
 }
 
 function cacheKey(documentId: string, signature: string): string {
@@ -57,7 +63,7 @@ export function useDocumentThumbnails(
   documentsRef.current = documents;
 
   const inputKey = useMemo(
-    () => documents.map((doc) => cacheKey(doc.id, sourceSignature(doc.source))).join("\n"),
+    () => documents.map((doc) => cacheKey(doc.id, renderSignature(doc))).join("\n"),
     [documents]
   );
 
@@ -79,17 +85,19 @@ export function useDocumentThumbnails(
         if (isCancelled()) {
           return;
         }
-        const signature = sourceSignature(doc.source);
+        const signature = renderSignature(doc);
         const key = cacheKey(doc.id, signature);
         if (documentThumbnailCache.has(key)) {
           continue;
         }
-        if (!doc.deck && doc.snapshotSvg && doc.snapshotSource === doc.source) {
+        if (!doc.deck && doc.snapshotSvg && doc.snapshotSource === doc.source &&
+          doc.snapshotActiveRootId === (doc.activeRootId ?? "figure:0")) {
           storeInCache(key, { url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(doc.snapshotSvg)}` });
           setTick((value) => value + 1);
           continue;
         }
         const requestId = `doc-gallery-thumb-${(galleryRequestCounter += 1).toString(36)}`;
+        const graphicsPreviewBundleKey = doc.graphicsPreviewBundle?.cacheKey ?? doc.graphicsPreviewBundleKey;
         const result = await (doc.deck
           ? requestThumbnail({
               type: "render",
@@ -98,9 +106,10 @@ export function useDocumentThumbnails(
               source: doc.source,
               figureId: `doc-gallery:${doc.id}:0`,
               figureSignature: signature,
+              ...(graphicsPreviewBundleKey ? { graphicsPreviewBundleKey } : {}),
               deckFrameIndex: 0,
               parseOptions: { recover: true, activeRootId: `doc-gallery:${doc.id}`, includeContextDefinitions: true }
-            })
+            }, doc.graphicsPreviewBundle ?? undefined)
           : requestThumbnail({
               type: "render",
               requestId,
@@ -110,13 +119,14 @@ export function useDocumentThumbnails(
               // for documents whose figures have not been parsed yet.
               figureId: doc.activeRootId ?? "figure:0",
               figureSignature: signature,
+              ...(graphicsPreviewBundleKey ? { graphicsPreviewBundleKey } : {}),
               parseOptions: {
                 recover: true,
                 activeRootId: doc.activeRootId ?? "figure:0",
                 includeContextDefinitions: true
               },
               svgOptions: { padding: 8 }
-            })).catch(() => null);
+            }, doc.graphicsPreviewBundle ?? undefined)).catch(() => null);
         if (isCancelled() || !result?.ok) {
           continue;
         }
@@ -140,7 +150,7 @@ export function useDocumentThumbnails(
     void inputKey;
     const map = new Map<string, DocumentThumbnail>();
     for (const doc of documentsRef.current) {
-      const cached = documentThumbnailCache.get(cacheKey(doc.id, sourceSignature(doc.source)));
+      const cached = documentThumbnailCache.get(cacheKey(doc.id, renderSignature(doc)));
       if (cached) {
         map.set(doc.id, cached);
       }
