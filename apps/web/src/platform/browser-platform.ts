@@ -520,6 +520,9 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
     }
     const saved = await readLinkedTextFromHandle(fileRef, handle);
     if (saved.status === "ok") {
+      // Never authorize the next write with a revision for somebody else's
+      // contents: an external editor may have written just after we did.
+      if (saved.source !== text) return { ...saved, status: "changed-on-disk" };
       return {
         status: "saved",
         revision: saved.revision,

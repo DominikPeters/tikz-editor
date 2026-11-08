@@ -964,6 +964,29 @@ fn read_linked_text_payload(path: &Path) -> Result<LinkedTextReadPayload, String
     }
 }
 
+fn confirm_linked_text_write(path: &Path, written: &str) -> Result<LinkedTextWritePayload, String> {
+    // A revision read after the write may already belong to another editor.
+    // Only adopt it as our baseline when its contents are still what we wrote.
+    Ok(match read_linked_text_payload(path)? {
+        LinkedTextReadPayload::Ok {
+            source,
+            revision,
+            file_ref,
+        } if source == written => LinkedTextWritePayload::Saved { revision, file_ref },
+        LinkedTextReadPayload::Ok {
+            source,
+            revision,
+            file_ref,
+        } => LinkedTextWritePayload::ChangedOnDisk {
+            source,
+            revision,
+            file_ref,
+        },
+        LinkedTextReadPayload::Missing => LinkedTextWritePayload::Missing,
+        LinkedTextReadPayload::Failed { reason } => LinkedTextWritePayload::Failed { reason },
+    })
+}
+
 fn normalize_watch_path(path: PathBuf) -> PathBuf {
     path.canonicalize().unwrap_or(path)
 }
@@ -2387,16 +2410,15 @@ fn desktop_write_linked_text(
             });
         }
     }
-    if let Err(error) = fs::write(&path_buf, text) {
+    if let Err(error) = fs::write(&path_buf, &text) {
         return Ok(LinkedTextWritePayload::Failed {
             reason: error.to_string(),
         });
     }
-    let source = fs::read_to_string(&path_buf).unwrap_or_default();
-    let revision = revision_for_path_and_source(&path_buf, &source);
+    let result = confirm_linked_text_write(&path_buf, &text)?;
     let file_ref = linked_file_ref_payload(&path_buf);
     add_recent_file(&app, file_ref.path.clone());
-    Ok(LinkedTextWritePayload::Saved { revision, file_ref })
+    Ok(result)
 }
 
 #[tauri::command]
@@ -3378,6 +3400,41 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn linked_write_confirmation_preserves_an_intervening_external_edit() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("figure.tex");
+        std::fs::write(&path, "local").unwrap();
+        assert!(matches!(
+            super::confirm_linked_text_write(&path, "local").unwrap(),
+            super::LinkedTextWritePayload::Saved { .. }
+        ));
+        std::fs::write(&path, "external").unwrap();
+        match super::confirm_linked_text_write(&path, "local").unwrap() {
+            super::LinkedTextWritePayload::ChangedOnDisk {
+                source, revision, ..
+            } => {
+                assert_eq!(source, "external");
+                assert_eq!(revision.hash, super::hash_text_for_revision("external"));
+            }
+            _ => panic!("An external edit must not become the saved revision"),
+        }
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "external");
+    }
+
+    #[test]
+    fn linked_write_confirmation_does_not_claim_missing_or_unreadable_files_are_saved() {
+        let temp = tempfile::tempdir().unwrap();
+        assert!(matches!(
+            super::confirm_linked_text_write(&temp.path().join("missing.tex"), "local").unwrap(),
+            super::LinkedTextWritePayload::Missing
+        ));
+        assert!(matches!(
+            super::confirm_linked_text_write(temp.path(), "local").unwrap(),
+            super::LinkedTextWritePayload::Failed { .. }
+        ));
+    }
+
     #[test]
     fn file_revision_survives_json_roundtrip() {
         let revision = super::FileRevisionPayload {

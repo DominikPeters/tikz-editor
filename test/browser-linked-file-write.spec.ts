@@ -146,6 +146,25 @@ describe("browser linked-file saves", () => {
     expect(f.handle.requestPermission).not.toHaveBeenCalled();
   });
 
+  it("does not adopt an external edit as the revision of the source just written", async () => {
+    const f = await linkedFileFixture();
+    f.handle.createWritable.mockImplementationOnce(async () => ({
+      write: async (text: string) => { expect(text).toBe(LOCAL); },
+      close: async () => {
+        await writeFile(f.path, LOCAL);
+        // Another editor wins the race before the post-save revision lookup.
+        await writeFile(f.path, EXTERNAL);
+      }
+    }));
+    const result = await f.writeLinkedText(f.fileRef, LOCAL, f.revision);
+    expect(result.status).toBe("changed-on-disk");
+    if (result.status === "changed-on-disk") {
+      expect(result.source).toBe(EXTERNAL);
+      expect(result.revision.hash).toBe(revisionForText(EXTERNAL).hash);
+    }
+    expect(await readFile(f.path, "utf8")).toBe(EXTERNAL);
+  });
+
   it.each(["deny", "cancel"] as const)("leaves the file untouched when permission is %s", async action => {
     vi.spyOn(console, "info").mockImplementation(() => undefined);
     const f = await linkedFileFixture();
