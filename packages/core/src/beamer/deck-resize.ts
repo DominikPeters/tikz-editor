@@ -85,6 +85,9 @@ export function beamerImageResizeTarget(source: string, layout: BeamerFrameLayou
   const commandEnd = command.starSpan?.to ?? command.span.to;
   const afterOverlay = beamerOverlayArgumentAfter(context, commandEnd, graphic.sourceSpan.to)?.span.to ?? commandEnd;
   const optional = beamerOptionalArgumentAfter(context, afterOverlay, graphic.sourceSpan.to);
+  // The two-bracket corner form is not a graphicx key list. Inserting scale
+  // into its lower-left coordinates would corrupt a valid image command.
+  if (optional && beamerOptionalArgumentAfter(context, optional.span.to, graphic.sourceSpan.to)) return null;
   const list = optional ? readOptionList(source, optional) : null;
   const entries = list?.entries ?? [];
   // pdftex and LuaTeX reject these; the preview does not draw them.

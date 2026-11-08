@@ -40,11 +40,56 @@
     {
       "rule": "F2",
       "symbol": "userText",
+      "file": "packages/app/src/ui/deck-graphics-insertion.ts",
+      "declaration": "changeGraphicsLocation.patches.replacement",
+      "hash": "20e7a115a03c",
+      "count": 1,
+      "expression": "userText(texPath, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
       "file": "packages/core/src/beamer/builds.ts",
       "declaration": "beamerBuildSpecPatch.replacement",
       "hash": "34b4b439b0ec",
       "count": 1,
       "expression": "userText(value.trim(), \"beamer-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "plainNumber",
+      "file": "packages/core/src/beamer/deck-crop.ts",
+      "declaration": "beamerImageCropPatches.number",
+      "hash": "86df99923a8f",
+      "count": 1,
+      "expression": "plainNumber(Number(factor.toFixed(4)), \"beamer-length\", source[size.span.from] === \".\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/deck-crop.ts",
+      "declaration": "beamerImageCropPatches.replacement",
+      "hash": "3a2de7b010e0",
+      "count": 1,
+      "expression": "sourceSlice(reset, { from: 0, to: reset.length })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/beamer/deck-crop.ts",
+      "declaration": "cropValue.parts",
+      "hash": "d53a6d128b78",
+      "count": 1,
+      "expression": "sourceSlice(source, unit.span)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "plainNumber",
+      "file": "packages/core/src/beamer/deck-crop.ts",
+      "declaration": "formatNumber",
+      "hash": "8ec87f293972",
+      "count": 1,
+      "expression": "plainNumber(Number(value.toFixed(2)) || 0, \"beamer-length\")"
     },
     {
       "rule": "F2",
@@ -117,6 +162,24 @@
       "hash": "99f198ebff92",
       "count": 1,
       "expression": "userText(trimmed, \"beamer-text\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "userText",
+      "file": "packages/core/src/beamer/deck-insert-graphics.ts",
+      "declaration": "beamerGraphicsInsertionEdits.command",
+      "hash": "72a4a8696d83",
+      "count": 1,
+      "expression": "userText(path, \"inspector-value\")"
+    },
+    {
+      "rule": "F2",
+      "symbol": "plainNumber",
+      "file": "packages/core/src/beamer/deck-insert-graphics.ts",
+      "declaration": "beamerGraphicsInsertionEdits.options",
+      "hash": "2140b1e8175e",
+      "count": 1,
+      "expression": "plainNumber(widthFraction, \"beamer-length\")"
     },
     {
       "rule": "F2",

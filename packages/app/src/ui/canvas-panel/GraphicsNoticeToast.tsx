@@ -31,10 +31,10 @@ export function GraphicsNoticeToast(): ReactNode {
   }, [dismiss, hovered, notice]);
 
   if (!notice || stale) return null;
-  const run = (task: () => Promise<void>) => {
+  const run = (task: () => void | Promise<void>) => {
     if (busy.current) return;
     busy.current = true;
-    void task().finally(() => { busy.current = false; });
+    void Promise.resolve().then(task).finally(() => { busy.current = false; });
   };
   let message: ReactNode;
   if (notice.kind === "error") message = notice.message;
@@ -42,7 +42,8 @@ export function GraphicsNoticeToast(): ReactNode {
   else if (notice.kind === "linked") message = <>Using <b>{notice.folderLabel}{notice.fileName}</b></>;
   else if (notice.createdFolder) message = <>Created <b>{notice.createdFolder}/</b> and saved <b>{notice.fileName}</b></>;
   else message = <>Saved <b>{notice.fileName}</b> in <b>{notice.folderLabel}</b></>;
-  const canChange = notice.kind === "saved" && getActiveEditorPlatform().files?.chooseGraphicsLocation != null;
+  const files = getActiveEditorPlatform().files;
+  const canChange = notice.kind === "saved" && files?.chooseGraphicsLocation != null && files.readLocalAsset != null && files.writeGraphicsFile != null;
 
   return (
     <div
@@ -59,7 +60,7 @@ export function GraphicsNoticeToast(): ReactNode {
       <span className={css.graphicsNoticeText}>{message}</span>
       {notice.kind !== "error" ? (
         <button type="button" className={css.graphicsNoticeButton}
-          onClick={() => { run(() => undoGraphicsInsertion(notice, useEditorStore.getState, useEditorStore.getState().dispatch)); }}>
+          onClick={() => { run(() => { undoGraphicsInsertion(notice, useEditorStore.getState, useEditorStore.getState().dispatch); }); }}>
           Undo
         </button>
       ) : null}

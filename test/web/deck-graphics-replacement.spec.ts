@@ -40,7 +40,7 @@ describe("deferred image replacement", () => {
     const pick = vi.fn(async () => svg());
     const fx = await fixture(pick);
     expect(await replaceSelectedDeckGraphics(fx)).toEqual({ status: "applied" });
-    expect(pick).toHaveBeenCalledWith({ kind: "graphics", addToRecent: false });
+    expect(pick).toHaveBeenCalledWith({ kind: "graphics-import", addToRecent: false });
     const source = fx.getState().source;
     expect(source).toContain("width=.5\\textwidth,trim=1 2 3 4,clip");
     expect(source).not.toContain("page=");
@@ -86,7 +86,7 @@ describe("deferred image replacement", () => {
     const fx = await fixture(async () => {
       if (failure === "picker") throw new Error("Read failed");
       const file = svg();
-      return failure === "format" ? { ...file, fileRef: { ...file.fileRef, name: "invalid.gif" } } : file;
+      return failure === "format" ? { bytes: new TextEncoder().encode("not an image").buffer, fileRef: { ...file.fileRef, name: "invalid.gif" } } : file;
     });
     if (failure === "storage") fx.platform.persistence.save = () => { throw new Error("Storage is full"); };
     const before = fx.getState();
@@ -96,9 +96,12 @@ describe("deferred image replacement", () => {
   });
 
   it("uses a native file reference without storing an embedded copy", async () => {
-    const fx = await fixture(async () => ({ ...svg(), fileRef: { kind: "file", provider: "desktop-fs", name: "image.png", path: "/tmp/images/image.png" } }));
+    const fx = await fixture(async () => ({ ...svg(), fileRef: { kind: "file", provider: "desktop-fs", name: "image.svg", path: "/project/images/image.svg" } }));
+    fx.setState(editorReducer(fx.getState(), { type: "MARK_DOCUMENT_SAVED", fileRef: { kind: "file", provider: "desktop-fs", name: "slides.tex", path: "/project/slides.tex" } }));
+    fx.platform.files!.listGraphicsFiles = async () => ({ files: [], directories: [] });
+    fx.platform.files!.writeGraphicsFile = async () => { throw new Error("An existing project image should not be copied"); };
     expect(await replaceSelectedDeckGraphics(fx)).toEqual({ status: "applied" });
-    expect(fx.getState().source).toContain("{/tmp/images/image.png}");
+    expect(fx.getState().source).toContain("{images/image.svg}");
     expect(fx.saved.size).toBe(0);
   });
 

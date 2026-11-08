@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent
 } from "react";
 import { pt, worldPoint } from "@tikz-editor/core/coords/index";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { snapKeyboardNudge, type SnapLine } from "@tikz-editor/core/edit/snapping";
 import type { EditAction } from "@tikz-editor/core/edit/actions";
 import type { SceneElement } from "@tikz-editor/core/semantic/types";
@@ -172,6 +173,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
   const documentId = useEditorStore(state => state.activeDocumentId);
   const sourceRevision = useEditorStore(state => state.sourceRevision);
   const activeRootId = useEditorStore(state => state.activeRootId);
+  const drawingLayerRootId = useEditorStore(state => state.documents[state.activeDocumentId]?.drawingLayerRootId ?? null);
   const captureClipboardEdit = useCallback(() => beginClipboardEdit({
     documentId, sourceRevision, activeRootId, source,
     snapshotSource: snapshot.source, scene: snapshot.scene,
@@ -420,13 +422,15 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
   );
 
   // On a slide, an image file pasted or dropped is inserted as \includegraphics.
+  // A drawing layer keeps the slide snapshot but owns its own clipboard edits.
+  const slideImages = snapshot.deck?.activeFrame != null && drawingLayerRootId === null && parseDocumentRootId(activeRootId ?? "")?.kind !== "beamer-frame-tikz";
   const insertDeckImage = useCallback((dataTransfer: DataTransfer | null): boolean => {
-    const image = snapshot.deck?.activeFrame && dataTransfer ? Array.from(dataTransfer.files).find(isGraphicsFile) : undefined;
+    const image = slideImages && dataTransfer ? Array.from(dataTransfer.files).find(isGraphicsFile) : undefined;
     if (!image) return false;
     void insertDeckGraphics({ getState: useEditorStore.getState, dispatch, load: async () => ({
       bytes: await image.arrayBuffer(), name: image.name || null, mimeType: image.type || graphicsMimeType(image.name) }) });
     return true;
-  }, [dispatch, snapshot.deck?.activeFrame]);
+  }, [dispatch, slideImages]);
 
   const onViewportPaste = useCallback(
     (event: ReactClipboardEvent<HTMLDivElement>) => {
@@ -528,13 +532,13 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       if (!hasFile) {
         return;
       }
-      if (snapshot.deck?.activeFrame || findSvgFileInDataTransfer(event.dataTransfer)) {
+      if (slideImages || findSvgFileInDataTransfer(event.dataTransfer)) {
         event.preventDefault();
         event.stopPropagation();
         event.dataTransfer.dropEffect = "copy";
       }
     },
-    [snapshot.deck?.activeFrame]
+    [slideImages]
   );
 
   const onViewportDrop = useCallback(

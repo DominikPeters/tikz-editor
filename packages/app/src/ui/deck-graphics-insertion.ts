@@ -5,7 +5,7 @@ import { userText } from "@tikz-editor/core/edit/fragment";
 import { analyzeSimpleTexResources } from "@tikz-editor/core/text/tex/index";
 import { beginDocumentEdit, canContinueDocumentEdit } from "../edit-session.js";
 import { prepareGraphics, sameBytes, type PreparedGraphics } from "../graphics-bytes.js";
-import { graphicBytesBase64, importedGraphicPath, replacementGraphicPath, storeImportedGraphic } from "../imported-graphics.js";
+import { graphicBytesBase64, graphicBytesFromBase64, importedGraphicPath, replacementGraphicPath, storeImportedGraphic } from "../imported-graphics.js";
 import { getActiveEditorPlatform } from "../platform/current.js";
 import type { DocumentFileRef, EditorAction, EditorState } from "../store/types.js";
 import { requestDeckReselect, takeDeckCaret } from "./canvas-panel/deck-insertion-bridge.js";
@@ -104,9 +104,7 @@ async function identicalFiles(directory: string, listing: GraphicsFolderListing,
   for (const file of candidates) {
     const result = await read(joinNative(directory, file.path));
     if (result.status !== "ok") continue;
-    const binary = atob(result.bytesBase64);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+    const bytes = new Uint8Array(graphicBytesFromBase64(result.bytesBase64));
     if (sameBytes(prepared.bytes, bytes)) identical.add(file.path);
   }
   return identical;
@@ -288,37 +286,44 @@ function currentSource(getState: () => EditorState, documentId: string): string 
   return getState().documents[documentId]?.source ?? null;
 }
 
-/** Undo the insertion: the edit, then the file it wrote and folders it made. */
-export async function undoGraphicsInsertion(notice: GraphicsNotice, getState: () => EditorState, dispatch: (action: EditorAction) => void): Promise<void> {
+/** Undo the source edit; its image must remain available to Redo. */
+export function undoGraphicsInsertion(notice: GraphicsNotice, getState: () => EditorState, dispatch: (action: EditorAction) => void): void {
   const store = useGraphicsNoticeStore.getState();
   if (currentSource(getState, notice.documentId) !== notice.sourceAfter || getState().activeDocumentId !== notice.documentId) { store.dismiss(notice.id); return; }
   dispatch({ type: "UNDO" });
   store.dismiss(notice.id);
-  try { await undoWrite(notice); }
-  catch (error) { showError(notice.documentId, error instanceof Error ? error.message : "The image file could not be removed."); }
 }
 
-/** Move the file the insertion wrote to a place picked in the save panel, and rename its reference. */
+/** Save at the chosen location and rename the reference, retaining the old file for Undo. */
 export async function changeGraphicsLocation(notice: GraphicsNotice, getState: () => EditorState, dispatch: (action: EditorAction) => void): Promise<void> {
-  const files = getActiveEditorPlatform().files;
-  if (notice.kind !== "saved" || !notice.absolutePath || !notice.compileDirectory || !files?.chooseGraphicsLocation || !files.moveGraphicsFile) return;
-  const extension = notice.fileName.slice(notice.fileName.lastIndexOf(".") + 1);
-  const chosen = await files.chooseGraphicsLocation(dirname(notice.absolutePath), notice.fileName, extension);
-  if (!chosen || chosen === notice.absolutePath) return;
-  const target = chosen.toLowerCase().endsWith(`.${extension.toLowerCase()}`) ? chosen : `${chosen}.${extension}`;
-  const source = currentSource(getState, notice.documentId);
+  const platform = getActiveEditorPlatform();
+  const files = platform.files;
   const state = getState();
   const document = state.documents[notice.documentId];
-  if (source === null || !document) return;
-  // The reference this insertion wrote, by its text.
-  const reference = analyzeSimpleTexResources(source).graphics.find((graphic) => graphic.filename === notice.texPath);
-  if (!reference) return;
-  const relative = replacementGraphicPath({ kind: "file", name: basename(target), path: target, provider: "desktop-fs" }, document.fileRef ?? null);
-  if (!relative || /[\\{}%#$^&~]/u.test(relative.replace(/\\/gu, "/"))) { showError(notice.documentId, "That name cannot be written in TeX."); return; }
+  if (notice.kind !== "saved" || !notice.absolutePath || !notice.compileDirectory || !files?.chooseGraphicsLocation || !files.readLocalAsset || !files.writeGraphicsFile ||
+    state.activeDocumentId !== notice.documentId || document?.source !== notice.sourceAfter || document.assistantLockReason) return;
+  const session = beginDocumentEdit(state);
+  const stale = () => {
+    const latest = getState();
+    const latestDocument = latest.documents[notice.documentId];
+    return !canContinueDocumentEdit(session, latest) || getActiveEditorPlatform() !== platform ||
+      latestDocument?.fileRef?.path !== document.fileRef?.path || latestDocument?.assistantLockReason != null;
+  };
   try {
-    const moved = await files.moveGraphicsFile(notice.absolutePath, target);
-    if (moved.status === "exists") { showError(notice.documentId, `${basename(target)} already exists.`); return; }
-    await files.removeGraphicsFile?.(notice.absolutePath, notice.size, notice.createdDirectories);
+    const extension = notice.fileName.slice(notice.fileName.lastIndexOf(".") + 1);
+    const chosen = await files.chooseGraphicsLocation(dirname(notice.absolutePath), notice.fileName, extension);
+    if (!chosen || chosen === notice.absolutePath || stale()) return;
+    const target = chosen.toLowerCase().endsWith(`.${extension.toLowerCase()}`) ? chosen : `${chosen}.${extension}`;
+    const source = session.latestSource;
+    // The reference this insertion wrote, by its text.
+    const reference = analyzeSimpleTexResources(source).graphics.find((graphic) => graphic.filename === notice.texPath);
+    if (!reference) return;
+    const relative = replacementGraphicPath({ kind: "file", name: basename(target), path: target, provider: "desktop-fs" }, document.fileRef ?? null);
+    if (!relative || /[\\{}%#$^&~]/u.test(relative.replace(/\\/gu, "/"))) { showError(notice.documentId, "That name cannot be written in TeX."); return; }
+    const read = await files.readLocalAsset(notice.absolutePath);
+    if (stale()) return;
+    if (read.status !== "ok") { showError(notice.documentId, "The image file could not be read."); return; }
+    const bytes = graphicBytesFromBase64(read.bytesBase64);
     const listing = files.listGraphicsFiles ? await files.listGraphicsFiles(notice.compileDirectory) : { files: [] };
     const relativeFolder = dirname(relative);
     // Name it as the document names images, reusing the planner's rules.
@@ -327,18 +332,24 @@ export async function changeGraphicsLocation(notice: GraphicsNotice, getState: (
         { files: [...listing.files, { path: relative }] }, new Set([relative]))
       : null;
     const texPath = plan?.reuse ? plan.texPath : relative;
-    const latest = getState();
-    const latestDocument = latest.documents[notice.documentId];
-    if (latestDocument?.source !== source) return;
+    if (stale()) return;
+    // Both paths can appear in source history. A destructive move would make
+    // Undo restore a missing image; keep each committed location available.
+    const written = await files.writeGraphicsFile(target, bytes);
+    if (written.status === "exists") { showError(notice.documentId, `${basename(target)} already exists.`); return; }
+    if (stale()) {
+      await files.removeGraphicsFile?.(target, bytes.byteLength, written.createdDirectories);
+      return;
+    }
     const span = { from: reference.filenameStart, to: reference.filenameEnd };
-    dispatch({ type: "APPLY_SOURCE_PATCHES", documentId: notice.documentId, baseRevision: latestDocument.sourceRevision, changedSourceIds: [],
+    dispatch({ type: "APPLY_SOURCE_PATCHES", documentId: notice.documentId, baseRevision: session.latestRevision, changedSourceIds: [],
       patches: [{ oldSpan: span, newSpan: { from: span.from, to: span.from + texPath.length }, replacement: userText(texPath, "inspector-value") }] });
     const sourceAfter = source.slice(0, span.from) + texPath + source.slice(span.to);
     useGraphicsNoticeStore.getState().show({ ...notice, id: nextNoticeId++, texPath, sourceAfter, absolutePath: target, fileName: basename(target),
       folderLabel: isInside(relative) ? (relativeFolder === "" ? `${basename(notice.compileDirectory)}/` : `${relativeFolder}/`) : `${basename(dirname(target))}/`,
-      createdFolder: null, createdDirectories: moved.createdDirectories });
+      size: bytes.byteLength, createdFolder: null, createdDirectories: written.createdDirectories });
   } catch (error) {
-    showError(notice.documentId, error instanceof Error ? error.message : "The image could not be moved.");
+    showError(notice.documentId, error instanceof Error ? error.message : "The image could not be saved at the new location.");
   }
 }
 

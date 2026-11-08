@@ -66,6 +66,26 @@ describe("image cropping", () => {
     expect(await target(document(String.raw`\includegraphics[draft]{demo.png}`))).toBeNull();
   });
 
+  it.each([
+    "trim=5 0 0 0,trim=10 0 0 0",
+    "viewport=5 0 100 50,trim=10 0 0 0",
+    "trim=5 0 0 0,bb=10 0 100 50",
+    "bb=5 0 100 50,viewport=10 0 100 50",
+    "trim=5 % first crop\n 0 0 0,viewport=10 0 100 50",
+  ])("resets every crop key in %s while retaining the image scale and comments", async (options) => {
+    const source = document(String.raw`\includegraphics[width=4cm,${options},clip,alt={A,B}]{demo.png}`);
+    const before = (await target(source))!;
+    const next = apply(source, beamerImageCropPatches(source, before, { left: 0, bottom: 0, right: 0, top: 0 }));
+    const after = (await target(next))!;
+    expect(next).not.toMatch(/(?:trim|viewport|bb)=/u);
+    expect(next).toContain("clip");
+    expect(next).toContain("alt={A,B}");
+    if (options.includes("% first crop")) expect(next).toContain("% first crop\n");
+    expect(after.crop).toEqual({ left: 0, bottom: 0, right: 0, top: 0 });
+    expect(after.scale.x).toBeCloseTo(before.scale.x, 3);
+    expect(after.scale.y).toBeCloseTo(before.scale.y, 3);
+  });
+
   it("keeps dragged edges inside the image and at a minimum size", async () => {
     const source = document(String.raw`\includegraphics[width=4cm]{demo.png}`);
     const before = (await target(source))!;

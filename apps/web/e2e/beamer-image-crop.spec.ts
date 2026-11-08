@@ -93,7 +93,9 @@ test("double-click reopens crop only for a cropped image, and Reset Crop restore
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByTestId("deck-crop-overlay")).toHaveCount(0);
 
-  await selectImage(page);
+  // Done retains the image selection. An extra click immediately before
+  // dblclick would make three presses within the activation window.
+  await expectSourceCanvasConsistency(page);
   await image(page).dblclick({ force: true });
   await expect(page.getByTestId("deck-crop-overlay")).toBeVisible();
   await page.keyboard.press("Enter");

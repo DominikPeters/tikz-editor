@@ -22,6 +22,13 @@ export function graphicBytesBase64(bytes: ArrayBuffer): string {
   return btoa(chunks.join(""));
 }
 
+export function graphicBytesFromBase64(base64: string): ArrayBuffer {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  return bytes.buffer;
+}
+
 export function storeImportedGraphic(storage: PlatformPersistence, graphic: { path: string; payload: string }): void {
   storage.save(KEY + graphic.path, graphic.payload);
   if (storage.load(KEY + graphic.path) !== graphic.payload) throw new Error("The selected image could not be saved in browser storage.");

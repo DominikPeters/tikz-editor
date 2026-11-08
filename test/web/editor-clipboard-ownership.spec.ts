@@ -95,6 +95,27 @@ describe("clipboard operation ownership", () => {
     await act(async () => { root.render(React.createElement(Harness)); });
   }
 
+  async function readyBeamerDrawing(editLayer = true) {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}
+\begin{tikzpicture}${editLayer ? "[remember picture,overlay]" : ""}
+\draw (0,0) -- (1,0);
+\end{tikzpicture}
+\end{frame}
+\end{document}`;
+    const layer = formatDocumentRootId({ kind: "beamer-frame-tikz", frameIndex: 0, index: 0, layer: true });
+    dispatch({ type: "CODE_EDITED", source });
+    dispatch({ type: "SET_ACTIVE_ROOT", rootId: editLayer ? layer : formatDocumentRootId({ kind: "beamer-frame", index: 0 }) });
+    const response = await computeSnapshot({ id: "clipboard-layer", documentId: state().activeDocumentId, source, sourceRevision: state().sourceRevision,
+      activeRootId: state().activeRootId, drawingLayerRootId: editLayer ? layer : null, includeDrawingLayer: true });
+    dispatch({ type: "COMPUTE_REQUESTED", requestId: response.id });
+    dispatch({ type: "SNAPSHOT_READY", requestId: response.id, snapshot: response.snapshot });
+    expect(state().snapshot.deck?.activeFrame).toBeTruthy();
+    if (editLayer) expect(state().snapshot.overlayLayer).toBeTruthy();
+    return source;
+  }
+
   beforeEach(async () => {
     initialStore = state();
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -340,6 +361,48 @@ describe("clipboard operation ownership", () => {
     await vi.waitFor(() => expect(state().source).toContain(String.raw`\begin{scope}`));
     expect(state().source).toContain(String.raw`\draw (0,0) -- (1,0);`);
     expect(warning).not.toHaveBeenCalled();
+  });
+
+  it.each(["paste", "drop"] as const)("imports an SVG %s into the active drawing layer instead of the slide", async operation => {
+    const source = await readyBeamerDrawing();
+    const arrayBuffer = vi.fn(async () => new TextEncoder().encode(SVG).buffer);
+    const data = pasteData([Object.assign(new File([SVG], "shape.svg", { type: "image/svg+xml" }), { text: async () => SVG, arrayBuffer })]);
+    act(() => {
+      if (operation === "paste") api.onViewportPaste({ target: document.body, defaultPrevented: false, preventDefault() {}, clipboardData: data } as never);
+      else api.onViewportDrop({ preventDefault() {}, stopPropagation() {}, dataTransfer: data } as never);
+    });
+    await vi.waitFor(() => expect(state().source).toContain(String.raw`\begin{scope}`));
+    expect(state().source).not.toContain(String.raw`\includegraphics`);
+    expect(state().source.indexOf(String.raw`\begin{scope}`)).toBeLessThan(state().source.indexOf(String.raw`\end{tikzpicture}`));
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(warning).not.toHaveBeenCalled();
+    dispatch({ type: "UNDO" });
+    expect(state().source).toBe(source);
+  });
+
+  it("keeps a native TikZ clipboard payload editable when it also has a PNG preview", async () => {
+    await readyBeamerDrawing();
+    platform.clipboard = { readCustomText: async () => ({ format: "tikz", text: PAYLOAD }) };
+    await renderHarness();
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(0));
+    beginNativePaste(pasteData([Object.assign(new File([], "image.png", { type: "image/png" }), { arrayBuffer })]));
+    await vi.waitFor(() => expect(state().source).toContain(SNIPPET));
+    expect(state().source).not.toContain(String.raw`\includegraphics`);
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(warning).not.toHaveBeenCalled();
+  });
+
+  it("inserts a slide image beside an inline TikZ picture when editing the slide", async () => {
+    await readyBeamerDrawing(false);
+    const storeGraphicAsset = vi.fn(async () => {});
+    platform.files = { storeGraphicAsset };
+    await renderHarness();
+    const arrayBuffer = vi.fn(async () => new TextEncoder().encode(SVG).buffer);
+    beginNativePaste(pasteData([Object.assign(new File([SVG], "shape.svg", { type: "image/svg+xml" }), { arrayBuffer })]));
+    await vi.waitFor(() => expect(state().source).toContain(String.raw`\includegraphics`));
+    expect(state().source.indexOf(String.raw`\includegraphics`)).toBeGreaterThan(state().source.indexOf(String.raw`\end{tikzpicture}`));
+    expect(arrayBuffer).toHaveBeenCalledOnce();
+    expect(storeGraphicAsset).toHaveBeenCalledOnce();
   });
 
   it.each([true, false])("handles rejected file reads (obsolete=%s) without unhandled rejections", async obsolete => {

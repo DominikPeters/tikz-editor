@@ -104,6 +104,13 @@ describe("image corner resizing", () => {
       expect((await render(nextSource)).graphics[0].bounds.width).toBeCloseTo(60, 3);
     }
   });
+  it.each(["", "<1->"])("withholds resize handles for the two-bracket corner form %s", async (overlay) => {
+    const source = document(String.raw`\includegraphics${overlay}[0,0] % lower corner
+      [100,50]{demo.png}`);
+    const layout = await render(source);
+    expect(layout.graphics[0].options.viewport).toBeDefined();
+    expect(beamerImageResizeTarget(source, layout, layout.graphics[0].itemId)).toBeNull();
+  });
   it("keeps relative image widths local to their column", async () => {
     const source = document(columns([".4\\textwidth", ".5\\textwidth"]).replace("Column 1 has enough text to reflow.", String.raw`\includegraphics[width=.5\linewidth]{demo.png}`));
     const layout = await render(source);

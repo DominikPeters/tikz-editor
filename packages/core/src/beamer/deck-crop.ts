@@ -1,8 +1,8 @@
-import { plainNumber, sourceSlice, tikz, EMPTY_FRAGMENT, type TikzFragment } from "../edit/fragment.js";
+import { applyFragments, plainNumber, sourceSlice, tikz, EMPTY_FRAGMENT, type TikzFragment } from "../edit/fragment.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import { texDimensionUnitFactor } from "../text/tex/dimensions.js";
-import { readOptionList } from "./option-edits.js";
+import { readOptionList, rewriteBeamerOptions, type OptionListLocation } from "./option-edits.js";
 import { beamerOptionalArgumentAfter, beamerOverlayArgumentAfter, createBeamerSyntaxContext } from "./syntax.js";
 import type { BeamerFrameLayout, BeamerRect } from "./types.js";
 
@@ -34,6 +34,8 @@ type CropSourcePlan = {
   readonly insert: { readonly at: number; readonly list: "none" | "empty" | "entries" };
   readonly clip: "present" | "missing" | { readonly falseEntry: Span };
   readonly sizes: readonly SizeValue[];
+  /** Reset must remove every crop key, including ones shadowed by the last. */
+  readonly resetList: OptionListLocation | null;
 };
 
 const BP = 72.27 / 72;
@@ -138,6 +140,7 @@ export function beamerImageCropTarget(source: string, layout: BeamerFrameLayout,
         : { at: afterOverlay, list: "none" },
       clip,
       sizes,
+      resetList: entries.filter((entry) => cropKeyName(entry.key) !== null).length > 1 ? list : null,
     },
   };
 }
@@ -207,6 +210,17 @@ export function beamerImageCropPatches(source: string, target: BeamerImageCropTa
     edits.push(edit(size.span, number));
   }
   const uncropped = [next.left, next.bottom, next.right, next.top].every((value) => Math.abs(value) < 0.005);
+  if (uncropped && plan.resetList) {
+    const span = plan.resetList.span;
+    const sized = applyFragments(source.slice(span.from, span.to), edits.map((item) => ({
+      span: { from: item.span.from - span.from, to: item.span.to - span.from }, fragment: item.replacement,
+    })));
+    const removals = rewriteBeamerOptions(sized, { span: { from: 0, to: sized.length }, contentSpan: { from: 1, to: sized.length - 1 } },
+      (entry) => cropKeyName(entry.kind === "unknown" ? null : entry.key) === null);
+    const reset = applyFragments(sized, removals.map((item) => ({ span: item.span, fragment: item.insert })));
+    const replacement = sourceSlice(reset, { from: 0, to: reset.length });
+    return [{ oldSpan: span, newSpan: { from: span.from, to: span.from + replacement.length }, replacement }];
+  }
   if (plan.key && uncropped) {
     // Remove the entry with one neighbouring comma, never touching other entries.
     const { entrySpan, previousEnd, nextStart } = plan.key;
