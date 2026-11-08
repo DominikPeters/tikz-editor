@@ -1,4 +1,6 @@
 import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import { isGraphicsFile } from "../../graphics-bytes";
+import { graphicsMimeType, insertDeckGraphics } from "../deck-graphics-insertion";
 import {
   useCallback,
   type MutableRefObject,
@@ -417,8 +419,18 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
     ]
   );
 
+  // On a slide, an image file pasted or dropped is inserted as \includegraphics.
+  const insertDeckImage = useCallback((dataTransfer: DataTransfer | null): boolean => {
+    const image = snapshot.deck?.activeFrame && dataTransfer ? Array.from(dataTransfer.files).find(isGraphicsFile) : undefined;
+    if (!image) return false;
+    void insertDeckGraphics({ getState: useEditorStore.getState, dispatch, load: async () => ({
+      bytes: await image.arrayBuffer(), name: image.name || null, mimeType: image.type || graphicsMimeType(image.name) }) });
+    return true;
+  }, [dispatch, snapshot.deck?.activeFrame]);
+
   const onViewportPaste = useCallback(
     (event: ReactClipboardEvent<HTMLDivElement>) => {
+      if (!event.defaultPrevented && insertDeckImage(event.clipboardData)) { event.preventDefault(); return; }
       if (event.defaultPrevented || isEditableClipboardTarget(event.target)) return;
       event.preventDefault();
       const pasteContext = captureClipboardEdit();
@@ -505,7 +517,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
         if (result.reason !== "empty") setWarning("Paste failed. Try copying again, then press Cmd/Ctrl+V while the canvas is focused.");
       })();
     },
-    [captureClipboardEdit, pasteImportedSnippet, pasteSvgFile, platform, setWarning,
+    [captureClipboardEdit, insertDeckImage, pasteImportedSnippet, pasteSvgFile, platform, setWarning,
       DESKTOP_TIKZ_CLIPBOARD_FORMATS, DESKTOP_SVG_CLIPBOARD_FORMATS,
       DESKTOP_POWERPOINT_GVML_CLIPBOARD_FORMATS, DESKTOP_KEYNOTE_CLIPBOARD_FORMATS]
   );
@@ -516,19 +528,24 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       if (!hasFile) {
         return;
       }
-      if (findSvgFileInDataTransfer(event.dataTransfer)) {
+      if (snapshot.deck?.activeFrame || findSvgFileInDataTransfer(event.dataTransfer)) {
         event.preventDefault();
         event.stopPropagation();
         event.dataTransfer.dropEffect = "copy";
       }
     },
-    []
+    [snapshot.deck?.activeFrame]
   );
 
   const onViewportDrop = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
       const hasFile = dataTransferHasFilePayload(event.dataTransfer);
       if (!hasFile) {
+        return;
+      }
+      if (insertDeckImage(event.dataTransfer)) {
+        event.preventDefault();
+        event.stopPropagation();
         return;
       }
       const svgFile = findSvgFileInDataTransfer(event.dataTransfer);
@@ -540,7 +557,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       const context = captureClipboardEdit();
       if (context && canPasteSelection(context)) void pasteSvgFile(svgFile, context, "drop");
     },
-    [captureClipboardEdit, pasteSvgFile]
+    [captureClipboardEdit, insertDeckImage, pasteSvgFile]
   );
 
   const onViewportCopy = useCallback(

@@ -488,6 +488,11 @@ export const APP_MENU_DEFINITION = [
         commandId: APP_MENU_COMMAND_IDS.INSERT_EQUATION,
         label: "Equation",
         accelerator: "CmdOrCtrl+Shift+E"
+      },
+      {
+        kind: "command",
+        commandId: APP_MENU_COMMAND_IDS.INSERT_IMAGE,
+        label: "Image…"
       }
     ]
   },

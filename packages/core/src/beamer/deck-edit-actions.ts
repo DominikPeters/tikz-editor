@@ -494,7 +494,9 @@ function applySetGraphicsOption(
 
 function applyReplaceGraphics(source: string, node: BeamerObjectNode, path: string): EditActionResult {
   if (node.kind !== "graphics") return { kind: "unsupported", reason: "Only images can be replaced." };
-  if (!path.trim() || /[\\{}%#$^&\r\n]/u.test(path) || !/\.(?:png|jpe?g|svg|pdf)$/iu.test(path)) return { kind: "unsupported", reason: "Choose a PNG, JPEG, SVG or PDF with a literal TeX-compatible path." };
+  // An extensionless name is looked up as graphics.sty does; a named extension must be one the preview reads.
+  const extension = /\.([A-Za-z0-9]+)$/u.exec(path.slice(path.lastIndexOf("/") + 1))?.[1];
+  if (!path.trim() || /[\\{}%#$^&\r\n]/u.test(path) || (extension !== undefined && !/^(?:png|jpe?g|svg|pdf)$/iu.test(extension))) return { kind: "unsupported", reason: "Choose a PNG, JPEG, SVG or PDF with a literal TeX-compatible path." };
   const context = createBeamerSyntaxContext(source);
   const command = context.syntax.controlsIn(node.sourceSpan).find(command => command.name === "includegraphics");
   if (!command) return { kind: "unsupported", reason: "The image command was not found." };

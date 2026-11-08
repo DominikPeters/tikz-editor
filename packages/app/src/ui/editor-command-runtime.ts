@@ -15,6 +15,7 @@ import { isMacLikePlatform } from "./key-labels";
 import type { AppSettings } from "../settings/types";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { useEditorStore } from "../store/store";
+import { pickAndInsertDeckGraphics } from "./deck-graphics-insertion";
 import type { DocumentFileRef, EditorAction, EditorState, SnapModes, ToolMode } from "../store/types";
 import { getToolCapabilityStatus } from "./capabilities";
 import { resolveEquationNodeTargetFromSelection, type EquationNodeTarget } from "./equation-utils";
@@ -896,6 +897,10 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     [APP_MENU_COMMAND_IDS.INSERT_RECT]: insertBinding("addRect"),
     [APP_MENU_COMMAND_IDS.INSERT_ELLIPSE]: insertBinding("addEllipse"),
     [APP_MENU_COMMAND_IDS.INSERT_CIRCLE]: insertBinding("addCircle"),
+    [APP_MENU_COMMAND_IDS.INSERT_IMAGE]: {
+      enabled: snapshot.deck?.activeFrame != null && snapshot.source === source && getActiveEditorPlatform().files?.openBinary != null,
+      run: () => { void pickAndInsertDeckGraphics(useEditorStore.getState, dispatch); }
+    },
     [APP_MENU_COMMAND_IDS.INSERT_EQUATION]: {
       enabled: onOpenInsertEquation != null,
       run: () => onOpenInsertEquation?.()

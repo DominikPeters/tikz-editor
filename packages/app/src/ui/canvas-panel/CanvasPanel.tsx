@@ -84,6 +84,7 @@ viewportToWorldPoint,
 worldToSvgPoint
 } from "./geometry";
 import type { Span } from "@tikz-editor/core/ast/types";
+import { clearDeckReselect, peekDeckReselect, registerDeckCaretReader, type DeckCaret } from "./deck-insertion-bridge";
 import { buildHitRegions, type HitRegion } from "./hit-regions";
 import {
 pickClosestSourceId
@@ -2538,6 +2539,14 @@ export const CanvasPanel = memo(function CanvasPanel({
     dispatch
   });
 
+  // Insertions from menus, paste and drop go in at the caret of a deck session.
+  const readDeckCaret = useStableCallback((): DeckCaret | null => {
+    if (!textEditingSession || !deckActiveFrame) return null;
+    const offset = textEditingSession.sourceSpan.from + Math.min(textEditingSession.selectionStart, textEditingSession.selectionEnd);
+    closeTextEditingSession();
+    return { documentId: activeDocumentId, frameId: deckActiveFrame.frameId, offset };
+  });
+  useEffect(() => registerDeckCaretReader(readDeckCaret), [readDeckCaret]);
   const textEditOpen = textEditingSession != null;
   useLayoutEffect(() => {
     if (textEditOpen === canvasTextEditActive) return;
@@ -2743,7 +2752,8 @@ export const CanvasPanel = memo(function CanvasPanel({
   );
 
   useEffect(() => {
-    const pending = pendingDeckReselectRef.current;
+    const external = peekDeckReselect();
+    const pending = pendingDeckReselectRef.current ?? (external?.source === source ? external : null);
     if (!pending || !deckObjectIndex || !deckActiveFrame) {
       return;
     }
@@ -2751,6 +2761,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       return;
     }
     pendingDeckReselectRef.current = null;
+    if (external) clearDeckReselect(external);
     // Items' topology spans run through the next `\item`/`\end` token, past
     // the inserted copy, so match on the span START falling inside it.
     const node = deckObjectIndex.nodes.find(

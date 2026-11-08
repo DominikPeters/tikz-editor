@@ -1,3 +1,4 @@
+import { GraphicsNoticeToast } from "./GraphicsNoticeToast";
 import {
   useEffect,
   useState,
@@ -496,6 +497,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             onCanvasContextMenu(event);
           }}
         >
+          <GraphicsNoticeToast />
           {assistantLockReason ? <div className={css.lockOverlay} data-testid="canvas-lock-overlay" data-select="text">{assistantLockReason}</div> : null}
           {!svgResult ? (
             <div className={css.noSvg} data-testid="canvas-no-svg" data-select="text">

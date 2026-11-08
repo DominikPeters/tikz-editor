@@ -1754,3 +1754,70 @@
   pointer-events: none;
 }
 .deckCropHandle:focus-visible .deckCropGrip { stroke-width: 4px; }
+
+/* Where an inserted image went: a HUD capsule over the canvas. */
+.graphicsNotice {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 6;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(100% - 28px);
+  padding: 4px 4px 4px 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent 30%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-pane) 82%, transparent 18%);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
+  color: var(--text);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: default;
+  user-select: none;
+  animation: graphicsNoticeIn 160ms ease-out;
+}
+
+.graphicsNoticeText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 6px;
+}
+
+.graphicsNoticeText b {
+  font-weight: 600;
+}
+
+.graphicsNoticeButton {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  padding: 3px 7px;
+  font: inherit;
+  font-weight: 500;
+  color: var(--control-accent);
+  cursor: default;
+}
+
+.graphicsNoticeButton:hover {
+  background: color-mix(in srgb, var(--control-accent) 12%, transparent);
+}
+
+.graphicsNoticeButton:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--control-accent) 60%, transparent);
+  outline-offset: 1px;
+}
+
+@keyframes graphicsNoticeIn {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .graphicsNotice { animation: none; }
+}

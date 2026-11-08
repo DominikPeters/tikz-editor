@@ -90,6 +90,7 @@ export const APP_MENU_COMMAND_IDS = {
   INSERT_ELLIPSE: "insert.ellipse",
   INSERT_CIRCLE: "insert.circle",
   INSERT_EQUATION: "insert.equation",
+  INSERT_IMAGE: "insert.image",
   EDIT_EQUATION: "edit.equation",
   ADD_LABEL: "insert.add-label",
   ADD_PIN: "insert.add-pin",

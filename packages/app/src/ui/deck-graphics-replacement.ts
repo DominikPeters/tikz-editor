@@ -1,6 +1,7 @@
 import { applyDeckEditAction, buildBeamerObjectIndex } from "@tikz-editor/core/beamer/index";
 import { beginDocumentEdit, canContinueDocumentEdit } from "../edit-session.js";
-import { graphicBytesBase64, importedGraphicPath, replacementGraphicPath, storeImportedGraphic } from "../imported-graphics.js";
+import { prepareGraphics } from "../graphics-bytes.js";
+import { discardPlacedGraphics, graphicsFileName, graphicsMimeType, placeGraphicsFile, showGraphicsNotice } from "./deck-graphics-insertion.js";
 import { getActiveEditorPlatform } from "../platform/current.js";
 import type { EditorAction, EditorState } from "../store/types.js";
 import { deckStepRootKey } from "../root-key.js";
@@ -23,30 +24,31 @@ export async function replaceSelectedDeckGraphics(params: {
   const picker = platform.files?.openBinary;
   if (!picker) return { status: "failed", reason: "Image selection is unavailable on this platform." };
   try {
-    const opened = await picker({ addToRecent: false, kind: "graphics" });
+    const opened = await picker({ addToRecent: false, kind: "graphics-import" });
     if (!opened) return { status: "cancelled" };
-    const current = params.getState();
-    if (!canContinueDocumentEdit(session, current) || current.documents[session.documentId]?.assistantLockReason || current.deckObjectSelection?.objectId !== selected.objectId ||
-      current.deckObjectSelection.frameId !== selected.frameId || current.snapshot.deck?.activeFrame?.step !== frame.step ||
-      current.deckStepByRootKey[stepKey] !== state.deckStepByRootKey[stepKey] ||
-      current.snapshot.source !== current.source || getActiveEditorPlatform() !== platform) return { status: "stale" };
-    const file = opened.fileRef;
-    if (!file || !/\.(?:png|jpe?g|svg|pdf)$/iu.test(file.name)) return { status: "failed", reason: "Choose a PNG, JPEG, SVG or PDF image." };
-    const nativePath = replacementGraphicPath(file, current.documents[session.documentId]?.fileRef ?? null);
-    const path = nativePath ?? importedGraphicPath(file.name);
-    const action = { kind: "deckReplaceGraphics", frameId: frame.frameId, objectId: selected.objectId, path } as const;
+    const stale = (latest: EditorState) => !canContinueDocumentEdit(session, latest) || latest.documents[session.documentId]?.assistantLockReason != null ||
+      latest.deckObjectSelection?.objectId !== selected.objectId || latest.deckObjectSelection.frameId !== selected.frameId ||
+      latest.snapshot.deck?.activeFrame?.step !== frame.step || latest.deckStepByRootKey[stepKey] !== state.deckStepByRootKey[stepKey] ||
+      latest.snapshot.source !== latest.source || getActiveEditorPlatform() !== platform;
+    if (stale(params.getState())) return { status: "stale" };
+    const name = opened.fileRef?.name ?? null;
+    const input = { bytes: opened.bytes, name, mimeType: name ? graphicsMimeType(name) : "",
+      path: opened.fileRef?.provider === "desktop-fs" ? opened.fileRef.path ?? null : null };
+    const prepared = await prepareGraphics(input.bytes, input.mimeType);
+    // The image goes where the document keeps images, as an insertion would.
+    const placed = await placeGraphicsFile({ source: session.latestSource, offset: node.sourceSpan.from, documentId: session.documentId,
+      documentRef: params.getState().documents[session.documentId]?.fileRef ?? null, input, prepared, name: graphicsFileName(input, session.latestSource, frame.frameId) });
+    if ("error" in placed) return { status: "failed", reason: placed.error };
+    const action = { kind: "deckReplaceGraphics", frameId: frame.frameId, objectId: selected.objectId, path: placed.texPath } as const;
     const result = applyDeckEditAction(session.latestSource, frame.layout, action);
-    if (result.kind !== "success") return { status: "failed", reason: result.kind === "unsupported" ? result.reason : "The image could not be replaced." };
-    if (nativePath === null) {
-      if (platform.files?.storeGraphicAsset) await platform.files.storeGraphicAsset({ path, bytes: opened.bytes });
-      else storeImportedGraphic(platform.persistence, { path, payload: graphicBytesBase64(opened.bytes) });
-      const latest = params.getState();
-      if (!canContinueDocumentEdit(session, latest) || latest.documents[session.documentId]?.assistantLockReason || latest.deckObjectSelection?.objectId !== selected.objectId ||
-        latest.deckStepByRootKey[stepKey] !== state.deckStepByRootKey[stepKey] || getActiveEditorPlatform() !== platform) return { status: "stale" };
+    if (result.kind !== "success" || stale(params.getState())) {
+      await discardPlacedGraphics(placed.notice);
+      return result.kind !== "success" ? { status: "failed", reason: result.kind === "unsupported" ? result.reason : "The image could not be replaced." } : { status: "stale" };
     }
     params.rememberSelection();
     params.dispatch({ type: "APPLY_EDIT_ACTION", documentId: session.documentId, action, precomputedSource: session.latestSource,
       precomputedResult: result, expectedDocumentRevision: { documentId: session.documentId, sourceRevision: session.latestRevision } });
+    showGraphicsNotice(placed, result.newSource);
     return { status: "applied" };
   } catch (error) {
     return { status: "failed", reason: error instanceof Error ? error.message : "The selected image could not be loaded or stored." };
