@@ -852,6 +852,12 @@ select {
   border-bottom-color: #d6c9bc;
 }
 
+.landingBeamerSection {
+  background: #ecebf3;
+  border-top-color: #d3d0e0;
+  border-bottom-color: #d3d0e0;
+}
+
 .landingIpadSection {
   margin: 0;
   background: #e7edf2;

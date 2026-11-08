@@ -43,6 +43,12 @@ import multiFigurePng2400 from "./assets/screenshots/multi-figure-2400.png";
 import multiFigureWebp960 from "./assets/screenshots/multi-figure-960.webp";
 import multiFigureWebp1600 from "./assets/screenshots/multi-figure-1600.webp";
 import multiFigureWebp2400 from "./assets/screenshots/multi-figure-2400.webp";
+import beamerPng960 from "./assets/screenshots/beamer-960.png";
+import beamerPng1600 from "./assets/screenshots/beamer-1600.png";
+import beamerPng2400 from "./assets/screenshots/beamer-2400.png";
+import beamerWebp960 from "./assets/screenshots/beamer-960.webp";
+import beamerWebp1600 from "./assets/screenshots/beamer-1600.webp";
+import beamerWebp2400 from "./assets/screenshots/beamer-2400.webp";
 import ipadLandscapePng960 from "./assets/screenshots/ipad-landscape-960.png";
 import ipadPortraitPng720 from "./assets/screenshots/ipad-portrait-720.png";
 import ipadLandscapePng1600 from "./assets/screenshots/ipad-landscape-1600.png";
@@ -121,6 +127,14 @@ const MULTI_FIGURE_SCREENSHOT: ResponsiveScreenshot = responsiveScreenshot({
   fallback: multiFigurePng2400,
   width: 2400,
   height: 1148
+});
+
+const BEAMER_SCREENSHOT: ResponsiveScreenshot = responsiveScreenshot({
+  png: [[beamerPng960, 960], [beamerPng1600, 1600], [beamerPng2400, 2400]],
+  webp: [[beamerWebp960, 960], [beamerWebp1600, 1600], [beamerWebp2400, 2400]],
+  fallback: beamerPng2400,
+  width: 2400,
+  height: 1511
 });
 
 const IPAD_LANDSCAPE_SCREENSHOT: ResponsiveScreenshot = responsiveScreenshot({
@@ -234,10 +248,11 @@ const FEATURE_GROUPS = [
     ]
   },
   {
-    title: "Papers and figures",
+    title: "Papers, slides, and figures",
     icon: RiSlideshowLine,
     items: [
       "Open a full paper with multiple figures, and navigate between figures using thumbnail previews.",
+      "Open a Beamer presentation and edit its slides, including their text, figures, overlays, and theme, then present it from the app.",
       "Draw nodes, shapes, matrices, arrows, paths, curves, grids, rectangles, ellipses, and circles.",
       "Edit text and equations directly in the figure."
     ]
@@ -295,6 +310,7 @@ export function App() {
       <TikzDevHeader />
       <main className="landingPage">
         <Hero />
+        <BeamerSection />
         <EditorStory />
         <Support />
         <PrivacyPolicy />
@@ -362,9 +378,9 @@ function Hero() {
           <span>TikZ Editor</span>
           <span className="landingTitleVersion">v{releaseDownloadMetadata.version}</span>
         </h1>
-        <p className="landingHeroLead">WYSIWYG editor for TikZ diagrams in LaTeX</p>
+        <p className="landingHeroLead">WYSIWYG editor for TikZ diagrams and Beamer slides in LaTeX</p>
         <p className="landingHeroText">
-          You can start from scratch or edit an existing TikZ figure, or even directly open your paper tex file to edit its images. The TikZ code gets instantly updated as you move around elements, without disturbing existing formatting such as line breaks and spaces.
+          You can start from scratch or edit an existing TikZ figure, or even directly open your paper tex file to edit its images, or your Beamer presentation to edit its slides. The TikZ code gets instantly updated as you move around elements, without disturbing existing formatting such as line breaks and spaces.
         </p>
         <p className="landingHeroText">
           The app makes fine-tuning the positions of elements easy and instant, without needing to recompile. It supports all common TikZ features including \foreach loops.
@@ -663,6 +679,31 @@ function EditorStory() {
   );
 }
 
+function BeamerSection() {
+  return (
+    <section className="landingPaperSection landingBeamerSection" aria-labelledby="beamer-title">
+      <div className="landingPaperSectionInner">
+        <div className="landingPaperCopy">
+          <h2 id="beamer-title">Edit Beamer slides</h2>
+          <p>
+            Open a Beamer <code>.tex</code> file to see its slides next to the source. You can edit slide text
+            and the TikZ figures on a slide directly on the canvas, step through overlays, change the theme, and
+            present the slides from the app.
+          </p>
+        </div>
+        <figure className="landingPaperScreenshot">
+          <ScreenshotImage
+            image={BEAMER_SCREENSHOT}
+            alt="TikZ Editor on the Mac editing a Beamer slide, with slide thumbnails, canvas, and source"
+            sizes="min(1000px, 100vw)"
+            loading="lazy"
+          />
+        </figure>
+      </div>
+    </section>
+  );
+}
+
 function PaperFileSection() {
   return (
     <section className="landingPaperSection" aria-labelledby="paper-workflow-title">
@@ -834,7 +875,7 @@ function HowItWorksSection() {
           Parsing TeX code is famously near impossible, which probably explains why prior to this project, no WYSIWYG editor for TikZ existed (with some exceptions like <a href="https://tikzit.github.io/">TikZiT</a> but which doesn't allow you to bring your pre-existing TikZ code). With the arrival of competent LLM coding agents, this parsing task has now become kind of feasible thanks to their inhuman patience to attack this problem by brute force.
         </p>
         <p>
-          Now, the app does not parse arbitrary TeX code; it only parses commands that are frequently used in the process of making TikZ figures. Thus, code that is very "hacky" will likely not be interpreted correctly. Still, coverage is pretty good and increasing over time. The app parses the given TikZ code and builds an internal representation of it which becomes a semantic layer that resolves coordinates, styles, transforms, loops, nodes, paths, and text into editable scene elements. This representation is closely linked to the syntactic input, by tagging it with line and character ranges. This allows the app to change parts of the code using small patches, without having to re-write the TikZ code in some canonical format. This way, the user's indentation and line breaks are preserved faithfully. The scene is then rendered using SVG.
+          Now, the app does not parse arbitrary TeX code; it only parses commands that are frequently used in the process of making TikZ figures and Beamer slides. Thus, code that is very "hacky" will likely not be interpreted correctly. Still, coverage is pretty good and increasing over time. The app parses the given TikZ code and builds an internal representation of it which becomes a semantic layer that resolves coordinates, styles, transforms, loops, nodes, paths, and text into editable scene elements. This representation is closely linked to the syntactic input, by tagging it with line and character ranges. This allows the app to change parts of the code using small patches, without having to re-write the TikZ code in some canonical format. This way, the user's indentation and line breaks are preserved faithfully. The scene is then rendered using SVG.
         </p>
         <p>
           Node contents are rendered by a text and math engine written from scratch to mirror LaTeX as closely as possible. To support multi-line text, the app re-implements TeX hyphenation and the <a href="https://en.wikipedia.org/wiki/Knuth%E2%80%93Plass_line-breaking_algorithm">Knuth-Plass line-breaking algorithm</a>. This was a major effort, but it means that multi-line text in the app usually closely mirrors the same text rendered by TeX.
