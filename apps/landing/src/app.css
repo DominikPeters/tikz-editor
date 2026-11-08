@@ -852,6 +852,71 @@ select {
   border-bottom-color: #d6c9bc;
 }
 
+.landingIpadSection {
+  margin: 0;
+  background: #e7edf2;
+  border-top: 0;
+  border-bottom-color: #c5d0d9;
+}
+
+.landingIpadSection .landingPaperCopy p {
+  margin: 14px auto 0;
+  color: var(--landing-muted);
+  font-size: clamp(0.98rem, 1.2vw, 1.12rem);
+  line-height: 1.58;
+}
+
+.landingIpadCta {
+  margin-top: 22px;
+}
+
+.landingAppStoreBadge {
+  display: inline-block;
+  line-height: 0;
+}
+
+.landingAppStoreBadge img {
+  width: auto;
+  height: 46px;
+}
+
+/* Landscape (4:3) and portrait (3:4) devices share a height: widths 16 : 9. */
+.landingIpadPair {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(16px, 2.6vw, 34px);
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.landingIpadLandscape {
+  flex: 16 1 0;
+}
+
+.landingIpadPortrait {
+  flex: 9 1 0;
+}
+
+.landingIpadDevice {
+  min-width: 0;
+  margin: 0;
+  padding: clamp(8px, 1.4vw, 14px);
+  border-radius: clamp(18px, 3vw, 30px);
+  background: #1c1c1e;
+  box-shadow:
+    0 0 0 1px #3a3a3c inset,
+    0 26px 70px rgba(34, 47, 48, 0.22),
+    0 10px 28px rgba(34, 47, 48, 0.14);
+}
+
+.landingIpadDevice img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: clamp(10px, 1.8vw, 18px);
+}
+
 .landingPaperSectionInner {
   width: min(1240px, calc(100vw - 32px));
   margin: 0 auto;
@@ -1484,6 +1549,19 @@ select {
     padding: 30px 0 36px;
   }
 
+  .landingIpadPair {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .landingIpadLandscape {
+    width: 100%;
+  }
+
+  .landingIpadPortrait {
+    width: 62%;
+  }
+
   .landingPaperCopy {
     margin-bottom: 24px;
   }
@@ -1515,4 +1593,8 @@ select {
   .landingFeatureGroup {
     padding: 11px 12px 12px;
   }
+}
+
+.landingHeroActions .landingAppStoreBadge img {
+  height: 40px;
 }

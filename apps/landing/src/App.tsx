@@ -43,6 +43,19 @@ import multiFigurePng2400 from "./assets/screenshots/multi-figure-2400.png";
 import multiFigureWebp960 from "./assets/screenshots/multi-figure-960.webp";
 import multiFigureWebp1600 from "./assets/screenshots/multi-figure-1600.webp";
 import multiFigureWebp2400 from "./assets/screenshots/multi-figure-2400.webp";
+import ipadLandscapePng960 from "./assets/screenshots/ipad-landscape-960.png";
+import ipadPortraitPng720 from "./assets/screenshots/ipad-portrait-720.png";
+import ipadLandscapePng1600 from "./assets/screenshots/ipad-landscape-1600.png";
+import ipadPortraitPng1200 from "./assets/screenshots/ipad-portrait-1200.png";
+import ipadLandscapePng2400 from "./assets/screenshots/ipad-landscape-2400.png";
+import ipadPortraitPng2064 from "./assets/screenshots/ipad-portrait-2064.png";
+import ipadLandscapeWebp960 from "./assets/screenshots/ipad-landscape-960.webp";
+import ipadPortraitWebp720 from "./assets/screenshots/ipad-portrait-720.webp";
+import ipadLandscapeWebp1600 from "./assets/screenshots/ipad-landscape-1600.webp";
+import ipadPortraitWebp1200 from "./assets/screenshots/ipad-portrait-1200.webp";
+import ipadLandscapeWebp2400 from "./assets/screenshots/ipad-landscape-2400.webp";
+import ipadPortraitWebp2064 from "./assets/screenshots/ipad-portrait-2064.webp";
+import appStoreBadge from "./assets/app-store-badge.svg";
 import { AddArrowCard } from "./feature-demos/cards/AddArrowCard";
 import { AddRectCard } from "./feature-demos/cards/AddRectCard";
 import { NodeMoveCard } from "./feature-demos/cards/NodeMoveCard";
@@ -109,6 +122,24 @@ const MULTI_FIGURE_SCREENSHOT: ResponsiveScreenshot = responsiveScreenshot({
   width: 2400,
   height: 1148
 });
+
+const IPAD_LANDSCAPE_SCREENSHOT: ResponsiveScreenshot = responsiveScreenshot({
+  png: [[ipadLandscapePng960, 960], [ipadLandscapePng1600, 1600], [ipadLandscapePng2400, 2400]],
+  webp: [[ipadLandscapeWebp960, 960], [ipadLandscapeWebp1600, 1600], [ipadLandscapeWebp2400, 2400]],
+  fallback: ipadLandscapePng2400,
+  width: 2400,
+  height: 1800
+});
+
+const IPAD_PORTRAIT_SCREENSHOT: ResponsiveScreenshot = responsiveScreenshot({
+  png: [[ipadPortraitPng720, 720], [ipadPortraitPng1200, 1200], [ipadPortraitPng2064, 2064]],
+  webp: [[ipadPortraitWebp720, 720], [ipadPortraitWebp1200, 1200], [ipadPortraitWebp2064, 2064]],
+  fallback: ipadPortraitPng2064,
+  width: 2064,
+  height: 2752
+});
+
+const APP_STORE_URL = "https://apps.apple.com/us/app/tikz-editor/id6831133261";
 
 const CODEX_SCREENSHOT: ResponsiveScreenshot = responsiveScreenshot({
   png: [[codexScreenshotPng960, 960], [codexScreenshotPng1600, 1600], [codexScreenshotPng2400, 2400]],
@@ -318,6 +349,7 @@ function TikzDevFooter() {
 function Hero() {
   const desktopDownloadSelection = useDesktopDownloadSelection();
   const desktopDownload = getDesktopDownload(desktopDownloadSelection);
+  const onIpad = isIpad();
   const DesktopDownloadIcon = desktopDownload.icon;
   const portableDownload = releaseDownloadMetadata.downloads.find(
     (download) => download.platform === "windows" && /_x64-portable\.zip$/i.test(download.name)
@@ -338,7 +370,7 @@ function Hero() {
           The app makes fine-tuning the positions of elements easy and instant, without needing to recompile. It supports all common TikZ features including \foreach loops.
         </p>
         <p className="landingHeroText">
-          The app is free and open source (MIT licensed, code on <a href="https://github.com/DominikPeters/tikz-editor">GitHub</a>). It works on the web or as a lightweight desktop app with some extra features.
+          The app is free and open source (MIT licensed, code on <a href="https://github.com/DominikPeters/tikz-editor">GitHub</a>). It works on the web, as a lightweight desktop app with some extra features, and <a href="#ipad">on the iPad</a>.
         </p>
         <div className="landingHeroActions" aria-label="Landing page links">
           <a href="https://tikz.dev/editor/web" className="landingPrimaryLink">
@@ -347,6 +379,16 @@ function Hero() {
               <span className="landingCtaLabel">Open TikZ Editor Web</span>
             </span>
           </a>
+          {onIpad ? (
+            <div className="landingDownloadBlock">
+              <AppStoreBadge />
+              <div className="landingDownloadAlternates">
+                or download for <a href={desktopDownload.primary.url}>Mac</a>
+                <span aria-hidden="true"> · </span>
+                <a href={releaseDownloadMetadata.url}>other platforms</a>
+              </div>
+            </div>
+          ) : (
           <div className="landingDownloadBlock">
             <a href={desktopDownload.primary.url} className="landingDownloadLink">
               <span className="landingCtaContent">
@@ -367,6 +409,7 @@ function Hero() {
               ))}
             </div>
           </div>
+          )}
           {desktopDownloadSelection.platform === "windows" && portableDownload ? (
             <div className="landingDownloadBlock">
               <a href={portableDownload.url} className="landingDownloadLink landingPortableDownloadLink">
@@ -474,6 +517,7 @@ function getDesktopDownload(selection: DesktopDownloadSelection) {
       primary: downloadLink("Download for Windows", findDownload((download) => download.platform === "windows" && download.format === "exe")),
       alternatePrefix: "",
       alternates: [
+        ipadAppLink("iPad app"),
         releaseLink("Other platforms"),
         { label: "Code-signing policy", url: "#code-signing-policy", sizeBytes: 0 }
       ]
@@ -488,6 +532,7 @@ function getDesktopDownload(selection: DesktopDownloadSelection) {
       alternates: [
         downloadLink("deb", findDownload((download) => download.platform === "linux" && download.format === "deb")),
         downloadLink("rpm", findDownload((download) => download.platform === "linux" && download.format === "rpm")),
+        ipadAppLink("iPad app"),
         releaseLink("other platforms")
       ]
     };
@@ -502,6 +547,7 @@ function getDesktopDownload(selection: DesktopDownloadSelection) {
     alternatePrefix: "or choose ",
     alternates: [
       downloadLink(`Mac (${macArchLabel(alternateArch)})`, findDownload((download) => download.platform === "mac" && download.arch === alternateArch)),
+      ipadAppLink("iPad app"),
       releaseLink("other platforms")
     ]
   };
@@ -516,6 +562,26 @@ function downloadLink(label: string, download: ReleaseDownload | undefined) {
     url: download.url,
     sizeBytes: download.sizeBytes
   };
+}
+
+function ipadAppLink(label: string) {
+  return { label, url: APP_STORE_URL, sizeBytes: 0 };
+}
+
+/** iPadOS Safari reports itself as a Mac, so touch support is what tells them apart. */
+function isIpad(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  return /iPad/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+}
+
+function AppStoreBadge() {
+  return (
+    <a href={APP_STORE_URL} className="landingAppStoreBadge">
+      <img src={appStoreBadge} alt="Download on the App Store" width={120} height={40} />
+    </a>
+  );
 }
 
 function releaseLink(label: string) {
@@ -588,6 +654,7 @@ function EditorStory() {
         </SyncedDemo>
       </section>
       <PaperFileSection />
+      <IpadSection />
       <AiAssistSection />
       <ToolCatalogSection />
       <FeatureChecklistSection />
@@ -640,6 +707,44 @@ function AiAssistSection() {
             loading="lazy"
           />
         </figure>
+      </div>
+    </section>
+  );
+}
+
+function IpadSection() {
+  return (
+    <section className="landingPaperSection landingIpadSection" id="ipad" aria-labelledby="ipad-title">
+      <div className="landingPaperSectionInner">
+        <div className="landingPaperCopy">
+          <h2 id="ipad-title">iPad app</h2>
+          <p>
+            The same editor is available on the iPad. It opens <code>.tex</code> and <code>.tikz</code> files
+            from the Files app, including papers and Beamer slides, which you can present on the iPad or on an
+            external display. It works offline and is free, like the other versions.
+          </p>
+          <div className="landingIpadCta">
+            <AppStoreBadge />
+          </div>
+        </div>
+        <div className="landingIpadPair">
+          <figure className="landingIpadDevice landingIpadLandscape">
+            <ScreenshotImage
+              image={IPAD_LANDSCAPE_SCREENSHOT}
+              alt="TikZ Editor on the iPad in landscape, editing a Beamer slide"
+              sizes="(max-width: 760px) 100vw, 760px"
+              loading="lazy"
+            />
+          </figure>
+          <figure className="landingIpadDevice landingIpadPortrait">
+            <ScreenshotImage
+              image={IPAD_PORTRAIT_SCREENSHOT}
+              alt="TikZ Editor on the iPad in portrait, editing a figure"
+              sizes="(max-width: 760px) 60vw, 430px"
+              loading="lazy"
+            />
+          </figure>
+        </div>
       </div>
     </section>
   );
