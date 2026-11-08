@@ -31,7 +31,7 @@ export type PlatformClipboard = {
 
 export type PlatformFileApi = {
   openText?: (options?: { addToRecent?: boolean }) => Promise<{ source: string; fileRef: DocumentFileRef | null } | null>;
-  openBinary?: (options?: { addToRecent?: boolean; kind?: "graphics" }) => Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef | null } | null>;
+  openBinary?: (options?: { addToRecent?: boolean; kind?: "graphics" | "graphics-import" }) => Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef | null } | null>;
   fetchArxivSource?: (idOrUrl: string) => Promise<ArxivSourcePayload>;
   bindOpenRequest?: (
     handler: (opened: { source: string; fileRef: DocumentFileRef | null; sourceLine?: number }) => void
@@ -48,6 +48,16 @@ export type PlatformFileApi = {
   readLocalAsset?: (path: string) => Promise<LocalAssetReadResult>;
   /** Persist a selected browser asset without embedding bytes in TeX source. */
   storeGraphicAsset?: (asset: { path: string; bytes: ArrayBuffer }) => Promise<void>;
+  /** Image files and folders up to two levels below `directory`, relative to it. */
+  listGraphicsFiles?: (directory: string) => Promise<GraphicsFileListing>;
+  /** Write a new image file, creating its folders; never replaces a file. */
+  writeGraphicsFile?: (path: string, bytes: ArrayBuffer) => Promise<GraphicsFileWriteResult>;
+  /** Move an image file, creating folders; never replaces a file. */
+  moveGraphicsFile?: (from: string, to: string) => Promise<GraphicsFileWriteResult>;
+  /** Remove a written image (if it still has `expectedSize`), then those folders while empty. */
+  removeGraphicsFile?: (path: string, expectedSize: number, directories: readonly string[]) => Promise<void>;
+  /** The system save panel for an image's new place; null when cancelled. */
+  chooseGraphicsLocation?: (directory: string, name: string, extension: string) => Promise<string | null>;
   writeLinkedText?: (
     fileRef: DocumentFileRef,
     text: string,
@@ -60,6 +70,15 @@ export type PlatformFileApi = {
   exportFile?: (content: BlobPart[], options: { fileName: string; mimeType: string }) => Promise<boolean>;
   clearRecentFiles?: () => Promise<void>;
 };
+
+export type GraphicsFileListing = {
+  files: { path: string; size: number }[];
+  directories: string[];
+};
+
+export type GraphicsFileWriteResult =
+  | { status: "written"; createdDirectories: string[] }
+  | { status: "exists" };
 
 export type LocalAssetReadResult =
   | {

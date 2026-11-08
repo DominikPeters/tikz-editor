@@ -471,6 +471,24 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
         }
         return await read(path);
       },
+      listGraphicsFiles: async (directory) => {
+        const list = getBridge().listGraphicsFiles;
+        return list ? await list(directory) : { files: [], directories: [] };
+      },
+      writeGraphicsFile: async (path, bytes) => {
+        const write = getBridge().writeGraphicsFile;
+        if (!write) throw new Error("Saving images is unavailable.");
+        return await write(path, base64FromBytes(new Uint8Array(bytes)));
+      },
+      moveGraphicsFile: async (from, to) => {
+        const move = getBridge().moveGraphicsFile;
+        if (!move) throw new Error("Moving images is unavailable.");
+        return await move(from, to);
+      },
+      removeGraphicsFile: async (path, expectedSize, directories) => {
+        await getBridge().removeGraphicsFile?.(path, expectedSize, directories);
+      },
+      chooseGraphicsLocation: async (directory, name, extension) => await getBridge().chooseGraphicsLocation?.(directory, name, extension) ?? null,
       writeLinkedText: async (fileRef, text, expectedRevision): Promise<LinkedTextWriteResult> => {
         const bridge = getBridge();
         if (fileRef.provider !== "desktop-fs" || !fileRef.path || !bridge.writeLinkedText) {

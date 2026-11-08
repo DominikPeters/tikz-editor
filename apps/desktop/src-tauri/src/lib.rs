@@ -1,4 +1,5 @@
 mod assistant;
+mod graphics_files;
 mod latex_pdf;
 mod presentation;
 mod update_preferences;
@@ -2162,6 +2163,14 @@ fn desktop_open_binary(
             FileDialog::new()
                 .add_filter("Images and PDF", &["png", "jpg", "jpeg", "svg", "pdf"])
                 .pick_file()
+        } else if kind.as_deref() == Some("graphics-import") {
+            // Formats pdfLaTeX cannot read are converted on insertion.
+            FileDialog::new()
+                .add_filter(
+                    "Images and PDF",
+                    &["png", "jpg", "jpeg", "svg", "pdf", "heic", "heif", "tif", "tiff", "webp", "gif", "bmp"],
+                )
+                .pick_file()
         } else {
             FileDialog::new()
                 .add_filter("PowerPoint", &["pptx"])
@@ -3198,6 +3207,11 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            graphics_files::desktop_list_graphics_files,
+            graphics_files::desktop_write_graphics_file,
+            graphics_files::desktop_move_graphics_file,
+            graphics_files::desktop_remove_graphics_file,
+            graphics_files::desktop_choose_graphics_location,
             snap_layout::desktop_set_maximize_button_bounds,
             windows_accent::desktop_accent_palette,
             presentation::desktop_presentation_keep_awake,

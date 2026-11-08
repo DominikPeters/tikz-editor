@@ -8,6 +8,8 @@ import type {
   AssistantThreadState,
   AssistantThreadSummary,
   DesktopContextMenuPayload,
+  GraphicsFileListing,
+  GraphicsFileWriteResult,
   UpdateInfo,
   UpdateInstallProgress
 } from "@tikz-editor/app/platform/types";
@@ -71,7 +73,7 @@ export type DesktopLocalAssetReadResult =
 
 export type DesktopBridge = {
   openText: (path?: string | null, options?: { addToRecent?: boolean }) => Promise<DesktopOpenTextResult | null>;
-  openBinary?: (path?: string | null, options?: { addToRecent?: boolean; kind?: "graphics" }) => Promise<DesktopOpenBinaryResult | null>;
+  openBinary?: (path?: string | null, options?: { addToRecent?: boolean; kind?: "graphics" | "graphics-import" }) => Promise<DesktopOpenBinaryResult | null>;
   fetchArxivSource?: (idOrUrl: string) => Promise<ArxivSourcePayload>;
   saveText: (params: {
     text: string;
@@ -81,6 +83,11 @@ export type DesktopBridge = {
   }) => Promise<DesktopSaveTextResult>;
   readLinkedText?: (path: string) => Promise<DesktopLinkedTextReadResult>;
   readLocalAsset?: (path: string) => Promise<DesktopLocalAssetReadResult>;
+  listGraphicsFiles?: (directory: string) => Promise<GraphicsFileListing>;
+  writeGraphicsFile?: (path: string, bytesBase64: string) => Promise<GraphicsFileWriteResult>;
+  moveGraphicsFile?: (from: string, to: string) => Promise<GraphicsFileWriteResult>;
+  removeGraphicsFile?: (path: string, expectedSize: number, directories: readonly string[]) => Promise<void>;
+  chooseGraphicsLocation?: (directory: string, name: string, extension: string) => Promise<string | null>;
   writeLinkedText?: (params: {
     path: string;
     text: string;
@@ -231,6 +238,13 @@ export function createDefaultBridge(): DesktopBridge {
     ),
     readLinkedText: async (path) => await invoke<DesktopLinkedTextReadResult>("desktop_read_linked_text", { path }),
     readLocalAsset: async (path) => await invoke<DesktopLocalAssetReadResult>("desktop_read_local_asset", { path }),
+    listGraphicsFiles: async (directory) => await invoke<GraphicsFileListing>("desktop_list_graphics_files", { directory }),
+    writeGraphicsFile: async (path, bytesBase64) => await invoke<GraphicsFileWriteResult>("desktop_write_graphics_file", { path, bytesBase64 }),
+    moveGraphicsFile: async (from, to) => await invoke<GraphicsFileWriteResult>("desktop_move_graphics_file", { from, to }),
+    removeGraphicsFile: async (path, expectedSize, directories) => {
+      await invoke<void>("desktop_remove_graphics_file", { path, expectedSize, directories });
+    },
+    chooseGraphicsLocation: async (directory, name, extension) => await invoke<string | null>("desktop_choose_graphics_location", { directory, name, extension }),
     writeLinkedText: async ({ path, text, expectedRevision }) => await invoke<DesktopLinkedTextWriteResult>(
       "desktop_write_linked_text",
       { path, text, expectedRevision: expectedRevision ?? null }

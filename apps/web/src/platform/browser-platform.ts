@@ -634,11 +634,11 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
         return await openTextFileWithInput();
       },
       openBinary: async (options) => {
-        const fsResult = await openBinaryViaFsApi(options?.kind === "graphics");
+        const fsResult = await openBinaryViaFsApi(options?.kind === "graphics" || options?.kind === "graphics-import");
         if (fsResult !== undefined) {
           return fsResult;
         }
-        return await openBinaryFileWithInput(options?.kind === "graphics");
+        return await openBinaryFileWithInput(options?.kind === "graphics" || options?.kind === "graphics-import");
       },
       ...(fsHandleStore ? { storeGraphicAsset: async ({ path, bytes }: { path: string; bytes: ArrayBuffer }) => {
         await fsHandleStore.save(`graphic:${path}`, new Uint8Array(bytes));
