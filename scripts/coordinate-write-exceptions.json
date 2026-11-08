@@ -761,19 +761,64 @@
       "rule": "F2",
       "symbol": "sourceSlice",
       "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
-      "declaration": "buildGroupReplacement.snippetsById",
-      "hash": "3707371ee9df",
+      "declaration": "applyUngroupElementsAction.body",
+      "hash": "04b330fb4ad3",
       "count": 1,
-      "expression": "sourceSlice(source, ref.span)"
+      "expression": "sourceSlice(source, { from: options.to, to: endStart })"
     },
     {
       "rule": "F2",
       "symbol": "sourceSlice",
       "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
-      "declaration": "reindentBlock.text",
-      "hash": "caea8888ce23",
+      "declaration": "applyUngroupElementsAction.body",
+      "hash": "5489505f5b87",
       "count": 1,
-      "expression": "sourceSlice(source, { from: span.from + strippedFrom, to: span.from + line.to })"
+      "expression": "sourceSlice(source, { from: beginEnd, to: options.from })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
+      "declaration": "applyUngroupElementsAction.body",
+      "hash": "57e686cd8d0a",
+      "count": 1,
+      "expression": "sourceSlice(source, { from: beginEnd, to: endStart })"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
+      "declaration": "buildGroupReplacement.snippetsById",
+      "hash": "9912f8b7ff33",
+      "count": 1,
+      "expression": "sourceSlice(source, requireDefined(contentSpans.get(ref.id), \"Missing statement content span\"))"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
+      "declaration": "reindentBlock",
+      "hash": "8b6decde8d5a",
+      "count": 1,
+      "expression": "sourceSlice(source, span)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sliceFragment",
+      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
+      "declaration": "reindentFragment.text",
+      "hash": "463139e67bd9",
+      "count": 1,
+      "expression": "sliceFragment(snippet, strippedFrom, line.to)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sliceFragment",
+      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
+      "declaration": "reindentScopeBody.content",
+      "hash": "25a351ef348f",
+      "count": 1,
+      "expression": "sliceFragment(body, lineStart, last)"
     },
     {
       "rule": "F2",
@@ -936,6 +981,15 @@
       "hash": "3707371ee9df",
       "count": 1,
       "expression": "sourceSlice(source, ref.span)"
+    },
+    {
+      "rule": "F2",
+      "symbol": "sourceSlice",
+      "file": "packages/core/src/edit/actions/reorder-elements.ts",
+      "declaration": "buildParentReorderReplacement.trivia",
+      "hash": "c87cbb45e490",
+      "count": 1,
+      "expression": "sourceSlice(source, gap)"
     },
     {
       "rule": "F2",
