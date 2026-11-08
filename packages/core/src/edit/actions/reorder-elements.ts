@@ -164,12 +164,9 @@ export function buildParentReorderReplacement(
   const parts: TikzFragment[] = [];
   let cursor = replacementSpan.from;
   const newSpansById = new Map<string, Span>();
-  for (const [index, id] of orderedIds.entries()) {
-
-    const ref = refsById.get(id);
-    if (!ref) {
-      continue;
-    }
+  const orderedRefs = orderedIds.flatMap(id => refsById.get(id) ?? []);
+  for (const [index, ref] of orderedRefs.entries()) {
+    const id = ref.id;
 
     const statementText = sourceSlice(source, ref.span);
     newSpansById.set(id, {
@@ -180,9 +177,14 @@ export function buildParentReorderReplacement(
     parts.push(statementText);
     cursor += statementText.length;
 
-    if (index < orderedIds.length - 1) {
-      parts.push(layout(separator));
-      cursor += separator.length;
+    if (index < orderedRefs.length - 1) {
+      const left = sortedRefs[index];
+      const right = sortedRefs[index + 1];
+      const gap = left && right ? { from: left.span.to, to: right.span.from } : null;
+      // Comments between siblings are authored source, not layout to discard.
+      const trivia = gap && source.slice(gap.from, gap.to).trim() ? sourceSlice(source, gap) : layout(separator);
+      parts.push(trivia);
+      cursor += trivia.length;
     }
   }
 

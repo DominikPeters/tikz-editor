@@ -86,6 +86,19 @@ describe("document editing identities", () => {
     expect(state.focusedScopeId).toBe("scope:2");
   });
 
+  it.each([
+    [null, null],
+    ["scope:2", "scope:3"]
+  ])("retains a focus-only change while source reconciliation is pending (%s)", (scopeId, expected) => {
+    const body = `\\begin{scope}\n${a}\n\\end{scope}\n\\begin{scope}\n${b}\n\\end{scope}`;
+    let state = setup(wrap(body));
+    state = editorReducer(state, { type: "SET_FOCUSED_SCOPE", scopeId: "scope:0" });
+    state = editorReducer(state, { type: "CODE_EDITED", source: wrap(`\\draw (8,0)--(9,0);\n${body}`) });
+    state = editorReducer(state, { type: "SET_FOCUSED_SCOPE", scopeId });
+    state = ready(state);
+    expect(state.focusedScopeId).toBe(expected);
+  });
+
   it("gives duplicated objects new identities and restores them through undo/redo", () => {
     let state = setup(); const original = entries(state).map(entry => entry.id);
     state = ready(editorReducer(state, { type: "APPLY_EDIT_ACTION", action: { kind: "duplicateElements", elementIds: ["path:0"], delta: wp(0, 0) } }));

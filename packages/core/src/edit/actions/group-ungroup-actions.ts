@@ -1,4 +1,4 @@
-import { joinFragments, layout, sourceSlice, tikz, type TikzFragment } from "../fragment.js";
+import { joinFragments, layout, sliceFragment, sourceSlice, tikz, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
@@ -153,11 +153,17 @@ export function applyUngroupElementsAction(
   }
   const indent = lineIndentAtOffset(source, ref.span.from);
   const newline = detectPreferredNewline(source, ref.span.from);
-  const separator = resolveStatementSeparator(source, parentRefs, indent, newline);
-  const replacementText = joinFragments(
-    scopeStatement.body.map((statement) => reindentBlock(source, statement.span, indent, false)),
-    separator
-  );
+  const beginEnd = ref.span.from + "\\begin{scope}".length;
+  const endStart = ref.span.to - "\\end{scope}".length;
+  if (!source.startsWith("\\begin{scope}", ref.span.from) || source.slice(endStart, ref.span.to) !== "\\end{scope}") {
+    return { kind: "unsupported", reason: "Ungroup requires a complete scope." };
+  }
+  const options = scopeStatement.options?.span;
+  const body = options ? joinFragments([
+    sourceSlice(source, { from: beginEnd, to: options.from }),
+    sourceSlice(source, { from: options.to, to: endStart })
+  ]) : sourceSlice(source, { from: beginEnd, to: endStart });
+  const replacementText = reindentScopeBody(body, indent, newline);
 
   const applied = applyTextReplacements(source, [{ span: ref.span, text: replacementText }]);
   const appliedReplacement = requireArrayValue(applied.applied, 0);
@@ -385,9 +391,14 @@ function buildGroupReplacement(input: {
   const childIndent = `${indent}${indentUnit}`;
   const lineBreak = layout(newline);
 
-  const snippetsById = new Map(parentRefs.map((ref) => [ref.id, sourceSlice(source, ref.span)] as const));
+  const contentSpans = new Map(parentRefs.map((ref, index) => {
+    const previous = parentRefs[index - 1];
+    const from = previous && source.slice(previous.span.to, ref.span.from).trim() ? previous.span.to : ref.span.from;
+    return [ref.id, { from, to: ref.span.to }] as const;
+  }));
+  const snippetsById = new Map(parentRefs.map((ref) => [ref.id, sourceSlice(source, requireDefined(contentSpans.get(ref.id), "Missing statement content span"))] as const));
   const groupedBody = joinFragments(
-    selectedRefs.map((ref) => reindentBlock(source, ref.span, childIndent, true)),
+    selectedRefs.map((ref) => reindentBlock(source, requireDefined(contentSpans.get(ref.id), "Missing grouped statement content span"), childIndent, true, newline)),
     lineBreak
   );
   const scopeText = tikz`\begin{scope}${lineBreak}${groupedBody}${lineBreak}${layout(indent)}\end{scope}`;
@@ -518,12 +529,15 @@ function detectPreferredNewline(source: string, aroundOffset: number): string {
 }
 
 /**
- * The statement at `span` with every line re-indented to `indent` (line breaks
- * become `\n`); its first line starts without the indent when `indentFirstLine`
+ * The statement at `span` with every line re-indented to `indent`; its first
+ * line starts without the indent when `indentFirstLine`
  * is false, for a statement that follows other text.
  */
-function reindentBlock(source: string, span: Span, indent: string, indentFirstLine: boolean): TikzFragment {
-  const snippet = source.slice(span.from, span.to);
+function reindentBlock(source: string, span: Span, indent: string, indentFirstLine: boolean, newline: string): TikzFragment {
+  return reindentFragment(sourceSlice(source, span), indent, indentFirstLine, newline);
+}
+
+function reindentFragment(snippet: TikzFragment, indent: string, indentFirstLine: boolean, newline: string): TikzFragment {
   const lines: Span[] = [];
   let lineFrom = 0;
   for (const lineBreak of snippet.matchAll(/\r\n?|\n/g)) {
@@ -540,11 +554,27 @@ function reindentBlock(source: string, span: Span, indent: string, indentFirstLi
   return joinFragments(
     lines.map((line, index) => {
       const strippedFrom = trimIndent > 0 ? line.from + Math.min(trimIndent, line.to - line.from) : line.from;
-      const text = sourceSlice(source, { from: span.from + strippedFrom, to: span.from + line.to });
+      const text = sliceFragment(snippet, strippedFrom, line.to);
       return indentFirstLine || index > 0 ? tikz`${layout(indent)}${text}` : text;
     }),
-    layout("\n")
+    layout(newline)
   );
+}
+
+function reindentScopeBody(body: TikzFragment, indent: string, newline: string): TikzFragment {
+  const first = body.search(/\S/u);
+  if (first < 0) return layout("");
+  const last = body.trimEnd().length;
+  // Keep the first line's indentation so all body lines dedent together.
+  const lineStart = Math.max(body.lastIndexOf("\n", first - 1), body.lastIndexOf("\r", first - 1)) + 1;
+  const content = sliceFragment(body, lineStart, last);
+  const result = reindentFragment(content, indent, false, newline);
+  const lastLine = content.slice(Math.max(content.lastIndexOf("\n"), content.lastIndexOf("\r")) + 1);
+  for (let index = 0; index < lastLine.length; index++) {
+    if (lastLine[index] === "\\") index++;
+    else if (lastLine[index] === "%") return tikz`${result}${layout(newline)}`;
+  }
+  return result;
 }
 
 function normalizeStatementIds(elementIds: readonly string[]): string[] {
