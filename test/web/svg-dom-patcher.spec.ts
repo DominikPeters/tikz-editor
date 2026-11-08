@@ -15,6 +15,26 @@ const model = (parts: SvgRenderPart[]): SvgRenderModel => ({
 afterEach(() => vi.restoreAllMocks());
 
 describe("canvas SVG patching", () => {
+  it("matches a fresh DOM across ordering, definition, clipping and incomplete-hint transitions", () => {
+    const orders = [[], ["a", "b", "c"], ["c", "a", "b"], ["c"], ["a", "d", "c"], ["d", "c", "a", "b"], ["b", "d"]];
+    const states = orders.map((order, revision) => ({
+      ...model(order.map(id => part(id, `<g clip-path="url(#clip)"><rect x="${id.charCodeAt(0) - 97}" width="5" height="5" fill="url(#paint)"/><text>${id === "a" && revision % 2 ? "updated" : id}</text></g>`))),
+      viewBox: { x: revision, y: 0, width: 100, height: 100 },
+      defs: [`<clipPath id="clip"><rect width="${revision + 1}" height="10"/></clipPath><linearGradient id="paint"><stop stop-color="${revision % 2 ? "red" : "blue"}"/></linearGradient>`],
+      defsFingerprint: `definitions-${revision}`
+    }));
+    for (const previous of states) for (const next of states) for (const affectedSourceIds of [undefined, ["a"], ["missing"]]) {
+      const host = document.createElement("div"), freshHost = document.createElement("div");
+      const patcher = new SvgDomPatcher(host), fresh = new SvgDomPatcher(freshHost);
+      patcher.applyOperations(diffSvgModels(null, previous));
+      patcher.applyOperations(diffSvgModels(previous, next, { affectedSourceIds }));
+      fresh.applyOperations(diffSvgModels(null, next));
+      expect(host.innerHTML).toBe(freshHost.innerHTML);
+      patcher.dispose();
+      fresh.dispose();
+    }
+  });
+
   it("batches dense changes and preserves unchanged DOM nodes across reordering", () => {
     const host = document.createElement("div");
     const patcher = new SvgDomPatcher(host);
