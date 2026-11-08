@@ -70,9 +70,9 @@ describe("export async ownership", () => {
     const pending = deferred<string>();
     commands.transformSvgMarkup.mockReturnValue(pending.promise);
     await render(SvgExportModal, svg("original"));
-    await act(async () => { [...host.querySelectorAll("button")].find(button => button.textContent === "Beautify")!.click(); });
+    await act(async () => { Array.from(host.querySelectorAll("button")).find(button => button.textContent === "Beautify")!.click(); });
     if (change === "new render") await render(SvgExportModal, svg("new render"));
-    else await act(async () => { [...host.querySelectorAll("button")].find(button => button.textContent === "Edit markup")!.click(); });
+    else await act(async () => { Array.from(host.querySelectorAll("button")).find(button => button.textContent === "Edit markup")!.click(); });
     await act(async () => { pending.resolve("<svg>old transform</svg>"); });
     expect(host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe(`<svg>${change}</svg>`);
     expect(host.querySelector<HTMLButtonElement>('[data-testid="svg-export-download"]')!.disabled).toBe(false);
