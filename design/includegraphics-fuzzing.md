@@ -33,7 +33,9 @@ node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/graphics-fuz
 
 The article image profile rasterizes every case and exits unsuccessfully for
 findings or oracle errors. Its image gate compares the four controlled color
-footprints with a direct raster of the LuaLaTeX PDF. Per-case reports retain the
+footprints with an independent MuPDF conversion of the LuaLaTeX PDF, rasterized
+with the same librsvg backend as the native SVG. Poppler's rendering of that
+same PDF is retained as a diagnostic control. Per-case reports retain the
 existing RGB tolerance of 2 and one-pixel boundary rule. The general AE/noise
 score alone can hide missing image paint among surrounding text.
 
@@ -46,13 +48,15 @@ original failures, comparison changes and exact replay commands.
   including 50 image/block paint samples.
 - Native image edit campaign: 8 sequences passed, 105 warm/cold comparisons;
   81 resolved image occurrences reached.
-- Article image campaign: all 16 completed and passed structural checks; **9
-  paint observations remain open**, 7 cases passed the complete gate. These are
-  observations, not nine established distinct renderer bugs. Raster interpolation
-  differences and other possible causes have not been triaged.
+- Article image campaign: **all 16 pass structural and paint checks**, including
+  the nine original flagged sources. All nine snippets and original TeX oracle
+  documents retain their SHA-256 hashes. A separate live regression test renders
+  those originals through the production SVG emitter and independently compiled
+  LuaLaTeX, and rejects missing, shifted, flipped and uncropped image mutations.
 - Focused LuaLaTeX image-box tests: all 7 tests passed, including seven independent
-  dimension programs. The wider targeted suite passed 218 tests in 25 files;
-  11 existing opt-in/disabled tests were skipped. Full typecheck/build and
+  dimension programs. The wider targeted suite passed 243 tests in 27 files;
+  12 opt-in/disabled tests were skipped. The two image-paint regression tests
+  were additionally run with the live oracle enabled and both passed. Full typecheck/build and
   production lint passed. Changed JavaScript scripts passed syntax checks;
   the repository's typed ESLint project does not include `.mjs` files.
 
@@ -61,17 +65,32 @@ unclipped viewBox transforms, image rectangles inside TikZ nodes, retained rotat
 glyph axes, and engine-local owner prefixes in placement IDs. Negative tests
 still reject corrupted placement IDs and missing image paint.
 
-The article oracle now ships the original TeX paragraph box at the page origin,
+The article oracle ships the original TeX paragraph box at the page origin,
 avoiding the enclosing TikZ/page offset. Native preview painting uses the current
-glyph-outline API. Image footprints use the actual PDF raster because Cairo's
-SVG image sampling shifts footprints, and dvisvgm's image symbols render oversized
-in librsvg when their uses omit explicit dimensions. The intermediate runs are
-retained in the ledger and are not successful paint comparisons. The zero-noise
+glyph-outline API. The nine paint observations had two test-harness causes:
+
+1. The mask gate mixed librsvg/Cairo SVG paint with Poppler/Splash PDF paint.
+   Seven cases fail the same contract comparing two renderings of the identical
+   TeX PDF, with no editor output involved. MuPDF's SVG conversion preserves the
+   independent PDF geometry and image data while letting both sides use librsvg.
+   Eight original failures disappear under that comparison. A global native
+   nearest-neighbor filter was rejected: it made 10/16 cases fail.
+2. The remaining PDF case used an undersampled 72-dpi test proxy. The app's
+   existing PDF rasterizer defaults to scale 2 (144 dpi). Matching that default
+   fixes the test proxy without changing natural dimensions, original PDF bytes
+   or image geometry. The original 72-dpi assets and their hashes are preserved.
+
+Both causes, experiments, original failures and the separate oracle correction
+are recorded in the ledger. Older Cairo SVG conversion shifts bitmap samples;
+dvisvgm also emits oversized symbols and empty image data for some clipped
+images. Those SVG scores are diagnostic in image mode. The intermediate runs are
+retained and are not successful paint comparisons. The zero-noise
 AE flag was also strengthened: nonzero native error is flagged when the two TeX
 SVG references agree exactly. **No numeric tolerance was relaxed.**
 
 No large image soak or independent TeX campaign over the recursive image grammar
-was run. Native Node edit checks use pinned Poppler PDF pages and do not validate
+was run. Paint closure uses the original campaign's 4 pixels per TeX point.
+Native Node edit checks use pinned Poppler PDF pages and do not validate
 the browser PDF.js rasterizer. The full repository test suite was not rerun.
 Older campaigns, remaining support gaps and raster limitations remain recorded
 in the separate [Beamer ledger](beamer-failure-ledger.json); this focused run does

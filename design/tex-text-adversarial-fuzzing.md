@@ -13,9 +13,10 @@ inline/display math, visual, and hit-map fuzzers consume the shared generator.
 
 The November 2026 [image grammar extension](includegraphics-fuzzing.md) adds
 controlled PNG/JPEG/PDF assets, ordered graphicx programs, image coverage and
-shrinking, independent TeX comparisons and native edit histories. Its ledger
-retains nine open article paint observations; native invariants passing does
-not close those independent fidelity findings.
+shrinking, independent TeX comparisons and native edit histories. All nine
+initial article paint observations are closed after live original-source replay
+and two documented harness corrections. Native invariants and independent TeX
+fidelity remain separate gates.
 
 The October 2026 editing-geometry pass adds SVG-anchored assertions to the
 existing hit-map fuzz gate (`npm run test:tex-math:hitmap`). Its 64 generated

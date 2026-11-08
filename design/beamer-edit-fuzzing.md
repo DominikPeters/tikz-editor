@@ -44,8 +44,9 @@ original comparison tolerances; complex generated failures remain visible.
 The image extension adds PNG/JPEG/PDF leaves and a focused `--profile images`.
 Its controlled filesystem adapter exercises real lookup, decoding and cache
 behavior. Node PDF paint uses pinned Poppler pages. See the separate
-[image verification ledger](includegraphics-fuzzing.md), including open article
-paint observations; native edit parity does not establish independent TeX fidelity.
+[image verification ledger](includegraphics-fuzzing.md), including the original
+article paint observations and their closure evidence; native edit parity does
+not establish independent TeX fidelity.
 
 ## Resource limits and failure classification
 

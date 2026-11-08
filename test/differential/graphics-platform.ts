@@ -31,6 +31,7 @@ export const graphicsFuzzPdfRasterizer: PdfAssetRasterizer = async request => {
   if (hash(request.bytes) !== pdfHash) throw new Error("PDF is outside the controlled graphics corpus.");
   const result = createTexFuzzGraphicsResolver().resolve({ filename: "fuzz-images/pages.pdf", options: { raw: "", page: { status: "valid", pageNumber: request.pageNumber } }, source: "", sourceStart: 0, sourceEnd: 0 });
   if (result.status !== "resolved") throw new Error("Controlled PDF page is missing.");
-  return { ...result, mimeType: "image/png", renderScale: 1, pixelWidth: Math.round(result.naturalWidthPt * 72 / 72.27),
-    pixelHeight: Math.round(result.naturalHeightPt * 72 / 72.27), signature: `${pdfHash}:page=${request.pageNumber}` };
+  // Match pdf-asset-rasterizer.ts's default scale 2 (144 dpi).
+  return { ...result, mimeType: "image/png", renderScale: 2, pixelWidth: Math.round(result.naturalWidthPt * 144 / 72.27),
+    pixelHeight: Math.round(result.naturalHeightPt * 144 / 72.27), signature: `${pdfHash}:page=${request.pageNumber}:scale=2` };
 };

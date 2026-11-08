@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { loadTexFuzzModules } from "./lib/tex-fuzz-loader.mjs";
 import { stageFuzzGraphicsAssets, FUZZ_GRAPHICS_ASSET_SHA256 } from "./lib/fuzz-graphics-assets.mjs";
-import { compareColorMasks } from "./lib/beamer-paint-compare.mjs";
+import { compareTexFuzzImagePaint } from "./lib/tex-fuzz-image-paint.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const distEntry = join(repoRoot, "packages/core/dist/text/tex/index.js");
@@ -2280,7 +2280,7 @@ async function main() {
     throw new Error("Missing core dist files. Run `npm run -w @tikz-editor/core build` first.");
   }
   requireCommands(["lualatex", "pdftocairo", "dvisvgm", "rsvg-convert", "magick"]);
-  if (options.caseMode === "images") requireCommands(["pdftoppm"]);
+  if (options.caseMode === "images") requireCommands(["pdftoppm", "mutool"]);
 
   const deps = {
     ...(await import(distEntry)),
@@ -2473,6 +2473,7 @@ async function main() {
       let oursRmse = null;
       let ratio = null;
       let imagePaint = [];
+      let imagePaintComparison = null;
       if (rasterSelected) {
         rasterize(oursSvgPath, oursPngPath, widthPx, heightPx);
         rasterize(texPdfToCairoSvgPath, texPdfToCairoPngPath, widthPx, heightPx);
@@ -2485,21 +2486,19 @@ async function main() {
           ? oursAe.normalized / texNoiseAe.normalized
           : null;
         if (options.caseMode === "images") {
-          // Check the actual TeX PDF: SVG conversion can shift bitmap samples,
-          // and dvisvgm image symbols depend on the consumer's <use> sizing.
-          const reference = join(caseDir, "tex-pdf-paint");
-          execFileSync("pdftoppm", ["-png", "-singlefile", "-scale-to-x", String(widthPx), "-scale-to-y", String(heightPx), texOraclePaths.pdfPath, reference]);
-          imagePaint = compareColorMasks(oursPngPath, `${reference}.png`, widthPx, heightPx,
-            ["#df2020", "#20b8cf", "#e8b020", "#2846aa"].map(color => ({ color })));
+          imagePaintComparison = compareTexFuzzImagePaint({ pdfPath: texOraclePaths.pdfPath, nativePngPath: oursPngPath,
+            directory: caseDir, width: widthPx, height: heightPx });
+          imagePaint = imagePaintComparison.masks;
         }
       }
       const imagePaintFlagged = imagePaint.some(mask => mask.interiorDisagreement > 0);
-      const visualFlagged = rasterSelected && (ratio !== null ? ratio > options.thresholdRatio
-        : (oursAe?.normalized ?? 0) > 0 && (texNoiseAe?.normalized ?? 0) === 0);
+      const visualFlagged = options.caseMode === "images" ? imagePaintFlagged
+        : rasterSelected && (ratio !== null ? ratio > options.thresholdRatio
+          : (oursAe?.normalized ?? 0) > 0 && (texNoiseAe?.normalized ?? 0) === 0);
       const flagged = traceFlagged || imagePaintFlagged || (options.flagVisualDiff && visualFlagged);
       if (rasterSelected && (flagged || visualFlagged)) {
         execFileSync("magick", [
-          texPdfToCairoPngPath,
+          options.caseMode === "images" ? join(caseDir, "tex-image-paint.png") : texPdfToCairoPngPath,
           oursPngPath,
           "+append",
           join(caseDir, "side-by-side.png"),
@@ -2544,6 +2543,7 @@ async function main() {
         visualFlagged,
         imagePaintFlagged,
         imagePaint,
+        imagePaintComparison,
         flagged,
       };
       rows.push(row);
@@ -2570,6 +2570,7 @@ async function main() {
     seed: options.seed,
     texFuzzGeneratorVersion: texFuzz.TEX_FUZZ_GENERATOR_VERSION,
     graphicsAssetsSha256: FUZZ_GRAPHICS_ASSET_SHA256,
+    imagePaintReference: options.caseMode === "images" ? "MuPDF SVG / librsvg; Poppler control diagnostic" : null,
     texFuzzFeatures: [...new Set(cases.flatMap((entry) => entry.texFuzz?.features ?? []))].sort(),
     casesRequested: requestedCaseCount,
     casesCompleted: rows.length,

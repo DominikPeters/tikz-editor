@@ -93,5 +93,5 @@ The harness currently targets the supported simple TeX paragraph regime:
 Use `--case-mode images` for controlled PNG/JPEG/PDF cases. Image mode checks
 all cases with an independent TeX PDF paint reference and exits unsuccessfully
 on findings or errors. The [image status and ledger](includegraphics-fuzzing.md)
-describe the changed comparison adapters, unchanged numeric tolerances, exact
-replays, and nine currently open paint observations.
+describe the corrected comparison adapters, unchanged numeric tolerances, exact
+replays, and closure evidence for the nine original paint observations.

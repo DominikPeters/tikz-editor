@@ -105,16 +105,16 @@
     ]
   },
   "verifiedArticle": {
-    "report": "artifacts/includegraphics/text-20261108-pdf/seed-20261108-cases-16-scale-4-2026-11-08T13-01-27-540Z/summary.json",
+    "report": "artifacts/includegraphics/fixed-original-20261108/seed-20261108-cases-16-scale-4-2026-11-08T13-15-02-958Z/summary.json",
     "casesRequested": 16,
     "casesCompleted": 16,
     "structuralFailures": 0,
-    "paintFlagged": 9,
-    "passed": 7,
+    "paintFlagged": 0,
+    "passed": 16,
     "errors": [],
     "scale": 4,
     "allCasesRasterized": true,
-    "reference": "Direct LuaLaTeX paragraph box shipout, PDF rasterized by pdftoppm; AE/noise ratios from SVG conversions remain diagnostics."
+    "reference": "MuPDF SVG / librsvg; Poppler control diagnostic"
   },
   "comparisonChanges": [
     "Correct native image viewBox transforms, clipping and rotated embedded TikZ glyph axes; LuaLaTeX oracle and numerical tolerances unchanged.",
@@ -122,12 +122,77 @@
     "Strengthen the visual flag when the TeX/TeX reference AE is zero: any nonzero native AE is flagged. Image mode enables visual flags and rasterizes every case.",
     "Native history comparison normalizes only the per-engine owner prefix of graphics placement IDs.",
     "Image article oracle ships the original TeX paragraph box directly at (0,0), avoiding the outer TikZ/page offset. Native preview uses the current loaded glyph-outline API. Original image source snippets are unchanged.",
-    "Image paint compares all four controlled color footprints against the actual TeX PDF via pdftoppm, using the existing color-mask RGB tolerance 2 and one-pixel boundary rule. Cairo SVG image sampling shifted footprints; dvisvgm symbol/use sizing produced oversized images in librsvg. Both SVG outputs and their scores are retained as diagnostics. No tolerance was relaxed."
+    "Image paint compares all four controlled color footprints against the actual TeX PDF via pdftoppm, using the existing color-mask RGB tolerance 2 and one-pixel boundary rule. Cairo SVG image sampling shifted footprints; dvisvgm symbol/use sizing produced oversized images in librsvg. Both SVG outputs and their scores are retained as diagnostics. No tolerance was relaxed.",
+    "Correct image gate to compare independent MuPDF PDF-to-SVG paint and native SVG with the same librsvg rasterizer. Keep Poppler cross-rasterizer controls diagnostic; numerical mask tolerances remain RGB 2 and one pixel in BOTH mask boundary bands. Update only the PDF test proxy from 72 to the app default 144 dpi; retain all original asset files and their hashes."
   ],
-  "unresolvedImageFindings": [
+  "unresolvedImageFindings": [],
+  "notEstablished": [
+    "No large image fuzz soak or independent TeX run of the recursive image grammar.",
+    "Native edit checks use pinned Poppler PDF pages in Node; they do not validate the browser PDF.js rasterizer.",
+    "This focused run does not close or revalidate other saved campaigns."
+  ],
+  "verification": {
+    "tests": {
+      "passed": 243,
+      "skipped": 12,
+      "files": 27
+    },
+    "focusedLuaLaTeXBoxTests": {
+      "passed": 7,
+      "dimensionPrograms": 7
+    },
+    "liveOriginalPaintRegressions": {
+      "passed": 2,
+      "originalSources": 9,
+      "negativeControls": 4
+    },
+    "typecheck": "passed",
+    "productionLint": "passed",
+    "newTestLint": "passed",
+    "javascriptSyntax": "passed"
+  },
+  "nativeEdits": {
+    "report": "artifacts/includegraphics/edits-20261108/report.json",
+    "comparisons": 105,
+    "coverageFailures": [],
+    "completed": 8,
+    "passed": 8
+  },
+  "articlePaintIntegrationRuns": [
+    {
+      "report": "artifacts/includegraphics/text-20261108-paint/seed-20261108-cases-16-scale-4-2026-11-08T12-56-40-862Z/summary.json",
+      "cases": 16,
+      "flagged": 10,
+      "errors": [],
+      "reference": "pdftocairo SVG conversion",
+      "note": "Diagnostic integration run; image paint now compares the actual TeX PDF via pdftoppm. These runs are not successful paint comparisons."
+    },
+    {
+      "report": "artifacts/includegraphics/text-20261108-direct/seed-20261108-cases-16-scale-4-2026-11-08T12-59-26-196Z/summary.json",
+      "cases": 16,
+      "flagged": 9,
+      "errors": [],
+      "reference": "pdftocairo SVG conversion",
+      "note": "Diagnostic integration run; image paint now compares the actual TeX PDF via pdftoppm. These runs are not successful paint comparisons."
+    }
+  ],
+  "findingCountNote": "All nine original paint observations are closed after live structural and paint replay. They had two harness causes, not nine renderer bugs. Original snippets, oracle documents, source hashes, asset bytes and baseline paint failures remain preserved.",
+  "generalTikzComparatorSmoke": {
+    "report": "artifacts/includegraphics/tikz-comparison/images-2026-11-08T12-59-43-749Z/compare-report.json",
+    "compiled": true,
+    "assets": [
+      {
+        "filename": "fuzz-images/pattern.png",
+        "page": 1,
+        "path": "/Users/dominik/GitHub/tikz-editor/artifacts/includegraphics/tikz/fuzz-images/pattern.png",
+        "status": "resolved"
+      }
+    ]
+  },
+  "articlePaintFindings": [
     {
       "id": "case-002",
-      "status": "untriaged-paint-mismatch",
+      "status": "passed",
       "source": "test/fixtures/graphics-fuzz/article-findings/case-002.tex",
       "sourceSha256": "c5524eef24a8a8a0d7e2e253714d834b8c675d69b32c738f2f00f329ff4aa038",
       "oracleSource": "test/fixtures/graphics-fuzz/article-findings/case-002.oracle.tex",
@@ -174,11 +239,24 @@
         }
       ],
       "artifacts": "artifacts/includegraphics/text-20261108-pdf/seed-20261108-cases-16-scale-4-2026-11-08T13-01-27-540Z/case-002",
-      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-002.tex --width 200 --parindent 15 --align right --scale 4 --out-dir artifacts/includegraphics/replay-case-002"
+      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-002.tex --width 200 --parindent 15 --align right --scale 4 --out-dir artifacts/includegraphics/replay-case-002",
+      "observedStatus": "untriaged-paint-mismatch",
+      "resolution": {
+        "cause": "Cross-rasterizer bitmap sampling treated as an editor error",
+        "report": "artifacts/includegraphics/fixed-original-20261108/seed-20261108-cases-16-scale-4-2026-11-08T13-15-02-958Z/summary.json",
+        "regressionReport": "artifacts/includegraphics/paint-regressions-20261108/report.json",
+        "sourceHashesUnchanged": true,
+        "interiorDisagreement": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
     },
     {
       "id": "case-004",
-      "status": "untriaged-paint-mismatch",
+      "status": "passed",
       "source": "test/fixtures/graphics-fuzz/article-findings/case-004.tex",
       "sourceSha256": "e059ce1b976c2877576a7bbf87ab40acc536ecba02511615716b132e9045b587",
       "oracleSource": "test/fixtures/graphics-fuzz/article-findings/case-004.oracle.tex",
@@ -225,11 +303,24 @@
         }
       ],
       "artifacts": "artifacts/includegraphics/text-20261108-pdf/seed-20261108-cases-16-scale-4-2026-11-08T13-01-27-540Z/case-004",
-      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-004.tex --width 150 --parindent 10 --align justify --scale 4 --out-dir artifacts/includegraphics/replay-case-004"
+      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-004.tex --width 150 --parindent 10 --align justify --scale 4 --out-dir artifacts/includegraphics/replay-case-004",
+      "observedStatus": "untriaged-paint-mismatch",
+      "resolution": {
+        "cause": "Cross-rasterizer bitmap sampling treated as an editor error",
+        "report": "artifacts/includegraphics/fixed-original-20261108/seed-20261108-cases-16-scale-4-2026-11-08T13-15-02-958Z/summary.json",
+        "regressionReport": "artifacts/includegraphics/paint-regressions-20261108/report.json",
+        "sourceHashesUnchanged": true,
+        "interiorDisagreement": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
     },
     {
       "id": "case-007",
-      "status": "untriaged-paint-mismatch",
+      "status": "passed",
       "source": "test/fixtures/graphics-fuzz/article-findings/case-007.tex",
       "sourceSha256": "bab3bc892aa3f0f990d58266fa677e7a89609e04071fced41f92ec7da1c1cd99",
       "oracleSource": "test/fixtures/graphics-fuzz/article-findings/case-007.oracle.tex",
@@ -276,11 +367,24 @@
         }
       ],
       "artifacts": "artifacts/includegraphics/text-20261108-pdf/seed-20261108-cases-16-scale-4-2026-11-08T13-01-27-540Z/case-007",
-      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-007.tex --width 120 --parindent 10 --align center --scale 4 --out-dir artifacts/includegraphics/replay-case-007"
+      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-007.tex --width 120 --parindent 10 --align center --scale 4 --out-dir artifacts/includegraphics/replay-case-007",
+      "observedStatus": "untriaged-paint-mismatch",
+      "resolution": {
+        "cause": "Cross-rasterizer bitmap sampling treated as an editor error",
+        "report": "artifacts/includegraphics/fixed-original-20261108/seed-20261108-cases-16-scale-4-2026-11-08T13-15-02-958Z/summary.json",
+        "regressionReport": "artifacts/includegraphics/paint-regressions-20261108/report.json",
+        "sourceHashesUnchanged": true,
+        "interiorDisagreement": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
     },
     {
       "id": "case-008",
-      "status": "untriaged-paint-mismatch",
+      "status": "passed",
       "source": "test/fixtures/graphics-fuzz/article-findings/case-008.tex",
       "sourceSha256": "2489b118838481531a62ec5be47a21b280504d3ad577ca4ffb11b3fee6c4c47f",
       "oracleSource": "test/fixtures/graphics-fuzz/article-findings/case-008.oracle.tex",
@@ -327,11 +431,24 @@
         }
       ],
       "artifacts": "artifacts/includegraphics/text-20261108-pdf/seed-20261108-cases-16-scale-4-2026-11-08T13-01-27-540Z/case-008",
-      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-008.tex --width 200 --parindent 15 --align justify --scale 4 --out-dir artifacts/includegraphics/replay-case-008"
+      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-008.tex --width 200 --parindent 15 --align justify --scale 4 --out-dir artifacts/includegraphics/replay-case-008",
+      "observedStatus": "untriaged-paint-mismatch",
+      "resolution": {
+        "cause": "Cross-rasterizer bitmap sampling treated as an editor error",
+        "report": "artifacts/includegraphics/fixed-original-20261108/seed-20261108-cases-16-scale-4-2026-11-08T13-15-02-958Z/summary.json",
+        "regressionReport": "artifacts/includegraphics/paint-regressions-20261108/report.json",
+        "sourceHashesUnchanged": true,
+        "interiorDisagreement": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
     },
     {
       "id": "case-009",
-      "status": "untriaged-paint-mismatch",
+      "status": "passed",
       "source": "test/fixtures/graphics-fuzz/article-findings/case-009.tex",
       "sourceSha256": "7b2287cce6560087295a57c2681ab0e88e5583c5351428b75098b270cdc01147",
       "oracleSource": "test/fixtures/graphics-fuzz/article-findings/case-009.oracle.tex",
@@ -378,11 +495,24 @@
         }
       ],
       "artifacts": "artifacts/includegraphics/text-20261108-pdf/seed-20261108-cases-16-scale-4-2026-11-08T13-01-27-540Z/case-009",
-      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-009.tex --width 100 --parindent 15 --align left --scale 4 --out-dir artifacts/includegraphics/replay-case-009"
+      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-009.tex --width 100 --parindent 15 --align left --scale 4 --out-dir artifacts/includegraphics/replay-case-009",
+      "observedStatus": "untriaged-paint-mismatch",
+      "resolution": {
+        "cause": "Cross-rasterizer bitmap sampling treated as an editor error",
+        "report": "artifacts/includegraphics/fixed-original-20261108/seed-20261108-cases-16-scale-4-2026-11-08T13-15-02-958Z/summary.json",
+        "regressionReport": "artifacts/includegraphics/paint-regressions-20261108/report.json",
+        "sourceHashesUnchanged": true,
+        "interiorDisagreement": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
     },
     {
       "id": "case-010",
-      "status": "untriaged-paint-mismatch",
+      "status": "passed",
       "source": "test/fixtures/graphics-fuzz/article-findings/case-010.tex",
       "sourceSha256": "90dacdda7a84dff08e7317f11aa0d992507ffd3add1a8bff977e0921ce3286cc",
       "oracleSource": "test/fixtures/graphics-fuzz/article-findings/case-010.oracle.tex",
@@ -429,11 +559,24 @@
         }
       ],
       "artifacts": "artifacts/includegraphics/text-20261108-pdf/seed-20261108-cases-16-scale-4-2026-11-08T13-01-27-540Z/case-010",
-      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-010.tex --width 120 --parindent 15 --align right --scale 4 --out-dir artifacts/includegraphics/replay-case-010"
+      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-010.tex --width 120 --parindent 15 --align right --scale 4 --out-dir artifacts/includegraphics/replay-case-010",
+      "observedStatus": "untriaged-paint-mismatch",
+      "resolution": {
+        "cause": "Cross-rasterizer bitmap sampling treated as an editor error",
+        "report": "artifacts/includegraphics/fixed-original-20261108/seed-20261108-cases-16-scale-4-2026-11-08T13-15-02-958Z/summary.json",
+        "regressionReport": "artifacts/includegraphics/paint-regressions-20261108/report.json",
+        "sourceHashesUnchanged": true,
+        "interiorDisagreement": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
     },
     {
       "id": "case-011",
-      "status": "untriaged-paint-mismatch",
+      "status": "passed",
       "source": "test/fixtures/graphics-fuzz/article-findings/case-011.tex",
       "sourceSha256": "2308d3658c3d431f311ae97a6c033b006e0accd32fcf7e26e77e02fc37720ae5",
       "oracleSource": "test/fixtures/graphics-fuzz/article-findings/case-011.oracle.tex",
@@ -480,11 +623,24 @@
         }
       ],
       "artifacts": "artifacts/includegraphics/text-20261108-pdf/seed-20261108-cases-16-scale-4-2026-11-08T13-01-27-540Z/case-011",
-      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-011.tex --width 320 --parindent 10 --align center --scale 4 --out-dir artifacts/includegraphics/replay-case-011"
+      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-011.tex --width 320 --parindent 10 --align center --scale 4 --out-dir artifacts/includegraphics/replay-case-011",
+      "observedStatus": "untriaged-paint-mismatch",
+      "resolution": {
+        "cause": "Cross-rasterizer bitmap sampling treated as an editor error",
+        "report": "artifacts/includegraphics/fixed-original-20261108/seed-20261108-cases-16-scale-4-2026-11-08T13-15-02-958Z/summary.json",
+        "regressionReport": "artifacts/includegraphics/paint-regressions-20261108/report.json",
+        "sourceHashesUnchanged": true,
+        "interiorDisagreement": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
     },
     {
       "id": "case-014",
-      "status": "untriaged-paint-mismatch",
+      "status": "passed",
       "source": "test/fixtures/graphics-fuzz/article-findings/case-014.tex",
       "sourceSha256": "6e8533e9923a30718943d280e30b15b8267475509637628fcbce00be783027ee",
       "oracleSource": "test/fixtures/graphics-fuzz/article-findings/case-014.oracle.tex",
@@ -531,11 +687,24 @@
         }
       ],
       "artifacts": "artifacts/includegraphics/text-20261108-pdf/seed-20261108-cases-16-scale-4-2026-11-08T13-01-27-540Z/case-014",
-      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-014.tex --width 200 --parindent 15 --align right --scale 4 --out-dir artifacts/includegraphics/replay-case-014"
+      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-014.tex --width 200 --parindent 15 --align right --scale 4 --out-dir artifacts/includegraphics/replay-case-014",
+      "observedStatus": "untriaged-paint-mismatch",
+      "resolution": {
+        "cause": "Cross-rasterizer bitmap sampling treated as an editor error",
+        "report": "artifacts/includegraphics/fixed-original-20261108/seed-20261108-cases-16-scale-4-2026-11-08T13-15-02-958Z/summary.json",
+        "regressionReport": "artifacts/includegraphics/paint-regressions-20261108/report.json",
+        "sourceHashesUnchanged": true,
+        "interiorDisagreement": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
     },
     {
       "id": "case-016",
-      "status": "untriaged-paint-mismatch",
+      "status": "passed",
       "source": "test/fixtures/graphics-fuzz/article-findings/case-016.tex",
       "sourceSha256": "4975401f6e06051cad19029215fa5936c857c369f68cf11c0cca8b4b3995f6d4",
       "oracleSource": "test/fixtures/graphics-fuzz/article-findings/case-016.oracle.tex",
@@ -582,62 +751,138 @@
         }
       ],
       "artifacts": "artifacts/includegraphics/text-20261108-pdf/seed-20261108-cases-16-scale-4-2026-11-08T13-01-27-540Z/case-016",
-      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-016.tex --width 200 --parindent 0 --align justify --scale 4 --out-dir artifacts/includegraphics/replay-case-016"
+      "replay": "node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --input test/fixtures/graphics-fuzz/article-findings/case-016.tex --width 200 --parindent 0 --align justify --scale 4 --out-dir artifacts/includegraphics/replay-case-016",
+      "observedStatus": "untriaged-paint-mismatch",
+      "resolution": {
+        "cause": "PDF test proxy was 72 dpi instead of the app default 144 dpi",
+        "report": "artifacts/includegraphics/fixed-original-20261108/seed-20261108-cases-16-scale-4-2026-11-08T13-15-02-958Z/summary.json",
+        "regressionReport": "artifacts/includegraphics/paint-regressions-20261108/report.json",
+        "sourceHashesUnchanged": true,
+        "interiorDisagreement": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
     }
   ],
-  "notEstablished": [
-    "No large image fuzz soak or independent TeX run of the recursive image grammar.",
-    "Native edit checks use pinned Poppler PDF pages in Node; they do not validate the browser PDF.js rasterizer.",
-    "This focused run does not close or revalidate other saved campaigns."
-  ],
-  "verification": {
-    "tests": {
-      "passed": 218,
-      "skipped": 11,
-      "files": 25
-    },
-    "focusedLuaLaTeXBoxTests": {
-      "passed": 7
-    },
-    "typecheck": "passed",
-    "productionLint": "passed"
+  "priorArticlePaintRun": {
+    "report": "artifacts/includegraphics/text-20261108-pdf/seed-20261108-cases-16-scale-4-2026-11-08T13-01-27-540Z/summary.json",
+    "casesRequested": 16,
+    "casesCompleted": 16,
+    "structuralFailures": 0,
+    "paintFlagged": 9,
+    "passed": 7,
+    "errors": [],
+    "scale": 4,
+    "allCasesRasterized": true,
+    "reference": "Direct LuaLaTeX paragraph box shipout, PDF rasterized by pdftoppm; AE/noise ratios from SVG conversions remain diagnostics."
   },
-  "nativeEdits": {
-    "report": "artifacts/includegraphics/edits-20261108/report.json",
-    "comparisons": 105,
-    "coverageFailures": [],
-    "completed": 8,
-    "passed": 8
+  "currentGraphicsAssetsSha256": "a4c633eb148add5759b4fce53274f9a6901ad01a4626f9dd76298c515e2d18da",
+  "verifiedBeamerAfterPaintFix": {
+    "report": "artifacts/includegraphics/beamer-reverified-20261108/comparison/report.json",
+    "passed": 8,
+    "failed": 0,
+    "states": 11
   },
-  "articlePaintIntegrationRuns": [
-    {
-      "report": "artifacts/includegraphics/text-20261108-paint/seed-20261108-cases-16-scale-4-2026-11-08T12-56-40-862Z/summary.json",
-      "cases": 16,
-      "flagged": 10,
-      "errors": [],
-      "reference": "pdftocairo SVG conversion",
-      "note": "Diagnostic integration run; image paint now compares the actual TeX PDF via pdftoppm. These runs are not successful paint comparisons."
-    },
-    {
-      "report": "artifacts/includegraphics/text-20261108-direct/seed-20261108-cases-16-scale-4-2026-11-08T12-59-26-196Z/summary.json",
-      "cases": 16,
-      "flagged": 9,
-      "errors": [],
-      "reference": "pdftocairo SVG conversion",
-      "note": "Diagnostic integration run; image paint now compares the actual TeX PDF via pdftoppm. These runs are not successful paint comparisons."
-    }
-  ],
-  "findingCountNote": "Nine failing paint observations, not nine established distinct renderer bugs. Their causes, including raster interpolation differences, remain untriaged. No failing source was reduced, removed from generation, or closed using only a passing reduction.",
-  "generalTikzComparatorSmoke": {
-    "report": "artifacts/includegraphics/tikz-comparison/images-2026-11-08T12-59-43-749Z/compare-report.json",
-    "compiled": true,
-    "assets": [
+  "paintRegressionTests": {
+    "report": "artifacts/includegraphics/paint-regressions-20261108/report.json",
+    "originalSources": 9,
+    "passed": 9,
+    "negativeControls": [
       {
-        "filename": "fuzz-images/pattern.png",
-        "page": 1,
-        "path": "/Users/dominik/GitHub/tikz-editor/artifacts/includegraphics/tikz/fuzz-images/pattern.png",
-        "status": "resolved"
+        "case": "case-007",
+        "mutation": "missing",
+        "interiorDisagreement": [
+          924,
+          638,
+          1050,
+          725
+        ],
+        "rejected": true
+      },
+      {
+        "case": "case-007",
+        "mutation": "shifted",
+        "interiorDisagreement": [
+          348,
+          348,
+          396,
+          396
+        ],
+        "rejected": true
+      },
+      {
+        "case": "case-007",
+        "mutation": "flipped",
+        "interiorDisagreement": [
+          1562,
+          1562,
+          1775,
+          1775
+        ],
+        "rejected": true
+      },
+      {
+        "case": "case-007",
+        "mutation": "uncropped",
+        "interiorDisagreement": [
+          200,
+          224,
+          148,
+          166
+        ],
+        "rejected": true
       }
     ]
+  },
+  "paintOracleCorrection": {
+    "causes": [
+      {
+        "id": "mixed-rasterizers",
+        "observations": [
+          "case-002",
+          "case-004",
+          "case-007",
+          "case-008",
+          "case-009",
+          "case-010",
+          "case-011",
+          "case-014"
+        ],
+        "explanation": "The old gate compared librsvg/Cairo native SVG paint with Poppler/Splash PDF paint. Native output matches independently converted MuPDF SVG when both use librsvg. Seven cases also fail the same mask contract comparing two renderings of the identical TeX PDF, with no editor output.",
+        "evidence": "artifacts/includegraphics/triage-20261108/mupdf-svg.json",
+        "texOnlyFailingControls": [
+          "case-002",
+          "case-004",
+          "case-007",
+          "case-009",
+          "case-010",
+          "case-011",
+          "case-014"
+        ]
+      },
+      {
+        "id": "undersampled-pdf-proxy",
+        "observations": [
+          "case-016"
+        ],
+        "explanation": "The Node fixture used 72-dpi PDF pages; the real app default render scale is 2 (144 dpi). Matching that existing default removes the proxy blur without changing natural dimensions, original PDF bytes or image geometry.",
+        "evidence": "artifacts/includegraphics/triage-20261108/pdf-resolution.json",
+        "activePdfRasterDpi": 144,
+        "originalPdfSha256": "247604c6a975c26abe0c95bb02e362cc5a231458f77ec5343f140f6f28e323fb"
+      }
+    ],
+    "numericToleranceChanges": [],
+    "rejectedAlternative": {
+      "description": "Changing all native bitmap filters to nearest-neighbor fixed some cases but made 10/16 fail; no production filter change was made.",
+      "evidence": "artifacts/includegraphics/triage-20261108/nearest-all.json"
+    },
+    "reference": "MuPDF reads the original independent LuaLaTeX PDF, then librsvg rasterizes both SVGs. The native renderer supplies no geometry or assets to the TeX conversion. Poppler and the older SVG conversion scores remain diagnostics.",
+    "toolVersions": {
+      "mupdf": "1.28.6"
+    },
+    "historical72DpiPagesRetained": true
   }
 }
