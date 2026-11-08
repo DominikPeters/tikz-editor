@@ -71,6 +71,7 @@ import {
   type InputSurface,
   type Intent,
   type IntentContext,
+  type IntentScheduler,
   type InteractionState
 } from "@tikz-editor/core/editing/input/index";
 
@@ -215,6 +216,11 @@ type TextSelectionDrag = {
   anchorOffset: number;
   mode: TextSelectionDragMode;
   anchorLineRange: TextLineRange | null;
+  requestRevision: number;
+  baseInputRevision: number;
+  moveRevision: number;
+  cancelled: boolean;
+  anchorResolved: Promise<void>;
 };
 
 export type UseCanvasTextEditSessionArgs = {
@@ -799,6 +805,7 @@ export function useCanvasTextEditSession(
   useEditTree(textEditingSession?.isScopeSession ? textEditingSession.text : null, editCommands);
   const [pendingAdornmentTextEditTargetId, setPendingAdornmentTextEditTargetId] = useState<string | null>(null);
   const textSelectionDragRef = useRef<TextSelectionDrag | null>(null);
+  const textPointerActiveRef = useRef(true);
   const textEditTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const canvasFocusInputRef = useRef<HTMLTextAreaElement | null>(null);
   const textEditPopupRef = useRef<HTMLDivElement | null>(null);
@@ -813,6 +820,36 @@ export function useCanvasTextEditSession(
   const composingInputRef = useRef<HTMLTextAreaElement | null>(null);
   const previousContextKeyRef = useRef(contextKey);
   const sourceRevisionRef = useRef(sourceRevision);
+  const intentSchedulerRef = useRef<IntentScheduler | null>(null);
+  const layoutWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetSessionInput = useCallback(() => {
+    pendingTextEditPasteRef.current = null;
+    pendingTextEditInsertTextRef.current = null;
+    composingInputRef.current = null;
+    intentSchedulerRef.current?.reset();
+    if (layoutWaitTimerRef.current != null) {
+      clearTimeout(layoutWaitTimerRef.current);
+      layoutWaitTimerRef.current = null;
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    textPointerActiveRef.current = true;
+    return () => {
+      textPointerActiveRef.current = false;
+      if (textSelectionDragRef.current) textSelectionDragRef.current.cancelled = true;
+      textSelectionDragRef.current = null;
+      resetSessionInput();
+    };
+  }, [resetSessionInput]);
+
+  const ownsTextPointer = useCallback((drag: TextSelectionDrag): boolean => {
+    const current = stateRef.current;
+    return textPointerActiveRef.current && !drag.cancelled &&
+      current.asyncRequestRevision === drag.requestRevision && current.inputRevision === drag.baseInputRevision &&
+      current.session?.sourceId === drag.sourceId && current.session.sceneTextId === drag.sceneTextId;
+  }, []);
 
   useLayoutEffect(() => {
     stateRef.current = state;
@@ -824,6 +861,16 @@ export function useCanvasTextEditSession(
 
   const dispatchCanvasTextEditAction = useCallback((action: CanvasTextEditAction) => {
     const reduced = reduceCanvasTextEdit(stateRef.current, action);
+    if (action.type === "start_session" || action.type === "pointer_down_provisional" || action.type === "session_close" ||
+      (stateRef.current.session && !reduced.state.session)) {
+      // A close and reopen can share one React render. Retire queued input
+      // synchronously, before it can run against the next session's buffer.
+      resetSessionInput();
+    }
+    if (reduced.state.asyncRequestRevision !== stateRef.current.asyncRequestRevision) {
+      if (textSelectionDragRef.current) textSelectionDragRef.current.cancelled = true;
+      textSelectionDragRef.current = null;
+    }
     stateRef.current = reduced.state;
     setState(reduced.state);
     for (const effect of reduced.effects) {
@@ -846,7 +893,7 @@ export function useCanvasTextEditSession(
       });
       sourceRevisionRef.current += 1;
     }
-  }, [dispatch]);
+  }, [dispatch, resetSessionInput]);
 
   /** Both DOM inputs set to a buffer state, value and selection. */
   const writeInputs = useCallback((state: { readonly text: string; readonly anchor: number; readonly focus: number }) => {
@@ -984,7 +1031,6 @@ export function useCanvasTextEditSession(
   }, [commitTransaction, currentIntentContext, dispatchCanvasTextEditAction, stepHistory]);
 
   const runIntentRef = useRef(runIntent);
-  const layoutWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * Revision protocol: intents that read the rendered layout wait until it
    * reflects the buffer, and later intents queue behind them, so a burst of
@@ -1020,6 +1066,7 @@ export function useCanvasTextEditSession(
     });
     return scheduler;
   });
+  intentSchedulerRef.current = intentScheduler;
 
   useLayoutEffect(() => {
     runIntentRef.current = runIntent;
@@ -1063,16 +1110,9 @@ export function useCanvasTextEditSession(
 
   useEffect(() => {
     if (!textEditingSession) {
-      pendingTextEditPasteRef.current = null;
-      pendingTextEditInsertTextRef.current = null;
-      composingInputRef.current = null;
-      intentScheduler.reset();
-      if (layoutWaitTimerRef.current != null) {
-        clearTimeout(layoutWaitTimerRef.current);
-        layoutWaitTimerRef.current = null;
-      }
+      resetSessionInput();
     }
-  }, [intentScheduler, textEditingSession]);
+  }, [resetSessionInput, textEditingSession]);
 
   const resolveRenderedMathTextElement = useCallback((
     target: EditableTextTarget,
@@ -1368,8 +1408,6 @@ export function useCanvasTextEditSession(
         );
         return;
       }
-      const requestRevision = state.asyncRequestRevision + 1;
-      const baseInputRevision = state.inputRevision;
       const existingHistoryMergeKey =
         textEditingSession?.sourceId === target.sourceId ? textEditingSession.historyMergeKey : undefined;
       const clickCount = event.detail >= 2 ? event.detail : 1;
@@ -1408,21 +1446,28 @@ export function useCanvasTextEditSession(
         anchorLineRange: provisionalLineRange,
         historyMergeKey: existingHistoryMergeKey ?? makeMergeKey("canvas-text-edit", target.sourceId, Date.now())
       });
-      textSelectionDragRef.current = {
+      const drag: TextSelectionDrag = {
         pointerId: event.pointerId,
         sourceId: target.sourceId,
         sceneTextId: target.sceneTextId,
         anchorOffset: provisionalOffset,
         mode,
-        anchorLineRange: provisionalLineRange
+        anchorLineRange: provisionalLineRange,
+        requestRevision: stateRef.current.asyncRequestRevision,
+        baseInputRevision: stateRef.current.inputRevision,
+        moveRevision: 0,
+        cancelled: false,
+        anchorResolved: Promise.resolve()
       };
+      textSelectionDragRef.current = drag;
       const pointerId = event.pointerId;
       const pointerCaptureTarget = event.currentTarget;
       const sourceHitPromise = resolveTextSourceHitFromClient(target, clientPoint);
       const lineRangePromise = mode === "line"
         ? resolveTextLineRangeFromClient(target, clientPoint)
         : Promise.resolve<TextLineRange | null>(null);
-      void Promise.all([sourceHitPromise, lineRangePromise]).then(([sourceHit, lineRange]) => {
+      drag.anchorResolved = Promise.all([sourceHitPromise, lineRangePromise]).then(([sourceHit, lineRange]) => {
+        if (!ownsTextPointer(drag)) return;
         const offset = sourceHit?.offset ?? null;
         const resolvedOffset = offset == null ? provisionalOffset : clamp(offset, 0, target.text.length);
         const resolvedLineRange = mode === "line"
@@ -1441,8 +1486,8 @@ export function useCanvasTextEditSession(
         const expandedSelection = promoteTextSelection(target, selection, editCommandsRef.current);
         dispatchCanvasTextEditAction({
           type: "pointer_resolved",
-          requestRevision,
-          baseInputRevision,
+          requestRevision: drag.requestRevision,
+          baseInputRevision: drag.baseInputRevision,
           sourceId: target.sourceId,
           sceneTextId: target.sceneTextId,
           pointerId,
@@ -1452,34 +1497,29 @@ export function useCanvasTextEditSession(
           anchorLineRange: resolvedLineRange
         });
         syncInputSelectionFromSession();
-        if (textSelectionDragRef.current?.pointerId === pointerId) {
-          textSelectionDragRef.current = {
-            pointerId,
-            sourceId: target.sourceId,
-            sceneTextId: target.sceneTextId,
-            anchorOffset: resolvedOffset,
-            mode,
-            anchorLineRange: resolvedLineRange
-          };
+        drag.anchorOffset = resolvedOffset;
+        drag.anchorLineRange = resolvedLineRange;
+        if (textSelectionDragRef.current === drag) {
+          try {
+            pointerCaptureTarget.setPointerCapture(pointerId);
+          } catch {
+            // Window listeners still complete the drag when pointer capture is unavailable.
+          }
         }
-        try {
-          pointerCaptureTarget.setPointerCapture(pointerId);
-        } catch {
-          // Window listeners still complete the drag when pointer capture is unavailable.
-        }
+      }).catch((error: unknown) => {
+        if (ownsTextPointer(drag)) console.info("[canvas-text-edit] Pointer hit failed; keeping the provisional selection.", error);
       });
     },
     [
       canvasTransform,
       dispatchCanvasTextEditAction,
       interactionSvgRef,
+      ownsTextPointer,
       resolveTextLineRangeFromClient,
       resolveTextSourceHitFromClient,
       syncInputSelectionFromSession,
       source,
       startTextEditingSession,
-      state.asyncRequestRevision,
-      state.inputRevision,
       suppressNextBackgroundClickRef,
       svgResult,
       textEditingSession,
@@ -2027,24 +2067,32 @@ export function useCanvasTextEditSession(
       if (drag?.pointerId !== event.pointerId) {
         return;
       }
+      if (!ownsTextPointer(drag)) {
+        textSelectionDragRef.current = null;
+        return;
+      }
       if (event.pointerType === "mouse" && event.buttons === 0) {
+        drag.cancelled = true;
         textSelectionDragRef.current = null;
         return;
       }
       const target = resolveEditableTextTargetById(drag.sourceId, drag.sceneTextId);
       if (!target) {
+        drag.cancelled = true;
         textSelectionDragRef.current = null;
         return;
       }
-      const requestRevision = stateRef.current.asyncRequestRevision;
-      const baseInputRevision = stateRef.current.inputRevision;
+      const moveRevision = ++drag.moveRevision;
       const clientPoint = makeClientPoint(px(event.clientX), px(event.clientY));
       const offsetPromise = resolveTextSourceHitFromClient(target, clientPoint)
         .then((hit) => hit?.offset ?? null);
       const lineRangePromise = drag.mode === "line"
         ? resolveTextLineRangeFromClient(target, clientPoint)
         : Promise.resolve<TextLineRange | null>(null);
-      void Promise.all([offsetPromise, lineRangePromise]).then(([offset, focusLineRange]) => {
+      // A drag needs the original click's anchor, even if its own hit map
+      // resolves first. Within that gesture only the newest sample may land.
+      void Promise.all([offsetPromise, lineRangePromise, drag.anchorResolved]).then(([offset, focusLineRange]) => {
+        if (!ownsTextPointer(drag) || moveRevision !== drag.moveRevision) return;
         const resolvedOffset = offset == null ? drag.anchorOffset : clamp(offset, 0, target.text.length);
         const selection = promoteTextSelection(target, resolveTextSelectionRangeForDrag(
           target.text,
@@ -2056,19 +2104,22 @@ export function useCanvasTextEditSession(
         ), editCommandsRef.current);
         dispatchCanvasTextEditAction({
           type: "drag_resolved",
-          requestRevision,
-          baseInputRevision,
+          requestRevision: drag.requestRevision,
+          baseInputRevision: drag.baseInputRevision,
           sourceId: target.sourceId,
           sceneTextId: target.sceneTextId,
           selectionStart: selection.start,
           selectionEnd: selection.end
         });
         syncInputSelectionFromSession();
+      }).catch((error: unknown) => {
+        if (ownsTextPointer(drag) && moveRevision === drag.moveRevision) console.info("[canvas-text-edit] Drag hit failed; keeping the selection.", error);
       });
     };
 
     const handlePointerUp = (event: PointerEvent) => {
       if (textSelectionDragRef.current?.pointerId === event.pointerId) {
+        if (event.type === "pointercancel") textSelectionDragRef.current.cancelled = true;
         textSelectionDragRef.current = null;
       }
     };
@@ -2083,6 +2134,7 @@ export function useCanvasTextEditSession(
     };
   }, [
     dispatchCanvasTextEditAction,
+    ownsTextPointer,
     resolveEditableTextTargetById,
     resolveTextLineRangeFromClient,
     resolveTextSourceHitFromClient,

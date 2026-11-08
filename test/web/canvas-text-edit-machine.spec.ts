@@ -3,6 +3,7 @@ import { viewportBounds, px } from "../../packages/core/src/coords/index";
 
 import {
   INITIAL_CANVAS_TEXT_EDIT_STATE,
+  interactionState,
   reduceCanvasTextEdit,
   type CanvasTextEditAction,
   type CanvasTextEditEffect,
@@ -156,6 +157,7 @@ function assertStateInvariants(state: CanvasTextEditState): void {
   if (!state.session) {
     expect(state.selectionOverlay).toBeNull();
     expect(state.compositionRange).toBeNull();
+    expect(state.treeSelection).toBeNull();
     return;
   }
   expect(state.session.selectionStart).toBeGreaterThanOrEqual(0);
@@ -181,6 +183,86 @@ function randomInt(rng: () => number, min: number, maxInclusive: number): number
 }
 
 describe("canvas text edit machine", () => {
+  function withOpenCommand(): CanvasTextEditState {
+    const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session", source: BASE_SOURCE, target: buildTarget(BASE_SOURCE, "$x$"),
+      selectionStart: 2, selectionEnd: 2, historyMergeKey: "command"
+    }).state;
+    return reduceCanvasTextEdit(started, {
+      type: "apply_transaction", time: 0,
+      transaction: {
+        baseRevision: started.inputRevision, patches: [],
+        selection: { kind: "absolute", anchor: 2, focus: 2 }, undo: { group: "own-step" },
+        interaction: { chip: { name: "frac", at: 2, selected: 0, held: null } }
+      }
+    }).state;
+  }
+
+  it.each(["start_session", "pointer_down_provisional"] as const)(
+    "drops command entry state when %s starts an identical buffer", type => {
+      const state = withOpenCommand();
+      expect(interactionState(state, 2, 2).chip?.name).toBe("frac");
+      const restarted = reduceCanvasTextEdit(state, {
+        type, source: BASE_SOURCE, target: buildTarget(BASE_SOURCE, "$x$"),
+        selectionStart: 2, selectionEnd: 2, historyMergeKey: "new-session",
+        pointerId: 1, anchorOffset: 2, mode: "char", anchorLineRange: null
+      }).state;
+      expect(interactionState(restarted, 2, 2)).toEqual({});
+      expect(restarted.treeSelection).toBeNull();
+    }
+  );
+
+  it("drops command entry state on close, including after the same buffer is reopened", () => {
+    const closed = reduceCanvasTextEdit(withOpenCommand(), { type: "session_close" }).state;
+    expect(closed.treeSelection).toBeNull();
+    const reopened = reduceCanvasTextEdit(closed, {
+      type: "start_session", source: BASE_SOURCE, target: buildTarget(BASE_SOURCE, "$x$"),
+      selectionStart: 2, selectionEnd: 2, historyMergeKey: "reopened"
+    }).state;
+    expect(interactionState(reopened, 2, 2)).toEqual({});
+  });
+
+  it("does not revive command entry when a native selection moves away and back", () => {
+    const state = reduceMany(withOpenCommand(), [
+      { type: "textarea_selection", selectionStart: 1, selectionEnd: 1 },
+      { type: "textarea_selection", selectionStart: 2, selectionEnd: 2 }
+    ]).state;
+    expect(interactionState(state, 2, 2)).toEqual({});
+    expect(state.treeSelection).toBeNull();
+  });
+
+  it.each(["native selection", "keyboard selection"])(
+    "keeps a newer %s when pending pointer and drag hits resolve", kind => {
+      const target = buildTarget(BASE_SOURCE, "$x$");
+      const down = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+        type: "pointer_down_provisional", source: BASE_SOURCE, target,
+        selectionStart: 1, selectionEnd: 1, historyMergeKey: "pointer",
+        pointerId: 1, anchorOffset: 1, mode: "char", anchorLineRange: null
+      }).state;
+      const selected = reduceCanvasTextEdit(down, kind === "native selection"
+        ? { type: "textarea_selection", selectionStart: 3, selectionEnd: 3 }
+        : { type: "apply_transaction", time: 0, transaction: {
+            baseRevision: down.inputRevision, patches: [],
+            selection: { kind: "absolute", anchor: 3, focus: 3 }, undo: { group: "own-step" }
+          } }
+      ).state;
+      const late = reduceCanvasTextEdit(selected, {
+        type: "pointer_resolved", requestRevision: down.asyncRequestRevision,
+        baseInputRevision: down.inputRevision, sourceId: target.sourceId, sceneTextId: target.sceneTextId,
+        pointerId: 1, selectionStart: 0, selectionEnd: 0, anchorOffset: 0, anchorLineRange: null
+      }).state;
+      expect(late.session?.selectionStart).toBe(3);
+      expect(late.session?.selectionEnd).toBe(3);
+      const lateDrag = reduceCanvasTextEdit(selected, {
+        type: "drag_resolved", requestRevision: down.asyncRequestRevision,
+        baseInputRevision: down.inputRevision, sourceId: target.sourceId, sceneTextId: target.sceneTextId,
+        selectionStart: 0, selectionEnd: 2
+      }).state;
+      expect(lateDrag.session?.selectionStart).toBe(3);
+      expect(lateDrag.session?.selectionEnd).toBe(3);
+    }
+  );
+
   it("keeps inline typo sessions single-line", () => {
     const target = {
       ...buildTarget(BASE_SOURCE, "$x$"),

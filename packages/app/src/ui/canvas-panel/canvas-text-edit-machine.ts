@@ -313,7 +313,8 @@ function closeState(state: CanvasTextEditState): CanvasTextEditState {
     !state.compositionRange &&
     state.focusSurface === "bar" &&
     state.history === EMPTY_UNDO_HISTORY &&
-    state.verticalGoal == null
+    state.verticalGoal == null &&
+    state.treeSelection == null
   ) {
     return state;
   }
@@ -326,6 +327,7 @@ function closeState(state: CanvasTextEditState): CanvasTextEditState {
     focusSurface: "bar",
     history: EMPTY_UNDO_HISTORY,
     verticalGoal: null,
+    treeSelection: null,
     asyncRequestRevision: state.asyncRequestRevision + 1
   };
 }
@@ -544,6 +546,7 @@ export function reduceCanvasTextEdit(
           focusSurface: action.target.scopeParagraphs != null ? "canvas" : "bar",
           history: EMPTY_UNDO_HISTORY,
           verticalGoal: null,
+          treeSelection: null,
           asyncRequestRevision: state.asyncRequestRevision + 1
         },
         effects: []
@@ -597,6 +600,7 @@ export function reduceCanvasTextEdit(
           focusSurface: action.target.scopeParagraphs != null ? "canvas" : "bar",
           history: EMPTY_UNDO_HISTORY,
           verticalGoal: null,
+          treeSelection: null,
           asyncRequestRevision: state.asyncRequestRevision + 1
         },
         effects: []
@@ -630,6 +634,7 @@ export function reduceCanvasTextEdit(
             : session,
           history: breakTypingRun(state.history),
           compositionRange: null,
+          treeSelection: null,
           dragSelection:
             state.dragSelection?.pointerId === action.pointerId &&
             state.dragSelection.sourceId === action.sourceId &&
@@ -663,7 +668,8 @@ export function reduceCanvasTextEdit(
             selectionEnd: selection.end
           },
           history: breakTypingRun(state.history),
-          compositionRange: null
+          compositionRange: null,
+          treeSelection: null
         },
         effects: []
       };
@@ -706,7 +712,9 @@ export function reduceCanvasTextEdit(
             history: breakTypingRun(state.history),
             compositionRange,
             verticalGoal,
-            treeSelection
+            treeSelection,
+            // Selection-only keyboard intents also supersede pending hits.
+            asyncRequestRevision: state.asyncRequestRevision + 1
           },
           effects: []
         };
@@ -774,7 +782,10 @@ export function reduceCanvasTextEdit(
           },
           // A selection change outside the composition overlay ends a typing run.
           history: preservedCompositionRange ? state.history : breakTypingRun(state.history),
-          compositionRange: preservedCompositionRange
+          compositionRange: preservedCompositionRange,
+          verticalGoal: null,
+          treeSelection: null,
+          asyncRequestRevision: state.asyncRequestRevision + 1
         },
         effects: []
       };
@@ -806,6 +817,7 @@ export function reduceCanvasTextEdit(
               compositionRange: null,
               history: EMPTY_UNDO_HISTORY,
               verticalGoal: null,
+              treeSelection: null,
               asyncRequestRevision: state.asyncRequestRevision + 1
             },
             effects: []
