@@ -1,6 +1,6 @@
 name: tikz-editor-ipad
 options:
-  bundleIdPrefix: com.tikz.editor
+  bundleIdPrefix: dev.tikz.editor
   deploymentTarget:
     iOS: 16.0
 fileGroups: [../../src]
@@ -11,7 +11,7 @@ settingGroups:
   app:
     base:
       PRODUCT_NAME: TikZ Editor
-      PRODUCT_BUNDLE_IDENTIFIER: com.tikz.editor
+      PRODUCT_BUNDLE_IDENTIFIER: dev.tikz.editor
 targetTemplates:
   app:
     type: application

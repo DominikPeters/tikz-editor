@@ -22,7 +22,6 @@ const DEFAULT_FONTS = [
   "cmssi10",
   "cmssbx10",
   "cmcsc10",
-  "tcrm1000",
   "cmmi10",
   "cmmi7",
   "cmmi5",

@@ -2038,8 +2038,8 @@ Beta`;
       .toMatchObject([
         { kind: "glyph", text: "•", code: 0x2022, font: { id: "lmroman10-regular" } },
         { kind: "glyph", text: "–", code: 0x2013, font: { id: "lmroman10-bold" } },
-        { kind: "glyph", text: "*", code: 42, font: { id: "tcrm1000" } },
-        { kind: "glyph", text: ".", code: 183, font: { id: "tcrm1000" } },
+        { kind: "glyph", text: "∗", code: 3, font: { id: "cmsy10" } },
+        { kind: "glyph", text: "·", code: 1, font: { id: "cmsy10" } },
       ]);
     expect(collectVListBoxes(layout.vlist.items)
       .filter((item) => item.role?.kind === "list-item")
@@ -2047,8 +2047,8 @@ Beta`;
     ).toEqual([
       { kind: "glyph", text: "•", code: 0x2022, fontId: "lmroman10-regular" },
       { kind: "glyph", text: "–", code: 0x2013, fontId: "lmroman10-bold" },
-      { kind: "glyph", text: "*", code: 42, fontId: "tcrm1000" },
-      { kind: "glyph", text: ".", code: 183, fontId: "tcrm1000" },
+      { kind: "glyph", text: "∗", code: 3, fontId: "cmsy10" },
+      { kind: "glyph", text: "·", code: 1, fontId: "cmsy10" },
     ]);
   });
 

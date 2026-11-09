@@ -62,7 +62,6 @@ export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "lmsans8-oblique",
   "lmsans9-regular",
   "lmsans9-oblique",
-  "tcrm1000",
   "cmss9",
   "cmss12",
   "cmss17",

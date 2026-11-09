@@ -9,7 +9,11 @@ const appRoot = path.resolve(path.dirname(scriptPath), "..");
 const rustupBin = path.join(homedir(), ".cargo", "bin");
 const env = {
   ...process.env,
-  PATH: existsSync(rustupBin) ? `${rustupBin}:${process.env.PATH ?? ""}` : process.env.PATH
+  // Xcode invokes /usr/bin/rsync, whose helper resolves rsync through PATH.
+  // Keep both ends on Apple's version; Homebrew rsync rejects its xattr flags.
+  PATH: [existsSync(rustupBin) ? rustupBin : null, "/usr/bin", "/bin", "/usr/sbin", "/sbin", process.env.PATH]
+    .filter(Boolean)
+    .join(":")
 };
 
 function run(command, args, options = {}) {

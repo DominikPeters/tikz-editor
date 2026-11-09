@@ -18,7 +18,6 @@ export const TEX_GLYPH_OUTLINE_LOADERS: Readonly<Record<string, () => Promise<{ 
   "cmssi10": () => import("./cmssi10.generated.js"),
   "cmssbx10": () => import("./cmssbx10.generated.js"),
   "cmcsc10": () => import("./cmcsc10.generated.js"),
-  "tcrm1000": () => import("./tcrm1000.generated.js"),
   "cmmi10": () => import("./cmmi10.generated.js"),
   "cmmi7": () => import("./cmmi7.generated.js"),
   "cmmi5": () => import("./cmmi5.generated.js"),

@@ -2,7 +2,7 @@
   "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "TikZ Editor",
   "version": "1.1.0",
-  "identifier": "com.tikz.editor",
+  "identifier": "dev.tikz.editor",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1422",
@@ -37,7 +37,7 @@
     ],
     "iOS": {
       "minimumSystemVersion": "16.0",
-      "bundleVersion": "1",
+      "bundleVersion": "2",
       "template": "src-tauri/ios-project.yml"
     }
   }

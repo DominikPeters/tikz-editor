@@ -19,6 +19,20 @@ uses that value for the dev server host and HMR configuration.
 
 ## App Store packaging
 
+The iPad App Store bundle ID is `dev.tikz.editor`.
+The website-distributed Mac app keeps `com.tikz.editor`.
+The shared `com.tikz.editor.tikz` document type identifier remains the same on
+both platforms so they recognize the same file format.
+
+Build the App Store package with:
+
+```sh
+npm run -w @tikz-editor/ipad tauri -- ios build --export-method app-store-connect --ci
+```
+
+The CLI wrapper puts Apple's system tools ahead of Homebrew in `PATH` so that
+Xcode's IPA export uses compatible `rsync` processes.
+
 The iPad Cargo manifest patches Wry 0.55.1 with a vendored copy. Its only source
 change omits the private WKPreferences PiP key on iOS; see
 `src-tauri/vendor/wry/LOCAL-PATCH.md`. PiP is not needed by this editor. Keep
@@ -29,10 +43,8 @@ release devtools, fullscreen, and transparent Wry features disabled unless audit
 `tauri ios init` preserves iPad-only support. Keep it in sync when upgrading the
 CLI. The checked-in generated Xcode project has the same setting.
 
-The shared app's public/vendor/tikzjax directory contains the pinned complete
-TikZJax runtime, including its worker, compressed WebAssembly/core, TeX packages,
-and fonts. Its loader respects the shell's Vite base URL. See VENDORED.md there
-for the package hash, source revision, update procedure, and GPL licensing caveat.
+TikZJax compilation is disabled on iPad (`tikzJax: false`). Its engine and runtime
+assets are not bundled. The shared web/desktop fallback remains independent.
 
 ### Privacy manifest rationale
 
@@ -62,7 +74,6 @@ Validation commands:
 ```sh
 npm run -w @tikz-editor/ipad typecheck
 npm run -w @tikz-editor/ipad build
-npm run -w @tikz-editor/web test:e2e -- tikzjax-offline.spec.ts --workers=1
 npm run -w @tikz-editor/ipad tauri -- ios build --target aarch64-sim --no-sign --archive-only --ci
 ```
 

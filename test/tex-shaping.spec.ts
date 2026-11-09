@@ -4600,8 +4600,8 @@ describe("simple TeX paragraph layout", () => {
       .toMatchObject([
         { text: "•", fontId: "lmroman10-regular", glyphCode: 0x2022 },
         { text: "–", fontId: "lmroman10-bold", glyphCode: 0x2013 },
-        { text: "*", fontId: "tcrm1000", glyphCode: 42 },
-        { text: ".", fontId: "tcrm1000", glyphCode: 183 },
+        { text: "∗", fontId: "cmsy10", glyphCode: 3 },
+        { text: "·", fontId: "cmsy10", glyphCode: 1 },
       ]);
     expect(result.report?.lines.map((line) => line.xStart)).toEqual([
       expect.closeTo(25, 6),

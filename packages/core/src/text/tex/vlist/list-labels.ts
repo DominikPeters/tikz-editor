@@ -147,20 +147,22 @@ function texDefaultItemizeLabelContent(labelDepth: number): TexVBoxListItemLabel
       fontId: "lmroman10-bold",
     };
   }
+  // The existing OFL-licensed math face supplies centered list symbols without
+  // bundling the GPL-licensed CM-Super text companion font.
   if (labelDepth === 3) {
     return {
       kind: "glyph",
-      text: "*",
-      code: 42,
-      fontId: "tcrm1000",
+      text: "\u2217",
+      code: 3,
+      fontId: "cmsy10",
     };
   }
   if (labelDepth === 4) {
     return {
       kind: "glyph",
-      text: ".",
-      code: 183,
-      fontId: "tcrm1000",
+      text: "\u00b7",
+      code: 1,
+      fontId: "cmsy10",
     };
   }
   return {

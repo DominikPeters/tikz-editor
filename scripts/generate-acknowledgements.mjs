@@ -106,7 +106,6 @@ const fonts = [
   { name: "Latin Modern", license: "GUST Font License", text: notice("latin-modern-GUST-FONT-LICENSE.txt") },
   { name: "Fira Sans", license: "OFL-1.1", text: notice("fira-OFL.txt") },
   { name: "RSFS (Ralph Smith's Formal Script)", license: "Free to use and distribute", text: notice("rsfs-README.txt") },
-  { name: "CM-Super (text companion symbols)", license: "GPL-2.0-or-later", text: notice("cm-super-README.txt") },
   { name: "Beamer bibliography icons", license: "LPPL-1.3c OR GPL-2.0", text: notice("beamer-icons.txt") },
 ];
 
