@@ -14,6 +14,7 @@ import {
   RiCodeLine,
   RiEdit2Line,
   RiExternalLinkLine,
+  RiFileCopyLine,
   RiFileListLine,
   RiFolderZipLine,
   RiGithubFill,
@@ -424,6 +425,9 @@ function Hero() {
                 </Fragment>
               ))}
             </div>
+            {desktopDownloadSelection.platform === "mac" ? (
+              <BrewCommand />
+            ) : null}
           </div>
           )}
           {desktopDownloadSelection.platform === "windows" && portableDownload ? (
@@ -448,6 +452,43 @@ function Hero() {
         />
       </figure>
     </section>
+  );
+}
+
+const BREW_COMMAND = "brew install --cask tikz-editor";
+
+function BrewCommand() {
+  const [copied, setCopied] = useState(false);
+  const codeRef = useRef<HTMLElement>(null);
+  const copy = () => {
+    const done = () => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    };
+    const fallback = () => {
+      const code = codeRef.current;
+      const selection = window.getSelection();
+      if (!code || !selection) return;
+      const range = document.createRange();
+      range.selectNodeContents(code);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      if (document.execCommand("copy")) done();
+    };
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(BREW_COMMAND).then(done, fallback);
+    } else {
+      fallback();
+    }
+  };
+  const Icon = copied ? RiCheckLine : RiFileCopyLine;
+  return (
+    <div className="landingDownloadAlternates landingBrewCommand">
+      or <code ref={codeRef}>{BREW_COMMAND}</code>
+      <button type="button" className="landingBrewCopy" onClick={copy} aria-label="Copy command" title={copied ? "Copied" : "Copy"}>
+        <Icon size={13} aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 

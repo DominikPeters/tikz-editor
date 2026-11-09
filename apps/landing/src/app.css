@@ -310,7 +310,6 @@ select {
 
 .landingHero {
   width: min(1180px, calc(100vw - 32px));
-  min-height: calc(82svh - var(--landing-header-height));
   margin: 0 auto;
   padding: clamp(20px, 3vw, 40px) 0 0 0;
 }
@@ -499,6 +498,50 @@ select {
 .landingDownloadAlternates a:hover {
   color: var(--landing-blue);
   text-decoration: underline;
+}
+
+.landingBrewCommand {
+  position: relative;
+  margin-top: 4px;
+}
+
+.landingBrewCommand code {
+  margin-left: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--landing-muted);
+  user-select: all;
+}
+
+.landingBrewCopy {
+  position: absolute;
+  top: 50%;
+  margin-left: 3px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: 0;
+  background: none;
+  color: var(--landing-faint);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 120ms;
+}
+
+.landingBrewCommand:hover .landingBrewCopy,
+.landingBrewCopy:focus-visible {
+  opacity: 1;
+}
+
+.landingBrewCopy:hover {
+  color: var(--landing-blue);
+}
+
+@media (hover: none) {
+  .landingBrewCopy {
+    opacity: 1;
+  }
 }
 
 .landingTextLink {
@@ -853,6 +896,7 @@ select {
 }
 
 .landingBeamerSection {
+  margin-top: 0;
   background: #ecebf3;
   border-top-color: #d3d0e0;
   border-bottom-color: #d3d0e0;
