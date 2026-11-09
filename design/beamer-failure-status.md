@@ -5,7 +5,28 @@ comparisons. Warm/cold agreement does not establish LuaLaTeX fidelity. The
 complex campaigns were not clean, and every outstanding failure should have
 been disclosed alongside successful fixes.
 
-## Current checkpoint
+## November 9 saved-regression follow-up
+
+The [November 8 audit](state-audit-validation-20261108.json) recorded 24 failing
+cases. The [follow-up investigation](release-failure-investigation-20261109.json)
+reproduced all 24 and traced them to three test/reference issues: 19 Beamer
+cases replayed a different compilation date, one watcher expectation omitted
+uppercase extensions, and four resize assertions assumed an exact floating-point
+height ratio instead of graphicx's scaled-point arithmetic.
+
+All 19 affected original Beamer cases and all 42 overlay states pass fresh
+independent LuaLaTeX structural and paint checks. Their original source hashes
+and saved glyph/rule traces are unchanged. Calendar provenance was added to the
+saved references and the replay clock now uses it; no comparison tolerance,
+paint witness, or exclusion was changed. The resize height assertion is tighter
+and checks the independently measured TeX value.
+
+The full-suite follow-up passes 8,740 tests, with zero failures, 25 skipped and
+one todo. Typecheck, the core build, production lint and changed-test lint pass.
+The two earlier live campaigns below were not rerun; their historical acceptance
+and the remaining support/oracle limits are preserved separately in the ledger.
+
+## Earlier complex-campaign checkpoint
 
 | Original campaign | Frames passing | Overlay states | Final live acceptance |
 | --- | ---: | ---: | --- |

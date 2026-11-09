@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { corpusGraphicsResolver } from "../scripts/lib/beamer-corpus.mjs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { prepareBeamerDocument } from "../packages/core/src/beamer/render.js";
 import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/index.js";
 import { buildNativeBeamerPageTrace, compareBeamerPageTraces, type OracleBeamerPageTrace } from "../scripts/lib/beamer-frame-compare.mjs";
@@ -20,10 +20,18 @@ for (const campaign of ["fidelity-campaign", "fidelity-campaign-wave2", "fidelit
         const source = readFileSync(new URL(fixture.file, root), "utf8");
         const oracle = JSON.parse(readFileSync(new URL(fixture.file.replace(/\.tex$/u, ".oracle.json"), root), "utf8")) as {
           sourceSha256: string; pages: OracleBeamerPageTrace[];
+          compilationDate?: { year: number; month: number; day: number };
         };
         expect(createHash("sha256").update(source).digest("hex")).toBe(oracle.sourceSha256);
         const temporary = mkdtempSync(join(tmpdir(), "beamer-campaign-"));
         try {
+          // Replay the calendar used by TeX, without rewriting the original
+          // source or ignoring its date glyphs in the comparison.
+          if (oracle.compilationDate) {
+            const { year, month, day } = oracle.compilationDate;
+            vi.useFakeTimers({ toFake: ["Date"] });
+            vi.setSystemTime(new Date(year, month - 1, day, 12));
+          }
           const graphics = corpusGraphicsResolver(source, fileURLToPath(new URL(fixture.file, root)), temporary);
           const pages = await prepareBeamerDocument(source).renderFramePages({ frameIndex: fixture.frame - 1, graphicsResolver: graphics.resolver });
           expect(pages.pageCount).toBe(fixture.pages);
@@ -42,6 +50,7 @@ for (const campaign of ["fidelity-campaign", "fidelity-campaign-wave2", "fidelit
             expect(priorityFidelityFailures({ input: { overlayStepCount: fixture.pages }, oracle: { page: { pageCount: oracle.pages.length } }, structural: comparison }, { pages: fixture.pages })).toEqual([]);
           }
         } finally {
+          vi.useRealTimers();
           rmSync(temporary, { recursive: true, force: true });
         }
       });

@@ -77,7 +77,8 @@ describe("active App asset watch ownership", () => {
     await act(async () => useEditorStore.getState().dispatch({ type: "MARK_DOCUMENT_SAVED", fileRef: file("/tmp/app-watch-save-as/new") }));
     expect(active.watched()).toEqual(["/tmp/app-watch-save-as/new/active.svg"]);
     await act(async () => useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: source.replace("active.svg", "next") }));
-    expect(active.watched()).toEqual(["jpeg", "jpg", "pdf", "png", "svg"].map((extension) => `/tmp/app-watch-save-as/new/next.${extension}`));
+    // Watch every supported graphics.sty candidate, including uppercase names.
+    expect(active.watched()).toEqual(["JPEG", "JPG", "PDF", "PNG", "jpeg", "jpg", "pdf", "png", "svg"].map((extension) => `/tmp/app-watch-save-as/new/next.${extension}`));
     await act(async () => useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: plain }));
     expect(active.watched()).toEqual([]);
   });

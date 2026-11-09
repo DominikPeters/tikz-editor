@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-export const BEAMER_FRAME_ORACLE_VERSION = 12;
+export const BEAMER_FRAME_ORACLE_VERSION = 13;
 export const SP_PER_TEX_POINT = 65_536;
 
 const PROBE_DIMENSIONS = [
@@ -29,6 +29,7 @@ export function beamerProbeInstrumentation() {
 \newcommand{\tikzeditorbeamerprobe}{%
   \typeout{TIKZ_BEAMER_PAGE \number\c@page}%
   \typeout{TIKZ_BEAMER_META aspectRatio \insertaspectratio}%
+  \typeout{TIKZ_BEAMER_META compilationDate \number\year-\number\month-\number\day}%
 ${dimensionWrites}
 }
 \directlua{dofile((os.getenv("TIKZ_BEAMER_TRACE_DIR") or ".") .. "/beamer-page-trace.lua")}

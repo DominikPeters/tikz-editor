@@ -21,7 +21,10 @@ for (const fixture of manifest.fidelity) {
   });
   const comparison = JSON.parse(readFileSync(join(run, result.snapshots[0].report), "utf8"));
   const oracle = JSON.parse(readFileSync(join(dirname(join(run, result.snapshots[0].report)), comparison.oracle.report), "utf8"));
-  const snapshot = { sourceSha256: result.sourceSha256, engine: oracle.environment.engineBanner, provenance: "compare-beamer-priorities.mjs, valid content witnesses and matching page counts", pages };
+  const date = /^(\d+)-(\d+)-(\d+)$/u.exec(oracle.tex.selectedPage.metadata.compilationDate ?? "");
+  if (!date) throw new Error(`Oracle lacks the TeX compilation date; rerun the live comparison: ${fixture.id}`);
+  const compilationDate = { year: Number(date[1]), month: Number(date[2]), day: Number(date[3]) };
+  const snapshot = { sourceSha256: result.sourceSha256, engine: oracle.environment.engineBanner, compilationDate, provenance: "compare-beamer-priorities.mjs, valid content witnesses and matching page counts", pages };
   writeFileSync(input.replace(/\.tex$/u, ".oracle.json"), JSON.stringify(snapshot, null, 2) + "\n");
 }
 console.log(`Pinned ${manifest.fidelity.length} independent TeX traces.`);

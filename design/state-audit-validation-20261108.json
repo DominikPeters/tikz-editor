@@ -319,5 +319,12 @@
     "Native export dialogs were not exercised; async ownership checks use controlled delayed promises.",
     "Passing limited edit comparisons does not establish that other saved fuzz campaigns are clean.",
     "Browser oracle setup corrections are recorded separately; original models/hashes and initial reports were preserved; no tolerance was relaxed."
-  ]
+  ],
+  "followUp": {
+    "date": "2026-11-09",
+    "report": "design/release-failure-investigation-20261109.json",
+    "recordedFailingCasesResolved": 24,
+    "recordedFailingCasesStillOpen": 0,
+    "note": "The original audit and its unresolved-failure list are preserved as historical evidence; the follow-up diagnoses and verifies their resolution."
+  }
 }

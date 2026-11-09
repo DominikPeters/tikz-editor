@@ -146,7 +146,10 @@ describe("canvas resize gestures", () => {
     pointer("pointerup", dx, dy); await renderSnapshot();
     expect(useEditorStore.getState().deckObjectSelection?.objectId).toBe(layout.graphics[0].itemId);
     expect(layout.graphics[0].bounds.width).toBeCloseTo(bounds.width * 1.5, 3);
-    expect(layout.graphics[0].bounds.height).toBeCloseTo(bounds.height * 1.5, 3);
+    // LuaLaTeX/graphicx's requested height for this 120pt × 60pt image at
+    // .75\linewidth. \Gscale@div rounds its ratio independently of the
+    // original .5\linewidth box, so its height is not exactly 1.5× taller.
+    expect(layout.graphics[0].bounds.height).toBeCloseTo(4_153_560 / 65_536, 6);
   });
   it("does not start a gesture while a new overlay step is pending", () => {
     act(() => { dispatch({ type: "SET_DECK_STEP", rootId: "frame:0", step: 2 }); });

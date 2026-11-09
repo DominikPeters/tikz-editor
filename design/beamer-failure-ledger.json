@@ -2150,5 +2150,14 @@
       "reason": "One pixel in a letter counter changes mask membership at 1600px. This raster-resolution limitation is separate from the 61 original complex frames accepted above.",
       "reference": "test/fixtures/beamer/fuzz-findings-v2/README.md"
     }
-  ]
+  ],
+  "savedReplayFollowUp": {
+    "date": "2026-11-09",
+    "report": "design/release-failure-investigation-20261109.json",
+    "affectedCases": 19,
+    "overlayStates": 42,
+    "originalSourcesAndSavedTracesUnchanged": true,
+    "freshLiveStructuralAndPaint": "19/19 affected cases and 42/42 states passed",
+    "note": "Saved date glyphs are compared with the original TeX compilation calendar. Earlier campaign acceptance and remaining support/oracle limits above are preserved."
+  }
 }
