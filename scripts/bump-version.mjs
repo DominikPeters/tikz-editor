@@ -35,18 +35,38 @@ const packageJsonUpdates = [
     file: "apps/desktop/package.json",
     internalDependencies: ["@tikz-editor/app"],
   },
+  { file: "apps/ipad/package.json" },
   {
     file: "apps/landing/package.json",
     internalDependencies: ["@tikz-editor/app"],
   },
 ];
 
+const nativeApps = [
+  { directory: "apps/desktop/src-tauri", packageName: "tikz-editor" },
+  { directory: "apps/ipad/src-tauri", packageName: "tikz-editor-ipad" },
+];
+
+const iosVersionFiles = [
+  {
+    file: "apps/ipad/src-tauri/gen/apple/project.yml",
+    pattern: /(CFBundleShortVersionString: )[^\r\n]+/,
+  },
+  {
+    file: "apps/ipad/src-tauri/gen/apple/tikz-editor-ipad_iOS/Info.plist",
+    pattern: /(<key>CFBundleShortVersionString<\/key>\s*<string>)[^<]+/,
+  },
+];
+
 const expectedFiles = [
   ...packageJsonUpdates.map(({ file }) => file),
   "package-lock.json",
-  "apps/desktop/src-tauri/Cargo.toml",
-  "apps/desktop/src-tauri/Cargo.lock",
-  "apps/desktop/src-tauri/tauri.conf.json",
+  ...nativeApps.flatMap(({ directory }) => [
+    `${directory}/Cargo.toml`,
+    `${directory}/Cargo.lock`,
+    `${directory}/tauri.conf.json`,
+  ]),
+  ...iosVersionFiles.map(({ file }) => file),
 ];
 
 const expectedFileSet = new Set(expectedFiles);
@@ -210,10 +230,12 @@ async function updatePackageJsons(version) {
 }
 
 async function updateTauriConfig(version) {
-  const configFile = "apps/desktop/src-tauri/tauri.conf.json";
-  const config = await readJson(configFile);
-  config.version = version;
-  await writeJson(configFile, config);
+  for (const { directory } of nativeApps) {
+    const configFile = `${directory}/tauri.conf.json`;
+    const config = await readJson(configFile);
+    config.version = version;
+    await writeJson(configFile, config);
+  }
 }
 
 async function replaceInFile(file, pattern, replacement) {
@@ -227,16 +249,21 @@ async function replaceInFile(file, pattern, replacement) {
 }
 
 async function updateCargoFiles(version) {
-  await replaceInFile(
-    "apps/desktop/src-tauri/Cargo.toml",
-    /(^\[package\]\nname = "tikz-editor"\nversion = ")[^"]+(")/m,
-    `$1${version}$2`,
-  );
-  await replaceInFile(
-    "apps/desktop/src-tauri/Cargo.lock",
-    /(\[\[package\]\]\nname = "tikz-editor"\nversion = ")[^"]+(")/,
-    `$1${version}$2`,
-  );
+  for (const { directory, packageName } of nativeApps) {
+    for (const [file, header] of [["Cargo.toml", "\\[package\\]"], ["Cargo.lock", "\\[\\[package\\]\\]"]]) {
+      await replaceInFile(
+        `${directory}/${file}`,
+        new RegExp(`(^${header}\\nname = "${escapeRegExp(packageName)}"\\nversion = ")[^"]+(")`, "m"),
+        `$1${version}$2`,
+      );
+    }
+  }
+}
+
+async function updateIosFiles(version) {
+  for (const { file, pattern } of iosVersionFiles) {
+    await replaceInFile(file, pattern, `$1${version}`);
+  }
 }
 
 async function verifyVersion(version) {
@@ -271,35 +298,20 @@ async function verifyVersion(version) {
     }
   }
 
-  const tauriConfig = await readJson("apps/desktop/src-tauri/tauri.conf.json");
-  assertEqual(tauriConfig.version, version, "tauri.conf.json version");
-
-  const cargoToml = await readFile(
-    path.join(repoRoot, "apps/desktop/src-tauri/Cargo.toml"),
-    "utf8",
-  );
-  const cargoLock = await readFile(
-    path.join(repoRoot, "apps/desktop/src-tauri/Cargo.lock"),
-    "utf8",
-  );
-
-  const escapedVersion = escapeRegExp(version);
-
-  if (
-    !new RegExp(
-      `^\\[package\\]\\nname = "tikz-editor"\\nversion = "${escapedVersion}"`,
-      "m",
-    ).test(cargoToml)
-  ) {
-    throw new Error("Cargo.toml tikz-editor package version did not verify");
+  for (const { directory, packageName } of nativeApps) {
+    const configFile = `${directory}/tauri.conf.json`;
+    assertEqual((await readJson(configFile)).version, version, `${configFile} version`);
+    for (const [file, header] of [["Cargo.toml", "\\[package\\]"], ["Cargo.lock", "\\[\\[package\\]\\]"]]) {
+      const text = await readFile(path.join(repoRoot, directory, file), "utf8");
+      const match = new RegExp(`^${header}\\nname = "${escapeRegExp(packageName)}"\\nversion = "([^"]+)"`, "m").exec(text);
+      assertEqual(match?.[1], version, `${directory}/${file} package version`);
+    }
   }
 
-  if (
-    !new RegExp(
-      `\\[\\[package\\]\\]\\nname = "tikz-editor"\\nversion = "${escapedVersion}"`,
-    ).test(cargoLock)
-  ) {
-    throw new Error("Cargo.lock tikz-editor package version did not verify");
+  for (const { file, pattern } of iosVersionFiles) {
+    const text = await readFile(path.join(repoRoot, file), "utf8");
+    const match = pattern.exec(text);
+    assertEqual(match?.[0].slice(match[1].length), version, `${file} marketing version`);
   }
 }
 
@@ -371,6 +383,7 @@ async function main() {
   await updatePackageJsons(version);
   await updateTauriConfig(version);
   await updateCargoFiles(version);
+  await updateIosFiles(version);
 
   run("npm", ["install", "--package-lock-only", "--ignore-scripts"]);
   await verifyVersion(version);
