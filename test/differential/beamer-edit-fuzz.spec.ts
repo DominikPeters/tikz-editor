@@ -8,7 +8,7 @@ import { EDIT_FIELDS, beamerSourceCandidates, beamerFailureKey, generateBeamerEd
 import { freshComputeModule } from "./compute-instances.js";
 import type { FuzzFailure, FuzzRunResult } from "./compute-fuzz.js";
 
-const base = generateBeamerFuzzCases({ seed: 20261106, cases: 33 })[0]!;
+const base = generateBeamerFuzzCases({ seed: 20261106, cases: 33 })[0];
 const sequence = (steps = 13) => generateBeamerEditSequence(withEditProbes(base.source), base.fixture.family, 20261106, steps);
 describe("Beamer semantic edit recipes", () => {
   it("replays deterministically and edits every field without malformed TeX", () => {
@@ -67,7 +67,7 @@ describe("Beamer semantic edit recipes", () => {
   it("loads real PNG, JPEG and PDF pages during warm/cold image edit comparisons", async () => {
     const cases = generateBeamerFuzzCases({ seed: 20261108, cases: 8, profile: "images" });
     for (const index of [0, 1, 6]) {
-      const entry = cases[index]!;
+      const entry = cases[index];
       const input = generateBeamerEditSequence(withEditProbes(entry.source), entry.fixture.family, 20261108, 2);
       const result = await runBeamerEditSequence(input);
       expect(result.failure, entry.id).toBeNull();

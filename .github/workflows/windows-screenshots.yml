@@ -5,12 +5,6 @@ name: Windows screenshots
 # (design/native-windows-look.md, Verification).
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "packages/app/src/ui/**"
-      - "packages/app/src/platform/**"
-      - "apps/desktop/**"
-      - ".github/workflows/windows-screenshots.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

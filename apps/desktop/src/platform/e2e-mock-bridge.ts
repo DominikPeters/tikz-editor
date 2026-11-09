@@ -85,7 +85,7 @@ export function installDeterministicBridgeInPage(): void {
   const bridge = {
     openText: (path) => {
       const resolvedPath = path ?? "/tmp/opened-from-e2e.tex";
-      const source = "\\\\draw (9,9)--(10,10); % desktop-opened";
+      const source = "\\draw (9,9)--(10,10); % desktop-opened";
       linkedFiles.set(resolvedPath, { source, revision: linkedRevisionForText(source) });
       return Promise.resolve({
         source,

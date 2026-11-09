@@ -463,7 +463,7 @@ function BrewCommand() {
   const copy = () => {
     const done = () => {
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      window.setTimeout(() => { setCopied(false); }, 1500);
     };
     const fallback = () => {
       const code = codeRef.current;
@@ -475,8 +475,9 @@ function BrewCommand() {
       selection.addRange(range);
       if (document.execCommand("copy")) done();
     };
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(BREW_COMMAND).then(done, fallback);
+    const clipboard = navigator.clipboard as Clipboard | undefined;
+    if (clipboard) {
+      clipboard.writeText(BREW_COMMAND).then(done, fallback);
     } else {
       fallback();
     }

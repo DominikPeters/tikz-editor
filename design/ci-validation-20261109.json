@@ -1,0 +1,238 @@
+{
+  "date": "2026-11-09",
+  "scope": "Push and pull-request CI audit and repairs; branch protection intentionally unchanged at the user request.",
+  "baseCommit": "8778580aa67c4d0bb7c9efedd83d93ea1f3aab22",
+  "inspectedGitHubRun": "https://github.com/DominikPeters/tikz-editor/actions/runs/42540529415",
+  "findings": [
+    {
+      "finding": "Screenshot collection ran automatically on pushes without assertions.",
+      "resolution": "Windows screenshots now has only workflow_dispatch."
+    },
+    {
+      "finding": "Lint failure prevented runtime checks in a single sequential job.",
+      "resolution": "Grammar, lint, typecheck, fuzz smoke, unit/mock and browser suites run independently; CI result aggregates failures and cancellations while accepting intentional skips."
+    },
+    {
+      "finding": "Only one of two generated grammars was checked.",
+      "resolution": "The generated-file guard checks both Lezer grammar directories."
+    },
+    {
+      "finding": "Unrelated marketing edits triggered native and image jobs while no automatic landing build existed.",
+      "resolution": "Git-based change classification scopes expensive checks and adds landing and iPad frontend builds; missing history, manual runs and unknown build inputs run everything."
+    },
+    {
+      "finding": "Current lint gate had 23 test warnings and two production warnings in the new landing copy control.",
+      "resolution": "Removed redundant assertions, avoided the RegExp.test conditional-test false positive, and retained clipboard fallback with explicit optional runtime typing."
+    },
+    {
+      "finding": "Native image test searched visible text Replace Image\u2026 although the button displays Replace\u2026 with aria-label Replace Image\u2026.",
+      "resolution": "Use the accessible label for selection, click and retention assertions."
+    },
+    {
+      "finding": "Image oracle tried a literal MuPDF SVG filename that differs across versions.",
+      "resolution": "Use an explicit page-number pattern and rename the first page to the canonical artifact; remove stale page output first. Old/current filename behavior and missing-fresh-output rejection are regression tested."
+    },
+    {
+      "finding": "A background macOS WebView left all dock panels empty after switching from a Beamer example to a TikZ file.",
+      "resolution": "Explicitly redraw FlexLayout after installing a new model so measured tabs render without waiting for the background ResizeObserver. Retain the mounted Layout to avoid its existing visibility-listener retention issue. Correct two over-escaped mock TikZ fixtures and improve failure-state/timeout diagnostics.",
+      "evidence": {
+        "before": "artifacts/ci-validation-20261109/desktop-corrected-fixtures-before-layout-fix.log",
+        "after": "artifacts/ci-validation-20261109/desktop.log"
+      }
+    },
+    {
+      "finding": "After the selector and layout fixes, native image editing passed through reload but failed its final picker assertion.",
+      "resolution": "Match the existing graphics-import picker contract used by deck-graphics-replacement.ts; retain the assertion and all real native I/O and PDF.js checks."
+    }
+  ],
+  "validation": {
+    "workflows": {
+      "actionlint": "v1.7.12; all workflow files passed; shellcheck unavailable and disabled",
+      "resultAggregation": "Success, intentional skips, and 28 failure/cancellation combinations passed against the actual workflow script.",
+      "aggregationScript": "artifacts/ci-validation-20261109/tikz-ci-result-script.js"
+    },
+    "unit": {
+      "report": "artifacts/ci-validation-20261109/unit.json",
+      "passed": 8753,
+      "failed": 0,
+      "skipped": 25,
+      "todo": 1,
+      "fullPointerFuzz": true
+    },
+    "desktopMock": {
+      "passed": 25,
+      "failed": 0
+    },
+    "pdfBrowsers": {
+      "report": "artifacts/ci-validation-20261109/pdf-browser.json",
+      "browsers": [
+        "chromium",
+        "webkit"
+      ],
+      "passed": 4,
+      "failed": 0
+    },
+    "fuzzSmoke": {
+      "report": "artifacts/ci-validation-20261109/fuzz-pr-bundle.json",
+      "seed": 20260711,
+      "hardFindings": 0,
+      "nativeCases": 1360,
+      "metamorphicChecks": 315,
+      "oracle": false
+    },
+    "imageOriginals": {
+      "report": "artifacts/ci-validation-20261109/image-oracle-tests.json",
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "originalPaintSources": 9,
+      "mutationControls": [
+        "missing",
+        "shifted",
+        "flipped",
+        "uncropped"
+      ]
+    },
+    "articleImages": {
+      "report": "artifacts/ci-validation-20261109/article/seed-20261108-cases-16-scale-4-2026-11-09T20-51-15-013Z/summary.json",
+      "casesCompleted": 16,
+      "flagged": 0,
+      "errors": 0,
+      "reference": "MuPDF SVG / librsvg; Poppler control diagnostic"
+    },
+    "beamerImages": {
+      "report": "artifacts/ci-validation-20261109/beamer/comparison/report.json",
+      "passed": 8,
+      "failed": 0,
+      "states": 11
+    },
+    "builds": [
+      "landing production",
+      "iPad frontend typecheck and production build",
+      "web production",
+      "isolated macOS desktop",
+      "tex-fuzz"
+    ],
+    "webBrowser": {
+      "report": "artifacts/ci-validation-20261109/web-browser.json",
+      "passed": 422,
+      "failed": 0,
+      "note": "Full suite before the additional background-layout redraw; focused final browser checks are recorded separately."
+    },
+    "nativeMacOS": {
+      "log": "artifacts/ci-validation-20261109/desktop.log",
+      "passed": 14,
+      "failed": 0,
+      "backgroundWindow": true,
+      "nativeImageOperations": "Real native open/read/write, image import, PDF.js, undo/redo, save/reload; only picker choices are deterministic."
+    },
+    "lintCi": "passed (production, tests and knip); final modified desktop scripts also linted",
+    "typecheck": "passed, including strict packages",
+    "grammar": "Both generators rerun; no differences in either grammar directory.",
+    "finalBrowser": {
+      "report": "artifacts/ci-validation-20261109/final-browser.json",
+      "passed": 12,
+      "failed": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "browsers": [
+        "chromium",
+        "webkit"
+      ],
+      "scope": "Final production rebuild: Beamer workspace, source placeholders and real PDF image editing/history/reload."
+    }
+  },
+  "oracleChanges": {
+    "numericalThresholds": "unchanged",
+    "structuralPredicates": "unchanged",
+    "rasterizer": "unchanged; only output filename handling fixed"
+  },
+  "limits": [
+    "Fresh Windows and Linux native execution requires GitHub runners; neither was run on this macOS host. No post-change GitHub run exists before pushing.",
+    "MuPDF 1.23 filename behavior was simulated in regression tests; live image comparisons ran with local MuPDF 1.28.6.",
+    "No native iOS build or device test; the added iPad job checks the frontend only.",
+    "No large image fuzz soak or independent TeX run of the recursive image grammar. Other saved campaigns, including design/beamer-failure-ledger.json, are not revalidated by these bounded samples.",
+    "Deterministic PR fuzz checks native invariants and metamorphic behavior without a TeX oracle; independent image fidelity results are recorded separately."
+  ],
+  "relatedLedgers": [
+    "design/includegraphics-fuzz-ledger.json",
+    "design/beamer-failure-ledger.json"
+  ],
+  "preservedOriginalSources": {
+    "test/fixtures/graphics-fuzz/original-history-owner-id.tex": "33621d53bfa671a92b8216e6ba585150a5b8e5867f884f34b7fdaeec3c0a0120",
+    "test/fixtures/graphics-fuzz/v4-seed-20261108-0000-image-inline.tex": "adc569101be80d59c81c986e54458fe5c3fc1ca808031bac180ad77a9cc4ac33",
+    "test/fixtures/graphics-fuzz/v4-seed-20261108-0001-image-column.tex": "30bf1bbdfe8431d368c3f4bd2ebb608e0e03c7c33296734f761f31441f6d8233",
+    "test/fixtures/graphics-fuzz/v4-seed-20261108-0002-image-block.tex": "68831ad12ec3cf1fdbd3c7b04756684e3250688625c84fecc01e5be0a7cf20f9",
+    "test/fixtures/graphics-fuzz/v4-seed-20261108-0003-image-node.tex": "f6cb38f74197841a10b5149e2011ae2bc796661a706bae3608e12f5048417927",
+    "test/fixtures/graphics-fuzz/v4-seed-20261108-0004-image-overlay.tex": "317c5989183cd5c110bce5c71ae31c1ad2b64cceaed3c310308f1f463fdabcb6",
+    "test/fixtures/graphics-fuzz/v4-seed-20261108-0005-image-lookup.tex": "4742b649aedd263044faa05e31d7c8998440a1e24690bf0307496d030c3a90be",
+    "test/fixtures/graphics-fuzz/v4-seed-20261108-0006-image-pdf-pages.tex": "d08241c04fecec4a75a346e4996bf1b79f2ac971896dd3607bbeb89237a212f4",
+    "test/fixtures/graphics-fuzz/v4-seed-20261108-0007-image-key-order.tex": "c5e57179f8ae0c837c190b5e095668ce5dd3a896fa1b16ed593b1480db0214ca",
+    "test/fixtures/graphics-fuzz/article-findings/case-002.tex": "c5524eef24a8a8a0d7e2e253714d834b8c675d69b32c738f2f00f329ff4aa038",
+    "test/fixtures/graphics-fuzz/article-findings/case-002.oracle.tex": "02faadc52a7fb864e8db119972af9fc33a71cd85f5e48f9c6c724cf00df84b9d",
+    "test/fixtures/graphics-fuzz/article-findings/case-004.tex": "e059ce1b976c2877576a7bbf87ab40acc536ecba02511615716b132e9045b587",
+    "test/fixtures/graphics-fuzz/article-findings/case-004.oracle.tex": "bab700732c83c3ef9c6253cd624bbb95d7e84a284ce26b71460514b55bc3e6d6",
+    "test/fixtures/graphics-fuzz/article-findings/case-007.tex": "bab3bc892aa3f0f990d58266fa677e7a89609e04071fced41f92ec7da1c1cd99",
+    "test/fixtures/graphics-fuzz/article-findings/case-007.oracle.tex": "ae50ff6d67d51cfb7990ebd38aba6f3be430185b3d36f3bc4e2899acba204f75",
+    "test/fixtures/graphics-fuzz/article-findings/case-008.tex": "2489b118838481531a62ec5be47a21b280504d3ad577ca4ffb11b3fee6c4c47f",
+    "test/fixtures/graphics-fuzz/article-findings/case-008.oracle.tex": "89d1d4fccfafca8a7cba7d4798362c27f17e385b61e939dca2cec56015804633",
+    "test/fixtures/graphics-fuzz/article-findings/case-009.tex": "7b2287cce6560087295a57c2681ab0e88e5583c5351428b75098b270cdc01147",
+    "test/fixtures/graphics-fuzz/article-findings/case-009.oracle.tex": "4f59cc6693fbc5c953a47a856edfb26816de708ed1156936d3c7c6ef0056daf5",
+    "test/fixtures/graphics-fuzz/article-findings/case-010.tex": "90dacdda7a84dff08e7317f11aa0d992507ffd3add1a8bff977e0921ce3286cc",
+    "test/fixtures/graphics-fuzz/article-findings/case-010.oracle.tex": "56d6b4552b4e180be186f583fe75d18d6edf66ca23aa3e1f7a4ef0f0f761c179",
+    "test/fixtures/graphics-fuzz/article-findings/case-011.tex": "2308d3658c3d431f311ae97a6c033b006e0accd32fcf7e26e77e02fc37720ae5",
+    "test/fixtures/graphics-fuzz/article-findings/case-011.oracle.tex": "b820ee3cc720fba2e5c4692b2f82488435991069775894383d63f1e5ae708ce6",
+    "test/fixtures/graphics-fuzz/article-findings/case-014.tex": "6e8533e9923a30718943d280e30b15b8267475509637628fcbce00be783027ee",
+    "test/fixtures/graphics-fuzz/article-findings/case-014.oracle.tex": "f84ef45add84eeac32e72ebbb5a89cd06b6704ac0c687ccb7eba684473d86875",
+    "test/fixtures/graphics-fuzz/article-findings/case-016.tex": "4975401f6e06051cad19029215fa5936c857c369f68cf11c0cca8b4b3995f6d4",
+    "test/fixtures/graphics-fuzz/article-findings/case-016.oracle.tex": "760679577809bc3600e397b2f4887df72d342f79dd945d06b35f6b1d4eb4527d"
+  },
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v26.13.0",
+    "MuPDF": "1.28.6",
+    "ciNode": "22"
+  },
+  "diagnosticHistory": [
+    {
+      "log": "artifacts/ci-validation-20261109/desktop-before.log",
+      "passed": 6,
+      "failed": 1,
+      "unreached": 7,
+      "finding": "Opened source was present in the store, but all dock panels were absent. The old timeout message captured empty values before polling."
+    },
+    {
+      "log": "artifacts/ci-validation-20261109/desktop-corrected-fixtures-before-layout-fix.log",
+      "passed": 6,
+      "failed": 1,
+      "unreached": 7,
+      "finding": "Correcting the invalid mock source did not fix the missing panels; the layout issue is independent."
+    },
+    {
+      "log": "artifacts/ci-validation-20261109/desktop-after-layout-fix-before-picker-assertion.log",
+      "passed": 13,
+      "failed": 1,
+      "finding": "Layout fix cleared the earlier failure. Final image assertion used the obsolete picker kind graphics rather than graphics-import."
+    },
+    {
+      "hostedRun": "https://github.com/DominikPeters/tikz-editor/actions/runs/42540529415",
+      "finding": "Image oracle ENOENT occurred before comparisons. That tooling-error run is not a successful fidelity comparison."
+    }
+  ],
+  "priorCampaignLimitsNotClosed": {
+    "knownUnverifiedSupportGaps": [
+      "Generic brace groups with a bare font declaration and block-level children still hit the frontend restriction. Not yet independently reduced.",
+      "Non-default heading struts and class-specific named sizes in overlay-picture node text need further independent checks.",
+      "Rounded-block width comparisons do not directly trace rounded background edges; centered text caught the pre-shrink width bug but simple prose alone could miss it."
+    ],
+    "knownOracleLimitations": [
+      {
+        "fixture": "test/fixtures/beamer/fuzz-findings-v2/large-relative-overlay-glyph-edge.tex",
+        "status": "Original 1600px paint-mask mismatch retained; the fixture explicitly uses 3200px and passes the same strict zero-interior-disagreement contract.",
+        "reason": "One pixel in a letter counter changes mask membership at 1600px. This raster-resolution limitation is separate from the 61 original complex frames accepted above.",
+        "reference": "test/fixtures/beamer/fuzz-findings-v2/README.md"
+      }
+    ]
+  }
+}

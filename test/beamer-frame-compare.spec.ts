@@ -79,11 +79,11 @@ Display rows:
     const render = await renderBeamerFrame(String.raw`\documentclass{beamer}\begin{document}\begin{frame}Before \includegraphics[trim=2 1 3 2,viewport=1 1 20 14,clip=false]{fuzz-images/pattern.png} after.\end{frame}\end{document}`, { graphicsResolver: createTexFuzzGraphicsResolver() });
     const images = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider).rectangles.filter(rect => rect.role === "image");
     expect(images).toHaveLength(1);
-    const graphic = render.layout.graphics[0]!;
-    expect(images[0]!.x).toBeCloseTo(graphic.bounds.x - 72.27 / 72, 5);
-    expect(images[0]!.y).toBeCloseTo(graphic.bounds.y - 2 * 72.27 / 72, 5);
-    expect(images[0]!.width).toBeCloseTo(24 * 72.27 / 72, 5);
-    expect(images[0]!.height).toBeCloseTo(16 * 72.27 / 72, 5);
+    const graphic = render.layout.graphics[0];
+    expect(images[0].x).toBeCloseTo(graphic.bounds.x - 72.27 / 72, 5);
+    expect(images[0].y).toBeCloseTo(graphic.bounds.y - 2 * 72.27 / 72, 5);
+    expect(images[0].width).toBeCloseTo(24 * 72.27 / 72, 5);
+    expect(images[0].height).toBeCloseTo(16 * 72.27 / 72, 5);
   });
 
   it("retains image rectangles and glyph paint axes inside rotated TikZ nodes", async () => {
@@ -92,9 +92,9 @@ Display rows:
     expect(trace.rectangles.filter(rect => rect.role === "image")).toHaveLength(1);
     const glyphs = trace.glyphs.filter(glyph => glyph.role === "embedded-tikz");
     expect(glyphs.length).toBeGreaterThan(1);
-    expect(glyphs[0]!.transform?.[0]).toBeCloseTo(Math.cos(Math.PI / 12), 4);
-    expect(glyphs[0]!.transform?.[1]).toBeCloseTo(-Math.sin(Math.PI / 12), 4);
-    expect(glyphs[1]!.y).toBeLessThan(glyphs[0]!.y);
+    expect(glyphs[0].transform?.[0]).toBeCloseTo(Math.cos(Math.PI / 12), 4);
+    expect(glyphs[0].transform?.[1]).toBeCloseTo(-Math.sin(Math.PI / 12), 4);
+    expect(glyphs[1].y).toBeLessThan(glyphs[0].y);
   });
 
   it("traces native display math rules alongside theme rectangles", async () => {

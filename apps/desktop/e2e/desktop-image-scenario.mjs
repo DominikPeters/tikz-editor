@@ -56,7 +56,7 @@ async function selectImage(browser) {
     return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
   });
   await browser.action("pointer").move({ ...center, origin: "viewport" }).down().up().perform();
-  await browser.$("//button[normalize-space(.)='Replace Image…']").waitForDisplayed({ timeout: 10_000 });
+  await browser.$('button[aria-label="Replace Image…"]').waitForDisplayed({ timeout: 10_000 });
 }
 
 function tinyPdf() {
@@ -106,19 +106,19 @@ export async function scenarioDesktopImages(browser, { dispatchCommand, restoreB
     await selectImage(browser);
 
     // Cancellation neither changes source nor creates an undo entry.
-    await browser.$("//button[normalize-space(.)='Replace Image…']").click();
+    await browser.$('button[aria-label="Replace Image…"]').click();
     await browser.waitUntil(async () => await browser.execute(() => window.__DESKTOP_IMAGE_PICKER_CALLS__.length === 1));
     await expectSource(browser, original);
     assert.equal(await browser.execute(() => window.__TIKZ_EDITOR_APP_TEST_API__.getCommandState("edit.undo").enabled), false);
 
-    await browser.$("//button[normalize-space(.)='Replace Image…']").click();
+    await browser.$('button[aria-label="Replace Image…"]').click();
     const replaced = original.replace(",page=3", "").replace("images/original.pdf", "images/replacement image.svg");
     await expectSource(browser, replaced);
     const replacedHref = await expectImage(browser, originalHref);
     assert.match(replacedHref, /^data:image\/svg\+xml;base64,/u);
     assert.match(Buffer.from(replacedHref.split(",")[1], "base64").toString("utf8"), /fill="blue"/u);
     await browser.saveScreenshot(path.join(process.env.RUNNER_TEMP ?? os.tmpdir(), "tikz-desktop-image-replacement.png"));
-    assert.equal(await browser.$("//button[normalize-space(.)='Replace Image…']").isDisplayed(), true, "replacement keeps image selected");
+    assert.equal(await browser.$('button[aria-label="Replace Image…"]').isDisplayed(), true, "replacement keeps image selected");
     assert.equal(await browser.$('[aria-label="Page"]').isExisting(), false, "SVG has no PDF page control");
     await dispatchCommand(browser, "edit.undo");
     await expectSource(browser, original);
@@ -135,12 +135,12 @@ export async function scenarioDesktopImages(browser, { dispatchCommand, restoreB
     await expectImage(browser);
     await installImagePicker(browser, [originalPath]);
     await selectImage(browser);
-    await browser.$("//button[normalize-space(.)='Replace Image…']").click();
+    await browser.$('button[aria-label="Replace Image…"]').click();
     const pdfAgain = replaced.replace("images/replacement image.svg", "images/original.pdf");
     await expectSource(browser, pdfAgain);
     await expectImage(browser, replacedHref);
     assert.equal(await browser.$('[aria-label="Page"]').getValue(), "1", "replacement PDF starts on page one");
-    assert.deepEqual(await browser.execute(() => window.__DESKTOP_IMAGE_PICKER_CALLS__), [{ addToRecent: false, kind: "graphics" }]);
+    assert.deepEqual(await browser.execute(() => window.__DESKTOP_IMAGE_PICKER_CALLS__), [{ addToRecent: false, kind: "graphics-import" }]);
     assert.equal((await source(browser)).includes("__tikz_assets__"), false, "desktop keeps native references");
   } catch (error) {
     console.error("[desktop-images]", await browser.execute(() => ({

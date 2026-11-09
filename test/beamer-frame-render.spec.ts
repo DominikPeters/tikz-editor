@@ -334,7 +334,7 @@ A\includegraphics<1>[width=20pt]{first.png}\includegraphics<2->{second.png}B
     expect(await drawn(1)).toEqual(["first.png", "picture.png"]);
     expect(await drawn(2)).toEqual(["second.png"]);
     const first = await document.renderFrame({ frameIndex: 0, step: 1, graphicsResolver });
-    const graphic = first.layout.graphics[0]!;
+    const graphic = first.layout.graphics[0];
     expect(source.slice(graphic.sourceSpan.from, graphic.sourceSpan.to)).toBe(String.raw`\includegraphics<1>[width=20pt]{first.png}`);
     expect(graphic.bounds.width).toBeCloseTo(20, 6);
   });
@@ -351,7 +351,7 @@ A\includegraphics<1>[width=20pt]{first.png}\includegraphics<2->{second.png}B
       resolve: () => ({ status: "resolved", mimeType: "image/png", dataBase64: "AA==", naturalWidthPt: 40, naturalHeightPt: 20, revision: "1" }),
     };
     const result = await renderBeamerFrame(source, { graphicsResolver });
-    const graphic = result.layout.graphics[0]!;
+    const graphic = result.layout.graphics[0];
     expect(graphic.bounds.width).toBeCloseTo(28.45274, 3);
     expect(graphic.bounds.height).toBeCloseTo(56.9055, 3);
     expect(result.svg.svg).toContain('data-tex-includegraphics-transform="true"');

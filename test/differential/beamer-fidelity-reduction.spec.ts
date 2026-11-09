@@ -25,7 +25,7 @@ describe.runIf(process.env.BEAMER_FIDELITY_REDUCE_INPUT)("independent LuaLaTeX f
       const frames = document.frames.map((frame, index) => ({ index, text: text.slice(frame.span.from, frame.span.to) })).filter(frame => frame.text.includes(anchor));
       const empty = { failure: null, comparisons: 0, reach: {} };
       if (document.diagnostics.length || frames.length !== 1) return empty;
-      const frame = frames[0]!, frameNumber = frame.index + 1;
+      const frame = frames[0], frameNumber = frame.index + 1;
       const id = `trial-${String(trial++).padStart(4, "0")}`;
       const path = join(out, id + ".tex"); writeFileSync(path, text);
       const entry: typeof trials[number] = { id, sourceSha256: sourceHash(text), valid: false }; trials.push(entry);
@@ -37,7 +37,7 @@ describe.runIf(process.env.BEAMER_FIDELITY_REDUCE_INPUT)("independent LuaLaTeX f
         entry.valid = true;
         const mismatch = structuralContractFailures(report.structural.summary)[0];
         if (!mismatch) return { ...empty, comparisons: 1 };
-        const field = mismatch.split("=")[0]!;
+        const field = mismatch.split("=")[0];
         const failure = { opIndex: 0, op: { kind: "render" as const, doc: 0 }, what: "LuaLaTeX structural contract",
           request: { id, source: text, activeRootId: `frame:${frame.index}`, deckStep: 1 }, differences: [`${field}: ${mismatch}`] };
         entry.key = beamerFailureKey(failure);

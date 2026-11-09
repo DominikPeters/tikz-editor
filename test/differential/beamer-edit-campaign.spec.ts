@@ -36,14 +36,15 @@ describe("generated Beamer edit differential campaign", () => {
     const visit = (directory: string): void => {
       for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
         const path = join(directory, entry.name);
+        const sourceFile = /\.(?:tsx?|json)$/u.test(entry.name);
         if (entry.isDirectory()) visit(path);
-        else if (/\.(?:tsx?|json)$/u.test(entry.name)) implementation.update(path + "\0").update(readFileSync(path)).update("\0");
+        else if (sourceFile) implementation.update(path + "\0").update(readFileSync(path)).update("\0");
       }
     };
     visit("packages/core/src"); visit("packages/app/src");
     const implementationSha256 = implementation.digest("hex");
     const gitHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-    const report = (status: string) => ({ formatVersion: 1, status, seed: replay ? cases[0]!.seed : seed, plannedCases: cases.length, steps: replay ? cases[0]!.actions.filter(action => action.kind === "set").length : steps, harnessSha256, implementationSha256, graphicsAssetsSha256: FUZZ_GRAPHICS_ASSET_SHA256, gitHead,
+    const report = (status: string) => ({ formatVersion: 1, status, seed: replay ? cases[0].seed : seed, plannedCases: cases.length, steps: replay ? cases[0].actions.filter(action => action.kind === "set").length : steps, harnessSha256, implementationSha256, graphicsAssetsSha256: FUZZ_GRAPHICS_ASSET_SHA256, gitHead,
       completed: results.length, passed: results.filter(r => r.status === "passed").length, failed: results.filter(r => r.status === "mismatch").length,
       errors: results.filter(r => r.status === "error").length, comparisons, reach, edits, families, coverageFailures, results });
     write("report.json", report("running"));
@@ -56,7 +57,7 @@ describe("generated Beamer edit differential campaign", () => {
       comparisons += result.comparisons;
       for (const [key, value] of Object.entries(result.reach)) reach[key] = (reach[key] ?? 0) + value;
       // Count only edits actually reached before the first failure.
-      const reached = materializeBeamerEdits({ ...sequence, actions: sequence.actions.slice(0, result.failure ? materialized.opActions[result.failure.opIndex]! + 1 : undefined) });
+      const reached = materializeBeamerEdits({ ...sequence, actions: sequence.actions.slice(0, result.failure ? materialized.opActions[result.failure.opIndex] + 1 : undefined) });
       for (const [key, value] of Object.entries(reached.effectiveEdits)) edits[key] = (edits[key] ?? 0) + value;
       families[sequence.family] = (families[sequence.family] ?? 0) + 1;
       const entry: typeof results[number] = { id, status: result.failure ? result.failure.what === "threw" ? "error" : "mismatch" : "passed", comparisons: result.comparisons,
@@ -87,9 +88,9 @@ describe("generated Beamer edit differential campaign", () => {
     const complete = results.length === cases.length;
     if (complete && !results.some(r => r.status !== "passed")) {
       if (comparisons < (replay ? 1 : cases.length + 1)) coverageFailures.push("No effective differential comparisons");
-      if (!replay && steps >= EDIT_FIELDS.length) for (const field of EDIT_FIELDS) if (!(edits[field]! > 0)) coverageFailures.push(`No effective ${field} edit`);
+      if (!replay && steps >= EDIT_FIELDS.length) for (const field of EDIT_FIELDS) if (!(edits[field] > 0)) coverageFailures.push(`No effective ${field} edit`);
       if (!replay && cases.length >= 33) for (const key of ["deck:claimed", "deck:prewarm", "race", "layer:shown", "parse:incremental", "semantic:incremental:selective", "suffix:skipped", "patches:rebased", "layer:slide-layout-reused"]) {
-        if (!(reach[key]! > 0)) coverageFailures.push(`No ${key} reached`);
+        if (!(reach[key] > 0)) coverageFailures.push(`No ${key} reached`);
       }
     }
     write("report.json", report(complete ? "complete" : "stopped-at-failure-limit"));

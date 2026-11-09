@@ -129,6 +129,16 @@ try {
   console.log(`[desktop-e2e] Completed ${passed}/${scenarios.length} scenarios in ${Date.now() - runStartedAt}ms`);
 } catch (error) {
   if (browser) {
+    await browser.execute(() => ({
+      source: window.__TIKZ_EDITOR_APP_TEST_API__.getSource(),
+      editors: document.querySelectorAll(".cm-editor").length,
+      errors: window.__DESKTOP_E2E_ERRORS__?.slice(-10),
+      warnings: window.__DESKTOP_E2E_WARNINGS__?.slice(-10),
+      panels: Array.from(document.querySelectorAll(".flexlayout__tab")).map(panel => panel.innerHTML.slice(0, 1500))
+    })).then(
+      diagnostic => console.error("[desktop-e2e] Failure state:", JSON.stringify(diagnostic)),
+      diagnosticError => console.error("[desktop-e2e] Could not capture failure state:", diagnosticError)
+    );
     const screenshot = path.join(process.env.RUNNER_TEMP ?? os.tmpdir(), "tikz-desktop-e2e-failure.png");
     await browser.saveScreenshot(screenshot).then(
       () => console.error(`[desktop-e2e] Failure screenshot: ${screenshot}`),
@@ -405,7 +415,7 @@ async function scenarioNativeOpenRequestAndSave(browserInstance) {
   const beforeWrites = await browserInstance.execute(() => window.__DESKTOP_E2E_WRITES__.length);
   await browserInstance.execute(() => {
     window.__TIKZ_EDITOR_DESKTOP_TEST_API__.triggerOpenRequest({
-      source: "\\\\draw (11,11)--(12,12); % native-open-request",
+      source: "\\draw (11,11)--(12,12); % native-open-request",
       path: "/tmp/native-open-request-e2e.tex",
       name: "native-open-request-e2e.tex"
     });
@@ -726,7 +736,9 @@ async function expectTextContains(browserInstance, selector, snippet) {
     return text.includes(snippet);
   }, {
     timeout: 10_000,
-    timeoutMsg: `Expected ${selector} text to include ${snippet}; lastText=${JSON.stringify(lastText)} lastSource=${JSON.stringify(lastSource)}`
+    timeoutMsg: `Expected ${selector} text to include ${snippet}`
+  }).catch(error => {
+    throw new Error(`${error.message}; lastText=${JSON.stringify(lastText)} lastSource=${JSON.stringify(lastSource)}`, { cause: error });
   });
 }
 

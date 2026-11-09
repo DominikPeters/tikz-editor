@@ -618,6 +618,12 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
   }, [figureCount, deckMode, model, kind]);
 
   const layoutRef = useRef<Layout>(null);
+  useEffect(() => {
+    // A replacement model starts with zero-sized tabs. FlexLayout measures them
+    // after its first render; request the second render explicitly because a
+    // background WebView may defer the ResizeObserver that normally does it.
+    layoutRef.current?.redraw();
+  }, [model]);
   const menuHost = useMemo(() => ({
     getModel: () => modelRef.current,
     redraw: () => { layoutRef.current?.redraw(); },

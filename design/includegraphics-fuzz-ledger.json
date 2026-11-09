@@ -952,5 +952,63 @@
     "hostedRun": "Chromium/WebKit matrix configured; hosted runners not triggered locally",
     "productionFix": "useDeckResize consumes the drag compatibility click so WebKit retains the image selection and crop mode; listener expires before the next genuine click.",
     "initialTrace": "Initial timeout trace archive was incomplete; source, log and screenshot are retained."
+  },
+  "ciAuditFollowup20261109": {
+    "report": "design/ci-validation-20261109.json",
+    "hostedRunInvestigated": "https://github.com/DominikPeters/tikz-editor/actions/runs/42540529415",
+    "toolingRepair": "Explicit MuPDF SVG page pattern; reject missing fresh output rather than accepting stale SVG. Independent reference, original source bytes and all numerical tolerances unchanged.",
+    "liveOriginalPaintRegressions": {
+      "report": "artifacts/ci-validation-20261109/image-oracle-tests.json",
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "originalPaintSources": 9,
+      "mutationControls": [
+        "missing",
+        "shifted",
+        "flipped",
+        "uncropped"
+      ]
+    },
+    "article": {
+      "report": "artifacts/ci-validation-20261109/article/seed-20261108-cases-16-scale-4-2026-11-09T20-51-15-013Z/summary.json",
+      "casesCompleted": 16,
+      "flagged": 0,
+      "errors": 0,
+      "reference": "MuPDF SVG / librsvg; Poppler control diagnostic"
+    },
+    "beamer": {
+      "report": "artifacts/ci-validation-20261109/beamer/comparison/report.json",
+      "passed": 8,
+      "failed": 0,
+      "states": 11
+    },
+    "nativeMacOS": {
+      "log": "artifacts/ci-validation-20261109/desktop.log",
+      "passed": 14,
+      "failed": 0,
+      "backgroundWindow": true,
+      "nativeImageOperations": "Real native open/read/write, image import, PDF.js, undo/redo, save/reload; only picker choices are deterministic."
+    },
+    "unresolvedImageFindings": [],
+    "limits": [
+      "Fresh Windows and Linux native execution requires GitHub runners; neither was run on this macOS host. No post-change GitHub run exists before pushing.",
+      "MuPDF 1.23 filename behavior was simulated in regression tests; live image comparisons ran with local MuPDF 1.28.6.",
+      "No native iOS build or device test; the added iPad job checks the frontend only.",
+      "No large image fuzz soak or independent TeX run of the recursive image grammar. Other saved campaigns, including design/beamer-failure-ledger.json, are not revalidated by these bounded samples.",
+      "Deterministic PR fuzz checks native invariants and metamorphic behavior without a TeX oracle; independent image fidelity results are recorded separately."
+    ],
+    "finalBrowser": {
+      "report": "artifacts/ci-validation-20261109/final-browser.json",
+      "passed": 12,
+      "failed": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "browsers": [
+        "chromium",
+        "webkit"
+      ],
+      "scope": "Final production rebuild: Beamer workspace, source placeholders and real PDF image editing/history/reload."
+    }
   }
 }

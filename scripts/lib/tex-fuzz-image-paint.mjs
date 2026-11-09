@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { execOracleTool } from "./oracle-tool-process.mjs";
 import { compareColorMasks } from "./beamer-paint-compare.mjs";
@@ -12,9 +12,15 @@ const colors = ["#df2020", "#20b8cf", "#e8b020", "#2846aa"].map(color => ({ colo
  */
 export function compareTexFuzzImagePaint({ pdfPath, nativePngPath, directory, width, height }) {
   const svg = join(directory, "tex-image-paint.svg");
+  // MuPDF 1.23 appends a page number even without a placeholder; newer
+  // versions honor the literal filename. An explicit pattern works in both.
+  const svgPattern = join(directory, "tex-image-paint-page-%d.svg");
+  const pageSvg = join(directory, "tex-image-paint-page-1.svg");
   const png = join(directory, "tex-image-paint.png");
   const poppler = join(directory, "tex-pdf-paint");
-  execOracleTool("mutool", ["draw", "-q", "-F", "svg", "-o", svg, pdfPath, "1"], { stdio: "ignore" });
+  rmSync(pageSvg, { force: true });
+  execOracleTool("mutool", ["draw", "-q", "-F", "svg", "-o", svgPattern, pdfPath, "1"], { stdio: "ignore" });
+  renameSync(pageSvg, svg);
   const source = readFileSync(svg, "utf8");
   if (!source.includes("<svg") || /data:;base64,/u.test(source)) throw new Error("Invalid TeX image-paint SVG");
   execOracleTool("rsvg-convert", ["-w", String(width), "-h", String(height), "-b", "white", "-f", "png", "-o", png, svg]);

@@ -4,16 +4,44 @@ on:
   push:
     branches: [master]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      checks: ${{ steps.paths.outputs.checks }}
+      unit: ${{ steps.paths.outputs.unit }}
+      web: ${{ steps.paths.outputs.web }}
+      desktop: ${{ steps.paths.outputs.desktop }}
+      images: ${{ steps.paths.outputs.images }}
+      landing: ${{ steps.paths.outputs.landing }}
+      ipad: ${{ steps.paths.outputs.ipad }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: paths
+        run: node scripts/ci-changes.mjs
+
   image-fidelity:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
     uses: ./.github/workflows/image-fidelity.yml
 
   pdf-browser:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -43,8 +71,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  test:
+  grammar:
+    needs: changes
+    if: needs.changes.outputs.checks == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,22 +86,127 @@ jobs:
       - name: Check generated grammar is committed
         run: |
           npm run generate:grammar
-          git diff --exit-code packages/lezer-tikz/src/grammar/
-      - name: Lint and typecheck
-        run: |
-          npm run lint:ci
-          npm run typecheck
+          git diff --exit-code -- packages/lezer-tex/src/grammar/ packages/lezer-tikz/src/grammar/
+
+  lint:
+    needs: changes
+    if: needs.changes.outputs.checks == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint:ci
+
+  typecheck:
+    needs: changes
+    if: needs.changes.outputs.checks == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  fuzz-smoke:
+    needs: changes
+    if: needs.changes.outputs.unit == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - name: Deterministic adversarial TeX fuzz smoke
         run: npm run fuzz:tex-adversarial:pr
-      - run: npm test
+
+  test:
+    needs: changes
+    if: needs.changes.outputs.unit == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --maxWorkers=2
         env:
           # Every frame of the pointer-invariant fuzzer; local runs take a quick subset.
           POINTER_FUZZ_FULL: "1"
       - run: npm run -w @tikz-editor/desktop test:e2e:mock
+
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:ci
+        env:
+          PLAYWRIGHT_OUTPUT_DIR: ${{ runner.temp }}/web-results
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: web-failure-${{ github.run_id }}
+          path: ${{ runner.temp }}/web-results
+          if-no-files-found: ignore
+
+  landing:
+    needs: changes
+    if: needs.changes.outputs.landing == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:landing
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  ipad:
+    name: iPad frontend
+    needs: changes
+    if: needs.changes.outputs.ipad == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run -w @tikz-editor/ipad typecheck
+      - run: npm run -w @tikz-editor/ipad build
 
   desktop-macos:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: macos-14
     timeout-minutes: 45
     steps:
@@ -97,7 +233,10 @@ jobs:
           if-no-files-found: ignore
 
   desktop-linux:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -131,8 +270,16 @@ jobs:
         if: steps.cache-tauri-driver.outputs.cache-hit != 'true'
       - run: npm run -w @tikz-editor/desktop tauri:build -- --no-bundle
       - run: xvfb-run -a npm run test:desktop:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: desktop-linux-failure
+          path: ${{ runner.temp }}/tikz-desktop*.png
+          if-no-files-found: ignore
 
   desktop-windows:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: windows-2022
     timeout-minutes: 45
     permissions:
@@ -241,3 +388,31 @@ jobs:
             apps/desktop/src-tauri/target/release/bundle/msi/*.msi
             ${{ runner.temp }}/portable-output/*-portable.zip
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: desktop-windows-failure
+          path: ${{ runner.temp }}/tikz-desktop*.png
+          if-no-files-found: ignore
+
+  result:
+    name: CI result
+    if: always()
+    needs: [changes, grammar, lint, typecheck, fuzz-smoke, test, web, pdf-browser, landing, ipad, image-fidelity, desktop-macos, desktop-linux, desktop-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        with:
+          script: |
+            const jobs = JSON.parse(process.env.JOB_RESULTS);
+            await core.summary.addTable([
+              [{data: 'Job', header: true}, {data: 'Result', header: true}],
+              ...Object.entries(jobs).map(([name, job]) => [name, job.result]),
+            ]).write();
+            const failures = Object.entries(jobs).filter(([, job]) => !['success', 'skipped'].includes(job.result));
+            if (jobs.changes.result !== 'success' || failures.length) {
+              core.setFailed(`CI jobs did not pass: ${failures.map(([name, job]) => `${name}=${job.result}`).join(', ')}`);
+            }

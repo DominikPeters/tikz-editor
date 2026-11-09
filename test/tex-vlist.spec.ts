@@ -2197,7 +2197,7 @@ describe("TeX vlist lowering", () => {
         ? { status: "missing" }
         : { status: "resolved", mimeType: "image/png", dataBase64: "AA==", naturalWidthPt: 100.37474, naturalHeightPt: 50.18736, revision: "1" },
     };
-    const block = parseSimpleTexParagraphIr(String.raw`\includegraphics[draft,width=4cm]{q.png}\includegraphics[draft=false]{q.png}\includegraphics{missing.png}`).blocks[0]!;
+    const block = parseSimpleTexParagraphIr(String.raw`\includegraphics[draft,width=4cm]{q.png}\includegraphics[draft=false]{q.png}\includegraphics{missing.png}`).blocks[0];
     const boxes = simpleTexInlineNodesToLayoutItems(block.nodes, block.sourceStart, block.sourceEnd, 10,
       computerModernTexMetricProvider, "font", undefined, undefined, luaLatexDefaultTextFontProfile, graphicsResolver)
       .flatMap((item) => item.kind === "text-box" && item.command === "includegraphics" ? [item.box] : []);
@@ -2235,7 +2235,7 @@ describe("TeX vlist lowering", () => {
       ["angle=90,scale=2", 100.37473, 200.74948, 0],
     ];
     for (const [options, width, height, depth] of cases) {
-      const block = parseSimpleTexParagraphIr(`\\includegraphics[${options}]{t.png}`).blocks[0]!;
+      const block = parseSimpleTexParagraphIr(`\\includegraphics[${options}]{t.png}`).blocks[0];
       const item = simpleTexInlineNodesToLayoutItems(block.nodes, block.sourceStart, block.sourceEnd, 10,
         computerModernTexMetricProvider, "font", undefined, undefined, luaLatexDefaultTextFontProfile, graphicsResolver)
         .find((candidate) => candidate.kind === "text-box" && candidate.command === "includegraphics");
