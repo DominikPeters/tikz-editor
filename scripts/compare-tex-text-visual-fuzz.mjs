@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { loadTexFuzzModules } from "./lib/tex-fuzz-loader.mjs";
 import { stageFuzzGraphicsAssets, FUZZ_GRAPHICS_ASSET_SHA256 } from "./lib/fuzz-graphics-assets.mjs";
 import { compareTexFuzzImagePaint } from "./lib/tex-fuzz-image-paint.mjs";
+import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const distEntry = join(repoRoot, "packages/core/dist/text/tex/index.js");
@@ -1886,11 +1887,7 @@ function texOracleCacheKey(caseData, pageWidth, pageHeight) {
 function runTexOracle(texPath, pdfPath, texPdfToCairoSvgPath, texDvisvgmSvgPath, caseDir) {
   execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", texPath], {
     cwd: caseDir,
-    env: {
-      ...process.env,
-      TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
-      TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
-    },
+    env: texOracleEnv(),
     maxBuffer: 20 * 1024 * 1024,
     stdio: "ignore",
   });

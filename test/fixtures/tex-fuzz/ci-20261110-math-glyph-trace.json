@@ -1,0 +1,307 @@
+{
+  "case": {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10050,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "xarrow",
+          "command": "xrightarrow",
+          "below": {
+            "kind": "matrix",
+            "environment": "cases",
+            "cells": [
+              [
+                {
+                  "kind": "atom",
+                  "value": "."
+                },
+                {
+                  "kind": "atom",
+                  "value": "\\Vert"
+                }
+              ],
+              [
+                {
+                  "kind": "atom",
+                  "value": "?"
+                },
+                {
+                  "kind": "atom",
+                  "value": "1"
+                }
+              ]
+            ]
+          },
+          "above": {
+            "kind": "fraction",
+            "command": "dfrac",
+            "numerator": {
+              "kind": "atom",
+              "value": "-"
+            },
+            "denominator": {
+              "kind": "atom",
+              "value": "?"
+            }
+          }
+        },
+        "delimiter": "dollar"
+      }
+    ],
+    "source": "$\\xrightarrow[{\\begin{cases}.&\\Vert\\\\?&1\\end{cases}}]{\\dfrac{-}{?}}$",
+    "sourceMap": [
+      {
+        "path": "root/0/math/below/cells/0/0",
+        "kind": "math.atom",
+        "start": 28,
+        "end": 29
+      },
+      {
+        "path": "root/0/math/below/cells/0/1",
+        "kind": "math.atom",
+        "start": 30,
+        "end": 35
+      },
+      {
+        "path": "root/0/math/below/cells/1/0",
+        "kind": "math.atom",
+        "start": 37,
+        "end": 38
+      },
+      {
+        "path": "root/0/math/below/cells/1/1",
+        "kind": "math.atom",
+        "start": 39,
+        "end": 40
+      },
+      {
+        "path": "root/0/math/below",
+        "kind": "math.matrix",
+        "start": 15,
+        "end": 51
+      },
+      {
+        "path": "root/0/math/above/numerator",
+        "kind": "math.atom",
+        "start": 61,
+        "end": 62
+      },
+      {
+        "path": "root/0/math/above/denominator",
+        "kind": "math.atom",
+        "start": 64,
+        "end": 65
+      },
+      {
+        "path": "root/0/math/above",
+        "kind": "math.fraction",
+        "start": 54,
+        "end": 66
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.xarrow",
+        "start": 1,
+        "end": 67
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 68
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.fraction.dfrac",
+      "math.inline",
+      "math.matrix.cases",
+      "math.node.atom",
+      "math.node.fraction",
+      "math.node.matrix",
+      "math.node.xarrow",
+      "math.symbol.-",
+      "math.symbol..",
+      "math.symbol.?",
+      "math.symbol.\\Vert",
+      "math.xarrow.xrightarrow"
+    ],
+    "mutations": []
+  },
+  "minimizedCase": {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10050,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "xarrow",
+          "command": "xrightarrow",
+          "below": {
+            "kind": "matrix",
+            "environment": "cases",
+            "cells": [
+              [
+                {
+                  "kind": "atom",
+                  "value": "."
+                },
+                {
+                  "kind": "atom",
+                  "value": "\\Vert"
+                }
+              ],
+              [
+                {
+                  "kind": "atom",
+                  "value": "?"
+                },
+                {
+                  "kind": "atom",
+                  "value": "1"
+                }
+              ]
+            ]
+          },
+          "above": {
+            "kind": "atom",
+            "value": "-"
+          }
+        },
+        "delimiter": "dollar"
+      }
+    ],
+    "source": "$\\xrightarrow[{\\begin{cases}.&\\Vert\\\\?&1\\end{cases}}]{-}$",
+    "sourceMap": [
+      {
+        "path": "root/0/math/below/cells/0/0",
+        "kind": "math.atom",
+        "start": 28,
+        "end": 29
+      },
+      {
+        "path": "root/0/math/below/cells/0/1",
+        "kind": "math.atom",
+        "start": 30,
+        "end": 35
+      },
+      {
+        "path": "root/0/math/below/cells/1/0",
+        "kind": "math.atom",
+        "start": 37,
+        "end": 38
+      },
+      {
+        "path": "root/0/math/below/cells/1/1",
+        "kind": "math.atom",
+        "start": 39,
+        "end": 40
+      },
+      {
+        "path": "root/0/math/below",
+        "kind": "math.matrix",
+        "start": 15,
+        "end": 51
+      },
+      {
+        "path": "root/0/math/above",
+        "kind": "math.atom",
+        "start": 54,
+        "end": 55
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.xarrow",
+        "start": 1,
+        "end": 56
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 57
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.inline",
+      "math.matrix.cases",
+      "math.node.atom",
+      "math.node.matrix",
+      "math.node.xarrow",
+      "math.symbol.-",
+      "math.symbol..",
+      "math.symbol.?",
+      "math.symbol.\\Vert",
+      "math.xarrow.xrightarrow"
+    ],
+    "mutations": []
+  },
+  "observation": {
+    "fingerprint": {
+      "version": 1,
+      "resultClass": "differential",
+      "code": "math-glyph-trace",
+      "firstDivergentLayer": "glyphs",
+      "featureTags": [
+        "math.fraction.dfrac",
+        "math.inline",
+        "math.matrix.cases",
+        "math.node.atom",
+        "math.node.fraction",
+        "math.node.matrix",
+        "math.node.xarrow",
+        "math.symbol.-",
+        "math.symbol..",
+        "math.symbol.?",
+        "math.symbol.\\Vert",
+        "math.xarrow.xrightarrow"
+      ],
+      "mode": "math",
+      "structuralLocus": "math-trace",
+      "oracleEnvironmentFamily": "lualatex"
+    },
+    "detail": {
+      "formula": "\\xrightarrow[{\\begin{cases}.&\\Vert\\\\?&1\\end{cases}}]{\\dfrac{-}{?}}",
+      "tolerance": 0.03,
+      "comparable": true,
+      "mismatches": [
+        "glyph 9 y differs: ours=1.66667 tex=2.116455",
+        "glyph 10 y differs: ours=7.966733 tex=8.416519",
+        "glyph 11 y differs: ours=10.066754 tex=10.516541",
+        "glyph 12 y differs: ours=22.66688 tex=23.116669",
+        "glyph 13 y differs: ours=24.766901 tex=25.21669",
+        "glyph 14 y differs: ours=12.046773 tex=11.746582",
+        "glyph 15 y differs: ours=12.046773 tex=11.746582",
+        "glyph 16 y differs: ours=26.446773 tex=26.14653",
+        "glyph 17 y differs: ours=26.446773 tex=26.14653",
+        "total depth differs: ours=32.066964 tex=32.516754"
+      ]
+    }
+  },
+  "oracleEnvironment": {
+    "engine": "lualatex",
+    "engineBanner": "This is LuaHBTeX, Version 1.24.0 (TeX Live 2026)",
+    "kpsewhich": "kpathsea version 6.4.2",
+    "dvisvgm": "dvisvgm 3.6",
+    "pdftocairo": "pdftocairo version 26.11.0",
+    "node": "v26.13.0",
+    "platform": "darwin-arm64",
+    "runnerVersion": "lualatex-math-glyph-trace-v2",
+    "graphicsAssetsSha256": "a4c633eb148add5759b4fce53274f9a6901ad01a4626f9dd76298c515e2d18da"
+  },
+  "shrink": {
+    "candidatesEvaluated": 12,
+    "oracleEvaluations": 12,
+    "termination": "candidate-budget"
+  },
+  "artifactSchemaVersion": 1,
+  "findingId": "tf1-09d25cd88999e575f8d51f45",
+  "witnessId": "tw1-f13eb78fbe7410cffc77e032"
+}

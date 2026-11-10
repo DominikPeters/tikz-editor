@@ -7,6 +7,11 @@ const declarations = new Set("tiny scriptsize footnotesize small normalsize larg
  * paragraph frontend executes them itself when no split occurs. */
 export function createBeamerAmbientText(source: string) {
   const context = createBeamerSyntaxContext(source);
+  const environments = [...matchTexSyntaxEnvironments(context.syntax).values()];
+  const storedOptions = new Set(environments.filter(env => env.name === "tcolorbox").flatMap(env => {
+    const options = beamerOptionalArgumentAfter(context, env.begin.span.to, source.length);
+    return options ? [options.span.from] : [];
+  }));
   const events = beamerControlSequencesIn(context, { from: 0, to: source.length }).flatMap(command => {
     if (!declarations.has(command.name) && command.name !== "color") return [];
     let to = command.to;
@@ -20,11 +25,13 @@ export function createBeamerAmbientText(source: string) {
     let node = context.syntax.tree.resolveInner(command.from + 1, 1);
     while (node.parent) {
       node = node.parent;
-      if (node.name === "Group" || node.name === "Environment") end = Math.min(end, node.to);
+      // tcolorbox stores fonttitle/fontupper options for separate saveboxes.
+      // Ordinary square brackets in prose do not create TeX groups.
+      if (node.name === "Group" || node.name === "Environment" ||
+          node.name === "OptionalArgument" && storedOptions.has(node.from)) end = Math.min(end, node.to);
     }
     return [{ from: command.from, to, end, text: source.slice(command.from, to) }];
   });
-  const environments = [...matchTexSyntaxEnvironments(context.syntax).values()];
   for (const env of environments) {
     if (!["column", "block", "alertblock", "exampleblock"].includes(env.name)) continue;
     events.push({ from: env.begin.span.from, to: env.begin.span.to, end: env.end.span.to, text: "\\raggedright" });

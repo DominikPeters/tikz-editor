@@ -6,7 +6,7 @@ import { texLength } from "../../text/tex/coordinates.js";
 import type { BeamerDocumentModel, BeamerThemeKind } from "../types.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
 import { beamerClassFontSize, beamerNamedFontSize } from "./font-sizes.js";
-import { scanBeamerFontDeclarations, applyBeamerFontDeclaration } from "./font-declarations.js";
+import { scanBeamerFontDeclarations, applyBeamerFontRoleDeclaration } from "./font-declarations.js";
 import { scanBeamerNavigationTemplates } from "./template-declarations.js";
 import { applyBeamerColorDeclaration, beamerColorRgbToCss, diagnoseBeamerColorDeclarations, resolveBeamerColorExpressionRgb, scanBeamerColorDeclarations, type BeamerColorRgb } from "./color-declarations.js";
 import type {
@@ -30,6 +30,7 @@ type MutableTheme = {
   colorAliases: Record<string, string>;
   colorAliasRgb: Record<string, BeamerColorRgb>;
   fonts: Record<BeamerThemeFontRole, BeamerThemeFont>;
+  fontRoleOverrides?: ResolvedBeamerTheme["fontRoleOverrides"];
   dimensions: BeamerThemeDimensions;
   templates: BeamerThemeTemplates;
   options: Record<string, string | boolean>;
@@ -87,7 +88,7 @@ export function resolveBeamerTheme(
     .sort((left, right) => left.span.from - right.span.from);
   for (const event of events) {
     if (event.kind === "font-declaration") {
-      state.fonts[event.role] = applyBeamerFontDeclaration(state.fonts[event.role], event, String(state.options["class-font-size"]));
+      applyBeamerFontRoleDeclaration(state, event, String(state.options["class-font-size"]));
       continue;
     }
     if (event.kind === "navigation-template") {
@@ -133,6 +134,7 @@ export function resolveBeamerTheme(
     colorAliases: Object.freeze({ ...state.colorAliases }),
     colorAliasRgb: Object.freeze(Object.fromEntries(Object.entries(state.colorAliasRgb).map(([name, channels]) => [name, freezeColorChannels(channels)]))),
     fonts: freezeFonts(state.fonts),
+    ...(state.fontRoleOverrides ? { fontRoleOverrides: state.fontRoleOverrides } : {}),
     dimensions: Object.freeze({
       ...state.dimensions,
       listLeftMarginEmByDepth: Object.freeze([

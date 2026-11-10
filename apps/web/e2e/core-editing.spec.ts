@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   canvasViewport,
   clearSceneSelection,
+  expectSourceCanvasConsistency,
   clickHitRegionByTargetId,
   clickHitRegion,
   dragBetweenPoints,
@@ -353,17 +354,19 @@ test("inline edge nodes are selectable independently and support resize/rotate h
   const resizedSource = await readSource(page);
   expect(resizedSource).toMatch(/node\[[^\]]*above[^\]]*draw[^\]]*\]/);
   expect(resizedSource).toContain("minimum width=");
+  await expectSourceCanvasConsistency(page, { assertNoPendingRequest: true, assertNoActiveCanvasDrag: true });
 
   const rotateHandle = page.locator(
     `[data-handle-kind="rotate-element"][data-source-id="${labelTargetId}"]`
   ).first();
   await expect(rotateHandle).toBeVisible();
   expect(await rotateHandle.evaluate((el) => getComputedStyle(el).cursor)).not.toBe("not-allowed");
+  await rotateHandle.hover();
   await dragLocatorBy(page, rotateHandle, 30, -26);
   await page.mouse.up();
 
+  await expect.poll(() => readSource(page)).toMatch(/node\[[^\]]*rotate=/);
   const rotatedSource = await readSource(page);
-  expect(rotatedSource).toMatch(/node\[[^\]]*rotate=/);
   expect(rotatedSource).not.toMatch(/\\draw\[[^\]]*rotate=/);
 });
 

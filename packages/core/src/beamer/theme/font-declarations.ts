@@ -3,7 +3,7 @@ import { parseOptionListRaw } from "../../options/parse.js";
 import type { BeamerDocumentModel } from "../types.js";
 import { beamerControlSequencesIn, beamerRequiredArgumentAfter, createBeamerSyntaxContext } from "../syntax.js";
 import { beamerNamedFontSize, beamerNamedFontSizes } from "./font-sizes.js";
-import type { BeamerThemeFont, BeamerThemeFontRole } from "./types.js";
+import type { BeamerThemeFont, BeamerThemeFontRole, ResolvedBeamerTheme } from "./types.js";
 
 export type BeamerFontDeclaration = {
   kind: "font-declaration";
@@ -67,4 +67,22 @@ export function applyBeamerFontDeclaration(font: BeamerThemeFont, declaration: B
   const family = families[declaration.values.family ?? ""];
   if (family) result.family = family;
   return result;
+}
+
+/** The stock framesubtitle font inherits its face from frametitle, keeping its own size. */
+export function applyBeamerFontRoleDeclaration(state: {
+  fonts: Record<BeamerThemeFontRole, BeamerThemeFont>;
+  fontRoleOverrides?: ResolvedBeamerTheme["fontRoleOverrides"];
+}, declaration: BeamerFontDeclaration, classSize: string): void {
+  state.fonts[declaration.role] = applyBeamerFontDeclaration(state.fonts[declaration.role], declaration, classSize);
+  const fields = ["family", "series", "shape"] as const;
+  const own = state.fontRoleOverrides?.[declaration.role] ?? [];
+  state.fontRoleOverrides = { ...state.fontRoleOverrides,
+    [declaration.role]: [...new Set([...own, ...fields.filter(field => declaration.values[field] !== undefined)])] };
+  if (declaration.role === "frame-title") {
+    const overrides = state.fontRoleOverrides["frame-subtitle"] ?? [];
+    const child = { ...state.fonts["frame-subtitle"] };
+    for (const field of fields) if (!overrides.includes(field)) Object.assign(child, { [field]: state.fonts["frame-title"][field] });
+    state.fonts["frame-subtitle"] = child;
+  }
 }

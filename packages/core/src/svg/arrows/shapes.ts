@@ -18,6 +18,13 @@ export function buildLocalTipPaths(tip: NormalizedArrowTip, metrics: ArrowTipMet
 function buildRawTipPaths(tip: NormalizedArrowTip): ArrowLocalPathCommand[][] {
   const halfWidth = tip.width / 2;
 
+  if (tip.kind === "to") {
+    const unit = tip.length / 3.75;
+    return [[moveTo(-3 * unit, halfWidth),
+      cubicTo(-2.75 * unit, halfWidth * .625, 0, halfWidth * .0625, .75 * unit, 0),
+      cubicTo(0, -halfWidth * .0625, -2.75 * unit, -halfWidth * .625, -3 * unit, -halfWidth)]];
+  }
+
   if (tip.kind === "cm-rightarrow") {
     const c1x = tip.length * 0.18269;
     const c2x = tip.length * 0.58981;
@@ -138,20 +145,15 @@ function buildRawTipPaths(tip: NormalizedArrowTip): ArrowLocalPathCommand[][] {
     return [frontPaths];
   }
 
-  if (tip.kind === "rays") {
-    const rayCount = Math.max(1, Math.round(tip.rayCount ?? 4));
-    const rays: ArrowLocalPathCommand[][] = [];
-    for (let i = 0; i < rayCount; i += 1) {
-      const angle = -Math.PI / 2 + ((i + 0.5) * Math.PI) / rayCount;
-      const x = tip.length * Math.cos(angle);
-      const y = halfWidth * Math.sin(angle);
-      rays.push([moveTo(0, 0), lineTo(x, y)]);
-    }
-    return rays;
+  const rayCount = Math.max(1, Math.round(tip.rayCount ?? 4));
+  const rays: ArrowLocalPathCommand[][] = [];
+  for (let i = 0; i < rayCount; i += 1) {
+    const angle = -Math.PI / 2 + ((i + 0.5) * Math.PI) / rayCount;
+    const x = tip.length * Math.cos(angle);
+    const y = halfWidth * Math.sin(angle);
+    rays.push([moveTo(0, 0), lineTo(x, y)]);
   }
-
-  const notchX = tip.length * 0.24;
-  return [[moveTo(0, halfWidth), lineTo(tip.length, 0), lineTo(0, -halfWidth), lineTo(notchX, 0), close()]];
+  return rays;
 }
 
 function transformPath(path: ArrowLocalPathCommand[], map: (x: number, y: number) => ArrowLocalPoint): ArrowLocalPathCommand[] {

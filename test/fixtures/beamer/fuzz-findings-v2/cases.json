@@ -692,8 +692,7 @@
       "oracleText": [
         "Beta;]"
       ],
-      "width": 3200,
-      "description": "A subpixel glyph counter requires a 3200px raster to avoid a false one-pixel hole mismatch; structural and paint gates remain unchanged.",
+      "description": "Original 1600px glyph-counter regression; native SVG and independent PDF use shared 2x supersampling before the unchanged strict paint-mask comparison.",
       "sourceSha256": "4d16c6eb97987dfb81cf8e0138f4da2e550e05ab05c72fbae678b0da9b8e9183",
       "generatedFrom": {
         "seed": 20261107,

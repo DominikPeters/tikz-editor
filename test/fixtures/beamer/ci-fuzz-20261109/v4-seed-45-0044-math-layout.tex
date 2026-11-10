@@ -1,0 +1,81 @@
+\documentclass[10pt,aspectratio=43]{beamer}
+\usepackage{tikz}
+\usetheme{Boadilla}
+\setbeamertemplate{navigation symbols}{}
+\title{Iterative refinement: experiments and bounds}
+\subtitle{Generated interaction study}
+\author{Research group}
+\date{}
+\year=2026\month=11\day=5
+\newcommand{\fuzzlayerA}[1]{\textrm{#1}}
+\newcommand{\fuzzlayerB}[1]{\fuzzlayerA{#1}}
+\newcommand{\fuzzlayerC}[1]{\fuzzlayerB{#1}}
+\newcommand{\fuzzterm}[1]{\fuzzlayerC{#1}}
+\newcommand{\fuzzpair}[2]{\fuzzterm{#1}: #2}
+\newcommand{\fuzzunit}{ms}
+\let\fuzzoriginalunit\fuzzunit
+\newcommand{\fuzzcoefficient}{3}
+\newcommand{\fuzzscale}[2][\fuzzcoefficient]{#1\,#2}
+\definecolor{fuzzpaint}{RGB}{255,0,255}
+\definecolor{fuzzsecond}{RGB}{18,137,67}
+\tikzset{fuzzvertex/.style={draw,rounded corners=1pt,fill=blue!10,inner sep=1pt,minimum width=.35cm,minimum height=.25cm}}
+\begin{document}
+\section{Iterative refinement}
+\begin{frame}[t,shrink=5]{Iterative refinement}{Composed dependencies}
+\fuzzpair{Experiment}{Timing: 12\fuzzunit; estimate $\fuzzscale{x}+\fuzzscale[2]{y}$.}\par
+{\renewcommand{\fuzzunit}{cycles}\let\fuzzterm\textbf\fuzzpair{LocalScope}{Timing: 7\fuzzunit.}\par}
+\fuzzpair{RestoredScope}{Timing: 11\fuzzunit.}\par
+\begin{itemize}
+\item<1-> \begin{itemize}
+\item<1-> \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]
+\end{itemize}
+\par
+\begin{exampleblock}{Message passing}
+\begin{tikzpicture}\node[draw] {\includegraphics % image argument
+[width=20pt,height=10pt,keepaspectratio] % image argument
+{fuzz-images/pattern.v2}};\end{tikzpicture}
+\end{exampleblock}
+\par
+\begin{flushleft}
+\begin{tikzpicture}\node[draw] {\includegraphics[angle=90,width=18pt]{fuzz-images/photo.jpg}};\end{tikzpicture}
+\end{flushleft}
+\item<2-> \begin{itemize}
+\item \[E=\sum_{i=1}^{n}w_i x_i\]
+\end{itemize}
+\par
+{\small\color{teal}\raggedright
+\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]\par}
+\par
+\begin{description}
+\item[Stage 1] \[\begin{aligned}a+b&=c\\ d-e&=f\end{aligned}\]
+\end{description}
+\item<2-> \begin{description}
+\item[Stage 1] Before \includegraphics[draft,width=18pt]{fuzz-images/pattern.v2} after.
+\item[Stage 2] {\small\color{black}\raggedleft
+\textit{The final diagram} records the order in which information crosses the partition.  The estimate is $\frac{a+b}{1+c}$.\par}
+\item[Stage 3] \begin{tabular}{lrr}Method&Cost&Error\\\hline
+Fresh0&19&12\\
+Cached1&14&9\\
+Cached2&10&15\\
+Local3&7&20\\
+\end{tabular}
+\end{description}
+\end{itemize}
+\par \begin{tikzpicture}[font=\scriptsize]
+\fill<2-3>[fuzzpaint] (0,0) rectangle (.8,.3);
+\fill<3->[fuzzsecond] (1,0) rectangle (1.8,.3);
+\node[anchor=west] at (2,0.15) {Witness};
+\end{tikzpicture}
+\only<4>{}
+\end{frame}
+\renewcommand{\fuzzunit}{Hz}
+\renewcommand{\fuzzcoefficient}{2}
+\renewcommand{\fuzzterm}[1]{{\textit{#1}}}
+\section{Constraint propagation}
+\begin{frame}[t]{Constraint propagation}
+\fuzzpair{MacroStageB}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{columns}[T]\begin{column}{.46\textwidth}A local update can change the measurements used by several neighboring components.\end{column}\begin{column}{.46\textwidth}\begin{itemize}\item Input state\item Updated state\end{itemize}\end{column}\end{columns}
+\end{frame}
+\end{document}

@@ -72,6 +72,11 @@ jobs:
     if: github.event.schedule == '43 3 * * 0'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -81,13 +86,15 @@ jobs:
       - run: npm ci
       - run: npm run build:tex-fuzz
       - name: Aggressive valid soak
-        run: node scripts/run-tex-fuzz.mjs --cases 30000 --seed ${{ github.run_number }} --profile aggressive --no-oracle --malformed-cases 2000 --prefix-base-cases 16 --prefix-limit-per-case 256 --metamorphic-cases 500 --projection-control-cases 256 --supported-cases 256 --supported-max-attempts 32768 --boundary-cases 256 --engine-history-cases 32 --out artifacts/tex-fuzz/soak-valid-bundle.json --coverage-out artifacts/tex-fuzz/soak-valid-coverage.json
+        # Keep the 30,000-case valid budget while bounding retained ASTs, source
+        # maps and choice traces below a runner's heap limit in each process.
+        run: node scripts/run-tex-fuzz.mjs --cases 6000 --seed $(( ${{ github.run_number }} + ${{ matrix.shard }} * 100000 )) --profile aggressive --no-oracle --malformed-cases 400 --prefix-base-cases 16 --prefix-limit-per-case 256 --metamorphic-cases 500 --projection-control-cases 256 --supported-cases 256 --supported-max-attempts 32768 --boundary-cases 256 --engine-history-cases 32 --out artifacts/tex-fuzz/soak-valid-bundle.json --coverage-out artifacts/tex-fuzz/soak-valid-coverage.json
       - name: Malformed typing-state soak
-        run: node scripts/run-tex-fuzz.mjs --cases 10000 --seed 20290713 --profile malformed --no-oracle --prefix-base-cases 16 --prefix-limit-per-case 256 --metamorphic-cases 200 --out artifacts/tex-fuzz/soak-malformed-bundle.json --coverage-out artifacts/tex-fuzz/soak-malformed-coverage.json
+        run: node scripts/run-tex-fuzz.mjs --cases 2000 --seed $(( 20290713 + ${{ matrix.shard }} * 100000 )) --profile malformed --no-oracle --prefix-base-cases 16 --prefix-limit-per-case 256 --metamorphic-cases 200 --out artifacts/tex-fuzz/soak-malformed-bundle.json --coverage-out artifacts/tex-fuzz/soak-malformed-coverage.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: tex-fuzz-soak-${{ github.run_id }}
+          name: tex-fuzz-soak-${{ github.run_id }}-${{ matrix.shard }}
           path: artifacts/tex-fuzz
           if-no-files-found: warn
           retention-days: 30
@@ -112,9 +119,10 @@ jobs:
             mkdir -p "$RUNNER_TEMP/beamer-bin"
             cat > "$RUNNER_TEMP/beamer-bin/magick" <<'SH'
           #!/bin/sh
-          if [ "$1" = compare ]; then
+          if [ "$1" = compare ] || [ "$1" = identify ]; then
+            command="$1"
             shift
-            exec compare "$@"
+            exec "$command" "$@"
           fi
           exec convert "$@"
           SH

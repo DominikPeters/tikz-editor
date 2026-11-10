@@ -13,6 +13,12 @@ import { defaultStyle } from "../../packages/core/src/semantic/style/defaults.js
 import { SHADOW_INHERIT_FILL, SHADOW_INHERIT_STROKE } from "../../packages/core/src/semantic/types.js";
 
 describe("semantic evaluator / styles and colors", () => {
+    it("loads the modern default To while retaining an explicit legacy override", () => {
+      const source = String.raw`\usetikzlibrary{arrows.meta}\begin{tikzpicture}
+        \draw[->] (0,0)--(1,0);\draw[>=to,->] (0,1)--(1,1);\end{tikzpicture}`;
+      const result = evaluateSemantic(source, {}, { includeContextDefinitions: true });
+      expect(elementsOfKind(result.scene.elements, "Path").map(path => path.style.markerEnd?.tips[0]?.kind)).toEqual(["cm-rightarrow", "to"]);
+    });
     it("reports malformed style, library, and color declarations", () => {
       const source = String.raw`\begin{tikzpicture}
     \tikzstyle{}=[draw]
@@ -741,7 +747,7 @@ describe("semantic evaluator / styles and colors", () => {
       }
     });
 
-    it("uses computer modern rightarrow as the default > tip in arrows.meta-style specs", () => {
+    it("uses the legacy to tip before arrows.meta is loaded", () => {
       const source = String.raw`\begin{tikzpicture}
     \draw[->]        (0,0)   -- (1,0);
     \draw[>-Stealth] (0,0.3) -- (1,0.3);
@@ -757,8 +763,8 @@ describe("semantic evaluator / styles and colors", () => {
       expect(second?.kind).toBe("Path");
       if (first?.kind === "Path" && second?.kind === "Path") {
         expect(first.style.markerStart).toBeNull();
-        expect(first.style.markerEnd?.tips[0]?.kind).toBe("cm-rightarrow");
-        expect(second.style.markerStart?.tips[0]?.kind).toBe("cm-rightarrow");
+        expect(first.style.markerEnd?.tips[0]?.kind).toBe("to");
+        expect(second.style.markerStart?.tips[0]?.kind).toBe("to");
         expect(second.style.markerEnd?.tips[0]?.kind).toBe("stealth");
       }
     });

@@ -19,6 +19,7 @@ import type {
   Statement
 } from "../ast/types.js";
 import { pt } from "../coords/scalars.js";
+import { makeDefaultArrowMarker } from "./style/arrows.js";
 import { includeGraphicsDiagnostics } from "../graphics/diagnostics.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import { initializeFeatureUsage, markFeatureUsage as markFeature, mergeFeatureUsage } from "./feature-usage.js";
@@ -1960,6 +1961,13 @@ function applyTikzLibraryStatement(
       const normalized = library.trim();
       if (normalized.length === 0) {
         continue;
+      }
+      if (normalized === "arrows.meta") {
+        const frame = currentFrame(context);
+        if (frame.style.arrowShorthandEnd.defaultTo) {
+          frame.style = { ...frame.style, arrowShorthandEnd: {
+            ...makeDefaultArrowMarker("cm-rightarrow", frame.style.lineWidth), defaultTo: true } };
+        }
       }
       defineContextSymbol(context, {
         kind: "library",

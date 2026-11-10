@@ -75,7 +75,7 @@ import {
   type TexMetricProvider,
 } from "../text/tex/index.js";
 import { parseTexDimensionExpression } from "../text/tex/dimensions.js";
-import { parseSimpleTexTabularRegisters } from "../text/tex/ir.js";
+import { parseSimpleTexTabularRegisters, parseSimpleTexParagraphIr } from "../text/tex/ir.js";
 import { collectBeamerParagraphSpacing } from "./spacing.js";
 import { resolveBeamerColumnPositions, resolveBeamerColumnWidth } from "./column-dimensions.js";
 import { beamerFrameBodyTransform, beamerFrameShrinkScale, beamerFrameShrinkWidth, crampedBeamerListProfile, resolveBeamerFrameShrink, transformBeamerPoint, transformBeamerRect } from "./frame-shrink.js";
@@ -727,8 +727,10 @@ async function renderBeamerFrameStep(params: {
     if (extractedPictures.has(root.span.from) || references.overlayPictures?.some(p => p.span.from === root.span.from)) continue;
     const visibility = resolveBeamerOverlaySpanVisibility(bodyIr.overlays, root.span, step);
     if (visibility === "removed") continue;
-    const tikz = await prepareEmbeddedTikz({ source, theme, node: { kind: "tikzpicture", id: root.id, span: root.span, root, horizontalAlignment: "left" },
-      width: Number.POSITIVE_INFINITY, bodyFont: theme.fonts["normal-text"], diagnostics, visibility, overlays: bodyIr.overlays, step,
+    const pictureTheme = ambientTextTheme(references.scopedTheme?.at(root.span.from) ?? theme, references.ambientTextAt?.(root.span.from) ?? "");
+    const tikz = await prepareEmbeddedTikz({ source, theme: pictureTheme, node: { kind: "tikzpicture", id: root.id, span: root.span, root, horizontalAlignment: "left" },
+      ambientText: references.ambientTextAt?.(root.span.from) ?? "",
+      width: Number.POSITIVE_INFINITY, bodyFont: pictureTheme.fonts["normal-text"], diagnostics, visibility, overlays: bodyIr.overlays, step,
       ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
       ...(params.work !== undefined ? {work:params.work} : {}) });
     if (tikz) inlinePictures.push({span:root.span,tikz});
@@ -1723,6 +1725,7 @@ async function prepareFrameFlow(params: {
     if (node.kind === "tikzpicture") {
       const tikz = await prepareEmbeddedTikz({
         source: params.source,
+        ambientText: params.references.ambientTextAt?.(node.root.span.from) ?? "",
         theme: nodeTheme,
         node,
         width: params.textWidth,
@@ -2525,8 +2528,13 @@ async function prepareBlockWithTheme(params: {
     ? paragraphMaterialExtent(body) + trailingScopedBeamerListSkip(createIdentityMappedText(params.source.slice(params.node.bodySpan.from, params.node.bodySpan.to), params.node.bodySpan.from), params.references, theoremBodyFont)
     : paragraphLineExtent(body)) : (bodyFlow?.extent ?? 0) - terminalBodySkip;
   const titleLine = title.layout.report.lines[0];
-  const titleAscent = Number(titleLine?.ascent ?? firstLineBaselineOffset(title));
-  const titleDepth = Number(titleLine?.descent ?? 0);
+  // The title template packs its paragraph into a vbox, whose reference is
+  // the last baseline. A wrapped title contributes every line to its height.
+  // The in-margin template instead uses a vtop referenced by the first line.
+  const titleDepth = plan.style === "inmargin" ? Number(titleLine?.descent ?? 0) : paragraphEndingMaterialDepth(title);
+  const titleAscent = plan.style === "inmargin"
+    ? Number(titleLine?.ascent ?? firstLineBaselineOffset(title))
+    : paragraphMaterialExtent(title) - titleDepth;
   const geometry = plan.geometry;
   if (plan.style === "inmargin") {
     const titleFirstBaseline = firstLineBaselineOffset(title);
@@ -2582,12 +2590,23 @@ async function prepareBlockWithTheme(params: {
     geometry.transitionHeightPt;
   const titleBoxExtent =
     titleAscent + Math.max(titleDepth, geometry.titleDepthFloorPt);
-  const bodyBaselineInset =
-    firstBody && geometry.bodyFirstBaselineSkipPt != null
-      ? (geometry.bodyFirstBaselineSkipPt - paragraphStartingMaterialHeight(firstBody) >= 0
-          ? geometry.bodyFirstBaselineSkipPt - paragraphStartingMaterialHeight(firstBody)
+  const firstBodyHeight = firstBody ? paragraphStartingMaterialHeight(firstBody)
+    : firstFlowItem?.kind === "block" ? firstFlowItem.block.flowBoxHeight : undefined;
+  const firstBodyBaselineSkip = firstBody ? paragraphStartingBaselineSkip(firstBody, theoremBodyFont.lineHeightPt)
+    : firstFlowItem?.kind === "block" ? (firstFlowItem.block.theme ?? params.theme).fonts["normal-text"].lineHeightPt : theoremBodyFont.lineHeightPt;
+  let bodyBaselineInset =
+    firstBodyHeight !== undefined && geometry.bodyFirstBaselineSkipPt != null
+      ? (firstBodyBaselineSkip - firstBodyHeight >= 0
+          ? firstBodyBaselineSkip - firstBodyHeight
           : 1) + geometry.bodyInitialVSkipEx * fontXHeightPt(params.theme.fonts[plan.bodyFontRole])
       : geometry.bodyTopPaddingPt;
+  if (plan.style === "rounded" && firstBody?.layout.vlistLayout.items[0]?.item.kind === "vbox" &&
+      firstBody.layout.vlistLayout.items[0].item.role?.kind === "trivlist" && !firstBody.layout.vlistLayout.items[0].item.role.noParList) {
+    // Large boxes after the rounded minipage's leading center/flush line
+    // need the minimum lineskip; ordinary prose already has its baseline.
+    const interline = theoremBodyFont.lineHeightPt - paragraphStartingMaterialHeight(firstBody);
+    if (interline < 0) bodyBaselineInset += 1;
+  }
   const lastFlowItem = bodyFlow?.items.at(-1)?.item;
   const bodyEndingDepth = body ? paragraphEndingMaterialDepth(body)
     : lastFlowItem?.kind === "columns" ? lastFlowItem.box.depth
@@ -3039,10 +3058,16 @@ function blockChromeMarkup(params: {
   const left = params.x - geometry.outerBleedPt;
   const right = params.x + block.width + geometry.outerBleedPt;
   const top = params.y + block.backgroundTop;
-  const titleBottom = top + block.titleBackgroundHeight;
-  const bodyTop = params.y + block.bodyBackgroundTop;
+  // beamerbaseboxes paints its title to baseline+2pt, then overlays a
+  // 2pt transition from baseline+1pt to baseline+3pt. The 6pt shading
+  // carrier is a layout box, not the gradient's painted extent.
+  const titleBaseline = params.y + block.titleTop + block.titleAscent + Math.max(block.titleDepth, geometry.titleDepthFloorPt);
+  const titleBottom = titleBaseline + 2;
+  const transitionTop = titleBaseline + 1;
+  const bodyTop = titleBaseline + 3;
   const bottom = params.y + block.backgroundBottom;
   const radius = geometry.cornerRadiusPt;
+  const cornerControl = radius * .45;
   const gradientId = `${block.node.id}:transition`.replace(
     /[^A-Za-z0-9_-]/gu,
     "-"
@@ -3053,15 +3078,15 @@ function blockChromeMarkup(params: {
   );
   const titlePath =
     `M${fmt(left)} ${fmt(titleBottom)}V${fmt(top + radius)}` +
-    `Q${fmt(left)} ${fmt(top)} ${fmt(left + radius)} ${fmt(top)}` +
+    `C${fmt(left)} ${fmt(top + cornerControl)} ${fmt(left + cornerControl)} ${fmt(top)} ${fmt(left + radius)} ${fmt(top)}` +
     `H${fmt(right - radius)}` +
-    `Q${fmt(right)} ${fmt(top)} ${fmt(right)} ${fmt(top + radius)}` +
+    `C${fmt(right - cornerControl)} ${fmt(top)} ${fmt(right)} ${fmt(top + cornerControl)} ${fmt(right)} ${fmt(top + radius)}` +
     `V${fmt(titleBottom)}Z`;
   const bodyPath =
     `M${fmt(left)} ${fmt(bodyTop)}V${fmt(bottom - radius)}` +
-    `Q${fmt(left)} ${fmt(bottom)} ${fmt(left + radius)} ${fmt(bottom)}` +
+    `C${fmt(left)} ${fmt(bottom - cornerControl)} ${fmt(left + cornerControl)} ${fmt(bottom)} ${fmt(left + radius)} ${fmt(bottom)}` +
     `H${fmt(right - radius)}` +
-    `Q${fmt(right)} ${fmt(bottom)} ${fmt(right)} ${fmt(bottom - radius)}` +
+    `C${fmt(right - cornerControl)} ${fmt(bottom)} ${fmt(right)} ${fmt(bottom - cornerControl)} ${fmt(right)} ${fmt(bottom - radius)}` +
     `V${fmt(bodyTop)}Z`;
   const shadow = block.plan.shadow
     ? beamerRoundedShadowMarkup({
@@ -3080,7 +3105,7 @@ function blockChromeMarkup(params: {
     `</linearGradient></defs>` +
     shadow +
     `<path d="${titlePath}" fill="${params.titleFill}" />` +
-    `<path d="M${fmt(left)} ${fmt(titleBottom)}H${fmt(right)}V${fmt(bodyTop)}H${fmt(left)}Z" fill="url(#${gradientId})" />` +
+    `<path d="M${fmt(left)} ${fmt(transitionTop)}H${fmt(right)}V${fmt(bodyTop)}H${fmt(left)}Z" fill="url(#${gradientId})" />` +
     `<path d="${bodyPath}" fill="${params.bodyFill}" />` +
     `</g>`
   );
@@ -3516,6 +3541,16 @@ async function prepareColumnContent(params: {
         const interline = bodyFont.lineHeightPt - (previousDepth ?? 0) - nextHeight;
         prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) + (interline < 0 ? 1 : interline);
       }
+      if (previous?.kind === "paragraph" && prepared.kind === "paragraph" && previous.trailingSkipPt > 0 && previousDepth !== undefined) {
+        const material = prepared.paragraph.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "glue" && item.itemKind !== "penalty" && item.itemKind !== "vbox");
+        const boundary = prepared.paragraph.layout.vlistLayout.boxReport.items.find(item => item.glue?.origin?.kind === "trivlist-boundary");
+        if (boundary && material && boundary.y <= material.y) {
+          // Adjacent list/trivlist boundaries use addvspace's maximum skip,
+          // followed by ordinary interline glue from the previous last box.
+          const interline = bodyFont.lineHeightPt - previousDepth - paragraphStartingMaterialHeight(prepared.paragraph);
+          prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) - Math.min(previous.trailingSkipPt, Number(boundary.height)) + (interline < 0 ? 1 : interline);
+        }
+      }
       flow.push(prepared);
       if (prepared.kind === "paragraph") {
         previousDepth = paragraphLastLineDepth(prepared.paragraph);
@@ -3712,13 +3747,13 @@ async function prepareColumnFlowNode(params: {
       kind: "paragraph",
       visibility,
       paragraph,
-      startsWithVerticalEnvironment: startsWithDisplay || /^\s*\\begin\s*\{(?:center|flushleft|flushright|itemize|enumerate|description)\}/u.test(projection.mapped.text),
+      startsWithVerticalEnvironment: node.kind === "list" || startsWithDisplay || /^\s*\\begin\s*\{(?:center|flushleft|flushright|itemize|enumerate|description)\}/u.test(projection.mapped.text),
       replacesColumnHeadSkip: /^\s*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(projection.mapped.text) &&
         !paragraph.layout.vlistLayout.boxReport.items.some(item => item.role?.kind === "trivlist" && item.role.noParList),
       leadingSkipPt: leadingBeamerTrivlistAdjustment(projection.mapped.text, paragraph, params.listProfile.trivlistTopsepPt) +
         // A column minipage starts with \leavevmode. A leading trivlist ends
         // that empty line, then inserts normal interline glue before its first box.
-        (initialPreviousDepth === undefined && params.leadingDisplayBaselineSkipPt !== 0 && /^\s*\\begin\s*\{(?:center|flushleft|flushright|itemize|enumerate|description)\}/u.test(projection.mapped.text)
+        (initialPreviousDepth === undefined && params.leadingDisplayBaselineSkipPt !== 0 && (node.kind === "list" || /^\s*\\begin\s*\{(?:center|flushleft|flushright|itemize|enumerate|description)\}/u.test(projection.mapped.text))
           ? (() => {
               const baseline = firstMaterial?.hboxRole?.kind === "external-flow"
                 ? firstMaterial.hboxRole.baselineSkipPt ?? paragraphStartingBaselineSkip(paragraph, bodyFont.lineHeightPt)
@@ -3753,6 +3788,7 @@ async function prepareColumnFlowNode(params: {
   }
   return prepareEmbeddedTikz({
     overlays, step,
+    ambientText: params.references.ambientTextAt?.(node.root.span.from) ?? "",
     source, theme,
     node,
     width,
@@ -3776,6 +3812,7 @@ function beamerTikzPaintModel(rendered: RenderTikzToSvgResult, overlays: BeamerO
 
 async function prepareEmbeddedTikz(params: {
   source: string;
+  ambientText?: string;
   theme?: ResolvedBeamerTheme;
   overlays: BeamerOverlayModel;
   step: number;
@@ -3793,20 +3830,24 @@ async function prepareEmbeddedTikz(params: {
 }> | null> {
   const textEngine = await createTexNodeTextEngine({
     mathFontProfile: createBeamerTexMathFontProfile(params.bodyFont),
+    namedFontSizes: Object.fromEntries(beamerNamedFontSizes(params.theme).map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),
   });
+  const ambientColor = params.ambientText ? parseSimpleTexParagraphIr(params.ambientText,
+    name => params.theme?.colorAliases?.[name] ?? null).nodes.flatMap(node => node.kind === "style-declaration" && node.color !== undefined ? [node.color] : []).at(-1) : undefined;
   const rendered = await renderTikzToSvgAsync(
     maskTikzPictureSource(projectBeamerTikzSource(params.source, params.node.root.span, params.overlays, params.step), params.node.root.span),
     {
       textEngine,
       parse: { includeContextDefinitions: true },
       evaluate: { initialFont: beamerTikzFontCommand(params.bodyFont),
+        ...(ambientColor ? { pictureOptions: `color=${ambientColor}` } : {}),
         namedFontSizes: Object.fromEntries(beamerNamedFontSizes(params.theme).map(([name, size]) => [name, size])) },
       ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
       ...(params.work?.options !== undefined ? { cooperative: params.work.options } : {}),
       // A TikZ picture contributes its natural PGF bounding box to the
       // surrounding TeX hbox. The standalone renderer's presentation padding
       // is useful for an isolated SVG, but it is not part of that box.
-      svg: { padding: 0 },
+      svg: { padding: 0, includeArrowInkBounds: false },
     }
   );
   const model = beamerTikzPaintModel(rendered, params.overlays, params.step);
@@ -3976,7 +4017,10 @@ function measureColumnVerticalBox(
     // minipage[b] is a vbox: its reference is the final baseline, and its
     // last box keeps its depth. Aligning geometric bottoms loses descenders.
     const last = flow.at(-1);
-    const depth = last?.kind === "paragraph" ? paragraphEndingMaterialDepth(last.paragraph)
+    // endlist's closing glue follows a terminal display skip. endminipage's
+    // single unskip leaves glue in the box, so its physical depth is zero.
+    const depth = last?.kind === "paragraph" ? last.trailingSkipPt > 0 && last.paragraph.layout.vlistLayout.boxReport.items.at(-1)?.itemKind === "glue"
+      ? 0 : paragraphEndingMaterialDepth(last.paragraph)
       : last?.kind === "block" ? last.block.endingDepth : last?.kind === "columns" ? last.box.depth : 0;
     return {
       height: naturalHeight - depth,

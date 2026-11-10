@@ -11,6 +11,13 @@ import {
 } from "../packages/core/src/beamer/index.js";
 
 describe("Beamer theme resolution", () => {
+  it.each([false, true])("inherits the subtitle face while retaining explicit child overrides (%s)", childFirst => {
+    const parent = String.raw`\setbeamerfont{frametitle}{series=\bfseries,family=\rmfamily}`;
+    const child = String.raw`\setbeamerfont{framesubtitle}{shape=\itshape,size=\small}`;
+    const theme = resolveBeamerTheme(scanBeamerDocument(String.raw`\documentclass[10pt]{beamer}` +
+      (childFirst ? child + parent : parent + child) + String.raw`\begin{document}\begin{frame}{Title}{Subtitle}Body\end{frame}\end{document}`));
+    expect(theme.fonts["frame-subtitle"]).toMatchObject({ family: "serif", series: "bold", shape: "italic", sizePt: 9, lineHeightPt: 11 });
+  });
   it.each([[8, 5], [9, 5], [10, 5], [11, 6], [12, 6], [14, 6], [17, 8], [20, 10]])("uses class %s's tiny size for a projected ball label", (classSize, tinySize) => {
     const theme = resolveBeamerTheme(scanBeamerDocument(`\\documentclass[${classSize}pt]{beamer}\\usetheme{Madrid}\\begin{document}\\begin{frame}A\\end{frame}\\end{document}`));
     const marker = resolveBeamerEnumerateMarker(theme, 1, 1)!;

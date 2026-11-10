@@ -478,7 +478,6 @@ for (const [shape, sizes] of [["regular", [6, 8, 9, 12, 17]], ["bold", [6, 8, 9,
 }
 
 const selectedFonts = process.argv.find((arg) => arg.startsWith("--fonts="))?.slice(8).split(",");
-const fontToolsOutlines = process.argv.includes("--fonttools-outlines");
 
 const atomPattern = /^(?<kind>[CODH])\s+(?<value>.+)$/;
 const charStartPattern = /^\s*\(CHARACTER\s+(?<atom>.+)$/;
@@ -1037,10 +1036,10 @@ function escapeTexPath(value) {
 }
 
 function extractOtfSvgGlyphPaths(fontPath, codes, namedGlyphs = {}) {
-  if (fontToolsOutlines) {
-    // ttx (used above) and these pens come from the same FontTools install.
-    // Read the original OpenType outlines when dvisvgm cannot open PDFs.
-    const script = `
+  // ttx (used above) and these pens come from the same FontTools install.
+  // Read the original OpenType outlines at 10 TeX points. PDF extraction
+  // uses bp and rounded PDF font sizes, which are not the renderer's units.
+  const script = `
 import json, sys
 from fontTools.ttLib import TTFont
 from fontTools.pens.svgPathPen import SVGPathPen
@@ -1052,72 +1051,14 @@ cmap.update({int(code): name for code, name in json.loads(sys.argv[3]).items()})
 scale = 10 / font["head"].unitsPerEm
 result = {}
 for code in json.loads(sys.argv[2]):
-    name = cmap.get(code)
-    if not name or code == 32: continue
-    pen = SVGPathPen(glyphs, ntos=lambda n: format(round(n, 6), ".6f").rstrip("0").rstrip(".") or "0")
-    glyphs[name].draw(TransformPen(pen, (scale, 0, 0, -scale, 0, 0)))
-    result[code] = pen.getCommands()
+  name = cmap.get(code)
+  if not name or code == 32: continue
+  pen = SVGPathPen(glyphs, ntos=lambda n: format(round(n, 6), ".6f").rstrip("0").rstrip(".") or "0")
+  glyphs[name].draw(TransformPen(pen, (scale, 0, 0, -scale, 0, 0)))
+  result[code] = pen.getCommands()
 print(json.dumps(result))
 `;
-    return JSON.parse(execFileSync("python3", ["-c", script, fontPath, JSON.stringify(codes), JSON.stringify(namedGlyphs)], { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 }));
-  }
-  const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-otf-glyph-"));
-  try {
-    const fontDir = `${dirname(fontPath)}/`;
-    const fontFile = basename(fontPath);
-    const sortedCodes = codes
-      .filter((code) => code !== 0x20)
-      .sort((a, b) => a - b);
-    const text = sortedCodes
-      .map((code) => `{\\char"${code.toString(16).toUpperCase()}}`)
-      .join("\\hskip1pt ");
-    const texSource = `\\documentclass{article}
-\\usepackage{fontspec}
-\\pagestyle{empty}
-\\setmainfont{${escapeTexPath(fontFile)}}[Path=${escapeTexPath(fontDir)},Ligatures=NoCommon]
-\\begin{document}
-${text}
-\\end{document}
-`;
-    writeFileSync(join(tempDir, "glyph.tex"), texSource, "utf8");
-    execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "glyph.tex"], {
-      cwd: tempDir,
-      env: {
-        ...process.env,
-        TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
-        TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
-      },
-      stdio: "pipe",
-    });
-    const output = execFileSync(
-      "dvisvgm",
-      ["--pdf", "--no-fonts", "--exact-bbox", "--stdout", "glyph.pdf"],
-      { cwd: tempDir, encoding: "utf8", maxBuffer: 20 * 1024 * 1024 }
-    );
-    const pathsById = new Map();
-    const pathPattern = /<path\s+id='(?<id>g0-\d+)'\s+d='(?<path>[^']*)'\/>/g;
-    let pathMatch = pathPattern.exec(output);
-    while (pathMatch?.groups) {
-      pathsById.set(pathMatch.groups.id, pathMatch.groups.path);
-      pathMatch = pathPattern.exec(output);
-    }
-    const usePattern = /<use\b[^>]*(?:xlink:href|href)='#(?<id>g0-\d+)'[^>]*>/g;
-    const useIds = [];
-    let useMatch = usePattern.exec(output);
-    while (useMatch?.groups) {
-      useIds.push(useMatch.groups.id);
-      useMatch = usePattern.exec(output);
-    }
-    const glyphs = {};
-    for (const [index, code] of sortedCodes.entries()) {
-      const pathId = useIds[index];
-      const path = pathId ? pathsById.get(pathId) : undefined;
-      if (path) glyphs[code] = path;
-    }
-    return glyphs;
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
+  return JSON.parse(execFileSync("python3", ["-c", script, fontPath, JSON.stringify(codes), JSON.stringify(namedGlyphs)], { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 }));
 }
 
 function main() {

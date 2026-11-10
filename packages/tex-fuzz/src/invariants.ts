@@ -455,7 +455,10 @@ export function checkTexFuzzLayoutResultInvariants(
       }
     }
     const expected = expectedSemanticProse(caseData);
-    const hasLiteralDegradation = result.report.lines.some((line) =>
+    // A boxed unsupported command becomes literal glyphs inside mathSvgBody,
+    // rather than a top-level segment.literal. Use the same source classifier
+    // as support qualification before imposing semantic paint obligations.
+    const hasLiteralDegradation = texFuzzSourceUsesUnsupportedLiteral(caseData.source) || result.report.lines.some((line) =>
       line.segments.some((segment) => segment.literal !== undefined)
     );
     const actual = hasLiteralDegradation ? expected : paintedSemanticProse(caseData, result);

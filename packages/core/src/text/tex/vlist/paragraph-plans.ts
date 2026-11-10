@@ -24,6 +24,7 @@ import type {
   TexParagraphRightskipStretchMode,
 } from "../paragraph-break.js";
 import {
+  simpleTexFontStateForDeclaration,
   splitSimpleTexParagraphSegments,
   type SimpleTexParagraphSegment,
   type SimpleTexFontState,
@@ -122,8 +123,10 @@ export function prepareTexLayoutParagraphsFromVList(
   for (const entry of paragraphEntries) {
     const paragraph = entry.item.paragraph;
     const textFontProfile = params.options.textFontProfile ?? defaultTexTextFontProfile;
-    const paragraphFont = paragraph.inheritedFontState
-      ? textFontProfile.resolveTextFont({ ...textFontProfile.defaultFontState, ...paragraph.inheritedFontState }, paragraph.fontSizePt ?? params.font.atPt, params.metricProvider)
+    const inheritedFontState = (paragraph.inheritedFontDeclarations ?? []).reduce(simpleTexFontStateForDeclaration,
+      { ...textFontProfile.defaultFontState, ...paragraph.inheritedFontState });
+    const paragraphFont = paragraph.inheritedFontState || paragraph.inheritedFontDeclarations
+      ? textFontProfile.resolveTextFont(inheritedFontState, paragraph.fontSizePt ?? params.font.atPt, params.metricProvider)
       : paragraph.fontSizePt != null ? { ...params.font, atPt: paragraph.fontSizePt } : params.font;
     const scopeContext = texParagraphScopeContext(entry.ancestors);
     const suppressAncestorBreakMargins =
@@ -182,10 +185,20 @@ export function prepareTexLayoutParagraphsFromVList(
     }
 
     for (const [segmentIndex, segment] of segments.entries()) {
-      const hasMaterial = (node: SimpleTexInlineNode): boolean => node.kind === "group"
-        ? node.children.some(hasMaterial) : !["space", "comment", "style-declaration", "font-declaration"].includes(node.kind);
+      const materialOffset = (node: SimpleTexInlineNode): number | undefined => node.kind === "group"
+        ? node.children.map(materialOffset).find(offset => offset !== undefined)
+        : ["space", "comment", "style-declaration", "font-declaration"].includes(node.kind) ? undefined : node.sourceStart;
+      const firstMaterialOffset = segment.nodes.map(materialOffset).find(offset => offset !== undefined);
+      const siblings = entry.ancestors.at(-1)?.items ?? params.vlist.items;
+      const nextMaterial = firstMaterialOffset === undefined && !segment.forcedBreakAfter
+        ? siblings.slice((entry.path.at(-1) ?? -1) + 1).find(item => item.kind !== "glue" && item.kind !== "penalty") : undefined;
+      // Declarations alone do not start horizontal mode. A following display
+      // consumes the pending label inside its own overlay context.
+      const displayConsumer = firstMaterialOffset === undefined && !segment.forcedBreakAfter &&
+        (nextMaterial?.kind === "display-math" || nextMaterial?.kind === "display-alignment")
+        ? nextMaterial.sourceSpan.start : undefined;
       const consumerOffset = params.options.listProfile?.groupItemBodies
-        ? segment.nodes.find(hasMaterial)?.sourceStart ?? segment.sourceEnd : undefined;
+        ? firstMaterialOffset ?? displayConsumer ?? segment.sourceEnd : undefined;
       const listAttachments = texListItemParagraphAttachments({
         ...(consumerOffset !== undefined ? { consumerOffset } : {}),
         blockIndex,
@@ -194,7 +207,7 @@ export function prepareTexLayoutParagraphsFromVList(
         ...(!suppressAncestorBreakMargins && scopeContext.listItemLayout !== undefined ? { listItemLayout: scopeContext.listItemLayout } : {}),
         font: scopeContext.listItemLayout?.label?.content.kind === "marker" ? params.font :
           paragraph.listContext?.labelFontSizePt !== undefined ? textFontProfile.resolveTextFont(
-            { ...textFontProfile.defaultFontState, ...paragraph.inheritedFontState },
+            inheritedFontState,
             paragraph.listContext.labelFontSizePt, params.metricProvider
           ) : paragraphFont,
         metricProvider: params.metricProvider,

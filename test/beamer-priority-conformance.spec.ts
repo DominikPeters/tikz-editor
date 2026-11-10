@@ -4,7 +4,7 @@ import { prepareBeamerDocument, scanBeamerDocument } from "../packages/core/src/
 import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/index.js";
 import { buildNativeBeamerPageTrace, type BeamerStructuralComparison } from "../scripts/lib/beamer-frame-compare.mjs";
 import { priorityManifestFailures, priorityFidelityFailures, priorityOracleFailures, unsupportedCodeFailures, type PriorityFixture } from "../scripts/lib/beamer-priority-contracts.mjs";
-import { compareColorPixels, paintContractFailures } from "../scripts/lib/beamer-paint-compare.mjs";
+import { blockPaintProbes, compareColorPixels, paintContractFailures } from "../scripts/lib/beamer-paint-compare.mjs";
 
 const root = new URL("./fixtures/beamer/corpus-priorities/", import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL("cases.json", root), "utf8")) as {
@@ -22,6 +22,22 @@ function comparison(summary = perfectSummary()) {
 function tracedPage(text: string) { return { glyphs: [...text].map(char => ({ code: char.codePointAt(0)! })) }; }
 
 describe("Beamer corpus-priority reproduction contracts", () => {
+  it("samples a parent's flat fill outside nested blocks while retaining child probes", async () => {
+    const source = readFileSync(new URL("./fixtures/beamer/ci-fuzz-20261109/v4-seed-45-0043-diagram-build.tex", import.meta.url), "utf8");
+    const render = await prepareBeamerDocument(source).renderFrame();
+    const trace = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider);
+    const probes = blockPaintProbes(render, trace, { glyphs: trace.glyphs });
+    const blocks = render.layout.items.filter(item => item.kind === "block");
+    expect(blocks).toHaveLength(2);
+    expect(probes).toHaveLength(4);
+    const parent = blocks.find(block => block.id === "frame:0:block:0")!;
+    const child = blocks.find(block => block.id !== parent.id)!;
+    for (const probe of probes.filter(probe => probe.id.startsWith(parent.id + ":"))) {
+      expect(probe.x < child.bounds.x - 6 || probe.x > child.bounds.x + child.bounds.width + 6 ||
+        probe.y < child.bounds.y - 6 || probe.y > child.bounds.y + child.bounds.height + 6).toBe(true);
+    }
+    expect(probes.filter(probe => probe.id.startsWith(child.id + ":"))).toHaveLength(2);
+  });
   it("rejects case-only identities and filenames while allowing shared source frames", () => {
     expect(priorityManifestFailures([{ id: "top", file: "columns.tex" }, { id: "bottom", file: "columns.tex" }])).toEqual([]);
     expect(priorityManifestFailures([{ id: "t", file: "top.tex" }, { id: "T", file: "capital-t.tex" }])).toContainEqual(expect.stringContaining("ID collision"));
@@ -101,6 +117,23 @@ describe("Beamer corpus-priority reproduction contracts", () => {
     hole[(5 * 11 + 5) * 3 + 1] = 255;
     expect(compareColorPixels(hole, oracle, "#ff00ff", 11).interiorDisagreement).toBe(1);
     expect(compareColorPixels(new Uint8Array(oracle.length).fill(255), oracle, "#ff00ff", 11).interiorDisagreement).toBeGreaterThan(0);
+  });
+
+  it("recognizes antialiased thin-ink edges without accepting missing or wrongly colored paint", () => {
+    const native = new Uint8Array(5 * 5 * 3).fill(255);
+    const oracle = new Uint8Array(native);
+    const put = (pixels: Uint8Array, x: number, y: number, rgb: readonly number[]) => pixels.set(rgb, (y * 5 + x) * 3);
+    put(native, 2, 2, [0, 128, 128]);
+    put(oracle, 2, 2, [6, 131, 131]);
+    put(oracle, 2, 1, [105, 180, 180]);
+    expect(compareColorPixels(native, oracle, "#008080", 5).interiorDisagreement).toBe(0);
+    const wrong = new Uint8Array(oracle);
+    put(wrong, 2, 2, [0, 0, 255]);
+    expect(compareColorPixels(native, wrong, "#008080", 5).interiorDisagreement).toBeGreaterThan(0);
+    const shifted = new Uint8Array(native.length).fill(255);
+    put(shifted, 4, 2, [0, 128, 128]);
+    expect(compareColorPixels(native, shifted, "#008080", 5).interiorDisagreement).toBeGreaterThan(0);
+    expect(compareColorPixels(new Uint8Array(native.length).fill(255), native, "#008080", 5).interiorDisagreement).toBeGreaterThan(0);
   });
 
   it("requires independent paint witnesses and rejects missing or shifted paths even with perfect glyphs", () => {

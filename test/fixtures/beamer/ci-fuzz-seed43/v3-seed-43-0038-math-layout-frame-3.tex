@@ -1,0 +1,113 @@
+\documentclass[9pt,aspectratio=43]{beamer}
+\usepackage{tikz}
+\usetheme{default}
+\setbeamertemplate{navigation symbols}{}
+\title{Geometric uncertainty: experiments and bounds}
+\subtitle{Generated interaction study}
+\author{Research group}
+\date{}
+\year=2026\month=11\day=5
+\newcommand{\fuzzlayerA}[1]{\textit{#1}}
+\newcommand{\fuzzterm}[1]{\fuzzlayerA{#1}}
+\newcommand{\fuzzpair}[2]{\fuzzterm{#1}: #2}
+\newcommand{\fuzzunit}{Hz}
+\let\fuzzoriginalunit\fuzzunit
+\newcommand{\fuzzcoefficient}{1}
+\newcommand{\fuzzscale}[2][\fuzzcoefficient]{#1\,#2}
+\definecolor{fuzzpaint}{RGB}{255,0,255}
+\definecolor{fuzzsecond}{RGB}{18,137,67}
+\tikzset{fuzzvertex/.style={draw,rounded corners=1pt,fill=blue!10,inner sep=1pt,minimum width=.35cm,minimum height=.25cm}}
+\begin{document}
+\section{Geometric uncertainty}
+\begin{frame}[t,shrink=5]{Geometric uncertainty}{Composed dependencies}
+\fuzzpair{Experiment}{Timing: 12\fuzzunit; estimate $\fuzzscale{x}+\fuzzscale[2]{y}$.}\par
+{\renewcommand{\fuzzunit}{ticks}\let\fuzzterm\textbf\fuzzpair{LocalScope}{Timing: 7\fuzzunit.}\par}
+\fuzzpair{RestoredScope}{Timing: 11\fuzzunit.}\par
+\begin{description}
+\item[Stage 1] \begin{enumerate}
+\item<1-> \begin{flushleft}
+\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]
+\end{flushleft}
+\item<2-> \begin{flushright}
+\begin{flushright}
+\textit{A local update} can change the measurements used by several neighboring components.  The estimate is $x_i+x_{i+1}$.
+\end{flushright}
+\end{flushright}
+\item<3-> \begin{description}
+\item<1->[Stage 1] \alt<1-2>{\begin{tabular}{lrr}Method&Cost&Error\\\hline
+Local0&16&5\\
+Local1&27&11\\
+Fresh2&25&0\\
+\end{tabular}}{Alternative estimate $x_0$.}
+\item<2->[Stage 2] \begin{tikzpicture}[font=\scriptsize]
+\begin{scope}[scale=1,rotate=0]
+
+
+\node[fuzzvertex] (g10n0) at (0.000,0) {A};
+\node[fuzzvertex] (g10n1) at (1.400,0) {B};
+\node[fuzzvertex] (g10n2) at (2.800,0) {C};
+\node[fuzzvertex] (g10n3) at (4.200,0) {D};
+\node[fuzzvertex] (g10n4) at (0.000,-0.65) {E};
+\node[fuzzvertex] (g10n5) at (1.400,-0.65) {F};
+\begin{scope}[xshift=.5pt,yshift=-.5pt]
+\draw<1->[->,thick] (g10n0) -- (g10n1);
+\draw<1->[->,thick] (g10n1) to[bend left=20] (g10n2);
+\draw<1->[->,thick] (g10n2) -- (g10n3);
+\draw<1->[->,thick] (g10n3) to[bend left=20] (g10n4);
+\draw<1->[->,thick] (g10n4) -- (g10n5);
+\draw[blue] (0,-.9) .. controls (1.260,-.3) and (2.940,-1.1) .. (4.200,-.8);
+\end{scope}
+\end{scope}
+\end{tikzpicture}
+\end{description}
+\end{enumerate}
+\item[Stage 2] \begin{columns}[onlytextwidth,c]
+\begin{column}{0.54\textwidth}
+\begin{exampleblock}{Cache invalidation}
+{\footnotesize\color{blue}\centering
+\begin{block}{Geometric uncertainty}
+\begin{tabular}{lrr}Method&Cost&Error\\\hline
+Global0&6&4\\
+Global1&13&24\\
+Cached2&26&11\\
+\end{tabular}
+\end{block}\par}
+\end{exampleblock}
+\end{column}
+\begin{column}{0.42\textwidth}
+\only<2->{\begin{exampleblock}{Geometric uncertainty}
+{\scriptsize\color{black}\centering
+\textrm{We compare the} proposed solution with a reference computed from the complete input. A local update can change the measurements used by several neighboring components. The estimate is $\sum_{i=1}^{n}x_i$.\par}
+\end{exampleblock}}
+\end{column}
+\end{columns}
+\end{description}
+\par \begin{tikzpicture}[font=\scriptsize]
+\fill<2-3>[fuzzpaint] (0,0) rectangle (.8,.3);
+\fill<3->[fuzzsecond] (1,0) rectangle (1.8,.3);
+\node[anchor=west] at (2,0.15) {Witness};
+\end{tikzpicture}
+\only<5>{}
+\end{frame}
+\renewcommand{\fuzzunit}{steps}
+\renewcommand{\fuzzcoefficient}{2}
+\renewcommand{\fuzzterm}[1]{{\textbf{#1}}}
+\section{Message passing}
+\begin{frame}[t]{Geometric uncertainty}
+\fuzzpair{MacroStageB}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{columns}[T]\begin{column}{.46\textwidth}Intermediate results carry both a numerical estimate and an explicit dependency set.\end{column}\begin{column}{.46\textwidth}\begin{itemize}\item Input state\item Updated state\end{itemize}\end{column}\end{columns}
+\end{frame}
+\renewcommand{\fuzzunit}{Hz}
+\renewcommand{\fuzzcoefficient}{3}
+\renewcommand{\fuzzterm}[1]{{\textit{#1}}}
+\section{Cache invalidation}
+\begin{frame}[t]{Incremental analysis}
+\fuzzpair{MacroStageC}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{block}{Follow-up}\fuzzterm{A revised value} depends on the preceding frame.\end{block}
+\[r_{k+1}=r_k-\alpha d_k\]
+\end{frame}
+\end{document}

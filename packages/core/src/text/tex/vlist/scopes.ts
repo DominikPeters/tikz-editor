@@ -132,13 +132,17 @@ function enrichListItemFrameFromParagraph(
   item: TexVListItem,
   listProfile?: TexListLayoutProfile
 ): void {
-  if (item.kind !== "paragraph" || item.paragraph.listContext?.showLabel !== true) {
+  if (item.kind !== "paragraph" || !item.paragraph.listContext) {
     return;
   }
   const listItemFrame = stack.filter(frame => frame.role.kind === "list-item").at(-1);
   if (listItemFrame?.role.kind !== "list-item") {
     return;
   }
+  // A nested first list can consume the parent's pending label before its
+  // first prose paragraph. The continuation still needs description margins,
+  // while a previously attached label must survive later continuations.
+  if (listItemFrame.layout.listItem && item.paragraph.listContext.showLabel !== true) return;
   const listItem = texListItemLayoutForParagraph(
     stack,
     item.paragraph,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { caseFromTexFuzzAst, shrinkTexFuzzCase, TEX_FUZZ_MATH_SYMBOL_ORACLE_FORMULAS, TEX_FUZZ_MATH_LAYOUT_ORACLE_FORMULAS } from "@tikz-editor/tex-fuzz";
 import { texFuzzMathOracleCases, compareTexFuzzMathOracle } from "../scripts/lib/tex-fuzz-math-oracle.mjs";
 
@@ -8,6 +9,31 @@ const caseData = caseFromTexFuzzAst([{ kind: "math", body: { kind: "fraction", c
   numerator: { kind: "atom", value: "x" }, denominator: { kind: "atom", value: "y" } } }]);
 
 describe("shared math glyph differential findings", () => {
+  it.each([
+    [String.raw`\(x^2\)`, "x^2"], ["$x^2$", "x^2"],
+    [String.raw`\[x^2\]`, String.raw`\displaystyle x^2`], ["$$x^2$$", String.raw`\displaystyle x^2`],
+  ])("compares the complete math body in %s", (source, expected) => {
+    let actual = "";
+    const candidate = { ...caseData, source };
+    expect(compareTexFuzzMathOracle(candidate, { compare: formula => {
+      actual = formula;
+      return { ok: true, mismatches: [], ours: { supported: true } };
+    } })).toEqual({ compared: true, observation: null });
+    expect(actual).toBe(expected);
+  });
+  it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex"))(
+    "compares every original nightly math sample and its legacy array context", () => {
+      const cases = JSON.parse(readFileSync(new URL("./fixtures/tex-fuzz/ci-20261110-math-sample.json", import.meta.url), "utf8")) as typeof caseData[];
+      expect(cases).toHaveLength(16);
+      for (const candidate of cases) {
+        expect(compareTexFuzzMathOracle(candidate), candidate.source).toEqual({ compared: true, observation: null });
+      }
+      const original = JSON.parse(readFileSync(new URL("./fixtures/tex-fuzz/ci-20261110-math-glyph-trace.json", import.meta.url), "utf8")) as { case: typeof caseData; minimizedCase: typeof caseData };
+      for (const candidate of [original.case, original.minimizedCase]) {
+        expect(compareTexFuzzMathOracle(candidate, { latexRelease: "2025-11-01" }), candidate.source).toEqual({ compared: true, observation: null });
+      }
+    }, 60_000
+  );
   it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex"))(
     "matches mandatory symbol and layout regressions", () => {
       for (const content of [...TEX_FUZZ_MATH_SYMBOL_ORACLE_FORMULAS, ...TEX_FUZZ_MATH_LAYOUT_ORACLE_FORMULAS]) {

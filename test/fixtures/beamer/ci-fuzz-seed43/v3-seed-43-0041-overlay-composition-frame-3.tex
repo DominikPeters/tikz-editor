@@ -1,0 +1,100 @@
+\documentclass[10pt,aspectratio=43]{beamer}
+\usepackage{tikz}
+\usetheme{default}
+\setbeamertemplate{navigation symbols}{}
+\title{Iterative refinement: experiments and bounds}
+\subtitle{Generated interaction study}
+\author{Research group}
+\date{}
+\year=2026\month=11\day=5
+\newcommand{\fuzzlayerA}[1]{\textbf{#1}}
+\newcommand{\fuzzlayerB}[1]{\fuzzlayerA{#1}}
+\newcommand{\fuzzlayerC}[1]{\fuzzlayerB{#1}}
+\newcommand{\fuzzterm}[1]{\fuzzlayerC{#1}}
+\newcommand{\fuzzpair}[2]{\fuzzterm{#1}: #2}
+\newcommand{\fuzzunit}{ms}
+\let\fuzzoriginalunit\fuzzunit
+\newcommand{\fuzzcoefficient}{1}
+\newcommand{\fuzzscale}[2][\fuzzcoefficient]{#1\,#2}
+\definecolor{fuzzpaint}{RGB}{255,0,255}
+\definecolor{fuzzsecond}{RGB}{18,137,67}
+\tikzset{fuzzvertex/.style={draw,rounded corners=1pt,fill=blue!10,inner sep=1pt,minimum width=.35cm,minimum height=.25cm}}
+\begin{document}
+\section{Iterative refinement}
+\begin{frame}[t,shrink=5]{Iterative refinement}{Composed dependencies}
+\fuzzpair{Experiment}{Timing: 12\fuzzunit; estimate $\fuzzscale{x}+\fuzzscale[2]{y}$.}\par
+{\renewcommand{\fuzzunit}{samples}\let\fuzzterm\textrm\fuzzpair{LocalScope}{Timing: 7\fuzzunit.}\par}
+\fuzzpair{RestoredScope}{Timing: 11\fuzzunit.}\par
+\visible<1,3>{\begin{columns}[onlytextwidth,t]
+\begin{column}{0.62\textwidth}
+\begin{description}
+\item[Stage 1] \begin{tikzpicture}[font=\scriptsize]
+\begin{scope}[scale=1.1,rotate=0]
+\clip (-.4,-1) rectangle (4.700,.5);
+\foreach \x in {0,1,2,3} {\draw[gray!30] (\x*1.400,-.8)--(\x*1.400,.35);}
+\node[fuzzvertex] (g3n0) at (0.000,0) {A};
+\node[fuzzvertex] (g3n1) at (1.400,0) {B};
+\node[fuzzvertex] (g3n2) at (2.800,0) {C};
+\node[fuzzvertex] (g3n3) at (4.200,0) {D};
+\begin{scope}[xshift=.5pt,yshift=-.5pt]
+\draw<2->[->,thick] (g3n0) -- (g3n1);
+\draw<2->[->,thick] (g3n1) to[bend left=20] (g3n2);
+\draw<2->[->,thick] (g3n2) -- (g3n3);
+\draw[blue] (0,-.9) .. controls (1.260,-.3) and (2.940,-1.1) .. (4.200,-.8);
+\end{scope}
+\end{scope}
+\end{tikzpicture}
+\item[Stage 2] \[E=\sum_{i=1}^{n}w_i x_i\]
+\end{description}
+\end{column}
+\begin{column}{0.34\textwidth}
+\begin{enumerate}
+\item \alt<1-2>{\textrm{A narrow column} can change line breaking even when the underlying expression is unchanged. The final diagram records the order in which information crosses the partition. The estimate is $\sum_{i=1}^{n}x_i$.}{Alternative estimate $x_0$.}
+\item \textrm{A local update} can change the measurements used by several neighboring components.  The estimate is $\alpha+\beta$.
+\item \begin{tabular}{lrr}Method&Cost&Error\\\hline
+Global0&19&25\\
+Fresh1&3&9\\
+Local2&26&29\\
+\end{tabular}
+\end{enumerate}
+\end{column}
+\end{columns}}
+\par \begin{tikzpicture}[font=\scriptsize]
+\fill<2-3>[fuzzpaint] (0,0) rectangle (.8,.3);
+\fill<3->[fuzzsecond] (1,0) rectangle (1.8,.3);
+\node[anchor=west] at (2,0.15) {Witness};
+\end{tikzpicture}
+\only<4>{}
+\end{frame}
+\renewcommand{\fuzzunit}{s}
+\renewcommand{\fuzzcoefficient}{2}
+\renewcommand{\fuzzterm}[1]{{\textit{#1}}}
+\section{Geometric uncertainty}
+\begin{frame}[t]{Message passing}
+\fuzzpair{MacroStageB}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{columns}[T]\begin{column}{.46\textwidth}A narrow column can change line breaking even when the underlying expression is unchanged.\end{column}\begin{column}{.46\textwidth}\begin{itemize}\item Input state\item Updated state\end{itemize}\end{column}\end{columns}
+\end{frame}
+\renewcommand{\fuzzunit}{us}
+\renewcommand{\fuzzcoefficient}{3}
+\renewcommand{\fuzzterm}[1]{{\textit{#1}}}
+\section{Cache invalidation}
+\begin{frame}[t]{Incremental analysis}
+\fuzzpair{MacroStageC}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{block}{Follow-up}\fuzzterm{A revised value} depends on the preceding frame.\end{block}
+\[r_{k+1}=r_k-\alpha d_k\]
+\end{frame}
+\renewcommand{\fuzzunit}{steps}
+\renewcommand{\fuzzcoefficient}{4}
+\renewcommand{\fuzzterm}[1]{{\textbf{#1}}}
+\section{Incremental analysis}
+\begin{frame}[t]{Constraint propagation}
+\fuzzpair{MacroStageD}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{columns}[T]\begin{column}{.46\textwidth}We compare the proposed solution with a reference computed from the complete input.\end{column}\begin{column}{.46\textwidth}\begin{itemize}\item Input state\item Updated state\end{itemize}\end{column}\end{columns}
+\end{frame}
+\end{document}

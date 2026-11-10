@@ -1,0 +1,2413 @@
+{
+  "case": {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 16009,
+    "profile": "document",
+    "ast": [
+      {
+        "kind": "vertical-glue",
+        "command": "vfill"
+      },
+      {
+        "kind": "display-math",
+        "delimiter": "equation-star",
+        "body": {
+          "kind": "group",
+          "body": {
+            "kind": "text",
+            "command": "text",
+            "value": "if"
+          }
+        }
+      },
+      {
+        "kind": "document-box",
+        "command": "minipage",
+        "position": "t",
+        "width": {
+          "amount": 1,
+          "unit": "ex"
+        },
+        "children": [
+          {
+            "kind": "box",
+            "command": "mbox",
+            "children": [
+              {
+                "kind": "style-declaration",
+                "command": "normalsize",
+                "children": [
+                  {
+                    "kind": "includegraphics",
+                    "filename": "fuzz-images/photo.jpg",
+                    "options": [
+                      "height=10pt"
+                    ],
+                    "starred": true,
+                    "gap": " "
+                  },
+                  {
+                    "kind": "font-declaration",
+                    "command": "upshape",
+                    "children": [
+                      {
+                        "kind": "math",
+                        "body": {
+                          "kind": "text",
+                          "command": "mathrm",
+                          "value": "rank"
+                        },
+                        "delimiter": "dollar"
+                      },
+                      {
+                        "kind": "transform-box",
+                        "command": "reflectbox",
+                        "children": [
+                          {
+                            "kind": "text",
+                            "value": "Beta"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "font",
+                        "command": "textit",
+                        "children": [
+                          {
+                            "kind": "color",
+                            "color": "teal",
+                            "children": [
+                              {
+                                "kind": "font",
+                                "command": "textsc",
+                                "children": [
+                                  {
+                                    "kind": "dimension-box",
+                                    "command": "vphantom",
+                                    "children": [
+                                      {
+                                        "kind": "style-declaration",
+                                        "command": "large",
+                                        "children": [
+                                          {
+                                            "kind": "text",
+                                            "value": "façade"
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "kind": "text",
+                                    "value": "Alpha"
+                                  }
+                                ]
+                              },
+                              {
+                                "kind": "space",
+                                "nonBreaking": true
+                              },
+                              {
+                                "kind": "accent",
+                                "command": "'",
+                                "base": "e"
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "accent",
+                            "command": "`",
+                            "base": "e"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "accent",
+                        "command": "'",
+                        "base": "e"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "math",
+            "body": {
+              "kind": "text",
+              "command": "text",
+              "value": "A B"
+            },
+            "delimiter": "dollar"
+          },
+          {
+            "kind": "text",
+            "value": "café"
+          },
+          {
+            "kind": "accent",
+            "command": "`",
+            "base": "e"
+          }
+        ]
+      },
+      {
+        "kind": "environment",
+        "name": "description",
+        "children": [
+          {
+            "kind": "item",
+            "label": [
+              {
+                "kind": "text",
+                "value": "Label"
+              }
+            ]
+          },
+          {
+            "kind": "box",
+            "command": "colorbox",
+            "backgroundColor": "teal",
+            "children": [
+              {
+                "kind": "style-declaration",
+                "command": "fontsize",
+                "size": {
+                  "amount": 0,
+                  "unit": "em"
+                },
+                "baselineSkip": {
+                  "amount": 32767,
+                  "unit": "pt"
+                },
+                "children": [
+                  {
+                    "kind": "font-declaration",
+                    "command": "scshape",
+                    "children": [
+                      {
+                        "kind": "transform-box",
+                        "command": "rotatebox",
+                        "angle": 0,
+                        "children": [
+                          {
+                            "kind": "text",
+                            "value": "Alpha"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "font-declaration",
+                        "command": "bf",
+                        "children": [
+                          {
+                            "kind": "accent",
+                            "command": "^",
+                            "base": "e"
+                          },
+                          {
+                            "kind": "tabular",
+                            "columns": [
+                              "l"
+                            ],
+                            "position": "c",
+                            "cells": [
+                              [
+                                {
+                                  "kind": "text",
+                                  "value": "Beta"
+                                }
+                              ],
+                              [
+                                {
+                                  "kind": "text",
+                                  "value": "7"
+                                }
+                              ],
+                              [
+                                {
+                                  "kind": "text",
+                                  "value": "A"
+                                }
+                              ]
+                            ]
+                          },
+                          {
+                            "kind": "style-declaration",
+                            "command": "fontsize",
+                            "size": {
+                              "amount": 100,
+                              "unit": "bp"
+                            },
+                            "baselineSkip": {
+                              "amount": 5,
+                              "unit": "bp"
+                            },
+                            "children": [
+                              {
+                                "kind": "transform-box",
+                                "command": "rotatebox",
+                                "angle": 30,
+                                "children": [
+                                  {
+                                    "kind": "text",
+                                    "value": "Alpha"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "includegraphics",
+                        "filename": "fuzz-images/pattern.v2",
+                        "options": [],
+                        "starred": false,
+                        "gap": " "
+                      },
+                      {
+                        "kind": "style-declaration",
+                        "command": "huge",
+                        "children": [
+                          {
+                            "kind": "accent",
+                            "command": "'",
+                            "base": "e"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "text",
+                    "value": "café"
+                  },
+                  {
+                    "kind": "math",
+                    "body": {
+                      "kind": "fraction",
+                      "command": "tfrac",
+                      "numerator": {
+                        "kind": "radical",
+                        "body": {
+                          "kind": "atom",
+                          "value": "*"
+                        }
+                      },
+                      "denominator": {
+                        "kind": "script",
+                        "base": {
+                          "kind": "atom",
+                          "value": "/"
+                        },
+                        "superscript": {
+                          "kind": "atom",
+                          "value": "b"
+                        }
+                      }
+                    },
+                    "delimiter": "dollar"
+                  },
+                  {
+                    "kind": "space",
+                    "nonBreaking": true
+                  }
+                ]
+              },
+              {
+                "kind": "accent",
+                "command": "^",
+                "base": "e"
+              },
+              {
+                "kind": "accent",
+                "command": "^",
+                "base": "e"
+              },
+              {
+                "kind": "text",
+                "value": "Beta"
+              }
+            ]
+          },
+          {
+            "kind": "space",
+            "nonBreaking": true
+          },
+          {
+            "kind": "math",
+            "body": {
+              "kind": "atom",
+              "value": ")"
+            },
+            "delimiter": "dollar"
+          },
+          {
+            "kind": "item"
+          },
+          {
+            "kind": "accent",
+            "command": "^",
+            "base": "e"
+          },
+          {
+            "kind": "item"
+          },
+          {
+            "kind": "space",
+            "nonBreaking": true
+          }
+        ]
+      },
+      {
+        "kind": "transform-box",
+        "command": "rotatebox",
+        "angle": -15,
+        "children": [
+          {
+            "kind": "font",
+            "command": "textbf",
+            "children": [
+              {
+                "kind": "text",
+                "value": "Depth"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "paragraph-break",
+        "command": "blank-line"
+      },
+      {
+        "kind": "noindent"
+      }
+    ],
+    "source": "\\vfill \\begin{equation*}{\\text{if}}\\end{equation*}\\begin{minipage}[t]{1ex}\\mbox{{\\normalsize \\includegraphics* [height=10pt] {fuzz-images/photo.jpg}{\\upshape $\\mathrm{rank}$\\reflectbox{Beta}\\textit{\\textcolor{teal}{\\textsc{\\vphantom{{\\large façade}}Alpha}~\\'{e}}\\`{e}}\\'{e}}}}$\\text{A B}$café\\`{e}\\end{minipage}\\begin{description}\\item[Label] \\colorbox{teal}{{\\fontsize{0em}{32767pt}\\selectfont {\\scshape \\rotatebox{0}{Alpha}{\\bf \\^{e}\\begin{tabular}[c]{l}Beta\\\\7\\\\A\\end{tabular}{\\fontsize{100bp}{5bp}\\selectfont \\rotatebox{30}{Alpha}}}\\includegraphics  {fuzz-images/pattern.v2}{\\huge \\'{e}}}café$\\tfrac{\\sqrt{*}}{{/}^{b}}$~}\\^{e}\\^{e}Beta}~$)$\\item \\^{e}\\item ~\\end{description}\\rotatebox{-15}{\\textbf{Depth}}\n\n\\noindent ",
+    "sourceMap": [
+      {
+        "path": "root/0",
+        "kind": "vertical-glue",
+        "start": 0,
+        "end": 7
+      },
+      {
+        "path": "root/1/math/body",
+        "kind": "math.text",
+        "start": 25,
+        "end": 34
+      },
+      {
+        "path": "root/1/math",
+        "kind": "math.group",
+        "start": 24,
+        "end": 35
+      },
+      {
+        "path": "root/1",
+        "kind": "display-math",
+        "start": 7,
+        "end": 50
+      },
+      {
+        "path": "root/2/children/0/children/0/children/0",
+        "kind": "includegraphics",
+        "start": 93,
+        "end": 148
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/0/math",
+        "kind": "math.text",
+        "start": 159,
+        "end": 172
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/0",
+        "kind": "math",
+        "start": 158,
+        "end": 173
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/1/children/0",
+        "kind": "text",
+        "start": 185,
+        "end": 189
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/1",
+        "kind": "transform-box",
+        "start": 173,
+        "end": 190
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/2/children/0/children/0/children/0/children/0/children/0",
+        "kind": "text",
+        "start": 241,
+        "end": 247
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/2/children/0/children/0/children/0/children/0",
+        "kind": "style-declaration",
+        "start": 233,
+        "end": 248
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/2/children/0/children/0/children/0",
+        "kind": "dimension-box",
+        "start": 223,
+        "end": 249
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/2/children/0/children/0/children/1",
+        "kind": "text",
+        "start": 249,
+        "end": 254
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/2/children/0/children/0",
+        "kind": "font",
+        "start": 215,
+        "end": 255
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/2/children/0/children/1",
+        "kind": "space",
+        "start": 255,
+        "end": 256
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/2/children/0/children/2",
+        "kind": "accent",
+        "start": 256,
+        "end": 261
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/2/children/0",
+        "kind": "color",
+        "start": 198,
+        "end": 262
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/2/children/1",
+        "kind": "accent",
+        "start": 262,
+        "end": 267
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/2",
+        "kind": "font",
+        "start": 190,
+        "end": 268
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1/children/3",
+        "kind": "accent",
+        "start": 268,
+        "end": 273
+      },
+      {
+        "path": "root/2/children/0/children/0/children/1",
+        "kind": "font-declaration",
+        "start": 148,
+        "end": 274
+      },
+      {
+        "path": "root/2/children/0/children/0",
+        "kind": "style-declaration",
+        "start": 80,
+        "end": 275
+      },
+      {
+        "path": "root/2/children/0",
+        "kind": "box",
+        "start": 74,
+        "end": 276
+      },
+      {
+        "path": "root/2/children/1/math",
+        "kind": "math.text",
+        "start": 277,
+        "end": 287
+      },
+      {
+        "path": "root/2/children/1",
+        "kind": "math",
+        "start": 276,
+        "end": 288
+      },
+      {
+        "path": "root/2/children/2",
+        "kind": "text",
+        "start": 288,
+        "end": 292
+      },
+      {
+        "path": "root/2/children/3",
+        "kind": "accent",
+        "start": 292,
+        "end": 297
+      },
+      {
+        "path": "root/2",
+        "kind": "document-box",
+        "start": 50,
+        "end": 311
+      },
+      {
+        "path": "root/3/children/0/label/0",
+        "kind": "text",
+        "start": 336,
+        "end": 341
+      },
+      {
+        "path": "root/3/children/0",
+        "kind": "item",
+        "start": 330,
+        "end": 343
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/0/children/0",
+        "kind": "text",
+        "start": 419,
+        "end": 424
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/0",
+        "kind": "transform-box",
+        "start": 405,
+        "end": 425
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/1/children/0",
+        "kind": "accent",
+        "start": 430,
+        "end": 435
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/1/children/1/cells/0/0/0",
+        "kind": "text",
+        "start": 456,
+        "end": 460
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/1/children/1/cells/1/0/0",
+        "kind": "text",
+        "start": 462,
+        "end": 463
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/1/children/1/cells/2/0/0",
+        "kind": "text",
+        "start": 465,
+        "end": 466
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/1/children/1",
+        "kind": "tabular",
+        "start": 435,
+        "end": 479
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/1/children/2/children/0/children/0",
+        "kind": "text",
+        "start": 528,
+        "end": 533
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/1/children/2/children/0",
+        "kind": "transform-box",
+        "start": 513,
+        "end": 534
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/1/children/2",
+        "kind": "style-declaration",
+        "start": 479,
+        "end": 535
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/1",
+        "kind": "font-declaration",
+        "start": 425,
+        "end": 536
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/2",
+        "kind": "includegraphics",
+        "start": 536,
+        "end": 578
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/3/children/0",
+        "kind": "accent",
+        "start": 585,
+        "end": 590
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0/children/3",
+        "kind": "style-declaration",
+        "start": 578,
+        "end": 591
+      },
+      {
+        "path": "root/3/children/1/children/0/children/0",
+        "kind": "font-declaration",
+        "start": 395,
+        "end": 592
+      },
+      {
+        "path": "root/3/children/1/children/0/children/1",
+        "kind": "text",
+        "start": 592,
+        "end": 596
+      },
+      {
+        "path": "root/3/children/1/children/0/children/2/math/numerator/body",
+        "kind": "math.atom",
+        "start": 610,
+        "end": 611
+      },
+      {
+        "path": "root/3/children/1/children/0/children/2/math/numerator",
+        "kind": "math.radical",
+        "start": 604,
+        "end": 612
+      },
+      {
+        "path": "root/3/children/1/children/0/children/2/math/denominator/base",
+        "kind": "math.atom",
+        "start": 615,
+        "end": 616
+      },
+      {
+        "path": "root/3/children/1/children/0/children/2/math/denominator/superscript",
+        "kind": "math.atom",
+        "start": 619,
+        "end": 620
+      },
+      {
+        "path": "root/3/children/1/children/0/children/2/math/denominator",
+        "kind": "math.script",
+        "start": 614,
+        "end": 621
+      },
+      {
+        "path": "root/3/children/1/children/0/children/2/math",
+        "kind": "math.fraction",
+        "start": 597,
+        "end": 622
+      },
+      {
+        "path": "root/3/children/1/children/0/children/2",
+        "kind": "math",
+        "start": 596,
+        "end": 623
+      },
+      {
+        "path": "root/3/children/1/children/0/children/3",
+        "kind": "space",
+        "start": 623,
+        "end": 624
+      },
+      {
+        "path": "root/3/children/1/children/0",
+        "kind": "style-declaration",
+        "start": 359,
+        "end": 625
+      },
+      {
+        "path": "root/3/children/1/children/1",
+        "kind": "accent",
+        "start": 625,
+        "end": 630
+      },
+      {
+        "path": "root/3/children/1/children/2",
+        "kind": "accent",
+        "start": 630,
+        "end": 635
+      },
+      {
+        "path": "root/3/children/1/children/3",
+        "kind": "text",
+        "start": 635,
+        "end": 639
+      },
+      {
+        "path": "root/3/children/1",
+        "kind": "box",
+        "start": 343,
+        "end": 640
+      },
+      {
+        "path": "root/3/children/2",
+        "kind": "space",
+        "start": 640,
+        "end": 641
+      },
+      {
+        "path": "root/3/children/3/math",
+        "kind": "math.atom",
+        "start": 642,
+        "end": 643
+      },
+      {
+        "path": "root/3/children/3",
+        "kind": "math",
+        "start": 641,
+        "end": 644
+      },
+      {
+        "path": "root/3/children/4",
+        "kind": "item",
+        "start": 644,
+        "end": 650
+      },
+      {
+        "path": "root/3/children/5",
+        "kind": "accent",
+        "start": 650,
+        "end": 655
+      },
+      {
+        "path": "root/3/children/6",
+        "kind": "item",
+        "start": 655,
+        "end": 661
+      },
+      {
+        "path": "root/3/children/7",
+        "kind": "space",
+        "start": 661,
+        "end": 662
+      },
+      {
+        "path": "root/3",
+        "kind": "environment",
+        "start": 311,
+        "end": 679
+      },
+      {
+        "path": "root/4/children/0/children/0",
+        "kind": "text",
+        "start": 703,
+        "end": 708
+      },
+      {
+        "path": "root/4/children/0",
+        "kind": "font",
+        "start": 695,
+        "end": 709
+      },
+      {
+        "path": "root/4",
+        "kind": "transform-box",
+        "start": 679,
+        "end": 710
+      },
+      {
+        "path": "root/5",
+        "kind": "paragraph-break",
+        "start": 710,
+        "end": 712
+      },
+      {
+        "path": "root/6",
+        "kind": "noindent",
+        "start": 712,
+        "end": 722
+      }
+    ],
+    "choices": [
+      {
+        "path": "budget/size/band",
+        "upperExclusive": 100,
+        "value": 20
+      },
+      {
+        "path": "budget/size/ordinary",
+        "upperExclusive": 7,
+        "value": 1
+      },
+      {
+        "path": "budget/depth/band",
+        "upperExclusive": 100,
+        "value": 99
+      },
+      {
+        "path": "budget/depth/long-tail",
+        "upperExclusive": 2,
+        "value": 0
+      },
+      {
+        "path": "root/0/document-kind",
+        "upperExclusive": 1713,
+        "value": 862
+      },
+      {
+        "path": "root/0/preset-glue",
+        "upperExclusive": 132,
+        "value": 103
+      },
+      {
+        "path": "root/1/document-kind",
+        "upperExclusive": 1713,
+        "value": 1482
+      },
+      {
+        "path": "root/1/display-delimiter",
+        "upperExclusive": 396,
+        "value": 131
+      },
+      {
+        "path": "root/1/display-content/kind",
+        "upperExclusive": 15,
+        "value": 1
+      },
+      {
+        "path": "root/1/display-content/group/kind",
+        "upperExclusive": 15,
+        "value": 14
+      },
+      {
+        "path": "root/1/display-content/group/text-command",
+        "upperExclusive": 3,
+        "value": 0
+      },
+      {
+        "path": "root/1/display-content/group/text-value",
+        "upperExclusive": 4,
+        "value": 0
+      },
+      {
+        "path": "root/2/document-kind",
+        "upperExclusive": 1713,
+        "value": 1253
+      },
+      {
+        "path": "root/2/minipage-position",
+        "upperExclusive": 3,
+        "value": 0
+      },
+      {
+        "path": "root/2/minipage-width/magnitude",
+        "upperExclusive": 8,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-width/unit",
+        "upperExclusive": 5,
+        "value": 2
+      },
+      {
+        "path": "root/2/minipage-body/count",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/2/minipage-body/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 1130
+      },
+      {
+        "path": "root/2/minipage-body/0/natural-box",
+        "upperExclusive": 110,
+        "value": 43
+      },
+      {
+        "path": "root/2/minipage-body/0/box/count",
+        "upperExclusive": 4,
+        "value": 0
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 916
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-command",
+        "upperExclusive": 183,
+        "value": 83
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/count",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 1894
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/0/image-file",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/0/image-program",
+        "upperExclusive": 19,
+        "value": 2
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/0/image-corners",
+        "upperExclusive": 12,
+        "value": 5
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/0/image-star",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/0/image-trivia",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/node-kind",
+        "upperExclusive": 2184,
+        "value": 679
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration",
+        "upperExclusive": 234,
+        "value": 113
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/count",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 1969
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/0/math/kind",
+        "upperExclusive": 15,
+        "value": 14
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/0/math/text-command",
+        "upperExclusive": 3,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/0/math/text-value",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/0/math-delimiter",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/1/node-kind",
+        "upperExclusive": 2184,
+        "value": 1419
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/1/transform-box/command",
+        "upperExclusive": 292,
+        "value": 227
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/1/transform-box/text",
+        "upperExclusive": 3,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/1/transform-box/styled",
+        "upperExclusive": 2,
+        "value": 0
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/node-kind",
+        "upperExclusive": 2184,
+        "value": 469
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font-command",
+        "upperExclusive": 231,
+        "value": 21
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/count",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 1014
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color-name",
+        "upperExclusive": 3,
+        "value": 2
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/count",
+        "upperExclusive": 4,
+        "value": 2
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 467
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/0/font-command",
+        "upperExclusive": 231,
+        "value": 203
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/0/font/count",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/0/font/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 1365
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/0/font/0/dimension-box",
+        "upperExclusive": 132,
+        "value": 38
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/0/font/0/dimension-box-body/count",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/0/font/0/dimension-box-body/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 898
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/0/font/0/dimension-box-body/0/size-command",
+        "upperExclusive": 183,
+        "value": 100
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/0/font/0/dimension-box-body/0/size-body/budget-leaf/leaf-kind",
+        "upperExclusive": 4,
+        "value": 0
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/0/font/0/dimension-box-body/0/size-body/budget-leaf/word",
+        "upperExclusive": 8,
+        "value": 6
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/0/font/1/leaf-kind",
+        "upperExclusive": 4,
+        "value": 0
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/0/font/1/word",
+        "upperExclusive": 8,
+        "value": 0
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/1/leaf-kind",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/1/tie",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/2/leaf-kind",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/0/color/2/accent",
+        "upperExclusive": 3,
+        "value": 0
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/1/leaf-kind",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/2/font/1/accent",
+        "upperExclusive": 3,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/3/leaf-kind",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/0/box/0/size-body/1/font-declaration-body/3/accent",
+        "upperExclusive": 3,
+        "value": 0
+      },
+      {
+        "path": "root/2/minipage-body/1/leaf-kind",
+        "upperExclusive": 4,
+        "value": 2
+      },
+      {
+        "path": "root/2/minipage-body/1/math/kind",
+        "upperExclusive": 15,
+        "value": 14
+      },
+      {
+        "path": "root/2/minipage-body/1/math/text-command",
+        "upperExclusive": 3,
+        "value": 0
+      },
+      {
+        "path": "root/2/minipage-body/1/math/text-value",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/2/minipage-body/1/math-delimiter",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/2/leaf-kind",
+        "upperExclusive": 4,
+        "value": 0
+      },
+      {
+        "path": "root/2/minipage-body/2/word",
+        "upperExclusive": 8,
+        "value": 2
+      },
+      {
+        "path": "root/2/minipage-body/3/leaf-kind",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/2/minipage-body/3/accent",
+        "upperExclusive": 3,
+        "value": 1
+      },
+      {
+        "path": "root/3/document-kind",
+        "upperExclusive": 1713,
+        "value": 562
+      },
+      {
+        "path": "root/3/environment-name",
+        "upperExclusive": 232,
+        "value": 224
+      },
+      {
+        "path": "root/3/list/items",
+        "upperExclusive": 3,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/label-0",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/count",
+        "upperExclusive": 4,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 1225
+      },
+      {
+        "path": "root/3/list/item-body-0/0/background",
+        "upperExclusive": 3,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/count",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 966
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/font-size/magnitude",
+        "upperExclusive": 8,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/font-size/unit",
+        "upperExclusive": 5,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/baseline-skip/magnitude",
+        "upperExclusive": 8,
+        "value": 7
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/baseline-skip/unit",
+        "upperExclusive": 5,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/count",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 740
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration",
+        "upperExclusive": 234,
+        "value": 121
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/count",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 1432
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/0/transform-box/command",
+        "upperExclusive": 292,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/0/transform-box/text",
+        "upperExclusive": 3,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/0/transform-box/styled",
+        "upperExclusive": 2,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/0/transform-box/angle",
+        "upperExclusive": 6,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/node-kind",
+        "upperExclusive": 2184,
+        "value": 616
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration",
+        "upperExclusive": 234,
+        "value": 154
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/count",
+        "upperExclusive": 4,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 2071
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/0/accent",
+        "upperExclusive": 3,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/1/node-kind",
+        "upperExclusive": 2184,
+        "value": 1882
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/1/tabular/columns",
+        "upperExclusive": 3,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/1/tabular/column-0",
+        "upperExclusive": 3,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/1/tabular/position",
+        "upperExclusive": 3,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/1/tabular/rows",
+        "upperExclusive": 3,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/1/tabular/cells/0/0",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/1/tabular/cells/1/0",
+        "upperExclusive": 4,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/1/tabular/cells/2/0",
+        "upperExclusive": 4,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/2/node-kind",
+        "upperExclusive": 2184,
+        "value": 976
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/2/font-size/magnitude",
+        "upperExclusive": 8,
+        "value": 6
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/2/font-size/unit",
+        "upperExclusive": 5,
+        "value": 4
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/2/baseline-skip/magnitude",
+        "upperExclusive": 8,
+        "value": 3
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/2/baseline-skip/unit",
+        "upperExclusive": 5,
+        "value": 4
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/2/fontsize-body/count",
+        "upperExclusive": 4,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/2/fontsize-body/0/node-kind",
+        "upperExclusive": 2184,
+        "value": 1585
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/2/fontsize-body/0/transform-box/command",
+        "upperExclusive": 292,
+        "value": 54
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/2/fontsize-body/0/transform-box/text",
+        "upperExclusive": 3,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/2/fontsize-body/0/transform-box/styled",
+        "upperExclusive": 2,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/1/font-declaration-body/2/fontsize-body/0/transform-box/angle",
+        "upperExclusive": 6,
+        "value": 3
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/2/node-kind",
+        "upperExclusive": 2184,
+        "value": 1928
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/2/image-file",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/2/image-program",
+        "upperExclusive": 19,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/2/image-corners",
+        "upperExclusive": 12,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/2/image-star",
+        "upperExclusive": 2,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/2/image-trivia",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/3/node-kind",
+        "upperExclusive": 2184,
+        "value": 841
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/3/size-command",
+        "upperExclusive": 183,
+        "value": 146
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/3/size-body/budget-leaf/leaf-kind",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/0/font-declaration-body/3/size-body/budget-leaf/accent",
+        "upperExclusive": 3,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/1/leaf-kind",
+        "upperExclusive": 4,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/1/word",
+        "upperExclusive": 8,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/2/leaf-kind",
+        "upperExclusive": 4,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/2/math/kind",
+        "upperExclusive": 15,
+        "value": 3
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/2/math/fraction-command",
+        "upperExclusive": 4,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/2/math/numerator/kind",
+        "upperExclusive": 15,
+        "value": 4
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/2/math/numerator/has-degree",
+        "upperExclusive": 2,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/2/math/numerator/radicand/atom",
+        "upperExclusive": 42,
+        "value": 29
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/2/math/denominator/kind",
+        "upperExclusive": 15,
+        "value": 5
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/2/math/denominator/script-mode",
+        "upperExclusive": 3,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/2/math/denominator/base/atom",
+        "upperExclusive": 42,
+        "value": 23
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/2/math/denominator/superscript/atom",
+        "upperExclusive": 42,
+        "value": 4
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/2/math-delimiter",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/3/leaf-kind",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/0/fontsize-body/3/tie",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/1/leaf-kind",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/1/accent",
+        "upperExclusive": 3,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/2/leaf-kind",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/2/accent",
+        "upperExclusive": 3,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/3/leaf-kind",
+        "upperExclusive": 4,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/0/colorbox/3/word",
+        "upperExclusive": 8,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/1/leaf-kind",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/3/list/item-body-0/1/tie",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-0/2/leaf-kind",
+        "upperExclusive": 4,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/item-body-0/2/math/kind",
+        "upperExclusive": 15,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-0/2/math/atom",
+        "upperExclusive": 42,
+        "value": 34
+      },
+      {
+        "path": "root/3/list/item-body-0/2/math-delimiter",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/label-1",
+        "upperExclusive": 2,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-1/budget-leaf/leaf-kind",
+        "upperExclusive": 4,
+        "value": 1
+      },
+      {
+        "path": "root/3/list/item-body-1/budget-leaf/accent",
+        "upperExclusive": 3,
+        "value": 2
+      },
+      {
+        "path": "root/3/list/label-2",
+        "upperExclusive": 2,
+        "value": 0
+      },
+      {
+        "path": "root/3/list/item-body-2/budget-leaf/leaf-kind",
+        "upperExclusive": 4,
+        "value": 3
+      },
+      {
+        "path": "root/3/list/item-body-2/budget-leaf/tie",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/4/document-kind",
+        "upperExclusive": 1713,
+        "value": 61
+      },
+      {
+        "path": "root/4/inline/node-kind",
+        "upperExclusive": 2184,
+        "value": 1384
+      },
+      {
+        "path": "root/4/inline/transform-box/command",
+        "upperExclusive": 292,
+        "value": 49
+      },
+      {
+        "path": "root/4/inline/transform-box/text",
+        "upperExclusive": 3,
+        "value": 2
+      },
+      {
+        "path": "root/4/inline/transform-box/styled",
+        "upperExclusive": 2,
+        "value": 1
+      },
+      {
+        "path": "root/4/inline/transform-box/font",
+        "upperExclusive": 2,
+        "value": 0
+      },
+      {
+        "path": "root/4/inline/transform-box/angle",
+        "upperExclusive": 6,
+        "value": 1
+      },
+      {
+        "path": "root/5/document-kind",
+        "upperExclusive": 1713,
+        "value": 288
+      },
+      {
+        "path": "root/5/paragraph-kind",
+        "upperExclusive": 2,
+        "value": 0
+      },
+      {
+        "path": "root/6/document-kind",
+        "upperExclusive": 1713,
+        "value": 393
+      }
+    ],
+    "features": [
+      "box.dimension.vphantom",
+      "box.tabular",
+      "box.text.colorbox",
+      "box.text.mbox",
+      "box.transform.reflectbox",
+      "box.transform.rotatebox",
+      "document.box.minipage",
+      "document.environment.description",
+      "document.item",
+      "document.noindent",
+      "document.paragraph-break",
+      "document.vertical-glue.vfill",
+      "graphics.format.jpg",
+      "graphics.format.png",
+      "graphics.includegraphics",
+      "graphics.key.height",
+      "graphics.star",
+      "math.display.equation-star",
+      "math.fraction.tfrac",
+      "math.inline",
+      "math.node.atom",
+      "math.node.fraction",
+      "math.node.group",
+      "math.node.radical",
+      "math.node.script",
+      "math.node.text",
+      "math.symbol.)",
+      "math.symbol.*",
+      "math.symbol./",
+      "math.text.mathrm",
+      "math.text.text",
+      "text.accent",
+      "text.bold",
+      "text.color",
+      "text.font-command.textbf",
+      "text.font-command.textit",
+      "text.font-command.textsc",
+      "text.font-declaration.bf",
+      "text.font-declaration.scshape",
+      "text.font-declaration.upshape",
+      "text.italic",
+      "text.literal",
+      "text.space",
+      "text.style-declaration.fontsize",
+      "text.style-declaration.huge",
+      "text.style-declaration.large",
+      "text.style-declaration.normalsize"
+    ],
+    "mutations": []
+  },
+  "minimizedCase": {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 16009,
+    "profile": "document",
+    "ast": [
+      {
+        "kind": "vertical-glue",
+        "command": "vfill"
+      },
+      {
+        "kind": "display-math",
+        "delimiter": "equation-star",
+        "body": {
+          "kind": "group",
+          "body": {
+            "kind": "text",
+            "command": "text",
+            "value": "if"
+          }
+        }
+      },
+      {
+        "kind": "environment",
+        "name": "description",
+        "children": [
+          {
+            "kind": "item",
+            "label": [
+              {
+                "kind": "text",
+                "value": "Label"
+              }
+            ]
+          },
+          {
+            "kind": "box",
+            "command": "colorbox",
+            "backgroundColor": "teal",
+            "children": [
+              {
+                "kind": "style-declaration",
+                "command": "fontsize",
+                "size": {
+                  "amount": 0,
+                  "unit": "em"
+                },
+                "baselineSkip": {
+                  "amount": 32767,
+                  "unit": "pt"
+                },
+                "children": [
+                  {
+                    "kind": "font-declaration",
+                    "command": "scshape",
+                    "children": [
+                      {
+                        "kind": "transform-box",
+                        "command": "rotatebox",
+                        "angle": 0,
+                        "children": [
+                          {
+                            "kind": "text",
+                            "value": "Alpha"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "font-declaration",
+                        "command": "bf",
+                        "children": [
+                          {
+                            "kind": "accent",
+                            "command": "^",
+                            "base": "e"
+                          },
+                          {
+                            "kind": "tabular",
+                            "columns": [
+                              "l"
+                            ],
+                            "position": "c",
+                            "cells": [
+                              [
+                                {
+                                  "kind": "text",
+                                  "value": "Beta"
+                                }
+                              ],
+                              [
+                                {
+                                  "kind": "text",
+                                  "value": "7"
+                                }
+                              ],
+                              [
+                                {
+                                  "kind": "text",
+                                  "value": "A"
+                                }
+                              ]
+                            ]
+                          },
+                          {
+                            "kind": "style-declaration",
+                            "command": "fontsize",
+                            "size": {
+                              "amount": 100,
+                              "unit": "bp"
+                            },
+                            "baselineSkip": {
+                              "amount": 5,
+                              "unit": "bp"
+                            },
+                            "children": [
+                              {
+                                "kind": "transform-box",
+                                "command": "rotatebox",
+                                "angle": 30,
+                                "children": [
+                                  {
+                                    "kind": "text",
+                                    "value": "Alpha"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "includegraphics",
+                        "filename": "fuzz-images/pattern.v2",
+                        "options": [],
+                        "starred": false,
+                        "gap": " "
+                      },
+                      {
+                        "kind": "style-declaration",
+                        "command": "huge",
+                        "children": [
+                          {
+                            "kind": "accent",
+                            "command": "'",
+                            "base": "e"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "text",
+                    "value": "café"
+                  },
+                  {
+                    "kind": "math",
+                    "body": {
+                      "kind": "fraction",
+                      "command": "tfrac",
+                      "numerator": {
+                        "kind": "radical",
+                        "body": {
+                          "kind": "atom",
+                          "value": "*"
+                        }
+                      },
+                      "denominator": {
+                        "kind": "script",
+                        "base": {
+                          "kind": "atom",
+                          "value": "/"
+                        },
+                        "superscript": {
+                          "kind": "atom",
+                          "value": "b"
+                        }
+                      }
+                    },
+                    "delimiter": "dollar"
+                  },
+                  {
+                    "kind": "space",
+                    "nonBreaking": true
+                  }
+                ]
+              },
+              {
+                "kind": "accent",
+                "command": "^",
+                "base": "e"
+              },
+              {
+                "kind": "accent",
+                "command": "^",
+                "base": "e"
+              },
+              {
+                "kind": "text",
+                "value": "Beta"
+              }
+            ]
+          },
+          {
+            "kind": "space",
+            "nonBreaking": true
+          },
+          {
+            "kind": "math",
+            "body": {
+              "kind": "atom",
+              "value": ")"
+            },
+            "delimiter": "dollar"
+          },
+          {
+            "kind": "item"
+          },
+          {
+            "kind": "accent",
+            "command": "^",
+            "base": "e"
+          },
+          {
+            "kind": "item"
+          },
+          {
+            "kind": "space",
+            "nonBreaking": true
+          }
+        ]
+      },
+      {
+        "kind": "transform-box",
+        "command": "rotatebox",
+        "angle": -15,
+        "children": [
+          {
+            "kind": "font",
+            "command": "textbf",
+            "children": [
+              {
+                "kind": "text",
+                "value": "Depth"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "paragraph-break",
+        "command": "blank-line"
+      },
+      {
+        "kind": "noindent"
+      }
+    ],
+    "source": "\\vfill \\begin{equation*}{\\text{if}}\\end{equation*}\\begin{description}\\item[Label] \\colorbox{teal}{{\\fontsize{0em}{32767pt}\\selectfont {\\scshape \\rotatebox{0}{Alpha}{\\bf \\^{e}\\begin{tabular}[c]{l}Beta\\\\7\\\\A\\end{tabular}{\\fontsize{100bp}{5bp}\\selectfont \\rotatebox{30}{Alpha}}}\\includegraphics  {fuzz-images/pattern.v2}{\\huge \\'{e}}}café$\\tfrac{\\sqrt{*}}{{/}^{b}}$~}\\^{e}\\^{e}Beta}~$)$\\item \\^{e}\\item ~\\end{description}\\rotatebox{-15}{\\textbf{Depth}}\n\n\\noindent ",
+    "sourceMap": [
+      {
+        "path": "root/0",
+        "kind": "vertical-glue",
+        "start": 0,
+        "end": 7
+      },
+      {
+        "path": "root/1/math/body",
+        "kind": "math.text",
+        "start": 25,
+        "end": 34
+      },
+      {
+        "path": "root/1/math",
+        "kind": "math.group",
+        "start": 24,
+        "end": 35
+      },
+      {
+        "path": "root/1",
+        "kind": "display-math",
+        "start": 7,
+        "end": 50
+      },
+      {
+        "path": "root/2/children/0/label/0",
+        "kind": "text",
+        "start": 75,
+        "end": 80
+      },
+      {
+        "path": "root/2/children/0",
+        "kind": "item",
+        "start": 69,
+        "end": 82
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/0/children/0",
+        "kind": "text",
+        "start": 158,
+        "end": 163
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/0",
+        "kind": "transform-box",
+        "start": 144,
+        "end": 164
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/1/children/0",
+        "kind": "accent",
+        "start": 169,
+        "end": 174
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/1/children/1/cells/0/0/0",
+        "kind": "text",
+        "start": 195,
+        "end": 199
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/1/children/1/cells/1/0/0",
+        "kind": "text",
+        "start": 201,
+        "end": 202
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/1/children/1/cells/2/0/0",
+        "kind": "text",
+        "start": 204,
+        "end": 205
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/1/children/1",
+        "kind": "tabular",
+        "start": 174,
+        "end": 218
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/1/children/2/children/0/children/0",
+        "kind": "text",
+        "start": 267,
+        "end": 272
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/1/children/2/children/0",
+        "kind": "transform-box",
+        "start": 252,
+        "end": 273
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/1/children/2",
+        "kind": "style-declaration",
+        "start": 218,
+        "end": 274
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/1",
+        "kind": "font-declaration",
+        "start": 164,
+        "end": 275
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/2",
+        "kind": "includegraphics",
+        "start": 275,
+        "end": 317
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/3/children/0",
+        "kind": "accent",
+        "start": 324,
+        "end": 329
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0/children/3",
+        "kind": "style-declaration",
+        "start": 317,
+        "end": 330
+      },
+      {
+        "path": "root/2/children/1/children/0/children/0",
+        "kind": "font-declaration",
+        "start": 134,
+        "end": 331
+      },
+      {
+        "path": "root/2/children/1/children/0/children/1",
+        "kind": "text",
+        "start": 331,
+        "end": 335
+      },
+      {
+        "path": "root/2/children/1/children/0/children/2/math/numerator/body",
+        "kind": "math.atom",
+        "start": 349,
+        "end": 350
+      },
+      {
+        "path": "root/2/children/1/children/0/children/2/math/numerator",
+        "kind": "math.radical",
+        "start": 343,
+        "end": 351
+      },
+      {
+        "path": "root/2/children/1/children/0/children/2/math/denominator/base",
+        "kind": "math.atom",
+        "start": 354,
+        "end": 355
+      },
+      {
+        "path": "root/2/children/1/children/0/children/2/math/denominator/superscript",
+        "kind": "math.atom",
+        "start": 358,
+        "end": 359
+      },
+      {
+        "path": "root/2/children/1/children/0/children/2/math/denominator",
+        "kind": "math.script",
+        "start": 353,
+        "end": 360
+      },
+      {
+        "path": "root/2/children/1/children/0/children/2/math",
+        "kind": "math.fraction",
+        "start": 336,
+        "end": 361
+      },
+      {
+        "path": "root/2/children/1/children/0/children/2",
+        "kind": "math",
+        "start": 335,
+        "end": 362
+      },
+      {
+        "path": "root/2/children/1/children/0/children/3",
+        "kind": "space",
+        "start": 362,
+        "end": 363
+      },
+      {
+        "path": "root/2/children/1/children/0",
+        "kind": "style-declaration",
+        "start": 98,
+        "end": 364
+      },
+      {
+        "path": "root/2/children/1/children/1",
+        "kind": "accent",
+        "start": 364,
+        "end": 369
+      },
+      {
+        "path": "root/2/children/1/children/2",
+        "kind": "accent",
+        "start": 369,
+        "end": 374
+      },
+      {
+        "path": "root/2/children/1/children/3",
+        "kind": "text",
+        "start": 374,
+        "end": 378
+      },
+      {
+        "path": "root/2/children/1",
+        "kind": "box",
+        "start": 82,
+        "end": 379
+      },
+      {
+        "path": "root/2/children/2",
+        "kind": "space",
+        "start": 379,
+        "end": 380
+      },
+      {
+        "path": "root/2/children/3/math",
+        "kind": "math.atom",
+        "start": 381,
+        "end": 382
+      },
+      {
+        "path": "root/2/children/3",
+        "kind": "math",
+        "start": 380,
+        "end": 383
+      },
+      {
+        "path": "root/2/children/4",
+        "kind": "item",
+        "start": 383,
+        "end": 389
+      },
+      {
+        "path": "root/2/children/5",
+        "kind": "accent",
+        "start": 389,
+        "end": 394
+      },
+      {
+        "path": "root/2/children/6",
+        "kind": "item",
+        "start": 394,
+        "end": 400
+      },
+      {
+        "path": "root/2/children/7",
+        "kind": "space",
+        "start": 400,
+        "end": 401
+      },
+      {
+        "path": "root/2",
+        "kind": "environment",
+        "start": 50,
+        "end": 418
+      },
+      {
+        "path": "root/3/children/0/children/0",
+        "kind": "text",
+        "start": 442,
+        "end": 447
+      },
+      {
+        "path": "root/3/children/0",
+        "kind": "font",
+        "start": 434,
+        "end": 448
+      },
+      {
+        "path": "root/3",
+        "kind": "transform-box",
+        "start": 418,
+        "end": 449
+      },
+      {
+        "path": "root/4",
+        "kind": "paragraph-break",
+        "start": 449,
+        "end": 451
+      },
+      {
+        "path": "root/5",
+        "kind": "noindent",
+        "start": 451,
+        "end": 461
+      }
+    ],
+    "choices": [],
+    "features": [
+      "box.tabular",
+      "box.text.colorbox",
+      "box.transform.rotatebox",
+      "document.environment.description",
+      "document.item",
+      "document.noindent",
+      "document.paragraph-break",
+      "document.vertical-glue.vfill",
+      "graphics.format.png",
+      "graphics.includegraphics",
+      "math.display.equation-star",
+      "math.fraction.tfrac",
+      "math.inline",
+      "math.node.atom",
+      "math.node.fraction",
+      "math.node.group",
+      "math.node.radical",
+      "math.node.script",
+      "math.node.text",
+      "math.symbol.)",
+      "math.symbol.*",
+      "math.symbol./",
+      "math.text.text",
+      "text.accent",
+      "text.bold",
+      "text.font-command.textbf",
+      "text.font-declaration.bf",
+      "text.font-declaration.scshape",
+      "text.literal",
+      "text.space",
+      "text.style-declaration.fontsize",
+      "text.style-declaration.huge"
+    ],
+    "mutations": []
+  },
+  "observation": {
+    "fingerprint": {
+      "version": 1,
+      "resultClass": "hard-invariant",
+      "code": "image-paint-count",
+      "featureTags": [
+        "box.dimension.vphantom",
+        "box.tabular",
+        "box.text.colorbox",
+        "box.text.mbox",
+        "box.transform.reflectbox",
+        "box.transform.rotatebox",
+        "document.box.minipage",
+        "document.environment.description",
+        "document.item",
+        "document.noindent",
+        "document.paragraph-break",
+        "document.vertical-glue.vfill",
+        "graphics.format.jpg",
+        "graphics.format.png",
+        "graphics.includegraphics",
+        "graphics.key.height",
+        "graphics.star",
+        "math.display.equation-star",
+        "math.fraction.tfrac",
+        "math.inline",
+        "math.node.atom",
+        "math.node.fraction",
+        "math.node.group",
+        "math.node.radical",
+        "math.node.script",
+        "math.node.text",
+        "math.symbol.)",
+        "math.symbol.*",
+        "math.symbol./",
+        "math.text.mathrm",
+        "math.text.text",
+        "text.accent",
+        "text.bold",
+        "text.color",
+        "text.font-command.textbf",
+        "text.font-command.textit",
+        "text.font-command.textsc",
+        "text.font-declaration.bf",
+        "text.font-declaration.scshape",
+        "text.font-declaration.upshape",
+        "text.italic",
+        "text.literal",
+        "text.space",
+        "text.style-declaration.fontsize",
+        "text.style-declaration.huge",
+        "text.style-declaration.large",
+        "text.style-declaration.normalsize"
+      ],
+      "mode": "text",
+      "structuralLocus": "paragraph/content/includegraphics/width-480"
+    },
+    "detail": {
+      "width": 480,
+      "expected": 2,
+      "actual": 1
+    }
+  },
+  "shrink": {
+    "candidatesEvaluated": 50,
+    "oracleEvaluations": 0,
+    "termination": "candidate-budget"
+  },
+  "oracleEnvironment": {
+    "node": "v22.23.4",
+    "platform": "linux-x64",
+    "runner": "native-hard-invariants-v3"
+  },
+  "artifactSchemaVersion": 1,
+  "findingId": "tf1-e632296b3e8e6ab9b409566f",
+  "witnessId": "tw1-689b2c2fdc45512674af465a"
+}

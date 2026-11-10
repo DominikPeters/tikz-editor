@@ -1,0 +1,1238 @@
+[
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10045,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "sequence",
+          "items": [
+            {
+              "kind": "alphabet",
+              "command": "mathfrak",
+              "body": {
+                "kind": "atom",
+                "value": "z"
+              }
+            },
+            {
+              "kind": "fraction",
+              "command": "binom",
+              "numerator": {
+                "kind": "atom",
+                "value": ","
+              },
+              "denominator": {
+                "kind": "atom",
+                "value": "<"
+              }
+            },
+            {
+              "kind": "alphabet",
+              "command": "boldsymbol",
+              "body": {
+                "kind": "atom",
+                "value": "["
+              }
+            }
+          ],
+          "operators": [
+            ";",
+            ";"
+          ]
+        },
+        "delimiter": "paren"
+      }
+    ],
+    "source": "\\(\\mathfrak{z};\\binom{,}{<};\\boldsymbol{[}\\)",
+    "sourceMap": [
+      {
+        "path": "root/0/math/items/0/body",
+        "kind": "math.atom",
+        "start": 12,
+        "end": 13
+      },
+      {
+        "path": "root/0/math/items/0",
+        "kind": "math.alphabet",
+        "start": 2,
+        "end": 14
+      },
+      {
+        "path": "root/0/math/items/1/numerator",
+        "kind": "math.atom",
+        "start": 22,
+        "end": 23
+      },
+      {
+        "path": "root/0/math/items/1/denominator",
+        "kind": "math.atom",
+        "start": 25,
+        "end": 26
+      },
+      {
+        "path": "root/0/math/items/1",
+        "kind": "math.fraction",
+        "start": 15,
+        "end": 27
+      },
+      {
+        "path": "root/0/math/items/2/body",
+        "kind": "math.atom",
+        "start": 40,
+        "end": 41
+      },
+      {
+        "path": "root/0/math/items/2",
+        "kind": "math.alphabet",
+        "start": 28,
+        "end": 42
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.sequence",
+        "start": 2,
+        "end": 42
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 44
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.alphabet.boldsymbol",
+      "math.alphabet.mathfrak",
+      "math.fraction.binom",
+      "math.inline",
+      "math.node.alphabet",
+      "math.node.atom",
+      "math.node.fraction",
+      "math.node.sequence",
+      "math.symbol.,",
+      "math.symbol.;",
+      "math.symbol.<",
+      "math.symbol.["
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10045,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "accent",
+          "command": "tilde",
+          "body": {
+            "kind": "atom",
+            "value": "\\vert"
+          }
+        },
+        "delimiter": "paren"
+      }
+    ],
+    "source": "\\(\\tilde{\\vert}\\)",
+    "sourceMap": [
+      {
+        "path": "root/0/math/body",
+        "kind": "math.atom",
+        "start": 9,
+        "end": 14
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.accent",
+        "start": 2,
+        "end": 15
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 17
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.accent.tilde",
+      "math.inline",
+      "math.node.accent",
+      "math.node.atom",
+      "math.symbol.\\vert"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10045,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "sequence",
+          "items": [
+            {
+              "kind": "left-right",
+              "left": "(",
+              "right": ")",
+              "body": {
+                "kind": "atom",
+                "value": ")"
+              }
+            },
+            {
+              "kind": "xarrow",
+              "command": "xrightarrow",
+              "above": {
+                "kind": "atom",
+                "value": "\\}"
+              }
+            }
+          ],
+          "operators": [
+            ":"
+          ]
+        },
+        "delimiter": "dollar"
+      }
+    ],
+    "source": "$\\left()\\right):\\xrightarrow{\\}}$",
+    "sourceMap": [
+      {
+        "path": "root/0/math/items/0/body",
+        "kind": "math.atom",
+        "start": 7,
+        "end": 8
+      },
+      {
+        "path": "root/0/math/items/0",
+        "kind": "math.left-right",
+        "start": 1,
+        "end": 15
+      },
+      {
+        "path": "root/0/math/items/1/above",
+        "kind": "math.atom",
+        "start": 29,
+        "end": 31
+      },
+      {
+        "path": "root/0/math/items/1",
+        "kind": "math.xarrow",
+        "start": 16,
+        "end": 32
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.sequence",
+        "start": 1,
+        "end": 32
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 33
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.inline",
+      "math.node.atom",
+      "math.node.left-right",
+      "math.node.sequence",
+      "math.node.xarrow",
+      "math.symbol.)",
+      "math.symbol.:",
+      "math.symbol.\\}",
+      "math.xarrow.xrightarrow"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10045,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "atom",
+          "value": "y"
+        },
+        "delimiter": "paren"
+      }
+    ],
+    "source": "\\(y\\)",
+    "sourceMap": [
+      {
+        "path": "root/0/math",
+        "kind": "math.atom",
+        "start": 2,
+        "end": 3
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 5
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.inline",
+      "math.node.atom"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10045,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "line",
+          "command": "overbrace",
+          "body": {
+            "kind": "alphabet",
+            "command": "mathfrak",
+            "body": {
+              "kind": "atom",
+              "value": "/"
+            }
+          }
+        },
+        "delimiter": "dollar"
+      }
+    ],
+    "source": "$\\overbrace{\\mathfrak{/}}$",
+    "sourceMap": [
+      {
+        "path": "root/0/math/body/body",
+        "kind": "math.atom",
+        "start": 22,
+        "end": 23
+      },
+      {
+        "path": "root/0/math/body",
+        "kind": "math.alphabet",
+        "start": 12,
+        "end": 24
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.line",
+        "start": 1,
+        "end": 25
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 26
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.alphabet.mathfrak",
+      "math.inline",
+      "math.line.overbrace",
+      "math.node.alphabet",
+      "math.node.atom",
+      "math.node.line",
+      "math.symbol./"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10046,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "script",
+          "base": {
+            "kind": "left-right",
+            "left": "\\lbrace",
+            "right": "\\rbrace",
+            "body": {
+              "kind": "atom",
+              "value": "1"
+            }
+          },
+          "superscript": {
+            "kind": "stackrel",
+            "above": {
+              "kind": "atom",
+              "value": "\\partial"
+            },
+            "body": {
+              "kind": "atom",
+              "value": "x"
+            }
+          }
+        },
+        "delimiter": "paren"
+      }
+    ],
+    "source": "\\({\\left\\lbrace{}1\\right\\rbrace}^{\\stackrel{\\partial}{x}}\\)",
+    "sourceMap": [
+      {
+        "path": "root/0/math/base/body",
+        "kind": "math.atom",
+        "start": 17,
+        "end": 18
+      },
+      {
+        "path": "root/0/math/base",
+        "kind": "math.left-right",
+        "start": 3,
+        "end": 31
+      },
+      {
+        "path": "root/0/math/superscript/above",
+        "kind": "math.atom",
+        "start": 44,
+        "end": 52
+      },
+      {
+        "path": "root/0/math/superscript/body",
+        "kind": "math.atom",
+        "start": 54,
+        "end": 55
+      },
+      {
+        "path": "root/0/math/superscript",
+        "kind": "math.stackrel",
+        "start": 34,
+        "end": 56
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.script",
+        "start": 2,
+        "end": 57
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 59
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.inline",
+      "math.node.atom",
+      "math.node.left-right",
+      "math.node.script",
+      "math.node.stackrel"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10046,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "fraction",
+          "command": "tfrac",
+          "numerator": {
+            "kind": "operator",
+            "command": "lim",
+            "script": {
+              "kind": "atom",
+              "value": "\\infty"
+            }
+          },
+          "denominator": {
+            "kind": "operator",
+            "command": "lim",
+            "script": {
+              "kind": "atom",
+              "value": "\\partial"
+            }
+          }
+        },
+        "delimiter": "dollar"
+      }
+    ],
+    "source": "$\\tfrac{\\lim_{\\infty}}{\\lim_{\\partial}}$",
+    "sourceMap": [
+      {
+        "path": "root/0/math/numerator/script",
+        "kind": "math.atom",
+        "start": 14,
+        "end": 20
+      },
+      {
+        "path": "root/0/math/numerator",
+        "kind": "math.operator",
+        "start": 8,
+        "end": 21
+      },
+      {
+        "path": "root/0/math/denominator/script",
+        "kind": "math.atom",
+        "start": 29,
+        "end": 37
+      },
+      {
+        "path": "root/0/math/denominator",
+        "kind": "math.operator",
+        "start": 23,
+        "end": 38
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.fraction",
+        "start": 1,
+        "end": 39
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 40
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.fraction.tfrac",
+      "math.inline",
+      "math.node.atom",
+      "math.node.fraction",
+      "math.node.operator",
+      "math.operator.lim"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10050,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "xarrow",
+          "command": "xrightarrow",
+          "below": {
+            "kind": "matrix",
+            "environment": "cases",
+            "cells": [
+              [
+                {
+                  "kind": "atom",
+                  "value": "."
+                },
+                {
+                  "kind": "atom",
+                  "value": "\\Vert"
+                }
+              ],
+              [
+                {
+                  "kind": "atom",
+                  "value": "?"
+                },
+                {
+                  "kind": "atom",
+                  "value": "1"
+                }
+              ]
+            ]
+          },
+          "above": {
+            "kind": "fraction",
+            "command": "dfrac",
+            "numerator": {
+              "kind": "atom",
+              "value": "-"
+            },
+            "denominator": {
+              "kind": "atom",
+              "value": "?"
+            }
+          }
+        },
+        "delimiter": "dollar"
+      }
+    ],
+    "source": "$\\xrightarrow[{\\begin{cases}.&\\Vert\\\\?&1\\end{cases}}]{\\dfrac{-}{?}}$",
+    "sourceMap": [
+      {
+        "path": "root/0/math/below/cells/0/0",
+        "kind": "math.atom",
+        "start": 28,
+        "end": 29
+      },
+      {
+        "path": "root/0/math/below/cells/0/1",
+        "kind": "math.atom",
+        "start": 30,
+        "end": 35
+      },
+      {
+        "path": "root/0/math/below/cells/1/0",
+        "kind": "math.atom",
+        "start": 37,
+        "end": 38
+      },
+      {
+        "path": "root/0/math/below/cells/1/1",
+        "kind": "math.atom",
+        "start": 39,
+        "end": 40
+      },
+      {
+        "path": "root/0/math/below",
+        "kind": "math.matrix",
+        "start": 15,
+        "end": 51
+      },
+      {
+        "path": "root/0/math/above/numerator",
+        "kind": "math.atom",
+        "start": 61,
+        "end": 62
+      },
+      {
+        "path": "root/0/math/above/denominator",
+        "kind": "math.atom",
+        "start": 64,
+        "end": 65
+      },
+      {
+        "path": "root/0/math/above",
+        "kind": "math.fraction",
+        "start": 54,
+        "end": 66
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.xarrow",
+        "start": 1,
+        "end": 67
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 68
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.fraction.dfrac",
+      "math.inline",
+      "math.matrix.cases",
+      "math.node.atom",
+      "math.node.fraction",
+      "math.node.matrix",
+      "math.node.xarrow",
+      "math.symbol.-",
+      "math.symbol..",
+      "math.symbol.?",
+      "math.symbol.\\Vert",
+      "math.xarrow.xrightarrow"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10053,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "line",
+          "command": "overbrace",
+          "body": {
+            "kind": "group",
+            "body": {
+              "kind": "atom",
+              "value": "\\Vert"
+            }
+          }
+        },
+        "delimiter": "paren"
+      }
+    ],
+    "source": "\\(\\overbrace{{\\Vert}}\\)",
+    "sourceMap": [
+      {
+        "path": "root/0/math/body/body",
+        "kind": "math.atom",
+        "start": 14,
+        "end": 19
+      },
+      {
+        "path": "root/0/math/body",
+        "kind": "math.group",
+        "start": 13,
+        "end": 20
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.line",
+        "start": 2,
+        "end": 21
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 23
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.inline",
+      "math.line.overbrace",
+      "math.node.atom",
+      "math.node.group",
+      "math.node.line",
+      "math.symbol.\\Vert"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10053,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "radical",
+          "degree": {
+            "kind": "line",
+            "command": "underline",
+            "body": {
+              "kind": "atom",
+              "value": "1"
+            }
+          },
+          "body": {
+            "kind": "operator",
+            "command": "bigcup"
+          }
+        },
+        "delimiter": "paren"
+      }
+    ],
+    "source": "\\(\\sqrt[{\\underline{1}}]{\\bigcup}\\)",
+    "sourceMap": [
+      {
+        "path": "root/0/math/degree/body",
+        "kind": "math.atom",
+        "start": 20,
+        "end": 21
+      },
+      {
+        "path": "root/0/math/degree",
+        "kind": "math.line",
+        "start": 9,
+        "end": 22
+      },
+      {
+        "path": "root/0/math/body",
+        "kind": "math.operator",
+        "start": 25,
+        "end": 32
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.radical",
+        "start": 2,
+        "end": 33
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 35
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.inline",
+      "math.line.underline",
+      "math.node.atom",
+      "math.node.line",
+      "math.node.operator",
+      "math.node.radical",
+      "math.operator.bigcup"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10053,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "radical",
+          "degree": {
+            "kind": "operator",
+            "command": "bigcup"
+          },
+          "body": {
+            "kind": "line",
+            "command": "overbrace",
+            "body": {
+              "kind": "atom",
+              "value": "<"
+            }
+          }
+        },
+        "delimiter": "dollar"
+      }
+    ],
+    "source": "$\\sqrt[{\\bigcup}]{\\overbrace{<}}$",
+    "sourceMap": [
+      {
+        "path": "root/0/math/degree",
+        "kind": "math.operator",
+        "start": 8,
+        "end": 15
+      },
+      {
+        "path": "root/0/math/body/body",
+        "kind": "math.atom",
+        "start": 29,
+        "end": 30
+      },
+      {
+        "path": "root/0/math/body",
+        "kind": "math.line",
+        "start": 18,
+        "end": 31
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.radical",
+        "start": 1,
+        "end": 32
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 33
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.inline",
+      "math.line.overbrace",
+      "math.node.atom",
+      "math.node.line",
+      "math.node.operator",
+      "math.node.radical",
+      "math.operator.bigcup",
+      "math.symbol.<"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10059,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "fraction",
+          "command": "dfrac",
+          "numerator": {
+            "kind": "atom",
+            "value": "("
+          },
+          "denominator": {
+            "kind": "atom",
+            "value": "\\lvert"
+          }
+        },
+        "delimiter": "paren"
+      }
+    ],
+    "source": "\\(\\dfrac{(}{\\lvert}\\)",
+    "sourceMap": [
+      {
+        "path": "root/0/math/numerator",
+        "kind": "math.atom",
+        "start": 9,
+        "end": 10
+      },
+      {
+        "path": "root/0/math/denominator",
+        "kind": "math.atom",
+        "start": 12,
+        "end": 18
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.fraction",
+        "start": 2,
+        "end": 19
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 21
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.fraction.dfrac",
+      "math.inline",
+      "math.node.atom",
+      "math.node.fraction",
+      "math.symbol.(",
+      "math.symbol.\\lvert"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10065,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "fraction",
+          "command": "binom",
+          "numerator": {
+            "kind": "matrix",
+            "environment": "cases",
+            "cells": [
+              [
+                {
+                  "kind": "atom",
+                  "value": "\\infty"
+                },
+                {
+                  "kind": "atom",
+                  "value": "x"
+                }
+              ],
+              [
+                {
+                  "kind": "atom",
+                  "value": "b"
+                },
+                {
+                  "kind": "atom",
+                  "value": "*"
+                }
+              ],
+              [
+                {
+                  "kind": "atom",
+                  "value": "\\parallel"
+                },
+                {
+                  "kind": "atom",
+                  "value": "\\alpha"
+                }
+              ]
+            ]
+          },
+          "denominator": {
+            "kind": "script",
+            "base": {
+              "kind": "atom",
+              "value": "."
+            },
+            "superscript": {
+              "kind": "atom",
+              "value": "\\rVert"
+            }
+          }
+        },
+        "delimiter": "paren"
+      }
+    ],
+    "source": "\\(\\binom{\\begin{cases}\\infty&x\\\\b&*\\\\\\parallel&\\alpha\\end{cases}}{{.}^{\\rVert}}\\)",
+    "sourceMap": [
+      {
+        "path": "root/0/math/numerator/cells/0/0",
+        "kind": "math.atom",
+        "start": 22,
+        "end": 28
+      },
+      {
+        "path": "root/0/math/numerator/cells/0/1",
+        "kind": "math.atom",
+        "start": 29,
+        "end": 30
+      },
+      {
+        "path": "root/0/math/numerator/cells/1/0",
+        "kind": "math.atom",
+        "start": 32,
+        "end": 33
+      },
+      {
+        "path": "root/0/math/numerator/cells/1/1",
+        "kind": "math.atom",
+        "start": 34,
+        "end": 35
+      },
+      {
+        "path": "root/0/math/numerator/cells/2/0",
+        "kind": "math.atom",
+        "start": 37,
+        "end": 46
+      },
+      {
+        "path": "root/0/math/numerator/cells/2/1",
+        "kind": "math.atom",
+        "start": 47,
+        "end": 53
+      },
+      {
+        "path": "root/0/math/numerator",
+        "kind": "math.matrix",
+        "start": 9,
+        "end": 64
+      },
+      {
+        "path": "root/0/math/denominator/base",
+        "kind": "math.atom",
+        "start": 67,
+        "end": 68
+      },
+      {
+        "path": "root/0/math/denominator/superscript",
+        "kind": "math.atom",
+        "start": 71,
+        "end": 77
+      },
+      {
+        "path": "root/0/math/denominator",
+        "kind": "math.script",
+        "start": 66,
+        "end": 78
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.fraction",
+        "start": 2,
+        "end": 79
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 81
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.fraction.binom",
+      "math.inline",
+      "math.matrix.cases",
+      "math.node.atom",
+      "math.node.fraction",
+      "math.node.matrix",
+      "math.node.script",
+      "math.symbol.*",
+      "math.symbol..",
+      "math.symbol.\\parallel",
+      "math.symbol.\\rVert"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10066,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "atom",
+          "value": "x"
+        },
+        "delimiter": "dollar"
+      }
+    ],
+    "source": "$x$",
+    "sourceMap": [
+      {
+        "path": "root/0/math",
+        "kind": "math.atom",
+        "start": 1,
+        "end": 2
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 3
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.inline",
+      "math.node.atom"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10071,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "stackrel",
+          "above": {
+            "kind": "text",
+            "command": "mathrm",
+            "value": "if"
+          },
+          "body": {
+            "kind": "text",
+            "command": "mathrm",
+            "value": "if"
+          }
+        },
+        "delimiter": "dollar"
+      }
+    ],
+    "source": "$\\stackrel{\\mathrm{if}}{\\mathrm{if}}$",
+    "sourceMap": [
+      {
+        "path": "root/0/math/above",
+        "kind": "math.text",
+        "start": 11,
+        "end": 22
+      },
+      {
+        "path": "root/0/math/body",
+        "kind": "math.text",
+        "start": 24,
+        "end": 35
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.stackrel",
+        "start": 1,
+        "end": 36
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 37
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.inline",
+      "math.node.stackrel",
+      "math.node.text",
+      "math.text.mathrm"
+    ],
+    "mutations": []
+  },
+  {
+    "schemaVersion": 1,
+    "generatorVersion": "shared-adversarial-v4-images",
+    "seed": 10072,
+    "profile": "supported-aggressive",
+    "ast": [
+      {
+        "kind": "math",
+        "body": {
+          "kind": "radical",
+          "body": {
+            "kind": "left-right",
+            "left": "|",
+            "right": "|",
+            "body": {
+              "kind": "atom",
+              "value": "\\beta"
+            }
+          }
+        },
+        "delimiter": "dollar"
+      }
+    ],
+    "source": "$\\sqrt{\\left|\\beta\\right|}$",
+    "sourceMap": [
+      {
+        "path": "root/0/math/body/body",
+        "kind": "math.atom",
+        "start": 13,
+        "end": 18
+      },
+      {
+        "path": "root/0/math/body",
+        "kind": "math.left-right",
+        "start": 7,
+        "end": 25
+      },
+      {
+        "path": "root/0/math",
+        "kind": "math.radical",
+        "start": 1,
+        "end": 26
+      },
+      {
+        "path": "root/0",
+        "kind": "math",
+        "start": 0,
+        "end": 27
+      }
+    ],
+    "choices": [],
+    "features": [
+      "math.inline",
+      "math.node.atom",
+      "math.node.left-right",
+      "math.node.radical"
+    ],
+    "mutations": []
+  }
+]

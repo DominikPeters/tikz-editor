@@ -30,6 +30,11 @@ export type StealthShapeParameters = {
 type ArrowTipInput = Omit<ArrowTip, "afterLineEnd"> & { afterLineEnd?: boolean };
 
 export function normalizeArrowTip(tip: ArrowTipInput, contextLineWidth: number, fallbackColor: string): NormalizedArrowTip {
+  if (tip.kind === "to") {
+    const shaftWidth = normalizeLineWidth(contextLineWidth, DEFAULT_CONTEXT_LINE_WIDTH);
+    const unit = .28 + .3 * shaftWidth;
+    tip = { ...tip, length: 3.75 * unit, width: 8 * unit, lineWidth: .8 * shaftWidth, open: true, round: true };
+  }
   const length = Number.isFinite(tip.length) ? Math.max(0.01, tip.length) : 0.01;
   const width = Number.isFinite(tip.width) ? Math.max(0.01, tip.width) : 0.01;
   let lineWidth = normalizeLineWidth(tip.lineWidth, contextLineWidth);
@@ -93,6 +98,13 @@ export function computeArrowShortening(side: ArrowSide, tips: NormalizedArrowTip
 }
 
 export function buildArrowTipMetrics(tip: NormalizedArrowTip, contextLineWidth: number): ArrowTipMetrics {
+  if (tip.kind === "to") {
+    const width = normalizeLineWidth(contextLineWidth, DEFAULT_CONTEXT_LINE_WIDTH);
+    const tipEnd = .21 + .625 * width;
+    const backEnd = -.84 - 1.3 * width;
+    const metrics = { tipEnd, backEnd, lineEnd: 0, visualTipEnd: tipEnd, visualBackEnd: backEnd, sep: tip.sep };
+    return tip.reversed ? reverseMetrics(metrics) : metrics;
+  }
   if (tip.kind === "latex") {
     const params = computeLatexShapeParameters(tip);
     let metrics: ArrowTipMetrics = {

@@ -78,6 +78,8 @@ export interface TexListLayoutProfile {
   readonly selectBodyFontBeforeList?: boolean;
   /** Class-owned center/flushleft/flushright (trivlist) boundary skips. */
   readonly trivlistTopsepPt?: number;
+  /** Live topsep after a class's begin-list hook, distinct from captured list boundary glue. */
+  readonly liveListTopsepPt?: number;
   readonly trivlistPartopsepPt?: number;
   /** Size commands replace the first-level list defaults in LaTeX classes. */
   readonly sizeOverrides?: readonly { readonly fontSizePt: number; readonly topsepPt: number; readonly topsepStretchPt: number; readonly topsepShrinkPt: number; readonly parsepPt: number; readonly parsepStretchPt: number; readonly parsepShrinkPt: number; readonly itemsepPt: number; readonly itemsepStretchPt: number; readonly itemsepShrinkPt: number }[];

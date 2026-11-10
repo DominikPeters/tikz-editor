@@ -267,6 +267,7 @@ export interface SimpleTexStyleDeclarationNode extends SimpleTexSourceRange {
   readonly sizePt?: TexLength;
   readonly baselineSkipPt?: TexLength;
   readonly restoreColor?: string | null;
+  readonly restoreFontDeclarations?: readonly SimpleTexFontDeclarationName[];
   readonly sizeScope?: { readonly boundary: "begin" | "end"; readonly name: string };
   readonly sizeCommand?: string;
   readonly listRegisters?: Partial<Record<"topsep" | "partopsep" | "itemsep" | "parsep" | "parskip", string>>;
@@ -649,6 +650,7 @@ export interface SimpleTexParagraphBlock {
   readonly explicitBaselineSkip?: boolean;
   /** List-scoped declarations inherited before this source-owned paragraph. */
   readonly inheritedFontState?: Partial<SimpleTexFontState>;
+  readonly inheritedFontDeclarations?: readonly SimpleTexFontDeclarationName[];
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -842,6 +844,7 @@ export interface SimpleTexSegmentInput {
   readonly explicitFontSize?: boolean;
   readonly explicitBaselineSkip?: boolean;
   readonly inheritedFontState?: Partial<SimpleTexFontState>;
+  readonly inheritedFontDeclarations?: readonly SimpleTexFontDeclarationName[];
   readonly text: string;
   readonly sourceSpan: {
     readonly start: number;
@@ -4365,9 +4368,7 @@ function scanSimpleTexGroup(
     resolveColorAlias
   );
   const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
-  const blockChildren = (childScan.nodes.some(node => node.kind === "display-math") ||
-      (!childScan.nodes.some(node => node.kind === "font-declaration") &&
-       childScan.nodes.some(node => !isSimpleTexInlineNode(node)))) &&
+  const blockChildren = childScan.nodes.some(node => !isSimpleTexInlineNode(node)) &&
     childScan.nodes.every(node => node.kind !== "unsupported-command")
     ? childScan.nodes : undefined;
   return {
@@ -4608,9 +4609,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
 ): SimpleTexParagraphBlockScanResult {
   const initialSize = texLength(options?.fontSizePt ?? 10);
   const initialBaseline = options?.baselineSkipPt === undefined ? undefined : texLength(options.baselineSkipPt);
-  type SizeState = SimpleTexDisplayMathState & { sizePt: TexLength; color?: string; selectionFrom?: number; displaySkipSelectionFrom?: number };
+  type SizeState = SimpleTexDisplayMathState & { sizePt: TexLength; color?: string; fontDeclarations: readonly SimpleTexFontDeclarationName[]; selectionFrom?: number; displaySkipSelectionFrom?: number };
   const normalFontSizePt = texLength(options?.namedFontSizes?.normalsize?.sizePt ?? 10);
-  const initialState: SizeState = { sizePt: initialSize, ...(initialBaseline !== undefined ? { baselineSkip: initialBaseline } : {}), normalFontSizePt };
+  const initialState: SizeState = { sizePt: initialSize, fontDeclarations: [], ...(initialBaseline !== undefined ? { baselineSkip: initialBaseline } : {}), normalFontSizePt };
   let sizeState: SizeState = initialState;
   const sizeScopes: SizeState[] = [];
   const sizeEnvironments: { name: string; outer: SizeState; item?: SizeState }[] = [];
@@ -4654,6 +4655,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const { strutBaselineSkipPt: _strutBaselineSkipPt, ...rule } = node;
       return { ...rule, ...(sizeState.baselineSkip !== undefined ? { strutBaselineSkipPt: sizeState.baselineSkip } : {}) };
     }
+    if (node.kind === "font-declaration") {
+      sizeState = { ...sizeState, fontDeclarations: [...sizeState.fontDeclarations, node.command] };
+      sizeHistory.push({ from: node.sourceEnd, state: sizeState });
+    }
     if (node.kind !== "style-declaration") return node;
     if (node.color !== undefined) sizeState = { ...sizeState, color: node.color };
     const name = node.sizeScope?.boundary === "begin" ? node.sizeScope.name : node.sizeCommand;
@@ -4672,7 +4677,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     } else if (!node.sizeScope && node.color === undefined) return node;
     sizeHistory.push({ from: node.sourceEnd, state: sizeState });
     const { baselineSkipPt: _baselineSkipPt, ...declaration } = node;
-    return { ...declaration, ...(node.sizeScope?.boundary === "end" ? { restoreColor: sizeState.color ?? null } : {}), sizePt: sizeState.sizePt, ...(sizeState.baselineSkip !== undefined ? { baselineSkipPt: sizeState.baselineSkip } : {}) };
+    return { ...declaration, ...(node.sizeScope?.boundary === "end" ? { restoreColor: sizeState.color ?? null, restoreFontDeclarations: sizeState.fontDeclarations } : {}), sizePt: sizeState.sizePt, ...(sizeState.baselineSkip !== undefined ? { baselineSkipPt: sizeState.baselineSkip } : {}) };
   });
   sourceNodes = resolveSizeNodes(sourceNodes);
   type AlignmentState = NonNullable<SimpleTexParagraphBlock["alignmentGroupState"]>;
@@ -4932,7 +4937,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
     }
     const leadingTrivlist = scopeStack.filter(role => role.kind === "trivlist").at(-1);
     const inlineNodes = simpleTexInlineNodesForRange(sourceNodes, start, end);
-    const hasOnlyDeclarations = inlineNodes.every(node => ["space", "comment", "style-declaration", "font-declaration"].includes(node.kind));
+    const declarationOnly = (node: SimpleTexInlineNode): boolean => node.kind === "group"
+      ? node.children.every(declarationOnly)
+      : ["space", "comment", "style-declaration", "font-declaration"].includes(node.kind);
+    const hasOnlyDeclarations = inlineNodes.every(declarationOnly);
     const shipsEmptyLine = beforeDisplay && hasOnlyDeclarations && leadingTrivlist !== undefined && !trivlistsWithParagraph.has(leadingTrivlist);
     const permitsEmpty = allowEmptyListItem && pendingListShowLabel || shipsEmptyLine;
     if (start < end || permitsEmpty) {
@@ -4955,7 +4963,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       }
       // Declarations in vertical mode select registers without creating an
       // empty prose paragraph (notably assignments before the first item).
-      if (nodes.every(node => ["space", "comment", "style-declaration", "font-declaration"].includes(node.kind)) && !permitsEmpty) return;
+      if (nodes.every(declarationOnly) && !permitsEmpty) return;
       if (listStack.length > 0 && !listContext) {
         // Material before a list's first `\item` fails to compile in LaTeX
         // ("perhaps a missing \item"), so it is outside the supported
@@ -4976,7 +4984,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       }
       unsupportedCommand ||= simpleTexBlockStartsWithVerticalModeLapBox(nodes);
       const endSize = sizeAt(end);
-      const labelOnly = nodes.every(node => ["space", "comment", "style-declaration", "font-declaration"].includes(node.kind));
+      const labelOnly = nodes.every(declarationOnly);
       // Empty pending labels execute when the next item/paragraph starts,
       // after any intervening group has restored its font.
       const startSize = labelOnly ? endSize : sizeAt(start);
@@ -5012,9 +5020,14 @@ function buildSimpleTexParagraphBlocksFromNodes(
         text: textSliceAtSourceOffsets(start, end),
         sourceStart: start,
         sourceEnd: end,
-        nodes,
+        // A declaration before a block boundary remains active for later
+        // paragraphs. Replay the scoped operations against the caller's font
+        // rather than assuming a serif default (or applying emphasis twice).
+        nodes: [...sizeAt(start).fontDeclarations.map(command => ({ kind: "font-declaration" as const,
+          command, text: "", sourceStart: start, sourceEnd: start })), ...nodes],
+        ...(sizeAt(start).fontDeclarations.length ? { inheritedFontDeclarations: sizeAt(start).fontDeclarations } : {}),
         ...((listContext && inheritedFontState) || sizeAt(start).color !== undefined || initialBaselineSkip !== undefined ? { inheritedFontState: {
-          ...(listContext && inheritedFontState ? { family: inheritedFontState.family, series: inheritedFontState.series, shape: inheritedFontState.shape } : {}),
+          ...(listContext && inheritedFontState && sizeAt(start).fontDeclarations.length === 0 ? { family: inheritedFontState.family, series: inheritedFontState.series, shape: inheritedFontState.shape } : {}),
           ...(sizeAt(start).color !== undefined ? { color: sizeAt(start).color } : {}),
           ...(initialBaselineSkip !== undefined ? { baselineSkipPt: initialBaselineSkip } : {}),
         } } : {}),
@@ -5405,7 +5418,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
         currentQuotationDepth,
         prefix.alignment,
         prefix.alignmentProfile,
-        node.boundary === "end" && isSimpleTexListEnvironmentName(node.name)
+        // endtrivlist executes leavevmode while an item label is pending.
+        // Its empty label line still belongs to the closing alignment scope.
+        node.boundary === "end" && (isSimpleTexListEnvironmentName(node.name) || isSimpleTexTrivlistEnvironmentName(node.name))
       );
       if (scanState.aborted) {
         break;
@@ -6141,6 +6156,10 @@ export function simpleTexInlineNodesToTokens(
 
 
     if (node.kind === "style-declaration") {
+      if (node.restoreFontDeclarations) {
+        const restored = node.restoreFontDeclarations.reduce(simpleTexFontStateForDeclaration, fontState);
+        activeFontState = { ...activeFontState, family: restored.family, series: restored.series, shape: restored.shape };
+      }
       if (node.restoreColor === null) {
         const { color: _color, ...restored } = activeFontState;
         activeFontState = restored;
@@ -6303,7 +6322,7 @@ export function simpleTexFontStateForCommand(
   return { ...current, family: "roman" };
 }
 
-function simpleTexFontStateForDeclaration(
+export function simpleTexFontStateForDeclaration(
   current: SimpleTexFontState,
   command: SimpleTexFontDeclarationName
 ): SimpleTexFontState {

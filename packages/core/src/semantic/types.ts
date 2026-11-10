@@ -78,6 +78,8 @@ export type ArrowTip = {
 
 export type ArrowMarker = {
   tips: ArrowTip[];
+  /** The class-default To shorthand follows a later arrows.meta library load. */
+  defaultTo?: boolean;
 };
 
 export type TipsMode = "true" | "proper" | "on draw" | "on proper draw" | "never";

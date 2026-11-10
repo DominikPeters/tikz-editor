@@ -54,7 +54,7 @@ describe("svg arrow geometry", () => {
       expect(path.style.markerEnd?.tips).toHaveLength(1);
     }
     const svg = emitSvg(semantic.scene).svg;
-    const tipMatches = svg.match(/data-arrow-tip-kind="cm-rightarrow"/g) ?? [];
+    const tipMatches = svg.match(/data-arrow-tip-kind="[^"]+"/g) ?? [];
     expect(tipMatches.length).toBe(1);
   });
 
@@ -242,7 +242,7 @@ describe("svg arrow geometry", () => {
     } else {
       if (outer?.kind !== "Path") throw new Error("Missing committed outer moves");
       expect(outer.commands.map(command => command.kind === "M" ? command.to.x : null)).toEqual(moves);
-      const points = extractArrowPathPoints(rendered.svg.svg, outer.sourceRef.sourceId, "cm-rightarrow");
+      const points = extractArrowPathPoints(rendered.svg.svg, outer.sourceRef.sourceId, "to");
       expect(points.length).toBeGreaterThan(0);
       const centerX = (Math.min(...points.map(point => point.x)) + Math.max(...points.map(point => point.x))) / 2;
       expect(centerX).toBeCloseTo(moves[moves.length - 1], 3);

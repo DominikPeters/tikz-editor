@@ -2779,7 +2779,7 @@ function layoutCasesBody(
     (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
     lastRow.depth
   );
-  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
+  const axis = mathParameterToPt(fontProfile, "axisHeight", fontProfile.arrayAxisStyle === "text" ? "text" : style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
   let baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height);
@@ -2890,7 +2890,7 @@ function layoutArrayNucleus(
     lastRow.depth +
     bottomRuleHeight
   );
-  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
+  const axis = mathParameterToPt(fontProfile, "axisHeight", fontProfile.arrayAxisStyle === "text" ? "text" : style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
   const firstBaselineY = roundTexPt(-height + topRuleHeight + requireArrayValue(concreteRows, 0).height);
@@ -3424,7 +3424,7 @@ function layoutMatrixBody(
     (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
     lastRow.depth
   );
-  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
+  const axis = mathParameterToPt(fontProfile, "axisHeight", fontProfile.arrayAxisStyle === "text" ? "text" : style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
   let baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height);

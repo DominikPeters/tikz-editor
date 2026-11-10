@@ -468,7 +468,7 @@ describe("svg emitter", () => {
     expect(emitted.svg).toContain('stroke="#0000ff"');
   });
 
-  it("avoids collapsing mixed >-Stealth tips and draws computer modern rightarrow as curved geometry", () => {
+  it("avoids collapsing mixed >-Stealth tips and draws the legacy to tip as curved geometry", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw[->]        (0,0)   -- (1,0);
   \draw[>-Stealth] (0,0.3) -- (1,0.3);
@@ -486,7 +486,7 @@ describe("svg emitter", () => {
     const startX = Number(secondPath[1]);
     const endX = Number(secondPath[2]);
     expect(endX - startX).toBeGreaterThan(20);
-    expect(emitted.svg).toContain('data-arrow-tip-kind="cm-rightarrow"');
+    expect(emitted.svg).toContain('data-arrow-tip-kind="to"');
     expect(emitted.svg).toContain('data-arrow-tip-kind="stealth"');
     expect(emitted.svg).toContain('data-arrow-index="0"');
   });
@@ -502,7 +502,7 @@ describe("svg emitter", () => {
 
     const stealthTips = emitted.svg.match(/data-arrow-tip-kind="stealth"/g) ?? [];
     expect(stealthTips).toHaveLength(2);
-    expect(emitted.svg).not.toContain('data-arrow-tip-kind="cm-rightarrow" data-arrow-side="start"');
+    expect(emitted.svg).not.toContain('data-arrow-tip-kind="to" data-arrow-side="start"');
   });
 
   it("suppresses tip geometry on closed paths and when tips=never", () => {

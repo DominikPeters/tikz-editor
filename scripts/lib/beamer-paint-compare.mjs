@@ -6,6 +6,10 @@ export function blockPaintProbes(render, nativeTrace, oracleTrace) {
   const probes = [];
   const glyphs = [...nativeTrace.glyphs, ...oracleTrace.glyphs];
   for (const block of render.layout.items.filter(item => item.kind === "block" && item.visibility !== "hidden")) {
+    // Each nested block has its own probes. Its paint (including rounded
+    // transitions and shadows) is not a flat sample of the parent's fill.
+    const nestedBlocks = render.layout.items.filter(item => item.kind === "block" && item.id !== block.id && item.visibility !== "hidden" &&
+      block.sourceSpan.from <= item.sourceSpan.from && item.sourceSpan.to <= block.sourceSpan.to);
     for (const role of ["block-title", "block-body"]) {
       const paragraph = render.layout.paragraphs.find(p => p.role === role &&
         render.layout.items.some(item => item.paragraphId === p.paragraphId && item.parentId === block.id));
@@ -15,7 +19,9 @@ export function blockPaintProbes(render, nativeTrace, oracleTrace) {
         const y = bounds.y + bounds.height * fraction;
         let point = null;
         for (let x = bounds.x + bounds.width - 8; x >= bounds.x + 8; x -= 4) {
-          if (!glyphs.some(g => x >= g.x - 2 && x <= g.x + g.width + 2 &&
+          if (!nestedBlocks.some(item => x >= item.bounds.x - 6 && x <= item.bounds.x + item.bounds.width + 6 &&
+              y >= item.bounds.y - 6 && y <= item.bounds.y + item.bounds.height + 6) &&
+              !glyphs.some(g => x >= g.x - 2 && x <= g.x + g.width + 2 &&
               y >= g.y - g.height - 2 && y <= g.y + g.depth + 2)) {
             point = { x, y };
             break;
@@ -94,12 +100,27 @@ export function compareColorPixels(native, oracle, color, width) {
     nativePixels += nativeMask[index];
     oraclePixels += oracleMask[index];
   }
-  const nearBoundary = (mask, index) => {
+  const coverageChannel = target.indexOf(Math.min(...target));
+  const coverageRange = 255 - target[coverageChannel];
+  const onWhiteCoverageRamp = (pixels, index) => {
+    if (coverageRange === 0) return false;
+    const coverage = (255 - pixels[index * 3 + coverageChannel]) / coverageRange;
+    return coverage >= 0 && coverage <= 1 && target.every((channel, offset) =>
+      Math.abs(pixels[index * 3 + offset] - (255 - coverage * (255 - channel))) <= 2);
+  };
+  const nearBoundary = (mask, pixels, index) => {
     const x = index % gridWidth, y = Math.floor(index / gridWidth);
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       const nx = x + dx, ny = y + dy;
-      const neighbor = nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight ? 0 : mask[ny * gridWidth + nx];
+      const outside = nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight;
+      const neighborIndex = ny * gridWidth + nx;
+      const neighbor = outside ? 0 : mask[neighborIndex];
       if (neighbor !== mask[index]) return true;
+      // A thin glyph/stroke may have no fully opaque sample on one side.
+      // Its changing target-to-white coverage still marks an edge inside
+      // the same 1px band. Constant missing paint and other ink colors do not.
+      if (!outside && onWhiteCoverageRamp(pixels, index) && onWhiteCoverageRamp(pixels, neighborIndex) &&
+          target.some((_, channel) => pixels[index * 3 + channel] !== pixels[neighborIndex * 3 + channel])) return true;
     }
     return false;
   };
@@ -109,7 +130,8 @@ export function compareColorPixels(native, oracle, color, width) {
     // Poppler hints text and rounds fill edges differently from librsvg.
     // Ignore only disagreements in BOTH masks' one-pixel boundary bands.
     // A new hole or missing shape inside otherwise matching paint still fails.
-    if (!edgeTolerancePx || !nearBoundary(nativeMask, index) || !nearBoundary(oracleMask, index)) interiorDisagreement++;
+    if (!edgeTolerancePx || !nearBoundary(nativeMask, native, index) || !nearBoundary(oracleMask, oracle, index)) interiorDisagreement++;
   }
-  return { color, nativePixels, oraclePixels, disagreement, relativeDifference: disagreement / Math.max(nativePixels, oraclePixels, 1), edgeTolerancePx, interiorDisagreement };
+  return { color, nativePixels, oraclePixels, disagreement, relativeDifference: disagreement / Math.max(nativePixels, oraclePixels, 1), edgeTolerancePx,
+    boundaryMethod: "binary-and-white-coverage", interiorDisagreement };
 }

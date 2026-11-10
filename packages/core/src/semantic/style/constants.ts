@@ -430,8 +430,6 @@ export const FONT_SIZE_COMMAND_FACTORS: Record<string, number> = {
   "\\pgfutil@font@Huge": 2.488
 };
 export const DEFAULT_DOUBLE_DISTANCE = 0.6;
-export const DEFAULT_ARROW_LENGTH = 8;
-export const DEFAULT_ARROW_WIDTH = 6;
 export const DEFAULT_AXIS_TOP_COLOR = COLOR_HEX.gray;
 export const DEFAULT_AXIS_MIDDLE_COLOR = "#c0c0c0";
 export const DEFAULT_AXIS_BOTTOM_COLOR = COLOR_HEX.white;

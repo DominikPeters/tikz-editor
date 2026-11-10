@@ -499,7 +499,7 @@ if (!values["no-oracle"] && mathOracleCount > 0 && commandExists("lualatex")) {
   const sample = texFuzzMathOracleCases([...supportedGenerated, ...validGenerated], mathOracleCount);
   const comparisons = await compareMathCases(sample);
   const findings = comparisons.filter((result) => result.observation);
-  const environment = { ...texFuzzOracleEnvironment("lualatex"), runnerVersion: "lualatex-math-glyph-trace-v2" };
+  const environment = { ...texFuzzOracleEnvironment("lualatex"), runnerVersion: "lualatex-math-glyph-trace-v3" };
   const bundles = [];
   for (const { caseData, observation, compared } of findings) {
     const shrink = await shrinkTexFuzzCase(caseData, observation, async (candidates, context) => {
@@ -514,7 +514,9 @@ if (!values["no-oracle"] && mathOracleCount > 0 && commandExists("lualatex")) {
   }
   const root = resolve(values["artifacts-dir"], "math-differential");
   writeFindingArtifacts(root, bundles, environment);
+  writeFileSync(resolve(root, "comparisons.json"), JSON.stringify(comparisons, null, 2) + "\n");
   mathOracleSummary = { available: true, cases: sample.length, compared: comparisons.filter((result) => result.compared).length,
+    incomparable: comparisons.filter((result) => !result.compared).length,
     findings: findings.length, artifacts: root, policy: mathOraclePolicy };
   if (mathOraclePolicy === "fail" && (findings.length || mathOracleSummary.compared !== sample.length)) {
     throw new Error(`Math glyph differential findings require triage; see ${root}.`);

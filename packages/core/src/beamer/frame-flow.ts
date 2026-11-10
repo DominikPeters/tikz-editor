@@ -88,11 +88,16 @@ export function positionPreparedFrameFlow(
       continue;
     }
     if (item.kind === "paragraph") {
-      const glue = verticalInterlineGlue(
-        previousDepth,
-        item.boxHeight,
-        item.startingBaselineSkip
-      ) + item.leadingAdjustment;
+      const firstBox = item.paragraph.layout.vlistLayout.boxReport.items.find(
+        material => material.itemKind !== "glue" && material.itemKind !== "penalty" && material.itemKind !== "vbox"
+      );
+      // A leading display's empty line already includes its full baseline
+      // skip in the measured paragraph prefix. Consume the preceding depth
+      // there, rather than adding another minimum lineskip outside the box.
+      const leadingDisplay = firstBox?.hboxRole?.kind === "display-empty-line" && firstBox.hboxRole.position === "before-display";
+      const glue = (leadingDisplay
+        ? -(previousDepth ?? 0)
+        : verticalInterlineGlue(previousDepth, item.boxHeight, item.startingBaselineSkip)) + item.leadingAdjustment;
       const referenceY = cursor + glue + item.boxHeight;
       const contentTop = referenceY - item.boxHeight;
       const visualBottom = contentTop + item.naturalHeight;
@@ -276,7 +281,7 @@ export function trailingBeamerTrivlistSkip(source: string, topsepPt = 9): number
     return 0;
   }
   const suffix = source.slice(lastEnd);
-  return /^(?:\s|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? topsepPt : 0;
+  return /^(?:\s|\}|\\par(?![A-Za-z@])|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? topsepPt : 0;
 }
 
 export function trailingBeamerListSkip(source: string, topsepPt = 3): number {
@@ -308,6 +313,9 @@ export function leadingBeamerTrivlistAdjustment(
       item.itemKind === "glue" &&
       item.glue?.origin?.kind === "trivlist-boundary"
   );
+  const firstMaterial = paragraph.layout.vlistLayout.boxReport.items.find(item =>
+    item.itemKind !== "glue" && item.itemKind !== "penalty" && item.itemKind !== "vbox");
+  if (boundary && firstMaterial && boundary.y > firstMaterial.y) return 0;
   return Math.max(0, topsepPt - Number(boundary?.height ?? topsepPt));
 }
 

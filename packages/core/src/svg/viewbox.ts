@@ -4,13 +4,13 @@ import { renderPathWithArrows } from "./arrows/render.js";
 import { computeSvgStrokedPathBounds, transformSvgBounds } from "./geometry.js";
 import { mapWorldTransformToSvgTransform } from "../coords/svg.js";
 
-export function computeViewBox(scene: SceneFigure, padding = 12): SvgViewBox {
+export function computeViewBox(scene: SceneFigure, padding = 12, includeArrowInkBounds = true): SvgViewBox {
   let bounds: { minX: number; minY: number; maxX: number; maxY: number } | undefined = scene.bounds ? { ...scene.bounds } : undefined;
   // Semantic bounds describe authored geometry. Arrow shortening may extend
   // the shaft, and a move-only path may contain only rendered arrow tips.
   // Measure those SVG paths here, keeping the semantic layer independent.
   const originViewBox = { y: 0, height: 0 };
-  for (const element of scene.elements) {
+  for (const element of includeArrowInkBounds ? scene.elements : []) {
     if (element.kind !== "Path" || element.pictureSizeRelevant === false || element.style.clip || element.style.useAsBoundingBox ||
       (!element.style.markerStart && !element.style.markerEnd &&
       element.style.shortenStart === 0 && element.style.shortenEnd === 0)) continue;

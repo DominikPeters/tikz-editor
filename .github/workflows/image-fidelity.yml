@@ -39,9 +39,10 @@ jobs:
             mkdir -p "$RUNNER_TEMP/image-bin"
             cat > "$RUNNER_TEMP/image-bin/magick" <<'SH'
           #!/bin/sh
-          if [ "$1" = compare ]; then
+          if [ "$1" = compare ] || [ "$1" = identify ]; then
+            command="$1"
             shift
-            exec compare "$@"
+            exec "$command" "$@"
           fi
           exec convert "$@"
           SH

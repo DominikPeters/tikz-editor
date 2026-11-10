@@ -48,6 +48,21 @@ function flattenMathItems(items: readonly TexMathHListItem[]): readonly TexMathH
 }
 
 describe("TeX math hlist layout", () => {
+  it.each(["matrix", "cases", "array"])("supports both LaTeX array-axis contexts for %s", environment => {
+    const parsed = parseTexMath(`\\begin{${environment}}${environment === "array" ? "{c}" : ""}x\\end{${environment}}`);
+    const ambient = layoutTexMathList(parsed.list, { style: "script", fontProfile: luaLatexAmsMathFontProfile });
+    const textAxis = layoutTexMathList(parsed.list, { style: "script", fontProfile: { ...luaLatexAmsMathFontProfile, arrayAxisStyle: "text" } });
+    expect(ambient.supported).toBe(true);
+    expect(textAxis.supported).toBe(true);
+    expect(textAxis.hlist?.width).toBeCloseTo(ambient.hlist?.width ?? 0, 5);
+    const body = (items: readonly TexMathHListItem[]) => environment === "cases"
+      ? items.find((item): item is TexMathChildHListLayoutItem => item.kind === "hlist" && item.role === "nucleus")
+      : undefined;
+    const ambientBox = body(ambient.hlist?.items ?? []) ?? ambient.hlist;
+    const textBox = body(textAxis.hlist?.items ?? []) ?? textAxis.hlist;
+    expect((textBox?.height ?? 0) - (ambientBox?.height ?? 0)).toBeCloseTo(.75, 4);
+    expect((textBox?.depth ?? 0) - (ambientBox?.depth ?? 0)).toBeCloseTo(-.75, 4);
+  });
   it("bounds extensible glyph assemblies when font families have extreme relative sizes", () => {
     const fontProfile = {
       ...luaLatexAmsMathFontProfile,

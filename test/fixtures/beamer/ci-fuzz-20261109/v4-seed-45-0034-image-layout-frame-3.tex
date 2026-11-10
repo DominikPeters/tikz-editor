@@ -1,0 +1,99 @@
+\documentclass[9pt,aspectratio=169]{beamer}
+\usepackage{tikz}
+\usetheme{default}
+\setbeamertemplate{navigation symbols}{}
+\title{Message passing: experiments and bounds}
+\subtitle{Generated interaction study}
+\author{Research group}
+\date{}
+\year=2026\month=11\day=5
+\newcommand{\fuzzlayerA}[1]{\textit{#1}}
+\newcommand{\fuzzlayerB}[1]{\fuzzlayerA{#1}}
+\newcommand{\fuzzlayerC}[1]{\fuzzlayerB{#1}}
+\newcommand{\fuzzterm}[1]{\fuzzlayerC{#1}}
+\newcommand{\fuzzpair}[2]{\fuzzterm{#1}: #2}
+\newcommand{\fuzzunit}{steps}
+\let\fuzzoriginalunit\fuzzunit
+\newcommand{\fuzzcoefficient}{1}
+\newcommand{\fuzzscale}[2][\fuzzcoefficient]{#1\,#2}
+\definecolor{fuzzpaint}{RGB}{255,0,255}
+\definecolor{fuzzsecond}{RGB}{18,137,67}
+\tikzset{fuzzvertex/.style={draw,rounded corners=1pt,fill=blue!10,inner sep=1pt,minimum width=.35cm,minimum height=.25cm}}
+\begin{document}
+\section{Message passing}
+\begin{frame}[t,shrink=5]{Message passing}{Composed dependencies}
+\fuzzpair{Experiment}{Timing: 12\fuzzunit; estimate $\fuzzscale{x}+\fuzzscale[2]{y}$.}\par
+{\renewcommand{\fuzzunit}{samples}\let\fuzzterm\textrm\fuzzpair{LocalScope}{Timing: 7\fuzzunit.}\par}
+\fuzzpair{RestoredScope}{Timing: 11\fuzzunit.}\par
+\begin{columns}[onlytextwidth,T]
+\begin{column}{0.54\textwidth}
+\begin{description}
+\item[Stage 1] Before \includegraphics % image argument
+[trim=2 1 3 2,clip,width=20pt] % image argument
+{fuzz-images/photo.jpg} after.
+\par
+\textbf{We compare the} proposed solution with a reference computed from the complete input.  The estimate is $\frac{a+b}{1+c}$.
+\par
+\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]
+\item[Stage 2] \uncover<2->{\begin{tabular}{lrr}Method&Cost&Error\\\hline
+Global0&6&11\\
+Global1&7&10\\
+Global2&20&0\\
+Fresh3&13&28\\
+\end{tabular}}
+\end{description}
+\end{column}
+\begin{column}{0.42\textwidth}
+\begin{columns}[onlytextwidth,b]
+\begin{column}{0.38\textwidth}
+\begin{block}{Message passing}
+{\scriptsize\color{teal}\centering
+\begin{tabular}{lrr}Method&Cost&Error\\\hline
+Global0&24&8\\
+Global1&17&2\\
+\end{tabular}\par}
+\end{block}
+\end{column}
+\begin{column}{0.58\textwidth}
+\begin{enumerate}
+\item<1-> Before \includegraphics[trim=2 1 3 2,clip,width=20pt]{fuzz-images/pattern.png} after.
+\item<2-> \begin{enumerate}
+\item<1-> \begin{tabular}{lrr}Method&Cost&Error\\\hline
+Global0&5&28\\
+Local1&5&10\\
+\end{tabular}
+\end{enumerate}
+\end{enumerate}
+\end{column}
+\end{columns}
+\end{column}
+\end{columns}
+\par \begin{tikzpicture}[font=\scriptsize]
+\fill<2-3>[fuzzpaint] (0,0) rectangle (.8,.3);
+\fill<3->[fuzzsecond] (1,0) rectangle (1.8,.3);
+\node[anchor=west] at (2,0.15) {Witness};
+\end{tikzpicture}
+\only<4>{}
+\end{frame}
+\renewcommand{\fuzzunit}{min}
+\renewcommand{\fuzzcoefficient}{2}
+\renewcommand{\fuzzterm}[1]{{\textbf{#1}}}
+\section{Geometric uncertainty}
+\begin{frame}[t]{Cache invalidation}
+\fuzzpair{MacroStageB}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{columns}[T]\begin{column}{.46\textwidth}A narrow column can change line breaking even when the underlying expression is unchanged.\end{column}\begin{column}{.46\textwidth}\begin{itemize}\item Input state\item Updated state\end{itemize}\end{column}\end{columns}
+\end{frame}
+\renewcommand{\fuzzunit}{steps}
+\renewcommand{\fuzzcoefficient}{3}
+\renewcommand{\fuzzterm}[1]{{\textbf{#1}}}
+\section{Geometric uncertainty}
+\begin{frame}[t]{Constraint propagation}
+\fuzzpair{MacroStageC}{Timing: 12\fuzzunit, retained: 9\fuzzoriginalunit.}\par
+{\renewcommand{\fuzzunit}{local}\fuzzpair{FrameLocal}{Timing: 5\fuzzunit.}\par}
+\fuzzpair{FrameRestored}{Timing: 8\fuzzunit; estimate $\fuzzscale{x}$.}\par
+\begin{block}{Follow-up}\fuzzterm{A revised value} depends on the preceding frame.\end{block}
+\[r_{k+1}=r_k-\alpha d_k\]
+\end{frame}
+\end{document}

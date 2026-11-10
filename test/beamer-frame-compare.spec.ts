@@ -97,6 +97,34 @@ Display rows:
     expect(glyphs[1].y).toBeLessThan(glyphs[0].y);
   });
 
+  it("retains every image when multiple inline paragraphs share a structural paint part", async () => {
+    const source = readFileSync(new URL("./fixtures/beamer/ci-fuzz-20261109/v4-seed-45-0041-image-layout.tex", import.meta.url), "utf8");
+    const render = await renderBeamerFrame(source, { graphicsResolver: createTexFuzzGraphicsResolver() });
+    const trace = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider);
+    expect(render.diagnostics).toEqual([]);
+    const imageCount = trace.rectangles.filter(rect => rect.role === "image").length;
+    expect(imageCount).toBe(5);
+    expect([...render.svg.svg.matchAll(/<image\b/gu)]).toHaveLength(imageCount);
+    expect(render.svg.svg).toContain('data-tex-includegraphics-filename="fuzz-images/pages.pdf"');
+  });
+
+  it("traces all four draft-image borders inside an embedded TikZ node", async () => {
+    const render = await renderBeamerFrame(String.raw`\documentclass{beamer}\usepackage{tikz}\begin{document}\begin{frame}\begin{tikzpicture}\node{\includegraphics[draft,width=18pt]{fuzz-images/pattern.png}};\end{tikzpicture}\end{frame}\end{document}`, { graphicsResolver: createTexFuzzGraphicsResolver() });
+    const trace = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider);
+    expect(trace.rectangles.filter(rect => rect.role === "image-frame")).toHaveLength(4);
+    expect(trace.rectangles.filter(rect => rect.role === "image")).toHaveLength(0);
+  });
+
+  it("appends the resolved extension to a draft label without exposing its absolute path", async () => {
+    const controlled = createTexFuzzGraphicsResolver();
+    const render = await renderBeamerFrame(String.raw`\documentclass{beamer}\begin{document}\begin{frame}\includegraphics[draft,width=18pt]{fuzz-images/pattern.v2}\end{frame}\end{document}`, { graphicsResolver: {
+      cacheKey: "draft-extension", resolve: request => ({ ...controlled.resolve(request), resolvedPath: "/private/document/fuzz-images/pattern.v2.png" }),
+    } });
+    const text = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider).lines.map(line => line.text).join(" ");
+    expect(text).toContain("fuzz-images/pattern.v2.png");
+    expect(text).not.toContain("/private/document");
+  });
+
   it("traces native display math rules alongside theme rectangles", async () => {
     const render = await renderBeamerFrame(String.raw`
 \documentclass{beamer}

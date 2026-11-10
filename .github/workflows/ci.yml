@@ -143,6 +143,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Install PDF tools used by corpus renderer tests
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: Build packages used by test subprocesses and workers
+        run: npm run build:tex-fuzz
       - run: npm test -- --maxWorkers=2
         env:
           # Every frame of the pointer-invariant fuzzer; local runs take a quick subset.

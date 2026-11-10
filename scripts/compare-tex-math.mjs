@@ -308,7 +308,6 @@ async function runComparisons() {
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) await runComparisons();
 
 export function compareFormula(formula, tolerance = 0.01, options = {}) {
-  const ours = ourTrace(formula);
   let tex;
   try {
     tex = texTrace(formula, options);
@@ -318,10 +317,11 @@ export function compareFormula(formula, tolerance = 0.01, options = {}) {
       formula,
       ok: false,
       mismatches: [`TeX oracle failed: ${message}`],
-      ours,
+      ours: ourTrace(formula),
       tex: { items: [], width: 0 },
     };
   }
+  const ours = ourTrace(formula, tex.arrayAxisStyle);
   const mismatches = [];
   if (!ours.supported) {
     mismatches.push(`our layout unsupported: ${ours.errors.map((error) => error.message).join("; ")}`);
@@ -395,6 +395,7 @@ function comparisonItemsForFormula(formula, ours, tex) {
     || hasSubstackCommand(formula)
     || hasSubarrayEnvironment(formula)
     || hasSidesetCommand(formula)
+    || /\\stackrel\b/.test(formula)
     || hasAmsMathCommand(formula)
     || hasAmsMathDelimiterCommand(formula)
     || /\\sqrt\[/.test(formula)
@@ -419,14 +420,14 @@ function isIndefiniteVerticalRuleTrace(item) {
   return item.kind === "rule" && item.height < 0;
 }
 
-function ourTrace(formula) {
+function ourTrace(formula, arrayAxisStyle = "ambient") {
   const parsed = parseTexMath(formula);
   // Compare under the same package/font context on both sides. Package
   // inference in the native renderer is separate from this layout oracle.
   const fontProfile = /\{(?:amsmath|amssymb|mathtools)\}/.test(mathPackagePreamble(formula))
     ? luaLatexAmsMathFontProfile
     : luaLatexDefaultMathFontProfile;
-  const result = layoutTexMathList(parsed.list, { fontProfile });
+  const result = layoutTexMathList(parsed.list, { fontProfile: { ...fontProfile, arrayAxisStyle } });
   if (!result.supported) {
     return {
       supported: false,
@@ -495,7 +496,7 @@ function texTrace(formula, options) {
   const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-math-compare-"));
   try {
     writeFileSync(join(tempDir, "trace.lua"), traceLuaSource(), "utf8");
-    writeFileSync(join(tempDir, "case.tex"), texSource(formula), "utf8");
+    writeFileSync(join(tempDir, "case.tex"), texSource(formula, options), "utf8");
     try {
       execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "case.tex"], {
         cwd: tempDir,
@@ -513,7 +514,9 @@ function texTrace(formula, options) {
     let width = 0;
     let height = 0;
     let depth = 0;
+    let arrayAxisStyle = "ambient";
     for (const line of log.split(/\r?\n/)) {
+      if (line === "TMT arrayaxis=text") arrayAxisStyle = "text";
       const glyph = /^TMT g x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) f=(?<font>\S+) c=(?<char>\d+) w=(?<width>[-.\d]+)/.exec(line);
       if (glyph?.groups) {
         items.push({
@@ -564,7 +567,7 @@ function texTrace(formula, options) {
         depth = round(Number(total.groups.depth));
       }
     }
-    return { items, width, height, depth };
+    return { items, width, height, depth, arrayAxisStyle };
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -599,8 +602,10 @@ function mathPackagePreamble(formula) {
   return amsmathPreamble + amssymbPreamble + mathtoolsPreamble + arrayPreamble;
 }
 
-function texSource(formula) {
-  return String.raw`\documentclass{article}
+function texSource(formula, options = {}) {
+  if (options.latexRelease !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(options.latexRelease)) throw new Error("Invalid LaTeX release date.");
+  const release = options.latexRelease ? `\\RequirePackage[${options.latexRelease}]{latexrelease}\n` : "";
+  return release + String.raw`\documentclass{article}
 ` + mathPackagePreamble(formula) + String.raw`
 \newbox\m
 \begin{document}
@@ -619,6 +624,8 @@ local hlist_id=node.id('hlist')
 local vlist_id=node.id('vlist')
 local disc_id=node.id('disc')
 local whatsit_id=node.id('whatsit')
+local array_macro=token.get_macro('@array') or ''
+texio.write_nl('TMT arrayaxis=' .. (string.find(array_macro, 'vcenter@text', 1, true) and 'text' or 'ambient'))
 local function sp(v) return (v or 0)/65536 end
 local function font_name(font_id)
   local registered=font.fonts and font.fonts[font_id]

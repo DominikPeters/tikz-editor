@@ -67,6 +67,8 @@ export type EmitSvgOptions = {
   /** Canvas previews can retain paragraph-local SVG and resolve source through their layout context. */
   textSourceCoordinates?: "document" | "layout";
   padding?: number;
+  /** Standalone previews include arrow ink; embedded TeX boxes use PGF's authored picture bounds. */
+  includeArrowInkBounds?: boolean;
   includeXmlns?: boolean;
   textEngine?: NodeTextEngine | null;
   viewBox?: SvgViewBox;

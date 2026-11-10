@@ -34,7 +34,7 @@
         "sourceSha256": "efb21819ac17b0016010de3d58f32b37c0abb5cf1d4d8f1c97337fe435f3cc3e",
         "originalStatus": "error",
         "originalFailures": [
-          "Required command failed: /opt/homebrew/Cellar/node/26.13.0_2/bin/node: Command failed: /opt/homebrew/Cellar/node/26.13.0_2/bin/node /Users/dominik/GitHub/tikz-editor/scripts/probe-beamer-frame.mjs --input /Users/dominik/GitHub/tikz-editor/artifacts/includegraphics/beamer-20261108/comparison/v4-seed-20261108-0006-image-corners-state-1/input.tex --frame 1 --out-dir /Users/dominik/GitHub/tikz-editor/artifacts/includegraphics/beamer-20261108/comparison/v4-seed-20261108-0006-image-corners-state-1/oracle --name frame --source-dir /Users/dominik/GitHub/tikz-editor/artifacts/includegraphics/beamer-20261108/cases --page 1 --trace-only\nCommand failed: lualatex --interaction=nonstopmode --halt-on-error --file-line-error --no-shell-escape --output-directory=/Users/dominik/GitHub/tikz-editor/artifacts/includegraphics/beamer-20261108/comparison/v4-seed-20261108-0006-image-corners-state-1/oracle/frame /Users/dominik/GitHub/tikz-editor/artifacts/includegraphics/beamer-20261108/comparison/v4-seed-20261108-0006-image-corners-state-1/oracle/frame/probe.tex\n"
+          "Required command failed: /opt/homebrew/Cellar/node/26.13.0_2/bin/node: Command failed: /opt/homebrew/Cellar/node/26.13.0_2/bin/node scripts/probe-beamer-frame.mjs --input artifacts/includegraphics/beamer-20261108/comparison/v4-seed-20261108-0006-image-corners-state-1/input.tex --frame 1 --out-dir artifacts/includegraphics/beamer-20261108/comparison/v4-seed-20261108-0006-image-corners-state-1/oracle --name frame --source-dir artifacts/includegraphics/beamer-20261108/cases --page 1 --trace-only\nCommand failed: lualatex --interaction=nonstopmode --halt-on-error --file-line-error --no-shell-escape --output-directory=artifacts/includegraphics/beamer-20261108/comparison/v4-seed-20261108-0006-image-corners-state-1/oracle/frame artifacts/includegraphics/beamer-20261108/comparison/v4-seed-20261108-0006-image-corners-state-1/oracle/frame/probe.tex\n"
         ],
         "resolution": "Invalid Beamer generator production, retained as original-beamer-corners.tex; article grammar retains legacy corners. Replaced by the explicit two-page PDF case."
       }
@@ -184,7 +184,7 @@
       {
         "filename": "fuzz-images/pattern.png",
         "page": 1,
-        "path": "/Users/dominik/GitHub/tikz-editor/artifacts/includegraphics/tikz/fuzz-images/pattern.png",
+        "path": "artifacts/includegraphics/tikz/fuzz-images/pattern.png",
         "status": "resolved"
       }
     ]
@@ -1010,5 +1010,46 @@
       ],
       "scope": "Final production rebuild: Beamer workspace, source placeholders and real PDF image editing/history/reload."
     }
+  },
+  "ciFailureFollowup20261110": {
+    "report": "design/ci-failure-investigation-20261110.json",
+    "portableArticleOracleEnvironment": true,
+    "ImageMagick6IdentifyDispatch": true,
+    "originalRegressions": {
+      "testsPassed": 9,
+      "originalSources": 9,
+      "mutationControls": [
+        "missing",
+        "shifted",
+        "flipped",
+        "uncropped"
+      ]
+    },
+    "article": {
+      "cases": 16,
+      "report": "artifacts/ci-investigation-20261110/article-images/seed-20261108-cases-16-scale-4-2026-11-09T23-46-53-779Z/summary.json",
+      "flagged": 0
+    },
+    "latestRecursiveBeamer": {
+      "archivedSeed": 45,
+      "frameObservations": 70,
+      "states": 155,
+      "passed": 70,
+      "failed": 0,
+      "status": "complete on final frozen source",
+      "report": "artifacts/ci-investigation-20261110/seed45-frozen/report.json"
+    },
+    "scopeNote": "The earlier notEstablished entries describe their original bounded campaigns. This follow-up adds independent checks of the latest archived recursive image campaign, without claiming a large image soak or closure of other saved campaigns.",
+    "remainingImageFindingsInVerifiedScopes": [],
+    "separateOpenFailures": "The previously open three Beamer observations and five local math discrepancies are closed in the linked follow-up. Hosted CI and the complete weekly soak are still unrun locally.",
+    "boundedImageProfile": {
+      "status": "passed on final source",
+      "cases": 8,
+      "states": 11,
+      "failed": 0,
+      "report": "artifacts/ci-investigation-20261110/beamer-images-frozen/comparison/report.json"
+    },
+    "followupReport": "design/ci-fidelity-followup-20261110.json",
+    "finalValidation": "artifacts/ci-followup-20261110/final-validation-status.json"
   }
 }

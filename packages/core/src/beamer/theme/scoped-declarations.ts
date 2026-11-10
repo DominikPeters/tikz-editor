@@ -4,7 +4,7 @@ import { matchTexSyntaxEnvironments } from "../../text/tex/syntax-index.js";
 import { createBeamerSyntaxContext } from "../syntax.js";
 import type { BeamerDocumentModel } from "../types.js";
 import { applyBeamerColorDeclaration, scanBeamerColorDeclarations } from "./color-declarations.js";
-import { applyBeamerFontDeclaration, scanBeamerFontDeclarations } from "./font-declarations.js";
+import { applyBeamerFontRoleDeclaration, scanBeamerFontDeclarations } from "./font-declarations.js";
 import { resolveBeamerThemeColor } from "./resolve.js";
 import type { ResolvedBeamerTheme } from "./types.js";
 
@@ -30,7 +30,7 @@ export function createBeamerScopedTheme(document: BeamerDocumentModel, base: Res
         colorAliases: { ...base.colorAliases }, colorAliasRgb: { ...base.colorAliasRgb }, diagnostics: [...base.diagnostics] };
       for (const { event } of active) {
         if (event.kind === "font-declaration") {
-          state.fonts[event.role] = applyBeamerFontDeclaration(state.fonts[event.role], event, String(base.options["class-font-size"]));
+          applyBeamerFontRoleDeclaration(state, event, String(base.options["class-font-size"]));
         } else applyBeamerColorDeclaration(state, event, document.source, role => resolveBeamerThemeColor(state, role));
       }
       return state;

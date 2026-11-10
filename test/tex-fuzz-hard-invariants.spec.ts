@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   createTexDerivedInlineMathBoxProvider,
   layoutSimpleTexParagraph,
@@ -10,9 +11,12 @@ import {
 import {
   caseFromTexFuzzAst,
   checkTexFuzzLayoutResultInvariants,
+  checkTexFuzzHardInvariants,
   checkTexFuzzPaintedMathContent,
   checkTexFuzzMetamorphicInvariants,
   generateFullySupportedTexFuzzCases,
+  parseTexFuzzBundle,
+  texFuzzSourceUsesUnsupportedLiteral,
   TEX_FUZZ_HARD_INVARIANT_WIDTHS,
 } from "@tikz-editor/tex-fuzz";
 
@@ -28,6 +32,15 @@ function layout(source: string, width = 160) {
 }
 
 describe("TeX fuzz renderer hard invariants", () => {
+  it("recognizes unsupported literal fallback inside a boxed document in the original CI witness", () => {
+    const bundle = parseTexFuzzBundle(readFileSync(new URL("./fixtures/tex-fuzz/ci-20261109-image-paint-count.json", import.meta.url), "utf8"));
+    for (const caseData of [bundle.case, bundle.minimizedCase]) {
+      if (!caseData) throw new Error("Missing original or reduced CI witness");
+      expect(texFuzzSourceUsesUnsupportedLiteral(caseData.source)).toBe(true);
+      expect(checkTexFuzzHardInvariants(caseData)).toEqual([]);
+    }
+  });
+
   it("accepts negative pair kerns between styled text runs", () => {
     const caseData = caseFromTexFuzzAst([
       { kind: "group", children: [{ kind: "text", value: "T" }] },

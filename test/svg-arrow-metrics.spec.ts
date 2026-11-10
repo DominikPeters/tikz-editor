@@ -32,6 +32,16 @@ function tip(kind: ArrowTipKind, overrides: Partial<ArrowTip> = {}): ArrowTip {
 }
 
 describe("SVG arrow metrics", () => {
+  it.each([.4, .8])("matches PGF legacy to geometry at shaft width %s", shaft => {
+    const forward = normalizeArrowTip(tip("to"), shaft, "black");
+    expect(forward.lineWidth).toBeCloseTo(.8 * shaft, 8);
+    expect(forward.length).toBeCloseTo(3.75 * (.28 + .3 * shaft), 8);
+    expect(buildArrowTipMetrics(forward, shaft)).toMatchObject({ tipEnd: expect.closeTo(.21 + .625 * shaft, 8),
+      backEnd: expect.closeTo(-.84 - 1.3 * shaft, 8), lineEnd: 0 });
+    const reversed = normalizeArrowTip(tip("to", { reversed: true }), shaft, "black");
+    expect(buildArrowTipMetrics(reversed, shaft)).toMatchObject({ tipEnd: expect.closeTo(.84 + 1.3 * shaft, 8),
+      backEnd: expect.closeTo(-.21 - .625 * shaft, 8), lineEnd: expect.closeTo(0, 8) });
+  });
   it("normalizes malformed tip dimensions and fallback paint inputs", () => {
     const normalized = normalizeArrowTip(
       tip("stealth", {
@@ -84,8 +94,7 @@ describe("SVG arrow metrics", () => {
       "triangle",
       "square",
       "rays",
-      "implies",
-      "to"
+      "implies"
     ];
 
     for (const kind of reversibleKinds) {

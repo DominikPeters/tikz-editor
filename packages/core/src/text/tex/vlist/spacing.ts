@@ -215,11 +215,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
       state.hasInterveningPenalty = true;
       continue;
     }
-    if (item.kind === "display-math" || item.kind === "display-alignment") {
-      state.previousEmittedContentKind = "display";
-      continue;
-    }
-    if (isDisplayEmptyLineHBox(item)) {
+    if (item.kind === "display-math" || item.kind === "display-alignment" || isDisplayEmptyLineHBox(item)) {
       const scope = ancestors.length ? ancestors : item.scopePath ?? [];
       const quoteDepth = scope.filter((role) => role.kind === "quote").length;
       const trivlistScopes = scope.filter(
@@ -227,6 +223,27 @@ function planSimpleTexParagraphVerticalSkipsInto(
       );
       const listRole = lastVListAncestorRole(scope, "list");
       const listItemRole = lastVListAncestorRole(scope, "list-item");
+      // A display outside a just-closed center/flush environment still owns
+      // that environment's closing glue before its leading empty line.
+      const previousList = state.previousEmittedListContext;
+      const previousProfile = listProfileForContext(listProfile, previousList);
+      const closingProfile = previousProfile && previousList ? { ...previousProfile,
+        trivlistTopsepPt: previousProfile.liveListTopsepPt ?? texProfileDepthValue(previousProfile.topsepPtByDepth, previousList.depth),
+        trivlistPartopsepPt: 0,
+      } : previousProfile;
+      const closingSkip = texArticleTrivlistExitBoundarySkip(state, state.previousEmittedTrivlistScopes,
+        commonTrivlistScopePrefixLength(state.previousEmittedTrivlistScopes, trivlistScopes), font, closingProfile);
+      const closingListSkip = previousList && previousList.depth > (listRole?.depth ?? 0)
+        ? texArticleListExitBoundarySkip(state, previousList.depth, listRole?.depth ?? 0, font, previousProfile) : texLength(0);
+      const boundarySkip = texLength(Math.max(closingSkip, closingListSkip));
+      if (boundarySkip > 0) skips.push({ blockIndex: -4_000_000 - (item.sourceSpan?.start ?? 0), vlistPath: path, segmentIndex: 0,
+        quoteSize: texLength(0), listSize: texLength(Math.max(0, closingListSkip - closingSkip)), trivlistSize: closingSkip, size: boundarySkip });
+      if (item.kind === "display-math" || item.kind === "display-alignment") {
+        state.previousEmittedTrivlistScopes = trivlistScopes;
+        if (!listRole) state.previousEmittedListContext = undefined;
+        state.previousEmittedContentKind = "display";
+        continue;
+      }
       state.previousEmittedQuoteDepth = quoteDepth;
       state.previousEmittedQuotationDepth = 0;
       state.previousEmittedTrivlistScopes = trivlistScopes;
@@ -265,7 +282,11 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const followsDisplay = state.previousEmittedContentKind === "display";
     const exitsTrivlistScope =
       state.previousEmittedTrivlistScopes.length > scope.trivlistScopes.length;
-    const suppressInitialTopsep = !hasPreviousEmittedParagraph && listProfile?.suppressInitialTopsep === true;
+    // A label transferred into an external minipage is still pending when
+    // its first nested list starts. LaTeX's @inlabel/@noparlist path omits
+    // that list's opening topsep, just as for an ordinary nested first item.
+    const suppressInitialTopsep = !hasPreviousEmittedParagraph &&
+      (listProfile?.suppressInitialTopsep === true || paragraph.ancestorListLabels?.some(label => label.inherited) === true);
     const parentTransition = paragraph.ancestorListLabels?.find(ancestor => {
       const previous = state.lastListItemsByDepth.get(ancestor.depth);
       return !ancestor.inherited && previous !== undefined && previous.listStart === ancestor.listStart && previous.itemIndex !== ancestor.itemIndex;
@@ -274,8 +295,12 @@ function planSimpleTexParagraphVerticalSkipsInto(
     let listVerticalSkipBefore: TexLength;
     if (suppressInitialTopsep) listVerticalSkipBefore = texLength(0);
     else if (followsDisplay) listVerticalSkipBefore = state.previousEmittedListContext && scope.listContext &&
-      (state.previousEmittedListContext.listStart !== scope.listContext.listStart || state.previousEmittedListContext.itemIndex !== scope.listContext.itemIndex)
-      ? texArticleListParagraphSkip(scope.listContext.depth, font, resolvedListProfile) : texLength(0);
+      state.previousEmittedListContext.listStart !== scope.listContext.listStart &&
+      state.previousEmittedListContext.depth === scope.listContext.depth && !parentTransition &&
+      !paragraph.ancestorListLabels?.some(label => !label.inherited)
+      ? texArticleOutsideListBoundarySkip(startsListInVerticalMode, font, resolvedListProfile, scope.listContext.depth)
+      : state.previousEmittedListContext && scope.listContext && state.previousEmittedListContext.itemIndex !== scope.listContext.itemIndex
+        ? texArticleListParagraphSkip(scope.listContext.depth, font, resolvedListProfile) : texLength(0);
     else if (parentTransition) {
       const parentProfile = listProfileForContext(listProfile, parentTransition);
       const previous = state.previousEmittedListContext;
@@ -320,6 +345,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
       listVerticalSkipBefore = texLength(Number(listVerticalSkipBefore) + state.externalPendingParskip);
     }
     delete state.externalPendingParskip;
+    const externalAfterSkip = state.externalAfterSkip;
     state.externalAfterSkip = 0;
     const listFlex = followsDisplay || suppressInitialTopsep
       ? { stretch: texLength(0), shrink: texLength(0) }
@@ -345,7 +371,12 @@ function planSimpleTexParagraphVerticalSkipsInto(
           state.previousEmittedListContext !== undefined || scope.listContext !== undefined,
           font
         );
-    const trivlistVerticalSkipBefore = followsDisplay || suppressInitialTopsep
+    const activeList = scope.listContext ?? state.previousEmittedListContext;
+    const trivlistProfile = listProfile && activeList ? { ...listProfile,
+      trivlistTopsepPt: listProfile.liveListTopsepPt ?? texProfileDepthValue(resolvedListProfile?.topsepPtByDepth ?? listProfile.topsepPtByDepth, activeList.depth),
+      trivlistPartopsepPt: 0,
+    } : listProfile;
+    let trivlistVerticalSkipBefore = followsDisplay || suppressInitialTopsep
       ? texLength(0)
       : texArticleTrivlistVerticalSkipBefore(
           state,
@@ -353,8 +384,11 @@ function planSimpleTexParagraphVerticalSkipsInto(
           scope.trivlistScopes,
           startsListInVerticalMode,
           font,
-          listProfile
+          trivlistProfile
         );
+    if (externalAfterSkip && !state.hasInterveningPenalty && scope.trivlistScopes.some(scope => !state.previousEmittedTrivlistScopes.includes(scope))) {
+      trivlistVerticalSkipBefore = texLength(Math.max(0, trivlistVerticalSkipBefore - externalAfterSkip));
+    }
 
     skips.push({
       blockIndex: paragraph.blockIndex,
@@ -525,7 +559,7 @@ function addParagraphVerticalGlueToItems(
       });
       continue;
     }
-    if (item.kind === "paragraph" || item.kind === "hbox" && item.role?.kind === "external-flow") {
+    if (item.kind === "paragraph" || item.kind === "display-math" || item.kind === "display-alignment" || item.kind === "hbox" && (item.role?.kind === "external-flow" || item.role?.kind === "display-empty-line")) {
       const skip = verticalSkipByPath.get(texVListPathKey(path));
       if (skip) {
         items.push(...paragraphBoundaryGlueItems(item, skip));
@@ -537,7 +571,7 @@ function addParagraphVerticalGlueToItems(
 }
 
 function paragraphBoundaryGlueItems(
-  item: TexParagraphItem | TexVBoxItem | TexHBoxItem,
+  item: Extract<TexVListItem, { kind: "paragraph" | "vbox" | "hbox" | "display-math" | "display-alignment" }>,
   skip: SimpleTexParagraphVerticalSkip
 ): TexGlueItem[] {
   const scopePath = item.kind === "paragraph" ? texVBoxRolePathForParagraph(item.paragraph) : item.scopePath ?? [];
@@ -918,6 +952,12 @@ function resolveDisplayMathVerticalGlueInItems(
     }
     if (item.kind === "paragraph") {
       const paragraphMeasurement = paragraphMeasurements.get(texVListPathKey(path));
+      // Projection can leave a declaration/group-only paragraph with no
+      // shipped lines. It neither inserts baseline glue nor changes prevdepth.
+      if (paragraphMeasurement?.lineOffsets.length === 0) {
+        items.push(item);
+        continue;
+      }
       const previousDepth = previousParagraphMeasurement
         ? texParagraphLastLineDepth(previousParagraphMeasurement)
         : previousDisplayMaterialMetrics?.depth;

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseBeamerFrameBody } from "../packages/core/src/beamer/content.js";
+import { createBeamerAmbientText } from "../packages/core/src/beamer/ambient-text.js";
 import { scanBeamerDocument } from "../packages/core/src/beamer/scan.js";
 import { prepareBeamerDocument, renderBeamerFrame } from "../packages/core/src/beamer/render.js";
 import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxPlan, tcolorboxSurroundingSpacing } from "../packages/core/src/beamer/tcolorbox.js";
@@ -35,6 +36,13 @@ const planFor = (source: string, node = box(source)) => {
 };
 
 describe("ordinary tcolorbox package boxes", () => {
+  it("isolates stored font options while keeping declarations in literal square brackets active", () => {
+    const source = deck(String.raw`\begin{tcolorbox}[title=Title,fonttitle=\bfseries,fontupper=\small]Body.\end{tcolorbox}
+Before [\itshape italic] after brackets.\begin{block}{Next}Following.\end{block}`);
+    const ambient = createBeamerAmbientText(source);
+    expect(ambient(source.indexOf("Body."))).not.toMatch(/bfseries|small/u);
+    expect(ambient(source.indexOf("Following."))).toContain(String.raw`\itshape`);
+  });
   it("keeps title punctuation and nested TeX groups source-backed while preserving body ownership", () => {
     const source = deck(String.raw`Before.\begin{tcolorbox}[title={A title, with \emph{emphasis}},colback=blue!5!white]Body.\end{tcolorbox}After.`);
     const ir = bodyIr(source);

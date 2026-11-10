@@ -696,6 +696,7 @@ function paragraphInputFromSimpleTexBlock(
     nodes: block.nodes,
     ...(block.preDisplayFontSizePt !== undefined ? { preDisplayFontSizePt: block.preDisplayFontSizePt } : {}),
     ...(block.inheritedFontState ? { inheritedFontState: block.inheritedFontState } : {}),
+    ...(block.inheritedFontDeclarations ? { inheritedFontDeclarations: block.inheritedFontDeclarations } : {}),
     ...(block.explicitFontSize ? { explicitFontSize: true } : {}),
     ...(block.explicitBaselineSkip ? { explicitBaselineSkip: true } : {}),
     ...(block.fontSizePt !== undefined ? { fontSizePt: block.fontSizePt } : {}),

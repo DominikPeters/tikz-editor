@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { simpleTexInlineNodesToTokens } from "../packages/core/src/text/tex/ir.js";
 import {
   analyzeSimpleTexParagraph,
   analyzeSimpleTexResources,
@@ -25,6 +26,16 @@ import {
 } from "../packages/core/src/text/tex/vlist/index.js";
 
 describe("simple TeX paragraph IR", () => {
+  it("retains and restores bare font declarations across scoped block children", () => {
+    const ir = parseSimpleTexParagraphIr(String.raw`Base\par{\bfseries\begin{center}Bold\end{center}Still\par}Base`);
+    expect(ir.unsupportedCommand).toBe(false);
+    const tokens = ir.blocks.flatMap(block => simpleTexInlineNodesToTokens(block.nodes,
+      { family: "sans", series: "medium", shape: "upright" }));
+    const words = tokens.filter(token => /Base|Bold|Still/u.test(token.text));
+    expect(words.map(token => [token.text, token.fontState.family, token.fontState.series])).toEqual([
+      ["Base", "sans", "medium"], ["Bold", "sans", "bold"], ["Still", "sans", "bold"], ["Base", "sans", "medium"],
+    ]);
+  });
   it("keeps ordinary paragraph groups scoped and ignores TeX's relax primitive", () => {
     const source = String.raw`\relax{\raggedleft Alpha\par}Omega`;
     const ir = parseSimpleTexParagraphIr(source);

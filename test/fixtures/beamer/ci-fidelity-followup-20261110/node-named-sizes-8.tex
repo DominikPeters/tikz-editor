@@ -1,0 +1,15 @@
+\documentclass[8pt]{beamer}
+\usepackage{tikz}
+\usetheme{default}
+\setbeamertemplate{navigation symbols}{}\date{}
+\begin{document}\begin{frame}[t]{Node font sizes}
+\begin{tikzpicture}
+\node[anchor=west] at (0,0) {\tiny Tiny};
+\node[anchor=west] at (0,-.5) {\scriptsize Script};
+\node[anchor=west] at (0,-1) {\footnotesize Foot};
+\node[anchor=west] at (0,-1.5) {\small Small};
+\node[anchor=west] at (0,-2) {\normalsize Normal};
+\node[anchor=west] at (0,-2.7) {\large Large};
+\node[anchor=west] at (0,-3.5) {\alt<1>{\Large First}{\Huge Second}};
+\end{tikzpicture}
+\only<2>{}\end{frame}\end{document}

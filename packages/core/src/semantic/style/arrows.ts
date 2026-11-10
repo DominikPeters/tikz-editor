@@ -1,7 +1,7 @@
 import { parseOptionListRaw } from "../../options/parse.js";
 import { parseLength } from "../coords/parse-length.js";
 import type { ArrowMarker, ArrowTip, ArrowTipKind, ResolvedStyle, TipsMode } from "../types.js";
-import { ARROW_NAME_ALIASES, DEFAULT_ARROW_LENGTH, DEFAULT_ARROW_WIDTH, NAMED_COLORS } from "./constants.js";
+import { ARROW_NAME_ALIASES, NAMED_COLORS } from "./constants.js";
 import { normalizeColor } from "./colors.js";
 import { findTopLevelCharacter, readBalancedBlock, readOptionalBracketOptions, stripEnclosingBraces } from "./option-utils.js";
 
@@ -248,6 +248,15 @@ export function makeDefaultArrowMarker(kind: ArrowTipKind, lineWidth = 0.4): Arr
 function makeDefaultArrowTip(kind: ArrowTipKind, lineWidth = 0.4): ArrowTip {
   const baseLineWidth = normalizeArrowLineWidth(lineWidth);
 
+  if (kind === "to") {
+    // pgfcorearrows.code.tex: the legacy tip uses a reduced stroke and
+    // fixed cubic coordinates, distinct from arrows.meta's modern tip.
+    const unit = .28 + .3 * baseLineWidth;
+    return { kind, open: true, round: true, reversed: false, bend: false, afterLineEnd: false,
+      color: null, fill: "none", length: 3.75 * unit, width: 8 * unit,
+      inset: null, sep: 0, lineWidth: .8 * baseLineWidth, arc: null, rayCount: null };
+  }
+
   if (kind === "cm-rightarrow") {
     // Based on pgflibraryarrows.meta.code.tex (Computer Modern Rightarrow defaults + setup code).
     const nominalLength = 1.6 + 2.2 * baseLineWidth;
@@ -491,42 +500,10 @@ function makeDefaultArrowTip(kind: ArrowTipKind, lineWidth = 0.4): ArrowTip {
     };
   }
 
-  if (kind === "implies") {
-    return {
-      kind,
-      open: false,
-      round: false,
-      reversed: false,
-      bend: false,
-      afterLineEnd: false,
-      color: null,
-      fill: null,
-      length: 9,
-      width: 7,
-      inset: null,
-      sep: 0,
-      lineWidth: baseLineWidth,
-      arc: null,
-      rayCount: null
-    };
-  }
-
   return {
-    kind,
-    open: false,
-    round: false,
-    reversed: false,
-    bend: false,
-    afterLineEnd: false,
-    color: null,
-    fill: null,
-    length: DEFAULT_ARROW_LENGTH,
-    width: DEFAULT_ARROW_WIDTH,
-    inset: null,
-    sep: 0,
-    lineWidth: baseLineWidth,
-    arc: null,
-    rayCount: null
+    kind, open: false, round: false, reversed: false, bend: false,
+    afterLineEnd: false, color: null, fill: null, length: 9, width: 7,
+    inset: null, sep: 0, lineWidth: baseLineWidth, arc: null, rayCount: null
   };
 }
 
@@ -624,7 +601,7 @@ function buildKiteTip(
 }
 
 export function cloneArrowMarker(marker: ArrowMarker): ArrowMarker {
-  return { tips: marker.tips.map(cloneArrowTip) };
+  return { ...marker, tips: marker.tips.map(cloneArrowTip) };
 }
 
 function cloneArrowTip(tip: ArrowTip): ArrowTip {

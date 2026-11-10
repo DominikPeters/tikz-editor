@@ -1191,7 +1191,19 @@ function parseColumnFlow(
       continue;
     }
     const end = requireArrayValue(tokens, endIndex);
-    const span = { from: token.span.from, to: end.span.to };
+    let span = { from: token.span.from, to: end.span.to };
+    // Keep a list's surrounding formatting group in the text frontend.
+    // Splitting off its closing brace paints it as a literal paragraph and
+    // changes the reference baseline of bottom-aligned columns.
+    let ancestor = context.syntax.tree.resolveInner(token.span.from + 1, 1);
+    while (ancestor.parent) {
+      ancestor = ancestor.parent;
+      if (ancestor.from < bodySpan.from) break;
+      if (ancestor.name === "Group" && ancestor.from < token.span.from && ancestor.to <= bodySpan.to &&
+          !overlays.commands.some(command => command.branches.some(branch => branch.span.from === ancestor.from && branch.span.to === ancestor.to))) {
+        span = { from: ancestor.from, to: ancestor.to };
+      }
+    }
     structural.push({
       span,
       node: {

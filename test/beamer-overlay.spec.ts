@@ -55,6 +55,21 @@ function listMarkerPaint(page: Awaited<ReturnType<typeof renderBeamerFramePages>
   }));
 }
 
+it.each(["Body", String.raw`\[x\]`])("covers a pending description label after declarations when its first content is %s", async content => {
+  const source = deck(String.raw`\begin{description}
+\item[Covered] {\scriptsize\color{black}\visible<1>{${content}}\par}
+\item[Always] After.
+\end{description}\only<2>{}`);
+  const result = await renderBeamerFramePages(source);
+  expect(result.diagnostics).toEqual([]);
+  expect(result.pages).toHaveLength(2);
+  expect(tracedText(result.pages[0])).toContain("Covered");
+  expect(tracedText(result.pages[1])).not.toContain("Covered");
+  expect(tracedText(result.pages[1])).toContain("Always");
+  const label = listMarkerPaint(result.pages[1]).find(marker => marker.from === source.indexOf("\\item[Covered]"));
+  expect(label?.visible).toBe(false);
+});
+
 describe("Beamer overlays", () => {
   it("a bare pause consumes following control-word whitespace without inserting a text gap", async () => {
     const result = await renderBeamerFramePages(deck(String.raw`First.\pause Second.`));

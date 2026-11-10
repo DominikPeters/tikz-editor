@@ -26,12 +26,12 @@ export function texListItemLayoutForParagraph(
   paragraph: TexParagraphInput,
   listProfile?: TexListLayoutProfile
 ): TexVBoxListItemLayout | undefined {
-  if (paragraph.listContext?.showLabel !== true) {
+  if (!paragraph.listContext) {
     return undefined;
   }
   const labelKind = texListItemLabelKind(paragraph);
   // Beamer sets description labels in a column of the margin, in the item font.
-  const beamerDescription = labelKind === "description" && listProfile?.descriptionLabelWidthPt !== undefined;
+  const beamerDescription = paragraph.listContext.kind === "description" && listProfile?.descriptionLabelWidthPt !== undefined;
   const labelPlacement = beamerDescription ? "margin" : texListItemLabelPlacement(paragraph);
   const labelContent = texListItemLabelContent(paragraph, listProfile);
   const labelRightEdge = texListItemLabelRightEdge(stack);

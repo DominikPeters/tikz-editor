@@ -3,6 +3,7 @@ export function texFuzzMathOracleCases(cases: readonly TexFuzzCase[], limit: num
 export function compareTexFuzzMathOracle(caseData: TexFuzzCase, options?: {
   readonly tolerance?: number;
   readonly timeoutMs?: number;
+  readonly latexRelease?: string;
   readonly compare?: (formula: string, tolerance: number) => {
     readonly ok: boolean; readonly mismatches: readonly string[]; readonly ours: { readonly supported: boolean };
   };

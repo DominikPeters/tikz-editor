@@ -1,0 +1,931 @@
+{
+  "date": "2026-11-10",
+  "baselineCommit": "6816e1c8",
+  "scope": "GitHub push CI and recurring scheduled TeX fuzz failures",
+  "hostedRuns": {
+    "push": {
+      "run": 42711036755,
+      "failedJobs": [
+        "test",
+        "web",
+        "image-fidelity"
+      ],
+      "macOS": "cancelled",
+      "windows": "passed",
+      "linux": "passed"
+    },
+    "nightly": {
+      "run": 42596864052,
+      "seed": 45,
+      "baseline": "d96b33f3"
+    },
+    "weekly": {
+      "run": 42472665961,
+      "seed": 44,
+      "failure": "Node heap exhausted during generation before output artifacts"
+    },
+    "olderBeamer": {
+      "run": 42465696700,
+      "seed": 43,
+      "failedFrameObservations": 15,
+      "replay": {
+        "initial": "artifacts/ci-investigation-20261110/seed43-final/report.json",
+        "closedFrameObservations": 12,
+        "closedStates": 28,
+        "openFrameObservations": 3,
+        "openStates": 14,
+        "open": [
+          {
+            "id": "v3-seed-43-0037-diagram-build",
+            "fixture": "test/fixtures/beamer/ci-fuzz-seed43/v3-seed-43-0037-diagram-build.tex",
+            "sourceSha256": "5a06f08b4480b0d6190cc00fc7bb3bc37b56e6aff9095b66ee84f7b82cad4a2e",
+            "frame": 1,
+            "states": 5,
+            "status": "mismatch",
+            "failures": [
+              "State 2: maxAbsoluteGlyphDyPt=0.2422 (maximum 0.01)",
+              "State 3: maxAbsoluteGlyphDyPt=0.2422 (maximum 0.01)",
+              "State 4: maxAbsoluteGlyphDyPt=0.2422 (maximum 0.01)",
+              "State 5: maxAbsoluteGlyphDyPt=0.2422 (maximum 0.01)"
+            ],
+            "currentReplay": "artifacts/ci-investigation-20261110/seed43-fixed6/report.json",
+            "originalFailures": [
+              "State 1: unmatchedOracleTextLines=5 (expected 0)",
+              "State 1: transformMatch=false",
+              "State 1: maxRectangleEdgeDeltaPt=0.703673 (maximum 0.01)",
+              "State 1: maxAbsoluteGlyphDxPt=1.725651 (maximum 0.02)",
+              "State 1: maxAbsoluteGlyphDyPt=0.639407 (maximum 0.01)",
+              "State 2: transformMatch=false",
+              "State 2: maxRectangleEdgeDeltaPt=0.772998 (maximum 0.01)",
+              "State 2: maxAbsoluteGlyphDxPt=1.725651 (maximum 0.02)",
+              "State 2: maxAbsoluteGlyphDyPt=0.857065 (maximum 0.01)",
+              "State 3: transformMatch=false",
+              "State 3: maxRectangleEdgeDeltaPt=0.772998 (maximum 0.01)",
+              "State 3: maxAbsoluteGlyphDxPt=1.725651 (maximum 0.02)",
+              "State 3: maxAbsoluteGlyphDyPt=0.857065 (maximum 0.01)",
+              "State 4: transformMatch=false",
+              "State 4: maxRectangleEdgeDeltaPt=0.772998 (maximum 0.01)",
+              "State 4: maxAbsoluteGlyphDxPt=1.725651 (maximum 0.02)",
+              "State 4: maxAbsoluteGlyphDyPt=0.857065 (maximum 0.01)",
+              "State 5: transformMatch=false",
+              "State 5: maxRectangleEdgeDeltaPt=0.772998 (maximum 0.01)",
+              "State 5: maxAbsoluteGlyphDxPt=1.725651 (maximum 0.02)",
+              "State 5: maxAbsoluteGlyphDyPt=0.857065 (maximum 0.01)"
+            ]
+          },
+          {
+            "id": "v3-seed-43-0038-math-layout",
+            "fixture": "test/fixtures/beamer/ci-fuzz-seed43/v3-seed-43-0038-math-layout.tex",
+            "sourceSha256": "73d91836f8b7943583972267a173df64caccc902a4d686ba4402d7bdda0db03c",
+            "frame": 1,
+            "states": 5,
+            "status": "mismatch",
+            "failures": [
+              "State 1: maxRectangleEdgeDeltaPt=0.049909 (maximum 0.01)",
+              "State 1: maxAbsoluteGlyphDyPt=0.049919 (maximum 0.01)",
+              "State 2: maxRectangleEdgeDeltaPt=0.049909 (maximum 0.01)",
+              "State 2: maxAbsoluteGlyphDyPt=1.703881 (maximum 0.01)",
+              "State 3: maxRectangleEdgeDeltaPt=0.057432 (maximum 0.01)",
+              "State 3: maxAbsoluteGlyphDyPt=1.905748 (maximum 0.01)",
+              "State 4: maxRectangleEdgeDeltaPt=0.057432 (maximum 0.01)",
+              "State 4: maxAbsoluteGlyphDyPt=1.905748 (maximum 0.01)",
+              "State 5: maxRectangleEdgeDeltaPt=0.057432 (maximum 0.01)",
+              "State 5: maxAbsoluteGlyphDyPt=1.905748 (maximum 0.01)"
+            ],
+            "currentReplay": "artifacts/ci-investigation-20261110/seed43-fixed7/report.json",
+            "originalFailures": [
+              "State 1: maxRectangleEdgeDeltaPt=0.049909 (maximum 0.01)",
+              "State 1: maxAbsoluteGlyphDyPt=0.049919 (maximum 0.01)",
+              "State 2: maxRectangleEdgeDeltaPt=0.049909 (maximum 0.01)",
+              "State 2: maxAbsoluteGlyphDyPt=1.703881 (maximum 0.01)",
+              "State 3: maxRectangleEdgeDeltaPt=0.057432 (maximum 0.01)",
+              "State 3: maxAbsoluteGlyphDyPt=1.905748 (maximum 0.01)",
+              "State 4: maxRectangleEdgeDeltaPt=0.057432 (maximum 0.01)",
+              "State 4: maxAbsoluteGlyphDyPt=1.905748 (maximum 0.01)",
+              "State 5: maxRectangleEdgeDeltaPt=0.057432 (maximum 0.01)",
+              "State 5: maxAbsoluteGlyphDyPt=1.905748 (maximum 0.01)"
+            ]
+          },
+          {
+            "id": "v3-seed-43-0040-scoped-typography",
+            "fixture": "test/fixtures/beamer/ci-fuzz-seed43/v3-seed-43-0040-scoped-typography.tex",
+            "sourceSha256": "7d98695943ec9e0a7c98be020a48cac2b6d259ebb4a701fc06d43eea1e1cb1c7",
+            "frame": 1,
+            "states": 4,
+            "status": "mismatch",
+            "failures": [
+              "State 1: unmatchedOracleTextLines=13 (expected 0)",
+              "State 1: transformMatch=false",
+              "State 1: maxRectangleEdgeDeltaPt=4.261915 (maximum 0.01)",
+              "State 1: maxAbsoluteGlyphDxPt=8.51427 (maximum 0.02)",
+              "State 1: maxAbsoluteGlyphDyPt=5.080195 (maximum 0.01)",
+              "State 2: unmatchedOracleTextLines=1 (expected 0)",
+              "State 3: maxAbsoluteGlyphDxPt=207.568433 (maximum 0.02)",
+              "State 4: maxAbsoluteGlyphDxPt=207.568433 (maximum 0.02)"
+            ],
+            "currentReplay": "artifacts/ci-investigation-20261110/seed43-fixed5/report.json",
+            "originalFailures": [
+              "State 1: unmatchedOracleTextLines=13 (expected 0)",
+              "State 1: transformMatch=false",
+              "State 1: maxRectangleEdgeDeltaPt=4.261915 (maximum 0.01)",
+              "State 1: maxAbsoluteGlyphDxPt=8.51427 (maximum 0.02)",
+              "State 1: maxAbsoluteGlyphDyPt=5.080195 (maximum 0.01)",
+              "State 2: unmatchedOracleTextLines=1 (expected 0)",
+              "State 3: maxAbsoluteGlyphDxPt=207.568433 (maximum 0.02)",
+              "State 4: maxAbsoluteGlyphDxPt=207.568433 (maximum 0.02)"
+            ]
+          }
+        ],
+        "allOriginalSourcesPreserved": true,
+        "closedManifest": "test/fixtures/beamer/ci-fuzz-seed43/closed-cases.json",
+        "totalOriginallyFailingObservationStates": 42,
+        "openFailingStates": 13
+      }
+    }
+  },
+  "workflowFixes": [
+    "Build tex-fuzz/core/grammar packages in the isolated unit job before subprocess and worker tests.",
+    "Install Poppler tools used by corpus PDF tests in the unit job.",
+    "Use portable shared TeX cache environment for article comparisons.",
+    "Dispatch ImageMagick 6 identify, compare, and convert correctly.",
+    "Shard the weekly 30,000 valid and 10,000 malformed budgets across five fresh processes, at most two simultaneous matrix jobs."
+  ],
+  "weeklyCampaignChange": {
+    "shards": 5,
+    "validPerShard": 6000,
+    "extraMalformedPerShard": 400,
+    "dedicatedMalformedPerShard": 2000,
+    "seedStride": 100000,
+    "note": "Total case budgets retained; source sequence and adaptive coverage history differ from the former monolithic campaign. Each shard retains its own controls. This is a campaign partition change, not a tolerance change.",
+    "boundedReplay": {
+      "seed": 44,
+      "heapLimitMiB": 2048,
+      "nativeCases": 11008,
+      "hardFindings": 0,
+      "metamorphicChecks": 6855,
+      "resourceWrapper": "The fuzzer completed and wrote reports; /usr/bin/time -l then returned 1 because sysctl kern.clockrate is sandbox restricted. Resource-wrapper exit is not counted as a successful command.",
+      "allFiveShardsRun": false,
+      "coverageReport": "artifacts/ci-investigation-20261110/weekly-shard0/coverage.json",
+      "nativeRunLog": "/tmp/tikz-ci-20261110-weekly.log",
+      "bundle": "artifacts/ci-investigation-20261110/weekly-shard0/bundle.json",
+      "checkpoint": "Before the final scoped spacing follow-ups; full weekly matrix not rerun."
+    }
+  },
+  "rendererFixes": [
+    "Leading displays following blocks consume prior depth without inserting an extra outer lineskip.",
+    "Pending list labels use the first material leaf or following display as their overlay consumer.",
+    "Transferred pending labels suppress an inner list opening skip.",
+    "Wrapped block titles use the complete vbox height.",
+    "Inline TikZ pictures inherit scoped ambient font dimensions.",
+    "Paragraphs with no shipped lines preserve prevdepth without adding baseline glue.",
+    "Column lists retain surrounding formatting groups and physical bottom-reference depth after endminipage unskip.",
+    "Paint interleaving preserves sibling paragraphs once and retains multiple pictures in a shared structural part.",
+    "Draft image labels append only a discovered extension and use natural leading font glue.",
+    "Cramped lists expose their live 0.5pt topsep to subsequent trivlists; list transitions retain pending-label semantics.",
+    "A mid-paragraph trivlist does not add leading adjustment to the enclosing paragraph.",
+    "Closing list/trivlist skips are emitted before subsequent display math, including its leading empty line.",
+    "Description continuations retain margin metadata after a nested list consumes their pending label.",
+    "Closing trivlist skips survive trailing par and group delimiters.",
+    "Consecutive list/trivlist boundaries in columns collapse with addvspace and retain interline glue.",
+    "Large leading center/flush boxes in rounded blocks retain their minimum lineskip; pending-label noparlist contexts stay distinct."
+  ],
+  "harnessChanges": {
+    "numericTolerancesChanged": false,
+    "invariantApplicability": {
+      "finding": "tf1-e632296b3e8e6ab9b409566f",
+      "reproduction": "test/fixtures/tex-fuzz/ci-20261109-image-paint-count.json",
+      "observations": 3,
+      "widths": [
+        48,
+        160,
+        480
+      ],
+      "change": "Exclude semantic paint obligations for the same unsupported literal sources already excluded by support qualification, including boxed literals inside math SVG.",
+      "independentTeXFidelityClosed": false,
+      "note": "Original and reduction use unsupported fontsize 0em / 32767pt. Independent LuaLaTeX reports Dimension too large; no valid independent image fidelity pass is claimed. Supported image-loss mutation controls remain required.",
+      "negativeControl": "Supported missing-image mutation still produces image-paint-count; geometry invariants remain active for unsupported cases."
+    },
+    "draftTracing": "Tag and trace all four draft borders inside embedded TikZ, without changing their paint geometry.",
+    "flatFillProbes": "Exclude nested block surfaces and shadow/transition regions from parent flat-fill probes; retain separate child probes. RGB tolerance stays 2. Existing rounded shadows are approximate, and these probes do not establish pixel equality."
+  },
+  "latestBeamerOriginals": {
+    "manifest": "test/fixtures/beamer/ci-fuzz-20261109/cases.json",
+    "frameObservations": 11,
+    "uniqueOriginalSources": 10,
+    "testedStates": 35,
+    "initialFailingStates": 32,
+    "sourceHashesUnchanged": true,
+    "sourceCheckpointReplays": {
+      "v4-seed-45-0034-image-layout-frame-3": {
+        "report": "artifacts/ci-investigation-20261110/frame3-fixed/report.json",
+        "sourceSha256": "7e6bcdbc9a57e558d66be2427fa09f74fed4c491401772f5eccbe1f06c88426c",
+        "states": 1
+      },
+      "v4-seed-45-0037-math-layout-frame-3": {
+        "report": "artifacts/ci-investigation-20261110/frame3-fixed/report.json",
+        "sourceSha256": "0681c63b4d3ab77bab20f912446f7c9756a3b7c45266cb5e918401a037ea3e7e",
+        "states": 1
+      },
+      "v4-seed-45-0038-table-flow-frame-3": {
+        "report": "artifacts/ci-investigation-20261110/frame3-fixed/report.json",
+        "sourceSha256": "dc34e039961619ba3648003ba805f323abb6f30a8e3a2bdfa1190acc5d750d95",
+        "states": 1
+      },
+      "v4-seed-45-0033-overlay-composition": {
+        "report": "artifacts/ci-investigation-20261110/beamer-fixed2/report.json",
+        "sourceSha256": "0ca0493f8213c61d4b92bb324577412bd79cca2563236c3dce9bb079198daf7c",
+        "states": 4
+      },
+      "v4-seed-45-0034-image-layout": {
+        "report": "artifacts/ci-investigation-20261110/beamer-fixed2/report.json",
+        "sourceSha256": "7e6bcdbc9a57e558d66be2427fa09f74fed4c491401772f5eccbe1f06c88426c",
+        "states": 4
+      },
+      "v4-seed-45-0035-nested-flow": {
+        "report": "artifacts/ci-investigation-20261110/beamer-fixed2/report.json",
+        "sourceSha256": "ec155373fc179c6eb82351da0cb7665df89334d2f79cf82933f4b484ddd31bdc",
+        "states": 4
+      },
+      "v4-seed-45-0042-nested-flow": {
+        "report": "artifacts/ci-investigation-20261110/beamer-fixed2/report.json",
+        "sourceSha256": "ea7692bfb3bd81e893b7ff93f7cc91a74c404dbddcae1f7ab2139968b70ada69",
+        "states": 4
+      },
+      "v4-seed-45-0039-scoped-typography": {
+        "report": "artifacts/ci-investigation-20261110/beamer-fixed3/report.json",
+        "sourceSha256": "05bc143c64aeac6aced02dee380b71b7e630de6d5c8c0a5ad256ab2ac8bf40fb",
+        "states": 4
+      },
+      "v4-seed-45-0043-diagram-build": {
+        "report": "artifacts/ci-investigation-20261110/beamer-fixed5/report.json",
+        "sourceSha256": "4100fbdd1ed7650728b3775afdd6e44bae3f489b8ef9b6a8817ab805eb0281bf",
+        "states": 4
+      },
+      "v4-seed-45-0041-image-layout": {
+        "report": "artifacts/ci-investigation-20261110/beamer-fixed7/report.json",
+        "sourceSha256": "c0df5dccd080502bff676ce3509bc50bbf48b464308b66f20baf026767cf08ab",
+        "states": 4
+      },
+      "v4-seed-45-0044-math-layout": {
+        "report": "artifacts/ci-investigation-20261110/beamer-fixed11/report.json",
+        "sourceSha256": "124c4dd93d6ad5b79d98f0cf789840c3f0c821238383bc81a17ba33ab306063a",
+        "states": 4
+      }
+    },
+    "completeCampaignReplay": {
+      "status": "passed on final frozen source",
+      "frames": 70,
+      "states": 155,
+      "failed": 0,
+      "report": "artifacts/ci-investigation-20261110/seed45-frozen/report.json",
+      "scope": "Every archived frame and recorded overlay state, independent LuaLaTeX structural and live-paint checks; no numerical tolerance changes."
+    }
+  },
+  "checks": {
+    "fullUnitCheckpoint": {
+      "passed": 8759,
+      "skipped": 25,
+      "todo": 1,
+      "filesPassed": 542,
+      "note": "Full POINTER_FUZZ_FULL run before the final scoped spacing and paint follow-ups; final affected suites recorded separately."
+    },
+    "finalPinnedAndComparatorCheckpoint": {
+      "passed": 437,
+      "failed": 0,
+      "log": "/tmp/tikz-ci-20261110-pinned5.log"
+    },
+    "typecheck": "passed on final source",
+    "lintCI": "passed on final source",
+    "webBuild": "passed on final source",
+    "workflowActionlint": "passed for all three changed workflows with actionlint 1.7.12; shellcheck unavailable and explicitly disabled",
+    "IM6DispatchShim": "identify, compare and convert dispatch assertions passed; this is a shim contract check on macOS, not a Linux workflow run",
+    "originalImageOracle": {
+      "testsPassed": 9,
+      "originalSources": 9,
+      "mutationControls": "missing, shifted, flipped, uncropped paint rejected"
+    },
+    "articleImages": {
+      "cases": 16,
+      "status": "passed",
+      "log": "/tmp/tikz-ci-20261110-article-images.log"
+    },
+    "browserRotation": {
+      "repeat": 20,
+      "passed": 20,
+      "log": "/tmp/tikz-ci-20261110-browser-hover.log"
+    },
+    "nightlyFinal": {
+      "status": "passed",
+      "nativeCases": 11771,
+      "hardFindings": 0,
+      "metamorphic": {
+        "cases": 200,
+        "pairs": 529,
+        "checks": 2645,
+        "findings": 0
+      },
+      "paragraphOracle": {
+        "available": true,
+        "calibrationCompilations": 18,
+        "initialCompileMs": 517.8,
+        "cacheHits": 0,
+        "shrinkCandidates": 23,
+        "minimizedSource": "\\TeX{}",
+        "generatedParagraphSample": 128,
+        "generatedParagraphCompared": 128,
+        "generatedParagraphFindings": 0,
+        "paragraphCompilations": 2,
+        "paragraphCacheHits": 0
+      },
+      "diagnosticMath": {
+        "available": true,
+        "cases": 16,
+        "compared": 8,
+        "findings": 1,
+        "artifacts": "artifacts/ci-investigation-20261110/nightly-final/findings/math-differential",
+        "policy": "diagnostic"
+      },
+      "report": "/tmp/tikz-ci-20261110-nightly-final.log",
+      "checkpoint": "Before final historical spacing follow-ups; nightlyFrozen is the final-source replay."
+    },
+    "browserFull": {
+      "status": "passed",
+      "passed": 422,
+      "failed": 0,
+      "workers": 2,
+      "log": "/tmp/tikz-ci-20261110-browser-final.log"
+    },
+    "mathSymbolMandatory": {
+      "status": "failed locally, pre-existing on untouched v1.2.0",
+      "cases": 56,
+      "passed": 52,
+      "failed": 4,
+      "hostedBaseline": "56/56 passed on Ubuntu in run 42596864052",
+      "localOracle": "LuaHBTeX 1.24.0 / TeX Live 2026",
+      "baselineCommit": "6816e1c8",
+      "baselineReplay": "artifacts/ci-investigation-20261110/baseline-math.json",
+      "originalFormulas": [
+        {
+          "formula": "x_{\\begin{pmatrix}z&;\\end{pmatrix}}",
+          "formulaSha256": "c79d2ee749b7f3474de7bb282dc420ffa037172e8332aceafd459e6d05a6b3f8",
+          "mismatches": [
+            "glyph 1 y differs: ours=-3.104443 tex=-2.654495",
+            "glyph 2 y differs: ours=5.255589 tex=4.955536",
+            "glyph 3 y differs: ours=5.255589 tex=4.955536",
+            "glyph 4 y differs: ours=-3.104443 tex=-2.654495",
+            "total depth differs: ours=9.155693 tex=9.605637"
+          ]
+        },
+        {
+          "formula": "\\frac{\\begin{pmatrix}x\\end{pmatrix}}{y}",
+          "formulaSha256": "9a0d2985df55d013e598c7ca41810a6401ed6a6c18b2ab4f29447e6771a9a2e1",
+          "mismatches": [
+            "glyph 1 y differs: ours=-7.000089 tex=-7.750076",
+            "total height differs: ours=15.700118 tex=16.15004"
+          ]
+        },
+        {
+          "formula": "\\sqrt[{\\begin{pmatrix}x\\end{pmatrix}}]{x}",
+          "formulaSha256": "2e773ae9809cc840a59f88b8c2c16c91f5f1dce131dfff2223f7dedb6c30b2aa",
+          "mismatches": [
+            "glyph 0 differs: ours=cmex7/18 tex=cmex7/32",
+            "glyph 0 y differs: ours=-10.370518 tex=-11.870529",
+            "glyph 0 width differs: ours=4.23366 tex=4.541199",
+            "glyph 1 x differs: ours=7.011446 tex=7.318909",
+            "glyph 1 y differs: ours=-2.213348 tex=-3.463348",
+            "glyph 2 differs: ours=cmex7/19 tex=cmex7/33",
+            "glyph 2 x differs: ours=12.726726 tex=13.03418",
+            "glyph 2 y differs: ours=-10.370518 tex=-11.870529",
+            "glyph 2 width differs: ours=4.23366 tex=4.541199",
+            "glyph 3 x differs: ours=11.404814 tex=12.019958",
+            "rule 4 x differs: ours=19.738174 tex=20.353317",
+            "glyph 5 x differs: ours=19.738174 tex=20.353317",
+            "total width differs: ours=25.453454 tex=26.068588",
+            "total height differs: ours=10.613373 tex=12.113373",
+            "total depth differs: ours=2.397236 tex=2.886765"
+          ]
+        },
+        {
+          "formula": "x_{\\begin{cases}x&y\\end{cases}}",
+          "formulaSha256": "ef3a0745b22c3c4d499e28b2aa70d8f0d526067c0068d1b31e32edeac5c76e73",
+          "mismatches": [
+            "glyph 2 y differs: ours=7.835603 tex=7.085587",
+            "glyph 3 y differs: ours=7.835603 tex=7.085587"
+          ]
+        }
+      ],
+      "baselineSameFailures": true,
+      "cause": "Unresolved. The local and Ubuntu oracle environments differ; no environment-specific tolerance or renderer change was made."
+    },
+    "finalPinnedFidelity": {
+      "passed": 415,
+      "failed": 0,
+      "originalSourceHashesChecked": true,
+      "log": "/tmp/tikz-ci-20261110-pinned-frozen.log"
+    },
+    "broadTextAndBeamer": {
+      "passed": 2897,
+      "skipped": 18,
+      "failed": 0,
+      "files": 140,
+      "log": "/tmp/tikz-ci-20261110-text-beamer-final.log",
+      "checkpoint": "Before the final column/trivlist and rounded-leading-box follow-ups; the final 415-case pinned gate follows those."
+    },
+    "nightlyFrozen": {
+      "status": "passed on final frozen source",
+      "seed": 45,
+      "generatedCases": 10000,
+      "nativeCases": 11771,
+      "hardFindings": 0,
+      "metamorphic": {
+        "cases": 200,
+        "pairs": 529,
+        "checks": 2645,
+        "findings": 0
+      },
+      "paragraphOracle": {
+        "available": true,
+        "calibrationCompilations": 18,
+        "initialCompileMs": 522.7,
+        "cacheHits": 0,
+        "shrinkCandidates": 23,
+        "minimizedSource": "\\TeX{}",
+        "generatedParagraphSample": 128,
+        "generatedParagraphCompared": 128,
+        "generatedParagraphFindings": 0,
+        "paragraphCompilations": 2,
+        "paragraphCacheHits": 0
+      },
+      "diagnosticMath": {
+        "available": true,
+        "cases": 16,
+        "compared": 8,
+        "findings": 1,
+        "artifacts": "artifacts/ci-investigation-20261110/nightly-frozen/findings/math-differential",
+        "policy": "diagnostic"
+      },
+      "log": "/tmp/tikz-ci-20261110-nightly-frozen.log"
+    },
+    "smokeFrozen": {
+      "status": "passed on final frozen source",
+      "seed": 20260711,
+      "generatedCases": 1000,
+      "nativeCases": 1360,
+      "hardFindings": 0,
+      "metamorphic": {
+        "cases": 25,
+        "pairs": 63,
+        "checks": 315,
+        "findings": 0
+      },
+      "paragraphOracle": {
+        "available": false
+      },
+      "diagnosticMath": {
+        "available": false
+      },
+      "log": "/tmp/tikz-ci-20261110-smoke-frozen.log"
+    },
+    "beamerImagesFrozen": {
+      "status": "passed on final source",
+      "cases": 8,
+      "states": 11,
+      "failed": 0,
+      "report": "artifacts/ci-investigation-20261110/beamer-images-frozen/comparison/report.json"
+    },
+    "desktopMock": {
+      "passed": 25,
+      "failed": 0,
+      "log": "/tmp/tikz-ci-20261110-desktop-mock.log",
+      "scope": "Mock shell and bridge tests; no fresh native OS execution."
+    },
+    "oracleIntegration": {
+      "passed": 29,
+      "failed": 1,
+      "log": "/tmp/tikz-ci-20261110-oracle-integration.log",
+      "failure": "The mandatory math-regression test stops on the first of the four locally failing formulas recorded in mathSymbolMandatory. All four reproduce unchanged on baseline 6816e1c8.",
+      "status": "failed; existing local oracle discrepancy remains open"
+    },
+    "finalFollowOnCommands": [
+      {
+        "name": "nightly-frozen",
+        "exitCode": 0,
+        "seconds": 182.66933866601903,
+        "log": "/tmp/tikz-ci-20261110-nightly-frozen.log"
+      },
+      {
+        "name": "smoke-frozen",
+        "exitCode": 0,
+        "seconds": 42.558779957995284,
+        "log": "/tmp/tikz-ci-20261110-smoke-frozen.log"
+      },
+      {
+        "name": "oracle-integration",
+        "exitCode": 1,
+        "seconds": 42.84739787498256,
+        "log": "/tmp/tikz-ci-20261110-oracle-integration.log"
+      },
+      {
+        "name": "beamer-images-frozen",
+        "exitCode": 0,
+        "seconds": 32.64099837501999,
+        "log": "/tmp/tikz-ci-20261110-beamer-images-frozen.log"
+      },
+      {
+        "name": "desktop-mock",
+        "exitCode": 0,
+        "seconds": 1.244728708988987,
+        "log": "/tmp/tikz-ci-20261110-desktop-mock.log"
+      }
+    ],
+    "finalAffectedUnitSuites": {
+      "passed": 193,
+      "failed": 0,
+      "files": 5,
+      "log": "/tmp/tikz-ci-20261110-affected-final.log",
+      "suites": [
+        "tex-vlist",
+        "beamer-overlay",
+        "beamer-frame-compare",
+        "beamer-priority-conformance",
+        "tex-fuzz-hard-invariants"
+      ]
+    }
+  },
+  "unresolved": [],
+  "notEstablished": [
+    "No hosted Ubuntu rerun of these uncommitted changes.",
+    "The full five-shard weekly campaign remains unrun locally.",
+    "Rounded shadow pixel equality and general arbitrary font-parent/template execution are not claimed.",
+    "The retained unsupported 0em / 32767pt literal source still produces Dimension too large in independent LuaLaTeX; its native invariant-domain correction is not an independent fidelity pass.",
+    "The independent source-hash-verified PDFs and traces compiled earlier in this task are reused for the final archive check. Paint results are reused only for byte-identical complete native SVGs; changed SVGs are rerasterized against those PDFs. Earlier historical live campaigns beyond the two CI archives have offline pinned structural coverage, not a fresh exhaustive paint soak.",
+    "Local macOS / Node 26 validation does not replace hosted Ubuntu / Node 22."
+  ],
+  "historicalUnresolvedAtInitialCheckpoint": [
+    {
+      "kind": "diagnostic-math-glyph-trace",
+      "case": "test/fixtures/tex-fuzz/ci-20261110-math-glyph-trace.json",
+      "originalSourceSha256": "5befbd78efff077f55dbf0b684819da3ea1cff9f62c4bcb25b95f203faa179d2",
+      "note": "One diagnostic xrightarrow/cases lower-label glyph trace mismatch; original and reduction retained. Not a hard nightly failure."
+    },
+    {
+      "kind": "local-mandatory-math",
+      "caseCount": 4,
+      "status": "pre-existing at baseline, retained unchanged",
+      "reproduction": "node scripts/check-tex-math-symbols.mjs",
+      "details": "checks.mathSymbolMandatory"
+    },
+    {
+      "kind": "older-seed43-observations",
+      "frameObservations": 3,
+      "manifest": "test/fixtures/beamer/ci-fuzz-seed43/cases.json",
+      "open": [
+        {
+          "id": "v3-seed-43-0037-diagram-build",
+          "fixture": "test/fixtures/beamer/ci-fuzz-seed43/v3-seed-43-0037-diagram-build.tex",
+          "sourceSha256": "5a06f08b4480b0d6190cc00fc7bb3bc37b56e6aff9095b66ee84f7b82cad4a2e",
+          "frame": 1,
+          "states": 5,
+          "status": "mismatch",
+          "failures": [
+            "State 2: maxAbsoluteGlyphDyPt=0.2422 (maximum 0.01)",
+            "State 3: maxAbsoluteGlyphDyPt=0.2422 (maximum 0.01)",
+            "State 4: maxAbsoluteGlyphDyPt=0.2422 (maximum 0.01)",
+            "State 5: maxAbsoluteGlyphDyPt=0.2422 (maximum 0.01)"
+          ],
+          "currentReplay": "artifacts/ci-investigation-20261110/seed43-fixed6/report.json",
+          "originalFailures": [
+            "State 1: unmatchedOracleTextLines=5 (expected 0)",
+            "State 1: transformMatch=false",
+            "State 1: maxRectangleEdgeDeltaPt=0.703673 (maximum 0.01)",
+            "State 1: maxAbsoluteGlyphDxPt=1.725651 (maximum 0.02)",
+            "State 1: maxAbsoluteGlyphDyPt=0.639407 (maximum 0.01)",
+            "State 2: transformMatch=false",
+            "State 2: maxRectangleEdgeDeltaPt=0.772998 (maximum 0.01)",
+            "State 2: maxAbsoluteGlyphDxPt=1.725651 (maximum 0.02)",
+            "State 2: maxAbsoluteGlyphDyPt=0.857065 (maximum 0.01)",
+            "State 3: transformMatch=false",
+            "State 3: maxRectangleEdgeDeltaPt=0.772998 (maximum 0.01)",
+            "State 3: maxAbsoluteGlyphDxPt=1.725651 (maximum 0.02)",
+            "State 3: maxAbsoluteGlyphDyPt=0.857065 (maximum 0.01)",
+            "State 4: transformMatch=false",
+            "State 4: maxRectangleEdgeDeltaPt=0.772998 (maximum 0.01)",
+            "State 4: maxAbsoluteGlyphDxPt=1.725651 (maximum 0.02)",
+            "State 4: maxAbsoluteGlyphDyPt=0.857065 (maximum 0.01)",
+            "State 5: transformMatch=false",
+            "State 5: maxRectangleEdgeDeltaPt=0.772998 (maximum 0.01)",
+            "State 5: maxAbsoluteGlyphDxPt=1.725651 (maximum 0.02)",
+            "State 5: maxAbsoluteGlyphDyPt=0.857065 (maximum 0.01)"
+          ]
+        },
+        {
+          "id": "v3-seed-43-0038-math-layout",
+          "fixture": "test/fixtures/beamer/ci-fuzz-seed43/v3-seed-43-0038-math-layout.tex",
+          "sourceSha256": "73d91836f8b7943583972267a173df64caccc902a4d686ba4402d7bdda0db03c",
+          "frame": 1,
+          "states": 5,
+          "status": "mismatch",
+          "failures": [
+            "State 1: maxRectangleEdgeDeltaPt=0.049909 (maximum 0.01)",
+            "State 1: maxAbsoluteGlyphDyPt=0.049919 (maximum 0.01)",
+            "State 2: maxRectangleEdgeDeltaPt=0.049909 (maximum 0.01)",
+            "State 2: maxAbsoluteGlyphDyPt=1.703881 (maximum 0.01)",
+            "State 3: maxRectangleEdgeDeltaPt=0.057432 (maximum 0.01)",
+            "State 3: maxAbsoluteGlyphDyPt=1.905748 (maximum 0.01)",
+            "State 4: maxRectangleEdgeDeltaPt=0.057432 (maximum 0.01)",
+            "State 4: maxAbsoluteGlyphDyPt=1.905748 (maximum 0.01)",
+            "State 5: maxRectangleEdgeDeltaPt=0.057432 (maximum 0.01)",
+            "State 5: maxAbsoluteGlyphDyPt=1.905748 (maximum 0.01)"
+          ],
+          "currentReplay": "artifacts/ci-investigation-20261110/seed43-fixed7/report.json",
+          "originalFailures": [
+            "State 1: maxRectangleEdgeDeltaPt=0.049909 (maximum 0.01)",
+            "State 1: maxAbsoluteGlyphDyPt=0.049919 (maximum 0.01)",
+            "State 2: maxRectangleEdgeDeltaPt=0.049909 (maximum 0.01)",
+            "State 2: maxAbsoluteGlyphDyPt=1.703881 (maximum 0.01)",
+            "State 3: maxRectangleEdgeDeltaPt=0.057432 (maximum 0.01)",
+            "State 3: maxAbsoluteGlyphDyPt=1.905748 (maximum 0.01)",
+            "State 4: maxRectangleEdgeDeltaPt=0.057432 (maximum 0.01)",
+            "State 4: maxAbsoluteGlyphDyPt=1.905748 (maximum 0.01)",
+            "State 5: maxRectangleEdgeDeltaPt=0.057432 (maximum 0.01)",
+            "State 5: maxAbsoluteGlyphDyPt=1.905748 (maximum 0.01)"
+          ]
+        },
+        {
+          "id": "v3-seed-43-0040-scoped-typography",
+          "fixture": "test/fixtures/beamer/ci-fuzz-seed43/v3-seed-43-0040-scoped-typography.tex",
+          "sourceSha256": "7d98695943ec9e0a7c98be020a48cac2b6d259ebb4a701fc06d43eea1e1cb1c7",
+          "frame": 1,
+          "states": 4,
+          "status": "mismatch",
+          "failures": [
+            "State 1: unmatchedOracleTextLines=13 (expected 0)",
+            "State 1: transformMatch=false",
+            "State 1: maxRectangleEdgeDeltaPt=4.261915 (maximum 0.01)",
+            "State 1: maxAbsoluteGlyphDxPt=8.51427 (maximum 0.02)",
+            "State 1: maxAbsoluteGlyphDyPt=5.080195 (maximum 0.01)",
+            "State 2: unmatchedOracleTextLines=1 (expected 0)",
+            "State 3: maxAbsoluteGlyphDxPt=207.568433 (maximum 0.02)",
+            "State 4: maxAbsoluteGlyphDxPt=207.568433 (maximum 0.02)"
+          ],
+          "currentReplay": "artifacts/ci-investigation-20261110/seed43-fixed5/report.json",
+          "originalFailures": [
+            "State 1: unmatchedOracleTextLines=13 (expected 0)",
+            "State 1: transformMatch=false",
+            "State 1: maxRectangleEdgeDeltaPt=4.261915 (maximum 0.01)",
+            "State 1: maxAbsoluteGlyphDxPt=8.51427 (maximum 0.02)",
+            "State 1: maxAbsoluteGlyphDyPt=5.080195 (maximum 0.01)",
+            "State 2: unmatchedOracleTextLines=1 (expected 0)",
+            "State 3: maxAbsoluteGlyphDxPt=207.568433 (maximum 0.02)",
+            "State 4: maxAbsoluteGlyphDxPt=207.568433 (maximum 0.02)"
+          ]
+        }
+      ],
+      "testedStates": 14,
+      "failingStates": 13,
+      "investigation": {
+        "v3-seed-43-0037-diagram-build": "Only states 2\u20135 remain displaced by 0.2422pt in an embedded bent-arrow TikZ picture; bounds/shortening interaction suspected, root cause not established.",
+        "v3-seed-43-0038-math-layout": "Nested block placement and covered overlay content remain displaced across all five states.",
+        "v3-seed-43-0040-scoped-typography": "Scoped and nested flushright block alignment and covered glyph positions remain incorrect across all four states."
+      }
+    }
+  ],
+  "historicalNotEstablishedAtInitialCheckpoint": [
+    "No hosted rerun of these uncommitted fixes.",
+    "Local macOS / Node 26 validation does not replace Ubuntu / Node 22 runs.",
+    "The full five-shard weekly campaign has not run locally.",
+    "Known Beamer support gaps and retained 1600px raster oracle limitation in design/beamer-failure-ledger.json remain.",
+    "The three remaining older seed-43 frame observations and five local math cases are not closed by the green latest seed-45 campaign or native invariant run.",
+    "Oracle integration is 29/30 locally: mandatory math test still fails; nightly diagnostic math compares only 8/16 sampled cases.",
+    "The original 1600px glyph-edge paint-mask mismatch is retained; its documented 3200px fixture pass does not close that resolution-specific mismatch.",
+    "Previously recorded brace/font block-child restrictions, heading and overlay-node font coverage gaps, and missing direct rounded-background-edge traces remain unverified."
+  ],
+  "currentFollowup": {
+    "report": "design/ci-fidelity-followup-20261110.json",
+    "status": "Original three Beamer observations and all five local math discrepancies closed; original math sample now 16/16 comparable. Oracle context, raster sampling and edge classification changes are reported separately.",
+    "checks": {
+      "math": "artifacts/ci-followup-20261110/math-final-status.json",
+      "strictPaintNegativeControls": "artifacts/ci-followup-20261110/paint-mutations/results.json",
+      "firstFullUnitRun": {
+        "passed": 8812,
+        "failed": 3,
+        "skipped": 26,
+        "todo": 1,
+        "log": "/tmp/tikz-followup-final-unit.log",
+        "resolution": "Two font regressions corrected, and the stale frame geometry expectation independently rechecked against LuaLaTeX; final full rerun in progress."
+      },
+      "focusedFontArrowPaint": {
+        "passed": 312,
+        "failed": 0,
+        "log": "/tmp/tikz-followup-final-focused.log"
+      },
+      "independentFrameGeometry": "artifacts/ci-followup-20261110/kkt-control/run/report.json",
+      "finalFontBoundaryRegression": {
+        "passed": 86,
+        "failed": 0,
+        "log": "/tmp/tikz-followup-last-font-check.log"
+      },
+      "fullUnit": {
+        "passed": 8817,
+        "failed": 0,
+        "skipped": 26,
+        "todo": 1,
+        "log": "/tmp/tikz-followup-current-unit.log",
+        "exitCode": 0,
+        "fullPointerFuzz": true,
+        "pinnedIndependentCases": 432
+      },
+      "preflight-current": "artifacts/ci-followup-20261110/preflight-current-status.json",
+      "final-validation": "artifacts/ci-followup-20261110/final-validation-status.json",
+      "archivedCampaigns": {
+        "frames": 143,
+        "states": 332,
+        "identicalPaint": 332,
+        "repainted": 0,
+        "failed": 0,
+        "method": "Fresh native rendering and structural comparison for every state. Reuse the minutes-old independent paint result only when the complete native SVG is byte-identical; otherwise rerasterize against its source-hash-verified independent PDF.",
+        "report": "artifacts/ci-followup-20261110/archives-final-native/report.json"
+      },
+      "seed43-closed-final": {
+        "frames": 15,
+        "states": 42,
+        "failed": 0,
+        "report": "artifacts/ci-followup-20261110/seed43-closed-final/report.json"
+      },
+      "coverage-final": {
+        "frames": 14,
+        "states": 16,
+        "failed": 0,
+        "report": "artifacts/ci-followup-20261110/coverage-final/report.json"
+      },
+      "raster1600-final": {
+        "frames": 1,
+        "states": 3,
+        "failed": 0,
+        "report": "artifacts/ci-followup-20261110/raster1600-final/report.json"
+      },
+      "browser": {
+        "passed": 422,
+        "failed": 0,
+        "flaky": 0,
+        "skipped": 0,
+        "report": "artifacts/ci-followup-20261110/browser-final.json",
+        "productionBuild": true,
+        "buildBase": "/",
+        "buildLog": "/tmp/tikz-followup-browser-root-build.log"
+      },
+      "nightlyFinalSummary": {
+        "native": {
+          "cases": 11771,
+          "timeoutMs": 10000,
+          "noveltyCandidates": 3,
+          "noveltyCombinationLimit": 256,
+          "noveltyTracked": {
+            "pairs": 22359,
+            "triples": 995783
+          },
+          "boundaryCases": 128,
+          "engineHistoryCases": 24,
+          "churnRequests": 4100,
+          "slowest": [
+            {
+              "seed": 10045,
+              "profile": "supported-aggressive",
+              "elapsedMs": 1156.4909579999803
+            },
+            {
+              "seed": 4338,
+              "profile": "document",
+              "elapsedMs": 272.2248749999999
+            },
+            {
+              "seed": 10067,
+              "profile": "document",
+              "elapsedMs": 233.61745900000096
+            },
+            {
+              "seed": 10047,
+              "profile": "document",
+              "elapsedMs": 182.16258299999754
+            },
+            {
+              "seed": 45,
+              "profile": "document",
+              "elapsedMs": 152.96512499999517
+            },
+            {
+              "seed": 20853,
+              "profile": "document",
+              "elapsedMs": 145.5632919999989
+            },
+            {
+              "seed": 60,
+              "profile": "document",
+              "elapsedMs": 141.85599999999977
+            },
+            {
+              "seed": 10090,
+              "profile": "document",
+              "elapsedMs": 130.17699999999604
+            },
+            {
+              "seed": 101,
+              "profile": "document",
+              "elapsedMs": 125.07766699999775
+            },
+            {
+              "seed": 10107,
+              "profile": "supported-aggressive",
+              "elapsedMs": 116.7732079999987
+            }
+          ]
+        },
+        "metamorphic": {
+          "cases": 200,
+          "pairs": 529,
+          "checks": 2645,
+          "findings": 0
+        },
+        "oracle": {
+          "available": true,
+          "calibrationCompilations": 18,
+          "initialCompileMs": 600.9,
+          "cacheHits": 0,
+          "shrinkCandidates": 23,
+          "minimizedSource": "\\TeX{}",
+          "generatedParagraphSample": 128,
+          "generatedParagraphCompared": 128,
+          "generatedParagraphFindings": 0,
+          "paragraphCompilations": 2,
+          "paragraphCacheHits": 0
+        },
+        "mathOracle": {
+          "available": true,
+          "cases": 16,
+          "compared": 16,
+          "incomparable": 0,
+          "findings": 0,
+          "artifacts": "artifacts/ci-followup-20261110/nightly-final/findings/math-differential",
+          "policy": "fail"
+        }
+      },
+      "nightlyFinalArtifacts": "artifacts/ci-followup-20261110/nightly-final",
+      "mathSummary": {
+        "mandatory": {
+          "passed": 56,
+          "failed": 0
+        },
+        "integration": {
+          "passed": 35,
+          "failed": 0,
+          "log": "/tmp/tikz-followup-final-oracle-integration.log"
+        },
+        "originalSample": {
+          "compared": 16,
+          "incomparable": 0,
+          "findings": 0
+        },
+        "installedAndLegacyReleaseControls": {
+          "passed": 10,
+          "failed": 0
+        },
+        "note": "Math source did not change after these checks; final nightly also independently compares all 16 cases."
+      },
+      "imageSummary": {
+        "originalTestsPassed": 9,
+        "originalTestsSkipped": 0,
+        "articleCases": 16,
+        "articleErrors": 0,
+        "articleFlagged": 0,
+        "articleReport": "artifacts/ci-followup-20261110/article-images-final/seed-20261108-cases-16-scale-4-2026-11-10T02-23-55-151Z/summary.json",
+        "beamerCases": 8,
+        "beamerStates": 11,
+        "beamerFailed": 0,
+        "report": "artifacts/ci-followup-20261110/beamer-images-final/comparison/report.json"
+      },
+      "finalPinnedAndPreviews": {
+        "passed": 434,
+        "failed": 0,
+        "pinnedCases": 432,
+        "log": "/tmp/tikz-followup-final-pinned-final.log"
+      },
+      "desktopMock": {
+        "passed": 25,
+        "failed": 0,
+        "log": "/tmp/tikz-followup-final-desktop-mock-final.log",
+        "scope": "Mock shell and bridge tests; no fresh native OS execution."
+      },
+      "earlierPreflight": "artifacts/ci-followup-20261110/preflight-status.json",
+      "earlierOriginalsReplay": "artifacts/ci-followup-20261110/pin-status.json",
+      "preflight": "artifacts/ci-followup-20261110/preflight-current-status.json",
+      "originalsReplay": "artifacts/ci-followup-20261110/final-validation-status.json"
+    },
+    "remainingValidation": [
+      "No hosted Ubuntu rerun of these uncommitted changes.",
+      "The full five-shard weekly campaign remains unrun locally.",
+      "Rounded shadow pixel equality and general arbitrary font-parent/template execution are not claimed.",
+      "The retained unsupported 0em / 32767pt literal source still produces Dimension too large in independent LuaLaTeX; its native invariant-domain correction is not an independent fidelity pass.",
+      "The independent source-hash-verified PDFs and traces compiled earlier in this task are reused for the final archive check. Paint results are reused only for byte-identical complete native SVGs; changed SVGs are rerasterized against those PDFs. Earlier historical live campaigns beyond the two CI archives have offline pinned structural coverage, not a fresh exhaustive paint soak."
+    ]
+  }
+}

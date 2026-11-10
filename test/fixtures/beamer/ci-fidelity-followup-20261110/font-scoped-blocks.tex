@@ -1,0 +1,13 @@
+\documentclass[10pt]{beamer}
+\usepackage{tikz}
+\usetheme{default}
+\setbeamertemplate{navigation symbols}{}\date{}
+\begin{document}\begin{frame}[t]{Scoped fonts}
+Before.\par
+{\bfseries Bold before.\par\begin{center}Bold centered.\end{center}
+{\itshape Bold italic.\par\begin{itemize}\item Bold italic item.\end{itemize}Bold italic after.\par}
+Bold restored.\par}
+Outside restored.\par
+{\sffamily\begin{flushright}Sans aligned.\end{flushright}Sans after.\par}
+Outside again.
+\end{frame}\end{document}

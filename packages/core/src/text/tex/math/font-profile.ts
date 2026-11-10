@@ -104,6 +104,8 @@ export interface TexMathLayoutParameters {
 }
 
 export interface TexMathFontProfile {
+  /** LaTeX 2026-06-01 centers arrays on the text axis; earlier kernels use the ambient math style. */
+  readonly arrayAxisStyle?: "ambient" | "text";
   /** Locally inherited LaTeX arraystretch; cases resets it to 1.2. */
   readonly arrayStretch?: number;
   readonly id: string;

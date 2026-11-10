@@ -146,6 +146,8 @@ export type ResolvedBeamerTheme = {
   colorAliases?: Readonly<Record<string, string>>;
   colorAliasRgb?: Readonly<Record<string, readonly [number, number, number]>>;
   fonts: Readonly<Record<BeamerThemeFontRole, BeamerThemeFont>>;
+  /** Face fields explicitly assigned to a role, excluding inherited parent values. */
+  fontRoleOverrides?: Readonly<Partial<Record<BeamerThemeFontRole, readonly ("family" | "series" | "shape")[]>>>;
   dimensions: Readonly<BeamerThemeDimensions>;
   templates: Readonly<BeamerThemeTemplates>;
   options: Readonly<Record<string, string | boolean>>;

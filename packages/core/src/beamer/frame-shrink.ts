@@ -43,6 +43,7 @@ export function crampedBeamerListProfile(profile: TexListLayoutProfile): TexList
   const zeros = profile.itemsepPtByDepth.map(() => 0);
   return {
     ...profile,
+    liveListTopsepPt: .5,
     itemsepPtByDepth: zeros,
     itemsepStretchPtByDepth: zeros,
     itemsepShrinkPtByDepth: zeros,

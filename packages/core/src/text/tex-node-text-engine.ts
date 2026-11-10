@@ -119,6 +119,7 @@ const retainedEntriesByContext = new WeakMap<TextLayoutContext, {
 }>();
 
 export type TexNodeTextEngineOptions = {
+  readonly namedFontSizes?: Parameters<typeof layoutSimpleTexParagraph>[1]["namedFontSizes"];
   /**
    * Document-class math substitutions used inside node text. For example,
    * Beamer keeps Computer Modern symbols but maps literal Latin math letters
@@ -130,6 +131,9 @@ export type TexNodeTextEngineOptions = {
 export async function createTexNodeTextEngine(
   options: TexNodeTextEngineOptions = {}
 ): Promise<NodeTextEngine> {
+  // A class-size table is part of the layout context, including when the
+  // math font profile happens to be shared with another document.
+  if (options.namedFontSizes) return initializeEngine(options);
   if (!options.mathFontProfile) {
     sharedEnginePromise ??= initializeEngine(options);
     return sharedEnginePromise;
@@ -324,6 +328,7 @@ async function initializeEngine(
           ...(request.graphicsResolver !== undefined ? { graphicsResolver: request.graphicsResolver } : {}),
           ...(request.colorResolver !== undefined ? { colorResolver: request.colorResolver } : {}),
           ...(options.mathFontProfile !== undefined ? { mathFontProfile: options.mathFontProfile } : {}),
+          ...(options.namedFontSizes !== undefined ? { namedFontSizes: options.namedFontSizes } : {}),
           nextParagraphId,
         });
         if (!entry) {
@@ -387,6 +392,7 @@ function buildTexSharedLayout(params: {
   readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly colorResolver?: NodeTextColorResolver;
   readonly mathFontProfile?: TexMathFontProfile;
+  readonly namedFontSizes?: TexNodeTextEngineOptions["namedFontSizes"];
   readonly nextParagraphId: () => string;
 }): TexSharedLayout | null {
   const cached = params.layoutCache.get(params.layoutCacheKey);
@@ -421,6 +427,7 @@ function buildTexSharedLayout(params: {
     metricProvider,
     textFontProfile,
     tikzTextWidthNode: true,
+    ...(params.namedFontSizes !== undefined ? { namedFontSizes: params.namedFontSizes } : {}),
     // The natural-width sentinel is an implementation detail, not a TeX
     // document register. Keep named width registers unresolved in that mode.
     ...(isNaturalWidthLayout ? { dimensionContext: null } : {}),

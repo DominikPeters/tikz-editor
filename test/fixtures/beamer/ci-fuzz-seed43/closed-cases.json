@@ -1,0 +1,2902 @@
+{
+  "formatVersion": 1,
+  "generatorVersion": 3,
+  "generatorSha256": "c3eaa0e1d20afda8f38a7f9786b8576c47a5ca1777c7be6958900f0968ada3cd",
+  "coverage": {
+    "cases": 45,
+    "frames": 73,
+    "uniqueSources": 45,
+    "pages": 177,
+    "families": {
+      "alignment": 1,
+      "alignment-environment": 1,
+      "alt-in-picture": 1,
+      "block-picture": 1,
+      "column-alignment": 1,
+      "column-block-alignment": 1,
+      "column-overlay-flow": 1,
+      "column-picture": 1,
+      "date": 1,
+      "default-date": 1,
+      "draw-overlay": 1,
+      "intricate-diagram-build": 2,
+      "intricate-math-layout": 2,
+      "intricate-nested-flow": 2,
+      "intricate-overlay-composition": 2,
+      "intricate-scoped-typography": 2,
+      "intricate-table-flow": 2,
+      "invisible-in-picture": 1,
+      "list-builds": 1,
+      "math-prose": 1,
+      "mixed-alignment": 1,
+      "mixed-center": 1,
+      "multi-picture": 1,
+      "nested-overlays": 1,
+      "node-overlay": 1,
+      "only-in-picture": 1,
+      "outer-overlay": 1,
+      "overlapping-shapes": 1,
+      "overlay-flow": 1,
+      "overlay-union": 1,
+      "path-options-overlay": 1,
+      "picture-in-list": 1,
+      "picture-transforms": 1,
+      "relative-overlays": 1,
+      "remembered-overlays": 1,
+      "scoped-alignment": 1,
+      "two-overlay-programs": 1,
+      "uncover-in-picture": 1,
+      "visible-in-picture": 1
+    },
+    "structural": {
+      "recursiveCases": 12,
+      "nodeCounts": [
+        19,
+        11,
+        10,
+        20,
+        17,
+        20,
+        25,
+        19,
+        10,
+        16,
+        13,
+        22
+      ],
+      "depths": [
+        3,
+        4,
+        5
+      ],
+      "features": [
+        "alignment",
+        "block",
+        "columns",
+        "diagram",
+        "equation",
+        "group",
+        "list",
+        "macro-arguments",
+        "macro-composition",
+        "macro-frame-redefinition",
+        "macro-let-alias",
+        "macro-local-redefinition",
+        "macro-optional-default",
+        "overlay",
+        "overlay-sentinels",
+        "paragraph",
+        "sequence",
+        "table",
+        "tikz-clip",
+        "tikz-curved-edges",
+        "tikz-edges",
+        "tikz-foreach",
+        "tikz-scope"
+      ],
+      "interactions": [
+        "alignment>alignment",
+        "alignment>block",
+        "alignment>diagram",
+        "alignment>equation",
+        "alignment>paragraph",
+        "alignment>table",
+        "block>alignment",
+        "block>equation",
+        "block>group",
+        "block>paragraph",
+        "block>sequence",
+        "block>table",
+        "columns>block",
+        "columns>columns",
+        "columns>diagram",
+        "columns>equation",
+        "columns>group",
+        "columns>list",
+        "columns>overlay",
+        "columns>paragraph",
+        "columns>sequence",
+        "columns>table",
+        "group>alignment",
+        "group>block",
+        "group>diagram",
+        "group>equation",
+        "group>list",
+        "group>overlay",
+        "group>paragraph",
+        "group>sequence",
+        "group>table",
+        "list>alignment",
+        "list>block",
+        "list>columns",
+        "list>diagram",
+        "list>equation",
+        "list>group",
+        "list>list",
+        "list>overlay",
+        "list>paragraph",
+        "list>sequence",
+        "list>table",
+        "overlay>block",
+        "overlay>columns",
+        "overlay>diagram",
+        "overlay>paragraph",
+        "overlay>table",
+        "sequence>alignment",
+        "sequence>block",
+        "sequence>columns",
+        "sequence>diagram",
+        "sequence>equation",
+        "sequence>group",
+        "sequence>list",
+        "sequence>overlay",
+        "sequence>paragraph",
+        "sequence>sequence",
+        "sequence>table"
+      ]
+    },
+    "documentAxes": {
+      "fontSize": [
+        11,
+        12,
+        8,
+        20,
+        17,
+        14,
+        9,
+        10
+      ],
+      "aspectRatio": [
+        43,
+        169
+      ],
+      "theme": [
+        "default",
+        "Madrid",
+        "Boadilla"
+      ]
+    }
+  },
+  "profile": "broad",
+  "title": "Original failed observations from GitHub Beamer fuzz seed 43",
+  "seed": 43,
+  "fidelity": [
+    {
+      "id": "v3-seed-43-0033-table-flow",
+      "file": "v3-seed-43-0033-table-flow.tex",
+      "frame": 1,
+      "family": "intricate-table-flow",
+      "pages": 4,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "composed",
+        "width": 0,
+        "height": 0,
+        "fontSize": 9,
+        "aspectRatio": 43,
+        "theme": "default",
+        "grammar": {
+          "version": 3,
+          "seed": 43,
+          "index": 33,
+          "maxDepth": 4,
+          "budget": 28,
+          "nodes": 19,
+          "depth": 3,
+          "frameCount": 4,
+          "macroPlan": {
+            "initialUnit": "ms",
+            "localUnit": "cycles",
+            "initialStyle": "textit",
+            "localStyle": "textbf",
+            "chainDepth": 3,
+            "coefficient": 1,
+            "stages": [
+              {
+                "frame": 2,
+                "unit": "steps",
+                "witness": "MacroStageB"
+              },
+              {
+                "frame": 3,
+                "unit": "Hz",
+                "witness": "MacroStageC"
+              },
+              {
+                "frame": 4,
+                "unit": "us",
+                "witness": "MacroStageD"
+              }
+            ]
+          },
+          "features": {
+            "columns": 1,
+            "sequence": 2,
+            "alignment": 3,
+            "table": 2,
+            "equation": 4,
+            "diagram": 2,
+            "list": 3,
+            "paragraph": 2,
+            "tikz-scope": 2,
+            "tikz-curved-edges": 2,
+            "tikz-clip": 1,
+            "tikz-foreach": 1,
+            "overlay-sentinels": 1,
+            "macro-arguments": 1,
+            "macro-optional-default": 1,
+            "macro-composition": 1,
+            "macro-local-redefinition": 1,
+            "macro-frame-redefinition": 1,
+            "macro-let-alias": 1
+          },
+          "pairs": [
+            "alignment>diagram",
+            "alignment>equation",
+            "alignment>table",
+            "columns>list",
+            "columns>sequence",
+            "list>alignment",
+            "list>equation",
+            "list>list",
+            "list>paragraph",
+            "sequence>alignment",
+            "sequence>diagram",
+            "sequence>equation",
+            "sequence>list",
+            "sequence>sequence",
+            "sequence>table"
+          ],
+          "tree": {
+            "id": 0,
+            "kind": "columns",
+            "ratio": 0.38,
+            "mode": "t",
+            "children": [
+              {
+                "id": 1,
+                "kind": "sequence",
+                "children": [
+                  {
+                    "id": 2,
+                    "kind": "alignment",
+                    "environment": "flushleft",
+                    "children": [
+                      {
+                        "id": 3,
+                        "kind": "table",
+                        "rows": [
+                          {
+                            "label": "Cached0",
+                            "a": 25,
+                            "b": 21
+                          },
+                          {
+                            "label": "Global1",
+                            "a": 26,
+                            "b": 8
+                          },
+                          {
+                            "label": "Global2",
+                            "a": 18,
+                            "b": 27
+                          },
+                          {
+                            "label": "Global3",
+                            "a": 13,
+                            "b": 7
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": 4,
+                    "kind": "sequence",
+                    "children": [
+                      {
+                        "id": 5,
+                        "kind": "equation",
+                        "expression": "E=\\sum_{i=1}^{n}w_i x_i"
+                      },
+                      {
+                        "id": 6,
+                        "kind": "table",
+                        "rows": [
+                          {
+                            "label": "Local0",
+                            "a": 27,
+                            "b": 8
+                          },
+                          {
+                            "label": "Global1",
+                            "a": 28,
+                            "b": 21
+                          },
+                          {
+                            "label": "Global2",
+                            "a": 28,
+                            "b": 10
+                          },
+                          {
+                            "label": "Fresh3",
+                            "a": 15,
+                            "b": 29
+                          }
+                        ]
+                      },
+                      {
+                        "id": 7,
+                        "kind": "diagram",
+                        "width": 2.8499999999999996,
+                        "vertices": 4,
+                        "rotation": 17,
+                        "scale": 1.1,
+                        "curve": true,
+                        "clip": true,
+                        "loop": true,
+                        "overlay": "2-",
+                        "diagramId": 7
+                      }
+                    ]
+                  },
+                  {
+                    "id": 8,
+                    "kind": "list",
+                    "environment": "itemize",
+                    "children": [
+                      {
+                        "id": 9,
+                        "kind": "equation",
+                        "expression": "E=\\sum_{i=1}^{n}w_i x_i"
+                      },
+                      {
+                        "id": 10,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "Intermediate results carry both a numerical estimate and an explicit dependency set."
+                        ],
+                        "math": "x_i+x_{i+1}",
+                        "emphasis": "textit"
+                      }
+                    ],
+                    "build": false
+                  }
+                ]
+              },
+              {
+                "id": 11,
+                "kind": "list",
+                "environment": "enumerate",
+                "children": [
+                  {
+                    "id": 12,
+                    "kind": "alignment",
+                    "environment": "flushright",
+                    "children": [
+                      {
+                        "id": 13,
+                        "kind": "diagram",
+                        "width": 3.9000000000000004,
+                        "vertices": 6,
+                        "rotation": 17,
+                        "scale": 0.8,
+                        "curve": true,
+                        "clip": false,
+                        "loop": false,
+                        "overlay": "1-",
+                        "diagramId": 13
+                      }
+                    ]
+                  },
+                  {
+                    "id": 14,
+                    "kind": "list",
+                    "environment": "description",
+                    "children": [
+                      {
+                        "id": 15,
+                        "kind": "equation",
+                        "expression": "\\begin{aligned}a+b&=c\\\\ d-e&=f\\end{aligned}"
+                      },
+                      {
+                        "id": 16,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "A local update can change the measurements used by several neighboring components."
+                        ],
+                        "math": "\\frac{a+b}{1+c}",
+                        "emphasis": "textrm"
+                      }
+                    ],
+                    "build": false
+                  },
+                  {
+                    "id": 17,
+                    "kind": "alignment",
+                    "environment": "flushright",
+                    "children": [
+                      {
+                        "id": 18,
+                        "kind": "equation",
+                        "expression": "E=\\sum_{i=1}^{n}w_i x_i"
+                      }
+                    ]
+                  }
+                ],
+                "build": false
+              }
+            ]
+          }
+        }
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7cycles",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11ms"
+        ]
+      ]
+    },
+    {
+      "id": "v3-seed-43-0033-table-flow-frame-3",
+      "file": "v3-seed-43-0033-table-flow-frame-3.tex",
+      "frame": 3,
+      "family": "intricate-macro-context",
+      "pages": 1,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "1",
+        "width": 0,
+        "height": 0
+      },
+      "oracleText": [
+        "MacroStageC",
+        "12Hz",
+        "9ms",
+        "5local",
+        "8Hz"
+      ]
+    },
+    {
+      "id": "v3-seed-43-0034-scoped-typography",
+      "file": "v3-seed-43-0034-scoped-typography.tex",
+      "frame": 1,
+      "family": "intricate-scoped-typography",
+      "pages": 4,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "composed",
+        "width": 0,
+        "height": 0,
+        "fontSize": 9,
+        "aspectRatio": 169,
+        "theme": "default",
+        "grammar": {
+          "version": 3,
+          "seed": 43,
+          "index": 34,
+          "maxDepth": 4,
+          "budget": 29,
+          "nodes": 11,
+          "depth": 4,
+          "frameCount": 2,
+          "macroPlan": {
+            "initialUnit": "steps",
+            "localUnit": "cycles",
+            "initialStyle": "textrm",
+            "localStyle": "textbf",
+            "chainDepth": 3,
+            "coefficient": 4,
+            "stages": [
+              {
+                "frame": 2,
+                "unit": "us",
+                "witness": "MacroStageB"
+              }
+            ]
+          },
+          "features": {
+            "group": 2,
+            "list": 2,
+            "paragraph": 2,
+            "sequence": 1,
+            "equation": 1,
+            "diagram": 1,
+            "overlay": 1,
+            "table": 1,
+            "tikz-scope": 1,
+            "tikz-curved-edges": 1,
+            "tikz-clip": 1,
+            "overlay-sentinels": 1,
+            "macro-arguments": 1,
+            "macro-optional-default": 1,
+            "macro-composition": 1,
+            "macro-local-redefinition": 1,
+            "macro-frame-redefinition": 1,
+            "macro-let-alias": 1
+          },
+          "pairs": [
+            "group>list",
+            "group>paragraph",
+            "list>diagram",
+            "list>equation",
+            "list>group",
+            "list>sequence",
+            "overlay>table",
+            "sequence>list",
+            "sequence>overlay",
+            "sequence>paragraph"
+          ],
+          "tree": {
+            "id": 0,
+            "kind": "group",
+            "font": "scriptsize",
+            "color": "blue",
+            "alignment": "centering",
+            "children": [
+              {
+                "id": 1,
+                "kind": "list",
+                "environment": "description",
+                "children": [
+                  {
+                    "id": 2,
+                    "kind": "group",
+                    "font": "small",
+                    "color": "black",
+                    "alignment": "raggedright",
+                    "children": [
+                      {
+                        "id": 3,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "The next pass must preserve the boundary conditions while revisiting dependent values."
+                        ],
+                        "math": "x_i+x_{i+1}",
+                        "emphasis": "textit"
+                      }
+                    ]
+                  },
+                  {
+                    "id": 4,
+                    "kind": "sequence",
+                    "children": [
+                      {
+                        "id": 5,
+                        "kind": "list",
+                        "environment": "enumerate",
+                        "children": [
+                          {
+                            "id": 6,
+                            "kind": "equation",
+                            "expression": "\\begin{aligned}a+b&=c\\\\ d-e&=f\\end{aligned}"
+                          },
+                          {
+                            "id": 7,
+                            "kind": "diagram",
+                            "width": 4.2,
+                            "vertices": 7,
+                            "rotation": -12,
+                            "scale": 1,
+                            "curve": true,
+                            "clip": true,
+                            "loop": false,
+                            "overlay": "2-",
+                            "diagramId": 7
+                          }
+                        ],
+                        "build": false
+                      },
+                      {
+                        "id": 8,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "We compare the proposed solution with a reference computed from the complete input.",
+                          "We compare the proposed solution with a reference computed from the complete input."
+                        ],
+                        "math": "\\sum_{i=1}^{n}x_i",
+                        "emphasis": "textbf"
+                      },
+                      {
+                        "id": 9,
+                        "kind": "overlay",
+                        "command": "alt",
+                        "spec": "2-3",
+                        "children": [
+                          {
+                            "id": 10,
+                            "kind": "table",
+                            "rows": [
+                              {
+                                "label": "Cached0",
+                                "a": 16,
+                                "b": 21
+                              },
+                              {
+                                "label": "Cached1",
+                                "a": 2,
+                                "b": 26
+                              },
+                              {
+                                "label": "Cached2",
+                                "a": 17,
+                                "b": 5
+                              },
+                              {
+                                "label": "Cached3",
+                                "a": 10,
+                                "b": 17
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                "build": true
+              }
+            ]
+          }
+        }
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7cycles",
+        "11steps"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11steps"
+        ]
+      ]
+    },
+    {
+      "id": "v3-seed-43-0035-overlay-composition-frame-3",
+      "file": "v3-seed-43-0035-overlay-composition-frame-3.tex",
+      "frame": 3,
+      "family": "intricate-macro-context",
+      "pages": 1,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "1",
+        "width": 0,
+        "height": 0
+      },
+      "oracleText": [
+        "MacroStageC",
+        "12min",
+        "9Hz",
+        "5local",
+        "8min"
+      ]
+    },
+    {
+      "id": "v3-seed-43-0036-nested-flow",
+      "file": "v3-seed-43-0036-nested-flow.tex",
+      "frame": 1,
+      "family": "intricate-nested-flow",
+      "pages": 4,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "composed",
+        "width": 0,
+        "height": 0,
+        "fontSize": 9,
+        "aspectRatio": 169,
+        "theme": "default",
+        "grammar": {
+          "version": 3,
+          "seed": 43,
+          "index": 36,
+          "maxDepth": 4,
+          "budget": 32,
+          "nodes": 20,
+          "depth": 4,
+          "frameCount": 3,
+          "macroPlan": {
+            "initialUnit": "steps",
+            "localUnit": "cycles",
+            "initialStyle": "textit",
+            "localStyle": "textrm",
+            "chainDepth": 2,
+            "coefficient": 2,
+            "stages": [
+              {
+                "frame": 2,
+                "unit": "us",
+                "witness": "MacroStageB"
+              },
+              {
+                "frame": 3,
+                "unit": "steps",
+                "witness": "MacroStageC"
+              }
+            ]
+          },
+          "features": {
+            "columns": 3,
+            "sequence": 1,
+            "list": 4,
+            "paragraph": 3,
+            "table": 3,
+            "alignment": 1,
+            "equation": 3,
+            "diagram": 1,
+            "overlay": 1,
+            "tikz-scope": 1,
+            "tikz-curved-edges": 1,
+            "overlay-sentinels": 1,
+            "macro-arguments": 1,
+            "macro-optional-default": 1,
+            "macro-composition": 1,
+            "macro-local-redefinition": 1,
+            "macro-frame-redefinition": 1,
+            "macro-let-alias": 1
+          },
+          "pairs": [
+            "alignment>table",
+            "columns>columns",
+            "columns>equation",
+            "columns>list",
+            "columns>overlay",
+            "columns>sequence",
+            "list>diagram",
+            "list>equation",
+            "list>list",
+            "list>paragraph",
+            "list>table",
+            "overlay>table",
+            "sequence>alignment",
+            "sequence>columns",
+            "sequence>list"
+          ],
+          "tree": {
+            "id": 0,
+            "kind": "columns",
+            "ratio": 0.46,
+            "mode": "b",
+            "children": [
+              {
+                "id": 1,
+                "kind": "sequence",
+                "children": [
+                  {
+                    "id": 2,
+                    "kind": "list",
+                    "environment": "description",
+                    "children": [
+                      {
+                        "id": 3,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "We compare the proposed solution with a reference computed from the complete input."
+                        ],
+                        "math": "\\sum_{i=1}^{n}x_i",
+                        "emphasis": "textbf"
+                      },
+                      {
+                        "id": 4,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "The final diagram records the order in which information crosses the partition."
+                        ],
+                        "math": "\\alpha+\\beta",
+                        "emphasis": "textit"
+                      },
+                      {
+                        "id": 5,
+                        "kind": "table",
+                        "rows": [
+                          {
+                            "label": "Fresh0",
+                            "a": 24,
+                            "b": 19
+                          },
+                          {
+                            "label": "Local1",
+                            "a": 10,
+                            "b": 20
+                          }
+                        ]
+                      }
+                    ],
+                    "build": true
+                  },
+                  {
+                    "id": 6,
+                    "kind": "alignment",
+                    "environment": "flushright",
+                    "children": [
+                      {
+                        "id": 7,
+                        "kind": "table",
+                        "rows": [
+                          {
+                            "label": "Local0",
+                            "a": 18,
+                            "b": 10
+                          },
+                          {
+                            "label": "Fresh1",
+                            "a": 16,
+                            "b": 9
+                          },
+                          {
+                            "label": "Cached2",
+                            "a": 4,
+                            "b": 5
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": 8,
+                    "kind": "columns",
+                    "ratio": 0.54,
+                    "mode": "b",
+                    "children": [
+                      {
+                        "id": 9,
+                        "kind": "equation",
+                        "expression": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}\\begin{pmatrix}x\\\\y\\end{pmatrix}"
+                      },
+                      {
+                        "id": 10,
+                        "kind": "equation",
+                        "expression": "\\begin{aligned}a+b&=c\\\\ d-e&=f\\end{aligned}"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": 11,
+                "kind": "columns",
+                "ratio": 0.54,
+                "mode": "t",
+                "children": [
+                  {
+                    "id": 12,
+                    "kind": "list",
+                    "environment": "enumerate",
+                    "children": [
+                      {
+                        "id": 13,
+                        "kind": "list",
+                        "environment": "itemize",
+                        "children": [
+                          {
+                            "id": 14,
+                            "kind": "paragraph",
+                            "sentences": [
+                              "We compare the proposed solution with a reference computed from the complete input.",
+                              "Intermediate results carry both a numerical estimate and an explicit dependency set."
+                            ],
+                            "math": "\\sum_{i=1}^{n}x_i",
+                            "emphasis": "textrm"
+                          }
+                        ],
+                        "build": true
+                      },
+                      {
+                        "id": 15,
+                        "kind": "equation",
+                        "expression": "\\begin{aligned}a+b&=c\\\\ d-e&=f\\end{aligned}"
+                      },
+                      {
+                        "id": 16,
+                        "kind": "list",
+                        "environment": "itemize",
+                        "children": [
+                          {
+                            "id": 17,
+                            "kind": "diagram",
+                            "width": 1.7324999999999997,
+                            "vertices": 5,
+                            "rotation": -12,
+                            "scale": 1.1,
+                            "curve": true,
+                            "clip": false,
+                            "loop": false,
+                            "overlay": "2-",
+                            "diagramId": 17
+                          }
+                        ],
+                        "build": false
+                      }
+                    ],
+                    "build": true
+                  },
+                  {
+                    "id": 18,
+                    "kind": "overlay",
+                    "command": "uncover",
+                    "spec": "2-3",
+                    "children": [
+                      {
+                        "id": 19,
+                        "kind": "table",
+                        "rows": [
+                          {
+                            "label": "Fresh0",
+                            "a": 29,
+                            "b": 21
+                          },
+                          {
+                            "label": "Global1",
+                            "a": 0,
+                            "b": 9
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7cycles",
+        "11steps"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7cycles",
+          "11steps"
+        ]
+      ]
+    },
+    {
+      "id": "v3-seed-43-0036-nested-flow-frame-3",
+      "file": "v3-seed-43-0036-nested-flow-frame-3.tex",
+      "frame": 3,
+      "family": "intricate-macro-context",
+      "pages": 1,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "1",
+        "width": 0,
+        "height": 0
+      },
+      "oracleText": [
+        "MacroStageC",
+        "12steps",
+        "9steps",
+        "5local",
+        "8steps"
+      ]
+    },
+    {
+      "id": "v3-seed-43-0037-diagram-build",
+      "file": "v3-seed-43-0037-diagram-build.tex",
+      "frame": 1,
+      "family": "intricate-diagram-build",
+      "pages": 5,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "composed",
+        "width": 0,
+        "height": 0,
+        "fontSize": 9,
+        "aspectRatio": 169,
+        "theme": "Boadilla",
+        "grammar": {
+          "version": 3,
+          "seed": 43,
+          "index": 37,
+          "maxDepth": 4,
+          "budget": 32,
+          "nodes": 17,
+          "depth": 4,
+          "frameCount": 2,
+          "macroPlan": {
+            "initialUnit": "steps",
+            "localUnit": "samples",
+            "initialStyle": "textit",
+            "localStyle": "textrm",
+            "chainDepth": 1,
+            "coefficient": 2,
+            "stages": [
+              {
+                "frame": 2,
+                "unit": "min",
+                "witness": "MacroStageB"
+              }
+            ]
+          },
+          "features": {
+            "block": 1,
+            "sequence": 2,
+            "columns": 3,
+            "diagram": 5,
+            "list": 1,
+            "table": 1,
+            "equation": 1,
+            "group": 1,
+            "paragraph": 2,
+            "tikz-scope": 5,
+            "tikz-edges": 3,
+            "tikz-foreach": 4,
+            "tikz-curved-edges": 2,
+            "tikz-clip": 2,
+            "overlay-sentinels": 1,
+            "macro-arguments": 1,
+            "macro-optional-default": 1,
+            "macro-composition": 1,
+            "macro-local-redefinition": 1,
+            "macro-frame-redefinition": 1,
+            "macro-let-alias": 1
+          },
+          "pairs": [
+            "block>sequence",
+            "columns>columns",
+            "columns>diagram",
+            "columns>paragraph",
+            "group>diagram",
+            "list>diagram",
+            "list>table",
+            "sequence>columns",
+            "sequence>equation",
+            "sequence>group",
+            "sequence>list",
+            "sequence>sequence"
+          ],
+          "tree": {
+            "id": 0,
+            "kind": "block",
+            "environment": "exampleblock",
+            "title": "Incremental analysis",
+            "children": [
+              {
+                "id": 1,
+                "kind": "sequence",
+                "children": [
+                  {
+                    "id": 2,
+                    "kind": "columns",
+                    "ratio": 0.54,
+                    "mode": "c",
+                    "children": [
+                      {
+                        "id": 3,
+                        "kind": "diagram",
+                        "width": 4.2,
+                        "vertices": 5,
+                        "rotation": 0,
+                        "scale": 1,
+                        "curve": false,
+                        "clip": false,
+                        "loop": true,
+                        "overlay": "2-",
+                        "diagramId": 3
+                      },
+                      {
+                        "id": 4,
+                        "kind": "columns",
+                        "ratio": 0.62,
+                        "mode": "c",
+                        "children": [
+                          {
+                            "id": 5,
+                            "kind": "diagram",
+                            "width": 2.5388999999999995,
+                            "vertices": 4,
+                            "rotation": 0,
+                            "scale": 1,
+                            "curve": true,
+                            "clip": false,
+                            "loop": false,
+                            "overlay": "2-",
+                            "diagramId": 5
+                          },
+                          {
+                            "id": 6,
+                            "kind": "diagram",
+                            "width": 1.3922999999999996,
+                            "vertices": 5,
+                            "rotation": 0,
+                            "scale": 1,
+                            "curve": false,
+                            "clip": true,
+                            "loop": true,
+                            "overlay": "2-",
+                            "diagramId": 6
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": 7,
+                    "kind": "sequence",
+                    "children": [
+                      {
+                        "id": 8,
+                        "kind": "list",
+                        "environment": "itemize",
+                        "children": [
+                          {
+                            "id": 9,
+                            "kind": "diagram",
+                            "width": 4.2,
+                            "vertices": 4,
+                            "rotation": -12,
+                            "scale": 1.1,
+                            "curve": false,
+                            "clip": false,
+                            "loop": true,
+                            "overlay": "2-",
+                            "diagramId": 9
+                          },
+                          {
+                            "id": 10,
+                            "kind": "table",
+                            "rows": [
+                              {
+                                "label": "Fresh0",
+                                "a": 6,
+                                "b": 0
+                              },
+                              {
+                                "label": "Global1",
+                                "a": 6,
+                                "b": 17
+                              },
+                              {
+                                "label": "Global2",
+                                "a": 9,
+                                "b": 16
+                              },
+                              {
+                                "label": "Global3",
+                                "a": 1,
+                                "b": 6
+                              }
+                            ]
+                          }
+                        ],
+                        "build": true
+                      },
+                      {
+                        "id": 11,
+                        "kind": "equation",
+                        "expression": "\\begin{aligned}a+b&=c\\\\ d-e&=f\\end{aligned}"
+                      },
+                      {
+                        "id": 12,
+                        "kind": "group",
+                        "font": "small",
+                        "color": "teal",
+                        "alignment": "raggedleft",
+                        "children": [
+                          {
+                            "id": 13,
+                            "kind": "diagram",
+                            "width": 4.2,
+                            "vertices": 7,
+                            "rotation": 17,
+                            "scale": 1.1,
+                            "curve": true,
+                            "clip": true,
+                            "loop": true,
+                            "overlay": "1-",
+                            "diagramId": 13
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": 14,
+                    "kind": "columns",
+                    "ratio": 0.54,
+                    "mode": "t",
+                    "children": [
+                      {
+                        "id": 15,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "The next pass must preserve the boundary conditions while revisiting dependent values."
+                        ],
+                        "math": "\\frac{a+b}{1+c}",
+                        "emphasis": "textrm"
+                      },
+                      {
+                        "id": 16,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "We compare the proposed solution with a reference computed from the complete input."
+                        ],
+                        "math": "x_i+x_{i+1}",
+                        "emphasis": "textit"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11steps"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11steps"
+        ]
+      ]
+    },
+    {
+      "id": "v3-seed-43-0038-math-layout",
+      "file": "v3-seed-43-0038-math-layout.tex",
+      "frame": 1,
+      "family": "intricate-math-layout",
+      "pages": 5,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "composed",
+        "width": 0,
+        "height": 0,
+        "fontSize": 9,
+        "aspectRatio": 43,
+        "theme": "default",
+        "grammar": {
+          "version": 3,
+          "seed": 43,
+          "index": 38,
+          "maxDepth": 5,
+          "budget": 33,
+          "nodes": 20,
+          "depth": 5,
+          "frameCount": 3,
+          "macroPlan": {
+            "initialUnit": "Hz",
+            "localUnit": "ticks",
+            "initialStyle": "textit",
+            "localStyle": "textbf",
+            "chainDepth": 1,
+            "coefficient": 1,
+            "stages": [
+              {
+                "frame": 2,
+                "unit": "steps",
+                "witness": "MacroStageB"
+              },
+              {
+                "frame": 3,
+                "unit": "Hz",
+                "witness": "MacroStageC"
+              }
+            ]
+          },
+          "features": {
+            "list": 3,
+            "alignment": 3,
+            "equation": 1,
+            "paragraph": 2,
+            "overlay": 2,
+            "table": 2,
+            "diagram": 1,
+            "columns": 1,
+            "block": 3,
+            "group": 2,
+            "tikz-scope": 1,
+            "tikz-curved-edges": 1,
+            "overlay-sentinels": 1,
+            "macro-arguments": 1,
+            "macro-optional-default": 1,
+            "macro-composition": 1,
+            "macro-local-redefinition": 1,
+            "macro-frame-redefinition": 1,
+            "macro-let-alias": 1
+          },
+          "pairs": [
+            "alignment>alignment",
+            "alignment>equation",
+            "alignment>paragraph",
+            "block>group",
+            "block>table",
+            "columns>block",
+            "columns>overlay",
+            "group>block",
+            "group>paragraph",
+            "list>alignment",
+            "list>columns",
+            "list>diagram",
+            "list>list",
+            "list>overlay",
+            "overlay>block",
+            "overlay>table"
+          ],
+          "tree": {
+            "id": 0,
+            "kind": "list",
+            "environment": "description",
+            "children": [
+              {
+                "id": 1,
+                "kind": "list",
+                "environment": "enumerate",
+                "children": [
+                  {
+                    "id": 2,
+                    "kind": "alignment",
+                    "environment": "flushleft",
+                    "children": [
+                      {
+                        "id": 3,
+                        "kind": "equation",
+                        "expression": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}\\begin{pmatrix}x\\\\y\\end{pmatrix}"
+                      }
+                    ]
+                  },
+                  {
+                    "id": 4,
+                    "kind": "alignment",
+                    "environment": "flushright",
+                    "children": [
+                      {
+                        "id": 5,
+                        "kind": "alignment",
+                        "environment": "flushright",
+                        "children": [
+                          {
+                            "id": 6,
+                            "kind": "paragraph",
+                            "sentences": [
+                              "A local update can change the measurements used by several neighboring components."
+                            ],
+                            "math": "x_i+x_{i+1}",
+                            "emphasis": "textit"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": 7,
+                    "kind": "list",
+                    "environment": "description",
+                    "children": [
+                      {
+                        "id": 8,
+                        "kind": "overlay",
+                        "command": "alt",
+                        "spec": "1-2",
+                        "children": [
+                          {
+                            "id": 9,
+                            "kind": "table",
+                            "rows": [
+                              {
+                                "label": "Local0",
+                                "a": 16,
+                                "b": 5
+                              },
+                              {
+                                "label": "Local1",
+                                "a": 27,
+                                "b": 11
+                              },
+                              {
+                                "label": "Fresh2",
+                                "a": 25,
+                                "b": 0
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": 10,
+                        "kind": "diagram",
+                        "width": 4.2,
+                        "vertices": 6,
+                        "rotation": 0,
+                        "scale": 1,
+                        "curve": true,
+                        "clip": false,
+                        "loop": false,
+                        "overlay": "1-",
+                        "diagramId": 10
+                      }
+                    ],
+                    "build": true
+                  }
+                ],
+                "build": true
+              },
+              {
+                "id": 11,
+                "kind": "columns",
+                "ratio": 0.54,
+                "mode": "c",
+                "children": [
+                  {
+                    "id": 12,
+                    "kind": "block",
+                    "environment": "exampleblock",
+                    "title": "Cache invalidation",
+                    "children": [
+                      {
+                        "id": 13,
+                        "kind": "group",
+                        "font": "footnotesize",
+                        "color": "blue",
+                        "alignment": "centering",
+                        "children": [
+                          {
+                            "id": 14,
+                            "kind": "block",
+                            "environment": "block",
+                            "title": "Geometric uncertainty",
+                            "children": [
+                              {
+                                "id": 15,
+                                "kind": "table",
+                                "rows": [
+                                  {
+                                    "label": "Global0",
+                                    "a": 6,
+                                    "b": 4
+                                  },
+                                  {
+                                    "label": "Global1",
+                                    "a": 13,
+                                    "b": 24
+                                  },
+                                  {
+                                    "label": "Cached2",
+                                    "a": 26,
+                                    "b": 11
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": 16,
+                    "kind": "overlay",
+                    "command": "only",
+                    "spec": "2-",
+                    "children": [
+                      {
+                        "id": 17,
+                        "kind": "block",
+                        "environment": "exampleblock",
+                        "title": "Geometric uncertainty",
+                        "children": [
+                          {
+                            "id": 18,
+                            "kind": "group",
+                            "font": "scriptsize",
+                            "color": "black",
+                            "alignment": "centering",
+                            "children": [
+                              {
+                                "id": 19,
+                                "kind": "paragraph",
+                                "sentences": [
+                                  "We compare the proposed solution with a reference computed from the complete input.",
+                                  "A local update can change the measurements used by several neighboring components."
+                                ],
+                                "math": "\\sum_{i=1}^{n}x_i",
+                                "emphasis": "textrm"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "build": false
+          }
+        }
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7ticks",
+        "11Hz"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11Hz"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11Hz"
+        ]
+      ]
+    },
+    {
+      "id": "v3-seed-43-0038-math-layout-frame-3",
+      "file": "v3-seed-43-0038-math-layout-frame-3.tex",
+      "frame": 3,
+      "family": "intricate-macro-context",
+      "pages": 1,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "1",
+        "width": 0,
+        "height": 0
+      },
+      "oracleText": [
+        "MacroStageC",
+        "12Hz",
+        "9Hz",
+        "5local",
+        "8Hz"
+      ]
+    },
+    {
+      "id": "v3-seed-43-0039-table-flow",
+      "file": "v3-seed-43-0039-table-flow.tex",
+      "frame": 1,
+      "family": "intricate-table-flow",
+      "pages": 5,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "composed",
+        "width": 0,
+        "height": 0,
+        "fontSize": 10,
+        "aspectRatio": 43,
+        "theme": "default",
+        "grammar": {
+          "version": 3,
+          "seed": 43,
+          "index": 39,
+          "maxDepth": 5,
+          "budget": 35,
+          "nodes": 25,
+          "depth": 4,
+          "frameCount": 4,
+          "macroPlan": {
+            "initialUnit": "ms",
+            "localUnit": "samples",
+            "initialStyle": "textbf",
+            "localStyle": "textrm",
+            "chainDepth": 1,
+            "coefficient": 4,
+            "stages": [
+              {
+                "frame": 2,
+                "unit": "Hz",
+                "witness": "MacroStageB"
+              },
+              {
+                "frame": 3,
+                "unit": "min",
+                "witness": "MacroStageC"
+              },
+              {
+                "frame": 4,
+                "unit": "us",
+                "witness": "MacroStageD"
+              }
+            ]
+          },
+          "features": {
+            "columns": 2,
+            "list": 3,
+            "group": 1,
+            "table": 5,
+            "paragraph": 5,
+            "equation": 2,
+            "sequence": 3,
+            "overlay": 1,
+            "diagram": 2,
+            "block": 1,
+            "tikz-scope": 2,
+            "tikz-edges": 1,
+            "tikz-clip": 2,
+            "tikz-curved-edges": 1,
+            "tikz-foreach": 1,
+            "overlay-sentinels": 1,
+            "macro-arguments": 1,
+            "macro-optional-default": 1,
+            "macro-composition": 1,
+            "macro-local-redefinition": 1,
+            "macro-frame-redefinition": 1,
+            "macro-let-alias": 1
+          },
+          "pairs": [
+            "block>sequence",
+            "columns>list",
+            "columns>paragraph",
+            "columns>sequence",
+            "columns>table",
+            "group>table",
+            "list>columns",
+            "list>diagram",
+            "list>equation",
+            "list>group",
+            "list>list",
+            "list>paragraph",
+            "list>table",
+            "overlay>diagram",
+            "sequence>block",
+            "sequence>list",
+            "sequence>overlay",
+            "sequence>paragraph",
+            "sequence>sequence",
+            "sequence>table"
+          ],
+          "tree": {
+            "id": 0,
+            "kind": "columns",
+            "ratio": 0.62,
+            "mode": "T",
+            "children": [
+              {
+                "id": 1,
+                "kind": "list",
+                "environment": "enumerate",
+                "children": [
+                  {
+                    "id": 2,
+                    "kind": "group",
+                    "font": "scriptsize",
+                    "color": "black",
+                    "alignment": "raggedleft",
+                    "children": [
+                      {
+                        "id": 3,
+                        "kind": "table",
+                        "rows": [
+                          {
+                            "label": "Local0",
+                            "a": 21,
+                            "b": 2
+                          },
+                          {
+                            "label": "Local1",
+                            "a": 9,
+                            "b": 18
+                          },
+                          {
+                            "label": "Global2",
+                            "a": 11,
+                            "b": 9
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": 4,
+                    "kind": "columns",
+                    "ratio": 0.46,
+                    "mode": "t",
+                    "children": [
+                      {
+                        "id": 5,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "The next pass must preserve the boundary conditions while revisiting dependent values.",
+                          "The final diagram records the order in which information crosses the partition."
+                        ],
+                        "math": "\\frac{a+b}{1+c}",
+                        "emphasis": "textrm"
+                      },
+                      {
+                        "id": 6,
+                        "kind": "table",
+                        "rows": [
+                          {
+                            "label": "Cached0",
+                            "a": 19,
+                            "b": 13
+                          },
+                          {
+                            "label": "Global1",
+                            "a": 29,
+                            "b": 26
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": 7,
+                    "kind": "list",
+                    "environment": "itemize",
+                    "children": [
+                      {
+                        "id": 8,
+                        "kind": "equation",
+                        "expression": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}\\begin{pmatrix}x\\\\y\\end{pmatrix}"
+                      },
+                      {
+                        "id": 9,
+                        "kind": "equation",
+                        "expression": "E=\\sum_{i=1}^{n}w_i x_i"
+                      },
+                      {
+                        "id": 10,
+                        "kind": "table",
+                        "rows": [
+                          {
+                            "label": "Global0",
+                            "a": 19,
+                            "b": 4
+                          },
+                          {
+                            "label": "Local1",
+                            "a": 2,
+                            "b": 29
+                          }
+                        ]
+                      }
+                    ],
+                    "build": false
+                  }
+                ],
+                "build": false
+              },
+              {
+                "id": 11,
+                "kind": "sequence",
+                "children": [
+                  {
+                    "id": 12,
+                    "kind": "sequence",
+                    "children": [
+                      {
+                        "id": 13,
+                        "kind": "overlay",
+                        "command": "alt",
+                        "spec": "1-2",
+                        "children": [
+                          {
+                            "id": 14,
+                            "kind": "diagram",
+                            "width": 2.55,
+                            "vertices": 5,
+                            "rotation": 0,
+                            "scale": 1,
+                            "curve": false,
+                            "clip": true,
+                            "loop": false,
+                            "overlay": "2-",
+                            "diagramId": 14
+                          }
+                        ]
+                      },
+                      {
+                        "id": 15,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "We compare the proposed solution with a reference computed from the complete input."
+                        ],
+                        "math": "\\frac{a+b}{1+c}",
+                        "emphasis": "textbf"
+                      }
+                    ]
+                  },
+                  {
+                    "id": 16,
+                    "kind": "list",
+                    "environment": "description",
+                    "children": [
+                      {
+                        "id": 17,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "A local update can change the measurements used by several neighboring components."
+                        ],
+                        "math": "x_i+x_{i+1}",
+                        "emphasis": "textrm"
+                      },
+                      {
+                        "id": 18,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "A local update can change the measurements used by several neighboring components."
+                        ],
+                        "math": "\\frac{a+b}{1+c}",
+                        "emphasis": "textit"
+                      },
+                      {
+                        "id": 19,
+                        "kind": "diagram",
+                        "width": 2.0999999999999996,
+                        "vertices": 7,
+                        "rotation": -12,
+                        "scale": 0.8,
+                        "curve": true,
+                        "clip": true,
+                        "loop": true,
+                        "overlay": "2-",
+                        "diagramId": 19
+                      }
+                    ],
+                    "build": true
+                  },
+                  {
+                    "id": 20,
+                    "kind": "block",
+                    "environment": "block",
+                    "title": "Constraint propagation",
+                    "children": [
+                      {
+                        "id": 21,
+                        "kind": "sequence",
+                        "children": [
+                          {
+                            "id": 22,
+                            "kind": "table",
+                            "rows": [
+                              {
+                                "label": "Local0",
+                                "a": 25,
+                                "b": 15
+                              },
+                              {
+                                "label": "Cached1",
+                                "a": 23,
+                                "b": 21
+                              },
+                              {
+                                "label": "Local2",
+                                "a": 17,
+                                "b": 0
+                              }
+                            ]
+                          },
+                          {
+                            "id": 23,
+                            "kind": "table",
+                            "rows": [
+                              {
+                                "label": "Global0",
+                                "a": 14,
+                                "b": 16
+                              },
+                              {
+                                "label": "Fresh1",
+                                "a": 0,
+                                "b": 24
+                              }
+                            ]
+                          },
+                          {
+                            "id": 24,
+                            "kind": "paragraph",
+                            "sentences": [
+                              "The next pass must preserve the boundary conditions while revisiting dependent values."
+                            ],
+                            "math": "\\sum_{i=1}^{n}x_i",
+                            "emphasis": "textit"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ]
+      ]
+    },
+    {
+      "id": "v3-seed-43-0039-table-flow-frame-3",
+      "file": "v3-seed-43-0039-table-flow-frame-3.tex",
+      "frame": 3,
+      "family": "intricate-macro-context",
+      "pages": 1,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "1",
+        "width": 0,
+        "height": 0
+      },
+      "oracleText": [
+        "MacroStageC",
+        "12min",
+        "9ms",
+        "5local",
+        "8min"
+      ]
+    },
+    {
+      "id": "v3-seed-43-0040-scoped-typography",
+      "file": "v3-seed-43-0040-scoped-typography.tex",
+      "frame": 1,
+      "family": "intricate-scoped-typography",
+      "pages": 4,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "composed",
+        "width": 0,
+        "height": 0,
+        "fontSize": 10,
+        "aspectRatio": 43,
+        "theme": "default",
+        "grammar": {
+          "version": 3,
+          "seed": 43,
+          "index": 40,
+          "maxDepth": 5,
+          "budget": 36,
+          "nodes": 19,
+          "depth": 5,
+          "frameCount": 3,
+          "macroPlan": {
+            "initialUnit": "ms",
+            "localUnit": "samples",
+            "initialStyle": "textrm",
+            "localStyle": "textit",
+            "chainDepth": 2,
+            "coefficient": 2,
+            "stages": [
+              {
+                "frame": 2,
+                "unit": "steps",
+                "witness": "MacroStageB"
+              },
+              {
+                "frame": 3,
+                "unit": "s",
+                "witness": "MacroStageC"
+              }
+            ]
+          },
+          "features": {
+            "group": 2,
+            "list": 3,
+            "paragraph": 3,
+            "table": 2,
+            "columns": 1,
+            "diagram": 2,
+            "equation": 1,
+            "alignment": 2,
+            "block": 1,
+            "sequence": 1,
+            "overlay": 1,
+            "tikz-scope": 2,
+            "tikz-curved-edges": 1,
+            "tikz-foreach": 1,
+            "tikz-edges": 1,
+            "tikz-clip": 1,
+            "overlay-sentinels": 1,
+            "macro-arguments": 1,
+            "macro-optional-default": 1,
+            "macro-composition": 1,
+            "macro-local-redefinition": 1,
+            "macro-frame-redefinition": 1,
+            "macro-let-alias": 1
+          },
+          "pairs": [
+            "alignment>alignment",
+            "alignment>block",
+            "block>paragraph",
+            "columns>diagram",
+            "columns>equation",
+            "group>list",
+            "group>sequence",
+            "list>alignment",
+            "list>columns",
+            "list>group",
+            "list>list",
+            "list>paragraph",
+            "list>table",
+            "overlay>diagram",
+            "sequence>overlay",
+            "sequence>table"
+          ],
+          "tree": {
+            "id": 0,
+            "kind": "group",
+            "font": "scriptsize",
+            "color": "black",
+            "alignment": "centering",
+            "children": [
+              {
+                "id": 1,
+                "kind": "list",
+                "environment": "enumerate",
+                "children": [
+                  {
+                    "id": 2,
+                    "kind": "list",
+                    "environment": "itemize",
+                    "children": [
+                      {
+                        "id": 3,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "The next pass must preserve the boundary conditions while revisiting dependent values.",
+                          "The next pass must preserve the boundary conditions while revisiting dependent values."
+                        ],
+                        "math": "\\alpha+\\beta",
+                        "emphasis": "textit"
+                      },
+                      {
+                        "id": 4,
+                        "kind": "list",
+                        "environment": "enumerate",
+                        "children": [
+                          {
+                            "id": 5,
+                            "kind": "paragraph",
+                            "sentences": [
+                              "A local update can change the measurements used by several neighboring components."
+                            ],
+                            "math": "\\alpha+\\beta",
+                            "emphasis": "textrm"
+                          },
+                          {
+                            "id": 6,
+                            "kind": "table",
+                            "rows": [
+                              {
+                                "label": "Cached0",
+                                "a": 5,
+                                "b": 23
+                              },
+                              {
+                                "label": "Global1",
+                                "a": 13,
+                                "b": 29
+                              },
+                              {
+                                "label": "Fresh2",
+                                "a": 17,
+                                "b": 15
+                              },
+                              {
+                                "label": "Global3",
+                                "a": 15,
+                                "b": 5
+                              }
+                            ]
+                          }
+                        ],
+                        "build": false
+                      },
+                      {
+                        "id": 7,
+                        "kind": "columns",
+                        "ratio": 0.62,
+                        "mode": "c",
+                        "children": [
+                          {
+                            "id": 8,
+                            "kind": "diagram",
+                            "width": 4.0920000000000005,
+                            "vertices": 4,
+                            "rotation": 0,
+                            "scale": 1,
+                            "curve": true,
+                            "clip": false,
+                            "loop": true,
+                            "overlay": "1-",
+                            "diagramId": 8
+                          },
+                          {
+                            "id": 9,
+                            "kind": "equation",
+                            "expression": "\\begin{aligned}a+b&=c\\\\ d-e&=f\\end{aligned}"
+                          }
+                        ]
+                      }
+                    ],
+                    "build": false
+                  },
+                  {
+                    "id": 10,
+                    "kind": "alignment",
+                    "environment": "flushright",
+                    "children": [
+                      {
+                        "id": 11,
+                        "kind": "alignment",
+                        "environment": "flushright",
+                        "children": [
+                          {
+                            "id": 12,
+                            "kind": "block",
+                            "environment": "block",
+                            "title": "Cache invalidation",
+                            "children": [
+                              {
+                                "id": 13,
+                                "kind": "paragraph",
+                                "sentences": [
+                                  "The next pass must preserve the boundary conditions while revisiting dependent values.",
+                                  "We compare the proposed solution with a reference computed from the complete input."
+                                ],
+                                "math": "\\sum_{i=1}^{n}x_i",
+                                "emphasis": "textrm"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": 14,
+                    "kind": "group",
+                    "font": "footnotesize",
+                    "color": "teal",
+                    "alignment": "raggedright",
+                    "children": [
+                      {
+                        "id": 15,
+                        "kind": "sequence",
+                        "children": [
+                          {
+                            "id": 16,
+                            "kind": "overlay",
+                            "command": "only",
+                            "spec": "2-",
+                            "children": [
+                              {
+                                "id": 17,
+                                "kind": "diagram",
+                                "width": 4.2,
+                                "vertices": 6,
+                                "rotation": 0,
+                                "scale": 1.1,
+                                "curve": false,
+                                "clip": true,
+                                "loop": false,
+                                "overlay": "1-",
+                                "diagramId": 17
+                              }
+                            ]
+                          },
+                          {
+                            "id": 18,
+                            "kind": "table",
+                            "rows": [
+                              {
+                                "label": "Global0",
+                                "a": 5,
+                                "b": 11
+                              },
+                              {
+                                "label": "Fresh1",
+                                "a": 17,
+                                "b": 26
+                              },
+                              {
+                                "label": "Local2",
+                                "a": 9,
+                                "b": 28
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                "build": true
+              }
+            ]
+          }
+        }
+      },
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7samples",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7samples",
+          "11ms"
+        ]
+      ],
+      "paintProbes": [
+        {
+          "id": "scoped-teal-stroke-0",
+          "x": 63.73417322834646,
+          "y": 210.55039370078734
+        },
+        {
+          "id": "scoped-teal-stroke-1",
+          "x": 93.32503937007874,
+          "y": 210.55039370078734
+        },
+        {
+          "id": "scoped-teal-stroke-2",
+          "x": 122.91590551181102,
+          "y": 210.55039370078734
+        }
+      ],
+      "paintColors": [
+        {
+          "color": "#008080",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "id": "v3-seed-43-0040-scoped-typography-frame-3",
+      "file": "v3-seed-43-0040-scoped-typography-frame-3.tex",
+      "frame": 3,
+      "family": "intricate-macro-context",
+      "pages": 1,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "1",
+        "width": 0,
+        "height": 0
+      },
+      "oracleText": [
+        "MacroStageC",
+        "12s",
+        "9ms",
+        "5local",
+        "8s"
+      ]
+    },
+    {
+      "id": "v3-seed-43-0041-overlay-composition-frame-3",
+      "file": "v3-seed-43-0041-overlay-composition-frame-3.tex",
+      "frame": 3,
+      "family": "intricate-macro-context",
+      "pages": 1,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "1",
+        "width": 0,
+        "height": 0
+      },
+      "oracleText": [
+        "MacroStageC",
+        "12us",
+        "9ms",
+        "5local",
+        "8us"
+      ]
+    },
+    {
+      "id": "v3-seed-43-0042-nested-flow",
+      "file": "v3-seed-43-0042-nested-flow.tex",
+      "frame": 1,
+      "family": "intricate-nested-flow",
+      "pages": 4,
+      "choices": {
+        "alignment": "mixed",
+        "spec": "composed",
+        "width": 0,
+        "height": 0,
+        "fontSize": 10,
+        "aspectRatio": 43,
+        "theme": "Boadilla",
+        "grammar": {
+          "version": 3,
+          "seed": 43,
+          "index": 42,
+          "maxDepth": 6,
+          "budget": 25,
+          "nodes": 16,
+          "depth": 4,
+          "frameCount": 3,
+          "macroPlan": {
+            "initialUnit": "ms",
+            "localUnit": "ticks",
+            "initialStyle": "textbf",
+            "localStyle": "textrm",
+            "chainDepth": 1,
+            "coefficient": 1,
+            "stages": [
+              {
+                "frame": 2,
+                "unit": "us",
+                "witness": "MacroStageB"
+              },
+              {
+                "frame": 3,
+                "unit": "Hz",
+                "witness": "MacroStageC"
+              }
+            ]
+          },
+          "features": {
+            "columns": 3,
+            "group": 3,
+            "paragraph": 3,
+            "list": 1,
+            "diagram": 2,
+            "overlay": 1,
+            "block": 1,
+            "alignment": 1,
+            "table": 1,
+            "tikz-scope": 2,
+            "tikz-curved-edges": 2,
+            "tikz-foreach": 2,
+            "overlay-sentinels": 1,
+            "macro-arguments": 1,
+            "macro-optional-default": 1,
+            "macro-composition": 1,
+            "macro-local-redefinition": 1,
+            "macro-frame-redefinition": 1,
+            "macro-let-alias": 1
+          },
+          "pairs": [
+            "alignment>table",
+            "block>alignment",
+            "columns>block",
+            "columns>columns",
+            "columns>group",
+            "group>list",
+            "group>overlay",
+            "group>paragraph",
+            "list>diagram",
+            "list>paragraph",
+            "overlay>paragraph"
+          ],
+          "tree": {
+            "id": 0,
+            "kind": "columns",
+            "ratio": 0.46,
+            "mode": "b",
+            "children": [
+              {
+                "id": 1,
+                "kind": "columns",
+                "ratio": 0.54,
+                "mode": "c",
+                "children": [
+                  {
+                    "id": 2,
+                    "kind": "group",
+                    "font": "small",
+                    "color": "teal",
+                    "alignment": "centering",
+                    "children": [
+                      {
+                        "id": 3,
+                        "kind": "paragraph",
+                        "sentences": [
+                          "A narrow column can change line breaking even when the underlying expression is unchanged.",
+                          "The final diagram records the order in which information crosses the partition."
+                        ],
+                        "math": "\\alpha+\\beta",
+                        "emphasis": "textrm"
+                      }
+                    ]
+                  },
+                  {
+                    "id": 4,
+                    "kind": "group",
+                    "font": "small",
+                    "color": "blue",
+                    "alignment": "raggedleft",
+                    "children": [
+                      {
+                        "id": 5,
+                        "kind": "list",
+                        "environment": "description",
+                        "children": [
+                          {
+                            "id": 6,
+                            "kind": "diagram",
+                            "width": 0.9989999999999999,
+                            "vertices": 6,
+                            "rotation": -12,
+                            "scale": 0.8,
+                            "curve": true,
+                            "clip": false,
+                            "loop": true,
+                            "overlay": "1-",
+                            "diagramId": 6
+                          },
+                          {
+                            "id": 7,
+                            "kind": "diagram",
+                            "width": 0.9989999999999999,
+                            "vertices": 4,
+                            "rotation": -12,
+                            "scale": 1.1,
+                            "curve": true,
+                            "clip": false,
+                            "loop": true,
+                            "overlay": "1-",
+                            "diagramId": 7
+                          },
+                          {
+                            "id": 8,
+                            "kind": "paragraph",
+                            "sentences": [
+                              "A local update can change the measurements used by several neighboring components.",
+                              "The next pass must preserve the boundary conditions while revisiting dependent values."
+                            ],
+                            "math": "\\frac{a+b}{1+c}",
+                            "emphasis": "textit"
+                          }
+                        ],
+                        "build": false
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": 9,
+                "kind": "columns",
+                "ratio": 0.38,
+                "mode": "c",
+                "children": [
+                  {
+                    "id": 10,
+                    "kind": "group",
+                    "font": "small",
+                    "color": "blue",
+                    "alignment": "raggedleft",
+                    "children": [
+                      {
+                        "id": 11,
+                        "kind": "overlay",
+                        "command": "only",
+                        "spec": "2-",
+                        "children": [
+                          {
+                            "id": 12,
+                            "kind": "paragraph",
+                            "sentences": [
+                              "The final diagram records the order in which information crosses the partition."
+                            ],
+                            "math": "\\alpha+\\beta",
+                            "emphasis": "textit"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": 13,
+                    "kind": "block",
+                    "environment": "alertblock",
+                    "title": "Cache invalidation",
+                    "children": [
+                      {
+                        "id": 14,
+                        "kind": "alignment",
+                        "environment": "center",
+                        "children": [
+                          {
+                            "id": 15,
+                            "kind": "table",
+                            "rows": [
+                              {
+                                "label": "Fresh0",
+                                "a": 8,
+                                "b": 11
+                              },
+                              {
+                                "label": "Fresh1",
+                                "a": 13,
+                                "b": 27
+                              },
+                              {
+                                "label": "Local2",
+                                "a": 18,
+                                "b": 1
+                              },
+                              {
+                                "label": "Global3",
+                                "a": 17,
+                                "b": 29
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "paintColors": [
+        {
+          "color": "#ff00ff",
+          "visible": [
+            false,
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "color": "#128943",
+          "visible": [
+            false,
+            false,
+            true,
+            true
+          ]
+        }
+      ],
+      "oracleText": [
+        "Experiment",
+        "Witness",
+        "7ticks",
+        "11ms"
+      ],
+      "oracleTextByPage": [
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11ms"
+        ],
+        [
+          "Experiment",
+          "Witness",
+          "7ticks",
+          "11ms"
+        ]
+      ]
+    }
+  ],
+  "recognition": []
+}

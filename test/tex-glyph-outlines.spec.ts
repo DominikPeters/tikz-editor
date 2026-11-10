@@ -11,6 +11,13 @@ const glyphPaths = (svg: string, font: string) =>
   [...svg.matchAll(new RegExp(`data-tex-font="${font}"[^>]* d="([^"]*)"`, "gu"))].map((match) => match[1]);
 
 describe("lazily loaded glyph outlines", () => {
+  // Original OpenType exclamation outlines, unitsPerEm=1000, at 10 TeX pt.
+  // PDF-extracted 9.96bp reference glyphs previously shrank these values.
+  it.each([["lmsans8-regular", -6.94], ["lmroman10-regular", -7.16]] as const)("keeps %s outlines in TeX points", async (font, top) => {
+    await loadTexGlyphOutlines([font]);
+    const values = [...texGlyphOutline(font, 33).matchAll(/[-+]?(?:\d*\.)?\d+/gu)].map(match => Number(match[0]));
+    expect(Math.min(...values)).toBeCloseTo(top, 6);
+  });
   it("renders blank glyphs until a font's outlines load, then renders again", async () => {
     vi.resetModules();
     const fresh = await import("../packages/core/src/text/tex/fonts/glyph-outlines.js");

@@ -27,14 +27,17 @@ export function texFuzzMathOracleCases(cases, limit) {
 
 /** Return shared findings rather than unstructured standalone-script diagnostics. */
 export function compareTexFuzzMathOracle(caseData, options = {}) {
-  const display = caseData.source.startsWith(String.raw`\[`) && caseData.source.endsWith(String.raw`\]`);
-  const inline = caseData.source.startsWith("$") && caseData.source.endsWith("$") && !caseData.source.startsWith("$$");
-  if ((!display && !inline) || caseData.source.length < (display ? 5 : 3)) {
+  const source = caseData.source;
+  const display = source.startsWith(String.raw`\[`) && source.endsWith(String.raw`\]`) || source.startsWith("$$") && source.endsWith("$$");
+  const paren = source.startsWith(String.raw`\(`) && source.endsWith(String.raw`\)`);
+  const inline = paren || source.startsWith("$") && source.endsWith("$") && !source.startsWith("$$");
+  const delimiterLength = display || paren ? 2 : 1;
+  if ((!display && !inline) || source.length <= 2 * delimiterLength) {
     return { compared: false, observation: null };
   }
-  const formula = display ? String.raw`\displaystyle ` + caseData.source.slice(2, -2) : caseData.source.slice(1, -1);
+  const formula = (display ? String.raw`\displaystyle ` : "") + source.slice(delimiterLength, -delimiterLength);
   const tolerance = options.tolerance ?? 0.03;
-  const result = (options.compare ?? compareFormula)(formula, tolerance, { timeoutMs: options.timeoutMs });
+  const result = (options.compare ?? compareFormula)(formula, tolerance, { timeoutMs: options.timeoutMs, latexRelease: options.latexRelease });
   const comparable = result.ours.supported && !result.mismatches.some((message) => message.startsWith("TeX oracle failed:"));
   if (result.ok) return { compared: true, observation: null };
   return { compared: comparable, observation: {

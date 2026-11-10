@@ -318,6 +318,12 @@ function relativeArtifact(runDir, path) {
   return relative(runDir, path);
 }
 
+function downsampleComparisonRaster(path, width, height) {
+  // Integrate subpixel coverage identically on both independent inputs.
+  // Direct 1600px sampling can erase a tiny glyph counter on only one side.
+  runRequired("magick", [path, "-filter", "box", "-resize", `${width}x${height}!`, path]);
+}
+
 export function structuralContractFailures(summary) {
   const failures = [];
   for (const key of [
@@ -479,7 +485,8 @@ export async function compareBeamerFrame(options, runtime = {}) {
     const rendererPng = join(runDir, "renderer.png");
     const oraclePng = join(runDir, "oracle.png");
     const oracleVectorPng = join(runDir, "oracle-vector.png");
-    rasterizeSvg(rendererSvg, rendererPng, options.width, rasterHeight);
+    rasterizeSvg(rendererSvg, rendererPng, options.width * 2, rasterHeight * 2);
+    downsampleComparisonRaster(rendererPng, options.width, rasterHeight);
     // This second oracle raster deliberately uses the same SVG rasterizer as
     // the native output. It is the useful visual check for glyph outline and
     // scale fidelity: comparing librsvg with Poppler can otherwise make
@@ -487,7 +494,10 @@ export async function compareBeamerFrame(options, runtime = {}) {
     //
     // Keep the PDF raster below as the primary full-paint oracle because
     // dvisvgm omits PGF radial shadings used by projected Beamer markers.
-    if (!options.pdfOnly) rasterizeSvg(oracleSvg, oracleVectorPng, options.width, rasterHeight);
+    if (!options.pdfOnly) {
+      rasterizeSvg(oracleSvg, oracleVectorPng, options.width * 2, rasterHeight * 2);
+      downsampleComparisonRaster(oracleVectorPng, options.width, rasterHeight);
+    }
     // dvisvgm preserves the selected oracle page as a useful vector artifact,
     // but it drops Beamer's PGF radial shadings. Raster the same selected PDF
     // page directly so theme markers and other PDF paint operators remain in
@@ -496,9 +506,10 @@ export async function compareBeamerFrame(options, runtime = {}) {
       join(oracleDir, oracleReport.artifacts.pdf ?? "probe.pdf"),
       oraclePng,
       oracleReport.input.compiledPage,
-      options.width,
-      rasterHeight
+      options.width * 2,
+      rasterHeight * 2
     );
+    downsampleComparisonRaster(oraclePng, options.width, rasterHeight);
     createVisualComparisons(runDir);
     if (!options.pdfOnly) createSameRasterizerComparisons(runDir);
   }
@@ -547,6 +558,7 @@ export async function compareBeamerFrame(options, runtime = {}) {
       background: "white",
       normalizedRmse: rasterRmse(join(runDir, "oracle.png"), join(runDir, "renderer.png")),
       oracleBackend: "pdftocairo",
+      sampling: { scale: 2, downsampleFilter: "box", sharedByNativeAndOracle: true },
     },
     artifacts: {
       input: "input.tex",

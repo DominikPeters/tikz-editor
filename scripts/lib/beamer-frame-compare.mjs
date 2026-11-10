@@ -324,7 +324,7 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
     const scale = embedded.bounds.width / embedded.viewBox.width;
     const pageTransform = [scale, 0, 0, scale, embedded.bounds.x - embedded.viewBox.x * scale, embedded.bounds.y - embedded.viewBox.y * scale];
     for (const [partIndex, part] of embedded.model.parts.entries()) {
-      rectangles.push(...nativeSvgImageRectangles(part.markup, pageTransform).map((rect, index) => ({
+      rectangles.push(...nativeSvgImageRectangles(part.markup, pageTransform, true).map((rect, index) => ({
         id: `${embedded.itemId}:image:${partIndex}:${index}`, role: "image", ...rect,
       })));
     }
@@ -1152,12 +1152,12 @@ function featuresFromNativeMathSvg(params) {
   }))]};
 }
 
-function nativeSvgImageRectangles(svg, initialTransform = identityMatrix()) {
+function nativeSvgImageRectangles(svg, initialTransform = identityMatrix(), includeRules = false) {
   const rectangles = [], stack = [{ transform: initialTransform, clipped: false, hidden: false, graphic: false }];
-  const append = (matrix, x, y, width, height) => {
+  const append = (matrix, x, y, width, height, role) => {
     const points = [[x, y], [x + width, y], [x, y + height], [x + width, y + height]].map(([a, b]) => transformPoint(matrix, a, b));
     const left = Math.min(...points.map(point => point.x)), top = Math.min(...points.map(point => point.y));
-    rectangles.push({ x: round(left), y: round(top), width: round(Math.max(...points.map(point => point.x)) - left), height: round(Math.max(...points.map(point => point.y)) - top) });
+    rectangles.push({ ...(role ? { role } : {}), x: round(left), y: round(top), width: round(Math.max(...points.map(point => point.x)) - left), height: round(Math.max(...points.map(point => point.y)) - top) });
   };
   for (const match of svg.matchAll(/<\/?[A-Za-z][^>]*>/gu)) {
     const tag = match[0];
@@ -1168,6 +1168,8 @@ function nativeSvgImageRectangles(svg, initialTransform = identityMatrix()) {
     const graphic = parent.graphic || readSvgAttribute(tag, "data-tex-includegraphics") === "true";
     const viewport = graphic && name === "svg" && readSvgAttribute(tag, "overflow") === "hidden" && readSvgAttribute(tag, "viewBox") != null;
     if (!hidden && !parent.clipped && (viewport || name === "image")) append(explicit, numericSvgAttribute(tag, "x", 0), numericSvgAttribute(tag, "y", 0), Number(readSvgAttribute(tag, "width")), Number(readSvgAttribute(tag, "height")));
+    const ruleRole = includeRules && name === "rect" && readSvgAttribute(tag, "data-tex-rule");
+    if (ruleRole && !hidden && !parent.clipped) append(explicit, numericSvgAttribute(tag, "x", 0), numericSvgAttribute(tag, "y", 0), Number(readSvgAttribute(tag, "width")), Number(readSvgAttribute(tag, "height")), ruleRole);
     const transform = name === "svg" ? multiplyMatrices(explicit, svgViewportTransform(tag)) : explicit;
     if (!tag.endsWith("/>") && !isVoidSvgElement(name)) stack.push({ transform, clipped: parent.clipped || viewport, hidden, graphic });
   }

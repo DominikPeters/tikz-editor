@@ -1279,7 +1279,7 @@ function texIncludeGraphicsBox(params: {
         height: size.height,
         status: resolution.status === "resolved" && assetNatural ? "draft" : resolution.status === "resolved" ? "unsupported" : resolution.status,
         ...(placeholderReason !== undefined && !(resolution.status === "resolved" && assetNatural) ? { reason: placeholderReason } : {}),
-        label: texIncludeGraphicsSafeDraftLabel(params.draftLabel, params.filename),
+        label: texIncludeGraphicsSafeDraftLabel(params.draftLabel, texIncludeGraphicsDraftFilename(params.filename, resolution.status === "resolved" ? resolution.resolvedPath : undefined)),
       });
   let extent: GraphicxBoxExtent = { width: size.width, height: size.height, depth: 0 };
   let matrix = IDENTITY_GRAPHICX_MATRIX;
@@ -1551,6 +1551,14 @@ function renderTexIncludeGraphicsImageSvgBody(params: {
 
 type TexIncludeGraphicsDraftLabel = { readonly width: number; readonly height: number; readonly depth: number; readonly svgBody: string };
 
+/** graphicx appends the discovered extension to its draft label. */
+function texIncludeGraphicsDraftFilename(filename: string, resolvedPath?: string): string {
+  const leaf = filename.trim().replace(/\\/gu, "/").split("/").at(-1);
+  const resolvedLeaf = resolvedPath?.replace(/\\/gu, "/").split("/").at(-1);
+  const suffix = leaf && resolvedLeaf?.startsWith(leaf) ? resolvedLeaf.slice(leaf.length) : "";
+  return /^\.(?:pdf|png|jpe?g|svg)$/iu.test(suffix) ? filename + suffix : filename;
+}
+
 /** The label is decoration: a file name the text engine cannot set leaves an unlabelled frame. */
 function texIncludeGraphicsSafeDraftLabel(
   draftLabel: ((label: string) => TexIncludeGraphicsDraftLabel | null) | undefined,
@@ -1586,7 +1594,9 @@ function texIncludeGraphicsDraftLabel(params: {
     tokens: simpleTexInlineNodesToTokens(nodes, params.fontState),
     atPt: params.atPt,
     metricProvider: params.metricProvider,
-    spaceGlueProfile: params.spaceGlueProfile,
+    // graphics.sty's draft label starts a fresh \rlap hbox. Its initial
+    // space uses the font's natural glue, including inside a TikZ node.
+    spaceGlueProfile: "font",
     textFontProfile: params.textFontProfile,
     trimEdges: false,
   });
@@ -1614,7 +1624,7 @@ function renderTexIncludeGraphicsPlaceholderSvgBody(params: {
   const width = Number(params.width);
   const height = Number(params.height);
   const unit = (value: number) => formatTexSvgNumber(value * TEX_SVG_UNIT_SCALE);
-  const rect = (x: number, y: number, w: number, h: number) => `<rect x="${unit(x)}" y="${unit(y)}" width="${unit(w)}" height="${unit(h)}" />`;
+  const rect = (x: number, y: number, w: number, h: number) => `<rect data-tex-rule="image-frame" x="${unit(x)}" y="${unit(y)}" width="${unit(w)}" height="${unit(h)}" />`;
   const reasonAttr = params.reason
     ? ` data-tex-includegraphics-reason="${escapeTexSvgAttribute(params.reason)}"`
     : "";
