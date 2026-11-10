@@ -2,9 +2,8 @@
 
 This is a decision inventory, not a commitment to implement every package.
 The requested Beamer fixes are separate. Package interfaces below remain
-unchanged while we choose a support boundary. The accompanying
-[`JSON inventory`](beamer-package-support-inventory.json) records every source
-frame and span. Counts are authored frames, not overlay pages, and overlap.
+unchanged while we choose a support boundary. The examples live in `test/fixtures/beamer/breadth-decks/`;
+`test/beamer-package-breadth.spec.ts` selects the package regression cases. Counts are authored frames, not overlay pages, and overlap.
 
 | Interface | Frames / decks | Actual interfaces exercised | Current result | Bounded native implementation |
 | --- | --- | --- | --- | --- |

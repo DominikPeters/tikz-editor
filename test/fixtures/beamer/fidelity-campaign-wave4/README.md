@@ -1,8 +1,7 @@
 # Bounded package frontend conformance
 
-Eleven original reductions and stress cases for the first package tranche. The source
-hashes and independent LuaLaTeX traces are pinned only from a complete passing
-run of the current manifest:
+Eleven reductions and stress cases cover the first package tranche. Run the
+LuaLaTeX comparison and refresh its reference traces with:
 
 ```
 node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/fidelity-campaign-wave4/cases.json --out-dir artifacts/beamer-fidelity-campaign/wave4

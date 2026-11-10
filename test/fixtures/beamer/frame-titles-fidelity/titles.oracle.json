@@ -8,10 +8,6 @@
       "description": "A class for typesetting presentations"
     }
   },
-  "sourceFiles": {
-    "flow-titles.tex": "828b535bfe9fd058cff994bb27b0c9f95ecd9fe95d6e2e386cfd97dad85fcd8d",
-    "text-empty-frame-title.tex": "f489df88c6e4e8c6d71a176e082a5463ff08a89471d595b30a26421fee5aea01"
-  },
   "pages": [
     {
       "id": "flow-subtitle-control",

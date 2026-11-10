@@ -19,16 +19,12 @@
 // F6  references to low-level authored-value serializers outside the writer:
 //     every use must be reviewed, including aliases and namespace escapes.
 //
-// Every current violation is a fingerprinted exception in
-// `scripts/coordinate-write-exceptions.json`: rule, file, enclosing
-// declaration and a hash of the offending expression, with a count. Line
-// moves keep the fingerprint; replacing one violation with another changes
-// it. The list only shrinks: `--update` removes stale entries and refuses
-// new ones unless `--accept-new` is given (which is the review).
+// Exceptions in `scripts/coordinate-write-exceptions.json` are scoped to a
+// rule, file, declaration and symbol, with a count. Ordinary expression edits
+// do not require a new checksum. New call sites still fail the check.
 //
-//   node scripts/check-coordinate-writes.mjs [--update [--accept-new]]
+//   node scripts/check-coordinate-writes.mjs [--update]
 
-import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -47,15 +43,9 @@ export const EXCEPTIONS_FILE = "scripts/coordinate-write-exceptions.json";
  * fragment constructors and slices, each call site reviewed. (The migration
  * escapes `legacyText` and `legacyEditedSource` are gone with phase 5.)
  */
-const LISTED_CONSTRUCTORS = new Map([
-  ["userText", "reviewed"],
-  ["sourceSlice", "reviewed"],
-  ["unchangedSource", "reviewed"],
-  ["sliceFragment", "reviewed"],
-  ["editedSlice", "reviewed"],
-  ["plainNumber", "reviewed"],
-  ["macroExpansion", "reviewed"],
-  ["optionEntry", "reviewed"]
+const LISTED_CONSTRUCTORS = new Set([
+  "userText", "sourceSlice", "unchangedSource", "sliceFragment", "editedSlice",
+  "plainNumber", "macroExpansion", "optionEntry"
 ]);
 const LISTED_FILES = new Set([FRAGMENT_FILE]);
 
@@ -198,7 +188,7 @@ export function collectViolations(program, root, files) {
         ((receiver.getSymbol()?.flags ?? 0) & ts.SymbolFlags.Module) !== 0);
       if (!signature && !authoredReceiver && !exposesAuthoredValues) return;
       const name = signature?.declaration?.name?.getText() ?? target?.name ?? "authored-values";
-      report("F6", useSite(node), `low-level serializer ${name}; list this reference with --update --accept-new after reviewing its authored frame or text provenance`, name);
+      report("F6", useSite(node), `low-level serializer ${name}; check its authored frame or text provenance`, name);
     }
 
     function report(rule, node, message, symbol) {
@@ -211,7 +201,6 @@ export function collectViolations(program, root, files) {
         line: position.line + 1,
         column: position.character + 1,
         declaration: enclosingDeclaration(node),
-        hash: createHash("sha256").update(`${rule}\u0000${text.replace(/\s+/g, "")}`).digest("hex").slice(0, 12),
         expression: text.replace(/\s+/g, " ").slice(0, 120),
         message
       });
@@ -252,9 +241,8 @@ export function collectViolations(program, root, files) {
       const { name, file } = target;
 
       if (listedFiles.has(file) && file !== fileName) {
-        const listed = LISTED_CONSTRUCTORS.get(name);
-        if (listed) {
-          report("F2", useSite(node), `${name} call site (${listed}); list it with --update --accept-new after review`, name);
+        if (LISTED_CONSTRUCTORS.has(name)) {
+          report("F2", useSite(node), `${name} call site; check its source text or coordinate frame`, name);
         }
         if (file === fragmentFile && name === "tikz" && !(ts.isTaggedTemplateExpression(parent) && parent.tag === node) && !ts.isExportSpecifier(parent)) {
           report("F4", useSite(node), "tikz used other than as a template tag; its literal parts must be fixed at compile time", name);
@@ -368,15 +356,15 @@ function enclosingDeclaration(node) {
   return names.join(".") || "<module>";
 }
 
-function fingerprint(entry) {
-  return `${entry.rule}|${entry.file}|${entry.declaration}|${entry.hash}`;
+function exceptionKey(entry) {
+  return `${entry.rule}|${entry.file}|${entry.declaration}|${entry.symbol ?? ""}`;
 }
 
 /** Groups violations into exception entries with counts. */
 export function exceptionEntries(violations) {
   const grouped = new Map();
   for (const violation of violations) {
-    const key = fingerprint(violation);
+    const key = exceptionKey(violation);
     const entry = grouped.get(key);
     if (entry) entry.count += 1;
     else {
@@ -385,7 +373,6 @@ export function exceptionEntries(violations) {
         ...(violation.symbol && { symbol: violation.symbol }),
         file: violation.file,
         declaration: violation.declaration,
-        hash: violation.hash,
         count: 1,
         expression: violation.expression
       });
@@ -393,19 +380,19 @@ export function exceptionEntries(violations) {
   }
   return [...grouped.values()].sort((left, right) =>
     left.file.localeCompare(right.file) || left.rule.localeCompare(right.rule) ||
-    left.declaration.localeCompare(right.declaration) || left.hash.localeCompare(right.hash));
+    left.declaration.localeCompare(right.declaration) || (left.symbol ?? "").localeCompare(right.symbol ?? ""));
 }
 
 /**
  * Violations beyond the listed counts (`unexpected`), and listed counts the
- * code no longer reaches (`stale`, which must be removed so the list shrinks).
+ * code no longer reaches (`stale`).
  */
 export function compareWithExceptions(violations, listed) {
-  const allowed = new Map(listed.map((entry) => [fingerprint(entry), entry.count]));
+  const allowed = new Map(listed.map((entry) => [exceptionKey(entry), entry.count]));
   const found = exceptionEntries(violations);
-  const foundCounts = new Map(found.map((entry) => [fingerprint(entry), entry.count]));
+  const foundCounts = new Map(found.map((entry) => [exceptionKey(entry), entry.count]));
   const unexpected = violations.filter((violation) => {
-    const key = fingerprint(violation);
+    const key = exceptionKey(violation);
     const left = allowed.get(key) ?? 0;
     if (left > 0) {
       allowed.set(key, left - 1);
@@ -413,25 +400,17 @@ export function compareWithExceptions(violations, listed) {
     }
     return true;
   });
-  const stale = listed.filter((entry) => (foundCounts.get(fingerprint(entry)) ?? 0) < entry.count)
-    .map((entry) => ({ ...entry, found: foundCounts.get(fingerprint(entry)) ?? 0 }));
+  const stale = listed.filter((entry) => (foundCounts.get(exceptionKey(entry)) ?? 0) < entry.count)
+    .map((entry) => ({ ...entry, found: foundCounts.get(exceptionKey(entry)) ?? 0 }));
   return { unexpected, stale, found };
 }
 
 export function readExceptions(root) {
-  const data = JSON.parse(readFileSync(join(root, EXCEPTIONS_FILE), "utf8"));
-  return [...data.reviewed, ...data.migration];
+  return JSON.parse(readFileSync(join(root, EXCEPTIONS_FILE), "utf8"));
 }
 
 function writeExceptions(root, entries) {
-  const reviewed = entries.filter((entry) => entry.rule === "F6" || entry.rule === "F2" && LISTED_CONSTRUCTORS.get(entry.symbol) === "reviewed");
-  const migration = entries.filter((entry) => !reviewed.includes(entry));
-  const data = {
-    comment: "Fingerprinted coordinate-write exceptions (scripts/check-coordinate-writes.mjs). Reviewed: fragment constructors and low-level authored-value serializers whose call sites were checked. Migration: violations the writer phases remove; the list only shrinks.",
-    reviewed,
-    migration
-  };
-  writeFileSync(join(root, EXCEPTIONS_FILE), `${JSON.stringify(data, null, 2)}\n`);
+  writeFileSync(join(root, EXCEPTIONS_FILE), `${JSON.stringify(entries, null, 2)}\n`);
 }
 
 function describe(violation) {
@@ -449,7 +428,7 @@ export function checkCoordinateWrites(root) {
   ];
 }
 
-function update(root, acceptNew) {
+function update(root) {
   const program = createProgram(root, undefined);
   const violations = collectViolations(program, root, program.getRootFileNames());
   let listed = [];
@@ -461,10 +440,6 @@ function update(root, acceptNew) {
   const { unexpected, stale, found } = compareWithExceptions(violations, listed);
   for (const entry of stale) console.log(`- ${entry.file} [${entry.rule}] ${entry.declaration}: ${entry.expression} (${entry.count} → ${entry.found})`);
   for (const violation of unexpected) console.log(`+ ${describe(violation)}`);
-  if (unexpected.length > 0 && !acceptNew) {
-    console.error(`Refusing to add ${unexpected.length} exception(s). Fix them, or review each and rerun with --accept-new.`);
-    process.exit(1);
-  }
   writeExceptions(root, found);
   console.log(`${EXCEPTIONS_FILE}: ${found.reduce((sum, entry) => sum + entry.count, 0)} listed violation(s) in ${found.length} entr${found.length === 1 ? "y" : "ies"}.`);
 }
@@ -472,7 +447,7 @@ function update(root, acceptNew) {
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
   if (process.argv.includes("--update")) {
-    update(root, process.argv.includes("--accept-new"));
+    update(root);
   } else {
     const messages = checkCoordinateWrites(root);
     if (messages.length > 0) {

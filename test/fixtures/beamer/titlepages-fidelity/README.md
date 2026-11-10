@@ -1,6 +1,6 @@
 # Titlepage conformance
 
-Each `.tex` document has a source-hashed `.oracle.json` containing normalized
+Each `.tex` document has a `.oracle.json` containing normalized
 LuaLaTeX page traces. `test/beamer-titlepage-fidelity.spec.ts` compares native
 text, font metrics, line breaks and TeX rules to these traces within 0.001pt.
 

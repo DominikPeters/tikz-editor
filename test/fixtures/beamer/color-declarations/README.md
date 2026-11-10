@@ -13,7 +13,7 @@ node test/fixtures/beamer/color-declarations/capture-oracles.mjs
 The script reuses `scripts/lib/tex-oracle.mjs`; its temporary TeX files are
 removed after compilation. `\usebeamercolor*` establishes normal-text fallback
 before querying each role, so an intentionally empty field is compared with
-that effective fallback. The source hash pins the declarations and role list.
+that effective fallback.
 
 Support is limited to authored preamble declarations. Local body/group
 assignments, macro-expanded declarations, contextual current-color expressions

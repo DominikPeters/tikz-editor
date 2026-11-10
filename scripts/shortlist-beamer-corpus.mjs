@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Candidate discovery for human review, not a renderer support/pass classifier.
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadCoreRenderer } from "./compare-beamer-frame.mjs";
@@ -137,16 +137,7 @@ async function main(argv) {
   }).sort((a, b) => b.repositories.length - a.repositories.length || b.distinctSourceForms - a.distinctSourceForms);
   const selected = selectDiverseFrames(uniqueFrames, options.count, options.maxPerDeck, options.maxPerRepository, excluded);
   mkdirSync(options.out, { recursive: true });
-  const codeFiles = [];
-  function fingerprint(directory) {
-    for (const file of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      const filePath = join(directory, file.name);
-      if (file.isDirectory()) fingerprint(filePath);
-      else if (file.name.endsWith(".js")) codeFiles.push([filePath.slice(repoRoot.length), sha256(readFileSync(filePath))]);
-    }
-  }
-  fingerprint(join(repoRoot, "packages/core/dist"));
-  const report = { generatedAt: new Date().toISOString(), rendererFingerprint: sha256(JSON.stringify(codeFiles)), options, limitations: ["Frequency counts only complete scanner-discovered environment frames. Command/macro-generated and recovery spans can be missed.", "Frequency is source usage, not rendering support. Package presence alone does not count as use.", "Exact repeated frame source is deduplicated per repository; semantic duplicates and generated variants can remain.", "Inputs are expanded conservatively; conditionals, package definitions and custom build wrappers are not executed.", "Repository diversity here covers eight source collections, not population-wide package popularity."], summary: { entryPoints: decks.length, frames: frames.length, distinctSourceForms: uniqueFrames.length, completeDistinctSourceForms: uniqueFrames.filter(f => f.complete).length, excludedReviewed: uniqueFrames.filter(f => excluded.has(reviewedFrameKey(f))).length, selected: selected.length }, frequency, selected, frames: uniqueFrames, decks };
+  const report = { generatedAt: new Date().toISOString(), options, limitations: ["Frequency counts only complete scanner-discovered environment frames. Command/macro-generated and recovery spans can be missed.", "Frequency is source usage, not rendering support. Package presence alone does not count as use.", "Exact repeated frame source is deduplicated per repository; semantic duplicates and generated variants can remain.", "Inputs are expanded conservatively; conditionals, package definitions and custom build wrappers are not executed.", "Repository diversity here covers eight source collections, not population-wide package popularity."], summary: { entryPoints: decks.length, frames: frames.length, distinctSourceForms: uniqueFrames.length, completeDistinctSourceForms: uniqueFrames.filter(f => f.complete).length, excludedReviewed: uniqueFrames.filter(f => excluded.has(reviewedFrameKey(f))).length, selected: selected.length }, frequency, selected, frames: uniqueFrames, decks };
   if (options.renderSelected) {
     const renders = [];
     for (const frame of selected) {

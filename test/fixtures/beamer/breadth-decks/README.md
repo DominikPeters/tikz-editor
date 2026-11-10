@@ -117,10 +117,6 @@ There are three distinct page denominators:
   the second continuation. The six generated section frames are an explicit
   scanner boundary, not silently counted as compared pages.
 
-The initial inventory is recorded in
-[`design/beamer-breadth-decks-baseline.json`](../../../../design/beamer-breadth-decks-baseline.json).
-It preserves package/color-theme diagnostics, literal markers and discovery
-boundaries. No failing native output is accepted as a fidelity golden.
 To begin paired investigation using the existing comparison harness:
 
 ```sh

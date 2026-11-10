@@ -1,6 +1,5 @@
 # Hosted label transfer and covered ownership
 
-Both cases and four states pass strict live checks in `artifacts/beamer-fuzz/v26-live`.
 A containing block clones its render context: label maps and their change state
 must remain shared, or preparation stops before rebuilding the child minipage.
 Whole-container visibility covers transferred labels even when their source owner

@@ -1,4 +1,4 @@
-These snapshots pin the LuaLaTeX shipout glyph/rule traces for the existing
+These snapshots record the LuaLaTeX shipout glyph/rule traces for the existing
 `corpus-followups/flow-titles.tex` and `text-empty-frame-title.tex` fixtures.
 They cover both subtitle syntaxes, title `only`/`uncover` overlays, a stock
 title control, and explicit/absent title controls under Warsaw. Covered
@@ -15,7 +15,7 @@ npm run compare:beamer-followups -- --cases flow-subtitle-control,flow-subtitle-
 node test/fixtures/beamer/frame-titles-fidelity/capture-oracles.mjs
 ```
 
-The capture script checks each compiled page count and source hash before
+The capture script checks each compiled page count before
 copying the oracle traces. `test/beamer-frame-title-fidelity.spec.ts` compares
 the direct source renderer with these traces without requiring TeX in CI.
 Subtitle geometry here exercises the default frame-title template, including

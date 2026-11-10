@@ -2,9 +2,7 @@
 
 The six controls cover default smaller list fonts, explicit font size/baseline
 selection, normalsize/footnotesize changes, a continuing parent list, plain versus
-visible-wrapped displays, and a covered pending ancestor marker. All overlay
-states pass live LuaLaTeX geometry and paint checks in
-`artifacts/beamer-fuzz/v31-live`.
+visible-wrapped displays, and a covered pending ancestor marker.
 
 List font declarations must update display registers, while explicit fontsize
 keeps the active registers. Environments restore font state; Beamer actionenv

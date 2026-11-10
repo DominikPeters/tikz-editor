@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // Regenerate from LuaLaTeX, never from the native renderer.
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -20,11 +19,8 @@ for (const name of readdirSync(fixtures).filter((name) => name.endsWith(".tex"))
     "--frame", "1", "--trace-only", "--out-dir", output, "--name", stem,
   ], { cwd: root, stdio: "inherit" });
   const report = JSON.parse(readFileSync(join(output, stem, "report.json"), "utf8"));
-  const sourceSha256 = createHash("sha256").update(readFileSync(input)).digest("hex");
-  if (sourceSha256 !== report.input.sha256) throw new Error(`Stale LuaLaTeX trace for ${name}`);
   const trace = normalizeOracleBeamerPageTrace(report.pageTrace.selectedPage, report.tex.selectedPage);
   const snapshot = {
-    sourceSha256,
     engine: report.environment.engineBanner,
     beamer: report.environment.beamerClass,
     trace: {

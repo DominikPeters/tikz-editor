@@ -22,15 +22,14 @@ fits inside the bar. RGB tolerance remains 2; glyph tolerances remain 0.02pt
 horizontally and 0.01pt vertically, with 0.01pt rule-edge tolerance. Geometry
 passes are not whole-image pixel-equality claims.
 
-Pin only after a complete passing live run:
+Refresh the independent LuaLaTeX traces with:
 
 ```
 node scripts/update-beamer-campaign-oracles.mjs artifacts/beamer-fidelity-campaign/wave3 test/fixtures/beamer/fidelity-campaign-wave3/cases.json
 ```
 
 The checked-in oracle snapshots contain independently compiled TeX glyph/rule
-traces. The offline campaign test verifies source hashes and compares native
-output to those traces; paint probes run in the live suite. Unsupported TOC
+traces. Unsupported TOC
 options produce diagnostics. Arbitrary contents templates, package frontends,
 generated section-hook frames and general frame continuation fidelity remain
 separate work.

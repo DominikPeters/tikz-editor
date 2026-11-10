@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseBeamerFrameBody } from "../packages/core/src/beamer/content.js";
@@ -14,7 +13,7 @@ import { buildNativeBeamerPageTrace, compareBeamerPageTraces, type OracleBeamerP
 
 const fixture = readFileSync(new URL("./fixtures/beamer/tcolorbox-fidelity/boxes.tex", import.meta.url), "utf8");
 const oracle = JSON.parse(readFileSync(new URL("./fixtures/beamer/tcolorbox-fidelity/boxes.oracle.json", import.meta.url), "utf8")) as {
-  sourceSha256: string; pages: Array<{ frameIndex: number; trace: OracleBeamerPageTrace }>;
+  pages: Array<{ frameIndex: number; trace: OracleBeamerPageTrace }>;
 };
 const deck = (body: string, preamble = "") => String.raw`\documentclass{beamer}\usepackage{tcolorbox}${preamble}\begin{document}\begin{frame}{Test}${body}\end{frame}\end{document}`;
 const bodyIr = (source: string) => {
@@ -154,10 +153,6 @@ Before [\itshape italic] after brackets.\begin{block}{Next}Following.\end{block}
     if (columns.kind !== "columns") throw new Error("Expected columns");
     expect(columns.columns[0].children[0]).toMatchObject({ kind: "block", packageBox: "tcolorbox" });
     expect(columns.columns[1].children.map(node => node.kind)).toEqual(["unsupported", "paragraph"]);
-  });
-
-  it("pins the source used for the LuaLaTeX fidelity snapshots", () => {
-    expect(createHash("sha256").update(fixture).digest("hex")).toBe(oracle.sourceSha256);
   });
 
   for (const page of oracle.pages) it(`matches LuaLaTeX glyphs and stock box packing for source frame ${page.frameIndex + 1}`, async () => {

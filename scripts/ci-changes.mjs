@@ -37,10 +37,6 @@ export function classifyCiChanges(files) {
       enable("checks", "unit");
       if (file.startsWith("test/fixtures/")) enable("images", "web");
       if (/^test\/tex-fuzz-(?:graphics|image-paint)(?:-tool)?\.spec\.ts$/u.test(file)) enable("images");
-    } else if (file === "design/includegraphics-fuzz-ledger.json") {
-      enable("unit", "images");
-    } else if (file === "design/beamer-package-support-inventory.json") {
-      enable("unit");
     } else if (file === ".github/workflows/image-fidelity.yml") {
       enable("checks", "images");
     } else if (file.startsWith(".github/")) {
@@ -48,7 +44,7 @@ export function classifyCiChanges(files) {
     } else if (file.startsWith("apps/")) {
       enable(...Object.keys(result));
     } else if (/^(?:docs|design|artifacts)\//u.test(file) || /(?:\.md$|^(?:LICENSE|NOTICE|\.gitignore)$)/u.test(file)) {
-      // Documentation and recorded campaign reports are not executable inputs.
+      // Documentation and generated reports are not executable inputs.
     } else {
       // Unknown build/configuration inputs get conservative coverage.
       enable(...Object.keys(result));

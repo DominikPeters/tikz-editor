@@ -2,11 +2,8 @@
 
 This audit compares the twelve original breadth decks with LuaLaTeX, using
 every discovered source frame and overlay, plus the numerical deck's second
-continuation page. The machine-readable inventory is
-[`beamer-breadth-decks-lualatex.json`](beamer-breadth-decks-lualatex.json).
-It records sources, environment, coverage, diagnostics, structural failures,
-raster differences and artifact paths per page. These are observations, not
-accepted fidelity goldens.
+continuation page. The examples live in `test/fixtures/beamer/breadth-decks/`.
+Use the commands below to generate a fresh comparison.
 
 All **151 paired pages** obtained valid LuaLaTeX references, with no oracle
 failures. **Two** meet the existing strict structural contract; **six** generated
@@ -85,9 +82,7 @@ Three harness issues were fixed before recording the final results:
   now includes the deck-context helper.
 
 The preliminary `compare/` and interrupted `compare-all/` artifacts predate
-these repairs and must not be used for fidelity conclusions. The earlier
-[`baseline`](beamer-breadth-decks-baseline.json) remains a coverage inventory;
-its native first-use paint artifacts are superseded by this run. No fixture
+these repairs and must not be used for fidelity conclusions. Earlier first-use paint artifacts were superseded by these repairs. No fixture
 source or production renderer was changed for this audit.
 
 ## Reproduce

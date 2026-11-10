@@ -60,8 +60,7 @@ The direct cutover landed in commits `625473f3` through `c4bb78de`.
 - The full repository suite, checked-in corpus fixtures, all 20 KKT frames,
   and the 28-theme/3-frame conformance matrix pass. The matrix reports 84/84
   structural comparisons passing.
-- The committed post-cutover latency artifact is
-  `design/benchmarks/beamer-frontend-post-cst-cutover.json`: scan is
+- The post-cutover frontend benchmark measured scan at
   7.792 ms median / 9.331 ms p95 and prepare is
   7.733 ms median / 8.885 ms p95 on the recorded profile, inside the agreed
   budgets.
@@ -502,9 +501,8 @@ overlay counts.
    agreed absolute/relative budget to the benchmark and this plan rather than
    accepting a regression implicitly.
 
-The pre-cutover baseline is recorded in
-`design/benchmarks/beamer-frontend-pre-cst-cutover.json`. On that recorded
-Apple Silicon/Node 26 profile, the post-cutover acceptance budgets are:
+For the Apple Silicon/Node 26 profile used by the pre-cutover benchmark,
+the post-cutover acceptance budgets are:
 
 - `scanBeamerDocument`: median ≤ 8 ms and p95 ≤ 12 ms;
 - `prepareBeamerDocument`: median ≤ 9 ms and p95 ≤ 13 ms.

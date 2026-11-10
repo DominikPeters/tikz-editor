@@ -9,7 +9,6 @@ export interface CoordinateWriteViolation {
   readonly line: number;
   readonly column: number;
   readonly declaration: string;
-  readonly hash: string;
   readonly expression: string;
   readonly message: string;
 }
@@ -19,7 +18,6 @@ export interface CoordinateWriteException {
   readonly symbol?: string;
   readonly file: string;
   readonly declaration: string;
-  readonly hash: string;
   readonly count: number;
   readonly expression: string;
 }

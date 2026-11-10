@@ -15,8 +15,8 @@ describe("CI change coverage", () => {
       checks: true, unit: false, web: false, desktop: false, images: false, landing: true, ipad: false,
     });
   });
-  it("lets documentation and historical reports finish through the CI result check", () => {
-    expect(Object.values(classifyCiChanges(["README.md", "apps/desktop/README.md", "packages/core/README.md", "design/beamer-failure-status.md", "design/release-failure-investigation-20261109.json"]))).not.toContain(true);
+  it("lets documentation changes finish through the CI result check", () => {
+    expect(Object.values(classifyCiChanges(["README.md", "apps/desktop/README.md", "packages/core/README.md", "design/beamer-editor.md"]))).not.toContain(true);
     expect(classifyCiChanges(["apps/landing/src/help.md"]).landing).toBe(true);
   });
   it("runs all consumers when a shared renderer or lockfile changes", () => {
@@ -38,7 +38,7 @@ describe("CI change coverage", () => {
     expect(classifyCiChanges(["apps/web/e2e/beamer-pdf-image.spec.ts"]).web).toBe(true);
   });
   it("covers independent oracle inputs and imported fixture assets", () => {
-    for (const path of ["scripts/lib/tex-fuzz-image-paint.mjs", "test/tex-fuzz-image-paint.spec.ts", "test/fixtures/graphics-fuzz/fuzz-images/pages.pdf", "design/includegraphics-fuzz-ledger.json", ".github/workflows/image-fidelity.yml"]) {
+    for (const path of ["scripts/lib/tex-fuzz-image-paint.mjs", "test/tex-fuzz-image-paint.spec.ts", "test/fixtures/graphics-fuzz/fuzz-images/pages.pdf", ".github/workflows/image-fidelity.yml"]) {
       expect(classifyCiChanges([path]).images, path).toBe(true);
     }
   });

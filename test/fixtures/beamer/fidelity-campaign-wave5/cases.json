@@ -8,12 +8,6 @@
       "frame": 1,
       "family": "alignment",
       "pages": 1,
-      "choices": {
-        "alignment": "raggedleft",
-        "spec": "2-3",
-        "width": 3,
-        "height": 1
-      },
       "oracleText": [
         "Alpha",
         "Omega"
@@ -25,12 +19,6 @@
       "frame": 1,
       "family": "column-alignment",
       "pages": 1,
-      "choices": {
-        "alignment": "centering",
-        "spec": "2-",
-        "width": 3,
-        "height": 1
-      },
       "oracleText": [
         "Alpha",
         "Omega"
@@ -42,12 +30,6 @@
       "frame": 1,
       "family": "column-picture",
       "pages": 1,
-      "choices": {
-        "alignment": "centering",
-        "spec": "2-",
-        "width": 2,
-        "height": 2
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -64,12 +46,6 @@
       "frame": 1,
       "family": "mixed-center",
       "pages": 1,
-      "choices": {
-        "alignment": "raggedleft",
-        "spec": "2-",
-        "width": 3,
-        "height": 1
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -89,12 +65,6 @@
       "frame": 1,
       "family": "block-picture",
       "pages": 1,
-      "choices": {
-        "alignment": "centering",
-        "spec": "2-2",
-        "width": 1,
-        "height": 1
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -111,12 +81,6 @@
       "frame": 1,
       "family": "draw-overlay",
       "pages": 2,
-      "choices": {
-        "alignment": "raggedleft",
-        "spec": "2-",
-        "width": 3,
-        "height": 2
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -134,12 +98,6 @@
       "frame": 1,
       "family": "node-overlay",
       "pages": 4,
-      "choices": {
-        "alignment": "raggedleft",
-        "spec": "3-4",
-        "width": 3,
-        "height": 1
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -161,12 +119,6 @@
       "frame": 1,
       "family": "only-in-picture",
       "pages": 3,
-      "choices": {
-        "alignment": "raggedright",
-        "spec": "3-",
-        "width": 3,
-        "height": 1
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -185,12 +137,6 @@
       "frame": 1,
       "family": "uncover-in-picture",
       "pages": 3,
-      "choices": {
-        "alignment": "raggedright",
-        "spec": "3-3",
-        "width": 1,
-        "height": 1
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -209,12 +155,6 @@
       "frame": 1,
       "family": "outer-overlay",
       "pages": 2,
-      "choices": {
-        "alignment": "raggedleft",
-        "spec": "2-",
-        "width": 1,
-        "height": 1
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -232,12 +172,6 @@
       "frame": 1,
       "family": "date",
       "pages": 1,
-      "choices": {
-        "alignment": "raggedright",
-        "spec": "2-2",
-        "width": 3,
-        "height": 1
-      },
       "oracleText": [
         "November",
         "2026"
@@ -249,12 +183,6 @@
       "frame": 1,
       "family": "default-date",
       "pages": 1,
-      "choices": {
-        "alignment": "centering",
-        "spec": "2-",
-        "width": 1,
-        "height": 2
-      },
       "oracleText": [
         "November",
         "2026"
@@ -266,12 +194,6 @@
       "frame": 1,
       "family": "mixed-alignment",
       "pages": 1,
-      "choices": {
-        "alignment": "centering",
-        "spec": "2-",
-        "width": 3,
-        "height": 2
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -291,12 +213,6 @@
       "frame": 1,
       "family": "path-options-overlay",
       "pages": 2,
-      "choices": {
-        "alignment": "raggedright",
-        "spec": "2-2",
-        "width": 2,
-        "height": 2
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -314,12 +230,6 @@
       "frame": 1,
       "family": "relative-overlays",
       "pages": 2,
-      "choices": {
-        "alignment": "raggedright",
-        "spec": "3-",
-        "width": 1,
-        "height": 1
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -337,12 +247,6 @@
       "frame": 1,
       "family": "nested-overlays",
       "pages": 3,
-      "choices": {
-        "alignment": "raggedright",
-        "spec": "3-3",
-        "width": 1,
-        "height": 1
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -361,12 +265,6 @@
       "frame": 1,
       "family": "alt-in-picture",
       "pages": 2,
-      "choices": {
-        "alignment": "raggedright",
-        "spec": "3-3",
-        "width": 2,
-        "height": 2
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -384,12 +282,6 @@
       "frame": 1,
       "family": "visible-in-picture",
       "pages": 2,
-      "choices": {
-        "alignment": "centering",
-        "spec": "2-",
-        "width": 1,
-        "height": 1
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -407,12 +299,6 @@
       "frame": 1,
       "family": "invisible-in-picture",
       "pages": 4,
-      "choices": {
-        "alignment": "centering",
-        "spec": "3-4",
-        "width": 1,
-        "height": 2
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -432,12 +318,6 @@
       "frame": 1,
       "family": "overlay-flow",
       "pages": 2,
-      "choices": {
-        "alignment": "raggedright",
-        "spec": "3-",
-        "width": 2,
-        "height": 1
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -455,12 +335,6 @@
       "frame": 1,
       "family": "column-overlay-flow",
       "pages": 2,
-      "choices": {
-        "alignment": "centering",
-        "spec": "3-4",
-        "width": 1,
-        "height": 2
-      },
       "paintColors": [
         {
           "color": "#ff00ff",

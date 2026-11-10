@@ -4,7 +4,6 @@
     "engineBanner": "This is LuaHBTeX, Version 1.21.0 (TeX Live 2025) ",
     "beamerClass": "Document Class: beamer 2025/02/04 v3.72 A class for typesetting presentations"
   },
-  "sourceSha256": "8a1b4a7c2daa035d36874b440ea3413303bb65dfa374383257aec675ef4f8e3f",
   "cases": [
     {
       "id": "stock-enumerate",

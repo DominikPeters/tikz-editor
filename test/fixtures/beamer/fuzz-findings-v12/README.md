@@ -1,9 +1,8 @@
 # Parent labels and nested list entry skips
 
-All 12 controls pass strict live LuaLaTeX checks in
-`artifacts/beamer-fuzz/v12-live`. The cases exercise a scoped smaller fraction
+The cases exercise a scoped smaller fraction
 before a parent item that begins with a nested list, with and without columns,
-projected labels, and frame shrinking. Their independent traces are pinned.
+projected labels, and frame shrinking. Their independent traces are saved.
 
 LaTeX's `@trivlist` sees the parent's pending label and sets `@noparitem`.
 The child's first `@item` then takes `@donoparitem`, which does not insert the

@@ -78,7 +78,7 @@ try {
     mkdirSync(directory, { recursive: true });
     stageFuzzGraphicsAssets(directory);
     const input = join(directory, "input.json"); write(input, job.sequence); writeFileSync(join(directory, "input.tex"), job.sequence.source);
-    const entry = { id, origin: job.origin, parent: job.parent, sequenceSha256: fuzzHash(JSON.stringify(job.sequence)), status: "running", input };
+    const entry = { id, origin: job.origin, parent: job.parent, status: "running", input };
     results.push(entry); save();
     const worker = join(directory, "worker"); mkdirSync(worker, { recursive: true });
     const env = { ...process.env, BEAMER_EDIT_FUZZ_REPLAY: input, BEAMER_EDIT_FUZZ_OUT: worker, BEAMER_EDIT_FUZZ_SKIP_REDUCTION: "1",

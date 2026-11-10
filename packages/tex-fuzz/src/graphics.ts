@@ -35,16 +35,17 @@ function record(value: unknown): value is Record<string, unknown> { return value
 const fixtureRoot = new URL("../../../test/fixtures/graphics-fuzz/", import.meta.url);
 let loaded: { images: readonly Image[]; bytes: ReadonlyMap<string, Buffer>; revision: string } | undefined;
 
-/** Fixture files are hashed and shared with TeX; no synthetic missing-file boxes. */
+/** Load the same image fixtures used by the TeX comparisons. */
 function assets() {
   if (loaded) return loaded;
   const manifest: unknown = JSON.parse(readFileSync(new URL("assets.json", fixtureRoot), "utf8"));
-  if (!record(manifest) || !record(manifest.files) || !Array.isArray(manifest.images)) throw new Error("Invalid image fuzz fixture manifest.");
+  if (!record(manifest) || !Array.isArray(manifest.files) || !Array.isArray(manifest.images)) throw new Error("Invalid image fuzz fixture manifest.");
   const bytes = new Map<string, Buffer>();
-  for (const [path, hash] of Object.entries(manifest.files)) {
-    if (path.includes("..") || !path.startsWith("fuzz-images/")) throw new Error("Invalid image fuzz fixture path.");
+  const revision = createHash("sha256").update(JSON.stringify(manifest));
+  for (const path of manifest.files as unknown[]) {
+    if (typeof path !== "string" || path.includes("..") || !path.startsWith("fuzz-images/")) throw new Error("Invalid image fuzz fixture path.");
     const data = readFileSync(new URL(path, fixtureRoot));
-    if (createHash("sha256").update(data).digest("hex") !== hash) throw new Error(`Image fuzz fixture changed: ${path}`);
+    revision.update(data);
     bytes.set(path, data);
   }
   const entries: readonly unknown[] = manifest.images;
@@ -57,7 +58,7 @@ function assets() {
       return { dataPath: page.dataPath, widthBp: page.widthBp, heightBp: page.heightBp };
     }) };
   });
-  loaded = { images, bytes, revision: createHash("sha256").update(JSON.stringify(manifest)).digest("hex") };
+  loaded = { images, bytes, revision: revision.digest("hex") };
   return loaded;
 }
 

@@ -1,9 +1,7 @@
 # Coordinate writer
 
-Status: phases 0–5 implemented; migration exceptions are empty. The
-follow-up PGF oracle, expanded pointer fuzzer and cost measurement are now
-implemented too. Reviewed low-level constructors remain fingerprinted by
-the checker. Inventory and failure classes are in
+Status: phases 0–5, the PGF oracle, pointer fuzzer and cost measurement are
+implemented. The checker limits low-level constructor calls to listed scopes. Inventory and failure classes are in
 [coordinate-writes.md](coordinate-writes.md); measured costs and current
 limits are in [coordinate-writer-costs.md](coordinate-writer-costs.md).
 
@@ -15,7 +13,7 @@ Changes from the first draft:
   the wrong reason; they survive only as a test oracle);
 - spelling and frame are not independent;
 - bounds have a site and a representation that is right under rotation;
-- migration gates use fingerprints and per-case outcomes.
+- migration tests check individual cases.
 
 ## The guarantee
 
@@ -135,7 +133,7 @@ production sources of `packages/` and `apps/`):
 | F3 | writer internals (`formatCoordinate`, `formatPolarCoordinate`, `formatCanvasCoordinate` in `writer/format.ts`, `localToSourceUnits`, `coordinateText`) used only in `edit/writer/`, resolved by symbol so aliases and re-exports count; `ptToCm` not on a point's `x`/`y` outside the writer either |
 | F4 | `tikz` only as a template tag |
 | F5 | a point, vector or bounds constructor of `coords/points.ts` not fed the `x`/`y` of a point in another space (directly, or through `+`, `-`, and one-argument calls such as `pt(…)`), except in the transform modules (`core/src/coords/`, `app/src/ui/coords/`) and the writer |
-| F6 | every reference outside the writer to a serializer in `writer/authored-values.ts` is reviewed and fingerprinted; symbol/signature resolution covers renamed imports, aliases, destructuring, bracket/computed access, binding and re-exports, and guards namespace objects and dynamic imports before they can be narrowed or forwarded |
+| F6 | every reference outside the writer to a serializer in `writer/authored-values.ts` is checked against the exception list; symbol/signature resolution covers renamed imports, aliases, destructuring, bracket/computed access, binding and re-exports, and guards namespace objects and dynamic imports before they can be narrowed or forwarded |
 
 `CoordinateWriter` exposes only operations that take evaluator-owned sites or
 contexts and world geometry. Raw authored angles, factors, local lengths,
@@ -160,9 +158,9 @@ The twelve existing F6 sites were reviewed as follows:
 | curve handle edits (two sites) | angles solved through the curve's inverse linear map |
 | `updateCoordinate` | components entered by the user and wrapped as `userText` |
 
-The current exception list has 147 reviewed entries and no migration entries.
-Adding or changing one of these expressions fails the normal typecheck gate
-until its new fingerprint is explicitly accepted after review.
+Exceptions are scoped to a rule, file, declaration and symbol, with a count.
+New call sites fail the normal typecheck gate. Editing an existing expression
+does not require updating a checksum.
 
 F5 covers the fixture "a `WorldPoint` built from picture-local numbers",
 which the types alone accept (both are `Pt`). Its first run found the
@@ -486,19 +484,11 @@ an evaluator fidelity question, not a writer one.
   every frame (`POINTER_FUZZ_FULL=1` on
   the `npm test` step); local `npm test` runs the quick subset. Other seeds
   may change refusals but not add failures.
-- **Checker exceptions, fingerprinted.** `scripts/coordinate-write-exceptions.json`
-  has one entry per fingerprint: rule, file, enclosing declaration path,
-  and a hash of the offending expression without whitespace, with a count
-  and the expression for review. Line moves don't change it; replacing one
-  violation with another does, and fails. Two sections: `reviewed` (calls
-  of fragment constructors whose arguments were checked, and the low-level
-  authored-value serializers whose frame or text provenance was reviewed)
-  and `migration`
-  (everything else; done when empty). A listed count the code no longer
-  reaches fails too, so the list shrinks with the code.
-  `node scripts/check-coordinate-writes.mjs --update` prints removals (`-`)
-  and additions (`+`), writes removals, and refuses additions unless
-  `--accept-new` is given after review.
+- **Checker exceptions.** `scripts/coordinate-write-exceptions.json` lists
+  allowed calls by rule, file, declaration and symbol, with a count. New calls
+  and stale entries fail the check. Use
+  `node scripts/check-coordinate-writes.mjs --update` to refresh the list;
+  its diff shows which scopes changed.
 - **Capture oracle** and the **compute differential fuzzer** cover the
   contexts.
 
@@ -514,7 +504,7 @@ an evaluator fidelity question, not a writer one.
    `every path` styles.
 2. **Fragment layer and checker.** Done: fragment types and constructors,
    option values and the key table, every patch, replacement and result
-   typed; F1–F5 with the fingerprinted exception list; negative fixtures.
+   typed; F1–F5 with scoped exceptions; negative fixtures.
    First list: 156 violations in 150 entries; 59 reviewed constructor
    calls, and as migration 64 `legacyText`/`legacyEditedSource` calls,
    22 writer-internal uses (F3) and 11 rebranded points (F5). Reviewing the

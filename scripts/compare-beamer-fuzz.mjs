@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { BEAMER_FUZZ_GENERATOR_VERSION, generateBeamerFuzzCases } from "./lib/beamer-fuzz-cases.mjs";
 import { stageFuzzGraphicsAssets } from "./lib/fuzz-graphics-assets.mjs";
@@ -23,14 +22,13 @@ const cases = generateBeamerFuzzCases({
   profile: values.profile,
 });
 mkdirSync(fixtureRoot, { recursive: true });
-const graphicsAssets = stageFuzzGraphicsAssets(fixtureRoot);
+stageFuzzGraphicsAssets(fixtureRoot);
 for (const c of cases) writeFileSync(join(fixtureRoot, c.fixture.file), c.source);
 const manifest = join(fixtureRoot, "cases.json");
-const hash = source => createHash("sha256").update(source).digest("hex");
 const coverage = {
   cases: cases.length,
   frames: cases.reduce((sum, c) => sum + 1 + (c.additionalFixtures?.length ?? 0), 0),
-  uniqueSources: new Set(cases.map(c => hash(c.source))).size,
+  uniqueSources: new Set(cases.map(c => c.source)).size,
   pages: cases.reduce((sum, c) => sum + c.fixture.pages + (c.additionalFixtures ?? []).reduce((n, frame) => n + frame.pages, 0), 0),
   families: Object.fromEntries([...new Set(cases.map(c => c.fixture.family))].sort().map(family => [family, cases.filter(c => c.fixture.family === family).length])),
   structural: {
@@ -42,13 +40,10 @@ const coverage = {
   },
   documentAxes: Object.fromEntries(["fontSize", "aspectRatio", "theme"].map(axis => [axis, [...new Set(cases.map(c => c.fixture.choices?.[axis]).filter(value => value !== undefined))]])),
 };
-const generatorSha256 = hash(["beamer-fuzz-cases.mjs", "beamer-fuzz-broad.mjs", "beamer-fuzz-intricate.mjs", "beamer-fuzz-images.mjs"].map(file => readFileSync(new URL(`./lib/${file}`, import.meta.url), "utf8")).join("\n") + graphicsAssets.sha256);
-writeFileSync(join(root, "coverage.json"), JSON.stringify({ generatorSha256, ...coverage }, null, 2) + "\n");
+writeFileSync(join(root, "coverage.json"), JSON.stringify(coverage, null, 2) + "\n");
 writeFileSync(manifest, JSON.stringify({
   formatVersion: 1,
   generatorVersion: values.profile === "smoke" ? 1 : values.profile === "controls" ? 2 : BEAMER_FUZZ_GENERATOR_VERSION,
-  generatorSha256,
-  graphicsAssets,
   coverage,
   profile: values.profile,
   title: `Beamer fuzz seed ${values.seed}`,

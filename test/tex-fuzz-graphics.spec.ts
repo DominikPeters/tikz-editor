@@ -57,11 +57,11 @@ describe("images in the existing TeX and Beamer grammars", () => {
     expect(original.source).toContain("[page=2,width=18pt,angle=90]");
   });
 
-  it("stages the exact hashed bytes used by both renderers beside a TeX reproduction", () => {
+  it("stages the image bytes used by both renderers beside a TeX reproduction", () => {
     const directory = mkdtempSync(join(tmpdir(), "graphics-fuzz-test-"));
     try {
       const manifest = stageFuzzGraphicsAssets(directory);
-      expect(Object.keys(manifest.files)).toContain("fuzz-images/pages.pdf");
+      expect(manifest.files).toContain("fuzz-images/pages.pdf");
       const resolver = createTexFuzzGraphicsResolver();
       const image = resolver.resolve({ filename: "fuzz-images/pattern.png", options: { raw: "" }, source: "", sourceStart: 0, sourceEnd: 0 });
       expect(image.status).toBe("resolved");

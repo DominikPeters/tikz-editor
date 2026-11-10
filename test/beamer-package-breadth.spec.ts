@@ -6,23 +6,29 @@ import { describe, expect, it } from "vitest";
 import { prepareBeamerDocument } from "../packages/core/src/beamer/render.js";
 import { corpusGraphicsResolver } from "../scripts/lib/beamer-corpus.mjs";
 
-const inventory = JSON.parse(readFileSync(new URL("../design/beamer-package-support-inventory.json", import.meta.url), "utf8")) as {
-  packages: { package: string; occurrences: { source: string; frame: number; span: { from: number; to: number } }[] }[];
-};
+const cases = [
+  { package: "listings", file: "04-algorithms-dijkstra.tex", frames: [4] },
+  { package: "listings", file: "10-distributed-timeout.tex", frames: [7] },
+  { package: "listings", file: "12-numerical-debugging.tex", frames: [2, 7] },
+  { package: "alltt", file: "12-numerical-debugging.tex", frames: [9] },
+  { package: "siunitx", file: "05-fluid-channel.tex", frames: [6] },
+  { package: "braket", file: "07-quantum-predict-observe.tex", frames: [2, 3, 4, 5, 6, 7] },
+  { package: "subcaption", file: "11-ecology-restoration.tex", frames: [7] },
+] as const;
 
 describe("first package tranche in the unchanged breadth sources (coverage, not fidelity)", () => {
-  for (const entry of inventory.packages.filter(entry => ["listings", "alltt", "siunitx", "braket", "subcaption"].includes(entry.package))) {
-    for (const occurrence of entry.occurrences) {
-      it(`${entry.package}: ${occurrence.source} frame ${occurrence.frame}`, async () => {
-        const input = new URL(`../${occurrence.source}`, import.meta.url);
+  for (const entry of cases) {
+    for (const frame of entry.frames) {
+      it(`${entry.package}: ${entry.file} frame ${frame}`, async () => {
+        const input = new URL(`./fixtures/beamer/breadth-decks/${entry.file}`, import.meta.url);
         const source = readFileSync(input, "utf8");
         const temporary = mkdtempSync(join(tmpdir(), "beamer-package-breadth-"));
         try {
           const graphics = corpusGraphicsResolver(source, fileURLToPath(input), temporary);
-          const pages = await prepareBeamerDocument(source).renderFramePages({ frameIndex: occurrence.frame - 1, graphicsResolver: graphics.resolver });
+          const pages = await prepareBeamerDocument(source).renderFramePages({ frameIndex: frame - 1, graphicsResolver: graphics.resolver });
           for (const page of pages.pages) {
             expect(page.diagnostics.filter(item => /^beamer-(?:listings|siunitx|subfigure)-unsupported/u.test(item.code ?? ""))).toEqual([]);
-            const unsupported = page.layout.items.filter(item => item.kind === "unsupported").filter(item => item.sourceSpan.from < occurrence.span.to && occurrence.span.from < item.sourceSpan.to);
+            const unsupported = page.layout.items.filter(item => item.kind === "unsupported");
             // Dirac macros inside a deferred circuit stay owned by that circuit.
             expect(unsupported.filter(item => entry.package !== "braket" || !item.message?.includes("quantikz"))).toEqual([]);
             if (entry.package === "listings" || entry.package === "alltt") expect(page.svg.svg).toContain('data-tex-font="lmmono');

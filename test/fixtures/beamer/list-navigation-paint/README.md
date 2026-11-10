@@ -14,7 +14,6 @@ node test/fixtures/beamer/list-navigation-paint/capture-oracles.mjs
 ```
 
 The script uses the shared TeX oracle runner and requires LuaLaTeX with Beamer.
-The snapshot records the TeX/class versions and hashes `cases.json` so source
-changes cannot silently reuse the old oracle. No native renderer values are
+The snapshot records the TeX/class versions. No native renderer values are
 used to produce the reference. The normal test suite reads this snapshot and
 checks native label glyph paint and navigation primitives without requiring TeX.

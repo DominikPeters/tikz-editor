@@ -74,13 +74,3 @@ the largest rectangle-edge delta is 0.007003pt. All **115 campaign cases**
 frames** pass coverage checks across all their native pages, with deferred
 Quantikz cards preserved. The serif caption and cropped-image pairs were also
 visually inspected.
-
-The [machine-readable acceptance record](beamer-fidelity-campaign-wave4-results.json)
-records hashes and validation. The [live paired gallery](../artifacts/beamer-fidelity-campaign/wave4/index.html)
-retains the independent reference PDFs and native output. A partial concurrent
-whole-deck run hit timeouts and was stopped; it contributes no fidelity score.
-
-Final validation: 7,472 repository tests, 115 pinned campaign cases and 13
-breadth-coverage cases passed (7,600 total; 20 skipped, one todo). Full
-typechecking, production lint and whitespace checks passed. The repository
-suite used two workers to avoid the contention of the initial concurrent run.

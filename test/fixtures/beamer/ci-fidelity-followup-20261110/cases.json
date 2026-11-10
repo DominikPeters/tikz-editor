@@ -6,85 +6,73 @@
       "id": "font-scoped-blocks",
       "file": "font-scoped-blocks.tex",
       "frame": 1,
-      "pages": 1,
-      "sourceSha256": "04667176b0dac773fe51bb04ca2a1995b0bca400c7f5c137fb9645f7d30fd012"
+      "pages": 1
     },
     {
       "id": "heading-8-default",
       "file": "heading-8-default.tex",
       "frame": 1,
-      "pages": 1,
-      "sourceSha256": "1fe68bf36e017916796b680f6a8bee337823a641a52ff57b99da6174af7f6f40"
+      "pages": 1
     },
     {
       "id": "heading-8-boadilla",
       "file": "heading-8-boadilla.tex",
       "frame": 1,
-      "pages": 1,
-      "sourceSha256": "c928c1f4376caceedcff962e149c5673ae6738ae4d53455990647cbcafba2d66"
+      "pages": 1
     },
     {
       "id": "heading-10-default",
       "file": "heading-10-default.tex",
       "frame": 1,
-      "pages": 1,
-      "sourceSha256": "7de432b024eaf21e78b93af2ed057165643483105430a7034614c4050b738173"
+      "pages": 1
     },
     {
       "id": "heading-10-boadilla",
       "file": "heading-10-boadilla.tex",
       "frame": 1,
-      "pages": 1,
-      "sourceSha256": "00b2441b85b6bfecc0a0926c5a0bbabbd08ba7c8f471a6cd59f579c5e282e231"
+      "pages": 1
     },
     {
       "id": "heading-12-default",
       "file": "heading-12-default.tex",
       "frame": 1,
-      "pages": 1,
-      "sourceSha256": "0498fdd51985db1d672ac00dab1e13736be9a84d1d13c9e19381d29ee6213817"
+      "pages": 1
     },
     {
       "id": "heading-12-boadilla",
       "file": "heading-12-boadilla.tex",
       "frame": 1,
-      "pages": 1,
-      "sourceSha256": "55b677b64b52d70f583c535e68ed545e292c8998f56c95f31570259d1c6822c5"
+      "pages": 1
     },
     {
       "id": "heading-17-default",
       "file": "heading-17-default.tex",
       "frame": 1,
-      "pages": 1,
-      "sourceSha256": "6c73acc9c0cf9081e90ef4168930b4224ee96b4f37d660f3601dc9718304f3b7"
+      "pages": 1
     },
     {
       "id": "heading-17-boadilla",
       "file": "heading-17-boadilla.tex",
       "frame": 1,
-      "pages": 1,
-      "sourceSha256": "ea100217510ff4be842f3d099e5e2224989e2989bc65c1d26d27f42a15ad9abb"
+      "pages": 1
     },
     {
       "id": "node-named-sizes-8",
       "file": "node-named-sizes-8.tex",
       "frame": 1,
-      "pages": 2,
-      "sourceSha256": "c7418c839144142070e18b8b2607cf956948021ecb3862588e3b9fce83a54f93"
+      "pages": 2
     },
     {
       "id": "node-named-sizes-17",
       "file": "node-named-sizes-17.tex",
       "frame": 1,
-      "pages": 2,
-      "sourceSha256": "d7bf2c0548423ef87588f2a641a95cd6c53874b428094c23df71adcb7ca21bf8"
+      "pages": 2
     },
     {
       "id": "rounded-footprint-8",
       "file": "rounded-footprint-8.tex",
       "frame": 1,
       "pages": 1,
-      "sourceSha256": "d2f3b9e101cde981ba37effecfaa610c37671799c1603b37e9644fccadcf9bcc",
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -105,7 +93,6 @@
       "file": "rounded-footprint-17.tex",
       "frame": 1,
       "pages": 1,
-      "sourceSha256": "66cb8987b48e97bedf29c61ae94fe824c0760c4a2c878829494f755b7dfadd08",
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -126,7 +113,6 @@
       "file": "legacy-default-arrows.tex",
       "frame": 1,
       "pages": 1,
-      "sourceSha256": "393ef41d5fcb1600064c9a76586c7697ae1147d0c506d875335f2fdd55ec4d6b",
       "paintColors": [
         {
           "color": "#ff00ff",

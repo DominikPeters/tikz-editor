@@ -1,6 +1,14 @@
 const GLYPH_LINE_Y_TOLERANCE_PT = 0.01;
 const MIN_CLUSTER_GAP_PT = 20;
 
+/** Reference refreshes compare rendering data, not TeX's diagnostic box tree.
+ * Internal node paths can change between TeX versions without moving any paint.
+ */
+export function beamerOracleRenderData(pages) {
+  return JSON.parse(JSON.stringify(pages, (key, value) =>
+    key === "boxes" || key === "path" ? undefined : value));
+}
+
 export function normalizeOracleBeamerPageTrace(pageTrace, pageGeometry) {
   if (!pageTrace) {
     throw new Error("The selected oracle page has no shipout trace.");

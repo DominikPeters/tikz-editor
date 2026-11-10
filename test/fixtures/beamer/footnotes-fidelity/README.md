@@ -1,7 +1,7 @@
 These snapshots are LuaLaTeX shipout traces, normalized to physical page
 coordinates with `scripts/lib/beamer-frame-compare.mjs`. They were produced
 with LuaHBTeX 1.21.0 (TeX Live 2025) and Beamer 3.72. Each JSON records the
-source SHA-256, tool versions, and authored frame/overlay correspondence.
+tool versions and authored frame/overlay correspondence.
 The tests compare native glyphs, font sizes, rules, and frame packing directly
 against these traces; they are not native-renderer golden files.
 
@@ -23,7 +23,8 @@ node scripts/regenerate-beamer-footnote-oracles.mjs
 npx vitest run test/beamer-footnotes.spec.ts
 ```
 
-`--check` recompiles without replacing snapshots. Omit it to regenerate;
+`--check` recompiles and compares rendering data, ignoring TeX's internal box
+paths and diagnostic box tree. It does not replace snapshots. Omit it to regenerate;
 review the JSON diff and the test results before committing. `--cases
 leading,counters` selects fixtures, and `--out-dir <directory>` changes the
 ignored compilation artifact directory. The helper uses the existing probe

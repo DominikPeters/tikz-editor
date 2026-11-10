@@ -1,7 +1,5 @@
 {
-  "sourceSha256": "d73e155e2812334536585869d447c21b0663a54ca9c5b7fa2f9fc3f44250f935",
   "engine": "This is LuaHBTeX, Version 1.24.0 (TeX Live 2026)",
-  "provenance": "compare-beamer-priorities.mjs, valid content witnesses and matching page counts",
   "pages": [
     {
       "coordinateSystem": {

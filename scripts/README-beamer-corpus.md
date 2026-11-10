@@ -52,7 +52,7 @@ Outputs are ignored under `artifacts/beamer-corpus-renderer/native/` or
 - `index.html`: filterable gallery linking SVGs, side-by-side images and detailed
   comparison reports. Filter by repository, file, status or diagnostic code.
 - `summary.md`: coverage denominators, repository counts and common diagnostics.
-- `report.json`: every deck/page result, source and renderer fingerprints,
+- `report.json`: every deck/page result, comparison measurements,
   tool versions, sample configuration, diagnostics and resolved/missing assets.
 - `decks/`: per-deck checkpoints, worker logs, native SVGs, materialized source,
   and per-page TeX logs/PDFs, traces, overlays and difference images.
@@ -85,7 +85,7 @@ sizing classification reads parsed option keys; a title containing “shrink”
 does not count as use of the `shrink` option.
 
 `shortlist.json` records every discovered source form, family frequencies,
-discovery/input diagnostics, selected cases and a renderer fingerprint.
+discovery/input diagnostics, selected cases.
 `selected.json` is the candidate list. Frequencies include only complete discovered
 frames: command-form and macro-generated frames can be missed. Counts establish
 breadth within these eight collections, not population-wide package popularity or
@@ -107,16 +107,14 @@ for those steps.
 The broader manual review is saved under ignored
 `artifacts/beamer-corpus-renderer/manual-review-round2/index.html`, with source
 excerpts, native SVG rasters, TeX PDF rasters, per-case caveats and observations.
-The durable candidate list is `design/beamer-corpus-todos.json`. It distinguishes
-built-in behavior, defined package interfaces, generic macro expansion and
-evaluation work. Its author-defined examples are evidence for general mechanisms,
-not a list of macro names to hardcode.
+The regression cases live in `test/fixtures/beamer/corpus-priorities/` and
+`test/fixtures/beamer/corpus-followups/`.
 
 Round 3 adds 33 previously unreviewed source frames from seven collections:
 `artifacts/beamer-corpus-renderer/manual-review-round3/index.html` retains source,
 37 native rasters and 38 reference rasters. Two private-input reference failures
 and two native exception attempts remain explicit. The durable findings and
-reference adaptations are in `design/beamer-corpus-round3.md` and its linked JSON.
+reference adaptations are in `design/beamer-corpus-round3.md`.
 
 Run the original minimal follow-up cases with the existing exact comparison gates:
 
@@ -331,7 +329,7 @@ richer cases. Warm/cold agreement alone does not establish correct TeX behavior.
 Use `--profile smoke --cases 38` for the original, narrower 23-family grammar.
 Broad cases deliberately explore combinations beyond established passing coverage;
 new renderer limitations remain failures rather than being excluded by generation.
-Seeds, generator version and SHA-256, source uniqueness, page totals, family
+Seeds, source uniqueness, page totals, family
 counts and document axes are recorded in the manifest and `coverage.json`.
 Saved sources are the authoritative replay input across generator revisions.
 For a longer soak, repeat seeds sequentially or use at most two comparison
@@ -354,8 +352,8 @@ An absent oracle paint witness is an invalid reference, not a passing empty
 comparison. Failures exit nonzero and remain in the report/gallery.
 
 Fifteen representative failures from the broad v2 campaign are preserved as
-regressions in `test/fixtures/beamer/fuzz-findings-v2/`, with SHA-checked sources,
-generation provenance and independent LuaLaTeX snapshots in the ordinary tests.
+regressions in `test/fixtures/beamer/fuzz-findings-v2/`, with independent
+LuaLaTeX snapshots in the ordinary tests.
 Run `npm run compare:beamer-fuzz-regressions` for the strict live text-and-paint
 comparison, including overlapping remembered pictures and large projected list labels.
 
@@ -434,8 +432,7 @@ excessive output and harness errors remain distinct findings. The parent kills
 the child process group on POSIX and can continue with the next saved input.
 
 Every case saves `case-NNNN/input.tex` and `input.json` before starting its
-worker. The worker additionally saves concrete operations, source/recipe hashes,
-harness fingerprints and comparison counts under `case-NNNN/worker/` when it
+worker. The worker additionally saves concrete operations, comparison counts under `case-NNNN/worker/` when it
 starts. `report.json` is updated atomically after each case; interrupted runs
 retain the current case's input. Existing reports are never overwritten. Mismatches
 retain the original recipe, concrete operations and failing source before reduction begins.

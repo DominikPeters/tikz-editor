@@ -8,4 +8,4 @@ To refresh the primary trace, first run `scripts/compare-beamer-frame.mjs` on `s
 node test/fixtures/beamer/frame-shrink-fidelity/capture-oracles.mjs
 ```
 
-The capture checks source hashes, engine, page count and oracle contract version. Beamer 3.72 computes both the minimum scale and its reciprocal with integer dimension arithmetic; `shrink=20` therefore paints at .80011 rather than exactly .8.
+The capture checks the engine, page count and oracle contract version. Beamer 3.72 computes both the minimum scale and its reciprocal with integer dimension arithmetic; `shrink=20` therefore paints at .80011 rather than exactly .8.

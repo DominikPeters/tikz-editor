@@ -7,8 +7,5 @@ column's negative head skip also differed from LaTeX.
 
 The ten controls cover pending/no labels, prose/no prose, font declarations,
 `center`, `flushleft`, `flushright`, and a single centered character before math.
-All ten pass independent live LuaLaTeX geometry and paint comparisons in
-`artifacts/beamer-fuzz/v28-declaration-spacing`. Their source-hash-checked TeX
-traces are pinned here. At this checkpoint the original complex frame still failed at another list
-boundary. V29 corrected that boundary, and the original frame now passes every
-state in the final live campaign (see `design/beamer-failure-status.md`).
+At this checkpoint the original complex frame still failed at another list
+boundary.

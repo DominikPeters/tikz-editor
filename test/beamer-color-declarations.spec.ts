@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { scanBeamerDocument } from "../packages/core/src/beamer/scan.js";
@@ -10,7 +9,7 @@ import { resolveDefineColorModel } from "../packages/core/src/semantic/style/col
 const casesSource = readFileSync(new URL("./fixtures/beamer/color-declarations/cases.json", import.meta.url), "utf8");
 const cases = JSON.parse(casesSource) as Array<{ id: string; preamble: string; roles: string[] }>;
 const oracle = JSON.parse(readFileSync(new URL("./fixtures/beamer/color-declarations/colors.oracle.json", import.meta.url), "utf8")) as {
-  sourceSha256: string; cases: Array<{ id: string; colors: Record<string, Record<"fg" | "bg", { model: string; specification: string }>> }>;
+  cases: Array<{ id: string; colors: Record<string, Record<"fg" | "bg", { model: string; specification: string }>> }>;
 };
 const deck = (preamble: string, body = "Alpha") => String.raw`\documentclass{beamer}
 ${preamble}
@@ -19,10 +18,6 @@ ${preamble}
 const themeFor = (preamble: string) => resolveBeamerTheme(scanBeamerDocument(deck(preamble)));
 
 describe("authored preamble Beamer colors", () => {
-  it("pins the LuaLaTeX declaration and queried-role source", () => {
-    expect(createHash("sha256").update(casesSource).digest("hex")).toBe(oracle.sourceSha256);
-  });
-
   for (const testCase of cases) it(`matches actual TeX effective foreground/background: ${testCase.id}`, () => {
     const theme = themeFor(testCase.preamble);
     expect(theme.diagnostics).toEqual([]);

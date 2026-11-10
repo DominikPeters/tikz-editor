@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
+  beamerOracleRenderData,
   buildNativeBeamerPageTrace,
   compareBeamerPageTraces,
   type BeamerTraceGlyph,
@@ -33,6 +34,29 @@ function glyph(overrides: Partial<BeamerTraceGlyph> = {}): BeamerTraceGlyph {
 }
 
 describe("Beamer structural frame comparison", () => {
+  it("ignores TeX box nesting during reference refreshes while retaining rendering changes", () => {
+    const original = [{ step: 1, trace: {
+      boxes: [{ path: "root.1", width: 20 }],
+      glyphs: [{ ...glyph(), path: "root.1.2" }],
+      rules: [{ path: "root.3", x: 0, y: 10, width: 20, height: 1 }],
+    } }];
+    const current = structuredClone(original);
+    current[0].trace.boxes = [];
+    current[0].trace.glyphs[0].path = "root.4";
+    current[0].trace.rules[0].path = "root.5";
+    expect(beamerOracleRenderData(current)).toEqual(beamerOracleRenderData(original));
+    for (const change of [
+      () => { current[0].trace.glyphs[0].x += 1; },
+      () => { current[0].trace.glyphs[0].fontName = "different-font"; },
+      () => { current[0].trace.rules[0].width += 1; },
+      () => { current[0].step += 1; },
+    ]) {
+      const before = beamerOracleRenderData(current);
+      change();
+      expect(beamerOracleRenderData(current)).not.toEqual(before);
+    }
+  });
+
   it("traces standalone display and alignment math glyph rows", async () => {
     const render = await renderBeamerFrame(String.raw`
 \documentclass{beamer}

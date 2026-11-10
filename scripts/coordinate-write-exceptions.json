@@ -1,1662 +1,1266 @@
-{
-  "comment": "Fingerprinted coordinate-write exceptions (scripts/check-coordinate-writes.mjs). Reviewed: fragment constructors and low-level authored-value serializers whose call sites were checked. Migration: violations the writer phases remove; the list only shrinks.",
-  "reviewed": [
-    {
-      "rule": "F2",
-      "symbol": "editedSlice",
-      "file": "packages/app/src/edit-execution.ts",
-      "declaration": "executeDocumentEdit.replacement",
-      "hash": "bb24ea5af287",
-      "count": 1,
-      "expression": "editedSlice(replay.source, layerAt, end + replay.source.length - working.length)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/app/src/editing-identities.ts",
-      "declaration": "identityPatches.replacement",
-      "hash": "4e0b0d9a5214",
-      "count": 1,
-      "expression": "sourceSlice(after, { from: 0, to: after.length })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/app/src/store/source-patch-diff.ts",
-      "declaration": "deriveSingleSourcePatch.replacement",
-      "hash": "3554d0f380f7",
-      "count": 1,
-      "expression": "sourceSlice(next, { from: prefix, to: nextSuffix })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/app/src/ui/canvas-panel/canvas-text-edit-machine.ts",
-      "declaration": "applySessionTextUpdate.typed",
-      "hash": "ebb2571de716",
-      "count": 1,
-      "expression": "userText(nextText, \"node-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/app/src/ui/deck-graphics-insertion.ts",
-      "declaration": "changeGraphicsLocation.patches.replacement",
-      "hash": "20e7a115a03c",
-      "count": 1,
-      "expression": "userText(texPath, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/builds.ts",
-      "declaration": "beamerBuildSpecPatch.replacement",
-      "hash": "34b4b439b0ec",
-      "count": 1,
-      "expression": "userText(value.trim(), \"beamer-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "plainNumber",
-      "file": "packages/core/src/beamer/deck-crop.ts",
-      "declaration": "beamerImageCropPatches.number",
-      "hash": "86df99923a8f",
-      "count": 1,
-      "expression": "plainNumber(Number(factor.toFixed(4)), \"beamer-length\", source[size.span.from] === \".\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/deck-crop.ts",
-      "declaration": "beamerImageCropPatches.replacement",
-      "hash": "3a2de7b010e0",
-      "count": 1,
-      "expression": "sourceSlice(reset, { from: 0, to: reset.length })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/deck-crop.ts",
-      "declaration": "cropValue.parts",
-      "hash": "d53a6d128b78",
-      "count": 1,
-      "expression": "sourceSlice(source, unit.span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "plainNumber",
-      "file": "packages/core/src/beamer/deck-crop.ts",
-      "declaration": "formatNumber",
-      "hash": "8ec87f293972",
-      "count": 1,
-      "expression": "plainNumber(Number(value.toFixed(2)) || 0, \"beamer-length\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/deck-edit-actions.ts",
-      "declaration": "applyRenameEnvironment.renamed",
-      "hash": "a051a059b574",
-      "count": 1,
-      "expression": "userText(name, \"beamer-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/deck-edit-actions.ts",
-      "declaration": "applyReplaceGraphics.edits.insert",
-      "hash": "72a4a8696d83",
-      "count": 1,
-      "expression": "userText(path, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/deck-edit-actions.ts",
-      "declaration": "applyReplaceGraphics.insert",
-      "hash": "affc65ef2373",
-      "count": 1,
-      "expression": "sourceSlice(source, comment)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/deck-edit-actions.ts",
-      "declaration": "applySetColumnWidth.typed",
-      "hash": "99f198ebff92",
-      "count": 1,
-      "expression": "userText(trimmed, \"beamer-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/deck-edit-actions.ts",
-      "declaration": "applySetEnvironmentTitle.typed",
-      "hash": "8dcdcf8649da",
-      "count": 1,
-      "expression": "userText(title, \"beamer-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/deck-edit-actions.ts",
-      "declaration": "buildOptionEdits.entryText",
-      "hash": "34b4b439b0ec",
-      "count": 1,
-      "expression": "userText(value.trim(), \"beamer-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/deck-edit-actions.ts",
-      "declaration": "buildOptionEdits.typedKey",
-      "hash": "1903d1544093",
-      "count": 1,
-      "expression": "userText(normalizedKey, \"beamer-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/deck-edit-actions.ts",
-      "declaration": "normalizeOverlaySpec.spec",
-      "hash": "99f198ebff92",
-      "count": 1,
-      "expression": "userText(trimmed, \"beamer-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/deck-insert-graphics.ts",
-      "declaration": "beamerGraphicsInsertionEdits.command",
-      "hash": "72a4a8696d83",
-      "count": 1,
-      "expression": "userText(path, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "plainNumber",
-      "file": "packages/core/src/beamer/deck-insert-graphics.ts",
-      "declaration": "beamerGraphicsInsertionEdits.options",
-      "hash": "2140b1e8175e",
-      "count": 1,
-      "expression": "plainNumber(widthFraction, \"beamer-length\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "plainNumber",
-      "file": "packages/core/src/beamer/deck-resize.ts",
-      "declaration": "beamerImageResizePatches.replacement",
-      "hash": "8396b52442bd",
-      "count": 1,
-      "expression": "plainNumber(Number(scale.toFixed(6)), \"beamer-scale\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "plainNumber",
-      "file": "packages/core/src/beamer/deck-resize.ts",
-      "declaration": "formatValue",
-      "hash": "3cc0f2d87f17",
-      "count": 1,
-      "expression": "plainNumber(Number(value.toFixed(6)), \"beamer-length\", source[numeric.span.from] === \".\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/deck-resize.ts",
-      "declaration": "formatValue",
-      "hash": "bee02c1d5da6",
-      "count": 1,
-      "expression": "sourceSlice(source, numeric.span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "plainNumber",
-      "file": "packages/core/src/beamer/deck-spacing.ts",
-      "declaration": "beamerSpacingResizePatches.number",
-      "hash": "cdd8999f06e0",
-      "count": 1,
-      "expression": "plainNumber(value, \"beamer-length\", /^[+-]?\\./u.test(source.slice(span.from, span.to)))"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/document-color-edits.ts",
-      "declaration": "planDeckColorEdit.command",
-      "hash": "5bd162385032",
-      "count": 1,
-      "expression": "userText(action.value, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/document-color-edits.ts",
-      "declaration": "planDeckColorEdit.command",
-      "hash": "9374a4e17722",
-      "count": 1,
-      "expression": "userText(action.side, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/document-color-edits.ts",
-      "declaration": "planDeckColorEdit.command",
-      "hash": "fa60c462ddca",
-      "count": 1,
-      "expression": "userText(action.role, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/document-color-edits.ts",
-      "declaration": "rewriteSide.text",
-      "hash": "174759a3f5b2",
-      "count": 1,
-      "expression": "userText(side, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/document-color-edits.ts",
-      "declaration": "rewriteSide.text",
-      "hash": "b22fcc7004ea",
-      "count": 1,
-      "expression": "userText(value, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/document-page-edits.ts",
-      "declaration": "planDeckPageEdit.command",
-      "hash": "b64cd4499cbf",
-      "count": 1,
-      "expression": "userText(`\\\\${action.field}`, \"beamer-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/document-page-edits.ts",
-      "declaration": "planDeckPageEdit.text",
-      "hash": "b22fcc7004ea",
-      "count": 2,
-      "expression": "userText(value, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/document-page-edits.ts",
-      "declaration": "planDeckPageEdit.value",
-      "hash": "5bd162385032",
-      "count": 1,
-      "expression": "userText(action.value, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/document-page-edits.ts",
-      "declaration": "retainedComments",
-      "hash": "4752ed62b386",
-      "count": 1,
-      "expression": "sourceSlice(document.source, comment)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/document-theme-edits.ts",
-      "declaration": "planDeckDocumentThemeEdit.command",
-      "hash": "82626cfdda13",
-      "count": 1,
-      "expression": "userText(`\\\\${BEAMER_THEME_COMMANDS[kind]}`, \"beamer-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/document-theme-edits.ts",
-      "declaration": "planDeckDocumentThemeEdit.key",
-      "hash": "dc0170e5f002",
-      "count": 1,
-      "expression": "userText(action.key, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/document-theme-edits.ts",
-      "declaration": "planDeckDocumentThemeEdit.options",
-      "hash": "45eebf1edf51",
-      "count": 1,
-      "expression": "sourceSlice(document.source, target.options.span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/document-theme-edits.ts",
-      "declaration": "planDeckDocumentThemeEdit.text",
-      "hash": "b22fcc7004ea",
-      "count": 1,
-      "expression": "userText(value, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/document-theme-edits.ts",
-      "declaration": "planDeckDocumentThemeEdit.typedName",
-      "hash": "01fb14e58665",
-      "count": 1,
-      "expression": "userText(name, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/list-head.ts",
-      "declaration": "planBeamerListHeadEdit",
-      "hash": "2786bb45e39c",
-      "count": 1,
-      "expression": "sourceSlice(context.source, existing.span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/list-head.ts",
-      "declaration": "planBeamerListHeadEdit",
-      "hash": "b22fcc7004ea",
-      "count": 2,
-      "expression": "userText(value, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/list-head.ts",
-      "declaration": "planBeamerListHeadEdit.trivia",
-      "hash": "7db3b42ab1c6",
-      "count": 1,
-      "expression": "sourceSlice(context.source, comment)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/note-editing.ts",
-      "declaration": "editBeamerFrameNote.text",
-      "hash": "2a13dc7210be",
-      "count": 1,
-      "expression": "userText(edit.text, \"beamer-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/object-overlays.ts",
-      "declaration": "beamerObjectOverlayTarget.setSpec",
-      "hash": "86d073da169f",
-      "count": 1,
-      "expression": "sourceSlice(source, node.sourceSpan)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/object-overlays.ts",
-      "declaration": "beamerObjectOverlayTarget.setSpec",
-      "hash": "a988f61a7876",
-      "count": 3,
-      "expression": "userText(spec, \"beamer-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/option-edits.ts",
-      "declaration": "rewriteBeamerOptions",
-      "hash": "1e9667546671",
-      "count": 1,
-      "expression": "sourceSlice(source, entry.span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/option-edits.ts",
-      "declaration": "rewriteBeamerOptions",
-      "hash": "affc65ef2373",
-      "count": 2,
-      "expression": "sourceSlice(source, comment)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/option-edits.ts",
-      "declaration": "rewriteBeamerOptions.trivia",
-      "hash": "738d2930e8b6",
-      "count": 1,
-      "expression": "sourceSlice(source, { from, to: span.to })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/option-edits.ts",
-      "declaration": "rewriteBeamerOptions.trivia",
-      "hash": "ef2e86af5b90",
-      "count": 1,
-      "expression": "sourceSlice(source, { from, to: at })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/preamble-edit-context.ts",
-      "declaration": "themeNamePrefix",
-      "hash": "9c453dc647b1",
-      "count": 1,
-      "expression": "sourceSlice(document.source, { from: use.name.contentSpan.from, to: comma + 1 })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "plainNumber",
-      "file": "packages/core/src/beamer/slide-manager.ts",
-      "declaration": "duplicateReplacements",
-      "hash": "b6e16e2e6cd5",
-      "count": 1,
-      "expression": "plainNumber(suffix, \"label-counter\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/slide-manager.ts",
-      "declaration": "duplicateReplacements.text",
-      "hash": "467ae5fa7332",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: to - requireArrayValue(alias, 2).length, to })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/slide-manager.ts",
-      "declaration": "duplicateReplacements.written",
-      "hash": "afae2499fc1a",
-      "count": 1,
-      "expression": "sourceSlice(source, label.span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/slide-manager.ts",
-      "declaration": "editBeamerSlides.text",
-      "hash": "2b954c2520a2",
-      "count": 1,
-      "expression": "sourceSlice(source, dependency.span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/slide-manager.ts",
-      "declaration": "pastedTikzLayers.replacements.own",
-      "hash": "787d14445b02",
-      "count": 1,
-      "expression": "sourceSlice(origin.source, { from, to: from + written.trim().length })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/slide-manager.ts",
-      "declaration": "rewrittenSlice",
-      "hash": "a585fac00455",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: cursor, to: replacement.span.from })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/slide-manager.ts",
-      "declaration": "rewrittenSlice",
-      "hash": "e10ba555a7b2",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: cursor, to: span.to })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/structural-edit.ts",
-      "declaration": "beamerObjectDuplicationPatch.copy",
-      "hash": "094d30939a98",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: lineFrom, to: blockTo })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/beamer/structural-edit.ts",
-      "declaration": "beamerObjectDuplicationPatch.copy",
-      "hash": "8b6decde8d5a",
-      "count": 1,
-      "expression": "sourceSlice(source, span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/beamer/theme-switch.ts",
-      "declaration": "presentationThemeEdits.name",
-      "hash": "c7915bd42798",
-      "count": 1,
-      "expression": "userText(plan.entry.name, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions.ts",
-      "declaration": "applyConnectHandle.nodeReference",
-      "hash": "683b860a8ebb",
-      "count": 1,
-      "expression": "userText(trimmedNodeName, \"node-reference\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "editedSlice",
-      "file": "packages/core/src/edit/actions.ts",
-      "declaration": "applyConnectHandle.replacement",
-      "hash": "933a83734ed8",
-      "count": 1,
-      "expression": "editedSlice(nameResolution.source, from, from + nameResolution.insertedLength)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions.ts",
-      "declaration": "applyConnectHandle.replacement",
-      "hash": "fcd53f769ad5",
-      "count": 1,
-      "expression": "userText(trimmedAnchor, \"node-reference\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions.ts",
-      "declaration": "applyEditAction.rawResult.newSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions.ts",
-      "declaration": "applyEditAction.rawResult.nextSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions.ts",
-      "declaration": "applyEditAction.result.newSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions.ts",
-      "declaration": "applyUpdateNodeText.text",
-      "hash": "c1c517652f5c",
-      "count": 1,
-      "expression": "userText(action.text, \"node-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions.ts",
-      "declaration": "ensureNodeSourceHasName.insertion",
-      "hash": "e1171109d6b1",
-      "count": 1,
-      "expression": "userText(name, \"node-reference\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions.ts",
-      "declaration": "ensureNodeSourceHasName.source",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions.ts",
-      "declaration": "resolveAnchorNodeName.source",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/adornment-actions.ts",
-      "declaration": "applyAddNodeAdornmentAction.snippet",
-      "hash": "18ddfd7aa779",
-      "count": 1,
-      "expression": "userText(key, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/adornment-actions.ts",
-      "declaration": "applyAddNodeAdornmentAction.snippet",
-      "hash": "63b6672813ab",
-      "count": 1,
-      "expression": "userText(action.angle, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/adornment-actions.ts",
-      "declaration": "applyAddNodeAdornmentAction.snippet",
-      "hash": "c1c517652f5c",
-      "count": 1,
-      "expression": "userText(action.text, \"node-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/adornment-actions.ts",
-      "declaration": "applyDuplicateAdornmentAction.snippet",
-      "hash": "7cd7f00ad8e9",
-      "count": 1,
-      "expression": "sourceSlice(source, resolved.target.optionSpan)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/adornment-set-property.ts",
-      "declaration": "applyAdornmentSetProperty.value",
-      "hash": "5bd162385032",
-      "count": 1,
-      "expression": "userText(action.value, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/adornment-set-property.ts",
-      "declaration": "applyAdornmentValueRewrite.replacement",
-      "hash": "8a35fa94ffd6",
-      "count": 1,
-      "expression": "userText(overrides.textRaw, \"node-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/adornment-set-property.ts",
-      "declaration": "applyAdornmentValueRewrite.replacement",
-      "hash": "a78e47eb3404",
-      "count": 1,
-      "expression": "sourceSlice(source, target.textSpan)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/adornment-set-property.ts",
-      "declaration": "applyAdornmentValueRewrite.replacement",
-      "hash": "fa768841aa50",
-      "count": 1,
-      "expression": "userText(angleRaw, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/adornment-set-property.ts",
-      "declaration": "buildPinEdgeMutations.value",
-      "hash": "b22fcc7004ea",
-      "count": 1,
-      "expression": "userText(value, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sliceFragment",
-      "file": "packages/core/src/edit/actions/adornment-set-property.ts",
-      "declaration": "cut",
-      "hash": "3a00ec9305ff",
-      "count": 1,
-      "expression": "sliceFragment(fragment, from, to)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/delete-elements.ts",
-      "declaration": "applyDeleteElementsAction.currentSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/delete-elements.ts",
-      "declaration": "pruneFitReferencesAfterDelete.currentSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/delete-elements.ts",
-      "declaration": "pruneFitReferencesAfterDelete.nextFitValue",
-      "hash": "cec69acd22d9",
-      "count": 1,
-      "expression": "userText(fitEntry.valueRaw, \"source-editor\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/delete-elements.ts",
-      "declaration": "pruneFitReferencesAfterDelete.source",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sliceFragment",
-      "file": "packages/core/src/edit/actions/delete-elements.ts",
-      "declaration": "pruneFitValueRaw.compact",
-      "hash": "5f609018013b",
-      "count": 1,
-      "expression": "sliceFragment(valueRaw, contentStart + token.from, contentStart + token.to)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
-      "declaration": "applyUngroupElementsAction.body",
-      "hash": "04b330fb4ad3",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: options.to, to: endStart })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
-      "declaration": "applyUngroupElementsAction.body",
-      "hash": "5489505f5b87",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: beginEnd, to: options.from })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
-      "declaration": "applyUngroupElementsAction.body",
-      "hash": "57e686cd8d0a",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: beginEnd, to: endStart })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
-      "declaration": "buildGroupReplacement.snippetsById",
-      "hash": "9912f8b7ff33",
-      "count": 1,
-      "expression": "sourceSlice(source, requireDefined(contentSpans.get(ref.id), \"Missing statement content span\"))"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
-      "declaration": "reindentBlock",
-      "hash": "8b6decde8d5a",
-      "count": 1,
-      "expression": "sourceSlice(source, span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sliceFragment",
-      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
-      "declaration": "reindentFragment.text",
-      "hash": "463139e67bd9",
-      "count": 1,
-      "expression": "sliceFragment(snippet, strippedFrom, line.to)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sliceFragment",
-      "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
-      "declaration": "reindentScopeBody.content",
-      "hash": "25a351ef348f",
-      "count": 1,
-      "expression": "sliceFragment(body, lineStart, last)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/matrix-structure-actions.ts",
-      "declaration": "parseMatrixGrid.rows.values",
-      "hash": "abb9bfb51524",
-      "count": 1,
-      "expression": "sourceSlice(target.source, cell.span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/matrix-structure-actions.ts",
-      "declaration": "resolveMatrixStructureTarget.value.cellSeparator",
-      "hash": "8b05fe0688c9",
-      "count": 1,
-      "expression": "userText(mode.cellSeparator, \"source-editor\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
-      "declaration": "applyElementDeltaMapStrict.currentSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
-      "declaration": "applyMoveElementsAction.currentSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
-      "declaration": "applyMoveElementsAction.newSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
-      "declaration": "applyMoveElementsUsingHandleRewrites.currentSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
-      "declaration": "applyMoveMatrixElementsWithPlacementRewrite.currentSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
-      "declaration": "applyMoveScopeElementsWithTransformRewrite.currentSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
-      "declaration": "applyMoveTreeRootElementsWithPlacementRewrite.currentSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F6",
-      "symbol": "writeLocalLength",
-      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
-      "declaration": "planOrderedScopeTranslation.value",
-      "hash": "5137f3c9069a",
-      "count": 1,
-      "expression": "writeLocalLength(value, pointDistanceFormatOptions(formatPrecision))"
-    },
-    {
-      "rule": "F6",
-      "symbol": "writeShiftPair",
-      "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
-      "declaration": "planOrderedScopeTranslation.value",
-      "hash": "62b789c96d6d",
-      "count": 1,
-      "expression": "writeShiftPair(pair, { x: component(old.x + localDelta.x, localDelta.x), y: component(old.y + localDelta.y, localDelta.y"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sliceFragment",
-      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
-      "declaration": "buildPlacementMutations.raw",
-      "hash": "82bff6f1c7bf",
-      "count": 1,
-      "expression": "sliceFragment(placementEntry, equalsIndex + 1)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sliceFragment",
-      "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
-      "declaration": "buildPlacementMutations.value",
-      "hash": "3a15ecd27948",
-      "count": 1,
-      "expression": "sliceFragment(raw, raw.length - raw.trimStart().length, raw.trimEnd().length)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/paste-duplicate.ts",
-      "declaration": "applyDuplicateElementsAction.currentSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/paste-duplicate.ts",
-      "declaration": "applyPasteStatementsAction.snippets",
-      "hash": "8e65050a675e",
-      "count": 1,
-      "expression": "userText(snippet, \"pasted-tikz\")"
-    },
-    {
-      "rule": "F6",
-      "symbol": "writeLocalLength",
-      "file": "packages/core/src/edit/actions/path-attached-node-actions.ts",
-      "declaration": "applyDistanceMutations.value",
-      "hash": "e226619243e6",
-      "count": 1,
-      "expression": "writeLocalLength(resolvedDistance, pointDistanceFormatOptions(action.formatPrecision))"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/reorder-elements.ts",
-      "declaration": "applyReorderElementsAction.currentSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/reorder-elements.ts",
-      "declaration": "buildParentReorderReplacement.statementText",
-      "hash": "3707371ee9df",
-      "count": 1,
-      "expression": "sourceSlice(source, ref.span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/reorder-elements.ts",
-      "declaration": "buildParentReorderReplacement.trivia",
-      "hash": "c87cbb45e490",
-      "count": 1,
-      "expression": "sourceSlice(source, gap)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "plainNumber",
-      "file": "packages/core/src/edit/actions/repeat.ts",
-      "declaration": "buildIndexList",
-      "hash": "252819dc58d9",
-      "count": 1,
-      "expression": "plainNumber(count - 1, \"loop-count\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "editedSlice",
-      "file": "packages/core/src/edit/actions/repeat.ts",
-      "declaration": "rewritePathStatementCoordinates",
-      "hash": "a1fa0e15fe84",
-      "count": 1,
-      "expression": "editedSlice(rewritten, statement.span.from, statement.span.to + (rewritten.length - source.length))"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/repeat.ts",
-      "declaration": "wrapRepeatedBlockInScope.block",
-      "hash": "d4790cb93e1f",
-      "count": 1,
-      "expression": "sourceSlice(geometry.source, { from: first.span.from, to: last.span.to })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/resize-element.ts",
-      "declaration": "applyResizeElementAction.newSource",
-      "hash": "49e7e7594a9d",
-      "count": 2,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/resize-element.ts",
-      "declaration": "applyResizePathRectangle.newSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/resize-element.ts",
-      "declaration": "restoreResizeBaselineOnNoop.newSource",
-      "hash": "3428e2d48560",
-      "count": 1,
-      "expression": "unchangedSource(geometry.source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/resize-element.ts",
-      "declaration": "rewriteShapePayloadCoordinate.at",
-      "hash": "1794d9a6cedb",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: payload.span.from + offset, to: payload.span.from + offset + length })"
-    },
-    {
-      "rule": "F6",
-      "symbol": "writeRadii",
-      "file": "packages/core/src/edit/actions/resize-element.ts",
-      "declaration": "applyResizePathCircleOrEllipse.radii",
-      "hash": "0ecaae0c98d8",
-      "count": 1,
-      "expression": "writeRadii({ ...reach, x: nextRxLocal, y: nextRyLocal }, { units: currentRadiusUnits(context.syntax) })"
-    },
-    {
-      "rule": "F6",
-      "symbol": "writeScaleFactor",
-      "file": "packages/core/src/edit/actions/resize-element.ts",
-      "declaration": "applyResizeScope.formatted",
-      "hash": "bdb3f851a9c7",
-      "count": 1,
-      "expression": "writeScaleFactor(current * ratio, action.formatPrecision === \"snapped\" ? { fractionDigits: 12 } : {})"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/actions/rotate-element.ts",
-      "declaration": "applyCenterPivotRotate.nextSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "editedSlice",
-      "file": "packages/core/src/edit/actions/rotate-element.ts",
-      "declaration": "computeReplacementPatch.replacement",
-      "hash": "4d4b919e2873",
-      "count": 1,
-      "expression": "editedSlice(newSource, prefix, newSuffix)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/actions/rotate-element.ts",
-      "declaration": "rotateAroundPivot",
-      "hash": "9468d0c7211f",
-      "count": 1,
-      "expression": "sourceSlice(source, { from, to })"
-    },
-    {
-      "rule": "F6",
-      "symbol": "writeAuthoredAngle",
-      "file": "packages/core/src/edit/actions/rotate-element.ts",
-      "declaration": "buildOriginRotateMutations.value",
-      "hash": "ec2728c443d1",
-      "count": 1,
-      "expression": "writeAuthoredAngle(normalizedAngle)"
-    },
-    {
-      "rule": "F6",
-      "symbol": "writeAuthoredAngle",
-      "file": "packages/core/src/edit/actions/rotate-element.ts",
-      "declaration": "buildPropertyRotateMutations.angle",
-      "hash": "3a56ae1ff084",
-      "count": 1,
-      "expression": "writeAuthoredAngle(normalizeTinyNumber(angleDeg))"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/set-property.ts",
-      "declaration": "applySetPropertyActionRaw.value",
-      "hash": "5bd162385032",
-      "count": 1,
-      "expression": "userText(action.value, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/set-property.ts",
-      "declaration": "authoredOptionText",
-      "hash": "e686d2dfa306",
-      "count": 1,
-      "expression": "userText(text, \"source-editor\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/actions/set-property.ts",
-      "declaration": "createOptionMutationsFromSetProperty.value",
-      "hash": "5bd162385032",
-      "count": 1,
-      "expression": "userText(action.value, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/apply.ts",
-      "declaration": "applyCurveEditMoveIntent.newSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/apply.ts",
-      "declaration": "applyEdit.replacement",
-      "hash": "403e18737b21",
-      "count": 1,
-      "expression": "userText(edit.x, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/apply.ts",
-      "declaration": "applyEdit.replacement",
-      "hash": "e4cf2662a42f",
-      "count": 1,
-      "expression": "userText(edit.y, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/apply.ts",
-      "declaration": "applyEdit.updated",
-      "hash": "d53711d30e73",
-      "count": 1,
-      "expression": "userText(edit.text, \"node-text\")"
-    },
-    {
-      "rule": "F6",
-      "symbol": "writeTypedComponents",
-      "file": "packages/core/src/edit/apply.ts",
-      "declaration": "applyEdit.replacement",
-      "hash": "07b88ff0ddec",
-      "count": 1,
-      "expression": "writeTypedComponents(oldRaw, userText(edit.x, \"inspector-value\"), userText(edit.y, \"inspector-value\"))"
-    },
-    {
-      "rule": "F6",
-      "symbol": "writeAuthoredAngle",
-      "file": "packages/core/src/edit/apply.ts",
-      "declaration": "buildCurveEditMutations.value",
-      "hash": "4378278462f2",
-      "count": 1,
-      "expression": "writeAuthoredAngle(Math.trunc(optionValue))"
-    },
-    {
-      "rule": "F6",
-      "symbol": "writeAuthoredAngle",
-      "file": "packages/core/src/edit/apply.ts",
-      "declaration": "buildCurveEditMutations.value",
-      "hash": "588270755bba",
-      "count": 1,
-      "expression": "writeAuthoredAngle(Math.trunc(Math.abs(signedBendAngle)))"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/center-pivot-move.ts",
-      "declaration": "rotateAroundPivot.after",
-      "hash": "3594d878b1fb",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: valueSpan.from + at + raw.length, to: valueSpan.to })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/center-pivot-move.ts",
-      "declaration": "rotateAroundPivot.before",
-      "hash": "cb7349bfd4e9",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: valueSpan.from, to: valueSpan.from + at })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/center-pivot-move.ts",
-      "declaration": "rotateAroundPivot.equals",
-      "hash": "ed189a057fa2",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: keySpan.to, to: valueSpan.from })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/center-pivot-move.ts",
-      "declaration": "rotateAroundPivot.key",
-      "hash": "7d78635dbe84",
-      "count": 1,
-      "expression": "sourceSlice(source, keySpan)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "buildDrawOptions",
-      "hash": "130204a494ce",
-      "count": 1,
-      "expression": "userText(fillColor, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "buildDrawOptions",
-      "hash": "d116cd7eb27c",
-      "count": 1,
-      "expression": "userText(strokeColor, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "buildNodeOptions",
-      "hash": "130204a494ce",
-      "count": 1,
-      "expression": "userText(fillColor, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "buildNodeOptions",
-      "hash": "d116cd7eb27c",
-      "count": 1,
-      "expression": "userText(strokeColor, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "endpoint",
-      "hash": "1b242ba135cb",
-      "count": 1,
-      "expression": "userText(normalizedAnchor, \"node-reference\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "endpoint",
-      "hash": "4aecb4716dba",
-      "count": 2,
-      "expression": "userText(nodeName, \"node-reference\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "formatNodeName",
-      "hash": "0c29de9256ca",
-      "count": 1,
-      "expression": "userText(trimmed, \"node-reference\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "generateElementSource",
-      "hash": "9b6b12a1281b",
-      "count": 1,
-      "expression": "userText(template.shape, \"inspector-value\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "generateElementSource",
-      "hash": "a2801e03e6bb",
-      "count": 1,
-      "expression": "userText(sanitizeMatrixCellText(explicit ?? spreadsheetLabel(flatIndex)), \"node-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "generateElementSource.text",
-      "hash": "c8fde864d9dd",
-      "count": 1,
-      "expression": "userText(template.text == null ? DEFAULT_NODE_TEXT : sanitizeNodeText(template.text), \"node-text\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/element-templates.ts",
-      "declaration": "insertElementIntoSource",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/name-conflicts.ts",
-      "declaration": "applyNameMappingToSnippet",
-      "hash": "1e907bc9413a",
-      "count": 1,
-      "expression": "userText(newName, \"node-reference\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "editedSlice",
-      "file": "packages/core/src/edit/name-conflicts.ts",
-      "declaration": "replaceSpans",
-      "hash": "14b483325208",
-      "count": 1,
-      "expression": "editedSlice(edited, 0, edited.length)"
-    },
-    {
-      "rule": "F6",
-      "symbol": "writeRadii",
-      "file": "packages/core/src/edit/new-statement.ts",
-      "declaration": "statementPointWriter.circleRadii.radii",
-      "hash": "250bdb7e4d87",
-      "count": 1,
-      "expression": "writeRadii(lengths)"
-    },
-    {
-      "rule": "F6",
-      "symbol": "writeRadii",
-      "file": "packages/core/src/edit/new-statement.ts",
-      "declaration": "statementPointWriter.ellipseRadii",
-      "hash": "250bdb7e4d87",
-      "count": 1,
-      "expression": "writeRadii(lengths)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sliceFragment",
-      "file": "packages/core/src/edit/option-mutations.ts",
-      "declaration": "cut",
-      "hash": "3a00ec9305ff",
-      "count": 1,
-      "expression": "sliceFragment(fragment, from, to)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/option-mutations.ts",
-      "declaration": "normalizeOptionEntryRaw",
-      "hash": "1a1373266c02",
-      "count": 1,
-      "expression": "userText(raw, \"source-editor\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/option-mutations.ts",
-      "declaration": "normalizeOptionEntryRaw",
-      "hash": "b5165720be5f",
-      "count": 1,
-      "expression": "userText(`${entry.key}=${entry.valueRaw}`, \"source-editor\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "userText",
-      "file": "packages/core/src/edit/option-mutations.ts",
-      "declaration": "normalizeOptionEntryRaw",
-      "hash": "df0b43442494",
-      "count": 1,
-      "expression": "userText(entry.key, \"source-editor\")"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/option-mutations.ts",
-      "declaration": "rewriteOptionListMutationsPreservingSourceInternal.original",
-      "hash": "586ad6150b33",
-      "count": 1,
-      "expression": "sourceSlice(source, optionsSpan)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "optionEntry",
-      "file": "packages/core/src/edit/option-mutations.ts",
-      "declaration": "serializeOptionEntry",
-      "hash": "24776e346a0e",
-      "count": 1,
-      "expression": "optionEntry(trimmed, null)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "optionEntry",
-      "file": "packages/core/src/edit/option-mutations.ts",
-      "declaration": "serializeOptionEntry",
-      "hash": "91934b73cfe0",
-      "count": 1,
-      "expression": "optionEntry(key, value)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "editedSlice",
-      "file": "packages/core/src/edit/patch.ts",
-      "declaration": "computeMinimalReplacementPatch.replacement",
-      "hash": "4d4b919e2873",
-      "count": 1,
-      "expression": "editedSlice(newSource, prefix, newSuffix)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/patch.ts",
-      "declaration": "documentDiffPatch.patch",
-      "hash": "abb19ec115f8",
-      "count": 1,
-      "expression": "unchangedSource(next)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/patch.ts",
-      "declaration": "documentDiffPatch.replacement",
-      "hash": "febbd10370ac",
-      "count": 1,
-      "expression": "sourceSlice(next, patch.newSpan)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/path-editing.ts",
-      "declaration": "analyzeExplicitPathStatement.analysis.prefix",
-      "hash": "c091903cc73b",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: statement.span.from, to: prefixEnd })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/path-editing.ts",
-      "declaration": "analyzeExplicitPathStatement.analysis.suffix",
-      "hash": "7e12caf5c9e1",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: lastItem.span.to, to: statement.span.to })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/path-editing.ts",
-      "declaration": "analyzeExplicitPathStatement.anchors.raw",
-      "hash": "ea2e143f5b27",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: firstItem.span.from, to: firstItem.span.to })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/path-editing.ts",
-      "declaration": "analyzeExplicitPathStatement.raw",
-      "hash": "23878444c535",
-      "count": 2,
-      "expression": "sourceSlice(source, { from: operator.span.from, to: parsedCurve.target.span.to })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/path-editing.ts",
-      "declaration": "analyzeExplicitPathStatement.raw",
-      "hash": "9e7e27f2e1ff",
-      "count": 2,
-      "expression": "sourceSlice(source, { from: operator.span.from, to: target.span.to })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/path-editing.ts",
-      "declaration": "analyzeExplicitPathStatement.raw",
-      "hash": "ef6d671e2ad1",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: target.span.from, to: target.span.to })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/path-editing.ts",
-      "declaration": "analyzeExplicitPathStatement.raw",
-      "hash": "fdf7da68373c",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: parsedCurve.target.span.from, to: parsedCurve.target.span.to })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/path-pieces.ts",
-      "declaration": "segmentText",
-      "hash": "58dd032e877d",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: cursor, to })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/path-pieces.ts",
-      "declaration": "segmentText",
-      "hash": "a760bc3f0e92",
-      "count": 1,
-      "expression": "sourceSlice(source, { from: cursor, to: span.from })"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/path-pieces.ts",
-      "declaration": "spellPath.pointText.text",
-      "hash": "416270cf9c73",
-      "count": 1,
-      "expression": "sourceSlice(source, coordinateAt(analysis, point.index).span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "editedSlice",
-      "file": "packages/core/src/edit/property-write-planner.ts",
-      "declaration": "deriveSingleSourcePatch.replacement",
-      "hash": "8688fb713745",
-      "count": 1,
-      "expression": "editedSlice(next, prefix, nextSuffix)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/source-patches.ts",
-      "declaration": "applySourcePatches.source",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sliceFragment",
-      "file": "packages/core/src/edit/source-patches.ts",
-      "declaration": "composeSourcePatches.split.text",
-      "hash": "692905598fb3",
-      "count": 1,
-      "expression": "sliceFragment(piece.text, cut)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sliceFragment",
-      "file": "packages/core/src/edit/source-patches.ts",
-      "declaration": "composeSourcePatches.split.text",
-      "hash": "c809986ee385",
-      "count": 1,
-      "expression": "sliceFragment(piece.text, 0, cut)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/source-patches.ts",
-      "declaration": "invertSourcePatches.replacement",
-      "hash": "d0c603b6c742",
-      "count": 1,
-      "expression": "sourceSlice(previous, patch.oldSpan)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "unchangedSource",
-      "file": "packages/core/src/edit/statement-ops.ts",
-      "declaration": "applyTextReplacements.source",
-      "hash": "49e7e7594a9d",
-      "count": 1,
-      "expression": "unchangedSource(source)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sliceFragment",
-      "file": "packages/core/src/edit/statement-ops.ts",
-      "declaration": "cut",
-      "hash": "94b5e4f6566f",
-      "count": 1,
-      "expression": "sliceFragment(text, from, to)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "editedSlice",
-      "file": "packages/core/src/edit/statement-ops.ts",
-      "declaration": "normalizeSnippet",
-      "hash": "a33a1bd5605e",
-      "count": 1,
-      "expression": "editedSlice(edited, 0, edited.trimEnd().length)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/edit/statement-ops.ts",
-      "declaration": "statementSnippet",
-      "hash": "3707371ee9df",
-      "count": 1,
-      "expression": "sourceSlice(source, ref.span)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "macroExpansion",
-      "file": "packages/core/src/foreach/flatten.ts",
-      "declaration": "flattenForeachInSourceWithContext.replacement",
-      "hash": "858cec130187",
-      "count": 1,
-      "expression": "macroExpansion(flattened.replacement)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "sourceSlice",
-      "file": "packages/core/src/parser/incremental.ts",
-      "declaration": "deriveSingleSourcePatch.replacement",
-      "hash": "3554d0f380f7",
-      "count": 1,
-      "expression": "sourceSlice(next, { from: prefix, to: nextSuffix })"
-    }
-  ],
-  "migration": []
-}
+[
+  {
+    "rule": "F2",
+    "symbol": "editedSlice",
+    "file": "packages/app/src/edit-execution.ts",
+    "declaration": "executeDocumentEdit.replacement",
+    "count": 1,
+    "expression": "editedSlice(replay.source, layerAt, end + replay.source.length - working.length)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/app/src/editing-identities.ts",
+    "declaration": "identityPatches.replacement",
+    "count": 1,
+    "expression": "sourceSlice(after, { from: 0, to: after.length })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/app/src/store/source-patch-diff.ts",
+    "declaration": "deriveSingleSourcePatch.replacement",
+    "count": 1,
+    "expression": "sourceSlice(next, { from: prefix, to: nextSuffix })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/app/src/ui/canvas-panel/canvas-text-edit-machine.ts",
+    "declaration": "applySessionTextUpdate.typed",
+    "count": 1,
+    "expression": "userText(nextText, \"node-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/app/src/ui/deck-graphics-insertion.ts",
+    "declaration": "changeGraphicsLocation.patches.replacement",
+    "count": 1,
+    "expression": "userText(texPath, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/builds.ts",
+    "declaration": "beamerBuildSpecPatch.replacement",
+    "count": 1,
+    "expression": "userText(value.trim(), \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "plainNumber",
+    "file": "packages/core/src/beamer/deck-crop.ts",
+    "declaration": "beamerImageCropPatches.number",
+    "count": 1,
+    "expression": "plainNumber(Number(factor.toFixed(4)), \"beamer-length\", source[size.span.from] === \".\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/deck-crop.ts",
+    "declaration": "beamerImageCropPatches.replacement",
+    "count": 1,
+    "expression": "sourceSlice(reset, { from: 0, to: reset.length })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/deck-crop.ts",
+    "declaration": "cropValue.parts",
+    "count": 1,
+    "expression": "sourceSlice(source, unit.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "plainNumber",
+    "file": "packages/core/src/beamer/deck-crop.ts",
+    "declaration": "formatNumber",
+    "count": 1,
+    "expression": "plainNumber(Number(value.toFixed(2)) || 0, \"beamer-length\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/deck-edit-actions.ts",
+    "declaration": "applyRenameEnvironment.renamed",
+    "count": 1,
+    "expression": "userText(name, \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/deck-edit-actions.ts",
+    "declaration": "applyReplaceGraphics.edits.insert",
+    "count": 1,
+    "expression": "userText(path, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/deck-edit-actions.ts",
+    "declaration": "applyReplaceGraphics.insert",
+    "count": 1,
+    "expression": "sourceSlice(source, comment)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/deck-edit-actions.ts",
+    "declaration": "applySetColumnWidth.typed",
+    "count": 1,
+    "expression": "userText(trimmed, \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/deck-edit-actions.ts",
+    "declaration": "applySetEnvironmentTitle.typed",
+    "count": 1,
+    "expression": "userText(title, \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/deck-edit-actions.ts",
+    "declaration": "buildOptionEdits.entryText",
+    "count": 1,
+    "expression": "userText(value.trim(), \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/deck-edit-actions.ts",
+    "declaration": "buildOptionEdits.typedKey",
+    "count": 1,
+    "expression": "userText(normalizedKey, \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/deck-edit-actions.ts",
+    "declaration": "normalizeOverlaySpec.spec",
+    "count": 1,
+    "expression": "userText(trimmed, \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/deck-insert-graphics.ts",
+    "declaration": "beamerGraphicsInsertionEdits.command",
+    "count": 1,
+    "expression": "userText(path, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "plainNumber",
+    "file": "packages/core/src/beamer/deck-insert-graphics.ts",
+    "declaration": "beamerGraphicsInsertionEdits.options",
+    "count": 1,
+    "expression": "plainNumber(widthFraction, \"beamer-length\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "plainNumber",
+    "file": "packages/core/src/beamer/deck-resize.ts",
+    "declaration": "beamerImageResizePatches.replacement",
+    "count": 1,
+    "expression": "plainNumber(Number(scale.toFixed(6)), \"beamer-scale\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "plainNumber",
+    "file": "packages/core/src/beamer/deck-resize.ts",
+    "declaration": "formatValue",
+    "count": 1,
+    "expression": "plainNumber(Number(value.toFixed(6)), \"beamer-length\", source[numeric.span.from] === \".\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/deck-resize.ts",
+    "declaration": "formatValue",
+    "count": 1,
+    "expression": "sourceSlice(source, numeric.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "plainNumber",
+    "file": "packages/core/src/beamer/deck-spacing.ts",
+    "declaration": "beamerSpacingResizePatches.number",
+    "count": 1,
+    "expression": "plainNumber(value, \"beamer-length\", /^[+-]?\\./u.test(source.slice(span.from, span.to)))"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/document-color-edits.ts",
+    "declaration": "planDeckColorEdit.command",
+    "count": 3,
+    "expression": "userText(action.role, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/document-color-edits.ts",
+    "declaration": "rewriteSide.text",
+    "count": 2,
+    "expression": "userText(side, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/document-page-edits.ts",
+    "declaration": "planDeckPageEdit.command",
+    "count": 1,
+    "expression": "userText(`\\\\${action.field}`, \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/document-page-edits.ts",
+    "declaration": "planDeckPageEdit.text",
+    "count": 2,
+    "expression": "userText(value, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/document-page-edits.ts",
+    "declaration": "planDeckPageEdit.value",
+    "count": 1,
+    "expression": "userText(action.value, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/document-page-edits.ts",
+    "declaration": "retainedComments",
+    "count": 1,
+    "expression": "sourceSlice(document.source, comment)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/document-theme-edits.ts",
+    "declaration": "planDeckDocumentThemeEdit.command",
+    "count": 1,
+    "expression": "userText(`\\\\${BEAMER_THEME_COMMANDS[kind]}`, \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/document-theme-edits.ts",
+    "declaration": "planDeckDocumentThemeEdit.key",
+    "count": 1,
+    "expression": "userText(action.key, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/document-theme-edits.ts",
+    "declaration": "planDeckDocumentThemeEdit.options",
+    "count": 1,
+    "expression": "sourceSlice(document.source, target.options.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/document-theme-edits.ts",
+    "declaration": "planDeckDocumentThemeEdit.text",
+    "count": 1,
+    "expression": "userText(value, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/document-theme-edits.ts",
+    "declaration": "planDeckDocumentThemeEdit.typedName",
+    "count": 1,
+    "expression": "userText(name, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/list-head.ts",
+    "declaration": "planBeamerListHeadEdit",
+    "count": 1,
+    "expression": "sourceSlice(context.source, existing.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/list-head.ts",
+    "declaration": "planBeamerListHeadEdit",
+    "count": 2,
+    "expression": "userText(value, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/list-head.ts",
+    "declaration": "planBeamerListHeadEdit.trivia",
+    "count": 1,
+    "expression": "sourceSlice(context.source, comment)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/note-editing.ts",
+    "declaration": "editBeamerFrameNote.text",
+    "count": 1,
+    "expression": "userText(edit.text, \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/object-overlays.ts",
+    "declaration": "beamerObjectOverlayTarget.setSpec",
+    "count": 1,
+    "expression": "sourceSlice(source, node.sourceSpan)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/object-overlays.ts",
+    "declaration": "beamerObjectOverlayTarget.setSpec",
+    "count": 3,
+    "expression": "userText(spec, \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/option-edits.ts",
+    "declaration": "rewriteBeamerOptions",
+    "count": 3,
+    "expression": "sourceSlice(source, entry.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/option-edits.ts",
+    "declaration": "rewriteBeamerOptions.trivia",
+    "count": 2,
+    "expression": "sourceSlice(source, { from, to: at })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/preamble-edit-context.ts",
+    "declaration": "themeNamePrefix",
+    "count": 1,
+    "expression": "sourceSlice(document.source, { from: use.name.contentSpan.from, to: comma + 1 })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "plainNumber",
+    "file": "packages/core/src/beamer/slide-manager.ts",
+    "declaration": "duplicateReplacements",
+    "count": 1,
+    "expression": "plainNumber(suffix, \"label-counter\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/slide-manager.ts",
+    "declaration": "duplicateReplacements.text",
+    "count": 1,
+    "expression": "sourceSlice(source, { from: to - requireArrayValue(alias, 2).length, to })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/slide-manager.ts",
+    "declaration": "duplicateReplacements.written",
+    "count": 1,
+    "expression": "sourceSlice(source, label.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/slide-manager.ts",
+    "declaration": "editBeamerSlides.text",
+    "count": 1,
+    "expression": "sourceSlice(source, dependency.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/slide-manager.ts",
+    "declaration": "pastedTikzLayers.replacements.own",
+    "count": 1,
+    "expression": "sourceSlice(origin.source, { from, to: from + written.trim().length })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/slide-manager.ts",
+    "declaration": "rewrittenSlice",
+    "count": 2,
+    "expression": "sourceSlice(source, { from: cursor, to: replacement.span.from })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/structural-edit.ts",
+    "declaration": "beamerObjectDuplicationPatch.copy",
+    "count": 2,
+    "expression": "sourceSlice(source, { from: lineFrom, to: blockTo })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/theme-switch.ts",
+    "declaration": "presentationThemeEdits.name",
+    "count": 1,
+    "expression": "userText(plan.entry.name, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions.ts",
+    "declaration": "applyConnectHandle.nodeReference",
+    "count": 1,
+    "expression": "userText(trimmedNodeName, \"node-reference\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "editedSlice",
+    "file": "packages/core/src/edit/actions.ts",
+    "declaration": "applyConnectHandle.replacement",
+    "count": 1,
+    "expression": "editedSlice(nameResolution.source, from, from + nameResolution.insertedLength)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions.ts",
+    "declaration": "applyConnectHandle.replacement",
+    "count": 1,
+    "expression": "userText(trimmedAnchor, \"node-reference\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions.ts",
+    "declaration": "applyEditAction.rawResult.newSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions.ts",
+    "declaration": "applyEditAction.rawResult.nextSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions.ts",
+    "declaration": "applyEditAction.result.newSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions.ts",
+    "declaration": "applyUpdateNodeText.text",
+    "count": 1,
+    "expression": "userText(action.text, \"node-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions.ts",
+    "declaration": "ensureNodeSourceHasName.insertion",
+    "count": 1,
+    "expression": "userText(name, \"node-reference\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions.ts",
+    "declaration": "ensureNodeSourceHasName.source",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions.ts",
+    "declaration": "resolveAnchorNodeName.source",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions/adornment-actions.ts",
+    "declaration": "applyAddNodeAdornmentAction.snippet",
+    "count": 3,
+    "expression": "userText(key, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/actions/adornment-actions.ts",
+    "declaration": "applyDuplicateAdornmentAction.snippet",
+    "count": 1,
+    "expression": "sourceSlice(source, resolved.target.optionSpan)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions/adornment-set-property.ts",
+    "declaration": "applyAdornmentSetProperty.value",
+    "count": 1,
+    "expression": "userText(action.value, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/actions/adornment-set-property.ts",
+    "declaration": "applyAdornmentValueRewrite.replacement",
+    "count": 1,
+    "expression": "sourceSlice(source, target.textSpan)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions/adornment-set-property.ts",
+    "declaration": "applyAdornmentValueRewrite.replacement",
+    "count": 2,
+    "expression": "userText(angleRaw, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions/adornment-set-property.ts",
+    "declaration": "buildPinEdgeMutations.value",
+    "count": 1,
+    "expression": "userText(value, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sliceFragment",
+    "file": "packages/core/src/edit/actions/adornment-set-property.ts",
+    "declaration": "cut",
+    "count": 1,
+    "expression": "sliceFragment(fragment, from, to)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/delete-elements.ts",
+    "declaration": "applyDeleteElementsAction.currentSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/delete-elements.ts",
+    "declaration": "pruneFitReferencesAfterDelete.currentSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions/delete-elements.ts",
+    "declaration": "pruneFitReferencesAfterDelete.nextFitValue",
+    "count": 1,
+    "expression": "userText(fitEntry.valueRaw, \"source-editor\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/delete-elements.ts",
+    "declaration": "pruneFitReferencesAfterDelete.source",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sliceFragment",
+    "file": "packages/core/src/edit/actions/delete-elements.ts",
+    "declaration": "pruneFitValueRaw.compact",
+    "count": 1,
+    "expression": "sliceFragment(valueRaw, contentStart + token.from, contentStart + token.to)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
+    "declaration": "applyUngroupElementsAction.body",
+    "count": 3,
+    "expression": "sourceSlice(source, { from: beginEnd, to: options.from })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
+    "declaration": "buildGroupReplacement.snippetsById",
+    "count": 1,
+    "expression": "sourceSlice(source, requireDefined(contentSpans.get(ref.id), \"Missing statement content span\"))"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
+    "declaration": "reindentBlock",
+    "count": 1,
+    "expression": "sourceSlice(source, span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sliceFragment",
+    "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
+    "declaration": "reindentFragment.text",
+    "count": 1,
+    "expression": "sliceFragment(snippet, strippedFrom, line.to)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sliceFragment",
+    "file": "packages/core/src/edit/actions/group-ungroup-actions.ts",
+    "declaration": "reindentScopeBody.content",
+    "count": 1,
+    "expression": "sliceFragment(body, lineStart, last)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/actions/matrix-structure-actions.ts",
+    "declaration": "parseMatrixGrid.rows.values",
+    "count": 1,
+    "expression": "sourceSlice(target.source, cell.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions/matrix-structure-actions.ts",
+    "declaration": "resolveMatrixStructureTarget.value.cellSeparator",
+    "count": 1,
+    "expression": "userText(mode.cellSeparator, \"source-editor\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+    "declaration": "applyElementDeltaMapStrict.currentSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+    "declaration": "applyMoveElementsAction.currentSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+    "declaration": "applyMoveElementsAction.newSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+    "declaration": "applyMoveElementsUsingHandleRewrites.currentSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+    "declaration": "applyMoveMatrixElementsWithPlacementRewrite.currentSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+    "declaration": "applyMoveScopeElementsWithTransformRewrite.currentSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+    "declaration": "applyMoveTreeRootElementsWithPlacementRewrite.currentSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F6",
+    "symbol": "writeLocalLength",
+    "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+    "declaration": "planOrderedScopeTranslation.value",
+    "count": 1,
+    "expression": "writeLocalLength(value, pointDistanceFormatOptions(formatPrecision))"
+  },
+  {
+    "rule": "F6",
+    "symbol": "writeShiftPair",
+    "file": "packages/core/src/edit/actions/move-arrange-actions.ts",
+    "declaration": "planOrderedScopeTranslation.value",
+    "count": 1,
+    "expression": "writeShiftPair(pair, { x: component(old.x + localDelta.x, localDelta.x), y: component(old.y + localDelta.y, localDelta.y"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sliceFragment",
+    "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
+    "declaration": "buildPlacementMutations.raw",
+    "count": 1,
+    "expression": "sliceFragment(placementEntry, equalsIndex + 1)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sliceFragment",
+    "file": "packages/core/src/edit/actions/node-positioning-actions.ts",
+    "declaration": "buildPlacementMutations.value",
+    "count": 1,
+    "expression": "sliceFragment(raw, raw.length - raw.trimStart().length, raw.trimEnd().length)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/paste-duplicate.ts",
+    "declaration": "applyDuplicateElementsAction.currentSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions/paste-duplicate.ts",
+    "declaration": "applyPasteStatementsAction.snippets",
+    "count": 1,
+    "expression": "userText(snippet, \"pasted-tikz\")"
+  },
+  {
+    "rule": "F6",
+    "symbol": "writeLocalLength",
+    "file": "packages/core/src/edit/actions/path-attached-node-actions.ts",
+    "declaration": "applyDistanceMutations.value",
+    "count": 1,
+    "expression": "writeLocalLength(resolvedDistance, pointDistanceFormatOptions(action.formatPrecision))"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/reorder-elements.ts",
+    "declaration": "applyReorderElementsAction.currentSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/actions/reorder-elements.ts",
+    "declaration": "buildParentReorderReplacement.statementText",
+    "count": 1,
+    "expression": "sourceSlice(source, ref.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/actions/reorder-elements.ts",
+    "declaration": "buildParentReorderReplacement.trivia",
+    "count": 1,
+    "expression": "sourceSlice(source, gap)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "plainNumber",
+    "file": "packages/core/src/edit/actions/repeat.ts",
+    "declaration": "buildIndexList",
+    "count": 1,
+    "expression": "plainNumber(count - 1, \"loop-count\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "editedSlice",
+    "file": "packages/core/src/edit/actions/repeat.ts",
+    "declaration": "rewritePathStatementCoordinates",
+    "count": 1,
+    "expression": "editedSlice(rewritten, statement.span.from, statement.span.to + (rewritten.length - source.length))"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/actions/repeat.ts",
+    "declaration": "wrapRepeatedBlockInScope.block",
+    "count": 1,
+    "expression": "sourceSlice(geometry.source, { from: first.span.from, to: last.span.to })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/resize-element.ts",
+    "declaration": "applyResizeElementAction.newSource",
+    "count": 2,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/resize-element.ts",
+    "declaration": "applyResizePathRectangle.newSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/resize-element.ts",
+    "declaration": "restoreResizeBaselineOnNoop.newSource",
+    "count": 1,
+    "expression": "unchangedSource(geometry.source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/actions/resize-element.ts",
+    "declaration": "rewriteShapePayloadCoordinate.at",
+    "count": 1,
+    "expression": "sourceSlice(source, { from: payload.span.from + offset, to: payload.span.from + offset + length })"
+  },
+  {
+    "rule": "F6",
+    "symbol": "writeRadii",
+    "file": "packages/core/src/edit/actions/resize-element.ts",
+    "declaration": "applyResizePathCircleOrEllipse.radii",
+    "count": 1,
+    "expression": "writeRadii({ ...reach, x: nextRxLocal, y: nextRyLocal }, { units: currentRadiusUnits(context.syntax) })"
+  },
+  {
+    "rule": "F6",
+    "symbol": "writeScaleFactor",
+    "file": "packages/core/src/edit/actions/resize-element.ts",
+    "declaration": "applyResizeScope.formatted",
+    "count": 1,
+    "expression": "writeScaleFactor(current * ratio, action.formatPrecision === \"snapped\" ? { fractionDigits: 12 } : {})"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/rotate-element.ts",
+    "declaration": "applyCenterPivotRotate.nextSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "editedSlice",
+    "file": "packages/core/src/edit/actions/rotate-element.ts",
+    "declaration": "computeReplacementPatch.replacement",
+    "count": 1,
+    "expression": "editedSlice(newSource, prefix, newSuffix)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/actions/rotate-element.ts",
+    "declaration": "rotateAroundPivot",
+    "count": 1,
+    "expression": "sourceSlice(source, { from, to })"
+  },
+  {
+    "rule": "F6",
+    "symbol": "writeAuthoredAngle",
+    "file": "packages/core/src/edit/actions/rotate-element.ts",
+    "declaration": "buildOriginRotateMutations.value",
+    "count": 1,
+    "expression": "writeAuthoredAngle(normalizedAngle)"
+  },
+  {
+    "rule": "F6",
+    "symbol": "writeAuthoredAngle",
+    "file": "packages/core/src/edit/actions/rotate-element.ts",
+    "declaration": "buildPropertyRotateMutations.angle",
+    "count": 1,
+    "expression": "writeAuthoredAngle(normalizeTinyNumber(angleDeg))"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions/set-property.ts",
+    "declaration": "applySetPropertyActionRaw.value",
+    "count": 1,
+    "expression": "userText(action.value, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions/set-property.ts",
+    "declaration": "authoredOptionText",
+    "count": 1,
+    "expression": "userText(text, \"source-editor\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions/set-property.ts",
+    "declaration": "createOptionMutationsFromSetProperty.value",
+    "count": 1,
+    "expression": "userText(action.value, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/apply.ts",
+    "declaration": "applyCurveEditMoveIntent.newSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/apply.ts",
+    "declaration": "applyEdit.replacement",
+    "count": 2,
+    "expression": "userText(edit.x, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/apply.ts",
+    "declaration": "applyEdit.updated",
+    "count": 1,
+    "expression": "userText(edit.text, \"node-text\")"
+  },
+  {
+    "rule": "F6",
+    "symbol": "writeTypedComponents",
+    "file": "packages/core/src/edit/apply.ts",
+    "declaration": "applyEdit.replacement",
+    "count": 1,
+    "expression": "writeTypedComponents(oldRaw, userText(edit.x, \"inspector-value\"), userText(edit.y, \"inspector-value\"))"
+  },
+  {
+    "rule": "F6",
+    "symbol": "writeAuthoredAngle",
+    "file": "packages/core/src/edit/apply.ts",
+    "declaration": "buildCurveEditMutations.value",
+    "count": 2,
+    "expression": "writeAuthoredAngle(Math.trunc(optionValue))"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/center-pivot-move.ts",
+    "declaration": "rotateAroundPivot.after",
+    "count": 1,
+    "expression": "sourceSlice(source, { from: valueSpan.from + at + raw.length, to: valueSpan.to })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/center-pivot-move.ts",
+    "declaration": "rotateAroundPivot.before",
+    "count": 1,
+    "expression": "sourceSlice(source, { from: valueSpan.from, to: valueSpan.from + at })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/center-pivot-move.ts",
+    "declaration": "rotateAroundPivot.equals",
+    "count": 1,
+    "expression": "sourceSlice(source, { from: keySpan.to, to: valueSpan.from })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/center-pivot-move.ts",
+    "declaration": "rotateAroundPivot.key",
+    "count": 1,
+    "expression": "sourceSlice(source, keySpan)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/element-templates.ts",
+    "declaration": "buildDrawOptions",
+    "count": 2,
+    "expression": "userText(strokeColor, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/element-templates.ts",
+    "declaration": "buildNodeOptions",
+    "count": 2,
+    "expression": "userText(strokeColor, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/element-templates.ts",
+    "declaration": "endpoint",
+    "count": 3,
+    "expression": "userText(nodeName, \"node-reference\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/element-templates.ts",
+    "declaration": "formatNodeName",
+    "count": 1,
+    "expression": "userText(trimmed, \"node-reference\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/element-templates.ts",
+    "declaration": "generateElementSource",
+    "count": 2,
+    "expression": "userText(template.shape, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/element-templates.ts",
+    "declaration": "generateElementSource.text",
+    "count": 1,
+    "expression": "userText(template.text == null ? DEFAULT_NODE_TEXT : sanitizeNodeText(template.text), \"node-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/element-templates.ts",
+    "declaration": "insertElementIntoSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/name-conflicts.ts",
+    "declaration": "applyNameMappingToSnippet",
+    "count": 1,
+    "expression": "userText(newName, \"node-reference\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "editedSlice",
+    "file": "packages/core/src/edit/name-conflicts.ts",
+    "declaration": "replaceSpans",
+    "count": 1,
+    "expression": "editedSlice(edited, 0, edited.length)"
+  },
+  {
+    "rule": "F6",
+    "symbol": "writeRadii",
+    "file": "packages/core/src/edit/new-statement.ts",
+    "declaration": "statementPointWriter.circleRadii.radii",
+    "count": 1,
+    "expression": "writeRadii(lengths)"
+  },
+  {
+    "rule": "F6",
+    "symbol": "writeRadii",
+    "file": "packages/core/src/edit/new-statement.ts",
+    "declaration": "statementPointWriter.ellipseRadii",
+    "count": 1,
+    "expression": "writeRadii(lengths)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sliceFragment",
+    "file": "packages/core/src/edit/option-mutations.ts",
+    "declaration": "cut",
+    "count": 1,
+    "expression": "sliceFragment(fragment, from, to)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/option-mutations.ts",
+    "declaration": "normalizeOptionEntryRaw",
+    "count": 3,
+    "expression": "userText(raw, \"source-editor\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/option-mutations.ts",
+    "declaration": "rewriteOptionListMutationsPreservingSourceInternal.original",
+    "count": 1,
+    "expression": "sourceSlice(source, optionsSpan)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "optionEntry",
+    "file": "packages/core/src/edit/option-mutations.ts",
+    "declaration": "serializeOptionEntry",
+    "count": 2,
+    "expression": "optionEntry(trimmed, null)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "editedSlice",
+    "file": "packages/core/src/edit/patch.ts",
+    "declaration": "computeMinimalReplacementPatch.replacement",
+    "count": 1,
+    "expression": "editedSlice(newSource, prefix, newSuffix)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/patch.ts",
+    "declaration": "documentDiffPatch.patch",
+    "count": 1,
+    "expression": "unchangedSource(next)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/patch.ts",
+    "declaration": "documentDiffPatch.replacement",
+    "count": 1,
+    "expression": "sourceSlice(next, patch.newSpan)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/path-editing.ts",
+    "declaration": "analyzeExplicitPathStatement.analysis.prefix",
+    "count": 1,
+    "expression": "sourceSlice(source, { from: statement.span.from, to: prefixEnd })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/path-editing.ts",
+    "declaration": "analyzeExplicitPathStatement.analysis.suffix",
+    "count": 1,
+    "expression": "sourceSlice(source, { from: lastItem.span.to, to: statement.span.to })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/path-editing.ts",
+    "declaration": "analyzeExplicitPathStatement.anchors.raw",
+    "count": 1,
+    "expression": "sourceSlice(source, { from: firstItem.span.from, to: firstItem.span.to })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/path-editing.ts",
+    "declaration": "analyzeExplicitPathStatement.raw",
+    "count": 6,
+    "expression": "sourceSlice(source, { from: operator.span.from, to: target.span.to })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/path-pieces.ts",
+    "declaration": "segmentText",
+    "count": 2,
+    "expression": "sourceSlice(source, { from: cursor, to: span.from })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/path-pieces.ts",
+    "declaration": "spellPath.pointText.text",
+    "count": 1,
+    "expression": "sourceSlice(source, coordinateAt(analysis, point.index).span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "editedSlice",
+    "file": "packages/core/src/edit/property-write-planner.ts",
+    "declaration": "deriveSingleSourcePatch.replacement",
+    "count": 1,
+    "expression": "editedSlice(next, prefix, nextSuffix)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/source-patches.ts",
+    "declaration": "applySourcePatches.source",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sliceFragment",
+    "file": "packages/core/src/edit/source-patches.ts",
+    "declaration": "composeSourcePatches.split.text",
+    "count": 2,
+    "expression": "sliceFragment(piece.text, 0, cut)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/source-patches.ts",
+    "declaration": "invertSourcePatches.replacement",
+    "count": 1,
+    "expression": "sourceSlice(previous, patch.oldSpan)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/statement-ops.ts",
+    "declaration": "applyTextReplacements.source",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sliceFragment",
+    "file": "packages/core/src/edit/statement-ops.ts",
+    "declaration": "cut",
+    "count": 1,
+    "expression": "sliceFragment(text, from, to)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "editedSlice",
+    "file": "packages/core/src/edit/statement-ops.ts",
+    "declaration": "normalizeSnippet",
+    "count": 1,
+    "expression": "editedSlice(edited, 0, edited.trimEnd().length)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/statement-ops.ts",
+    "declaration": "statementSnippet",
+    "count": 1,
+    "expression": "sourceSlice(source, ref.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "macroExpansion",
+    "file": "packages/core/src/foreach/flatten.ts",
+    "declaration": "flattenForeachInSourceWithContext.replacement",
+    "count": 1,
+    "expression": "macroExpansion(flattened.replacement)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/parser/incremental.ts",
+    "declaration": "deriveSingleSourcePatch.replacement",
+    "count": 1,
+    "expression": "sourceSlice(next, { from: prefix, to: nextSuffix })"
+  }
+]

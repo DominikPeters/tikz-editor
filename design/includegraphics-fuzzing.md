@@ -15,8 +15,8 @@ successful oracle comparison.
 
 The original assets and all successful focused Beamer sources are in
 [`test/fixtures/graphics-fuzz`](../test/fixtures/graphics-fuzz/README.md).
-`assets.json` pins every asset byte. Both oracle caches and campaign manifests
-include the asset hash. Standalone campaign directories receive the same files.
+`assets.json` lists the files and their dimensions. Cache keys are derived from
+the current asset contents. Standalone comparison directories receive the same files.
 The general TikZ renderer comparator and direct Beamer comparator now resolve
 local assets too.
 
@@ -44,7 +44,7 @@ score alone can hide missing image paint among surrounding text.
 The reusable [image fidelity workflow](../.github/workflows/image-fidelity.yml)
 runs on pull requests, pushes to master, and the daily/manual TeX workflow. It
 installs and validates all oracle tools, records their versions, commit, seed and
-asset hash, runs both image oracle suites with live TeX enabled, and checks that
+runs both image oracle suites with live TeX enabled, and checks that
 no tests were skipped. Its required bounded campaigns use the reproducible seed
 20261108: 16 article cases at 4 pixels/pt and 8 Beamer cases / 11 overlay states.
 Manual dispatch accepts another seed. Source files, asset bytes, PDFs, SVGs,
@@ -76,62 +76,4 @@ without skips, all 16 article cases, all 11 Beamer states, and 8 browser tests
 lint passed; the new browser spec also passed a focused typecheck and lint.
 Workflow YAML and embedded shell blocks parse, and the tool/skip guards were
 executed locally. Hosted GitHub Actions jobs have not been triggered from this
-task. The ledger links the local reports and the initial WebKit failure evidence.
-
-## Verification on November 8, 2026
-
-The [ledger](includegraphics-fuzz-ledger.json) records reports, source hashes,
-original failures, comparison changes and exact replay commands.
-
-- Focused Beamer: 8 cases / 11 states passed structural and paint checks,
-  including 50 image/block paint samples.
-- Native image edit campaign: 8 sequences passed, 105 warm/cold comparisons;
-  81 resolved image occurrences reached.
-- Article image campaign: **all 16 pass structural and paint checks**, including
-  the nine original flagged sources. All nine snippets and original TeX oracle
-  documents retain their SHA-256 hashes. A separate live regression test renders
-  those originals through the production SVG emitter and independently compiled
-  LuaLaTeX, and rejects missing, shifted, flipped and uncropped image mutations.
-- Focused LuaLaTeX image-box tests: all 7 tests passed, including seven independent
-  dimension programs. The wider targeted suite passed 243 tests in 27 files;
-  12 opt-in/disabled tests were skipped. The two image-paint regression tests
-  were additionally run with the live oracle enabled and both passed. Full typecheck/build and
-  production lint passed. Changed JavaScript scripts passed syntax checks;
-  the repository's typed ESLint project does not include `.mjs` files.
-
-The image integration corrected comparison adapters, not renderer semantics:
-unclipped viewBox transforms, image rectangles inside TikZ nodes, retained rotated
-glyph axes, and engine-local owner prefixes in placement IDs. Negative tests
-still reject corrupted placement IDs and missing image paint.
-
-The article oracle ships the original TeX paragraph box at the page origin,
-avoiding the enclosing TikZ/page offset. Native preview painting uses the current
-glyph-outline API. The nine paint observations had two test-harness causes:
-
-1. The mask gate mixed librsvg/Cairo SVG paint with Poppler/Splash PDF paint.
-   Seven cases fail the same contract comparing two renderings of the identical
-   TeX PDF, with no editor output involved. MuPDF's SVG conversion preserves the
-   independent PDF geometry and image data while letting both sides use librsvg.
-   Eight original failures disappear under that comparison. A global native
-   nearest-neighbor filter was rejected: it made 10/16 cases fail.
-2. The remaining PDF case used an undersampled 72-dpi test proxy. The app's
-   existing PDF rasterizer defaults to scale 2 (144 dpi). Matching that default
-   fixes the test proxy without changing natural dimensions, original PDF bytes
-   or image geometry. The original 72-dpi assets and their hashes are preserved.
-
-Both causes, experiments, original failures and the separate oracle correction
-are recorded in the ledger. Older Cairo SVG conversion shifts bitmap samples;
-dvisvgm also emits oversized symbols and empty image data for some clipped
-images. Those SVG scores are diagnostic in image mode. The intermediate runs are
-retained and are not successful paint comparisons. The zero-noise
-AE flag was also strengthened: nonzero native error is flagged when the two TeX
-SVG references agree exactly. **No numeric tolerance was relaxed.**
-
-No large image soak or independent TeX campaign over the recursive image grammar
-was run. Paint closure uses the original campaign's 4 pixels per TeX point.
-Native Node edit checks use pinned Poppler PDF pages; the separate browser tests
-above validate PDF.js for the controlled two-page fixture. Broader PDF/browser
-coverage and the full repository test suite were not run in this pass.
-Older campaigns, remaining support gaps and raster limitations remain recorded
-in the separate [Beamer ledger](beamer-failure-ledger.json); this focused run does
-not revalidate or close those records.
+task.

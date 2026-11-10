@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { runTexOracleDocument } from "../../../../scripts/lib/tex-oracle.mjs";
 
@@ -30,5 +29,5 @@ ${testCase.recordCounter ? String.raw`\addtobeamertemplate{enumerate item}{\type
   return { id: testCase.id, labels, navigation, ...(testCase.recordCounter ? { counters } : {}) };
 });
 writeFileSync(new URL("./paint.oracle.json", import.meta.url), JSON.stringify({
-  engine: "lualatex", environment, sourceSha256: createHash("sha256").update(readFileSync(casesPath)).digest("hex"), cases: captured,
+  engine: "lualatex", environment, cases: captured,
 }, null, 2) + "\n");

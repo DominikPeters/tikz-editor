@@ -8,7 +8,6 @@
       "frame": 1,
       "pages": 1,
       "family": "local-macro-redefinition",
-      "sourceSha256": "73e207fc243933b537aa2d989e93def23487353d3e66cff872f83b3c988fd00a",
       "oracleText": [
         "Before:12ms.",
         "Local:7ticks.",
@@ -21,7 +20,6 @@
       "frame": 1,
       "pages": 1,
       "family": "columns-inside-block",
-      "sourceSha256": "d2452730b04a5a0d822c89d9c597e9ab57a05d58d1ddf9707630833be52be39e",
       "oracleText": [
         "Panel",
         "Leftinput.",

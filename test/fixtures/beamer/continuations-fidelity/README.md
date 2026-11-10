@@ -4,7 +4,7 @@ oracle instrumentation and comparison helpers. They check forced and
 automatic breaks, top/center/bottom/plain geometry, paragraph lines and list glue,
 display math, atomic blocks, the stock continuation title variants, final
 footnote placement, and frame counters across a complete deck. Each snapshot
-records the source SHA-256 and TeX environment. Continuation indexes are
+records the TeX environment. Continuation indexes are
 one-based; frame indexes are zero-based. Continuations are distinct from
 overlay steps.
 
@@ -17,7 +17,8 @@ npx vitest run test/beamer-continuations.spec.ts
 npm run compare:beamer-continuations
 ```
 
-`--check` recompiles without replacing snapshots; omit it to regenerate and
+`--check` recompiles and compares rendering data, ignoring TeX's internal box
+paths and diagnostic box tree. It does not replace snapshots; omit it to regenerate and
 review the JSON diff. `--cases forced,counters` selects fixtures and
 `--out-dir <directory>` changes the ignored compilation artifact directory.
 The helper compiles complete authored documents twice, so the counter case

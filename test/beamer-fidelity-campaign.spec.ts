@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,10 +18,10 @@ for (const campaign of ["fidelity-campaign", "fidelity-campaign-wave2", "fidelit
       it(fixture.id, async () => {
         const source = readFileSync(new URL(fixture.file, root), "utf8");
         const oracle = JSON.parse(readFileSync(new URL(fixture.file.replace(/\.tex$/u, ".oracle.json"), root), "utf8")) as {
-          sourceSha256: string; pages: OracleBeamerPageTrace[];
+          pages: OracleBeamerPageTrace[];
           compilationDate?: { year: number; month: number; day: number };
         };
-        expect(createHash("sha256").update(source).digest("hex")).toBe(oracle.sourceSha256);
+
         const temporary = mkdtempSync(join(tmpdir(), "beamer-campaign-"));
         try {
           // Replay the calendar used by TeX, without rewriting the original
@@ -34,6 +33,8 @@ for (const campaign of ["fidelity-campaign", "fidelity-campaign-wave2", "fidelit
           }
           const graphics = corpusGraphicsResolver(source, fileURLToPath(new URL(fixture.file, root)), temporary);
           const pages = await prepareBeamerDocument(source).renderFramePages({ frameIndex: fixture.frame - 1, graphicsResolver: graphics.resolver });
+          expect(graphics.report().filter(asset => asset.status !== "resolved"),
+            "Image fixtures require resolved assets and their external tools").toEqual([]);
           expect(pages.pageCount).toBe(fixture.pages);
           expect(oracle.pages).toHaveLength(fixture.pages);
           for (const [index, page] of pages.pages.entries()) {

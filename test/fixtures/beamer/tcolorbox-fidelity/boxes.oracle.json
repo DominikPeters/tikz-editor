@@ -1,6 +1,5 @@
 {
   "formatVersion": 1,
-  "sourceSha256": "57932cefa03d56fe650e0a34b89cd00fc0ca3202eeefca47984f74280b3422b7",
   "environment": {
     "engine": "This is LuaHBTeX, Version 1.21.0 (TeX Live 2025)",
     "beamerClass": {

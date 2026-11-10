@@ -1,7 +1,5 @@
 # Table baseline and inherited list-context regressions
 
-All six cases pass strict live LuaLaTeX checks in `artifacts/beamer-fuzz/v22-live`.
-
 Table row struts use the active font's baseline register, including implicit
 list body fonts and explicit fontsize/baseline selections. A paragraph's initial
 baseline enters inline font state, so later declarations still take effect at

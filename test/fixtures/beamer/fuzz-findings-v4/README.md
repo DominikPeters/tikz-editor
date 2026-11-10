@@ -14,7 +14,7 @@ and now participate in the passing frozen-oracle collection.
 
 These are hand-reduced reproductions, not claims of global minimality. Both
 compile with LuaLaTeX, preserve visible text witnesses and originally failed the
-strict glyph/layout contract. Source hashes are recorded in `cases.json`.
+strict glyph/layout contract.
 
 ```sh
 node scripts/compare-beamer-priorities.mjs \
@@ -24,8 +24,7 @@ node scripts/compare-beamer-priorities.mjs \
 
 Both reduced sources now pass. Complex
 cases can have several simultaneous failures; a failing frame is not counted
-as a distinct bug. Those broader generated cases were subsequently repaired and all 61 original
-frames now pass live checks; see `design/beamer-failure-status.md`.
+as a distinct bug.
 
 Macro redefinitions also exposed an oracle bug, fixed separately: isolating a
 later frame previously omitted preceding body declarations. The oracle now

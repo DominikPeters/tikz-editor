@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -23,5 +22,5 @@ for (let frameIndex = 0; frameIndex < 5; frameIndex++) {
   pages.push({ frameIndex, trace: { ...trace, boxes: [] } });
 }
 writeFileSync(path.join(directory, "boxes.oracle.json"), JSON.stringify({
-  formatVersion: 1, sourceSha256: createHash("sha256").update(readFileSync(input)).digest("hex"), environment, pages,
+  formatVersion: 1, environment, pages,
 }, null, 2) + "\n");

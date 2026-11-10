@@ -775,25 +775,11 @@ Nightly and soak jobs save and minimize new mismatches. They should make the
 diagnostic job red or “needs triage,” but do not automatically block every
 unrelated pull request.
 
-### Known differential findings
+### Regression cases
 
-Known findings have a checked-in fingerprint, reason, owner/status, and scope.
-The system must fail when:
-
-- the fingerprint changes unexpectedly;
-- occurrence count or affected feature coverage expands;
-- a finding marked fixed reappears;
-- an allowlist entry lacks a reason or expires.
-
-Allowlist growth must be an explicit reviewed change, never an automatic
-“update snapshots” operation.
-
-Legitimate renderer or oracle changes may move many findings at once. Provide
-a sanctioned re-baselining command that runs both revisions in the pinned
-oracle environment, produces an old-to-new fingerprint mapping, separates
-resolved/new/split/merged findings, and requires reviewed justification before
-writing the baseline. Expected movement is reviewed evidence, not a storm of
-independent unexplained failures.
+Turn fixed findings into regression tests. Keep runnable examples beside the
+fixtures and put generated reports in `artifacts/`. Changes to reference output
+should explain the behavior change and include a comparison against TeX.
 
 ## Execution Tiers
 
@@ -1119,7 +1105,6 @@ project.
   canaries and failure bisection.
 - The visual runner produces its PDF and Lua node trace in one compilation and
   escalates only sampled/interesting cases to SVG and raster layers.
-- Re-baselining produces a reviewed old-to-new fingerprint map.
 
 ### Milestone 4: operational maturity
 

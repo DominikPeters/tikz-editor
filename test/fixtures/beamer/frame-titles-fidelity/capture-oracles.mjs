@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,19 +14,15 @@ const cases = [
   ["text-explicit-empty-title", "text-empty-frame-title.tex", 0, 1],
   ["text-absent-title-control", "text-empty-frame-title.tex", 1, 1],
 ];
-const sourceFiles = {};
 const pages = [];
 let environment;
 for (const [id, file, frameIndex, pageCount] of cases) {
-  const source = readFileSync(path.resolve(directory, "../corpus-followups", file), "utf8");
-  sourceFiles[file] = createHash("sha256").update(source).digest("hex");
   for (let step = 1; step <= pageCount; step++) {
     const caseDirectory = path.join(artifacts, `${id}-state-${step}`);
     const oracle = JSON.parse(readFileSync(path.join(caseDirectory, "oracle/frame/report.json"), "utf8"));
     if (oracle.environment.engine !== "lualatex" || oracle.pdf.pageCount !== pageCount) {
       throw new Error(`Invalid LuaLaTeX page correspondence for ${id} state ${step}`);
     }
-    if (oracle.input.sha256 !== sourceFiles[file]) throw new Error(`Source hash changed for ${id}`);
     environment ??= { engine: oracle.environment.engineBanner, beamerClass: oracle.environment.beamerClass };
     const trace = JSON.parse(readFileSync(path.join(caseDirectory, "oracle-page-trace.json"), "utf8"));
     // Box ancestry is not part of the glyph/rule comparator. Retain every
@@ -37,6 +32,6 @@ for (const [id, file, frameIndex, pageCount] of cases) {
   }
 }
 writeFileSync(path.join(directory, "titles.oracle.json"), JSON.stringify({
-  formatVersion: 1, environment, sourceFiles, pages,
+  formatVersion: 1, environment, pages,
 }, null, 2) + "\n");
 console.log(`Captured ${pages.length} LuaLaTeX title pages.`);

@@ -13,8 +13,7 @@
         "Inside",
         "After"
       ],
-      "family": "block-inside-list",
-      "sourceSha256": "4e0530b8d7f9dc8c0cc5dafa8bde385ada1c6c7635ca04700369e2f79e5cfaec"
+      "family": "block-inside-list"
     },
     {
       "id": "grouped-columns",
@@ -25,8 +24,7 @@
         "Left",
         "Right"
       ],
-      "family": "grouped-columns",
-      "sourceSha256": "0393b379baf83af3abd5805a9b3dce9cb80682861a2dfbd68ee70712e3d526bb"
+      "family": "grouped-columns"
     },
     {
       "id": "columns-in-subtitle",
@@ -37,8 +35,7 @@
         "Left",
         "Right"
       ],
-      "family": "columns-in-subtitle",
-      "sourceSha256": "822807591e333fbb3819dd71a79126168e16cba12004703c0c9a632a8d096a82"
+      "family": "columns-in-subtitle"
     }
   ],
   "recognition": []

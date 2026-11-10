@@ -1,10 +1,7 @@
 # Fidelity findings from editing sequences
 
-These findings are **fixed as of 2026-11-07** under the original strict
-comparison gates. Their independent TeX traces now participate in the passing
-frozen-oracle campaign. Each source was compiled
-independently with LuaLaTeX; the minimized sources were verified again after
-reduction. SHA-256 hashes and reduction budgets are recorded in `cases.json`.
+Regression cases for inline picture flow and title-page spacing. Their
+reference traces were compiled independently with LuaLaTeX.
 
 - `inline-picture-after-text`: a top-level ordinary picture sharing a paragraph
   with preceding text is extracted into separate vertical flow. The generated
@@ -31,9 +28,7 @@ node scripts/compare-beamer-priorities.mjs \
 
 All four sources now pass. The picture fix retains shared paragraph ownership;
 the title-page fix carries the preceding depth through the opening empty box.
-The reduced title-page source now pins the compilation calendar so replay does
-not change at midnight. Its original reduction hash remains in `cases.json`;
-the original 214-byte reduction size below predates that calendar pin.
+The title-page example sets a fixed date so its output is stable across runs.
 To continue reducing the inline example:
 
 ```sh

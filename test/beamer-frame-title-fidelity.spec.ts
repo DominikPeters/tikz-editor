@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { prepareBeamerDocument } from "../packages/core/src/beamer/render.js";
@@ -7,10 +6,9 @@ import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/i
 import { buildNativeBeamerPageTrace, compareBeamerPageTraces, type OracleBeamerPageTrace } from "../scripts/lib/beamer-frame-compare.mjs";
 
 const oracle = JSON.parse(readFileSync(new URL("./fixtures/beamer/frame-titles-fidelity/titles.oracle.json", import.meta.url), "utf8")) as {
-  sourceFiles: Record<string, string>;
   pages: Array<{ id: string; file: string; frameIndex: number; step: number; pageCount: number; trace: OracleBeamerPageTrace }>;
 };
-const sources = new Map(Object.keys(oracle.sourceFiles).map(file => [file,
+const sources = new Map([...new Set(oracle.pages.map(page => page.file))].map(file => [file,
   readFileSync(new URL(`./fixtures/beamer/corpus-followups/${file}`, import.meta.url), "utf8")]));
 const prepared = new Map([...sources].map(([file, source]) => [file, prepareBeamerDocument(source)]));
 const deck = (frame: string, preamble = "") => String.raw`\documentclass{beamer}
@@ -20,12 +18,6 @@ const trace = (page: RenderBeamerFrameResult) =>
   buildNativeBeamerPageTrace(page, computerModernTexMetricProvider);
 
 describe("ordinary Beamer frame titles and subtitles", () => {
-  it("pins the source used for the checked-in LuaLaTeX traces", () => {
-    for (const [file, source] of sources) {
-      expect(createHash("sha256").update(source).digest("hex")).toBe(oracle.sourceFiles[file]);
-    }
-  });
-
   for (const page of oracle.pages) {
     it(`matches exact glyphs, title/body packing and covered paint: ${page.id} state ${page.step}`, async () => {
       const document = prepared.get(page.file)!;

@@ -46,19 +46,25 @@ describe("coordinate-write checker", () => {
 describe("coordinate-write exceptions", () => {
   const violation = (overrides: Partial<CoordinateWriteViolation> = {}): CoordinateWriteViolation => ({
     rule: "F2", symbol: "legacyText", file: "packages/core/src/edit/example.ts", line: 10, column: 3,
-    declaration: "rewrite", hash: "aaaaaaaaaaaa", expression: "legacyText(text)", message: "", ...overrides
+    declaration: "rewrite", expression: "legacyText(text)", message: "", ...overrides
   });
 
-  it("matches by fingerprint, not by line", () => {
+  it("allows line moves and expression edits within the same scope", () => {
     const listed = exceptionEntries([violation()]);
-    expect(compareWithExceptions([violation({ line: 42, column: 7 })], listed)).toMatchObject({ unexpected: [], stale: [] });
+    expect(compareWithExceptions([violation({ line: 42, column: 7, expression: "legacyText(otherText)" })], listed))
+      .toMatchObject({ unexpected: [], stale: [] });
   });
 
-  it("reports a replaced violation as new, and the old entry as stale", () => {
+  it.each([
+    { rule: "F3" as const },
+    { file: "packages/core/src/edit/other.ts" },
+    { declaration: "otherRewrite" },
+    { symbol: "sourceSlice" }
+  ])("keeps an exception scoped to its rule, file, declaration and symbol: %j", (change) => {
     const listed = exceptionEntries([violation()]);
-    const { unexpected, stale } = compareWithExceptions([violation({ hash: "bbbbbbbbbbbb" })], listed);
+    const { unexpected, stale } = compareWithExceptions([violation(change)], listed);
     expect(unexpected).toHaveLength(1);
-    expect(stale).toMatchObject([{ hash: "aaaaaaaaaaaa", count: 1, found: 0 }]);
+    expect(stale).toMatchObject([{ count: 1, found: 0 }]);
   });
 
   it("counts repeated violations in one declaration", () => {

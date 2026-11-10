@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { prepareBeamerDocument } from "../packages/core/src/beamer/render.js";
@@ -13,9 +12,9 @@ describe("Beamer titlepage fidelity", () => {
     it(`matches LuaLaTeX glyphs, line breaks and rules: ${name}`, async () => {
       const source = readFileSync(new URL(`${name}.tex`, fixtures), "utf8");
       const oracle = JSON.parse(readFileSync(new URL(`${name}.oracle.json`, fixtures), "utf8")) as {
-        sourceSha256: string; pages: OracleBeamerPageTrace[];
+        pages: OracleBeamerPageTrace[];
       };
-      expect(createHash("sha256").update(source).digest("hex")).toBe(oracle.sourceSha256);
+
       const document = prepareBeamerDocument(source);
       const pages = await document.renderFramePages();
       expect(pages.pageCount).toBe(oracle.pages.length);

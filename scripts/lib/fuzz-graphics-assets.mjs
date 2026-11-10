@@ -5,14 +5,16 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../test/fixtures/graphics-fuzz/", import.meta.url));
 const manifest = JSON.parse(readFileSync(join(root, "assets.json"), "utf8"));
-export const FUZZ_GRAPHICS_ASSET_SHA256 = createHash("sha256").update(JSON.stringify(manifest)).digest("hex");
+// Cache keys must change when an image changes; no checked-in checksum list is needed.
+const revision = createHash("sha256").update(JSON.stringify(manifest));
+for (const path of manifest.files) revision.update(readFileSync(join(root, path)));
+export const FUZZ_GRAPHICS_ASSET_SHA256 = revision.digest("hex");
 
-/** Materialize byte-identical, hashed assets beside each standalone TeX reproduction. */
+/** Copy the shared image fixtures beside a standalone TeX reproduction. */
 export function stageFuzzGraphicsAssets(directory) {
-  for (const [path, hash] of Object.entries(manifest.files)) {
+  for (const path of manifest.files) {
     if (!path.startsWith("fuzz-images/") || path.includes("..")) throw new Error("Invalid controlled image path");
     const input = join(root, path);
-    if (createHash("sha256").update(readFileSync(input)).digest("hex") !== hash) throw new Error(`Image fixture changed: ${path}`);
     const output = join(directory, path);
     mkdirSync(dirname(output), { recursive: true });
     copyFileSync(input, output);

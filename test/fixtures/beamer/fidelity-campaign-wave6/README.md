@@ -18,7 +18,7 @@ Reproduce the live glyph, rule and paint comparison:
 node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/fidelity-campaign-wave6/cases.json --out-dir artifacts/beamer-fidelity-campaign/wave6
 ```
 
-Pin independent LuaLaTeX traces only after that entire run passes:
+Refresh the independent LuaLaTeX traces with:
 
 ```sh
 node scripts/update-beamer-campaign-oracles.mjs artifacts/beamer-fidelity-campaign/wave6 test/fixtures/beamer/fidelity-campaign-wave6/cases.json

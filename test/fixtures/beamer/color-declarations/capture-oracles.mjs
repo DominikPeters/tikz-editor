@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { runTexOracleDocument } from "../../../../scripts/lib/tex-oracle.mjs";
 
@@ -27,5 +26,5 @@ ${probes}
   return { id: testCase.id, colors };
 });
 writeFileSync(new URL("./colors.oracle.json", import.meta.url), JSON.stringify({
-  engine: "lualatex", environment, sourceSha256: createHash("sha256").update(readFileSync(casesPath)).digest("hex"), cases: pages,
+  engine: "lualatex", environment, cases: pages,
 }, null, 2) + "\n");

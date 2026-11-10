@@ -1,6 +1,6 @@
 # Broad Beamer fuzz v2: regressions
 
-These 15 sources were copied byte-for-byte from mismatches in the 1,024-case broad campaign. Their source hashes and generation provenance are recorded in `cases.json`. They cover rotated PGF bounds, nested flow ownership, column alignment, large class fonts, list labels and wrapping, scoped alignment, paragraph glue, and overlapping picture paint order. Each has a pinned, independently compiled LuaLaTeX trace used by the ordinary fidelity tests. The live runner also checks paint against the TeX PDF with strict gates.
+These 15 sources were copied byte-for-byte from mismatches in the 1,024-case broad campaign. They cover rotated PGF bounds, nested flow ownership, column alignment, large class fonts, list labels and wrapping, scoped alignment, paragraph glue, and overlapping picture paint order. Each has a saved, independently compiled LuaLaTeX trace used by the ordinary fidelity tests. The live runner also checks paint against the TeX PDF with strict gates.
 
 Replay them against live LuaLaTeX:
 
@@ -25,7 +25,7 @@ Use `--cases` with a case ID to replay one source. The runner exits nonzero on a
 - [top-column-itemize](top-column-itemize.tex): Leading lists set the correct top-column reference.
 - [top-column-enumerate-small](top-column-enumerate-small.tex) and [top-column-enumerate](top-column-enumerate.tex): Projected labels use the class font size and contribute their full height to line layout.
 - [leading-center-capital-t](leading-center-capital-t.tex): A leading alignment environment clears the capital-T column's initial skip.
-- [large-relative-overlay-glyph-edge](large-relative-overlay-glyph-edge.tex): Direct 1600px rasterization produced a one-pixel glyph-counter mismatch. Both the independent PDF and native SVG now use shared 2x supersampling and box downsampling to the requested 1600px output. All three original states pass the unchanged strict zero-interior-disagreement gate; the former 3200px fixture override is removed. Historical direct-raster evidence is retained in the failure ledger. Missing-fill, shifted-body, changed-corner and missing-paint-hole controls still fail.
+- [large-relative-overlay-glyph-edge](large-relative-overlay-glyph-edge.tex): Direct 1600px rasterization produced a one-pixel glyph-counter mismatch. Both the independent PDF and native SVG now use shared 2x supersampling and box downsampling to the requested 1600px output. All three original states pass the unchanged strict zero-interior-disagreement gate; the former 3200px fixture override is removed. Missing-fill, shifted-body, changed-corner and missing-paint-hole controls still fail.
 - [remembered-picture-paint-order](remembered-picture-paint-order.tex): Following text paints above an overlapping remembered picture.
 
 PGF picture bounds deliberately differ from tight ink bounds. The ellipse fix preserves the original transformed axes and PGF's cubic protocol, including its deferred first-control y assignment. Logging inside `pgf@protocolsizes` changes that assignment's timing, so the focused numeric regression uses dimensions collected only after the completed path.

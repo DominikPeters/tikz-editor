@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { beamerPageTraceLuaSource, beamerProbeInstrumentation, fileSha256, parseBeamerPageTraceTsv, parseBeamerProbeLog } from "./lib/beamer-frame-oracle.mjs";
+import { beamerPageTraceLuaSource, beamerProbeInstrumentation, parseBeamerPageTraceTsv, parseBeamerProbeLog } from "./lib/beamer-frame-oracle.mjs";
 import { normalizeOracleBeamerPageTrace } from "./lib/beamer-frame-compare.mjs";
 import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
@@ -24,7 +24,7 @@ for (const name of readdirSync(fixtures).filter(name => name.endsWith(".tex") &&
   const tex = parseBeamerProbeLog(readFileSync(join(directory, "probe.log"), "utf8"));
   const traces = parseBeamerPageTraceTsv(readFileSync(join(directory, "beamer-page-trace.tsv"), "utf8"));
   const pages = traces.pages.map((page, index) => normalizeOracleBeamerPageTrace(page, tex.pages[index]));
-  const snapshot = { sourceSha256: fileSha256(join(fixtures, name)), engine: "LuaLaTeX / TeX Live 2025", pages };
+  const snapshot = { engine: "lualatex", pages };
   writeFileSync(join(fixtures, name.replace(/\.tex$/u, ".oracle.json")), `${JSON.stringify(snapshot, null, 2)}\n`);
   console.log(`[titlepage-oracles] ${name}: ${pages.length} pages`);
 }

@@ -1,10 +1,7 @@
 {
-  "sourceSha256": "513ded70a0c3281547a41a2a41d86f28160942ceb4533c026fa952e9b1ddbf5f",
   "environment": {
     "engine": "lualatex",
     "engineBanner": "This is LuaHBTeX, Version 1.21.0 (TeX Live 2025)",
-    "beamerClassPath": "/usr/local/texlive/2025/texmf-dist/tex/latex/beamer/beamer.cls",
-    "beamerClassSha256": "189abaf8955b840a37cfad68cbe97a0bd8f022a46869ca32cf63b9bef2c9ee8f",
     "beamerClass": {
       "date": "2025/02/04",
       "version": "3.72",

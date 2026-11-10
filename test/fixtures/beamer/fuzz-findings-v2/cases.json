@@ -8,25 +8,6 @@
       "frame": 1,
       "family": "only-in-picture",
       "pages": 2,
-      "choices": {
-        "alignment": "raggedleft",
-        "spec": "1-",
-        "width": 1.35,
-        "height": 0.4,
-        "fontSize": 8,
-        "aspectRatio": 169,
-        "theme": "Boadilla",
-        "columnMode": "c",
-        "columnWidth": 0.56,
-        "shape": "ellipse",
-        "transform": "rotate=15",
-        "label": "Kappa",
-        "blockKind": "block",
-        "environment": "center",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -37,14 +18,7 @@
         }
       ],
       "oracleText": [],
-      "description": "Rotated curves have displaced paint footprints.",
-      "sourceSha256": "92cc371282621bb7e4797e5b19766caccf029167786e7154fe2e58a005649f8f",
-      "generatedFrom": {
-        "seed": 20261106,
-        "id": "v2-seed-20261106-0007-only-in-picture",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      "description": "Rotated curves have displaced paint footprints."
     },
     {
       "id": "leading-center-column",
@@ -52,25 +26,6 @@
       "frame": 1,
       "family": "column-picture",
       "pages": 1,
-      "choices": {
-        "alignment": "raggedright",
-        "spec": "4",
-        "width": 2.25,
-        "height": 0.7,
-        "fontSize": 8,
-        "aspectRatio": 169,
-        "theme": "Boadilla",
-        "columnMode": "t",
-        "columnWidth": 0.56,
-        "shape": "rectangle",
-        "transform": "scale=.8",
-        "label": "Alpha",
-        "blockKind": "alertblock",
-        "environment": "flushright",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -80,14 +35,7 @@
         }
       ],
       "oracleText": [],
-      "description": "A leading alignment environment in a top-aligned column shifts text and paint.",
-      "sourceSha256": "3d5ccc996b5c1e93ca6d43cd38eaef2cefc3c4f50221f5fb830f50a635944468",
-      "generatedFrom": {
-        "seed": 20261108,
-        "id": "v2-seed-20261108-0002-column-picture",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      "description": "A leading alignment environment in a top-aligned column shifts text and paint."
     },
     {
       "id": "large-titlepage-date",
@@ -95,37 +43,11 @@
       "frame": 1,
       "family": "default-date",
       "pages": 1,
-      "choices": {
-        "alignment": "raggedleft",
-        "spec": "1-",
-        "width": 0.4,
-        "height": 0.4,
-        "fontSize": 17,
-        "aspectRatio": 43,
-        "theme": "Madrid",
-        "columnMode": "c",
-        "columnWidth": 0.56,
-        "shape": "circle",
-        "transform": "rotate=-25",
-        "label": "Alpha",
-        "blockKind": "block",
-        "environment": "center",
-        "year": 2024,
-        "month": 6,
-        "day": 27
-      },
       "oracleText": [
         "June",
         "2024"
       ],
-      "description": "Title-page glyphs shift by about 5.56 pt at a 17-point class size.",
-      "sourceSha256": "322ffb5739fcf92535bad993c5464717b522f255a66f186ba3afb1d33c5936bd",
-      "generatedFrom": {
-        "seed": 20261109,
-        "id": "v2-seed-20261109-0011-default-date",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      "description": "Title-page glyphs shift by about 5.56 pt at a 17-point class size."
     },
     {
       "id": "picture-in-list",
@@ -133,25 +55,6 @@
       "frame": 1,
       "family": "picture-in-list",
       "pages": 1,
-      "choices": {
-        "alignment": "centering",
-        "spec": "1-",
-        "width": 1,
-        "height": 1,
-        "fontSize": 20,
-        "aspectRatio": 169,
-        "theme": "Madrid",
-        "columnMode": "t",
-        "columnWidth": 0.56,
-        "shape": "ellipse",
-        "transform": "scale=.8",
-        "label": "Beta;]",
-        "blockKind": "block",
-        "environment": "flushleft",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -164,14 +67,7 @@
         "Alpha",
         "Omega"
       ],
-      "description": "Text and rule coordinates shift by approximately 16.8 pt.",
-      "sourceSha256": "6017b7c0fcf7b42638414205a5c6519bbc6da5ffac6ba1f59b566a616b7bf911",
-      "generatedFrom": {
-        "seed": 20261106,
-        "id": "v2-seed-20261106-0024-picture-in-list",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      "description": "Text and rule coordinates shift by approximately 16.8 pt."
     },
     {
       "id": "consecutive-pictures",
@@ -179,25 +75,6 @@
       "frame": 1,
       "family": "multi-picture",
       "pages": 1,
-      "choices": {
-        "alignment": "centering",
-        "spec": "4-6",
-        "width": 0.65,
-        "height": 1.8,
-        "fontSize": 8,
-        "aspectRatio": 43,
-        "theme": "Madrid",
-        "columnMode": "t",
-        "columnWidth": 0.56,
-        "shape": "triangle",
-        "transform": "",
-        "label": "Alpha",
-        "blockKind": "block",
-        "environment": "flushleft",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -216,14 +93,7 @@
         "Alpha",
         "Omega"
       ],
-      "description": "A paragraph separator between pictures is diagnosed as unsupported and displaces content.",
-      "sourceSha256": "ee3726c0e7229ecc4215bb152615015d24e551236c63b4c8d6205150397da8aa",
-      "generatedFrom": {
-        "seed": 20261106,
-        "id": "v2-seed-20261106-0030-multi-picture",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      "description": "A paragraph separator between pictures is diagnosed as unsupported and displaces content."
     },
     {
       "id": "math-relation-spacing",
@@ -231,25 +101,6 @@
       "frame": 1,
       "family": "math-prose",
       "pages": 1,
-      "choices": {
-        "alignment": "raggedleft",
-        "spec": "1-",
-        "width": 0.65,
-        "height": 0.4,
-        "fontSize": 20,
-        "aspectRatio": 43,
-        "theme": "default",
-        "columnMode": "c",
-        "columnWidth": 0.4,
-        "shape": "ellipse",
-        "transform": "",
-        "label": "Beta;]",
-        "blockKind": "exampleblock",
-        "environment": "center",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -262,14 +113,7 @@
         "Alpha",
         "Omega"
       ],
-      "description": "The 20-point math/prose case has glyph x differences up to 41.05 pt.",
-      "sourceSha256": "94186dcef824e8f516d20203b7b8c72b8a2d4032feb6fbe63d3acfa72339ffeb",
-      "generatedFrom": {
-        "seed": 20261107,
-        "id": "v2-seed-20261107-0054-math-prose",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      "description": "The 20-point math/prose case has glyph x differences up to 41.05 pt."
     },
     {
       "id": "scoped-alignment",
@@ -277,25 +121,6 @@
       "frame": 1,
       "family": "scoped-alignment",
       "pages": 1,
-      "choices": {
-        "alignment": "raggedleft",
-        "spec": "1-",
-        "width": 0.4,
-        "height": 1,
-        "fontSize": 9,
-        "aspectRatio": 43,
-        "theme": "Madrid",
-        "columnMode": "t",
-        "columnWidth": 0.4,
-        "shape": "circle",
-        "transform": "rotate=15",
-        "label": "Beta;]",
-        "blockKind": "exampleblock",
-        "environment": "flushleft",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -308,14 +133,7 @@
         "Alpha",
         "Omega"
       ],
-      "description": "Scoped alignment followed by a picture produces unmatched lines and displaced paint.",
-      "sourceSha256": "7bbadde645b203cd1609f873ec56d9812279f02dd5e16a5a6b8eefd92b5995d9",
-      "generatedFrom": {
-        "seed": 20261106,
-        "id": "v2-seed-20261106-0029-scoped-alignment",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      "description": "Scoped alignment followed by a picture produces unmatched lines and displaced paint."
     },
     {
       "id": "negative-rotation-overlay-flow",
@@ -323,25 +141,6 @@
       "frame": 1,
       "family": "overlay-union",
       "pages": 4,
-      "choices": {
-        "alignment": "centering",
-        "spec": "1-",
-        "width": 0.65,
-        "height": 0.7,
-        "fontSize": 17,
-        "aspectRatio": 169,
-        "theme": "Boadilla",
-        "columnMode": "c",
-        "columnWidth": 0.62,
-        "shape": "ellipse",
-        "transform": "rotate=-25",
-        "label": "Alpha",
-        "blockKind": "alertblock",
-        "environment": "flushleft",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -356,14 +155,7 @@
       "oracleText": [
         "Alpha",
         "Omega"
-      ],
-      "sourceSha256": "85f980b04214e1b3e92a4a0e85bb836877a780d647f524ab41df657cb8201337",
-      "generatedFrom": {
-        "seed": 20261106,
-        "id": "v2-seed-20261106-0101-overlay-union",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      ]
     },
     {
       "id": "large-list-picture-overflow",
@@ -371,25 +163,6 @@
       "frame": 1,
       "family": "list-builds",
       "pages": 3,
-      "choices": {
-        "alignment": "centering",
-        "spec": "1-",
-        "width": 2.25,
-        "height": 1.8,
-        "fontSize": 20,
-        "aspectRatio": 43,
-        "theme": "Madrid",
-        "columnMode": "b",
-        "columnWidth": 0.32,
-        "shape": "triangle",
-        "transform": "scale=1.15",
-        "label": "Beta;]",
-        "blockKind": "alertblock",
-        "environment": "flushright",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -403,14 +176,7 @@
       "oracleText": [
         "Alpha",
         "Omega"
-      ],
-      "sourceSha256": "2e1e94c0e62a028cd9dd946a33601cae992d1f9109c22a2a425234b5e942fa20",
-      "generatedFrom": {
-        "seed": 20261111,
-        "id": "v2-seed-20261111-0037-list-builds",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      ]
     },
     {
       "id": "top-column-itemize",
@@ -418,25 +184,6 @@
       "frame": 1,
       "family": "picture-in-list",
       "pages": 1,
-      "choices": {
-        "alignment": "centering",
-        "spec": "3-",
-        "width": 1,
-        "height": 1,
-        "fontSize": 10,
-        "aspectRatio": 169,
-        "theme": "Madrid",
-        "columnMode": "T",
-        "columnWidth": 0.4,
-        "shape": "circle",
-        "transform": "scale=1.15",
-        "label": "Beta;]",
-        "blockKind": "exampleblock",
-        "environment": "center",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -448,14 +195,7 @@
       "oracleText": [
         "Alpha",
         "Omega"
-      ],
-      "sourceSha256": "0f3bb518e6ad260b669e98d8277f8d4e3f4b49c9a0f8a0d9f636a287a386ee64",
-      "generatedFrom": {
-        "seed": 20261111,
-        "id": "v2-seed-20261111-0105-picture-in-list",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      ]
     },
     {
       "id": "top-column-enumerate-small",
@@ -463,25 +203,6 @@
       "frame": 1,
       "family": "list-builds",
       "pages": 3,
-      "choices": {
-        "alignment": "centering",
-        "spec": "1-",
-        "width": 0.4,
-        "height": 1,
-        "fontSize": 9,
-        "aspectRatio": 43,
-        "theme": "Madrid",
-        "columnMode": "T",
-        "columnWidth": 0.48,
-        "shape": "circle",
-        "transform": "",
-        "label": "Beta;]",
-        "blockKind": "alertblock",
-        "environment": "center",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -495,14 +216,7 @@
       "oracleText": [
         "Alpha",
         "Omega"
-      ],
-      "sourceSha256": "e661f3e5969b90a6cfbcda81354675592b514cd443eff39ad01b26bdabe702a7",
-      "generatedFrom": {
-        "seed": 20261111,
-        "id": "v2-seed-20261111-0116-list-builds",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      ]
     },
     {
       "id": "top-column-enumerate",
@@ -510,25 +224,6 @@
       "frame": 1,
       "family": "list-builds",
       "pages": 3,
-      "choices": {
-        "alignment": "raggedleft",
-        "spec": "3-",
-        "width": 0.4,
-        "height": 0.4,
-        "fontSize": 11,
-        "aspectRatio": 43,
-        "theme": "default",
-        "columnMode": "T",
-        "columnWidth": 0.32,
-        "shape": "ellipse",
-        "transform": "scale=1.15",
-        "label": "A",
-        "blockKind": "alertblock",
-        "environment": "center",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -542,14 +237,7 @@
       "oracleText": [
         "Alpha",
         "Omega"
-      ],
-      "sourceSha256": "7e85c66c496c8213cbf443eb098dde3e9167539006fbb32c4d7fbb2785b5142a",
-      "generatedFrom": {
-        "seed": 20261112,
-        "id": "v2-seed-20261112-0091-list-builds",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      ]
     },
     {
       "id": "leading-center-capital-t",
@@ -557,25 +245,6 @@
       "frame": 1,
       "family": "mixed-center",
       "pages": 1,
-      "choices": {
-        "alignment": "raggedleft",
-        "spec": "4-",
-        "width": 1,
-        "height": 1.4,
-        "fontSize": 9,
-        "aspectRatio": 43,
-        "theme": "Boadilla",
-        "columnMode": "T",
-        "columnWidth": 0.62,
-        "shape": "circle",
-        "transform": "rotate=15",
-        "label": "Alpha",
-        "blockKind": "exampleblock",
-        "environment": "center",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -587,14 +256,7 @@
       "oracleText": [
         "Alpha",
         "Omega"
-      ],
-      "sourceSha256": "f7857eb168ecca41e3931cc3abf7bc0505b89e03fa36f3b967d18bed9d732d58",
-      "generatedFrom": {
-        "seed": 20261110,
-        "id": "v2-seed-20261110-0003-mixed-center",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      ]
     },
     {
       "id": "remembered-picture-paint-order",
@@ -602,25 +264,6 @@
       "frame": 1,
       "family": "remembered-overlays",
       "pages": 5,
-      "choices": {
-        "alignment": "raggedleft",
-        "spec": "3-4",
-        "width": 1.8,
-        "height": 1.4,
-        "fontSize": 12,
-        "aspectRatio": 169,
-        "theme": "Madrid",
-        "columnMode": "c",
-        "columnWidth": 0.62,
-        "shape": "ellipse",
-        "transform": "",
-        "label": "Beta;]",
-        "blockKind": "alertblock",
-        "environment": "flushleft",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -637,14 +280,7 @@
         "Alpha",
         "Omega"
       ],
-      "description": "Following text must paint above an overlapping remembered picture.",
-      "sourceSha256": "a269f9dfef7fbb2c3028273227eea7e83aab3dcd1b6336da5b6de21375e63255",
-      "generatedFrom": {
-        "seed": 20261106,
-        "id": "v2-seed-20261106-0039-remembered-overlays",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      "description": "Following text must paint above an overlapping remembered picture."
     },
     {
       "id": "large-relative-overlay-glyph-edge",
@@ -652,25 +288,6 @@
       "frame": 1,
       "family": "relative-overlays",
       "pages": 3,
-      "choices": {
-        "alignment": "centering",
-        "spec": "2-4",
-        "width": 1.8,
-        "height": 1.4,
-        "fontSize": 17,
-        "aspectRatio": 43,
-        "theme": "Boadilla",
-        "columnMode": "T",
-        "columnWidth": 0.48,
-        "shape": "rectangle",
-        "transform": "rotate=15",
-        "label": "Beta;]",
-        "blockKind": "block",
-        "environment": "flushleft",
-        "year": 2026,
-        "month": 11,
-        "day": 5
-      },
       "paintColors": [
         {
           "color": "#ff00ff",
@@ -692,14 +309,7 @@
       "oracleText": [
         "Beta;]"
       ],
-      "description": "Original 1600px glyph-counter regression; native SVG and independent PDF use shared 2x supersampling before the unchanged strict paint-mask comparison.",
-      "sourceSha256": "4d16c6eb97987dfb81cf8e0138f4da2e550e05ab05c72fbae678b0da9b8e9183",
-      "generatedFrom": {
-        "seed": 20261107,
-        "id": "v2-seed-20261107-0047-relative-overlays",
-        "generatorVersion": 2,
-        "generatorSha256": "4df4bd516301d17b1fa2658c501a9c450af186ac61cf31b3ea156e2d1bf12cef"
-      }
+      "description": "Original 1600px glyph-counter regression; native SVG and independent PDF use shared 2x supersampling before the unchanged strict paint-mask comparison."
     }
   ],
   "recognition": []

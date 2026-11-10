@@ -8,13 +8,6 @@
       "description": "A class for typesetting presentations"
     }
   },
-  "sourceFiles": {
-    "tables-columns.tex": "894a18d19a2e726feca72eb30b9d76b72c18f49c2f7ec46e90852114e4824f4b",
-    "text-bold-math.tex": "c60714e4ffa0680c00587c65cc13b94c678a1835014c6d4c3ed53e9a84bc90d2",
-    "root-font-14pt.tex": "9626bb88cdc25acf6ba6e3f01ec291b2619c54dbad68aaa1a9fe606289105d4b",
-    "root-font-11pt-control.tex": "aa217a9e56637e14fe6ad4887f1e4053e386fbff6c7f2615adb9e59d4fb8fdcc",
-    "flow-package-boxes.tex": "f8fc6a8ce007bf58159b2614b1ff488d7c99b60913561cad49c3b4c51436d388"
-  },
   "pages": [
     {
       "id": "tables-command-columns-totalwidth",

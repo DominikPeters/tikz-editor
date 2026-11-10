@@ -1,8 +1,6 @@
 # Structural Beamer boxes inside native text containers
 
-All three sources pass strict live LuaLaTeX structural and paint comparisons
-(`artifacts/beamer-fuzz/v7-recursive-final`, 2026-11-07) and are included in the
-frozen fidelity campaign. No tolerances or expectations were relaxed.
+No tolerances or expectations were relaxed.
 
 - `block-inside-list.tex`: a block inside an item retains its title/body flow
   instead of printing environment syntax.
@@ -15,7 +13,6 @@ frozen fidelity campaign. No tolerances or expectations were relaxed.
   source as body nesting was incorrect.
 
 Passing these reductions does not establish that arbitrary compositions work.
-Outstanding generated frames are tracked in `design/beamer-failure-ledger.json`.
 
 ```sh
 node scripts/compare-beamer-priorities.mjs \

@@ -1,21 +1,6 @@
 {
   "formatVersion": 1,
   "generatorVersion": 4,
-  "generatorSha256": "45e044433afcf796d8c8e152c2419747686fe4aa6c550c851b8aa7b56aeaba4f",
-  "graphicsAssets": {
-    "sha256": "a4c633eb148add5759b4fce53274f9a6901ad01a4626f9dd76298c515e2d18da",
-    "files": {
-      "fuzz-images/nested/pattern.pdf": "247604c6a975c26abe0c95bb02e362cc5a231458f77ec5343f140f6f28e323fb",
-      "fuzz-images/page-1.png": "bbbf4b9419c77af72f75a12bbf539c92c5cd7a018151b437b467da5249fa7f34",
-      "fuzz-images/page-2.png": "9643adfba81c4ee874bc01503c0b616e8a033a249955b651f540bdff16f5bf7e",
-      "fuzz-images/pages.pdf": "247604c6a975c26abe0c95bb02e362cc5a231458f77ec5343f140f6f28e323fb",
-      "fuzz-images/pattern.png": "3b50aa9b6a29955b6e9c7560964dd9b9869c311a2203c5ab0f153163524a2d1e",
-      "fuzz-images/pattern.v2.png": "3b50aa9b6a29955b6e9c7560964dd9b9869c311a2203c5ab0f153163524a2d1e",
-      "fuzz-images/photo.jpg": "c1545d354166bae121ead92fa402a63cc7583e54d7388c5414e39aad83e64e06",
-      "fuzz-images/page-1-144dpi.png": "04927af6505e372def1402e94b47e37a2cc7cca96e73cc9dd82db1e8137d444e",
-      "fuzz-images/page-2-144dpi.png": "ea265710092bb828d200802e74ecdd02c266ef46efc81f16221693f11747a8d0"
-    }
-  },
   "coverage": {
     "cases": 8,
     "frames": 8,

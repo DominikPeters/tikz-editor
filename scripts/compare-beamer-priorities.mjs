@@ -5,7 +5,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { compareBeamerFrame, loadCoreRenderer, rasterizePdfPage, rasterizeSvg } from "./compare-beamer-frame.mjs";
 import { buildNativeBeamerPageTrace } from "./lib/beamer-frame-compare.mjs";
-import { corpusGraphicsResolver, sha256 } from "./lib/beamer-corpus.mjs";
+import { corpusGraphicsResolver } from "./lib/beamer-corpus.mjs";
 import { priorityManifestFailures, priorityFidelityFailures, priorityOracleFailures, unsupportedCodeFailures } from "./lib/beamer-priority-contracts.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -122,7 +122,7 @@ async function main(argv) {
   mkdirSync(options.outDir, { recursive: true });
   const documents = new Map();
   const results = [];
-  const report = { formatVersion: 1, generatedAt: new Date().toISOString(), status: "running", title: manifest.title ?? "Beamer priority reproductions", options, manifestSha256: sha256(readFileSync(options.manifest)), passed: 0, failed: 0, results };
+  const report = { formatVersion: 1, generatedAt: new Date().toISOString(), status: "running", title: manifest.title ?? "Beamer priority reproductions", options, passed: 0, failed: 0, results };
   const checkpoint = () => {
     report.passed = results.filter(r => r.status === "passed").length;
     report.failed = results.length - report.passed;
@@ -145,7 +145,7 @@ async function main(argv) {
       documents.set(inputPath, { source, prepared: core.prepareBeamerDocument(source) });
     }
     const { source, prepared } = documents.get(inputPath);
-    const result = { id: fixture.id, kind, fixture, sourceSha256: sha256(source), status: "passed", failures: [], snapshots: [] };
+    const result = { id: fixture.id, kind, fixture, status: "passed", failures: [], snapshots: [] };
     try {
       if (kind === "recognition") {
         const directory = join(options.outDir, fixture.id);

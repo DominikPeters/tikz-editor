@@ -8,7 +8,6 @@
       "frame": 3,
       "pages": 1,
       "family": "inline-picture-flow",
-      "sourceSha256": "a6bdbc50184741a29871ef62a7e3476b5c7b7d88d6e59d542cd1a478a0752d58",
       "oracleText": [
         "EditNeighbor"
       ],
@@ -28,7 +27,6 @@
       "frame": 1,
       "pages": 1,
       "family": "inline-picture-flow",
-      "sourceSha256": "1ff3be4fbdc3b0187dc8dcc211d062d3f16197dbef7e043f4ff8f6e210b736de",
       "oracleText": [
         "EditNeighbor"
       ],
@@ -55,7 +53,6 @@
       "frame": 1,
       "pages": 1,
       "family": "titlepage-flow",
-      "sourceSha256": "4da881a80134fd052bc49d586ac571071dadf1afb946fe1da6e1ce529d7835c5",
       "oracleText": [
         "Probe"
       ],
@@ -67,7 +64,6 @@
       "frame": 1,
       "pages": 1,
       "family": "titlepage-flow",
-      "sourceSha256": "696d23d94b6392d3d57f70c70d1e0bc09b9f7eb9b396db9757c4cf6f6bef0d99",
       "oracleText": [
         "Probe"
       ],
@@ -78,8 +74,7 @@
         "accepted": 11,
         "budgetExhausted": false,
         "verifiedTrial": "trial-0020"
-      },
-      "originalReducedSourceSha256": "3f19b3936b7f896f29959db57e836917d5083b10448ad182f6da6d3e1bf01209"
+      }
     }
   ],
   "recognition": []

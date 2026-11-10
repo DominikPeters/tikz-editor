@@ -1,7 +1,5 @@
 {
-  "sourceSha256": "3c5f9b93a37e95b54a1d70d4c97609c7922f10c4e4c517c980452a22cfc4438c",
   "engine": "LuaLaTeX / TeX Live 2025",
-  "provenance": "compare-beamer-priorities.mjs, valid content witnesses and matching page counts",
   "pages": [
     {
       "coordinateSystem": {

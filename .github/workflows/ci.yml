@@ -143,8 +143,24 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Install PDF tools used by corpus renderer tests
-        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: Install image and PDF tools used by corpus renderer tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick poppler-utils
+          if ! command -v magick >/dev/null; then
+            mkdir -p "$RUNNER_TEMP/test-bin"
+            cat > "$RUNNER_TEMP/test-bin/magick" <<'SH'
+          #!/bin/sh
+          if [ "$1" = compare ] || [ "$1" = identify ]; then
+            command="$1"
+            shift
+            exec "$command" "$@"
+          fi
+          exec convert "$@"
+          SH
+            chmod +x "$RUNNER_TEMP/test-bin/magick"
+            echo "$RUNNER_TEMP/test-bin" >> "$GITHUB_PATH"
+          fi
       - name: Build packages used by test subprocesses and workers
         run: npm run build:tex-fuzz
       - run: npm test -- --maxWorkers=2

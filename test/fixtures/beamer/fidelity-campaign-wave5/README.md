@@ -17,12 +17,11 @@ step and compares the entire colored footprint, including its position. Hidden
 steps must have no oracle paint. The structural-only mode deliberately cannot
 pass these paint contracts. Glyph and rule tolerances remain unchanged.
 
-Only after a complete passing live run, pin the independent LuaLaTeX traces:
+Refresh the independent LuaLaTeX traces with:
 
 ```sh
 node scripts/update-beamer-campaign-oracles.mjs artifacts/beamer-fidelity-campaign/wave5 test/fixtures/beamer/fidelity-campaign-wave5/cases.json
 ```
 
-The regular test suite checks these source hashes and offline glyph/rule traces,
-plus the generator's per-step paint-presence and diagnostic invariants. Full
+Full
 path paint is gated by the live comparison and scheduled Beamer fuzz job.

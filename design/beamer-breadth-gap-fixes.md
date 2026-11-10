@@ -69,18 +69,3 @@ latest result per deck, strict structural matches increased from **2 to 34**;
 none of the two prior matches regressed. Diagnostic-free pages increased from
 104 to 134. Empty diagnostics do not establish fidelity. Package input still
 produces unsupported or literal fallback output in the remaining decks.
-
-The [machine-readable result](beamer-fidelity-campaign-wave3-results.json)
-records source/report hashes, per-deck transitions and diagnostics. The
-[fresh paired gallery](../artifacts/beamer-breadth-decks/fixes/index.html)
-retains all failures; final [logic](../artifacts/beamer-breadth-decks/fixes-final-logic/index.html)
-and [ecology](../artifacts/beamer-breadth-decks/fixes-final-ecology/index.html)
-rechecks carry the counter-width correction. No failing whole-deck page became
-a golden. This recheck
-covers the 150 authored states. It does not re-evaluate the separate extra
-continuation, and the six generated section pages remain undiscovered.
-
-Final validation: 7,550 repository tests passed (20 skipped, one todo). After
-the final footer correction, 995 Beamer/capability tests passed (six skipped),
-including all 104 pinned campaign cases. Production lint, full typechecking
-and whitespace checks passed.

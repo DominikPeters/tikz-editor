@@ -11,8 +11,7 @@
         "Footeroverflowwitness.",
         "Incrementalanalysis:experimentsandbounds"
       ],
-      "family": "long-infolines-title",
-      "sourceSha256": "6138cdd58a2989a84efbc60e4ca95d81fd6eee0b815a18d61a7776c0c8690f86"
+      "family": "long-infolines-title"
     },
     {
       "id": "macro-across-flow",
@@ -24,8 +23,7 @@
         "Inside:8ticks.",
         "After:9ticks."
       ],
-      "family": "macro-across-flow",
-      "sourceSha256": "ff09651f5f7cd51be7554115d9e6cf04870ce9912c434907c2bc96f1959626a6"
+      "family": "macro-across-flow"
     },
     {
       "id": "macro-declaration-alias",
@@ -35,8 +33,7 @@
       "oracleText": [
         "Next:10s."
       ],
-      "family": "macro-declaration-alias",
-      "sourceSha256": "ca3f7380cb8b6fd22ed8887adfdc6cef014d2007977fe815778b1745f5922e19"
+      "family": "macro-declaration-alias"
     }
   ],
   "recognition": []

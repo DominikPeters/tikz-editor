@@ -1,8 +1,5 @@
 # Expanded list and picture regressions
 
-All 24 controls pass strict live LuaLaTeX structural and paint comparisons in
-`artifacts/beamer-fuzz/v10-live`. Pinned traces are source-hash checked.
-
 The controls cover blocks at the beginning of items and after prose, itemize,
 enumerate and description lists, rounded and default block templates, scoped
 small text and description margins, projected marker placement, and picture
@@ -14,6 +11,3 @@ shrinking geometry.
 The Bézier controls deliberately test PGF picture bounds, which include control
 points and can exceed the curve's ink bounds. This keeps the correct image
 layout separate from tight rendered-path bounds.
-
-All original compositions now pass live checks; their failure history remains
-in `design/beamer-failure-ledger.json`.

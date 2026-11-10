@@ -155,9 +155,8 @@ requirement is recognizing unsupported environments and preserving supported
 siblings, including inside blocks. Full code typesetting is a separate feature
 decision.
 
-The candidate list in [beamer-corpus-todos.json](beamer-corpus-todos.json) records
-21 tasks, priorities, standard/package provenance, source paths/frame numbers,
-observations, positive controls and unresolved causes. Defined interfaces of
+The examples in `test/fixtures/beamer/corpus-priorities/` and
+`test/fixtures/beamer/corpus-followups/` exercise these mechanisms. Defined interfaces of
 `amsmath`, `graphicx`/`booktabs`, algorithm packages, `pgfplots`,
 `tcolorbox` and `siunitx` merit coverage. An author-defined `wideitemize`,
 `myboxtitle`, `Procedure` or slide wrapper instead motivates generic expansion of
@@ -165,8 +164,7 @@ supported source definitions; those names should not become renderer features.
 
 `compare:beamer-priorities` runs 20 minimal fidelity frames through the existing
 exact glyph/font/geometry gates and six code-environment recognition frames
-through a separate source-preservation contract. Its manifest links reproductions
-to the candidate list. Count mismatches fail without asserting a correspondence
+through a separate source-preservation contract. Its manifest lists the regression cases. Count mismatches fail without asserting a correspondence
 between continuations and overlays; current failures are not accepted goldens.
 
 `scripts/shortlist-beamer-corpus.mjs` selects cases by repository/feature diversity
@@ -1021,7 +1019,7 @@ size, plus icon rectangles, against frozen LuaLaTeX shipout traces with a
 0.001pt tolerance. The fixtures cover stock templates, custom labels,
 wrapped small/footnotesize text, and bibliographies next to ordinary lists. Regenerate
 only from LuaLaTeX with `node scripts/update-beamer-bibliography-oracles.mjs`;
-the snapshots include engine versions and source hashes. The default icon
+the snapshots include engine versions. The default icon
 and colors have also been visually compared to the PDF. The 9pt Latin
 Modern sans faces are included so `\footnotesize` does not substitute a
 scaled 10pt face. Regenerate those faces with

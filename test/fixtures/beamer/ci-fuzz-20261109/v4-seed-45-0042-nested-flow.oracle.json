@@ -1,12 +1,10 @@
 {
-  "sourceSha256": "ea7692bfb3bd81e893b7ff93f7cc91a74c404dbddcae1f7ab2139968b70ada69",
   "engine": "This is LuaHBTeX, Version 1.24.0 (TeX Live 2026)",
   "compilationDate": {
     "year": 2026,
     "month": 11,
     "day": 5
   },
-  "provenance": "compare-beamer-priorities.mjs, valid content witnesses and matching page counts",
   "pages": [
     {
       "coordinateSystem": {

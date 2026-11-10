@@ -1,16 +1,16 @@
 {
   "version": 2,
-  "files": {
-    "fuzz-images/nested/pattern.pdf": "247604c6a975c26abe0c95bb02e362cc5a231458f77ec5343f140f6f28e323fb",
-    "fuzz-images/page-1.png": "bbbf4b9419c77af72f75a12bbf539c92c5cd7a018151b437b467da5249fa7f34",
-    "fuzz-images/page-2.png": "9643adfba81c4ee874bc01503c0b616e8a033a249955b651f540bdff16f5bf7e",
-    "fuzz-images/pages.pdf": "247604c6a975c26abe0c95bb02e362cc5a231458f77ec5343f140f6f28e323fb",
-    "fuzz-images/pattern.png": "3b50aa9b6a29955b6e9c7560964dd9b9869c311a2203c5ab0f153163524a2d1e",
-    "fuzz-images/pattern.v2.png": "3b50aa9b6a29955b6e9c7560964dd9b9869c311a2203c5ab0f153163524a2d1e",
-    "fuzz-images/photo.jpg": "c1545d354166bae121ead92fa402a63cc7583e54d7388c5414e39aad83e64e06",
-    "fuzz-images/page-1-144dpi.png": "04927af6505e372def1402e94b47e37a2cc7cca96e73cc9dd82db1e8137d444e",
-    "fuzz-images/page-2-144dpi.png": "ea265710092bb828d200802e74ecdd02c266ef46efc81f16221693f11747a8d0"
-  },
+  "files": [
+    "fuzz-images/nested/pattern.pdf",
+    "fuzz-images/page-1.png",
+    "fuzz-images/page-2.png",
+    "fuzz-images/pages.pdf",
+    "fuzz-images/pattern.png",
+    "fuzz-images/pattern.v2.png",
+    "fuzz-images/photo.jpg",
+    "fuzz-images/page-1-144dpi.png",
+    "fuzz-images/page-2-144dpi.png"
+  ],
   "images": [
     {
       "path": "fuzz-images/pattern.png",

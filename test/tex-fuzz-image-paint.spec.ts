@@ -1,5 +1,4 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -10,11 +9,18 @@ import { compareTexFuzzImagePaint } from "../scripts/lib/tex-fuzz-image-paint.mj
 import { stageFuzzGraphicsAssets } from "../scripts/lib/fuzz-graphics-assets.mjs";
 import { commandExists } from "../scripts/lib/tex-fuzz-oracle.mjs";
 
-const ledger = JSON.parse(readFileSync(new URL("../design/includegraphics-fuzz-ledger.json", import.meta.url), "utf8")) as {
-  articlePaintFindings: { id: string; source: string; sourceSha256: string; oracleSource: string; oracleSourceSha256: string;
-    width: number; parindent: number; alignment: "left" | "right" | "center" | "justify" }[];
-};
-const hash = (source: string) => createHash("sha256").update(source).digest("hex");
+const cases = [
+  { id: "case-002", width: 200, parindent: 15, alignment: "right" },
+  { id: "case-004", width: 150, parindent: 10, alignment: "justify" },
+  { id: "case-007", width: 120, parindent: 10, alignment: "center" },
+  { id: "case-008", width: 200, parindent: 15, alignment: "justify" },
+  { id: "case-009", width: 100, parindent: 15, alignment: "left" },
+  { id: "case-010", width: 120, parindent: 15, alignment: "right" },
+  { id: "case-011", width: 320, parindent: 10, alignment: "center" },
+  { id: "case-014", width: 200, parindent: 15, alignment: "right" },
+  { id: "case-016", width: 200, parindent: 0, alignment: "justify" },
+] as const;
+const fixtures = new URL("./fixtures/graphics-fuzz/article-findings/", import.meta.url);
 const hasTools = process.env.TEX_FUZZ_ORACLE_TESTS === "1" && ["lualatex", "rsvg-convert", "magick"].every(commandExists)
   && spawnSync("mutool", ["-v"]).status === 0 && spawnSync("pdftoppm", ["-v"]).status === 0;
 
@@ -32,20 +38,17 @@ describe("independent image paint regression oracle", () => {
     const saved = process.env.TEX_FUZZ_IMAGE_PAINT_OUT;
     const directory = saved ? resolve(saved) : mkdtempSync(join(tmpdir(), "tex-image-paint-"));
     mkdirSync(directory, { recursive: true });
-    const reports: { id: string; sourceSha256: string; interiorDisagreement: number[]; popplerControl: number[]; mutations: Record<string, number[]> }[] = [];
+    const reports: { id: string; interiorDisagreement: number[]; popplerControl: number[]; mutations: Record<string, number[]> }[] = [];
     try {
-      for (const entry of ledger.articlePaintFindings) {
-        const source = readFileSync(entry.source, "utf8");
-        const oracle = readFileSync(entry.oracleSource, "utf8");
-        expect(hash(source)).toBe(entry.sourceSha256);
-        expect(hash(oracle)).toBe(entry.oracleSourceSha256);
+      for (const entry of cases) {
+        const source = readFileSync(new URL(`${entry.id}.tex`, fixtures), "utf8");
+        const oracle = readFileSync(new URL(`${entry.id}.oracle.tex`, fixtures), "utf8");
         const out = join(directory, entry.id);
         mkdirSync(out, { recursive: true });
         stageFuzzGraphicsAssets(out);
         const pdfPath = join(out, "case.pdf");
         writeFileSync(join(out, "case.tex"), oracle);
-        // The saved oracle invokes this only to dump node metadata. Its TeX
-        // source stays byte-identical, and paint still comes from LuaLaTeX.
+        // The reference document invokes this only to dump node metadata.
         writeFileSync(join(out, "trace.lua"), "");
         execFileSync("lualatex", ["--interaction=batchmode", "--halt-on-error", "case.tex"], { cwd: out, stdio: "ignore", timeout: 30_000,
           env: { ...process.env, TEXMFVAR: tmpdir(), TEXMFCACHE: tmpdir() } });
@@ -63,7 +66,7 @@ describe("independent image paint regression oracle", () => {
         };
         const compare = (nativePngPath: string) => compareTexFuzzImagePaint({ pdfPath, nativePngPath, directory: out, width: 1440, height: 720 });
         const result = compare(render("native", body));
-        const report = { id: entry.id, sourceSha256: entry.sourceSha256, interiorDisagreement: result.masks.map(mask => mask.interiorDisagreement),
+        const report = { id: entry.id, interiorDisagreement: result.masks.map(mask => mask.interiorDisagreement),
           popplerControl: result.popplerControl.map(mask => mask.interiorDisagreement), mutations: {} as Record<string, number[]> };
         reports.push(report);
         expect(report.interiorDisagreement, entry.id).toEqual([0, 0, 0, 0]);

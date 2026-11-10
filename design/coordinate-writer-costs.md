@@ -1,8 +1,7 @@
 # Coordinate writer costs
 
-Measured 2026-10-22 on Apple M1 Pro, macOS arm64, Node v26.12.0. Raw
-measurements, all samples' summary statistics and GC calibration trials are
-in [coordinate-writer-costs.json](coordinate-writer-costs.json).
+Measured 2026-10-22 on Apple M1 Pro, macOS arm64, Node v26.12.0.
+The benchmark command below produces fresh measurements.
 
 ## Method
 

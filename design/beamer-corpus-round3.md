@@ -10,8 +10,6 @@ strict tolerances unchanged. This remains a selected reproduction suite.
 
 - [Minimal comparison gallery](../artifacts/beamer-followup-conformance/index.html)
 - [Corpus source and raster gallery](../artifacts/beamer-corpus-renderer/manual-review-round3/index.html)
-- [Structured findings, provenance and initial results](beamer-corpus-round3.json)
-- [Current fix validation](beamer-corpus-round3-fixes.json)
 - [Fixture manifest](../test/fixtures/beamer/corpus-followups/cases.json)
 
 Run all cases with `npm run compare:beamer-followups`, or select IDs with
@@ -104,12 +102,6 @@ flat-fill RGB tolerance remains 2. All fixture reference page counts and text
 witnesses validate. The harness's 22 focused tests, typecheck and production lint
 pass. Raster inspection remains necessary for paint beyond these contracts,
 particularly shrinking, clipping, opacity and transformed ink.
-
-Detailed evidence is split into [tables](beamer-corpus-round3-tables.json),
-[text/math](beamer-corpus-round3-text.json), [flow](beamer-corpus-round3-flow.json)
-and [font/background](beamer-corpus-round3-root.json) reports. Their result counts
-record the initial baseline, so later fixes should regenerate the gallery rather
-than treating those counts as permanent expected outcomes.
 
 
 ## Renderer fixes and regression coverage

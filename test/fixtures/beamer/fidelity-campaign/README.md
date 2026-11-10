@@ -37,10 +37,10 @@ unsupported-code recognition pass is a separate contract from visual fidelity.
 The campaign and current baseline are described in
 [`design/beamer-fidelity-campaign.md`](../../../../design/beamer-fidelity-campaign.md).
 
-The first wave now has 20 regression cases. Their `.oracle.json` files contain
-independent TeX traces, never accepted native output. After a complete passing
-live run, use `node scripts/update-beamer-campaign-oracles.mjs RUN_DIRECTORY` to
-refresh them; the script rejects stale source/manifest hashes or failed cases.
+The first wave has 20 regression cases. Their `.oracle.json` files contain
+independent TeX traces. Use
+`node scripts/update-beamer-campaign-oracles.mjs RUN_DIRECTORY` to refresh them
+from a comparison run.
 `test/beamer-fidelity-campaign.spec.ts` applies the same structural contract
 offline. Paint fidelity still requires the live raster probes and visual review.
 Fira's license is retained beside the generated font data.

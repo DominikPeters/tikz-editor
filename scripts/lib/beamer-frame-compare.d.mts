@@ -114,6 +114,7 @@ export interface BeamerStructuralComparison {
   readonly text: unknown;
 }
 
+export function beamerOracleRenderData(pages: readonly unknown[]): unknown;
 export function normalizeOracleBeamerPageTrace(
   pageTrace: unknown,
   pageGeometry: unknown

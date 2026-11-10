@@ -1,8 +1,5 @@
 # Deferred labels consumed inside structural minipages
 
-Eight cases and twelve states pass strict live LuaLaTeX structural and paint
-checks in `artifacts/beamer-fuzz/v17-live`. Source-hash-checked traces are pinned.
-
 A list/trivlist inside a block's minipage can consume the surrounding pending
 item label through LaTeX's global @inlabel/@labels state. A plain minipage
 paragraph does not. Leaving that label pending manufactured a label-only

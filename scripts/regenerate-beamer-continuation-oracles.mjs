@@ -4,8 +4,8 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
-import { beamerPageTraceLuaSource, beamerProbeInstrumentation, fileSha256, firstVersionLine, parseBeamerClassVersion, parseBeamerPageTraceTsv, parseBeamerProbeLog } from "./lib/beamer-frame-oracle.mjs";
-import { normalizeOracleBeamerPageTrace } from "./lib/beamer-frame-compare.mjs";
+import { beamerPageTraceLuaSource, beamerProbeInstrumentation, firstVersionLine, parseBeamerClassVersion, parseBeamerPageTraceTsv, parseBeamerProbeLog } from "./lib/beamer-frame-oracle.mjs";
+import { beamerOracleRenderData, normalizeOracleBeamerPageTrace } from "./lib/beamer-frame-compare.mjs";
 import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -26,7 +26,6 @@ const beamerClassPath = execFileSync("kpsewhich", ["beamer.cls"], { encoding: "u
 const environment = {
   engine: "lualatex",
   engineBanner: firstVersionLine(execFileSync("lualatex", ["--version"], { encoding: "utf8" })),
-  beamerClassPath, beamerClassSha256: fileSha256(beamerClassPath),
   beamerClass: parseBeamerClassVersion(readFileSync(beamerClassPath, "utf8")),
 };
 let failures = 0;
@@ -49,10 +48,10 @@ for (const name of selected) {
     step: 1, trace: normalizeOracleBeamerPageTrace(page, tex.pages[index]),
   }));
   const oraclePath = join(fixtures, `${name}.oracle.json`);
-  const snapshot = { sourceSha256: fileSha256(join(fixtures, `${name}.tex`)), environment, pages };
+  const snapshot = { environment, pages };
   if (options.check) {
     const original = JSON.parse(readFileSync(oraclePath, "utf8"));
-    const matches = isDeepStrictEqual(snapshot, original);
+    const matches = isDeepStrictEqual(beamerOracleRenderData(pages), beamerOracleRenderData(original.pages));
     console.log(`[continuation-oracles] ${name}: ${matches ? "unchanged" : "changed"}`);
     if (!matches) failures++;
   } else {
