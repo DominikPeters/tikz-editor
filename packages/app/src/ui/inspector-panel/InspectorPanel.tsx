@@ -1994,7 +1994,7 @@ export function InspectorPanel() {
                   <div className={css.globalNote}>{renderedDescriptor.infoNote}</div>
                 ) : null}
 
-                {imageSpan && imageElementId ? <ImageNodeSections elementId={imageElementId} span={imageSpan} source={inspectorSource} beginNumberLabelScrub={beginNumberLabelScrub} /> : null}
+                {imageSpan && imageElementId ? <ImageNodeSections elementId={imageElementId} span={imageSpan} source={inspectorSource} snapshot={snapshot} beginNumberLabelScrub={beginNumberLabelScrub} /> : null}
                 {imageNodeDescriptorSections(renderedDescriptor.sections, imageSpan != null).map((section) => (
                   <InspectorSingleSection
                     key={section.id}

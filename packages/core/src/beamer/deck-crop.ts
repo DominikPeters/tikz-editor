@@ -6,6 +6,8 @@ import { EXACT_TOLERANCE_PT, shortestDecimal } from "../edit/format.js";
 import { readOptionList, rewriteBeamerOptions, type OptionListLocation } from "./option-edits.js";
 import { beamerOptionalArgumentAfter, beamerOverlayArgumentAfter, createBeamerSyntaxContext } from "./syntax.js";
 import type { BeamerFrameLayout, BeamerRect } from "./types.js";
+import type { DocumentGraphicsAsset } from "../graphics/types.js";
+import type { SimpleTexGraphicsOptions } from "../text/tex/ir.js";
 
 /** Amounts cut from each side of the image's natural box, in TeX points. */
 export type BeamerImageCrop = { readonly left: number; readonly bottom: number; readonly right: number; readonly top: number };
@@ -13,9 +15,26 @@ export type BeamerImageCrop = { readonly left: number; readonly bottom: number; 
 /** A size value's number; an empty span before a bare register (`\\textwidth`) inserts one. */
 type SizeValue = { readonly axis: "x" | "y"; readonly span: Span; readonly factor: number };
 
+/**
+ * An image as drawn, wherever it is drawn: a slide's laid-out graphic or an
+ * image node in a TikZ figure. `bounds` is the kept part, in points with y
+ * pointing down, in whatever space the caller draws and drags in.
+ */
+export type ImageCropPlacement = {
+  readonly id: string;
+  /** The `\includegraphics` command. */
+  readonly sourceSpan: Span;
+  readonly bounds: BeamerRect;
+  readonly asset: DocumentGraphicsAsset;
+  readonly options: SimpleTexGraphicsOptions;
+};
+
 export type BeamerImageCropTarget = {
   readonly objectId: string;
   readonly sourceStart: number;
+  /** The command and its parsed options, for previewing the whole image. */
+  readonly sourceSpan: Span;
+  readonly options: SimpleTexGraphicsOptions;
   /** The drawn (kept) part of the image on the slide. */
   readonly bounds: BeamerRect;
   /** The whole image at its drawn scale, positioned behind `bounds`. */
@@ -66,7 +85,13 @@ function sizeValue(source: string, span: Span, axis: "x" | "y"): SizeValue | nul
  */
 export function beamerImageCropTarget(source: string, layout: BeamerFrameLayout, objectId: string): BeamerImageCropTarget | null {
   const graphic = layout.graphics.find((item) => item.itemId === objectId && item.visibility === "visible");
-  if (graphic?.asset.status !== "resolved" || graphic.bounds.width <= 0 || graphic.bounds.height <= 0) return null;
+  return graphic ? imageCropTarget(source, { id: graphic.itemId, sourceSpan: graphic.sourceSpan, bounds: graphic.bounds, asset: graphic.asset, options: graphic.options }) : null;
+}
+
+/** The crop state of a placed image, from the image alone: no slide layout needed. */
+export function imageCropTarget(source: string, graphic: ImageCropPlacement): BeamerImageCropTarget | null {
+  const objectId = graphic.id;
+  if (graphic.asset.status !== "resolved" || graphic.bounds.width <= 0 || graphic.bounds.height <= 0) return null;
   const options = graphic.options;
   if (options.draft || options.sizeKeys?.some((key) => key.key === "angle" || (key.key !== "scale" && key.value === null))) return null;
   // The two-bracket corner form has no key to rewrite.
@@ -123,6 +148,8 @@ export function beamerImageCropTarget(source: string, layout: BeamerFrameLayout,
   return {
     objectId,
     sourceStart: graphic.sourceSpan.from,
+    sourceSpan: graphic.sourceSpan,
+    options,
     bounds: graphic.bounds,
     imageBounds: {
       x: graphic.bounds.x - crop.left * scale.x,

@@ -70,6 +70,8 @@ import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/doc
 import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
 import { DeckResizeOverlay } from "./DeckResizeOverlay";
+import { TikzImageCropOverlay } from "./TikzImageCropOverlay";
+import { tikzCropMatches, useTikzCropStore } from "./tikz-image-crop";
 import { startDeckCrop } from "./deck-crop-store";
 import { CanvasPanelView } from "./CanvasPanelView";
 import { useDeckOverlayContextMenu } from "./useDeckOverlayContextMenu";
@@ -816,6 +818,9 @@ export const CanvasPanel = memo(function CanvasPanel({
   const topRulerRef = useRef<SVGSVGElement | null>(null);
   const leftRulerRef = useRef<SVGSVGElement | null>(null);
   const interactionSvgRef = useRef<SVGSVGElement | null>(null);
+  // In crop mode, the crop grips replace the image node's own resize and rotate handles.
+  const tikzCrop = useTikzCropStore((state) => state.crop);
+  const croppingElementId = tikzCropMatches(tikzCrop) ? tikzCrop.elementId : null;
   const dragRef = useRef<DragState | null>(null);
   const cancelCanvasGestureRef = useRef<(() => void) | null>(null);
   const suppressNextBackgroundClickRef = useRef(false);
@@ -3921,6 +3926,8 @@ export const CanvasPanel = memo(function CanvasPanel({
         deckResizeOverlay={<DeckResizeOverlay source={snapshot.source} layout={deckActiveFrame?.layout ?? null}
           index={deckObjectIndex} selected={deckSelectedObject} scale={canvasTransform.scale}
           svgRef={interactionSvgRef} closeText={closeTextEditingSession} />}
+        topOverlay={deckActiveFrame && !snapshot.overlayLayer ? null
+          : <TikzImageCropOverlay svgRef={interactionSvgRef} scale={canvasTransform.scale} viewBox={svgResult?.viewBox ?? null} />}
         deckBuildSelectionRects={deckBuildSelectionRects}
         adornmentHighlightBoxes={adornmentHighlightBoxes}
         selectedAdornmentConnectors={selectedAdornmentConnectors}
@@ -3936,7 +3943,8 @@ export const CanvasPanel = memo(function CanvasPanel({
         {...(pendingNodePositionTargetPick ? { onNodeAnchorHoverChange: setPendingNodePositionAnchorHoverSourceId } : {})}
         nodePositionTargetTooltip={nodePositionTargetTooltip}
         handleHalfSize={handleHalfSize}
-        handleDisplays={handleDisplays}
+        handleDisplays={croppingElementId == null ? handleDisplays
+          : handleDisplays.filter((display) => !("elementId" in display) || display.elementId !== croppingElementId)}
         onHandlePointerDown={onHandlePointerDown}
         onResizeHandlePointerDown={onResizeHandlePointerDown}
         onRotateHandlePointerDown={onRotateHandlePointerDown}

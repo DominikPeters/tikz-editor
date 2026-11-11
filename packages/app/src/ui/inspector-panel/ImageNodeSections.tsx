@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import {
+  beamerImageCropPatches,
   includegraphicsSections,
   setIncludegraphicsOption,
+  type BeamerImageCrop,
   type DeckInspectorCommand,
   type DeckInspectorField,
   type DeckInspectorWrite
@@ -10,6 +12,9 @@ import type { Span, Statement } from "@tikz-editor/core/ast/types";
 import { imageNodeCommandSpan } from "@tikz-editor/core/edit/graphics-node-size";
 import { useEditorStore } from "../../store/store";
 import { replaceTikzNodeGraphics } from "../deck-graphics-replacement";
+import type { SessionSnapshot } from "../../compute";
+import { patchedSource } from "../canvas-panel/usePatchDrag";
+import { startTikzCrop, stopTikzCrop, tikzCropMatches, tikzImageCropTarget, useTikzCropStore } from "../canvas-panel/tikz-image-crop";
 import { SidePanel } from "../SidePanel";
 import { DeckField } from "./deck-fields";
 import css from "./InspectorPanel.module.css";
@@ -46,13 +51,33 @@ export type BeginNumberLabelScrub = (event: ReactPointerEvent<HTMLElement>, bind
   onPreview: (value: number) => void; onCommit: (value: number) => void;
 }) => void;
 
-export function ImageNodeSections(props: { elementId: string; span: Span; source: string; beginNumberLabelScrub: BeginNumberLabelScrub }): JSX.Element | null {
-  const { elementId, span, source, beginNumberLabelScrub } = props;
+export function ImageNodeSections(props: { elementId: string; span: Span; source: string; snapshot: SessionSnapshot; beginNumberLabelScrub: BeginNumberLabelScrub }): JSX.Element | null {
+  const { elementId, span, source, snapshot, beginNumberLabelScrub } = props;
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
   const dispatch = useEditorStore((s) => s.dispatch);
+  const cropMode = useTikzCropStore((s) => s.crop);
+  const cropping = tikzCropMatches(cropMode) && cropMode.elementId === elementId;
   const [error, setError] = useState<string | null>(null);
   const replacing = useRef(false);
-  const sections = useMemo(() => includegraphicsSections(source, span, { lengthSuffix: { width: "cm", height: "cm" }, crop: false }), [source, span]);
+  // Crop needs only the target's crop and scale, so the snapshot's own view box will do.
+  const cropTarget = useMemo(() => snapshot.svg ? tikzImageCropTarget(source, snapshot, elementId, snapshot.svg.viewBox) : null, [source, snapshot, elementId]);
+  const sections = useMemo(() => includegraphicsSections(source, span, { lengthSuffix: { width: "cm", height: "cm" }, cropTarget }), [source, span, cropTarget]);
+
+  /** Patches that crop the image to `crop` against `base`, or null when that leaves nothing. */
+  const cropEdit = (base: string, crop: BeamerImageCrop) => {
+    if (!cropTarget) return null;
+    const kept = { width: cropTarget.natural.width - crop.left - crop.right, height: cropTarget.natural.height - crop.top - crop.bottom };
+    if (!(kept.width > 0) || !(kept.height > 0)) { setError("The crop leaves nothing of the image."); return null; }
+    return beamerImageCropPatches(base, cropTarget, crop);
+  };
+  const applyPatches = (base: string, patches: ReturnType<typeof beamerImageCropPatches> | null) => {
+    const live = useEditorStore.getState();
+    if (!patches || patches.length === 0 || live.source !== base) return;
+    setError(null);
+    dispatch({ type: "APPLY_SOURCE_PATCHES", documentId: activeDocumentId, baseRevision: live.sourceRevision, changedSourceIds: [elementId], patches });
+  };
+  const sideCrop = (side: keyof BeamerImageCrop, valuePt: number): BeamerImageCrop | null =>
+    cropTarget ? { ...cropTarget.crop, [side]: Math.max(0, valuePt) } : null;
 
   /** The edit against `base`, applied only while the document still is `base`. */
   const applyOption = (base: string, write: Extract<DeckInspectorWrite, { kind: "setGraphicsOption" | "setGraphicsFlag" }>, value: string | number | boolean | null): void => {
@@ -69,11 +94,30 @@ export function ImageNodeSections(props: { elementId: string; span: Span; source
 
   const commit = (write: DeckInspectorWrite, value: string | number | boolean | null): void => {
     if (write.kind === "setGraphicsOption" || write.kind === "setGraphicsFlag") applyOption(source, write, value);
+    if (write.kind === "setGraphicsCrop") {
+      const crop = sideCrop(write.side, typeof value === "number" ? value * write.unitPt : 0);
+      if (crop) applyPatches(source, cropEdit(source, crop));
+    }
   };
 
   /** Dragging a size label previews the image at each step and commits one undoable edit. */
   const beginScrub = (event: ReactPointerEvent<HTMLElement>, field: Extract<DeckInspectorField, { kind: "number" }>): void => {
     const write = field.write;
+    if (write?.kind === "setGraphicsCrop" && field.value != null) {
+      const base = source;
+      const patchesAt = (next: number) => { const crop = sideCrop(write.side, next * write.unitPt); return crop ? cropEdit(base, crop) : null; };
+      beginNumberLabelScrub(event, {
+        writable: true, value: field.value, step: field.step,
+        ...(field.min === undefined ? {} : { min: field.min }),
+        ...(field.max === undefined ? {} : { max: field.max }),
+        onPreview: (next) => {
+          const patches = patchesAt(next);
+          if (patches?.length) dispatch({ type: "SET_SOURCE_TRANSIENT", source: patchedSource(base, patches), changedSourceIds: [elementId] });
+        },
+        onCommit: (next) => { applyPatches(base, patchesAt(next)); }
+      });
+      return;
+    }
     if (write?.kind !== "setGraphicsOption" || field.value == null) return;
     const base = source;
     beginNumberLabelScrub(event, {
@@ -92,6 +136,15 @@ export function ImageNodeSections(props: { elementId: string; span: Span; source
   };
 
   const command = (next: DeckInspectorCommand): void => {
+    if (next.kind === "cropGraphics") {
+      if (cropping) stopTikzCrop();
+      else startTikzCrop(elementId);
+      return;
+    }
+    if (next.kind === "resetGraphicsCrop") {
+      applyPatches(source, cropEdit(source, { left: 0, bottom: 0, right: 0, top: 0 }));
+      return;
+    }
     if (next.kind !== "replaceGraphics" || replacing.current) return;
     replacing.current = true;
     setError(null);
@@ -105,10 +158,15 @@ export function ImageNodeSections(props: { elementId: string; span: Span; source
     <>
       {sections.map((section) => (
         <SidePanel.Section key={section.id} collapseId={`inspector:image-${section.id}`}>
-          {section.title ? <SidePanel.SectionHeader>{section.title}</SidePanel.SectionHeader> : null}
-          <SidePanel.SectionBody>
+          {section.title ? <SidePanel.SectionHeader accessory={section.action ? (
+            <button type="button" className={css.moreOptionsToggle} onClick={() => { if (section.action) command(section.action.command); }}>
+              {section.action.label}
+            </button>
+          ) : null}>{section.title}</SidePanel.SectionHeader> : null}
+          <SidePanel.SectionBody className={css.deckFields ?? ""}>
             {section.fields.map((field) => (
-              <DeckField key={field.id} field={field} onCommit={commit} onCommand={command} onBeginScrub={beginScrub} />
+              <DeckField key={field.id} field={field.id === "crop-image" && field.kind === "button" && cropping ? { ...field, label: "Done" } : field}
+                onCommit={commit} onCommand={command} onBeginScrub={beginScrub} />
             ))}
             {section.id === "image" && error ? <p className={css.deckReadOnlyReason}>{error}</p> : null}
           </SidePanel.SectionBody>
@@ -117,3 +175,4 @@ export function ImageNodeSections(props: { elementId: string; span: Span; source
     </>
   );
 }
+

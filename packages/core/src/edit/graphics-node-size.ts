@@ -1,4 +1,6 @@
 import type { NodeItem, Span, Statement } from "../ast/types.js";
+import type { SceneElement, SceneText } from "../semantic/types.js";
+import type { ImageCropPlacement } from "../beamer/deck-crop.js";
 import { applyFragments, plainNumber, sourceSlice, tikz, type EditedSource, type FragmentEdit, type TikzFragment } from "./fragment.js";
 import { shortestDecimal } from "./format.js";
 
@@ -125,4 +127,36 @@ function findNode(statements: readonly Statement[], id: string): NodeItem | null
     if (statement.id === id && statement.command === "node" && nodes.length === 1) return nodes[0] ?? null;
   }
   return null;
+}
+
+/**
+ * Where an image node's picture is drawn, for cropping it in place: the
+ * node's TeX text holds exactly that image, which fills the text block.
+ * `toDrawn` maps world points to the space the caller draws and drags in (the
+ * canvas's SVG coordinates, y down). Null for a rotated or transformed node,
+ * whose picture is not an axis-aligned rectangle there.
+ */
+export function imageNodeCropPlacement(
+  elements: readonly SceneElement[],
+  elementId: string,
+  commandSpan: Span,
+  toDrawn: (x: number, y: number) => { readonly x: number; readonly y: number }
+): ImageCropPlacement | null {
+  const text = elements.find((element): element is SceneText => element.kind === "Text" && element.sourceRef.sourceId === elementId);
+  if (!text || text.transform || Math.abs(text.rotation ?? 0) > 1e-9 || text.textRenderInfo?.mode !== "tex") return null;
+  const placements = text.textRenderInfo.graphicsPlacements ?? [];
+  const placement = placements.length === 1 ? placements[0] : undefined;
+  const width = text.textBlockWidth;
+  const height = text.textBlockHeight;
+  if (!placement || width === undefined || height === undefined) return null;
+  if (Math.abs(placement.bounds.width - width) > 0.05 || Math.abs(placement.bounds.height - height) > 0.05) return null;
+  const topLeft = toDrawn(text.position.x - width / 2, text.position.y + height / 2);
+  const bottomRight = toDrawn(text.position.x + width / 2, text.position.y - height / 2);
+  return {
+    id: elementId,
+    sourceSpan: commandSpan,
+    bounds: { x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y },
+    asset: placement.asset,
+    options: placement.options,
+  };
 }

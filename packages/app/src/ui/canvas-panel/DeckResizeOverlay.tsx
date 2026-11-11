@@ -87,7 +87,7 @@ export function DeckResizeOverlay({ source, layout, index, selected, scale, svgR
         <rect x={x - 14 / scale} y={end - 1.5 / scale} width={12 / scale} height={3 / scale} rx={1.5 / scale} className={css.deckSpacingGrip} />
       </g>;
     })}
-    {cropTarget ? <DeckCropOverlay layout={layout} target={cropTarget} scale={scale} begin={begin} onKeyDown={onKeyDown} /> : null}
+    {cropTarget ? <DeckCropOverlay target={cropTarget} scale={scale} begin={begin} onKeyDown={onKeyDown} /> : null}
     {image ? (["nw", "ne", "sw", "se"] as const).map((corner) => {
       const target: DeckResizeTarget = { kind: "image", image, corner };
       const x = image.bounds.x + (corner.endsWith("e") ? image.bounds.width : 0);

@@ -1,24 +1,18 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
-import { clientPoint, px } from "@tikz-editor/core/coords/index";
+import { useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { beamerColumnResizePatches, beamerImageCropDrag, beamerImageCropPatches, beamerImageResizePatches, beamerSpacingResizePatches, type BeamerSpacingTarget, type BeamerColumnDivider, type BeamerFrameLayout, type BeamerImageCropHandle, type BeamerImageCropTarget, type BeamerImageResizeTarget } from "@tikz-editor/core/beamer/index";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
-import { beginDocumentEdit, canContinueDocumentEdit, restoreDocumentEdit, trackDocumentEdit, type DocumentEditSession } from "../../edit-session";
+import { beginDocumentEdit, canContinueDocumentEdit } from "../../edit-session";
 import { useEditorStore } from "../../store/store";
 import { deckStepRootKey } from "../../root-key";
-import { clientToSvgPoint } from "./geometry";
+import { usePatchDrag, type PatchDragSession } from "./usePatchDrag";
 import { pointerTolerancePtForScale } from "../canvas-zoom";
 
 export type DeckResizeTarget = { kind: "columns"; divider: BeamerColumnDivider }
   | { kind: "spacing"; spacing: BeamerSpacingTarget }
   | { kind: "image"; image: BeamerImageResizeTarget; corner: "nw" | "ne" | "sw" | "se" }
   | { kind: "crop"; crop: BeamerImageCropTarget; handle: BeamerImageCropHandle };
-type Session = {
-  edit: DocumentEditSession;
-  step: number;
-  patches: SourcePatch[];
-  imageFrom?: number;
-  cleanup: () => void;
-};
+/** A slide drag: the handle, the overlay step it began on, and the image to reselect after reflow. */
+type DeckDrag = { target: DeckResizeTarget; step: number; imageFrom?: number };
 
 function patchesFor(source: string, target: DeckResizeTarget, dx: number, dy: number): SourcePatch[] {
   // Numbers are written as precisely as the pointer is at this zoom.
@@ -32,9 +26,6 @@ function patchesFor(source: string, target: DeckResizeTarget, dx: number, dy: nu
   const factor = 1 + (sx * dx * width + sy * dy * height) / (width * width + height * height);
   return beamerImageResizePatches(source, target.image, factor, tolerance);
 }
-function patchedSource(source: string, patches: SourcePatch[]): string {
-  return [...patches].reverse().reduce((text, patch) => text.slice(0, patch.oldSpan.from) + patch.replacement + text.slice(patch.oldSpan.to), source);
-}
 
 export function useDeckResize({ source, layout, svgRef, closeText }: {
   source: string;
@@ -42,57 +33,42 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
   svgRef: RefObject<SVGSVGElement | null>;
   closeText: () => void;
 }) {
-  const session = useRef<Session | null>(null);
   const pendingSelection = useRef<{ documentId: string; frameId: string; source: string; from: number } | null>(null);
-  const [dragging, setDragging] = useState<DeckResizeTarget | null>(null);
 
-  const valid = useCallback((current: Session) => {
+  const valid = useCallback((current: PatchDragSession<DeckDrag>) => {
     const state = useEditorStore.getState();
     return canContinueDocumentEdit(current.edit, state) &&
-      (state.deckStepByRootKey[deckStepRootKey(current.edit.documentId, current.edit.activeRootId)] ?? 1) === current.step &&
+      (state.deckStepByRootKey[deckStepRootKey(current.edit.documentId, current.edit.activeRootId)] ?? 1) === current.target.step &&
       !state.activeCanvasTextEditSourceId && !state.documents[current.edit.documentId]?.assistantLockReason;
   }, []);
-
-  const stop = useCallback((commit: boolean) => {
-    const current = session.current;
-    if (!current) return;
-    session.current = null;
-    current.cleanup();
-    const { dispatch } = useEditorStore.getState();
-    const canCommit = valid(current);
-    const restored = restoreDocumentEdit(current.edit, useEditorStore.getState, dispatch);
-    dispatch({ type: "SET_ACTIVE_INSPECTOR_EDIT", documentId: null });
-    if (commit && canCommit && restored && current.patches.length) {
-      dispatch({ type: "APPLY_SOURCE_PATCHES", documentId: current.edit.documentId,
-        baseRevision: current.edit.latestRevision, patches: current.patches, changedSourceIds: [] });
+  const drag = usePatchDrag<DeckDrag>({
+    svgRef,
+    valid,
+    patchesFor: (base, current, dx, dy) => patchesFor(base, current.target, dx, dy),
+    afterStop: (current, restored) => {
+      const document = useEditorStore.getState().documents[current.edit.documentId];
+      if (restored && document && current.target.imageFrom != null && current.edit.activeRootId != null) {
+        pendingSelection.current = { documentId: current.edit.documentId, frameId: current.edit.activeRootId,
+          source: document.source, from: current.target.imageFrom };
+      }
     }
-    const document = useEditorStore.getState().documents[current.edit.documentId];
-    if (restored && document && current.imageFrom != null && current.edit.activeRootId != null) {
-      pendingSelection.current = { documentId: current.edit.documentId, frameId: current.edit.activeRootId,
-        source: document.source, from: current.imageFrom };
-    }
-    setDragging(null);
-  }, [valid]);
-
-  // Synchronous ownership checks avoid overwriting typing, undo, tab changes, or a step change.
-  useEffect(() => useEditorStore.subscribe(() => {
-    if (session.current && !valid(session.current)) stop(false);
-  }), [stop, valid]);
-  useEffect(() => () => { stop(false); }, [stop]);
+  });
 
   useEffect(() => {
     const state = useEditorStore.getState();
-    const current = session.current;
+    const current = drag.current();
     const pending = pendingSelection.current;
-    const from = current?.imageFrom ?? (pending?.documentId === state.activeDocumentId && pending.frameId === layout?.frameId && pending.source === source ? pending.from : undefined);
+    // While dragging, reflow can renumber the image; afterwards, the drag's result does.
+    const from = current?.target.imageFrom ?? (pending?.documentId === state.activeDocumentId && pending.frameId === layout?.frameId && pending.source === source ? pending.from : undefined);
     if (from == null || !layout || source !== state.source) return;
     const image = layout.graphics.find((item) => item.sourceSpan.from === from && item.visibility === "visible");
     if (image) state.dispatch({ type: "SET_DECK_OBJECT_SELECTION", frameId: layout.frameId, objectId: image.itemId });
     if (!current) pendingSelection.current = null;
-  }, [source, layout]);
+    // `drag` changes only when a drag starts or ends.
+  }, [source, layout, drag]);
 
-  const prepare = (target: DeckResizeTarget): Session | null => {
-    if (session.current || !layout) return null;
+  const prepare = (target: DeckResizeTarget): PatchDragSession<DeckDrag> | null => {
+    if (drag.active() || !layout) return null;
     const initial = useEditorStore.getState();
     if (initial.source !== source || initial.snapshot.source !== source || initial.activeRootId !== layout.frameId ||
       Math.min(initial.deckStepByRootKey[deckStepRootKey(initial.activeDocumentId, layout.frameId)] ?? 1, layout.stepCount) !== layout.step ||
@@ -104,8 +80,8 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
     const edit = beginDocumentEdit(state, []);
     const imageFrom = target.kind === "image" ? layout.graphics.find((item) => item.itemId === target.image.objectId)?.sourceSpan.from
       : target.kind === "crop" ? target.crop.sourceStart : undefined;
-    return { edit, ...(imageFrom !== undefined ? { imageFrom: imageFrom } : {}), step: state.deckStepByRootKey[deckStepRootKey(edit.documentId, layout.frameId)] ?? 1,
-      patches: [], cleanup: () => {} };
+    const step = state.deckStepByRootKey[deckStepRootKey(edit.documentId, layout.frameId)] ?? 1;
+    return { edit, target: { target, step, ...(imageFrom !== undefined ? { imageFrom } : {}) }, patches: [], cleanup: () => {} };
   };
 
   const nudge = (target: DeckResizeTarget, dx: number, dy: number) => {
@@ -115,8 +91,8 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
     const state = useEditorStore.getState();
     state.dispatch({ type: "APPLY_SOURCE_PATCHES", documentId: current.edit.documentId,
       baseRevision: current.edit.latestRevision, patches, changedSourceIds: [] });
-    if (current.imageFrom != null && layout) pendingSelection.current = { documentId: current.edit.documentId, frameId: layout.frameId,
-      source: useEditorStore.getState().source, from: current.imageFrom };
+    if (current.target.imageFrom != null && layout) pendingSelection.current = { documentId: current.edit.documentId, frameId: layout.frameId,
+      source: useEditorStore.getState().source, from: current.target.imageFrom };
   };
 
   const begin = (event: ReactPointerEvent<SVGElement>, target: DeckResizeTarget) => {
@@ -124,79 +100,7 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
     event.preventDefault(); event.stopPropagation();
     event.currentTarget.focus();
     const current = prepare(target);
-    const svg = svgRef.current;
-    if (!current || !svg) return;
-    const pointerCapture: Partial<Pick<SVGSVGElement, "setPointerCapture" | "hasPointerCapture" | "releasePointerCapture">> = svg;
-    const origin = clientToSvgPoint(clientPoint(px(event.clientX), px(event.clientY)), svg);
-    if (!origin) return;
-    // Freeze the view transform as well as the source: reflow must not move the drag origin.
-    const inverse = svg.getScreenCTM()?.inverse();
-    if (!inverse) return;
-    const pointerId = event.pointerId;
-    let frame: number | null = null;
-    let latest: PointerEvent | null = null;
-    const preview = (sample: PointerEvent) => {
-      if (session.current !== current) return;
-      if (!valid(current)) { stop(false); return; }
-      const point = svg.createSVGPoint(); point.x = sample.clientX; point.y = sample.clientY;
-      const next = point.matrixTransform(inverse);
-      current.patches = patchesFor(current.edit.baseSource, target, next.x - origin.x, next.y - origin.y);
-      const nextSource = patchedSource(current.edit.baseSource, current.patches);
-      if (nextSource === current.edit.latestSource) return;
-      const { dispatch } = useEditorStore.getState();
-      // Store subscribers run during dispatch; mark the expected transition before notifying them.
-      const previous = current.edit.latestSource;
-      const revision = current.edit.latestRevision;
-      current.edit.latestSource = nextSource; current.edit.latestRevision = revision + 1;
-      dispatch({ type: "SET_SOURCE_TRANSIENT", documentId: current.edit.documentId, source: nextSource,
-        expectedSource: previous, expectedSourceRevision: revision, changedSourceIds: [] });
-      trackDocumentEdit(current.edit, useEditorStore.getState());
-    };
-    const move = (sample: PointerEvent) => {
-      if (sample.pointerId !== pointerId) return;
-      latest = sample;
-      frame ??= requestAnimationFrame(() => { frame = null; if (latest) preview(latest); });
-    };
-    const up = (sample: PointerEvent) => {
-      if (sample.pointerId !== pointerId) return;
-      preview(sample);
-      stop(true);
-      // WebKit can retarget the drag's compatibility click to the capturing
-      // SVG, where it looks like a background click and clears the restored
-      // image selection. Consume that click, then remove the listener even
-      // when the browser generates no click, so the next real click works.
-      const consumeClick = (click: MouseEvent) => { click.preventDefault(); click.stopPropagation(); };
-      window.addEventListener("click", consumeClick, { capture: true, once: true });
-      setTimeout(() => { window.removeEventListener("click", consumeClick, true); }, 0);
-    };
-    const cancel = (sample: PointerEvent) => { if (sample.pointerId === pointerId) stop(false); };
-    const blur = () => { stop(false); };
-    const key = (sample: KeyboardEvent) => {
-      if (sample.key === "Escape") { sample.preventDefault(); sample.stopPropagation(); stop(false); }
-    };
-    const wheel = (sample: WheelEvent) => { sample.preventDefault(); sample.stopPropagation(); };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    window.addEventListener("pointercancel", cancel);
-    svg.addEventListener("lostpointercapture", cancel);
-    window.addEventListener("blur", blur);
-    window.addEventListener("keydown", key, true);
-    svg.addEventListener("wheel", wheel, { passive: false, capture: true });
-    current.cleanup = () => {
-      if (frame != null) cancelAnimationFrame(frame);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      window.removeEventListener("pointercancel", cancel);
-      svg.removeEventListener("lostpointercapture", cancel);
-      window.removeEventListener("blur", blur);
-      window.removeEventListener("keydown", key, true);
-      svg.removeEventListener("wheel", wheel, true);
-      if (pointerCapture.hasPointerCapture?.(pointerId)) pointerCapture.releasePointerCapture?.(pointerId);
-    };
-    session.current = current;
-    pointerCapture.setPointerCapture?.(pointerId);
-    useEditorStore.getState().dispatch({ type: "SET_ACTIVE_INSPECTOR_EDIT", documentId: current.edit.documentId });
-    setDragging(target);
+    if (current) drag.begin(event, current);
   };
-  return { dragging, begin, nudge };
+  return { dragging: drag.dragging?.target ?? null, begin, nudge };
 }

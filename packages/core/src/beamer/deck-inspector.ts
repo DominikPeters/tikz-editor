@@ -15,7 +15,7 @@ import {
 import type { BeamerObjectNode } from "./object-index.js";
 import type { Span } from "../ast/types.js";
 import type { BeamerDocumentModel, BeamerFrameLayout } from "./types.js";
-import { beamerImageCropTarget, beamerImageCropUnit } from "./deck-crop.js";
+import { beamerImageCropTarget, beamerImageCropUnit, type BeamerImageCropTarget } from "./deck-crop.js";
 import type { BeamerThemeKind } from "./types.js";
 import type { BeamerChromeMetadataField } from "./theme/chrome-metadata.js";
 import { readBeamerListHead } from "./list-head.js";
@@ -206,7 +206,7 @@ export function buildDeckObjectInspector(
   const context = createBeamerSyntaxContext(source);
   const fields: DeckInspectorField[] = [];
   if (node.kind === "graphics") {
-    const sections = graphicsSections(context, node, extra.layout);
+    const sections = graphicsSections(context, node, extra.layout ? beamerImageCropTarget(context.source, extra.layout, node.id) : null);
     return { target: "object", title: OBJECT_TITLES[node.kind] ?? "Object", fields: sections.flatMap((section) => section.fields), sections };
   }
   switch (node.kind) {
@@ -537,17 +537,17 @@ const DIMENSION_UNIT_NAMES: Readonly<Record<string, string>> = {
 export function includegraphicsSections(
   source: string,
   span: Span,
-  options: { readonly layout?: BeamerFrameLayout; readonly objectId?: string; readonly lengthSuffix?: { readonly width: string; readonly height: string }; readonly crop?: boolean } = {}
+  options: { readonly cropTarget?: BeamerImageCropTarget | null; readonly lengthSuffix?: { readonly width: string; readonly height: string }; readonly crop?: boolean } = {}
 ): DeckInspectorSection[] {
-  const node: Pick<BeamerObjectNode, "id" | "sourceSpan"> = { id: options.objectId ?? "", sourceSpan: span };
-  const sections = graphicsSections(createBeamerSyntaxContext(source), node, options.layout, options.lengthSuffix);
+  const node: Pick<BeamerObjectNode, "id" | "sourceSpan"> = { id: options.cropTarget?.objectId ?? "", sourceSpan: span };
+  const sections = graphicsSections(createBeamerSyntaxContext(source), node, options.cropTarget ?? null, options.lengthSuffix);
   return options.crop === false ? sections.filter((section) => section.id !== "crop") : sections;
 }
 
 function graphicsSections(
   context: BeamerSyntaxContext,
   node: Pick<BeamerObjectNode, "id" | "sourceSpan">,
-  layout: BeamerFrameLayout | undefined,
+  cropTarget: BeamerImageCropTarget | null,
   lengthSuffix: { readonly width: string; readonly height: string } = { width: "\\textwidth", height: "\\textheight" }
 ): DeckInspectorSection[] {
   const command = context.syntax
@@ -607,7 +607,7 @@ function graphicsSections(
   sizeFields.push({ kind: "boolean", id: "keepaspectratio", label: "Keep aspect ratio", inset: true,
     value: hasFlag("keepaspectratio"), write: { kind: "setGraphicsFlag", key: "keepaspectratio" } });
 
-  const target = layout ? beamerImageCropTarget(context.source, layout, node.id) : null;
+  const target = cropTarget;
   const cropped = list?.entries.some((entry) => entry.key === "trim" || entry.key === "viewport" || entry.key === "bb") ?? false;
   const cropFields: DeckInspectorField[] = [];
   if (target) {

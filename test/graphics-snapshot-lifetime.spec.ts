@@ -57,7 +57,7 @@ describe("snapshot graphics ownership", () => {
     expect(getDocumentGraphicsPreviewBundle(snapshot.graphicsPreviewBundleKey!)).toBeNull();
     store.snapshot = snapshot;
     const markup = renderToStaticMarkup(createElement("svg", null, createElement(DeckCropOverlay, {
-      layout, target, scale: 1, begin() {}, onKeyDown() {}
+      target, scale: 1, begin() {}, onKeyDown() {}
     })));
     expect(markup.includes('data-testid="deck-crop-ghost"')).toBe(true);
     expect(markup.includes(`base64,${payload}`)).toBe(true);

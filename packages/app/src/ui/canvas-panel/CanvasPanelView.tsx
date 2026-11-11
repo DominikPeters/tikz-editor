@@ -145,6 +145,8 @@ type CanvasPanelViewProps = {
   deckBuildSelectionRects?: readonly { x: number; y: number; width: number; height: number }[];
   /** Selected deck object outline (object layer), in world coordinates. */
   deckResizeOverlay: ReactNode;
+  /** Drawn above selection and handles, so it takes their pointer events (image crop in a figure). */
+  topOverlay?: ReactNode;
   deckObjectSelectionBox: {
     objectId: string;
     kind: string;
@@ -285,6 +287,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     selectionBoxes,
     deckObjectSelectionBox,
     deckResizeOverlay,
+    topOverlay,
     deckBuildSelectionRects,
     adornmentHighlightBoxes,
     selectedAdornmentConnectors,
@@ -839,6 +842,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                     onRotateHandlePointerDown={onRotateHandlePointerDown}
                   />
                 )}
+                {topOverlay}
               </svg>
             </div>
           )}

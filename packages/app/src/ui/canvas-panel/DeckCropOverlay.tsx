@@ -1,9 +1,8 @@
 import { useId, useMemo, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createDocumentGraphicsResolverFromPreviewBundle } from "@tikz-editor/core/graphics";
-import type { BeamerFrameLayout, BeamerImageCropHandle, BeamerImageCropTarget } from "@tikz-editor/core/beamer/index";
+import type { BeamerImageCropHandle, BeamerImageCropTarget } from "@tikz-editor/core/beamer/index";
 import { getDocumentGraphicsPreviewBundle } from "../../image-asset-cache";
 import { useEditorStore } from "../../store/store";
-import type { DeckResizeTarget } from "./useDeckResize";
 import css from "./CanvasPanel.module.css";
 
 const HANDLES: readonly { handle: Exclude<BeamerImageCropHandle, "move">; x: number; y: number; cursor: string; name: string }[] = [
@@ -17,30 +16,35 @@ const HANDLES: readonly { handle: Exclude<BeamerImageCropHandle, "move">; x: num
   { handle: "w", x: 0, y: 0.5, cursor: "ew-resize", name: "left edge" },
 ];
 
-/** The whole image behind its crop window, from the same data the slide was drawn with. */
-function useImageHref(layout: BeamerFrameLayout, target: BeamerImageCropTarget): string | null {
+/** The whole image behind its crop window, from the same data the picture was drawn with. */
+function useImageHref(target: BeamerImageCropTarget): string | null {
   const bundleKey = useEditorStore((s) => s.snapshot.graphicsPreviewBundleKey ?? null);
   const ownedBundle = useEditorStore((s) => s.snapshot.graphicsPreviewBundle ?? null);
   return useMemo(() => {
-    const graphic = layout.graphics.find((item) => item.itemId === target.objectId);
     const bundle = ownedBundle?.cacheKey === bundleKey ? ownedBundle : bundleKey ? getDocumentGraphicsPreviewBundle(bundleKey) : null;
-    if (!graphic || !bundle) return null;
+    if (!bundle) return null;
     const resolution = createDocumentGraphicsResolverFromPreviewBundle(bundle).resolve({
-      filename: target.filename, options: graphic.options, source: "", sourceStart: graphic.sourceSpan.from, sourceEnd: graphic.sourceSpan.to,
+      filename: target.filename, options: target.options, source: "", sourceStart: target.sourceSpan.from, sourceEnd: target.sourceSpan.to,
     });
     return resolution.status === "resolved" && resolution.dataBase64 ? `data:${resolution.mimeType};base64,${resolution.dataBase64}` : null;
-  }, [bundleKey, ownedBundle, layout, target.filename, target.objectId]);
+  }, [bundleKey, ownedBundle, target.filename, target.options, target.sourceSpan]);
 }
 
-export function DeckCropOverlay({ layout, target, scale, begin, onKeyDown }: {
-  layout: BeamerFrameLayout;
+/** A crop target with the handle being dragged; slides and figures each wrap it in their own target type. */
+export type CropHandleTarget = { kind: "crop"; crop: BeamerImageCropTarget; handle: BeamerImageCropHandle };
+
+/**
+ * Crop handles for an image, in the SVG space its target's bounds are in: a
+ * slide's page or a TikZ figure's canvas.
+ */
+export function DeckCropOverlay({ target, scale, begin, onKeyDown }: {
   target: BeamerImageCropTarget;
   scale: number;
-  begin: (event: ReactPointerEvent<SVGElement>, target: DeckResizeTarget) => void;
-  onKeyDown: (event: KeyboardEvent<SVGElement>, target: DeckResizeTarget) => void;
+  begin: (event: ReactPointerEvent<SVGElement>, target: CropHandleTarget) => void;
+  onKeyDown: (event: KeyboardEvent<SVGElement>, target: CropHandleTarget) => void;
 }) {
   const clipId = useId();
-  const href = useImageHref(layout, target);
+  const href = useImageHref(target);
   const { bounds: kept, imageBounds: image } = target;
   const arm = Math.min(12 / scale, kept.width / 3, kept.height / 3);
   const bar = Math.min(16 / scale, kept.width / 3, kept.height / 3);
@@ -71,7 +75,7 @@ export function DeckCropOverlay({ layout, target, scale, begin, onKeyDown }: {
     {HANDLES.map((h) => {
       const x = kept.x + h.x * kept.width;
       const y = kept.y + h.y * kept.height;
-      const handleTarget: DeckResizeTarget = { kind: "crop", crop: target, handle: h.handle };
+      const handleTarget: CropHandleTarget = { kind: "crop", crop: target, handle: h.handle };
       return <g key={h.handle} className={css.deckCropHandle} style={{ cursor: h.cursor }} data-testid={`deck-crop-${h.handle}`}
         role="button" tabIndex={0} aria-label={`Crop from ${h.name}`}
         onPointerDown={(event) => { begin(event, handleTarget); }} onKeyDown={(event) => { onKeyDown(event, handleTarget); }}>
