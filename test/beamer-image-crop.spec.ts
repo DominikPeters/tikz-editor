@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { POINTER_TOLERANCE_PT } from "../packages/core/src/edit/format.js";
 import { applyDeckEditAction, beamerImageCropDrag, beamerImageCropPatches, beamerImageCropTarget, buildBeamerObjectIndex, buildDeckObjectInspector, prepareBeamerDocument, type DeckInspectorField } from "../packages/core/src/beamer/index.js";
 import type { DocumentGraphicsResolver } from "../packages/core/src/graphics/index.js";
 import type { SourcePatch } from "../packages/core/src/edit/types.js";
@@ -20,8 +21,8 @@ describe("image cropping", () => {
     const source = document(String.raw`\includegraphics[width=4cm]{demo.png}`);
     const before = (await target(source))!;
     expect(before.crop).toEqual({ left: 0, bottom: 0, right: 0, top: 0 });
-    const next = apply(source, beamerImageCropPatches(source, before, { left: 12, bottom: 0, right: 0, top: 6 }));
-    expect(next).toBe(document(String.raw`\includegraphics[width=3.6cm, trim=${Number((12 / BP).toFixed(2))} 0 0 ${Number((6 / BP).toFixed(2))}, clip]{demo.png}`));
+    const next = apply(source, beamerImageCropPatches(source, before, { left: 12, bottom: 0, right: 0, top: 6 }, POINTER_TOLERANCE_PT));
+    expect(next).toBe(document(String.raw`\includegraphics[width=3.6cm, trim=12 0 0 6, clip]{demo.png}`));
     const after = (await target(next))!;
     expect(after.scale.x).toBeCloseTo(before.scale.x, 3);
     expect(after.scale.y).toBeCloseTo(before.scale.y, 3);
@@ -32,9 +33,10 @@ describe("image cropping", () => {
   it("crops a natural-size image without sizing keys", async () => {
     const source = document(String.raw`\includegraphics{demo.png}`);
     const before = (await target(source))!;
-    const next = apply(source, beamerImageCropPatches(source, before, { left: 0, bottom: 0, right: 60, top: 0 }));
-    expect(next).toContain(String.raw`\includegraphics[trim=0 0 ${Number((60 / BP).toFixed(2))} 0, clip]{demo.png}`);
-    expect((await target(next))!.bounds.width).toBeCloseTo(60, 2);
+    const next = apply(source, beamerImageCropPatches(source, before, { left: 0, bottom: 0, right: 60, top: 0 }, POINTER_TOLERANCE_PT));
+    expect(next).toContain(String.raw`\includegraphics[trim=0 0 60 0, clip]{demo.png}`);
+    // The trim is the shortest decimal that keeps the edge within half a pixel.
+    expect(Math.abs((await target(next))!.bounds.width - 60)).toBeLessThanOrEqual(POINTER_TOLERANCE_PT);
   });
 
   it("keeps the author's key and unit and scales a bare register", async () => {

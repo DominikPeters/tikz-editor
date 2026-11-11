@@ -45,6 +45,19 @@ describe("scrub-utils", () => {
     ).toBe(1);
   });
 
+  it("scrubs on the step's grid without float noise", () => {
+    const scrub = (startValue: number, steps: number, step = 0.1) => computeScrubbedValue({
+      startX: 0, currentX: steps * 8, startValue, step, modifiers: { shiftKey: false, altKey: false }
+    });
+    expect(scrub(0.1, 2)).toBe(0.3);
+    expect(scrub(0.37, 1)).toBe(0.4);
+    expect(scrub(0.37, 2)).toBe(0.5);
+    expect(scrub(0.37, -1)).toBe(0.3);
+    expect(scrub(0.37, 0)).toBe(0.37);
+    expect(scrub(2.5, 3, 1)).toBe(5);
+    expect(scrub(1.2, -3, 0.25)).toBe(0.5);
+  });
+
   it("formats scrubbed values while preserving display precision", () => {
     expect(formatScrubNumber(1.2, 3, 2)).toBe("1.20");
     expect(formatScrubNumber(1.234, 3, 0)).toBe("1.234");

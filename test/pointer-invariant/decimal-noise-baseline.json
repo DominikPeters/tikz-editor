@@ -1,0 +1,100 @@
+{
+  "actions": {
+    "addElement": {
+      "gross": 0,
+      "excessDigits": 3
+    },
+    "alignElements": {
+      "gross": 0,
+      "excessDigits": 108
+    },
+    "appendToPath": {
+      "gross": 0,
+      "excessDigits": 20
+    },
+    "convertNodePositionToAbsolute": {
+      "gross": 0,
+      "excessDigits": 8
+    },
+    "duplicateElements": {
+      "gross": 0,
+      "excessDigits": 40
+    },
+    "freehand": {
+      "gross": 0,
+      "excessDigits": 4
+    },
+    "insertAfterTikzset": {
+      "gross": 0,
+      "excessDigits": 0
+    },
+    "insertPathPoint": {
+      "gross": 0,
+      "excessDigits": 2
+    },
+    "moveAdornment": {
+      "gross": 0,
+      "excessDigits": 0
+    },
+    "moveCurveHandle": {
+      "gross": 0,
+      "excessDigits": 0
+    },
+    "moveElement": {
+      "gross": 0,
+      "excessDigits": 32
+    },
+    "moveHandle": {
+      "gross": 1,
+      "excessDigits": 56
+    },
+    "movePathAttachedNode": {
+      "gross": 0,
+      "excessDigits": 0
+    },
+    "pasteAcrossScopes": {
+      "gross": 0,
+      "excessDigits": 3
+    },
+    "pathTool": {
+      "gross": 0,
+      "excessDigits": 1
+    },
+    "positionNodeRelativeTo": {
+      "gross": 0,
+      "excessDigits": 4
+    },
+    "repeatElements": {
+      "gross": 1,
+      "excessDigits": 252
+    },
+    "resizeElement": {
+      "gross": 0,
+      "excessDigits": 0
+    },
+    "resizeImage": {
+      "gross": 0,
+      "excessDigits": 0
+    },
+    "reversePath": {
+      "gross": 0,
+      "excessDigits": 0
+    },
+    "rotateElement": {
+      "gross": 0,
+      "excessDigits": 0
+    },
+    "setFigureBounds": {
+      "gross": 0,
+      "excessDigits": 9
+    },
+    "setPathPointKind": {
+      "gross": 1,
+      "excessDigits": 75
+    }
+  },
+  "dragBack": {
+    "drifted": 2,
+    "respelled": 9
+  }
+}

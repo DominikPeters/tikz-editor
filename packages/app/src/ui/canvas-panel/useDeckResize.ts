@@ -25,7 +25,7 @@ function patchesFor(source: string, target: DeckResizeTarget, dx: number, dy: nu
   const tolerance = pointerTolerancePtForScale(useEditorStore.getState().canvasTransform.scale);
   if (target.kind === "columns") return beamerColumnResizePatches(source, target.divider, dx, tolerance);
   if (target.kind === "spacing") return beamerSpacingResizePatches(source, target.spacing, dy, tolerance);
-  if (target.kind === "crop") return beamerImageCropPatches(source, target.crop, beamerImageCropDrag(target.crop, target.handle, dx, dy));
+  if (target.kind === "crop") return beamerImageCropPatches(source, target.crop, beamerImageCropDrag(target.crop, target.handle, dx, dy), tolerance);
   const { width, height } = target.image.bounds;
   const sx = target.corner.endsWith("e") ? 1 : -1;
   const sy = target.corner.startsWith("s") ? 1 : -1;

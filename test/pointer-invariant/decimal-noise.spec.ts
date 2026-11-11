@@ -1,14 +1,43 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { auditWrittenNumbers, DEFAULT_TOLERANCE_PT, renderReport, runDecimalNoiseAudit, summarize } from "./decimal-noise.js";
 import { evaluate, FRAMES, QUICK_FRAME_LABELS } from "./pointer-fuzz.js";
 import { createTexNodeTextEngine } from "../../packages/core/src/text/tex-node-text-engine.js";
 
-// The audit itself is a report, not a gate: DECIMAL_NOISE_AUDIT=1 runs it
-// (every frame with POINTER_FUZZ_FULL=1) and writes artifacts/decimal-noise/.
-// `npm run audit:decimal-noise` does both.
+// `npm test` gates the audit on one frame per mechanism against
+// decimal-noise-baseline.json: no action may write more gross noise or excess
+// digits, and dragging back may not drift or respell more often.
+// DECIMAL_NOISE_UPDATE=1 records the current counts (refusing regressions
+// unless DECIMAL_NOISE_ACCEPT_REGRESSIONS=1). DECIMAL_NOISE_AUDIT=1 writes
+// the full report to artifacts/decimal-noise/ (every frame with
+// POINTER_FUZZ_FULL=1); `npm run audit:decimal-noise` does both.
 const AUDIT = Boolean(process.env.DECIMAL_NOISE_AUDIT);
 const FULL = Boolean(process.env.POINTER_FUZZ_FULL);
+const BASELINE_PATH = "test/pointer-invariant/decimal-noise-baseline.json";
+
+type Baseline = { actions: Record<string, { gross: number; excessDigits: number }>; dragBack: { drifted: number; respelled: number } };
+
+function countsOf(run: ReturnType<typeof runDecimalNoiseAudit>): Baseline {
+  const actions = Object.fromEntries(summarize(run)
+    .map((entry): [string, { gross: number; excessDigits: number }] => [entry.action, { gross: entry.gross, excessDigits: entry.excessDigits }])
+    .sort(([a], [b]) => a.localeCompare(b)));
+  const count = (outcome: string) => run.dragBacks.filter(entry => entry.outcome === outcome).length;
+  return { actions, dragBack: { drifted: count("drifted"), respelled: count("respelled") } };
+}
+
+/** Every way `now` is worse than `before`. */
+function regressions(before: Baseline, now: Baseline): string[] {
+  const worse: string[] = [];
+  for (const [action, counts] of Object.entries(now.actions)) {
+    const was = before.actions[action] ?? { gross: 0, excessDigits: 0 };
+    if (counts.gross > was.gross) worse.push(`${action}: gross ${was.gross} → ${counts.gross}`);
+    if (counts.excessDigits > was.excessDigits) worse.push(`${action}: excess digits ${was.excessDigits} → ${counts.excessDigits}`);
+  }
+  for (const key of ["drifted", "respelled"] as const) {
+    if (now.dragBack[key] > before.dragBack[key]) worse.push(`drag back ${key}: ${before.dragBack[key]} → ${now.dragBack[key]}`);
+  }
+  return worse;
+}
 
 const picture = (body: string) => evaluate(String.raw`\begin{tikzpicture}
 ${body}
@@ -36,6 +65,24 @@ describe("decimal-noise metric", () => {
     const after = picture(String.raw`\node (n12) at (0,0) {a};`);
     expect(auditWrittenNumbers(before, after, DEFAULT_TOLERANCE_PT).numbers).toEqual([]);
   });
+});
+
+describe("decimal-noise gate", () => {
+  it("writes no noisier numbers than recorded, in one frame per mechanism", async () => {
+    const run = runDecimalNoiseAudit({ frames: FRAMES.filter(frame => QUICK_FRAME_LABELS.has(frame.label)), textEngine: await createTexNodeTextEngine() });
+    const now = countsOf(run);
+    const before = existsSync(BASELINE_PATH) ? JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as Baseline : null;
+    const worse = before ? regressions(before, now) : [];
+    if (process.env.DECIMAL_NOISE_UPDATE) {
+      if (worse.length > 0 && !process.env.DECIMAL_NOISE_ACCEPT_REGRESSIONS) {
+        throw new Error(`Refusing to record regressions (set DECIMAL_NOISE_ACCEPT_REGRESSIONS=1 to accept):\n${worse.join("\n")}`);
+      }
+      writeFileSync(BASELINE_PATH, `${JSON.stringify(now, null, 2)}\n`);
+      return;
+    }
+    expect(before, `no ${BASELINE_PATH}; record one with DECIMAL_NOISE_UPDATE=1`).not.toBeNull();
+    expect(worse, `noisier than ${BASELINE_PATH}; run npm run audit:decimal-noise for examples`).toEqual([]);
+  }, 120_000);
 });
 
 describe.runIf(AUDIT)("decimal-noise audit", () => {

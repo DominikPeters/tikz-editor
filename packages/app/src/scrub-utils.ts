@@ -40,11 +40,22 @@ export function clamp(value: number, min?: number, max?: number): number {
   return value;
 }
 
+/**
+ * The value after scrubbing by whole steps. Once it moves, it moves on the
+ * step's grid (from 0.37 by 0.1: 0.4, 0.5, … or 0.3, 0.2, …) and is rounded
+ * to the step's decimals, so scrubbing writes `0.3`, never
+ * `0.30000000000000004` or `0.47`.
+ */
 export function computeScrubbedValue(input: ComputeScrubbedValueInput): number {
   const pixelsPerStep = pixelsPerStepForModifiers(input.modifiers);
   const deltaSteps = Math.round((input.currentX - input.startX) / pixelsPerStep);
-  const unclampedValue = input.startValue + deltaSteps * input.step;
-  return clamp(unclampedValue, input.min, input.max);
+  const { startValue, step } = input;
+  if (deltaSteps === 0 || !(step > 0) || !Number.isFinite(step)) return clamp(startValue + deltaSteps * step, input.min, input.max);
+  const units = startValue / step;
+  // An off-grid start counts its own partial step as the first one.
+  const base = deltaSteps > 0 ? Math.floor(units + 1e-9) : Math.ceil(units - 1e-9);
+  const decimals = Math.min(12, fractionDigits(String(step)));
+  return clamp(Number(((base + deltaSteps) * step).toFixed(decimals)), input.min, input.max);
 }
 
 export function formatScrubNumber(value: number, precision: number, minDisplayPrecision: number): string {

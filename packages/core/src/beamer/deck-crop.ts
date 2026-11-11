@@ -2,6 +2,7 @@ import { applyFragments, plainNumber, sourceSlice, tikz, EMPTY_FRAGMENT, type Ti
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import { texDimensionUnitFactor } from "../text/tex/dimensions.js";
+import { EXACT_TOLERANCE_PT, shortestDecimal } from "../edit/format.js";
 import { readOptionList, rewriteBeamerOptions, type OptionListLocation } from "./option-edits.js";
 import { beamerOptionalArgumentAfter, beamerOverlayArgumentAfter, createBeamerSyntaxContext } from "./syntax.js";
 import type { BeamerFrameLayout, BeamerRect } from "./types.js";
@@ -145,21 +146,28 @@ export function beamerImageCropTarget(source: string, layout: BeamerFrameLayout,
   };
 }
 
-function formatNumber(value: number): TikzFragment {
-  return plainNumber(Number(value.toFixed(2)) || 0, "beamer-length");
+/** The shortest decimal within `tolerance`, or the author's number when it already says that. */
+function formatNumber(value: number, tolerance: number, authored?: string): TikzFragment {
+  if (authored !== undefined && Math.abs(Number(authored) - value) <= tolerance) return plainNumber(Number(authored), "beamer-length", /^-?\./u.test(authored));
+  return plainNumber(Number(shortestDecimal(value, tolerance)) || 0, "beamer-length");
 }
 
-/** Keep an author's unit when every non-zero value already uses it. */
-function cropValue(source: string, target: BeamerImageCropTarget, crop: BeamerImageCrop): TikzFragment {
+/**
+ * Keep an author's unit when every non-zero value already uses it. Each value
+ * is the shortest decimal that keeps its edge within `tolerancePt` slide
+ * points; an edge the edit leaves alone keeps its authored number.
+ */
+function cropValue(source: string, target: BeamerImageCropTarget, crop: BeamerImageCrop, tolerancePt: number): TikzFragment {
   const key = target.plan.key;
   const values = key?.name === "trim" || !key
     ? [crop.left, crop.bottom, crop.right, crop.top]
     : [crop.left, crop.bottom, target.natural.width - crop.right, target.natural.height - crop.top];
   let unit: { span: Span; factor: number } | null = null;
+  let authored: (string | undefined)[] = [];
   if (key) {
     const raw = source.slice(key.valueSpan.from, key.valueSpan.to);
-    const units = [...raw.matchAll(new RegExp(String.raw`(${NUMBER})\s*([a-zA-Z]{2})?`, "gu"))]
-      .filter((match) => match[2] !== undefined || Number(match[1]) !== 0);
+    const all = [...raw.matchAll(new RegExp(String.raw`(${NUMBER})\s*([a-zA-Z]{2})?`, "gu"))];
+    const units = all.filter((match) => match[2] !== undefined || Number(match[1]) !== 0);
     const first = units[0];
     const name = first?.[2];
     const factor = name ? texDimensionUnitFactor(name) : null;
@@ -167,10 +175,17 @@ function cropValue(source: string, target: BeamerImageCropTarget, crop: BeamerIm
       const from = key.valueSpan.from + first.index + first[0].length - name.length;
       unit = { span: { from, to: from + name.length }, factor };
     }
+    // Authored numbers are comparable only in the unit the new ones are written in.
+    if (all.length === 4 && (unit || all.every((match) => match[2] === undefined || match[2] === "bp"))) authored = all.map((match) => match[1]);
   }
-  const parts = values.map((value) => unit
-    ? tikz`${formatNumber(value / unit.factor)}${sourceSlice(source, unit.span)}`
-    : formatNumber(value / BP));
+  // Natural points per slide point along each edge's axis.
+  const perSlide = [1 / target.scale.x, 1 / target.scale.y, 1 / target.scale.x, 1 / target.scale.y];
+  const parts = values.map((value, index) => {
+    const tolerance = tolerancePt * (perSlide[index] ?? 1);
+    return unit
+      ? tikz`${formatNumber(value / unit.factor, tolerance / unit.factor, authored[index])}${sourceSlice(source, unit.span)}`
+      : formatNumber(value / BP, tolerance / BP, authored[index]);
+  });
   return tikz`${parts[0] ?? EMPTY_FRAGMENT} ${parts[1] ?? EMPTY_FRAGMENT} ${parts[2] ?? EMPTY_FRAGMENT} ${parts[3] ?? EMPTY_FRAGMENT}`;
 }
 
@@ -195,7 +210,11 @@ function edit(span: Span, replacement: TikzFragment) { return { span, replacemen
  * graphicx sizes the cropped image, so numeric width/height values follow
  * the kept extent. An uncropped result removes the crop key.
  */
-export function beamerImageCropPatches(source: string, target: BeamerImageCropTarget, next: BeamerImageCrop): SourcePatch[] {
+/**
+ * `tolerancePt`: how far, in slide points, each edge may be from `next`.
+ * A typed value is written exactly; a drag passes half a pixel.
+ */
+export function beamerImageCropPatches(source: string, target: BeamerImageCropTarget, next: BeamerImageCrop, tolerancePt = EXACT_TOLERANCE_PT): SourcePatch[] {
   const { natural, crop, plan } = target;
   const keptWidth = natural.width - crop.left - crop.right;
   const keptHeight = natural.height - crop.bottom - crop.top;
@@ -205,8 +224,11 @@ export function beamerImageCropPatches(source: string, target: BeamerImageCropTa
   const edits: { span: Span; replacement: TikzFragment }[] = [];
   for (const size of plan.sizes) {
     const factor = size.factor * (size.axis === "x" ? nextWidth / keptWidth : nextHeight / keptHeight);
-    if (Math.abs(factor - size.factor) < 1e-9) continue;
-    const number = plainNumber(Number(factor.toFixed(4)), "beamer-length", source[size.span.from] === ".");
+    // The drawn size is factor × (kept extent / factor): the factor's share of the tolerance.
+    const drawn = size.axis === "x" ? nextWidth * target.scale.x : nextHeight * target.scale.y;
+    const tolerance = drawn > 0 ? factor * tolerancePt / drawn : 0;
+    if (Math.abs(factor - size.factor) <= Math.max(1e-9, tolerance)) continue;
+    const number = plainNumber(Number(shortestDecimal(factor, tolerance)), "beamer-length", source[size.span.from] === ".");
     edits.push(edit(size.span, number));
   }
   const uncropped = [next.left, next.bottom, next.right, next.top].every((value) => Math.abs(value) < 0.005);
@@ -228,15 +250,15 @@ export function beamerImageCropPatches(source: string, target: BeamerImageCropTa
       : nextStart !== null ? { from: entrySpan.from, to: nextStart }
       : entrySpan;
     const comments = createBeamerSyntaxContext(source).syntax.comments.some((comment) => comment.from < span.to && comment.to > span.from);
-    edits.push(edit(comments ? plan.key.valueSpan : span, comments ? cropValue(source, target, next) : EMPTY_FRAGMENT));
+    edits.push(edit(comments ? plan.key.valueSpan : span, comments ? cropValue(source, target, next, tolerancePt) : EMPTY_FRAGMENT));
   } else if (plan.key) {
     const raw = source.slice(plan.key.valueSpan.from, plan.key.valueSpan.to);
     const inner = /^(\s*\{\s*)([^]*?)(\s*\}\s*)$/u.exec(raw);
     const from = plan.key.valueSpan.from + (inner ? inner[1]?.length ?? 0 : raw.length - raw.trimStart().length);
     const to = plan.key.valueSpan.to - (inner ? inner[3]?.length ?? 0 : raw.length - raw.trimEnd().length);
-    edits.push(edit({ from, to }, cropValue(source, target, next)));
+    edits.push(edit({ from, to }, cropValue(source, target, next, tolerancePt)));
   } else if (!uncropped) {
-    const value = cropValue(source, target, next);
+    const value = cropValue(source, target, next, tolerancePt);
     const clip = plan.clip === "missing" ? tikz`, clip` : EMPTY_FRAGMENT;
     const at = { from: plan.insert.at, to: plan.insert.at };
     edits.push(edit(at, plan.insert.list === "none" ? tikz`[trim=${value}${clip}]`

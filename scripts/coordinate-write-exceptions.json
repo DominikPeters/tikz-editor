@@ -53,7 +53,7 @@
     "file": "packages/core/src/beamer/deck-crop.ts",
     "declaration": "beamerImageCropPatches.number",
     "count": 1,
-    "expression": "plainNumber(Number(factor.toFixed(4)), \"beamer-length\", source[size.span.from] === \".\")"
+    "expression": "plainNumber(Number(shortestDecimal(factor, tolerance)), \"beamer-length\", source[size.span.from] === \".\")"
   },
   {
     "rule": "F2",
@@ -76,8 +76,8 @@
     "symbol": "plainNumber",
     "file": "packages/core/src/beamer/deck-crop.ts",
     "declaration": "formatNumber",
-    "count": 1,
-    "expression": "plainNumber(Number(value.toFixed(2)) || 0, \"beamer-length\")"
+    "count": 2,
+    "expression": "plainNumber(Number(authored), \"beamer-length\", /^-?\\./u.test(authored))"
   },
   {
     "rule": "F2",
