@@ -1,5 +1,6 @@
 import type { Span } from "../ast/types.js";
 import { applyFragments, plainNumber, sourceSlice, tikz, type EditedSource, type FragmentEdit, type TikzFragment } from "./fragment.js";
+import { shortestDecimal } from "./format.js";
 
 /**
  * A node whose text is a single `\includegraphics`, as inserted images are:
@@ -48,25 +49,28 @@ export function nodeGraphicsSize(source: string, textSpan: Span): NodeGraphicsSi
   return { values: [], insertScale: { at: contentTo, prefix: optional.trim() === "" ? tikz`scale=` : tikz`, scale=`, suffix: tikz`` } };
 }
 
-/** The source with the image scaled by `factor` (both axes). */
-export function scaleNodeGraphics(source: string, size: NodeGraphicsSize, factor: number): EditedSource | null {
-  if (!(factor > 0) || !Number.isFinite(factor) || Math.abs(factor - 1) < 1e-9) return null;
-  const edits: FragmentEdit[] = size.values.map((value) => ({ span: value.span, fragment: formatScaled(source, value, factor) }));
+/**
+ * The source with the image scaled by `factor` (both axes). `factorTolerance`
+ * is how far the factor may be off: the pointer's tolerance over the distance
+ * from the fixed point to the dragged corner. Each number is the shortest
+ * decimal within it.
+ */
+export function scaleNodeGraphics(source: string, size: NodeGraphicsSize, factor: number, factorTolerance: number): EditedSource | null {
+  if (!(factor > 0) || !Number.isFinite(factor)) return null;
+  // Within tolerance of the current size is no change.
+  if (Math.abs(factor - 1) <= factorTolerance) return null;
+  const edits: FragmentEdit[] = size.values.map((value) => ({ span: value.span, fragment: formatScaled(source, value, factor, factorTolerance) }));
   if (size.insertScale) {
     const { at, prefix, suffix } = size.insertScale;
-    edits.push({ span: { from: at, to: at }, fragment: tikz`${prefix}${plainNumber(round(factor), "graphics-scale")}${suffix}` });
+    edits.push({ span: { from: at, to: at }, fragment: tikz`${prefix}${plainNumber(Number(shortestDecimal(factor, factorTolerance)), "graphics-scale")}${suffix}` });
   }
   return applyFragments(source, edits);
 }
 
-function formatScaled(source: string, value: { span: Span; value: number }, factor: number): TikzFragment {
-  const next = round(value.value * factor);
+function formatScaled(source: string, value: { span: Span; value: number }, factor: number, factorTolerance: number): TikzFragment {
+  const next = Number(shortestDecimal(value.value * factor, value.value * factorTolerance));
   if (next === value.value) return sourceSlice(source, value.span);
   return plainNumber(next, "graphics-length", source[value.span.from] === ".");
-}
-
-function round(value: number): number {
-  return Number(value.toFixed(value >= 10 ? 2 : 3));
 }
 
 type Entry = { key: string; value: Span | null };

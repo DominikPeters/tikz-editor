@@ -3,6 +3,7 @@ import { createEditGeometrySession } from "../../packages/core/src/edit/geometry
 import { collectSourceWorldBounds } from "../../packages/core/src/edit/snapping/geometry.js";
 import { applyMatrix } from "../../packages/core/src/semantic/transform.js";
 import { parseTikz } from "../../packages/core/src/parser/index.js";
+import { pointAtPlacementSegment } from "../../packages/core/src/semantic/path/path-attached.js";
 import { evaluateTikzFigure } from "../../packages/core/src/semantic/evaluate.js";
 import type { DocumentGraphicsResolver } from "../../packages/core/src/graphics/types.js";
 import type { EvaluateOptions } from "../../packages/core/src/semantic/types.js";
@@ -221,6 +222,51 @@ function imageResizeEdits(frames: readonly FrameStack[], seed: number, rendering
   }
 }
 
+const ADORNED_BODY = String.raw`\node[draw,label=above:L,pin=right:P,P] at (1,1) {N};`;
+const ATTACHED_BODY = String.raw`\draw[P] (0,0) -- (2,1) node[pos=.3] {M};`;
+
+/**
+ * Drags the pointer fuzzer has no cases for: labels and pins (angle and
+ * distance) and nodes on a path (`pos`), each as the canvas sends them.
+ */
+function adornmentEdits(frames: readonly FrameStack[], seed: number, rendering: AuditRendering, observe: (key: string, frame: FrameStack, action: EditAction, before: Snapshot, after: Snapshot) => void): void {
+  for (const frame of frames) {
+    const adorned = render(pictureSource(frame, ADORNED_BODY).source, rendering);
+    const owner = adorned.handles.find(handle => handle.kind === "node-position" && handle.sourceRef.sourceId.startsWith("path:") && handle.sourceRef.sourceSpan.from > adorned.source.indexOf("{A}"));
+    for (const handle of adorned.handles.filter(h => h.kind === "node-position" && h.sourceRef.sourceId.startsWith("node-adornment:"))) {
+      if (!owner) break;
+      const kind = handle.sourceRef.sourceId.includes(":pin:") ? "pin" : "label";
+      const key = `moveAdornment|${frame.label}|${kind}`;
+      const random = caseRandom(key, seed);
+      const angle = random() * 2 * Math.PI, length = 15 + 30 * random();
+      const action: EditAction = { kind: "moveAdornment", targetId: handle.sourceRef.sourceId, ownerPoint: owner.world,
+        newWorld: wp(owner.world.x + length * Math.cos(angle), owner.world.y + length * Math.sin(angle)) };
+      const next = applyDrag(adorned, action, rendering);
+      if (next !== null && next !== adorned.source) observe(key, frame, action, adorned, render(next, rendering));
+    }
+
+    const attached = render(pictureSource(frame, ATTACHED_BODY).source, rendering);
+    const node = attached.handles.find(handle => handle.pathAttachmentContext !== undefined);
+    const context = node?.pathAttachmentContext;
+    if (!node || !context) continue;
+    const key = `movePathAttachedNode|${frame.label}|line`;
+    const random = caseRandom(key, seed);
+    let length = 0;
+    let previous = pointAtPlacementSegment(context.segment, 0);
+    for (let i = 1; i <= 32; i++) {
+      const point = pointAtPlacementSegment(context.segment, i / 32);
+      length += Math.hypot(point.x - previous.x, point.y - previous.y);
+      previous = point;
+    }
+    const host = attached.parsed.figure.body.find(statement => statement.kind === "Path" && statement.items.some(item => item.kind === "Node" && item.id === node.sourceRef.sourceId));
+    if (!host || length <= 0) continue;
+    const action: EditAction = { kind: "movePathAttachedNode", nodeId: node.sourceRef.sourceId, hostPathSourceId: host.id, pos: .1 + .8 * random(),
+      posTolerance: DEFAULT_TOLERANCE_PT / length, snapToPreset: false, preserveRegime: true };
+    const next = applyDrag(attached, action, rendering);
+    if (next !== null && next !== attached.source) observe(key, frame, action, attached, render(next, rendering));
+  }
+}
+
 export function runDecimalNoiseAudit(options: { seed?: number; frames?: readonly FrameStack[]; bodies?: readonly Body[]; tolerancePt?: number; textEngine?: NodeTextEngine } = {}): DecimalNoiseRun {
   const tolerancePt = options.tolerancePt ?? DEFAULT_TOLERANCE_PT;
   const rendering = auditRendering(options.textEngine);
@@ -235,6 +281,7 @@ export function runDecimalNoiseAudit(options: { seed?: number; frames?: readonly
   const frames = options.frames ?? FRAMES;
   runPointerFuzz(options.seed ?? 1, frames, options.bodies ?? [...BODIES, IMAGE_BODY], edit => observe(edit.key, edit.frame, edit.action, edit.before, edit.after));
   imageResizeEdits(frames, options.seed ?? 1, rendering, observe);
+  adornmentEdits(frames, options.seed ?? 1, rendering, observe);
   return { edits, dragBacks, tolerancePt };
 }
 

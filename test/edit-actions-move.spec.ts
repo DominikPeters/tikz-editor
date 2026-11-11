@@ -974,7 +974,7 @@ describe("applyEditAction – moveElement", () => {
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
     expect(result.newSource).toContain("xshift=4pt");
-    expect(result.newSource).toContain("(1.11,1.07)");
+    expect(result.newSource).toContain("(1.1,1.07)");
     expectPatchesReconstructSource(source, result);
   });
 

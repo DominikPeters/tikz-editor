@@ -35,6 +35,8 @@ export function executeDocumentEdit(
     parseOptions?: EditParseOptions;
     evaluateOptions?: EvaluateOptions;
     nestedFigureSpan?: Span | null;
+    /** Half a screen pixel at the canvas zoom, in pt: how precisely pointer edits are meant. */
+    pointerTolerancePt?: number;
   } = {}
 ): EditActionResult {
   const { source, snapshot, activeRootId } = context;
@@ -84,7 +86,8 @@ export function executeDocumentEdit(
   const geometry = options.geometry ?? (snapshotMatchesRoot && snapshot.source === source && snapshot.parseResult && snapshot.semanticResult
     ? createEditGeometrySession({ source: editSource, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, evaluateOptions, parseOptions)
     : undefined);
-  const result = applyEditAction(editSource, snapshot.editHandles, action, { ...((geometry) === undefined ? {} : { geometry: geometry }), parseOptions, evaluateOptions });
+  const result = applyEditAction(editSource, snapshot.editHandles, action, { ...((geometry) === undefined ? {} : { geometry: geometry }), parseOptions, evaluateOptions,
+    ...(options.pointerTolerancePt === undefined ? {} : { pointerTolerancePt: options.pointerTolerancePt }) });
   if (!span || (result.kind !== "success" && result.kind !== "partial")) return result;
   const replay = applySourcePatches(working, result.patches);
   if (replay.kind !== "success") return { kind: "error", message: "The figure edit did not apply cleanly." };

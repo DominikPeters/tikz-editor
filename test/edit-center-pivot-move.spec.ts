@@ -174,7 +174,7 @@ describe("centered rotate-around movement planning", () => {
     if (plan.kind !== "success") throw new Error(plan.reason);
     expect(plan.contextsBySource.size).toBe(2);
     expect(plan.replacements.map(replacement => replacement.text)).toEqual([
-      "rotate around={32:(2,0.5)}", "rotate around={90:(4,4)}"
+      "rotate around={32:(2,.5)}", "rotate around={90:(4,4)}"
     ]);
   });
 

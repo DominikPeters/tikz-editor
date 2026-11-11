@@ -86,6 +86,7 @@ worldToSvgPoint
 import type { Span } from "@tikz-editor/core/ast/types";
 import { clearDeckReselect, peekDeckReselect, registerDeckCaretReader, type DeckCaret } from "./deck-insertion-bridge";
 import { registerTikzViewCenterReader } from "./tikz-insertion-bridge";
+import { pointerTolerancePtForScale } from "../canvas-zoom";
 import { buildHitRegions, type HitRegion } from "./hit-regions";
 import {
 pickClosestSourceId
@@ -2058,13 +2059,16 @@ export const CanvasPanel = memo(function CanvasPanel({
     (action: EditAction, historyMergeKey?: string, sourceOverride?: string, geometry?: EditGeometrySession, recordInHistory?: boolean): ApplyActionFeedback => {
       const sourceForEdit = sourceOverride ?? source;
       const drawingLayerRootId = useEditorStore.getState().documents[activeDocumentId]?.drawingLayerRootId;
+      // Read at the edit, not the render: the gesture is as precise as the zoom it happens at.
+      const pointerTolerancePt = pointerTolerancePtForScale(useEditorStore.getState().canvasTransform.scale);
       const result = executeDocumentEdit({ documentId: activeDocumentId, source: sourceForEdit, sourceRevision, activeRootId, snapshot,
         ...(drawingLayerRootId !== undefined ? { drawingLayerRootId } : {}) }, action, {
         ...(geometry !== undefined ? { geometry: geometry } : {}),
         parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame" },
         evaluateOptions: { textEngine: textEngineRef.current },
         nestedFigureSpan: nestedFigureSpan ? { from: nestedFigureSpan.from,
-          to: nestedFigureSpan.to + (sourceForEdit.length - source.length) } : null
+          to: nestedFigureSpan.to + (sourceForEdit.length - source.length) } : null,
+        ...(pointerTolerancePt === undefined ? {} : { pointerTolerancePt })
       });
 
       if (result.kind === "success" || result.kind === "partial") {

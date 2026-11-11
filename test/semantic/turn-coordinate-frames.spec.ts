@@ -104,8 +104,8 @@ describe("polar turn coordinate frames", () => {
     expectPoint(handle.local, Math.sqrt(3) * CM / 2, -CM / 2);
     expectPoint(applyFrameTransform(handle.frame, handle.local), end.x, end.y);
     const same = rewriteCoordinate(handle.world, handle, source);
-    // The formatter normalizes angles to [0,360) and preserves the authored radius unit.
-    expect(same).toBe("([turn]330:1cm)");
+    // Rewriting the point where it is keeps the authored angle and radius unit.
+    expect(same).toBe("([turn]-30:1cm)");
     if (!same) throw new Error("Missing arc rewrite");
     const unchanged = source.slice(0, handle.sourceRef.sourceSpan.from) + same + source.slice(handle.sourceRef.sourceSpan.to);
     expectPoint(endpoint(unchanged).end, end.x, end.y);

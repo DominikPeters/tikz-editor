@@ -13,7 +13,7 @@ import type { NodeItem, PathItem, PathStatement, Statement, Span } from "../ast/
 import type { SourcePatch } from "./types.js";
 import { applyEditIntent } from "./apply.js";
 import { computeMinimalReplacementPatch, replaceSpan } from "./patch.js";
-import { PT_PER_CM, type DragFormatPrecision } from "./format.js";
+import { COMMAND_TOLERANCE_PT, dragTolerancePt, PT_PER_CM, withWriteTolerance, type DragFormatPrecision } from "./format.js";
 import {
   generateComplexPathSource,
   generateElementSource,
@@ -216,6 +216,12 @@ export type EditActionApplyOptions = {
   geometry?: EditGeometrySession;
   evaluateOptions?: EvaluateOptions;
   parseOptions?: EditParseOptions;
+  /**
+   * How precise the gesture behind the edit is, in world pt: half a screen
+   * pixel at the current zoom. Numbers are written as the shortest decimals
+   * within it. Defaults to half a pixel at 100%.
+   */
+  pointerTolerancePt?: number;
 };
 
 export function preflightPositionNodeRelativeToAction(
@@ -242,6 +248,12 @@ type AnchorNameResolution = {
   insertedSpan?: Span;
   insertedLength: number;
 };
+
+/** Edits whose numbers come from where the pointer is: written to the pointer's precision. */
+const POINTER_ACTIONS: ReadonlySet<EditAction["kind"]> = new Set<EditAction["kind"]>([
+  "moveElement", "moveElements", "moveHandle", "insertPathPoint", "addElement", "addPath",
+  "pasteStatements", "duplicateElements", "resizeElement", "rotateElement", "moveAdornment", "movePathAttachedNode"
+]);
 
 export function applyEditAction(
   source: string,
@@ -270,7 +282,9 @@ export function applyEditAction(
     else parseOptions.sourceFingerprint = sourceFingerprint;
   }
   if ("bypassSnapping" in action) parseOptions = { ...parseOptions, bypassSnapping: action.bypassSnapping };
-  const rawResult = (() : EditActionResult => {
+  const precision = "formatPrecision" in action ? action.formatPrecision : undefined;
+  const tolerance = POINTER_ACTIONS.has(action.kind) ? dragTolerancePt(precision, options.pointerTolerancePt) : COMMAND_TOLERANCE_PT;
+  const rawResult = withWriteTolerance(tolerance, () : EditActionResult => {
     switch (action.kind) {
       case "moveHandle": {
         const initial = geometry?.semantic.editHandles.find(handle => handle.id === action.handleId);
@@ -398,7 +412,7 @@ export function applyEditAction(
       case "resizeElement":
         return applyResizeElementAction(source, action, evaluateOptions, parseOptions, geometry);
     }
-  })();
+  });
   let result = geometry && rawResult.kind === "unsupported" && (
     rawResult.reason === ADORNMENT_EDIT_NOOP_REASON ||
     rawResult.reason === PATH_ATTACHED_NODE_EDIT_NOOP_REASON ||

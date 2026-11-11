@@ -39,6 +39,7 @@ import { computeMinimalReplacementPatch, replaceSpan } from "../patch.js";
 import { rewriteCoordinate } from "../rewrite.js";
 import {
   pointDimensionFormatOptions,
+  writeTolerancePt,
   type DragFormatPrecision
 } from "../format.js";
 import { applyTextReplacements } from "../statement-ops.js";
@@ -412,7 +413,8 @@ function resizeNodeGraphics(
     ...(size.affectsHeight ? [size.requestedHeight / height] : [])
   ];
   const factor = Math.max(MIN_IMAGE_SIZE_PT / Math.min(width, height), ...factors);
-  const next = scaleNodeGraphics(source, graphics, factor);
+  // The node grows about its centre: a corner is half the diagonal away.
+  const next = scaleNodeGraphics(source, graphics, factor, writeTolerancePt() / (Math.hypot(width, height) / 2));
   return next ? { kind: "resized", source: next } : { kind: "unchanged" };
 }
 

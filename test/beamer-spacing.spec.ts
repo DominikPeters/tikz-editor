@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { POINTER_TOLERANCE_PT } from "../packages/core/src/edit/format.js";
 import { beamerSpacingTargets, beamerSpacingResizePatches, prepareBeamerDocument, type BeamerFrameLayout } from "../packages/core/src/beamer/index.js";
 import type { SourcePatch } from "../packages/core/src/edit/types.js";
 const document = (body: string, preamble = "") => String.raw`\documentclass{beamer}
@@ -72,8 +73,9 @@ describe("source-backed Beamer spacing", () => {
     expect(target).toBeDefined();
     const next = apply(source, beamerSpacingResizePatches(source, target, 5));
     const nextLayout = await render(next);
-    expect(beamerSpacingTargets(next, nextLayout)[0].sizePt).toBeCloseTo(target.sizePt + 5, 2);
-    expect(textY(nextLayout, "After") - textY(layout, "After")).toBeCloseTo(5, 2);
+    // The space is the shortest decimal in its unit within half a pixel of the drag.
+    expect(Math.abs(beamerSpacingTargets(next, nextLayout)[0].sizePt - (target.sizePt + 5))).toBeLessThanOrEqual(POINTER_TOLERANCE_PT);
+    expect(Math.abs(textY(nextLayout, "After") - textY(layout, "After") - 5)).toBeLessThanOrEqual(POINTER_TOLERANCE_PT);
   });
   it("places inline spacing after its owning line and preserves consumed whitespace", async () => {
     const source = document(String.raw`Before\medskip After\par Next`);

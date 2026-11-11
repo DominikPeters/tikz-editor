@@ -1,4 +1,5 @@
 import { plainNumber, tikz } from "../edit/fragment.js";
+import { POINTER_TOLERANCE_PT, shortestDecimal } from "../edit/format.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
@@ -47,9 +48,10 @@ export function beamerSpacingTargets(source: string, layout: BeamerFrameLayout):
   return targets;
 }
 
-export function beamerSpacingResizePatches(source: string, target: BeamerSpacingTarget, deltaPt: number): SourcePatch[] {
-  if (!Number.isFinite(deltaPt) || Math.abs(deltaPt) < 1e-6) return [];
-  const value = Number((target.value + deltaPt / target.unitPt).toFixed(4));
+/** The space dragged by `deltaPt`, as the shortest decimal within `tolerancePt` (half a pixel at 100% by default). */
+export function beamerSpacingResizePatches(source: string, target: BeamerSpacingTarget, deltaPt: number, tolerancePt = POINTER_TOLERANCE_PT): SourcePatch[] {
+  if (!Number.isFinite(deltaPt) || Math.abs(deltaPt) <= tolerancePt) return [];
+  const value = Number(shortestDecimal(target.value + deltaPt / target.unitPt, tolerancePt / target.unitPt));
   if (value === target.value) return [];
   let span = target.numericSpan ?? target.sourceSpan;
   if (!target.numericSpan && target.horizontal && !/\s/u.test(source[target.sourceSpan.from - 1] ?? "")) {

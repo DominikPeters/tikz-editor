@@ -208,9 +208,9 @@ describe("spacing handle gestures", () => {
   it("keeps a zero spacing's star and relative unit", async () => {
     await setup("\\vspace*{0em}");
     begin("deck-spacing-handle"); pointer("pointerup", 0, -20);
-    expect(useEditorStore.getState().source).toContain("\\vspace*{-0.9132em}");
+    expect(useEditorStore.getState().source).toContain("\\vspace*{-0.9em}");
     await renderSnapshot();
-    expect(host.querySelector('[data-testid="deck-spacing-handle"]')?.getAttribute("aria-valuenow")).toBe("-0.9132");
+    expect(host.querySelector('[data-testid="deck-spacing-handle"]')?.getAttribute("aria-valuenow")).toBe("-0.9");
   });
   it("supports vertical keyboard nudges and ignores horizontal arrows", async () => {
     const source = await setup("\\smallskip");

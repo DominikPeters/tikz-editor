@@ -2,6 +2,7 @@ import { plainNumber, sourceSlice, tikz, type TikzFragment } from "../edit/fragm
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
+import { POINTER_TOLERANCE_PT, shortestDecimal } from "../edit/format.js";
 import { parseTexDimensionExpression } from "../text/tex/dimensions.js";
 import { environmentBoundariesOf, readOptionList } from "./deck-edit-actions.js";
 import { buildBeamerObjectIndex, type BeamerObjectIndex, type BeamerObjectNode } from "./object-index.js";
@@ -121,24 +122,50 @@ function formatValue(source: string, numeric: NumericValue, value: number): Tikz
   return plainNumber(Number(value.toFixed(6)), "beamer-length", source[numeric.span.from] === ".");
 }
 
-export function beamerColumnResizePatches(source: string, divider: BeamerColumnDivider, deltaPt: number): SourcePatch[] {
+/**
+ * The divider moved by `deltaPt`. The left width is the shortest decimal that
+ * puts the divider within `tolerancePt` of the pointer; the right one takes
+ * up the rest, so widths in the same unit keep their exact sum.
+ */
+export function beamerColumnResizePatches(source: string, divider: BeamerColumnDivider, deltaPt: number, tolerancePt = POINTER_TOLERANCE_PT): SourcePatch[] {
   if (!Number.isFinite(deltaPt)) return [];
   const minimum = Math.min(12, divider.leftWidth, divider.rightWidth);
   const delta = Math.max(minimum - divider.leftWidth, Math.min(divider.rightWidth - minimum, deltaPt));
+  const leftPerPt = divider.left.value / divider.leftWidth;
+  const rightPerPt = divider.right.value / divider.rightWidth;
+  if (Math.abs(delta) <= tolerancePt) return [];
+  const left = Number(shortestDecimal(divider.left.value + delta * leftPerPt, tolerancePt * leftPerPt));
+  const sameUnit = Math.abs(leftPerPt - rightPerPt) <= 1e-9 * Math.max(leftPerPt, rightPerPt);
+  const digits = (value: number) => (String(value).split(".")[1] ?? "").length;
+  const right = sameUnit
+    ? Number((divider.left.value + divider.right.value - left).toFixed(Math.max(digits(left), digits(divider.left.value), digits(divider.right.value))))
+    : Number(shortestDecimal(divider.right.value - delta * rightPerPt, tolerancePt * rightPerPt));
   return numericPatches(source, [
-    { span: divider.left.span, replacement: formatValue(source, divider.left, divider.left.value * (divider.leftWidth + delta) / divider.leftWidth) },
-    { span: divider.right.span, replacement: formatValue(source, divider.right, divider.right.value * (divider.rightWidth - delta) / divider.rightWidth) },
+    { span: divider.left.span, replacement: formatValue(source, divider.left, left) },
+    { span: divider.right.span, replacement: formatValue(source, divider.right, right) },
   ]);
 }
 
-export function beamerImageResizePatches(source: string, target: BeamerImageResizeTarget, factor: number): SourcePatch[] {
+/**
+ * `factor` scales the image about its opposite corner; each number is the
+ * shortest decimal that keeps the dragged corner within `tolerancePt` (half
+ * a screen pixel at 100% by default).
+ */
+export function beamerImageResizePatches(source: string, target: BeamerImageResizeTarget, factor: number, tolerancePt = POINTER_TOLERANCE_PT): SourcePatch[] {
   if (!Number.isFinite(factor)) return [];
   const scale = Math.max(Math.min(1, 8 / Math.min(target.bounds.width, target.bounds.height)), Math.min(100, factor));
-  if (Math.abs(scale - 1) < 1e-9) return [];
-  const edits = target.values.map((value) => ({ span: value.span, replacement: formatValue(source, value, value.value * scale) }));
+  const factorTolerance = tolerancePt / Math.hypot(target.bounds.width, target.bounds.height);
+  if (Math.abs(scale - 1) <= factorTolerance) return [];
+  const edits = target.values.map((value) => ({ span: value.span, replacement: formatScaled(source, value, scale, factorTolerance) }));
   if (target.insertScale) {
     const { at, prefix, suffix } = target.insertScale;
-    edits.push({ span: { from: at, to: at }, replacement: tikz`${prefix}${plainNumber(Number(scale.toFixed(6)), "beamer-scale")}${suffix}` });
+    edits.push({ span: { from: at, to: at }, replacement: tikz`${prefix}${plainNumber(Number(shortestDecimal(scale, factorTolerance)), "beamer-scale")}${suffix}` });
   }
   return numericPatches(source, edits);
+}
+
+function formatScaled(source: string, numeric: NumericValue, factor: number, factorTolerance: number): TikzFragment {
+  const next = Number(shortestDecimal(numeric.value * factor, numeric.value * factorTolerance));
+  if (next === numeric.value) return sourceSlice(source, numeric.span);
+  return plainNumber(next, "beamer-length", source[numeric.span.from] === ".");
 }

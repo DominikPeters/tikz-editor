@@ -1,3 +1,4 @@
+import { POINTER_TOLERANCE_PT } from "../packages/core/src/edit/format.js";
 import { describe, expect, it } from "vitest";
 import { beamerColumnDividers, beamerColumnResizePatches, beamerImageResizeTarget, beamerImageResizePatches, prepareBeamerDocument } from "../packages/core/src/beamer/index.js";
 import type { SourcePatch } from "../packages/core/src/edit/types.js";
@@ -44,8 +45,9 @@ describe("column divider resizing", () => {
     const nextSource = apply(source, beamerColumnResizePatches(source, divider, 10));
     expect(nextSource).toContain("cm}"); expect(nextSource).toContain("\\linewidth}");
     const next = beamerColumnDividers(nextSource, await render(nextSource))[0];
-    expect(next.leftWidth).toBeCloseTo(divider.leftWidth + 10, 3);
-    expect(next.rightWidth).toBeCloseTo(divider.rightWidth - 10, 3);
+    // Widths are the shortest decimals that put the divider within half a pixel.
+    expect(Math.abs(next.leftWidth - (divider.leftWidth + 10))).toBeLessThanOrEqual(POINTER_TOLERANCE_PT);
+    expect(Math.abs(next.rightWidth - (divider.rightWidth - 10))).toBeLessThanOrEqual(POINTER_TOLERANCE_PT);
   });
   it("clamps at usable widths and has no patch for a zero delta", async () => {
     const source = document(columns([".5\\textwidth", ".5\\textwidth"]));
@@ -53,7 +55,7 @@ describe("column divider resizing", () => {
     expect(beamerColumnResizePatches(source, divider, 0)).toEqual([]);
     const next = apply(source, beamerColumnResizePatches(source, divider, 1e6));
     const resized = beamerColumnDividers(next, await render(next))[0];
-    expect(resized.rightWidth).toBeCloseTo(12, 3);
+    expect(Math.abs(resized.rightWidth - 12)).toBeLessThanOrEqual(POINTER_TOLERANCE_PT);
     expect(resized.leftWidth + resized.rightWidth).toBeCloseTo(divider.leftWidth + divider.rightWidth, 3);
   });
   it("does not publish misleading handles for arbitrary expressions or hidden columns", async () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { POINTER_TOLERANCE_PT } from "../../packages/core/src/edit/format.js";
 import { renderTikzToSvg } from "../../packages/core/src/render/index.js";
 import { applyEditAction } from "../../packages/core/src/edit/actions.js";
 import { editFeatureRegistry } from "../../packages/core/src/capabilities/registries.js";
@@ -17,14 +18,14 @@ const prefix = String.raw`\coordinate (C) at (0.85,5.30);\coordinate (B) at (2,3
 
 describe("visual editing of calc coordinates", () => {
   it.each([
-    [String.raw`$(C)+(.33,.11)$`, String.raw`$(C)+(0.53,0.01)$`],
-    [String.raw`$(C)-(.33,.11)$`, String.raw`$(C)-(0.13,0.21)$`],
+    [String.raw`$(C)+(.33,.11)$`, String.raw`$(C)+(.53,.01)$`],
+    [String.raw`$(C)-(.33,.11)$`, String.raw`$(C)-(.13,.21)$`],
     [String.raw`$(C)!.5!(B)$`, String.raw`$(C)!.5!(B)+(0.2,-0.1)$`],
     [String.raw`$(C)+(30:1)$`, String.raw`$(C)+(30:1)+(0.2,-0.1)$`],
     [String.raw`$(C)$`, String.raw`$(C)+(0.2,-0.1)$`],
-    [String.raw`$ (C) + ( .33333 , .11000 ) $`, String.raw`$ (C) + ( 0.53333 , 0.01000 ) $`],
-    [String.raw`$(C)+(2mm,3pt)$`, String.raw`$(C)+(4mm,0.15pt)$`],
-    [String.raw`$(C)+(1e-3,.2)$`, String.raw`$(C)+(0.201,0.1)$`]
+    [String.raw`$ (C) + ( .33333 , .11000 ) $`, String.raw`$ (C) + ( .53 , .01 ) $`],
+    [String.raw`$(C)+(2mm,3pt)$`, String.raw`$(C)+(4mm,0pt)$`],
+    [String.raw`$(C)+(1e-3,.2)$`, String.raw`$(C)+(0.2,.1)$`]
   ])("preserves %s while moving it", (expression, expected) => {
     const source = String.raw`\begin{tikzpicture}${prefix}\node[anchor=south west] at (${expression}) {Label};\end{tikzpicture}`;
     const before = render(source);
@@ -39,8 +40,9 @@ describe("visual editing of calc coordinates", () => {
     expect(result.newSource).toContain(prefix);
     expectPatchesReconstructSource(source, result);
     const after = render(result.newSource).semantic.editHandles.find(h => h.id === handle.id)!;
-    expect(after.world.x - handle.world.x).toBeCloseTo(.2 * PT_PER_CM, 2);
-    expect(after.world.y - handle.world.y).toBeCloseTo(-.1 * PT_PER_CM, 2);
+    // The offset is the shortest decimal within half a pixel of the pointer.
+    expect(Math.abs(after.world.x - handle.world.x - .2 * PT_PER_CM)).toBeLessThanOrEqual(POINTER_TOLERANCE_PT);
+    expect(Math.abs(after.world.y - handle.world.y + .1 * PT_PER_CM)).toBeLessThanOrEqual(POINTER_TOLERANCE_PT);
   });
 
   it("keeps fine drag precision when the original offset has only one decimal place", () => {
@@ -53,7 +55,7 @@ describe("visual editing of calc coordinates", () => {
     });
     expect(result.kind).toBe("success");
     if (result.kind !== "success") throw new Error(JSON.stringify(result));
-    expect(result.newSource).toContain(String.raw`$(C)+(0.25,0.25)$`);
+    expect(result.newSource).toContain(String.raw`$(C)+(.25,.25)$`);
     expectPatchesReconstructSource(source, result);
   });
 
@@ -135,7 +137,7 @@ describe("visual editing of calc coordinates", () => {
     });
     expect(result.kind).toBe("success");
     if (result.kind !== "success") throw new Error(JSON.stringify(result));
-    expect(result.newSource).toContain(String.raw`controls ($(C)+(0.3,.2)$) and (1,2)`);
+    expect(result.newSource).toContain(String.raw`controls ($(C)+(.3,.2)$) and (1,2)`);
     expectPatchesReconstructSource(source, result);
     render(result.newSource);
   });

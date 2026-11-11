@@ -6,6 +6,7 @@ import { beginDocumentEdit, canContinueDocumentEdit, restoreDocumentEdit, trackD
 import { useEditorStore } from "../../store/store";
 import { deckStepRootKey } from "../../root-key";
 import { clientToSvgPoint } from "./geometry";
+import { pointerTolerancePtForScale } from "../canvas-zoom";
 
 export type DeckResizeTarget = { kind: "columns"; divider: BeamerColumnDivider }
   | { kind: "spacing"; spacing: BeamerSpacingTarget }
@@ -20,14 +21,16 @@ type Session = {
 };
 
 function patchesFor(source: string, target: DeckResizeTarget, dx: number, dy: number): SourcePatch[] {
-  if (target.kind === "columns") return beamerColumnResizePatches(source, target.divider, dx);
-  if (target.kind === "spacing") return beamerSpacingResizePatches(source, target.spacing, dy);
+  // Numbers are written as precisely as the pointer is at this zoom.
+  const tolerance = pointerTolerancePtForScale(useEditorStore.getState().canvasTransform.scale);
+  if (target.kind === "columns") return beamerColumnResizePatches(source, target.divider, dx, tolerance);
+  if (target.kind === "spacing") return beamerSpacingResizePatches(source, target.spacing, dy, tolerance);
   if (target.kind === "crop") return beamerImageCropPatches(source, target.crop, beamerImageCropDrag(target.crop, target.handle, dx, dy));
   const { width, height } = target.image.bounds;
   const sx = target.corner.endsWith("e") ? 1 : -1;
   const sy = target.corner.startsWith("s") ? 1 : -1;
   const factor = 1 + (sx * dx * width + sy * dy * height) / (width * width + height * height);
-  return beamerImageResizePatches(source, target.image, factor);
+  return beamerImageResizePatches(source, target.image, factor, tolerance);
 }
 function patchedSource(source: string, patches: SourcePatch[]): string {
   return [...patches].reverse().reduce((text, patch) => text.slice(0, patch.oldSpan.from) + patch.replacement + text.slice(patch.oldSpan.to), source);

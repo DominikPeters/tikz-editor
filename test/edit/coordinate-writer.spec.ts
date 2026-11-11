@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { PT_PER_CM } from "../../packages/core/src/coords/source.js";
 import { frameTransform } from "../../packages/core/src/coords/transforms.js";
 import { createCoordinateWriter } from "../../packages/core/src/edit/writer/index.js";
+import { POINTER_TOLERANCE_PT } from "../../packages/core/src/edit/format.js";
 import { isCoordinateEditHandle, type CoordinateEditHandle } from "../../packages/core/src/semantic/types.js";
-import { FRAMES, evaluate, frameTolerance, pictureSource } from "../pointer-invariant/pointer-fuzz.js";
+import { FRAMES, evaluate, pictureSource } from "../pointer-invariant/pointer-fuzz.js";
 import { testSiteContext, wp, wv } from "../coords-helpers.js";
 
 /** Every spelling the writer preserves, in one path. */
@@ -35,7 +36,8 @@ describe("coordinate writer", () => {
       const edited = source.slice(0, span.from) + written.fragment + source.slice(span.to);
       const reread = bodyHandles(edited, bodyFrom, bodyTo - (span.to - span.from) + written.fragment.length)[index];
       const error = reread ? Math.hypot(reread.world.x - target.x, reread.world.y - target.y) : Infinity;
-      if (error > 1e-3 * frameTolerance(frame)) problems.push(`${handle.sourceText} → ${written.fragment}: off by ${error.toFixed(4)}pt`);
+      // Steps are the shortest decimals that keep the farthest copy within half a pixel.
+      if (error > POINTER_TOLERANCE_PT) problems.push(`${handle.sourceText} → ${written.fragment}: off by ${error.toFixed(4)}pt`);
     }
     expect(problems).toEqual([]);
   });
@@ -47,11 +49,12 @@ describe("coordinate writer", () => {
       const result = writer.point({ kind: "coordinate", handle }, wp(handle.world.x + 28.45274, handle.world.y));
       return result.kind === "ok" ? result.fragment : result.reason;
     });
-    // Drag precision rounds in cm before converting to a component's unit:
-    // `10pt` plus 1cm is 1.35cm, written as 38.41122pt.
+    // Each component is the shortest decimal in its own unit within half a
+    // pixel: `10pt` plus 1cm is 38.45pt, written as 38.5pt. Components the
+    // move leaves alone keep their authored text (`.5`).
     expect(written).toEqual([
-      "(1,0)", "(2cm,0.5)", "(36.59:2.18)", "(13.29:17.4mm)", "(2,0.5)", "(38.41122pt,1)", "([turn]347.18:1.07)",
-      "([turn]276.76:11.1mm)", "(canvas cs:x=2cm,y=2mm)", "(1,1.31)", "(3,3mm)"
+      "(1,0)", "(2cm,.5)", "(36.6:2.18)", "(13:17.4mm)", "(2,.5)", "(38.5pt,1)", "([turn]347:1.07)",
+      "([turn]277:11.1mm)", "(canvas cs:x=2cm,y=2mm)", "(1,1.3)", "(3,3mm)"
     ]);
   });
 
@@ -70,8 +73,8 @@ describe("coordinate writer", () => {
     const { source, bodyFrom, bodyTo } = pictureSource(frame, String.raw`\draw[P] (0,0) -- (1cm,.5) -- (2,3mm) -- (0.5cm,1.5cm) -- (1,2,0) -- (-1,0);`);
     const handles = bodyHandles(source, bodyFrom, bodyTo);
     const writer = createCoordinateWriter(source);
-    // Copy (i, j) = (2, 3): two steps right by 20pt, three down by 14pt.
-    const steps = [{ variable: String.raw`\i`, world: wv(20, 0) }, { variable: String.raw`\j`, world: wv(0, -14) }];
+    // Copy (i, j) = (2, 3) of 3 × 4: two steps right by 20pt, three down by 14pt.
+    const steps = [{ variable: String.raw`\i`, world: wv(20, 0), count: 3 }, { variable: String.raw`\j`, world: wv(0, -14), count: 4 }];
     const problems: string[] = [];
     for (const [index, handle] of handles.entries()) {
       const written = writer.translated({ kind: "coordinate", handle }, steps);
@@ -84,7 +87,8 @@ describe("coordinate writer", () => {
       const edited = source.slice(0, span.from) + text + source.slice(span.to);
       const reread = bodyHandles(edited, bodyFrom, bodyTo - (span.to - span.from) + text.length)[index];
       const error = reread ? Math.hypot(reread.world.x - (handle.world.x + 40), reread.world.y - (handle.world.y - 42)) : Infinity;
-      if (error > 1e-3 * frameTolerance(frame)) problems.push(`${handle.sourceText} → ${written.fragment}: off by ${error.toFixed(4)}pt`);
+      // Steps are the shortest decimals that keep the farthest copy within half a pixel.
+      if (error > POINTER_TOLERANCE_PT) problems.push(`${handle.sourceText} → ${written.fragment}: off by ${error.toFixed(4)}pt`);
     }
     expect(problems).toEqual([]);
   });
@@ -97,7 +101,7 @@ describe("coordinate writer", () => {
       const result = writer.translated({ kind: "coordinate", handle }, steps);
       return result.kind === "ok" ? result.fragment : result.reason;
     });
-    expect(written).toEqual([String.raw`(\i*1,-\j*0.5)`, String.raw`(1cm+\i*1cm,.5-\j*0.5)`, String.raw`(2+\i*1,3mm-\j*5mm)`,
+    expect(written).toEqual([String.raw`(\i*1,-\j*0.5)`, String.raw`(1cm+\i*1cm,.5-\j*.5)`, String.raw`(2+\i*1,3mm-\j*5mm)`,
       String.raw`( 0.5+\i*1 , 1.5-\j*0.5 )`, String.raw`(1+\i*1,2-\j*0.5,0)`]);
   });
 

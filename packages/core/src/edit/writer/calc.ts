@@ -7,7 +7,7 @@ import { ptToCm } from "../../coords/source.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
 import { worldDeltaToLocalDelta } from "../coords.js";
-import { formatNumber } from "../format.js";
+import { shortestDecimal } from "../format.js";
 
 const NUMBER = String.raw`[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?`;
 const SCALAR = new RegExp(`^(\\s*)(${NUMBER})(cm|mm|pt|bp|pc|in|dd|cc|sp)?(\\s*)$`, "u");
@@ -18,11 +18,15 @@ const CARTESIAN = /^\(([^(),]+),([^(),]+)\)$/u;
  * named references or math. The offset is read in the handle's frame; it
  * goes into the expression's last plain term, or a new `+(…)` after it.
  */
-export function writeCalcCoordinate(newWorld: WorldPoint, handle: CalcCoordinateEditHandle, source: string): string | null {
+export function writeCalcCoordinate(newWorld: WorldPoint, handle: CalcCoordinateEditHandle, source: string, tolerancePt: number): string | null {
   const delta = worldDeltaToLocalDelta(worldVector(pt(newWorld.x - handle.world.x), pt(newWorld.y - handle.world.y)), handle.frame);
   if (!delta || !Number.isFinite(delta.x) || !Number.isFinite(delta.y)) return null;
   const raw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
-  if (Math.abs(delta.x) < 1e-9 && Math.abs(delta.y) < 1e-9) return raw;
+  // Local pt per component that keeps the point within the tolerance (over √2 along each axis).
+  const axisX = Math.hypot(handle.frame.a, handle.frame.b);
+  const axisY = Math.hypot(handle.frame.c, handle.frame.d);
+  const tolerance = { x: axisX > 0 ? tolerancePt / (Math.SQRT2 * axisX) : 0, y: axisY > 0 ? tolerancePt / (Math.SQRT2 * axisY) : 0 };
+  if (Math.abs(delta.x) <= tolerance.x && Math.abs(delta.y) <= tolerance.y) return raw;
   const parsed = parseCoordinate(raw);
   if (parsed.form !== "calc") return null;
   const calcStart = raw.lastIndexOf(parsed.x);
@@ -34,42 +38,39 @@ export function writeCalcCoordinate(newWorld: WorldPoint, handle: CalcCoordinate
   let rewritten: string;
   if (customBasis) {
     const end = inner.trimEnd().length;
-    rewritten = `${inner.slice(0, end)}+(${formatNumber(delta.x, { fractionDigits: 6 })}pt,${formatNumber(delta.y, { fractionDigits: 6 })}pt)${inner.slice(end)}`;
+    rewritten = `${inner.slice(0, end)}+(${shortestDecimal(delta.x, tolerance.x)}pt,${shortestDecimal(delta.y, tolerance.y)}pt)${inner.slice(end)}`;
   } else if (numeric) {
-    const x = rewriteScalar(requireArrayValue(numeric, 1), tail.sign * delta.x);
-    const y = rewriteScalar(requireArrayValue(numeric, 2), tail.sign * delta.y);
+    const x = rewriteScalar(requireArrayValue(numeric, 1), tail.sign * delta.x, tolerance.x);
+    const y = rewriteScalar(requireArrayValue(numeric, 2), tail.sign * delta.y, tolerance.y);
     if (x != null && y != null) {
       rewritten = inner.slice(0, tail.from) + `(${x},${y})` + inner.slice(tail.to);
     } else {
-      rewritten = appendOffset(inner, delta.x, delta.y);
+      rewritten = appendOffset(inner, delta.x, delta.y, tolerance);
     }
   } else {
-    rewritten = appendOffset(inner, delta.x, delta.y);
+    rewritten = appendOffset(inner, delta.x, delta.y, tolerance);
   }
   return raw.slice(0, calcStart + 1) + rewritten + raw.slice(calcStart + parsed.x.length - 1);
 }
 
-function appendOffset(inner: string, x: number, y: number): string {
+function appendOffset(inner: string, x: number, y: number, tolerance: { x: number; y: number }): string {
   const end = inner.trimEnd().length;
-  return `${inner.slice(0, end)}+(${formatNumber(ptToCm(pt(x)))},${formatNumber(ptToCm(pt(y)))})${inner.slice(end)}`;
+  return `${inner.slice(0, end)}+(${shortestDecimal(ptToCm(pt(x)), ptToCm(pt(tolerance.x)))},${shortestDecimal(ptToCm(pt(y)), ptToCm(pt(tolerance.y)))})${inner.slice(end)}`;
 }
 
-function rewriteScalar(raw: string, deltaPt: number): string | null {
+/** The scalar moved by `deltaPt`, to within `tolerancePt`; unchanged when the move is within it. */
+function rewriteScalar(raw: string, deltaPt: number, tolerancePt: number): string | null {
   const match = SCALAR.exec(raw);
   if (!match) return null;
-  if (Math.abs(deltaPt) < 1e-9) return raw;
+  if (Math.abs(deltaPt) <= tolerancePt) return raw;
   const unit = match[3] ?? "cm";
   const unitPt = parseLength(`1${unit}`, "cm");
   if (unitPt == null || unitPt === 0) return null;
   const value = Number(match[2]) + deltaPt / unitPt;
-  const parts = requireArrayValue(match, 2).toLowerCase().split("e");
-  const mantissa = requireArrayValue(parts, 0);
-  const exponent = parts[1] ?? "0";
-  const digits = Math.max(0, (mantissa.split(".")[1]?.length ?? 0) - Number(exponent));
-  const formatted = formatNumber(value, { fractionDigits: Math.min(12, Math.max(2, digits)) });
-  const displayDigits = Math.min(12, Math.max(digits, formatted.split(".")[1]?.length ?? 0));
-  const display = digits > 0 ? Number(formatted).toFixed(displayDigits) : formatted;
-  return `${match[1]}${display}${match[3] ?? ""}${match[4]}`;
+  const text = shortestDecimal(value, tolerancePt / unitPt);
+  // Keep the author's `.5` spelling.
+  const bare = /^[+-]?\./u.test(requireArrayValue(match, 2)) ? text.replace(/^(-?)0\./u, "$1.") : text;
+  return `${match[1]}${bare}${match[3] ?? ""}${match[4]}`;
 }
 
 /** Find only a complete top-level term, never an interpolation operand. */

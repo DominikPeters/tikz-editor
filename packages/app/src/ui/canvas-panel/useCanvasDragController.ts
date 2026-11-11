@@ -1,6 +1,7 @@
 import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { canContinueDocumentEdit, restoreDocumentEdit, trackDocumentEdit } from "../../edit-session";
 import { useEditorStore } from "../../store/store";
+import { pointerTolerancePtForScale } from "../canvas-zoom";
 import { createFrameEditQueue } from "../frame-edit-queue";
 import { applyEditAction } from "@tikz-editor/core/edit/actions";
 import { resolveResizeFrameForSource } from "./resize-frames";
@@ -100,6 +101,19 @@ type CanvasWorldListeners = {
   onKeyDown: (event: KeyboardEvent) => void;
   onKeyUp: (event: KeyboardEvent) => void;
 };
+
+/** How far `pos` may be off for the node to stay within half a pixel: the pointer tolerance over the segment's length. */
+function placementPosTolerance(segment: Parameters<typeof pointAtPlacementSegment>[0]): { posTolerance?: number } {
+  let length = 0;
+  let previous = pointAtPlacementSegment(segment, 0);
+  for (let i = 1; i <= 32; i++) {
+    const next = pointAtPlacementSegment(segment, i / 32);
+    length += Math.hypot(next.x - previous.x, next.y - previous.y);
+    previous = next;
+  }
+  const tolerance = pointerTolerancePtForScale(useEditorStore.getState().canvasTransform.scale);
+  return length > 0 && tolerance !== undefined ? { posTolerance: tolerance / length } : {};
+}
 
 function clientPointFromEvent(event: Pick<PointerEvent, "clientX" | "clientY">): ClientPoint {
   return clientPoint(px(event.clientX), px(event.clientY));
@@ -970,6 +984,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
                 nodeId: pathAttachedNodeDrag.nodeId,
                 hostPathSourceId: pathAttachedNodeDrag.hostPathSourceId,
                 pos: snapped.snappedT,
+                ...placementPosTolerance(pathAttachedNodeDrag.segment),
                 snapToPreset: !ctrlOrMeta,
                 preserveRegime: true,
                 ...(sideUpdate !== undefined ? { sideUpdate: sideUpdate } : {}),

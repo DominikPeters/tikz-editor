@@ -6,12 +6,14 @@ import { coordinateSourceUnit, parseLengthWithInfo } from "../../semantic/coords
 import { spelledCoordinateFrame, type CoordinateSpelling, type SiteContext } from "../../semantic/site-context.js";
 import { isFrameLocalCoordinateEditHandle, isRelativeCoordinateEditHandle, type CoordinateEditHandle } from "../../semantic/types.js";
 import { worldDeltaToLocalDelta, worldToLocal } from "../coords.js";
-import { formatNumber, type NumberFormatOptions } from "../format.js";
+import { EXACT_TOLERANCE_PT, formatNumber, writeTolerancePt, type NumberFormatOptions } from "../format.js";
+import { ptToCm } from "../../coords/source.js";
+import type { FrameTransform } from "../../coords/transforms.js";
 import { joinFragments, tikz, type CoordinateText, type TikzFragment } from "../fragment.js";
 import type { EditHandlePositioningContext } from "../../semantic/types.js";
 import { coordinateText } from "./coordinate-text.js";
 import { writePositioning } from "./positioning.js";
-import { cartesianComponents, coordinateLayout, formatCanvasCoordinate, formatCoordinate, formatPolarCoordinate, translatedComponent } from "./format.js";
+import { cartesianComponents, coordinateLayout, formatCanvasCoordinate, formatCoordinate, formatPolarCoordinate, translatedComponent, type WrittenValue } from "./format.js";
 import { localToSourceUnits } from "./source-units.js";
 import { writeCalcCoordinate } from "./calc.js";
 
@@ -62,8 +64,11 @@ export type PointPrecision = "drag" | "reparameterize";
 
 export type PointWriteOptions = Readonly<{ precision?: PointPrecision }>;
 
-/** A loop variable and the world vector one step of it moves a copy by. */
-export type LoopStep = Readonly<{ variable: string; world: WorldVector }>;
+/**
+ * A loop variable and the world vector one step of it moves a copy by;
+ * `count` copies, so a step's rounding adds up `count - 1` times.
+ */
+export type LoopStep = Readonly<{ variable: string; world: WorldVector; count?: number }>;
 
 export interface CoordinateWriter {
   /** The text that puts `site`'s coordinate at `world`, in its own spelling. */
@@ -181,24 +186,39 @@ function readCartesian(raw: string): { spelling: CoordinateSpelling; local: Fram
   return { spelling: { unitlessX: !x.hasExplicitUnit, unitlessY: !y.hasExplicitUnit }, local: frameLocalPoint(pt(x.value), pt(y.value)) };
 }
 
+/**
+ * How far each written component may be from the exact one, in cm-equivalent
+ * units, so the written point lies within the edit's tolerance of the exact
+ * one: the world tolerance over √2 along each of the frame's axes.
+ */
+function componentTolerances(frame: FrameTransform, precision: PointPrecision): { x: number; y: number } {
+  const world = precision === "reparameterize" ? EXACT_TOLERANCE_PT : writeTolerancePt();
+  const x = Math.hypot(frame.a, frame.b);
+  const y = Math.hypot(frame.c, frame.d);
+  return { x: x > 0 ? ptToCm(pt(world / (Math.SQRT2 * x))) : 0, y: y > 0 ? ptToCm(pt(world / (Math.SQRT2 * y))) : 0 };
+}
+
+function writtenValues(units: { x: number; y: number }, tolerance: { x: number; y: number }): { x: WrittenValue; y: WrittenValue } {
+  return { x: { value: units.x, tolerance: tolerance.x }, y: { value: units.y, tolerance: tolerance.y } };
+}
+
 function writeContextPoint(site: ContextSite, world: WorldPoint, precision: PointPrecision): WriterResult<CoordinateText> {
   const spelling = site.replaces === undefined ? UNITLESS : readCartesian(site.replaces)?.spelling;
   if (!spelling) return unsupported("only cartesian coordinates are rewritten at a context");
-  const local = worldToLocal(world, spelledCoordinateFrame(site.context, spelling));
+  const frame = spelledCoordinateFrame(site.context, spelling);
+  const local = worldToLocal(world, frame);
   if (!local) return singular();
-  const units = localToSourceUnits(local);
-  const digits = precision === "reparameterize" ? REPARAMETERIZE : {};
-  return ok(formatCoordinate(site.replaces ?? "", formatNumber(units.x, digits), formatNumber(units.y, digits)));
+  const values = writtenValues(localToSourceUnits(local), componentTolerances(frame, precision));
+  return ok(formatCoordinate(site.replaces ?? "", values.x, values.y));
 }
 
 function writeCoordinatePoint(source: string, site: CoordinateSite, world: WorldPoint, precision: PointPrecision): WriterResult<CoordinateText> {
   const { handle } = site;
   const context = site.context ?? handle.siteContext;
   const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
-  const digits = precision === "reparameterize" ? REPARAMETERIZE : {};
 
   if (handle.rewriteMode === "calc") {
-    const text = writeCalcCoordinate(world, handle, source);
+    const text = writeCalcCoordinate(world, handle, source, precision === "reparameterize" ? EXACT_TOLERANCE_PT : writeTolerancePt());
     return text === null ? unsupported("this calc expression cannot be offset") : ok(text);
   }
 
@@ -211,35 +231,39 @@ function writeCoordinatePoint(source: string, site: CoordinateSite, world: World
     const local = worldDeltaToLocalDelta(delta, frame);
     if (!local) return singular();
     const units = localToSourceUnits(local);
-    if (handle.coordinateForm === "polar") return polar(oldRaw, units, handle, precision);
-    if (handle.coordinateForm === "explicit") return canvas(oldRaw, units, handle, digits);
+    if (handle.coordinateForm === "polar") return polar(oldRaw, units, frame, handle, precision);
+    if (handle.coordinateForm === "explicit") return canvas(oldRaw, units, frame, handle, precision);
     if (handle.coordinateForm === "xyz") return unsupported("xyz coordinates are not rewritten");
-    return ok(formatCoordinate(oldRaw, formatNumber(units.x, digits), formatNumber(units.y, digits), handle.sourceUnits));
+    const values = writtenValues(units, componentTolerances(frame, precision));
+    return ok(formatCoordinate(oldRaw, values.x, values.y, handle.sourceUnits));
   }
 
   if (handle.rewriteMode === "unsupported") {
     // A named path endpoint can be detached into a new coordinate, unitless.
     if (handle.kind !== "path-point" || handle.coordinateForm !== "named") return unsupported("this coordinate cannot be rewritten");
     const spelling = handle.coordinateSpace === "frame-local" ? handle.spelling : UNITLESS;
-    const local = worldToLocal(world, spelledCoordinateFrame(context, spelling));
+    const frame = spelledCoordinateFrame(context, spelling);
+    const local = worldToLocal(world, frame);
     if (!local) return singular();
-    const units = localToSourceUnits(local);
-    return ok(formatCoordinate(oldRaw, formatNumber(units.x, digits), formatNumber(units.y, digits),
-      handle.coordinateSpace === "frame-local" ? handle.sourceUnits : undefined));
+    const values = writtenValues(localToSourceUnits(local), componentTolerances(frame, precision));
+    return ok(formatCoordinate(oldRaw, values.x, values.y, handle.coordinateSpace === "frame-local" ? handle.sourceUnits : undefined));
   }
 
   // Handles are runtime data: a direct one without a frame is malformed.
   if (!isFrameLocalCoordinateEditHandle(handle)) return unsupported("this coordinate has no frame to write in");
-  const local = worldToLocal(world, spelledCoordinateFrame(context, handle.spelling));
+  const frame = spelledCoordinateFrame(context, handle.spelling);
+  const local = worldToLocal(world, frame);
   if (!local) return singular();
   const units = localToSourceUnits(local);
   switch (handle.coordinateForm) {
-    case "cartesian":
-      return ok(formatCoordinate(oldRaw, formatNumber(units.x, digits), formatNumber(units.y, digits), handle.sourceUnits));
+    case "cartesian": {
+      const values = writtenValues(units, componentTolerances(frame, precision));
+      return ok(formatCoordinate(oldRaw, values.x, values.y, handle.sourceUnits));
+    }
     case "polar":
-      return polar(oldRaw, units, handle, precision);
+      return polar(oldRaw, units, frame, handle, precision);
     case "explicit":
-      return canvas(oldRaw, units, handle, digits);
+      return canvas(oldRaw, units, frame, handle, precision);
     case "xyz":
     case "calc":
     case "named":
@@ -267,30 +291,35 @@ function writeTranslated(source: string, site: WriteSite, steps: readonly LoopSt
   const y = layout && parseLengthWithInfo(layout.y, "cm");
   if (!layout || !x || !y) return unsupported("only cartesian coordinates are moved by a loop");
   const frame = spelledCoordinateFrame(context, { unitlessX: !x.hasExplicitUnit, unitlessY: !y.hasExplicitUnit });
-  const moves: { variable: string; x: number; y: number }[] = [];
+  const moves: { variable: string; x: number; y: number; share: number }[] = [];
+  // Each copy's error is the sum of its steps' errors, each taken up to count - 1 times.
+  const multiples = steps.reduce((sum, step) => sum + Math.max(1, (step.count ?? 2) - 1), 0);
   for (const step of steps) {
     const local = worldDeltaToLocalDelta(step.world, frame);
     if (!local) return singular();
     const units = localToSourceUnits(local);
-    moves.push({ variable: step.variable, x: units.x, y: units.y });
+    moves.push({ variable: step.variable, x: units.x, y: units.y, share: Math.max(1, multiples) });
   }
-  const xText = translatedComponent(layout.x, moves.map(move => ({ variable: move.variable, value: move.x })), coordinateSourceUnit(layout.x));
-  const yText = translatedComponent(layout.y, moves.map(move => ({ variable: move.variable, value: move.y })), coordinateSourceUnit(layout.y));
+  const tolerance = componentTolerances(frame, "drag");
+  const xText = translatedComponent(layout.x, moves.map(move => ({ variable: move.variable, value: move.x, tolerance: tolerance.x / move.share })), coordinateSourceUnit(layout.x));
+  const yText = translatedComponent(layout.y, moves.map(move => ({ variable: move.variable, value: move.y, tolerance: tolerance.y / move.share })), coordinateSourceUnit(layout.y));
   return ok(`(${layout.open}${layout.options}${xText}${layout.gap}${yText}${layout.afterY}${layout.z === null ? "" : `,${layout.z}`})`);
 }
 
-function polar(oldRaw: string, units: { x: number; y: number }, handle: CoordinateEditHandle, precision: PointPrecision): WriterResult<CoordinateText> {
+function polar(oldRaw: string, units: { x: number; y: number }, frame: FrameTransform, handle: CoordinateEditHandle, precision: PointPrecision): WriterResult<CoordinateText> {
   const radius = Math.hypot(units.x, units.y);
   let angleDeg = (Math.atan2(units.y, units.x) * 180) / Math.PI;
-  if (precision === "reparameterize") {
-    return ok(formatPolarCoordinate(oldRaw, formatNumber(angleDeg, REPARAMETERIZE), formatNumber(radius, REPARAMETERIZE), handle.sourceUnits));
-  }
-  if (angleDeg < 0) angleDeg += 360;
-  return ok(formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius), handle.sourceUnits));
+  // The radius and the arc the angle sweeps share the tolerance, along the frame's longer axis.
+  const tolerance = componentTolerances(frame, precision);
+  const radial = Math.min(tolerance.x, tolerance.y);
+  const angleTolerance = radius > 0 ? (radial / radius) * 180 / Math.PI : 0;
+  if (precision !== "reparameterize" && angleDeg < 0) angleDeg += 360;
+  return ok(formatPolarCoordinate(oldRaw, { value: angleDeg, tolerance: angleTolerance }, { value: radius, tolerance: radial }, handle.sourceUnits));
 }
 
-function canvas(oldRaw: string, units: { x: number; y: number }, handle: CoordinateEditHandle, digits: NumberFormatOptions): WriterResult<CoordinateText> {
-  const text = formatCanvasCoordinate(oldRaw, formatNumber(units.x, digits), formatNumber(units.y, digits), handle.sourceUnits);
+function canvas(oldRaw: string, units: { x: number; y: number }, frame: FrameTransform, handle: CoordinateEditHandle, precision: PointPrecision): WriterResult<CoordinateText> {
+  const values = writtenValues(units, componentTolerances(frame, precision));
+  const text = formatCanvasCoordinate(oldRaw, values.x, values.y, handle.sourceUnits);
   return text === null ? unsupported("canvas coordinate without both x= and y=") : ok(text);
 }
 

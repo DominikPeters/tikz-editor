@@ -4,7 +4,7 @@ import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { applyOptionMutationsToTarget, normalizeOptionKey, type OptionMutation } from "../option-mutations.js";
 import { resolvePropertyTarget } from "../property-target.js";
-import { pointDistanceFormatOptions, type DragFormatPrecision } from "../format.js";
+import { pointDistanceFormatOptions, shortestDecimal, type DragFormatPrecision } from "../format.js";
 import type { EditParseOptions } from "../parse-options.js";
 import {
   PATH_ATTACHED_NODE_POSITION_VALUE_KEY,
@@ -40,7 +40,12 @@ export type MovePathAttachedNodeAction = {
   };
   distanceUpdatePt?: number;
   formatPrecision?: DragFormatPrecision;
+  /** How far `pos` may be off: the pointer's tolerance over the segment's length. */
+  posTolerance?: number;
 };
+
+/** A `pos` given without a pointer's tolerance is written as given, to six decimals. */
+const DEFAULT_POS_TOLERANCE = 5e-7;
 
 type PathAttachedNodeInspectorAction = {
   elementId: string;
@@ -88,7 +93,7 @@ export function applyMovePathAttachedNodeAction(
   const regime = resolvePathAttachedNodeRegime(resolved.target.options);
 
   const mutations = new Map<string, OptionMutation>();
-  applyPositionMutations(mutations, normalizePathPosition(action.pos), action.snapToPreset);
+  applyPositionMutations(mutations, normalizePathPosition(action.pos), action.snapToPreset, action.posTolerance);
   applySideMutations(mutations, regime, action.sideUpdate);
   applyDistanceMutations(mutations, regime, action);
 
@@ -179,7 +184,8 @@ export function resolveDraggedPathAttachedNodeDirection(
 function applyPositionMutations(
   mutations: Map<string, OptionMutation>,
   rawPosition: number,
-  snapToPreset = true
+  snapToPreset = true,
+  tolerance = DEFAULT_POS_TOLERANCE
 ): void {
   const position = normalizePathPosition(rawPosition);
   const snapped = snapToPreset ? resolvePathPositionPreset(position, null) : { preset: null };
@@ -193,7 +199,7 @@ function applyPositionMutations(
     mutations.set(snapped.preset, { kind: "set", value: EMPTY_FRAGMENT });
     return;
   }
-  mutations.set("pos", { kind: "set", value: optionValueFor("pos", ratio(position, 6)) });
+  mutations.set("pos", { kind: "set", value: optionValueFor("pos", ratio(Number(shortestDecimal(position, tolerance > 0 ? tolerance : DEFAULT_POS_TOLERANCE)), 6)) });
 }
 
 function applySideMutations(

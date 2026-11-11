@@ -882,7 +882,7 @@ describe("applyEditAction – resizeElement", () => {
 
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
-    expect(result.newSource).toContain("\\draw[rotate=45] (0.71,0) rectangle (2,2.12);");
+    expect(result.newSource).toContain("\\draw[rotate=45] (0.7,0) rectangle (2,2.12);");
   });
 
   it("keeps rotated rectangle corner drags continuous across world-topness changes", () => {

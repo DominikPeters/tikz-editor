@@ -165,7 +165,23 @@
     "file": "packages/core/src/beamer/deck-resize.ts",
     "declaration": "beamerImageResizePatches.replacement",
     "count": 1,
-    "expression": "plainNumber(Number(scale.toFixed(6)), \"beamer-scale\")"
+    "expression": "plainNumber(Number(shortestDecimal(scale, factorTolerance)), \"beamer-scale\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "plainNumber",
+    "file": "packages/core/src/beamer/deck-resize.ts",
+    "declaration": "formatScaled",
+    "count": 1,
+    "expression": "plainNumber(next, \"beamer-length\", source[numeric.span.from] === \".\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/deck-resize.ts",
+    "declaration": "formatScaled",
+    "count": 1,
+    "expression": "sourceSlice(source, numeric.span)"
   },
   {
     "rule": "F2",
@@ -1077,7 +1093,7 @@
     "file": "packages/core/src/edit/graphics-node-size.ts",
     "declaration": "scaleNodeGraphics.fragment",
     "count": 1,
-    "expression": "plainNumber(round(factor), \"graphics-scale\")"
+    "expression": "plainNumber(Number(shortestDecimal(factor, factorTolerance)), \"graphics-scale\")"
   },
   {
     "rule": "F2",

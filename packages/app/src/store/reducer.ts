@@ -1,4 +1,5 @@
 import { requireArrayValue } from "@tikz-editor/core/utils/collections";
+import { pointerTolerancePtForScale } from "../ui/canvas-zoom";
 import { editingIdentityRootId, reconcileEditingIdentities, updateDocumentIdentities, withEditingHandleIdentities } from "../editing-identities";
 import { executeDocumentEdit } from "../edit-execution";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
@@ -892,9 +893,11 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       ) {
         result = action.precomputedResult;
       } else {
+        const pointerTolerancePt = pointerTolerancePtForScale(state.canvasTransform.scale);
         result = executeDocumentEdit({ ...activeDoc, documentId }, action.action, {
           parseOptions: { ...action.parseOptions,
-            propertyWriteMode: action.parseOptions?.propertyWriteMode ?? (action.recordInHistory === false ? "preview" : "commit") }
+            propertyWriteMode: action.parseOptions?.propertyWriteMode ?? (action.recordInHistory === false ? "preview" : "commit") },
+          ...(pointerTolerancePt === undefined ? {} : { pointerTolerancePt })
         });
       }
 

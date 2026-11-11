@@ -274,8 +274,8 @@ function buildRepeatReplacement(
 /** Each loop moves a copy by its step along the page: the first to the right, the second down. */
 function loopSteps(xLoop: RepeatLoop | null, yLoop: RepeatLoop | null): LoopStep[] {
   return [
-    ...(xLoop ? [{ variable: xLoop.variable, world: worldVector(pt(xLoop.stepPt), pt(0)) }] : []),
-    ...(yLoop ? [{ variable: yLoop.variable, world: worldVector(pt(0), pt(yLoop.stepPt)) }] : [])
+    ...(xLoop ? [{ variable: xLoop.variable, world: worldVector(pt(xLoop.stepPt), pt(0)), count: xLoop.count }] : []),
+    ...(yLoop ? [{ variable: yLoop.variable, world: worldVector(pt(0), pt(yLoop.stepPt)), count: yLoop.count }] : [])
   ];
 }
 
