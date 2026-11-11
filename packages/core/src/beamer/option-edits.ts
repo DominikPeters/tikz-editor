@@ -21,6 +21,7 @@ export function rewriteBeamerOptions(
   const last = kept.lastIndexOf(true);
   if (last < 0 && append === undefined && comments.length === 0) return [{ span: argument.span, insert: tikz`` }];
   const parts: TikzFragment[] = [];
+  let emitted = false;
   const trivia = (span: Span, comma: boolean): void => {
     let from = span.from;
     for (let at = span.from; at < span.to; at += 1) {
@@ -28,6 +29,8 @@ export function rewriteBeamerOptions(
       if (comma) { comma = false; continue; }
       parts.push(sourceSlice(source, { from, to: at }));
       from = at + 1;
+      // With nothing kept before it, the space after a dropped comma would lead the list: `[ clip]`.
+      if (!emitted) while (from < span.to && (source[from] === " " || source[from] === "\t")) from += 1;
     }
     parts.push(sourceSlice(source, { from, to: span.to }));
   };
@@ -36,6 +39,7 @@ export function rewriteBeamerOptions(
   entries.forEach((entry, index) => {
     trivia({ from: cursor, to: entry.span.from }, index > 0 && kept[index - 1] === true && index <= last);
     if (kept[index]) {
+      emitted = true;
       parts.push(replacement?.index === index ? replacement.text : sourceSlice(source, entry.span));
       if (replacement?.index === index) for (const comment of comments.filter(comment => entry.span.from <= comment.from && comment.to <= entry.span.to)) {
         parts.push(sourceSlice(source, comment), layout(source.includes("\r\n") ? "\r\n" : "\n"));

@@ -1,4 +1,5 @@
-import { applyDeckEditAction, buildBeamerObjectIndex } from "@tikz-editor/core/beamer/index";
+import { applyDeckEditAction, buildBeamerObjectIndex, replaceIncludegraphicsFile } from "@tikz-editor/core/beamer/index";
+import { imageNodeCommandSpan } from "@tikz-editor/core/edit/graphics-node-size";
 import { beginDocumentEdit, canContinueDocumentEdit } from "../edit-session.js";
 import { prepareGraphics } from "../graphics-bytes.js";
 import { discardPlacedGraphics, graphicsFileName, graphicsMimeType, placeGraphicsFile, showGraphicsNotice } from "./deck-graphics-insertion.js";
@@ -48,6 +49,54 @@ export async function replaceSelectedDeckGraphics(params: {
     params.rememberSelection();
     params.dispatch({ type: "APPLY_EDIT_ACTION", documentId: session.documentId, action, precomputedSource: session.latestSource,
       precomputedResult: result, expectedDocumentRevision: { documentId: session.documentId, sourceRevision: session.latestRevision } });
+    showGraphicsNotice(placed, result.newSource);
+    return { status: "applied" };
+  } catch (error) {
+    return { status: "failed", reason: error instanceof Error ? error.message : "The selected image could not be loaded or stored." };
+  }
+}
+
+/**
+ * Replace… for an image node in a TikZ figure: the file goes where the
+ * document keeps images, and the node's `\includegraphics` names it.
+ */
+export async function replaceTikzNodeGraphics(params: {
+  getState: () => EditorState;
+  dispatch: (action: EditorAction) => void;
+  elementId: string;
+}): Promise<{ status: "applied" | "cancelled" | "stale" } | { status: "failed"; reason: string }> {
+  const state = params.getState();
+  const spanOf = (latest: EditorState) => {
+    const body = latest.snapshot.parseResult?.figure.body;
+    return body && latest.snapshot.source === latest.source ? imageNodeCommandSpan(latest.source, body, params.elementId) : null;
+  };
+  const span = spanOf(state);
+  if (!span || state.documents[state.activeDocumentId]?.assistantLockReason) return { status: "stale" };
+  const session = beginDocumentEdit(state);
+  const platform = getActiveEditorPlatform();
+  const picker = platform.files?.openBinary;
+  if (!picker) return { status: "failed", reason: "Image selection is unavailable on this platform." };
+  try {
+    const opened = await picker({ addToRecent: false, kind: "graphics-import" });
+    if (!opened) return { status: "cancelled" };
+    const stale = (latest: EditorState) => !canContinueDocumentEdit(session, latest) || latest.documents[session.documentId]?.assistantLockReason != null ||
+      getActiveEditorPlatform() !== platform;
+    if (stale(params.getState())) return { status: "stale" };
+    const name = opened.fileRef?.name ?? null;
+    const input = { bytes: opened.bytes, name, mimeType: name ? graphicsMimeType(name) : "",
+      path: opened.fileRef?.provider === "desktop-fs" ? opened.fileRef.path ?? null : null };
+    const prepared = await prepareGraphics(input.bytes, input.mimeType);
+    const placed = await placeGraphicsFile({ source: session.latestSource, offset: span.from, documentId: session.documentId,
+      documentRef: params.getState().documents[session.documentId]?.fileRef ?? null, input, prepared, name: name ?? "image" });
+    if ("error" in placed) return { status: "failed", reason: placed.error };
+    const latestSpan = spanOf(params.getState());
+    const result = latestSpan ? replaceIncludegraphicsFile(session.latestSource, latestSpan, placed.texPath) : null;
+    if (result?.kind !== "success" || stale(params.getState())) {
+      await discardPlacedGraphics(placed.notice);
+      return result && result.kind !== "success" ? { status: "failed", reason: result.kind === "unsupported" ? result.reason : "The image could not be replaced." } : { status: "stale" };
+    }
+    params.dispatch({ type: "APPLY_SOURCE_PATCHES", documentId: session.documentId, baseRevision: session.latestRevision,
+      changedSourceIds: [params.elementId], patches: result.patches });
     showGraphicsNotice(placed, result.newSource);
     return { status: "applied" };
   } catch (error) {

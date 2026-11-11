@@ -49,6 +49,8 @@ export {
   applyDeckEditAction,
   applyDeckDocumentEditAction,
   isDeckEditAction,
+  replaceIncludegraphicsFile,
+  setIncludegraphicsOption,
   type DeckEditAction,
 } from "./deck-edit-actions.js";
 export { isDeckDocumentEditAction, type DeckDocumentEditAction } from "./document-theme-edits.js";
@@ -73,6 +75,7 @@ export {
 export {
   buildDeckFrameInspector,
   buildDeckObjectInspector,
+  includegraphicsSections,
   splitDeckDimension,
   type DeckInspectorColor,
   type DeckInspectorCommand,

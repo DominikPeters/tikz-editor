@@ -91,22 +91,6 @@
     "rule": "F2",
     "symbol": "userText",
     "file": "packages/core/src/beamer/deck-edit-actions.ts",
-    "declaration": "applyReplaceGraphics.edits.insert",
-    "count": 1,
-    "expression": "userText(path, \"inspector-value\")"
-  },
-  {
-    "rule": "F2",
-    "symbol": "sourceSlice",
-    "file": "packages/core/src/beamer/deck-edit-actions.ts",
-    "declaration": "applyReplaceGraphics.insert",
-    "count": 1,
-    "expression": "sourceSlice(source, comment)"
-  },
-  {
-    "rule": "F2",
-    "symbol": "userText",
-    "file": "packages/core/src/beamer/deck-edit-actions.ts",
     "declaration": "applySetColumnWidth.typed",
     "count": 1,
     "expression": "userText(trimmed, \"beamer-text\")"
@@ -142,6 +126,22 @@
     "declaration": "normalizeOverlaySpec.spec",
     "count": 1,
     "expression": "userText(trimmed, \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/deck-edit-actions.ts",
+    "declaration": "replaceIncludegraphicsFile.edits.insert",
+    "count": 1,
+    "expression": "userText(path, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/beamer/deck-edit-actions.ts",
+    "declaration": "replaceIncludegraphicsFile.insert",
+    "count": 1,
+    "expression": "sourceSlice(source, comment)"
   },
   {
     "rule": "F2",

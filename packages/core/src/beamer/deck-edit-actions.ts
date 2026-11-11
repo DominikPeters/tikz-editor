@@ -466,6 +466,16 @@ function applySetGraphicsOption(
   if (node.kind !== "graphics") {
     return { kind: "unsupported", reason: "Only graphics take image options." };
   }
+  return setIncludegraphicsOption(source, node.sourceSpan, key, value);
+}
+
+/**
+ * Sets (a string), adds (true) or removes (null) one option of the
+ * `\includegraphics` within `span`, in any document: a slide image or one in
+ * a TikZ node.
+ */
+export function setIncludegraphicsOption(source: string, span: Span, key: string, value: string | true | null): EditActionResult {
+  const node = { sourceSpan: span };
   const context = createBeamerSyntaxContext(source);
   const command = context.syntax
     .controlsIn(node.sourceSpan)
@@ -494,6 +504,12 @@ function applySetGraphicsOption(
 
 function applyReplaceGraphics(source: string, node: BeamerObjectNode, path: string): EditActionResult {
   if (node.kind !== "graphics") return { kind: "unsupported", reason: "Only images can be replaced." };
+  return replaceIncludegraphicsFile(source, node.sourceSpan, path);
+}
+
+/** Points the `\includegraphics` within `span` at `path`, dropping a PDF page selection. */
+export function replaceIncludegraphicsFile(source: string, span: Span, path: string): EditActionResult {
+  const node = { sourceSpan: span };
   // An extensionless name is looked up as graphics.sty does; a named extension must be one the preview reads.
   const extension = /\.([A-Za-z0-9]+)$/u.exec(path.slice(path.lastIndexOf("/") + 1))?.[1];
   if (!path.trim() || /[\\{}%#$^&\r\n]/u.test(path) || (extension !== undefined && !/^(?:png|jpe?g|svg|pdf)$/iu.test(extension))) return { kind: "unsupported", reason: "Choose a PNG, JPEG, SVG or PDF with a literal TeX-compatible path." };

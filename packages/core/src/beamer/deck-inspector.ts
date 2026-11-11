@@ -529,10 +529,26 @@ const DIMENSION_UNIT_NAMES: Readonly<Record<string, string>> = {
   "\\paperheight": "× paper height",
 };
 
+/**
+ * The File, Size and Crop sections of an `\includegraphics` image, for any
+ * document: a slide image (with its layout, for crop) or an image in a TikZ
+ * node (`lengthSuffix` "cm": new widths and heights in centimetres, no crop).
+ */
+export function includegraphicsSections(
+  source: string,
+  span: Span,
+  options: { readonly layout?: BeamerFrameLayout; readonly objectId?: string; readonly lengthSuffix?: { readonly width: string; readonly height: string }; readonly crop?: boolean } = {}
+): DeckInspectorSection[] {
+  const node: Pick<BeamerObjectNode, "id" | "sourceSpan"> = { id: options.objectId ?? "", sourceSpan: span };
+  const sections = graphicsSections(createBeamerSyntaxContext(source), node, options.layout, options.lengthSuffix);
+  return options.crop === false ? sections.filter((section) => section.id !== "crop") : sections;
+}
+
 function graphicsSections(
   context: BeamerSyntaxContext,
-  node: BeamerObjectNode,
-  layout: BeamerFrameLayout | undefined
+  node: Pick<BeamerObjectNode, "id" | "sourceSpan">,
+  layout: BeamerFrameLayout | undefined,
+  lengthSuffix: { readonly width: string; readonly height: string } = { width: "\\textwidth", height: "\\textheight" }
 ): DeckInspectorSection[] {
   const command = context.syntax
     .controlsIn(node.sourceSpan)
@@ -579,7 +595,7 @@ function graphicsSections(
   }
 
   const sizeFields: DeckInspectorField[] = [];
-  for (const [id, label, defaultSuffix] of [["width", "Width", "\\textwidth"], ["height", "Height", "\\textheight"], ["scale", "Scale", ""]] as const) {
+  for (const [id, label, defaultSuffix] of [["width", "Width", lengthSuffix.width], ["height", "Height", lengthSuffix.height], ["scale", "Scale", ""]] as const) {
     const field = optionNumberField({ id, label, raw: rawValue(id), defaultSuffix,
       write: (suffix) => ({ kind: "setGraphicsOption", key: id, suffix }) });
     if (field?.kind !== "number") continue;

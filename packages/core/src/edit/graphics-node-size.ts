@@ -1,4 +1,4 @@
-import type { Span } from "../ast/types.js";
+import type { NodeItem, Span, Statement } from "../ast/types.js";
 import { applyFragments, plainNumber, sourceSlice, tikz, type EditedSource, type FragmentEdit, type TikzFragment } from "./fragment.js";
 import { shortestDecimal } from "./format.js";
 
@@ -94,4 +94,35 @@ function splitEntries(text: string, offset: number): Entry[] {
   }
   push(text.length);
   return entries;
+}
+
+/**
+ * The `\includegraphics` command of the image node `elementId` (a `\node`
+ * statement or a node on a path) when its text is that command alone, as
+ * inserted images are; null for any other element.
+ */
+export function imageNodeCommandSpan(source: string, statements: readonly Statement[], elementId: string): Span | null {
+  const node = findNode(statements, elementId);
+  if (node?.textSource !== "group") return null;
+  const text = source.slice(node.textSpan.from, node.textSpan.to);
+  const match = COMMAND.exec(text);
+  if (!match) return null;
+  const leading = text.length - text.trimStart().length;
+  return { from: node.textSpan.from + leading, to: node.textSpan.to - (text.length - text.trimEnd().length) };
+}
+
+function findNode(statements: readonly Statement[], id: string): NodeItem | null {
+  for (const statement of statements) {
+    if (statement.kind === "Scope") {
+      const nested = findNode(statement.body, id);
+      if (nested) return nested;
+      continue;
+    }
+    if (statement.kind !== "Path") continue;
+    const nodes = statement.items.filter((item): item is NodeItem => item.kind === "Node");
+    const own = nodes.find((item) => item.id === id);
+    if (own) return own;
+    if (statement.id === id && statement.command === "node" && nodes.length === 1) return nodes[0] ?? null;
+  }
+  return null;
 }

@@ -40,6 +40,7 @@ import { getInspectorPropertyCapabilityStatus } from "../capabilities";
 import { ColorPickerField } from "../ColorPicker";
 import { MULTI_ARRANGE_ACTIONS,type MultiArrangeAction } from "./arrange-actions";
 import { InspectorMultiSection,InspectorSingleSection } from "./InspectorSections";
+import { IMAGE_NODE_HIDDEN_PROPERTY_IDS, ImageNodeSections, useImageNodeSpan } from "./ImageNodeSections";
 import {
 clampNumber,
 compactPairPresentation,
@@ -136,6 +137,9 @@ export function InspectorPanel() {
     dispatch,
     getInspectorDescriptor
   });
+
+  const imageElementId = selectedSourceIds.length === 1 ? selectedSourceIds[0] : undefined;
+  const imageSpan = useImageNodeSpan(imageElementId);
 
   const [manualLineWidthCustomKeys, setManualLineWidthCustomKeys] = useState<Set<string>>(
     () => new Set()
@@ -1979,7 +1983,7 @@ export function InspectorPanel() {
           </SidePanel.Content>
         ) : (
           <>
-            <SidePanel.Header>{ELEMENT_KIND_TITLES[renderedDescriptor.elementKind]}</SidePanel.Header>
+            <SidePanel.Header>{imageSpan ? "Image" : ELEMENT_KIND_TITLES[renderedDescriptor.elementKind]}</SidePanel.Header>
             <SidePanel.Content className={css.content ?? ""}>
               <div className={css.elementInfo}>
                 {renderedDescriptor.readOnlyReason ? (
@@ -1989,7 +1993,8 @@ export function InspectorPanel() {
                   <div className={css.globalNote}>{renderedDescriptor.infoNote}</div>
                 ) : null}
 
-                {renderedDescriptor.sections.map((section) => (
+                {imageSpan && imageElementId ? <ImageNodeSections elementId={imageElementId} span={imageSpan} /> : null}
+                {imageNodeDescriptorSections(renderedDescriptor.sections, imageSpan != null).map((section) => (
                   <InspectorSingleSection
                     key={section.id}
                     section={section}
@@ -2043,4 +2048,12 @@ export function InspectorPanel() {
       )}
     </SidePanel>
   );
+}
+
+/** An image node's own sections leave out what only text uses (font, alignment, text colour). */
+function imageNodeDescriptorSections(sections: InspectorDescriptor["sections"], image: boolean): InspectorDescriptor["sections"] {
+  if (!image) return sections;
+  return sections
+    .map((section) => ({ ...section, properties: section.properties.filter((property) => !IMAGE_NODE_HIDDEN_PROPERTY_IDS.has(property.id)) }))
+    .filter((section) => section.properties.length > 0);
 }
