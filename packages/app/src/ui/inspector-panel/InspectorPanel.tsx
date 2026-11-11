@@ -116,6 +116,7 @@ export function InspectorPanel() {
   const toolProjectNamedColorSwatches = useProjectNamedColorSwatches();
 
   const {
+    source: inspectorSource,
     selectedSourceIds,
     snapshot,
     projectNamedColorSwatches,
@@ -139,7 +140,7 @@ export function InspectorPanel() {
   });
 
   const imageElementId = selectedSourceIds.length === 1 ? selectedSourceIds[0] : undefined;
-  const imageSpan = useImageNodeSpan(imageElementId);
+  const imageSpan = useImageNodeSpan(imageElementId, inspectorSource, snapshot);
 
   const [manualLineWidthCustomKeys, setManualLineWidthCustomKeys] = useState<Set<string>>(
     () => new Set()
@@ -1993,7 +1994,7 @@ export function InspectorPanel() {
                   <div className={css.globalNote}>{renderedDescriptor.infoNote}</div>
                 ) : null}
 
-                {imageSpan && imageElementId ? <ImageNodeSections elementId={imageElementId} span={imageSpan} /> : null}
+                {imageSpan && imageElementId ? <ImageNodeSections elementId={imageElementId} span={imageSpan} source={inspectorSource} beginNumberLabelScrub={beginNumberLabelScrub} /> : null}
                 {imageNodeDescriptorSections(renderedDescriptor.sections, imageSpan != null).map((section) => (
                   <InspectorSingleSection
                     key={section.id}

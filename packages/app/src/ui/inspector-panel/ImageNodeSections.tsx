@@ -1,11 +1,12 @@
-import { useMemo, useRef, useState, type JSX } from "react";
+import { useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import {
   includegraphicsSections,
   setIncludegraphicsOption,
   type DeckInspectorCommand,
+  type DeckInspectorField,
   type DeckInspectorWrite
 } from "@tikz-editor/core/beamer/index";
-import type { Span } from "@tikz-editor/core/ast/types";
+import type { Span, Statement } from "@tikz-editor/core/ast/types";
 import { imageNodeCommandSpan } from "@tikz-editor/core/edit/graphics-node-size";
 import { useEditorStore } from "../../store/store";
 import { replaceTikzNodeGraphics } from "../deck-graphics-replacement";
@@ -16,10 +17,12 @@ import css from "./InspectorPanel.module.css";
 /** Node properties that mean nothing for a node holding only an image. */
 export const IMAGE_NODE_HIDDEN_PROPERTY_IDS: ReadonlySet<string> = new Set(["node-text-align", "node-text-width", "node-font", "node-text-color"]);
 
-/** The selected node's `\includegraphics` span, when it is an image node of the current snapshot. */
-export function useImageNodeSpan(elementId: string | undefined): Span | null {
-  const source = useEditorStore((s) => s.source);
-  const snapshot = useEditorStore((s) => s.snapshot);
+/**
+ * The selected node's `\includegraphics` span, when it is an image node.
+ * `source` and `snapshot` are the inspector's, which move together, so the
+ * section stays put while a scrub previews new source ahead of the snapshot.
+ */
+export function useImageNodeSpan(elementId: string | undefined, source: string, snapshot: { readonly source: string; readonly parseResult: { readonly figure: { readonly body: readonly Statement[] } } | null }): Span | null {
   return useMemo(() => {
     const body = snapshot.parseResult?.figure.body;
     if (!elementId || !body || snapshot.source !== source) return null;
@@ -37,26 +40,55 @@ function optionValue(write: Extract<DeckInspectorWrite, { kind: "setGraphicsOpti
  * File and Size for a TikZ node that holds an image, with the slide image
  * inspector's fields: lengths default to centimetres, and there is no crop.
  */
-export function ImageNodeSections(props: { elementId: string; span: Span }): JSX.Element | null {
-  const { elementId, span } = props;
-  const source = useEditorStore((s) => s.source);
-  const sourceRevision = useEditorStore((s) => s.sourceRevision);
+/** The inspector's number-label scrub, shared with every other scrubbable label. */
+export type BeginNumberLabelScrub = (event: ReactPointerEvent<HTMLElement>, binding: {
+  writable: boolean; value: number; step: number; min?: number; max?: number;
+  onPreview: (value: number) => void; onCommit: (value: number) => void;
+}) => void;
+
+export function ImageNodeSections(props: { elementId: string; span: Span; source: string; beginNumberLabelScrub: BeginNumberLabelScrub }): JSX.Element | null {
+  const { elementId, span, source, beginNumberLabelScrub } = props;
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
   const dispatch = useEditorStore((s) => s.dispatch);
   const [error, setError] = useState<string | null>(null);
   const replacing = useRef(false);
   const sections = useMemo(() => includegraphicsSections(source, span, { lengthSuffix: { width: "cm", height: "cm" }, crop: false }), [source, span]);
 
-  const commit = (write: DeckInspectorWrite, value: string | number | boolean | null): void => {
-    if (write.kind !== "setGraphicsOption" && write.kind !== "setGraphicsFlag") return;
-    const result = setIncludegraphicsOption(source, span, write.key, optionValue(write, value));
+  /** The edit against `base`, applied only while the document still is `base`. */
+  const applyOption = (base: string, write: Extract<DeckInspectorWrite, { kind: "setGraphicsOption" | "setGraphicsFlag" }>, value: string | number | boolean | null): void => {
+    const result = setIncludegraphicsOption(base, span, write.key, optionValue(write, value));
     if (result.kind !== "success") {
       setError(result.kind === "unsupported" ? result.reason : "The image could not be changed.");
       return;
     }
     setError(null);
-    if (result.patches.length === 0) return;
-    dispatch({ type: "APPLY_SOURCE_PATCHES", documentId: activeDocumentId, baseRevision: sourceRevision, changedSourceIds: [elementId], patches: result.patches });
+    const live = useEditorStore.getState();
+    if (result.patches.length === 0 || live.source !== base) return;
+    dispatch({ type: "APPLY_SOURCE_PATCHES", documentId: activeDocumentId, baseRevision: live.sourceRevision, changedSourceIds: [elementId], patches: result.patches });
+  };
+
+  const commit = (write: DeckInspectorWrite, value: string | number | boolean | null): void => {
+    if (write.kind === "setGraphicsOption" || write.kind === "setGraphicsFlag") applyOption(source, write, value);
+  };
+
+  /** Dragging a size label previews the image at each step and commits one undoable edit. */
+  const beginScrub = (event: ReactPointerEvent<HTMLElement>, field: Extract<DeckInspectorField, { kind: "number" }>): void => {
+    const write = field.write;
+    if (write?.kind !== "setGraphicsOption" || field.value == null) return;
+    const base = source;
+    beginNumberLabelScrub(event, {
+      writable: true,
+      value: field.value,
+      step: field.step,
+      ...(field.min === undefined ? {} : { min: field.min }),
+      ...(field.max === undefined ? {} : { max: field.max }),
+      onPreview: (next) => {
+        const result = setIncludegraphicsOption(base, span, write.key, optionValue(write, next));
+        if (result.kind === "success") dispatch({ type: "SET_SOURCE_TRANSIENT", source: result.newSource, changedSourceIds: [elementId] });
+      },
+      // The scrub helper restores the base source before committing.
+      onCommit: (next) => { applyOption(base, write, next); }
+    });
   };
 
   const command = (next: DeckInspectorCommand): void => {
@@ -76,7 +108,7 @@ export function ImageNodeSections(props: { elementId: string; span: Span }): JSX
           {section.title ? <SidePanel.SectionHeader>{section.title}</SidePanel.SectionHeader> : null}
           <SidePanel.SectionBody>
             {section.fields.map((field) => (
-              <DeckField key={field.id} field={field} onCommit={commit} onCommand={command} />
+              <DeckField key={field.id} field={field} onCommit={commit} onCommand={command} onBeginScrub={beginScrub} />
             ))}
             {section.id === "image" && error ? <p className={css.deckReadOnlyReason}>{error}</p> : null}
           </SidePanel.SectionBody>
