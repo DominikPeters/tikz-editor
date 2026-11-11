@@ -82,7 +82,7 @@ export type CaseOutcome =
 
 export type CaseResult = { key: string; action: string; outcome: CaseOutcome };
 
-type Snapshot = { source: string; handles: EditHandle[]; parsed: ReturnType<typeof parseTikz>; semantic: ReturnType<typeof evaluateTikzFigure> };
+export type Snapshot = { source: string; handles: EditHandle[]; parsed: ReturnType<typeof parseTikz>; semantic: ReturnType<typeof evaluateTikzFigure> };
 
 export function evaluate(source: string): Snapshot {
   const parsed = parseTikz(source, { recover: true, includeContextDefinitions: true });
@@ -218,7 +218,10 @@ function changedText(before: string, after: string): string {
   return JSON.stringify(after.slice(start, after.length - end).slice(0, 120));
 }
 
-export type FuzzContext = { seed: number; tolerance: Map<string, number> };
+/** Sees every edit that wrote source, whatever its check concluded (the decimal-noise audit). */
+export type EditObserver = (edit: { key: string; frame: FrameStack; action: EditAction; before: Snapshot; after: Snapshot }) => void;
+
+export type FuzzContext = { seed: number; tolerance: Map<string, number>; observe?: EditObserver };
 
 function tol(context: FuzzContext, frame: FrameStack): number {
   let value = context.tolerance.get(frame.label);
@@ -244,6 +247,7 @@ function runCase(
   const applied = apply(before, action);
   if (applied.kind !== "success") return { key, action: name, outcome: applied };
   const next = applied.next;
+  context.observe?.({ key, frame, action, before, after: next });
   const result = check(next);
   if ("kind" in result) return { key, action: name, outcome: result };
   const tolerance = tol(context, frame);
@@ -678,8 +682,8 @@ const BODY_CASES = [
 ];
 const PICTURE_CASES = [addElementCases, pathToolCase, freehandCase, figureBoundsCase, singularCases, changedInsertionCases, crossScopePasteCase];
 
-export function runPointerFuzz(seed: number, frames: readonly FrameStack[] = FRAMES, bodies: readonly Body[] = BODIES): CaseResult[] {
-  const context: FuzzContext = { seed, tolerance: new Map() };
+export function runPointerFuzz(seed: number, frames: readonly FrameStack[] = FRAMES, bodies: readonly Body[] = BODIES, observe?: EditObserver): CaseResult[] {
+  const context: FuzzContext = { seed, tolerance: new Map(), ...(observe ? { observe } : {}) };
   const results: CaseResult[] = [];
   for (const frame of frames) {
     for (const body of bodies) {

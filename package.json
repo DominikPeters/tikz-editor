@@ -33,6 +33,7 @@
     "test:watch": "npm run generate:grammar && vitest",
     "test:corpus": "npm run generate:grammar && vitest run test/corpus.spec.ts",
     "test:pointer-fuzz": "npm run generate:grammar && POINTER_FUZZ_FULL=1 vitest run test/pointer-invariant",
+    "audit:decimal-noise": "DECIMAL_NOISE_AUDIT=1 POINTER_FUZZ_FULL=1 vitest run test/pointer-invariant/decimal-noise.spec.ts",
     "parse:corpus": "npm run test:corpus",
     "compare:renderers": "node scripts/compare-tikz-renderers.mjs",
     "compare:paragraph-breaks": "node scripts/compare-paragraph-breaks.mjs",
