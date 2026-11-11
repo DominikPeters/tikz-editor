@@ -9,6 +9,10 @@ import { graphicBytesBase64, graphicBytesFromBase64, importedGraphicPath, replac
 import { getActiveEditorPlatform } from "../platform/current.js";
 import type { DocumentFileRef, EditorAction, EditorState } from "../store/types.js";
 import { requestDeckReselect, takeDeckCaret } from "./canvas-panel/deck-insertion-bridge.js";
+import { readTikzViewCenter } from "./canvas-panel/tikz-insertion-bridge.js";
+import { pt, worldPoint, type WorldPoint } from "@tikz-editor/core/coords/index";
+import type { EditAction } from "@tikz-editor/core/edit/actions";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 
 /**
  * Inserting an image on the active slide: the file goes where the document
@@ -193,16 +197,119 @@ function extensionOf(path: string): string {
   return name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
 }
 
+/**
+ * Where an inserted image goes: the text of the active slide, or the TikZ
+ * figure the canvas edits (a picture, a slide's TikZ picture or drawing layer).
+ */
+export function graphicsInsertionTarget(params: {
+  snapshot: Pick<EditorState["snapshot"], "deck" | "scene">;
+  activeRootId: string | null;
+  drawingLayerRootId: string | null;
+}): "slide" | "figure" | null {
+  const { snapshot, activeRootId, drawingLayerRootId } = params;
+  if (snapshot.deck?.activeFrame != null && drawingLayerRootId === null && parseDocumentRootId(activeRootId ?? "")?.kind !== "beamer-frame-tikz") return "slide";
+  return snapshot.scene != null ? "figure" : null;
+}
+
+/** Opens the system file panel for an image; null when cancelled. */
+async function pickGraphics(): Promise<GraphicsInput | null> {
+  const picker = getActiveEditorPlatform().files?.openBinary;
+  if (!picker) return null;
+  const opened = await picker({ addToRecent: false, kind: "graphics-import" });
+  if (!opened) return null;
+  const name = opened.fileRef?.name ?? null;
+  return { bytes: opened.bytes, name, mimeType: name ? graphicsMimeType(name) : "", path: opened.fileRef?.provider === "desktop-fs" ? opened.fileRef.path ?? null : null };
+}
+
+/** Insert → Image… in a TikZ figure: the system file panel, then insertion at the centre of the view. */
+export async function pickAndInsertTikzGraphics(getState: () => EditorState, dispatch: (action: EditorAction) => void): Promise<void> {
+  if (!getActiveEditorPlatform().files?.openBinary) return;
+  await insertTikzGraphics({ getState, dispatch, at: readTikzViewCenter(), load: pickGraphics });
+}
+
+const CM_PER_BP = 2.54 / 72;
+const TIKZ_MAX_WIDTH_CM = 6;
+const TIKZ_MAX_HEIGHT_CM = 5;
+const TIKZ_UNKNOWN_SIZE_WIDTH_CM = 5;
+
+/**
+ * `width=<w>cm` for an image in a figure: pdfLaTeX draws pixels at 72 dpi,
+ * so photos would come out tens of centimetres wide. Small images keep
+ * their natural size (undefined).
+ */
+export function tikzInsertionWidthCm(prepared: Pick<PreparedGraphics, "pixelSize">): number | undefined {
+  const size = prepared.pixelSize;
+  if (!size || size.width <= 0 || size.height <= 0) return TIKZ_UNKNOWN_SIZE_WIDTH_CM;
+  const naturalWidth = size.width * CM_PER_BP;
+  const naturalHeight = size.height * CM_PER_BP;
+  if (naturalWidth <= TIKZ_MAX_WIDTH_CM && naturalHeight <= TIKZ_MAX_HEIGHT_CM) return undefined;
+  const width = Math.min(TIKZ_MAX_WIDTH_CM, TIKZ_MAX_HEIGHT_CM * size.width / size.height);
+  return Math.max(0.5, Math.round(width * 10) / 10);
+}
+
+/** The name to save an image under in a figure: its own, unless generic, else the document's. */
+function tikzGraphicsFileName(input: GraphicsInput, documentRef: DocumentFileRef | null): string {
+  const given = input.name?.trim() ?? "";
+  if (given && !GENERIC_NAME.test(given)) return given;
+  const stem = documentRef?.name.replace(/\.[A-Za-z0-9]+$/u, "").trim() ?? "";
+  return /[A-Za-z0-9]/u.test(stem) ? `${stem}-image` : "image";
+}
+
+/**
+ * An image in the active TikZ figure (or a slide's drawing layer): a node
+ * at `at` holding `\includegraphics`, with the file placed as on slides.
+ */
+export async function insertTikzGraphics(params: {
+  getState: () => EditorState;
+  dispatch: (action: EditorAction) => void;
+  /** Where the image's centre goes; null puts it at the origin. */
+  at: WorldPoint | null;
+  load: () => Promise<GraphicsInput | null>;
+}): Promise<"applied" | "stale" | "cancelled" | "failed"> {
+  const state = params.getState();
+  const documentId = state.activeDocumentId;
+  const document = state.documents[documentId];
+  if (!document || state.snapshot.source !== state.source || document.assistantLockReason) return "stale";
+  const source = state.source;
+  const session = beginDocumentEdit(state);
+  const platform = getActiveEditorPlatform();
+  const fail = (message: string) => { showError(documentId, message); return "failed" as const; };
+  try {
+    const input = await params.load();
+    if (!input) return "cancelled";
+    const prepared = await prepareGraphics(input.bytes, input.mimeType);
+    const documentRef = document.fileRef ?? null;
+    // New statements go at the end of the figure: follow the last image's folder.
+    const placed = await placeGraphicsFile({ source, offset: source.length, documentId, documentRef, input, prepared,
+      name: tikzGraphicsFileName(input, documentRef) });
+    if ("error" in placed) return fail(placed.error);
+    const { texPath, notice } = placed;
+
+    if (!canContinueDocumentEdit(session, params.getState()) || getActiveEditorPlatform() !== platform) {
+      await undoWrite(notice);
+      return "stale";
+    }
+    const widthCm = tikzInsertionWidthCm(prepared);
+    const action: EditAction = { kind: "addElement", at: params.at ?? worldPoint(pt(0), pt(0)),
+      template: { kind: "image", path: texPath, ...(widthCm === undefined ? {} : { widthCm }) } };
+    params.dispatch({ type: "APPLY_EDIT_ACTION", documentId, action, precomputedSource: session.latestSource,
+      expectedDocumentRevision: { documentId, sourceRevision: session.latestRevision } });
+    const after = params.getState().documents[documentId];
+    if (!after || after.sourceRevision === session.latestRevision) {
+      await undoWrite(notice);
+      return fail("The image could not be inserted.");
+    }
+    showGraphicsNotice({ texPath, notice }, after.source);
+    return "applied";
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "The image could not be inserted.");
+  }
+}
+
 /** Insert → Image…: the system file panel, then insertion. */
 export async function pickAndInsertDeckGraphics(getState: () => EditorState, dispatch: (action: EditorAction) => void): Promise<void> {
-  const picker = getActiveEditorPlatform().files?.openBinary;
-  if (!picker) return;
-  await insertDeckGraphics({ getState, dispatch, load: async () => {
-    const opened = await picker({ addToRecent: false, kind: "graphics-import" });
-    if (!opened) return null;
-    const name = opened.fileRef?.name ?? null;
-    return { bytes: opened.bytes, name, mimeType: name ? graphicsMimeType(name) : "", path: opened.fileRef?.provider === "desktop-fs" ? opened.fileRef.path ?? null : null };
-  } });
+  if (!getActiveEditorPlatform().files?.openBinary) return;
+  await insertDeckGraphics({ getState, dispatch, load: pickGraphics });
 }
 
 export async function insertDeckGraphics(params: {

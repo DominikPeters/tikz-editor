@@ -69,7 +69,8 @@ describe("clipboard operation ownership", () => {
       logSnapDebug: vi.fn(), NUDGE_STEP_PT: 1, NUDGE_STEP_SHIFT_PT: 10, platform,
       DESKTOP_TIKZ_CLIPBOARD_FORMATS: ["tikz"], DESKTOP_SVG_CLIPBOARD_FORMATS: ["svg"],
       DESKTOP_KEYNOTE_CLIPBOARD_FORMATS: ["keynote"], DESKTOP_POWERPOINT_GVML_CLIPBOARD_FORMATS: ["powerpoint"],
-      computeAutoScaleForImportedTikz: () => null
+      computeAutoScaleForImportedTikz: () => null,
+      resolveWorldFromClient: () => null
     });
     return null;
   }
@@ -403,6 +404,36 @@ describe("clipboard operation ownership", () => {
     expect(state().source.indexOf(String.raw`\includegraphics`)).toBeGreaterThan(state().source.indexOf(String.raw`\end{tikzpicture}`));
     expect(arrayBuffer).toHaveBeenCalledOnce();
     expect(storeGraphicAsset).toHaveBeenCalledOnce();
+  });
+
+  it.each(["paste", "drop"] as const)("adds an image %sped on a figure as a node", async operation => {
+    const storeGraphicAsset = vi.fn(async () => {});
+    platform.files = { storeGraphicAsset };
+    await renderHarness();
+    const pdf = new TextEncoder().encode("%PDF-1.4\n").buffer;
+    const data = pasteData([Object.assign(new File([pdf], "plot.pdf", { type: "application/pdf" }), { arrayBuffer: async () => pdf })]);
+    act(() => {
+      if (operation === "paste") api.onViewportPaste({ target: document.body, defaultPrevented: false, preventDefault() {}, clipboardData: data } as never);
+      else api.onViewportDrop({ preventDefault() {}, stopPropagation() {}, dataTransfer: data, clientX: 0, clientY: 0 } as never);
+    });
+    await vi.waitFor(() => expect(state().source).toContain(String.raw`\node[inner sep=0pt] at (0,0) {\includegraphics[width=5cm]{`));
+    expect(state().source.indexOf(String.raw`\includegraphics`)).toBeLessThan(state().source.indexOf(String.raw`\end{tikzpicture}`));
+    expect(storeGraphicAsset).toHaveBeenCalledOnce();
+    expect(warning).not.toHaveBeenCalled();
+  });
+
+  it("adds an image pasted while drawing on a slide to the drawing layer", async () => {
+    await readyBeamerDrawing();
+    const storeGraphicAsset = vi.fn(async () => {});
+    platform.files = { storeGraphicAsset };
+    await renderHarness();
+    const pdf = new TextEncoder().encode("%PDF-1.4\n").buffer;
+    beginNativePaste(pasteData([Object.assign(new File([pdf], "plot.pdf", { type: "application/pdf" }), { arrayBuffer: async () => pdf })]));
+    await vi.waitFor(() => expect(state().source).toContain(String.raw`{\includegraphics[width=5cm]{`));
+    const source = state().source;
+    expect(source.indexOf(String.raw`\includegraphics`)).toBeGreaterThan(source.indexOf("[remember picture,overlay]"));
+    expect(source.indexOf(String.raw`\includegraphics`)).toBeLessThan(source.indexOf(String.raw`\end{tikzpicture}`));
+    expect(warning).not.toHaveBeenCalled();
   });
 
   it.each([true, false])("handles rejected file reads (obsolete=%s) without unhandled rejections", async obsolete => {

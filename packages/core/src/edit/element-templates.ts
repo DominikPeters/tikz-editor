@@ -1,5 +1,5 @@
 import {
-  applyFragments, canvasLength, EMPTY_FRAGMENT, joinFragments, layout, option, optionList, tikz, unchangedSource, userText,
+  applyFragments, canvasLength, EMPTY_FRAGMENT, joinFragments, layout, option, optionList, plainNumber, tikz, unchangedSource, userText,
   type CoordinateText, type EditedSource, type TikzFragment
 } from "./fragment.js";
 import type { NewStatementPoints, StatementPointWriter } from "./new-statement.js";
@@ -25,7 +25,9 @@ export type ElementTemplate =
   | { kind: "rectangle"; corner?: WorldPoint; strokeColor?: string; fillColor?: string }
   | { kind: "ellipse"; corner?: WorldPoint; strokeColor?: string; fillColor?: string }
   | { kind: "circle"; edge?: WorldPoint; strokeColor?: string; fillColor?: string }
-  | { kind: "filledCircle"; edge?: WorldPoint };
+  | { kind: "filledCircle"; edge?: WorldPoint }
+  /** `\includegraphics` of `path` (as TeX reads it) in a node with no padding; `widthCm` omitted keeps the natural size. */
+  | { kind: "image"; path: string; widthCm?: number };
 
 export type ComplexPathSegment =
   | { kind: "line"; to: WorldPoint; toAnchor?: AnchorReference }
@@ -74,6 +76,13 @@ export function generateElementSource(template: ElementTemplate, at: WorldPoint,
       }
       const nodeOptions = buildNodeOptions(template.strokeColor, template.fillColor, false);
       return tikz`\node${optionList(nodeOptions)}${namePart} at ${point(at)} {${text}};`;
+    }
+
+    case "image": {
+      const point = points({ command: "node", options: "inner sep=0pt" });
+      // graphicx lengths are TeX dimensions: no TikZ frame transforms them.
+      const size = template.widthCm == null ? EMPTY_FRAGMENT : tikz`[width=${plainNumber(Number(template.widthCm.toFixed(2)), "graphics-length")}cm]`;
+      return tikz`\node[inner sep=0pt] at ${point(at)} {\includegraphics${size}{${userText(template.path, "inspector-value")}}};`;
     }
 
     case "matrix": {

@@ -812,7 +812,7 @@
     "symbol": "unchangedSource",
     "file": "packages/core/src/edit/actions/resize-element.ts",
     "declaration": "applyResizeElementAction.newSource",
-    "count": 2,
+    "count": 3,
     "expression": "unchangedSource(source)"
   },
   {
@@ -1028,8 +1028,16 @@
     "symbol": "userText",
     "file": "packages/core/src/edit/element-templates.ts",
     "declaration": "generateElementSource",
-    "count": 2,
+    "count": 3,
     "expression": "userText(template.shape, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "plainNumber",
+    "file": "packages/core/src/edit/element-templates.ts",
+    "declaration": "generateElementSource.size",
+    "count": 1,
+    "expression": "plainNumber(Number(template.widthCm.toFixed(2)), \"graphics-length\")"
   },
   {
     "rule": "F2",
@@ -1046,6 +1054,30 @@
     "declaration": "insertElementIntoSource",
     "count": 1,
     "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "plainNumber",
+    "file": "packages/core/src/edit/graphics-node-size.ts",
+    "declaration": "formatScaled",
+    "count": 1,
+    "expression": "plainNumber(next, \"graphics-length\", source[value.span.from] === \".\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/graphics-node-size.ts",
+    "declaration": "formatScaled",
+    "count": 1,
+    "expression": "sourceSlice(source, value.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "plainNumber",
+    "file": "packages/core/src/edit/graphics-node-size.ts",
+    "declaration": "scaleNodeGraphics.fragment",
+    "count": 1,
+    "expression": "plainNumber(round(factor), \"graphics-scale\")"
   },
   {
     "rule": "F2",

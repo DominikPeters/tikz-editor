@@ -2055,3 +2055,42 @@ describe("applyEditAction – resizeElement", () => {
     expect(nodeResult.reason).toContain("disabled");
   });
 });
+
+describe("applyEditAction – resizeElement on an image node", () => {
+  const wrap = (body: string) => String.raw`\begin{tikzpicture}
+  ${body}
+\end{tikzpicture}`;
+  const size = (body: string) => {
+    const source = wrap(body);
+    const bounds = collectSourceWorldBounds(evaluateTikzFigure(parseTikz(source).figure, source).scene.elements).get("path:0");
+    if (!bounds) throw new Error("no bounds");
+    return { width: bounds.maxX - bounds.minX, height: bounds.maxY - bounds.minY };
+  };
+  const resize = (body: string, role: "bottom-right" | "right", newWorld: ReturnType<typeof wp>) => {
+    const result = applyEditAction(wrap(body), [], { kind: "resizeElement", elementId: "path:0", role, newWorld });
+    if (result.kind !== "success") throw new Error(result.kind === "unsupported" ? result.reason : result.kind);
+    return result.newSource.split("\n")[1]?.trim();
+  };
+  const node = (options: string) => String.raw`\node[inner sep=0pt] at (0,0) {\includegraphics${options}{photo.png}};`;
+
+  it("scales the image's own size keys instead of padding the node", () => {
+    const body = node("[width=4cm, height=2cm]");
+    const { width, height } = size(body);
+    expect(resize(body, "bottom-right", wp(width, -height))).toBe(node("[width=8cm, height=4cm]"));
+  });
+
+  it("scales uniformly when one side is dragged", () => {
+    const body = node("[width=4cm, height=2cm]");
+    expect(resize(body, "right", wp(size(body).width / 4, 0))).toBe(node("[width=2cm, height=1cm]"));
+  });
+
+  it("scales an image sized by scale, or adds a scale", () => {
+    expect(resize(node("[draft, scale=.5]"), "right", wp(size(node("[draft, scale=.5]")).width, 0))).toBe(node("[draft, scale=1]"));
+    expect(resize(node(""), "right", wp(size(node("")).width / 4, 0))).toBe(node("[scale=0.5]"));
+  });
+
+  it("leaves nodes with other text to the generic resize", () => {
+    const body = String.raw`\node[draw] at (0,0) {A \includegraphics[width=1cm]{photo.png}};`;
+    expect(resize(body, "right", wp(size(body).width * 2, 0))).toContain("minimum width");
+  });
+});

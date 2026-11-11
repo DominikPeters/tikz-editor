@@ -1,5 +1,5 @@
 import { writeRadii, writeScaleFactor } from "../writer/authored-values.js";
-import { canvasLength, option, optionList, optionValueFor, sourceSlice, tikz, unchangedSource, type CoordinateText, type TikzFragment } from "../fragment.js";
+import { canvasLength, option, optionList, optionValueFor, sourceSlice, tikz, unchangedSource, type CoordinateText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
@@ -35,7 +35,7 @@ import { resolveNodeShape } from "../../semantic/nodes/options.js";
 import { applyMatrix, inverseMatrix, multiplyMatrix } from "../../semantic/transform.js";
 import { collectSourceWorldBounds } from "../snapping/index.js";
 import { worldToLocal } from "../coords.js";
-import { replaceSpan } from "../patch.js";
+import { computeMinimalReplacementPatch, replaceSpan } from "../patch.js";
 import { rewriteCoordinate } from "../rewrite.js";
 import {
   pointDimensionFormatOptions,
@@ -56,6 +56,8 @@ import {
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, propertyTargetUsesFit, sourceUsesFitNodeFromParseResult } from "../fit.js";
 import { findPathStatementById } from "../statement-find.js";
+import { nodeGraphicsSize, scaleNodeGraphics } from "../graphics-node-size.js";
+
 
 const RESIZE_EPSILON = 1e-3;
 
@@ -281,6 +283,16 @@ export function applyResizeElementAction(
       (!affectsHeight || Math.abs(requestedHeight - baselineSize.height) < 1e-6)) {
     return { kind: "success", newSource: unchangedSource(source), patches: [], changedSourceIds };
   }
+  const graphicsResized = resizeNodeGraphics(source, parsed.figure.body, resizeTarget.id, elementId, {
+    affectsWidth, affectsHeight, requestedWidth, requestedHeight,
+    current: requireDefined(resolveNodeResizeLocalSize(semantic.scene.elements, elementId), "Missing node size for image resize")
+  });
+  if (graphicsResized) {
+    return graphicsResized.kind === "unchanged"
+      ? { kind: "success", newSource: unchangedSource(source), patches: [], changedSourceIds }
+      : { kind: "success", newSource: graphicsResized.source, patches: [computeMinimalReplacementPatch(source, graphicsResized.source)], changedSourceIds };
+  }
+
   const intrinsicWorldWidth = floorBounds.maxX - floorBounds.minX;
   const intrinsicLocal = requireDefined(resolveNodeResizeLocalSize(floorSemantic.scene.elements, elementId), "Missing required resolveNodeResizeLocalSize(floorSemantic.scene.elements, elementId)");
   const intrinsicWidth = intrinsicLocal.width;
@@ -374,6 +386,41 @@ export function applyResizeElementAction(
     patches: [rewritten.patch],
     changedSourceIds
   };
+}
+
+const MIN_IMAGE_SIZE_PT = 2;
+
+/**
+ * Resizing a node that holds only an image scales the image, uniformly,
+ * about the node's centre like any node resize. Null for other nodes.
+ */
+function resizeNodeGraphics(
+  source: string,
+  statements: readonly Statement[],
+  targetId: string,
+  elementId: string,
+  size: { affectsWidth: boolean; affectsHeight: boolean; requestedWidth: number; requestedHeight: number; current: { width: number; height: number } }
+): { kind: "resized"; source: EditedSource } | { kind: "unchanged" } | null {
+  const node = findNodeItem(statements, targetId) ?? findNodeItem(statements, elementId);
+  if (node?.textSource !== "group") return null;
+  const graphics = nodeGraphicsSize(source, node.textSpan);
+  if (!graphics) return null;
+  const { width, height } = size.current;
+  if (!(width > 0) || !(height > 0)) return null;
+  const factors = [
+    ...(size.affectsWidth ? [size.requestedWidth / width] : []),
+    ...(size.affectsHeight ? [size.requestedHeight / height] : [])
+  ];
+  const factor = Math.max(MIN_IMAGE_SIZE_PT / Math.min(width, height), ...factors);
+  const next = scaleNodeGraphics(source, graphics, factor);
+  return next ? { kind: "resized", source: next } : { kind: "unchanged" };
+}
+
+function findNodeItem(statements: readonly Statement[], id: string): NodeItem | null {
+  const path = findPathStatementById(statements, id) ?? findPathStatementContainingNodeId(statements, id);
+  if (!path) return null;
+  const nodes = path.items.filter((item): item is NodeItem => item.kind === "Node");
+  return nodes.find((item) => item.id === id) ?? (path.command === "node" && nodes.length === 1 ? nodes[0] ?? null : null);
 }
 
 function restoreResizeBaselineOnNoop(result: EditActionResultLike, geometry: EditGeometrySession | undefined, elementId: string, changedSourceIds = [elementId]): EditActionResultLike {

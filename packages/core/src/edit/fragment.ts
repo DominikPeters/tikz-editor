@@ -82,6 +82,8 @@ export function userText(text: string, origin: UserTextOrigin): TikzFragment {
 export type PlainNumberOrigin =
   | "beamer-length"
   | "beamer-scale"
+  | "graphics-length"
+  | "graphics-scale"
   | "label-counter"
   | "loop-count";
 

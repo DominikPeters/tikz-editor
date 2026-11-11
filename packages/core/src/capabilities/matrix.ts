@@ -654,10 +654,10 @@ export const capabilityMatrix: CapabilityMatrix = {
     parser: "not-applicable",
     semantic: "stable",
     svg: "stable",
-    edit: "none",
+    edit: "partial",
     fixtures: ["node_text_includegraphics"],
     notes:
-      "PNG/JPEG/SVG and rasterized PDF graphics. graphicx keys run left to right as in graphicx.sty (width/height/totalheight/scale/angle/origin/keepaspectratio, `!`), trim/viewport/bb (pdftex.def) with clip and the star, the two-bracket corner form, draft boxes, Beamer overlay specifications, and \\graphicspath lookup in \\Gin@extensions order. Unreadable files draw pdftex's 72bp draft box; undrawn keys are reported as warnings."
+      "PNG/JPEG/SVG and rasterized PDF graphics. graphicx keys run left to right as in graphicx.sty (width/height/totalheight/scale/angle/origin/keepaspectratio, `!`), trim/viewport/bb (pdftex.def) with clip and the star, the two-bracket corner form, draft boxes, Beamer overlay specifications, and \\graphicspath lookup in \\Gin@extensions order. Unreadable files draw pdftex's 72bp draft box; undrawn keys are reported as warnings. Insert → Image, paste and drop add a `\\node[inner sep=0pt]` holding the image to a figure, with the file placed as on slides; resizing a node whose text is only `\\includegraphics` scales its size keys uniformly. Image-specific inspector fields exist only on slides."
   },
   text_tabular: {
     parser: "partial",

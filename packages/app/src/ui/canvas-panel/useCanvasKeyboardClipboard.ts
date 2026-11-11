@@ -1,6 +1,7 @@
 import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { isGraphicsFile } from "../../graphics-bytes";
-import { graphicsMimeType, insertDeckGraphics } from "../deck-graphics-insertion";
+import { graphicsInsertionTarget, graphicsMimeType, insertDeckGraphics, insertTikzGraphics } from "../deck-graphics-insertion";
+import { readTikzViewCenter } from "./tikz-insertion-bridge";
 import {
   useCallback,
   type MutableRefObject,
@@ -8,8 +9,7 @@ import {
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent
 } from "react";
-import { pt, worldPoint } from "@tikz-editor/core/coords/index";
-import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { clientPoint, pt, px, worldPoint } from "@tikz-editor/core/coords/index";
 import { snapKeyboardNudge, type SnapLine } from "@tikz-editor/core/edit/snapping";
 import type { EditAction } from "@tikz-editor/core/edit/actions";
 import type { SceneElement } from "@tikz-editor/core/semantic/types";
@@ -17,7 +17,7 @@ import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { EditorPlatform } from "../../platform/types";
 import type { ToolMode } from "../../store/types";
 import { useEditorStore } from "../../store/store";
-import type { WorldPoint } from "../coords/types";
+import type { ClientPoint, WorldPoint } from "../coords/types";
 import {
   canPasteSelection,
   beginClipboardEdit,
@@ -91,6 +91,8 @@ export type UseCanvasKeyboardClipboardArgs = {
     currentScene: { elements: SceneElement[] } | null,
     currentViewBox: SvgViewBox | null
   ) => number | null;
+  /** The figure point under a client point, for images dropped on the canvas. */
+  resolveWorldFromClient: (point: ClientPoint) => WorldPoint | null;
 };
 
 function logClipboardImportDebug(message: string, error: unknown): void {
@@ -113,6 +115,10 @@ function decodeBase64Bytes(base64: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
+}
+
+function isSvgFile(file: File): boolean {
+  return file.type.toLowerCase() === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
 }
 
 function isEditableElement(target: EventTarget | null): boolean {
@@ -167,7 +173,8 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
     DESKTOP_SVG_CLIPBOARD_FORMATS,
     DESKTOP_KEYNOTE_CLIPBOARD_FORMATS,
     DESKTOP_POWERPOINT_GVML_CLIPBOARD_FORMATS,
-    computeAutoScaleForImportedTikz
+    computeAutoScaleForImportedTikz,
+    resolveWorldFromClient
   } = args;
 
   const documentId = useEditorStore(state => state.activeDocumentId);
@@ -421,20 +428,28 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
     ]
   );
 
-  // On a slide, an image file pasted or dropped is inserted as \includegraphics.
-  // A drawing layer keeps the slide snapshot but owns its own clipboard edits.
-  const slideImages = snapshot.deck?.activeFrame != null && drawingLayerRootId === null && parseDocumentRootId(activeRootId ?? "")?.kind !== "beamer-frame-tikz";
-  const insertDeckImage = useCallback((dataTransfer: DataTransfer | null): boolean => {
-    const image = slideImages && dataTransfer ? Array.from(dataTransfer.files).find(isGraphicsFile) : undefined;
-    if (!image) return false;
-    void insertDeckGraphics({ getState: useEditorStore.getState, dispatch, load: async () => ({
-      bytes: await image.arrayBuffer(), name: image.name || null, mimeType: image.type || graphicsMimeType(image.name) }) });
-    return true;
-  }, [dispatch, slideImages]);
+  // An image file pasted or dropped is inserted as \includegraphics: in the
+  // text of a slide, or as a node of the figure. SVG files in a figure are
+  // imported as drawings instead.
+  const imageTarget = graphicsInsertionTarget({ snapshot, activeRootId, drawingLayerRootId });
+  const findImageFile = useCallback((dataTransfer: DataTransfer | null): File | null => {
+    if (!imageTarget || !dataTransfer) return null;
+    return Array.from(dataTransfer.files).find((file) => isGraphicsFile(file) && (imageTarget === "slide" || !isSvgFile(file))) ?? null;
+  }, [imageTarget]);
+  const insertImageFile = useCallback((image: File, dropPoint?: { x: number; y: number }): void => {
+    const load = async () => ({ bytes: await image.arrayBuffer(), name: image.name || null, mimeType: image.type || graphicsMimeType(image.name) });
+    if (imageTarget === "slide") {
+      void insertDeckGraphics({ getState: useEditorStore.getState, dispatch, load });
+      return;
+    }
+    const dropped = dropPoint ? resolveWorldFromClient(clientPoint(px(dropPoint.x), px(dropPoint.y))) : null;
+    void insertTikzGraphics({ getState: useEditorStore.getState, dispatch, at: dropped ?? readTikzViewCenter(), load });
+  }, [dispatch, imageTarget, resolveWorldFromClient]);
 
   const onViewportPaste = useCallback(
     (event: ReactClipboardEvent<HTMLDivElement>) => {
-      if (!event.defaultPrevented && insertDeckImage(event.clipboardData)) { event.preventDefault(); return; }
+      const pastedImage = event.defaultPrevented ? null : findImageFile(event.clipboardData);
+      if (pastedImage && imageTarget === "slide") { event.preventDefault(); insertImageFile(pastedImage); return; }
       if (event.defaultPrevented || isEditableClipboardTarget(event.target)) return;
       event.preventDefault();
       const pasteContext = captureClipboardEdit();
@@ -517,11 +532,14 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
             logClipboardImportDebug("Keynote clipboard import failed before conversion completed.", error);
           }
         }
+        // In a figure, an image is what is left once no drawing could be read:
+        // TikZ, PowerPoint and Keynote clipboards also carry a PNG preview.
+        if (pastedImage) { insertImageFile(pastedImage); return; }
         if (result.reason === "invalid") { setWarning("Clipboard did not contain a valid TikZ payload."); return; }
         if (result.reason !== "empty") setWarning("Paste failed. Try copying again, then press Cmd/Ctrl+V while the canvas is focused.");
       })();
     },
-    [captureClipboardEdit, insertDeckImage, pasteImportedSnippet, pasteSvgFile, platform, setWarning,
+    [captureClipboardEdit, findImageFile, imageTarget, insertImageFile, pasteImportedSnippet, pasteSvgFile, platform, setWarning,
       DESKTOP_TIKZ_CLIPBOARD_FORMATS, DESKTOP_SVG_CLIPBOARD_FORMATS,
       DESKTOP_POWERPOINT_GVML_CLIPBOARD_FORMATS, DESKTOP_KEYNOTE_CLIPBOARD_FORMATS]
   );
@@ -532,13 +550,13 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       if (!hasFile) {
         return;
       }
-      if (slideImages || findSvgFileInDataTransfer(event.dataTransfer)) {
+      if (imageTarget || findSvgFileInDataTransfer(event.dataTransfer)) {
         event.preventDefault();
         event.stopPropagation();
         event.dataTransfer.dropEffect = "copy";
       }
     },
-    [slideImages]
+    [imageTarget]
   );
 
   const onViewportDrop = useCallback(
@@ -547,9 +565,11 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       if (!hasFile) {
         return;
       }
-      if (insertDeckImage(event.dataTransfer)) {
+      const droppedImage = findImageFile(event.dataTransfer);
+      if (droppedImage) {
         event.preventDefault();
         event.stopPropagation();
+        insertImageFile(droppedImage, { x: event.clientX, y: event.clientY });
         return;
       }
       const svgFile = findSvgFileInDataTransfer(event.dataTransfer);
@@ -561,7 +581,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       const context = captureClipboardEdit();
       if (context && canPasteSelection(context)) void pasteSvgFile(svgFile, context, "drop");
     },
-    [captureClipboardEdit, insertDeckImage, pasteSvgFile]
+    [captureClipboardEdit, findImageFile, insertImageFile, pasteSvgFile]
   );
 
   const onViewportCopy = useCallback(

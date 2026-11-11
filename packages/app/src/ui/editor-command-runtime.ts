@@ -15,7 +15,7 @@ import { isMacLikePlatform } from "./key-labels";
 import type { AppSettings } from "../settings/types";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { useEditorStore } from "../store/store";
-import { pickAndInsertDeckGraphics } from "./deck-graphics-insertion";
+import { graphicsInsertionTarget, pickAndInsertDeckGraphics, pickAndInsertTikzGraphics } from "./deck-graphics-insertion";
 import type { DocumentFileRef, EditorAction, EditorState, SnapModes, ToolMode } from "../store/types";
 import { getToolCapabilityStatus } from "./capabilities";
 import { resolveEquationNodeTargetFromSelection, type EquationNodeTarget } from "./equation-utils";
@@ -94,6 +94,7 @@ type RuntimeInput = {
   onPresentationOptions?: () => void;
   source: string;
   activeRootId: string | null;
+  drawingLayerRootId?: string | null;
   sourceRevision?: number;
   snapshot: SessionSnapshot;
   toolMode: ToolMode;
@@ -166,6 +167,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
   const {
     source,
     activeRootId,
+    drawingLayerRootId = null,
     sourceRevision,
     snapshot,
     toolMode,
@@ -274,6 +276,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     getActiveEditorPlatform().id.startsWith("desktop") &&
     isMacLikePlatform();
 
+  const imageTarget = graphicsInsertionTarget({ snapshot, activeRootId, drawingLayerRootId });
   const insertBinding = (mode: ToolMode): CommandBinding => {
     const capability = getToolCapabilityStatus(mode);
     return {
@@ -898,8 +901,11 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     [APP_MENU_COMMAND_IDS.INSERT_ELLIPSE]: insertBinding("addEllipse"),
     [APP_MENU_COMMAND_IDS.INSERT_CIRCLE]: insertBinding("addCircle"),
     [APP_MENU_COMMAND_IDS.INSERT_IMAGE]: {
-      enabled: snapshot.deck?.activeFrame != null && snapshot.source === source && getActiveEditorPlatform().files?.openBinary != null,
-      run: () => { void pickAndInsertDeckGraphics(useEditorStore.getState, dispatch); }
+      enabled: imageTarget !== null && snapshot.source === source && getActiveEditorPlatform().files?.openBinary != null,
+      run: () => {
+        if (imageTarget === "slide") void pickAndInsertDeckGraphics(useEditorStore.getState, dispatch);
+        else if (imageTarget === "figure") void pickAndInsertTikzGraphics(useEditorStore.getState, dispatch);
+      }
     },
     [APP_MENU_COMMAND_IDS.INSERT_EQUATION]: {
       enabled: onOpenInsertEquation != null,
@@ -1187,6 +1193,7 @@ export function useEditorCommandRuntime(
   const source = useEditorStore((s) => s.source);
   const documentKind = useEditorStore(s => s.documentKind);
   const activeRootId = useEditorStore((s) => s.activeRootId);
+  const drawingLayerRootId = useEditorStore((s) => s.documents[s.activeDocumentId]?.drawingLayerRootId ?? null);
   const sourceRevision = useEditorStore((s) => s.sourceRevision);
   const snapshot = useEditorStore((s) => s.snapshot);
   const toolMode = useEditorStore((s) => s.toolMode);
@@ -1253,6 +1260,7 @@ export function useEditorCommandRuntime(
         ...(options.onPresentationOptions === undefined ? {} : { onPresentationOptions: options.onPresentationOptions }),
         source: effectiveCommandInputs.source,
         activeRootId: effectiveCommandInputs.activeRootId,
+        drawingLayerRootId,
         sourceRevision: effectiveCommandInputs.sourceRevision,
         snapshot: effectiveCommandInputs.snapshot,
         toolMode,
@@ -1315,6 +1323,7 @@ export function useEditorCommandRuntime(
       presentation,
       options.onPresentationOptions,
       effectiveCommandInputs,
+      drawingLayerRootId,
       toolMode,
       historyIndex,
       historyLength,

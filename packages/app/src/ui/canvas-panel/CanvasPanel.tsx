@@ -20,7 +20,7 @@ type KeyboardEvent as ReactKeyboardEvent,
 type MouseEvent as ReactMouseEvent,
 type PointerEvent as ReactPointerEvent
 } from "react";
-import { worldPoint as makeWorldPoint,pt,px,svgBounds,viewportPoint } from "@tikz-editor/core/coords/index";
+import { clientPoint, worldPoint as makeWorldPoint,pt,px,svgBounds,viewportPoint } from "@tikz-editor/core/coords/index";
 import {
 ADORNMENT_EDIT_NOOP_REASON,
 PATH_ATTACHED_NODE_EDIT_NOOP_REASON,
@@ -85,6 +85,7 @@ worldToSvgPoint
 } from "./geometry";
 import type { Span } from "@tikz-editor/core/ast/types";
 import { clearDeckReselect, peekDeckReselect, registerDeckCaretReader, type DeckCaret } from "./deck-insertion-bridge";
+import { registerTikzViewCenterReader } from "./tikz-insertion-bridge";
 import { buildHitRegions, type HitRegion } from "./hit-regions";
 import {
 pickClosestSourceId
@@ -3132,6 +3133,11 @@ export const CanvasPanel = memo(function CanvasPanel({
     [canvasTransform, svgResult]
   );
 
+  useEffect(() => registerTikzViewCenterReader(() => {
+    const rect = viewportRef.current?.getBoundingClientRect();
+    return rect ? resolveWorldFromViewportClient(clientPoint(px(rect.left + rect.width / 2), px(rect.top + rect.height / 2))) : null;
+  }), [resolveWorldFromViewportClient]);
+
   const startMarqueeSelection = useCallback(
     (pointerId: number, clientPoint: ClientPoint, additiveSelection: boolean): boolean => {
       const world = resolveWorldFromViewportClient(clientPoint);
@@ -3352,7 +3358,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     DESKTOP_SVG_CLIPBOARD_FORMATS,
     DESKTOP_KEYNOTE_CLIPBOARD_FORMATS,
     DESKTOP_POWERPOINT_GVML_CLIPBOARD_FORMATS,
-    computeAutoScaleForImportedTikz
+    computeAutoScaleForImportedTikz,
+    resolveWorldFromClient: resolveWorldFromViewportClient
   });
 
   stickyFitRef.current = snapshot.deck != null;
