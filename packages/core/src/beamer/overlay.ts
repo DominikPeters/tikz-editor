@@ -56,6 +56,8 @@ export type BeamerOverlayCommand = {
   readonly branches: readonly BeamerDelimitedSourceValue[];
   /** Macro syntax removed before the selected branch reaches the TeX frontend. */
   readonly syntaxSpans: readonly Span[];
+  /** Parts of a declaration's reach where a later one in an inner picture scope holds instead. */
+  readonly holes?: readonly Span[];
 };
 
 export type BeamerOverlayItem = {
@@ -72,6 +74,8 @@ export type BeamerOverlayPause = {
   readonly span: Span;
   readonly threshold: number;
   readonly contentSpan: Span;
+  /** Parts of its reach where an `\onslide` in an inner picture scope holds instead. */
+  readonly holes?: readonly Span[];
 };
 
 export type BeamerOverlayReference = {
@@ -406,16 +410,38 @@ export function scanBeamerFrameOverlays(
       rawSpec: overlay,
     });
   }
-  for (const [index, declaration] of declarations.entries()) {
+  // In a picture, \onslide and \pause hold to the end of the enclosing scope
+  // or picture, where the declaration in force before resumes; the latest
+  // one in force wins. (Checked with LuaLaTeX; a brace group ends neither.)
+  const pictureScopes = [...tikzRanges, ...environmentPairs.filter(pair => pair.name === "scope" &&
+    tikzRanges.some(picture => picture.from <= pair.span.from && pair.span.to <= picture.to))
+    .map(pair => ({ from: pair.span.from, to: pair.end.span.from }))];
+  const reachEnd = (at: number): number => {
+    let end = frame.bodySpan.to, width = Infinity;
+    for (const scope of pictureScopes) {
+      if (scope.from < at && at < scope.to && scope.to - scope.from < width) { end = Math.min(scope.to, frame.bodySpan.to); width = scope.to - scope.from; }
+    }
+    return end;
+  };
+  const pauseStartsInSource = pending.flatMap(entry => entry.kind === "pause" ? [entry.span.from] : []);
+  /** Where declarations starting in an inner scope of `(from, to)` hold instead of the one at `from`. */
+  const innerReaches = (from: number, to: number, end: number, starts: readonly number[]): Span[] =>
+    starts.filter(start => start > from && start < to && reachEnd(start) < end).map(start => ({ from: start, to: reachEnd(start) }));
+  for (const declaration of declarations) {
     // overprint installs a local declaration handler; its final minipage ends
     // at the environment boundary instead of covering subsequent frame text.
     const owner = overprints.find(overprint => declaration.from >= overprint.contentSpan.from && declaration.from < overprint.contentSpan.to);
-    const to = Math.min(declarations[index + 1]?.from ?? frame.bodySpan.to, owner?.contentSpan.to ?? frame.bodySpan.to);
+    const end = reachEnd(declaration.from);
+    const next = declarations.find(candidate => candidate.from > declaration.from && reachEnd(candidate.from) >= end);
+    // In a picture a later \pause of the same reach takes over as well.
+    const nextPause = end < frame.bodySpan.to ? pauseStartsInSource.find(start => start > declaration.from && reachEnd(start) >= end) : undefined;
+    const to = Math.min(next?.from ?? frame.bodySpan.to, nextPause ?? frame.bodySpan.to, owner?.contentSpan.to ?? frame.bodySpan.to, end);
     const contentSpan = { from: declaration.syntaxTo, to };
+    const holes = innerReaches(declaration.from, to, end, [...declarations.map(candidate => candidate.from), ...pauseStartsInSource]);
     pending.push({ kind: "command", sourceOrder: declaration.from, rawSpec: declaration.spec,
       command: { kind: owner ? "only" : declaration.kind, commandSpan: { from: declaration.from, to: declaration.syntaxTo },
         span: { from: declaration.from, to }, branches: [{ span: contentSpan, contentSpan, value: source.slice(contentSpan.from, contentSpan.to) }],
-        syntaxSpans: [{ from: declaration.from, to: declaration.syntaxTo }] } });
+        syntaxSpans: [{ from: declaration.from, to: declaration.syntaxTo }], ...(holes.length ? { holes } : {}) } });
   }
   pending.push(...overlayEnvironmentSpecs(context, frame.bodySpan));
   const listDefaultsByOwner = new Map<typeof listRanges[number], {
@@ -514,16 +540,17 @@ export function scanBeamerFrameOverlays(
     }
   }
 
-  const pauses = pauseStarts.map((pause, index): BeamerOverlayPause => ({
-    ...pause,
-    contentSpan: {
-      from: pause.span.to,
-      // \pause is an \onslide declaration in Beamer. A later declaration
-      // closes its cover, including a bare \onslide that restores visibility.
-      to: Math.min(pauseStarts[index + 1]?.span.from ?? frame.bodySpan.to,
-        declarations.find(declaration => declaration.from > pause.span.from)?.from ?? frame.bodySpan.to),
-    },
-  }));
+  const pauses = pauseStarts.map((pause): BeamerOverlayPause => {
+    const end = reachEnd(pause.span.from);
+    const sameReach = (from: number) => from > pause.span.from && reachEnd(from) >= end;
+    // \pause is an \onslide declaration in Beamer. A later declaration
+    // closes its cover, including a bare \onslide that restores visibility.
+    const to = Math.min(pauseStarts.find(candidate => sameReach(candidate.span.from))?.span.from ?? frame.bodySpan.to,
+      declarations.find(declaration => sameReach(declaration.from))?.from ?? frame.bodySpan.to, end);
+    // A later pause in an inner scope has a higher threshold; only an \onslide there takes over.
+    const holes = innerReaches(pause.span.from, to, end, declarations.map(declaration => declaration.from));
+    return { ...pause, contentSpan: { from: pause.span.to, to }, ...(holes.length ? { holes } : {}) };
+  });
 
   return {
     frameSpan: frame.bodySpan,
@@ -559,6 +586,7 @@ export function resolveBeamerOverlaySpanVisibility(
       !beamerOverlaySpecContains(reference.spec, step)) return "removed";
   }
   for (const command of model.commands) {
+    if (command.holes?.some((hole) => containsSpan(hole, span))) continue;
     let branchIndex = command.branches.findIndex((branch) =>
       containsSpan(branch.contentSpan, span)
     );
@@ -607,7 +635,8 @@ export function resolveBeamerOverlaySpanVisibility(
     }
   }
   for (const pause of model.pauses) {
-    if (containsSpan(pause.contentSpan, span) && step < pause.threshold) {
+    if (containsSpan(pause.contentSpan, span) && step < pause.threshold &&
+      !pause.holes?.some((hole) => containsSpan(hole, span))) {
       visibility = "hidden";
     }
   }

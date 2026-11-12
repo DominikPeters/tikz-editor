@@ -256,3 +256,98 @@ describe("incremental parsing with overlay syntax", () => {
     expect(result.parse.figure.body).toEqual(parseTikz(after).figure.body);
   });
 });
+
+describe("declarations in a picture, against LuaLaTeX", () => {
+  // Each frame's visible words per step are what `pdftotext` reads from the
+  // pages LuaLaTeX sets (TeX Live 2025), with Beamer's default invisible cover.
+  const frame = (body: string) => String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}
+${body}
+\end{frame}
+\end{document}`;
+  const shown = (source: string): string[] => {
+    const document = scanBeamerDocument(source);
+    const overlays = scanBeamerFrameOverlays(source, document.frames[0]!);
+    const words = [...source.matchAll(/\{([A-Z][0-9])\};|^([A-Z]{2,})$/gmu)].map((match) => ({ word: match[1] ?? match[2]!, at: match.index }));
+    const statement = (at: number) => {
+      const from = source.lastIndexOf(String.raw`\node`, at);
+      return source.slice(from, at).includes("\n") || from < 0 ? { from: at, to: at + 2 } : { from, to: source.indexOf(";", at) + 1 };
+    };
+    return Array.from({ length: overlays.stepCount }, (_, index) =>
+      words.filter(({ at }) => resolveBeamerOverlaySpanVisibility(overlays, statement(at), index + 1) === "visible").map(({ word }) => word).join(" "));
+  };
+
+  it("ends a pause with its scope, and resumes the pause before it", () => {
+    expect(shown(frame(String.raw`FRAMEA
+\begin{tikzpicture}
+\node at (0,0) {A1};
+\pause
+\node at (1,0) {A2};
+\begin{scope}
+\pause
+\node at (2,0) {A3};
+\end{scope}
+\node at (3,0) {A4};
+\end{tikzpicture}
+AFTERA`))).toEqual(["FRAMEA A1 AFTERA", "FRAMEA A1 A2 A4 AFTERA", "FRAMEA A1 A2 A3 A4 AFTERA"]);
+  });
+
+  it("lets an onslide in an inner scope override the one outside, which resumes after it", () => {
+    expect(shown(frame(String.raw`FRAMEB
+\begin{tikzpicture}
+\node at (0,0) {B1};
+\onslide<3->
+\node at (1,0) {B2};
+\begin{scope}
+\onslide<2->
+\node at (2,0) {B3};
+\end{scope}
+\node at (3,0) {B4};
+\end{tikzpicture}
+AFTERB`))).toEqual(["FRAMEB B1 AFTERB", "FRAMEB B1 B3 AFTERB", "FRAMEB B1 B2 B3 B4 AFTERB"]);
+  });
+
+  it("lets the latest declaration win between pauses and onslide", () => {
+    expect(shown(frame(String.raw`FRAMEC
+\begin{tikzpicture}
+\onslide<3->
+\node at (1,0) {C1};
+\begin{scope}
+\pause
+\node at (2,0) {C2};
+\end{scope}
+\node at (3,0) {C3};
+\end{tikzpicture}`))).toEqual(["FRAMEC", "FRAMEC C2", "FRAMEC C1 C2 C3"]);
+    expect(shown(frame(String.raw`FRAMED
+\begin{tikzpicture}
+\pause
+\pause
+\node at (1,0) {D1};
+\begin{scope}
+\onslide<1->
+\node at (2,0) {D2};
+\onslide<2->
+\node at (2,1) {D3};
+\end{scope}
+\node at (3,0) {D4};
+\end{tikzpicture}`))).toEqual(["FRAMED D2", "FRAMED D2 D3", "FRAMED D1 D2 D3 D4"]);
+  });
+
+  it("keeps a pause before the picture in force after a pause in one of its scopes", () => {
+    // TeX also shows the text after the last pause on step 2, a Beamer quirk not followed here.
+    expect(shown(frame(String.raw`FRAMEE
+\pause
+TEXTE
+\begin{tikzpicture}
+\node at (0,0) {E1};
+\begin{scope}
+\pause
+\node at (2,0) {E2};
+\end{scope}
+\node at (3,0) {E3};
+\end{tikzpicture}
+MOREE`))).toEqual(["FRAMEE", "FRAMEE TEXTE E1 E3 MOREE", "FRAMEE TEXTE E1 E2 E3 MOREE"]);
+  });
+});
