@@ -8,6 +8,13 @@ export function buildSelectionRects(layout: BeamerFrameLayout, source: string, s
     ["block", "graphics", "tikzpicture"].includes(item.kind) &&
     spans.some((span) => span.from <= item.sourceSpan.from && span.to >= item.sourceSpan.to));
   const rects: BeamerRect[] = shapes.map((item) => item.bounds);
+  // A rule on statements inside a picture points at what they draw.
+  for (const picture of layout.embeddedTikz) {
+    if (shapes.some((item) => item.id === picture.itemId)) continue;
+    for (const shape of picture.ruledShapes ?? []) {
+      if (spans.some((span) => span.from <= shape.sourceSpan.from && span.to >= shape.sourceSpan.to)) rects.push(shape.bounds);
+    }
+  }
   const paragraphs = layout.paragraphs.filter((paragraph) =>
     !["headline", "footline"].includes(paragraph.role) &&
     spans.some((span) => span.from < paragraph.sourceSpan.to && span.to > paragraph.sourceSpan.from) &&

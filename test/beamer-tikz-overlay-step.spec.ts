@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import { computeSnapshot } from "../packages/app/src/compute.js";
 import { executeDocumentEdit } from "../packages/app/src/edit-execution.js";
 import { pictureOverlayVisibility } from "../packages/app/src/picture-overlay-step.js";
-import { beamerStatementOverlayTarget, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
+import { buildSelectionRects } from "../packages/app/src/ui/builds-panel/build-selection.js";
+import { beamerStatementOverlayTarget, prepareBeamerDocument, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
 import { buildBeamerBuildModel } from "../packages/core/src/beamer/builds.js";
 import { BEAMER_TIKZ_LAYER_DEFINITION } from "../packages/core/src/beamer/overlay-pictures.js";
 import { projectBeamerTikzSource, resolveBeamerOverlaySpanVisibility, scanBeamerFrameOverlays } from "../packages/core/src/beamer/overlay.js";
@@ -484,5 +485,33 @@ ${body}
     expect([paused.canSet, paused.row?.kind]).toEqual([false, "pause"]);
     const looped = beamerStatementOverlayTarget(model, statement(source, String.raw`\node<\x->`));
     expect([looped.canSet, looped.removePatches]).toEqual([false, []]);
+  });
+});
+
+describe("a selected Overlays row for a shape", () => {
+  it("points at what the shape draws on the slide, on the steps it is there", async () => {
+    const source = String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}
+\begin{tikzpicture}
+\draw (0,0) rectangle (4,2);
+\node<2-> at (1,1) {B};
+\end{tikzpicture}
+\end{frame}
+\end{document}`;
+    const span = { from: source.indexOf(String.raw`\node<2->`), to: source.indexOf(";", source.indexOf(String.raw`\node<2->`)) + 1 };
+    const prepared = prepareBeamerDocument(source);
+    const rects = async (step: number) => buildSelectionRects((await prepared.renderFrame({ frameIndex: 0, step })).layout, source, [span]);
+    expect(await rects(1)).toEqual([]);
+    const [rect, ...others] = await rects(2);
+    expect(others).toEqual([]);
+    const picture = (await prepared.renderFrame({ frameIndex: 0, step: 2 })).layout.embeddedTikz[0]!.bounds;
+    // The node sits left of centre in the 4cm × 2cm rectangle, inside the picture.
+    expect(rect!.x).toBeGreaterThan(picture.x);
+    expect(rect!.x + rect!.width).toBeLessThan(picture.x + picture.width / 2);
+    expect(rect!.y).toBeGreaterThan(picture.y);
+    expect(rect!.y + rect!.height).toBeLessThan(picture.y + picture.height);
+    expect(Math.abs(rect!.y + rect!.height / 2 - (picture.y + picture.height / 2))).toBeLessThan(2);
   });
 });

@@ -21,6 +21,8 @@ export type BeamerTikzStep = {
    * same statements alike, so an evaluation cached for one serves the other.
    */
   readonly overlayKey: string;
+  /** Whether the statement at a span stands under an overlay rule of the frame. */
+  readonly ruled?: (span: Span) => boolean;
 };
 
 function within(span: Span, picture: Span): boolean {
@@ -52,6 +54,7 @@ export function beamerTikzStep(source: string, span: Span, overlays: BeamerOverl
       ? maskTikzPictureSource(projectBeamerTikzSource(source, span, overlays, step, tikzOverlayTrace(source, span).statementStarts), span)
       : masked,
     overlayVisibility,
+    ruled: (statement) => regions.some(region => region.from <= statement.from && statement.to <= region.to),
     // Only what is hidden or removed: on a step that shows everything, edits keep the key.
     overlayKey: regions.flatMap(region => {
       const state = overlayVisibility(region);

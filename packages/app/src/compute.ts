@@ -93,6 +93,8 @@ export type SessionSnapshot = {
   overlayLayer?: OverlayLayerSnapshot | null;
   /** For a slide picture whose overlay step hides or removes some of its statements: the step it shows. */
   pictureOverlayStep?: PictureOverlayStep | null;
+  /** For a slide picture edited on its own: the step it is shown on, of how many its frame has. */
+  pictureFrameSteps?: { readonly frameId: string; readonly step: number; readonly stepCount: number } | null;
 };
 
 /**
@@ -1116,7 +1118,8 @@ async function computeNestedTikzSnapshot(
     graphicsPreviewBundle: graphicsContext.previewBundle,
     incremental: null,
     deck: null,
-    ...(pictureStep.overlayKey ? { pictureOverlayStep: { frameIndex: ref.frameIndex, step: pictureStepNumber } } : {})
+    ...(pictureStep.overlayKey ? { pictureOverlayStep: { frameIndex: ref.frameIndex, step: pictureStepNumber } } : {}),
+    pictureFrameSteps: { frameId: formatDocumentRootId({ kind: "beamer-frame", index: ref.frameIndex }), step: pictureStepNumber, stepCount: Math.max(1, overlays.stepCount) }
   };
   recordProfilingComputeTiming({
     requestId: request.id,

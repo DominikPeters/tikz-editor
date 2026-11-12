@@ -65,7 +65,7 @@ import { useSettingsStore } from "../../settings/useSettingsStore";
 import { useEditorStore } from "../../store/store";
 import { useThemePreviewStore } from "../theme-gallery/theme-preview-store";
 import type { CanvasDragKind,CanvasTransform } from "../../store/types";
-import { rootKey, requestedDeckStep } from "../../root-key";
+import { deckStepRootKey, rootKey, requestedDeckStep } from "../../root-key";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { pictureOverlayVisibility } from "../../picture-overlay-step";
 import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
@@ -536,6 +536,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   const deckFrameFresh = !!deckActiveFrame && snapshot.source === source && deckActiveFrame.frameId === activeRootId &&
     deckActiveFrame.step === Math.min(activeDeckStep, Math.max(1, deckActiveFrame.stepCount));
   const deckBuildSelection = useEditorStore((s) => s.deckBuildSelection);
+  const pictureFrameSteps = snapshot.pictureFrameSteps ?? null;
   const deckBuildSelectionRects = useMemo(() => {
     if (!deckActiveFrame || !deckBuildSelection || snapshot.source !== source ||
       deckBuildSelection.documentId !== activeDocumentId ||
@@ -3976,6 +3977,15 @@ export const CanvasPanel = memo(function CanvasPanel({
                 stepCount: deckActiveFrame.stepCount,
                 onStepChange: (step: number) => {
                   dispatch({ type: "SET_DECK_STEP", rootId: deckActiveFrame.frameId, step });
+                }
+              }
+            // A picture edited on its own is shown on its slide's step.
+            : pictureFrameSteps && pictureFrameSteps.stepCount > 1 && nestedFigureSpan && deckStepRootKey(activeDocumentId, activeRootId) === deckStepRootKey(activeDocumentId, pictureFrameSteps.frameId)
+            ? {
+                step: pictureFrameSteps.step,
+                stepCount: pictureFrameSteps.stepCount,
+                onStepChange: (step: number) => {
+                  dispatch({ type: "SET_DECK_STEP", rootId: pictureFrameSteps.frameId, step });
                 }
               }
             : null

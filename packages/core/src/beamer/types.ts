@@ -411,6 +411,11 @@ export type BeamerEmbeddedTikzLayout = {
   model: SvgRenderModel;
   /** Covered parts retain geometry and glyphs without painting. */
   coveredModel?: SvgRenderModel;
+  /**
+   * The statements painted on this step that stand under an overlay rule,
+   * with their bounds on the page: what an Overlays row points at.
+   */
+  ruledShapes?: readonly { sourceSpan: Span; bounds: BeamerRect }[];
   /** A TikZ `overlay` picture: drawn where it is on the page, taking no room in the text. */
   overlay?: BeamerOverlayPictureLayout;
 };

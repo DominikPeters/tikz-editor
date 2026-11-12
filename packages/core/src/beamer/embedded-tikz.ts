@@ -41,6 +41,8 @@ export function emitEmbeddedTikz(params: {
       ...(tikz.visibility === "hidden" ? tikz.model.parts : []),
       ...(tikz.coveredModel?.parts ?? []),
     ] }, tikz.id),
+    ...(tikz.ruledShapes?.length && tikz.visibility !== "hidden" ? { ruledShapes: tikz.ruledShapes.map(shape => ({ sourceSpan: shape.sourceSpan,
+      bounds: { x: translateX + shape.bounds.x * scale, y: translateY + shape.bounds.y * scale, width: shape.bounds.width * scale, height: shape.bounds.height * scale } })) } : {}),
   });
   params.items.push({
     id: tikz.id,

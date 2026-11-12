@@ -74,6 +74,25 @@ Phase 2, second part (2026-11-12):
 - **Edit actions** evaluate a slide picture as its snapshot's step shows it
   (`picture-overlay-step.ts`), when the step hides anything.
 
+Phase 3, first part (2026-11-12):
+
+- **A shape's rule** (`beamerStatementOverlayTarget`): its own `<spec>`,
+  set straight after the command's name, changed in place or removed; or
+  the shared rule it stands under (a brace command around several
+  statements, a pause), which is offered and not retimed.
+- **Inspector.** A shape selected in a slide picture or drawing layer has an
+  Overlay section with a Steps field; empty means every step. A shape under
+  a shared rule shows that rule and opens it in the Overlays panel.
+- **Overlays panel.** Shape rows are named by what they draw ("Node ·
+  Alpha", "Path · (0,0) -- (1,1)"), and a selected row points at the shape
+  on the slide (the layout keeps page bounds for statements under a rule).
+- **Stepping inside a picture.** A picture opened from its slide shows the
+  step strip and the slide's step.
+
+Still to do in phase 3: the canvas Overlays menu for shapes, step tags (on
+hover and with the panel open), and selecting a shape from its row while
+inside the picture.
+
 Still to do:
 
 - **Rule chains on scene elements** (which rules govern an element), for

@@ -45,6 +45,8 @@ import {
   type MacroBinding,
 } from "../macros/index.js";
 import { renderTikzToSvgAsync, type RenderTikzToSvgResult } from "../render/index.js";
+import { computeBounds } from "../semantic/evaluate.js";
+import type { SceneElement } from "../semantic/types.js";
 import { BeamerRenderWork, runBeamerRenderOperation } from "./cooperative-render-work.js";
 import { formatSvgNumber as fmt } from "../svg/format.js";
 import {
@@ -3800,6 +3802,28 @@ async function prepareColumnFlowNode(params: {
 }
 
 /** Covered paths still contribute their PGF geometry but do not paint. */
+/**
+ * The painted statements under an overlay rule, each with the bounds of what
+ * it draws in the picture's SVG coordinates (world y is up; SVG y = 2·viewBox.y + height − y).
+ */
+function beamerTikzRuledShapes(rendered: RenderTikzToSvgResult, ruled: ((span: Span) => boolean) | undefined) {
+  if (!ruled) return [];
+  const byStatement = new Map<string, { sourceSpan: Span; elements: SceneElement[] }>();
+  for (const element of rendered.semantic.scene.elements) {
+    const sourceSpan = element.sourceRef.sourceSpan;
+    if (element.overlayCovered || !ruled(sourceSpan)) continue;
+    const key = `${sourceSpan.from}-${sourceSpan.to}`;
+    const entry = byStatement.get(key) ?? { sourceSpan, elements: [] };
+    entry.elements.push(element);
+    byStatement.set(key, entry);
+  }
+  const viewBox = rendered.svg.viewBox;
+  return [...byStatement.values()].flatMap(({ sourceSpan, elements }) => {
+    const bounds = computeBounds(elements);
+    return bounds ? [{ sourceSpan, bounds: { x: bounds.minX, y: 2 * viewBox.y + viewBox.height - bounds.maxY, width: bounds.maxX - bounds.minX, height: bounds.maxY - bounds.minY } }] : [];
+  });
+}
+
 /** The picture's paint without its covered elements, which keep their room and names. */
 function beamerTikzPaintModel(rendered: RenderTikzToSvgResult) {
   const hiddenIds = new Set(rendered.semantic.scene.elements.filter(element => element.overlayCovered).map(element => element.id));
@@ -3880,6 +3904,7 @@ async function prepareEmbeddedTikz(params: {
     height: empty ? 0 : viewBox.height * scale,
     model,
     coveredModel,
+    ruledShapes: beamerTikzRuledShapes(rendered, pictureStep.ruled),
     viewBox,
   };
 }
@@ -3977,6 +4002,7 @@ async function emitBeamerOverlayPictures(params: {
         width: viewBox.width,
         height: viewBox.height,
         model: beamerTikzPaintModel(rendered),
+        ruledShapes: beamerTikzRuledShapes(rendered, pictureStep.ruled),
         viewBox,
       },
       x: origin.x + viewBox.x,

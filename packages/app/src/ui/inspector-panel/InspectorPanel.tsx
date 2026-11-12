@@ -40,6 +40,7 @@ import { getInspectorPropertyCapabilityStatus } from "../capabilities";
 import { ColorPickerField } from "../ColorPicker";
 import { MULTI_ARRANGE_ACTIONS,type MultiArrangeAction } from "./arrange-actions";
 import { InspectorMultiSection,InspectorSingleSection } from "./InspectorSections";
+import { ShapeOverlaySection } from "./ShapeOverlaySection";
 import { IMAGE_NODE_HIDDEN_PROPERTY_IDS, ImageNodeSections, useImageNodeSpan } from "./ImageNodeSections";
 import {
 clampNumber,
@@ -2011,6 +2012,7 @@ export function InspectorPanel() {
                     onTogglePaint={applyPaintToggle}
                   />
                 ))}
+                {imageElementId ? <ShapeOverlaySection elementId={imageElementId} source={inspectorSource} snapshot={snapshot} /> : null}
               </div>
             </SidePanel.Content>
           </>
