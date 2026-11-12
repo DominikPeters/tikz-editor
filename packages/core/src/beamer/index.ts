@@ -1,5 +1,5 @@
 export { resolveBeamerPageGeometry } from "./geometry.js";
-export { beamerObjectOverlayTarget, type BeamerObjectOverlayTarget } from "./object-overlays.js";
+export { beamerObjectOverlayTarget, beamerStatementOverlayTarget, type BeamerObjectOverlayTarget } from "./object-overlays.js";
 export {
   buildBeamerBuildModel,
   canEditBeamerBuildTiming,

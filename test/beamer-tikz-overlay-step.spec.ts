@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { computeSnapshot } from "../packages/app/src/compute.js";
 import { executeDocumentEdit } from "../packages/app/src/edit-execution.js";
 import { pictureOverlayVisibility } from "../packages/app/src/picture-overlay-step.js";
-import { scanBeamerDocument } from "../packages/core/src/beamer/index.js";
+import { beamerStatementOverlayTarget, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
 import { buildBeamerBuildModel } from "../packages/core/src/beamer/builds.js";
 import { BEAMER_TIKZ_LAYER_DEFINITION } from "../packages/core/src/beamer/overlay-pictures.js";
 import { projectBeamerTikzSource, resolveBeamerOverlaySpanVisibility, scanBeamerFrameOverlays } from "../packages/core/src/beamer/overlay.js";
@@ -426,5 +426,63 @@ ${body}
     const model = buildBeamerBuildModel(source, "frame:0")!;
     expect(model.stepCount).toBe(3);
     expect(model.rows.map((row) => [row.id, row.editable])).toEqual([[`command:${source.indexOf(String.raw`\node<\x->`)}`, false]]);
+  });
+});
+
+describe("the overlay rule of a shape", () => {
+  const deck = (body: string) => String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}
+\begin{tikzpicture}
+${body}
+\end{tikzpicture}
+\end{frame}
+\end{document}`;
+  const statement = (source: string, text: string) => ({ from: source.indexOf(text), to: source.indexOf(";", source.indexOf(text)) + 1 });
+  const apply = (source: string, patches: readonly { oldSpan: { from: number; to: number }; replacement: string }[]) =>
+    [...patches].sort((a, b) => b.oldSpan.from - a.oldSpan.from).reduce((text, patch) => text.slice(0, patch.oldSpan.from) + patch.replacement + text.slice(patch.oldSpan.to), source);
+
+  it("names shape rows by what they draw", () => {
+    const source = deck(String.raw`\node<2->[draw] (a) at (0,0) {Alpha $x$};
+\draw<3>[red] (0,0) -- (1,1);
+\coordinate<2> (c) at (1,1);`);
+    expect(buildBeamerBuildModel(source, "frame:0")!.rows.map((row) => row.label)).toEqual(
+      ["Node · Alpha $x$", "Path · (0,0) -- (1,1)", "Coordinate · (c) at (1,1)"]);
+  });
+
+  it("writes a new specification straight after the command's name", () => {
+    const source = deck(String.raw`\node[draw] (a) at (0,0) {A};
+\draw (0,0) -- (1,1);`);
+    const model = buildBeamerBuildModel(source, "frame:0")!;
+    const node = beamerStatementOverlayTarget(model, statement(source, String.raw`\node[draw]`));
+    expect([node.canSet, node.row, node.removePatches]).toEqual([true, null, []]);
+    expect(apply(source, [node.setSpec("2-")!])).toBe(source.replace(String.raw`\node[draw]`, String.raw`\node<2->[draw]`));
+    const path = beamerStatementOverlayTarget(model, statement(source, String.raw`\draw (0,0)`));
+    expect(apply(source, [path.setSpec("3")!])).toBe(source.replace(String.raw`\draw (0,0)`, String.raw`\draw<3> (0,0)`));
+    expect(node.setSpec("+-")).toBeNull();
+  });
+
+  it("changes and removes a shape's own specification in place", () => {
+    const source = deck(String.raw`\node<2-> (a) at (0,0) {A};`);
+    const model = buildBeamerBuildModel(source, "frame:0")!;
+    const target = beamerStatementOverlayTarget(model, statement(source, String.raw`\node<2->`));
+    expect(target.row?.id).toBe(`command:${source.indexOf(String.raw`\node<2->`)}`);
+    expect(apply(source, [target.setSpec("3-4")!])).toBe(source.replace("<2->", "<3-4>"));
+    expect(apply(source, target.removePatches)).toBe(source.replace("<2->", ""));
+  });
+
+  it("offers the owner of a shared rule and does not retime the shape", () => {
+    const source = deck(String.raw`\only<2->{\node (a) at (0,0) {A}; \node (b) at (1,0) {B};}
+\pause
+\draw (0,0) -- (1,1);
+\foreach \x in {1,2} { \node<\x-> at (\x,0) {L}; }`);
+    const model = buildBeamerBuildModel(source, "frame:0")!;
+    const grouped = beamerStatementOverlayTarget(model, statement(source, String.raw`\node (a)`));
+    expect([grouped.canSet, grouped.row?.id, grouped.setSpec("3")]).toEqual([false, `command:${source.indexOf(String.raw`\only<2->`)}`, null]);
+    const paused = beamerStatementOverlayTarget(model, statement(source, String.raw`\draw (0,0)`));
+    expect([paused.canSet, paused.row?.kind]).toEqual([false, "pause"]);
+    const looped = beamerStatementOverlayTarget(model, statement(source, String.raw`\node<\x->`));
+    expect([looped.canSet, looped.removePatches]).toEqual([false, []]);
   });
 });

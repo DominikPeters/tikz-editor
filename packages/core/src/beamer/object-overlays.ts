@@ -77,3 +77,33 @@ export function beamerObjectOverlayTarget(model: BeamerBuildModel, node: BeamerO
     return patch(node.sourceSpan, tikz`\uncover<${userText(spec, "beamer-text")}>{${sourceSlice(source, node.sourceSpan)}}`);
   } };
 }
+
+/**
+ * The overlay rule of one TikZ path statement in a slide picture: its own
+ * `<spec>`, read straight after the command's name, or the rule it is under.
+ * A statement under a shared rule (an `\only` around several, a `\pause`
+ * before it) is not retimed here; its owner is offered instead.
+ */
+export function beamerStatementOverlayTarget(model: BeamerBuildModel, statement: Span): BeamerObjectOverlayTarget {
+  const { source } = model;
+  const command = /^\\(?:node|coordinate|matrix|pic|path|draw|fill|filldraw|pattern|shade|shadedraw|clip|useasboundingbox)(?![A-Za-z@])/u.exec(source.slice(statement.from, statement.to));
+  const rows = model.rows.filter((row) => row.kind !== "branch" && row.kind !== "list");
+  const own = rows.find((row) => row.kind === "content" && same(row.sourceSpan, statement) && row.command?.kind === "only" && row.command.branches.length === 1) ?? null;
+  const pause = model.overlays.pauses.filter((entry) => contains(entry.contentSpan, statement) && !entry.holes?.some((hole) => contains(hole, statement))).at(-1);
+  const inherited = rows.filter((row) => row !== own && row.kind !== "pause" && contains(row.sourceSpan, statement) && !row.command?.holes?.some((hole) => contains(hole, statement)))
+    .sort((a, b) => (a.sourceSpan.to - a.sourceSpan.from) - (b.sourceSpan.to - b.sourceSpan.from))[0] ??
+    (pause ? rows.find((row) => row.id === `pause:${pause.span.from}`) : undefined);
+  const precedingStateful = model.rows.some((candidate) => candidate.kind === "unsupported" && candidate.contentSpans.length === 0 && candidate.sourceSpan.from < statement.from);
+  const canSet = command !== null && !inherited && !precedingStateful && (!own || canEditBeamerBuildTiming(own));
+  return {
+    row: own ?? inherited ?? null,
+    canSet,
+    removePatches: own && canEditBeamerBuildTiming(own) && own.spec ? [patch(own.spec.source.span, EMPTY_FRAGMENT)] : [],
+    setSpec: (spec) => {
+      if (!canSet || !isExplicitBeamerBuildSpec(spec)) return null;
+      if (own) return beamerBuildSpecPatch(model, own.id, spec);
+      const anchor = statement.from + command[0].length;
+      return patch({ from: anchor, to: anchor }, tikz`<${userText(spec, "beamer-text")}>`);
+    },
+  };
+}

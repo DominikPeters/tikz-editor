@@ -81,8 +81,31 @@ function excerpt(value: string): string {
   return text.length > 52 ? `${text.slice(0, 51).trimEnd()}…` : text;
 }
 
+/** A TikZ path statement with its own specification, named by what it draws. */
+function shapeLabel(raw: string): string | null {
+  const match = /^\\(node|coordinate|matrix|pic|path|draw|fill|filldraw|pattern|shade|shadedraw|clip|useasboundingbox)(?![A-Za-z@])\s*(?:\[[^\]]*\]\s*)?<[^>]*>/u.exec(raw);
+  if (!match) return null;
+  const rest = raw.slice(match[0].length).replace(/;\s*$/u, "").replace(/^\s*\[[^\]]*\]/u, "").trim();
+  const command = match[1] ?? "path";
+  if (command === "node" || command === "matrix") {
+    // The node's text is its last top-level brace group.
+    let depth = 0, start = -1, text = "";
+    for (let index = 0; index < rest.length; index += 1) {
+      const character = rest[index];
+      if (character === "\\") { index += 1; continue; }
+      if (character === "{") { if (depth === 0) start = index; depth += 1; }
+      if (character === "}") { depth -= 1; if (depth === 0 && start >= 0) text = rest.slice(start + 1, index); }
+    }
+    return `${command === "node" ? "Node" : "Matrix"} · ${excerpt(text) || excerpt(rest) || "Empty"}`;
+  }
+  const kind = command === "coordinate" ? "Coordinate" : command === "pic" ? "Pic" : command === "clip" ? "Clip" : "Path";
+  return `${kind} · ${excerpt(rest) || "Empty"}`;
+}
+
 function contentLabel(context: BeamerSyntaxContext, span: Span): string {
   const raw = context.source.slice(span.from, span.to).trim();
+  const shape = shapeLabel(raw);
+  if (shape) return shape;
   const boundaries = context.syntax.environmentBoundariesIn(span);
   const begin = boundaries.find((entry) => entry.kind === "begin");
   const firstControl = context.syntax.controlsIn(span)[0];
