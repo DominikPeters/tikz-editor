@@ -34,7 +34,6 @@ interface ScrubTarget {
   value: number;
   step: number;
   precision: number;
-  minDisplayPrecision: number;
   min?: number;
   max?: number;
 }
@@ -46,7 +45,6 @@ interface ActiveScrub {
   startValue: number;
   step: number;
   precision: number;
-  minDisplayPrecision: number;
   min?: number;
   max?: number;
   lastText: string;
@@ -213,7 +211,6 @@ export function numberScrubber(options: NumberScrubberOptions = {}): Extension {
           startValue: pending.target.value,
           step: pending.target.step,
           precision: pending.target.precision,
-          minDisplayPrecision: pending.target.minDisplayPrecision,
           ...(pending.target.min === undefined ? {} : { min: pending.target.min }),
           ...(pending.target.max === undefined ? {} : { max: pending.target.max }),
           lastText: this.view.state.doc.sliceString(pending.target.from, pending.target.to)
@@ -248,7 +245,7 @@ export function numberScrubber(options: NumberScrubberOptions = {}): Extension {
             altKey: event.altKey
           }
         });
-        const nextText = formatScrubNumber(nextValue, active.precision, active.minDisplayPrecision);
+        const nextText = formatScrubNumber(nextValue, active.precision);
         if (nextText === active.lastText) {
           return;
         }
@@ -403,7 +400,6 @@ function buildScrubTarget(view: EditorView, numberNode: SyntaxNode): ScrubTarget
     value: context.integerOnly ? Math.round(value) : value,
     step: context.step,
     precision,
-    minDisplayPrecision: sourcePrecision,
     ...(context.min === undefined ? {} : { min: context.min }),
     ...(context.max === undefined ? {} : { max: context.max })
   };

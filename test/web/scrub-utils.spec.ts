@@ -59,8 +59,11 @@ describe("scrub-utils", () => {
   });
 
   it("formats scrubbed values while preserving display precision", () => {
-    expect(formatScrubNumber(1.2, 3, 2)).toBe("1.20");
-    expect(formatScrubNumber(1.234, 3, 0)).toBe("1.234");
-    expect(formatScrubNumber(1.2, 3, 0)).toBe("1.2");
+    expect(formatScrubNumber(1.2, 3)).toBe("1.2");
+    expect(formatScrubNumber(0.6, 2)).toBe("0.6");
+    expect(formatScrubNumber(3, 2)).toBe("3");
+    expect(formatScrubNumber(-0.001, 2)).toBe("0");
+    expect(formatScrubNumber(1.234, 3)).toBe("1.234");
+    expect(formatScrubNumber(1.2, 3)).toBe("1.2");
   });
 });

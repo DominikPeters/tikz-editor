@@ -13,8 +13,8 @@ test.beforeEach(async ({ page }) => {
   await gotoApp(page);
 });
 
-// Scrubbing moves on the step's grid and keeps the literal's decimals.
-for (const [literal, expected] of [[".33", "0.60"], ["-.11", "0.10"], ["1e-3", "0.300"], ["1.", "1.3"]]) {
+// Scrubbing moves on the step's grid and writes no trailing zeros.
+for (const [literal, expected] of [[".33", "0.6"], ["-.11", "0.1"], ["1e-3", "0.3"], ["1.", "1.3"]]) {
   test(`source scrubbing replaces ${literal} through repeated moves`, async ({ page }) => {
     const source = String.raw`\begin{tikzpicture}
 \coordinate (C) at (0.85,5.30);

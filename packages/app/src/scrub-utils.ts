@@ -58,25 +58,12 @@ export function computeScrubbedValue(input: ComputeScrubbedValueInput): number {
   return clamp(Number(((base + deltaSteps) * step).toFixed(decimals)), input.min, input.max);
 }
 
-export function formatScrubNumber(value: number, precision: number, minDisplayPrecision: number): string {
+/** A scrubbed value as written: rounded to `precision` decimals, without trailing zeros. */
+export function formatScrubNumber(value: number, precision: number): string {
   const normalized = Math.abs(value) < 1e-10 ? 0 : value;
-  if (precision <= 0) {
-    return String(Math.round(normalized));
-  }
-
-  const fixed = normalized.toFixed(precision);
-  const dotIndex = fixed.indexOf(".");
-  if (dotIndex === -1) {
-    return fixed;
-  }
-
-  const intPart = fixed.slice(0, dotIndex);
-  let fraction = fixed.slice(dotIndex + 1);
-  while (fraction.length > minDisplayPrecision && fraction.endsWith("0")) {
-    fraction = fraction.slice(0, -1);
-  }
-
-  return fraction.length > 0 ? `${intPart}.${fraction}` : intPart;
+  if (precision <= 0) return String(Math.round(normalized));
+  const fixed = normalized.toFixed(precision).replace(/0+$/u, "").replace(/\.$/u, "");
+  return fixed === "-0" ? "0" : fixed;
 }
 
 export function fractionDigits(text: string): number {
