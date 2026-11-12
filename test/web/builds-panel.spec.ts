@@ -62,6 +62,8 @@ beforeEach(() => {
   useEditorStore.setState(makeInitialState());
   useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: SOURCE });
   useEditorStore.getState().dispatch({ type: "SET_ACTIVE_ROOT", rootId: "frame:0" });
+  // These tests start on step 1; a slide opens on its last step otherwise.
+  useEditorStore.getState().dispatch({ type: "SET_DECK_STEP", rootId: "frame:0", step: 1 });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
