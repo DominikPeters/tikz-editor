@@ -149,6 +149,8 @@ export type PathStatement = {
   command: PathCommand;
   /** `\node<2->`: the path exists only on these steps. */
   overlay?: OverlaySpecAst;
+  /** A specification where PGF does not read one: after the options of a command other than `\\path`. */
+  misplacedOverlay?: Span;
   options?: OptionListAst;
   items: PathItem[];
 };

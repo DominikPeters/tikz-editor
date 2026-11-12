@@ -107,6 +107,18 @@ describe("overlay syntax in a picture", () => {
     }
   });
 
+  it("reads a specification after options for \\path only, and through brackets inside options", () => {
+    const nested = parseTikz(picture(String.raw`\path[label={[red]above:x}]<3> (2,0) node {BC};`));
+    expect(nested.diagnostics).toEqual([]);
+    expect(nested.figure.body[0]!.kind === "Path" && nested.figure.body[0].overlay?.raw).toBe("3");
+    // \draw is \path[draw]: PGF gives up on \draw[red]<2>.
+    const shorthand = parseTikz(picture(String.raw`\draw[red]<2> (0,0) -- (1,1);`));
+    expect(shorthand.figure.body.some((statement) => statement.kind === "Path" && statement.overlay !== undefined)).toBe(false);
+    expect(shorthand.diagnostics.some((diagnostic) => diagnostic.severity === "error")).toBe(true);
+    // An ordinary \path with options still parses as before.
+    expect(parseTikz(picture(String.raw`\path[draw] (0,0) -- (1,1);`)).diagnostics).toEqual([]);
+  });
+
   it("reads an overlay command's bodies as siblings that name it", () => {
     const source = picture(String.raw`\draw (0,0) -- (1,0);
 \alt<2>{\draw (0,0) -- (1,1); \node {x};}{\fill (2,2) circle (1);}
@@ -469,6 +481,18 @@ ${body}
 \foreach \x in {1,2} { \node at (\x,0) {A\x}; \onslide<1-> \node at (\x,1) {B\x}; }`))).toEqual(["A2 B1 B2", "A2 B1 B2", "A1 A2 B1 B2"]);
     expect(shownBySteps(deck(String.raw`\pause \pause
 \foreach \x in {1,2} { \node at (\x,0) {C\x}; \onslide<2-> \node at (\x,1) {D\x}; }`))).toEqual(["", "C2 D1 D2", "C1 C2 D1 D2"]);
+  });
+
+  it("counts a specification after options with brackets inside", () => {
+    expect(shownBySteps(deck(String.raw`\node at (0,0) {A};
+\path[label={[red]above:x}]<3> (2,0) node {BC};`))).toEqual(["A", "A", "A BC"]);
+  });
+
+  it("applies a specification a macro's body writes to what the call makes", () => {
+    expect(shownBySteps(deck(String.raw`\newcommand\stp[1]{\node<#1-> at (#1,0) {M#1}}
+\stp{1};
+\stp{2};
+\stp{3};`))).toEqual(["M1", "M1 M2", "M1 M2 M3"]);
   });
 
   it("gives one Overlays row to a loop's specification, not editable as a number", () => {

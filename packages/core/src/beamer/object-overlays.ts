@@ -3,6 +3,7 @@ import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import { beamerOverlayDeclarationInForce } from "./overlay.js";
+import { TIKZ_PATH_COMMAND_START } from "./tikz-overlay-trace.js";
 import { beamerBuildSpecPatch, canEditBeamerBuildTiming, isExplicitBeamerBuildSpec, type BeamerBuildModel, type BeamerBuildRow } from "./builds.js";
 import type { BeamerObjectNode } from "./object-index.js";
 import { createBeamerSyntaxContext } from "./syntax.js";
@@ -87,7 +88,7 @@ export function beamerObjectOverlayTarget(model: BeamerBuildModel, node: BeamerO
  */
 export function beamerStatementOverlayTarget(model: BeamerBuildModel, statement: Span): BeamerObjectOverlayTarget {
   const { source } = model;
-  const command = /^\\(?:node|coordinate|matrix|pic|path|draw|fill|filldraw|pattern|shade|shadedraw|clip|useasboundingbox)(?![A-Za-z@])/u.exec(source.slice(statement.from, statement.to));
+  const command = TIKZ_PATH_COMMAND_START.exec(source.slice(statement.from, statement.to));
   const rows = model.rows.filter((row) => row.kind !== "branch" && row.kind !== "list");
   const own = rows.find((row) => row.kind === "content" && same(row.sourceSpan, statement) && row.command?.kind === "only" && row.command.branches.length === 1) ?? null;
   // The rule it stands under: the smallest brace command or text-level declaration around it, else

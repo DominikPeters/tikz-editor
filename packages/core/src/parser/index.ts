@@ -88,6 +88,12 @@ export function parseTikz(input: string, opts: ParseTikzOptions = {}): ParseTikz
   }
 
   diagnostics.push(...validateNodeText(mapped.figure, input, opts.nodeTextValidator));
+  walkStatements(mapped.figure.body, {
+    onStatement: (statement) => {
+      if (statement.kind === "Path" && statement.misplacedOverlay) diagnostics.push({ severity: "error", code: "misplaced-overlay-specification",
+        message: "An overlay specification comes straight after the command's name, before its options.", span: statement.misplacedOverlay });
+    }
+  });
 
   diagnostics.sort(compareDiagnosticPosition);
 

@@ -12,6 +12,7 @@ import {
   type BeamerOverlayVisibility,
 } from "./overlay.js";
 import { scanBeamerDocumentWithSyntax } from "./scan.js";
+import { TIKZ_PATH_COMMAND_START } from "./tikz-overlay-trace.js";
 import {
   beamerOptionalArgumentAfter,
   beamerOverlayArgumentAfter,
@@ -101,9 +102,10 @@ function shapesLabel(raw: string): string | null {
 
 /** A TikZ path statement, named by what it draws. */
 function shapeLabel(raw: string): string | null {
-  const match = /^\\(node|coordinate|matrix|pic|path|draw|fill|filldraw|pattern|shade|shadedraw|clip|useasboundingbox)(?![A-Za-z@])\s*(?:\[[^\]]*\]\s*)?(?:<[^>]*>)?/u.exec(raw);
+  const match = TIKZ_PATH_COMMAND_START.exec(raw);
   if (!match) return null;
-  const rest = raw.slice(match[0].length).replace(/;\s*$/u, "").replace(/^\s*\[[^\]]*\]/u, "").trim();
+  // Past the command's specification and options, in either order.
+  const rest = raw.slice(match[0].length).replace(/;\s*$/u, "").replace(/^\s*(?:\[[^\]]*\]\s*)?(?:<[^>]*>\s*)?(?:\[[^\]]*\])?/u, "").trim();
   const command = match[1] ?? "path";
   if (command === "node" || command === "matrix") {
     // The node's text is its last top-level brace group.

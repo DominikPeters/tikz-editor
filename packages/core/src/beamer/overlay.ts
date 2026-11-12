@@ -582,8 +582,8 @@ export function scanBeamerFrameOverlays(
     pauseCounter = resolved.nextPauseCounter;
     stepCount = Math.max(stepCount, resolved.spec.lastRequiredStep);
     if (entry.kind === "command") {
-      // A loop's specification is resolved from its values; what the source says stays the authored text.
-      commands.push({ ...entry.command, spec: entry.command.instance
+      // A loop's or a macro's specification is resolved from what it expands to; what the source says stays the authored text.
+      commands.push({ ...entry.command, spec: entry.command.instance || entry.rawSpec.span.to === entry.rawSpec.span.from
         ? { ...resolved.spec, source: { ...resolved.spec.source, value: source.slice(entry.rawSpec.contentSpan.from, entry.rawSpec.contentSpan.to) } }
         : resolved.spec, ...(entry.command.declaration ? { declaration: { ...entry.command.declaration, order } } : {}) });
     } else if (entry.kind === "switch") {

@@ -1,7 +1,7 @@
 import type { SyntaxNode } from "@lezer/common";
 
 import { graphOperationItemId, pathCommentItemId, pathStatementId, plotOperationItemId } from "../../ast/ids.js";
-import type { ChildForeachClause, OverlaySpecAst, PathCommand, PathItem, PathStatement } from "../../ast/types.js";
+import type { ChildForeachClause, OverlaySpecAst, PathCommand, PathItem, PathStatement, Span } from "../../ast/types.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import type { OptionListAst } from "../../options/types.js";
 import { parsePathItemsFromFragment } from "../../foreach/snippet-parse.js";
@@ -40,11 +40,18 @@ export function mapOverlaySpec(node: SyntaxNode, source: string): OverlaySpecAst
   return { span: { from: node.from, to: node.to }, contentSpan, raw: source.slice(contentSpan.from, contentSpan.to) };
 }
 
-/** The specification straight after a path command's name, or after `\\path`'s first option list. */
-function pathStatementOverlay(node: SyntaxNode, source: string): OverlaySpecAst | undefined {
+/**
+ * The specification straight after a path command's name, or after `\path`'s
+ * first option list. After another command's options PGF does not read one:
+ * the shorthands are `\path[…]`, so their own options come second.
+ */
+function pathStatementOverlay(node: SyntaxNode, source: string): { overlay?: OverlaySpecAst; misplacedOverlay?: Span } {
   const owner = findFirstChildByName(node, "NodePathStatement") ?? findFirstChildByName(node, "PicPathStatement") ?? node;
   const spec = findFirstChildByName(owner, "OverlaySpec");
-  return spec ? mapOverlaySpec(spec, source) : undefined;
+  if (!spec) return {};
+  const command = findFirstChildByName(owner, "PathCommand");
+  const afterOptions = command !== null && /\S/u.test(source.slice(command.to, spec.from));
+  return afterOptions && source.slice(command.from, command.to) !== "\\path" ? { misplacedOverlay: { from: spec.from, to: spec.to } } : { overlay: mapOverlaySpec(spec, source) };
 }
 
 export function mapPathStatement(node: SyntaxNode, source: string, statementIndex: number): PathStatement {
@@ -57,7 +64,7 @@ export function mapPathStatement(node: SyntaxNode, source: string, statementInde
       id: pathStatementId(statementIndex),
       span: { from: node.from, to: node.to },
       command: "path",
-      ...(overlay !== undefined ? { overlay } : {}),
+      ...overlay,
       items: [picItem]
     };
   }
@@ -169,7 +176,7 @@ export function mapPathStatement(node: SyntaxNode, source: string, statementInde
     id: pathStatementId(statementIndex),
     span: { from: node.from, to: node.to },
     command,
-    ...(overlay !== undefined ? { overlay } : {}),
+    ...overlay,
     ...(options !== undefined ? { options } : {}),
     items: finalizedItems
   };

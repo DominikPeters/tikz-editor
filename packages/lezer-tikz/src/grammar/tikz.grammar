@@ -90,7 +90,9 @@ ForeachList {
 
 // Beamer overlay specifications, read where PGF reads them
 // (tikz.code.tex, \tikz@path@overlay and \tikz@command@path): straight after
-// a path command's name, and after \path's first option list.
+// a path command's name, and after \path's first option list. The grammar
+// takes it after any command's first option list; the AST refuses it for the
+// shorthands, which are \path[…] to PGF (\draw[red]<2> is an error there).
 PathStatement {
   PicPathStatement |
   NodePathStatement |

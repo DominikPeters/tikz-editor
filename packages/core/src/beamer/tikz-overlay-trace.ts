@@ -5,7 +5,7 @@ import { parseTikz } from "../parser/index.js";
 
 /** A specification where the source has it, with its text after a loop's substitutions (`2-` for `\x-`). */
 export type TikzOverlaySpecSite = {
-  /** With its angle brackets. */
+  /** With its angle brackets. Empty where a macro's body wrote the specification. */
   readonly span: Span;
   readonly contentSpan: Span;
   readonly raw: string;
@@ -69,9 +69,19 @@ export type TikzOverlayTrace = {
   readonly statementStarts: ReadonlySet<number>;
 };
 
-/** Whether the picture's text can hold anything a trace reports. */
+/** The TikZ commands that start a path, each of which takes a specification straight after its name. */
+export const TIKZ_PATH_COMMAND_NAMES = ["path", "draw", "fill", "filldraw", "pattern", "shade", "shadedraw", "clip", "useasboundingbox", "node", "coordinate", "matrix", "pic"] as const;
+
+/** A path command's name at the start of a text: `\node`, not `\nodepart`. */
+export const TIKZ_PATH_COMMAND_START = new RegExp(String.raw`^\\(${TIKZ_PATH_COMMAND_NAMES.join("|")})(?![A-Za-z@])`, "u");
+
+/**
+ * Whether the picture's text can hold anything a trace reports: an angle
+ * bracket or an overlay command's name. Deliberately loose; the parser
+ * decides what is a specification.
+ */
 export function tikzOverlayTraceNeeded(text: string): boolean {
-  return /\\(?:path|draw|fill|filldraw|pattern|shade|shadedraw|clip|useasboundingbox|node|coordinate|matrix|pic)\s*(?:\[[^\]]*\]\s*)?<|\\(?:pause|onslide|only|uncover|visible|invisible|alt|temporal)(?![A-Za-z@])/u.test(text);
+  return /<|\\(?:pause|onslide|only|uncover|visible|invisible|alt|temporal)(?![A-Za-z@])/u.test(text);
 }
 
 /** Two iterations of nested loops, outermost first: negative when `left` runs first, zero when one contains the other. */
@@ -97,17 +107,18 @@ function shiftSpec(spec: TikzOverlaySpecSite, by: number): TikzOverlaySpecSite {
 function traceRelative(text: string): TikzOverlayTrace {
   const figure = parseTikz(text, { recover: true }).figure;
   const statementStarts = new Set<number>();
-  const seen = { loops: false };
+  // Loops and the picture's own macros make statements the parsed body does not show.
+  const seen = { expanding: false };
   const isOverlay = (statement: Statement) => statement.kind === "OverlayGroup" || statement.kind === "OverlayDeclaration" ||
     (statement.kind === "Path" && statement.overlay !== undefined);
   walkStatements(figure.body, {
     onStatement: (statement) => {
-      if (statement.kind === "Foreach") seen.loops = true;
+      if (statement.kind === "Foreach" || statement.kind === "MacroDefinition" || statement.kind === "MacroCommandDefinition") seen.expanding = true;
       if (isOverlay(statement)) statementStarts.add(statement.span.from);
     }
   });
   const ops: TikzOverlayTraceOp[] = [];
-  const expanded = seen.loops ? expandForeachFigure(figure, text) : null;
+  const expanded = seen.expanding ? expandForeachFigure(figure, text) : null;
   const visit = (statements: readonly Statement[]): void => {
     for (const statement of statements) {
       if (statement.kind === "Scope") { visit(statement.body); continue; }
@@ -118,13 +129,14 @@ function traceRelative(text: string): TikzOverlayTrace {
       const authored = (span: Span): Span | null => sourceMap ? sourceMap.mapSpan(span) : span;
       const span = authored(statement.span);
       if (!span) continue;
-      // A substitution can change a specification's length; its place is then read from the authored text.
       const specSite = (spec: OverlaySpecAst): TikzOverlaySpecSite | null => {
+        // A substitution can change a specification's length; its place is then read from the authored statement.
         const open = text.indexOf("<", span.from);
         const close = text.indexOf(">", open);
-        const site = authored(spec.span) ?? (open >= 0 && close > open ? { from: open, to: close + 1 } : null);
-        return site && text[site.from] === "<" && text[site.to - 1] === ">"
-          ? { span: site, contentSpan: { from: site.from + 1, to: site.to - 1 }, raw: spec.raw } : null;
+        const site = authored(spec.span) ?? (open >= 0 && close > open && close < span.to ? { from: open, to: close + 1 } : null);
+        if (site && text[site.from] === "<" && text[site.to - 1] === ">") return { span: site, contentSpan: { from: site.from + 1, to: site.to - 1 }, raw: spec.raw };
+        // A macro's body wrote it: it has no place in the source, and holds for what the call makes.
+        return sourceMap?.sourceKind === "macro" ? { span: { from: span.from, to: span.from }, contentSpan: { from: span.from, to: span.from }, raw: spec.raw } : null;
       };
       const performed: Performed = { instance: stack.map((frame) => frame.iterationIndex), loopSpan: stack[0]?.loopSpan ?? null };
       if (stack.length > 0) statementStarts.add(span.from);
