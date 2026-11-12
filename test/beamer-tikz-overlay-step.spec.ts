@@ -436,6 +436,22 @@ ${body}
 \node at (5,5) {C};`))).toEqual(["B1", "B1 B2 C"]);
   });
 
+  it("applies rules inside a scope a loop makes", () => {
+    expect(shownBySteps(deck(String.raw`\foreach \x in {1,2} { \begin{scope} \node<\x> at (\x,0) {S\x}; \end{scope} }`))).toEqual(["S1", "S2"]);
+    expect(shownBySteps(deck(String.raw`\foreach \x in {1,2} { \begin{scope}[xshift=\x cm] \only<\x->{\node at (0,0) {T\x};} \uncover<2>{\node at (0,1) {U\x};} \end{scope} }`))).toEqual(["T1", "T1 T2 U1 U2"]);
+  });
+
+  it("tells steps apart by what a loop's rules hide, for cached evaluations and edits", () => {
+    const source = deck(String.raw`\foreach \x in {1,2,3} { \node<\x-> at (\x,0) {R\x}; }
+\foreach \x in {1,2} { \onslide<\x-> \node at (\x,1) {O\x}; }`);
+    const document = scanBeamerDocument(source);
+    const overlays = scanBeamerFrameOverlays(source, document.frames[0]!);
+    const picture = document.frames[0]!.children.find((child) => child.kind === "tikzpicture")!;
+    const keys = [1, 2, 3].map((step) => beamerTikzStep(source, picture.span, overlays, step).overlayKey);
+    expect(new Set(keys).size).toBe(3);
+    expect(keys[2]).toBe("");
+  });
+
   it("gives one Overlays row to a loop's specification, not editable as a number", () => {
     const source = deck(String.raw`\foreach \x in {1,2,3} { \node<\x-> at (\x,0) {R\x}; }`);
     const model = buildBeamerBuildModel(source, "frame:0")!;
@@ -533,5 +549,48 @@ describe("a selected Overlays row for a shape", () => {
     expect(rect!.y).toBeGreaterThan(picture.y);
     expect(rect!.y + rect!.height).toBeLessThan(picture.y + picture.height);
     expect(Math.abs(rect!.y + rect!.height / 2 - (picture.y + picture.height / 2))).toBeLessThan(2);
+  });
+});
+
+describe("a drawing layer's cached evaluation across edits", () => {
+  const deck = (body: string, text = "Text.") => String.raw`\documentclass{beamer}
+\usepackage{tikz}
+${BEAMER_TIKZ_LAYER_DEFINITION}
+\begin{document}
+\begin{frame}{T}
+${text}
+\begin{tikzlayer}
+${body}
+\end{tikzlayer}
+\end{frame}
+\end{document}`;
+  const shown = (snapshot: Awaited<ReturnType<typeof computeSnapshot>>["snapshot"]) =>
+    (snapshot.scene?.elements ?? []).map((element) => `${element.kind === "Text" ? element.text : element.kind}${element.overlayCovered ? " (covered)" : ""}`).sort().join(", ");
+  const loop = String.raw`\foreach \x in {1,2} {\node<+-> at (\x,0) {L\x};}`;
+  const three = String.raw`\node<+-> at (0,0) {A};
+\node<+-> at (1,0) {B};
+\node<+-> at (2,0) {C};`;
+
+  it.each<[string, { before: string; after: string; step: number }]>([
+    ["a rule in the frame's text shifts a loop's relative specifications", { before: deck(loop), after: deck(loop, String.raw`\only<+->{Text.}`), step: 2 }],
+    ["a rule in the frame's text shifts a relative specification", { before: deck(String.raw`\node<+-> at (0,0) {A};`), after: deck(String.raw`\node<+-> at (0,0) {A};`, String.raw`\only<+->{Text.}`), step: 1 }],
+    ["a statement before a loop gains a relative specification", { before: deck(`\\node at (0,0) {A};\n${loop}\n\\node<3> at (9,9) {Z};`), after: deck(`\\node<+-> at (0,0) {A};\n${loop}\n\\node<3> at (9,9) {Z};`), step: 2 }],
+    ["a pause before a pausing loop is removed", { before: deck(String.raw`\node at (0,0) {A};
+\pause
+\foreach \x in {1,2} {\node at (\x,0) {L\x}; \pause}
+\node<4> at (9,9) {Z};`), after: deck(String.raw`\node at (0,0) {A};
+\foreach \x in {1,2} {\node at (\x,0) {L\x}; \pause}
+\node<4> at (9,9) {Z};`), step: 2 }],
+    ["a statement with a relative specification is added between others", { before: deck(three), after: deck(three.replace("{B};", String.raw`{B}; \node<+-> at (1,1) {D};`)), step: 3 }],
+    ["a statement after a loop with rules moves", { before: deck(String.raw`\foreach \x in {1,2} {\node<\x> at (\x,0) {L\x};}
+\node at (9,9) {Z};`), after: deck(String.raw`\foreach \x in {1,2} {\node<\x> at (\x,0) {L\x};}
+\node at (9,8) {Z};`), step: 2 }],
+  ])("shows what a fresh evaluation shows after %s", async (_name, { before, after, step }) => {
+    const request = { activeRootId: "frame:0:overlay:0", deckStep: step };
+    const documentId = `warm-${_name}`;
+    await computeSnapshot({ ...request, id: `${documentId}-1`, documentId, source: before, sourceRevision: 1 });
+    const warm = await computeSnapshot({ ...request, id: `${documentId}-2`, documentId, source: after, sourceRevision: 2 });
+    const cold = await computeSnapshot({ ...request, id: `${documentId}-3`, documentId: `${documentId}-cold`, source: after, sourceRevision: 1 });
+    expect(shown(warm.snapshot)).toBe(shown(cold.snapshot));
   });
 });

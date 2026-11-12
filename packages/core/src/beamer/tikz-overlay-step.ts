@@ -16,9 +16,11 @@ export type BeamerTikzStep = {
   /** What the evaluator does with each statement on this step; absent when the frame has no overlays. */
   readonly overlayVisibility?: (span: Span, instance: readonly number[]) => OverlayStatementVisibility;
   /**
-   * What `overlayVisibility` hides or removes, as text relative to the
-   * picture's start: two steps (or two edits) with the same key treat the
-   * same statements alike, so an evaluation cached for one serves the other.
+   * What the frame's rules hide or remove in the picture on this step, as
+   * text relative to the picture's start, a loop's rules once per iteration.
+   * Empty when every statement is there. Two steps (or two edits) with the
+   * same key treat the same statements alike, so an evaluation cached for
+   * one serves the other.
    */
   readonly overlayKey: string;
   /** Whether the statement at a span stands under an overlay rule of the frame. */
@@ -46,6 +48,12 @@ export function beamerTikzStep(source: string, span: Span, overlays: BeamerOverl
   const regions = [...overlays.commands.flatMap(command => command.branches.map(branch => branch.contentSpan)),
     ...overlays.pauses.map(pause => pause.contentSpan), ...overlays.items.map(item => item.contentSpan)]
     .filter(region => within(region, span) && region.to > region.from);
+  // Where each rule starts to hold, asked as the iteration that performs it would ask.
+  const effects = [
+    ...overlays.commands.flatMap(command => command.branches.map(branch => ({ at: branch.contentSpan.from, to: branch.contentSpan.to, instance: command.instance ?? [] }))),
+    ...overlays.pauses.map(pause => ({ at: pause.contentSpan.from, to: pause.contentSpan.to, instance: pause.instance ?? [] })),
+    ...overlays.items.map(item => ({ at: item.contentSpan.from, to: item.contentSpan.to, instance: [] as readonly number[] })),
+  ].filter(effect => within({ from: effect.at, to: effect.to }, span) && effect.to > effect.at);
   const inside = overlays.commands.some(command => command.commandSpan.from >= span.from && command.commandSpan.from < span.to) ||
     overlays.pauses.some(pause => pause.span.from >= span.from && pause.span.from < span.to) ||
     (overlays.switches ?? []).some(entry => entry.commandSpan.from >= span.from && entry.commandSpan.from < span.to);
@@ -56,9 +64,9 @@ export function beamerTikzStep(source: string, span: Span, overlays: BeamerOverl
     overlayVisibility,
     ruled: (statement) => regions.some(region => region.from <= statement.from && statement.to <= region.to),
     // Only what is hidden or removed: on a step that shows everything, edits keep the key.
-    overlayKey: regions.flatMap(region => {
-      const state = overlayVisibility(region);
-      return state === "visible" ? [] : [`${region.from - span.from}-${region.to - span.from}${state[0]}`];
+    overlayKey: effects.flatMap(({ at, to, instance }) => {
+      const state = overlayVisibility({ from: at, to: at }, instance);
+      return state === "visible" ? [] : [`${at - span.from}-${to - span.from}${instance.length ? `@${instance.join(".")}` : ""}${state[0]}`];
     }).join(","),
   };
 }

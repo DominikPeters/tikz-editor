@@ -120,6 +120,7 @@ import { normalizeEveryShapeNodeStyleName } from "./nodes/options.js";
 import type {
   EditHandle,
   EvaluateOptions,
+  OverlayStatementVisibility,
   FeatureUsage,
   NodeAnchorTarget,
   SceneElement,
@@ -183,7 +184,6 @@ export type SemanticEvaluationRun = {
   rootTransform?: WorldTransform;
   baseDiagnosticsCount: number;
   scopeSteps: WeakMap<Statement, "enter" | "leave">;
-  overlayVisibility?: NonNullable<EvaluateOptions["overlayVisibility"]>;
   geometryCheckpoints: Map<number, SemanticContextSnapshot>;
   captureGeometryCheckpoints: boolean;
   /** Indexed like `expandedFigureBody`; sparse when only some statements were evaluated. */
@@ -391,19 +391,28 @@ export function createSemanticEvaluationRun(
 
   const scopeSteps = new WeakMap<Statement, "enter" | "leave">();
   const evaluationBody = splitScopeSteps(activeExpandedFigureBody, scopeSteps, expanded.statementAttribution, expanded.statementSourceMaps);
+  const sourceStatementSpanById = buildSourceStatementSpanById(figure.body);
+  const overlayVisibility = opts.overlayVisibility;
+  if (overlayVisibility) {
+    context.overlayVisibilityOf = (statement) => {
+      const origin = expanded.statementAttribution.get(statement);
+      const sourceMap = expanded.statementSourceMaps.get(statement);
+      const sourceSpan = sourceMap ? mapExpansionSpan(sourceMap, statement.span) : sourceStatementSpanById.get(origin?.sourceId ?? statement.id) ?? statement.span;
+      return overlayVisibility(sourceSpan, origin?.foreachStack.map((frame) => frame.iterationIndex) ?? []);
+    };
+  }
   return {
     figure,
     source,
     context,
     scopeSteps,
-    ...(opts.overlayVisibility ? { overlayVisibility: opts.overlayVisibility } : {}),
     geometryCheckpoints: new Map(),
     captureGeometryCheckpoints: true,
     statementEntryContexts: [],
     diagnostics,
     featureUsage,
     expandedFigureBody: evaluationBody,
-    sourceStatementSpanById: buildSourceStatementSpanById(figure.body),
+    sourceStatementSpanById,
     statementAttribution: expanded.statementAttribution,
     statementSourceMaps: expanded.statementSourceMaps,
     pathItemForeachStack: expanded.pathItemForeachStack,
@@ -448,9 +457,7 @@ export function evaluateSemanticStatementByIndex(
   const sourceSpan = statementSourceMap
     ? mapExpansionSpan(statementSourceMap, statement.span)
     : run.sourceStatementSpanById.get(sourceId) ?? statement.span;
-  // A scope's frame is entered and left whatever the step; its statements each answer for themselves.
-  const overlayVisibility = scopeStep || !run.overlayVisibility ? "visible"
-    : run.overlayVisibility(sourceSpan, run.statementAttribution.get(statement)?.foreachStack.map((frame) => frame.iterationIndex) ?? []);
+  const overlayVisibility = scopeStep ? "visible" : statementOverlayVisibility(run.context, statement);
   beginStatementEffectTracking(run.context);
   const statementElements = withDependencySource(run.context, statement.id, () =>
     withPgfMathRuntime(
@@ -1014,6 +1021,15 @@ export function resolvePathBoundary(
 }
 
 /** Enter a scope exactly as its `enter` step does, so edit code can resolve frames inside it. */
+/**
+ * What a statement is on the overlay step. A scope is always entered: its
+ * frame is pushed and popped whatever the step, and its statements each
+ * answer for themselves.
+ */
+function statementOverlayVisibility(context: SemanticContext, statement: Statement): OverlayStatementVisibility {
+  return statement.kind === "Scope" ? "visible" : context.overlayVisibilityOf?.(statement) ?? "visible";
+}
+
 export function enterScopeStatement(statement: Extract<Statement, { kind: "Scope" }>, context: SemanticContext): void {
   evaluateStatement(statement, context, [], {}, new WeakMap(), true);
 }
@@ -1317,9 +1333,13 @@ function evaluateStatement(
     pushStyleDiagnostics(diagnostics, resolved.diagnostics, "Scope option issue", statement.span);
     pushStyleDiagnostics(diagnostics, backgroundDiagnostics, "Scope background option issue", statement.span);
     if (enterScopeOnly) return [];
-    const nested = statement.body.flatMap((entry) =>
-      evaluateStatement(entry, context, diagnostics, featureUsage, statementMacroAttribution)
-    );
+    const nested = statement.body.flatMap((entry) => {
+      const overlayVisibility = statementOverlayVisibility(context, entry);
+      if (overlayVisibility === "removed") return [];
+      const elements = evaluateStatement(entry, context, diagnostics, featureUsage, statementMacroAttribution);
+      if (overlayVisibility === "hidden") for (const element of elements) element.overlayCovered = true;
+      return elements;
+    });
     popFrame(context);
     return nested;
   }
