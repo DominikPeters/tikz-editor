@@ -7,7 +7,8 @@
   childBare,
   picGrouped,
   picOptionOnly,
-  pgfMathSemicolon
+  pgfMathSemicolon,
+  overlayContinuation
 }
 
 TikzEnvironment {
@@ -30,6 +31,8 @@ Statement {
   ScopeStatement |
   ForeachStatement |
   PathStatement |
+  OverlayGroupStatement |
+  OverlayDeclarationStatement |
   FontSizeStatement |
   StyleDefinitionStatement |
   TikzLibraryStatement |
@@ -85,18 +88,43 @@ ForeachList {
   IdentifierLike
 }
 
+// Beamer overlay specifications, read where PGF reads them
+// (tikz.code.tex, \tikz@path@overlay and \tikz@command@path): straight after
+// a path command's name, and after \path's first option list.
 PathStatement {
   PicPathStatement |
   NodePathStatement |
-  PathCommand PathItem* ";"
+  PathCommand OverlaySpec? PathItem* ";" |
+  PathCommand OptionList OverlaySpec PathItem* ";"
 }
 
 PicPathStatement {
-  PicCmd PicForeachClause* PicQualifier* Group? ";"
+  PicCmd OverlaySpec? PicForeachClause* PicQualifier* Group? ";"
 }
 
 NodePathStatement {
-  NodeCmd NodeCommandItem* ";"
+  NodeCmd OverlaySpec? NodeCommandItem* ";"
+}
+
+// Beamer's overlay commands at statement level. Their braces delimit an
+// argument, not a TeX group; \onslide without braces and \pause are
+// declarations that hold to the end of the enclosing scope.
+OverlayGroupStatement {
+  OverlayGroupCmd OverlaySpec OverlayBody (!overlayContinuation OverlayBody)* |
+  OnslideCmd OverlayModifier? OverlaySpec !overlayContinuation OverlayBody
+}
+
+OverlayDeclarationStatement {
+  OnslideCmd OverlayModifier? OverlaySpec? |
+  PauseCmd (!overlayContinuation OptionList)?
+}
+
+OverlayModifier {
+  !overlayContinuation ("*" | "+")
+}
+
+OverlayBody {
+  "{" BodyItem* !overlayContinuation "}"
 }
 
 PathCommand {
@@ -763,7 +791,10 @@ KnownCommand {
   NodeCmd |
   PicCmd |
   CoordinateCmd |
-  FontSizeCmd
+  FontSizeCmd |
+  OverlayGroupCmd |
+  OnslideCmd |
+  PauseCmd
 }
 
 StraySymbol {
@@ -814,6 +845,17 @@ StrayToken {
 // Word keywords specialize Identifier so they only match as whole words.
 AtKw { @specialize<Identifier, "at"> }
 InlineTikzCmd { @specialize<CommandName, "\\tikz"> }
+// Whole command names only: \altitude is not \alt.
+OverlayGroupCmd {
+  @specialize<CommandName, "\\only"> |
+  @specialize<CommandName, "\\uncover"> |
+  @specialize<CommandName, "\\visible"> |
+  @specialize<CommandName, "\\invisible"> |
+  @specialize<CommandName, "\\alt"> |
+  @specialize<CommandName, "\\temporal">
+}
+OnslideCmd { @specialize<CommandName, "\\onslide"> }
+PauseCmd { @specialize<CommandName, "\\pause"> }
 BendKw { @specialize<Identifier, "bend"> }
 CycleKw { @specialize<Identifier, "cycle"> }
 CircleKw { @specialize<Identifier, "circle"> }
@@ -923,6 +965,7 @@ ForeachKw { @specialize<Identifier, "foreach"> }
   MatrixCmd { "\\matrix" }
   BeginScope { "\\begin{scope}" }
   EndScope { "\\end{scope}" }
+  OverlaySpec { "<" ![<>{}\n\r]* ">" }
   ForeachCmd { "\\foreach" }
   NodeCmd { "\\node" }
   PicCmd { "\\pic" }

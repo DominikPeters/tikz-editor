@@ -8,7 +8,7 @@ import { createBeamerAmbientText } from "./ambient-text.js";
 import { expandBeamerLocalMacros } from "./local-macros.js";
 import { interleaveBeamerPicturePaint, type BeamerPicturePaintOwner } from "./picture-paint.js";
 import { projectBeamerInlinePictures, type BeamerInlinePicture } from "./inline-pictures.js";
-import { projectBeamerTikzSource } from "./overlay.js";
+import { beamerTikzStep } from "./tikz-overlay-step.js";
 import { beamerDateBindings, beamerMetadataWithDefaultDate, projectBeamerDateRegisters, type BeamerCompilationDate } from "./date.js";
 import { projectBeamerPreformatted } from "./preformatted.js";
 import { projectBeamerScientificNotation } from "./package-notation.js";
@@ -33,7 +33,6 @@ import {
   remapTexVListLayoutSourceMap,
   remapSimpleTexListStructureSourceMap,
 } from "../text/tex/source-map-report.js";
-import { maskTikzPictureSource } from "../document/masking.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 import type { Span } from "../ast/types.js";
 import { projectBeamerCaptions } from "./captions.js";
@@ -3801,9 +3800,9 @@ async function prepareColumnFlowNode(params: {
 }
 
 /** Covered paths still contribute their PGF geometry but do not paint. */
-function beamerTikzPaintModel(rendered: RenderTikzToSvgResult, overlays: BeamerOverlayModel, step: number) {
-  const hiddenIds = new Set(rendered.semantic.scene.elements.filter(element =>
-    resolveBeamerOverlaySpanVisibility(overlays, element.sourceRef.sourceSpan, step) === "hidden").map(element => element.id));
+/** The picture's paint without its covered elements, which keep their room and names. */
+function beamerTikzPaintModel(rendered: RenderTikzToSvgResult) {
+  const hiddenIds = new Set(rendered.semantic.scene.elements.filter(element => element.overlayCovered).map(element => element.id));
   return hiddenIds.size === 0 ? rendered.svg.model : {
     ...rendered.svg.model,
     parts: rendered.svg.model.parts.filter(part => !part.elementId || !hiddenIds.has(part.elementId)),
@@ -3834,12 +3833,14 @@ async function prepareEmbeddedTikz(params: {
   });
   const ambientColor = params.ambientText ? parseSimpleTexParagraphIr(params.ambientText,
     name => params.theme?.colorAliases?.[name] ?? null).nodes.flatMap(node => node.kind === "style-declaration" && node.color !== undefined ? [node.color] : []).at(-1) : undefined;
+  const pictureStep = beamerTikzStep(params.source, params.node.root.span, params.overlays, params.step);
   const rendered = await renderTikzToSvgAsync(
-    maskTikzPictureSource(projectBeamerTikzSource(params.source, params.node.root.span, params.overlays, params.step), params.node.root.span),
+    pictureStep.source,
     {
       textEngine,
       parse: { includeContextDefinitions: true },
       evaluate: { initialFont: beamerTikzFontCommand(params.bodyFont),
+        ...(pictureStep.overlayVisibility ? { overlayVisibility: pictureStep.overlayVisibility } : {}),
         ...(ambientColor ? { pictureOptions: `color=${ambientColor}` } : {}),
         namedFontSizes: Object.fromEntries(beamerNamedFontSizes(params.theme).map(([name, size]) => [name, size])) },
       ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
@@ -3850,7 +3851,7 @@ async function prepareEmbeddedTikz(params: {
       svg: { padding: 0, includeArrowInkBounds: false },
     }
   );
-  const model = beamerTikzPaintModel(rendered, params.overlays, params.step);
+  const model = beamerTikzPaintModel(rendered);
   const visibleParts = new Set(model.parts);
   const coveredModel = { ...rendered.svg.model, parts: rendered.svg.model.parts.filter(part => !visibleParts.has(part)) };
   const empty = rendered.semantic.scene.elements.length === 0 && !rendered.semantic.scene.bounds;
@@ -3939,8 +3940,9 @@ async function emitBeamerOverlayPictures(params: {
       requireArrayValue(params.embeddedTikz, params.embeddedTikz.length - 1).overlay = { rootId, origin, rememberPicture: picture.rememberPicture, elements: [], sourceOffset: 0 };
       continue;
     }
+    const pictureStep = beamerTikzStep(params.context.source, picture.span, params.overlays, params.step);
     const rendered = await renderTikzToSvgAsync(
-      maskTikzPictureSource(projectBeamerTikzSource(params.context.source, picture.span, params.overlays, params.step), picture.span),
+      pictureStep.source,
       {
         textEngine,
         parse: { includeContextDefinitions: true },
@@ -3951,6 +3953,7 @@ async function emitBeamerOverlayPictures(params: {
         // without, `current page` takes the picture's origin for the page's corner.
         evaluate: {
           initialFont: beamerTikzFontCommand(params.font),
+          ...(pictureStep.overlayVisibility ? { overlayVisibility: pictureStep.overlayVisibility } : {}),
           ...(picture.tikzLayer && { pictureOptions: BEAMER_TIKZ_LAYER_OPTIONS }),
           currentPage: picture.rememberPicture
             ? { minX: -origin.x, minY: origin.y - params.page.height, maxX: params.page.width - origin.x, maxY: origin.y }
@@ -3973,7 +3976,7 @@ async function emitBeamerOverlayPictures(params: {
         horizontalAlignment: "left",
         width: viewBox.width,
         height: viewBox.height,
-        model: beamerTikzPaintModel(rendered, params.overlays, params.step),
+        model: beamerTikzPaintModel(rendered),
         viewBox,
       },
       x: origin.x + viewBox.x,
@@ -3988,7 +3991,7 @@ async function emitBeamerOverlayPictures(params: {
       rootId,
       origin,
       rememberPicture: picture.rememberPicture,
-      elements: rendered.semantic.scene.elements.filter(element => resolveBeamerOverlaySpanVisibility(params.overlays, element.sourceRef.sourceSpan, params.step) === "visible"),
+      elements: rendered.semantic.scene.elements.filter(element => !element.overlayCovered),
       sourceOffset: 0,
     };
   }

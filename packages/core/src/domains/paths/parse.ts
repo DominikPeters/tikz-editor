@@ -1,7 +1,7 @@
 import type { SyntaxNode } from "@lezer/common";
 
 import { graphOperationItemId, pathCommentItemId, pathStatementId, plotOperationItemId } from "../../ast/ids.js";
-import type { ChildForeachClause, PathCommand, PathItem, PathStatement } from "../../ast/types.js";
+import type { ChildForeachClause, OverlaySpecAst, PathCommand, PathItem, PathStatement } from "../../ast/types.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import type { OptionListAst } from "../../options/types.js";
 import { parsePathItemsFromFragment } from "../../foreach/snippet-parse.js";
@@ -34,7 +34,21 @@ type PathItemContext = {
   graphCommandConsumed: boolean;
 };
 
+export function mapOverlaySpec(node: SyntaxNode, source: string): OverlaySpecAst {
+  const closed = source[node.to - 1] === ">";
+  const contentSpan = { from: node.from + 1, to: closed ? node.to - 1 : node.to };
+  return { span: { from: node.from, to: node.to }, contentSpan, raw: source.slice(contentSpan.from, contentSpan.to) };
+}
+
+/** The specification straight after a path command's name, or after `\\path`'s first option list. */
+function pathStatementOverlay(node: SyntaxNode, source: string): OverlaySpecAst | undefined {
+  const owner = findFirstChildByName(node, "NodePathStatement") ?? findFirstChildByName(node, "PicPathStatement") ?? node;
+  const spec = findFirstChildByName(owner, "OverlaySpec");
+  return spec ? mapOverlaySpec(spec, source) : undefined;
+}
+
 export function mapPathStatement(node: SyntaxNode, source: string, statementIndex: number): PathStatement {
+  const overlay = pathStatementOverlay(node, source);
   const picPathStatement = findFirstChildByName(node, "PicPathStatement");
   if (picPathStatement) {
     const picItem = mapPicOperationItem(picPathStatement, source, statementIndex, 0);
@@ -43,6 +57,7 @@ export function mapPathStatement(node: SyntaxNode, source: string, statementInde
       id: pathStatementId(statementIndex),
       span: { from: node.from, to: node.to },
       command: "path",
+      ...(overlay !== undefined ? { overlay } : {}),
       items: [picItem]
     };
   }
@@ -154,6 +169,7 @@ export function mapPathStatement(node: SyntaxNode, source: string, statementInde
     id: pathStatementId(statementIndex),
     span: { from: node.from, to: node.to },
     command,
+    ...(overlay !== undefined ? { overlay } : {}),
     ...(options !== undefined ? { options } : {}),
     items: finalizedItems
   };

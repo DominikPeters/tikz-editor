@@ -183,6 +183,7 @@ export type SemanticEvaluationRun = {
   rootTransform?: WorldTransform;
   baseDiagnosticsCount: number;
   scopeSteps: WeakMap<Statement, "enter" | "leave">;
+  overlayVisibility?: NonNullable<EvaluateOptions["overlayVisibility"]>;
   geometryCheckpoints: Map<number, SemanticContextSnapshot>;
   captureGeometryCheckpoints: boolean;
   /** Indexed like `expandedFigureBody`; sparse when only some statements were evaluated. */
@@ -395,6 +396,7 @@ export function createSemanticEvaluationRun(
     source,
     context,
     scopeSteps,
+    ...(opts.overlayVisibility ? { overlayVisibility: opts.overlayVisibility } : {}),
     geometryCheckpoints: new Map(),
     captureGeometryCheckpoints: true,
     statementEntryContexts: [],
@@ -442,21 +444,25 @@ export function evaluateSemanticStatementByIndex(
   const beforeCurrentPoint = run.context.currentPoint ? { ...run.context.currentPoint } : null;
   const beforePathStartPoint = run.context.pathStartPoint ? { ...run.context.pathStartPoint } : null;
   const featureUsage: FeatureUsage = {};
+  const statementSourceMap = run.statementSourceMaps.get(statement);
+  const sourceSpan = statementSourceMap
+    ? mapExpansionSpan(statementSourceMap, statement.span)
+    : run.sourceStatementSpanById.get(sourceId) ?? statement.span;
+  // A scope's frame is entered and left whatever the step; its statements each answer for themselves.
+  const overlayVisibility = scopeStep || !run.overlayVisibility ? "visible" : run.overlayVisibility(sourceSpan);
   beginStatementEffectTracking(run.context);
   const statementElements = withDependencySource(run.context, statement.id, () =>
     withPgfMathRuntime(
       { rng: run.context.mathRandom },
       () => {
         if (scopeStep === "leave") { popFrame(run.context); return []; }
+        if (overlayVisibility === "removed") return [];
         return evaluateStatement(statement, run.context, run.diagnostics, featureUsage, run.statementMacroAttribution, scopeStep === "enter");
       }
     )
   );
+  if (overlayVisibility === "hidden") for (const element of statementElements) element.overlayCovered = true;
   mergeFeatureUsage(run.featureUsage, featureUsage);
-  const statementSourceMap = run.statementSourceMaps.get(statement);
-  const sourceSpan = statementSourceMap
-    ? mapExpansionSpan(statementSourceMap, statement.span)
-    : run.sourceStatementSpanById.get(sourceId) ?? statement.span;
   const elements = finalizeStatementElements(
     finalizeExpandedStatementElements({
       statement,
@@ -1378,6 +1384,11 @@ function evaluateStatement(
   if (statement.kind === "DefineColor") {
     applyDefineColorStatement(statement, context, diagnostics);
     markFeature(featureUsage, "unknown_statement", "supported");
+    return [];
+  }
+
+  // Overlay commands act through `overlayVisibility`; they draw nothing themselves.
+  if (statement.kind === "OverlayGroup" || statement.kind === "OverlayDeclaration") {
     return [];
   }
 

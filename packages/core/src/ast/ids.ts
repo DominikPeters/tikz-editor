@@ -50,6 +50,14 @@ export function defineColorStatementId(statementIndex: number): string {
   return `definecolor:${statementIndex}`;
 }
 
+export function overlayGroupStatementId(statementIndex: number): string {
+  return `overlay-group:${statementIndex}`;
+}
+
+export function overlayDeclarationStatementId(statementIndex: number): string {
+  return `overlay-declaration:${statementIndex}`;
+}
+
 export function unknownStatementId(statementIndex: number): string {
   return `unknown-statement:${statementIndex}`;
 }

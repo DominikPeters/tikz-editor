@@ -149,7 +149,16 @@ export type ScenePathAttachment = {
   sloped: boolean;
 };
 
-export type SceneElement = ScenePath | SceneCircle | SceneEllipse | SceneText;
+export type SceneElement = (ScenePath | SceneCircle | SceneEllipse | SceneText) & {
+  /**
+   * Covered on this overlay step (`\uncover`, `\pause`): it keeps its
+   * geometry, names and room in the picture, and is not painted.
+   */
+  overlayCovered?: true;
+};
+
+/** A statement on one overlay step: there, covered (kept, not painted), or absent. */
+export type OverlayStatementVisibility = "visible" | "hidden" | "removed";
 
 /**
  * Where a scene element comes from. It names no source revision: a reused
@@ -548,6 +557,13 @@ export type EvaluateOptions = {
   pictureOptions?: string;
   /** Placement of the picture's origin in an enclosing scene. */
   initialTransform?: WorldTransform;
+  /**
+   * The Beamer overlay step: what the statement at an authored source span
+   * is on it. A removed statement is skipped whole, as `\alt<spec>{…}{}`
+   * leaves nothing; a hidden one is evaluated and its elements are covered.
+   * Without it every statement is there.
+   */
+  overlayVisibility?: (span: Span) => OverlayStatementVisibility;
 };
 
 export type { CoordinateForm };

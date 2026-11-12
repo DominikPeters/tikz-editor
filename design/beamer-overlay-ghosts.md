@@ -18,6 +18,55 @@ Linked changes, in the order they should be built:
 Ghosts (drawing hidden content faded) were considered and are not planned;
 the section is kept as a record.
 
+## Built so far
+
+Phase 1 (2026-11-12): slides open on their last step; the step strip.
+
+Phase 2, first part (2026-11-12):
+
+- **Grammar and AST.** `<spec>` on path commands; `\only`, `\uncover`,
+  `\visible`, `\invisible`, `\alt`, `\temporal` and `\onslide<spec>{…}`
+  around statements; `\onslide` and `\pause` declarations. Command names
+  match as whole words.
+- **A flat representation, not a container.** An overlay command's braces
+  delimit an argument, not a TeX group, so its statements stay siblings in
+  the enclosing body. The command is a head statement (`OverlayGroup`);
+  each statement of its bodies names it in `overlayGroups`. No code that
+  walks scopes had to learn a new container.
+- **Evaluator.** `overlayVisibility(span)` says, per statement, visible,
+  hidden or removed. A removed statement is skipped whole; a hidden one is
+  evaluated and its elements carry `overlayCovered`. Element ids are the
+  same on every step.
+- **One function for a picture on a step** (`beamerTikzStep`), used by the
+  slide renderer and both edit snapshots (slide picture, drawing layer).
+  The frame decoder still decides visibility; the evaluator asks it by
+  source span.
+- **Text inside a statement is still projected.** Overlay commands in node
+  text or option values (`\node {\only<2>{x}}`) are resolved as text, as
+  in the slide's own text, since the TeX text engine does not read them.
+  Only statement-level commands moved to the AST.
+- `<spec>` after a path command is now seen in a `tikzlayer`, and after
+  `\pattern` and `\useasboundingbox`.
+- **Checked** on every fixture frame with overlay syntax in a picture, on
+  every step: the scene equals what blanking the source drew
+  (`test/beamer-tikz-overlay-step.spec.ts`), and the test fails when
+  visibility is broken on purpose.
+
+Still to do in phase 2:
+
+- **Sites from the AST.** The decoder still finds a picture's overlay
+  commands with its own scanner. Until it reads them from the AST:
+  `\pause` and `\onslide` in a picture still run to the end of the frame,
+  and specifications a loop creates are still missed.
+- **Edit actions on the main thread** evaluate a slide picture without the
+  step's visibility (they parse the overlay syntax correctly now, and ids
+  agree with the snapshot). They need the frame's step passed in.
+- **Rule chains on scene elements**, and the effective-steps requirement
+  for edits.
+- `projectBeamerTikzSource` stays for text inside statements; the picture is
+  parsed once more per step to find its statement-level commands (cached
+  per source).
+
 ## Decided
 
 - Navigator thumbnails show the last step. (They already do:

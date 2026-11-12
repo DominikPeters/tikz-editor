@@ -7,6 +7,8 @@ import {
   macroAliasStatementId,
   macroCommandDefinitionStatementId,
   macroDefinitionStatementId,
+  overlayDeclarationStatementId,
+  overlayGroupStatementId,
   pgfMathStatementId,
   pgfkeysStatementId,
   scopeStatementId,
@@ -21,6 +23,9 @@ import type {
   MacroAliasStatement,
   MacroCommandDefinitionStatement,
   MacroDefinitionStatement,
+  OverlayDeclarationStatement,
+  OverlayGroupCommand,
+  OverlayGroupStatement,
   PgfMathStatement,
   PgfkeysStatement,
   ScopeStatement,
@@ -30,7 +35,7 @@ import type {
   TikzSetStatement,
   TikzStyleStatement
 } from "../../ast/types.js";
-import { mapPathStatement } from "../paths/parse.js";
+import { mapOverlaySpec, mapPathStatement } from "../paths/parse.js";
 import { mapUnknownStatement } from "../../transform/unknown.js";
 import { parseOptionListRaw, parseStyleValueAsOptionList } from "../../options/parse.js";
 import { parseForeachHeaderRaw } from "../../foreach/header.js";
@@ -46,6 +51,10 @@ export function mapBodyStatements(node: SyntaxNode, source: string, state: State
   forEachChild(node, (child) => {
     const maybeStatement = unwrapStatementLikeNode(child);
 
+    if (maybeStatement.type.name === "OverlayGroupStatement") {
+      statements.push(...mapOverlayGroupStatement(maybeStatement, source, state));
+      return;
+    }
     const mapped = mapStatementNode(maybeStatement, source, state);
     if (mapped) {
       statements.push(mapped);
@@ -53,6 +62,59 @@ export function mapBodyStatements(node: SyntaxNode, source: string, state: State
   });
 
   return statements;
+}
+
+const OVERLAY_GROUP_COMMANDS: readonly OverlayGroupCommand[] = ["only", "uncover", "visible", "invisible", "alt", "temporal", "onslide"];
+
+/**
+ * An overlay command around statements, as its head followed by the
+ * statements of its bodies, each naming the head and its body.
+ */
+function mapOverlayGroupStatement(node: SyntaxNode, source: string, state: StatementMappingState): Statement[] {
+  const statementIndex = allocateStatementIndex(state);
+  const commandNode = findFirstChildByName(node, "OverlayGroupCmd") ?? findFirstChildByName(node, "OnslideCmd");
+  const specNode = findFirstChildByName(node, "OverlaySpec");
+  const modifierNode = findFirstChildByName(node, "OverlayModifier");
+  const bodies = findChildrenByName(node, "OverlayBody");
+  const command = OVERLAY_GROUP_COMMANDS.find((name) => commandNode && name === source.slice(commandNode.from + 1, commandNode.to)) ?? "only";
+  const modifier = modifierNode ? source.slice(modifierNode.from, modifierNode.to).trim() : "";
+  const head: OverlayGroupStatement = {
+    kind: "OverlayGroup",
+    id: overlayGroupStatementId(statementIndex),
+    span: { from: node.from, to: specNode?.to ?? commandNode?.to ?? node.to },
+    groupSpan: { from: node.from, to: node.to },
+    command,
+    ...(modifier === "*" || modifier === "+" ? { modifier } : {}),
+    spec: specNode ? mapOverlaySpec(specNode, source) : { span: { from: node.from, to: node.from }, contentSpan: { from: node.from, to: node.from }, raw: "" },
+    branches: bodies.map((body) => ({ from: body.from + 1, to: source[body.to - 1] === "}" ? body.to - 1 : body.to }))
+  };
+  const statements: Statement[] = [head];
+  bodies.forEach((body, branch) => {
+    for (const member of mapBodyStatements(body, source, state)) {
+      member.overlayGroups = [{ groupId: head.id, branch }, ...(member.overlayGroups ?? [])];
+      statements.push(member);
+    }
+  });
+  return statements;
+}
+
+function mapOverlayDeclarationStatement(node: SyntaxNode, source: string, state: StatementMappingState): OverlayDeclarationStatement {
+  const statementIndex = allocateStatementIndex(state);
+  const pause = findFirstChildByName(node, "PauseCmd") !== null;
+  const specNode = findFirstChildByName(node, "OverlaySpec");
+  const modifierNode = findFirstChildByName(node, "OverlayModifier");
+  const countNode = findFirstChildByName(node, "OptionList");
+  const modifier = modifierNode ? source.slice(modifierNode.from, modifierNode.to).trim() : "";
+  const countSpan = countNode ? { from: countNode.from + 1, to: source[countNode.to - 1] === "]" ? countNode.to - 1 : countNode.to } : undefined;
+  return {
+    kind: "OverlayDeclaration",
+    id: overlayDeclarationStatementId(statementIndex),
+    span: { from: node.from, to: node.to },
+    command: pause ? "pause" : "onslide",
+    ...(modifier === "*" || modifier === "+" ? { modifier } : {}),
+    ...(specNode ? { spec: mapOverlaySpec(specNode, source) } : {}),
+    ...(countSpan ? { countRaw: source.slice(countSpan.from, countSpan.to), countSpan } : {})
+  };
 }
 
 export function unwrapStatementLikeNode(node: SyntaxNode): SyntaxNode {
@@ -111,6 +173,10 @@ export function mapStatementNode(node: SyntaxNode, source: string, state: Statem
 
   if (node.type.name === "ScopeStatement") {
     return mapScopeStatement(node, source, state);
+  }
+
+  if (node.type.name === "OverlayDeclarationStatement") {
+    return mapOverlayDeclarationStatement(node, source, state);
   }
 
   if (node.type.name === "ForeachStatement") {

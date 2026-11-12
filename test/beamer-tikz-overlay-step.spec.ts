@@ -1,0 +1,258 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+import { computeSnapshot } from "../packages/app/src/compute.js";
+import { scanBeamerDocument } from "../packages/core/src/beamer/index.js";
+import { BEAMER_TIKZ_LAYER_DEFINITION } from "../packages/core/src/beamer/overlay-pictures.js";
+import { projectBeamerTikzSource, resolveBeamerOverlaySpanVisibility, scanBeamerFrameOverlays } from "../packages/core/src/beamer/overlay.js";
+import { beamerTikzStep } from "../packages/core/src/beamer/tikz-overlay-step.js";
+import { maskTikzPictureSource } from "../packages/core/src/document/masking.js";
+import { createIncrementalParseSession, parseTikz } from "../packages/core/src/parser/index.js";
+import { renderTikzToSvg } from "../packages/core/src/render/index.js";
+
+const FIXTURES = join(__dirname, "fixtures/beamer");
+
+function texFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    return statSync(path).isDirectory() ? texFiles(path) : name.endsWith(".tex") ? [path] : [];
+  });
+}
+
+/** A scene element without its ids, which the old path numbered per step. */
+function shape(element: object): string {
+  return JSON.stringify(element, (key, value: unknown) => /(?:^id|Id|Ids|^sourceRef|^overlayCovered|^styleChain|^dependsOn.*|^provenance)$/u.test(key) ? undefined : value);
+}
+
+function drawn(source: string, options: Parameters<typeof renderTikzToSvg>[1], covered: (element: ReturnType<typeof renderTikzToSvg>["semantic"]["scene"]["elements"][number]) => boolean) {
+  const rendered = renderTikzToSvg(source, options);
+  const elements = rendered.semantic.scene.elements;
+  return {
+    painted: elements.filter((element) => !covered(element)).map((element) => `${element.sourceRef.sourceSpan.from}-${element.sourceRef.sourceSpan.to} ${shape(element)}`),
+    covered: elements.filter(covered).map((element) => `${element.sourceRef.sourceSpan.from}-${element.sourceRef.sourceSpan.to} ${shape(element)}`),
+    bounds: rendered.semantic.scene.bounds,
+    ids: elements.map((element) => `${element.sourceRef.sourceSpan.from}:${element.id}`),
+  };
+}
+
+const decks = texFiles(FIXTURES)
+  .map((path) => ({ path, source: readFileSync(path, "utf8") }))
+  .filter(({ source }) => /\\begin\{tikz(?:picture|layer)\}/u.test(source) && /\\(?:only|uncover|visible|invisible|alt|temporal|onslide|pause)(?![A-Za-z])|\\(?:node|draw|path|fill|filldraw|shade|clip|coordinate|matrix|pic)\s*</u.test(source));
+
+describe("a slide picture on an overlay step", () => {
+  it("has fixture decks to check", () => { expect(decks.length).toBeGreaterThan(10); });
+
+  it("draws what blanking the source before parsing drew, on every step of every fixture", () => {
+    let pictures = 0, steps = 0;
+    for (const { path, source } of decks) {
+      const document = scanBeamerDocument(source);
+      for (const frame of document.frames) {
+        const tikz = frame.children.filter((child) => child.kind === "tikzpicture");
+        if (tikz.length === 0) continue;
+        const overlays = scanBeamerFrameOverlays(source, frame);
+        for (const picture of tikz) {
+          const structural = overlays.commands.some((command) => command.commandSpan.from >= picture.span.from && command.commandSpan.from < picture.span.to) ||
+            overlays.pauses.some((pause) => pause.span.from >= picture.span.from && pause.span.from < picture.span.to);
+          if (!structural) continue;
+          pictures += 1;
+          const idsByStep: string[][] = [];
+          for (let step = 1; step <= overlays.stepCount; step += 1) {
+            steps += 1;
+            const where = `${path.slice(FIXTURES.length + 1)} @${picture.span.from} step ${step}`;
+            const before = drawn(maskTikzPictureSource(projectBeamerTikzSource(source, picture.span, overlays, step), picture.span),
+              { parse: { includeContextDefinitions: true } },
+              (element) => resolveBeamerOverlaySpanVisibility(overlays, element.sourceRef.sourceSpan, step) === "hidden");
+            const pictureStep = beamerTikzStep(source, picture.span, overlays, step);
+            const after = drawn(pictureStep.source, { parse: { includeContextDefinitions: true },
+              evaluate: pictureStep.overlayVisibility ? { overlayVisibility: pictureStep.overlayVisibility } : {} }, (element) => element.overlayCovered === true);
+            expect(after.painted, where).toEqual(before.painted);
+            expect(after.covered, where).toEqual(before.covered);
+            expect(after.bounds, where).toEqual(before.bounds);
+            idsByStep.push(after.ids);
+          }
+          // An element has one id on every step it is on.
+          const idBySpan = new Map<string, string>();
+          for (const ids of idsByStep) for (const entry of ids) {
+            const [span, id] = [entry.slice(0, entry.indexOf(":")), entry.slice(entry.indexOf(":") + 1)];
+            void span;
+            expect(idBySpan.get(id) ?? entry, path).toBe(entry);
+            idBySpan.set(id, entry);
+          }
+        }
+      }
+    }
+    expect(pictures).toBeGreaterThan(5);
+    expect(steps).toBeGreaterThan(pictures);
+  });
+});
+
+describe("overlay syntax in a picture", () => {
+  const picture = (body: string) => `\\begin{tikzpicture}\n${body}\n\\end{tikzpicture}`;
+
+  it("parses specifications on path commands where PGF reads them", () => {
+    for (const [body, raw] of [
+      [String.raw`\node<2-> at (0,0) {A};`, "2-"], [String.raw`\draw<3>[red] (0,0) -- (1,1);`, "3"], [String.raw`\path[draw]<2-4> (0,0) -- (1,1);`, "2-4"],
+      [String.raw`\coordinate<+-> (a) at (0,0);`, "+-"], [String.raw`\pic<2> at (0,0) {x};`, "2"], [String.raw`\useasboundingbox<2> (0,0) rectangle (1,1);`, "2"],
+    ] as const) {
+      const parsed = parseTikz(picture(body));
+      expect(parsed.diagnostics, body).toEqual([]);
+      const statement = parsed.figure.body[0];
+      expect(statement.kind === "Path" && statement.overlay?.raw, body).toBe(raw);
+    }
+  });
+
+  it("reads an overlay command's bodies as siblings that name it", () => {
+    const source = picture(String.raw`\draw (0,0) -- (1,0);
+\alt<2>{\draw (0,0) -- (1,1); \node {x};}{\fill (2,2) circle (1);}
+\onslide<3->{\draw (5,5) -- (6,6);}
+\draw (9,9) -- (8,8);`);
+    const parsed = parseTikz(source);
+    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.figure.body.map((statement) => [statement.id, statement.overlayGroups?.map((group) => `${group.groupId}/${group.branch}`).join(",") ?? ""])).toEqual([
+      ["path:0", ""], ["overlay-group:1", ""], ["path:2", "overlay-group:1/0"], ["path:3", "overlay-group:1/0"], ["path:4", "overlay-group:1/1"],
+      ["overlay-group:5", ""], ["path:6", "overlay-group:5/0"], ["path:7", ""],
+    ]);
+    const head = parsed.figure.body[1];
+    expect(head.kind === "OverlayGroup" && [head.command, head.spec.raw, source.slice(head.span.from, head.span.to), head.branches.length]).toEqual(["alt", "2", String.raw`\alt<2>`, 2]);
+    const onslide = parsed.figure.body[5];
+    expect(onslide.kind === "OverlayGroup" && onslide.command).toBe("onslide");
+  });
+
+  it("nests overlay commands, outermost first", () => {
+    const parsed = parseTikz(picture(String.raw`\only<2>{\uncover<3>{\draw (0,0) -- (1,1);}}`));
+    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.figure.body.map((statement) => statement.overlayGroups?.map((group) => group.groupId))).toEqual([undefined, ["overlay-group:0"], ["overlay-group:0", "overlay-group:1"]]);
+  });
+
+  it("reads declarations, and leaves the statement after them alone", () => {
+    const parsed = parseTikz(picture(String.raw`\pause
+\draw (0,0) -- (1,1);
+\pause[4]\draw (1,1) -- (2,2);
+\onslide<2->
+\draw (2,2) -- (3,3);
+\onslide*<3>
+\onslide
+\draw (3,3) -- (4,4);`));
+    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.figure.body.map((statement) => statement.kind === "OverlayDeclaration"
+      ? `${statement.command}${statement.modifier ?? ""}${statement.spec ? `<${statement.spec.raw}>` : ""}${statement.countRaw ? `[${statement.countRaw}]` : ""}` : statement.kind)).toEqual(
+      ["pause", "Path", "pause[4]", "Path", "onslide<2->", "Path", "onslide*<3>", "onslide", "Path"]);
+  });
+
+  it("matches whole command names, and leaves node text and options alone", () => {
+    const parsed = parseTikz(picture(String.raw`\node[alt=<2>{red}{blue}] at (0,0) {\only<2>{x} $a<b>c$ \pause y};
+\altitude;`));
+    expect(parsed.figure.body.map((statement) => statement.kind)).toEqual(["Path", "UnknownStatement"]);
+    expect(parsed.diagnostics.filter((diagnostic) => diagnostic.severity === "error")).toEqual([]);
+  });
+
+  it("skips a removed statement whole and covers a hidden one", () => {
+    const source = picture(String.raw`\node (a) at (0,0) {A};
+\node<2-> (b) at (4,0) {B};
+\uncover<2->{\draw (a) -- (2,2);}
+\draw (a) -- (b);`);
+    const visibility = (step: number) => (span: { from: number; to: number }) => {
+      const text = source.slice(span.from, span.to);
+      return step >= 2 ? "visible" : text.includes("(b) at") ? "removed" : text.includes("(2,2)") ? "hidden" : "visible";
+    };
+    const first = renderTikzToSvg(source, { evaluate: { overlayVisibility: visibility(1) } });
+    const second = renderTikzToSvg(source, { evaluate: { overlayVisibility: visibility(2) } });
+    expect(second.semantic.scene.elements.filter((element) => element.overlayCovered)).toEqual([]);
+    expect(first.semantic.scene.elements.filter((element) => element.overlayCovered).map((element) => element.id)).toEqual(
+      second.semantic.scene.elements.filter((element) => element.sourceRef.sourceSpan.from === source.indexOf(String.raw`\draw (a) -- (2,2)`)).map((element) => element.id));
+    // The removed node's name is not defined on step 1.
+    expect(first.semantic.diagnostics.some((diagnostic) => /\bb\b/u.test(diagnostic.message))).toBe(true);
+    expect(second.semantic.diagnostics).toEqual([]);
+    // Elements keep their ids across steps.
+    const ids = (result: typeof first) => new Set(result.semantic.scene.elements.map((element) => element.id));
+    for (const id of ids(first)) expect(ids(second).has(id)).toBe(true);
+    // A covered element counts towards the picture's size; a removed one does not.
+    expect(first.semantic.scene.bounds!.maxY).toBeCloseTo(second.semantic.scene.bounds!.maxY, 6);
+    expect(first.semantic.scene.bounds!.maxX).toBeLessThan(second.semantic.scene.bounds!.maxX);
+  });
+});
+
+describe("pictures on a slide, by step", () => {
+  const DECK = String.raw`\documentclass{beamer}
+\usepackage{tikz}
+${BEAMER_TIKZ_LAYER_DEFINITION}
+\begin{document}
+\begin{frame}{T}
+Text.
+
+\begin{tikzpicture}
+\node (a) at (0,0) {A};
+\node<2-> (b) at (2,0) {B};
+\only<3>{\draw (a) -- (b);}
+\uncover<2->{\node (c) at (4,0) {C};}
+\end{tikzpicture}
+\begin{tikzlayer}
+\node<3> at (3,3) {L};
+\pattern<2->[pattern=dots] (0,0) rectangle (1,1);
+\end{tikzlayer}
+\end{frame}
+\end{document}`;
+  let requests = 0;
+  const steps = async (activeRootId: string) => {
+    const result = [];
+    for (const deckStep of [1, 2, 3]) {
+      const response = await computeSnapshot({ id: `overlay-step-${++requests}`, documentId: "overlay-step", source: DECK, activeRootId, deckStep, sourceRevision: 1 });
+      expect(response.diagnostics.filter((diagnostic) => diagnostic.severity === "error"), `step ${deckStep}`).toEqual([]);
+      result.push(response.snapshot);
+    }
+    return result;
+  };
+  const texts = (elements: readonly { kind: string }[]) =>
+    elements.flatMap((element) => element.kind === "Text" && "text" in element && typeof element.text === "string" ? [element.text] : []);
+
+  it("counts a layer's specifications in the frame's steps", () => {
+    const document = scanBeamerDocument(DECK);
+    expect(scanBeamerFrameOverlays(DECK, document.frames[0]).stepCount).toBe(3);
+  });
+
+  it("gives the picture's edit snapshot the statements the slide shows, with one id each", async () => {
+    const byStep = await steps("frame:0:tikzpicture:0");
+    const elements = byStep.map((step) => step.scene!.elements);
+    expect(elements.map((scene) => texts(scene))).toEqual([["A", "C"], ["A", "B", "C"], ["A", "B", "C"]]);
+    expect(elements.map((scene) => scene.filter((element) => element.overlayCovered).length)).toEqual([1, 0, 0]);
+    expect(elements.map((scene) => scene.filter((element) => element.kind === "Path").length)).toEqual([0, 0, 1]);
+    const ids = elements.map((scene) => new Set(scene.map((element) => element.id)));
+    for (const id of ids[0]) expect(ids[2].has(id)).toBe(true);
+    for (const id of ids[1]) expect(ids[2].has(id)).toBe(true);
+  });
+
+  it("gives the drawing layer's edit snapshot the statements of its step", async () => {
+    const byStep = await steps("frame:0:overlay:0");
+    expect(byStep.map((step) => texts(step.scene!.elements))).toEqual([[], [], ["L"]]);
+    expect(byStep.map((step) => step.scene!.elements.filter((element) => element.kind === "Path").length)).toEqual([0, 1, 1]);
+  });
+});
+
+describe("incremental parsing with overlay syntax", () => {
+  const before = `\\begin{tikzpicture}
+\\draw (0,0) -- (1,0);
+\\only<2->{\\draw (0,0) -- (1,1); \\node at (2,2) {x};}
+\\node<3> at (4,4) {y};
+\\pause
+\\draw (5,5) -- (6,6);
+\\end{tikzpicture}`;
+
+  it.each([["(1,1)", "(1.5,1)"], ["(2,2)", "(2,3)"], ["(4,4)", "(4,5)"], ["(6,6)", "(7,6)"]])("re-parses a statement whose %s becomes %s as a full parse does", (from, to) => {
+    const session = createIncrementalParseSession();
+    session.evaluate({ source: before, sourceRevision: 1 });
+    const after = before.replace(from, to);
+    const result = session.evaluate({ source: after, sourceRevision: 2, inferChanges: true });
+    expect(result.stats.strategy).toBe("incremental");
+    expect(result.parse.figure.body).toEqual(parseTikz(after).figure.body);
+    expect(result.parse.diagnostics).toEqual([]);
+  });
+
+  it("parses the whole picture again when an overlay command's own text changes", () => {
+    const session = createIncrementalParseSession();
+    session.evaluate({ source: before, sourceRevision: 1 });
+    const after = before.replace("\\only<2->", "\\only<3->");
+    const result = session.evaluate({ source: after, sourceRevision: 2, inferChanges: true });
+    expect(result.parse.figure.body).toEqual(parseTikz(after).figure.body);
+  });
+});

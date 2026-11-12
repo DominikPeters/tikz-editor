@@ -23,6 +23,7 @@ import type {
   BeamerFrameModel,
 } from "./types.js";
 import { scanBeamerNoteCommands } from "./notes.js";
+import { TIKZ_PICTURE_ENVIRONMENTS } from "../parser/figure-scan.js";
 
 export type BeamerOverlayInterval = {
   readonly from: number;
@@ -199,7 +200,7 @@ export function scanBeamerFrameOverlays(
   const environmentBoundaries = beamerEnvironmentBoundariesIn(context, frame.bodySpan);
   const environmentPairs = [...matchTexSyntaxEnvironments(context.syntax).values()];
   const tikzRanges = environmentPairs
-    .filter(pair => pair.name === "tikzpicture" && pair.span.from >= frame.bodySpan.from && pair.span.to <= frame.bodySpan.to)
+    .filter(pair => TIKZ_PICTURE_ENVIRONMENTS.has(pair.name) && pair.span.from >= frame.bodySpan.from && pair.span.to <= frame.bodySpan.to)
     .map(pair => pair.span);
   const overprintStarts: typeof environmentBoundaries[number][] = [];
   for (const boundary of environmentBoundaries) {
@@ -249,7 +250,7 @@ export function scanBeamerFrameOverlays(
     }
     // PGF's path frontend implements <spec> as \alt<spec>{path}{nothing}.
     // Include these in the same source-ordered decoder as relative Beamer specs.
-    const picture = ["path", "draw", "fill", "filldraw", "shade", "shadedraw", "clip", "node", "coordinate", "matrix", "pic"].includes(command.name)
+    const picture = ["path", "draw", "fill", "filldraw", "pattern", "shade", "shadedraw", "clip", "useasboundingbox", "node", "coordinate", "matrix", "pic"].includes(command.name)
       ? tikzRanges.find(span => span.from < command.from && command.from < span.to) : undefined;
     if (picture) {
       const optional = command.name === "path" ? beamerOptionalArgumentAfter(context, command.to, frame.bodySpan.to) : null;
@@ -624,12 +625,15 @@ export function projectBeamerOverlayText(
   mapped: MappedText,
   sourceSpan: Span,
   model: BeamerOverlayModel,
-  step: number
+  step: number,
+  /** Commands (by where they start) left as written: a picture's statement-level ones, which its evaluator applies. */
+  leave?: ReadonlySet<number>
 ): BeamerOverlayTextProjection {
   const removals: Span[] = [];
   const hidden: Span[] = [];
 
   for (const command of model.commands) {
+    if (leave?.has(command.commandSpan.from)) continue;
     removals.push(...command.syntaxSpans);
     const selected = selectedOverlayBranch(command, step);
     for (const [index, branch] of command.branches.entries()) {
@@ -662,6 +666,7 @@ export function projectBeamerOverlayText(
     removals.push(beamerOverlaySpecContains(entry.spec, step) ? entry.activeSyntax : entry.inactiveSyntax);
   }
   for (const pause of model.pauses) {
+    if (leave?.has(pause.span.from)) continue;
     removals.push(pause.span);
     if (step < pause.threshold) {
       hidden.push(pause.contentSpan);
@@ -1110,9 +1115,12 @@ function tikzStatementEnd(source: string, from: number, to: number): number | nu
   return null;
 }
 
-/** Project without changing offsets: scene/edit spans still address authored source. */
-export function projectBeamerTikzSource(source: string, span: Span, model: BeamerOverlayModel, step: number): string {
-  const projected = projectBeamerOverlayText(createIdentityMappedText(source.slice(span.from, span.to), span.from), span, model, step).mapped;
+/**
+ * Project without changing offsets: scene/edit spans still address authored
+ * source. Commands in `leave` stay as written.
+ */
+export function projectBeamerTikzSource(source: string, span: Span, model: BeamerOverlayModel, step: number, leave?: ReadonlySet<number>): string {
+  const projected = projectBeamerOverlayText(createIdentityMappedText(source.slice(span.from, span.to), span.from), span, model, step, leave).mapped;
   const characters = source.slice(span.from, span.to).replace(/[^\n]/g, " ").split("");
   for (let index = 0; index < projected.text.length; index++) {
     const origin = projected.sourceMap.charOrigins[index];

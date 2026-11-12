@@ -69,7 +69,7 @@ export type TikzFigureInventoryItem = {
   endLine: number;
 };
 
-export type Statement =
+export type Statement = (
   | PathStatement
   | ScopeStatement
   | ForeachStatement
@@ -83,13 +83,72 @@ export type Statement =
   | TikzLibraryStatement
   | ColorletStatement
   | DefineColorStatement
-  | UnknownStatement;
+  | OverlayGroupStatement
+  | OverlayDeclarationStatement
+  | UnknownStatement
+) & OverlayGroupMember;
+
+/** A Beamer overlay specification, `<2->`: `span` with its angle brackets, `contentSpan` and `raw` without. */
+export type OverlaySpecAst = {
+  span: Span;
+  contentSpan: Span;
+  raw: string;
+};
+
+export type OverlayGroupCommand = "only" | "uncover" | "visible" | "invisible" | "alt" | "temporal" | "onslide";
+
+/**
+ * The head of a Beamer overlay command around statements, `\only<2->{…}`.
+ *
+ * Its braces delimit an argument, not a TeX group, so the statements inside
+ * are siblings of this one in the enclosing body and name it in their
+ * `overlayGroups`. `span` covers the command and its specification;
+ * `groupSpan` the whole command with its bodies.
+ */
+export type OverlayGroupStatement = {
+  kind: "OverlayGroup";
+  id: string;
+  span: Span;
+  groupSpan: Span;
+  command: OverlayGroupCommand;
+  /** `\onslide*` (as `\only`) and `\onslide+` (as `\visible`). */
+  modifier?: "*" | "+";
+  spec: OverlaySpecAst;
+  /** The content of each brace body, in order. */
+  branches: Span[];
+};
+
+/** Which body of which overlay command a statement was written in. */
+export type OverlayGroupMembership = { groupId: string; branch: number };
+
+export type OverlayGroupMember = {
+  /** The overlay commands this statement is directly inside, outermost first. */
+  overlayGroups?: OverlayGroupMembership[];
+};
+
+/**
+ * `\onslide<spec>` without a brace body, or `\pause`: holds for what follows
+ * to the end of the enclosing scope or picture.
+ */
+export type OverlayDeclarationStatement = {
+  kind: "OverlayDeclaration";
+  id: string;
+  span: Span;
+  command: "onslide" | "pause";
+  modifier?: "*" | "+";
+  spec?: OverlaySpecAst;
+  /** `\pause[n]`. */
+  countRaw?: string;
+  countSpan?: Span;
+};
 
 export type PathStatement = {
   kind: "Path";
   id: string;
   span: Span;
   command: PathCommand;
+  /** `\node<2->`: the path exists only on these steps. */
+  overlay?: OverlaySpecAst;
   options?: OptionListAst;
   items: PathItem[];
 };

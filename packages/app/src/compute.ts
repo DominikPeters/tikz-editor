@@ -42,6 +42,8 @@ import {
   prepareBeamerDocument,
   resolveBeamerTheme,
   scanBeamerDocument,
+  scanBeamerFrameOverlays,
+  beamerTikzStep,
   type BeamerDocumentModel,
   type BeamerFrameLayout,
   type PreparedBeamerDocument
@@ -50,6 +52,7 @@ import { createTexNodeTextEngine } from "@tikz-editor/core/text/tex-node-text-en
 import { sameSyntaxTree } from "@tikz-editor/core/text/tex/syntax-index";
 import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
 import { translationMatrix } from "@tikz-editor/core/semantic/transform";
+import { requireDefined } from "@tikz-editor/core/utils/invariants";
 import type { EvaluateOptions } from "@tikz-editor/core/semantic/types";
 import { composeOverlayPage, undrawnLayerPageStands } from "./beamer-overlay-page";
 import { insertDrawingLayer, pageDrawingLayerRootId, type DrawingLayerInsertion } from "./drawing-layer";
@@ -1081,10 +1084,15 @@ async function computeNestedTikzSnapshot(
     mathFontProfile: createBeamerTexMathFontProfile(theme.fonts["normal-text"])
   });
   work?.signal?.throwIfAborted();
-  const masked = maskTikzPictureSource(request.source, picture.span);
+  // The picture as the slide shows it on this step: the same statements, with the same ids.
+  const overlays = scanBeamerFrameOverlays(request.source, requireDefined(document.frames[ref.frameIndex], "Expected the picture's frame"));
+  const pictureStep = beamerTikzStep(request.source, picture.span, overlays,
+    Math.min(Math.max(1, request.deckStep ?? 1), Math.max(1, overlays.stepCount)));
+  const masked = pictureStep.source;
   const result = await renderTikzToSvgAsync(masked, {
     parse: { recover: true, includeContextDefinitions: true },
-    evaluate: { graphicsResolver: graphicsContext.resolver, initialFont: beamerTikzFontCommand(theme.fonts["normal-text"]) },
+    evaluate: { graphicsResolver: graphicsContext.resolver, initialFont: beamerTikzFontCommand(theme.fonts["normal-text"]),
+      ...(pictureStep.overlayVisibility ? { overlayVisibility: pictureStep.overlayVisibility } : {}) },
     svgOptionsFromParse: (parse) => computeSvgOptions(parse, request.renderViewBox),
     textEngine,
     ...((work) === undefined ? {} : { cooperative: work })
@@ -1302,7 +1310,13 @@ async function computeOverlayLayerSnapshot(
   // The page in the picture's SVG coordinates (y = 2·viewBox.y + height − world y):
   // the slide's canvas transform then shows the picture where it is on the slide.
   const viewBox = { x: pageCoordinates ? 0 : -origin.x, y: pageCoordinates ? 0 : origin.y - page.height, width: page.width, height: page.height };
-  const masked = maskTikzPictureSource(working, picture.span);
+  // The layer as the slide shows it on this step. Its overlays are read from
+  // the source it is drawn in, which a layer about to be inserted changes.
+  const workingFrame = insertion ? scanBeamerDocument(working).frames[ref.frameIndex] : frame;
+  const pictureStep = workingFrame
+    ? beamerTikzStep(working, picture.span, scanBeamerFrameOverlays(working, workingFrame, insertion ? undefined : context.syntax), step)
+    : { source: maskTikzPictureSource(working, picture.span), overlayKey: "" };
+  const masked = pictureStep.source;
   const patches = cache.warmSource && request.patches && patchesMatchSourceTransition(cache.warmSource, masked, request.patches)
     ? request.patches : null;
   // Text being edited on the slide beside the picture is no part of it.
@@ -1312,8 +1326,9 @@ async function computeOverlayLayerSnapshot(
     // Preserve exact statement patches when they also reconstruct the masked
     // source. Coalesced/virtual edits infer their transition from the baseline.
     patches, patchBaseRevision: patches ? request.patchBaseRevision ?? null : null, inferSourceChanges: true }, revision, cache, work, {
-    key: JSON.stringify([formatDocumentRootId(ref), step, pageCoordinates, evaluate, graphicsContext.resolver.cacheKey]),
-    textEngine, graphicsContext, evaluate, padding: 0, startedAt: computeStartedAt,
+    key: JSON.stringify([formatDocumentRootId(ref), step, pageCoordinates, evaluate, graphicsContext.resolver.cacheKey, pictureStep.overlayKey]),
+    textEngine, graphicsContext, padding: 0, startedAt: computeStartedAt,
+    evaluate: pictureStep.overlayVisibility ? { ...evaluate, overlayVisibility: pictureStep.overlayVisibility } : evaluate,
     ...(pictureMask ? { structuralMasks: [pictureMask] } : {}),
     ...((pageContext?.deckLayoutReused) === undefined ? {} : { deckLayoutReused: pageContext.deckLayoutReused })
   });

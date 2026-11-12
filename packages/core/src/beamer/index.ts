@@ -94,6 +94,7 @@ export {
   type BeamerObjectNode,
 } from "./object-index.js";
 export { collectBeamerEditScopes, collectBeamerRecovery, resolveBeamerEditScopeAt } from "./edit-scopes.js";
+export { beamerTikzStep, type BeamerTikzStep } from "./tikz-overlay-step.js";
 export {
   beamerOverlaySpecContains,
   projectBeamerOverlayText,

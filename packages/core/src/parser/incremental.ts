@@ -425,6 +425,8 @@ function identityStructure(statement: Statement): string {
 
 function alignStatementIds(previous: Statement, next: Statement): void {
   next.id = previous.id;
+  // A statement parsed on its own does not see the overlay command around it.
+  if (previous.overlayGroups) next.overlayGroups = previous.overlayGroups;
 
   if (previous.kind === "Path" && next.kind === "Path") {
     alignPathItems(previous.items, next.items);
@@ -792,8 +794,11 @@ function shiftFigure(figure: TikzFigure, patches: readonly SourcePatch[]): TikzF
   const { body, ...rest } = figure;
   return {
     ...cloneShiftingSpans(rest, patches),
-    body: body.map((statement) => statement.span.to < firstChange || standsThroughPatches(statement.span, patches)
-      ? statement : cloneShiftingSpans(statement, patches))
+    body: body.map((statement) => {
+      // An overlay command's head also holds the spans of its bodies, which reach past it.
+      const reach = statement.kind === "OverlayGroup" ? statement.groupSpan : statement.span;
+      return reach.to < firstChange || standsThroughPatches(reach, patches) ? statement : cloneShiftingSpans(statement, patches);
+    })
   };
 }
 
