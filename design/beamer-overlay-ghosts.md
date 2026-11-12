@@ -52,57 +52,70 @@ Phase 2, first part (2026-11-12):
   (`test/beamer-tikz-overlay-step.spec.ts`), and the test fails when
   visibility is broken on purpose.
 
-Phase 2, second part (2026-11-12):
+Phase 2, completed (2026-11-12):
 
-- **Declarations follow TeX's scoping.** In a picture, `\pause` and
-  `\onslide` hold to the end of the enclosing scope or picture, where the
-  declaration in force before resumes; the latest one in force wins (an
-  inner `\onslide<1->` shows what an outer pause covers). Text after the
-  picture is no longer covered. Each case is checked against pages
-  LuaLaTeX set.
 - **A trace per picture** (`beamer/tikz-overlay-trace.ts`): the picture is
-  parsed and its loops expanded, and its path specifications and loop
-  pauses are listed in execution order, each loop iteration its own
-  instance. The frame decoder resolves them with the frame's counter; the
-  evaluator asks by source span and iteration. The decoder's own scanner
-  for path commands is gone.
-- **Loops.** `\foreach \x in {1,2,3} {\node<\x-> …;}` gives three steps and
-  shows one more node on each; a `\pause` in a loop counts once per
-  iteration and covers what runs after it. Nested loops resolve by their
-  own variables. The Overlays panel shows one row for the rule as written,
-  not editable as a number.
-- **Edit actions** evaluate a slide picture as its snapshot's step shows it
-  (`picture-overlay-step.ts`), when the step hides anything.
+  parsed, its loops and its own macros expanded, and every statement-level
+  overlay operation is listed in execution order: path specifications,
+  brace commands, `\onslide` and `\pause`. A loop performs an operation
+  once per iteration, each its own instance. The frame decoder resolves the
+  trace with the frame's counter and no longer scans a picture's
+  statement-level commands itself; what it still scans in a picture is text
+  inside a statement.
+- **One rule for `\pause` and `\onslide` in a picture**
+  (`beamerOverlayDeclarationInForce`): of those performed before a
+  statement and still within their scope or picture, the latest holds. It
+  also holds over a declaration in the text before the picture, which
+  resumes after it. A loop's declaration holds on after the loop unless its
+  scope lies inside the loop's body.
+- **The evaluator asks for every statement that draws**, also inside a scope
+  a loop makes, which is evaluated whole.
+- **Edit actions** evaluate a slide picture as its snapshot's step shows it.
+  The drawing layer's cached evaluation is keyed by what the step hides,
+  each loop iteration answering for itself.
+- A specification after a shorthand's options (`\draw[red]<2>`) is refused
+  with a diagnostic, as PGF gives up on it; `\path[opts]<spec>` is read.
+- Every case above is asserted against pages LuaLaTeX set
+  (`test/beamer-tikz-overlay-step.spec.ts`).
 
-Phase 3, first part (2026-11-12):
+Phase 3 (2026-11-12):
 
 - **A shape's rule** (`beamerStatementOverlayTarget`): its own `<spec>`,
   set straight after the command's name, changed in place or removed; or
-  the shared rule it stands under (a brace command around several
-  statements, a pause), which is offered and not retimed.
-- **Inspector.** A shape selected in a slide picture or drawing layer has an
-  Overlay section with a Steps field; empty means every step. A shape under
-  a shared rule shows that rule and opens it in the Overlays panel.
-- **Overlays panel.** Shape rows are named by what they draw ("Node ·
-  Alpha", "Path · (0,0) -- (1,1)"), and a selected row points at the shape
-  on the slide (the layout keeps page bounds for statements under a rule).
-- **Stepping inside a picture.** A picture opened from its slide shows the
-  step strip and the slide's step.
+  the shared rule it stands under, which is offered and not retimed.
+- **Inspector.** An Overlay section with a Steps field for a shape selected
+  in a slide picture or drawing layer; empty means every step.
+- **Canvas menu.** The Overlays submenu for a shape, with the slide menu's
+  items.
+- **Overlays panel.** Rows are named by what they draw ("Node · Alpha",
+  "Shapes · Alpha, Top"). A selected row points at the shape on the slide
+  and selects it inside the picture. The panel works while a picture is
+  edited on its own.
+- **Stepping inside a picture.** The step strip shows there and follows the
+  slide's step.
+- **Step tags.** On every rule's object while the Overlays panel is shown;
+  otherwise on the object the pointer rests on.
 
-Still to do in phase 3: the canvas Overlays menu for shapes, step tags (on
-hover and with the panel open), and selecting a shape from its row while
-inside the picture.
+Edit guard (2026-11-12):
 
-Still to do:
+- An edit to a slide picture's structure (reorder, group, paste, duplicate,
+  delete) is refused, with the shape named, when it would change the steps
+  of a statement it left as written (`beamer/picture-step-guard.ts`).
+  Edits within a statement (move, resize, properties, text) are not
+  checked: they cannot do that.
 
-- **Rule chains on scene elements** (which rules govern an element), for
-  phase 3.
-- **Edits keep effective steps.** Not yet checked or enforced: moving a
-  statement past a `\pause`, or reordering `+` specifications.
-- **Brace commands and `\onslide` inside a loop body** are still resolved as
-  text, once, not per iteration.
+Known gaps:
+
+- **Overlay commands in node text inside a loop** are counted once, at
+  their place in the source, after the loop's own operations.
+- **A comment between a command and its specification** (`\node % c` then
+  `<2>` on the next line) is a syntax error here; TeX accepts it.
+- **Inline `\tikz` pictures** get no rules (as before this work).
+- **Macros defined before the picture** that write a specification are not
+  expanded for the trace; the picture's own are.
 - **A Beamer quirk not followed:** after a `\pause` inside a picture, TeX
   shows the text after a later frame-level `\pause` one step early.
+- The edit guard matches statements by their text; loops are not compared.
 - `projectBeamerTikzSource` stays for text inside statements.
 
 ## Decided

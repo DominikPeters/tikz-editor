@@ -1,5 +1,5 @@
 import { applyEditAction, type EditAction, type EditActionResult } from "@tikz-editor/core/edit/actions";
-import { applyDeckEditAction, applyDeckDocumentEditAction, beamerOverlayPicturesIn, isDeckDocumentEditAction, isDeckEditAction, scanBeamerDocument, type DeckEditAction } from "@tikz-editor/core/beamer/index";
+import { applyDeckEditAction, applyDeckDocumentEditAction, beamerOverlayPicturesIn, beamerPictureStepsChanged, isDeckDocumentEditAction, isDeckEditAction, scanBeamerDocument, type DeckEditAction } from "@tikz-editor/core/beamer/index";
 import { createBeamerSyntaxContext } from "@tikz-editor/core/beamer/syntax";
 import { createEditGeometrySession, type EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
@@ -26,6 +26,16 @@ export type EditExecutionContext = {
   drawingLayerRootId?: string | null;
   snapshot: SessionSnapshot;
 };
+
+/**
+ * Actions that change a statement in place and leave the picture's
+ * statements where they are: they cannot change another shape's overlay
+ * steps, and run on every frame of a drag.
+ */
+const STEP_PRESERVING_ACTIONS: ReadonlySet<EditAction["kind"]> = new Set([
+  "moveElement", "moveElements", "moveHandle", "resizeElement", "rotateElement", "moveAdornment", "movePathAttachedNode", "insertPathPoint",
+  "updateNodeText", "setProperty", "setProperties",
+]);
 
 /** Shared preparation for canvas gestures, inspector edits, and commands. */
 export function executeDocumentEdit(
@@ -92,6 +102,16 @@ export function executeDocumentEdit(
   if (!span || (result.kind !== "success" && result.kind !== "partial")) return result;
   const replay = applySourcePatches(working, result.patches);
   if (replay.kind !== "success") return { kind: "error", message: "The figure edit did not apply cleanly." };
+  // An edit to a slide picture's structure must not change when shapes it left as written appear.
+  if (ref && !STEP_PRESERVING_ACTIONS.has(action.kind)) {
+    const frameIndex = ref.kind === "beamer-frame-tikz" ? ref.frameIndex : ref.kind === "beamer-frame" ? ref.index : null;
+    const changed = frameIndex === null ? null : beamerPictureStepsChanged({ source: working, frameIndex, span },
+      { source: replay.source, frameIndex, span: { from: span.from, to: span.to + replay.source.length - working.length } });
+    if (changed) {
+      const shape = changed.text.replace(/\s+/gu, " ");
+      return { kind: "unsupported", reason: `This would change the overlay steps of ${shape.length > 40 ? `${shape.slice(0, 39)}…` : shape}` };
+    }
+  }
   if (!insertion) {
     if (layer && (action.kind === "deleteElement" || action.kind === "deleteElements")) {
       const editedSpan = { from: span.from, to: span.to + replay.source.length - working.length };

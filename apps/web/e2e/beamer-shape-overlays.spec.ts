@@ -121,3 +121,25 @@ test("step tags show for every rule while the Overlays panel is shown, and for t
   await page.locator(".flexlayout__tab_button_content").filter({ hasText: /^Inspector$/u }).first().click();
   await expect(page.getByTestId("step-tag")).toHaveCount(0);
 });
+
+test("selecting a shape's row in the Overlays panel selects the shape in the picture", async ({ page }) => {
+  await page.locator(".flexlayout__tab_button_content").filter({ hasText: /^Overlays$/u }).first().click();
+  await page.getByRole("button", { name: "Node · Beta", exact: true }).click();
+  await expect.poll(() => api<string[]>(page, "api.getSelectedSourceIds()")).toEqual(["path:2"]);
+  await page.getByRole("button", { name: "Path · (a) -- (b)", exact: true }).click();
+  await expect.poll(() => api<string[]>(page, "api.getSelectedSourceIds()")).toEqual(["path:3"]);
+  // On a step the shape is not on, there is nothing to select.
+  await page.getByTestId("deck-step-1").click();
+  await expect.poll(() => api<string[]>(page, "api.getSceneSourceIds()")).toEqual(["path:0", "path:1"]);
+  expect(await readStoreSource(page)).toBe(SOURCE);
+});
+
+test("an edit that would change another shape's steps is refused with the reason", async ({ page }) => {
+  const paused = SOURCE.replace(String.raw`\node<2->[draw] (b)`, "\\pause\n" + String.raw`\node[draw] (b)`).replace(String.raw`\draw<3>[->] (a) -- (b);`, "");
+  await setSource(page, paused);
+  await expect.poll(() => api<string[]>(page, "api.getSceneSourceIds()")).toContain("path:3");
+  await api(page, "api.selectSourceIds(['path:3'])");
+  await api(page, "api.runCommand('edit.send-to-back')");
+  await expect(page.getByTestId("canvas-warning-message")).toContainText("This would change the overlay steps of");
+  expect(await readStoreSource(page)).toBe(paused);
+});

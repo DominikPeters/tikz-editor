@@ -90,6 +90,7 @@ viewportToWorldPoint,
 worldToSvgPoint
 } from "./geometry";
 import type { Span } from "@tikz-editor/core/ast/types";
+import { walkStatements } from "@tikz-editor/core/ast/walk";
 import { clearDeckReselect, peekDeckReselect, registerDeckCaretReader, type DeckCaret } from "./deck-insertion-bridge";
 import { registerTikzViewCenterReader } from "./tikz-insertion-bridge";
 import { pointerTolerancePtForScale } from "../canvas-zoom";
@@ -540,6 +541,22 @@ export const CanvasPanel = memo(function CanvasPanel({
     deckActiveFrame.step === Math.min(activeDeckStep, Math.max(1, deckActiveFrame.stepCount));
   const deckBuildSelection = useEditorStore((s) => s.deckBuildSelection);
   const pictureFrameSteps = snapshot.pictureFrameSteps ?? null;
+  // Inside a picture, selecting a rule's row in the Overlays panel selects the shapes it governs on this step.
+  const selectedBuildRow = deckBuildSelection?.documentId === activeDocumentId && deckBuildSelection.sourceRevision === sourceRevision ? deckBuildSelection : null;
+  useEffect(() => {
+    const statements = snapshot.parseResult?.figure.body;
+    if (!selectedBuildRow || !pictureFrameSteps || deckActiveFrame || !statements || snapshot.source !== source) return;
+    const ids: string[] = [];
+    walkStatements(statements, { onStatement: (statement) => {
+      if (statement.kind === "Path" && selectedBuildRow.contentSpans.some((span) => span.from <= statement.span.from && statement.span.to <= span.to)) ids.push(statement.id);
+    } });
+    const drawn = new Set(snapshot.scene?.elements.map((element) => element.sourceRef.sourceId));
+    const shown = ids.filter((id) => drawn.has(id));
+    if (shown.length) dispatch({ type: "SELECT_RANGE", ids: shown });
+    // The row, not every render of it, selects: a later canvas selection stands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBuildRow?.rowId, selectedBuildRow?.step]);
+
   // Step tags: on slides and slide pictures with more than one step.
   const overlaysPanelShown = useOverlaysPanelShown((s) => s.shown);
   const stepTagList = useMemo(() => {

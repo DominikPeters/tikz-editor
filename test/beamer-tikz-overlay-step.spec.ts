@@ -637,3 +637,64 @@ ${body}
     expect(shown(warm.snapshot)).toBe(shown(cold.snapshot));
   });
 });
+
+describe("edits that would change another shape's steps", () => {
+  const deck = (body: string) => String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}
+\begin{tikzpicture}
+${body}
+\end{tikzpicture}
+\end{frame}
+\end{document}`;
+  let requests = 0;
+  const edit = async (source: string, action: (ids: Record<string, string>) => Parameters<typeof executeDocumentEdit>[1]) => {
+    const { snapshot } = await computeSnapshot({ id: `guard-${++requests}`, documentId: `guard-${requests}`, source, activeRootId: "frame:0:tikzpicture:0", deckStep: 99, sourceRevision: 1 });
+    const ids = Object.fromEntries(snapshot.scene!.elements.flatMap((element) => element.kind === "Text" ? [[element.text, element.sourceRef.sourceId]] : []));
+    return executeDocumentEdit({ documentId: `guard-${requests}`, source, sourceRevision: 1, activeRootId: "frame:0:tikzpicture:0", snapshot }, action(ids));
+  };
+  const paused = deck(String.raw`\node at (0,0) {A};
+\pause
+\node at (1,0) {B};
+\node at (2,0) {C};`);
+
+  it("refuses to send a shape behind a pause it stands after", async () => {
+    const result = await edit(paused, (ids) => ({ kind: "reorderElements", elementIds: [ids.B!], direction: "sendToBack" }));
+    expect(result.kind === "unsupported" && result.reason).toBe(String.raw`This would change the overlay steps of \node at (1,0) {B};`);
+  });
+
+  it("reorders shapes that stay on their steps", async () => {
+    const result = await edit(paused, (ids) => ({ kind: "reorderElements", elementIds: [ids.C!], direction: "sendBackward" }));
+    expect(result.kind).toBe("success");
+    expect(result.kind === "success" && result.newSource).toBe(paused.replace(String.raw`\node at (1,0) {B};
+\node at (2,0) {C};`, String.raw`\node at (2,0) {C};
+\node at (1,0) {B};`));
+  });
+
+  it("refuses to delete a shape whose relative specification the next one counts on", async () => {
+    const relative = deck(String.raw`\node<+-> at (0,0) {A};
+\node<+-> at (1,0) {B};
+\node<+-> at (2,0) {C};`);
+    const first = await edit(relative, (ids) => ({ kind: "deleteElements", elementIds: [ids.A!] }));
+    expect(first.kind === "unsupported" && first.reason).toBe(String.raw`This would change the overlay steps of \node<+-> at (1,0) {B};`);
+    const last = await edit(relative, (ids) => ({ kind: "deleteElements", elementIds: [ids.C!] }));
+    expect(last.kind).toBe("success");
+  });
+
+  it("groups shapes when the scope takes no declaration with it", async () => {
+    const source = deck(String.raw`\node at (0,0) {A};
+\node at (1,0) {B};
+\pause
+\node at (2,0) {C};`);
+    expect((await edit(source, (ids) => ({ kind: "groupElements", elementIds: [ids.A!, ids.B!] }))).kind).toBe("success");
+  });
+
+  it("moves and edits shapes freely, and edits pictures on frames with one step", async () => {
+    const moved = await edit(paused, (ids) => ({ kind: "moveElements", elementIds: [ids.B!], delta: worldPoint(pt(28.4527559055), pt(0)) }));
+    expect(moved.kind).toBe("success");
+    const plain = deck(String.raw`\node at (0,0) {A};
+\node at (1,0) {B};`);
+    expect((await edit(plain, (ids) => ({ kind: "reorderElements", elementIds: [ids.B!], direction: "sendToBack" }))).kind).toBe("success");
+  });
+});

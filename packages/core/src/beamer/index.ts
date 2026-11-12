@@ -95,6 +95,7 @@ export {
 } from "./object-index.js";
 export { collectBeamerEditScopes, collectBeamerRecovery, resolveBeamerEditScopeAt } from "./edit-scopes.js";
 export { beamerTikzStep, type BeamerTikzStep } from "./tikz-overlay-step.js";
+export { beamerPictureStepsChanged, type BeamerPictureRevision } from "./picture-step-guard.js";
 export {
   beamerOverlaySpecContains,
   projectBeamerOverlayText,
