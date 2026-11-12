@@ -878,6 +878,18 @@
   stroke-width: 1px;
 }
 
+.stepTag {
+  fill: var(--control-accent);
+  opacity: 0.92;
+}
+
+.stepTagLabel {
+  fill: #fff;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
 .selectionRectDashed {
   stroke-dasharray: 5 3;
 }

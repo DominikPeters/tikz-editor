@@ -18,6 +18,7 @@ import {
 } from "@tikz-editor/core/beamer/index";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { useEditorStore } from "../../store/store";
+import { useOverlaysPanelShown } from "../canvas-panel/step-tags";
 import { deckFrameRootId, requestedDeckStep } from "../../root-key";
 import { openSourcePanel } from "../open-source-panel";
 import { SidePanel } from "../SidePanel";
@@ -45,6 +46,18 @@ export function BuildsPanel() {
   const [pageOverride, setPageOverride] = useState<number | null>(null);
   const { drag, begin: beginBoundaryDrag } = useBuildBoundaryDrag();
   const tableRef = useRef<HTMLTableElement>(null);
+  // The canvas shows step tags while this panel is the one on screen.
+  const shownRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = shownRef.current;
+    if (!element) return;
+    const { setShown } = useOverlaysPanelShown.getState();
+    const update = () => { setShown(element.getClientRects().length > 0); };
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(element);
+    update();
+    return () => { observer?.disconnect(); setShown(false); };
+  }, []);
   const focusBoundary = useRef<{ rowId: string; boundary: BeamerBuildBoundary } | null>(null);
   const [menu, setMenu] = useState<{ rowId: string; step: number; documentId: string; frameId: string; revision: number; anchor: BuildTimingMenuAnchor } | null>(null);
   const closeMenu = useCallback(() => { setMenu(null); }, []);
@@ -166,7 +179,7 @@ export function BuildsPanel() {
           <button type="button" className={inspector.multiArrangeIconButton} aria-label="Later overlay steps" title="Later overlay steps" disabled={(page + 1) * PAGE_SIZE >= model.stepCount} onClick={() => { setPageOverride(page + 1); }}><RiArrowRightSLine size={14} /></button>
         </div>
       </SidePanel.Header> : null}
-      <SidePanel.Content className={css.content ?? ""}>
+      <SidePanel.Content ref={shownRef} className={css.content ?? ""}>
         {!model ? <p className={inspector.hint}>Select a slide to view its overlays.</p>
           : model.rows.length === 0 ? <p className={inspector.hint}>No overlays on this slide.</p>
             : <>

@@ -42,7 +42,8 @@ import {
   buildBeamerObjectIndex,
   resolveBeamerEditScopeAt,
   type BeamerCaretDomain,
-  type BeamerObjectNode
+  type BeamerObjectNode,
+  buildBeamerBuildModel
 } from "@tikz-editor/core/beamer/index";
 import { renderTikzToSvg } from "@tikz-editor/core/render/index";
 import type {
@@ -67,6 +68,7 @@ import { useThemePreviewStore } from "../theme-gallery/theme-preview-store";
 import type { CanvasDragKind,CanvasTransform } from "../../store/types";
 import { deckStepRootKey, rootKey, requestedDeckStep } from "../../root-key";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { pictureStepTags, slideStepTags, useOverlaysPanelShown } from "./step-tags";
 import { pictureOverlayVisibility } from "../../picture-overlay-step";
 import { SHAPE_OVERLAY_COMMANDS, shapeOverlayMenuTarget } from "../shape-overlay-rule";
 import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
@@ -538,6 +540,19 @@ export const CanvasPanel = memo(function CanvasPanel({
     deckActiveFrame.step === Math.min(activeDeckStep, Math.max(1, deckActiveFrame.stepCount));
   const deckBuildSelection = useEditorStore((s) => s.deckBuildSelection);
   const pictureFrameSteps = snapshot.pictureFrameSteps ?? null;
+  // Step tags: on slides and slide pictures with more than one step.
+  const overlaysPanelShown = useOverlaysPanelShown((s) => s.shown);
+  const stepTagList = useMemo(() => {
+    if (snapshot.source !== source) return [];
+    if (deckActiveFrame) {
+      if (deckActiveFrame.stepCount < 2) return [];
+      const model = buildBeamerBuildModel(source, deckActiveFrame.frameId);
+      return model ? slideStepTags(model, deckActiveFrame.layout) : [];
+    }
+    if (!pictureFrameSteps || pictureFrameSteps.stepCount < 2 || !snapshot.scene || !snapshot.svg) return [];
+    const model = buildBeamerBuildModel(source, pictureFrameSteps.frameId);
+    return model ? pictureStepTags(model, pictureFrameSteps.step, snapshot.scene.elements, snapshot.svg.viewBox) : [];
+  }, [deckActiveFrame, pictureFrameSteps, snapshot.scene, snapshot.source, snapshot.svg, source]);
   const deckBuildSelectionRects = useMemo(() => {
     if (!deckActiveFrame || !deckBuildSelection || snapshot.source !== source ||
       deckBuildSelection.documentId !== activeDocumentId ||
@@ -3912,6 +3927,8 @@ export const CanvasPanel = memo(function CanvasPanel({
         topOverlay={deckActiveFrame && !snapshot.overlayLayer ? null
           : <TikzImageCropOverlay svgRef={interactionSvgRef} scale={canvasTransform.scale} viewBox={svgResult?.viewBox ?? null} />}
         deckBuildSelectionRects={deckBuildSelectionRects}
+        stepTags={stepTagList.length ? { tags: stepTagList, all: overlaysPanelShown,
+          hover: toolMode === "select" && activeCanvasDragKind == null && !textEditingSession } : null}
         adornmentHighlightBoxes={adornmentHighlightBoxes}
         selectedAdornmentConnectors={selectedAdornmentConnectors}
         selectionStrokeWidth={selectionStrokeWidth}

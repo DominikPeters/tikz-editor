@@ -101,3 +101,23 @@ test("a shape under a shared rule is offered that rule, not a rule of its own", 
   await expect(page.getByTestId("build-row").filter({ hasText: "Shapes · Alpha, Top" })).toHaveAttribute("data-selected", "true");
   expect(await readStoreSource(page)).toBe(shared);
 });
+
+test("step tags show for every rule while the Overlays panel is shown, and for the shape the pointer rests on otherwise", async ({ page }) => {
+  await expect(page.getByTestId("step-tag")).toHaveCount(0);
+  // Resting on a shape with a rule shows its tag, as a tooltip would.
+  const beta = page.locator("[data-hit-region-target-id='path:2']").first();
+  const box = (await beta.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.move(box.x + box.width / 2 + 1, box.y + box.height / 2);
+  await expect(page.getByTestId("step-tag")).toHaveText(["2-"]);
+  const alpha = (await page.locator("[data-hit-region-target-id='path:1']").first().boundingBox())!;
+  await page.mouse.move(alpha.x + alpha.width / 2, alpha.y + alpha.height / 2);
+  await expect(page.getByTestId("step-tag")).toHaveCount(0);
+
+  await page.locator(".flexlayout__tab_button_content").filter({ hasText: /^Overlays$/u }).first().click();
+  await expect(page.getByTestId("step-tag")).toHaveText(["2-", "3"]);
+  await page.getByTestId("deck-step-2").click();
+  await expect(page.getByTestId("step-tag")).toHaveText(["2-"]);
+  await page.locator(".flexlayout__tab_button_content").filter({ hasText: /^Inspector$/u }).first().click();
+  await expect(page.getByTestId("step-tag")).toHaveCount(0);
+});

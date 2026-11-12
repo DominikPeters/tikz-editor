@@ -51,6 +51,8 @@ import type {
 } from "./types";
 import type { SvgBounds, WorldPoint } from "../coords/types";
 import { fmt, worldToSvgY, type RulerTick, type VisibleRanges } from "./geometry";
+import { StepTags } from "./StepTags";
+import type { StepTag } from "./step-tags";
 import { CanvasContextMenu } from "../CanvasContextMenu";
 import { RenderedTooltip } from "../RenderedTooltip";
 import type { CommandBindings, CommandOrigin } from "../editor-command-runtime";
@@ -144,6 +146,8 @@ type CanvasPanelViewProps = {
   selectionBoxes: readonly SelectionBoxDisplay[];
   /** Visible geometry for the selected build, in world coordinates. */
   deckBuildSelectionRects?: readonly { x: number; y: number; width: number; height: number }[];
+  /** Step tags of the slide or picture shown: all of them, or the one the pointer rests on. */
+  stepTags?: { tags: readonly StepTag[]; all: boolean; hover: boolean } | null;
   /** Selected deck object outline (object layer), in world coordinates. */
   deckResizeOverlay: ReactNode;
   /** Drawn above selection and handles, so it takes their pointer events (image crop in a figure). */
@@ -290,6 +294,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     deckResizeOverlay,
     topOverlay,
     deckBuildSelectionRects,
+    stepTags,
     adornmentHighlightBoxes,
     selectedAdornmentConnectors,
     selectionStrokeWidth,
@@ -785,6 +790,8 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                 ) : null}
 
                 {deckResizeOverlay}
+
+                {stepTags ? <StepTags tags={stepTags.tags} all={stepTags.all} hover={stepTags.hover} svgRef={interactionSvgRef} scale={canvasTransform.scale} /> : null}
 
                 {deckBuildSelectionRects?.length ? (
                   <g className={css.selectionOverlay} data-testid="deck-build-selection" pointerEvents="none">
