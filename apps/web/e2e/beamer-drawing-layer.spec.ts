@@ -146,7 +146,8 @@ test("selecting an overlay preserves step 2 and the slide text", async ({ page }
   const source = LAYERED.replace("A first paragraph of text.", String.raw`First.\pause Second.`);
   await setSource(page, source);
   await page.getByRole("button", { name: "1. Layer", exact: true }).click();
-  await page.getByRole("button", { name: "Next overlay step", exact: true }).click();
+  // The slide opens on step 2, its last.
+  await expect(page.getByRole("button", { name: "Next overlay step", exact: true })).toBeDisabled();
   const rectangle = page.locator('[data-hit-region-target-id="path:0"]').first();
   await expect(rectangle).toBeAttached();
   const before = (await canvasState(page)).transform;

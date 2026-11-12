@@ -7,7 +7,7 @@ import {
 } from "@tikz-editor/core/beamer/index";
 import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
 import { BoundedLru } from "../../bounded-lru";
-import { deckStepRootKey } from "../../root-key";
+import { requestedDeckStep } from "../../root-key";
 import { useEditorStore } from "../../store/store";
 import { cancelGroup, requestThumbnail } from "../workers/thumbnail-worker-client";
 import { useThemePreviewStore } from "./theme-preview-store";
@@ -49,7 +49,7 @@ export function ThemeGalleryPopover(props: {
   const snapshot = useEditorStore((s) => s.snapshot);
   const documentId = useEditorStore((s) => s.activeDocumentId);
   const activeRootId = useEditorStore((s) => s.activeRootId);
-  const activeStep = useEditorStore((s) => s.deckStepByRootKey[deckStepRootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
+  const activeStep = useEditorStore((s) => requestedDeckStep(s.deckStepByRootKey, s.activeDocumentId, s.activeRootId));
   const showPreview = useThemePreviewStore((s) => s.show);
   const clearPreview = useThemePreviewStore((s) => s.clear);
   const rootRef = useRef<HTMLDivElement>(null);

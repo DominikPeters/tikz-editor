@@ -38,3 +38,14 @@ export function deckStepRootKey(documentId: string, rootId: string | null | unde
     ? formatDocumentRootId({ kind: "beamer-frame", index: ref.frameIndex })
     : rootId);
 }
+
+/**
+ * The step asked for on a slide not stepped through yet: its last, the whole
+ * slide as its thumbnail shows it. Readers clamp to the slide's step count.
+ */
+export const DECK_LAST_STEP = Number.MAX_SAFE_INTEGER;
+
+/** The step asked for on a slide: the one last looked at, else its last. */
+export function requestedDeckStep(steps: Readonly<Record<string, number>>, documentId: string, rootId: string | null | undefined): number {
+  return steps[deckStepRootKey(documentId, rootId)] ?? DECK_LAST_STEP;
+}

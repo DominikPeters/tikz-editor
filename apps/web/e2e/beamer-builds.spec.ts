@@ -69,10 +69,11 @@ test("canvas overlay commands reveal the source rule in the Overlays panel", asy
   if (!box) throw new Error("Missing block hit region");
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "right" });
   await page.getByRole("menuitem", { name: /^Overlays/u }).hover();
+  // The slide is open on step 2, its last, so the next step is 3.
   await page.getByTestId("canvas-context-cmd-overlay.next").click();
-  await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace("\\begin{block}", "\\begin{block}<2->"));
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace("\\begin{block}", "\\begin{block}<3->"));
   await page.locator(".flexlayout__tab_button_content").filter({ hasText: /^Overlays$/u }).first().click();
   const row = page.getByTestId("build-row").filter({ hasText: "Block · Result" });
   await expect(row).toHaveAttribute("data-selected", "true");
-  await expect(page.getByRole("textbox", { name: "Overlay steps" })).toHaveValue("2-");
+  await expect(page.getByRole("textbox", { name: "Overlay steps" })).toHaveValue("3-");
 });

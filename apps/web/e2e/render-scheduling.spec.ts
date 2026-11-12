@@ -50,8 +50,8 @@ test("overlay navigation bypasses the delay after a source typing render", async
   }).__TIKZ_EDITOR_APP_TEST_API__.setSource(source), DECK.replace("First slide.", "Edited first slide."));
   await expect.poll(async () => (await profiling(page)).computeTimings.map(timing => timing.trigger)).toContain("source-typing");
   await resetProfiling(page);
-  await page.getByTestId("deck-step-next").click();
-  await expect(page.getByTestId("deck-step-label")).toHaveText("2 / 2");
+  await page.getByTestId("deck-step-prev").click();
+  await expect(page.getByTestId("deck-step-1")).toHaveAttribute("aria-current", "step");
   await expect.poll(async () => (await profiling(page)).computeTimings.map(timing => timing.trigger)).toContain("overlay-step");
 });
 

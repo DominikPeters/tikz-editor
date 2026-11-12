@@ -65,7 +65,7 @@ import { useSettingsStore } from "../../settings/useSettingsStore";
 import { useEditorStore } from "../../store/store";
 import { useThemePreviewStore } from "../theme-gallery/theme-preview-store";
 import type { CanvasDragKind,CanvasTransform } from "../../store/types";
-import { deckStepRootKey, rootKey } from "../../root-key";
+import { rootKey, requestedDeckStep } from "../../root-key";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
@@ -525,7 +525,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   const deckActiveFrame = snapshot.deck?.activeFrame ?? null;
   // The theme gallery's hover preview, while it still shows this slide.
   const themePreview = useThemePreviewStore((s) => s.preview);
-  const activeDeckStep = useEditorStore(s => s.deckStepByRootKey[deckStepRootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
+  const activeDeckStep = useEditorStore(s => requestedDeckStep(s.deckStepByRootKey, s.activeDocumentId, s.activeRootId));
   const themePreviewUrl = themePreview && deckActiveFrame && themePreview.documentId === activeDocumentId &&
     themePreview.frameId === activeRootId && themePreview.frameId === deckActiveFrame.frameId &&
     themePreview.step === Math.min(activeDeckStep, Math.max(1, deckActiveFrame.stepCount)) &&

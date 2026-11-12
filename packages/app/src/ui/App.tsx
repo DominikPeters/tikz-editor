@@ -13,7 +13,7 @@ import {
   type AppMenuPlatformTarget
 } from "../app-menu";
 import { flushPendingWorkspaceSave, useEditorStore } from "../store/store";
-import { deckStepRootKey } from "../root-key";
+import { requestedDeckStep } from "../root-key";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
 import { computeSnapshot, makeEmptySnapshot, deckPageCacheStats, type ComputeRequest, type ComputeResponse } from "../compute";
 import { invalidateImageAssetPath } from "../image-asset-cache";
@@ -316,7 +316,7 @@ function EditorApp() {
     drawingLayerRootId: s.documents[s.activeDocumentId]?.drawingLayerRootId ?? null,
     activeDeckStep:
       s.documentKind === "beamer"
-        ? s.deckStepByRootKey[deckStepRootKey(s.activeDocumentId, s.activeRootId)] ?? null
+        ? requestedDeckStep(s.deckStepByRootKey, s.activeDocumentId, s.activeRootId)
         : null,
     selectedElementIds: s.selectedElementIds,
     activeDocumentId: s.activeDocumentId,

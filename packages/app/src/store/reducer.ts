@@ -32,7 +32,7 @@ import {
   type WorkspaceSeed
 } from "./workspace-state";
 import { reconcileActiveRootSelection, snapshotRoots } from "../root-inventory";
-import { deckStepRootKey, rootKey } from "../root-key";
+import { deckStepRootKey, rootKey, requestedDeckStep } from "../root-key";
 import { DEFAULT_CANVAS_VIEW_PREFERENCES, type CanvasViewPreferences } from "./canvas-view-preferences";
 export { DEFAULT_SOURCE, WORKSPACE_VERSION } from "./workspace-state";
 const FREEHAND_SMOOTHING_MIN_PX = 4;
@@ -598,7 +598,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         const page = action.snapshot.deck?.activeFrame;
         if (page) {
           const expected = action.snapshot.deck?.frames.find(frame => frame.id === doc.activeRootId);
-          const step = Math.min(Math.max(1, ui.deckStepByRootKey[deckStepRootKey(documentId, doc.activeRootId)] ?? 1), Math.max(1, page.stepCount));
+          const step = Math.min(Math.max(1, requestedDeckStep(ui.deckStepByRootKey, documentId, doc.activeRootId)), Math.max(1, page.stepCount));
           if (action.snapshot.source !== doc.source || page.layout.frameId !== page.frameId || page.layout.step !== page.step ||
             (expected && (page.frameId !== expected.id || page.step !== step))) return doc;
         }

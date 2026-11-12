@@ -5,6 +5,7 @@ import { getActiveEditorPlatform, setActiveEditorPlatform } from "../packages/ap
 import { editorReducer, makeInitialState } from "../packages/app/src/store/reducer";
 import { useEditorStore } from "../packages/app/src/store/store";
 import { BoundedLru } from "../packages/app/src/bounded-lru";
+import { DECK_LAST_STEP } from "../packages/app/src/root-key";
 import { deckPageDerived, DeckPageDerivedKey } from "../packages/app/src/deck-page-derived-cache";
 
 let sequence = 0;
@@ -72,7 +73,8 @@ describe("atomic cached navigation", () => {
   it("publishes one observer update containing the new root, SVG and hit geometry", async () => {
     useEditorStore.setState(makeInitialState());
     const dispatch = useEditorStore.getState().dispatch;
-    const base = request(); dispatch({ type: "CODE_EDITED", source: base.source });
+    // A slide not stepped through is asked for on its last step.
+    const base = { ...request(), deckStep: DECK_LAST_STEP }; dispatch({ type: "CODE_EDITED", source: base.source });
     const state = useEditorStore.getState();
     const req = { ...base, documentId: state.activeDocumentId, sourceRevision: state.sourceRevision };
     const first = await computeSnapshot(req);

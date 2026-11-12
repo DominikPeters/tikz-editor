@@ -1208,7 +1208,8 @@ Stra\ss e caf\'{e}
 \end{frame}
 \end{document}`;
     await setSource(page, source);
-    if (step === 2) await page.getByRole("button", { name: "Next overlay step", exact: true }).click();
+    // The slide opens on step 2, its last.
+    if (step === 1) await page.getByRole("button", { name: "Previous overlay step", exact: true }).click();
     const textarea = await openScopeContaining(page, "Prefix");
     const input = page.getByTestId("canvas-focus-input");
     const buffer = await textarea.inputValue();

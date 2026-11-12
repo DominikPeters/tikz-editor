@@ -3,7 +3,7 @@ import { beamerColumnResizePatches, beamerImageCropDrag, beamerImageCropPatches,
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { beginDocumentEdit, canContinueDocumentEdit } from "../../edit-session";
 import { useEditorStore } from "../../store/store";
-import { deckStepRootKey } from "../../root-key";
+import { requestedDeckStep } from "../../root-key";
 import { usePatchDrag, type PatchDragSession } from "./usePatchDrag";
 import { pointerTolerancePtForScale } from "../canvas-zoom";
 
@@ -38,7 +38,7 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
   const valid = useCallback((current: PatchDragSession<DeckDrag>) => {
     const state = useEditorStore.getState();
     return canContinueDocumentEdit(current.edit, state) &&
-      (state.deckStepByRootKey[deckStepRootKey(current.edit.documentId, current.edit.activeRootId)] ?? 1) === current.target.step &&
+      requestedDeckStep(state.deckStepByRootKey, current.edit.documentId, current.edit.activeRootId) === current.target.step &&
       !state.activeCanvasTextEditSourceId && !state.documents[current.edit.documentId]?.assistantLockReason;
   }, []);
   const drag = usePatchDrag<DeckDrag>({
@@ -71,7 +71,7 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
     if (drag.active() || !layout) return null;
     const initial = useEditorStore.getState();
     if (initial.source !== source || initial.snapshot.source !== source || initial.activeRootId !== layout.frameId ||
-      Math.min(initial.deckStepByRootKey[deckStepRootKey(initial.activeDocumentId, layout.frameId)] ?? 1, layout.stepCount) !== layout.step ||
+      Math.min(requestedDeckStep(initial.deckStepByRootKey, initial.activeDocumentId, layout.frameId), layout.stepCount) !== layout.step ||
       initial.activeInspectorEditDocumentId || initial.documents[initial.activeDocumentId]?.assistantLockReason) return null;
     closeText();
     const state = useEditorStore.getState();
@@ -80,7 +80,7 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
     const edit = beginDocumentEdit(state, []);
     const imageFrom = target.kind === "image" ? layout.graphics.find((item) => item.itemId === target.image.objectId)?.sourceSpan.from
       : target.kind === "crop" ? target.crop.sourceStart : undefined;
-    const step = state.deckStepByRootKey[deckStepRootKey(edit.documentId, layout.frameId)] ?? 1;
+    const step = requestedDeckStep(state.deckStepByRootKey, edit.documentId, layout.frameId);
     return { edit, target: { target, step, ...(imageFrom !== undefined ? { imageFrom } : {}) }, patches: [], cleanup: () => {} };
   };
 

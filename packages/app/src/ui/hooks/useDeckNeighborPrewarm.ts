@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useEditorStore } from "../../store/store";
 import { cancelDeckPrewarm, isDeckSnapshotCurrent, prewarmDeckNeighbors, type ComputeRequest } from "../../compute";
-import { deckStepRootKey } from "../../root-key";
+import { requestedDeckStep } from "../../root-key";
 import { yieldToBrowser } from "../../yield-to-browser";
 
 export function useDeckNeighborPrewarm(): void {
@@ -28,7 +28,7 @@ export function useDeckNeighborPrewarm(): void {
         state.activeInspectorEditDocumentId != null || doc.assistantLockReason) { cancel(); return; }
       const request: ComputeRequest = { id: "idle-neighbors", documentId: doc.id, source: doc.source,
         sourceRevision: doc.sourceRevision, documentFileRef: doc.fileRef, activeRootId: doc.activeRootId,
-        deckStep: state.deckStepByRootKey[deckStepRootKey(doc.id, doc.activeRootId)] ?? 1 };
+        deckStep: requestedDeckStep(state.deckStepByRootKey, doc.id, doc.activeRootId) };
       if (!isDeckSnapshotCurrent(state.snapshot, request)) { cancel(); return; }
       const quietWait = quietUntil - performance.now();
       if (quietWait > 0) { cancel(); timer = setTimeout(schedule, quietWait); return; }

@@ -1,5 +1,5 @@
 import { deckPageDerived, deckObjectIndexKey } from "../../deck-page-derived-cache";
-import { deckStepRootKey } from "../../root-key";
+import { requestedDeckStep } from "../../root-key";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import {
   applyDeckEditAction,
@@ -59,7 +59,7 @@ export function DeckInspectorPanel(): JSX.Element {
   const activeFrame = snapshot.deck?.activeFrame ?? null;
   const deckDocument = snapshot.deck?.document;
   const activeRootId = useEditorStore(s => s.activeRootId);
-  const activeStep = useEditorStore(s => s.deckStepByRootKey[deckStepRootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
+  const activeStep = useEditorStore(s => requestedDeckStep(s.deckStepByRootKey, s.activeDocumentId, s.activeRootId));
   const fresh = activeFrame != null && snapshot.source === source && activeFrame.frameId === activeRootId &&
     activeFrame.step === Math.min(activeStep, Math.max(1, activeFrame.stepCount));
 

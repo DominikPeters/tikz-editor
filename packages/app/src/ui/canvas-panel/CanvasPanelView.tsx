@@ -34,6 +34,7 @@ import {
   ToolPreviewOverlay,
   type ToolPreview
 } from "./overlays";
+import { deckStepStripItems } from "./deck-step-strip";
 import type {
   AdornmentConnectorDisplay,
   AdornmentHighlightBox,
@@ -1264,7 +1265,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             </div>
           ) : null}
           {deckStepper ? (
-            <div className={css.deckStepper} data-testid="deck-step-scrubber" data-select="chrome">
+            <div className={css.deckStepper} role="group" aria-label="Overlay steps" data-testid="deck-step-scrubber" data-select="chrome">
               <button
                 type="button"
                 className={css.deckStepperButton}
@@ -1275,9 +1276,19 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               >
                 ◀
               </button>
-              <span className={css.deckStepperLabel} data-testid="deck-step-label">
-                {deckStepper.step} / {deckStepper.stepCount}
-              </span>
+              {deckStepStripItems(deckStepper.step, deckStepper.stepCount).map((item) => item.kind === "gap"
+                ? <span key={item.key} className={css.deckStepperGap} aria-hidden="true">…</span>
+                : <button
+                    key={item.step}
+                    type="button"
+                    className={css.deckStepperStep}
+                    aria-label={`Overlay step ${item.step} of ${deckStepper.stepCount}`}
+                    aria-current={item.step === deckStepper.step ? "step" : undefined}
+                    onClick={() => { if (item.step !== deckStepper.step) deckStepper.onStepChange(item.step); }}
+                    data-testid={`deck-step-${item.step}`}
+                  >
+                    {item.step}
+                  </button>)}
               <button
                 type="button"
                 className={css.deckStepperButton}

@@ -97,13 +97,14 @@ test("mirrors the active overlay, shows other slides' final overlays, and keeps 
   await card(page, "A").click();
   await expect(nav(page)).toHaveAttribute("data-layout", "vertical");
   await expect(nav(page).locator("img")).toHaveCount(4);
-  const image = await card(page, "A").locator("img").getAttribute("src");
-  expect(decodeURIComponent(image!).includes(`data-source-start="${SOURCE.indexOf("Later.")}"`)).toBe(false);
-  await expect(card(page, "A").getByTestId("navigator-step-badge")).toHaveText("2");
-  await page.getByTestId("deck-step-next").click();
+  // A slide opens on its last step; its card follows the step shown.
   await expect.poll(async () => decodeURIComponent((await card(page, "A").locator("img").getAttribute("src"))!)
     .includes(`data-source-start="${SOURCE.indexOf("Later.")}"`)).toBe(true);
+  await expect(card(page, "A").getByTestId("navigator-step-badge")).toHaveText("2");
+  await expect(page.getByTestId("deck-step-2")).toHaveAttribute("aria-current", "step");
   await page.getByTestId("deck-step-prev").click();
+  await expect.poll(async () => decodeURIComponent((await card(page, "A").locator("img").getAttribute("src"))!)
+    .includes(`data-source-start="${SOURCE.indexOf("Later.")}"`)).toBe(false);
   await card(page, "B").click();
   await expect.poll(async () => decodeURIComponent((await card(page, "A").locator("img").getAttribute("src"))!)
     .includes(`data-source-start="${SOURCE.indexOf("Later.")}"`)).toBe(true);
@@ -179,6 +180,9 @@ test("reuses the main render while editing without active-slide thumbnail reques
     await expect.poll(previewText).toContain(text.replaceAll(" ", ""));
     expect(await previewText()).toBe(await canvasText());
   }
+  await page.getByTestId("deck-step-1").click();
+  await expect.poll(previewText).not.toContain("Later.");
+  expect(await previewText()).toBe(await canvasText());
   await page.getByTestId("deck-step-next").click();
   await expect.poll(previewText).toContain("Later.");
   expect(await previewText()).toBe(await canvasText());
@@ -215,7 +219,8 @@ test("selects ranges and toggles, duplicates through the menu, and restores sele
 test("moves a group across a section boundary and preserves active overlay through undo", async ({ page }) => {
   await gotoApp(page); await setSource(page, SOURCE); await dock(page, 18);
   await card(page, "A").click();
-  await page.getByRole("button", { name: "Next overlay" }).click();
+  // The slide opens on its last step; step 1 is the one a move must keep.
+  await page.getByRole("button", { name: "Previous overlay" }).click();
   await card(page, "B").click({ modifiers: ["ControlOrMeta"] });
   const section = nav(page).locator('[data-section-id="section:2"]');
   await dragTo(page, card(page, "A"), section, "after");
@@ -224,10 +229,10 @@ test("moves a group across a section boundary and preserves active overlay throu
   expect(moved.indexOf("\\subsection{Details}")).toBeLessThan(moved.indexOf("% Keep with A"));
   expect(moved.indexOf("{A}First")).toBeLessThan(moved.indexOf("{B}\\hyperlink"));
   await expect(selected(page)).toHaveCount(2);
-  await expect(page.getByRole("button", { name: "Next overlay" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Previous overlay" })).toBeDisabled();
   await card(page, "A").focus(); await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
-  await expect(page.getByRole("button", { name: "Next overlay" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Previous overlay" })).toBeDisabled();
   await nav(page).getByRole("button", { name: "One", exact: true }).click();
   await expect(card(page, "A")).toHaveCount(0);
   await nav(page).getByRole("button", { name: "One", exact: true }).click();

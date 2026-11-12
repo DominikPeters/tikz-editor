@@ -1110,11 +1110,35 @@
   cursor: default;
 }
 
-.deckStepperLabel {
-  color: var(--text);
+.deckStepperStep {
+  appearance: none;
+  min-width: calc(var(--app-ui-scale, 1) * 20px);
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
   font-size: calc(var(--app-ui-scale, 1) * 11px);
   font-variant-numeric: tabular-nums;
-  padding: 0 4px;
+  line-height: 1;
+  padding: 4px 5px;
+  cursor: pointer;
+}
+
+.deckStepperStep:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.deckStepperStep[aria-current="step"] {
+  background: var(--tab-selected-bg);
+  color: var(--text);
+  font-weight: 600;
+  cursor: default;
+}
+
+.deckStepperGap {
+  color: var(--text-muted);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  padding: 0 2px;
   user-select: none;
 }
 
@@ -1625,7 +1649,7 @@
   align-items: center;
   padding: 1px 6px;
   font: 11px/16px var(--font-ui);
-  color: var(--text-muted, var(--text));
+  color: var(--text-muted);
   white-space: nowrap;
   pointer-events: none;
   background: var(--bg-pane);

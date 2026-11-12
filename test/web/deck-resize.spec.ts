@@ -63,6 +63,8 @@ beforeEach(async () => {
   useEditorStore.setState(makeInitialState());
   dispatch({ type: "CODE_EDITED", source: SOURCE });
   dispatch({ type: "SET_ACTIVE_ROOT", rootId: "frame:0" });
+  // The layout below is step 1; a slide opens on its last step otherwise.
+  dispatch({ type: "SET_DECK_STEP", rootId: "frame:0", step: 1 });
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
   await renderSnapshot();
 });
