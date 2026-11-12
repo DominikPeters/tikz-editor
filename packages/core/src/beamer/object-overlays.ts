@@ -2,6 +2,7 @@ import { EMPTY_FRAGMENT, sourceSlice, tikz, userText, type TikzFragment } from "
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
+import { beamerOverlayDeclarationInForce } from "./overlay.js";
 import { beamerBuildSpecPatch, canEditBeamerBuildTiming, isExplicitBeamerBuildSpec, type BeamerBuildModel, type BeamerBuildRow } from "./builds.js";
 import type { BeamerObjectNode } from "./object-index.js";
 import { createBeamerSyntaxContext } from "./syntax.js";
@@ -89,10 +90,13 @@ export function beamerStatementOverlayTarget(model: BeamerBuildModel, statement:
   const command = /^\\(?:node|coordinate|matrix|pic|path|draw|fill|filldraw|pattern|shade|shadedraw|clip|useasboundingbox)(?![A-Za-z@])/u.exec(source.slice(statement.from, statement.to));
   const rows = model.rows.filter((row) => row.kind !== "branch" && row.kind !== "list");
   const own = rows.find((row) => row.kind === "content" && same(row.sourceSpan, statement) && row.command?.kind === "only" && row.command.branches.length === 1) ?? null;
-  const pause = model.overlays.pauses.filter((entry) => contains(entry.contentSpan, statement) && !entry.holes?.some((hole) => contains(hole, statement))).at(-1);
-  const inherited = rows.filter((row) => row !== own && row.kind !== "pause" && contains(row.sourceSpan, statement) && !row.command?.holes?.some((hole) => contains(hole, statement)))
+  // The rule it stands under: the smallest brace command or text-level declaration around it, else
+  // the \pause or \onslide in force for it in its picture, else a pause before the picture.
+  const inForce = beamerOverlayDeclarationInForce(model.overlays, statement);
+  const textPause = model.overlays.pauses.filter((entry) => !entry.reach && contains(entry.contentSpan, statement)).at(-1);
+  const inherited = rows.filter((row) => row !== own && row.kind !== "pause" && !row.command?.declaration?.reach && contains(row.sourceSpan, statement))
     .sort((a, b) => (a.sourceSpan.to - a.sourceSpan.from) - (b.sourceSpan.to - b.sourceSpan.from))[0] ??
-    (pause ? rows.find((row) => row.id === `pause:${pause.span.from}`) : undefined);
+    rows.find((row) => row.id === (inForce?.command ? `command:${inForce.command.span.from}` : inForce?.pause ? `pause:${inForce.pause.span.from}` : textPause ? `pause:${textPause.span.from}` : ""));
   const precedingStateful = model.rows.some((candidate) => candidate.kind === "unsupported" && candidate.contentSpans.length === 0 && candidate.sourceSpan.from < statement.from);
   const canSet = command !== null && !inherited && !precedingStateful && (!own || canEditBeamerBuildTiming(own));
   return {

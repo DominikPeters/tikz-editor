@@ -359,6 +359,18 @@ AFTERB`))).toEqual(["FRAMEB B1 AFTERB", "FRAMEB B1 B3 AFTERB", "FRAMEB B1 B2 B3 
 \end{tikzpicture}`))).toEqual(["FRAMED D2", "FRAMED D2 D3", "FRAMED D1 D2 D3 D4"]);
   });
 
+  it("lets a declaration in the picture override one in the text before it, which resumes after the picture", () => {
+    expect(shown(frame(String.raw`TEXT
+\onslide<2->
+MORE
+\begin{tikzpicture}
+\node at (0,0) {E1};
+\onslide<1->
+\node at (1,0) {E2};
+\end{tikzpicture}
+LAST`))).toEqual(["TEXT E2", "TEXT MORE E1 E2 LAST"]);
+  });
+
   it("keeps a pause before the picture in force after a pause in one of its scopes", () => {
     // TeX also shows the text after the last pause on step 2, a Beamer quirk not followed here.
     expect(shown(frame(String.raw`FRAMEE
@@ -450,6 +462,13 @@ ${body}
     const keys = [1, 2, 3].map((step) => beamerTikzStep(source, picture.span, overlays, step).overlayKey);
     expect(new Set(keys).size).toBe(3);
     expect(keys[2]).toBe("");
+  });
+
+  it("keeps a declaration before a loop in force until the loop performs its own", () => {
+    expect(shownBySteps(deck(String.raw`\onslide<3->
+\foreach \x in {1,2} { \node at (\x,0) {A\x}; \onslide<1-> \node at (\x,1) {B\x}; }`))).toEqual(["A2 B1 B2", "A2 B1 B2", "A1 A2 B1 B2"]);
+    expect(shownBySteps(deck(String.raw`\pause \pause
+\foreach \x in {1,2} { \node at (\x,0) {C\x}; \onslide<2-> \node at (\x,1) {D\x}; }`))).toEqual(["", "C2 D1 D2", "C1 C2 D1 D2"]);
   });
 
   it("gives one Overlays row to a loop's specification, not editable as a number", () => {

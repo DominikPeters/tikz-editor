@@ -57,16 +57,33 @@ export type BeamerOverlayCommand = {
   readonly branches: readonly BeamerDelimitedSourceValue[];
   /** Macro syntax removed before the selected branch reaches the TeX frontend. */
   readonly syntaxSpans: readonly Span[];
-  /** Parts of a declaration's reach where a later one in an inner picture scope holds instead. */
-  readonly holes?: readonly Span[];
   /**
-   * A specification a picture's loop performs once per iteration: which
+   * For a command a picture's loop performs once per iteration: which
    * iteration this is, outermost loop first. `spec` is resolved from the
    * loop's values; its `source` is the authored text.
    */
   readonly instance?: readonly number[];
-  /** An `\onslide` declaration a picture's loop performs: the loop, where the latest one performed holds. */
-  readonly loopSpan?: Span;
+  /** For `\onslide<spec>` without a body: a declaration, which holds for what follows it. */
+  readonly declaration?: {
+    /** Its place among the frame's pauses and declarations, in the order TeX performs them. */
+    readonly order: number;
+    readonly reach?: BeamerOverlayPictureReach;
+  };
+};
+
+/**
+ * How far a `\pause` or `\onslide` at statement level in a picture holds:
+ * from where it is performed to the end of its scope or picture, where the
+ * one in force before resumes. Of those in force for a statement the latest
+ * performed wins. (Checked with LuaLaTeX; a brace group ends neither.)
+ */
+export type BeamerOverlayPictureReach = {
+  /** The end of the scope or picture it stands in. */
+  readonly end: number;
+  /** For one a loop performs: the outermost loop around it. */
+  readonly loop?: Span;
+  /** Its scope lies inside the loop's body, so it holds within one iteration only. */
+  readonly scoped?: true;
 };
 
 export type BeamerOverlayItem = {
@@ -83,11 +100,12 @@ export type BeamerOverlayPause = {
   readonly span: Span;
   readonly threshold: number;
   readonly contentSpan: Span;
-  /** Parts of its reach where an `\onslide` in an inner picture scope holds instead. */
-  readonly holes?: readonly Span[];
-  /** A pause in a picture's loop: the iteration it runs in, and the loop. */
+  /** Its place among the frame's pauses and declarations, in the order TeX performs them. */
+  readonly order: number;
+  /** For a pause a picture's loop performs: the iteration, outermost loop first. */
   readonly instance?: readonly number[];
-  readonly loopSpan?: Span;
+  /** For a pause at statement level in a picture. */
+  readonly reach?: BeamerOverlayPictureReach;
 };
 
 export type BeamerOverlayReference = {
@@ -138,10 +156,7 @@ type PendingDeclaration = {
   readonly from: number;
   readonly syntaxTo: number;
   readonly kind: BeamerOverlayCommandKind;
-  readonly sourceOrder: number;
   readonly spec: BeamerDelimitedSourceValue;
-  readonly instance?: readonly number[];
-  readonly loopSpan?: Span;
 };
 
 type PendingSpec =
@@ -175,7 +190,7 @@ type PendingSpec =
       readonly span: Span;
       readonly requestedStep: number | null;
       readonly instance?: readonly number[];
-      readonly loopSpan?: Span;
+      readonly reach?: BeamerOverlayPictureReach;
     };
 
 const OVERLAY_COMMANDS = new Map<string, BeamerOverlayCommandKind>([
@@ -236,6 +251,23 @@ export function scanBeamerFrameOverlays(
   // join the same source-ordered decoder as the frame's relative
   // specifications and pauses. PGF implements `\path<spec> …;` as
   // \alt<spec>{path}{nothing}.
+  const pictureScopes = [...tikzRanges, ...environmentPairs.filter(pair => pair.name === "scope" &&
+    tikzRanges.some(picture => picture.from <= pair.span.from && pair.span.to <= picture.to))
+    .map(pair => ({ from: pair.span.from, to: pair.end.span.from }))];
+  /** The end of the innermost scope or picture around a place in a picture. */
+  const scopeEnd = (at: number): number => {
+    let end = frame.bodySpan.to, width = Infinity;
+    for (const scope of pictureScopes) {
+      if (scope.from < at && at < scope.to && scope.to - scope.from < width) { end = Math.min(scope.to, frame.bodySpan.to); width = scope.to - scope.from; }
+    }
+    return end;
+  };
+  const pictureReach = (at: number, loop: Span | null): BeamerOverlayPictureReach => {
+    const end = scopeEnd(at);
+    if (!loop) return { end };
+    // A scope inside the loop's body ends with its iteration; otherwise the loop's last one holds on, to the end of the loop's scope.
+    return end <= loop.to ? { end, loop, scoped: true } : { end: scopeEnd(loop.from), loop };
+  };
   const traces = tikzRanges.filter(span => tikzOverlayTraceNeeded(source.slice(span.from, span.to))).map(span => tikzOverlayTrace(source, span));
   const pictureStatementStarts = new Set(traces.flatMap(trace => [...trace.statementStarts]));
   for (const trace of traces) {
@@ -245,22 +277,27 @@ export function scanBeamerFrameOverlays(
       const performed = op.loopSpan ? { instance: op.instance } : {};
       if (op.kind === "pause") {
         pending.push({ kind: "pause", sourceOrder, span: op.span, requestedStep: op.countRaw !== null && /^\s*\d+\s*$/u.test(op.countRaw) ? Number(op.countRaw.trim()) : null,
-          ...(op.loopSpan ? { instance: op.instance, loopSpan: op.loopSpan } : {}) });
+          ...performed, reach: pictureReach(op.span.from, op.loopSpan) });
       } else if (op.kind === "declaration") {
         // As in text: a starred \onslide without a body is left to TeX.
         if (op.modifier === "*") return;
-        declarations.push({ from: op.span.from, syntaxTo: op.span.to, kind: op.modifier === "+" ? "visible" : "uncover", sourceOrder,
-          spec: op.spec ? { span: op.spec.span, contentSpan: op.spec.contentSpan, value: op.spec.raw }
+        const reach = pictureReach(op.span.from, op.loopSpan);
+        const contentSpan = { from: op.span.to, to: reach.end };
+        pending.push({ kind: "command", sourceOrder,
+          rawSpec: op.spec ? { span: op.spec.span, contentSpan: op.spec.contentSpan, value: op.spec.raw }
             : { span: { from: op.span.to, to: op.span.to }, contentSpan: { from: op.span.to, to: op.span.to }, value: "1-" },
-          ...(op.loopSpan ? { instance: op.instance, loopSpan: op.loopSpan } : {}) });
+          command: { kind: op.modifier === "+" ? "visible" : "uncover", commandSpan: op.span, span: { from: op.span.from, to: reach.end },
+            branches: [{ span: contentSpan, contentSpan, value: source.slice(contentSpan.from, contentSpan.to) }], syntaxSpans: [op.span],
+            ...performed, declaration: { order: 0, reach } } });
       } else if (op.kind === "path") {
         pending.push({ kind: "command", sourceOrder, rawSpec: { span: op.spec.span, contentSpan: op.spec.contentSpan, value: op.spec.raw },
           command: { kind: "only", span: op.span, commandSpan: { from: op.span.from, to: op.spec.span.from },
             branches: [{ span: op.span, contentSpan: op.span, value: source.slice(op.span.from, op.span.to) }], syntaxSpans: [op.spec.span], ...performed } });
       } else {
         const kind: BeamerOverlayCommandKind = op.command === "onslide" ? op.modifier === "*" ? "only" : op.modifier === "+" ? "visible" : "uncover" : op.command;
-        if (op.branches.length < (kind === "alt" ? 2 : kind === "temporal" ? 3 : 1)) return;
-        const branches = op.branches.slice(0, kind === "alt" ? 2 : kind === "temporal" ? 3 : 1).map(contentSpan =>
+        const branchCount = overlayBranchCount(kind);
+        if (op.branches.length < branchCount) return;
+        const branches = op.branches.slice(0, branchCount).map(contentSpan =>
           ({ span: { from: contentSpan.from - 1, to: contentSpan.to + 1 }, contentSpan, value: source.slice(contentSpan.from, contentSpan.to) }));
         const span = { from: op.span.from, to: requireArrayValue(branches, branches.length - 1).span.to };
         pending.push({ kind: "command", sourceOrder, rawSpec: { span: op.spec.span, contentSpan: op.spec.contentSpan, value: op.spec.raw },
@@ -395,7 +432,7 @@ export function scanBeamerFrameOverlays(
         const syntaxTo = spec?.span.to ?? commandTo;
         // Declaration form changes covering until the next declaration. A bare
         // \onslide closes the current cover and makes following material visible.
-        declarations.push({ from: command.from, syntaxTo, kind, sourceOrder: command.from,
+        declarations.push({ from: command.from, syntaxTo, kind,
           spec: spec ?? { span: { from: commandTo, to: commandTo }, contentSpan: { from: commandTo, to: commandTo }, value: "1-" } });
       }
       continue;
@@ -456,53 +493,16 @@ export function scanBeamerFrameOverlays(
       rawSpec: overlay,
     });
   }
-  // In a picture, \onslide and \pause hold to the end of the enclosing scope
-  // or picture, where the declaration in force before resumes; the latest
-  // one in force wins. (Checked with LuaLaTeX; a brace group ends neither.)
-  const pictureScopes = [...tikzRanges, ...environmentPairs.filter(pair => pair.name === "scope" &&
-    tikzRanges.some(picture => picture.from <= pair.span.from && pair.span.to <= picture.to))
-    .map(pair => ({ from: pair.span.from, to: pair.end.span.from }))];
-  const reachEnd = (at: number): number => {
-    let end = frame.bodySpan.to, width = Infinity;
-    for (const scope of pictureScopes) {
-      if (scope.from < at && at < scope.to && scope.to - scope.from < width) { end = Math.min(scope.to, frame.bodySpan.to); width = scope.to - scope.from; }
-    }
-    return end;
-  };
-  const pauseStartsInSource = pending.flatMap(entry => entry.kind === "pause" ? [entry.span.from] : []);
-  /** Where declarations starting in an inner scope of `(from, to)` hold instead of the one at `from`. */
-  const innerReaches = (from: number, to: number, end: number, starts: readonly number[]): Span[] =>
-    starts.filter(start => start > from && start < to && reachEnd(start) < end).map(start => ({ from: start, to: reachEnd(start) }));
-  declarations.sort((left, right) => left.sourceOrder - right.sourceOrder);
-  for (const declaration of declarations) {
-    if (declaration.loopSpan) {
-      // A loop performs it once per iteration, the latest one performed holding:
-      // through the rest of the loop and on to the end of the loop's scope.
-      const loop = declaration.loopSpan;
-      const end = reachEnd(loop.from);
-      const after = [...declarations.filter(candidate => !candidate.loopSpan).map(candidate => candidate.from), ...pauseStartsInSource]
-        .find(start => start >= loop.to && reachEnd(start) >= end);
-      const contentSpan = { from: declaration.syntaxTo, to: Math.min(after ?? frame.bodySpan.to, end) };
-      pending.push({ kind: "command", sourceOrder: declaration.sourceOrder, rawSpec: declaration.spec,
-        command: { kind: declaration.kind, commandSpan: { from: declaration.from, to: declaration.syntaxTo },
-          span: { from: declaration.from, to: contentSpan.to }, branches: [{ span: contentSpan, contentSpan, value: source.slice(contentSpan.from, contentSpan.to) }],
-          syntaxSpans: [{ from: declaration.from, to: declaration.syntaxTo }], ...(declaration.instance ? { instance: declaration.instance } : {}), loopSpan: loop } });
-      continue;
-    }
+  for (const [index, declaration] of declarations.entries()) {
     // overprint installs a local declaration handler; its final minipage ends
     // at the environment boundary instead of covering subsequent frame text.
     const owner = overprints.find(overprint => declaration.from >= overprint.contentSpan.from && declaration.from < overprint.contentSpan.to);
-    const end = reachEnd(declaration.from);
-    const next = declarations.find(candidate => candidate.from > declaration.from && reachEnd(candidate.from) >= end);
-    // In a picture a later \pause of the same reach takes over as well.
-    const nextPause = end < frame.bodySpan.to ? pauseStartsInSource.find(start => start > declaration.from && reachEnd(start) >= end) : undefined;
-    const to = Math.min(next?.from ?? frame.bodySpan.to, nextPause ?? frame.bodySpan.to, owner?.contentSpan.to ?? frame.bodySpan.to, end);
+    const to = Math.min(declarations[index + 1]?.from ?? frame.bodySpan.to, owner?.contentSpan.to ?? frame.bodySpan.to);
     const contentSpan = { from: declaration.syntaxTo, to };
-    const holes = innerReaches(declaration.from, to, end, [...declarations.map(candidate => candidate.from), ...pauseStartsInSource]);
-    pending.push({ kind: "command", sourceOrder: declaration.sourceOrder, rawSpec: declaration.spec,
+    pending.push({ kind: "command", sourceOrder: declaration.from, rawSpec: declaration.spec,
       command: { kind: owner ? "only" : declaration.kind, commandSpan: { from: declaration.from, to: declaration.syntaxTo },
         span: { from: declaration.from, to }, branches: [{ span: contentSpan, contentSpan, value: source.slice(contentSpan.from, contentSpan.to) }],
-        syntaxSpans: [{ from: declaration.from, to: declaration.syntaxTo }], ...(holes.length ? { holes } : {}) } });
+        syntaxSpans: [{ from: declaration.from, to: declaration.syntaxTo }], declaration: { order: 0 } } });
   }
   pending.push(...overlayEnvironmentSpecs(context, frame.bodySpan));
   const listDefaultsByOwner = new Map<typeof listRanges[number], {
@@ -562,20 +562,15 @@ export function scanBeamerFrameOverlays(
   const items: BeamerOverlayItem[] = [];
   const listDefaults: Array<{ span: Span; spec: BeamerOverlaySpec }> = [];
   const switches: BeamerOverlaySwitch[] = [];
-  const pauseStarts: Array<{
-    span: Span;
-    threshold: number;
-    instance?: readonly number[];
-    loopSpan?: Span;
-  }> = [];
+  const pauseStarts: Array<Omit<BeamerOverlayPause, "contentSpan">> = [];
   let pauseCounter = 1;
   let stepCount = 1;
 
-  for (const entry of pending) {
+  for (const [order, entry] of pending.entries()) {
     if (entry.kind === "pause") {
       pauseCounter = entry.requestedStep ?? pauseCounter + 1;
-      pauseStarts.push({ span: entry.span, threshold: pauseCounter,
-        ...(entry.instance && entry.loopSpan ? { instance: entry.instance, loopSpan: entry.loopSpan } : {}) });
+      pauseStarts.push({ span: entry.span, threshold: pauseCounter, order,
+        ...(entry.instance ? { instance: entry.instance } : {}), ...(entry.reach ? { reach: entry.reach } : {}) });
       stepCount = Math.max(stepCount, pauseCounter);
       continue;
     }
@@ -590,7 +585,7 @@ export function scanBeamerFrameOverlays(
       // A loop's specification is resolved from its values; what the source says stays the authored text.
       commands.push({ ...entry.command, spec: entry.command.instance
         ? { ...resolved.spec, source: { ...resolved.spec.source, value: source.slice(entry.rawSpec.contentSpan.from, entry.rawSpec.contentSpan.to) } }
-        : resolved.spec });
+        : resolved.spec, ...(entry.command.declaration ? { declaration: { ...entry.command.declaration, order } } : {}) });
     } else if (entry.kind === "switch") {
       switches.push({ ...entry.switch, spec: resolved.spec });
     } else if (entry.kind === "reference") {
@@ -607,23 +602,18 @@ export function scanBeamerFrameOverlays(
     }
   }
 
-  const pauses = pauseStarts.map((pause): BeamerOverlayPause => {
-    // A loop's pause holds for the rest of the loop and on to the end of the loop's scope.
-    const end = reachEnd(pause.loopSpan?.from ?? pause.span.from);
-    if (pause.loopSpan) {
-      const after = pause.loopSpan.to;
-      const to = Math.min(declarations.find(declaration => declaration.from >= after && reachEnd(declaration.from) >= end)?.from ?? frame.bodySpan.to, end);
-      return { ...pause, contentSpan: { from: pause.span.to, to } };
-    }
-    const sameReach = (from: number) => from > pause.span.from && reachEnd(from) >= end;
-    // \pause is an \onslide declaration in Beamer. A later declaration
-    // closes its cover, including a bare \onslide that restores visibility.
-    const to = Math.min(pauseStarts.find(candidate => sameReach(candidate.loopSpan?.from ?? candidate.span.from))?.span.from ?? frame.bodySpan.to,
-      declarations.find(declaration => sameReach(declaration.from))?.from ?? frame.bodySpan.to, end);
-    // A later pause in an inner scope has a higher threshold; only an \onslide there takes over.
-    const holes = innerReaches(pause.span.from, to, end, declarations.map(declaration => declaration.from));
-    return { ...pause, contentSpan: { from: pause.span.to, to }, ...(holes.length ? { holes } : {}) };
-  });
+  const textPauses = pauseStarts.filter(pause => !pause.reach);
+  const pauses = pauseStarts.map((pause): BeamerOverlayPause => ({
+    ...pause,
+    contentSpan: {
+      from: pause.span.to,
+      // \pause is an \onslide declaration in Beamer. In text a later
+      // declaration closes its cover, including a bare \onslide that restores
+      // visibility; in a picture it holds to the end of its scope.
+      to: pause.reach?.end ?? Math.min(textPauses[textPauses.indexOf(pause) + 1]?.span.from ?? frame.bodySpan.to,
+        declarations.find(declaration => declaration.from > pause.span.from)?.from ?? frame.bodySpan.to),
+    },
+  }));
 
   return {
     frameSpan: frame.bodySpan,
@@ -646,6 +636,41 @@ export function beamerOverlaySpecContains(
   return spec.intervals.some((interval) =>
     step >= interval.from && (interval.to == null || step <= interval.to)
   );
+}
+
+/** Whether a command a loop performed in iteration `performed` is the one a statement of iteration `instance` answers to: its own, or that of a loop around it. */
+function performedFor(performed: readonly number[] | undefined, instance: readonly number[]): boolean {
+  return !performed || (performed.length <= instance.length && performed.every((value, index) => value === instance[index]));
+}
+
+/**
+ * The picture-level `\pause` or `\onslide` that holds for a statement: of
+ * those performed before it and still within their scope, the latest. Null
+ * for a statement no such declaration reaches.
+ */
+export function beamerOverlayDeclarationInForce(
+  model: BeamerOverlayModel,
+  span: Span,
+  instance: readonly number[] = []
+): { readonly order: number; readonly command?: BeamerOverlayCommand; readonly pause?: BeamerOverlayPause } | null {
+  /** `at` is where the declaration has taken effect: the end of its own text. */
+  const holds = (reach: BeamerOverlayPictureReach | undefined, performed: readonly number[] | undefined, at: number): boolean => {
+    if (!reach || span.to > reach.end) return false;
+    if (!reach.loop) return at <= span.from;
+    if (!containsSpan(reach.loop, span)) return !reach.scoped && span.from >= reach.loop.to;
+    // In the loop: what it performed earlier, in an earlier iteration or before the statement in this one.
+    const order = compareTikzOverlayInstances(performed ?? [], instance);
+    return reach.scoped ? order === 0 && at <= span.from : order < 0 || (order === 0 && at <= span.from);
+  };
+  let latest: ReturnType<typeof beamerOverlayDeclarationInForce> = null;
+  for (const command of model.commands) {
+    const declaration = command.declaration;
+    if (declaration && holds(declaration.reach, command.instance, command.commandSpan.to) && declaration.order > (latest?.order ?? -1)) latest = { order: declaration.order, command };
+  }
+  for (const pause of model.pauses) {
+    if (holds(pause.reach, pause.instance, pause.span.to) && pause.order > (latest?.order ?? -1)) latest = { order: pause.order, pause };
+  }
+  return latest;
 }
 
 export function resolveBeamerOverlaySpanVisibility(
@@ -671,24 +696,12 @@ export function resolveBeamerOverlaySpanVisibility(
     }
     return true;
   };
-  /** Whether what a loop performed in iteration `performed` at `at` ran before the span. */
-  const ranBefore = (performed: readonly number[], at: number): boolean => {
-    const order = compareTikzOverlayInstances(performed, instance);
-    return order < 0 || (order === 0 && at <= span.from);
-  };
-  // In a loop the latest \onslide performed before the span holds; after the loop, the last.
-  const loopDeclarations = new Map<number, BeamerOverlayCommand>();
+  // In a picture the latest \pause or \onslide in force holds, over those before it in the text too.
+  const inForce = beamerOverlayDeclarationInForce(model, span, instance);
+  const superseded = (order: number) => inForce !== null && order < inForce.order;
   for (const command of model.commands) {
-    if (command.holes?.some((hole) => containsSpan(hole, span))) continue;
-    if (command.loopSpan) {
-      const inLoop = containsSpan(command.loopSpan, span);
-      if (inLoop ? ranBefore(command.instance ?? [], command.commandSpan.to) : command.branches.some((branch) => containsSpan(branch.contentSpan, span))) {
-        loopDeclarations.set(command.loopSpan.from, command);
-      }
-      continue;
-    }
-    // A loop performs a command once per iteration; a statement answers to the one of its own iteration.
-    if (command.instance?.some((value, index) => value !== instance[index])) continue;
+    if (command.declaration?.reach || (command.declaration && superseded(command.declaration.order))) continue;
+    if (!performedFor(command.instance, instance)) continue;
     let branchIndex = command.branches.findIndex((branch) =>
       containsSpan(branch.contentSpan, span)
     );
@@ -702,9 +715,8 @@ export function resolveBeamerOverlaySpanVisibility(
     }
     if (branchIndex >= 0 && !apply(command, branchIndex)) return "removed";
   }
-  for (const command of loopDeclarations.values()) {
-    if (!apply(command, 0)) return "removed";
-  }
+  if (inForce?.command && !apply(inForce.command, 0)) return "removed";
+  if (inForce?.pause && step < inForce.pause.threshold) visibility = "hidden";
   for (const item of model.items) {
     if (
       (containsSpan(item.contentSpan, span) ||
@@ -715,13 +727,10 @@ export function resolveBeamerOverlaySpanVisibility(
     }
   }
   for (const pause of model.pauses) {
-    if (step >= pause.threshold) continue;
-    if (pause.loopSpan && pause.instance && containsSpan(pause.loopSpan, span)) {
-      // Inside the loop a pause covers what runs after it: the rest of its iteration, and the later ones.
-      if (!ranBefore(pause.instance, pause.span.to)) continue;
-    } else if (!containsSpan(pause.contentSpan, span)) continue;
-    if (pause.holes?.some((hole) => containsSpan(hole, span))) continue;
-    visibility = "hidden";
+    if (pause.reach || superseded(pause.order)) continue;
+    if (containsSpan(pause.contentSpan, span) && step < pause.threshold) {
+      visibility = "hidden";
+    }
   }
   return visibility;
 }
@@ -828,6 +837,11 @@ export function projectBeamerOverlayText(
   };
 }
 
+/** How many brace bodies an overlay command takes. */
+function overlayBranchCount(kind: BeamerOverlayCommandKind): number {
+  return kind === "alt" ? 2 : kind === "temporal" ? 3 : 1;
+}
+
 function parseOverlayCommand(
   context: BeamerSyntaxContext,
   limit: number,
@@ -843,7 +857,7 @@ function parseOverlayCommand(
   if (spec) {
     cursor = spec.span.to;
   }
-  const branchCount = kind === "alt" ? 2 : kind === "temporal" ? 3 : 1;
+  const branchCount = overlayBranchCount(kind);
   const branches: BeamerDelimitedSourceValue[] = [];
   for (let index = 0; index < branchCount; index += 1) {
     const branch = beamerRequiredArgumentAfter(context, cursor, limit);
