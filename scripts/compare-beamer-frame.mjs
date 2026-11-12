@@ -395,7 +395,8 @@ export async function compareBeamerFrame(options, runtime = {}) {
   const coreRenderer = runtime.coreRenderer ?? await loadCoreRenderer();
   const assetDir = join(runDir, "native-assets");
   mkdirSync(assetDir, { recursive: true });
-  const graphicsResolver = runtime.graphicsResolver ?? corpusGraphicsResolver(source, options.inputPath, assetDir).resolver;
+  const graphicsInput = options.sourceDir ? join(options.sourceDir, basename(options.inputPath)) : options.inputPath;
+  const graphicsResolver = runtime.graphicsResolver ?? corpusGraphicsResolver(source, graphicsInput, assetDir).resolver;
   const { computerModernTexMetricProvider } = coreRenderer;
   const preparedDocument = runtime.preparedDocument ??
     coreRenderer.prepareBeamerDocument(source);

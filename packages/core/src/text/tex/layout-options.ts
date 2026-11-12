@@ -143,7 +143,7 @@ export interface TexDisplayMathLayoutProfile {
   /**
    * Some outer environments enter horizontal mode before their first source
    * token. If that token is display math, TeX ships a zero-sized line and
-   * consequently selects the short display skips.
+   * uses that line's two-quad pre-display allowance to select display skips.
    */
   readonly leadingDisplay?: Readonly<{
     readonly emptyLineBaselineSkipPt: number;

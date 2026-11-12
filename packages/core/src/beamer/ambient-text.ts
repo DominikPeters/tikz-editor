@@ -51,5 +51,11 @@ export function createBeamerAmbientText(source: string) {
     cache.set(offset, text);
     return text;
   };
-  return Object.assign(at, { itemDepthAt: (offset: number) => lists.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).length });
+  const allLists = environments.filter(env => ["itemize", "enumerate", "description"].includes(env.name));
+  const minipages = environments.filter(env => ["column", "minipage"].includes(env.name));
+  const listDepthAt = (offset: number) => {
+    const start = Math.max(0, ...minipages.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).map(env => env.begin.span.to));
+    return allLists.filter(env => start <= env.begin.span.from && env.begin.span.to <= offset && offset < env.end.span.from).length;
+  };
+  return Object.assign(at, { listDepthAt, itemDepthAt: (offset: number) => lists.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).length });
 }

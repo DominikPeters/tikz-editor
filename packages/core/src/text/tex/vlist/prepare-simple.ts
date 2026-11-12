@@ -43,7 +43,8 @@ export function prepareSimpleTexVList(
   );
   const materialized = materializeDisplayMathVerticalGlueInVList(
     paragraphGlue,
-    displayMathProfile
+    displayMathProfile,
+    font
   );
   return {
     materialized,

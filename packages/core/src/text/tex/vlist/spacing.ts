@@ -124,7 +124,7 @@ interface SimpleTexParagraphVerticalSkipState {
   previousEmittedListContext: SimpleTexListContext | undefined;
   previousEmittedContentKind: "paragraph" | "display" | undefined;
   readonly quotePartopsepByDepth: Map<number, boolean>;
-  readonly trivlistPartopsepByScope: Map<TexTrivlistScopeRole, boolean>;
+  readonly trivlistTopsepByScope: Map<TexTrivlistScopeRole, TexLength>;
   readonly listPartopsepByDepth: Map<number, boolean>;
   readonly noParListDepths: Set<number>;
   readonly lastListItemsByDepth: Map<number, { listStart: number | undefined; itemIndex: number }>;
@@ -187,19 +187,21 @@ function planSimpleTexParagraphVerticalSkipsInto(
       const scope = ancestors.length ? ancestors : item.scopePath ?? [];
       const list = lastVListAncestorRole(scope, "list");
       const listItem = lastVListAncestorRole(scope, "list-item");
-      if (list && listItem && (!state.previousEmittedListContext ||
+      const trivlists = scope.filter(role => role.kind === "trivlist");
+      const changesTrivlist = commonTrivlistScopePrefixLength(state.previousEmittedTrivlistScopes, trivlists) !== Math.max(state.previousEmittedTrivlistScopes.length, trivlists.length);
+      if (changesTrivlist || list && listItem && (!state.previousEmittedListContext ||
           state.previousEmittedListContext.listStart !== list.sourceStart ||
           state.previousEmittedListContext.itemIndex !== listItem.itemIndex)) {
         const blockIndex = -3_000_000 - (item.sourceSpan?.start ?? 0);
         const boundary: TexParagraphItem = { kind: "paragraph", blockIndex,
           sourceSpan: item.sourceSpan ?? { start: 0, end: 0 },
           paragraph: { blockIndex, text: "", sourceSpan: item.sourceSpan ?? { start: 0, end: 0 }, nodes: [], noIndent: true,
-            startsAfterExplicitPar: true, quoteDepth: 0, ...(item.role.pendingListBoundaries ? { ancestorListLabels: item.role.pendingListBoundaries.filter(label => label.depth < list.depth) } : {}), ...(item.scopePath ? { scopePath: item.scopePath } : {}) } };
+            startsAfterExplicitPar: true, quoteDepth: 0, ...(item.role.pendingListBoundaries && list ? { ancestorListLabels: item.role.pendingListBoundaries.filter(label => label.depth < list.depth) } : {}), ...(item.scopePath ? { scopePath: item.scopePath } : {}) } };
         planSimpleTexParagraphVerticalSkipsInto([boundary], font, listProfile, state, skips, ancestors, pathPrefix);
         const skip = skips.at(-1);
         if (skip) {
           const profile = listProfileForContext(listProfile, state.previousEmittedListContext);
-          const parskip = texArticleListParagraphSkip(list.depth, font, profile);
+          const parskip = list ? texArticleListParagraphSkip(list.depth, font, profile) : texLength(0);
           skips[skips.length - 1] = { ...skip, listSize: texLength(Math.max(0, skip.listSize - parskip)),
             size: texLength(Math.max(0, skip.size - parskip)), vlistPath: path };
           state.externalPendingParskip = Number(parskip);
@@ -317,6 +319,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
       font, resolvedListProfile);
     // @trivlist inherits @inlabel when a list starts as an item's first
     // material. Its @noparlist suppresses endtrivlist's closing topsep too.
+    if (!hasPreviousEmittedParagraph && scope.listContext && paragraph.ancestorListLabels?.some(label => label.inherited)) {
+      state.noParListDepths.add(scope.listContext.depth);
+    }
     for (const ancestor of paragraph.ancestorListLabels ?? []) {
       if (ancestor.inherited) continue;
       for (let depth = ancestor.depth + 1; depth <= (scope.listContext?.depth ?? 0); depth++) state.noParListDepths.add(depth);
@@ -371,7 +376,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
           state.previousEmittedListContext !== undefined || scope.listContext !== undefined,
           font
         );
-    const activeList = scope.listContext ?? state.previousEmittedListContext;
+    const enteringTrivlist = scope.trivlistScopes.some(role => !state.previousEmittedTrivlistScopes.includes(role));
+    const activeList = scope.listContext ?? (enteringTrivlist ? undefined : state.previousEmittedListContext);
     const trivlistProfile = listProfile && activeList ? { ...listProfile,
       trivlistTopsepPt: listProfile.liveListTopsepPt ?? texProfileDepthValue(resolvedListProfile?.topsepPtByDepth ?? listProfile.topsepPtByDepth, activeList.depth),
       trivlistPartopsepPt: 0,
@@ -388,6 +394,13 @@ function planSimpleTexParagraphVerticalSkipsInto(
         );
     if (externalAfterSkip && !state.hasInterveningPenalty && scope.trivlistScopes.some(scope => !state.previousEmittedTrivlistScopes.includes(scope))) {
       trivlistVerticalSkipBefore = texLength(Math.max(0, trivlistVerticalSkipBefore - externalAfterSkip));
+    }
+
+    // Adjacent list and alignment environments share addvspace's last skip.
+    if (!state.hasInterveningPenalty &&
+        state.previousEmittedListContext && !scope.listContext &&
+        trivlistVerticalSkipBefore > 0) {
+      listVerticalSkipBefore = texLength(Math.max(0, listVerticalSkipBefore - trivlistVerticalSkipBefore));
     }
 
     skips.push({
@@ -441,7 +454,7 @@ function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphV
     previousEmittedListContext: undefined,
     previousEmittedContentKind: undefined,
     quotePartopsepByDepth: new Map(),
-    trivlistPartopsepByScope: new Map(),
+    trivlistTopsepByScope: new Map(),
     listPartopsepByDepth: new Map(),
     noParListDepths: new Set(),
     lastListItemsByDepth: new Map(),
@@ -633,24 +646,26 @@ export function materializeParagraphVerticalGlueInVList(
 
 export function materializeDisplayMathVerticalGlueInVList(
   vlist: TexVListDocument,
-  profile: TexDisplayMathLayoutProfile = latexArticleDisplaySkipsPt
+  profile: TexDisplayMathLayoutProfile = latexArticleDisplaySkipsPt,
+  font?: ResolvedTexFont
 ): TexVListDocument {
   return {
     ...vlist,
-    items: materializeDisplayMathVerticalGlueInItems(vlist.items, profile),
+    items: materializeDisplayMathVerticalGlueInItems(vlist.items, profile, font),
   };
 }
 
 function materializeDisplayMathVerticalGlueInItems(
   sourceItems: readonly TexVListItem[],
-  profile: TexDisplayMathLayoutProfile
+  profile: TexDisplayMathLayoutProfile,
+  font?: ResolvedTexFont
 ): readonly TexVListItem[] {
   const items: TexVListItem[] = [];
   for (const [index, item] of sourceItems.entries()) {
     if (item.kind === "vbox") {
       items.push({
         ...item,
-        items: materializeDisplayMathVerticalGlueInItems(item.items, profile),
+        items: materializeDisplayMathVerticalGlueInItems(item.items, profile, font),
       });
       continue;
     }
@@ -663,7 +678,8 @@ function materializeDisplayMathVerticalGlueInItems(
         item,
         "above",
         profile,
-        (index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay ? "short" : undefined
+        (index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay ? "short" : undefined,
+        font
       ));
       items.push(item);
       items.push(displayMathBoundaryGlueItem(item, "below", profile));
@@ -678,7 +694,8 @@ function materializeDisplayMathVerticalGlueInItems(
         item,
         "above",
         profile,
-        (index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay ? "short" : undefined
+        (index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay ? "short" : undefined,
+        font
       ));
       items.push(...displayAlignmentMaterialItems(item, displayMathProfileForItem(item, profile)));
       items.push(displayMathBoundaryGlueItem(item, "below", profile));
@@ -717,17 +734,23 @@ function displayMathBoundaryGlueItem(
   item: TexDisplayMathItem | TexDisplayAlignmentItem,
   side: "above" | "below",
   profile: TexDisplayMathLayoutProfile,
-  variant?: TexDisplayMathSkipVariant
+  variant?: TexDisplayMathSkipVariant,
+  font?: ResolvedTexFont
 ): TexGlueItem {
   profile = displayMathProfileForItem(item, profile);
   if (item.kind === "display-alignment" || item.box.fullDisplayWidth) variant = "normal";
-  const skip = profile[side][variant ?? "normal"];
   const materialWidth = item.kind === "display-math"
     ? item.box.displayContentWidth ?? item.box.width
     : item.alignment.width;
   const displayLeftEdge = texLength(roundTexPt(
     Math.max(0, (item.targetWidth - materialWidth) / 2)
   ));
+  const alignment = item.scopePath?.filter(role => role.kind === "trivlist").at(-1)?.alignment;
+  if (variant === "short" && (alignment === "center" || alignment === "ragged-left")) variant = "normal";
+  // Even a zero-width line has TeX's two-quad pre-display allowance. A wide
+  // equation in a narrow column can therefore require the normal skips.
+  if (variant === "short" && font && displayLeftEdge <= 2 * (item.fontSizePt ?? font.atPt) * font.data.fontdimen.quad) variant = "normal";
+  const skip = profile[side][variant ?? "normal"];
   return {
     kind: "glue",
     sourceSpan: item.sourceSpan,
@@ -935,6 +958,7 @@ function resolveDisplayMathVerticalGlueInItems(
       previousDisplayMaterialMetrics = nested.previousDisplayMaterialMetrics;
       previousDepthSuppressed = nested.previousDepthSuppressed;
       if (previousDepthSuppressed) plainParagraphInterlinePending = false;
+      else if (previousDisplayMaterialMetrics) plainParagraphInterlinePending = true;
       continue;
     }
     if (item.kind === "hbox" && item.role?.kind === "external-flow") {
@@ -1965,11 +1989,11 @@ function texArticleTrivlistVerticalSkipBefore(
     }
     const usesPartopsep =
       index === 0 && commonPrefixLength === 0 && startsListInVerticalMode;
-    state.trivlistPartopsepByScope.set(scope, usesPartopsep);
-    entrySize = texLength(Math.max(
-      entrySize,
-      texTrivlistBoundarySkip(font, usesPartopsep, profile)
-    ));
+    // LaTeX captures @topsepadd here; a following list may select different
+    // registers before this environment's closing skip is materialized.
+    const topsep = texTrivlistBoundarySkip(font, usesPartopsep, profile);
+    state.trivlistTopsepByScope.set(scope, topsep);
+    entrySize = texLength(Math.max(entrySize, topsep));
   }
   // An authored penalty separates the closing and opening glue, preventing
   // LaTeX \addvspace from collapsing them across adjacent environments.
@@ -2065,7 +2089,7 @@ function texArticleListVerticalSkipBefore(
     // The closed list's trailing skip and the next list's initial skip are
     // separate boundaries; \@endparenv closes the first paragraph scope.
     return texLength(
-      texArticleOutsideListBoundarySkip(false, font, listProfileForContext(profile, previous), previous.depth) +
+      texArticleListExitBoundarySkip(state, previous.depth, previous.depth - 1, font, listProfileForContext(profile, previous)) +
       texArticleOutsideListBoundarySkip(startsListInVerticalMode, font, profile, current.depth)
     );
   }
@@ -2120,9 +2144,8 @@ function texArticleTrivlistExitBoundarySkip(
     if (!scope || scope.noParList) {
       continue;
     }
-    const usesPartopsep = state.trivlistPartopsepByScope.get(scope) ?? false;
-    state.trivlistPartopsepByScope.delete(scope);
-    const depthSize = texTrivlistBoundarySkip(font, usesPartopsep, profile);
+    const depthSize = state.trivlistTopsepByScope.get(scope) ?? texTrivlistBoundarySkip(font, false, profile);
+    state.trivlistTopsepByScope.delete(scope);
     size = texLength(Math.max(size, depthSize));
   }
   return size;

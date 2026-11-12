@@ -3519,12 +3519,16 @@ async function prepareColumnContent(params: {
       paperWidth: params.paperWidth,
       ...(params.work !== undefined ? { work: params.work } : {}),
       // T's \colheadskip ships the leading empty line before \vskip-1ex.
-      // A first display selects short skips without another baseline skip.
+      // A first display does not add another empty-line baseline skip.
       firstInColumn: flow.length === 0,
       ...(column.alignment === "T" && flow.length === 0 ? { leadingDisplayBaselineSkipPt: 0 } : {}),
     });
     if (prepared) {
       const previous = flow.at(-1);
+      const paragraphNeedsInterline = prepared.kind === "paragraph" &&
+        (previous?.kind === "block" ||
+          previous?.kind === "columns" && node.kind !== "list" ||
+          previous?.kind === "paragraph" && !prepared.startsWithVerticalEnvironment);
       if (prepared.kind === "block" && prepared.block.packageBox) {
         const spacing = tcolorboxSurroundingSpacing(prepared.block.packageBox.plan, {
           baselineSkipPt: bodyFont.lineHeightPt, previousDepthPt: previousDepth ?? null,
@@ -3533,7 +3537,7 @@ async function prepareColumnContent(params: {
         // box skip. The column's \leavevmode has already cleared minipage mode.
         prepared.leadingSkipPt = spacing.beforePt + (flow.length === 0 && column.alignment === "T" && !prepared.block.packageBox.plan.noBeforeAfter ? fontXHeightPt(bodyFont) : 0);
       } else if ((previousDepth != null || (flow.length === 0 && column.alignment !== "T" && prepared.kind === "block")) &&
-          (prepared.kind === "block" || (prepared.kind === "paragraph" && previous?.kind === "block"))) {
+          (prepared.kind === "block" || paragraphNeedsInterline)) {
         // column's \leavevmode starts an empty line before a leading block's
         // \par. Its depth is zero, so normal baseline glue precedes the first
         // title box. T columns clear that depth with \nointerlineskip instead.
@@ -3549,7 +3553,7 @@ async function prepareColumnContent(params: {
           // Adjacent list/trivlist boundaries use addvspace's maximum skip,
           // followed by ordinary interline glue from the previous last box.
           const interline = bodyFont.lineHeightPt - previousDepth - paragraphStartingMaterialHeight(prepared.paragraph);
-          prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) - Math.min(previous.trailingSkipPt, Number(boundary.height)) + (interline < 0 ? 1 : interline);
+          prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) - Math.min(previous.trailingSkipPt, Number(boundary.height)) + (paragraphNeedsInterline ? 0 : interline < 0 ? 1 : interline);
         }
       }
       flow.push(prepared);
@@ -4379,9 +4383,23 @@ function layoutParagraph(params: {
   });
   const normalDisplayProfile = beamerDisplayMathProfile(params.references.theme);
   const blockDisplayProfile = { ...normalDisplayProfile };
-  // A minipage starts the display from an empty paragraph at its top.
-  // It selects the short display skip, without a frame-leading baseline.
+  // A minipage starts the display from an empty paragraph at its top,
+  // without a frame-leading baseline.
   blockDisplayProfile.leadingDisplay = { emptyLineBaselineSkipPt: 0 };
+  // Default block colorboxes retain the surrounding list depth. Columns and
+  // rounded blocks use minipages, which reset LaTeX's list spacing depth.
+  const listDepthOffset = params.role === "block-body" && params.listProfile?.suppressInitialTopsep === false
+    ? params.references.ambientTextAt?.listDepthAt?.(params.sourceSpan.from) ?? 0 : 0;
+  const spacingProfile = params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE;
+  const spacingKeys = [
+    "topsepPtByDepth", "topsepStretchPtByDepth", "topsepShrinkPtByDepth", "partopsepPtByDepth",
+    "itemsepPtByDepth", "itemsepStretchPtByDepth", "itemsepShrinkPtByDepth",
+    "parsepPtByDepth", "parsepStretchPtByDepth", "parsepShrinkPtByDepth",
+  ] as const;
+  const listSpacing = Object.fromEntries(spacingKeys.flatMap(key => {
+    const values = spacingProfile[key];
+    return values ? [[key, values.slice(Math.min(listDepthOffset, values.length - 1))] as const] : [];
+  }));
   const layoutOptions = {
     boxesClearingPendingItemLabels: beamerBoxesClearingPendingItemLabels(mapped, params.references.inlineFlow ?? []),
     inheritedItemLabels: [...(params.references.inlineFlowItemLabels?.values() ?? [])].filter(transfer => mapped.sourceMap.charOrigins.some(origin => origin.kind === "direct" && origin.from === transfer.targetOffset)).flatMap(transfer => transfer.labels),
@@ -4406,7 +4424,7 @@ function layoutParagraph(params: {
       const depth = item.kind === "block" ? item.block.endingDepth : item.box.depth;
       const advance = item.kind === "block" ? item.block.naturalHeight : item.box.height + item.box.depth;
       const after = item.kind === "block" ? item.block.plan.geometry.afterSkipPt : 0;
-      return [{ kind: "hbox", role: { kind: "external-flow", ...(box.consumedItemLabels ? { pendingListBoundaries: box.consumedItemLabels } : {}), baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
+      return [{ kind: "hbox", role: { kind: "external-flow", ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
         advance: texLength(advance), box: { metrics: { width: texLength(0), height: texLength(height), depth: texLength(depth) }, renderItems: [] } },
         ...(after ? [{ kind: "glue" as const, size: texLength(after), origin: { kind: "external-flow-after" as const } }] : [])];
     },
@@ -4451,7 +4469,9 @@ function layoutParagraph(params: {
     },
     ...(params.initialPreviousDepth !== undefined ? { initialPreviousDepth: params.initialPreviousDepth } : {}),
     listProfile: {
-      ...(params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE),
+      ...spacingProfile,
+      ...listSpacing,
+      ...(listDepthOffset > 0 ? { sizeOverrides: [] } : {}),
       fontDepthOffset: params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0,
       ...(params.listProfile?.bodyFontSizePtByDepth ? {
         bodyFontSizePtByDepth: params.listProfile.bodyFontSizePtByDepth.slice(params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0),
@@ -5323,6 +5343,13 @@ function emitUnsupportedPlaceholder(params: {
 function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerReferenceContext, font: BeamerThemeFont): number {
   const end = [...mapped.text.matchAll(/\\end\s*\{(?:itemize|enumerate|description)\}/gu)].at(-1);
   if (!end) return 0;
+  // A transferred parent label makes this list take LaTeX's noparlist path:
+  // its opening and closing topsep are both suppressed.
+  const terminalList = [...matchTexSyntaxEnvironments(getTexSyntaxIndex(mapped.text, texFragmentParser)).values()]
+    .find(env => env.end.span.from === end.index);
+  const beginOrigin = terminalList ? mapped.sourceMap.charOrigins[terminalList.begin.span.from] : undefined;
+  if (beginOrigin?.kind === "direct" && [...(references.inlineFlowItemLabels?.values() ?? [])]
+    .some(transfer => beginOrigin.from === transfer.targetOffset)) return 0;
   const origin = mapped.sourceMap.charOrigins[end.index];
   const active = references.theme ? ambientTextTheme(references.theme,
     references.ambientTextAt?.(origin?.kind === "direct" ? origin.from : 0) ?? "").fonts["normal-text"] : font;

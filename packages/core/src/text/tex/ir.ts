@@ -645,7 +645,7 @@ export interface SimpleTexParagraphBlock {
   readonly preDisplayFontSizePt?: TexLength;
   /** Active list identities, including ancestors flattened out of scopePath. */
   readonly listSourceStarts?: readonly number[];
-  readonly shipsEmptyLine?: boolean;
+  readonly hasTrivlistLabel?: boolean;
   readonly explicitFontSize?: boolean;
   readonly explicitBaselineSkip?: boolean;
   /** List-scoped declarations inherited before this source-owned paragraph. */
@@ -759,6 +759,8 @@ export interface SimpleTexDisplayMathBlockItem extends SimpleTexSourceRange, Sim
 }
 
 export interface SimpleTexBoxBlockItem extends SimpleTexSourceRange {
+  /** Labels still pending on entry, whether or not this box consumes them. */
+  readonly pendingItemLabels?: readonly SimpleTexListContext[];
   readonly consumedItemLabels?: readonly SimpleTexListContext[];
   readonly kind: "box";
   readonly text: string;
@@ -4914,7 +4916,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
     alignment?: TexParagraphAlignment,
     alignmentProfile?: TexAlignmentProfile,
     allowEmptyListItem = false,
-    beforeDisplay = false
+    beforeDisplay = false,
+    closesTrivlist = false
   ) => {
     const scopedAlignment = hasAlignmentGroups ? alignmentAt(rawEnd) : undefined;
     if (scopedAlignment) {
@@ -4941,8 +4944,11 @@ function buildSimpleTexParagraphBlocksFromNodes(
       ? node.children.every(declarationOnly)
       : ["space", "comment", "style-declaration", "font-declaration"].includes(node.kind);
     const hasOnlyDeclarations = inlineNodes.every(declarationOnly);
-    const shipsEmptyLine = beforeDisplay && hasOnlyDeclarations && leadingTrivlist !== undefined && !trivlistsWithParagraph.has(leadingTrivlist);
-    const permitsEmpty = allowEmptyListItem && pendingListShowLabel || shipsEmptyLine;
+    // endtrivlist ships its still-pending anonymous item even when its only
+    // content was an external block, which did not start a prose paragraph.
+    const hasTrivlistLabel = leadingTrivlist !== undefined && !consumedTrivlistLabels.has(leadingTrivlist);
+    const permitsEmpty = allowEmptyListItem && pendingListShowLabel ||
+      (beforeDisplay || closesTrivlist) && hasOnlyDeclarations && hasTrivlistLabel;
     if (start < end || permitsEmpty) {
       const listContext = currentSimpleTexListContext();
       const startsAfterExplicitPar = previousParagraphBlockEnd !== undefined &&
@@ -5011,12 +5017,12 @@ function buildSimpleTexParagraphBlocksFromNodes(
           ...(pending.label ? { label: pending.label } : {}) });
         pending.show = false;
       }
-      for (const role of scopeStack) if (role.kind === "trivlist") trivlistsWithParagraph.add(role);
+      for (const role of scopeStack) if (role.kind === "trivlist") consumedTrivlistLabels.add(role);
       const block: SimpleTexParagraphBlock = {
         ...(beforeDisplay ? { preDisplayFontSizePt: activeList && (endSize.selectionFrom ?? -1) < activeList.sourceStart
           ? activeList.fontSizePt : endSize.sizePt } : {}),
         ...(listStack.length ? { listSourceStarts: listStack.map(list => list.sourceStart) } : {}),
-        ...(shipsEmptyLine ? { shipsEmptyLine: true } : {}),
+        ...(hasTrivlistLabel ? { hasTrivlistLabel: true } : {}),
         text: textSliceAtSourceOffsets(start, end),
         sourceStart: start,
         sourceEnd: end,
@@ -5227,7 +5233,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
   };
 
   let inheritedItemLabels = [...(options?.inheritedItemLabels ?? [])];
-  const trivlistsWithParagraph = new Set<SimpleTexScopePathRole>();
+  const consumedTrivlistLabels = new Set<SimpleTexScopePathRole>();
   let prefix = consumeParagraphPrefix(0);
   let blockStart = sourceStartForNodeIndex(prefix.start);
   let currentNoIndent = prefix.noIndent;
@@ -5420,7 +5426,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
         prefix.alignmentProfile,
         // endtrivlist executes leavevmode while an item label is pending.
         // Its empty label line still belongs to the closing alignment scope.
-        node.boundary === "end" && (isSimpleTexListEnvironmentName(node.name) || isSimpleTexTrivlistEnvironmentName(node.name))
+        node.boundary === "end" && (isSimpleTexListEnvironmentName(node.name) || isSimpleTexTrivlistEnvironmentName(node.name)),
+        false,
+        node.boundary === "end" && isSimpleTexTrivlistEnvironmentName(node.name)
       );
       if (scanState.aborted) {
         break;
@@ -5653,20 +5661,25 @@ function buildSimpleTexParagraphBlocksFromNodes(
         scanState.aborted = true;
         break;
       }
-      const consumedItemLabels: SimpleTexListContext[] = [];
-      if (options?.boxesClearingPendingItemLabels?.includes(node.sourceStart)) {
-        for (const [depthIndex, list] of listStack.entries()) {
-          const pending = depthIndex === listStack.length - 1 ? { show: pendingListShowLabel, label: pendingListLabel } : pendingListLabels[depthIndex + 1];
-          if (!pending?.show || list.itemIndex <= 0) continue;
-          consumedItemLabels.push({ fontDepth: listStack.slice(0, depthIndex + 1).filter(entry => entry.kind === "itemize" || entry.kind === "enumerate").length, kind: list.kind, depth: list.depth, labelDepth: list.labelDepth,
-            itemIndex: list.itemIndex, labelCounter: list.labelCounter, showLabel: true,
-            ownLeftMarginEm: list.ownLeftMarginEm, totalLeftMarginEm: list.totalLeftMarginEm,
-            fontSizePt: list.fontSizePt, labelFontSizePt: list.labelFontSizePt ?? list.fontSizePt, listStart: list.sourceStart,
-            ...(list.itemCommandSpan ? { itemCommandSpan: list.itemCommandSpan } : {}),
-            ...(list.enumerateTemplate ? { enumerateTemplate: list.enumerateTemplate } : {}),
-            ...(list.kind === "enumerate" ? { enumerateCounters: listStack.slice(0, depthIndex + 1).filter(entry => entry.kind === "enumerate").map(entry => entry.labelCounter) } : {}),
-            ...(pending.label ? { label: pending.label } : {}) });
-        }
+      const pendingItemLabels: SimpleTexListContext[] = [];
+      for (const [depthIndex, list] of listStack.entries()) {
+        const pending = depthIndex === listStack.length - 1 ? { show: pendingListShowLabel, label: pendingListLabel } : pendingListLabels[depthIndex + 1];
+        if (!pending?.show || list.itemIndex <= 0) continue;
+        pendingItemLabels.push({ fontDepth: listStack.slice(0, depthIndex + 1).filter(entry => entry.kind === "itemize" || entry.kind === "enumerate").length, kind: list.kind, depth: list.depth, labelDepth: list.labelDepth,
+          itemIndex: list.itemIndex, labelCounter: list.labelCounter, showLabel: true,
+          ownLeftMarginEm: list.ownLeftMarginEm, totalLeftMarginEm: list.totalLeftMarginEm,
+          fontSizePt: list.fontSizePt, labelFontSizePt: list.labelFontSizePt ?? list.fontSizePt, listStart: list.sourceStart,
+          ...(list.itemCommandSpan ? { itemCommandSpan: list.itemCommandSpan } : {}),
+          ...(list.enumerateTemplate ? { enumerateTemplate: list.enumerateTemplate } : {}),
+          ...(list.kind === "enumerate" ? { enumerateCounters: listStack.slice(0, depthIndex + 1).filter(entry => entry.kind === "enumerate").map(entry => entry.labelCounter) } : {}),
+          ...(pending.label ? { label: pending.label } : {}) });
+      }
+      const clearsPendingLabels = options?.boxesClearingPendingItemLabels?.includes(node.sourceStart);
+      const consumedItemLabels = clearsPendingLabels ? pendingItemLabels : [];
+      if (clearsPendingLabels) {
+        for (const role of scopeStack) if (role.kind === "trivlist") consumedTrivlistLabels.add(role);
+      }
+      if (consumedItemLabels.length) {
         pendingListShowLabel = false;
         pendingListLabel = undefined;
         for (const pending of pendingListLabels) { pending.show = false; pending.label = undefined; }
@@ -5686,6 +5699,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         contentEnd: node.contentEnd,
         ...currentSimpleTexBlockItemScope(),
         items: body.items,
+        ...(pendingItemLabels.length ? { pendingItemLabels } : {}),
         ...(consumedItemLabels.length ? { consumedItemLabels } : {}),
       });
       unsupportedCommand ||= node.body.unsupportedCommand;

@@ -186,7 +186,7 @@ export interface TexVListParagraphHorizontalLayout {
 
 export interface TexParagraphInput extends SimpleTexSegmentInput {
   readonly preDisplayFontSizePt?: TexLength;
-  readonly shipsEmptyLine?: boolean;
+  readonly hasTrivlistLabel?: boolean;
   readonly fontSizePt?: TexLength;
   readonly baselineSkip?: TexLength;
   readonly blockIndex: number;

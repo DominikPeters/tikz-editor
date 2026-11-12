@@ -345,6 +345,14 @@
   },
   {
     "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/object-overlays.ts",
+    "declaration": "beamerStatementOverlayTarget.setSpec",
+    "count": 1,
+    "expression": "userText(spec, \"beamer-text\")"
+  },
+  {
+    "rule": "F2",
     "symbol": "sourceSlice",
     "file": "packages/core/src/beamer/option-edits.ts",
     "declaration": "rewriteBeamerOptions",
