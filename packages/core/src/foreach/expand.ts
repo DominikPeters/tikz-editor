@@ -13,6 +13,8 @@ import {
   macroAliasStatementId,
   macroCommandDefinitionStatementId,
   macroDefinitionStatementId,
+  overlayDeclarationStatementId,
+  overlayGroupStatementId,
   pgfMathStatementId,
   pgfkeysStatementId,
   nodeForeachClauseId,
@@ -1148,7 +1150,9 @@ function reindexStatementsInPlace(
   statements: Statement[],
   state: { nextStatementIndex: number },
   attributionByStatement: WeakMap<Statement, ForeachStatementAttribution>,
-  templateLocalIdByExpandedId: Map<string, string>
+  templateLocalIdByExpandedId: Map<string, string>,
+  /** The new id of each renamed overlay command head, by the id its statements still name. */
+  overlayGroupIds: Map<string, string> = new Map()
 ): void {
   for (const statement of statements) {
     const preserveExistingId = shouldPreserveStatementId(statement, attributionByStatement);
@@ -1157,6 +1161,19 @@ function reindexStatementsInPlace(
       state.nextStatementIndex += 1;
     }
     const previousId = statement.id;
+    // An overlay command's statements follow its head, so they are renamed with it.
+    if (statement.overlayGroups?.some((group) => overlayGroupIds.has(group.groupId))) {
+      statement.overlayGroups = statement.overlayGroups.map((group) => ({ ...group, groupId: overlayGroupIds.get(group.groupId) ?? group.groupId }));
+    }
+
+    if (statement.kind === "OverlayGroup" || statement.kind === "OverlayDeclaration") {
+      if (!preserveExistingId) {
+        statement.id = statement.kind === "OverlayGroup" ? overlayGroupStatementId(statementIndex) : overlayDeclarationStatementId(statementIndex);
+        templateLocalIdByExpandedId.set(statement.id, previousId);
+        if (statement.kind === "OverlayGroup") overlayGroupIds.set(previousId, statement.id);
+      }
+      continue;
+    }
 
     if (statement.kind === "Path") {
       if (!preserveExistingId) {
@@ -1172,7 +1189,7 @@ function reindexStatementsInPlace(
         statement.id = scopeStatementId(statementIndex);
         templateLocalIdByExpandedId.set(statement.id, previousId);
       }
-      reindexStatementsInPlace(statement.body, state, attributionByStatement, templateLocalIdByExpandedId);
+      reindexStatementsInPlace(statement.body, state, attributionByStatement, templateLocalIdByExpandedId, overlayGroupIds);
       continue;
     }
 

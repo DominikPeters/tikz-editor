@@ -65,6 +65,8 @@ export type BeamerOverlayCommand = {
    * loop's values; its `source` is the authored text.
    */
   readonly instance?: readonly number[];
+  /** An `\onslide` declaration a picture's loop performs: the loop, where the latest one performed holds. */
+  readonly loopSpan?: Span;
 };
 
 export type BeamerOverlayItem = {
@@ -132,6 +134,16 @@ export type BeamerOverlayTextProjection = {
   readonly hiddenSourceSpans: readonly Span[];
 };
 
+type PendingDeclaration = {
+  readonly from: number;
+  readonly syntaxTo: number;
+  readonly kind: BeamerOverlayCommandKind;
+  readonly sourceOrder: number;
+  readonly spec: BeamerDelimitedSourceValue;
+  readonly instance?: readonly number[];
+  readonly loopSpan?: Span;
+};
+
 type PendingSpec =
   | { readonly kind: "reference"; readonly sourceOrder: number; readonly rawSpec: BeamerDelimitedSourceValue; readonly contentSpan?: Span }
   | { readonly kind: "switch"; readonly sourceOrder: number; readonly switch: Omit<BeamerOverlaySwitch, "spec">; readonly rawSpec: BeamerDelimitedSourceValue }
@@ -165,8 +177,6 @@ type PendingSpec =
       readonly instance?: readonly number[];
       readonly loopSpan?: Span;
     };
-
-const PATH_COMMANDS: ReadonlySet<string> = new Set(["path", "draw", "fill", "filldraw", "pattern", "shade", "shadedraw", "clip", "useasboundingbox", "node", "coordinate", "matrix", "pic"]);
 
 const OVERLAY_COMMANDS = new Map<string, BeamerOverlayCommandKind>([
   ["only", "only"],
@@ -220,24 +230,42 @@ export function scanBeamerFrameOverlays(
   const tikzRanges = environmentPairs
     .filter(pair => TIKZ_PICTURE_ENVIRONMENTS.has(pair.name) && pair.span.from >= frame.bodySpan.from && pair.span.to <= frame.bodySpan.to)
     .map(pair => pair.span);
-  // PGF's path frontend implements <spec> as \alt<spec>{path}{nothing}; a
-  // loop performs it once per iteration. These join the same source-ordered
-  // decoder as the frame's relative specifications and pauses.
+  const declarations: PendingDeclaration[] = [];
+  // A picture's statement-level overlay commands come from its parsed and
+  // loop-expanded statements, each loop iteration performing its own. They
+  // join the same source-ordered decoder as the frame's relative
+  // specifications and pauses. PGF implements `\path<spec> …;` as
+  // \alt<spec>{path}{nothing}.
   const traces = tikzRanges.filter(span => tikzOverlayTraceNeeded(source.slice(span.from, span.to))).map(span => tikzOverlayTrace(source, span));
+  const pictureStatementStarts = new Set(traces.flatMap(trace => [...trace.statementStarts]));
   for (const trace of traces) {
     trace.ops.forEach((op, index) => {
       // A loop's operations run where the loop stands, in the order it performs them.
-      const sourceOrder = op.loopSpan ? op.loopSpan.from + (index + 1) / (trace.ops.length + 2) : op.kind === "path" ? op.statementSpan.from : op.span.from;
+      const sourceOrder = op.loopSpan ? op.loopSpan.from + (index + 1) / (trace.ops.length + 2) : op.span.from;
+      const performed = op.loopSpan ? { instance: op.instance } : {};
       if (op.kind === "pause") {
         pending.push({ kind: "pause", sourceOrder, span: op.span, requestedStep: op.countRaw !== null && /^\s*\d+\s*$/u.test(op.countRaw) ? Number(op.countRaw.trim()) : null,
-          instance: op.instance, loopSpan: op.loopSpan });
-        return;
+          ...(op.loopSpan ? { instance: op.instance, loopSpan: op.loopSpan } : {}) });
+      } else if (op.kind === "declaration") {
+        // As in text: a starred \onslide without a body is left to TeX.
+        if (op.modifier === "*") return;
+        declarations.push({ from: op.span.from, syntaxTo: op.span.to, kind: op.modifier === "+" ? "visible" : "uncover", sourceOrder,
+          spec: op.spec ? { span: op.spec.span, contentSpan: op.spec.contentSpan, value: op.spec.raw }
+            : { span: { from: op.span.to, to: op.span.to }, contentSpan: { from: op.span.to, to: op.span.to }, value: "1-" },
+          ...(op.loopSpan ? { instance: op.instance, loopSpan: op.loopSpan } : {}) });
+      } else if (op.kind === "path") {
+        pending.push({ kind: "command", sourceOrder, rawSpec: { span: op.spec.span, contentSpan: op.spec.contentSpan, value: op.spec.raw },
+          command: { kind: "only", span: op.span, commandSpan: { from: op.span.from, to: op.spec.span.from },
+            branches: [{ span: op.span, contentSpan: op.span, value: source.slice(op.span.from, op.span.to) }], syntaxSpans: [op.spec.span], ...performed } });
+      } else {
+        const kind: BeamerOverlayCommandKind = op.command === "onslide" ? op.modifier === "*" ? "only" : op.modifier === "+" ? "visible" : "uncover" : op.command;
+        if (op.branches.length < (kind === "alt" ? 2 : kind === "temporal" ? 3 : 1)) return;
+        const branches = op.branches.slice(0, kind === "alt" ? 2 : kind === "temporal" ? 3 : 1).map(contentSpan =>
+          ({ span: { from: contentSpan.from - 1, to: contentSpan.to + 1 }, contentSpan, value: source.slice(contentSpan.from, contentSpan.to) }));
+        const span = { from: op.span.from, to: requireArrayValue(branches, branches.length - 1).span.to };
+        pending.push({ kind: "command", sourceOrder, rawSpec: { span: op.spec.span, contentSpan: op.spec.contentSpan, value: op.spec.raw },
+          command: { kind, span, commandSpan: { from: span.from, to: op.spec.span.from }, branches, syntaxSpans: overlayCommandSyntaxSpans(span, branches), ...performed } });
       }
-      const span = op.statementSpan;
-      pending.push({ kind: "command", sourceOrder, rawSpec: { span: op.specSpan, contentSpan: op.specContentSpan, value: op.raw },
-        command: { kind: "only", span, commandSpan: { from: span.from, to: op.specSpan.from },
-          branches: [{ span, contentSpan: span, value: source.slice(span.from, span.to) }], syntaxSpans: [op.specSpan],
-          ...(op.loopSpan ? { instance: op.instance } : {}) } });
     });
   }
   const overprintStarts: typeof environmentBoundaries[number][] = [];
@@ -249,9 +277,9 @@ export function scanBeamerFrameOverlays(
     const width = beamerOptionalArgumentAfter(context, begin.span.to, boundary.span.from) ?? undefined;
     overprints.push({ span: { from: begin.span.from, to: boundary.span.to }, contentSpan: { from: width?.span.to ?? begin.span.to, to: boundary.span.from }, ...(width ? { width } : {}) });
   }
-  const declarations: Array<{ from: number; syntaxTo: number; kind: BeamerOverlayCommandKind; spec: BeamerDelimitedSourceValue }> = [];
-
   for (const command of controls) {
+    // A picture's statement-level commands are in its trace; what is left in a picture is text inside a statement.
+    if (pictureStatementStarts.has(command.from)) continue;
     if (command.name === "note") {
       const firstOverlay = beamerOverlayArgumentAfter(context, command.to, frame.bodySpan.to);
       const optional = beamerOptionalArgumentAfter(context, firstOverlay?.span.to ?? command.to, frame.bodySpan.to);
@@ -286,8 +314,6 @@ export function scanBeamerFrameOverlays(
       }
       continue;
     }
-    // A picture's own overlay operations come from its parsed statements (above).
-    if (PATH_COMMANDS.has(command.name) && tikzRanges.some(span => span.from < command.from && command.from < span.to)) continue;
     // beamerbasemisc.sty: \includegraphics<spec>[opts]{file} is
     // \only<spec>{\includegraphics[opts]{file}}. The spec must follow the
     // name directly; beamer's redefinition reads a star as the filename.
@@ -369,14 +395,12 @@ export function scanBeamerFrameOverlays(
         const syntaxTo = spec?.span.to ?? commandTo;
         // Declaration form changes covering until the next declaration. A bare
         // \onslide closes the current cover and makes following material visible.
-        declarations.push({ from: command.from, syntaxTo, kind,
+        declarations.push({ from: command.from, syntaxTo, kind, sourceOrder: command.from,
           spec: spec ?? { span: { from: commandTo, to: commandTo }, contentSpan: { from: commandTo, to: commandTo }, value: "1-" } });
       }
       continue;
     }
     if (command.name === "pause") {
-      // A loop's pause runs once per iteration; the picture's trace has each.
-      if (traces.some(trace => trace.pausingLoops.some(loop => loop.from < command.from && command.from < loop.to))) continue;
       const optional = beamerOptionalArgumentAfter(
         context,
         command.to,
@@ -449,7 +473,22 @@ export function scanBeamerFrameOverlays(
   /** Where declarations starting in an inner scope of `(from, to)` hold instead of the one at `from`. */
   const innerReaches = (from: number, to: number, end: number, starts: readonly number[]): Span[] =>
     starts.filter(start => start > from && start < to && reachEnd(start) < end).map(start => ({ from: start, to: reachEnd(start) }));
+  declarations.sort((left, right) => left.sourceOrder - right.sourceOrder);
   for (const declaration of declarations) {
+    if (declaration.loopSpan) {
+      // A loop performs it once per iteration, the latest one performed holding:
+      // through the rest of the loop and on to the end of the loop's scope.
+      const loop = declaration.loopSpan;
+      const end = reachEnd(loop.from);
+      const after = [...declarations.filter(candidate => !candidate.loopSpan).map(candidate => candidate.from), ...pauseStartsInSource]
+        .find(start => start >= loop.to && reachEnd(start) >= end);
+      const contentSpan = { from: declaration.syntaxTo, to: Math.min(after ?? frame.bodySpan.to, end) };
+      pending.push({ kind: "command", sourceOrder: declaration.sourceOrder, rawSpec: declaration.spec,
+        command: { kind: declaration.kind, commandSpan: { from: declaration.from, to: declaration.syntaxTo },
+          span: { from: declaration.from, to: contentSpan.to }, branches: [{ span: contentSpan, contentSpan, value: source.slice(contentSpan.from, contentSpan.to) }],
+          syntaxSpans: [{ from: declaration.from, to: declaration.syntaxTo }], ...(declaration.instance ? { instance: declaration.instance } : {}), loopSpan: loop } });
+      continue;
+    }
     // overprint installs a local declaration handler; its final minipage ends
     // at the environment boundary instead of covering subsequent frame text.
     const owner = overprints.find(overprint => declaration.from >= overprint.contentSpan.from && declaration.from < overprint.contentSpan.to);
@@ -460,7 +499,7 @@ export function scanBeamerFrameOverlays(
     const to = Math.min(next?.from ?? frame.bodySpan.to, nextPause ?? frame.bodySpan.to, owner?.contentSpan.to ?? frame.bodySpan.to, end);
     const contentSpan = { from: declaration.syntaxTo, to };
     const holes = innerReaches(declaration.from, to, end, [...declarations.map(candidate => candidate.from), ...pauseStartsInSource]);
-    pending.push({ kind: "command", sourceOrder: declaration.from, rawSpec: declaration.spec,
+    pending.push({ kind: "command", sourceOrder: declaration.sourceOrder, rawSpec: declaration.spec,
       command: { kind: owner ? "only" : declaration.kind, commandSpan: { from: declaration.from, to: declaration.syntaxTo },
         span: { from: declaration.from, to }, branches: [{ span: contentSpan, contentSpan, value: source.slice(contentSpan.from, contentSpan.to) }],
         syntaxSpans: [{ from: declaration.from, to: declaration.syntaxTo }], ...(holes.length ? { holes } : {}) } });
@@ -621,9 +660,35 @@ export function resolveBeamerOverlaySpanVisibility(
     if (reference.contentSpan && containsSpan(reference.contentSpan, span) &&
       !beamerOverlaySpecContains(reference.spec, step)) return "removed";
   }
+  // What one command does to the span when the span is in its branch `branchIndex`.
+  const apply = (command: BeamerOverlayCommand, branchIndex: number): boolean => {
+    const covering = command.kind === "uncover" || command.kind === "visible" || command.kind === "invisible";
+    if (selectedOverlayBranch(command, step) !== branchIndex) {
+      if (!covering) return false;
+      visibility = "hidden";
+    } else if (covering && (command.kind === "invisible") === beamerOverlaySpecContains(command.spec, step)) {
+      visibility = "hidden";
+    }
+    return true;
+  };
+  /** Whether what a loop performed in iteration `performed` at `at` ran before the span. */
+  const ranBefore = (performed: readonly number[], at: number): boolean => {
+    const order = compareTikzOverlayInstances(performed, instance);
+    return order < 0 || (order === 0 && at <= span.from);
+  };
+  // In a loop the latest \onslide performed before the span holds; after the loop, the last.
+  const loopDeclarations = new Map<number, BeamerOverlayCommand>();
   for (const command of model.commands) {
     if (command.holes?.some((hole) => containsSpan(hole, span))) continue;
-    if (command.instance && (command.instance.length !== instance.length || command.instance.some((value, index) => value !== instance[index]))) continue;
+    if (command.loopSpan) {
+      const inLoop = containsSpan(command.loopSpan, span);
+      if (inLoop ? ranBefore(command.instance ?? [], command.commandSpan.to) : command.branches.some((branch) => containsSpan(branch.contentSpan, span))) {
+        loopDeclarations.set(command.loopSpan.from, command);
+      }
+      continue;
+    }
+    // A loop performs a command once per iteration; a statement answers to the one of its own iteration.
+    if (command.instance?.some((value, index) => value !== instance[index])) continue;
     let branchIndex = command.branches.findIndex((branch) =>
       containsSpan(branch.contentSpan, span)
     );
@@ -635,32 +700,10 @@ export function resolveBeamerOverlaySpanVisibility(
     ) {
       branchIndex = 0;
     }
-    if (branchIndex < 0) {
-      continue;
-    }
-    const selected = selectedOverlayBranch(command, step);
-    if (selected !== branchIndex) {
-      if (
-        command.kind === "uncover" ||
-        command.kind === "visible" ||
-        command.kind === "invisible"
-      ) {
-        visibility = "hidden";
-      } else {
-        return "removed";
-      }
-    } else if (
-      command.kind === "uncover" ||
-      command.kind === "visible" ||
-      command.kind === "invisible"
-    ) {
-      const shouldPaint = command.kind === "invisible"
-        ? !beamerOverlaySpecContains(command.spec, step)
-        : beamerOverlaySpecContains(command.spec, step);
-      if (!shouldPaint) {
-        visibility = "hidden";
-      }
-    }
+    if (branchIndex >= 0 && !apply(command, branchIndex)) return "removed";
+  }
+  for (const command of loopDeclarations.values()) {
+    if (!apply(command, 0)) return "removed";
   }
   for (const item of model.items) {
     if (
@@ -675,8 +718,7 @@ export function resolveBeamerOverlaySpanVisibility(
     if (step >= pause.threshold) continue;
     if (pause.loopSpan && pause.instance && containsSpan(pause.loopSpan, span)) {
       // Inside the loop a pause covers what runs after it: the rest of its iteration, and the later ones.
-      const order = compareTikzOverlayInstances(pause.instance, instance);
-      if (order > 0 || (order === 0 && pause.span.to > span.from)) continue;
+      if (!ranBefore(pause.instance, pause.span.to)) continue;
     } else if (!containsSpan(pause.contentSpan, span)) continue;
     if (pause.holes?.some((hole) => containsSpan(hole, span))) continue;
     visibility = "hidden";

@@ -422,6 +422,20 @@ ${body}
     expect(shownBySteps(deck(String.raw`\foreach \x in {1,2} { \foreach \y in {1,2} { \node<\y> at (\x,\y) {N\x\y}; } }`))).toEqual(["N11 N21", "N12 N22"]);
   });
 
+  it("performs a brace command once per iteration, each on its own statements", () => {
+    expect(shownBySteps(deck(String.raw`\foreach \x in {1,2,3} { \only<\x>{\node at (\x,0) {G\x};} }`))).toEqual(["G1", "G2", "G3"]);
+    expect(shownBySteps(deck(String.raw`\foreach \x in {2,3} { \uncover<\x->{\node at (\x,0) {U\x};} }
+\node at (5,5) {V};`))).toEqual(["V", "U2 V", "U2 U3 V"]);
+    expect(shownBySteps(deck(String.raw`\foreach \x in {1,2} { \alt<\x>{\node at (\x,0) {Y\x};}{\node at (\x,1) {N\x};} }`))).toEqual(["N2 Y1", "N1 Y2"]);
+  });
+
+  it("lets the latest onslide a loop performed hold, in the loop and after it", () => {
+    expect(shownBySteps(deck(String.raw`\foreach \x in {1,2} { \onslide<\x-> \node at (\x,2) {O\x}; }
+\node at (5,5) {P};`))).toEqual(["O1", "O1 O2 P"]);
+    expect(shownBySteps(deck(String.raw`\foreach \x in {1,2} { \node at (\x,3) {B\x}; \onslide<2-> }
+\node at (5,5) {C};`))).toEqual(["B1", "B1 B2 C"]);
+  });
+
   it("gives one Overlays row to a loop's specification, not editable as a number", () => {
     const source = deck(String.raw`\foreach \x in {1,2,3} { \node<\x-> at (\x,0) {R\x}; }`);
     const model = buildBeamerBuildModel(source, "frame:0")!;

@@ -1,48 +1,86 @@
-import type { Span, Statement } from "../ast/types.js";
+import type { OverlayGroupCommand, OverlaySpecAst, Span, Statement } from "../ast/types.js";
 import { walkStatements } from "../ast/walk.js";
 import { expandForeachFigure } from "../foreach/index.js";
 import { parseTikz } from "../parser/index.js";
 
+/** A specification where the source has it, with its text after a loop's substitutions (`2-` for `\x-`). */
+export type TikzOverlaySpecSite = {
+  /** With its angle brackets. */
+  readonly span: Span;
+  readonly contentSpan: Span;
+  readonly raw: string;
+};
+
+type Performed = {
+  /**
+   * Which iteration of its loops performs the operation, outermost first;
+   * empty outside a loop. A loop performs the operation at one place in the
+   * source once per iteration.
+   */
+  readonly instance: readonly number[];
+  /** The outermost loop around it. */
+  readonly loopSpan: Span | null;
+};
+
 /**
- * One overlay operation a picture performs, in the order TeX executes them.
- * Spans are the authored source's; a loop performs the operation at one
- * place once per iteration, each time as its own `instance`.
+ * One overlay operation a picture performs at statement level, in the order
+ * TeX executes them. Spans are the authored source's.
  */
-export type TikzOverlayTraceOp =
+export type TikzOverlayTraceOp = Performed & (
   | {
+      /** `\node<spec> …;`: the path exists only on the specification's steps. */
       readonly kind: "path";
-      /** The path statement, which exists only on the specification's steps. */
-      readonly statementSpan: Span;
-      readonly specSpan: Span;
-      readonly specContentSpan: Span;
-      /** The specification after the loop's substitutions (`2-` for `\x-`). */
-      readonly raw: string;
-      readonly instance: readonly number[];
-      readonly loopSpan: Span | null;
+      readonly span: Span;
+      readonly spec: TikzOverlaySpecSite;
+    }
+  | {
+      /** `\only<spec>{…}` and the like, around statements. */
+      readonly kind: "group";
+      readonly command: OverlayGroupCommand;
+      readonly modifier: "*" | "+" | null;
+      /** The whole command with its bodies. */
+      readonly span: Span;
+      readonly spec: TikzOverlaySpecSite;
+      /** The content of each brace body. */
+      readonly branches: readonly Span[];
+    }
+  | {
+      /** `\onslide<spec>` without a body: holds to the end of its scope. */
+      readonly kind: "declaration";
+      readonly modifier: "*" | "+" | null;
+      readonly span: Span;
+      readonly spec: TikzOverlaySpecSite | null;
     }
   | {
       readonly kind: "pause";
       readonly span: Span;
       readonly countRaw: string | null;
-      readonly instance: readonly number[];
-      readonly loopSpan: Span;
-    };
+    }
+);
 
 export type TikzOverlayTrace = {
   readonly ops: readonly TikzOverlayTraceOp[];
   /**
-   * Where the overlay commands start that the picture's parser reads and its
-   * evaluator applies: those at statement level, and a loop body's
-   * specifications and pauses.
+   * Where the picture's statement-level overlay commands start, loop bodies
+   * included: the ones its parser reads and its evaluator applies. Overlay
+   * commands elsewhere in the picture are inside a statement (node text, an
+   * option value) and are resolved as text.
    */
   readonly statementStarts: ReadonlySet<number>;
-  /** The outermost loops whose bodies pause; their pauses are in `ops`, once per iteration. */
-  readonly pausingLoops: readonly Span[];
 };
 
 /** Whether the picture's text can hold anything a trace reports. */
 export function tikzOverlayTraceNeeded(text: string): boolean {
   return /\\(?:path|draw|fill|filldraw|pattern|shade|shadedraw|clip|useasboundingbox|node|coordinate|matrix|pic)\s*(?:\[[^\]]*\]\s*)?<|\\(?:pause|onslide|only|uncover|visible|invisible|alt|temporal)(?![A-Za-z@])/u.test(text);
+}
+
+/** Two iterations of nested loops, outermost first: negative when `left` runs first, zero when one contains the other. */
+export function compareTikzOverlayInstances(left: readonly number[], right: readonly number[]): number {
+  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+    const difference = (left[index] ?? 0) - (right[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
 }
 
 const cache = new Map<string, TikzOverlayTrace>();
@@ -52,57 +90,62 @@ function shift(span: Span, by: number): Span {
   return { from: span.from + by, to: span.to + by };
 }
 
-/** The same order for two iterations of nested loops, outermost first: negative when `left` runs first. */
-export function compareTikzOverlayInstances(left: readonly number[], right: readonly number[]): number {
-  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
-    const difference = (left[index] ?? 0) - (right[index] ?? 0);
-    if (difference !== 0) return difference;
-  }
-  return 0;
+function shiftSpec(spec: TikzOverlaySpecSite, by: number): TikzOverlaySpecSite {
+  return { span: shift(spec.span, by), contentSpan: shift(spec.contentSpan, by), raw: spec.raw };
 }
 
 function traceRelative(text: string): TikzOverlayTrace {
   const figure = parseTikz(text, { recover: true }).figure;
   const statementStarts = new Set<number>();
   const seen = { loops: false };
+  const isOverlay = (statement: Statement) => statement.kind === "OverlayGroup" || statement.kind === "OverlayDeclaration" ||
+    (statement.kind === "Path" && statement.overlay !== undefined);
   walkStatements(figure.body, {
     onStatement: (statement) => {
       if (statement.kind === "Foreach") seen.loops = true;
-      if (statement.kind === "OverlayGroup" || statement.kind === "OverlayDeclaration" ||
-        (statement.kind === "Path" && statement.overlay)) statementStarts.add(statement.span.from);
+      if (isOverlay(statement)) statementStarts.add(statement.span.from);
     }
   });
   const ops: TikzOverlayTraceOp[] = [];
-  const pausingLoops: Span[] = [];
   const expanded = seen.loops ? expandForeachFigure(figure, text) : null;
   const visit = (statements: readonly Statement[]): void => {
     for (const statement of statements) {
       if (statement.kind === "Scope") { visit(statement.body); continue; }
+      if (!isOverlay(statement)) continue;
       const attribution = expanded?.statementAttribution.get(statement);
       const stack = attribution?.foreachStack ?? [];
       const sourceMap = expanded?.statementSourceMaps.get(statement);
       const authored = (span: Span): Span | null => sourceMap ? sourceMap.mapSpan(span) : span;
-      const statementSpan = authored(statement.span) ?? sourceMap?.sourceSpan ?? attribution?.sourceSpan ?? statement.span;
-      const instance = stack.map((frame) => frame.iterationIndex);
-      const loopSpan = stack[0]?.loopSpan ?? null;
-      if (statement.kind === "Path" && statement.overlay) {
-        // Substitution may have changed the specification's length; its place is then read from the authored text.
-        const open = text.indexOf("<", statementSpan.from);
+      const span = authored(statement.span);
+      if (!span) continue;
+      // A substitution can change a specification's length; its place is then read from the authored text.
+      const specSite = (spec: OverlaySpecAst): TikzOverlaySpecSite | null => {
+        const open = text.indexOf("<", span.from);
         const close = text.indexOf(">", open);
-        const specSpan = authored(statement.overlay.span) ?? (open >= 0 && close > open && close < statementSpan.to ? { from: open, to: close + 1 } : null);
-        if (!specSpan || text[specSpan.from] !== "<") continue;
-        if (stack.length > 0) statementStarts.add(statementSpan.from);
-        ops.push({ kind: "path", statementSpan, specSpan, specContentSpan: { from: specSpan.from + 1, to: Math.max(specSpan.from + 1, specSpan.to - 1) },
-          raw: statement.overlay.raw, instance, loopSpan });
-      } else if (statement.kind === "OverlayDeclaration" && statement.command === "pause" && loopSpan) {
-        statementStarts.add(statementSpan.from);
-        if (!pausingLoops.some((loop) => loop.from === loopSpan.from)) pausingLoops.push(loopSpan);
-        ops.push({ kind: "pause", span: statementSpan, countRaw: statement.countRaw ?? null, instance, loopSpan });
+        const site = authored(spec.span) ?? (open >= 0 && close > open ? { from: open, to: close + 1 } : null);
+        return site && text[site.from] === "<" && text[site.to - 1] === ">"
+          ? { span: site, contentSpan: { from: site.from + 1, to: site.to - 1 }, raw: spec.raw } : null;
+      };
+      const performed: Performed = { instance: stack.map((frame) => frame.iterationIndex), loopSpan: stack[0]?.loopSpan ?? null };
+      if (stack.length > 0) statementStarts.add(span.from);
+      if (statement.kind === "Path" && statement.overlay) {
+        const spec = specSite(statement.overlay);
+        if (spec) ops.push({ kind: "path", span, spec, ...performed });
+      } else if (statement.kind === "OverlayGroup") {
+        const spec = specSite(statement.spec);
+        const whole = authored(statement.groupSpan);
+        const branches = statement.branches.map(authored);
+        if (spec && whole && branches.every((branch): branch is Span => branch !== null)) {
+          ops.push({ kind: "group", command: statement.command, modifier: statement.modifier ?? null, span: whole, spec, branches, ...performed });
+        }
+      } else if (statement.kind === "OverlayDeclaration") {
+        if (statement.command === "pause") ops.push({ kind: "pause", span, countRaw: statement.countRaw ?? null, ...performed });
+        else ops.push({ kind: "declaration", modifier: statement.modifier ?? null, span, spec: statement.spec ? specSite(statement.spec) : null, ...performed });
       }
     }
   };
   visit(expanded?.figureBody ?? figure.body);
-  return { ops, statementStarts, pausingLoops };
+  return { ops, statementStarts };
 }
 
 /**
@@ -115,21 +158,19 @@ export function tikzOverlayTrace(source: string, picture: Span): TikzOverlayTrac
   let relative = cache.get(text);
   if (!relative) {
     relative = traceRelative(text);
-    if (cache.size >= CACHE_LIMIT) cache.delete(requireFirstKey(cache));
+    const oldest = cache.keys().next();
+    if (cache.size >= CACHE_LIMIT && !oldest.done) cache.delete(oldest.value);
     cache.set(text, relative);
   }
   const by = picture.from;
   return {
-    ops: relative.ops.map((op) => op.kind === "path"
-      ? { ...op, statementSpan: shift(op.statementSpan, by), specSpan: shift(op.specSpan, by), specContentSpan: shift(op.specContentSpan, by), loopSpan: op.loopSpan ? shift(op.loopSpan, by) : null }
-      : { ...op, span: shift(op.span, by), loopSpan: shift(op.loopSpan, by) }),
+    ops: relative.ops.map((op): TikzOverlayTraceOp => {
+      const loopSpan = op.loopSpan ? shift(op.loopSpan, by) : null;
+      if (op.kind === "path") return { ...op, loopSpan, span: shift(op.span, by), spec: shiftSpec(op.spec, by) };
+      if (op.kind === "group") return { ...op, loopSpan, span: shift(op.span, by), spec: shiftSpec(op.spec, by), branches: op.branches.map((branch) => shift(branch, by)) };
+      if (op.kind === "declaration") return { ...op, loopSpan, span: shift(op.span, by), spec: op.spec ? shiftSpec(op.spec, by) : null };
+      return { ...op, loopSpan, span: shift(op.span, by) };
+    }),
     statementStarts: new Set([...relative.statementStarts].map((start) => start + by)),
-    pausingLoops: relative.pausingLoops.map((loop) => shift(loop, by)),
   };
-}
-
-function requireFirstKey(map: Map<string, unknown>): string {
-  const first = map.keys().next();
-  if (first.done) throw new Error("Expected a cached overlay trace");
-  return first.value;
 }
