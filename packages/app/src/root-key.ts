@@ -31,6 +31,13 @@ export function documentIdFromRootKey(key: string): string {
   return delimiter >= 0 ? key.slice(0, delimiter) : key;
 }
 
+/** The slide a root is on: the slide itself, or the slide of a picture edited on its own. Null outside a deck. */
+export function deckFrameRootId(rootId: string | null | undefined): string | null {
+  const ref = parseDocumentRootId(rootId ?? "");
+  return ref?.kind === "beamer-frame" ? formatDocumentRootId(ref)
+    : ref?.kind === "beamer-frame-tikz" ? formatDocumentRootId({ kind: "beamer-frame", index: ref.frameIndex }) : null;
+}
+
 /** A nested picture shares the overlay step of the slide it is edited on. */
 export function deckStepRootKey(documentId: string, rootId: string | null | undefined): string {
   const ref = parseDocumentRootId(rootId ?? "");

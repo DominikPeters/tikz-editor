@@ -32,7 +32,7 @@ import {
   type WorkspaceSeed
 } from "./workspace-state";
 import { reconcileActiveRootSelection, snapshotRoots } from "../root-inventory";
-import { deckStepRootKey, rootKey, requestedDeckStep } from "../root-key";
+import { deckFrameRootId, deckStepRootKey, rootKey, requestedDeckStep } from "../root-key";
 import { DEFAULT_CANVAS_VIEW_PREFERENCES, type CanvasViewPreferences } from "./canvas-view-preferences";
 export { DEFAULT_SOURCE, WORKSPACE_VERSION } from "./workspace-state";
 const FREEHAND_SMOOTHING_MIN_PX = 4;
@@ -1532,7 +1532,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const doc = workspace.documents[workspace.activeDocumentId];
       if (action.selection && (
         !doc || action.selection.documentId !== workspace.activeDocumentId ||
-        action.selection.frameId !== doc.activeRootId ||
+        // A picture edited on its own is on its slide.
+        action.selection.frameId !== (deckFrameRootId(doc.activeRootId) ?? doc.activeRootId) ||
         action.selection.sourceRevision !== doc.sourceRevision
       )) return state;
       if (!action.selection && !ui.deckBuildSelection) return state;

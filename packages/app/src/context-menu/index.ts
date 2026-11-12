@@ -1,4 +1,5 @@
-export { CANVAS_CONTEXT_MENU_DEFINITION, buildCanvasContextMenuDefinition } from "./canvas-context-menu.js";
+export { CANVAS_CONTEXT_MENU_DEFINITION, buildCanvasContextMenuDefinition, overlayMenuItems } from "./canvas-context-menu.js";
+export type { CanvasContextMenuOptions, OverlayMenuTarget } from "./canvas-context-menu.js";
 
 export type {
   CanvasContextMenuTarget,

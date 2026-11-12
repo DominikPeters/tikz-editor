@@ -5,7 +5,7 @@ import { beamerObjectOverlayTarget, beamerBuildStateAt, buildBeamerBuildModel, t
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import { APP_MENU_COMMAND_IDS as IDS, type AppMenuCommandId, type AppMenuItem } from "../../app-menu";
-import { CANVAS_CONTEXT_MENU_DEFINITION } from "../../context-menu";
+import { CANVAS_CONTEXT_MENU_DEFINITION, overlayMenuItems } from "../../context-menu";
 import { getActiveEditorPlatform } from "../../platform/current";
 import { useEditorStore } from "../../store/store";
 import { requestedDeckStep } from "../../root-key";
@@ -98,18 +98,7 @@ export function useDeckOverlayContextMenu({ index, selected, frame, viewportRef,
       [IDS.DUPLICATE]: { enabled: true, run: () => { if (current()) editObject("duplicate", node); } },
     };
     const command = (commandId: AppMenuCommandId, label: string): AppMenuItem => ({ kind: "command", commandId, label });
-    const overlayItems: AppMenuItem[] = [];
-    if (target.canSet) overlayItems.push(
-      command(IDS.OVERLAY_NEXT, `Appear on next step (${frame.step + 1})`),
-      command(IDS.OVERLAY_FROM, `Show from step ${frame.step}`),
-      command(IDS.OVERLAY_ONLY, `Only on step ${frame.step}`),
-      command(IDS.OVERLAY_THROUGH, `Show through step ${frame.step}`),
-    );
-    if (target.row || target.removePatches.length) {
-      if (overlayItems.length) overlayItems.push({ kind: "separator" });
-      if (target.row) overlayItems.push(command(IDS.OVERLAY_EDIT, "Edit in Overlays"));
-      if (target.removePatches.length) overlayItems.push(command(IDS.OVERLAY_REMOVE, "Remove overlay rule"));
-    }
+    const overlayItems = overlayMenuItems({ step: frame.step, canSet: target.canSet, hasRule: target.row != null, canRemove: target.removePatches.length > 0 });
     const items: AppMenuItem[] = [command(IDS.UNDO, "Undo"), command(IDS.REDO, "Redo"), { kind: "separator" },
       command(IDS.DUPLICATE, "Duplicate"), command(IDS.DELETE, "Delete")];
     if (overlayItems.length) items.push({ kind: "separator" }, { kind: "submenu", label: "Overlays", items: overlayItems });

@@ -14,7 +14,7 @@ import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
 
 import { APP_MENU_COMMAND_IDS } from "../../app-menu";
 import type { CommandBindings } from "../editor-command-runtime";
-import { buildCanvasContextMenuDefinition, type CanvasContextMenuTarget } from "../../context-menu";
+import { buildCanvasContextMenuDefinition, type CanvasContextMenuOptions, type CanvasContextMenuTarget, type OverlayMenuTarget } from "../../context-menu";
 import type { getActiveEditorPlatform } from "../../platform/current";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { resolveEquationNodeTarget } from "../equation-utils";
@@ -99,6 +99,8 @@ export type UseCanvasContextMenuControllerArgs = {
   editParseOptions: CanvasEditParseOptions;
   viewportRef: RefObject<HTMLDivElement | null>;
   dispatch: CanvasDispatch;
+  /** What the Overlays submenu can do for the shape `sourceId` names, in a slide picture. */
+  resolveShapeOverlay: (sourceId: string | null) => OverlayMenuTarget | null;
 };
 
 export function useCanvasContextMenuController({
@@ -115,42 +117,17 @@ export function useCanvasContextMenuController({
   canvasTransform,
   editParseOptions,
   viewportRef,
-  dispatch
+  dispatch,
+  resolveShapeOverlay
 }: UseCanvasContextMenuControllerArgs): {
   openCanvasContextMenuAt: (clientPoint: ClientPoint, clickedSourceId: string | null, clickedHandleId?: string | null) => void;
 } {
   const pendingNativeContextMenuTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showNativeContextMenu = useCallback(
-    (
-      target: CanvasContextMenuTarget,
-      options: {
-        includeEditEquationForSingleNode?: boolean;
-        nodePositioningAction?: NodePositioningContextMenuAction | null;
-        includePathSubmenuForSingleSelection?: boolean;
-        includeFlattenForeach?: boolean;
-        includeMatrixMultiRemoveRow?: boolean;
-        includeMatrixMultiRemoveColumn?: boolean;
-        includeMatrixMultiInsertRowAbove?: boolean;
-        includeMatrixMultiInsertRowBelow?: boolean;
-        includeMatrixMultiInsertColumnLeft?: boolean;
-        includeMatrixMultiInsertColumnRight?: boolean;
-      } = {}
-    ) => {
-      const definition = buildCanvasContextMenuDefinition({
-        ...(options.includeEditEquationForSingleNode !== undefined ? { includeEditEquationForSingleNode: options.includeEditEquationForSingleNode } : {}),
-        ...(options.nodePositioningAction !== undefined ? { nodePositioningAction: options.nodePositioningAction } : {}),
-        ...(options.includePathSubmenuForSingleSelection !== undefined ? { includePathSubmenuForSingleSelection: options.includePathSubmenuForSingleSelection } : {}),
-        ...(options.includeFlattenForeach !== undefined ? { includeFlattenForeach: options.includeFlattenForeach } : {}),
-        ...(options.includeMatrixMultiRemoveRow !== undefined ? { includeMatrixMultiRemoveRow: options.includeMatrixMultiRemoveRow } : {}),
-        ...(options.includeMatrixMultiRemoveColumn !== undefined ? { includeMatrixMultiRemoveColumn: options.includeMatrixMultiRemoveColumn } : {}),
-        ...(options.includeMatrixMultiInsertRowAbove !== undefined ? { includeMatrixMultiInsertRowAbove: options.includeMatrixMultiInsertRowAbove } : {}),
-        ...(options.includeMatrixMultiInsertRowBelow !== undefined ? { includeMatrixMultiInsertRowBelow: options.includeMatrixMultiInsertRowBelow } : {}),
-        ...(options.includeMatrixMultiInsertColumnLeft !== undefined ? { includeMatrixMultiInsertColumnLeft: options.includeMatrixMultiInsertColumnLeft } : {}),
-        ...(options.includeMatrixMultiInsertColumnRight !== undefined ? { includeMatrixMultiInsertColumnRight: options.includeMatrixMultiInsertColumnRight } : {})
-      });
+    (target: CanvasContextMenuTarget, options: CanvasContextMenuOptions = {}) => {
       void platform.menu?.showNativeContextMenu?.({
-        items: definition[target],
+        items: buildCanvasContextMenuDefinition(options)[target],
         commandStates: commandBindings,
         onCommandRun: (commandId, origin) => {
           const binding = commandBindings[commandId];
@@ -257,6 +234,27 @@ export function useCanvasContextMenuController({
     [editParseOptions, source]
   );
 
+  /** Everything a menu on `target` offers beyond its fixed items, for the element it opens on. */
+  const resolveMenuOptions = useCallback(
+    (target: CanvasContextMenuTarget, sourceId: string | null): CanvasContextMenuOptions => ({
+      includeEditEquationForSingleNode: resolveIncludeEditEquationForSingleNode(target, sourceId),
+      nodePositioningAction: resolveNodePositioningAction(target, sourceId),
+      includePathSubmenuForSingleSelection: resolveIncludePathSubmenuForSingleSelection(target, sourceId),
+      includeFlattenForeach: commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH]?.enabled ?? false,
+      ...resolveMatrixMultiContextMenuOptions(target, selectedElementIds),
+      shapeOverlay: target.startsWith("selection-single") ? resolveShapeOverlay(sourceId) : null
+    }),
+    [
+      commandBindings,
+      resolveIncludeEditEquationForSingleNode,
+      resolveIncludePathSubmenuForSingleSelection,
+      resolveMatrixMultiContextMenuOptions,
+      resolveNodePositioningAction,
+      resolveShapeOverlay,
+      selectedElementIds
+    ]
+  );
+
   useEffect(() => {
     const pendingNativeContextMenuRequest = state.pendingNativeContextMenuRequest;
     if (!platform.menu?.usesNativeContextMenus || !pendingNativeContextMenuRequest) {
@@ -303,35 +301,11 @@ export function useCanvasContextMenuController({
             ? "selection-single-path-point-tree"
             : "selection-single-path-point") as CanvasContextMenuTarget
         : resolution.target;
-    const includeEditEquationForSingleNode = resolveIncludeEditEquationForSingleNode(
-      nativeEffectiveTarget,
-      pendingNativeContextMenuRequest.clickedSourceId
-    );
-    const nodePositioningAction = resolveNodePositioningAction(
-      nativeEffectiveTarget,
-      pendingNativeContextMenuRequest.clickedSourceId
-    );
-    const includePathSubmenuForSingleSelection = resolveIncludePathSubmenuForSingleSelection(
-      nativeEffectiveTarget,
-      pendingNativeContextMenuRequest.clickedSourceId
-    );
-    const includeFlattenForeach = (commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH]?.enabled ?? false);
-    const matrixMultiOptions = resolveMatrixMultiContextMenuOptions(nativeEffectiveTarget, selectedElementIds);
+    const options = resolveMenuOptions(nativeEffectiveTarget, pendingNativeContextMenuRequest.clickedSourceId);
 
     pendingNativeContextMenuTimeoutRef.current = setTimeout(() => {
       pendingNativeContextMenuTimeoutRef.current = null;
-      showNativeContextMenu(nativeEffectiveTarget, {
-        includeEditEquationForSingleNode,
-        nodePositioningAction,
-        includePathSubmenuForSingleSelection,
-        includeFlattenForeach,
-        includeMatrixMultiRemoveRow: matrixMultiOptions.includeMatrixMultiRemoveRow,
-        includeMatrixMultiRemoveColumn: matrixMultiOptions.includeMatrixMultiRemoveColumn,
-        includeMatrixMultiInsertRowAbove: matrixMultiOptions.includeMatrixMultiInsertRowAbove,
-        includeMatrixMultiInsertRowBelow: matrixMultiOptions.includeMatrixMultiInsertRowBelow,
-        includeMatrixMultiInsertColumnLeft: matrixMultiOptions.includeMatrixMultiInsertColumnLeft,
-        includeMatrixMultiInsertColumnRight: matrixMultiOptions.includeMatrixMultiInsertColumnRight
-      });
+      showNativeContextMenu(nativeEffectiveTarget, options);
       state.setPendingNativeContextMenuRequest(null);
       viewport.focus({ preventScroll: true });
     }, 75);
@@ -344,14 +318,10 @@ export function useCanvasContextMenuController({
     };
   }, [
     canvasTransform,
-    commandBindings,
     dispatch,
     editParseOptions,
     platform.menu?.usesNativeContextMenus,
-    resolveIncludeEditEquationForSingleNode,
-    resolveIncludePathSubmenuForSingleSelection,
-    resolveMatrixMultiContextMenuOptions,
-    resolveNodePositioningAction,
+    resolveMenuOptions,
     selectedElementIds,
     showNativeContextMenu,
     source,
@@ -430,26 +400,12 @@ export function useCanvasContextMenuController({
       const equationSourceId = resolution.selectionAction.kind === "select-only"
         ? resolution.selectionAction.sourceId
         : clickedSourceId ?? (selectedElementIds.size === 1 ? [...selectedElementIds][0] ?? null : null);
-      const includeEditEquationForSingleNode = resolveIncludeEditEquationForSingleNode(effectiveTarget, equationSourceId);
-      const nodePositioningAction = resolveNodePositioningAction(effectiveTarget, equationSourceId);
-      const includePathSubmenuForSingleSelection = resolveIncludePathSubmenuForSingleSelection(effectiveTarget, equationSourceId);
-      const includeFlattenForeach = (commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH]?.enabled ?? false);
-      const matrixMultiOptions = resolveMatrixMultiContextMenuOptions(effectiveTarget, selectedElementIds);
-
+      const options = resolveMenuOptions(effectiveTarget, equationSourceId);
       const nextContextMenuState: CanvasContextMenuState = {
+        ...options,
         target: effectiveTarget,
         anchor: viewportPointFromClient(clientPoint, viewport),
-        handleIdOverride: clickedHandleId,
-        includeEditEquationForSingleNode,
-        nodePositioningAction,
-        includePathSubmenuForSingleSelection,
-        includeFlattenForeach,
-        includeMatrixMultiInsertRowAbove: matrixMultiOptions.includeMatrixMultiInsertRowAbove,
-        includeMatrixMultiInsertRowBelow: matrixMultiOptions.includeMatrixMultiInsertRowBelow,
-        includeMatrixMultiRemoveRow: matrixMultiOptions.includeMatrixMultiRemoveRow,
-        includeMatrixMultiInsertColumnLeft: matrixMultiOptions.includeMatrixMultiInsertColumnLeft,
-        includeMatrixMultiInsertColumnRight: matrixMultiOptions.includeMatrixMultiInsertColumnRight,
-        includeMatrixMultiRemoveColumn: matrixMultiOptions.includeMatrixMultiRemoveColumn
+        handleIdOverride: clickedHandleId
       };
 
       if (platform.menu?.usesNativeContextMenus) {
@@ -462,18 +418,7 @@ export function useCanvasContextMenuController({
           viewport.focus({ preventScroll: true });
           return;
         }
-        showNativeContextMenu(effectiveTarget, {
-          includeEditEquationForSingleNode,
-          nodePositioningAction,
-          includePathSubmenuForSingleSelection,
-          includeFlattenForeach,
-          includeMatrixMultiInsertRowAbove: matrixMultiOptions.includeMatrixMultiInsertRowAbove,
-          includeMatrixMultiInsertRowBelow: matrixMultiOptions.includeMatrixMultiInsertRowBelow,
-          includeMatrixMultiRemoveRow: matrixMultiOptions.includeMatrixMultiRemoveRow,
-          includeMatrixMultiInsertColumnLeft: matrixMultiOptions.includeMatrixMultiInsertColumnLeft,
-          includeMatrixMultiInsertColumnRight: matrixMultiOptions.includeMatrixMultiInsertColumnRight,
-          includeMatrixMultiRemoveColumn: matrixMultiOptions.includeMatrixMultiRemoveColumn
-        });
+        showNativeContextMenu(effectiveTarget, options);
         viewport.focus({ preventScroll: true });
         return;
       }
@@ -483,15 +428,11 @@ export function useCanvasContextMenuController({
     },
     [
       canvasTransform,
-      commandBindings,
       dispatch,
       editParseOptions,
       focusedScopeId,
       platform.menu?.usesNativeContextMenus,
-      resolveIncludeEditEquationForSingleNode,
-      resolveIncludePathSubmenuForSingleSelection,
-      resolveMatrixMultiContextMenuOptions,
-      resolveNodePositioningAction,
+      resolveMenuOptions,
       scopeOverlay,
       selectedElementIds,
       showNativeContextMenu,

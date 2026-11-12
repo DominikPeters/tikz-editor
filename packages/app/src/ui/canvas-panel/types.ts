@@ -14,7 +14,7 @@ import type { Dispatch, SetStateAction } from "react";
 
 import type { SessionSnapshot } from "../../compute";
 import type { CanvasTransform, EditorAction } from "../../store/types";
-import type { CanvasContextMenuTarget } from "../../context-menu";
+import type { CanvasContextMenuOptions, CanvasContextMenuTarget } from "../../context-menu";
 import type { ToolCreateMode } from "../tool-config";
 import type { ClientPoint, SvgBounds, SvgPoint, ViewportBounds, ViewportPoint, WorldBounds, WorldPoint, WorldVector } from "../coords/types";
 import type { HitRegion } from "./hit-regions";
@@ -45,20 +45,10 @@ export type ApplyActionWithFeedbackFn = (
   recordInHistory?: boolean
 ) => ApplyActionFeedback;
 
-export type CanvasContextMenuState = {
+export type CanvasContextMenuState = CanvasContextMenuOptions & {
   target: CanvasContextMenuTarget;
   anchor: ViewportPoint;
   handleIdOverride?: string | null;
-  includeEditEquationForSingleNode?: boolean;
-  nodePositioningAction?: "position-relative" | "convert-absolute" | null;
-  includePathSubmenuForSingleSelection?: boolean;
-  includeFlattenForeach?: boolean;
-  includeMatrixMultiRemoveRow?: boolean;
-  includeMatrixMultiRemoveColumn?: boolean;
-  includeMatrixMultiInsertRowAbove?: boolean;
-  includeMatrixMultiInsertRowBelow?: boolean;
-  includeMatrixMultiInsertColumnLeft?: boolean;
-  includeMatrixMultiInsertColumnRight?: boolean;
 };
 
 export type GuidesState = {

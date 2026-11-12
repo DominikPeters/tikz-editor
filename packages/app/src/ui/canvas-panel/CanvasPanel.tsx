@@ -68,6 +68,7 @@ import type { CanvasDragKind,CanvasTransform } from "../../store/types";
 import { deckStepRootKey, rootKey, requestedDeckStep } from "../../root-key";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { pictureOverlayVisibility } from "../../picture-overlay-step";
+import { SHAPE_OVERLAY_COMMANDS, shapeOverlayMenuTarget } from "../shape-overlay-rule";
 import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
 import { DeckResizeOverlay } from "./DeckResizeOverlay";
@@ -3206,10 +3207,13 @@ export const CanvasPanel = memo(function CanvasPanel({
     ]
   );
 
+  // A shape's Overlays commands act on the selection; the app's own bindings for them are placeholders.
+  const canvasMenuBindings = useMemo(() => ({ ...commandRuntime.bindings, ...SHAPE_OVERLAY_COMMANDS }), [commandRuntime.bindings]);
   const { openCanvasContextMenuAt } = useCanvasContextMenuController({
     state: contextMenus,
     platform,
-    commandBindings: commandRuntime.bindings,
+    commandBindings: canvasMenuBindings,
+    resolveShapeOverlay: shapeOverlayMenuTarget,
     source,
     snapshot,
     toolMode,
@@ -3774,33 +3778,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     }
     return names;
   }, [snapshot.semanticResult?.nodeAnchorTargets]);
-  const contextMenuDefinition = useMemo(
-    () =>
-      buildCanvasContextMenuDefinition({
-        includeEditEquationForSingleNode: contextMenuState?.includeEditEquationForSingleNode ?? false,
-        nodePositioningAction: contextMenuState?.nodePositioningAction ?? null,
-        includePathSubmenuForSingleSelection: contextMenuState?.includePathSubmenuForSingleSelection ?? false,
-        includeFlattenForeach: contextMenuState?.includeFlattenForeach ?? false,
-        includeMatrixMultiInsertRowAbove: contextMenuState?.includeMatrixMultiInsertRowAbove ?? false,
-        includeMatrixMultiInsertRowBelow: contextMenuState?.includeMatrixMultiInsertRowBelow ?? false,
-        includeMatrixMultiRemoveRow: contextMenuState?.includeMatrixMultiRemoveRow ?? false,
-        includeMatrixMultiInsertColumnLeft: contextMenuState?.includeMatrixMultiInsertColumnLeft ?? false,
-        includeMatrixMultiInsertColumnRight: contextMenuState?.includeMatrixMultiInsertColumnRight ?? false,
-        includeMatrixMultiRemoveColumn: contextMenuState?.includeMatrixMultiRemoveColumn ?? false
-      }),
-    [
-      contextMenuState?.includeEditEquationForSingleNode,
-      contextMenuState?.nodePositioningAction,
-      contextMenuState?.includePathSubmenuForSingleSelection,
-      contextMenuState?.includeFlattenForeach,
-      contextMenuState?.includeMatrixMultiInsertRowAbove,
-      contextMenuState?.includeMatrixMultiInsertRowBelow,
-      contextMenuState?.includeMatrixMultiRemoveRow,
-      contextMenuState?.includeMatrixMultiInsertColumnLeft,
-      contextMenuState?.includeMatrixMultiInsertColumnRight,
-      contextMenuState?.includeMatrixMultiRemoveColumn
-    ]
-  );
+  const contextMenuDefinition = useMemo(() => buildCanvasContextMenuDefinition(contextMenuState ?? {}), [contextMenuState]);
 
   return (
     <>
@@ -3955,11 +3933,13 @@ export const CanvasPanel = memo(function CanvasPanel({
         onRotateHandlePointerDown={onRotateHandlePointerDown}
         platform={platform}
         contextMenuState={contextMenuState}
-        commandRuntimeBindings={commandRuntime.bindings}
+        commandRuntimeBindings={canvasMenuBindings}
         contextMenuDefinition={contextMenuDefinition}
         onContextMenuClose={() => { setContextMenuState(null); }}
         onContextMenuCommandRun={(commandId: AppMenuCommandId, origin: CommandOrigin) => {
-          commandRuntime.runCommand(commandId, origin);
+          const shapeOverlay = SHAPE_OVERLAY_COMMANDS[commandId];
+          if (shapeOverlay) void shapeOverlay.run(origin);
+          else commandRuntime.runCommand(commandId, origin);
           setContextMenuState(null);
         }}
         dragTooltip={dragTooltip}

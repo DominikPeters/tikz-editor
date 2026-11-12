@@ -466,6 +466,12 @@ ${body}
       ["Node · Alpha $x$", "Path · (0,0) -- (1,1)", "Coordinate · (c) at (1,1)"]);
   });
 
+  it("names a brace command's row by the shapes inside it", () => {
+    const source = deck(String.raw`\only<2->{\node (a) at (0,0) {Alpha}; \draw[red] (0,0) -- (1,1);}
+\uncover<3>{\node at (1,0) {Solo};}`);
+    expect(buildBeamerBuildModel(source, "frame:0")!.rows.map((row) => row.label)).toEqual(["Shapes · Alpha, (0,0) -- (1,1)", "Node · Solo"]);
+  });
+
   it("writes a new specification straight after the command's name", () => {
     const source = deck(String.raw`\node[draw] (a) at (0,0) {A};
 \draw (0,0) -- (1,1);`);

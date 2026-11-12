@@ -1,4 +1,4 @@
-import { APP_MENU_COMMAND_IDS, type AppMenuItem } from "../app-menu/types.js";
+import { APP_MENU_COMMAND_IDS, type AppMenuCommandId, type AppMenuItem } from "../app-menu/types.js";
 import type { CanvasContextMenuDefinition } from "./types.js";
 
 const REORDER_ITEMS: readonly AppMenuItem[] = [
@@ -487,20 +487,56 @@ function withMatrixCellItems(items: readonly AppMenuItem[]): readonly AppMenuIte
   return withPrependedItems(items, MATRIX_CELL_ITEMS);
 }
 
-export function buildCanvasContextMenuDefinition(
-  options: {
-    includeEditEquationForSingleNode?: boolean;
-    nodePositioningAction?: "position-relative" | "convert-absolute" | null;
-    includePathSubmenuForSingleSelection?: boolean;
-    includeFlattenForeach?: boolean;
-    includeMatrixMultiRemoveRow?: boolean;
-    includeMatrixMultiRemoveColumn?: boolean;
-    includeMatrixMultiInsertRowAbove?: boolean;
-    includeMatrixMultiInsertRowBelow?: boolean;
-    includeMatrixMultiInsertColumnLeft?: boolean;
-    includeMatrixMultiInsertColumnRight?: boolean;
-  } = {}
-) {
+/** What a canvas context menu offers beyond its target's fixed items, decided when it opens. */
+export type CanvasContextMenuOptions = {
+  includeEditEquationForSingleNode?: boolean;
+  nodePositioningAction?: "position-relative" | "convert-absolute" | null;
+  includePathSubmenuForSingleSelection?: boolean;
+  includeFlattenForeach?: boolean;
+  includeMatrixMultiRemoveRow?: boolean;
+  includeMatrixMultiRemoveColumn?: boolean;
+  includeMatrixMultiInsertRowAbove?: boolean;
+  includeMatrixMultiInsertRowBelow?: boolean;
+  includeMatrixMultiInsertColumnLeft?: boolean;
+  includeMatrixMultiInsertColumnRight?: boolean;
+  /** For one shape in a slide picture: what its overlay rule allows. */
+  shapeOverlay?: OverlayMenuTarget | null;
+};
+
+/** What the Overlays submenu can do for an object on a slide, on the step shown. */
+export type OverlayMenuTarget = {
+  step: number;
+  /** Its own rule can be set or changed here. */
+  canSet: boolean;
+  /** It has a rule, or stands under one, that the Overlays panel can show. */
+  hasRule: boolean;
+  canRemove: boolean;
+};
+
+/** The Overlays submenu's items: timing for the step shown, then the rule itself. */
+export function overlayMenuItems(target: OverlayMenuTarget): AppMenuItem[] {
+  const command = (commandId: AppMenuCommandId, label: string): AppMenuItem => ({ kind: "command", commandId, label });
+  const items: AppMenuItem[] = [];
+  if (target.canSet) items.push(
+    command(APP_MENU_COMMAND_IDS.OVERLAY_NEXT, `Appear on next step (${target.step + 1})`),
+    command(APP_MENU_COMMAND_IDS.OVERLAY_FROM, `Show from step ${target.step}`),
+    command(APP_MENU_COMMAND_IDS.OVERLAY_ONLY, `Only on step ${target.step}`),
+    command(APP_MENU_COMMAND_IDS.OVERLAY_THROUGH, `Show through step ${target.step}`),
+  );
+  if (target.hasRule || target.canRemove) {
+    if (items.length) items.push({ kind: "separator" });
+    if (target.hasRule) items.push(command(APP_MENU_COMMAND_IDS.OVERLAY_EDIT, "Edit in Overlays"));
+    if (target.canRemove) items.push(command(APP_MENU_COMMAND_IDS.OVERLAY_REMOVE, "Remove overlay rule"));
+  }
+  return items;
+}
+
+function withOverlayItems(items: readonly AppMenuItem[], target: OverlayMenuTarget | null | undefined): readonly AppMenuItem[] {
+  const overlay = target ? overlayMenuItems(target) : [];
+  return overlay.length ? [...items, { kind: "separator" }, { kind: "submenu", label: "Overlays", items: overlay }] : items;
+}
+
+export function buildCanvasContextMenuDefinition(options: CanvasContextMenuOptions = {}) {
   const includeFlattenForeach = options.includeFlattenForeach === true;
   const includePathSubmenuForSingleSelection = options.includePathSubmenuForSingleSelection === true;
   const selectionSingleItems = buildSingleSelectionItems(includeFlattenForeach, includePathSubmenuForSingleSelection);
@@ -512,6 +548,7 @@ export function buildCanvasContextMenuDefinition(
   const pathPointSelectionItems = buildPathPointSelectionItems(includeFlattenForeach);
   const selectionMultiItems = withMatrixMultiItems(buildMultiSelectionItems(includeFlattenForeach), options);
   const singleMatrixItems = buildSingleSelectionItems(includeFlattenForeach, false);
+  const single = (items: readonly AppMenuItem[]) => withOverlayItems(items, options.shapeOverlay);
 
   return {
     "canvas-empty": [
@@ -562,13 +599,13 @@ export function buildCanvasContextMenuDefinition(
         items: SNAP_ITEMS
       }
     ],
-    "selection-single": [...selectionSingleItems],
-    "selection-single-tree": [...withTreeItems(selectionSingleItems)],
-    "selection-single-path-point": [...pathPointSelectionItems],
-    "selection-single-path-point-tree": [...withTreeItems(pathPointSelectionItems)],
-    "selection-single-node": [...selectionSingleNodeItems],
-    "selection-single-node-tree": [...withTreeItems(selectionSingleNodeItems)],
-    "selection-single-matrix": [...withMatrixStatementItems(singleMatrixItems)],
+    "selection-single": [...single(selectionSingleItems)],
+    "selection-single-tree": [...single(withTreeItems(selectionSingleItems))],
+    "selection-single-path-point": [...single(pathPointSelectionItems)],
+    "selection-single-path-point-tree": [...single(withTreeItems(pathPointSelectionItems))],
+    "selection-single-node": [...single(selectionSingleNodeItems)],
+    "selection-single-node-tree": [...single(withTreeItems(selectionSingleNodeItems))],
+    "selection-single-matrix": [...single(withMatrixStatementItems(singleMatrixItems))],
     "selection-single-matrix-cell": [...withMatrixCellItems(selectionSingleNodeItems)],
     "selection-multi": [...selectionMultiItems]
   } as const satisfies CanvasContextMenuDefinition;

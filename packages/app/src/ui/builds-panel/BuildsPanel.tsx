@@ -18,7 +18,7 @@ import {
 } from "@tikz-editor/core/beamer/index";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { useEditorStore } from "../../store/store";
-import { requestedDeckStep } from "../../root-key";
+import { deckFrameRootId, requestedDeckStep } from "../../root-key";
 import { openSourcePanel } from "../open-source-panel";
 import { SidePanel } from "../SidePanel";
 import inspector from "../inspector-panel/InspectorPanel.module.css";
@@ -33,7 +33,8 @@ export function BuildsPanel() {
   const source = useEditorStore((s) => s.source);
   const sourceRevision = useEditorStore((s) => s.sourceRevision);
   const documentId = useEditorStore((s) => s.activeDocumentId);
-  const frameId = useEditorStore((s) => s.activeRootId);
+  // A picture edited on its own is on its slide: the panel shows that slide's rules.
+  const frameId = useEditorStore((s) => deckFrameRootId(s.activeRootId) ?? s.activeRootId);
   const activeSelection = useEditorStore((s) => s.deckBuildSelection);
   const requestedStep = useEditorStore((s) => requestedDeckStep(s.deckStepByRootKey, s.activeDocumentId, s.activeRootId));
   const locked = useEditorStore((s) => s.documents[s.activeDocumentId]?.assistantLockReason != null || s.activeCanvasTextEditSourceId != null);

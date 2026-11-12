@@ -72,3 +72,32 @@ test("the inspector sets, changes and clears a shape's steps, each as one undo s
   await page.keyboard.press(`${MOD}+z`);
   await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
 });
+
+test("the canvas menu sets and removes a shape's rule for the step shown", async ({ page }) => {
+  await page.getByTestId("deck-step-1").click();
+  await expect(page.getByTestId("deck-step-1")).toHaveAttribute("aria-current", "step");
+  const alpha = page.locator("[data-hit-region-target-id='path:1']").first();
+  await alpha.click({ button: "right", force: true });
+  await page.getByRole("menuitem", { name: /^Overlays/u }).hover();
+  await page.getByTestId("canvas-context-cmd-overlay.next").click();
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace(String.raw`\node[draw] (a)`, String.raw`\node<2->[draw] (a)`));
+  // The picture moves to the step the shape now appears on, and the shape stays selected.
+  await expect(page.getByTestId("deck-step-2")).toHaveAttribute("aria-current", "step");
+  await expect.poll(() => api<string[]>(page, "api.getSelectedSourceIds()")).toEqual(["path:1"]);
+
+  await alpha.click({ button: "right", force: true });
+  await page.getByRole("menuitem", { name: /^Overlays/u }).hover();
+  await page.getByTestId("canvas-context-cmd-overlay.remove").click();
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
+});
+
+test("a shape under a shared rule is offered that rule, not a rule of its own", async ({ page }) => {
+  const shared = SOURCE.replace(String.raw`\node[draw] (a) at (1.5,1.5) {Alpha};`, String.raw`\only<2->{\node[draw] (a) at (1.5,1.5) {Alpha}; \node at (1.5,2.5) {Top};}`);
+  await setSource(page, shared);
+  await expect.poll(() => api<string[]>(page, "api.getSceneSourceIds()")).toContain("path:2");
+  await api(page, "api.selectSourceIds(['path:2'])");
+  await expect(page.getByRole("textbox", { name: "Overlay steps" })).toHaveCount(0);
+  await page.getByRole("button", { name: "2- · shared" }).click();
+  await expect(page.getByTestId("build-row").filter({ hasText: "Shapes · Alpha, Top" })).toHaveAttribute("data-selected", "true");
+  expect(await readStoreSource(page)).toBe(shared);
+});

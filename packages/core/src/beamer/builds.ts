@@ -81,9 +81,27 @@ function excerpt(value: string): string {
   return text.length > 52 ? `${text.slice(0, 51).trimEnd()}…` : text;
 }
 
-/** A TikZ path statement with its own specification, named by what it draws. */
+/** TikZ path statements under one rule, named by what they draw: one as itself, several as "Shapes". */
+function shapesLabel(raw: string): string | null {
+  const statements: string[] = [];
+  let depth = 0, start = 0;
+  for (let index = 0; index < raw.length; index += 1) {
+    const character = raw[index];
+    if (character === "\\") { index += 1; continue; }
+    if (character === "%") { const end = raw.indexOf("\n", index); index = end < 0 ? raw.length : end; continue; }
+    if (character === "{" || character === "[") depth += 1;
+    if (character === "}" || character === "]") depth -= 1;
+    if (character === ";" && depth === 0) { statements.push(raw.slice(start, index + 1).trim()); start = index + 1; }
+  }
+  if (statements.length === 0 || raw.slice(start).trim() !== "") return null;
+  const labels = statements.map(shapeLabel);
+  if (!labels.every((label): label is string => label !== null)) return null;
+  return labels.length === 1 ? requireArrayValue(labels, 0) : `Shapes · ${excerpt(labels.map((label) => label.slice(label.indexOf(" · ") + 3)).join(", "))}`;
+}
+
+/** A TikZ path statement, named by what it draws. */
 function shapeLabel(raw: string): string | null {
-  const match = /^\\(node|coordinate|matrix|pic|path|draw|fill|filldraw|pattern|shade|shadedraw|clip|useasboundingbox)(?![A-Za-z@])\s*(?:\[[^\]]*\]\s*)?<[^>]*>/u.exec(raw);
+  const match = /^\\(node|coordinate|matrix|pic|path|draw|fill|filldraw|pattern|shade|shadedraw|clip|useasboundingbox)(?![A-Za-z@])\s*(?:\[[^\]]*\]\s*)?(?:<[^>]*>)?/u.exec(raw);
   if (!match) return null;
   const rest = raw.slice(match[0].length).replace(/;\s*$/u, "").replace(/^\s*\[[^\]]*\]/u, "").trim();
   const command = match[1] ?? "path";
@@ -104,8 +122,8 @@ function shapeLabel(raw: string): string | null {
 
 function contentLabel(context: BeamerSyntaxContext, span: Span): string {
   const raw = context.source.slice(span.from, span.to).trim();
-  const shape = shapeLabel(raw);
-  if (shape) return shape;
+  const shapes = shapesLabel(raw);
+  if (shapes) return shapes;
   const boundaries = context.syntax.environmentBoundariesIn(span);
   const begin = boundaries.find((entry) => entry.kind === "begin");
   const firstControl = context.syntax.controlsIn(span)[0];
