@@ -449,7 +449,8 @@ export function evaluateSemanticStatementByIndex(
     ? mapExpansionSpan(statementSourceMap, statement.span)
     : run.sourceStatementSpanById.get(sourceId) ?? statement.span;
   // A scope's frame is entered and left whatever the step; its statements each answer for themselves.
-  const overlayVisibility = scopeStep || !run.overlayVisibility ? "visible" : run.overlayVisibility(sourceSpan);
+  const overlayVisibility = scopeStep || !run.overlayVisibility ? "visible"
+    : run.overlayVisibility(sourceSpan, run.statementAttribution.get(statement)?.foreachStack.map((frame) => frame.iterationIndex) ?? []);
   beginStatementEffectTracking(run.context);
   const statementElements = withDependencySource(run.context, statement.id, () =>
     withPgfMathRuntime(

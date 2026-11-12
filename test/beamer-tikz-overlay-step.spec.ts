@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { computeSnapshot } from "../packages/app/src/compute.js";
 import { scanBeamerDocument } from "../packages/core/src/beamer/index.js";
+import { buildBeamerBuildModel } from "../packages/core/src/beamer/builds.js";
 import { BEAMER_TIKZ_LAYER_DEFINITION } from "../packages/core/src/beamer/overlay-pictures.js";
 import { projectBeamerTikzSource, resolveBeamerOverlaySpanVisibility, scanBeamerFrameOverlays } from "../packages/core/src/beamer/overlay.js";
 import { beamerTikzStep } from "../packages/core/src/beamer/tikz-overlay-step.js";
@@ -269,8 +270,8 @@ ${body}
 \end{document}`;
   const shown = (source: string): string[] => {
     const document = scanBeamerDocument(source);
-    const overlays = scanBeamerFrameOverlays(source, document.frames[0]!);
-    const words = [...source.matchAll(/\{([A-Z][0-9])\};|^([A-Z]{2,})$/gmu)].map((match) => ({ word: match[1] ?? match[2]!, at: match.index }));
+    const overlays = scanBeamerFrameOverlays(source, document.frames[0]);
+    const words = [...source.matchAll(/\{([A-Z][0-9])\};|^([A-Z]{2,})$/gmu)].map((match) => ({ word: match[1] ?? match[2], at: match.index }));
     const statement = (at: number) => {
       const from = source.lastIndexOf(String.raw`\node`, at);
       return source.slice(from, at).includes("\n") || from < 0 ? { from: at, to: at + 2 } : { from, to: source.indexOf(";", at) + 1 };
@@ -349,5 +350,59 @@ TEXTE
 \node at (3,0) {E3};
 \end{tikzpicture}
 MOREE`))).toEqual(["FRAMEE", "FRAMEE TEXTE E1 E3 MOREE", "FRAMEE TEXTE E1 E2 E3 MOREE"]);
+  });
+});
+
+describe("overlay operations a loop performs, against LuaLaTeX", () => {
+  const deck = (body: string) => String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}
+\begin{tikzpicture}
+${body}
+\end{tikzpicture}
+\end{frame}
+\end{document}`;
+  /** The node texts the picture shows on each step, sorted. */
+  const shownBySteps = (source: string): string[] => {
+    const document = scanBeamerDocument(source);
+    const frame = document.frames[0];
+    const overlays = scanBeamerFrameOverlays(source, frame);
+    const picture = frame.children.find((child) => child.kind === "tikzpicture")!;
+    return Array.from({ length: overlays.stepCount }, (_, index) => {
+      const step = beamerTikzStep(source, picture.span, overlays, index + 1);
+      const rendered = renderTikzToSvg(step.source, { evaluate: step.overlayVisibility ? { overlayVisibility: step.overlayVisibility } : {} });
+      expect(rendered.parse.diagnostics.filter((diagnostic) => diagnostic.severity === "error")).toEqual([]);
+      return rendered.semantic.scene.elements.flatMap((element) => element.kind === "Text" && !element.overlayCovered ? [element.text] : []).sort().join(" ");
+    });
+  };
+
+  it("resolves a specification once per iteration, from the loop's values", () => {
+    expect(shownBySteps(deck(String.raw`\foreach \x in {1,2,3} { \node<\x-> at (\x,0) {R\x}; }`))).toEqual(["R1", "R1 R2", "R1 R2 R3"]);
+  });
+
+  it("counts a pause in a loop once per iteration, each covering what runs after it", () => {
+    expect(shownBySteps(deck(String.raw`\foreach \x in {1,2,3} { \node<\x-> at (\x,0) {R\x}; }
+\foreach \x in {1,2} { \pause \node at (\x,1) {S\x}; }`))).toEqual(["R1", "R1 R2 S1", "R1 R2 R3 S1 S2"]);
+  });
+
+  it("covers what follows a pausing loop until its scope ends", () => {
+    expect(shownBySteps(deck(String.raw`\node at (0,0) {A};
+\begin{scope}
+\foreach \x in {1,2} { \node at (\x,1) {B\x}; \pause }
+\node at (5,5) {C};
+\end{scope}
+\node at (6,6) {D};`))).toEqual(["A B1 D", "A B1 B2 D", "A B1 B2 C D"]);
+  });
+
+  it("resolves nested loops by their own variables", () => {
+    expect(shownBySteps(deck(String.raw`\foreach \x in {1,2} { \foreach \y in {1,2} { \node<\y> at (\x,\y) {N\x\y}; } }`))).toEqual(["N11 N21", "N12 N22"]);
+  });
+
+  it("gives one Overlays row to a loop's specification, not editable as a number", () => {
+    const source = deck(String.raw`\foreach \x in {1,2,3} { \node<\x-> at (\x,0) {R\x}; }`);
+    const model = buildBeamerBuildModel(source, "frame:0")!;
+    expect(model.stepCount).toBe(3);
+    expect(model.rows.map((row) => [row.id, row.editable])).toEqual([[`command:${source.indexOf(String.raw`\node<\x->`)}`, false]]);
   });
 });

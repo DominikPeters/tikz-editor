@@ -561,9 +561,10 @@ export type EvaluateOptions = {
    * The Beamer overlay step: what the statement at an authored source span
    * is on it. A removed statement is skipped whole, as `\alt<spec>{…}{}`
    * leaves nothing; a hidden one is evaluated and its elements are covered.
-   * Without it every statement is there.
+   * A statement a loop makes is asked about once per iteration, `instance`
+   * naming it (outermost loop first). Without it every statement is there.
    */
-  overlayVisibility?: (span: Span) => OverlayStatementVisibility;
+  overlayVisibility?: (span: Span, instance: readonly number[]) => OverlayStatementVisibility;
 };
 
 export type { CoordinateForm };

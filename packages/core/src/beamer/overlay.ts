@@ -24,6 +24,7 @@ import type {
 } from "./types.js";
 import { scanBeamerNoteCommands } from "./notes.js";
 import { TIKZ_PICTURE_ENVIRONMENTS } from "../parser/figure-scan.js";
+import { compareTikzOverlayInstances, tikzOverlayTrace, tikzOverlayTraceNeeded } from "./tikz-overlay-trace.js";
 
 export type BeamerOverlayInterval = {
   readonly from: number;
@@ -58,6 +59,12 @@ export type BeamerOverlayCommand = {
   readonly syntaxSpans: readonly Span[];
   /** Parts of a declaration's reach where a later one in an inner picture scope holds instead. */
   readonly holes?: readonly Span[];
+  /**
+   * A specification a picture's loop performs once per iteration: which
+   * iteration this is, outermost loop first. `spec` is resolved from the
+   * loop's values; its `source` is the authored text.
+   */
+  readonly instance?: readonly number[];
 };
 
 export type BeamerOverlayItem = {
@@ -76,6 +83,9 @@ export type BeamerOverlayPause = {
   readonly contentSpan: Span;
   /** Parts of its reach where an `\onslide` in an inner picture scope holds instead. */
   readonly holes?: readonly Span[];
+  /** A pause in a picture's loop: the iteration it runs in, and the loop. */
+  readonly instance?: readonly number[];
+  readonly loopSpan?: Span;
 };
 
 export type BeamerOverlayReference = {
@@ -152,7 +162,11 @@ type PendingSpec =
       readonly sourceOrder: number;
       readonly span: Span;
       readonly requestedStep: number | null;
+      readonly instance?: readonly number[];
+      readonly loopSpan?: Span;
     };
+
+const PATH_COMMANDS: ReadonlySet<string> = new Set(["path", "draw", "fill", "filldraw", "pattern", "shade", "shadedraw", "clip", "useasboundingbox", "node", "coordinate", "matrix", "pic"]);
 
 const OVERLAY_COMMANDS = new Map<string, BeamerOverlayCommandKind>([
   ["only", "only"],
@@ -206,6 +220,26 @@ export function scanBeamerFrameOverlays(
   const tikzRanges = environmentPairs
     .filter(pair => TIKZ_PICTURE_ENVIRONMENTS.has(pair.name) && pair.span.from >= frame.bodySpan.from && pair.span.to <= frame.bodySpan.to)
     .map(pair => pair.span);
+  // PGF's path frontend implements <spec> as \alt<spec>{path}{nothing}; a
+  // loop performs it once per iteration. These join the same source-ordered
+  // decoder as the frame's relative specifications and pauses.
+  const traces = tikzRanges.filter(span => tikzOverlayTraceNeeded(source.slice(span.from, span.to))).map(span => tikzOverlayTrace(source, span));
+  for (const trace of traces) {
+    trace.ops.forEach((op, index) => {
+      // A loop's operations run where the loop stands, in the order it performs them.
+      const sourceOrder = op.loopSpan ? op.loopSpan.from + (index + 1) / (trace.ops.length + 2) : op.kind === "path" ? op.statementSpan.from : op.span.from;
+      if (op.kind === "pause") {
+        pending.push({ kind: "pause", sourceOrder, span: op.span, requestedStep: op.countRaw !== null && /^\s*\d+\s*$/u.test(op.countRaw) ? Number(op.countRaw.trim()) : null,
+          instance: op.instance, loopSpan: op.loopSpan });
+        return;
+      }
+      const span = op.statementSpan;
+      pending.push({ kind: "command", sourceOrder, rawSpec: { span: op.specSpan, contentSpan: op.specContentSpan, value: op.raw },
+        command: { kind: "only", span, commandSpan: { from: span.from, to: op.specSpan.from },
+          branches: [{ span, contentSpan: span, value: source.slice(span.from, span.to) }], syntaxSpans: [op.specSpan],
+          ...(op.loopSpan ? { instance: op.instance } : {}) } });
+    });
+  }
   const overprintStarts: typeof environmentBoundaries[number][] = [];
   for (const boundary of environmentBoundaries) {
     if (boundary.name !== "overprint") continue;
@@ -252,22 +286,8 @@ export function scanBeamerFrameOverlays(
       }
       continue;
     }
-    // PGF's path frontend implements <spec> as \alt<spec>{path}{nothing}.
-    // Include these in the same source-ordered decoder as relative Beamer specs.
-    const picture = ["path", "draw", "fill", "filldraw", "pattern", "shade", "shadedraw", "clip", "useasboundingbox", "node", "coordinate", "matrix", "pic"].includes(command.name)
-      ? tikzRanges.find(span => span.from < command.from && command.from < span.to) : undefined;
-    if (picture) {
-      const optional = command.name === "path" ? beamerOptionalArgumentAfter(context, command.to, frame.bodySpan.to) : null;
-      const rawSpec = beamerOverlayArgumentAfter(context, optional?.span.to ?? command.to, frame.bodySpan.to);
-      const end = rawSpec ? tikzStatementEnd(source, rawSpec.span.to, picture.to) : null;
-      if (rawSpec && end !== null) {
-        const span = { from: command.from, to: end };
-        pending.push({ kind: "command", sourceOrder: command.from, rawSpec,
-          command: { kind: "only", span, commandSpan: { from: command.from, to: command.to },
-            branches: [{ span, contentSpan: span, value: source.slice(span.from, span.to) }], syntaxSpans: [rawSpec.span] } });
-      }
-      continue;
-    }
+    // A picture's own overlay operations come from its parsed statements (above).
+    if (PATH_COMMANDS.has(command.name) && tikzRanges.some(span => span.from < command.from && command.from < span.to)) continue;
     // beamerbasemisc.sty: \includegraphics<spec>[opts]{file} is
     // \only<spec>{\includegraphics[opts]{file}}. The spec must follow the
     // name directly; beamer's redefinition reads a star as the filename.
@@ -355,6 +375,8 @@ export function scanBeamerFrameOverlays(
       continue;
     }
     if (command.name === "pause") {
+      // A loop's pause runs once per iteration; the picture's trace has each.
+      if (traces.some(trace => trace.pausingLoops.some(loop => loop.from < command.from && command.from < loop.to))) continue;
       const optional = beamerOptionalArgumentAfter(
         context,
         command.to,
@@ -504,6 +526,8 @@ export function scanBeamerFrameOverlays(
   const pauseStarts: Array<{
     span: Span;
     threshold: number;
+    instance?: readonly number[];
+    loopSpan?: Span;
   }> = [];
   let pauseCounter = 1;
   let stepCount = 1;
@@ -511,7 +535,8 @@ export function scanBeamerFrameOverlays(
   for (const entry of pending) {
     if (entry.kind === "pause") {
       pauseCounter = entry.requestedStep ?? pauseCounter + 1;
-      pauseStarts.push({ span: entry.span, threshold: pauseCounter });
+      pauseStarts.push({ span: entry.span, threshold: pauseCounter,
+        ...(entry.instance && entry.loopSpan ? { instance: entry.instance, loopSpan: entry.loopSpan } : {}) });
       stepCount = Math.max(stepCount, pauseCounter);
       continue;
     }
@@ -523,7 +548,10 @@ export function scanBeamerFrameOverlays(
     pauseCounter = resolved.nextPauseCounter;
     stepCount = Math.max(stepCount, resolved.spec.lastRequiredStep);
     if (entry.kind === "command") {
-      commands.push({ ...entry.command, spec: resolved.spec });
+      // A loop's specification is resolved from its values; what the source says stays the authored text.
+      commands.push({ ...entry.command, spec: entry.command.instance
+        ? { ...resolved.spec, source: { ...resolved.spec.source, value: source.slice(entry.rawSpec.contentSpan.from, entry.rawSpec.contentSpan.to) } }
+        : resolved.spec });
     } else if (entry.kind === "switch") {
       switches.push({ ...entry.switch, spec: resolved.spec });
     } else if (entry.kind === "reference") {
@@ -541,11 +569,17 @@ export function scanBeamerFrameOverlays(
   }
 
   const pauses = pauseStarts.map((pause): BeamerOverlayPause => {
-    const end = reachEnd(pause.span.from);
+    // A loop's pause holds for the rest of the loop and on to the end of the loop's scope.
+    const end = reachEnd(pause.loopSpan?.from ?? pause.span.from);
+    if (pause.loopSpan) {
+      const after = pause.loopSpan.to;
+      const to = Math.min(declarations.find(declaration => declaration.from >= after && reachEnd(declaration.from) >= end)?.from ?? frame.bodySpan.to, end);
+      return { ...pause, contentSpan: { from: pause.span.to, to } };
+    }
     const sameReach = (from: number) => from > pause.span.from && reachEnd(from) >= end;
     // \pause is an \onslide declaration in Beamer. A later declaration
     // closes its cover, including a bare \onslide that restores visibility.
-    const to = Math.min(pauseStarts.find(candidate => sameReach(candidate.span.from))?.span.from ?? frame.bodySpan.to,
+    const to = Math.min(pauseStarts.find(candidate => sameReach(candidate.loopSpan?.from ?? candidate.span.from))?.span.from ?? frame.bodySpan.to,
       declarations.find(declaration => sameReach(declaration.from))?.from ?? frame.bodySpan.to, end);
     // A later pause in an inner scope has a higher threshold; only an \onslide there takes over.
     const holes = innerReaches(pause.span.from, to, end, declarations.map(declaration => declaration.from));
@@ -578,7 +612,9 @@ export function beamerOverlaySpecContains(
 export function resolveBeamerOverlaySpanVisibility(
   model: BeamerOverlayModel,
   span: Span,
-  step: number
+  step: number,
+  /** For a statement in a picture's loop: its iteration, outermost loop first. */
+  instance: readonly number[] = []
 ): BeamerOverlayVisibility {
   let visibility: BeamerOverlayVisibility = "visible";
   for (const reference of model.referenceSpecs) {
@@ -587,6 +623,7 @@ export function resolveBeamerOverlaySpanVisibility(
   }
   for (const command of model.commands) {
     if (command.holes?.some((hole) => containsSpan(hole, span))) continue;
+    if (command.instance && (command.instance.length !== instance.length || command.instance.some((value, index) => value !== instance[index]))) continue;
     let branchIndex = command.branches.findIndex((branch) =>
       containsSpan(branch.contentSpan, span)
     );
@@ -635,10 +672,14 @@ export function resolveBeamerOverlaySpanVisibility(
     }
   }
   for (const pause of model.pauses) {
-    if (containsSpan(pause.contentSpan, span) && step < pause.threshold &&
-      !pause.holes?.some((hole) => containsSpan(hole, span))) {
-      visibility = "hidden";
-    }
+    if (step >= pause.threshold) continue;
+    if (pause.loopSpan && pause.instance && containsSpan(pause.loopSpan, span)) {
+      // Inside the loop a pause covers what runs after it: the rest of its iteration, and the later ones.
+      const order = compareTikzOverlayInstances(pause.instance, instance);
+      if (order > 0 || (order === 0 && pause.span.to > span.from)) continue;
+    } else if (!containsSpan(pause.contentSpan, span)) continue;
+    if (pause.holes?.some((hole) => containsSpan(hole, span))) continue;
+    visibility = "hidden";
   }
   return visibility;
 }
@@ -1126,22 +1167,6 @@ function mergeSpans(spans: readonly Span[]): Span[] {
     }
   }
   return result;
-}
-
-/** A TikZ path's semicolon is outside label groups, options and comments. */
-function tikzStatementEnd(source: string, from: number, to: number): number | null {
-  let braces = 0, brackets = 0;
-  for (let cursor = from; cursor < to; cursor++) {
-    const character = source[cursor];
-    if (character === "%") { const newline = source.indexOf("\n", cursor); if (newline < 0) return null; cursor = newline; continue; }
-    if (character === "\\") { cursor++; continue; }
-    if (character === "{") braces++;
-    if (character === "}") { if (braces === 0) return null; braces--; }
-    if (character === "[" && braces === 0) brackets++;
-    if (character === "]" && braces === 0 && brackets > 0) brackets--;
-    if (character === ";" && braces === 0 && brackets === 0) return cursor + 1;
-  }
-  return null;
 }
 
 /**

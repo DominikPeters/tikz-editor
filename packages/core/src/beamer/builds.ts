@@ -139,7 +139,10 @@ export function buildBeamerBuildModel(source: string, frameId: string): BeamerBu
     };
   };
 
+  // A loop performs its rule once per iteration; the row is for the rule as written.
+  const firstIteration = (instance: readonly number[] | undefined) => instance === undefined || instance.every((index) => index === 0);
   for (const command of overlays.commands) {
+    if (!firstIteration(command.instance)) continue;
     const alternatives = command.branches.length > 1;
     const id = `command:${command.span.from}`;
     rows.push({
@@ -179,6 +182,7 @@ export function buildBeamerBuildModel(source: string, frameId: string): BeamerBu
     });
   }
   for (const pause of overlays.pauses) {
+    if (!firstIteration(pause.instance)) continue;
     rows.push({
       id: `pause:${pause.span.from}`, parentId: null, kind: "pause",
       sourceSpan: pause.span, contentSpans: [pause.contentSpan], ruleSpan: pause.span,
