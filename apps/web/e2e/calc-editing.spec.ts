@@ -13,7 +13,8 @@ test.beforeEach(async ({ page }) => {
   await gotoApp(page);
 });
 
-for (const [literal, expected] of [[".33", "0.63"], ["-.11", "0.19"], ["1e-3", "0.301"], ["1.", "1.3"]]) {
+// Scrubbing moves on the step's grid and keeps the literal's decimals.
+for (const [literal, expected] of [[".33", "0.60"], ["-.11", "0.10"], ["1e-3", "0.300"], ["1.", "1.3"]]) {
   test(`source scrubbing replaces ${literal} through repeated moves`, async ({ page }) => {
     const source = String.raw`\begin{tikzpicture}
 \coordinate (C) at (0.85,5.30);
@@ -87,7 +88,8 @@ test("bare calc text selects text and dragging its padding keeps the reference a
   await expect.poll(() => readSource(page)).not.toBe(source);
   const moved = await readSource(page);
   expect(moved).toContain(String.raw`\coordinate (C) at (0.85,5.30);`);
-  expect(moved).toMatch(/\$\(C\)\+\([+-]?\d+(?:\.\d+)?,[+-]?\d+(?:\.\d+)?\)\$/u);
+  // The source wrote its offsets without a leading zero; the move keeps that.
+  expect(moved).toMatch(/\$\(C\)\+\([+-]?(?:\d+(?:\.\d+)?|\.\d+),[+-]?(?:\d+(?:\.\d+)?|\.\d+)\)\$/u);
   await expectSourceCanvasConsistency(page,{ assertNoActiveCanvasDrag:true });
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => readSource(page)).toBe(source);

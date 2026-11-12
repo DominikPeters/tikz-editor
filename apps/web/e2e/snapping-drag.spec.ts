@@ -38,9 +38,15 @@ for (const direction of [1, -1]) {
       await page.evaluate(({ pointer, x, y }) => {
         window.dispatchEvent(new PointerEvent("pointermove", { ...pointer, clientX: x, clientY: y }));
       }, { pointer, x: start.x + direction * deltaCm * ptPerCm, y: start.y });
-      const left = Math.round((3 + direction * deltaCm) * 100) / 100;
-      const right = Math.round((5 + direction * deltaCm) * 100) / 100;
-      await expect.poll(() => readSource(page)).toContain(`(${left},2) rectangle (${right},1)`);
+      // A drag writes the shortest decimals within half a pixel of the pointer.
+      const corners = async () => {
+        const match = /\((\S+),2\) rectangle \((\S+),1\)/u.exec(await readSource(page));
+        return match ? [Number(match[1]), Number(match[2])] : [NaN, NaN];
+      };
+      const halfPixelCm = 0.5 * 0.75 / ptPerCm;
+      await expect.poll(async () => Math.abs((await corners())[0]! - (3 + direction * deltaCm))).toBeLessThanOrEqual(halfPixelCm + 1e-9);
+      const [left, right] = await corners();
+      expect(right! - left!).toBeCloseTo(2, 9);
       await expectSourceCanvasConsistency(page);
       await expect(page.locator("g[class*='snapOverlay']")).toHaveCount(1);
     }
