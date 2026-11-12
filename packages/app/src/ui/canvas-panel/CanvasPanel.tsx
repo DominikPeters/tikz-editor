@@ -67,6 +67,7 @@ import { useThemePreviewStore } from "../theme-gallery/theme-preview-store";
 import type { CanvasDragKind,CanvasTransform } from "../../store/types";
 import { rootKey, requestedDeckStep } from "../../root-key";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { pictureOverlayVisibility } from "../../picture-overlay-step";
 import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
 import { DeckResizeOverlay } from "./DeckResizeOverlay";
@@ -1110,7 +1111,8 @@ export const CanvasPanel = memo(function CanvasPanel({
       source: nestedFigureSpan ? maskTikzPictureSource(nestedEditBaseSource(source, snapshot), nestedFigureSpan) : source,
       parsed: snapshot.parseResult,
       semantic: snapshot.semanticResult
-    }, { textEngine: textEngineRef.current, ...snapshot.overlayLayer?.evaluate }, editParseOptions);
+    }, { textEngine: textEngineRef.current, ...snapshot.overlayLayer?.evaluate,
+      ...pictureOverlayVisibility(nestedEditBaseSource(source, snapshot), nestedFigureSpan, snapshot.pictureOverlayStep) }, editParseOptions);
   });
 
   const resolvePendingNodePositionTargetStatus = useMemo(() => {
@@ -1138,7 +1140,8 @@ export const CanvasPanel = memo(function CanvasPanel({
       const geometry = prepareEditGeometry();
       const preflight = preflightPositionNodeRelativeToAction(source, action, {
         ...(geometry !== undefined ? { geometry } : {}),
-        evaluateOptions: { ...(sourceFingerprint !== undefined ? { sourceFingerprint: sourceFingerprint } : {}), textEngine: activeTextEngine, ...snapshot.overlayLayer?.evaluate },
+        evaluateOptions: { ...(sourceFingerprint !== undefined ? { sourceFingerprint: sourceFingerprint } : {}), textEngine: activeTextEngine, ...snapshot.overlayLayer?.evaluate,
+          ...pictureOverlayVisibility(nestedEditBaseSource(source, snapshot), nestedFigureSpan, snapshot.pictureOverlayStep) },
         parseOptions: { ...positionParseOptions, propertyWriteMode: "drag-frame", ...(sourceFingerprint !== undefined ? { sourceFingerprint } : {}) }
       });
       const { result } = preflight;
@@ -1170,6 +1173,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     };
   }, [
     prepareEditGeometry,
+    nestedFigureSpan,
     activeTextEngine,
     editParseOptions,
     pendingNodePositionTargetPick,

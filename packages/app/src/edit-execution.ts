@@ -16,6 +16,7 @@ import { documentKindForSource } from "./store/workspace-state";
 import { parseTikz } from "@tikz-editor/core/parser/index";
 import { beamerDrawingLayerRemovalSpan } from "@tikz-editor/core/beamer/overlay-pictures";
 import type { SessionSnapshot } from "./compute";
+import { pictureOverlayVisibility } from "./picture-overlay-step";
 
 export type EditExecutionContext = {
   documentId: string;
@@ -79,7 +80,7 @@ export function executeDocumentEdit(
   if (parseRootId === undefined) delete parseContext.activeRootId;
   else parseContext.activeRootId = parseRootId;
   const parseOptions = buildEditParseOptions({ ...parseContext, source: editSource, analysis: "none", ...((options.parseOptions) === undefined ? {} : { overrides: options.parseOptions }) });
-  const evaluateOptions = { ...options.evaluateOptions, ...layer?.evaluate };
+  const evaluateOptions = { ...options.evaluateOptions, ...layer?.evaluate, ...pictureOverlayVisibility(working, span, snapshot.pictureOverlayStep) };
   if (parseOptions.sourceFingerprint === undefined) delete evaluateOptions.sourceFingerprint;
   else evaluateOptions.sourceFingerprint = parseOptions.sourceFingerprint;
   const snapshotMatchesRoot = parseOptions.activeFigureId === undefined || snapshot.parseResult?.activeFigureId === parseOptions.activeFigureId;

@@ -54,6 +54,7 @@ import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
 import { translationMatrix } from "@tikz-editor/core/semantic/transform";
 import { requireDefined } from "@tikz-editor/core/utils/invariants";
 import type { EvaluateOptions } from "@tikz-editor/core/semantic/types";
+import type { PictureOverlayStep } from "./picture-overlay-step";
 import { composeOverlayPage, undrawnLayerPageStands } from "./beamer-overlay-page";
 import { insertDrawingLayer, pageDrawingLayerRootId, type DrawingLayerInsertion } from "./drawing-layer";
 import { prepareDocumentGraphicsContext, getImageAssetCacheGeneration, type PreparedDocumentGraphicsContext } from "./image-asset-cache";
@@ -90,6 +91,8 @@ export type SessionSnapshot = {
   deck: DeckSnapshot | null;
   /** Present for a drawing layer (an overlay picture root), edited in place on its slide. */
   overlayLayer?: OverlayLayerSnapshot | null;
+  /** For a slide picture whose overlay step hides or removes some of its statements: the step it shows. */
+  pictureOverlayStep?: PictureOverlayStep | null;
 };
 
 /**
@@ -1086,8 +1089,8 @@ async function computeNestedTikzSnapshot(
   work?.signal?.throwIfAborted();
   // The picture as the slide shows it on this step: the same statements, with the same ids.
   const overlays = scanBeamerFrameOverlays(request.source, requireDefined(document.frames[ref.frameIndex], "Expected the picture's frame"));
-  const pictureStep = beamerTikzStep(request.source, picture.span, overlays,
-    Math.min(Math.max(1, request.deckStep ?? 1), Math.max(1, overlays.stepCount)));
+  const pictureStepNumber = Math.min(Math.max(1, request.deckStep ?? 1), Math.max(1, overlays.stepCount));
+  const pictureStep = beamerTikzStep(request.source, picture.span, overlays, pictureStepNumber);
   const masked = pictureStep.source;
   const result = await renderTikzToSvgAsync(masked, {
     parse: { recover: true, includeContextDefinitions: true },
@@ -1112,7 +1115,8 @@ async function computeNestedTikzSnapshot(
     graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
     graphicsPreviewBundle: graphicsContext.previewBundle,
     incremental: null,
-    deck: null
+    deck: null,
+    ...(pictureStep.overlayKey ? { pictureOverlayStep: { frameIndex: ref.frameIndex, step: pictureStepNumber } } : {})
   };
   recordProfilingComputeTiming({
     requestId: request.id,
@@ -1333,6 +1337,7 @@ async function computeOverlayLayerSnapshot(
     ...((pageContext?.deckLayoutReused) === undefined ? {} : { deckLayoutReused: pageContext.deckLayoutReused })
   });
   result.snapshot.source = source;
+  if (pictureStep.overlayKey) result.snapshot.pictureOverlayStep = { frameIndex: ref.frameIndex, step };
   result.snapshot.overlayLayer = { rootId: formatDocumentRootId(ref), frameIndex: ref.frameIndex, step,
     backdropSvg: placement.backdropSvg, origin, evaluate, insertion, pageCoordinates,
     requestedRootId: request.drawingLayerRootId ?? null };

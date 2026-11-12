@@ -3,11 +3,14 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { computeSnapshot } from "../packages/app/src/compute.js";
+import { executeDocumentEdit } from "../packages/app/src/edit-execution.js";
+import { pictureOverlayVisibility } from "../packages/app/src/picture-overlay-step.js";
 import { scanBeamerDocument } from "../packages/core/src/beamer/index.js";
 import { buildBeamerBuildModel } from "../packages/core/src/beamer/builds.js";
 import { BEAMER_TIKZ_LAYER_DEFINITION } from "../packages/core/src/beamer/overlay-pictures.js";
 import { projectBeamerTikzSource, resolveBeamerOverlaySpanVisibility, scanBeamerFrameOverlays } from "../packages/core/src/beamer/overlay.js";
 import { beamerTikzStep } from "../packages/core/src/beamer/tikz-overlay-step.js";
+import { pt, worldPoint } from "../packages/core/src/coords/index.js";
 import { maskTikzPictureSource } from "../packages/core/src/document/masking.js";
 import { createIncrementalParseSession, parseTikz } from "../packages/core/src/parser/index.js";
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
@@ -221,6 +224,25 @@ Text.
     const ids = elements.map((scene) => new Set(scene.map((element) => element.id)));
     for (const id of ids[0]) expect(ids[2].has(id)).toBe(true);
     for (const id of ids[1]) expect(ids[2].has(id)).toBe(true);
+  });
+
+  it("evaluates an edit on the picture as its snapshot's step shows it", async () => {
+    const [first, , third] = await steps("frame:0:tikzpicture:0");
+    const picture = scanBeamerDocument(DECK).frames[0]!.children.find((child) => child.kind === "tikzpicture")!;
+    expect(third!.pictureOverlayStep ?? null).toBeNull();
+    expect(first!.pictureOverlayStep).toEqual({ frameIndex: 0, step: 1 });
+    const { overlayVisibility } = pictureOverlayVisibility(DECK, picture.span, first!.pictureOverlayStep);
+    const at = (text: string) => ({ from: DECK.indexOf(text), to: DECK.indexOf(";", DECK.indexOf(text)) + 1 });
+    expect([String.raw`\node (a)`, String.raw`\node<2-> (b)`, String.raw`\draw (a) -- (b)`, String.raw`\node (c)`].map((text) => overlayVisibility!(at(text), [])))
+      .toEqual(["visible", "removed", "removed", "hidden"]);
+    expect(pictureOverlayVisibility(DECK, picture.span, null)).toEqual({});
+
+    // Moving the node that is there edits its coordinate, on the step that hides others.
+    const moved = executeDocumentEdit({ documentId: "overlay-step", source: DECK, sourceRevision: 1, activeRootId: "frame:0:tikzpicture:0", snapshot: first! },
+      { kind: "moveElements", elementIds: first!.scene!.elements.filter((element) => element.kind === "Text" && element.text === "A").map((element) => element.sourceRef.sourceId),
+        delta: worldPoint(pt(28.4527559055), pt(0)) });
+    expect(moved.kind === "unsupported" ? moved.reason : moved.kind).toBe("success");
+    expect(moved.kind === "success" && moved.newSource).toBe(DECK.replace(String.raw`\node (a) at (0,0)`, String.raw`\node (a) at (1,0)`));
   });
 
   it("gives the drawing layer's edit snapshot the statements of its step", async () => {

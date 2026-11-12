@@ -52,20 +52,39 @@ Phase 2, first part (2026-11-12):
   (`test/beamer-tikz-overlay-step.spec.ts`), and the test fails when
   visibility is broken on purpose.
 
-Still to do in phase 2:
+Phase 2, second part (2026-11-12):
 
-- **Sites from the AST.** The decoder still finds a picture's overlay
-  commands with its own scanner. Until it reads them from the AST:
-  `\pause` and `\onslide` in a picture still run to the end of the frame,
-  and specifications a loop creates are still missed.
-- **Edit actions on the main thread** evaluate a slide picture without the
-  step's visibility (they parse the overlay syntax correctly now, and ids
-  agree with the snapshot). They need the frame's step passed in.
-- **Rule chains on scene elements**, and the effective-steps requirement
-  for edits.
-- `projectBeamerTikzSource` stays for text inside statements; the picture is
-  parsed once more per step to find its statement-level commands (cached
-  per source).
+- **Declarations follow TeX's scoping.** In a picture, `\pause` and
+  `\onslide` hold to the end of the enclosing scope or picture, where the
+  declaration in force before resumes; the latest one in force wins (an
+  inner `\onslide<1->` shows what an outer pause covers). Text after the
+  picture is no longer covered. Each case is checked against pages
+  LuaLaTeX set.
+- **A trace per picture** (`beamer/tikz-overlay-trace.ts`): the picture is
+  parsed and its loops expanded, and its path specifications and loop
+  pauses are listed in execution order, each loop iteration its own
+  instance. The frame decoder resolves them with the frame's counter; the
+  evaluator asks by source span and iteration. The decoder's own scanner
+  for path commands is gone.
+- **Loops.** `\foreach \x in {1,2,3} {\node<\x-> …;}` gives three steps and
+  shows one more node on each; a `\pause` in a loop counts once per
+  iteration and covers what runs after it. Nested loops resolve by their
+  own variables. The Overlays panel shows one row for the rule as written,
+  not editable as a number.
+- **Edit actions** evaluate a slide picture as its snapshot's step shows it
+  (`picture-overlay-step.ts`), when the step hides anything.
+
+Still to do:
+
+- **Rule chains on scene elements** (which rules govern an element), for
+  phase 3.
+- **Edits keep effective steps.** Not yet checked or enforced: moving a
+  statement past a `\pause`, or reordering `+` specifications.
+- **Brace commands and `\onslide` inside a loop body** are still resolved as
+  text, once, not per iteration.
+- **A Beamer quirk not followed:** after a `\pause` inside a picture, TeX
+  shows the text after a later frame-level `\pause` one step early.
+- `projectBeamerTikzSource` stays for text inside statements.
 
 ## Decided
 
