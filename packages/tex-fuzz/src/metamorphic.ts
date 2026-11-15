@@ -199,9 +199,14 @@ export function checkTexFuzzMetamorphicInvariants(
         continue;
       }
       if (pair.relationId === "tie-removes-breakpoint" && transformed.report) {
+        const report = transformed.report;
         const changedOffset = firstDifference(pair.originalSource, pair.transformedSource);
         const forbiddenBreakOffset = changedOffset + 1;
-        if (transformed.report.lines.some((line) => line.break?.sourceOffset === forbiddenBreakOffset)) {
+        if (report.lines.some((line) => line.break?.kind === "space"
+          && line.break.sourceOffset === forbiddenBreakOffset
+          // Explicit breaks and synthetic paragraph-start penalties can share
+          // the tie's source offset. Only a break at the space run violates it.
+          && report.runs.some(run => run.runIndex === line.break?.runIndex && run.kind === "space"))) {
           findings.push({
             fingerprint: {
               version: 1,

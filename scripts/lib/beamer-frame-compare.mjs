@@ -392,7 +392,8 @@ function transformTraceRectRange(rectangles, start, matrix) {
     const points = [[rect.x, rect.y], [rect.x + rect.width, rect.y], [rect.x, rect.y + rect.height], [rect.x + rect.width, rect.y + rect.height]].map(([x, y]) => transformPoint(matrix, x, y));
     const x = Math.min(...points.map(point => point.x));
     const y = Math.min(...points.map(point => point.y));
-    rectangles[index] = { ...rect, ...roundedRect({ x, y, width: Math.max(...points.map(point => point.x)) - x, height: Math.max(...points.map(point => point.y)) - y }) };
+    rectangles[index] = { ...rect, ...roundedRect({ x, y, width: Math.max(...points.map(point => point.x)) - x, height: Math.max(...points.map(point => point.y)) - y }),
+      ...(rect.paintProbes ? { paintProbes: rect.paintProbes.map(point => transformPoint(matrix, point.x, point.y)) } : {}) };
   }
 }
 
@@ -1157,6 +1158,7 @@ function featuresFromNativeMathSvg(params) {
   // image there, and the viewport only when clipping actually applies.
   return {glyphs,rules: [...rules, ...nativeSvgImageRectangles(params.svgBody).map(rect => ({
     role: "image", x: round(params.originX + rect.x / 100), y: round(params.baselineY + rect.y / 100), width: round(rect.width / 100), height: round(rect.height / 100),
+    paintProbes: rect.paintProbes.map(point => ({ x: round(params.originX + point.x / 100), y: round(params.baselineY + point.y / 100) })),
   }))]};
 }
 
@@ -1165,7 +1167,10 @@ function nativeSvgImageRectangles(svg, initialTransform = identityMatrix(), incl
   const append = (matrix, x, y, width, height, role) => {
     const points = [[x, y], [x + width, y], [x, y + height], [x + width, y + height]].map(([a, b]) => transformPoint(matrix, a, b));
     const left = Math.min(...points.map(point => point.x)), top = Math.min(...points.map(point => point.y));
-    rectangles.push({ ...(role ? { role } : {}), x: round(left), y: round(top), width: round(Math.max(...points.map(point => point.x)) - left), height: round(Math.max(...points.map(point => point.y)) - top) });
+    // Probe each quadrant in the image's own coordinates. A rotated bounding
+    // rectangle's quarter points can land on antialiased edges or outside it.
+    const paintProbes = [.25, .75].flatMap(v => [.25, .75].map(u => transformPoint(matrix, x + width * u, y + height * v)));
+    rectangles.push({ ...(role ? { role } : { paintProbes }), x: round(left), y: round(top), width: round(Math.max(...points.map(point => point.x)) - left), height: round(Math.max(...points.map(point => point.y)) - top) });
   };
   for (const match of svg.matchAll(/<\/?[A-Za-z][^>]*>/gu)) {
     const tag = match[0];

@@ -196,14 +196,17 @@ function planSimpleTexParagraphVerticalSkipsInto(
         const boundary: TexParagraphItem = { kind: "paragraph", blockIndex,
           sourceSpan: item.sourceSpan ?? { start: 0, end: 0 },
           paragraph: { blockIndex, text: "", sourceSpan: item.sourceSpan ?? { start: 0, end: 0 }, nodes: [], noIndent: true,
-            startsAfterExplicitPar: true, quoteDepth: 0, ...(item.role.pendingListBoundaries && list ? { ancestorListLabels: item.role.pendingListBoundaries.filter(label => label.depth < list.depth) } : {}), ...(item.scopePath ? { scopePath: item.scopePath } : {}) } };
+            startsAfterExplicitPar: true, quoteDepth: 0, ...(item.role.pendingListBoundaries && list ? { ancestorListLabels: item.role.pendingListBoundaries.filter(label => label.inherited === true || label.depth < list.depth) } : {}), ...(item.scopePath ? { scopePath: item.scopePath } : {}) } };
         planSimpleTexParagraphVerticalSkipsInto([boundary], font, listProfile, state, skips, ancestors, pathPrefix);
         const skip = skips.at(-1);
         if (skip) {
           const profile = listProfileForContext(listProfile, state.previousEmittedListContext);
           const parskip = list ? texArticleListParagraphSkip(list.depth, font, profile) : texLength(0);
-          skips[skips.length - 1] = { ...skip, listSize: texLength(Math.max(0, skip.listSize - parskip)),
-            size: texLength(Math.max(0, skip.size - parskip)), vlistPath: path };
+          // A transferred label takes @donoparitem's path. With opening
+          // topsep suppressed, its outerparskip - parskip can be negative.
+          const minimum = item.role.pendingListBoundaries?.some(label => label.inherited) ? -Number(parskip) : 0;
+          skips[skips.length - 1] = { ...skip, listSize: texLength(Math.max(minimum, skip.listSize - parskip)),
+            size: texLength(Math.max(minimum, skip.size - parskip)), vlistPath: path };
           state.externalPendingParskip = Number(parskip);
         }
       }
@@ -542,7 +545,7 @@ export function addParagraphVerticalGlueToVList(
 ): TexVListDocument {
   const verticalSkipByPath = new Map<string, SimpleTexParagraphVerticalSkip>();
   for (const skip of skips) {
-    if (skip.segmentIndex === 0 && (skip.size > 0 || (skip.listStretch ?? 0) !== 0 || (skip.listShrink ?? 0) !== 0)) {
+    if (skip.segmentIndex === 0 && (skip.size !== 0 || (skip.listStretch ?? 0) !== 0 || (skip.listShrink ?? 0) !== 0)) {
       verticalSkipByPath.set(texVListPathKey(skip.vlistPath), skip);
     }
   }
@@ -606,7 +609,7 @@ function paragraphBoundaryGlueItems(
       size: skip.quoteSize,
     });
   }
-  if (skip.listSize > 0 || (skip.listStretch ?? 0) !== 0 || (skip.listShrink ?? 0) !== 0) {
+  if (skip.listSize !== 0 || (skip.listStretch ?? 0) !== 0 || (skip.listShrink ?? 0) !== 0) {
     glues.push({
       kind: "glue",
       ...shared,

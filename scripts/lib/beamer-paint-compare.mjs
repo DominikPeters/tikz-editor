@@ -45,8 +45,9 @@ function pixelRgb(path, x, y) {
 export function compareBlockPaint(render, nativeTrace, oracleTrace, nativePng, oraclePng, width, height, additionalProbes = [], paintImages = false) {
   const automaticProbes = blockPaintProbes(render, nativeTrace, oracleTrace);
   if (paintImages) for (const graphic of nativeTrace.rectangles.filter(rect => rect.role === "image")) {
-    for (const [row, y] of [.25, .75].entries()) for (const [column, x] of [.25, .75].entries()) {
-      automaticProbes.push({ id: `${graphic.id}:image:${row}:${column}`, x: graphic.x + graphic.width * x, y: graphic.y + graphic.height * y });
+    const points = graphic.paintProbes ?? [.25, .75].flatMap(y => [.25, .75].map(x => ({ x: graphic.x + graphic.width * x, y: graphic.y + graphic.height * y })));
+    for (const [index, point] of points.entries()) {
+      automaticProbes.push({ id: `${graphic.id}:image:${Math.floor(index / 2)}:${index % 2}`, ...point });
     }
   }
   const ids = new Set(automaticProbes.map(probe => probe.id));

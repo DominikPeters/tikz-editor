@@ -198,6 +198,20 @@ describe("TeX math SVG rendering", () => {
     expect(caretMap.diagnostics?.[0]?.code).toBe("unsupported-math-caret-geometry");
   });
 
+  it("builds caret geometry for a long arrow assembled from tiny glyphs", () => {
+    const source = String.raw`$\xrightarrow{{\mid}_{z}^{\rVert}}$`;
+    const box = createTexDerivedInlineMathBoxProvider().getInlineMathBox({
+      source, content: source.slice(1, -1), delimiter: "dollar",
+      sourceStart: 0, sourceEnd: source.length, contentStart: 1, contentEnd: source.length - 1,
+      atPt: texLength(25 / 65536),
+    });
+    expect(box?.width).toBeCloseTo(0.500568, 6);
+    expect(box?.caretMap?.entries.length).toBeGreaterThan(40_000);
+    expect(box?.caretStops).toHaveLength(source.length + 1);
+    const entries = box!.caretMap!.entries;
+    expect(entries.every(entry => Number.isFinite(entry.x) && Number.isFinite(entry.y))).toBe(true);
+  });
+
   it("generates 2-D caret map entries for script layout", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const source = String.raw`$x^2$`;

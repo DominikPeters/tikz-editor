@@ -2067,7 +2067,7 @@ function prepareFrameParagraph(params: {
   const projectedSource = projection.mapped.text;
   const trivlistTopsep = params.listProfile.trivlistTopsepPt ?? 9;
   const trailingTrivlistSkip = trailingBeamerTrivlistSkip(projectedSource, trivlistTopsep);
-  const trailingListSkip = trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont);
+  const trailingListSkip = trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont, paragraph);
   const trailingListShrink = trailingListSkip > 0
     ? BEAMER_LIST_LAYOUT_PROFILE.topsepShrinkPtByDepth?.[0] ?? 0
     : 0;
@@ -2526,7 +2526,7 @@ async function prepareBlockWithTheme(params: {
       : terminalBodyFlow?.kind === "block" ? terminalBodyFlow.block.plan.geometry.afterSkipPt : 0
     : 0;
   const bodyExtent = body ? (plan.style === "default"
-    ? paragraphMaterialExtent(body) + trailingScopedBeamerListSkip(createIdentityMappedText(params.source.slice(params.node.bodySpan.from, params.node.bodySpan.to), params.node.bodySpan.from), params.references, theoremBodyFont)
+    ? paragraphMaterialExtent(body) + trailingScopedBeamerListSkip(createIdentityMappedText(params.source.slice(params.node.bodySpan.from, params.node.bodySpan.to), params.node.bodySpan.from), params.references, theoremBodyFont, body)
     : paragraphLineExtent(body)) : (bodyFlow?.extent ?? 0) - terminalBodySkip;
   const titleLine = title.layout.report.lines[0];
   // The title template packs its paragraph into a vbox, whose reference is
@@ -2595,19 +2595,12 @@ async function prepareBlockWithTheme(params: {
     : firstFlowItem?.kind === "block" ? firstFlowItem.block.flowBoxHeight : undefined;
   const firstBodyBaselineSkip = firstBody ? paragraphStartingBaselineSkip(firstBody, theoremBodyFont.lineHeightPt)
     : firstFlowItem?.kind === "block" ? (firstFlowItem.block.theme ?? params.theme).fonts["normal-text"].lineHeightPt : theoremBodyFont.lineHeightPt;
-  let bodyBaselineInset =
+  const bodyBaselineInset =
     firstBodyHeight !== undefined && geometry.bodyFirstBaselineSkipPt != null
       ? (firstBodyBaselineSkip - firstBodyHeight >= 0
           ? firstBodyBaselineSkip - firstBodyHeight
           : 1) + geometry.bodyInitialVSkipEx * fontXHeightPt(params.theme.fonts[plan.bodyFontRole])
       : geometry.bodyTopPaddingPt;
-  if (plan.style === "rounded" && firstBody?.layout.vlistLayout.items[0]?.item.kind === "vbox" &&
-      firstBody.layout.vlistLayout.items[0].item.role?.kind === "trivlist" && !firstBody.layout.vlistLayout.items[0].item.role.noParList) {
-    // Large boxes after the rounded minipage's leading center/flush line
-    // need the minimum lineskip; ordinary prose already has its baseline.
-    const interline = theoremBodyFont.lineHeightPt - paragraphStartingMaterialHeight(firstBody);
-    if (interline < 0) bodyBaselineInset += 1;
-  }
   const lastFlowItem = bodyFlow?.items.at(-1)?.item;
   const bodyEndingDepth = body ? paragraphEndingMaterialDepth(body)
     : lastFlowItem?.kind === "columns" ? lastFlowItem.box.depth
@@ -3521,7 +3514,8 @@ async function prepareColumnContent(params: {
       // T's \colheadskip ships the leading empty line before \vskip-1ex.
       // A first display does not add another empty-line baseline skip.
       firstInColumn: flow.length === 0,
-      ...(column.alignment === "T" && flow.length === 0 ? { leadingDisplayBaselineSkipPt: 0 } : {}),
+      ...((column.alignment === "T" && flow.length === 0) || flow.at(-1)?.kind === "columns"
+        ? { leadingDisplayBaselineSkipPt: 0 } : {}),
     });
     if (prepared) {
       const previous = flow.at(-1);
@@ -5340,7 +5334,7 @@ function emitUnsupportedPlaceholder(params: {
 }
 
 /** Closing list glue uses the registers captured in the list's active size. */
-function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerReferenceContext, font: BeamerThemeFont): number {
+function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerReferenceContext, font: BeamerThemeFont, paragraph?: LaidParagraph): number {
   const end = [...mapped.text.matchAll(/\\end\s*\{(?:itemize|enumerate|description)\}/gu)].at(-1);
   if (!end) return 0;
   // A transferred parent label makes this list take LaTeX's noparlist path:
@@ -5354,5 +5348,11 @@ function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerRefe
   const active = references.theme ? ambientTextTheme(references.theme,
     references.ambientTextAt?.(origin?.kind === "direct" ? origin.from : 0) ?? "").fonts["normal-text"] : font;
   const skip = beamerListSizeOverrides(references.theme).find(entry => Math.abs(entry.fontSizePt - active.sizePt) < .001)?.topsepPt ?? 3;
-  return trailingBeamerListSkip(mapped.text, skip);
+  const closing = trailingBeamerListSkip(mapped.text, skip);
+  // endtrivlist uses addvspace, so a terminal display skip and the list's
+  // closing topsep contribute their maximum rather than their sum.
+  const last = paragraph?.layout.vlistLayout.boxReport.items.at(-1);
+  const existing = last?.glue?.origin?.kind === "display-math-boundary" && last.glue.origin.side === "below"
+    ? Math.max(0, Number(last.height)) : 0;
+  return Math.max(0, closing - existing);
 }

@@ -5661,7 +5661,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
         scanState.aborted = true;
         break;
       }
-      const pendingItemLabels: SimpleTexListContext[] = [];
+      const inheritedMargin = inheritedItemLabels.at(-1)?.totalLeftMarginEm ?? 0;
+      const pendingItemLabels: SimpleTexListContext[] = inheritedItemLabels.map(label => ({
+        ...label, inherited: true, totalLeftMarginEm: label.totalLeftMarginEm - inheritedMargin,
+      }));
       for (const [depthIndex, list] of listStack.entries()) {
         const pending = depthIndex === listStack.length - 1 ? { show: pendingListShowLabel, label: pendingListLabel } : pendingListLabels[depthIndex + 1];
         if (!pending?.show || list.itemIndex <= 0) continue;
@@ -5677,6 +5680,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const clearsPendingLabels = options?.boxesClearingPendingItemLabels?.includes(node.sourceStart);
       const consumedItemLabels = clearsPendingLabels ? pendingItemLabels : [];
       if (clearsPendingLabels) {
+        inheritedItemLabels = [];
         for (const role of scopeStack) if (role.kind === "trivlist") consumedTrivlistLabels.add(role);
       }
       if (consumedItemLabels.length) {

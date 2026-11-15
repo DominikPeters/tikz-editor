@@ -99,6 +99,19 @@ Display rows:
     expect(render.diagnostics).toEqual([]);
   });
 
+  it("keeps image paint probes inside the rotated image through frame shrink", async () => {
+    const render = await renderBeamerFrame(String.raw`\documentclass{beamer}\begin{document}\begin{frame}[shrink=20]\includegraphics[angle=30,width=20pt]{fuzz-images/pattern.png}\end{frame}\end{document}`, { graphicsResolver: createTexFuzzGraphicsResolver() });
+    const [image] = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider).rectangles.filter(rect => rect.role === "image");
+    expect(image.paintProbes).toHaveLength(4);
+    if (!image.paintProbes) throw new Error("Missing transformed image paint probes");
+    const [a, b, c, d] = image.paintProbes;
+    expect((b.y - a.y) / (b.x - a.x)).toBeCloseTo(-Math.tan(Math.PI / 6), 5);
+    expect(d.x).toBeCloseTo(b.x + c.x - a.x, 5);
+    expect(d.y).toBeCloseTo(b.y + c.y - a.y, 5);
+    expect((a.x + d.x) / 2).toBeCloseTo(image.x + image.width / 2, 5);
+    expect((a.y + d.y) / 2).toBeCloseTo(image.y + image.height / 2, 5);
+  });
+
   it("traces unclipped image paint through a shifted viewBox", async () => {
     const render = await renderBeamerFrame(String.raw`\documentclass{beamer}\begin{document}\begin{frame}Before \includegraphics[trim=2 1 3 2,viewport=1 1 20 14,clip=false]{fuzz-images/pattern.png} after.\end{frame}\end{document}`, { graphicsResolver: createTexFuzzGraphicsResolver() });
     const images = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider).rectangles.filter(rect => rect.role === "image");

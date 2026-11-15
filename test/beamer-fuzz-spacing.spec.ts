@@ -19,6 +19,26 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "starts a rounded block's flush environment without an extra lineskip",
+    source: slide(String.raw`\begin{block}{Alpha}\begin{flushleft}\begin{tikzpicture}\draw (0,0) rectangle (2,1);\node at (1,.5){Box};\end{tikzpicture}\end{flushleft}\par Tail\end{block}\par Witness`),
+    baselines: [["Alpha", 46.952881], ["Box", 72.597809], ["Tail", 104.221405], ["Witness", 124.395721]],
+  },
+  {
+    name: "combines a terminal display skip with a default block's closing list skip",
+    source: slide(String.raw`\begin{exampleblock}{Alpha}\begin{enumerate}\item First\item \begin{itemize}\item Second\item \[\begin{aligned}a+b&=c\\d-e&=f\end{aligned}\]\end{itemize}\end{enumerate}\end{exampleblock}\par\begin{tikzpicture}\node {Witness};\end{tikzpicture}`, 9, "default"),
+    baselines: [["Alpha", 40.755554], ["Witness", 109.287582]],
+  },
+  {
+    name: "starts a display after nested columns without another empty-line baseline",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,T]\begin{column}{.46\textwidth}\begin{columns}[onlytextwidth,c]\begin{column}{.38\textwidth}Alpha\end{column}\begin{column}{.58\textwidth}\[E=\sum_{i=1}^{n}w_i x_i\]\end{column}\end{columns}\par\[E=\sum_{i=1}^{n}w_i x_i\]\par Tail\end{column}\begin{column}{.46\textwidth}Peer\end{column}\end{columns}\par Witness`, 12),
+    baselines: [["Alpha", 66.31813], ["Tail", 136.525543], ["Witness", 145.501419]],
+  },
+  {
+    name: "keeps the negative paragraph skip of an inherited item before an external block",
+    source: slide(String.raw`\begin{itemize}\item First\item \begin{columns}[onlytextwidth,t]\begin{column}{.38\textwidth}\begin{itemize}\item \begin{block}{Alpha}Inside\end{block}\item Second\item Third\end{itemize}\end{column}\begin{column}{.58\textwidth}Peer\end{column}\end{columns}\end{itemize}\par\begin{tikzpicture}\node {Witness};\end{tikzpicture}`, 9, "Madrid"),
+    baselines: [["Alpha", 71.001877], ["Inside", 84.294708], ["Second", 112.410843], ["Third", 122.861176], ["Witness", 135.520981]],
+  },
+  {
     name: "retains the anonymous flushleft item after external blocks",
     source: slide(String.raw`\begin{columns}[onlytextwidth,c]\begin{column}{.46\textwidth}\begin{flushleft}\begin{exampleblock}{Alpha}First\end{exampleblock}\begin{block}{Beta}Second\end{block}\end{flushleft}\par Tail\end{column}\begin{column}{.5\textwidth}Peer\end{column}\end{columns}\par Witness`),
     baselines: [["Alpha", 56.453539], ["Beta", 97.659095], ["Tail", 154.467184], ["Peer", 95.606793], ["Witness", 162.751208]],

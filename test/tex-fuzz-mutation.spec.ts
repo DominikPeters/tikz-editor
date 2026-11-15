@@ -208,6 +208,24 @@ describe("TeX fuzz mutations and relations", () => {
     )).toBe(true);
   });
 
+  it("allows an explicit line break immediately after a tie", () => {
+    const caseData = caseFromTexFuzzAst([
+      { kind: "text", value: "Alpha" },
+      { kind: "space", nonBreaking: false },
+      { kind: "line-break", command: "linebreak", priority: 4 },
+      { kind: "text", value: "Beta" },
+    ]);
+    expect(checkTexFuzzMetamorphicInvariants(caseData).findings).toEqual([]);
+  });
+
+  it("distinguishes a trivlist label penalty from a tie at the same source offset", () => {
+    const caseData = caseFromTexFuzzAst([{ kind: "environment", name: "flushleft", children: [
+      { kind: "space", nonBreaking: false },
+      { kind: "text", value: "coöperate" },
+    ] }]);
+    expect(checkTexFuzzMetamorphicInvariants(caseData, { widths: [40] }).findings).toEqual([]);
+  });
+
   it("accounts local candidates independently from external oracle evaluations", async () => {
     const original = caseFromTexFuzzAst([
       { kind: "text", value: "Alpha" },

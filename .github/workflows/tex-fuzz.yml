@@ -143,7 +143,7 @@ jobs:
 
   beamer-edit-feedback:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: ${{ github.event.schedule == '43 3 * * 0' && 360 || 90 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -161,11 +161,15 @@ jobs:
         run: |
           edit_cases=49
           edit_steps=28
+          case_timeout_ms=180000
           if [ '${{ github.event.schedule }}' = '43 3 * * 0' ]; then
             edit_cases=64
             edit_steps=96
+            # The weekly sequences do over three times as many edits, with
+            # a fresh covered reference render for each changed state.
+            case_timeout_ms=600000
           fi
-          npm run fuzz:beamer-edits -- --cases "$edit_cases" --steps "$edit_steps" --seed ${{ github.run_number }} --corpus-replays 8 --mutations 16 --max-failures 3 --out-dir artifacts/beamer-edit-fuzz/ci
+          npm run fuzz:beamer-edits -- --cases "$edit_cases" --steps "$edit_steps" --case-timeout-ms "$case_timeout_ms" --seed ${{ github.run_number }} --corpus-replays 8 --mutations 16 --max-failures 3 --out-dir artifacts/beamer-edit-fuzz/ci
       - uses: actions/cache/save@v4
         if: ${{ always() && (steps.campaign.outcome == 'success' || steps.campaign.outcome == 'failure') }}
         with:

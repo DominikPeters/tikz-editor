@@ -60,6 +60,8 @@ export interface NativeBeamerPageTrace {
     readonly bounds: BeamerTraceRect;
   }[];
   readonly rectangles: readonly (BeamerTraceRect & {
+    /** Image quadrant centers after all graphic and frame transforms. */
+    readonly paintProbes?: readonly { readonly x: number; readonly y: number }[];
     readonly id: string;
     readonly role: string;
   })[];

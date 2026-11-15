@@ -1167,20 +1167,18 @@ function dedupeMathCaretEntries(entries: readonly TexMathCaretEntry[]): readonly
         left.kind.localeCompare(right.kind)
       : left.sourceOffset - right.sourceOffset
   );
-  return sorted.filter((entry, index, allEntries) =>
-    allEntries.findIndex((candidate) =>
-      candidate.sourceOffset === entry.sourceOffset &&
-      candidate.x === entry.x &&
-      candidate.y === entry.y &&
-      candidate.height === entry.height &&
-      candidate.depth === entry.depth &&
-      candidate.kind === entry.kind &&
-      candidate.hitBounds.xStart === entry.hitBounds.xStart &&
-      candidate.hitBounds.xEnd === entry.hitBounds.xEnd &&
-      candidate.hitBounds.yStart === entry.hitBounds.yStart &&
-      candidate.hitBounds.yEnd === entry.hitBounds.yEnd
-    ) === index
-  );
+  // Extensible glyphs can contribute thousands of entries. Retain the first
+  // (highest-priority) match without rescanning the whole map for every entry.
+  const seen = new Set<string>();
+  return sorted.filter((entry) => {
+    const key = JSON.stringify([
+      entry.sourceOffset, entry.x, entry.y, entry.height, entry.depth, entry.kind,
+      entry.hitBounds.xStart, entry.hitBounds.xEnd, entry.hitBounds.yStart, entry.hitBounds.yEnd,
+    ]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function mathCaretMapCoverageDiagnostics(
