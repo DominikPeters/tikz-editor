@@ -16,7 +16,7 @@ import {
   scanFigureSpans
 } from "./shared.js";
 import { applyStructuralMasks, parseTikz } from "./index.js";
-import { collectContextDefinitions } from "../transform/cst-to-ast.js";
+import { collectContextDefinitions, scanFigureOptionsSpan } from "../transform/cst-to-ast.js";
 import { buildLineStarts, lineForOffset } from "../text/line-map.js";
 import { nodeTextValidatorForParse, rememberNodeTextValidator, syntaxDiagnostics, validateNodeText } from "./node-text-validation.js";
 
@@ -736,6 +736,11 @@ function shiftFigureInventory(
   const lineStarts = buildLineStarts(source);
   return figures.map((figure) => {
     const shifted = shiftSpansDeep(structuredClone(figure), patches);
+    // Edits outside the active picture can add/remove another picture's
+    // option list. Rebasing spans cannot discover that header change.
+    const optionsSpan = scanFigureOptionsSpan(source, shifted.beginSpan.to, shifted.endSpan.from);
+    if (optionsSpan) shifted.optionsSpan = optionsSpan;
+    else delete shifted.optionsSpan;
     shifted.startLine = lineForOffset(shifted.span.from, lineStarts);
     shifted.endLine = lineForOffset(Math.max(shifted.span.from, shifted.span.to - 1), lineStarts);
     return shifted;

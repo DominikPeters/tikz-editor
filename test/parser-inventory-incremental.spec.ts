@@ -45,6 +45,31 @@ function syntaxSpans(parse: ReturnType<typeof parseTikz>): string[] {
 }
 
 describe("incremental figure inventory lines", () => {
+  it.each([
+    { name: "adding options", before: "", after: "[red,thick]" },
+    { name: "removing options", before: "[red,thick]", after: "" },
+    { name: "removing a closing bracket", before: "[red,thick]", after: "[red,thick" },
+    { name: "closing an option list", before: "[red,thick", after: "[red,thick]" },
+    { name: "adding options after a comment", before: "% header\n", after: "% header\n[red]" },
+    { name: "commenting out options", before: "[red]", after: "% [red]\n" }
+  ])("refreshes inactive figure headers when $name", ({ before, after }) => {
+    const document = (header: string) => [
+      String.raw`\begin{tikzpicture}`, String.raw`\draw (0,0) -- (1,0);`, String.raw`\end{tikzpicture}`,
+      String.raw`\begin{tikzpicture}`, header + String.raw`\node {B};`, String.raw`\end{tikzpicture}`
+    ].join("\n");
+    const options = { activeFigureId: "figure:0", recover: true };
+    const session = createIncrementalParseSession();
+    session.prime(parseTikz(document(before), options), options);
+    const source = document(after);
+    const result = session.evaluate({ source, inferChanges: true, ...options });
+    const fresh = parseTikz(source, options);
+    expect(result.stats.strategy).toBe("incremental");
+    expect(result.stats.reparsedStatementCount).toBe(0);
+    expect(result.parse.figures).toEqual(fresh.figures);
+    expect(result.parse.figure).toEqual(fresh.figure);
+    expect(session.evaluate({ source, ...options }).parse.figures).toEqual(fresh.figures);
+  });
+
   it.each(["\n", "\r\n", "\r"])("updates all following figures after inserting %j in a statement", (lineBreak) => {
     expectIncrementalInventoryParity(documentWithLabel("First", lineBreak), documentWithLabel(`First${lineBreak}line`, lineBreak));
   });
