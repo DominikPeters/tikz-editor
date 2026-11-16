@@ -105,7 +105,10 @@ export function commitCommand(
   const following = tree.text.slice(followsAt, followsAt + 1);
   // Even a name committed as typed must not absorb the letters after the caret (`\te` before `lpha`).
   const tail = key === "space" && mode !== "math" ? textSpaceTail(schema, following) : letterTerminator(following, mode);
-  const text = command + tail;
+  // Existing brackets are content, rather than an optional argument the
+  // user requested while committing the command. TeX skips spaces/comments.
+  const guard = optionalFirst && !tail.startsWith("{") && /^(?:\s|%[^\r\n]*(?:\r?\n|$))*\[/u.test(tree.text.slice(followsAt)) ? "{}" : "";
+  const text = command + guard + tail;
   if (placeholder && tail.trim() === "" && (mandatory.length === 0 || key === "typed")) {
     // A symbol TeX reads as one token replaces the braces (M12: `\mu^\top`); anything else
     // (`\ldots`, `\sum`, `\bf`, a user macro) keeps them, the caret leaving them after a

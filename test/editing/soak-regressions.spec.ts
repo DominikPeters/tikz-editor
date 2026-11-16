@@ -17,6 +17,35 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 
 describe("keystroke soak regressions", () => {
 
+  it("keeps pause from absorbing an existing bracket and later columns", () => {
+    const result = replay("\n\\fuzzpair{MacroStageB}{Timing: 12\\fuzzunit, retained: 9\\fuzzoriginalunit.}\\par\n{\\renewcommand{\\fuzzunit}{local}\\fuzzpair{FrameLocal}{Timing: 5\\fuzzunit.}\\par}\n\\fuzzpair{FrameRestored}{Timing: 8\\fuzzunit; estimate $\\fuzzscale{x}$.}\u2038\\par\n\\begin{columns}[T]\\begin{column}{.46\\textwidth}The final diagram records the order in which information crosses the partition.\\end{column}\\begin{column}{.46\\textwidth}\\begin{itemize}\\item Input state\\item Updated state\\end{itemize}\\end{column}\\end{columns}\n", ["[", "←", String.raw`\pause`, "⏎"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toContain(String.raw`\pause{}[`);
+  });
+
+  it.each(["pause", "tableofcontents"])("guards existing brackets when committing %s", name => {
+    for (const suffix of ["[Keep]", " \n[Keep]", "% comment\n[Keep]"]) {
+      for (const key of ["space", "structure", "typed"] as const) {
+        const source = `Text ${suffix}`;
+        const view = createEditView(buildEditTree(source, { commands }));
+        const result = commitCommand(view, commands, view.positionAt(5), 5, name, key, NO_INTERACTION, null).outcome;
+        expect(result.kind).toBe("patch");
+        if (result.kind !== "patch") throw new Error("Expected the command commit");
+        const after = applyPatches(source, result.patches);
+        expect(after).toContain(`\\${name}{}`);
+        expect(after.endsWith(suffix)).toBe(true);
+      }
+    }
+  });
+
+  it("still opens an optional argument when the bracket is the commit key", () => {
+    const view = createEditView(buildEditTree("Text ", { commands }));
+    const result = commitCommand(view, commands, view.positionAt(5), 5, "pause", "bracket", NO_INTERACTION, null).outcome;
+    expect(result.kind).toBe("patch");
+    if (result.kind !== "patch") throw new Error("Expected the optional argument");
+    expect(applyPatches("Text ", result.patches)).toBe(String.raw`Text \pause[]`);
+  });
+
   it("keeps alltt command terminators when deleting a selected character", () => {
     const result = replay("\\begin{alltt}\n  e‸cho hello\n  echo world\n\\end{alltt}", [String.raw`\te`, String.raw`\sum`, "Esc", "b", "⇧←", "⌦"]);
     expect(result.failure, JSON.stringify(result.states)).toBeNull();
