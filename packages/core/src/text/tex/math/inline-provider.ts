@@ -537,12 +537,10 @@ function mathCaretMapWithinBudget(items: readonly TexMathHListItem[]): boolean {
   let remaining = 100_000;
   const pending = [...items];
   for (let item = pending.pop(); item !== undefined; item = pending.pop()) {
-    if (item.kind === "hlist") {
-      remaining -= 2;
-      pending.push(...item.items);
-    } else if (item.kind === "glyph" || item.kind === "rule") {
-      remaining -= Math.max(2, item.sourceSpan.end - item.sourceSpan.start + 1);
-    }
+    // Source-bearing kern/glue nodes also expand into caret entries.
+    // Include them and container spans before allocating any geometry.
+    remaining -= Math.max(2, item.sourceSpan.end - item.sourceSpan.start + 1);
+    if (item.kind === "hlist") pending.push(...item.items);
     if (remaining < 0) return false;
   }
   return true;
