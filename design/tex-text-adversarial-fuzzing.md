@@ -968,6 +968,11 @@ Within a campaign using unchanged renderer code and oracle environment, run the
 support oracle's calibration/shrinking self-check once, then pass
 `--skip-support-self-check` to subsequent batches. Generated paragraph and math
 comparisons, and math control calibrations, still run on every oracle batch.
+Likewise, exercise the full 4,100-request cache-eviction working set once per
+unchanged campaign, then use `--engine-churn-requests 0` for subsequent batches.
+Keep `--engine-history-cases` enabled: source shifts, font/resolver changes,
+undo/redo, fresh-engine comparisons and retained snapshots still run for every
+selected history. A new campaign runs the full eviction check again.
 
 Useful bounded local runs (build first with `npm run build:tex-fuzz`):
 
