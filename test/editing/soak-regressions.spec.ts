@@ -18,6 +18,13 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 
 describe("keystroke soak regressions", () => {
 
+  it.each(["_2", "^2", "_{2}", "^{2}"])("terminates the base command after deleting %s", script => {
+    const marked = `$\\pi${script.replace("2", "‸2")}p$`;
+    const result = replay(marked, ["⌦", "⌦"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toBe(String.raw`$\pi p$`);
+  });
+
   it.each([
     [String.raw`\left[`], [String.raw`\left(`],
     [String.raw`\mathbb`, "⏎"], [String.raw`\frac`, "⏎"],

@@ -198,13 +198,14 @@ function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDeci
   }
   if (isEmptySlot(view, slot) && REMOVABLE_ROLES.has(record.role)) {
     const span = slotOuterSpan(tree, slot);
-    const patches = new PatchSet().delete(span).patches();
+    const result = finishDeletion(view, new PatchSet().delete(span), span.from, record.mode, null);
     // Removing a root's empty index moves into its radicand, past its
     // opening brace. A caret before that brace would let the next command
     // become the radicand's single token and split a delimiter pair.
     const next = record.role === "index" ? slots[slots.findIndex(candidate => candidate.id === slot) + 1] : null;
-    const caret = next ? view.offset({ slot: next.id, index: 0 }) : span.from;
-    return outcome({ kind: "patch", patches, caret: mapThrough(patches, caret), run: null });
+    return outcome(next && result.kind === "patch"
+      ? { ...result, caret: mapThrough(result.patches, view.offset({ slot: next.id, index: 0 })) }
+      : result);
   }
   const at = slots.findIndex((candidate) => candidate.id === slot);
   const neighbour = slots[edge === "start" ? at - 1 : at + 1];
