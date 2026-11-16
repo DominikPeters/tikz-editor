@@ -17,6 +17,12 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 
 describe("keystroke soak regressions", () => {
 
+  it("keeps populated table cells in their mode when changing a specification", () => {
+    const result = replay("\n\\begin{tabular}{>{$}c<{$}l}\nx\u2038^2 & Alpha\\\\\n  & Beta\\\\\n\\frac{1}{2} & Gamma\n\\end{tabular}\n", ["@72:38", "#", String.raw`\left|`, "@setvalue:-549825329"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toContain(">{$}c<{$}l");
+  });
+
   it("keeps malformed lens comments inside their recovered tree spans", () => {
     const result = replay("\u2038\\relax \\begin{enumerate}\\item<1-> \\uncover<1>{{\\scriptsize\\color{blue}\\centering\\begin{columns}[onlytextwidth,b]\\begin{column}{.46\\textwidth}Left\\end{column}\\begin{column}{.5\\textwidth}Right\\\\Second\\end{column}\\end{columns}\\par}}\\item After.\\end{enumerate}\\only<2>{}", ["⌦", "⌘E", "@lens:1119488613", "⌘B", "⏎"]);
     expect(result.failure, JSON.stringify(result.states)).toBeNull();
