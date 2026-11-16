@@ -14,6 +14,15 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 }
 
 describe("keystroke soak regressions", () => {
+  it.each(["enumerate", "itemize"])("keeps fallback motion at editable stops inside %s", environment => {
+    for (const motion of ["⌘←", "⌥←"]) {
+      const source = `\\begin{${environment}}\n\\item \\[w_i‸ x_i\\]\n\\end{${environment}}`;
+      const result = replay(source, [String.raw`\url`, String.raw`\left(`, "→", motion, String.raw`\texttt`, "⏎"]);
+      expect(result.failure, JSON.stringify(result.states)).toBeNull();
+      expect(result.finalText.indexOf(String.raw`\texttt`)).toBeGreaterThan(result.finalText.indexOf(String.raw`\item`));
+    }
+  });
+
   it("keeps item-label text when a command opens an optional argument", () => {
     const result = replay(String.raw`\begin{description}\item[Stag‸e] Last parent.\end{description}`, [String.raw`\pause`, "["]);
     expect(result.failure, JSON.stringify(result.states)).toBeNull();

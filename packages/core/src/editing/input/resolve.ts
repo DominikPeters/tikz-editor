@@ -1832,6 +1832,16 @@ class Resolver {
     return this.context.positions ? view.representative(this.rawEnds(view).focus) : caretAt(view, this.from);
   }
 
+  /** A source-coordinate fallback still lands on editable tree stops. */
+  private selectUnrenderedMotion(view: EditView | null, next: number, motion: Extract<Intent, { type: "move" }>): IntentResolution {
+    if (view) {
+      const stop = view.stopAt(next);
+      if (!stop) return NONE;
+      return this.selectPositions(view, { anchor: motion.extend ? this.rawEnds(view).anchor : stop, focus: stop });
+    }
+    return motion.extend ? this.select(this.context.anchor, next) : this.select(next, next);
+  }
+
   move(motion: Extract<Intent, { type: "move" }>): IntentResolution {
     if (this.context.surface !== "canvas") {
       return NONE;
@@ -1853,9 +1863,9 @@ class Resolver {
     const { unit } = motion;
     if (unit === "word") {
       // (⌥←/⌥→ are native but with a `\right` pending; should one arrive anyway, it moves by source word.)
-      const { text, anchor, focus } = this.context;
+      const { text, focus } = this.context;
       const next = motion.dir === "left" || motion.dir === "up" ? previousWordBoundary(text, focus) : nextWordBoundary(text, focus);
-      return motion.extend ? this.select(anchor, next) : this.select(next, next);
+      return this.selectUnrenderedMotion(view, next, motion);
     }
     if (view && motion.unit === "item" && (motion.dir === "left" || motion.dir === "right")) {
       return this.moveOnTree(view, motion.dir === "left" ? -1 : 1, motion.extend);
@@ -1870,7 +1880,7 @@ class Resolver {
       return this.selectMotionResult(rendered);
     }
     // No rendered domain: source-character motion.
-    const { text, anchor, focus } = this.context;
+    const { text, focus } = this.context;
     const backward = motion.dir === "left" || motion.dir === "up";
     let next: number;
     switch (unit) {
@@ -1890,7 +1900,7 @@ class Resolver {
       case "line":
         return NONE;
     }
-    return motion.extend ? this.select(anchor, next) : this.select(next, next);
+    return this.selectUnrenderedMotion(view, next, motion);
   }
 
   /**
