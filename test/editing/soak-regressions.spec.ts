@@ -17,6 +17,12 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 
 describe("keystroke soak regressions", () => {
 
+  it.each(["smallskip", "medskip", "bigskip"])("terminates %s after removing its newly dead line break", command => {
+    const result = replay(String.raw`Right\\Second‸\\Third\\Fourth`, [`\\${command}`, "⏎", "x"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toContain(`\\${command}{}xThird`);
+  });
+
   it("keeps populated table cells in their mode when changing a specification", () => {
     const result = replay("\n\\begin{tabular}{>{$}c<{$}l}\nx\u2038^2 & Alpha\\\\\n  & Beta\\\\\n\\frac{1}{2} & Gamma\n\\end{tabular}\n", ["@72:38", "#", String.raw`\left|`, "@setvalue:-549825329"]);
     expect(result.failure, JSON.stringify(result.states)).toBeNull();

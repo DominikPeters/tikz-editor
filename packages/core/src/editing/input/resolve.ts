@@ -736,10 +736,15 @@ class Resolver {
       return transaction;
     }
     let next = applied.text;
-    for (const span of [...drop].sort((left, right) => right.from - left.from)) {
-      next = next.slice(0, span.from) + next.slice(span.to);
-    }
-    const shift = (offset: number) => drop.reduce((moved, span) => moved - Math.max(0, Math.min(offset, span.to) - span.from), offset);
+    const removed = [...drop].sort((left, right) => right.from - left.from).map(span => {
+      const before = next.slice(0, span.from);
+      const after = next.slice(span.to);
+      const insert = /\\[A-Za-z@]+$/u.test(before) && /^[A-Za-z@]/u.test(after) ? "{}" : "";
+      next = before + insert + after;
+      return { ...span, insert };
+    });
+    const shift = (offset: number) => removed.reduce((moved, span) =>
+      moved - Math.max(0, Math.min(offset, span.to) - span.from) + (offset >= span.from ? span.insert.length : 0), offset);
     return {
       ...transaction,
       patches: replacementPatches(text, next),
