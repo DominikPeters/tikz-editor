@@ -23,6 +23,10 @@ function tree(text: string) {
 
 describe("edit tree binding", () => {
 
+  it("bounds a comment at a recovered list boundary", () => {
+    tree("\\relax \\begin{enumerate}\\item<1-> \\uncover<1>{{\\scriptsize\\color{blue}\\centering\\begin{columns}[onlytextwidth,b]\\begin{column}{.46\\textwidth}Left\\end{column}\\begin{column}{.5\\textwidth}R\n\n\\uncover<1>{{\\scriptsize\\color{blue}\\centering \\textbf{}%ight\\\\Second\\end{column}\\end{columns}\\par}}\\item After.\\end{enumerate}\\only<2>{}");
+  });
+
   it("binds listing characters literally and alltt controls structurally", () => {
     const source = R`\begin{lstlisting}[language=Python]
 \note{literal} % $ _ { }

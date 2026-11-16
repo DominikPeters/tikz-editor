@@ -1131,7 +1131,14 @@ class Resolver {
       const after = { slot: requireDefined(editNodeAt(view.tree.nodes, ghost.node).parent, "Missing required editNodeAt(view.tree.nodes, ghost.node).parent"), index: childIndex(view.tree, ghost.node) + 1 };
       return this.outcome(view, typeCharacter(view, after, kind === "sup" ? "^" : "_", NO_INTERACTION, at));
     }
-    return this.outcome(view, { kind: "patch", patches: [{ from: at, to: at, insert: "[]" }], caret: at + 1, run: null, exact: true });
+    const node = editNodeAt(view.tree.nodes, ghost.node);
+    const protect = kind === "index" && (this.context.title === true ||
+      (node.parent != null && insideOptional(view, node.parent)));
+    const patches = protect
+      ? [{ from: node.span.from, to: node.span.from, insert: "{" }, { from: at, to: at, insert: "[]" },
+        { from: node.span.to, to: node.span.to, insert: "}" }]
+      : [{ from: at, to: at, insert: "[]" }];
+    return this.outcome(view, { kind: "patch", patches, caret: at + 1 + (protect ? 1 : 0), run: null, exact: true });
   }
 
   pickCompletion(index: number): IntentResolution {

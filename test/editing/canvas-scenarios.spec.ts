@@ -306,6 +306,16 @@ describe("canvas editing: the focus tag's menu (V4)", () => {
     expect(menuEdit(`$${construct}‸$`, construct, "unwrap")).toBeNull();
   });
 
+
+  it.each(["underbrace", "hat", "sqrt"])("keeps an unwrapped %s as one outer script base", command => {
+    const construct = `\\${command}{x_1 + x_n}`;
+    expect(menuEdit(`$\\${command}{x_1 + x_n‸}_i$`, construct, "unwrap")).toBe("${x_1 + x_n‸}_i$");
+  });
+
+  it("keeps the grouping required by an outer script", () => {
+    expect(menuEdit("${x_n‸}_i$", R`{x_n}`, "unwrap")).toBeNull();
+  });
+
   it("still unwraps plain text into math", () => {
     expect(menuEdit(R`$\text{wor‸d}$`, R`\text{word}`, "unwrap")).toBe(R`$wor‸d$`);
   });

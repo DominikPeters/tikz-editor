@@ -17,6 +17,17 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 
 describe("keystroke soak regressions", () => {
 
+  it("keeps malformed lens comments inside their recovered tree spans", () => {
+    const result = replay("\u2038\\relax \\begin{enumerate}\\item<1-> \\uncover<1>{{\\scriptsize\\color{blue}\\centering\\begin{columns}[onlytextwidth,b]\\begin{column}{.46\\textwidth}Left\\end{column}\\begin{column}{.5\\textwidth}Right\\\\Second\\end{column}\\end{columns}\\par}}\\item After.\\end{enumerate}\\only<2>{}", ["⌦", "⌘E", "@lens:1119488613", "⌘B", "⏎"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+  });
+
+  it.each(["⏎", "{"])("protects a ghost radical index inside an item label after %s", key => {
+    const result = replay(String.raw`\begin{description}\item[Sta‸ge] Body.\end{description}`, [String.raw`\sqrt`, key, "@ghost"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toContain(String.raw`{\sqrt[]`);
+  });
+
   it("uses the new row's mode after deleting a mixed-mode table selection", () => {
     const result = replay("\n\\begin{tabular}{>{$}c<{$}l}\nx^2‸ & Alpha\\\\\n  & Beta\\\\\n\\frac{1}{2} & Gamma\n\\end{tabular}\n", ["⏎", String.raw`\frac`, "@83:69", "$"]);
     expect(result.failure, JSON.stringify(result.states)).toBeNull();

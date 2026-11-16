@@ -65,10 +65,14 @@ export function constructMenuEdit(view: EditView, node: NodeId, id: string, comm
     const terminator = terminated ? word : "";
     // And one the content ends with (`\textbf{\LaTeX}x`).
     const closing = /\\[A-Za-z@]+$/u.test(content) && /^[A-Za-z@]/u.test(tree.text.slice(record.span.to)) ? word : "";
-    const patches = [{ from: record.span.from, to: record.span.to, insert: terminator + content + closing }];
+    const parent = editSlotAt(tree.slots, requireDefined(record.parent, "Missing required record.parent"));
+    const scripted = parent.role === "base" && editNodeAt(tree.nodes, parent.node).kind === "scripted";
+    const prefix = scripted ? "{" : terminator;
+    const suffix = scripted ? "}" : closing;
+    const patches = [{ from: record.span.from, to: record.span.to, insert: prefix + content + suffix }];
     // The caret stays in the content it was in.
     const inside = Math.max(0, Math.min(caret - slot.contentSpan.from, content.length));
-    const after = caret >= record.span.to ? mapThrough(patches, caret) : record.span.from + terminator.length + inside;
+    const after = caret >= record.span.to ? mapThrough(patches, caret) : record.span.from + prefix.length + inside;
     return { kind: "patch", patches, caret: after, run: null };
   }
   if (id === "variant:display" || id === "variant:inline") {
@@ -139,6 +143,8 @@ function unwrapSlot(view: EditView, record: EditNode) {
   if (!UNWRAPPABLE.has(record.kind) || record.parent == null) {
     return null;
   }
+  const parent = editSlotAt(view.tree.slots, record.parent);
+  if (record.kind === "group" && parent.role === "base" && editNodeAt(view.tree.nodes, parent.node).kind === "scripted") return null;
   const slots = presentSlots(view.tree, record.id);
   const slot = slots.length === 1 ? requireArrayValue(slots, 0) : null;
   // With nothing to keep, deleting it is the way (an empty formula's `$$` would be display math).

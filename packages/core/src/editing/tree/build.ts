@@ -458,7 +458,7 @@ class Binder {
         this.leaf(run, "char", cursor, cursor + 1); cursor++; continue;
       }
       if (char === "%") {
-        const end = this.commentEnd(cursor);
+        const end = Math.min(this.commentEnd(cursor), run.end);
         this.attachComment(run, cursor, end);
         run.skipSpace = true;
         cursor = end;
@@ -1123,7 +1123,7 @@ class Binder {
         continue;
       }
       if (text[cursor] === "%") {
-        const end = this.commentEnd(cursor);
+        const end = Math.min(this.commentEnd(cursor), to);
         this.attach(slot, this.node("invisible", betweenRowsMode, { from: cursor, to: end }));
         cursor = end;
         continue;
