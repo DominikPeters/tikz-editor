@@ -1472,29 +1472,33 @@ function layoutNucleus(
   if (nucleus.kind === "left-right") {
     return layoutLeftRightNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
+  // Alignment templates open fresh math formulas for their cells. Family
+  // switches reset there, while an enclosing bold math version survives.
+  const alignmentAlphabet = alphabet === "bm" || alphabet === "boldsymbol" ? alphabet
+    : alphabet?.startsWith("bold") ? "boldsymbol" : undefined;
   if (nucleus.kind === "aligned") {
-    return layoutAlignedNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutAlignedNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   if (nucleus.kind === "substack") {
-    return layoutSubstackNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutSubstackNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   if (nucleus.kind === "subarray") {
-    return layoutSubarrayNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutSubarrayNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   if (nucleus.kind === "sideset") {
     return layoutSidesetNucleus(nucleus, fontProfile, baseAtPt, alphabet);
   }
   if (nucleus.kind === "array") {
-    return layoutArrayNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutArrayNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   if (nucleus.kind === "cases") {
-    return layoutCasesNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutCasesNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   if (nucleus.kind === "smallmatrix") {
-    return layoutSmallMatrixNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutSmallMatrixNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   if (nucleus.kind === "matrix") {
-    return layoutMatrixNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutMatrixNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   return null;
 }
