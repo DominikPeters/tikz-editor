@@ -99,9 +99,14 @@ function braceWaitingArgument(view: EditView, outcome: EditOutcome): EditOutcome
   if (patch.from !== patch.to || /^(?:\\[A-Za-z]+|\\.|[^\\{}~'])$/u.test(patch.insert) || /^[{ ]/u.test(patch.insert)) {
     return outcome;
   }
-  if (!view.tree.diagnostics.some((diagnostic) => diagnostic.code === "missing-argument" && diagnostic.span.from === patch.from && diagnostic.span.to === patch.from)) {
-    return outcome;
-  }
+  const waiting = view.tree.diagnostics.some(diagnostic => {
+    if (diagnostic.code !== "missing-argument" || diagnostic.span.from !== diagnostic.span.to || diagnostic.span.from > patch.from) return false;
+    const gap = view.tree.text.slice(diagnostic.span.from, patch.from);
+    // Argument scanning skips whitespace and comments, but a blank line ends
+    // the paragraph rather than extending the waiting argument into it.
+    return /^(?:[ \t\r\n]|%[^\r\n]*(?:\r\n?|\n|$))*$/u.test(gap) && !/\n[ \t\r]*\n/u.test(gap);
+  });
+  if (!waiting) return outcome;
   return {
     ...outcome,
     patches: [{ ...patch, insert: `{${patch.insert}}` }],

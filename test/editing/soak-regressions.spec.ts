@@ -3,6 +3,7 @@ import { createCommandTable } from "../../packages/core/src/editing/commands/ind
 import { runCase } from "./fuzz/keystroke-fuzz.js";
 import { commitCommand } from "../../packages/core/src/editing/operations/command.js";
 import { NO_INTERACTION } from "../../packages/core/src/editing/input/interaction.js";
+import { braceUnbracedArgument } from "../../packages/core/src/editing/operations/script.js";
 import { enter } from "../../packages/core/src/editing/operations/structure.js";
 import { buildEditTree } from "../../packages/core/src/editing/tree/build.js";
 import { createEditView } from "../../packages/core/src/editing/position/index.js";
@@ -16,6 +17,34 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 }
 
 describe("keystroke soak regressions", () => {
+
+  it("keeps a delimiter pair in a fraction argument after a typed space", () => {
+    const result = replay("Text‸.", ["$", String.raw`\frac`, "[", "␣", String.raw`\left(`]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toContain(String.raw`{\left(\right)}`);
+  });
+
+  it.each(["", " ", " \t ", "\n", "% comment\n", "% one\n% two\n"])("braces a waiting argument across %j", gap => {
+    const source = `$\\frac[${gap}$`;
+    const view = createEditView(buildEditTree(source, { commands }));
+    const at = source.length - 1;
+    const content = String.raw`\left(\right)`;
+    const result = braceUnbracedArgument(view, view.positionAt(at), {
+      kind: "patch", patches: [{ from: at, to: at, insert: content }], caret: at + content.length, run: null,
+    });
+    expect(result.kind).toBe("patch");
+    if (result.kind !== "patch") throw new Error("Expected the argument insertion");
+    expect(applyPatches(source, result.patches)).toBe(`${source.slice(0, at)}{${content}}$`);
+  });
+
+  it("does not carry a waiting argument across a paragraph break", () => {
+    const source = "$\\frac[\n\n$";
+    const view = createEditView(buildEditTree(source, { commands }));
+    const at = source.length - 1;
+    const insert = String.raw`\left(\right)`;
+    const outcome = { kind: "patch" as const, patches: [{ from: at, to: at, insert }], caret: at + insert.length, run: null };
+    expect(braceUnbracedArgument(view, view.positionAt(at), outcome)).toBe(outcome);
+  });
 
   it("keeps pause from absorbing an existing bracket and later columns", () => {
     const result = replay("\n\\fuzzpair{MacroStageB}{Timing: 12\\fuzzunit, retained: 9\\fuzzoriginalunit.}\\par\n{\\renewcommand{\\fuzzunit}{local}\\fuzzpair{FrameLocal}{Timing: 5\\fuzzunit.}\\par}\n\\fuzzpair{FrameRestored}{Timing: 8\\fuzzunit; estimate $\\fuzzscale{x}$.}\u2038\\par\n\\begin{columns}[T]\\begin{column}{.46\\textwidth}The final diagram records the order in which information crosses the partition.\\end{column}\\begin{column}{.46\\textwidth}\\begin{itemize}\\item Input state\\item Updated state\\end{itemize}\\end{column}\\end{columns}\n", ["[", "←", String.raw`\pause`, "⏎"]);
