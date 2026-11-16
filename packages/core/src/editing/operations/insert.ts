@@ -438,6 +438,9 @@ export function placeholderAt(view: EditView, open: number, at: number): Placeho
   }
   const group = tree.nodes.find((node) => node.kind === "group" && node.span.from === open && node.span.to === open + 2);
   const parent = group?.parent == null ? null : editSlotAt(tree.slots, group.parent);
+  if (group && parent?.role === "base" && editNodeAt(tree.nodes, parent.node).kind === "scripted") {
+    return { open, kind: "argument", slot: parent.id, formula: null };
+  }
   if (group && parent && isDollarFormula(view, parent.node)) {
     return { open, kind: "formula", slot: null, formula: parent.node };
   }

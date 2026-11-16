@@ -319,6 +319,16 @@ export function isDollarFormula(view: EditView, node: NodeId): boolean {
   return record.kind === "formula" && view.tree.text[record.span.from] === "$";
 }
 
+/** Keep a remaining script from being captured by an earlier atom. */
+function scriptBaseNeedsPlaceholder(view: EditView, slot: SlotId): boolean {
+  const { tree } = view;
+  const base = editSlotAt(tree.slots, slot);
+  const scripted = editNodeAt(tree.nodes, base.node);
+  if (base.role !== "base" || scripted.kind !== "scripted" || scripted.parent == null) return false;
+  const parent = editSlotAt(tree.slots, scripted.parent);
+  return parent.children.slice(0, childIndex(tree, scripted.id)).some(child => view.role(child) !== "invisible");
+}
+
 /**
  * What to remove when a slot loses its last item: the wrapper around it
  * (recursively, for nested wrappers), the script with its marker, or the
@@ -350,7 +360,8 @@ function emptiedSlotCleanup(
       presentSlots(tree, owner).every((candidate) => candidate.id === slot || isEmptySlot(view, candidate.id));
     return alone ? { span: editSlotAt(tree.slots, parent).contentSpan, insert: "{}" } : { span: slotOuterSpan(tree, slot) };
   }
-  if ((!record.braced && ARGUMENT_ROLES.has(record.role)) || isDollarFormula(view, owner)) {
+  if ((!record.braced && ARGUMENT_ROLES.has(record.role)) ||
+    scriptBaseNeedsPlaceholder(view, slot) || isDollarFormula(view, owner)) {
     return { span: record.contentSpan, insert: "{}" };
   }
   return null;
@@ -438,7 +449,8 @@ export function deleteRange(view: EditView, start: Position, end: Position, inse
         if (empty) {
           removals.push({ span: node.span });
         }
-      } else if (((!slot.braced && ARGUMENT_ROLES.has(slot.role)) || isDollarFormula(view, node.id)) && !insert) {
+      } else if (((!slot.braced && ARGUMENT_ROLES.has(slot.role)) ||
+        scriptBaseNeedsPlaceholder(view, slot.id) || isDollarFormula(view, node.id)) && !insert) {
         // Typed text refills the slot; otherwise it holds placeholder braces.
         removals.push({ span: slot.contentSpan, insert: "{}" });
       }

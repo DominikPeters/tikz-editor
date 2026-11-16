@@ -18,6 +18,28 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 
 describe("keystroke soak regressions", () => {
 
+  it("keeps a deleted script base separate from the preceding scripted term", () => {
+    const result = replay("\n\\[E=\\sum_{i=1}^{n}w_i x_‸i\\]\n", ["@24:23", "⌦"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toContain(String.raw`w_i {}_i`);
+  });
+
+  it.each(["⌫", "⌦"])("preserves an empty grouped base when %s deletes a selected script base", key => {
+    const source = "$w_i x_i‸$";
+    const result = replay(source, ["@5:6", key]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toBe("$w_i {}_i$");
+    const filled = replay(source, ["@5:6", key, "y"]);
+    expect(filled.failure, JSON.stringify(filled.states)).toBeNull();
+    expect(filled.finalText).toBe("$w_i y_i$");
+  });
+
+  it("still removes a whole selected scripted term", () => {
+    const result = replay("$w_i x_i‸$", ["@5:8", "⌦"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toBe("$w_i $");
+  });
+
   it("keeps a delimiter pair in a fraction argument after a typed space", () => {
     const result = replay("Text‸.", ["$", String.raw`\frac`, "[", "␣", String.raw`\left(`]);
     expect(result.failure, JSON.stringify(result.states)).toBeNull();
