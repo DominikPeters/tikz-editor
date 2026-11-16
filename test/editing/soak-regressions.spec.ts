@@ -17,6 +17,18 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 
 describe("keystroke soak regressions", () => {
 
+  it("keeps alltt command terminators when deleting a selected character", () => {
+    const result = replay("\\begin{alltt}\n  e‸cho hello\n  echo world\n\\end{alltt}", [String.raw`\te`, String.raw`\sum`, "Esc", "b", "⇧←", "⌦"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toContain(String.raw`\te{}cho`);
+  });
+
+  it.each(["⌫", "⌦"])("keeps a nested alltt command terminated after selection deletion with %s", key => {
+    const result = replay(String.raw`\begin{alltt}\textbf{e‸cho hello}\end{alltt}`, [String.raw`\te`, String.raw`\sum`, "Esc", "b", "⇧←", key]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toContain(String.raw`\te{}cho`);
+  });
+
   it.each(["smallskip", "medskip", "bigskip"])("terminates %s after removing its newly dead line break", command => {
     const result = replay(String.raw`Right\\Second‸\\Third\\Fourth`, [`\\${command}`, "⏎", "x"]);
     expect(result.failure, JSON.stringify(result.states)).toBeNull();

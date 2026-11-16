@@ -376,7 +376,10 @@ function gapEnd(view: EditView, slot: SlotId, from: number): number {
 function finishDeletion(view: EditView, set: PatchSet, seam: number, mode: EditMode, run: string | null): EditOutcome {
   const raw = set.patches();
   const caret = mapThrough(raw, seam);
-  const patches = mode === "verbatim" ? raw : withBracketGuard(view.tree.text, withTerminator(view.tree.text, raw, caret, mode), caret);
+  // alltt keeps control words and braces active despite its literal specials.
+  const literal = mode === "verbatim" && !view.tree.nodes.some(node =>
+    node.command === "alltt" && node.span.from < seam && seam < node.span.to);
+  const patches = literal ? raw : withBracketGuard(view.tree.text, withTerminator(view.tree.text, raw, caret, mode), caret);
   const single = raw.length === 1 && requireArrayValue(raw, 0).insert === "" && requireArrayValue(raw, 0).to - requireArrayValue(raw, 0).from === 1;
   return { kind: "patch", patches, caret, run: single ? run : null };
 }
