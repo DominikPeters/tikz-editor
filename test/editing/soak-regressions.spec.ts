@@ -4,7 +4,7 @@ import { runCase } from "./fuzz/keystroke-fuzz.js";
 import { commitCommand } from "../../packages/core/src/editing/operations/command.js";
 import { NO_INTERACTION } from "../../packages/core/src/editing/input/interaction.js";
 import { braceUnbracedArgument } from "../../packages/core/src/editing/operations/script.js";
-import { enter } from "../../packages/core/src/editing/operations/structure.js";
+import { enter, inValue } from "../../packages/core/src/editing/operations/structure.js";
 import { buildEditTree } from "../../packages/core/src/editing/tree/build.js";
 import { createEditView } from "../../packages/core/src/editing/position/index.js";
 import { applyPatches } from "../../packages/core/src/editing/transaction/index.js";
@@ -17,6 +17,22 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 }
 
 describe("keystroke soak regressions", () => {
+
+  it.each([
+    [String.raw`\left[`], [String.raw`\left(`],
+    [String.raw`\mathbb`, "⏎"], [String.raw`\frac`, "⏎"],
+  ])("refuses a command in table row-break spacing: %j", (...keys) => {
+    const result = replay(String.raw`\begin{tabular}{lrr}Loca‸l1&0&2\\\end{tabular}`, [String.raw`\\`, "[", ...keys]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).not.toMatch(/\\(?:left|mathbb|frac)/u);
+  });
+
+  it.each([String.raw`\\`, String.raw`\tabularnewline`])("recognizes %s row spacing as a value", command => {
+    const source = `\\begin{tabular}{l}a${command}[2pt]b\\end{tabular}`;
+    const view = createEditView(buildEditTree(source, { commands }));
+    expect(inValue(view, source.indexOf("2pt") + 1)).toBe(true);
+    expect(inValue(view, source.indexOf("]b") + 1)).toBe(false);
+  });
 
   it("keeps a deleted script base separate from the preceding scripted term", () => {
     const result = replay("\n\\[E=\\sum_{i=1}^{n}w_i x_‸i\\]\n", ["@24:23", "⌦"]);
