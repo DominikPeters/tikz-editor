@@ -7114,6 +7114,13 @@ function accentBaseSkew(
   if (item.nucleus.kind === "accent") {
     return accentBaseSkew(item.nucleus.base, fontProfile, style, baseAtPt, alphabet);
   }
+  if (item.nucleus.kind === "list" && item.nucleus.leadingKern === undefined && !item.nucleus.operator) {
+    return accentBaseSkew(item.nucleus.list, fontProfile, style, baseAtPt, alphabet);
+  }
+  if (item.nucleus.kind === "alphabet" && item.nucleus.alphabet !== "boldsymbol") {
+    return accentBaseSkew(item.nucleus.list, fontProfile, style, baseAtPt,
+      nestedMathAlphabet(item.nucleus.alphabet, alphabet));
+  }
   if (item.nucleus.kind !== "glyph") {
     return 0;
   }
@@ -7147,6 +7154,13 @@ function accentBaseSingleGlyphMetrics(
     item.superscript
   ) {
     return null;
+  }
+  if (item.nucleus.kind === "list" && item.nucleus.leadingKern === undefined && !item.nucleus.operator) {
+    return accentBaseSingleGlyphMetrics(item.nucleus.list, fontProfile, style, baseAtPt, alphabet);
+  }
+  if (item.nucleus.kind === "alphabet" && item.nucleus.alphabet !== "boldsymbol") {
+    return accentBaseSingleGlyphMetrics(item.nucleus.list, fontProfile, style, baseAtPt,
+      nestedMathAlphabet(item.nucleus.alphabet, alphabet));
   }
   if (item.nucleus.kind !== "glyph") {
     return null;
