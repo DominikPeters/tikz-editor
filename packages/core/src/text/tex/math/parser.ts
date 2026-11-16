@@ -972,6 +972,7 @@ class TexMathParser {
     );
     const nucleus: TexMathNucleus = {
       kind: "fraction",
+      delimiterStyle: "text",
       numerator: numerator?.list ?? emptyList(command.sourceSpan.end),
       denominator: denominator?.list ?? emptyList(command.sourceSpan.end),
       ...(leftDelimiter.delimiter ? { leftDelimiter: leftDelimiter.delimiter } : {}),
@@ -1003,6 +1004,7 @@ class TexMathParser {
     );
     const nucleus: TexMathNucleus = {
       kind: "fraction",
+      delimiterStyle: "text",
       numerator: numerator?.list ?? emptyList(command.sourceSpan.end),
       denominator: denominator?.list ?? emptyList(command.sourceSpan.end),
       leftDelimiter: "(",

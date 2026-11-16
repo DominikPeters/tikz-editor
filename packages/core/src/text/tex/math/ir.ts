@@ -178,6 +178,8 @@ export interface TexMathFractionNucleus {
   readonly kind: "fraction";
   readonly numerator: TexMathList;
   readonly denominator: TexMathList;
+  /** AMS genfrac builds delimiter boxes in text style, even in scripts. */
+  readonly delimiterStyle?: TexMathStyle;
   readonly leftDelimiter?: TexMathDelimiter;
   readonly rightDelimiter?: TexMathDelimiter;
   readonly ruleThickness?: TexLength;

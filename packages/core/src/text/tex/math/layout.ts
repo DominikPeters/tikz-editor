@@ -4043,6 +4043,7 @@ function layoutFractionNucleus(
       leftDelimiter,
       rightDelimiter,
       fontProfile,
+      delimiterStyle: nucleus.delimiterStyle ?? delimiterSizeStyle(fractionStyle),
       style: fractionStyle,
       baseAtPt,
       sourceSpan: nucleus.sourceSpan,
@@ -4075,6 +4076,7 @@ function wrapFractionWithDelimiters(params: {
   readonly width: TexLength;
   readonly height: TexLength;
   readonly depth: TexLength;
+  readonly delimiterStyle: TexMathStyle;
   readonly leftDelimiter: TexMathDelimiter;
   readonly rightDelimiter: TexMathDelimiter;
   readonly fontProfile: TexMathFontProfile;
@@ -4082,7 +4084,7 @@ function wrapFractionWithDelimiters(params: {
   readonly baseAtPt: TexLength;
   readonly sourceSpan: TexMathSourceSpan;
 }): TexMathAtomLayout | null {
-  const delimiterStyle = delimiterSizeStyle(params.style);
+  const delimiterStyle = params.delimiterStyle;
   const targetHeight = mathParameterToPt(
     params.fontProfile,
     params.style === "display" ? "delim1" : "delim2",
@@ -6189,13 +6191,9 @@ function delimiterTotalHeight(delimiter: TexMathDelimiterLayout): number {
 }
 
 function delimiterProbeStyles(style: TexMathStyle): readonly TexMathStyle[] {
-  if (style === "scriptscript") {
-    return ["scriptscript", "script", "text"];
-  }
-  if (style === "script") {
-    return ["script", "text"];
-  }
-  return ["text"];
+  // LuaTeX searches the small and large delimiter chains in the current
+  // size; it does not try larger math styles before the extension font.
+  return [style];
 }
 
 function delimiterSpec(

@@ -20,6 +20,7 @@ let generateTexMathFuzzCase;
 const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
 const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
 const amsMathCommands = [
+  String.raw`\genfrac`,
   String.raw`\boldsymbol`,
   String.raw`\boxed`,
   String.raw`\dddot`,

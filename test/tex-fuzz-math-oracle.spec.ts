@@ -11,6 +11,25 @@ const caseData = caseFromTexFuzzAst([{ kind: "math", body: { kind: "fraction", c
 
 describe("shared math glyph differential findings", () => {
   it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex")).each([
+    String.raw`\displaystyle \tfrac{\left[{\lvert}_{\parallel}\right]}{\mathrm{office}}`,
+    String.raw`\xrightarrow[{\binom{(}{]}}]{\mathrm{2}}`,
+    ...["scriptstyle", "scriptscriptstyle"].flatMap(style => [
+      `\\${style}\\binom{x}{y}`, `\\${style}\\genfrac{[}{]}{0pt}{}{x}{y}`,
+      `\\${style}{x\\atopwithdelims()y}`,
+    ]),
+    ...["textstyle", "scriptstyle", "scriptscriptstyle"].flatMap(style =>
+      [String.raw`{\lvert}_{\parallel}`, String.raw`\lvert_{\parallel}`, "x_i"].flatMap(body => [
+        `\\${style}\\left[${body}\\right]`,
+        `\\${style}\\left(${body}\\right)`,
+        `\\${style}\\sqrt{${body}}`,
+      ])),
+  ])("matches LuaTeX delimiter sizing %s", async content => {
+    await setImmediate();
+    const candidate = caseFromTexFuzzAst([{ kind: "math", content }]);
+    expect(compareTexFuzzMathOracle(candidate), content).toEqual({ compared: true, observation: null });
+  }, 20_000);
+
+  it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex")).each([
     String.raw`\mathtt{\hat{/}}`,
     String.raw`{\mathtt{\alpha}}_{\mathbf{office}}`, String.raw`{\mathfrak{\beta}}_{\prod}`,
     ...["mathtt", "mathsf", "mathit", "mathrm", "mathbf", "mathfrak", "mathcal", "mathbb", "boldsymbol", "bm"].flatMap(alphabet =>
