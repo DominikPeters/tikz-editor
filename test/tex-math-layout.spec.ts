@@ -83,6 +83,15 @@ describe("TeX math hlist layout", () => {
     expect(result.hlist?.depth).toBeCloseTo(2.444427, 4);
   });
 
+  it.each(["mathtt", "mathrm", "mathbf", "mathsf", "mathcal"])("centers an operator character through %s", alphabet => {
+    const expected = layout(String.raw`\stackrel{x}{\alpha}`);
+    const actual = layout(`\\stackrel{x}{\\${alphabet}{\\alpha}}`);
+    expect(actual.supported).toBe(true);
+    expect(actual.hlist?.width).toBe(expected.hlist?.width);
+    expect(actual.hlist?.height).toBe(expected.hlist?.height);
+    expect(actual.hlist?.depth).toBe(expected.hlist?.depth);
+  });
+
   it("includes a stackrel character's italic correction in its operator width", () => {
     const result = layout(String.raw`\stackrel{;}{\beta}`);
     expect(result.supported).toBe(true);

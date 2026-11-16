@@ -1332,7 +1332,7 @@ function layoutNucleus(
   }
   if (nucleus.kind === "list") {
     if (nucleus.leadingKern === undefined) {
-      const unwrapped = layoutSingleAtomGroupNucleus(nucleus.list, fontProfile, style, cramped, baseAtPt, alphabet);
+      const unwrapped = layoutSingleAtomGroupNucleus(nucleus.list, fontProfile, style, cramped, baseAtPt, alphabet, nucleus.operator === true);
       if (unwrapped) {
         return mathAtomLayout({
           ...unwrapped,
@@ -1476,7 +1476,8 @@ function layoutSingleAtomGroupNucleus(
   style: TexMathStyle,
   cramped: boolean,
   baseAtPt: TexLength,
-  alphabet?: TexMathAlphabetCommand
+  alphabet?: TexMathAlphabetCommand,
+  operator = false
 ): TexMathAtomLayout | null {
   if (list.items.length !== 1) {
     return null;
@@ -1490,6 +1491,16 @@ function layoutSingleAtomGroupNucleus(
     item.limits
   ) {
     return null;
+  }
+  // A math family switch keeps an ordinary character available to make_op;
+  // boxed boldsymbol formulas and nonordinary/multiple atoms stay boxed.
+  if (operator && item.nucleus.kind === "alphabet" &&
+    item.nucleus.alphabet !== "boldsymbol" && item.nucleus.alphabet !== "bm") {
+    return layoutSingleAtomGroupNucleus(item.nucleus.list, fontProfile, style, cramped,
+      baseAtPt, nestedMathAlphabet(item.nucleus.alphabet, alphabet), true);
+  }
+  if (operator && item.nucleus.kind === "list" && item.nucleus.leadingKern === undefined) {
+    return layoutSingleAtomGroupNucleus(item.nucleus.list, fontProfile, style, cramped, baseAtPt, alphabet, true);
   }
   return layoutNucleus(item.nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
 }
