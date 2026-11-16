@@ -1175,7 +1175,7 @@ function createCheckpointBinder(
   const chain = (entries: StyleChainEntry[]) => {
     const bound = entries.map(entry => {
       if (!entry.sourceRef || !authored(entry.sourceRef)) return entry;
-      return { ...entry, sourceRef: binder.metadata(entry.sourceRef), rawOptions: binder.metadata(entry.rawOptions) };
+      return { ...entry, sourceRef: binder.metadata(entry.sourceRef), rawOptions: entry.sourceRef.identityRef ? entry.rawOptions : binder.metadata(entry.rawOptions) };
     });
     return bound.every((entry, index) => entry.sourceRef === requireArrayValue(entries, index).sourceRef && entry.rawOptions === requireArrayValue(entries, index).rawOptions)
       ? entries : bound;

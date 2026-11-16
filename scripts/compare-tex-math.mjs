@@ -391,6 +391,9 @@ function comparisonItemsForFormula(formula, ours, tex) {
     hasMatrixEnvironment(formula) ||
     hasOperatorNameCommand(formula) ||
     hasBinomialCommand(formula) ||
+    // Fraction reboxing can absorb an invisible italic-correction kern in TeX.
+    // Compare paint and total dimensions, as for amsmath's styled fractions.
+    /\\frac(?![a-zA-Z])/.test(formula) ||
     hasStyledFractionCommand(formula)
     || hasSubstackCommand(formula)
     || hasSubarrayEnvironment(formula)
@@ -599,7 +602,10 @@ function mathPackagePreamble(formula) {
   const mathtoolsPreamble = hasMathtoolsColonRelationCommand(formula)
     ? String.raw`\usepackage{mathtools}` + "\n"
     : "";
-  return amsmathPreamble + amssymbPreamble + mathtoolsPreamble + arrayPreamble;
+  const bmPreamble = /\\bm(?![A-Za-z])/u.test(formula)
+    ? String.raw`\usepackage{bm}` + "\n"
+    : "";
+  return amsmathPreamble + amssymbPreamble + mathtoolsPreamble + arrayPreamble + bmPreamble;
 }
 
 function texSource(formula, options = {}) {

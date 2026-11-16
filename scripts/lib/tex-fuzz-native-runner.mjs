@@ -14,11 +14,16 @@ export function createTexFuzzNativeRunner(options = {}) {
       signal?.throwIfAborted();
       busy = true;
       const started = performance.now();
+      const stages = checks.support ? ["support"] : checks.paragraphWidth !== undefined ? ["paragraph"] : checks.mathOracle ? ["math-oracle"]
+        : ["hard-invariants", ...(checks.boundary ? ["boundary"] : []), ...(checks.metamorphic ? ["metamorphic"] : []), ...(checks.history ? ["history"] : [])];
+      let stage = "startup";
+      let nextStage = 0;
       try {
         worker ??= new Worker(workerUrl, { resourceLimits: { maxOldGenerationSizeMb: 256 } });
         const current = worker;
         const response = await new Promise((resolve) => {
           let completed = false;
+          let timer;
           const finish = (value) => {
             if (completed) return;
             completed = true;
@@ -29,12 +34,25 @@ export function createTexFuzzNativeRunner(options = {}) {
             current.removeListener("exit", onExit);
             resolve(value);
           };
-          const onMessage = (value) => finish(value);
+          const onMessage = (value) => {
+            if (value?.nativeStage !== undefined) {
+              // Only an expected transition renews the budget; duplicate or
+              // out-of-order progress must not keep a stuck stage alive.
+              if (value.nativeStage === stages[nextStage]) {
+                stage = value.nativeStage;
+                nextStage += 1;
+                clearTimeout(timer);
+                timer = setTimeout(() => finish({ timedOut: true, stage }), timeoutMs);
+              }
+              return;
+            }
+            finish(value);
+          };
           const onError = (error) => finish({ error: error.message });
           const onExit = (code) => finish({ error: `Native worker exited with code ${code}.` });
           const onAbort = () => finish({ aborted: true });
-          const timer = setTimeout(() => finish({ timedOut: true }), timeoutMs);
-          current.once("message", onMessage);
+          timer = setTimeout(() => finish({ timedOut: true, stage }), timeoutMs);
+          current.on("message", onMessage);
           current.once("error", onError);
           current.once("exit", onExit);
           signal?.addEventListener("abort", onAbort, { once: true });
@@ -49,7 +67,7 @@ export function createTexFuzzNativeRunner(options = {}) {
             fingerprint: { version: 1, resultClass: "hard-invariant",
               code: response.timedOut ? "native-time-budget" : "native-worker-failure",
               featureTags: caseData.features, mode: "text", structuralLocus: "native-worker" },
-            detail: { timeoutMs, checks, error: response.error },
+            detail: { timeoutMs, checks, stage: response.stage, error: response.error },
           }] };
         }
         signal?.throwIfAborted();

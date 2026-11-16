@@ -97,27 +97,7 @@ export function placeInsertion(view: EditView, caret: Position, at: number, type
     return newRowFor(view, typed, at, slot.contentSpan.to);
   }
   // R6: whatever is typed into an unbraced argument (`\frac‸12`, then `^`) brings its braces.
-  return braceUnbracedArgument(view, caret, braceWaitingArgument(view, at, typed));
-}
-
-/**
- * Right after a command still waiting for its argument, TeX takes one
- * token (K2: `\frac1n`); an insertion of more (`\^{}` after the accent
- * `\t`) goes in braces, as R6 has it, so that it is the argument whole.
- */
-function braceWaitingArgument(view: EditView, at: number, typed: EditOutcome): EditOutcome {
-  if (typed.kind !== "patch" || typed.patches.length !== 1) {
-    return typed;
-  }
-  const patch = requireArrayValue(typed.patches, 0);
-  // One token, or a terminator that ends the command's name (R5). (`~` and `'` are macros, not one token.)
-  if (patch.from !== at || patch.to !== at || /^(?:\\[A-Za-z]+|\\.|[^\\{}~'])$/u.test(patch.insert) || /^[{ ]/u.test(patch.insert)) {
-    return typed;
-  }
-  if (!view.tree.diagnostics.some((diagnostic) => diagnostic.code === "missing-argument" && diagnostic.span.from === at && diagnostic.span.to === at)) {
-    return typed;
-  }
-  return { ...typed, patches: [{ from: at, to: at, insert: `{${patch.insert}}` }], caret: typed.caret + 1, ...(typed.placeholder === undefined ? {} : { placeholder: typed.placeholder + 1 }) };
+  return braceUnbracedArgument(view, caret, typed);
 }
 
 /**

@@ -23,6 +23,15 @@ describe("Beamer semantic edit recipes", () => {
     }
   });
 
+  it("makes every edit field effective for image fixtures with implicit class defaults", () => {
+    for (const entry of generateBeamerFuzzCases({ seed: 230311150, cases: 8, profile: "images" })) {
+      const input = generateBeamerEditSequence(withEditProbes(entry.source), entry.fixture.family, 230311150, EDIT_FIELDS.length);
+      const materialized = materializeBeamerEdits(input);
+      for (const field of EDIT_FIELDS) expect(materialized.effectiveEdits[field], `${entry.fixture.family}: ${field}`).toBeGreaterThan(0);
+      expect(scanBeamerDocument(materialized.finalSource).diagnostics).toEqual([]);
+    }
+  });
+
   it("retains the frozen compilation calendar while reducing source", () => {
     const source = sequence().source;
     const candidates = beamerSourceCandidates(source);
@@ -62,6 +71,7 @@ describe("Beamer semantic edit recipes", () => {
     expect(result.failure).toBeNull();
     expect(result.reach["semantic:incremental:selective"] ?? 0).toBeGreaterThan(0);
     expect(result.reach["suffix:skipped"] ?? 0).toBeGreaterThan(0);
+    expect(result.reach["layer:slide-layout-reused"] ?? 0).toBeGreaterThan(0);
   }, 30_000);
 
   it("loads real PNG, JPEG and PDF pages during warm/cold image edit comparisons", async () => {

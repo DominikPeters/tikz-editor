@@ -84,7 +84,8 @@ export function commitCommand(
 
   if (key === "bracket" && optionalFirst) {
     const insert = `${command}[]${"{}".repeat(mandatory.length)}`;
-    return { outcome: edit(range, insert, range.from + command.length + 1) };
+    const nested = insideOptional(view, caret.slot);
+    return { outcome: edit(range, nested ? `{${insert}}` : insert, range.from + command.length + 1 + (nested ? 1 : 0)) };
   }
   // Committed as typed right before existing content, a command that takes
   // arguments would take that content (`\\frac` before `bc`): it gets its

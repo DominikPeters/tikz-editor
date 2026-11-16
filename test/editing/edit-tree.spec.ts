@@ -40,6 +40,17 @@ describe("edit tree binding", () => {
     expect(alltt.nodes.some(node => node.kind === "formula")).toBe(false);
   });
 
+  it.each([
+    R`$a^\left\right)^+b^2$`, R`$a_\left\right)x$`,
+    R`$\frac\left\right)2$`, R`$\sqrt\left\right)$`,
+  ])("keeps delimiter recovery inside its unbraced argument: %s", (source) => {
+    const built = tree(source);
+    const pair = built.nodes.find(node => node.kind === "delimited")!;
+    expect(pair.span.to).toBe(source.indexOf(R`\right`));
+    expect(pair.delimiters).toHaveLength(1);
+    expect(built.diagnostics.some(diagnostic => diagnostic.code === "missing-argument")).toBe(true);
+  });
+
   it("binds scripts by TeX's single-token rule", () => {
     expect(printEditTree(tree(R`$x^23 + x_i^{n+1}$`))).toBe(
       `(scope (paragraph (formula (scripted base:["x"] sup:["2"]) "3+" (scripted base:["x"] sub:["i"] sup:["n+1"]))))`

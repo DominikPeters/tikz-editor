@@ -20,6 +20,7 @@ export interface TexFuzzNativeRecord {
   readonly metamorphic?: TexFuzzMetamorphicRun;
 }
 export interface TexFuzzNativeOptions {
+  /** Budget for worker startup and for each requested check stage. */
   readonly timeoutMs?: number;
   readonly workerUrl?: URL;
   readonly signal?: AbortSignal;

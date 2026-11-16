@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { beforeEach, describe, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FuzzDocument } from "./compute-fuzz.js";
 import { describeStoreFailure, generateStoreOps, runStoreOps, shrinkStoreOps, type StoreOp } from "./store-fuzz.js";
@@ -23,6 +23,14 @@ const DOCUMENT_SETS: FuzzDocument[][] = [
 beforeEach(() => { vi.spyOn(console, "info").mockImplementation(() => {}); });
 
 describe("store fuzzing", () => {
+  it("compares settled output independently of the exact-parse strategy flag", async () => {
+    const result = await runStoreOps(DOCUMENT_SETS[2], [
+      { kind: "type", r: [0.1965145436115563, 0.5689504337497056, 0.9634498390369117, 0.8825881793163717] },
+      { kind: "settle", r: [0.06091256928630173, 0.13419591402634978, 0.9016162764746696, 0.9940589244943112] }
+    ]);
+    expect(result.failure).toBeNull();
+  });
+
   it("keeps the store's invariants under interleaved edits, renders, saves and faults", async () => {
     const counts: Record<string, number> = {};
     for (let index = 0; index < CASES; index += 1) {

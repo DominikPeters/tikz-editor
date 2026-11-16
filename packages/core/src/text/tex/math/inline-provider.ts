@@ -174,6 +174,10 @@ function getMathBox(
   const hlist = displayLabel
     ? addDisplayMathTag(measuredHList, displayLabel, params.targetWidth ?? measuredHList.width, fontProfile, baseAtPt)
     : measuredHList;
+  if (!mathCaretMapWithinBudget(hlist.items)) {
+    cache.boxes.set(key, null, key.length * 2 + 64);
+    return null;
+  }
   const caretMap = buildInlineMathCaretMap(hlist, params, fontProfile);
   const box = {
     source: params.source,
@@ -526,6 +530,22 @@ function collectMathItemExtents(
     }
   }
   return extents;
+}
+
+/** Bound geometry expansion before allocating caret entries for assembly glyphs. */
+function mathCaretMapWithinBudget(items: readonly TexMathHListItem[]): boolean {
+  let remaining = 100_000;
+  const pending = [...items];
+  for (let item = pending.pop(); item !== undefined; item = pending.pop()) {
+    if (item.kind === "hlist") {
+      remaining -= 2;
+      pending.push(...item.items);
+    } else if (item.kind === "glyph" || item.kind === "rule") {
+      remaining -= Math.max(2, item.sourceSpan.end - item.sourceSpan.start + 1);
+    }
+    if (remaining < 0) return false;
+  }
+  return true;
 }
 
 function buildInlineMathCaretMap(
@@ -1167,20 +1187,23 @@ function dedupeMathCaretEntries(entries: readonly TexMathCaretEntry[]): readonly
         left.kind.localeCompare(right.kind)
       : left.sourceOffset - right.sourceOffset
   );
-  return sorted.filter((entry, index, allEntries) =>
-    allEntries.findIndex((candidate) =>
-      candidate.sourceOffset === entry.sourceOffset &&
-      candidate.x === entry.x &&
-      candidate.y === entry.y &&
-      candidate.height === entry.height &&
-      candidate.depth === entry.depth &&
-      candidate.kind === entry.kind &&
-      candidate.hitBounds.xStart === entry.hitBounds.xStart &&
-      candidate.hitBounds.xEnd === entry.hitBounds.xEnd &&
-      candidate.hitBounds.yStart === entry.hitBounds.yStart &&
-      candidate.hitBounds.yEnd === entry.hitBounds.yEnd
-    ) === index
-  );
+  // Assemblies can generate thousands of distinct positions for the same
+  // source offset. Avoid rescanning the entire map for each position.
+  const seen = new Set<string>();
+  let sourceOffset: number | undefined;
+  return sorted.filter(entry => {
+    if (sourceOffset !== entry.sourceOffset) {
+      seen.clear();
+      sourceOffset = entry.sourceOffset;
+    }
+    const geometry = [entry.x, entry.y, entry.height, entry.depth,
+      entry.hitBounds.xStart, entry.hitBounds.xEnd, entry.hitBounds.yStart, entry.hitBounds.yEnd];
+    if (geometry.some(Number.isNaN)) return false;
+    const key = `${entry.kind}|${geometry.join("|")}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function mathCaretMapCoverageDiagnostics(
@@ -1388,7 +1411,7 @@ function getDisplayMathAlignment(
     fontProfile,
     baseAtPt,
   });
-  if (!laidOut.supported) {
+  if (!laidOut.supported || !mathCaretMapWithinBudget(laidOut.hlist.items)) {
     return null;
   }
   const alignedRows = laidOut.hlist.items.filter((item): item is TexMathChildHListLayoutItem =>

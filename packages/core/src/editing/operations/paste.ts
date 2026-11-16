@@ -20,6 +20,7 @@ import {
 } from "./insert.js";
 import { SPEC_READER_BEFORE, withBracketGuard, withTerminator } from "./source.js";
 import { inAlignment, inListFlow, inValue } from "./structure.js";
+import { braceUnbracedArgument } from "./script.js";
 
 /**
  * The clipboard (R15, O6, C3, Z3). A copy made on the canvas carries the
@@ -255,7 +256,10 @@ function insertSource(place: Place, converted: string): EditOutcome {
   const end = at + source.length;
   const patches = withBracketGuard(view.tree.text, withTerminator(view.tree.text, [{ from: at, to: at, insert: source }], end, mode), end);
   const inserted = requireArrayValue(patches, 0).insert;
-  return placeInsertion(view, caret, at, { kind: "patch", patches, caret: at + inserted.length, run: null });
+  const outcome = { kind: "patch", patches, caret: at + inserted.length, run: null } as const;
+  return editSlotAt(view.tree.slots, caret.slot).role === "base"
+    ? braceUnbracedArgument(view, caret, outcome, true)
+    : placeInsertion(view, caret, at, outcome);
 }
 
 type Place = {

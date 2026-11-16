@@ -2,6 +2,7 @@ import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { Span } from "../../ast/types.js";
 import { TexWeightedLruCache } from "./cache.js";
+import { readTexBalancedDelimited, readTexControlSequence, skipTexWhitespaceAndComments } from "../../parser/tex-lexical.js";
 
 /**
  * Recovery from unbalanced TeX (T1, T2, T5): an opener with no closer is
@@ -61,6 +62,54 @@ const DEFINITIONS = new Set(["newcommand", "renewcommand", "providecommand", "De
   "renewenvironment", "def", "gdef", "edef", "xdef", "NewDocumentCommand", "RenewDocumentCommand", "ProvideDocumentCommand",
   "DeclareDocumentCommand", "NewDocumentEnvironment", "RenewDocumentEnvironment", "newcolumntype",
   "defbeamertemplate", "setbeamertemplate", "addtobeamertemplate"]);
+
+/** Number of mandatory braced arguments, including a braced command name. */
+const DEFINITION_GROUPS: Readonly<Record<string, number>> = {
+  newenvironment: 3, renewenvironment: 3,
+  NewDocumentCommand: 3, RenewDocumentCommand: 3, ProvideDocumentCommand: 3, DeclareDocumentCommand: 3,
+  NewDocumentEnvironment: 4, RenewDocumentEnvironment: 4,
+  defbeamertemplate: 3, addtobeamertemplate: 3,
+};
+
+/** Skip a definition's inert arguments without swallowing following text. */
+function definitionEnd(text: string, name: string, end: number): number {
+  if (name === "def" || name === "gdef" || name === "edef" || name === "xdef") {
+    // TeX's parameter text precedes one body; it can include delimiter tokens.
+    const lead = /^[^{}%\n]*\n?[ \t]*/u.exec(text.slice(end, end + 80))?.[0] ?? "";
+    return readTexBalancedDelimited(text, end + lead.length, "{", "}")?.to ?? end;
+  }
+  let remaining = DEFINITION_GROUPS[name] ?? 2;
+  let cursor = skipTexWhitespaceAndComments(text, end);
+  if (name === "defbeamertemplate" && text[cursor] === "<") {
+    const close = text.indexOf(">", cursor + 1);
+    if (close < 0) return end;
+    cursor = skipTexWhitespaceAndComments(text, close + 1);
+  }
+  if (text[cursor] === "*") cursor = skipTexWhitespaceAndComments(text, cursor + 1);
+  let last = end;
+  const bareName = readTexControlSequence(text, cursor);
+  if (bareName) {
+    last = cursor = bareName.to;
+    remaining -= 1;
+  }
+  for (let group = 0; group < remaining; group += 1) {
+    cursor = skipTexWhitespaceAndComments(text, cursor);
+    while (text[cursor] === "[") {
+      const optional = readTexBalancedDelimited(text, cursor, "[", "]");
+      if (!optional) return last;
+      last = optional.to;
+      cursor = skipTexWhitespaceAndComments(text, last);
+    }
+    const argument = readTexBalancedDelimited(text, cursor, "{", "}");
+    if (!argument) return last;
+    last = cursor = argument.to;
+  }
+  if (name === "defbeamertemplate") {
+    const action = readTexBalancedDelimited(text, skipTexWhitespaceAndComments(text, last), "[", "]");
+    if (action) return readTexBalancedDelimited(text, skipTexWhitespaceAndComments(text, action.to), "{", "}")?.to ?? action.to;
+  }
+  return last;
+}
 
 // Source keys include whole documents: an entry limit alone can retain many
 // large revisions. Keep a single oversized active document reusable as well.
@@ -138,23 +187,6 @@ function scan(text: string): TexRecovery {
       }
     }
     return -1;
-  };
-  /** The end of the balanced group at `from`, or null if it does not close. */
-  const groupEnd = (from: number): number | null => {
-    let depth = 0;
-    for (let cursor = from; cursor < text.length; cursor += 1) {
-      if (text[cursor] === "\\") {
-        cursor += 1;
-      } else if (text[cursor] === "%") {
-        const end = text.indexOf("\n", cursor);
-        cursor = end < 0 ? text.length : end;
-      } else if (text[cursor] === "{") {
-        depth += 1;
-      } else if (text[cursor] === "}" && --depth === 0) {
-        return cursor + 1;
-      }
-    }
-    return null;
   };
   const popTo = (index: number, at: number) => {
     while (stack.length > index) {
@@ -269,17 +301,7 @@ function scan(text: string): TexRecovery {
         continue;
       }
       if (DEFINITIONS.has(name)) {
-        // Past the name and parameters (`\foo`, `[2]`, `#1`) and every braced argument, the body last.
-        let cursor = end;
-        for (;;) {
-          const lead = requireDefined(/^[^{}%\n]*\n?[ \t]*/u.exec(text.slice(cursor, cursor + 80)), "Recovery definition prefix always matches.")[0];
-          const close = text[cursor + lead.length] === "{" ? groupEnd(cursor + lead.length) : null;
-          if (close == null) {
-            break;
-          }
-          cursor = close;
-        }
-        index = cursor;
+        index = definitionEnd(text, name, end);
         continue;
       }
       if ((name === "left" || name === "right") && nearest((frame) => frame.kind === "math") >= 0) {

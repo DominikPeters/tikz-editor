@@ -16,8 +16,10 @@ parentPort.on("message", async ({ caseData, checks }) => {
   const started = performance.now();
   try {
     const finish = (result) => parentPort.postMessage({ observations: [], ...result, elapsedMs: performance.now() - started });
-    if (checks.support) { finish({ support: classifyTexFuzzNativeSupport(caseData) }); return; }
+    const stage = (name) => parentPort.postMessage({ nativeStage: name });
+    if (checks.support) { stage("support"); finish({ support: classifyTexFuzzNativeSupport(caseData) }); return; }
     if (checks.paragraphWidth !== undefined) {
+      stage("paragraph");
       const result = layoutSimpleTexParagraph(caseData.source, {
         width: checks.paragraphWidth, alignment: "justified", hyphenator: { hyphenate: () => [] },
         graphicsResolver: createTexFuzzGraphicsResolver(caseData.source),
@@ -25,13 +27,17 @@ parentPort.on("message", async ({ caseData, checks }) => {
       finish({ paragraphReport: result.report }); return;
     }
     if (checks.mathOracle) {
+      stage("math-oracle");
       finish({ mathOracle: compareTexFuzzMathOracle(caseData, checks.mathOracle) }); return;
     }
+    stage("hard-invariants");
     const observations = checkTexFuzzHardInvariants(caseData);
-    if (checks.boundary) observations.push(...checkTexFuzzBoundaryInvariants(caseData));
+    if (checks.boundary) { stage("boundary"); observations.push(...checkTexFuzzBoundaryInvariants(caseData)); }
+    if (checks.metamorphic) stage("metamorphic");
     const metamorphic = checks.metamorphic ? checkTexFuzzMetamorphicInvariants(caseData) : undefined;
     if (metamorphic) observations.push(...metamorphic.findings);
     if (checks.history) {
+      stage("history");
       engine ??= await createTexFuzzFreshEngine();
       observations.push(...await checkTexFuzzEngineHistory(caseData, { engine, churnRequests: checks.churnRequests ?? 0 }));
     }

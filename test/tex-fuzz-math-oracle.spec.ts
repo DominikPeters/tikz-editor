@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { setImmediate } from "node:timers/promises";
 import { caseFromTexFuzzAst, shrinkTexFuzzCase, TEX_FUZZ_MATH_SYMBOL_ORACLE_FORMULAS, TEX_FUZZ_MATH_LAYOUT_ORACLE_FORMULAS } from "@tikz-editor/tex-fuzz";
 import { texFuzzMathOracleCases, compareTexFuzzMathOracle } from "../scripts/lib/tex-fuzz-math-oracle.mjs";
 
@@ -9,6 +10,47 @@ const caseData = caseFromTexFuzzAst([{ kind: "math", body: { kind: "fraction", c
   numerator: { kind: "atom", value: "x" }, denominator: { kind: "atom", value: "y" } } }]);
 
 describe("shared math glyph differential findings", () => {
+  it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex")).each([
+    ...["mathtt", "mathbf", "mathrm", "mathsf", "boldsymbol", "bm"].flatMap(alphabet =>
+      ["xrightarrow", "xleftarrow"].map(command => `\\${alphabet}{\\${command}{b}}`)),
+    String.raw`\scriptstyle\bm{\xrightarrow{b}}`,
+    String.raw`\bm{\xleftarrow[xy]{abcdef}}`,
+    String.raw`\bm{x+\xrightarrow{b}+y}`,
+    String.raw`\bm{\xrightarrow{\mathrm{b}}}`,
+    String.raw`\mathtt{\xrightarrow[xy]{abcdef}}`,
+    String.raw`\mathbf{\xleftarrow{\mathrm{b}}}`,
+    String.raw`\mathbb{\underbrace{1}}`,
+    ...["mathbb", "mathbf", "mathrm", "mathsf", "boldsymbol", "bm"].flatMap(alphabet =>
+      ["underbrace", "overbrace"].map(command => `\\${alphabet}{\\${command}{a1}}`)),
+    String.raw`\mathbb{\underbrace{\mathbb{1}}}`,
+    String.raw`\mathrm{\overbrace{\mathbf{x}}}`,
+    String.raw`\lim_{\begin{smallmatrix}/&\mid\\{*}&\lvert\end{smallmatrix}}`,
+    String.raw`\begin{smallmatrix}a&b\\c&d\end{smallmatrix}`,
+    String.raw`x_{\begin{smallmatrix}a&b\\c&d\end{smallmatrix}}`,
+    String.raw`x^{y_{\begin{smallmatrix}a&b\\c&d\end{smallmatrix}}}`,
+    String.raw`\frac{\prod_{!}}{\int}`, String.raw`\frac{\prod}{\int}`,
+    String.raw`\frac{\sum_{!}}{\int}`,
+    String.raw`\boldsymbol{\dfrac{+}{\ell}}`, String.raw`\boldsymbol{\tfrac{x}{y}}`,
+    String.raw`\boldsymbol{x^2+y_i}`, String.raw`\boldsymbol{\sqrt{x_i}}`,
+    String.raw`\boldsymbol{\hat{\ell}_i}`, String.raw`\boldsymbol{\mathrm{R}+\dfrac{1}{2}}`,
+    String.raw`\frac{x}{y}+\boldsymbol{\frac{x}{y}}`,
+    String.raw`\left|,\right|`, String.raw`\left(x,\right)`,
+    String.raw`\left|,\quad\right|`, String.raw`\scriptstyle\left|,\right|`,
+    String.raw`\sqrt[{b-,/\parallel-\alpha}]{\left|,\right|}`,
+    String.raw`{\tilde{\lvert}}_{]}`, String.raw`\tilde\lvert_{]}`,
+    String.raw`\hat{;}_{?}`, String.raw`\hat;_{?}`,
+    String.raw`\hat{\parallel}_i`, String.raw`\hat\parallel_i`,
+    String.raw`\hat{[}_i`, String.raw`\hat[_i`,
+    String.raw`{\mathfrak{;}}_{?}`, String.raw`{\mathfrak{;}}_{{?}^{a}}`,
+    String.raw`\stackrel{;}{\beta}`, String.raw`\overline{\stackrel{\parallel}{\partial}}`,
+    String.raw`\begin{pmatrix}{y}_{.}&\xrightarrow{\ell}\\\stackrel{;}{\beta}&\Vert\\\sqrt[{\alpha}]{a}&y:<\end{pmatrix}`,
+  ])(
+    "matches hourly-soak math regression %s", async (content) => {
+      await setImmediate();
+      expect(compareTexFuzzMathOracle(caseFromTexFuzzAst([{ kind: "math", content }])), content)
+        .toEqual({ compared: true, observation: null });
+    }, 20_000
+  );
   it.each([
     [String.raw`\(x^2\)`, "x^2"], ["$x^2$", "x^2"],
     [String.raw`\[x^2\]`, String.raw`\displaystyle x^2`], ["$$x^2$$", String.raw`\displaystyle x^2`],
@@ -22,26 +64,27 @@ describe("shared math glyph differential findings", () => {
     expect(actual).toBe(expected);
   });
   it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex"))(
-    "compares every original nightly math sample and its legacy array context", () => {
+    "compares every original nightly math sample and its legacy array context", async () => {
       const cases = JSON.parse(readFileSync(new URL("./fixtures/tex-fuzz/ci-20261110-math-sample.json", import.meta.url), "utf8")) as typeof caseData[];
       expect(cases).toHaveLength(16);
       for (const candidate of cases) {
+        await setImmediate();
         expect(compareTexFuzzMathOracle(candidate), candidate.source).toEqual({ compared: true, observation: null });
       }
       const original = JSON.parse(readFileSync(new URL("./fixtures/tex-fuzz/ci-20261110-math-glyph-trace.json", import.meta.url), "utf8")) as { case: typeof caseData; minimizedCase: typeof caseData };
       for (const candidate of [original.case, original.minimizedCase]) {
+        await setImmediate();
         expect(compareTexFuzzMathOracle(candidate, { latexRelease: "2025-11-01" }), candidate.source).toEqual({ compared: true, observation: null });
       }
     }, 60_000
   );
-  it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex"))(
-    "matches mandatory symbol and layout regressions", () => {
-      for (const content of [...TEX_FUZZ_MATH_SYMBOL_ORACLE_FORMULAS, ...TEX_FUZZ_MATH_LAYOUT_ORACLE_FORMULAS]) {
-        const candidate = caseFromTexFuzzAst([{ kind: "math", content }]);
-        expect(compareTexFuzzMathOracle(candidate), content).toEqual({ compared: true, observation: null });
-      }
-    }, 60_000
-  );
+  it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex")).each([
+    ...TEX_FUZZ_MATH_SYMBOL_ORACLE_FORMULAS, ...TEX_FUZZ_MATH_LAYOUT_ORACLE_FORMULAS,
+  ])("matches mandatory symbol and layout regression %s", async (content) => {
+    await setImmediate();
+    const candidate = caseFromTexFuzzAst([{ kind: "math", content }]);
+    expect(compareTexFuzzMathOracle(candidate), content).toEqual({ compared: true, observation: null });
+  }, 20_000);
   it("selects actual nested syntax rather than replacing generated math with prose", () => {
     const owner = caseFromTexFuzzAst([{ kind: "font", command: "textbf", children: caseData.ast }]);
     const selected = texFuzzMathOracleCases([owner, owner], 8);
@@ -83,7 +126,7 @@ describe("shared math glyph differential findings", () => {
     expect(result.observation?.detail?.comparable).toBe(false);
   });
   it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex"))(
-    "matches LuaLaTeX paint for short, long, empty, and nested arrow labels", () => {
+    "matches LuaLaTeX paint for short, long, empty, and nested arrow labels", async () => {
       const formulas = [
         String.raw`\xrightarrow[a]{a}`, String.raw`\xleftarrow[x]{1}`,
         String.raw`\dot{\xrightarrow[a]{a}}`, String.raw`\xleftarrow[\mathbf{rank}]{1-b}`,
@@ -93,6 +136,7 @@ describe("shared math glyph differential findings", () => {
         String.raw`\frac{1}{\xrightarrow[a^2]{a^2}}`,
       ];
       for (const content of formulas) {
+        await setImmediate();
         const candidate = caseFromTexFuzzAst([{ kind: "math", content }]);
         const result = compareTexFuzzMathOracle(candidate);
         expect(result, content).toEqual({ compared: true, observation: null });

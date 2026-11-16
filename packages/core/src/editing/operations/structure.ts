@@ -25,7 +25,7 @@ import {
   wrapInListPatch,
   type StructuralPatch,
 } from "./lists.js";
-import { mapThrough, PatchSet } from "./source.js";
+import { mapThrough, PatchSet, withTerminator } from "./source.js";
 
 /**
  * The structural keys on the tree: ⏎, ⇧⏎, ⇥/⇧⇥, ⌫/⌦ at paragraph and
@@ -76,7 +76,9 @@ export function enter(view: EditView, caret: Position, at: number, key: "enter" 
       if (!context) {
         return { kind: "none" };
       }
-      if (context.index === context.list.items.length - 1 && isBlank(tree.text, context.item.contentSpan.from, context.item.contentSpan.to)) {
+      const label = context.item.labelSpan;
+      const emptyLabel = label == null || isBlank(tree.text, label.from, label.to);
+      if (context.index === context.list.items.length - 1 && emptyLabel && isBlank(tree.text, context.item.contentSpan.from, context.item.contentSpan.to)) {
         return patchOutcome(exitEmptyLastItemPatch(tree.text, context));
       }
       const { closes, reopens } = carried(view, decision.transparent);
@@ -123,6 +125,9 @@ function carried(view: EditView, transparent: readonly ChainLink[]): { closes: s
       // `{\bf ` reopens with its declarations.
       const first = slot.children.find((child) => editNodeAt(tree.nodes, child).kind !== "declaration");
       open += tree.text.slice(slot.contentSpan.from, first == null ? slot.contentSpan.to : editNodeAt(tree.nodes, first).span.from);
+      // A declaration originally followed by a construct may now precede
+      // letters (`\centering` + `text`); keep its control word terminated.
+      if (/\\[A-Za-z@]+$/u.test(open)) open += " ";
     }
     reopens = open + reopens;
   }
@@ -174,9 +179,10 @@ export function deadBreaks(view: EditView): Span[] {
     .map((node) => node.span);
 }
 
-/** Whether `at` is inside a value argument (a file name, colour, URL). */
+/** Whether `at` is inside a value argument (a file name, colour, URL, break spacing). */
 export function inValue(view: EditView, at: number): boolean {
-  return view.tree.nodes.some((node) => node.values.some((value) => value.contentSpan.from <= at && at <= value.contentSpan.to));
+  return view.tree.nodes.some((node) => node.values.some((value) => value.contentSpan.from <= at && at <= value.contentSpan.to) ||
+    (node.kind === "break" && node.span.from < at && at < node.span.to));
 }
 
 /** Commands after which TeX is between paragraphs. */
@@ -305,18 +311,25 @@ function rowBreak(view: EditView, slot: SlotId, row: NodeId, at: number): EditOu
   if (inside.some((link) => link.capability.kind !== "transparent")) {
     return { kind: "none" };
   }
-  return newRow(view, row, at, inside);
+  return newRow(view, row, requireDefined(chain.find((link) => link.node === row), "Missing row owner").slot, at, inside);
 }
 
 /** ⏎ in an alignment row (D2): a row break, the rest of the row moving to a new line with the same indent. */
-function newRow(view: EditView, row: NodeId, at: number, transparent: readonly ChainLink[] = []): EditOutcome {
+function newRow(view: EditView, row: NodeId, cell: SlotId, at: number, transparent: readonly ChainLink[] = []): EditOutcome {
   const { tree } = view;
   const span = editNodeAt(tree.nodes, row).span;
   const { closes, reopens } = carried(view, transparent);
   const collapse = transparent.length === 0;
   const from = collapse ? skipHorizontalBack(tree.text, at, span.from) : at;
   const to = collapse ? skipHorizontalForward(tree.text, at, span.to) : at;
-  const lineBreak = ` \\\\\n${lineIndentAt(tree.text, span.from)}`;
+  const cells = editNodeAt(tree.nodes, row).slots;
+  const column = cells.indexOf(cell);
+  // Moving a suffix to column zero must not reinterpret math as text (or
+  // text as math). Keep its column positions when the modes would change.
+  const shiftedModes = cells.slice(column).some((id, index) =>
+    editSlotAt(tree.slots, id).mode !== editSlotAt(tree.slots, requireArrayValue(cells, index)).mode);
+  const padding = shiftedModes ? "& ".repeat(column) : "";
+  const lineBreak = ` \\\\\n${lineIndentAt(tree.text, span.from)}${padding}`;
   // (What is reopened after the break never starts with `[`.)
   const insert = closes + (reopens ? lineBreak : protectBreak(lineBreak, tree.text, to)) + reopens;
   return patchOutcome({ edits: [{ span: { from, to }, insert }], caret: from + insert.length });
@@ -441,7 +454,9 @@ export function joinRows(view: EditView, row: NodeId, direction: "backward" | "f
   const from = trimmedEnd(tree.text, { from: lastCell.contentSpan.from, to: breakToken.from });
   const to = skipHorizontalForward(tree.text, firstCell.contentSpan.from, firstCell.contentSpan.to);
   const insert = from === upper.span.from ? "" : joinSeparator(tree.text, from, " ");
-  return patchOutcome({ edits: [{ span: { from, to }, insert }], caret: direction === "backward" ? from + insert.length : from });
+  const patches = withTerminator(tree.text, [{ from, to, insert }], from + insert.length, firstCell.mode);
+  const inserted = requireArrayValue(patches, 0).insert;
+  return { kind: "patch", patches, caret: direction === "backward" ? from + inserted.length : from, run: null, exact: true };
 }
 
 /** Whether the row of `cell` has all the columns its alignment fixes (`\multicolumn{n}` counting n), so `&` cannot add one. */

@@ -1694,10 +1694,18 @@ class TexMathParser {
 
   private parseAccent(commandNameValue: TexMathAccentCommand, allowScripts: boolean): TexMathAtom {
     const command = this.advance();
+    this.skipSpaces();
+    const unbraced = this.peek()?.kind !== "group-open";
     const base = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} base`, {
       stopAtGroupClose: true,
       suppressTerminalEllipsisGlue: true,
     });
+    const baseList = base?.list ?? emptyList(command.sourceSpan.end);
+    const first = baseList.items[0];
+    // scan_math takes a bare math character without its noad class. AMS's
+    // protected vertical delimiters remain boxed, even without written braces.
+    const bareCharacter = unbraced && baseList.items.length === 1 && first?.kind === "atom" && first.nucleus.kind === "glyph" &&
+      !["\\lvert", "\\rvert", "\\lVert", "\\rVert"].includes(first.nucleus.text);
     const sourceSpan = spanUnion(command.sourceSpan, base?.sourceSpan ?? command.sourceSpan);
     return this.maybeParseScripts({
       kind: "atom",
@@ -1705,7 +1713,7 @@ class TexMathParser {
       nucleus: {
         kind: "accent",
         command: commandNameValue,
-        base: base?.list ?? emptyList(command.sourceSpan.end),
+        base: bareCharacter ? { ...baseList, items: [{ ...first, atomClass: "ord" }] } : baseList,
         commandSourceSpan: command.sourceSpan,
         sourceSpan,
       },

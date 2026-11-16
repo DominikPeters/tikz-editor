@@ -792,7 +792,7 @@ class Binder {
     stops.add("right");
     const stopped = this.scanSlot(slot, "math", openEnd, run.end, stops);
     let end = stopped;
-    if (this.isControl(stopped, "right")) {
+    if (stopped < run.end && this.isControl(stopped, "right")) {
       end = this.delimiterTokenEnd(stopped + "\\right".length, run.end);
       this.delimiter(node, stopped, end);
     } else {
@@ -1112,7 +1112,8 @@ class Binder {
   private alignment(node: NodeId, from: number, to: number, mode: EditMode): void {
     const columns = mode === "text" ? this.columnModes(node) : [];
     // Text typed between rows starts a row: in the first column's mode.
-    const slot = this.slot(node, "content", { from, to }, { mode: columns[0] ?? mode, flow: false });
+    const betweenRowsMode = columns[0] ?? mode;
+    const slot = this.slot(node, "content", { from, to }, { mode: betweenRowsMode, flow: false });
     const text = this.text;
     let cursor = from;
     while (cursor < to) {
@@ -1123,7 +1124,7 @@ class Binder {
       }
       if (text[cursor] === "%") {
         const end = this.commentEnd(cursor);
-        this.attach(slot, this.node("invisible", mode, { from: cursor, to: end }));
+        this.attach(slot, this.node("invisible", betweenRowsMode, { from: cursor, to: end }));
         cursor = end;
         continue;
       }
@@ -1144,7 +1145,7 @@ class Binder {
             if (!match.complete) break;
             ruleEnd = match.end;
           }
-          this.attach(slot, this.node("invisible", mode, { from: cursor, to: ruleEnd }, name));
+          this.attach(slot, this.node("invisible", betweenRowsMode, { from: cursor, to: ruleEnd }, name));
           cursor = ruleEnd;
           continue;
         }

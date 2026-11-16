@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { claimCachedDeckSnapshot, computeSnapshot, type SessionSnapshot } from "../packages/app/src/compute";
 import { buildEditParseOptions } from "../packages/app/src/edit-parse-options";
@@ -41,6 +42,19 @@ function paragraphGeometry(snapshot: SessionSnapshot) {
 }
 
 describe("overlay editing on a slide", () => {
+  it("preserves generated drawing-layer option spans after a preamble edit", async () => {
+    const source = readFileSync("test/fixtures/beamer/overlay-pictures-fidelity/drawing-layer-tikzlayer.tex", "utf8");
+    const request = { source, activeRootId: "frame:1", deckStep: 2, includeDrawingLayer: true, drawingLayerRootId: "frame:1:overlay:0" };
+    await computeSnapshot({ ...request, id: "seed", documentId: "generated-layer-options", sourceRevision: 0 });
+    const changed = source.slice(0, 38) + "W" + source.slice(38);
+    const warm = await computeSnapshot({ ...request, id: "edit", documentId: "generated-layer-options", source: changed,
+      sourceRevision: 1, changedSourceIds: [], patches: [documentDiffPatch(source, changed)], patchBaseRevision: 0 });
+    const cold = await computeSnapshot({ ...request, id: "cold", documentId: "generated-layer-options-cold", source: changed, sourceRevision: 1 });
+    const chains = (snapshot: SessionSnapshot) => snapshot.scene!.elements.map(element => element.styleChain);
+    expect(chains(warm.snapshot).flat().some(entry => entry.sourceRef?.label === "environment")).toBe(true);
+    expect(chains(warm.snapshot)).toEqual(chains(cold.snapshot));
+  });
+
   it.each(["shared", "none"] as const)("resolves rectangle command options using %s analysis and edits them", async analysis => {
     const documentId = `overlay-inspector-${analysis}`;
     const { snapshot } = await computeSnapshot({ id: "inspector", documentId, source: SOURCE, sourceRevision: 0,

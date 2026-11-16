@@ -1009,6 +1009,10 @@ function layoutAtom(
   }
 
   if (shouldUseOperatorLimits(atom, style)) {
+    if (nucleus.isCharacterNucleus && atom.nucleus.kind === "list" && atom.nucleus.operator) {
+      // TeX's make_op keeps the character's italic correction in its box width.
+      nucleus = mathAtomLayout({ ...nucleus, width: roundTexPt(nucleus.width + nucleus.italicCorrection) });
+    }
     return layoutOperatorLimitsAtom(atom, nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
 
@@ -1847,8 +1851,15 @@ function layoutAlphabetNucleus(
     const result = layoutNucleus(singleAtom.nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
     return result ? mathAtomLayout({ ...result, sourceSpan: nucleus.sourceSpan }) : null;
   }
+  // amsbsy opens a formula in the bold math version, including its fontdimens.
+  // bm substitutes noads in the ambient version and keeps its layout parameters.
+  const innerFontProfile = nucleus.alphabet === "boldsymbol" ? {
+    ...fontProfile,
+    resolveMathFont: (request: Parameters<TexMathFontProfile["resolveMathFont"]>[0]) =>
+      resolveBoldMathFont(fontProfile, request.family, request.style, texLength(request.baseAtPt ?? baseAtPt), "boldsymbol"),
+  } : fontProfile;
   const result = layoutTexMathList(nucleus.list, {
-    fontProfile,
+    fontProfile: innerFontProfile,
     style,
     cramped,
     baseAtPt,
@@ -1870,7 +1881,7 @@ function layoutAlphabetNucleus(
     // character; it does not turn that character into an inner subformula.
     // Scripts therefore start from the character shift (zero) rather than
     // applying \supdrop to the alphabet wrapper's height.
-    scriptShiftsAsCharacter: isSingleCharacterCleanBoxList(nucleus.list),
+    scriptShiftsAsCharacter: singleAtom?.atomClass === "ord" && isSingleCharacterCleanBoxList(nucleus.list),
     sourceSpan: nucleus.sourceSpan,
   });
 }
@@ -3299,7 +3310,12 @@ function layoutSmallMatrixBody(
   const columnWidths = Array.from({ length: columnCount }, (_, columnIndex) =>
     Math.max(0, ...concreteRows.map((row) => row.cells[columnIndex]?.hlist.width ?? 0))
   ).map(roundTexPt);
-  const columnGap = muToPt(fontProfile, style, baseAtPt, 5);
+  // amsmath inserts \thickspace between the cell math boxes, in text
+  // mode: .2777em of the ambient text font, independent of math style.
+  const textFont = fontProfile.textFontProfile.resolveTextFont(
+    fontProfile.textFontProfile.defaultFontState, baseAtPt, fontProfile.metricProvider
+  );
+  const columnGap = roundTexPt(0.2777 * tfmToPt(textFont, textFont.data.fontdimen.quad));
   const bodyWidth = roundTexPt(
     columnWidths.reduce((sum, columnWidth) => sum + columnWidth, 0) +
     Math.max(0, columnCount - 1) * columnGap
@@ -4653,12 +4669,13 @@ function layoutBraceNucleus(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  // LaTeX's definitions explicitly typeset the braced body in display style.
+  // LaTeX opens a fresh $...$ formula in the brace's alignment box,
+  // resetting an inherited math alphabet. Bold math versions still apply.
   const bodyResult = layoutTexMathList(nucleus.body, {
     fontProfile,
     style: "display",
     baseAtPt,
-    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
+    ...((alphabet === "boldsymbol" || alphabet === "bm") ? { alphabet } : {}),
   });
   if (!bodyResult.supported) {
     return null;
@@ -5203,6 +5220,7 @@ function amsNestedAccentScriptGlyphMetrics(
   const item = deepestBase.items.length === 1 ? deepestBase.items[0] : null;
   if (
     item?.kind !== "atom" ||
+    item.atomClass !== "ord" ||
     item.subscript ||
     item.superscript ||
     item.nucleus.kind !== "glyph"
@@ -5576,15 +5594,25 @@ function layoutExtensibleArrowNucleus(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  // amsmath measures labels in scriptstyle, but typesets limits in the enclosing
-  // operator's script style. Empty arguments do not create a limit at all.
-  const measuredAbove = layoutLimitList(nucleus.above, fontProfile, "script", false, baseAtPt, alphabet);
+  if (alphabet === "bm") {
+    // bm's grouped mathop construction uses its boldmath box fallback, so
+    // the arrow assembly and its fontdimens belong to the bold math version.
+    return layoutExtensibleArrowNucleus(nucleus, {
+      ...fontProfile,
+      resolveMathFont: request => resolveBoldMathFont(fontProfile, request.family, request.style,
+        texLength(request.baseAtPt ?? baseAtPt), "boldsymbol"),
+    }, style, cramped, baseAtPt, "boldsymbol");
+  }
+  // Measurement happens in fresh scriptstyle formulas, which reset an
+  // inherited math alphabet. The actual limits retain the outer alphabet.
+  const measureAlphabet = alphabet === "boldsymbol" ? alphabet : undefined;
+  const measuredAbove = layoutLimitList(nucleus.above, fontProfile, "script", false, baseAtPt, measureAlphabet);
   const measuredBelow = nucleus.below
-    ? layoutLimitList(nucleus.below, fontProfile, "script", false, baseAtPt, alphabet)
+    ? layoutLimitList(nucleus.below, fontProfile, "script", false, baseAtPt, measureAlphabet)
     : null;
   const aboveStyle = supStyle(style);
   const above = nucleus.above.items.length > 0
-    ? aboveStyle === "script" && !cramped
+    ? aboveStyle === "script" && !cramped && measureAlphabet === alphabet
       ? measuredAbove
       : layoutLimitList(nucleus.above, fontProfile, aboveStyle, cramped, baseAtPt, alphabet)
     : null;
@@ -5759,7 +5787,8 @@ function layoutLeftRightNucleus(
 ): TexMathAtomLayout | null {
   const delimiterStyle = delimiterSizeStyle(style);
   const axis = mathParameterToPt(fontProfile, "axisHeight", delimiterStyle, baseAtPt);
-  const rawBody = layoutLeftRightBody(nucleus.body, fontProfile, style, cramped, baseAtPt, alphabet);
+  const rawBody = layoutLeftRightBody(nucleus.body, fontProfile, style, cramped, baseAtPt, alphabet,
+    nucleus.open ? undefined : nucleus.rightDelimiterSourceSpan);
   if (!rawBody) {
     return null;
   }
@@ -5835,7 +5864,8 @@ function layoutLeftRightBody(
   style: TexMathStyle,
   cramped: boolean,
   baseAtPt: TexLength,
-  alphabet?: TexMathAlphabetCommand
+  alphabet?: TexMathAlphabetCommand,
+  closingSpan?: TexMathSourceSpan
 ): TexMathHList | null {
   const result = layoutTexMathList(list, {
     fontProfile,
@@ -5845,7 +5875,32 @@ function layoutLeftRightBody(
     ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
     allowMiddleDelimiters: true,
   });
-  return result.supported ? result.hlist : null;
+  if (!result.supported) return null;
+  if (!closingSpan) return result.hlist;
+  // The right delimiter is a Close noad. Punctuation before it still gets
+  // TeX's thin inter-atom glue, including after explicit kerns and skips.
+  let last: TexMathAtom | null = null;
+  let finalStyle = style;
+  for (const item of list.items) {
+    if (item.kind === "atom") last = item;
+    else if (item.kind === "style-change") finalStyle = item.style;
+    else if (item.kind === "middle-delimiter" || item.kind === "unsupported") last = null;
+  }
+  if (last?.atomClass !== "punct") return result.hlist;
+  const glue = texMathSpacingBetween(last, { ...last, atomClass: "close", sourceSpan: closingSpan }, finalStyle);
+  if (!glue) return result.hlist;
+  const width = muToPt(fontProfile, finalStyle, baseAtPt, glue.mu);
+  return mathHList({
+    ...result.hlist,
+    width: roundTexPt(result.hlist.width + width),
+    items: [...result.hlist.items, mathGlueLayoutItem({
+      kind: "glue", x: result.hlist.width, width,
+      mu: glue.mu,
+      stretch: muToPt(fontProfile, finalStyle, baseAtPt, glue.stretchMu),
+      shrink: muToPt(fontProfile, finalStyle, baseAtPt, glue.shrinkMu),
+      source: glue.source, sourceSpan: glue.sourceSpan,
+    })],
+  });
 }
 
 function expandMiddleDelimitersInHList(
@@ -7007,6 +7062,7 @@ function accentBaseSingleGlyphMetrics(
   const item = base.items[0];
   if (
     item?.kind !== "atom" ||
+    item.atomClass !== "ord" ||
     item.subscript ||
     item.superscript
   ) {

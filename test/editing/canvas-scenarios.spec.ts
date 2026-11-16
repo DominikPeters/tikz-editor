@@ -293,11 +293,21 @@ describe("canvas editing: the focus tag's menu (V4)", () => {
     ["a fraction for a display one", R`$\frac{1‸}{2}$`, R`\frac{1}{2}`, "variant:dfrac", R`$\dfrac{1‸}{2}$`],
     ["an inline formula for a display", R`Let $x+‸y$ be`, R`$x+y$`, "variant:display", R`Let \[x+‸y\] be`],
     ["a display for an inline formula", R`\[x‸\]`, R`\[x\]`, "variant:inline", R`$x‸$`],
+    ["an empty display for an inline formula", R`\[‸\]`, R`\[\]`, "variant:inline", "${‸}$"],
+    ["a blank display for an inline formula", R`\[ ‸\]`, R`\[ \]`, "variant:inline", "${‸}$"],
     ["Unwrap keeps the content and the caret in it", R`a \textbf{bo‸ld} b`, R`\textbf{bold}`, "unwrap", R`a bo‸ld b`],
     ["Unwrap after a control word keeps it a word", R`$\alpha\sqrt{x‸}$`, R`\sqrt{x}`, "unwrap", R`$\alpha x‸$`],
     ["Unwrap of a control word before a letter keeps it a word", R`see \textbf{\LaTeX‸}x`, R`\textbf{\LaTeX}`, "unwrap", R`see \LaTeX‸{}x`],
   ])("%s", (_, body, construct, id, expected) => {
     expect(menuEdit(body, construct, id)).toBe(expected);
+  });
+
+  it.each([String.raw`\text{$\left(\right)$}`, String.raw`\text{\footnote{Keep}}`])("does not unwrap mode-specific structured content in %s", (construct) => {
+    expect(menuEdit(`$${construct}‸$`, construct, "unwrap")).toBeNull();
+  });
+
+  it("still unwraps plain text into math", () => {
+    expect(menuEdit(R`$\text{wor‸d}$`, R`\text{word}`, "unwrap")).toBe(R`$wor‸d$`);
   });
 
   it("offers a display only where TeX takes one: in a paragraph, not a table cell", () => {

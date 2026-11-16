@@ -1,3 +1,4 @@
+import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import type { CommandTable } from "../../../packages/core/src/editing/commands/index.js";
 import type { Intent } from "../../../packages/core/src/editing/input/index.js";
 import { valueEditorFields, type ValueField } from "../../../packages/core/src/editing/operations/index.js";
@@ -898,19 +899,21 @@ export type CampaignResult = {
 };
 
 /** Runs `cases` random cases from a seed, stopping after `maxFailures`. */
-export function runCampaign(options: {
+export async function runCampaign(options: {
   readonly starts: readonly FuzzStart[];
   readonly seed: number;
   readonly cases: number;
   readonly length: number;
   readonly maxFailures?: number;
   readonly shrink?: boolean;
-}): CampaignResult {
+}): Promise<CampaignResult> {
   const random = createRandom(options.seed);
   const failures: string[] = [];
   const invariants: string[] = [];
   let edits = 0;
   for (let index = 0; index < options.cases && failures.length < (options.maxFailures ?? 3); index += 1) {
+    // Keep the worker's control channel responsive during extended soaks.
+    if (index % 64 === 0) await yieldToEventLoop();
     const fuzz = generateCase(random, options.starts, options.length);
     const run = runCase(fuzz);
     edits += run.edits;

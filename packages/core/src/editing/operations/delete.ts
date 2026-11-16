@@ -199,7 +199,12 @@ function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDeci
   if (isEmptySlot(view, slot) && REMOVABLE_ROLES.has(record.role)) {
     const span = slotOuterSpan(tree, slot);
     const patches = new PatchSet().delete(span).patches();
-    return outcome({ kind: "patch", patches, caret: mapThrough(patches, span.from), run: null });
+    // Removing a root's empty index moves into its radicand, past its
+    // opening brace. A caret before that brace would let the next command
+    // become the radicand's single token and split a delimiter pair.
+    const next = record.role === "index" ? slots[slots.findIndex(candidate => candidate.id === slot) + 1] : null;
+    const caret = next ? view.offset({ slot: next.id, index: 0 }) : span.from;
+    return outcome({ kind: "patch", patches, caret: mapThrough(patches, caret), run: null });
   }
   const at = slots.findIndex((candidate) => candidate.id === slot);
   const neighbour = slots[edge === "start" ? at - 1 : at + 1];
@@ -371,7 +376,7 @@ function gapEnd(view: EditView, slot: SlotId, from: number): number {
 function finishDeletion(view: EditView, set: PatchSet, seam: number, mode: EditMode, run: string | null): EditOutcome {
   const raw = set.patches();
   const caret = mapThrough(raw, seam);
-  const patches = withBracketGuard(view.tree.text, withTerminator(view.tree.text, raw, caret, mode), caret);
+  const patches = mode === "verbatim" ? raw : withBracketGuard(view.tree.text, withTerminator(view.tree.text, raw, caret, mode), caret);
   const single = raw.length === 1 && requireArrayValue(raw, 0).insert === "" && requireArrayValue(raw, 0).to - requireArrayValue(raw, 0).from === 1;
   return { kind: "patch", patches, caret, run: single ? run : null };
 }
