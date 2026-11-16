@@ -1932,7 +1932,11 @@ function layoutAlphabetNucleus(
     // character; it does not turn that character into an inner subformula.
     // Scripts therefore start from the character shift (zero) rather than
     // applying \supdrop to the alphabet wrapper's height.
-    scriptShiftsAsCharacter: singleAtom?.atomClass === "ord" && (isSingleCharacterCleanBoxList(nucleus.list) || unboxedCharacter),
+    scriptShiftsAsCharacter: nucleus.alphabet !== "boldsymbol" && singleAtom?.atomClass === "ord" &&
+      (isSingleCharacterCleanBoxList(nucleus.list) || unboxedCharacter),
+    ...(singleAtom?.atomClass === "ord" && unboxedCharacter && nucleus.alphabet !== "boldsymbol" && hlist.items[0]?.kind === "glyph"
+      ? { scriptBaseWidth: hlist.items[0].width, scriptSuperscriptOffset: roundTexPt(hlist.width - hlist.items[0].width) }
+      : {}),
     sourceSpan: nucleus.sourceSpan,
   });
 }
