@@ -28,6 +28,31 @@ async function setup(input = source, activeRootId = "figure:0") {
 }
 afterEach(() => vi.restoreAllMocks());
 
+
+it.each(["remove", "insert", "damage"])("rejects a stale picture edit after a %s changes the root inventory", async change => {
+  const picture = String.raw`\begin{tikzpicture}\draw (0,0)--(1,1);\end{tikzpicture}`;
+  const multi = [picture, picture, picture].join("\n");
+  const { state, documentId } = await setup(multi, "figure:2");
+  const changed = change === "remove" ? multi.slice(picture.length)
+    : change === "insert" ? `${picture}\n${multi}`
+    : multi.replace("{tikzpicture}", "{tikzpicure}");
+  const result = executeDocumentEdit({ ...state, documentId, source: changed },
+    { kind: "setProperty", elementId: "path:0", level: "command", key: "draw", value: "red" });
+  expect(result).toMatchObject({ kind: "unsupported", reason: expect.stringContaining("catching up") });
+});
+
+it("keeps stale picture edits available when the root inventory is unchanged", async () => {
+  const picture = String.raw`\begin{tikzpicture}\draw (0,0)--(1,1);\end{tikzpicture}`;
+  const multi = [picture, picture, picture].join("\n");
+  const { state, documentId } = await setup(multi, "figure:2");
+  const changed = `% moved source\n${multi}`;
+  const result = executeDocumentEdit({ ...state, documentId, source: changed },
+    { kind: "setProperty", elementId: "path:0", level: "command", key: "draw", value: "red" });
+  expect(result.kind).toBe("success");
+  if (result.kind !== "success") throw new Error("Expected the selected figure edit");
+  expect(result.newSource).toBe(`% moved source\n${picture}\n${picture}\n${picture.replace("\\draw ", "\\draw[red] ")}`);
+});
+
 it("records consecutive color sides and resets while a frame render is pending", async () => {
   const source = String.raw`\documentclass{beamer}\begin{document}\begin{frame}Text\end{frame}\end{document}`;
   const { state } = await setup(source, "frame:0");

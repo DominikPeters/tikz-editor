@@ -13,6 +13,7 @@ import { editedSlice, EMPTY_FRAGMENT } from "@tikz-editor/core/edit/fragment";
 import { drawingLayerOffset, insertDrawingLayer } from "./drawing-layer";
 import { buildEditParseOptions } from "./edit-parse-options";
 import { documentKindForSource } from "./store/workspace-state";
+import { scanTikzFigures } from "@tikz-editor/core/parser/figure-scan";
 import { parseTikz } from "@tikz-editor/core/parser/index";
 import { beamerDrawingLayerRemovalSpan } from "@tikz-editor/core/beamer/overlay-pictures";
 import type { SessionSnapshot } from "./compute";
@@ -53,6 +54,12 @@ export function executeDocumentEdit(
   // Element ids and handles name things in the picture the snapshot shows. Right
   // after switching pictures they would resolve against the new one instead.
   if (!nested && activeRootId != null && snapshot.activeRootId != null && snapshot.activeRootId !== activeRootId) {
+    return { kind: "unsupported", reason: "The figure is still catching up." };
+  }
+  // Positional picture ids cannot be reused after pictures are inserted or
+  // removed: a missing id falls back to the first picture during parsing.
+  if (!nested && ref?.kind === "tikz-figure" && snapshot.source !== source &&
+    scanTikzFigures(source).filter(figure => !figure.isTemplate).length !== snapshot.figures.length) {
     return { kind: "unsupported", reason: "The figure is still catching up." };
   }
   if ((ref?.kind === "beamer-frame-tikz" && ref.layer && snapshot.overlayLayer?.rootId !== activeRootId) ||
