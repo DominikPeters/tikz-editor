@@ -17,6 +17,22 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 
 describe("keystroke soak regressions", () => {
 
+  it("uses the new row's mode after deleting a mixed-mode table selection", () => {
+    const result = replay("\n\\begin{tabular}{>{$}c<{$}l}\nx^2‸ & Alpha\\\\\n  & Beta\\\\\n\\frac{1}{2} & Gamma\n\\end{tabular}\n", ["⏎", String.raw`\frac`, "@83:69", "$"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).not.toContain("${}$");
+  });
+
+  it.each([">{$}c<{$}l", "l>{$}c<{$}"])("uses the first column's %s mode in a removed row", spec => {
+    const marked = `\\begin{tabular}{${spec}}x & y\\\\\na & b‸\\end{tabular}`;
+    const source = marked.replace("‸", "");
+    const from = source.indexOf("a & b");
+    const to = from + "a & b".length;
+    const result = replay(marked, [`@${from}:${to}`, "$"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText.includes("${}$")).toBe(spec.startsWith("l"));
+  });
+
   it("refuses math delimiter commands in alltt", () => {
     const result = replay("\\begin{alltt}\n2‸ Done\n\\end{alltt}", [String.raw`\left(`, "→", "⌫", "⌫"]);
     expect(result.failure, JSON.stringify(result.states)).toBeNull();

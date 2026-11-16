@@ -413,7 +413,10 @@ function caretAt(view: EditView, offset: number): Position {
   // At a cell boundary, the table container is not an editable insertion stop.
   if (!view.isStop(found)) {
     const stop = view.stopAt(offset);
-    if (stop && editSlotAt(view.tree.slots, stop.slot).role === "cell") found = stop;
+    const cell = stop ? editSlotAt(view.tree.slots, stop.slot) : null;
+    // A gap after a row break starts the next row; the previous cell's
+    // nearest stop can have a different mode from the insertion offset.
+    if (stop && cell?.role === "cell" && cell.contentSpan.from <= offset && offset <= cell.contentSpan.to) found = stop;
   }
   return outsideUnbracedScript(view, found, offset) ?? found;
 }
