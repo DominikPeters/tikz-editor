@@ -465,7 +465,8 @@ function fillPlaceholder(view: EditView, placeholder: Placeholder, char: string)
   if (placeholder.formula == null && /^['~]$/u.test(char)) {
     return null;
   }
-  const text = ESCAPED[char] ?? char;
+  const mode = placeholder.slot != null ? editSlotAt(view.tree.slots, placeholder.slot).mode : "math";
+  const text = terminated(view, placeholder.open, char, mode) + (ESCAPED[char] ?? char);
   const patches = new PatchSet().replace({ from: placeholder.open, to: placeholder.open + 2 }, text).patches();
   return { kind: "patch", patches, caret: placeholder.open + text.length, run: "insert" };
 }
