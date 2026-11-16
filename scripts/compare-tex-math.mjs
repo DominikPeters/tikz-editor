@@ -407,7 +407,7 @@ function ourTrace(formula, arrayAxisStyle = "ambient") {
   const fontProfile = /\{(?:amsmath|amssymb|mathtools)\}/.test(mathPackagePreamble(formula))
     ? luaLatexAmsMathFontProfile
     : luaLatexDefaultMathFontProfile;
-  const result = layoutTexMathList(parsed.list, { fontProfile: { ...fontProfile, arrayAxisStyle } });
+  const result = layoutTexMathList(parsed.list, { fontProfile: { ...fontProfile, arrayAxisStyle, amsWideAccents: /\{amssymb\}/.test(mathPackagePreamble(formula)) } });
   if (!result.supported) {
     return {
       supported: false,

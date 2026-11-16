@@ -11,6 +11,19 @@ const caseData = caseFromTexFuzzAst([{ kind: "math", body: { kind: "fraction", c
 
 describe("shared math glyph differential findings", () => {
   it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex")).each([
+    String.raw`\mathtt{\hat{/}}`,
+    ...["mathtt", "mathsf", "mathit", "mathrm", "mathbf", "mathcal", "mathfrak", "mathbb"].flatMap(alphabet =>
+      ["hat", "bar", "ddot"].map(command => `\\${alphabet}{\\${command}{X}}`)),
+    String.raw`\mathfrak{\bar{X}}_i`, String.raw`\mathfrak{\bar{X}}^2`,
+    String.raw`\mathtt{\vec{X}}`, String.raw`\mathbf{\vec{X}}`,
+    ...["widehat", "widetilde"].flatMap(command => [
+      `\\${command}{abc}+\\mathbb{R}`, `\\${command}{abcdef}+\\mathbb{R}`,
+      `x_{\\${command}{abcdef}}+\\mathbb{R}`, `x_{y_{\\${command}{abcdef}}}+\\mathbb{R}`,
+      `\\${command}{\\begin{matrix}A&B\\\\C&D\\end{matrix}}`,
+      `\\${command}{\\begin{matrix}A&B\\\\C&D\\end{matrix}}+\\mathbb{R}`,
+      `\\mathtt{\\${command}{abcdef}}+\\mathbb{R}`,
+    ]),
+    String.raw`\xrightarrow[{\begin{smallmatrix}\lim_{-}&\left\lbrace{}\|\right\rbrace&\stackrel{;}{\partial}\\\left\langle{}2\right\rangle&\mathbb{*}&\left\lbrace{}\mid\right\rbrace\end{smallmatrix}}]{\frac{\widehat{\begin{bmatrix}(&*&\beta\\b&\{&?\end{bmatrix}}}{{\xleftarrow[{y}]{\rvert}}^{\underbrace{\partial}}}}`,
     ...["mathtt", "mathrm", "mathbf", "mathsf", "mathcal", "mathfrak"].map(alphabet =>
       `\\stackrel{x}{\\${alphabet}{\\alpha}}`),
     ...["mathbf", "mathrm", "mathsf", "mathtt", "boldsymbol", "bm"].map(alphabet =>

@@ -1,3 +1,4 @@
+import { isObjectRecord } from "../../../utils/records.js";
 import { requireArrayValue } from "../../../utils/collections.js";
 import { roundTexPt, tfmToPt } from "../fonts/units.js";
 import {
@@ -778,8 +779,36 @@ export function setTexMathHListWidth(
   });
 }
 
+const amsMathWithoutAmsFonts: TexMathFontProfile = {
+  ...luaLatexAmsMathFontProfile,
+  preamble: [String.raw`\usepackage{amsmath}`],
+  amsWideAccents: false,
+};
+
 export function resolveDefaultTexMathFontProfileForList(list: TexMathList): TexMathFontProfile {
-  return texMathListNeedsAmsMath(list) ? luaLatexAmsMathFontProfile : defaultTexMathFontProfile;
+  if (texMathListNeedsAmsFonts(list)) return luaLatexAmsMathFontProfile;
+  return texMathListNeedsAmsMath(list) ? amsMathWithoutAmsFonts : defaultTexMathFontProfile;
+}
+
+/** Package context belongs to the complete formula, including nested math. */
+function texMathListNeedsAmsFonts(list: TexMathList): boolean {
+  const pending: unknown[] = [list];
+  const corners = new Set(["ulcorner", "urcorner", "llcorner", "lrcorner"]);
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (Array.isArray(value)) {
+      for (const field of value as unknown[]) pending.push(field);
+    } else if (isObjectRecord(value)) {
+      if (value.kind === "alphabet" && ["mathbb", "mathfrak", "boldmathfrak"].includes(String(value.alphabet))) return true;
+      if (value.kind === "glyph" && typeof value.text === "string" &&
+        texMathSymbolDeclaration(value.text.replace(/^\\/u, ""))?.requiredLatexPackage === "amssymb") return true;
+      if ((value.kind === "left-right" && [value.leftDelimiter, value.rightDelimiter].some(delimiter => corners.has(String(delimiter)))) ||
+        (value.kind === "sized-delimiter" && corners.has(String(value.delimiter)))) return true;
+      if (value.kind === "math" && typeof value.content === "string") pending.push(parseTexMath(value.content).list);
+      for (const field of Object.values(value)) if (field && typeof field === "object") pending.push(field);
+    }
+  }
+  return false;
 }
 
 function texMathListNeedsAmsMath(list: TexMathList): boolean {
@@ -1881,6 +1910,8 @@ function layoutAlphabetNucleus(
   }
   const hlist = result.hlist;
   const child = childHList("nucleus", 0, 0, hlist, nucleus.sourceSpan);
+  const unboxedCharacter = hlist.items[0]?.kind === "glyph" &&
+    hlist.items.slice(1).every(item => item.kind === "kern" && item.reason === "italic-correction");
   return mathAtomLayout({
     items: [child],
     width: child.width,
@@ -1892,7 +1923,7 @@ function layoutAlphabetNucleus(
     // character; it does not turn that character into an inner subformula.
     // Scripts therefore start from the character shift (zero) rather than
     // applying \supdrop to the alphabet wrapper's height.
-    scriptShiftsAsCharacter: singleAtom?.atomClass === "ord" && isSingleCharacterCleanBoxList(nucleus.list),
+    scriptShiftsAsCharacter: singleAtom?.atomClass === "ord" && (isSingleCharacterCleanBoxList(nucleus.list) || unboxedCharacter),
     sourceSpan: nucleus.sourceSpan,
   });
 }
@@ -5035,7 +5066,7 @@ function layoutAccentNucleus(
   if (!base) {
     return null;
   }
-  const accent = resolveMathAccent(
+  let accent = resolveMathAccent(
     nucleus.command,
     fontProfile,
     style,
@@ -5047,6 +5078,28 @@ function layoutAccentNucleus(
     return null;
   }
 
+  if (fontProfile.amsWideAccents && (nucleus.command === "widehat" || nucleus.command === "widetilde")) {
+    // amsfonts measures a fresh textstyle formula against two ambient ems,
+    // then chooses an AMSb accent before TeX follows its size chain.
+    const measureAlphabet = alphabet === "boldsymbol" || alphabet === "bm" ? alphabet : undefined;
+    const measured = layoutAccentBase(nucleus.base, fontProfile, "text", false, baseAtPt, measureAlphabet, true);
+    if (!measured) return null;
+    const textFont = fontProfile.textFontProfile.resolveTextFont(
+      fontProfile.textFontProfile.defaultFontState, baseAtPt, fontProfile.metricProvider);
+    if (measured.width > 2 * tfmToPt(textFont, textFont.data.fontdimen.quad)) {
+      accent = resolvedMathGlyph({ ...accent, family: "amsSymbolsB",
+        font: fontProfile.resolveMathFont({ family: "amsSymbolsB", style, baseAtPt }),
+        code: nucleus.command === "widehat" ? 91 : 93 });
+    }
+  }
+  if (!accent.font.data.chars[String(accent.code)]) {
+    // TeX omits an absent accent and leaves the underlying noad intact.
+    const unwrapped = layoutSingleAtomGroupNucleus(nucleus.base, fontProfile, style, true, baseAtPt, alphabet);
+    if (unwrapped) return mathAtomLayout({ ...unwrapped, sourceSpan: nucleus.sourceSpan });
+    return mathAtomLayout({ items: [childHList("nucleus", 0, 0, base, nucleus.base.sourceSpan)],
+      width: base.width, height: base.height, depth: base.depth, italicCorrection: 0,
+      isCharacterNucleus: false, sourceSpan: nucleus.sourceSpan });
+  }
   const metric = selectAccentMetric(accent.font, accent.code, base.width);
   const accentWidth = roundTexPt(tfmToPt(accent.font, metric.width));
   const accentCenterWidth = roundTexPt(accentWidth + tfmToPt(accent.font, metric.italicCorrection));
@@ -5061,7 +5114,7 @@ function layoutAccentNucleus(
     accentBaseSingleGlyphMetrics(nucleus.base, fontProfile, style, baseAtPt, alphabet);
   const delta = Math.min(base.height, accentXHeight(accent.font));
   const accentX = roundTexPt(skew + amsNestedAdjustment.overlayXShift + (base.width - accentCenterWidth) / 2);
-  const accentY = roundTexPt(delta - base.height);
+  const accentY = roundTexPt(delta - base.height - accentDepth);
   const accentItem = mathGlyphLayoutItem({
     kind: "glyph",
     fontId: accent.font.id,
@@ -5176,7 +5229,7 @@ function trailingSkewKern(
     const kern = glyph.font.data.ligKerns.find((rule) =>
       rule[0] === "kern" &&
       rule[1] === glyph.code &&
-      rule[2] === TEX_DEFAULT_SKEW_CHAR
+      rule[2] === mathFontSkewChar(glyph.font)
     );
     return kern ? roundTexPt(tfmToPt(glyph.font, kern[3])) : 0;
   }
@@ -6859,11 +6912,20 @@ function resolveMathAccent(
   if (!resolved) {
     return null;
   }
+  let font = alphabet === "boldsymbol" || alphabet === "bm"
+    ? resolveBoldMathFont(fontProfile, resolved.family, style, baseAtPt, alphabet)
+    : fontProfile.resolveMathFont({ family: resolved.family, style, baseAtPt });
+  if (resolved.family === "operators" && alphabet && alphabet !== "boldsymbol" && alphabet !== "bm") {
+    const atPt = fontProfile.resolveMathStyleAtPt(style, baseAtPt);
+    const fontId = alphabet === "mathcal"
+      ? resolveComputerModernMathOpticalFont("symbols", atPt, false)
+      : defaultLuaLatexMathAlphabetFontId(alphabet, style, "A");
+    font = fontProfile.resolveMathAlphabetFont?.({ alphabet, style, baseAtPt, text: "A" }) ??
+      fontProfile.metricProvider.resolveFont({ fontId, atPt });
+  }
   return resolvedMathGlyph({
     kind: "glyph",
-    font: alphabet === "boldsymbol" || alphabet === "bm"
-      ? resolveBoldMathFont(fontProfile, resolved.family, style, baseAtPt, alphabet)
-      : fontProfile.resolveMathFont({ family: resolved.family, style, baseAtPt }),
+    font,
     family: resolved.family,
     code: resolved.code,
     text: `\\${command}`,
@@ -7024,6 +7086,11 @@ function accentXHeight(font: ResolvedTexFont): number {
   return tfmToPt(font, font.data.fontdimen.xheight);
 }
 
+function mathFontSkewChar(font: ResolvedTexFont): number {
+  // LaTeX assigns skewchar 48 to CM symbol families and 127 to math italic.
+  return /^(?:cm|cmb)sy\d/u.test(font.id) ? 48 : TEX_DEFAULT_SKEW_CHAR;
+}
+
 function accentBaseSkew(
   base: TexMathList,
   fontProfile: TexMathFontProfile,
@@ -7055,7 +7122,7 @@ function accentBaseSkew(
   const kern = glyph.font.data.ligKerns.find((rule) =>
     rule[0] === "kern" &&
     rule[1] === glyph.code &&
-    rule[2] === TEX_DEFAULT_SKEW_CHAR
+    rule[2] === mathFontSkewChar(glyph.font)
   );
   return kern ? roundTexPt(tfmToPt(glyph.font, kern[3])) : 0;
 }

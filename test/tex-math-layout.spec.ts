@@ -2625,6 +2625,47 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it.each(["mathtt", "mathsf", "mathit"])("uses the %s family for variable-family accents", alphabet => {
+    for (const command of ["hat", "bar", "dot", "ddot", "tilde", "mathring"]) {
+      const result = layout(`\\${alphabet}{\\${command}{X}}`);
+      expect(result.supported).toBe(true);
+      const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+      expect(glyphs).toHaveLength(2);
+      expect(glyphs[0].fontId).toBe(glyphs[1].fontId);
+    }
+  });
+
+  it("omits an accent absent from its selected math family", () => {
+    const result = layout(String.raw`\mathfrak{\bar{X}}`);
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).map(glyph => [glyph.fontId, glyph.code]))
+      .toEqual([["eufm10", 88]]);
+  });
+
+  it("uses calligraphic skew and the selected accent glyph's depth", () => {
+    const hat = flattenGlyphItems(layout(String.raw`\mathcal{\hat{X}}`).hlist?.items ?? [])[0];
+    const bar = flattenGlyphItems(layout(String.raw`\mathcal{\bar{X}}`).hlist?.items ?? [])[0];
+    expect(hat.x).toBeCloseTo(2.354218, 4);
+    expect(bar.y).toBeCloseTo(-3.887482, 4);
+  });
+
+  it("keeps character superscript placement when a family lacks the accent", () => {
+    const actual = layout(String.raw`\mathfrak{\bar{X}}^2`);
+    const expected = layout(String.raw`\mathfrak{X}^2`);
+    expect(actual.hlist?.height).toBe(expected.hlist?.height);
+    expect(actual.hlist?.depth).toBe(expected.hlist?.depth);
+  });
+
+  it("distinguishes amsfonts wide accents from amsmath's ordinary extension chain", () => {
+    const formula = String.raw`\widehat{\begin{matrix}A&B\\C&D\end{matrix}}`;
+    const onlyMath = layout(formula);
+    const withFonts = layout(formula + String.raw`+\mathbb{R}`);
+    const accent = (result: ReturnType<typeof layout>) => flattenGlyphItems(result.hlist?.items ?? [])
+      .find(glyph => glyph.text === String.raw`\widehat`);
+    expect(accent(onlyMath)?.fontId).toBe("cmex10");
+    expect(accent(withFonts)?.fontId).toBe("msbm10");
+  });
+
   it("lays out wide accents from TeX extension-font size chains", () => {
     const result = layout(String.raw`\widehat{abc}^2+\widetilde{abc}`);
     expect(result.supported).toBe(true);
