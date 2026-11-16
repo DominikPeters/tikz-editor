@@ -383,33 +383,10 @@ function comparisonItemsForFormula(formula, ours, tex) {
       (a.code ?? 0) - (b.code ?? 0) || a.x - b.x || a.y - b.y || a.width - b.width;
     return { ours: visibleMathItems(ours).sort(order), tex: visibleMathItems(tex).sort(order) };
   }
-  if (
-    formula.includes(String.raw`\begin{aligned}`) ||
-    hasArrayEnvironment(formula) ||
-    hasCasesEnvironment(formula) ||
-    hasSmallMatrixEnvironment(formula) ||
-    hasMatrixEnvironment(formula) ||
-    hasOperatorNameCommand(formula) ||
-    hasBinomialCommand(formula) ||
-    // Fraction reboxing can absorb an invisible italic-correction kern in TeX.
-    // Compare paint and total dimensions, as for amsmath's styled fractions.
-    /\\frac(?![a-zA-Z])/.test(formula) ||
-    hasStyledFractionCommand(formula)
-    || hasSubstackCommand(formula)
-    || hasSubarrayEnvironment(formula)
-    || hasSidesetCommand(formula)
-    || /\\stackrel\b/.test(formula)
-    || hasAmsMathCommand(formula)
-    || hasAmsMathDelimiterCommand(formula)
-    || /\\sqrt\[/.test(formula)
-    || hasMathtoolsColonRelationCommand(formula)
-  ) {
-    return {
-      ours: visibleMathItems(ours),
-      tex: visibleMathItems(tex),
-    };
-  }
-  return { ours, tex };
+  // TeX can absorb invisible glue/kerns (including italic correction) into
+  // box dimensions. Their node boundaries are not a rendering difference.
+  // Glyph/rule positions and total width, height and depth remain compared.
+  return { ours: visibleMathItems(ours), tex: visibleMathItems(tex) };
 }
 
 function visibleMathItems(items) {

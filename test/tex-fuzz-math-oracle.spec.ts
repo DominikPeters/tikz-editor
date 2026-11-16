@@ -11,6 +11,8 @@ const caseData = caseFromTexFuzzAst([{ kind: "math", body: { kind: "fraction", c
 
 describe("shared math glyph differential findings", () => {
   it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex")).each([
+    String.raw`\bigcup_{\mathsf{y}}`,
+    String.raw`\bigcup_{\mathrm{y}}`,
     ...["mathtt", "mathbf", "mathrm", "mathsf", "boldsymbol", "bm"].flatMap(alphabet =>
       ["xrightarrow", "xleftarrow"].map(command => `\\${alphabet}{\\${command}{b}}`)),
     String.raw`\scriptstyle\bm{\xrightarrow{b}}`,
