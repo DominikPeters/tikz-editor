@@ -1344,6 +1344,12 @@ function layoutOperatorLimitsAtom(
   });
 }
 
+/** Fresh math formulas reset family switches but retain the math version. */
+function freshFormulaAlphabet(alphabet: TexMathAlphabetCommand | undefined): TexMathAlphabetCommand | undefined {
+  return alphabet === "bm" || alphabet === "boldsymbol" ? alphabet
+    : alphabet?.startsWith("bold") ? "boldsymbol" : undefined;
+}
+
 function layoutNucleus(
   nucleus: TexMathNucleus,
   fontProfile: TexMathFontProfile,
@@ -1414,13 +1420,13 @@ function layoutNucleus(
     return layoutRadicalNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
   if (nucleus.kind === "boxed") {
-    return layoutBoxedNucleus(nucleus, fontProfile, baseAtPt, alphabet);
+    return layoutBoxedNucleus(nucleus, fontProfile, baseAtPt, freshFormulaAlphabet(alphabet));
   }
   if (nucleus.kind === "smash") {
-    return layoutSmashNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
+    return layoutSmashNucleus(nucleus, fontProfile, style, cramped, baseAtPt, freshFormulaAlphabet(alphabet));
   }
   if (nucleus.kind === "phantom") {
-    return layoutPhantomNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
+    return layoutPhantomNucleus(nucleus, fontProfile, style, cramped, baseAtPt, freshFormulaAlphabet(alphabet));
   }
   if (nucleus.kind === "shift-box") {
     return layoutShiftBoxNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
@@ -1474,8 +1480,7 @@ function layoutNucleus(
   }
   // Alignment templates open fresh math formulas for their cells. Family
   // switches reset there, while an enclosing bold math version survives.
-  const alignmentAlphabet = alphabet === "bm" || alphabet === "boldsymbol" ? alphabet
-    : alphabet?.startsWith("bold") ? "boldsymbol" : undefined;
+  const alignmentAlphabet = freshFormulaAlphabet(alphabet);
   if (nucleus.kind === "aligned") {
     return layoutAlignedNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
@@ -4188,7 +4193,17 @@ function layoutRadicalNucleus(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const radicand = layoutRadicandList(nucleus.radicand, fontProfile, style, true, baseAtPt, alphabet);
+  if (alphabet === "bm") {
+    return layoutRadicalNucleus(nucleus, {
+      ...fontProfile,
+      resolveMathFont: request => resolveBoldMathFont(fontProfile, request.family, request.style,
+        texLength(request.baseAtPt ?? baseAtPt), "boldsymbol"),
+    }, style, _cramped, baseAtPt, "boldsymbol");
+  }
+  // Indexed roots build both degree and radicand in fresh math boxes;
+  // the primitive unindexed square root keeps the ambient family.
+  const innerAlphabet = nucleus.degree ? freshFormulaAlphabet(alphabet) : alphabet;
+  const radicand = layoutRadicandList(nucleus.radicand, fontProfile, style, true, baseAtPt, innerAlphabet);
   if (!radicand) {
     return null;
   }
@@ -4257,7 +4272,7 @@ function layoutRadicalNucleus(
     style: "scriptscript",
     cramped: false,
     baseAtPt,
-    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
+    ...(innerAlphabet !== undefined ? { alphabet: innerAlphabet } : {}),
   });
   if (!degree.supported) {
     return null;
