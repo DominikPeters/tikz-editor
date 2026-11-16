@@ -12,6 +12,14 @@ const caseData = caseFromTexFuzzAst([{ kind: "math", body: { kind: "fraction", c
 describe("shared math glyph differential findings", () => {
   it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex")).each([
     String.raw`\mathtt{\hat{/}}`,
+    String.raw`\stackrel{\mathrm{\lvert}}{\widehat{\partial}}`,
+    String.raw`\int\limits_0^1`,
+    String.raw`\hat{\partial}_i^2`,
+    ...["hat", "widehat", "bar", "vec"].flatMap(command => [
+      `\\stackrel{x}{\\${command}{\\partial}}`,
+      `\\underset{x}{\\${command}{\\partial}}`,
+      `\\stackrel{x}{\\${command}{y}}`,
+    ]),
     ...["mathtt", "mathsf", "mathit", "mathrm", "mathbf", "mathcal", "mathfrak", "mathbb"].flatMap(alphabet =>
       ["hat", "bar", "ddot"].map(command => `\\${alphabet}{\\${command}{X}}`)),
     String.raw`\mathfrak{\bar{X}}_i`, String.raw`\mathfrak{\bar{X}}^2`,

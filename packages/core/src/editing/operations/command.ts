@@ -381,11 +381,13 @@ function wrapSelection(text: string, schema: CommandSchema, command: string, hel
     return null;
   }
   const selected = text.slice(held.from, held.to);
+  // A trailing comment must end before the generated argument's closing brace.
+  const content = /(?:^|[^\\])(?:\\\\)*%[^\n]*$/u.test(selected) ? `${selected}\n` : selected;
   let insert = command;
   const openings: number[] = [];
   args.forEach((_, index) => {
     openings.push(held.from + insert.length + 1);
-    insert += index === target ? `{${selected}}` : "{}";
+    insert += index === target ? `{${content}}` : "{}";
   });
   const after = openings[target + 1];
   const before = openings.slice(0, target)[0];

@@ -1478,6 +1478,7 @@ class Resolver {
       return this.keepSelection(NO_INTERACTION);
     }
     const mode = editSlotAt(view.tree.slots, caret.slot).mode;
+    if (mode === "verbatim") return this.keepSelection(NO_INTERACTION);
     // A bare `]` would end the optional argument it is in (`\bibitem[A$\right]$`): the bracket by name.
     const bracketed = this.context.title === true || insideOptional(view, caret.slot);
     const named = bracketed && delimiter === "]" ? "\\rbrack" : bracketed && delimiter === "[" ? "\\lbrack" : delimiter;

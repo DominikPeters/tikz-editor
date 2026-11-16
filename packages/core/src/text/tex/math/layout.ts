@@ -5138,7 +5138,9 @@ function layoutAccentNucleus(
     width: adjustedBase.width,
     height: roundTexPt(Math.max(base.height, -accentY + accentHeight)),
     depth: base.depth,
-    italicCorrection: scriptGlyphBase?.italicCorrection ?? 0,
+    // Accent boxes have no operator italic correction; scripts retain the
+    // underlying character correction through scriptSuperscriptOffset.
+    italicCorrection: 0,
     isCharacterNucleus: false,
     scriptShiftsAsCharacter: scriptGlyphBase !== null,
     ...(scriptGlyphBase ? {

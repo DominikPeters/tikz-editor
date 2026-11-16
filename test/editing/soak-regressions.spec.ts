@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createCommandTable } from "../../packages/core/src/editing/commands/index.js";
 import { runCase } from "./fuzz/keystroke-fuzz.js";
+import { commitCommand } from "../../packages/core/src/editing/operations/command.js";
+import { NO_INTERACTION } from "../../packages/core/src/editing/input/interaction.js";
 import { enter } from "../../packages/core/src/editing/operations/structure.js";
 import { buildEditTree } from "../../packages/core/src/editing/tree/build.js";
 import { createEditView } from "../../packages/core/src/editing/position/index.js";
@@ -14,6 +16,33 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 }
 
 describe("keystroke soak regressions", () => {
+
+  it("refuses math delimiter commands in alltt", () => {
+    const result = replay("\\begin{alltt}\n2‸ Done\n\\end{alltt}", [String.raw`\left(`, "→", "⌫", "⌫"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).not.toContain(String.raw`\left`);
+  });
+
+  it("keeps a revealed comment balanced when wrapping it", () => {
+    const result = replay("First.\\pause Second.\n\n‸\\onslide<1->%\n\\begin{tikzlayer}[blue]\n  \\node at (2,3) {Added};\n\\end{tikzlayer}\n", ["@reveal", "⌦", String.raw`\emph`, String.raw`\text`]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toContain("\\emph{%\n}");
+  });
+
+  it.each(["%", "% comment", String.raw`\\% comment`])("ends a selected trailing comment before wrapping %s", selected => {
+    const source = `${selected}\nTail`;
+    const view = createEditView(buildEditTree(source, { commands }));
+    const result = commitCommand(view, commands, view.positionAt(0), 0, "emph", "structure", NO_INTERACTION, { from: 0, to: selected.length }).outcome;
+    expect(result.kind).toBe("patch");
+    if (result.kind !== "patch") throw new Error("Expected a wrapper");
+    expect(applyPatches(source, result.patches)).toBe(`\\emph{${selected}\n}\nTail`);
+  });
+
+  it("keeps an escaped percent inside a wrapper without adding a line end", () => {
+    const result = replay(String.raw`‸\%` + "\nTail", ["@0:2", String.raw`\emph`, String.raw`\text`]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toContain(String.raw`\emph{\%}`);
+  });
   it.each(["enumerate", "itemize"])("keeps fallback motion at editable stops inside %s", environment => {
     for (const motion of ["⌘←", "⌥←"]) {
       const source = `\\begin{${environment}}\n\\item \\[w_i‸ x_i\\]\n\\end{${environment}}`;
