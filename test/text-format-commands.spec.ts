@@ -10,6 +10,18 @@ import {
 } from "../packages/core/src/text/format-commands.js";
 
 describe("text format command toggles", () => {
+
+  it("preserves an unrelated empty wrapper inside a selected formula", () => {
+    const text = String.raw`$\textcolor{blue}{}$`;
+    expect(toggleTextFormatCommand(text, 0, text.length, "textbf")?.nextText)
+      .toBe(String.raw`\textbf{$\textcolor{blue}{}$}`);
+  });
+
+  it("keeps an empty group when removing a selected formula's last wrapper", () => {
+    const text = String.raw`$\textbf{}$`;
+    expect(toggleTextFormatCommand(text, 0, text.length, "textbf")?.nextText)
+      .toBe("\\textbf{${}$}");
+  });
   it("wraps a plain selection and selects the wrapped content", () => {
     const text = "Alpha beta gamma";
     const result = toggleTextFormatCommand(text, 6, 10, "textbf")!;
