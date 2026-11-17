@@ -18,6 +18,20 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 
 describe("keystroke soak regressions", () => {
 
+  it.each(["⌘B", "⌘I"])("refuses %s inside an overlay value without splitting its wrapper", key => {
+    const result = replay("‸Tail.", ["⌘I", String.raw`\only`, "<", key]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toBe(String.raw`\textit{\only<>{}}Tail.`);
+  });
+
+  it("keeps alltt content visible when typing a bracket before its environment", () => {
+    const marked = "\nBeforeOpaque.\n\\begin{alltt}\n  echo hello\n  echo world‸\n\\end{alltt}\nAfterOpaque.\n";
+    const result = replay(marked, ["%", "@14", "[<+->]"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toContain("BeforeOpaque.[<+->]");
+    expect(result.finalText).toContain("echo world%");
+  });
+
   it.each([String.raw`\textcolor{blue}{}`, String.raw`\textbf{}`, String.raw`\textit{}`, String.raw`\textbf{\textit{}}`])(
     "preserves an empty formula containing %s when formatting its selection", body => {
       const marked = `Before $${body}$‸ After.`;

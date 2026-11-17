@@ -1977,9 +1977,11 @@ class Resolver {
   /**
    * Format wraps must not swallow structure: a selection containing an
    * `\item` or environment boundary would wrap it into the command
-   * argument. Removing an active wrapper is always allowed.
+   * argument. Removing an active wrapper is allowed outside opaque value arguments.
    */
   private formatAllowed(name: TextFormatCommandName): boolean {
+    const view = this.view;
+    if (view && [this.from, this.to].some(at => inValue(view, at))) return false;
     if (activeTextFormatWrapper(this.context.text, this.from, this.to, name)) {
       return true;
     }
