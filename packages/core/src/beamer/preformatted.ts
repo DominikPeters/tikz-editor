@@ -48,7 +48,7 @@ export function projectBeamerPreformatted(mapped: MappedText, source: string, di
     // its optional header. Read that balanced header before consuming code.
     let local: { span: { to: number }; contentSpan: { from: number; to: number } } | null = null;
     if (env.name === "lstlisting") {
-      let at = env.begin.span.to; while (/\s/u.test(mapped.text[at] ?? "") && at < env.end.span.from) at++;
+      let at = env.begin.span.to; while (/[ \t]/u.test(mapped.text[at] ?? "") && at < env.end.span.from) at++;
       if (mapped.text[at] === "[") {
         let depth = 1, braces = 0, end = at + 1;
         for (; end < env.end.span.from; end++) {

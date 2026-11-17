@@ -18,6 +18,16 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 
 describe("keystroke soak regressions", () => {
 
+  it.each(["", "[language=Python]"])("types on the first code line past a listings header %s", options => {
+    for (const newline of ["\n", "\r\n"]) {
+      const prefix = `\\begin{lstlisting}${options}`;
+      const marked = `${prefix}‸${newline}code${newline}\\end{lstlisting}`;
+      const result = replay(marked, ["[", "]"]);
+      expect(result.failure, JSON.stringify(result.states)).toBeNull();
+      expect(result.finalText).toBe(`${prefix}${newline}[]code${newline}\\end{lstlisting}`);
+    }
+  });
+
   it.each(["⌘B", "⌘I"])("refuses %s inside an overlay value without splitting its wrapper", key => {
     const result = replay("‸Tail.", ["⌘I", String.raw`\only`, "<", key]);
     expect(result.failure, JSON.stringify(result.states)).toBeNull();

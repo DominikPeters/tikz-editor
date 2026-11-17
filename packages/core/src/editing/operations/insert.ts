@@ -36,7 +36,13 @@ export function typeCharacter(
     // the other TeX special characters print as typed.
     let owner: EditNode = editNodeAt(tree.nodes, slot.node);
     while (owner.command !== "alltt" && owner.parent != null) owner = editNodeAt(tree.nodes, editSlotAt(tree.slots, owner.parent).node);
-    if (owner.command !== "alltt" || "%$&_~^".includes(char)) return insert(at, char);
+    if (owner.command !== "alltt") {
+      // The opening line break belongs to the listings header. Code typed
+      // at that seam starts on the next line, away from optional arguments.
+      const newline = at === slot.contentSpan.from ? /^(?:\r\n?|\n)/u.exec(tree.text.slice(at)) : null;
+      return insert(at + (newline?.[0].length ?? 0), char);
+    }
+    if ("%$&_~^".includes(char)) return insert(at, char);
   }
   if (beforeMulticolumn(view, caret)) {
     // `\multicolumn` must open its cell ("Misplaced \omit"): nothing goes before it.

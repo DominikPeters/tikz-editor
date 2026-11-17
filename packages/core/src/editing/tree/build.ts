@@ -994,6 +994,9 @@ class Binder {
     const bodyEnd = matched.endFrom;
     const bodyRun: Run = { ...run, end: bodyEnd };
     for (const arg of schema.args) {
+      // Listings makes its opening newline active before looking for options.
+      // A bracket on the next line belongs to the literal code body.
+      if (schema.body === "literal" && arg.kind === "optional" && !/^[ \t]*\[/u.test(this.text.slice(cursor, bodyEnd))) continue;
       cursor = this.bindArgument(bodyRun, node, arg, cursor);
     }
     switch (schema.body) {
