@@ -1,5 +1,7 @@
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
+import { parseTexTabularPreamble } from "../../text/tex/tabular/parser.js";
+import { presentSlots } from "../tree/navigate.js";
 import { editSlotAt } from "../tree/lookup.js";
 import type { CommandSchema, CommandTable } from "../commands/table.js";
 import type { Position } from "../position/position.js";
@@ -10,7 +12,7 @@ import type { CommitKey } from "./command.js";
 import type { EditOutcome } from "./delete.js";
 import { insideOptional } from "./insert.js";
 import { specColumns, widestRow } from "./structure.js";
-import { withTerminator } from "./source.js";
+import { protectPatchEnds } from "./source.js";
 
 /**
  * Value arguments (O8): colours, URLs, lengths, keys and the like, which
@@ -285,7 +287,7 @@ export function writtenValueAt(view: EditView, span: Span): WrittenValue | null 
  */
 export function editValues(view: EditView, edits: readonly { readonly span: Span; readonly text: string }[]): { from: number; to: number; insert: string }[] | null {
   const { text } = view.tree;
-  let patches: { from: number; to: number; insert: string }[] = [];
+  const patches: { from: number; to: number; insert: string }[] = [];
   const modes = new Map<number, EditNode["mode"]>();
   const touched = new Set<EditNode>();
   for (const edit of edits) {
@@ -317,20 +319,40 @@ export function editValues(view: EditView, edits: readonly { readonly span: Span
     if (spec && (specColumns(final(spec)) ?? 0) < widestRow(view, node.id)) {
       return null;
     }
+    // A populated cell cannot change mode without converting its content.
+    // Empty cells may change mode; multicolumn content has its own preamble.
+    if (spec && node.mode === "text" && final(spec) !== text.slice(spec.contentSpan.from, spec.contentSpan.to)) {
+      let columns;
+      try {
+        columns = parseTexTabularPreamble(final(spec)).columns;
+      } catch {
+        return null;
+      }
+      const rows = view.tree.nodes.filter(row => row.kind === "row" && row.parent != null &&
+        editSlotAt(view.tree.slots, row.parent).node === node.id);
+      for (const row of rows) {
+        let column = 0;
+        for (const cell of presentSlots(view.tree, row.id)) {
+          const content = text.slice(cell.contentSpan.from, cell.contentSpan.to);
+          const spanning = /^\s*\\multicolumn\s*\{\s*(\d+)\s*\}/u.exec(content);
+          if (spanning) {
+            column += Number(spanning[1]);
+            continue;
+          }
+          const next = columns[column++];
+          const mode = next?.before?.trim() === "$" && next.after?.trim() === "$" ? "math" : "text";
+          if (mode !== cell.mode && content.trim() !== "") return null;
+        }
+      }
+    }
     const model = node.values.some((value) => text.charAt(value.span.from) === "[" && final(value) !== "");
     if (node.values.some((value) => value.role === "color" && valueProblem("color", final(value), false, model) != null)) {
       return null;
     }
   }
   patches.sort((left, right) => left.from - right.from);
-  let delta = 0;
-  for (const [index, patch] of patches.entries()) {
-
-    const seam = patch.from + delta + patch.insert.length;
-    patches = withTerminator(text, patches, seam, requireDefined(modes.get(patch.from), "Missing required modes.get(patch.from)"));
-    delta += requireArrayValue(patches, index).insert.length - (patch.to - patch.from);
-  }
-  return patches;
+  return protectPatchEnds(text, patches, patch =>
+    requireDefined(modes.get(patch.from), "Missing required modes.get(patch.from)"));
 }
 
 /** The command a value editor at `at` is open for, as the mode there reads it, and its fields. */

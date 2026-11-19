@@ -861,7 +861,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       )) return state;
       const resultOwnsGesture = documentId === state.activeDocumentId && state.activeCanvasDragKind != null && action.precomputedSource === activeDoc.source &&
         action.precomputedResult?.geometryBaseSource != null && action.precomputedResult.identityMoves != null;
-      if (activeDoc.editingIdentities && activeDoc.editingTargetsStale && activeDoc.snapshot.source !== activeDoc.source && !resultOwnsGesture && !isDeckDocumentEditAction(action.action)) {
+      if (activeDoc.editingTargetsStale && activeDoc.snapshot.source !== activeDoc.source && !resultOwnsGesture && !isDeckDocumentEditAction(action.action)) {
         workspace = updateDocument(workspace, documentId, doc => applyEditWarningToDocument(doc, "The figure is still catching up with the source edit."));
         break;
       }

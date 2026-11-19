@@ -38,6 +38,38 @@ describe("bounded native TeX fuzz execution", () => {
     expect(records[1].observations).toEqual([]);
   });
 
+  it("budgets each check stage and rejects repeated progress from a hung stage", async () => {
+    const stagedWorker = new URL(`data:text/javascript,${encodeURIComponent(`
+      import {parentPort} from 'node:worker_threads';
+      parentPort.on('message', async ({caseData}) => {
+        const started = performance.now();
+        parentPort.postMessage({nativeStage:'hard-invariants'});
+        if (caseData.source === 'hang-stage') {
+          parentPort.postMessage({nativeStage:'boundary'});
+          setInterval(() => parentPort.postMessage({nativeStage:'boundary'}), 100);
+          return;
+        }
+        for (const next of ['boundary', 'metamorphic']) {
+          await new Promise(resolve => setTimeout(resolve, 600));
+          parentPort.postMessage({nativeStage:next});
+        }
+        await new Promise(resolve => setTimeout(resolve, 600));
+        parentPort.postMessage({observations:[],elapsedMs:performance.now()-started});
+      });
+    `)}`);
+    const runner = createTexFuzzNativeRunner({ workerUrl: stagedWorker, timeoutMs: 1000 });
+    const checks = { boundary: true, metamorphic: true };
+    try {
+      const completed = await runner.runCase(source("staged"), checks);
+      expect(completed.observations).toEqual([]);
+      expect(completed.elapsedMs).toBeGreaterThan(1000);
+      const hung = await runner.runCase(source("hang-stage"), checks);
+      expect(hung.observations[0]).toMatchObject({
+        fingerprint: { code: "native-time-budget" }, detail: { stage: "boundary", timeoutMs: 1000 },
+      });
+    } finally { await runner.close(); }
+  });
+
   it("records crashes and continues instead of losing the remaining case batch", async () => {
     const records = await runTexFuzzNativeCases([source("crash"), source("valid")], { workerUrl, timeoutMs: 1000 });
     expect(records[0].observations[0]).toMatchObject({

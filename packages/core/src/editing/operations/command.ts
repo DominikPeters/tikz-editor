@@ -10,7 +10,7 @@ import { texMathCommandFamily } from "../../text/tex/math/parser.js";
 import type { EditMode, SlotId, Span } from "../tree/types.js";
 import type { EditOutcome } from "./delete.js";
 import { insideOptional, placeholderAt } from "./insert.js";
-import { PatchSet } from "./source.js";
+import { controlWordTerminator, PatchSet } from "./source.js";
 import { inkOnLine } from "./structure.js";
 
 /**
@@ -84,7 +84,8 @@ export function commitCommand(
 
   if (key === "bracket" && optionalFirst) {
     const insert = `${command}[]${"{}".repeat(mandatory.length)}`;
-    return { outcome: edit(range, insert, range.from + command.length + 1) };
+    const nested = insideOptional(view, caret.slot);
+    return { outcome: edit(range, nested ? `{${insert}}` : insert, range.from + command.length + 1 + (nested ? 1 : 0)) };
   }
   // Committed as typed right before existing content, a command that takes
   // arguments would take that content (`\\frac` before `bc`): it gets its
@@ -103,8 +104,11 @@ export function commitCommand(
   const followsAt = placeholder ? placeholder.open + 2 : range.to;
   const following = tree.text.slice(followsAt, followsAt + 1);
   // Even a name committed as typed must not absorb the letters after the caret (`\te` before `lpha`).
-  const tail = key === "space" && mode !== "math" ? textSpaceTail(schema, following) : letterTerminator(following, mode);
-  const text = command + tail;
+  const tail = key === "space" && mode !== "math" ? textSpaceTail(schema, following) : controlWordTerminator(command, following, mode);
+  // Existing brackets are content, rather than an optional argument the
+  // user requested while committing the command. TeX skips spaces/comments.
+  const guard = optionalFirst && !tail.startsWith("{") && /^(?:\s|%[^\r\n]*(?:\r?\n|$))*\[/u.test(tree.text.slice(followsAt)) ? "{}" : "";
+  const text = command + guard + tail;
   if (placeholder && tail.trim() === "" && (mandatory.length === 0 || key === "typed")) {
     // A symbol TeX reads as one token replaces the braces (M12: `\mu^\top`); anything else
     // (`\ldots`, `\sum`, `\bf`, a user macro) keeps them, the caret leaving them after a
@@ -359,7 +363,7 @@ export function matchingRightDelimiter(opener: string): string | null {
  * (`\right\rangle` before `r` is not `\rangler`).
  */
 export function apart(insert: string, text: string, at: number): string {
-  return /\\[A-Za-z]+$/u.test(insert) && /^[A-Za-z]/u.test(text.slice(at)) ? `${insert} ` : insert;
+  return insert + controlWordTerminator(insert, text.slice(at), "math");
 }
 
 /** Whether `\left` or `\right` takes this as its delimiter: `(`, `\}`, `\rangle`, `.`. */
@@ -380,11 +384,13 @@ function wrapSelection(text: string, schema: CommandSchema, command: string, hel
     return null;
   }
   const selected = text.slice(held.from, held.to);
+  // A trailing comment must end before the generated argument's closing brace.
+  const content = /(?:^|[^\\])(?:\\\\)*%[^\n]*$/u.test(selected) ? `${selected}\n` : selected;
   let insert = command;
   const openings: number[] = [];
   args.forEach((_, index) => {
     openings.push(held.from + insert.length + 1);
-    insert += index === target ? `{${selected}}` : "{}";
+    insert += index === target ? `{${content}}` : "{}";
   });
   const after = openings[target + 1];
   const before = openings.slice(0, target)[0];
@@ -399,14 +405,6 @@ function wrapSelection(text: string, schema: CommandSchema, command: string, hel
 
 function edit(range: Span, insert: string, caret: number): EditOutcome {
   return { kind: "patch", patches: [{ from: range.from, to: range.to, insert }], caret, run: null, exact: true };
-}
-
-/** R5: what keeps a control word from absorbing the letter after it. */
-function letterTerminator(following: string, mode: EditMode): string {
-  if (!/^[A-Za-z@]$/u.test(following)) {
-    return "";
-  }
-  return mode === "math" ? " " : "{}";
 }
 
 /**

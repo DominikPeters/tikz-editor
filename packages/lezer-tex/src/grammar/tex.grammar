@@ -124,6 +124,7 @@ OptionalArgument {
 
 OptionalItem {
   Comment |
+  OpaqueEnvironment |
   DisplayMath |
   InlineMath |
   GenericCommand |

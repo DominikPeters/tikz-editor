@@ -283,7 +283,7 @@ describe("clipboard operation ownership", () => {
     expect(state().selectedElementIds.size).toBe(1);
   });
 
-  it("clears the nested root when its clipboard parse snapshot is unavailable", async () => {
+  it("cancels a clipboard operation when its nested picture snapshot is unavailable", async () => {
     const source = String.raw`\documentclass{beamer}
 \begin{document}
 \begin{frame}{Nested}
@@ -308,8 +308,7 @@ describe("clipboard operation ownership", () => {
       getState: () => ({ ...current, documents: { ...current.documents,
         [current.activeDocumentId]: { ...document, snapshot } } })
     });
-    expect(clipboard).not.toBeNull();
-    expect(clipboard?.parseOptions?.activeFigureId).toBeUndefined();
+    expect(clipboard).toBeNull();
   });
 
   it("pastes only in the selected nested Beamer picture and preserves its surrounding deck", async () => {

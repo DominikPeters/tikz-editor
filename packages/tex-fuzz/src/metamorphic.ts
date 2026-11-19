@@ -147,13 +147,18 @@ export function checkTexFuzzMetamorphicInvariants(
   const layout = options.layout ?? defaultMetamorphicLayout;
   const findings: TexFuzzObservation[] = [];
   const pairs = deriveTexFuzzMetamorphicPairs(caseData);
+  const baselines = new Map<number, TexParagraphLayoutResult>();
   let checks = 0;
   for (const pair of pairs) {
     for (const width of widths) {
       checks += 1;
-      const original = layout(pair.originalSource, width);
+      // The tie relation only inspects the transformed breakpoint. Other
+      // relations share a baseline; repeat-render still makes a second call.
+      const original = pair.relationId === "tie-removes-breakpoint" ? null
+        : baselines.get(width) ?? layout(pair.originalSource, width);
+      if (original) baselines.set(width, original);
       const transformed = layout(pair.transformedSource, width);
-      if (pair.relationId === "leading-comment-source-shift" && original.supported && transformed.supported
+      if (pair.relationId === "leading-comment-source-shift" && original?.supported && transformed.supported
         && original.report && transformed.report && !original.fallbackReason && !transformed.fallbackReason
         && ![original, transformed].some((result) => result.report?.lines.some((line) => line.segments.some((segment) => segment.literal)))) {
         const paint = (result: TexParagraphLayoutResult) => {
@@ -181,7 +186,7 @@ export function checkTexFuzzMetamorphicInvariants(
         }
         continue;
       }
-      if (pair.relationId === "repeat-render-determinism") {
+      if (pair.relationId === "repeat-render-determinism" && original) {
         if (JSON.stringify(original.report) !== JSON.stringify(transformed.report)
           || original.supported !== transformed.supported
           || original.fallbackReason !== transformed.fallbackReason) {

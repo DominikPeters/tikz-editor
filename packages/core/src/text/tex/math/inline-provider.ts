@@ -111,7 +111,7 @@ export function createTexDerivedInlineMathBoxProvider(
       return getMathBox(params, "display", getCache(), configuredFontProfile, params.atPt ?? baseAtPt);
     },
     getDisplayMathAlignment: (params) => {
-      return getDisplayMathAlignment(params, configuredFontProfile, params.atPt ?? baseAtPt);
+      return withCaretBudget(budget => getDisplayMathAlignment(params, configuredFontProfile, params.atPt ?? baseAtPt, budget));
     },
   };
 }
@@ -174,7 +174,15 @@ function getMathBox(
   const hlist = displayLabel
     ? addDisplayMathTag(measuredHList, displayLabel, params.targetWidth ?? measuredHList.width, fontProfile, baseAtPt)
     : measuredHList;
-  const caretMap = buildInlineMathCaretMap(hlist, params, fontProfile);
+  if (!mathCaretMapWithinBudget(hlist.items)) {
+    cache.boxes.set(key, null, key.length * 2 + 64);
+    return null;
+  }
+  const caretMap = withCaretBudget(budget => buildInlineMathCaretMap(hlist, params, fontProfile, budget));
+  if (!caretMap) {
+    cache.boxes.set(key, null, key.length * 2 + 64);
+    return null;
+  }
   const box = {
     source: params.source,
     content: params.content,
@@ -528,6 +536,33 @@ function collectMathItemExtents(
   return extents;
 }
 
+const MAX_MATH_CARET_ENTRIES = 100_000;
+
+class MathCaretBudgetExceeded extends Error {}
+
+function withCaretBudget<T>(build: (budget: { remaining: number }) => T): T | null {
+  try {
+    return build({ remaining: MAX_MATH_CARET_ENTRIES });
+  } catch (error) {
+    if (error instanceof MathCaretBudgetExceeded) return null;
+    throw error;
+  }
+}
+
+/** Bound geometry expansion before allocating caret entries for assembly glyphs. */
+function mathCaretMapWithinBudget(items: readonly TexMathHListItem[]): boolean {
+  let remaining = MAX_MATH_CARET_ENTRIES;
+  const pending = [...items];
+  for (let item = pending.pop(); item !== undefined; item = pending.pop()) {
+    // Source-bearing kern/glue nodes also expand into caret entries.
+    // Include them and container spans before allocating any geometry.
+    remaining -= Math.max(2, item.sourceSpan.end - item.sourceSpan.start + 1);
+    if (item.kind === "hlist") pending.push(...item.items);
+    if (remaining < 0) return false;
+  }
+  return true;
+}
+
 function buildInlineMathCaretMap(
   hlist: TexMathHList,
   params: {
@@ -536,13 +571,18 @@ function buildInlineMathCaretMap(
     readonly contentStart: number;
     readonly contentEnd: number;
   },
-  fontProfile: TexMathFontProfile
+  fontProfile: TexMathFontProfile,
+  budget: { remaining: number }
 ): TexMathCaretMap {
   const entries: TexMathCaretEntry[] = [];
   const addEntry = (entry: TexMathCaretEntry) => {
     if (!Number.isFinite(entry.sourceOffset) || !Number.isFinite(entry.x) || !Number.isFinite(entry.y)) {
       return;
     }
+    // Charge before storing a candidate. Synthetic boundaries and tags
+    // also count, and all rows of a display share one budget.
+    if (budget.remaining === 0) throw new MathCaretBudgetExceeded();
+    budget.remaining -= 1;
     entries.push({
       ...entry,
       sourceOffset: Math.max(params.sourceStart, Math.min(params.sourceEnd, Math.floor(entry.sourceOffset))),
@@ -1167,14 +1207,19 @@ function dedupeMathCaretEntries(entries: readonly TexMathCaretEntry[]): readonly
         left.kind.localeCompare(right.kind)
       : left.sourceOffset - right.sourceOffset
   );
-  // Extensible glyphs can contribute thousands of entries. Retain the first
-  // (highest-priority) match without rescanning the whole map for every entry.
+  // Assemblies can generate thousands of distinct positions for the same
+  // source offset. Avoid rescanning the entire map for each position.
   const seen = new Set<string>();
-  return sorted.filter((entry) => {
-    const key = JSON.stringify([
-      entry.sourceOffset, entry.x, entry.y, entry.height, entry.depth, entry.kind,
-      entry.hitBounds.xStart, entry.hitBounds.xEnd, entry.hitBounds.yStart, entry.hitBounds.yEnd,
-    ]);
+  let sourceOffset: number | undefined;
+  return sorted.filter(entry => {
+    if (sourceOffset !== entry.sourceOffset) {
+      seen.clear();
+      sourceOffset = entry.sourceOffset;
+    }
+    const geometry = [entry.x, entry.y, entry.height, entry.depth,
+      entry.hitBounds.xStart, entry.hitBounds.xEnd, entry.hitBounds.yStart, entry.hitBounds.yEnd];
+    if (geometry.some(Number.isNaN)) return false;
+    const key = `${entry.kind}|${geometry.join("|")}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -1365,7 +1410,8 @@ function getDisplayMathAlignment(
     readonly displayLabels?: readonly (TexMathDisplayLabel | null)[];
   },
   configuredFontProfile: TexMathFontProfile | undefined,
-  baseAtPt: TexLength
+  baseAtPt: TexLength,
+  budget: { remaining: number }
 ): TexMathDisplayAlignment | null {
   if (!texMathDisplayAlignmentDelimiter(params.delimiter)) {
     return null;
@@ -1386,7 +1432,7 @@ function getDisplayMathAlignment(
     fontProfile,
     baseAtPt,
   });
-  if (!laidOut.supported) {
+  if (!laidOut.supported || !mathCaretMapWithinBudget(laidOut.hlist.items)) {
     return null;
   }
   const alignedRows = laidOut.hlist.items.filter((item): item is TexMathChildHListLayoutItem =>
@@ -1457,7 +1503,7 @@ function getDisplayMathAlignment(
         sourceEnd: rowSourceSpan.end,
         contentStart: rowSourceSpan.start,
         contentEnd: rowSourceSpan.end,
-      }, fontProfile);
+      }, fontProfile, budget);
       return {
         rowIndex,
         x: texVListLocalX(0),
@@ -1535,7 +1581,7 @@ function getDisplayMathAlignment(
         sourceEnd: row.sourceSpan.end,
         contentStart: row.sourceSpan.start,
         contentEnd: row.sourceSpan.end,
-      }, fontProfile);
+      }, fontProfile, budget);
       return {
         rowIndex,
         x: texVListLocalX(0),
@@ -1653,7 +1699,7 @@ function getDisplayMathAlignment(
       sourceEnd: row.sourceSpan.end,
       contentStart: row.sourceSpan.start,
       contentEnd: row.sourceSpan.end,
-    }, fontProfile);
+    }, fontProfile, budget);
     return {
       rowIndex,
       x: texVListLocalX(0),

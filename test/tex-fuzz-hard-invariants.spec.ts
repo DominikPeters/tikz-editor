@@ -32,6 +32,15 @@ function layout(source: string, width = 160) {
 }
 
 describe("TeX fuzz renderer hard invariants", () => {
+  it("allows a forced line break next to a space changed to a tie", () => {
+    const caseData = caseFromTexFuzzAst([
+      { kind: "text", value: "Alpha" },
+      { kind: "space", nonBreaking: false },
+      { kind: "line-break", command: "newline" },
+    ]);
+    expect(checkTexFuzzMetamorphicInvariants(caseData).findings).toEqual([]);
+  });
+
   it("recognizes unsupported literal fallback inside a boxed document in the original CI witness", () => {
     const bundle = parseTexFuzzBundle(readFileSync(new URL("./fixtures/tex-fuzz/ci-20261109-image-paint-count.json", import.meta.url), "utf8"));
     for (const caseData of [bundle.case, bundle.minimizedCase]) {

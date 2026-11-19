@@ -212,6 +212,49 @@ describe("TeX math SVG rendering", () => {
     expect(entries.every(entry => Number.isFinite(entry.x) && Number.isFinite(entry.y))).toBe(true);
   });
 
+  it("maps tiny-font nested arrow assemblies without quadratic duplicate scans", () => {
+    const source = String.raw`$\xleftarrow[{{.}_{2}^{;}}]{\xleftarrow{(}}$`;
+    const box = createTexDerivedInlineMathBoxProvider({ baseAtPt: 0.001 }).getInlineMathBox({
+      source, content: source.slice(1, -1), delimiter: "dollar",
+      sourceStart: 0, sourceEnd: source.length, contentStart: 1, contentEnd: source.length - 1,
+    });
+    expect(box?.caretMap?.entries.length).toBeGreaterThan(10_000);
+    for (const char of ["2", ";", "("]) {
+      expect(findCaretEntry(box?.caretMap?.entries, source.indexOf(char), "glyph-boundary")).toBeTruthy();
+    }
+    expect(findCaretEntry(box?.caretMap?.entries, source.length, "math-boundary")).toBeTruthy();
+  });
+
+  it("refuses excessive assembly caret geometry before exhausting memory", () => {
+    const content = String.raw`\xleftarrow[{{.}_{2}^{;}}]{\xleftarrow{(}}`;
+    const source = `$${content}$`;
+    const provider = createTexDerivedInlineMathBoxProvider({ baseAtPt: 5 / 65536 });
+    const params = { source, content, sourceStart: 0, sourceEnd: source.length,
+      contentStart: 1, contentEnd: source.length - 1 };
+    expect(provider.getInlineMathBox({ ...params, delimiter: "dollar" })).toBeNull();
+    expect(provider.getDisplayMathAlignment?.({ ...params, delimiter: "align-star", targetWidth: texLength(160) })).toBeNull();
+  });
+
+  it("counts source-bearing assembly kerns in the caret geometry budget", () => {
+    const content = String.raw`\xleftarrow[{\bigcup_{\%}}]{\begin{smallmatrix}\}\\(\end{smallmatrix}}`;
+    const source = `$${content}$`;
+    const provider = createTexDerivedInlineMathBoxProvider({ baseAtPt: 10 / 65536 });
+    const params = { source, content, sourceStart: 0, sourceEnd: source.length,
+      contentStart: 1, contentEnd: source.length - 1 };
+    expect(provider.getInlineMathBox({ ...params, delimiter: "dollar" })).toBeNull();
+    expect(provider.getDisplayMathAlignment?.({ ...params, delimiter: "align-star", targetWidth: texLength(160) })).toBeNull();
+  });
+
+  it("also budgets caret entries for source outside the parsed math list", () => {
+    const contentStart = 100_001;
+    const source = "$" + " ".repeat(contentStart - 1) + "x$";
+    const box = createTexDerivedInlineMathBoxProvider().getInlineMathBox({
+      source, content: "x", delimiter: "dollar", sourceStart: 0,
+      sourceEnd: source.length, contentStart, contentEnd: contentStart + 1,
+    });
+    expect(box).toBeNull();
+  });
+
   it("generates 2-D caret map entries for script layout", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const source = String.raw`$x^2$`;
@@ -1900,14 +1943,14 @@ describe("TeX math SVG rendering", () => {
     expect(box).toMatchObject({
       source,
       content,
-      width: expect.closeTo(14.952627, 6),
+      width: expect.closeTo(14.951841, 6),
       height: expect.closeTo(8.611115, 6),
       depth: expect.closeTo(3.611115, 6),
     });
     expect(box?.svgBody).toContain('data-tex-font="cmmi7" data-tex-glyph="97"');
     expect(box?.svgBody).toContain('data-tex-font="cmmi7" data-tex-glyph="121"');
     expect(box?.svgBody).toContain('transform="translate(176.5218 -375) scale(70)"');
-    expect(box?.svgBody).toContain('transform="translate(897.9198 225) scale(70)"');
+    expect(box?.svgBody).toContain('transform="translate(897.8412 225) scale(70)"');
   });
 
   it("creates inline math boxes for AMS matrix delimiter variants", () => {

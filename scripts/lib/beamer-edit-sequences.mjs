@@ -11,6 +11,9 @@ function makeRng(seed) {
 }
 export const EDIT_FIELDS = ["text", "class-font", "aspect", "theme", "alignment", "date", "width", "rotation", "overlay", "color", "comment", "title", "scope", "bounds-width"];
 export function withEditProbes(source) {
+  // Make Beamer's implicit defaults editable by the class-font and aspect
+  // probes too (image fixtures start with an optionless document class).
+  source = source.replace("\\documentclass{beamer}", "\\documentclass[11pt,aspectratio=43]{beamer}");
   // Freeze the date even for imported reproducers, including long runs crossing midnight.
   const preamble = String.raw`\newcommand{\editprobetext}{EditAlpha}
 \definecolor{editpaint}{RGB}{255,0,255}
@@ -91,9 +94,11 @@ export function generateBeamerEditSequence(source, family, seed, steps) {
   };
   const overlayFrame = frameAt("% edit-layer-probe") ?? frameAt("% edit-overlay") ?? 1;
   const boundsFrame = frameAt("% edit-bounds") ?? 2;
+  // Keep these width edits equal in source length so the explicit cache
+  // probe exercises slide-layout reuse as well as semantic replay.
   const actions = [{ kind: "navigate", frame: 0, step: 1 }, { kind: "neighbors" },
     { kind: "navigate", frame: overlayFrame, step: 2 }, { kind: "layer", enabled: true },
-    { kind: "set", field: "width", value: "0.2", mode: "typing", render: true },
+    { kind: "set", field: "width", value: "2", mode: "typing", render: true },
     { kind: "set", field: "width", value: "1", mode: "typing", render: true },
     { kind: "navigate", frame: 0, step: 1 }];
   if (overlayFrame > 1) {

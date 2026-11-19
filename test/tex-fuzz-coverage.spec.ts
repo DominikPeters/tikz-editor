@@ -4,6 +4,8 @@ import {
   caseFromTexFuzzAst,
   generateTexFuzzCase,
   measureTexFuzzCoverage,
+  measureTexFuzzCompactCoverage,
+  expandTexFuzzCompactCoverage,
   mergeTexFuzzCoverage,
   normalizeTexFuzzWeights,
   pickWeightedTexFuzzValue,
@@ -19,6 +21,29 @@ import {
 } from "@tikz-editor/tex-fuzz";
 
 describe("TeX fuzz semantic coverage", () => {
+  it("round-trips compact memberships to exact exhaustive counts and source telemetry", () => {
+    const cases = Array.from({ length: 70 }, (_, index) => ({
+      ast: [{ kind: "text" }], source: index % 2 ? "café" : "Ω",
+      features: ["always", "always", ...(index % 2 ? ['a,"b'] : []),
+        ...(index % 3 ? [String.raw`a\b`] : []), ...(index % 5 ? ["Ω"] : [])],
+    }));
+    const compact = measureTexFuzzCompactCoverage(cases);
+    expect(compact).not.toHaveProperty("featureTripleCounts");
+    const restored = expandTexFuzzCompactCoverage(JSON.parse(JSON.stringify(compact)) as typeof compact);
+    expect(restored).toEqual(measureTexFuzzCoverage(cases));
+    expect(restored.featureTripleCounts[texFuzzCombinationKey(['a,"b', String.raw`a\b`, "always"])])
+      .toBe(cases.filter(item => item.features.includes('a,"b') && item.features.includes(String.raw`a\b`)).length);
+    expect(expandTexFuzzCompactCoverage(measureTexFuzzCompactCoverage([]))).toEqual(measureTexFuzzCoverage([]));
+  });
+
+  it("rejects incompatible, truncated, and inconsistent compact memberships", () => {
+    const compact = measureTexFuzzCompactCoverage([{ features: ["a"], ast: [], source: "" }]);
+    expect(() => expandTexFuzzCompactCoverage({ ...compact, featureMemberships: { a: [] } }))
+      .toThrow(/Invalid coverage membership/);
+    expect(() => expandTexFuzzCompactCoverage({ ...compact, version: 999 })).toThrow(/Unsupported compact/);
+    expect(() => expandTexFuzzCompactCoverage({ ...compact, featureMemberships: { a: [2] } }))
+      .toThrow(/Invalid coverage membership count/);
+  });
   it("rejects incompatible report versions at the merge boundary", () => {
     const report = measureTexFuzzCoverage([]);
     expect(() => mergeTexFuzzCoverage([{ ...report, version: 999 }])).toThrow(/Unsupported.*schema/);
@@ -108,7 +133,7 @@ describe("TeX fuzz semantic coverage", () => {
     const tables = cases.filter((caseData) => caseData.features.includes("box.tabular"));
     expect(tables.length).toBeGreaterThan(0);
     expect(tables.every((caseData) => caseData.source.includes("\\begin{tabular}"))).toBe(true);
-    const coverage = measureTexFuzzCoverage(tables);
+    const coverage = measureTexFuzzCompactCoverage(tables);
     expect(coverage.nodeKindCounts.tabular).toBeGreaterThan(0);
     expect(coverage.nodeKindCounts.text).toBeGreaterThan(0);
     expect(coverage.featureCounts["box.tabular"]).toBe(tables.length);
@@ -119,7 +144,7 @@ describe("TeX fuzz semantic coverage", () => {
       generateTexFuzzCase(seed, { profile: "aggressive", depth: 5, size: 8 })
     );
     const transforms = cases.filter((caseData) => caseData.features.some((feature) => feature.startsWith("box.transform.")));
-    const coverage = measureTexFuzzCoverage(transforms);
+    const coverage = measureTexFuzzCompactCoverage(transforms);
     expect(coverage.nodeKindCounts["transform-box"]).toBeGreaterThan(0);
     expect(coverage.nodeKindCounts.text).toBeGreaterThan(0);
     for (const command of ["rotatebox", "scalebox", "resizebox", "reflectbox"] as const) {

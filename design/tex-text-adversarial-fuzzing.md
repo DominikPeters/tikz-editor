@@ -1,5 +1,20 @@
 # Adversarial Fuzzing for the TeX Text Engine
 
+## Running a soak
+
+Build the fuzz tools with `npm run build:tex-fuzz`, then run
+`npm run fuzz:soak -- --rounds 3 --seed 20261115`. The runner starts new
+batches for one hour per round and lets active batches finish. It runs
+editing and TeX suites side by side. Use `--parallel 2` on a machine with
+capacity for four concurrent jobs, or `--duration` for a short trial.
+
+The TeX comparison batches use the installed LuaLaTeX packages and inherit
+settings such as `TEXMFHOME`. The runner saves each batch's seed, command,
+environment overrides, and output log under a new directory in
+`artifacts/fuzz-soak/`. The first failing batch stops new launches across
+all rounds. See `summary.json` for the result and each round's
+`results.json` for batch details.
+
 ## Status
 
 Operational, with completion criteria still open (updated October 2026).
@@ -105,11 +120,11 @@ now consumes the star, `\newline`, and priorities 0–4 (lower priorities become
 real Knuth–Plass penalties), and support classification now rejects literal,
 noncanonical, external-fallback, missing-report, and error-bearing results.
 
-The scheduled LuaLaTeX gate sends a coverage-stratified sample of generated
-cases through a batched paragraph oracle. It projects arbitrary generated
-syntax to replayable controlled prose, compares line text and realized
-interword glue, caches observations, bisects compilation failures, emits
-structured artifacts, and fails on new geometry findings. Mutation regressions
+The scheduled LuaLaTeX gate selects three fixed prose calibration controls
+from a coverage-stratified sample of generated cases. These controls check
+line text and realized interword glue. The gate caches observations, bisects
+compilation failures, emits structured artifacts, and fails on new geometry
+findings. Broad random paragraph-geometry fuzzing remains a follow-up. Mutation regressions
 prove that halved glue and dropped final text are detected. The math glyph/rule
 trace comparison now also feeds shared finding artifacts and shrinking. It
 remains diagnostic by default; display composition and raster comparisons still
@@ -856,8 +871,11 @@ to disappear; stored fingerprints retain their full feature/locus identity.
 Reducers also simplify nested fractions, radicals, scripts, and matrix cells.
 
 Native checks run sequentially in a reusable worker with a default 10-second
-per-case timeout and a 256MiB old-generation heap limit. A timeout or crash
-preserves the original case, selected checks, and budget, restarts the worker,
+budget for startup and each requested check stage, plus a 256MiB old-generation
+heap limit. Hard invariants, boundary probes, metamorphic relations, and engine
+histories each get their own budget; expected stage transitions renew it once,
+so duplicate progress cannot keep a hung stage alive. A timeout or crash
+preserves the original case, selected checks, stage, and budget, restarts the worker,
 and continues the batch. Resource failures are deliberately not shrunk. These
 limits cover native invariant/history execution and support-quota qualification.
 The CLI uses asynchronous rejection sampling with the same seeded sampler as
@@ -954,6 +972,22 @@ produced a witness that reproduces through the replay CLI. Timeout, crash,
 cancellation, deterministic asynchronous qualification, and deadline-bisection
 canaries pass, as do typechecking and production lint. Reports are under
 `artifacts/tex-fuzz/arrow-and-budget-followup/`.
+
+The CLI defaults to `--coverage-format compact` to retain per-feature case
+membership bitsets and ordinary telemetry without expanding millions of pair
+and triple keys after each batch. This representation is lossless:
+`expandTexFuzzCompactCoverage` restores the exhaustive schema-2 report for
+offline analysis. Pass `--coverage-format full` for expanded tables. Live novelty
+feedback and all renderer/oracle checks use the same cases in either format.
+Within a campaign using unchanged renderer code and oracle environment, run the
+support oracle's calibration/shrinking self-check once, then pass
+`--skip-support-self-check` to subsequent batches. Generated paragraph and math
+comparisons, and math control calibrations, still run on every oracle batch.
+Likewise, exercise the full 4,100-request cache-eviction working set once per
+unchanged campaign, then use `--engine-churn-requests 0` for subsequent batches.
+Keep `--engine-history-cases` enabled: source shifts, font/resolver changes,
+undo/redo, fresh-engine comparisons and retained snapshots still run for every
+selected history. A new campaign runs the full eviction check again.
 
 Useful bounded local runs (build first with `npm run build:tex-fuzz`):
 
