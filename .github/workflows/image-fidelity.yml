@@ -33,6 +33,8 @@ jobs:
       - run: npm ci
       - name: Install independent TeX and image paint tools
         run: |
+          # Regional EC2 mirrors can exhaust the job timeout downloading TeX Live.
+          sudo sed -i -E 's|https?://[a-z0-9-]+\.ec2\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update
           sudo apt-get install -y texlive-luatex texlive-latex-extra texlive-fonts-recommended texlive-pictures dvisvgm librsvg2-bin imagemagick poppler-utils mupdf-tools
           if ! command -v magick >/dev/null; then
