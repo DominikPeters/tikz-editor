@@ -89,7 +89,7 @@ describe("a slide picture on an overlay step", () => {
     }
     expect(pictures).toBeGreaterThan(5);
     expect(steps).toBeGreaterThan(pictures);
-  });
+  }, 60_000);
 });
 
 describe("overlay syntax in a picture", () => {

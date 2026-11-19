@@ -32,6 +32,7 @@ import { beginDocumentEdit, canContinueDocumentEdit, type DocumentEditSession } 
 import { executeDocumentEdit, nestedEditBaseSource, resolveNestedEditSpan, type EditExecutionContext } from "../edit-execution";
 import { buildEditParseOptions, type BuildEditParseOptionsInput } from "../edit-parse-options";
 import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { useEditorStore } from "../store/store";
 import {
   buildSelectionPngBase64,
@@ -111,6 +112,8 @@ export function beginClipboardEdit(context: SelectionCommandContext): SelectionC
     ...(document.drawingLayerRootId === undefined ? {} : { drawingLayerRootId: document.drawingLayerRootId })
   };
   const nestedSpan = resolveNestedEditSpan(editContext);
+  const root = parseDocumentRootId(session.activeRootId ?? "");
+  if (root?.kind === "beamer-frame-tikz" && (!nestedSpan || !document.snapshot.parseResult)) return null;
   const parseSource = nestedSpan ? maskTikzPictureSource(nestedEditBaseSource(context.source, document.snapshot), nestedSpan) : context.source;
   const parseRootId = nestedSpan ? document.snapshot.parseResult?.activeFigureId : session.activeRootId;
   const parseInput: BuildEditParseOptionsInput & { analysis: "none" } = {
