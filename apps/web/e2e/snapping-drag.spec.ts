@@ -44,9 +44,9 @@ for (const direction of [1, -1]) {
         return match ? [Number(match[1]), Number(match[2])] : [NaN, NaN];
       };
       const halfPixelCm = 0.5 * 0.75 / ptPerCm;
-      await expect.poll(async () => Math.abs((await corners())[0]! - (3 + direction * deltaCm))).toBeLessThanOrEqual(halfPixelCm + 1e-9);
+      await expect.poll(async () => Math.abs((await corners())[0] - (3 + direction * deltaCm))).toBeLessThanOrEqual(halfPixelCm + 1e-9);
       const [left, right] = await corners();
-      expect(right! - left!).toBeCloseTo(2, 9);
+      expect(right - left).toBeCloseTo(2, 9);
       await expectSourceCanvasConsistency(page);
       await expect(page.locator("g[class*='snapOverlay']")).toHaveCount(1);
     }

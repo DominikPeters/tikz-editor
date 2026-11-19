@@ -110,7 +110,7 @@ describe("overlay syntax in a picture", () => {
   it("reads a specification after options for \\path only, and through brackets inside options", () => {
     const nested = parseTikz(picture(String.raw`\path[label={[red]above:x}]<3> (2,0) node {BC};`));
     expect(nested.diagnostics).toEqual([]);
-    expect(nested.figure.body[0]!.kind === "Path" && nested.figure.body[0].overlay?.raw).toBe("3");
+    expect(nested.figure.body[0].kind === "Path" && nested.figure.body[0].overlay?.raw).toBe("3");
     // \draw is \path[draw]: PGF gives up on \draw[red]<2>.
     const shorthand = parseTikz(picture(String.raw`\draw[red]<2> (0,0) -- (1,1);`));
     expect(shorthand.figure.body.some((statement) => statement.kind === "Path" && statement.overlay !== undefined)).toBe(false);
@@ -241,18 +241,18 @@ Text.
 
   it("evaluates an edit on the picture as its snapshot's step shows it", async () => {
     const [first, , third] = await steps("frame:0:tikzpicture:0");
-    const picture = scanBeamerDocument(DECK).frames[0]!.children.find((child) => child.kind === "tikzpicture")!;
-    expect(third!.pictureOverlayStep ?? null).toBeNull();
-    expect(first!.pictureOverlayStep).toEqual({ frameIndex: 0, step: 1 });
-    const { overlayVisibility } = pictureOverlayVisibility(DECK, picture.span, first!.pictureOverlayStep);
+    const picture = scanBeamerDocument(DECK).frames[0].children.find((child) => child.kind === "tikzpicture")!;
+    expect(third.pictureOverlayStep ?? null).toBeNull();
+    expect(first.pictureOverlayStep).toEqual({ frameIndex: 0, step: 1 });
+    const { overlayVisibility } = pictureOverlayVisibility(DECK, picture.span, first.pictureOverlayStep);
     const at = (text: string) => ({ from: DECK.indexOf(text), to: DECK.indexOf(";", DECK.indexOf(text)) + 1 });
     expect([String.raw`\node (a)`, String.raw`\node<2-> (b)`, String.raw`\draw (a) -- (b)`, String.raw`\node (c)`].map((text) => overlayVisibility!(at(text), [])))
       .toEqual(["visible", "removed", "removed", "hidden"]);
     expect(pictureOverlayVisibility(DECK, picture.span, null)).toEqual({});
 
     // Moving the node that is there edits its coordinate, on the step that hides others.
-    const moved = executeDocumentEdit({ documentId: "overlay-step", source: DECK, sourceRevision: 1, activeRootId: "frame:0:tikzpicture:0", snapshot: first! },
-      { kind: "moveElements", elementIds: first!.scene!.elements.filter((element) => element.kind === "Text" && element.text === "A").map((element) => element.sourceRef.sourceId),
+    const moved = executeDocumentEdit({ documentId: "overlay-step", source: DECK, sourceRevision: 1, activeRootId: "frame:0:tikzpicture:0", snapshot: first },
+      { kind: "moveElements", elementIds: first.scene!.elements.filter((element) => element.kind === "Text" && element.text === "A").map((element) => element.sourceRef.sourceId),
         delta: worldPoint(pt(28.4527559055), pt(0)) });
     expect(moved.kind === "unsupported" ? moved.reason : moved.kind).toBe("success");
     expect(moved.kind === "success" && moved.newSource).toBe(DECK.replace(String.raw`\node (a) at (0,0)`, String.raw`\node (a) at (1,0)`));
@@ -469,8 +469,8 @@ ${body}
     const source = deck(String.raw`\foreach \x in {1,2,3} { \node<\x-> at (\x,0) {R\x}; }
 \foreach \x in {1,2} { \onslide<\x-> \node at (\x,1) {O\x}; }`);
     const document = scanBeamerDocument(source);
-    const overlays = scanBeamerFrameOverlays(source, document.frames[0]!);
-    const picture = document.frames[0]!.children.find((child) => child.kind === "tikzpicture")!;
+    const overlays = scanBeamerFrameOverlays(source, document.frames[0]);
+    const picture = document.frames[0].children.find((child) => child.kind === "tikzpicture")!;
     const keys = [1, 2, 3].map((step) => beamerTikzStep(source, picture.span, overlays, step).overlayKey);
     expect(new Set(keys).size).toBe(3);
     expect(keys[2]).toBe("");
@@ -585,13 +585,13 @@ describe("a selected Overlays row for a shape", () => {
     expect(await rects(1)).toEqual([]);
     const [rect, ...others] = await rects(2);
     expect(others).toEqual([]);
-    const picture = (await prepared.renderFrame({ frameIndex: 0, step: 2 })).layout.embeddedTikz[0]!.bounds;
+    const picture = (await prepared.renderFrame({ frameIndex: 0, step: 2 })).layout.embeddedTikz[0].bounds;
     // The node sits left of centre in the 4cm × 2cm rectangle, inside the picture.
-    expect(rect!.x).toBeGreaterThan(picture.x);
-    expect(rect!.x + rect!.width).toBeLessThan(picture.x + picture.width / 2);
-    expect(rect!.y).toBeGreaterThan(picture.y);
-    expect(rect!.y + rect!.height).toBeLessThan(picture.y + picture.height);
-    expect(Math.abs(rect!.y + rect!.height / 2 - (picture.y + picture.height / 2))).toBeLessThan(2);
+    expect(rect.x).toBeGreaterThan(picture.x);
+    expect(rect.x + rect.width).toBeLessThan(picture.x + picture.width / 2);
+    expect(rect.y).toBeGreaterThan(picture.y);
+    expect(rect.y + rect.height).toBeLessThan(picture.y + picture.height);
+    expect(Math.abs(rect.y + rect.height / 2 - (picture.y + picture.height / 2))).toBeLessThan(2);
   });
 });
 
@@ -660,12 +660,12 @@ ${body}
 \node at (2,0) {C};`);
 
   it("refuses to send a shape behind a pause it stands after", async () => {
-    const result = await edit(paused, (ids) => ({ kind: "reorderElements", elementIds: [ids.B!], direction: "sendToBack" }));
+    const result = await edit(paused, (ids) => ({ kind: "reorderElements", elementIds: [ids.B], direction: "sendToBack" }));
     expect(result.kind === "unsupported" && result.reason).toBe(String.raw`This would change the overlay steps of \node at (1,0) {B};`);
   });
 
   it("reorders shapes that stay on their steps", async () => {
-    const result = await edit(paused, (ids) => ({ kind: "reorderElements", elementIds: [ids.C!], direction: "sendBackward" }));
+    const result = await edit(paused, (ids) => ({ kind: "reorderElements", elementIds: [ids.C], direction: "sendBackward" }));
     expect(result.kind).toBe("success");
     expect(result.kind === "success" && result.newSource).toBe(paused.replace(String.raw`\node at (1,0) {B};
 \node at (2,0) {C};`, String.raw`\node at (2,0) {C};
@@ -676,9 +676,9 @@ ${body}
     const relative = deck(String.raw`\node<+-> at (0,0) {A};
 \node<+-> at (1,0) {B};
 \node<+-> at (2,0) {C};`);
-    const first = await edit(relative, (ids) => ({ kind: "deleteElements", elementIds: [ids.A!] }));
+    const first = await edit(relative, (ids) => ({ kind: "deleteElements", elementIds: [ids.A] }));
     expect(first.kind === "unsupported" && first.reason).toBe(String.raw`This would change the overlay steps of \node<+-> at (1,0) {B};`);
-    const last = await edit(relative, (ids) => ({ kind: "deleteElements", elementIds: [ids.C!] }));
+    const last = await edit(relative, (ids) => ({ kind: "deleteElements", elementIds: [ids.C] }));
     expect(last.kind).toBe("success");
   });
 
@@ -687,14 +687,14 @@ ${body}
 \node at (1,0) {B};
 \pause
 \node at (2,0) {C};`);
-    expect((await edit(source, (ids) => ({ kind: "groupElements", elementIds: [ids.A!, ids.B!] }))).kind).toBe("success");
+    expect((await edit(source, (ids) => ({ kind: "groupElements", elementIds: [ids.A, ids.B] }))).kind).toBe("success");
   });
 
   it("moves and edits shapes freely, and edits pictures on frames with one step", async () => {
-    const moved = await edit(paused, (ids) => ({ kind: "moveElements", elementIds: [ids.B!], delta: worldPoint(pt(28.4527559055), pt(0)) }));
+    const moved = await edit(paused, (ids) => ({ kind: "moveElements", elementIds: [ids.B], delta: worldPoint(pt(28.4527559055), pt(0)) }));
     expect(moved.kind).toBe("success");
     const plain = deck(String.raw`\node at (0,0) {A};
 \node at (1,0) {B};`);
-    expect((await edit(plain, (ids) => ({ kind: "reorderElements", elementIds: [ids.B!], direction: "sendToBack" }))).kind).toBe("success");
+    expect((await edit(plain, (ids) => ({ kind: "reorderElements", elementIds: [ids.B], direction: "sendToBack" }))).kind).toBe("success");
   });
 });

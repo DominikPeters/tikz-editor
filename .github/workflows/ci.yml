@@ -172,7 +172,8 @@ jobs:
   web:
     needs: changes
     if: needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-latest
+    # The pinned Playwright version supports Chromium on Ubuntu 24.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -255,7 +256,8 @@ jobs:
   desktop-linux:
     needs: changes
     if: needs.changes.outputs.desktop == 'true'
-    runs-on: ubuntu-latest
+    # The desktop tests need the webkit2gtk-driver package from Ubuntu 24.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
