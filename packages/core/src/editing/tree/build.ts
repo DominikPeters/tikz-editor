@@ -10,6 +10,7 @@ import {
   type TexSyntaxMatchedEnvironment,
 } from "../../text/tex/syntax-index.js";
 import { scanTexRecovery, texVirtualCloserAt } from "../../text/tex/recovery.js";
+import { readListingsOptions } from "../../parser/tex-lexical.js";
 import { parseTexTabularPreamble } from "../../text/tex/tabular/parser.js";
 import {
   createCommandTable,
@@ -992,12 +993,19 @@ class Binder {
     this.delimiter(node, at, matched.beginEnd);
     let cursor = matched.beginEnd;
     const bodyEnd = matched.endFrom;
-    const bodyRun: Run = { ...run, end: bodyEnd };
-    for (const arg of schema.args) {
-      // Listings makes its opening newline active before looking for options.
-      // A bracket on the next line belongs to the literal code body.
-      if (schema.body === "literal" && arg.kind === "optional" && !/^[ \t]*\[/u.test(this.text.slice(cursor, bodyEnd))) continue;
-      cursor = this.bindArgument(bodyRun, node, arg, cursor);
+    if (name === "lstlisting") {
+      const options = readListingsOptions(this.text, cursor, bodyEnd);
+      if (options) {
+        editNodeAt(this.nodes, node).values.push({
+          role: "options", span: options, contentSpan: { from: options.from + 1, to: options.to - 1 },
+        });
+        this.delimiter(node, cursor, options.from);
+        this.delimiter(node, options.from, options.to);
+        cursor = options.to;
+      }
+    } else {
+      const bodyRun: Run = { ...run, end: bodyEnd };
+      for (const arg of schema.args) cursor = this.bindArgument(bodyRun, node, arg, cursor);
     }
     switch (schema.body) {
       case "literal": {

@@ -1,3 +1,4 @@
+import { inValue } from "../ownership/regions.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editNodeAt, editSlotAt } from "../tree/lookup.js";
@@ -25,7 +26,7 @@ import {
   wrapInListPatch,
   type StructuralPatch,
 } from "./lists.js";
-import { mapThrough, PatchSet, withTerminator } from "./source.js";
+import { mapThrough, PatchSet, protectPatchEnds } from "./source.js";
 
 /**
  * The structural keys on the tree: ⏎, ⇧⏎, ⇥/⇧⇥, ⌫/⌦ at paragraph and
@@ -177,13 +178,6 @@ export function deadBreaks(view: EditView): Span[] {
       return slot.mode === "text" && slot.role !== "cell" && !inkOnLine(view, node.parent, node.span.from);
     })
     .map((node) => node.span);
-}
-
-/** Whether `at` is inside a value argument (a file name, colour, URL, break spacing). */
-export function inValue(view: EditView, at: number): boolean {
-  return view.tree.nodes.some((node) => node.values.some((value) => value.contentSpan.from <= at && at <= value.contentSpan.to) ||
-    (node.kind === "break" && node.span.from < at && at < node.span.to) ||
-    (node.kind === "row" && node.delimiters.some(span => span.from < at && at < span.to)));
 }
 
 /** Commands after which TeX is between paragraphs. */
@@ -455,7 +449,7 @@ export function joinRows(view: EditView, row: NodeId, direction: "backward" | "f
   const from = trimmedEnd(tree.text, { from: lastCell.contentSpan.from, to: breakToken.from });
   const to = skipHorizontalForward(tree.text, firstCell.contentSpan.from, firstCell.contentSpan.to);
   const insert = from === upper.span.from ? "" : joinSeparator(tree.text, from, " ");
-  const patches = withTerminator(tree.text, [{ from, to, insert }], from + insert.length, firstCell.mode);
+  const patches = protectPatchEnds(tree.text, [{ from, to, insert }], firstCell.mode);
   const inserted = requireArrayValue(patches, 0).insert;
   return { kind: "patch", patches, caret: direction === "backward" ? from + inserted.length : from, run: null, exact: true };
 }
@@ -716,20 +710,6 @@ function patchOutcome(patch: StructuralPatch): EditOutcome {
     exact: true,
     ...(patch.selectionEnd === undefined ? {} : { selectionEnd: patch.selectionEnd }),
   };
-}
-
-/** Whether a slot is in an alignment's rows (a cell, at any depth short of a formula). */
-export function inAlignment(view: EditView, slot: SlotId): boolean {
-  const { tree } = view;
-  for (let current: SlotId | null = slot; current != null; current = editNodeAt(tree.nodes, editSlotAt(tree.slots, current).node).parent) {
-    if (editSlotAt(tree.slots, current).role === "cell" || editNodeAt(tree.nodes, editSlotAt(tree.slots, current).node).kind === "alignment") {
-      return true;
-    }
-    if (editNodeAt(tree.nodes, editSlotAt(tree.slots, current).node).kind === "formula") {
-      return false;
-    }
-  }
-  return false;
 }
 
 /** Whether a slot is a list item's flow, or a paragraph in one. */

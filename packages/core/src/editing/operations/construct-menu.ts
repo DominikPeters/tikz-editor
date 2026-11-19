@@ -6,7 +6,7 @@ import type { EditView } from "../position/view.js";
 import { presentSlots } from "../tree/navigate.js";
 import type { EditNode, NodeId } from "../tree/types.js";
 import type { EditOutcome } from "./delete.js";
-import { mapThrough, PatchSet } from "./source.js";
+import { controlWordTerminator, mapThrough, PatchSet, protectPatchEnds } from "./source.js";
 
 /**
  * The focus tag's menu (V4): the variants of the construct the caret is
@@ -59,17 +59,12 @@ export function constructMenuEdit(view: EditView, node: NodeId, id: string, comm
   if (id === "unwrap") {
     const slot = requireDefined(unwrapSlot(view, record), "Missing required unwrapSlot(view, record)");
     const content = tree.text.slice(slot.contentSpan.from, slot.contentSpan.to);
-    // R5: a control word before the construct stays one (`\alpha\sqrt{x}` is `\alpha x`).
-    const terminated = /\\[A-Za-z@]+$/u.test(tree.text.slice(0, record.span.from)) && /^[A-Za-z@]/u.test(content);
-    const word = editSlotAt(tree.slots, requireDefined(record.parent, "Missing required record.parent")).mode === "math" ? " " : "{}";
-    const terminator = terminated ? word : "";
-    // And one the content ends with (`\textbf{\LaTeX}x`).
-    const closing = /\\[A-Za-z@]+$/u.test(content) && /^[A-Za-z@]/u.test(tree.text.slice(record.span.to)) ? word : "";
     const parent = editSlotAt(tree.slots, requireDefined(record.parent, "Missing required record.parent"));
     const scripted = parent.role === "base" && editNodeAt(tree.nodes, parent.node).kind === "scripted";
-    const prefix = scripted ? "{" : terminator;
-    const suffix = scripted ? "}" : closing;
-    const patches = [{ from: record.span.from, to: record.span.to, insert: prefix + content + suffix }];
+    const prefix = scripted ? "{" : controlWordTerminator(tree.text.slice(0, record.span.from), content, parent.mode);
+    const suffix = scripted ? "}" : "";
+    const patches = protectPatchEnds(tree.text,
+      [{ from: record.span.from, to: record.span.to, insert: prefix + content + suffix }], parent.mode);
     // The caret stays in the content it was in.
     const inside = Math.max(0, Math.min(caret - slot.contentSpan.from, content.length));
     const after = caret >= record.span.to ? mapThrough(patches, caret) : record.span.from + prefix.length + inside;

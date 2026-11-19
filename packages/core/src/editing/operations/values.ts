@@ -12,7 +12,7 @@ import type { CommitKey } from "./command.js";
 import type { EditOutcome } from "./delete.js";
 import { insideOptional } from "./insert.js";
 import { specColumns, widestRow } from "./structure.js";
-import { withTerminator } from "./source.js";
+import { protectPatchEnds } from "./source.js";
 
 /**
  * Value arguments (O8): colours, URLs, lengths, keys and the like, which
@@ -287,7 +287,7 @@ export function writtenValueAt(view: EditView, span: Span): WrittenValue | null 
  */
 export function editValues(view: EditView, edits: readonly { readonly span: Span; readonly text: string }[]): { from: number; to: number; insert: string }[] | null {
   const { text } = view.tree;
-  let patches: { from: number; to: number; insert: string }[] = [];
+  const patches: { from: number; to: number; insert: string }[] = [];
   const modes = new Map<number, EditNode["mode"]>();
   const touched = new Set<EditNode>();
   for (const edit of edits) {
@@ -351,14 +351,8 @@ export function editValues(view: EditView, edits: readonly { readonly span: Span
     }
   }
   patches.sort((left, right) => left.from - right.from);
-  let delta = 0;
-  for (const [index, patch] of patches.entries()) {
-
-    const seam = patch.from + delta + patch.insert.length;
-    patches = withTerminator(text, patches, seam, requireDefined(modes.get(patch.from), "Missing required modes.get(patch.from)"));
-    delta += requireArrayValue(patches, index).insert.length - (patch.to - patch.from);
-  }
-  return patches;
+  return protectPatchEnds(text, patches, patch =>
+    requireDefined(modes.get(patch.from), "Missing required modes.get(patch.from)"));
 }
 
 /** The command a value editor at `at` is open for, as the mode there reads it, and its fields. */

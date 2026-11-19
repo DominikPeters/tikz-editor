@@ -1,3 +1,4 @@
+import { inValue } from "../ownership/regions.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
@@ -12,14 +13,13 @@ import type { EditOutcome } from "./delete.js";
 import {
   afterSuperscript,
   beforeMulticolumn,
-  endsWithControlWord,
   insideOptional,
   optionalArgumentAhead,
   placeInsertion,
   skipSpacesBack,
 } from "./insert.js";
-import { SPEC_READER_BEFORE, withBracketGuard, withTerminator } from "./source.js";
-import { inAlignment, inListFlow, inValue } from "./structure.js";
+import { controlWordTerminator, endsWithControlWord, protectPatchEnds, SPEC_READER_BEFORE } from "./source.js";
+import { inListFlow } from "./structure.js";
 import { braceUnbracedArgument } from "./script.js";
 
 /**
@@ -253,8 +253,7 @@ function insertSource(place: Place, converted: string): EditOutcome {
   const { view, caret, at, mode, title } = place;
   const guarded = title || insideOptional(view, caret.slot) ? protectClosingBrackets(converted) : converted;
   const source = startSeam(place, guarded) + guarded;
-  const end = at + source.length;
-  const patches = withBracketGuard(view.tree.text, withTerminator(view.tree.text, [{ from: at, to: at, insert: source }], end, mode), end);
+  const patches = protectPatchEnds(view.tree.text, [{ from: at, to: at, insert: source }], mode, true);
   const inserted = requireArrayValue(patches, 0).insert;
   const outcome = { kind: "patch", patches, caret: at + inserted.length, run: null } as const;
   return editSlotAt(view.tree.slots, caret.slot).role === "base"
@@ -328,7 +327,7 @@ function fits(place: Place, source: string, commands: CommandTable | null): bool
   if (lists.some((node) => listDepth(tree, node.id) + listDepthAt(view, caret.slot) > BEAMER_LIST_DEPTH)) {
     return false;
   }
-  if (nodes.some((node) => node.kind === "break") && !(lineEndable(view, caret, at) || inAlignment(view, caret.slot))) {
+  if (nodes.some((node) => node.kind === "break") && !lineEndable(view, caret, at)) {
     return false;
   }
   return true;
@@ -555,9 +554,5 @@ function startSeam(place: Place, source: string): string {
   if (mode === "math" && source.startsWith("'") && afterSuperscript(view, place.caret)) {
     return "{}";
   }
-  const letter = mode === "math" ? /^[A-Za-z@]/u : /^[A-Za-z@ ]/u;
-  if (letter.test(source) && endsWithControlWord(text, at)) {
-    return mode === "math" ? " " : "{}";
-  }
-  return "";
+  return controlWordTerminator(text.slice(0, at), source, mode, true);
 }

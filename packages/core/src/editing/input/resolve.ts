@@ -62,7 +62,7 @@ import {
   type EditOutcome,
 } from "../operations/index.js";
 import { childIndex, presentSlots } from "../tree/navigate.js";
-import { PatchSet } from "../operations/source.js";
+import { controlWordTerminator, PatchSet, protectPatchEnds } from "../operations/source.js";
 import {
   ghostSlots,
   insertionOffset,
@@ -739,7 +739,7 @@ class Resolver {
     const removed = [...drop].sort((left, right) => right.from - left.from).map(span => {
       const before = next.slice(0, span.from);
       const after = next.slice(span.to);
-      const insert = /\\[A-Za-z@]+$/u.test(before) && /^[A-Za-z@]/u.test(after) ? "{}" : "";
+      const insert = controlWordTerminator(before, after, "text");
       next = before + insert + after;
       return { ...span, insert };
     });
@@ -941,11 +941,7 @@ class Resolver {
     }
     // Merge touching removals before checking the resulting seams: an empty
     // pair after \quad and before x must leave a command terminator.
-    const patches = set.replace(right, scripted ? "}" : "").patches().map((patch) => ({
-      ...patch,
-      insert: /\\[A-Za-z@]+$/u.test(text.slice(0, patch.from) + patch.insert) && /^[A-Za-z@]/u.test(text.slice(patch.to))
-        ? patch.insert + " " : patch.insert,
-    }));
+    const patches = protectPatchEnds(text, set.replace(right, scripted ? "}" : "").patches(), "math");
     // The caret stays at the content's edge it was at.
     const at: MappedPosition = direction === "backward" ? { offset: left.from + 1, assoc: 1 } : { offset: right.from + 1, assoc: -1 };
     return this.transaction(patches, { kind: "mapped", anchor: at, focus: at }, { group: "own-step" });
@@ -1632,7 +1628,7 @@ class Resolver {
       return new Resolver({ ...this.context, interaction: NO_INTERACTION }).move(motion);
     }
     // A control word must not run into a letter where the `\right` leaves or lands (`\alpha\right)x`, `\right\rangle x`).
-    const leaving = /\\[A-Za-z]+$/u.test(text.slice(0, token.from)) && /^[A-Za-z]/u.test(text.slice(token.to)) ? " " : "";
+    const leaving = controlWordTerminator(text.slice(0, token.from), text.slice(token.to), "math");
     const landing = target > at ? target + (token.to - token.from) : target;
     const removal = { from: token.from, to: token.to, insert: leaving };
     const insertion = { from: landing, to: landing, insert: apart(closer, text, landing) };
@@ -1697,7 +1693,7 @@ class Resolver {
     }
     const closer = requireArrayValue(pair.delimiters, 1);
     const insert = `\\right${char}`;
-    const leaving = /\\[A-Za-z@]+$/u.test(text.slice(0, closer.from)) && /^[A-Za-z@]/u.test(text.slice(closer.to)) ? " " : "";
+    const leaving = controlWordTerminator(text.slice(0, closer.from), text.slice(closer.to), "math");
     const caret = chip.at - (closer.to - closer.from) + leaving.length + insert.length;
     return this.transaction(
       [{ from: closer.from, to: closer.to, insert: leaving }, { from: chip.at, to: chip.at, insert: apart(insert, text, chip.at) }],

@@ -1,3 +1,4 @@
+import { editSyntaxAt } from "../ownership/regions.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
@@ -7,7 +8,7 @@ import type { EditView } from "../position/view.js";
 import { childIndex, presentSlots } from "../tree/navigate.js";
 import type { EditMode, NodeId, SlotId, Span } from "../tree/types.js";
 import type { BufferPatch } from "../transaction/transaction.js";
-import { mapThrough, PatchSet, slotOuterSpan, withBracketGuard, withTerminator } from "./source.js";
+import { mapThrough, PatchSet, slotOuterSpan, protectPatchEnds } from "./source.js";
 import { joinRows } from "./structure.js";
 
 /**
@@ -388,10 +389,8 @@ function gapEnd(view: EditView, slot: SlotId, from: number): number {
 function finishDeletion(view: EditView, set: PatchSet, seam: number, mode: EditMode, run: string | null): EditOutcome {
   const raw = set.patches();
   const caret = mapThrough(raw, seam);
-  // alltt keeps control words and braces active despite its literal specials.
-  const literal = mode === "verbatim" && !view.tree.nodes.some(node =>
-    node.command === "alltt" && node.span.from < seam && seam < node.span.to);
-  const patches = literal ? raw : withBracketGuard(view.tree.text, withTerminator(view.tree.text, raw, caret, mode), caret);
+  const patches = editSyntaxAt(view.tree, mode, seam) === "literal"
+    ? raw : protectPatchEnds(view.tree.text, raw, mode, true);
   const single = raw.length === 1 && requireArrayValue(raw, 0).insert === "" && requireArrayValue(raw, 0).to - requireArrayValue(raw, 0).from === 1;
   return { kind: "patch", patches, caret, run: single ? run : null };
 }

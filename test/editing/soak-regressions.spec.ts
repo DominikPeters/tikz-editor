@@ -4,7 +4,8 @@ import { runCase } from "./fuzz/keystroke-fuzz.js";
 import { commitCommand } from "../../packages/core/src/editing/operations/command.js";
 import { NO_INTERACTION } from "../../packages/core/src/editing/input/interaction.js";
 import { braceUnbracedArgument } from "../../packages/core/src/editing/operations/script.js";
-import { enter, inValue } from "../../packages/core/src/editing/operations/structure.js";
+import { inValue } from "../../packages/core/src/editing/ownership/regions.js";
+import { enter } from "../../packages/core/src/editing/operations/structure.js";
 import { buildEditTree } from "../../packages/core/src/editing/tree/build.js";
 import { createEditView } from "../../packages/core/src/editing/position/index.js";
 import { applyPatches } from "../../packages/core/src/editing/transaction/index.js";
@@ -17,6 +18,13 @@ function replay(marked: string, tokens: readonly string[], table = commands) {
 }
 
 describe("keystroke soak regressions", () => {
+
+  it("keeps a paste from ending an alignment row inside a delimiter pair", () => {
+    const marked = String.raw`\[\begin{aligned}a&=b\\ c-‸d&=e\end{aligned}\]`;
+    const result = replay(marked, [String.raw`\left`, String.raw`\{`, "@paste-text:11"]);
+    expect(result.failure, JSON.stringify(result.states)).toBeNull();
+    expect(result.finalText).toContain(String.raw`\left\{\backslash \backslash \right\}`);
+  });
 
   it.each(["", "[language=Python]"])("types on the first code line past a listings header %s", options => {
     for (const newline of ["\n", "\r\n"]) {

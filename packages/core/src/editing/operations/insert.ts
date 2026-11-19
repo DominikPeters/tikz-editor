@@ -1,3 +1,4 @@
+import { editSyntaxAt } from "../ownership/regions.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
@@ -6,10 +7,10 @@ import { ARGUMENT_ROLES, isCaretSlot } from "../ownership/kinds.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
 import { childIndex, presentSlots } from "../tree/navigate.js";
-import type { EditMode, EditNode, EditSlot, NodeId, SlotId } from "../tree/types.js";
+import type { EditNode, EditSlot, NodeId, SlotId } from "../tree/types.js";
 import { isDollarFormula, type EditOutcome } from "./delete.js";
 import { braceUnbracedArgument, enterExistingScript } from "./script.js";
-import { OPTION_READER_BEFORE, PatchSet, SPEC_READER_BEFORE, slotOuterSpan, withTerminator } from "./source.js";
+import { OPTION_READER_BEFORE, PatchSet, SPEC_READER_BEFORE, slotOuterSpan, controlWordTerminator, endsWithControlWord, protectPatchEnds } from "./source.js";
 import { rowIsFull } from "./structure.js";
 
 /**
@@ -31,19 +32,13 @@ export function typeCharacter(
 ): EditOutcome {
   const { tree } = view;
   const slot = editSlotAt(tree.slots, caret.slot);
-  if (slot.mode === "verbatim") {
-    // Listings is literal; alltt keeps TeX groups and controls active while
-    // the other TeX special characters print as typed.
-    let owner: EditNode = editNodeAt(tree.nodes, slot.node);
-    while (owner.command !== "alltt" && owner.parent != null) owner = editNodeAt(tree.nodes, editSlotAt(tree.slots, owner.parent).node);
-    if (owner.command !== "alltt") {
-      // The opening line break belongs to the listings header. Code typed
-      // at that seam starts on the next line, away from optional arguments.
-      const newline = at === slot.contentSpan.from ? /^(?:\r\n?|\n)/u.exec(tree.text.slice(at)) : null;
-      return insert(at + (newline?.[0].length ?? 0), char);
-    }
-    if ("%$&_~^".includes(char)) return insert(at, char);
+  const syntax = editSyntaxAt(tree, slot.mode, at);
+  if (syntax === "literal") {
+    // Code starts after the listings header's opening line break.
+    const newline = at === slot.contentSpan.from ? /^(?:\r\n?|\n)/u.exec(tree.text.slice(at)) : null;
+    return insert(at + (newline?.[0].length ?? 0), char);
   }
+  if (syntax === "alltt" && "%$&_~^".includes(char)) return insert(at, char);
   if (beforeMulticolumn(view, caret)) {
     // `\multicolumn` must open its cell ("Misplaced \omit"): nothing goes before it.
     return { kind: "none" };
@@ -175,7 +170,7 @@ function typeInText(view: EditView, caret: Position, at: number, char: string, s
   if (char === "<" && SPEC_READER_BEFORE.test(view.tree.text.slice(0, skipSpacesBack(view.tree.text, at)))) {
     return insert(at, "{}<");
   }
-  return insert(at, terminated(view, at, char, "text") + char);
+  return insert(at, controlWordTerminator(view.tree.text.slice(0, at), char, "text", true) + char);
 }
 
 function typeInMath(view: EditView, caret: Position, at: number, char: string, state: InteractionState): EditOutcome {
@@ -210,24 +205,11 @@ function typeInMath(view: EditView, caret: Position, at: number, char: string, s
   if (char === "[" && optionalArgumentAhead(view, at)) {
     return insert(at, "{}[");
   }
-  return insert(at, terminated(view, at, char, "math") + char);
+  return insert(at, controlWordTerminator(view.tree.text.slice(0, at), char, "math") + char);
 }
 
 function insert(at: number, text: string): EditOutcome {
   return { kind: "patch", patches: [{ from: at, to: at, insert: text }], caret: at + text.length, run: "insert" };
-}
-
-/**
- * R5: the terminator a control word right before the caret needs when a
- * letter follows (or, in text, a space): `\cup B`, `\LaTeX{} is`,
- * `\mu^\top x`.
- */
-function terminated(view: EditView, at: number, char: string, mode: EditMode): string {
-  const needs = mode === "math" ? /^[A-Za-z@]$/u.test(char) : /^[A-Za-z@ ]$/u.test(char);
-  if (!needs || !endsWithControlWord(view.tree.text, at)) {
-    return "";
-  }
-  return mode === "math" ? " " : "{}";
 }
 
 export function skipSpacesBack(text: string, at: number): number {
@@ -236,22 +218,6 @@ export function skipSpacesBack(text: string, at: number): number {
     end -= 1;
   }
   return end;
-}
-
-/** Whether the source before an offset ends with a control word (`\alpha`, not the text after `\\`). */
-export function endsWithControlWord(text: string, at: number): boolean {
-  let start = at;
-  while (start > 0 && /[A-Za-z@]/u.test(text.charAt(start - 1))) {
-    start -= 1;
-  }
-  if (start === at) {
-    return false;
-  }
-  let slashes = 0;
-  while (start - slashes > 0 && text[start - slashes - 1] === "\\") {
-    slashes += 1;
-  }
-  return slashes % 2 === 1;
 }
 
 /** Whether a slot is an alignment cell, where `&` separates cells. */
@@ -472,7 +438,7 @@ function fillPlaceholder(view: EditView, placeholder: Placeholder, char: string)
     return null;
   }
   const mode = placeholder.slot != null ? editSlotAt(view.tree.slots, placeholder.slot).mode : "math";
-  const text = terminated(view, placeholder.open, char, mode) + (ESCAPED[char] ?? char);
+  const text = controlWordTerminator(view.tree.text.slice(0, placeholder.open), char, mode, true) + (ESCAPED[char] ?? char);
   const patches = new PatchSet().replace({ from: placeholder.open, to: placeholder.open + 2 }, text).patches();
   return { kind: "patch", patches, caret: placeholder.open + text.length, run: "insert" };
 }
@@ -495,6 +461,6 @@ export function abandonPlaceholder(view: EditView, placeholder: Placeholder): Ed
     span = slotOuterSpan(tree, requireDefined(placeholder.slot, "Missing required placeholder.slot"));
   }
   // R5 at the seam: `\gamma_{}w` leaves `\gamma w`, not `\gammaw`.
-  const patches = withTerminator(tree.text, new PatchSet().delete(span).patches(), span.from, "math");
+  const patches = protectPatchEnds(tree.text, new PatchSet().delete(span).patches(), "math");
   return { kind: "patch", patches, caret: span.from, run: null };
 }
