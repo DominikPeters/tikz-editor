@@ -1,5 +1,5 @@
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
-import type { BufferPatch } from "../transaction/transaction.js";
+import { applyPatches, mapOffset, type BufferPatch } from "../transaction/transaction.js";
 import type { EditMode, EditTree, SlotId, Span } from "../tree/types.js";
 
 /**
@@ -84,51 +84,26 @@ export class PatchSet {
 
 /** The post-edit offset of a pre-edit offset that no patch covers (or the start of a covered one). */
 export function mapThrough(patches: readonly BufferPatch[], offset: number): number {
-  let delta = 0;
-  for (const patch of patches) {
-    if (patch.from >= offset) {
-      break;
-    }
-    if (patch.to <= offset) {
-      delta += patch.insert.length - (patch.to - patch.from);
-    } else {
-      return patch.from + delta;
-    }
-  }
-  return offset + delta;
+  return mapOffset(patches, offset, -1);
 }
 
-/**
- * R5 at a seam: when an edit leaves a control word directly before a
- * letter (`\alpha` + `b`), the terminator goes back in: a space in math,
- * `{}` in text. Returns the patches with the terminator added at `seam`
- * (a post-edit offset) when needed.
- */
-export function withTerminator(
-  original: string,
-  patches: BufferPatch[],
-  seam: number,
-  mode: EditMode
-): BufferPatch[] {
-  let after = "";
-  let cursor = 0;
-  for (const patch of patches) {
-    after += original.slice(cursor, patch.from) + patch.insert;
-    cursor = patch.to;
-  }
-  after += original.slice(cursor);
-  const before = after.slice(0, seam);
-  if (!/\\[A-Za-z@]+$/u.test(before) || !/^[A-Za-z@]/u.test(after.slice(seam))) {
-    return patches;
-  }
-  // Put the terminator into the patch that ends at the seam.
-  const terminator = mode === "math" ? " " : "{}";
-  let delta = 0;
-  return patches.map((patch) => {
-    const end = patch.from + delta + patch.insert.length;
-    delta += patch.insert.length - (patch.to - patch.from);
-    return end === seam ? { ...patch, insert: patch.insert + terminator } : patch;
-  });
+/** Whether source ends with a control word, rather than text after an escaped slash. */
+export function endsWithControlWord(text: string, at = text.length): boolean {
+  let start = at;
+  while (start > 0 && /[A-Za-z@]/u.test(text.charAt(start - 1))) start -= 1;
+  if (start === at) return false;
+  let slashes = 0;
+  while (start > 0 && text[--start] === "\\") slashes += 1;
+  return slashes % 2 === 1;
+}
+
+/** Preserve a control word when an edit puts letters, or a visible space, after it. */
+export function controlWordTerminator(
+  before: string, after: string, mode: EditMode, preserveSpace = false
+): string {
+  const needs = preserveSpace && mode !== "math" ? /^[A-Za-z@ ]/u : /^[A-Za-z@]/u;
+  if (!needs.test(after) || !endsWithControlWord(before)) return "";
+  return mode === "math" ? " " : "{}";
 }
 
 /**
@@ -151,32 +126,40 @@ export const SPEC_READER_BEFORE =
  */
 export const OPTION_READER_BEFORE = /(?:\\begin\{[^}]*\}|\\item)(?:<[^<>]*>)?$/u;
 
+/** Protect a bracket that would otherwise become an option or overlay. */
+function bracketGuard(before: string, after: string): string {
+  const head = before.trimEnd();
+  if (/^\s*\[/u.test(after) &&
+    (/(?:^|[^\\])(?:\\\\)*(?:\\\\\*?|\\item)$/u.test(head) || OPTION_READER_BEFORE.test(head))) return "{}";
+  if (/^\s*</u.test(after) && SPEC_READER_BEFORE.test(head)) return "{}";
+  return "";
+}
+
 /**
- * K9 at a seam: when an edit leaves a `[` right after `\\\\` or `\\item`
- * (deleting what stood between), TeX would read it as their optional
- * argument, and a `<` after `\\item` or `\\begin{…}` as an overlay
- * specification; `{}` goes in between.
+ * Finish sorted source patches at the seams they created. The caller
+ * identifies the argument's mode and opts into bracket protection when
+ * the following bracket is meant to remain literal.
  */
-export function withBracketGuard(original: string, patches: BufferPatch[], seam: number): BufferPatch[] {
-  let after = "";
-  let cursor = 0;
-  for (const patch of patches) {
-    after += original.slice(cursor, patch.from) + patch.insert;
-    cursor = patch.to;
-  }
-  after += original.slice(cursor);
-  const before = after.slice(0, seam).replace(/\s+$/u, "");
-  const opens = (/(?:^|[^\\])(?:\\\\)*(?:\\\\\*?|\\item)$/u.test(before) || OPTION_READER_BEFORE.test(before)) && /^\s*\[/u.test(after.slice(seam));
-  // (`\item` also reads a `<` after it, past its label, as an overlay specification.)
-  const spec = SPEC_READER_BEFORE.test(before) && /^\s*</u.test(after.slice(seam));
-  if (!opens && !spec) {
-    return patches;
-  }
+export function protectPatchEnds(
+  source: string,
+  patches: BufferPatch[],
+  mode: EditMode | ((patch: BufferPatch) => EditMode),
+  protectBrackets = false
+): BufferPatch[] {
+  const after = applyPatches(source, patches);
   let delta = 0;
-  return patches.map((patch) => {
-    const end = patch.from + delta + patch.insert.length;
+  let cursor = 0;
+  let before = "";
+  return patches.map(patch => {
+    const seam = patch.from + delta + patch.insert.length;
     delta += patch.insert.length - (patch.to - patch.from);
-    return end === seam ? { ...patch, insert: `${patch.insert}{}` } : patch;
+    before += after.slice(cursor, seam);
+    const following = after.slice(seam);
+    const guard = controlWordTerminator(before, following, typeof mode === "function" ? mode(patch) : mode)
+      || (protectBrackets ? bracketGuard(before, following) : "");
+    before += guard;
+    cursor = seam;
+    return guard ? { ...patch, insert: patch.insert + guard } : patch;
   });
 }
 

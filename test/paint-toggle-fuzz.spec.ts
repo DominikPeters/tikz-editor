@@ -172,5 +172,6 @@ describe("paint toggle fuzz", () => {
       }
     }
     expect(checked).toBeGreaterThan(CASES / 3);
-  }, 15_000 + CASES * 20);
+  // Each case renders several paint states; leave room for concurrent fuzz lanes.
+  }, 15_000 + CASES * 50);
 });

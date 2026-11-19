@@ -6,7 +6,7 @@ import type { EditView } from "../position/view.js";
 import { presentSlots } from "../tree/navigate.js";
 import type { EditNode, NodeId } from "../tree/types.js";
 import type { EditOutcome } from "./delete.js";
-import { mapThrough, PatchSet } from "./source.js";
+import { controlWordTerminator, mapThrough, PatchSet, protectPatchEnds } from "./source.js";
 
 /**
  * The focus tag's menu (V4): the variants of the construct the caret is
@@ -59,16 +59,15 @@ export function constructMenuEdit(view: EditView, node: NodeId, id: string, comm
   if (id === "unwrap") {
     const slot = requireDefined(unwrapSlot(view, record), "Missing required unwrapSlot(view, record)");
     const content = tree.text.slice(slot.contentSpan.from, slot.contentSpan.to);
-    // R5: a control word before the construct stays one (`\alpha\sqrt{x}` is `\alpha x`).
-    const terminated = /\\[A-Za-z@]+$/u.test(tree.text.slice(0, record.span.from)) && /^[A-Za-z@]/u.test(content);
-    const word = editSlotAt(tree.slots, requireDefined(record.parent, "Missing required record.parent")).mode === "math" ? " " : "{}";
-    const terminator = terminated ? word : "";
-    // And one the content ends with (`\textbf{\LaTeX}x`).
-    const closing = /\\[A-Za-z@]+$/u.test(content) && /^[A-Za-z@]/u.test(tree.text.slice(record.span.to)) ? word : "";
-    const patches = [{ from: record.span.from, to: record.span.to, insert: terminator + content + closing }];
+    const parent = editSlotAt(tree.slots, requireDefined(record.parent, "Missing required record.parent"));
+    const scripted = parent.role === "base" && editNodeAt(tree.nodes, parent.node).kind === "scripted";
+    const prefix = scripted ? "{" : controlWordTerminator(tree.text.slice(0, record.span.from), content, parent.mode);
+    const suffix = scripted ? "}" : "";
+    const patches = protectPatchEnds(tree.text,
+      [{ from: record.span.from, to: record.span.to, insert: prefix + content + suffix }], parent.mode);
     // The caret stays in the content it was in.
     const inside = Math.max(0, Math.min(caret - slot.contentSpan.from, content.length));
-    const after = caret >= record.span.to ? mapThrough(patches, caret) : record.span.from + terminator.length + inside;
+    const after = caret >= record.span.to ? mapThrough(patches, caret) : record.span.from + prefix.length + inside;
     return { kind: "patch", patches, caret: after, run: null };
   }
   if (id === "variant:display" || id === "variant:inline") {
@@ -77,11 +76,13 @@ export function constructMenuEdit(view: EditView, node: NodeId, id: string, comm
       return null;
     }
     const [open, close] = id === "variant:display" ? ["\\[", "\\]"] : ["$", "$"];
-    const patches = new PatchSet()
-      .replace({ from: record.span.from, to: content.contentSpan.from }, open)
-      .replace({ from: content.contentSpan.to, to: record.span.to }, close)
-      .patches();
-    return { kind: "patch", patches, caret: mapThrough(patches, caret), run: null };
+    const emptyInline = id === "variant:inline" && tree.text.slice(content.contentSpan.from, content.contentSpan.to).trim() === "";
+    const set = new PatchSet().replace({ from: record.span.from, to: content.contentSpan.from }, open);
+    if (emptyInline) set.replace(content.contentSpan, "{}");
+    const patches = set.replace({ from: content.contentSpan.to, to: record.span.to }, close).patches();
+    return { kind: "patch", patches, caret: emptyInline ? record.span.from + 2 : mapThrough(patches, caret), run: null,
+      ...(emptyInline ? { placeholder: record.span.from + 1 } : {}) };
+
   }
   const name = id.slice("variant:".length);
   if (record.command == null || !tree.text.startsWith(`\\${record.command}`, record.span.from)) {
@@ -137,7 +138,16 @@ function unwrapSlot(view: EditView, record: EditNode) {
   if (!UNWRAPPABLE.has(record.kind) || record.parent == null) {
     return null;
   }
+  const parent = editSlotAt(view.tree.slots, record.parent);
+  if (record.kind === "group" && parent.role === "base" && editNodeAt(view.tree.nodes, parent.node).kind === "scripted") return null;
   const slots = presentSlots(view.tree, record.id);
+  const slot = slots.length === 1 ? requireArrayValue(slots, 0) : null;
   // With nothing to keep, deleting it is the way (an empty formula's `$$` would be display math).
-  return slots.length === 1 && view.tree.text.slice(requireArrayValue(slots, 0).contentSpan.from, requireArrayValue(slots, 0).contentSpan.to).trim() !== "" ? requireArrayValue(slots, 0) : null;
+  if (!slot || view.tree.text.slice(slot.contentSpan.from, slot.contentSpan.to).trim() === "") return null;
+  const parentMode = editSlotAt(view.tree.slots, record.parent).mode;
+  // Plain characters can change mode. Structured content cannot: removing
+  // \text around $...$ would expose nested formula delimiters in math,
+  // and text-only commands would lose the context that makes them valid.
+  if (slot.mode !== parentMode && slot.children.some(child => !["char", "space"].includes(editNodeAt(view.tree.nodes, child).kind))) return null;
+  return slot;
 }

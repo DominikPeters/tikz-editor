@@ -36,7 +36,7 @@ import { PT_PER_CM } from "../../packages/core/src/edit/format.js";
 import type { ComputeRequest, SessionSnapshot } from "../../packages/app/src/compute.js";
 import type { DocumentFileRef, EditorAction, EditorState, FileRevision } from "../../packages/app/src/store/types.js";
 import { decideLinkedFileRefresh, revisionForText, revisionsMatch, sameDocumentFileRef, type LinkedTextReadResult, type LinkedTextWriteResult } from "../../packages/app/src/linked-file-sync.js";
-import { benignTextEdit, coldCompute, makeRng, randomTextEdit, singleEdit, type FuzzDocument } from "./compute-fuzz.js";
+import { benignTextEdit, coldCompute, makeRng, randomTextEdit, singleEdit, snapshotForOutputComparison, type FuzzDocument } from "./compute-fuzz.js";
 import type { ModuleMock } from "./compute-instances.js";
 import * as glyphOutlines from "../../packages/core/src/text/tex/fonts/glyph-outlines.js";
 import { diffValues } from "./snapshot-diff.js";
@@ -300,10 +300,12 @@ async function checkSettledRender(harness: Harness): Promise<string[]> {
   const request = appRequest(state, "settled");
   const expected = await coldCompute(request);
   return diffValues(
-    { snapshot: expected.snapshot },
-    { snapshot: doc.snapshot },
+    { snapshot: snapshotForOutputComparison(expected.snapshot) },
+    { snapshot: snapshotForOutputComparison(doc.snapshot) },
     // editingId: the store names handles by editing identity on arrival.
-    { ignoredKeys: new Set(["revision", "cacheEpoch", "incremental", "textLayoutContext", "runtimeId", "editingId"]),
+    // exactParse records the parse strategy; settle explicitly reparses after
+    // recovery. Compare all rendered output, as the compute oracle does.
+    { ignoredKeys: new Set(["revision", "cacheEpoch", "incremental", "textLayoutContext", "runtimeId", "editingId", "exactParse"]),
       normalizers: { expected: stripRunIdentities, actual: stripRunIdentities } }
   ).map((difference) => `settled render: ${difference}`);
 }

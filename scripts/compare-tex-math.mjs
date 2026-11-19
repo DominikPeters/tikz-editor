@@ -20,6 +20,7 @@ let generateTexMathFuzzCase;
 const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
 const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
 const amsMathCommands = [
+  String.raw`\genfrac`,
   String.raw`\boldsymbol`,
   String.raw`\boxed`,
   String.raw`\dddot`,
@@ -383,30 +384,10 @@ function comparisonItemsForFormula(formula, ours, tex) {
       (a.code ?? 0) - (b.code ?? 0) || a.x - b.x || a.y - b.y || a.width - b.width;
     return { ours: visibleMathItems(ours).sort(order), tex: visibleMathItems(tex).sort(order) };
   }
-  if (
-    formula.includes(String.raw`\begin{aligned}`) ||
-    hasArrayEnvironment(formula) ||
-    hasCasesEnvironment(formula) ||
-    hasSmallMatrixEnvironment(formula) ||
-    hasMatrixEnvironment(formula) ||
-    hasOperatorNameCommand(formula) ||
-    hasBinomialCommand(formula) ||
-    hasStyledFractionCommand(formula)
-    || hasSubstackCommand(formula)
-    || hasSubarrayEnvironment(formula)
-    || hasSidesetCommand(formula)
-    || /\\stackrel\b/.test(formula)
-    || hasAmsMathCommand(formula)
-    || hasAmsMathDelimiterCommand(formula)
-    || /\\sqrt\[/.test(formula)
-    || hasMathtoolsColonRelationCommand(formula)
-  ) {
-    return {
-      ours: visibleMathItems(ours),
-      tex: visibleMathItems(tex),
-    };
-  }
-  return { ours, tex };
+  // TeX can absorb invisible glue/kerns (including italic correction) into
+  // box dimensions. Their node boundaries are not a rendering difference.
+  // Glyph/rule positions and total width, height and depth remain compared.
+  return { ours: visibleMathItems(ours), tex: visibleMathItems(tex) };
 }
 
 function visibleMathItems(items) {
@@ -427,7 +408,7 @@ function ourTrace(formula, arrayAxisStyle = "ambient") {
   const fontProfile = /\{(?:amsmath|amssymb|mathtools)\}/.test(mathPackagePreamble(formula))
     ? luaLatexAmsMathFontProfile
     : luaLatexDefaultMathFontProfile;
-  const result = layoutTexMathList(parsed.list, { fontProfile: { ...fontProfile, arrayAxisStyle } });
+  const result = layoutTexMathList(parsed.list, { fontProfile: { ...fontProfile, arrayAxisStyle, amsWideAccents: /\{amssymb\}/.test(mathPackagePreamble(formula)) } });
   if (!result.supported) {
     return {
       supported: false,
@@ -599,7 +580,10 @@ function mathPackagePreamble(formula) {
   const mathtoolsPreamble = hasMathtoolsColonRelationCommand(formula)
     ? String.raw`\usepackage{mathtools}` + "\n"
     : "";
-  return amsmathPreamble + amssymbPreamble + mathtoolsPreamble + arrayPreamble;
+  const bmPreamble = /\\bm(?![A-Za-z])/u.test(formula)
+    ? String.raw`\usepackage{bm}` + "\n"
+    : "";
+  return amsmathPreamble + amssymbPreamble + mathtoolsPreamble + arrayPreamble + bmPreamble;
 }
 
 function texSource(formula, options = {}) {

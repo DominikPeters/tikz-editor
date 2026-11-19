@@ -40,8 +40,8 @@ import {
   needsValues,
   valueEditorFields,
   deadBreaks,
-  inAlignment,
   inListFlow,
+  inValue,
   pasteAt,
   type ClipboardPayload,
   lineEndable,
@@ -61,7 +61,8 @@ import {
   smartQuote,
   type EditOutcome,
 } from "../operations/index.js";
-import { childIndex } from "../tree/navigate.js";
+import { childIndex, presentSlots } from "../tree/navigate.js";
+import { controlWordTerminator, PatchSet, protectPatchEnds } from "../operations/source.js";
 import {
   ghostSlots,
   insertionOffset,
@@ -78,6 +79,7 @@ import {
   applyPatches,
   applyTransaction,
   replacementPatches,
+  mapOffset,
   type BufferPatch,
   type BufferRange,
   type MappedPosition,
@@ -397,7 +399,25 @@ export function copySelection(context: IntentContext): ClipboardPayload | null {
 
 /** The position a caret at an offset is at: the outermost there (after `x^2‸`, outside the script). */
 function caretAt(view: EditView, offset: number): Position {
-  const found = view.index.resolve(offset, "after") ?? view.positionAt(offset);
+  const resolved = view.index.resolve(offset, "after");
+  if (!resolved) {
+    // Deleting an item's leading text can leave the caret in horizontal
+    // whitespace that the new tree assigns to the item header. Stay in
+    // that item's flow rather than falling back outside the entire list.
+    const item = view.tree.nodes.find(node => node.kind === "item" && node.delimiters.some(span =>
+      span.from <= offset && offset < span.to && /^\s+$/u.test(view.tree.text.slice(span.from, span.to))));
+    const flow = item && presentSlots(view.tree, item.id).find(slot => slot.role === "flow");
+    if (flow) return { slot: flow.id, index: 0 };
+  }
+  let found = resolved ?? view.positionAt(offset);
+  // At a cell boundary, the table container is not an editable insertion stop.
+  if (!view.isStop(found)) {
+    const stop = view.stopAt(offset);
+    const cell = stop ? editSlotAt(view.tree.slots, stop.slot) : null;
+    // A gap after a row break starts the next row; the previous cell's
+    // nearest stop can have a different mode from the insertion offset.
+    if (stop && cell?.role === "cell" && cell.contentSpan.from <= offset && offset <= cell.contentSpan.to) found = stop;
+  }
   return outsideUnbracedScript(view, found, offset) ?? found;
 }
 
@@ -610,10 +630,13 @@ class Resolver {
    */
   private endRowsBeforeRules(transaction: Transaction): Transaction {
     const { structure, text } = this.context;
-    if (!structure || !this.context.isScopeSession || transaction.patches.length === 0 || !/\\(?:hline|cline|\w*rule|addlinespace)/u.test(text)) {
+    if (!structure || !this.context.isScopeSession || transaction.patches.length === 0) {
       return transaction;
     }
     const applied = applyTransaction(text, transaction);
+    if (!/\\(?:hline|cline|\w*rule|addlinespace)/u.test(applied.text)) {
+      return transaction;
+    }
     const rules = rulesInsideRows(structure(applied.text).tree);
     if (rules.length === 0) {
       return transaction;
@@ -713,10 +736,15 @@ class Resolver {
       return transaction;
     }
     let next = applied.text;
-    for (const span of [...drop].sort((left, right) => right.from - left.from)) {
-      next = next.slice(0, span.from) + next.slice(span.to);
-    }
-    const shift = (offset: number) => drop.reduce((moved, span) => moved - Math.max(0, Math.min(offset, span.to) - span.from), offset);
+    const removed = [...drop].sort((left, right) => right.from - left.from).map(span => {
+      const before = next.slice(0, span.from);
+      const after = next.slice(span.to);
+      const insert = controlWordTerminator(before, after, "text");
+      next = before + insert + after;
+      return { ...span, insert };
+    });
+    const shift = (offset: number) => removed.reduce((moved, span) =>
+      moved - Math.max(0, Math.min(offset, span.to) - span.from) + (offset >= span.from ? span.insert.length : 0), offset);
     return {
       ...transaction,
       patches: replacementPatches(text, next),
@@ -778,10 +806,13 @@ class Resolver {
       // Only plain inline text becomes a formula: not math, and not a table or list it contains.
       // (A block may hold the selection, with room around it; one the selection reaches or is, it may not.)
       const holds = (span: { from: number; to: number }) => span.from <= from && span.to >= to && (span.from < from || span.to > to);
-      const hasMath = view.tree.nodes.some((node) => node.span.from < to && node.span.to > from && (
-        (WRAP_REFUSING_KINDS.has(node.kind) && (node.kind === "formula" || node.kind === "display" || !holds(node.span))) ||
-        // An environment kept whole (an atom) is a block too.
-        (node.kind === "atom" && view.tree.text.startsWith("\\begin", node.span.from))));
+      const hasMath = view.tree.nodes.some((node) => {
+        if (node.span.from >= to || node.span.to <= from) return false;
+        if (WRAP_REFUSING_KINDS.has(node.kind) && (node.kind === "formula" || node.kind === "display" || !holds(node.span))) return true;
+        // Opaque macro arguments can contain math that has no child nodes.
+        return node.kind === "atom" && (view.tree.text.startsWith("\\begin", node.span.from) ||
+          /(?:^|[^\\])(?:\\\\)*\$|\\[([]/u.test(view.tree.text.slice(node.span.from, node.span.to)));
+      });
       // (A `\\left` just before the closing `$` would take it as its delimiter.)
       const delimiterBefore = /\\(?:left|right|middle)\s*$/u.test(view.tree.text.slice(Math.max(0, to - 12), to));
       if (text === "$" && from < to && start.slot === end.slot && editSlotAt(view.tree.slots, start.slot).mode === "text" && !hasMath && !delimiterBefore && !this.crossesStructure()) {
@@ -903,17 +934,14 @@ class Resolver {
       const brace = parent.contentSpan.from;
       return this.outcome(view, { kind: "patch", patches: [{ from: brace, to: parent.contentSpan.to, insert: "{}" }], caret: brace + 1, run: null, placeholder: brace });
     }
-    // A control word left next to a letter would read as one longer name (`\alpha\left(x` → `\alpha x`).
-    const removal = (from: number, to: number, insert: string): BufferPatch =>
-      ({ from, to, insert: insert === "" && /\\[A-Za-z]+$/u.test(text.slice(0, from)) && /^[A-Za-z]/u.test(text.slice(to)) ? " " : insert });
-    const patches: BufferPatch[] = [
-      removal(left.from, left.to, scripted ? "{" : ""),
-      ...middles.map((middle) => {
-        const delimiter = text.slice(middle.span.from + "\\middle".length, middle.span.to).trim();
-        return removal(middle.span.from, middle.span.to, delimiter === "." ? "" : delimiter);
-      }),
-      removal(right.from, right.to, scripted ? "}" : ""),
-    ];
+    const set = new PatchSet().replace(left, scripted ? "{" : "");
+    for (const middle of middles) {
+      const delimiter = text.slice(middle.span.from + "\\middle".length, middle.span.to).trim();
+      set.replace(middle.span, delimiter === "." ? "" : delimiter);
+    }
+    // Merge touching removals before checking the resulting seams: an empty
+    // pair after \quad and before x must leave a command terminator.
+    const patches = protectPatchEnds(text, set.replace(right, scripted ? "}" : "").patches(), "math");
     // The caret stays at the content's edge it was at.
     const at: MappedPosition = direction === "backward" ? { offset: left.from + 1, assoc: 1 } : { offset: right.from + 1, assoc: -1 };
     return this.transaction(patches, { kind: "mapped", anchor: at, focus: at }, { group: "own-step" });
@@ -1104,7 +1132,14 @@ class Resolver {
       const after = { slot: requireDefined(editNodeAt(view.tree.nodes, ghost.node).parent, "Missing required editNodeAt(view.tree.nodes, ghost.node).parent"), index: childIndex(view.tree, ghost.node) + 1 };
       return this.outcome(view, typeCharacter(view, after, kind === "sup" ? "^" : "_", NO_INTERACTION, at));
     }
-    return this.outcome(view, { kind: "patch", patches: [{ from: at, to: at, insert: "[]" }], caret: at + 1, run: null, exact: true });
+    const node = editNodeAt(view.tree.nodes, ghost.node);
+    const protect = kind === "index" && (this.context.title === true ||
+      (node.parent != null && insideOptional(view, node.parent)));
+    const patches = protect
+      ? [{ from: node.span.from, to: node.span.from, insert: "{" }, { from: at, to: at, insert: "[]" },
+        { from: node.span.to, to: node.span.to, insert: "}" }]
+      : [{ from: at, to: at, insert: "[]" }];
+    return this.outcome(view, { kind: "patch", patches, caret: at + 1 + (protect ? 1 : 0), run: null, exact: true });
   }
 
   pickCompletion(index: number): IntentResolution {
@@ -1354,6 +1389,7 @@ class Resolver {
       return new Resolver({ ...this.context, interaction: NO_INTERACTION }).insertText(char, true);
     }
     if (chip.name === "") {
+      if (inValue(view, chip.at)) return this.keepSelection(NO_INTERACTION);
       const symbol = commitControlSymbol(view, caret, chip.at, char, chip.held);
       if (!symbol) {
         return this.keepSelection(NO_INTERACTION);
@@ -1447,7 +1483,13 @@ class Resolver {
     side: string,
     delimiter: string
   ): IntentResolution | null {
+    // Value arguments are dimensions, options or identifiers, not rendered
+    // prose or math; delimiter formulas cannot stand in them.
+    if (inValue(view, chip.at)) {
+      return this.keepSelection(NO_INTERACTION);
+    }
     const mode = editSlotAt(view.tree.slots, caret.slot).mode;
+    if (mode === "verbatim") return this.keepSelection(NO_INTERACTION);
     // A bare `]` would end the optional argument it is in (`\bibitem[A$\right]$`): the bracket by name.
     const bracketed = this.context.title === true || insideOptional(view, caret.slot);
     const named = bracketed && delimiter === "]" ? "\\rbrack" : bracketed && delimiter === "[" ? "\\lbrack" : delimiter;
@@ -1470,7 +1512,7 @@ class Resolver {
     if (!written) {
       return null;
     }
-    const committed = this.commitOutcome(view, written);
+    const committed = this.commitOutcome(view, braceUnbracedArgument(view, caret, written));
     return chip.held ? committed : this.withPendingCloser(committed);
   }
 
@@ -1586,7 +1628,7 @@ class Resolver {
       return new Resolver({ ...this.context, interaction: NO_INTERACTION }).move(motion);
     }
     // A control word must not run into a letter where the `\right` leaves or lands (`\alpha\right)x`, `\right\rangle x`).
-    const leaving = /\\[A-Za-z]+$/u.test(text.slice(0, token.from)) && /^[A-Za-z]/u.test(text.slice(token.to)) ? " " : "";
+    const leaving = controlWordTerminator(text.slice(0, token.from), text.slice(token.to), "math");
     const landing = target > at ? target + (token.to - token.from) : target;
     const removal = { from: token.from, to: token.to, insert: leaving };
     const insertion = { from: landing, to: landing, insert: apart(closer, text, landing) };
@@ -1651,9 +1693,10 @@ class Resolver {
     }
     const closer = requireArrayValue(pair.delimiters, 1);
     const insert = `\\right${char}`;
-    const caret = chip.at - (closer.to - closer.from) + insert.length;
+    const leaving = controlWordTerminator(text.slice(0, closer.from), text.slice(closer.to), "math");
+    const caret = chip.at - (closer.to - closer.from) + leaving.length + insert.length;
     return this.transaction(
-      [{ from: closer.from, to: closer.to, insert: "" }, { from: chip.at, to: chip.at, insert: apart(insert, text, chip.at) }],
+      [{ from: closer.from, to: closer.to, insert: leaving }, { from: chip.at, to: chip.at, insert: apart(insert, text, chip.at) }],
       { kind: "absolute", anchor: caret, focus: caret },
       { group: "own-step" }
     );
@@ -1672,6 +1715,7 @@ class Resolver {
       // Nothing typed yet: the chip just closes.
       return this.keepSelection(NO_INTERACTION);
     }
+    if (inValue(view, chip.at)) return this.keepSelection(NO_INTERACTION);
     const caret = caretAt(view, chip.at);
     const mode = editSlotAt(view.tree.slots, caret.slot).mode;
     const name = chipCommitName(commands, mode, chip.name, chip.selected, view.tree.text, accept, this.pendingCloserText(view));
@@ -1686,10 +1730,17 @@ class Resolver {
       // A line break with no line to end (at an item's start, after a blank line).
       return this.keepSelection(NO_INTERACTION);
     }
-    const rowLevel = editSlotAt(view.tree.slots, caret.slot).role === "cell" || editNodeAt(view.tree.nodes, editSlotAt(view.tree.slots, caret.slot).node).kind === "alignment";
-    if (TABLE_RULES.has(name) && !(rowLevel && inAlignment(view, caret.slot))) {
-      // Outside a table, or inside something in a cell (a script, a group), TeX has no row for a rule ("Misplaced \noalign").
-      return this.keepSelection(NO_INTERACTION);
+    if (TABLE_RULES.has(name)) {
+      const slot = editSlotAt(view.tree.slots, caret.slot);
+      const owner = editNodeAt(view.tree.nodes, slot.node);
+      const alignment = owner.kind === "alignment" ? owner : owner.kind === "row" && owner.parent != null
+        ? editNodeAt(view.tree.nodes, editSlotAt(view.tree.slots, owner.parent).node) : null;
+      // Rules need a row boundary. Math rendering supports hline in arrays;
+      // other math alignments cannot display table rules safely.
+      if (alignment?.kind !== "alignment" ||
+        !(alignment.mode === "text" || (alignment.command === "array" && name === "hline"))) {
+        return this.keepSelection(NO_INTERACTION);
+      }
     }
     if ((name === "item" || name === "bibitem") && !inListFlow(view, caret.slot)) {
       // Outside a list, TeX has a "lonely \item".
@@ -1793,6 +1844,16 @@ class Resolver {
     return this.context.positions ? view.representative(this.rawEnds(view).focus) : caretAt(view, this.from);
   }
 
+  /** A source-coordinate fallback still lands on editable tree stops. */
+  private selectUnrenderedMotion(view: EditView | null, next: number, motion: Extract<Intent, { type: "move" }>): IntentResolution {
+    if (view) {
+      const stop = view.stopAt(next);
+      if (!stop) return NONE;
+      return this.selectPositions(view, { anchor: motion.extend ? this.rawEnds(view).anchor : stop, focus: stop });
+    }
+    return motion.extend ? this.select(this.context.anchor, next) : this.select(next, next);
+  }
+
   move(motion: Extract<Intent, { type: "move" }>): IntentResolution {
     if (this.context.surface !== "canvas") {
       return NONE;
@@ -1814,9 +1875,9 @@ class Resolver {
     const { unit } = motion;
     if (unit === "word") {
       // (⌥←/⌥→ are native but with a `\right` pending; should one arrive anyway, it moves by source word.)
-      const { text, anchor, focus } = this.context;
+      const { text, focus } = this.context;
       const next = motion.dir === "left" || motion.dir === "up" ? previousWordBoundary(text, focus) : nextWordBoundary(text, focus);
-      return motion.extend ? this.select(anchor, next) : this.select(next, next);
+      return this.selectUnrenderedMotion(view, next, motion);
     }
     if (view && motion.unit === "item" && (motion.dir === "left" || motion.dir === "right")) {
       return this.moveOnTree(view, motion.dir === "left" ? -1 : 1, motion.extend);
@@ -1831,7 +1892,7 @@ class Resolver {
       return this.selectMotionResult(rendered);
     }
     // No rendered domain: source-character motion.
-    const { text, anchor, focus } = this.context;
+    const { text, focus } = this.context;
     const backward = motion.dir === "left" || motion.dir === "up";
     let next: number;
     switch (unit) {
@@ -1851,7 +1912,7 @@ class Resolver {
       case "line":
         return NONE;
     }
-    return motion.extend ? this.select(anchor, next) : this.select(next, next);
+    return this.selectUnrenderedMotion(view, next, motion);
   }
 
   /**
@@ -1874,7 +1935,9 @@ class Resolver {
   }
 
   private toggleResult(result: TextFormatToggleResult | null): IntentResolution {
-    if (!result || gluesControlWords(this.context.text, result.nextText) || this.changesConstructs(result.nextText)) {
+    if (!result) return NONE;
+    result = this.protectOptionalFormatResult(result);
+    if (gluesControlWords(this.context.text, result.nextText) || this.changesConstructs(result.nextText)) {
       return NONE;
     }
     return this.transaction(
@@ -1884,12 +1947,37 @@ class Resolver {
     );
   }
 
+  /** Keep an optional argument's grouping when removing a style exposes `]`. */
+  private protectOptionalFormatResult(result: TextFormatToggleResult): TextFormatToggleResult {
+    const view = this.context.structure && this.context.isScopeSession ? this.currentView(this.context.structure) : null;
+    if (!view) return result;
+    const patches = replacementPatches(this.context.text, result.nextText);
+    const optional = view.tree.slots.filter((slot) =>
+      view.tree.text[slot.contentSpan.to] === "]" &&
+      editNodeAt(view.tree.nodes, slot.node).delimiters.some((span) => span.from === slot.contentSpan.to) &&
+      patches.every((patch) => slot.contentSpan.from <= patch.from && patch.to <= slot.contentSpan.to))
+      .sort((a, b) => (a.contentSpan.to - a.contentSpan.from) - (b.contentSpan.to - b.contentSpan.from))[0];
+    if (!optional) return result;
+    const from = mapOffset(patches, optional.contentSpan.from, -1);
+    const to = mapOffset(patches, optional.contentSpan.to, 1);
+    const nextTree = requireDefined(this.context.structure, "Missing edit structure")(result.nextText).tree;
+    if (nextTree.slots.some((slot) => slot.contentSpan.from === from && slot.contentSpan.to === to)) return result;
+    const shifted = (offset: number) => offset < from ? offset : offset <= to ? offset + 1 : offset + 2;
+    return {
+      nextText: result.nextText.slice(0, from) + "{" + result.nextText.slice(from, to) + "}" + result.nextText.slice(to),
+      selectionStart: shifted(result.selectionStart),
+      selectionEnd: shifted(result.selectionEnd),
+    };
+  }
+
   /**
    * Format wraps must not swallow structure: a selection containing an
    * `\item` or environment boundary would wrap it into the command
-   * argument. Removing an active wrapper is always allowed.
+   * argument. Removing an active wrapper is allowed outside opaque value arguments.
    */
   private formatAllowed(name: TextFormatCommandName): boolean {
+    const view = this.view;
+    if (view && [this.from, this.to].some(at => inValue(view, at))) return false;
     if (activeTextFormatWrapper(this.context.text, this.from, this.to, name)) {
       return true;
     }
@@ -1965,8 +2053,8 @@ class Resolver {
 
   /**
    * Whether a text-level format toggle changed the source of a construct
-   * inside the selection (`\\footnote{\\textit{}}` losing its empty
-   * `\\textit{}`): it may add or remove wrappers around them, never inside.
+   * inside the selection or moved it into another mode: a text-only
+   * footnote inside a wrapper must not become a literal command in math.
    */
   private changesConstructs(next: string): boolean {
     const view = this.context.structure && this.context.isScopeSession ? this.currentView(this.context.structure) : null;
@@ -1974,9 +2062,12 @@ class Resolver {
       return false;
     }
     const { tree } = view;
+    const nextTree = requireDefined(this.context.structure, "Missing edit structure")(next).tree;
     return tree.nodes.some((node) =>
       node.span.from >= this.from && node.span.to <= this.to && view.role(node.id) === "construct" &&
-      node.kind !== "formula" && !next.includes(tree.text.slice(node.span.from, node.span.to)));
+      node.kind !== "formula" && !nextTree.nodes.some((candidate) =>
+        candidate.kind === node.kind && candidate.mode === node.mode &&
+        next.slice(candidate.span.from, candidate.span.to) === tree.text.slice(node.span.from, node.span.to)));
   }
 
   /**

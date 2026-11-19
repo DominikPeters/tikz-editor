@@ -23,6 +23,10 @@ function tree(text: string) {
 
 describe("edit tree binding", () => {
 
+  it("bounds a comment at a recovered list boundary", () => {
+    tree("\\relax \\begin{enumerate}\\item<1-> \\uncover<1>{{\\scriptsize\\color{blue}\\centering\\begin{columns}[onlytextwidth,b]\\begin{column}{.46\\textwidth}Left\\end{column}\\begin{column}{.5\\textwidth}R\n\n\\uncover<1>{{\\scriptsize\\color{blue}\\centering \\textbf{}%ight\\\\Second\\end{column}\\end{columns}\\par}}\\item After.\\end{enumerate}\\only<2>{}");
+  });
+
   it("binds listing characters literally and alltt controls structurally", () => {
     const source = R`\begin{lstlisting}[language=Python]
 \note{literal} % $ _ { }
@@ -38,6 +42,17 @@ describe("edit tree binding", () => {
     expect(alltt.diagnostics).toEqual([]);
     expect(alltt.nodes.some(node => node.command === "textbf")).toBe(true);
     expect(alltt.nodes.some(node => node.kind === "formula")).toBe(false);
+  });
+
+  it.each([
+    R`$a^\left\right)^+b^2$`, R`$a_\left\right)x$`,
+    R`$\frac\left\right)2$`, R`$\sqrt\left\right)$`,
+  ])("keeps delimiter recovery inside its unbraced argument: %s", (source) => {
+    const built = tree(source);
+    const pair = built.nodes.find(node => node.kind === "delimited")!;
+    expect(pair.span.to).toBe(source.indexOf(R`\right`));
+    expect(pair.delimiters).toHaveLength(1);
+    expect(built.diagnostics.some(diagnostic => diagnostic.code === "missing-argument")).toBe(true);
   });
 
   it("binds scripts by TeX's single-token rule", () => {

@@ -188,6 +188,23 @@ describe("value checks", () => {
     expect(target.text).toBe(text);
   });
 
+
+  it.each([
+    [">{$}c<{$}", "l", String.raw`\left|x\right|`, false],
+    ["l", ">{$}c<{$}", "$x$", false],
+    [">{$}c<{$}l", "ll", " & Keep", true],
+    ["ll", ">{$}c<{$}l", " & Keep", true],
+    [">{$}c<{$}l", ">{$}r<{$}l", "x & Keep", true],
+    ["lll", ">{$}c<{$}>{$}c<{$}l", String.raw`\multicolumn{2}{c}{Keep} & Tail`, true],
+    ["lll", ">{$}c<{$}>{$}c<{$}l", String.raw`\multicolumn{2}{c}{Keep} & Tail\\a & b & c`, false],
+  ])("checks populated cell modes for %s to %s", (before, after, body, allowed) => {
+    const target = session(`\\begin{tabular}{${before}}${body}‸\\end{tabular}`);
+    const source = target.text;
+    const from = source.indexOf(before);
+    press(target, { kind: "setValues", edits: [{ span: { from, to: from + before.length }, text: after }] });
+    expect(target.text).toBe(allowed ? source.slice(0, from) + after + source.slice(from + before.length) : source);
+  });
+
   it("keeps a table's columns: a specification cannot take fewer than a row uses", () => {
     const text = "\\begin{tabular}{lr}\nA & 1\\\\\nB & 2\n\\end{tabular}";
     const target = session(`‸${text}`);

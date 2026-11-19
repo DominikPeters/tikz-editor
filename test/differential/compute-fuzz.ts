@@ -138,10 +138,27 @@ function stripRunIdentities(text: string): string {
     : text;
 }
 
+/**
+ * Curve controls have no literal coordinate token. Their generated identity
+ * span is a synthetic allocation (document length plus a handle counter),
+ * retained by reuse. Real source ownership, operation IDs and geometry remain
+ * observable and are compared in full.
+ */
+export function snapshotForOutputComparison(snapshot: SessionSnapshot): SessionSnapshot {
+  const handles = (values: SessionSnapshot["editHandles"]) => values.map(handle =>
+    handle.curveEdit && handle.identityRef?.sourceKind === "expanded-handle"
+      ? { ...handle, identityRef: { ...handle.identityRef, sourceSpan: { from: 0, to: 0 } } }
+      : handle);
+  return { ...snapshot, editHandles: handles(snapshot.editHandles),
+    semanticResult: snapshot.semanticResult
+      ? { ...snapshot.semanticResult, editHandles: handles(snapshot.semanticResult.editHandles) }
+      : snapshot.semanticResult };
+}
+
 export function compareResponses(expected: ComputeResponse, actual: { snapshot: SessionSnapshot; diagnostics: unknown }): string[] {
   return diffValues(
-    { snapshot: expected.snapshot, diagnostics: expected.diagnostics },
-    { snapshot: actual.snapshot, diagnostics: actual.diagnostics },
+    { snapshot: snapshotForOutputComparison(expected.snapshot), diagnostics: expected.diagnostics },
+    { snapshot: snapshotForOutputComparison(actual.snapshot), diagnostics: actual.diagnostics },
     { ignoredKeys: IGNORED_KEYS, normalizers: { expected: stripRunIdentities, actual: stripRunIdentities } }
   );
 }

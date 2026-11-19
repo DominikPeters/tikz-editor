@@ -77,6 +77,34 @@ describe("TeX recovery", () => {
     expect(recovered(text)).toBe(expected);
   });
 
+  it.each([
+    String.raw`\newcommand{\foo}[1]{$#1}`,
+    String.raw`\renewcommand*\foo[2][{$}]{$#1}`,
+    "\\providecommand{\\foo}% definition comment\n[1]{$#1}",
+    String.raw`\DeclareRobustCommand{\foo}{$}`,
+    String.raw`\newenvironment{foo}[1]{\begin{itemize}$#1}{\end{itemize}}`,
+    String.raw`\NewDocumentCommand{\foo}{m}{$#1}`,
+    String.raw`\NewDocumentCommand\foo{m}{$#1}`,
+    String.raw`\RenewDocumentEnvironment{foo}{m}{$#1}{$}`,
+    String.raw`\def\foo#1{$#1}`, "\\gdef\\foo$#1${$#1}",
+    String.raw`\newcolumntype{Y}[1]{>{$}#1<{$}}`,
+    String.raw`\defbeamertemplate*{foo}{bar}[1]{\begin{itemize}$#1}`,
+    String.raw`\setbeamertemplate{foo}{\begin{itemize}$}`,
+    String.raw`\addtobeamertemplate{foo}{$}{$}`,
+    String.raw`\setbeamertemplate{blocks}[rounded][shadow=true]`,
+    String.raw`\defbeamertemplate{foo}{bar}[1]{#1}\setbeamertemplate{foo}[bar]{$}`,
+    String.raw`\defbeamertemplate<presentation>*{foo}{bar}{$}`,
+    String.raw`\defbeamertemplate{foo}{bar}{$}[action]{$}`,
+
+  ])("ends inert definition arguments before subsequent math: %s", (definition) => {
+    expect(scanTexRecovery(definition + " ${}$2")).toEqual({ closers: [], strays: [] });
+    const incomplete = definition + " $x";
+    expect(scanTexRecovery(incomplete).closers).toEqual([{
+      opener: { from: definition.length + 1, to: definition.length + 2 },
+      kind: "math", at: incomplete.length, closer: "$",
+    }]);
+  });
+
   it("keeps an opener with nothing to close as source", () => {
     expect(recovered("a $\n\nc \\textbf{")).toBe("a ⟪$⟫\n\nc \\textbf⟪{⟫");
     expect(recovered("$\\frac{a}{$")).toBe("$\\frac{a}⟪{⟫$");

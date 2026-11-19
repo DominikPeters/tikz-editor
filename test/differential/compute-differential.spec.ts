@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { coldCompute, compareResponses, describeFailure, generateOps, longDeck, longFigure, runOps, shrinkOps, type FuzzDocument, type FuzzOp, type FuzzReach } from "./compute-fuzz.js";
+import type { EditHandle } from "../../packages/core/src/semantic/types.js";
+import { worldPoint } from "../../packages/core/src/coords/points.js";
+import { pt } from "../../packages/core/src/coords/scalars.js";
 import { freshComputeModule } from "./compute-instances.js";
 
 // Scale with COMPUTE_FUZZ_CASES / COMPUTE_FUZZ_STEPS / COMPUTE_FUZZ_SEED;
@@ -49,6 +52,33 @@ describe("compute differential fuzzing", () => {
       const other = await (await freshComputeModule()).computeSnapshot(request);
       expect(compareResponses(await coldCompute(request), other)).toEqual([]);
     }
+  });
+
+  it("compares synthetic curve controls by their real targets after recovered long-figure edits", async () => {
+    const result = await runOps(DOCUMENT_SETS[10], [
+      { kind: "edit", doc: 0, edit: { from: 2167, to: 2167, insert: "\\end{frame}\n" }, origin: "source-editor", changedSourceIds: null, drag: false, render: true, note: "source typing" },
+      { kind: "edit", doc: 0, edit: { from: 2720, to: 2723, insert: "1.64" }, origin: "source-editor", changedSourceIds: null, drag: false, render: true, note: "source typing" }
+    ]);
+    expect(result.failure).toBeNull();
+  }, 30_000);
+
+  it("still detects real source, operation and geometry changes on generated curve controls", async () => {
+    const expected = await coldCompute({ id: "curve-comparison", source: String.raw`\begin{tikzpicture}
+\foreach \x in {0,1} \draw (\x,0) to[bend left=20] ++(1,0);
+\end{tikzpicture}` });
+    const target = expected.snapshot.editHandles.find(handle => handle.curveEdit && handle.identityRef?.sourceKind === "expanded-handle");
+    if (!target) throw new Error("Expected a generated curve control");
+    const changed = (mutate: (handle: EditHandle) => EditHandle) => ({ ...expected, snapshot: { ...expected.snapshot,
+      editHandles: expected.snapshot.editHandles.map(handle => handle.id === target.id ? mutate(handle) : handle) } });
+    expect(compareResponses(expected, changed(handle => ({ ...handle, identityRef: { ...handle.identityRef!,
+      sourceSpan: { from: handle.identityRef!.sourceSpan.from + 1, to: handle.identityRef!.sourceSpan.to + 1 } } })))).toEqual([]);
+    for (const actual of [
+      changed(handle => ({ ...handle, sourceRef: { ...handle.sourceRef,
+        sourceSpan: { from: handle.sourceRef.sourceSpan.from + 1, to: handle.sourceRef.sourceSpan.to + 1 } } })),
+      changed(handle => ({ ...handle, world: worldPoint(pt(handle.world.x + 1), handle.world.y) })),
+      changed(handle => handle.handleType === "curve-control"
+        ? { ...handle, curveEdit: { ...handle.curveEdit, operationItemId: "wrong-operation" } } : handle)
+    ]) expect(compareResponses(expected, actual).length).toBeGreaterThan(0);
   });
 
   it("matches a cold render after every request the app would send", async () => {

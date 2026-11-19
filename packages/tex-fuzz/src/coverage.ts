@@ -21,6 +21,19 @@ export interface TexFuzzCoverage {
   readonly unicodeNormalizationCounts: Readonly<Record<string, number>>;
 }
 
+type TexFuzzCoverageTelemetry = Omit<TexFuzzCoverage, "featurePairCounts" | "featureTripleCounts">;
+
+/** Lossless case memberships defer the potentially cubic pair/triple tables. */
+export interface TexFuzzCompactCoverage extends TexFuzzCoverageTelemetry {
+  readonly encoding: "feature-memberships-v1";
+  readonly featureMemberships: Readonly<Record<string, readonly number[]>>;
+}
+
+type TexFuzzCompactCoverageInput = Omit<TexFuzzCompactCoverage, "version" | "encoding"> & {
+  readonly version: number;
+  readonly encoding: string;
+};
+
 type MutableCounts = Record<string, number>;
 
 interface MutableCoverage {
@@ -37,19 +50,60 @@ interface MutableCoverage {
 }
 
 export function measureTexFuzzCoverage(cases: readonly TexFuzzCoverageCase[]): TexFuzzCoverage {
+  const coverage = collectCaseCoverage(cases);
+  countFeatureCombinations(featureMemberships(cases, coverage), coverage);
+  return freezeCoverage(coverage);
+}
+
+export function measureTexFuzzCompactCoverage(cases: readonly TexFuzzCoverageCase[]): TexFuzzCompactCoverage {
+  const coverage = collectCaseCoverage(cases);
+  return {
+    ...freezeTelemetry(coverage),
+    encoding: "feature-memberships-v1",
+    featureMemberships: Object.fromEntries(featureMemberships(cases, coverage).map(({ name, bits }) => [name, Array.from(bits)])),
+  };
+}
+
+/** Restore the exhaustive report when an analysis actually needs every tuple. */
+export function expandTexFuzzCompactCoverage(report: TexFuzzCompactCoverageInput): TexFuzzCoverage {
+  if (report.version !== TEX_FUZZ_COVERAGE_SCHEMA_VERSION || report.encoding !== "feature-memberships-v1") {
+    throw new RangeError("Unsupported compact TeX fuzz coverage format.");
+  }
+  if (!Number.isSafeInteger(report.caseCount) || report.caseCount < 0) throw new RangeError("Invalid coverage case count.");
+  const words = Math.ceil(report.caseCount / 32);
+  if (Object.keys(report.featureMemberships).length !== Object.keys(report.featureCounts).length) {
+    throw new RangeError("Coverage membership features do not match the telemetry.");
+  }
+  const members = Object.keys(report.featureCounts).sort().map(name => {
+    const bits = report.featureMemberships[name];
+    if (bits?.length !== words || bits.some(word => !Number.isSafeInteger(word) || word < 0 || word > 0xffffffff)) {
+      throw new RangeError(`Invalid coverage membership for ${name}.`);
+    }
+    const tail = report.caseCount & 31;
+    if ((tail !== 0 && ((bits[words - 1] ?? 0) >>> tail) !== 0)
+      || bits.reduce((sum, word) => sum + bitCount(word), 0) !== report.featureCounts[name]) {
+      throw new RangeError(`Invalid coverage membership count for ${name}.`);
+    }
+    return { name, bits: new Uint32Array(bits) };
+  });
+  const coverage: MutableCoverage = { ...report, featurePairCounts: {}, featureTripleCounts: {} };
+  countFeatureCombinations(members, coverage);
+  return freezeCoverage(coverage);
+}
+
+function collectCaseCoverage(cases: readonly TexFuzzCoverageCase[]): MutableCoverage {
   const coverage = emptyMutableCoverage();
   for (const caseData of cases) {
     const features = [...new Set(caseData.features)].sort();
     addCase(coverage, caseData, features);
   }
-  countFeatureCombinations(cases, coverage);
-  return freezeCoverage(coverage);
+  return coverage;
 }
 
 // Count exact co-occurrences with case-membership bitsets. Enumerating and
 // serializing every tuple in every dense case becomes prohibitively expensive
 // as the symbol vocabulary expands; each output key now needs serialization once.
-function countFeatureCombinations(cases: readonly TexFuzzCoverageCase[], coverage: MutableCoverage): void {
+function featureMemberships(cases: readonly TexFuzzCoverageCase[], coverage: MutableCoverage) {
   const names = Object.keys(coverage.featureCounts).sort();
   const words = Math.ceil(cases.length / 32);
   const members = names.map((name) => ({ name, bits: new Uint32Array(words) }));
@@ -62,9 +116,14 @@ function countFeatureCombinations(cases: readonly TexFuzzCoverageCase[], coverag
       bits[word] = (bits[word] ?? 0) | (1 << (index & 31));
     }
   });
+  return members;
+}
+
+function countFeatureCombinations(members: readonly { readonly name: string; readonly bits: Uint32Array }[], coverage: MutableCoverage): void {
+  const words = Math.ceil(coverage.caseCount / 32);
   const pair = new Uint32Array(words);
   for (const [a, first] of members.entries()) {
-    for (let b = a + 1; b < names.length; b += 1) {
+    for (let b = a + 1; b < members.length; b += 1) {
       const second = members[b];
       if (!second) throw new Error("Missing second coverage membership.");
       let pairCount = 0;
@@ -75,7 +134,7 @@ function countFeatureCombinations(cases: readonly TexFuzzCoverageCase[], coverag
       }
       if (!pairCount) continue;
       coverage.featurePairCounts[texFuzzCombinationKey([first.name, second.name])] = pairCount;
-      for (let c = b + 1; c < names.length; c += 1) {
+      for (let c = b + 1; c < members.length; c += 1) {
         const third = members[c];
         if (!third) throw new Error("Missing third coverage membership.");
         let count = 0;
@@ -348,11 +407,17 @@ function emptyMutableCoverage(): MutableCoverage {
 
 function freezeCoverage(coverage: MutableCoverage): TexFuzzCoverage {
   return {
+    ...freezeTelemetry(coverage),
+    featurePairCounts: sortedCounts(coverage.featurePairCounts),
+    featureTripleCounts: sortedCounts(coverage.featureTripleCounts),
+  };
+}
+
+function freezeTelemetry(coverage: MutableCoverage): TexFuzzCoverageTelemetry {
+  return {
     version: TEX_FUZZ_COVERAGE_SCHEMA_VERSION,
     caseCount: coverage.caseCount,
     featureCounts: sortedCounts(coverage.featureCounts),
-    featurePairCounts: sortedCounts(coverage.featurePairCounts),
-    featureTripleCounts: sortedCounts(coverage.featureTripleCounts),
     nodeKindCounts: sortedCounts(coverage.nodeKindCounts),
     nodeDepthCounts: sortedCounts(coverage.nodeDepthCounts),
     maximumDepthCounts: sortedCounts(coverage.maximumDepthCounts),

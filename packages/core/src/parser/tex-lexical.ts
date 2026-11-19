@@ -158,3 +158,22 @@ export function readTexBalancedDelimited(
   }
   return null;
 }
+
+/** Listings looks for options on its opening line. Braces protect a closing bracket. */
+export function readListingsOptions(source: string, from: number, limit: number): Span | null {
+  let start = from;
+  while (start < limit && /[ \t]/u.test(source.charAt(start))) start += 1;
+  if (start === limit || source[start] !== "[") return null;
+  for (let cursor = start + 1; cursor < limit; cursor += 1) {
+    const char = source[cursor];
+    if (char === "]") return { from: start, to: cursor + 1 };
+    if (char === "\\") cursor += 1;
+    if (char === "%") cursor = skipTexComment(source, cursor) - 1;
+    if (char === "{") {
+      const group = readTexBalancedDelimited(source, cursor, "{", "}", limit);
+      if (!group) return null;
+      cursor = group.to - 1;
+    }
+  }
+  return null;
+}

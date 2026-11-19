@@ -8,6 +8,7 @@ import {
   generateTexFuzzCase,
   generateTexFuzzEditSequence,
   measureTexFuzzCoverage,
+  measureTexFuzzCompactCoverage,
   planTexFuzzArtifacts,
   projectTexFuzzCaseToParagraph,
   texFuzzParagraphOracleWidth,
@@ -43,10 +44,12 @@ const { values } = parseArgs({
     profile: { type: "string", default: "aggressive" },
     out: { type: "string", default: "artifacts/tex-fuzz/vertical-slice.json" },
     "coverage-out": { type: "string", default: "artifacts/tex-fuzz/coverage.json" },
+    "coverage-format": { type: "string", default: "compact" },
     "artifacts-dir": { type: "string", default: "artifacts/tex-fuzz/findings" },
     "oracle-cache-dir": { type: "string", default: "artifacts/tex-fuzz/oracle-cache" },
     "oracle-workers": { type: "string", default: "2" },
     "no-oracle": { type: "boolean", default: false },
+    "skip-support-self-check": { type: "boolean", default: false },
     "stateful-cases": { type: "string", default: "25" },
     "malformed-cases": { type: "string", default: "0" },
     "prefix-base-cases": { type: "string", default: "0" },
@@ -110,6 +113,7 @@ if (!Number.isSafeInteger(count) || count <= 0 || !Number.isSafeInteger(seed)
   || !["diagnostic", "fail"].includes(oracleGeometryPolicy)) {
   throw new Error("Case counts and --seed must be valid integers; --oracle-workers and --prefix-limit-per-case must be positive.");
 }
+if (!["full", "compact"].includes(values["coverage-format"])) throw new Error("--coverage-format must be full or compact.");
 
 const drift = texFuzzRegistryDrift();
 if (drift.missing.length > 0 || drift.staleExclusions.length > 0) {
@@ -137,6 +141,8 @@ for (let index = 0; index < count; index += 1) {
   }
 }
 
+const candidateGenerationMs = performance.now() - generationStarted;
+const qualificationStarted = performance.now();
 const qualificationRunner = createTexFuzzNativeRunner({ timeoutMs: nativeTimeoutMs });
 let supportedLane;
 try {
@@ -154,6 +160,7 @@ try {
     return record.support.supported;
   });
 } finally { await qualificationRunner.close(); }
+const supportedQualificationMs = performance.now() - qualificationStarted;
 const supportedGenerated = [...supportedLane.cases];
 
 const malformedGenerated = Array.from({ length: malformedCount }, (_, index) => {
@@ -170,9 +177,10 @@ const prefixGenerated = validGenerated.slice(0, Math.min(prefixBaseCount, validG
   );
 });
 const generated = [...validGenerated, ...supportedGenerated, ...malformedGenerated, ...prefixGenerated];
-const projectionControls = validGenerated
+const projectionControls = [...new Map(validGenerated
   .slice(0, Math.min(projectionControlCount, validGenerated.length))
-  .map(projectTexFuzzCaseToParagraph);
+  .map(projectTexFuzzCaseToParagraph)
+  .map(caseData => [caseData.source, caseData])).values()];
 const metamorphicCandidates = [...supportedGenerated, ...validGenerated];
 const metamorphicCases = new Set(metamorphicCandidates.slice(0, metamorphicCount));
 const boundaryCases = new Set(metamorphicCandidates.slice(0, boundaryCount));
@@ -281,77 +289,81 @@ for (let index = 0; index < Math.min(statefulCount, generated.length); index += 
 let bundle;
 let oracleSummary = { available: false };
 if (!values["no-oracle"] && commandExists("lualatex")) {
-  const canary = differentialCanaryCase();
-  const calibrationCases = [canary, ...generated.slice(0, 3)].map((item, index) => ({ id: `cal-${index}`, source: item.source }));
-  const calibration = calibrateBatchedTexSupportOracle(calibrationCases);
-  if (!calibration.ok) {
-    throw new Error(`Batched oracle isolation calibration failed for ${calibration.mismatches.join(", ")}.`);
-  }
-  const expected = { fingerprint: differentialSupportFingerprint(canary) };
-  const oursSupported = !texFuzzSourceUsesUnsupportedLiteral(canary.source);
-  const oracleOptions = {
-    batchSize: 64,
-    workers: oracleWorkers,
-    cacheDir: resolve(values["oracle-cache-dir"]),
-  };
-  const initialOracle = await runBatchedTexSupportOracleAsync(
-    [{ id: "canary", source: canary.source }],
-    oracleOptions
-  );
-  const oracleSupported = initialOracle.observations[0]?.supported === true;
-  if (oursSupported === oracleSupported) {
-    throw new Error("Differential support-classification canary did not diverge.");
-  }
-  const shrink = await shrinkTexFuzzCase(canary, expected, async (candidates, context) => {
-    // A failed batch can require at most 2n-1 compilations when recursively
-    // bisected to individual cases. Restrict the attempted prefix so oracle
-    // work can never exceed the shrinker's remaining external-work budget.
-    const attemptedCount = Math.min(candidates.length, Math.floor((context.maxOracleEvaluations + 1) / 2));
-    const attempted = candidates.slice(0, attemptedCount);
-    if (attempted.length === 0) {
-      return {
-        observations: candidates.map(() => null),
-        oracleEvaluations: 0,
-        oracleBudgetExhausted: true,
-      };
+  oracleSummary = { available: true, selfCheck: "skipped", calibrationCompilations: 0 };
+  if (!values["skip-support-self-check"]) {
+    const canary = differentialCanaryCase();
+    const calibrationCases = [canary, ...generated.slice(0, 3)].map((item, index) => ({ id: `cal-${index}`, source: item.source }));
+    const calibration = calibrateBatchedTexSupportOracle(calibrationCases);
+    if (!calibration.ok) {
+      throw new Error(`Batched oracle isolation calibration failed for ${calibration.mismatches.join(", ")}.`);
     }
-    const oracle = await runBatchedTexSupportOracleAsync(
-      attempted.map((item, index) => ({ id: `shrink-${index}`, source: item.source })),
-      { ...oracleOptions, signal: context.signal, deadline: context.deadline }
-    );
-    const observations = attempted.map((candidate, index) => {
-      const candidateOurs = !texFuzzSourceUsesUnsupportedLiteral(candidate.source);
-      const candidateOracle = oracle.observations[index]?.supported === true;
-      return candidateOurs !== candidateOracle ? { fingerprint: differentialSupportFingerprint(candidate) } : null;
-    });
-    return {
-      observations: [...observations, ...candidates.slice(attempted.length).map(() => null)],
-      oracleEvaluations: oracle.stats.compilations,
-      oracleBudgetExhausted: attempted.length < candidates.length,
+    const expected = { fingerprint: differentialSupportFingerprint(canary) };
+    const oursSupported = !texFuzzSourceUsesUnsupportedLiteral(canary.source);
+    const oracleOptions = {
+      batchSize: 64,
+      workers: oracleWorkers,
+      cacheDir: resolve(values["oracle-cache-dir"]),
     };
-  }, { maxCandidates: 200, maxOracleEvaluations: 200, maxTimeMs: 30_000 });
-  bundle = {
-    case: canary,
-    minimizedCase: shrink.minimizedCase,
-    observation: expected,
-    oracleEnvironment: initialOracle.environment,
-    shrink: {
-      candidatesEvaluated: shrink.candidatesEvaluated,
-      oracleEvaluations: shrink.oracleEvaluations,
-      termination: shrink.termination,
-    },
-  };
-  oracleSummary = {
-    available: true,
-    calibrationCompilations: calibration.batched.stats.compilations + calibration.reversed.stats.compilations + calibration.standalone.length,
-    initialCompileMs: Number(initialOracle.stats.elapsedMs.toFixed(1)),
-    cacheHits: initialOracle.stats.cacheHits,
-    shrinkCandidates: shrink.candidatesEvaluated,
-    minimizedSource: shrink.minimizedCase.source,
-  };
+    const initialOracle = await runBatchedTexSupportOracleAsync(
+      [{ id: "canary", source: canary.source }],
+      oracleOptions
+    );
+    const oracleSupported = initialOracle.observations[0]?.supported === true;
+    if (oursSupported === oracleSupported) {
+      throw new Error("Differential support-classification canary did not diverge.");
+    }
+    const shrink = await shrinkTexFuzzCase(canary, expected, async (candidates, context) => {
+      // A failed batch can require at most 2n-1 compilations when recursively
+      // bisected to individual cases. Restrict the attempted prefix so oracle
+      // work can never exceed the shrinker's remaining external-work budget.
+      const attemptedCount = Math.min(candidates.length, Math.floor((context.maxOracleEvaluations + 1) / 2));
+      const attempted = candidates.slice(0, attemptedCount);
+      if (attempted.length === 0) {
+        return {
+          observations: candidates.map(() => null),
+          oracleEvaluations: 0,
+          oracleBudgetExhausted: true,
+        };
+      }
+      const oracle = await runBatchedTexSupportOracleAsync(
+        attempted.map((item, index) => ({ id: `shrink-${index}`, source: item.source })),
+        { ...oracleOptions, signal: context.signal, deadline: context.deadline }
+      );
+      const observations = attempted.map((candidate, index) => {
+        const candidateOurs = !texFuzzSourceUsesUnsupportedLiteral(candidate.source);
+        const candidateOracle = oracle.observations[index]?.supported === true;
+        return candidateOurs !== candidateOracle ? { fingerprint: differentialSupportFingerprint(candidate) } : null;
+      });
+      return {
+        observations: [...observations, ...candidates.slice(attempted.length).map(() => null)],
+        oracleEvaluations: oracle.stats.compilations,
+        oracleBudgetExhausted: attempted.length < candidates.length,
+      };
+    }, { maxCandidates: 200, maxOracleEvaluations: 200, maxTimeMs: 30_000 });
+    bundle = {
+      case: canary,
+      minimizedCase: shrink.minimizedCase,
+      observation: expected,
+      oracleEnvironment: initialOracle.environment,
+      shrink: {
+        candidatesEvaluated: shrink.candidatesEvaluated,
+        oracleEvaluations: shrink.oracleEvaluations,
+        termination: shrink.termination,
+      },
+    };
+    oracleSummary = {
+      available: true,
+      selfCheck: "passed",
+      calibrationCompilations: calibration.batched.stats.compilations + calibration.reversed.stats.compilations + calibration.standalone.length,
+      initialCompileMs: Number(initialOracle.stats.elapsedMs.toFixed(1)),
+      cacheHits: initialOracle.stats.cacheHits,
+      shrinkCandidates: shrink.candidatesEvaluated,
+      minimizedSource: shrink.minimizedCase.source,
+    };
+  }
 
   const core = await import("../packages/core/dist/text/tex/index.js");
-  const projected = selectTexFuzzEscalation(
+  const projectionCandidates = selectTexFuzzEscalation(
     validGenerated.map((caseData, index) => ({
       id: `generated-${index}`,
       source: caseData.source,
@@ -359,6 +371,9 @@ if (!values["no-oracle"] && commandExists("lualatex")) {
     })),
     { controlSampleSize: Math.min(oracleSampleCount, validGenerated.length), seed }
   );
+  const projected = [...new Map(projectionCandidates.map(entry => [
+    `${texFuzzParagraphOracleWidth(entry.caseData)}:${entry.caseData.source}`, entry,
+  ])).values()];
   const paragraphInputs = projected.map(({ id, caseData }) => ({
     id,
     source: caseData.source,
@@ -402,6 +417,8 @@ if (!values["no-oracle"] && commandExists("lualatex")) {
   });
   oracleSummary = {
     ...oracleSummary,
+    paragraphProjection: "fixed-calibration-controls",
+    paragraphProjectionCandidates: projectionCandidates.length,
     generatedParagraphSample: projected.length,
     generatedParagraphCompared: paragraphCompared,
     generatedParagraphFindings: paragraphFindings.length,
@@ -552,14 +569,15 @@ const output = {
     slowest: [...nativeRecords].sort((a, b) => b.elapsedMs - a.elapsedMs).slice(0, 10)
       .map(({ caseData, elapsedMs }) => ({ seed: caseData.seed, profile: caseData.profile, elapsedMs })),
   },
-  timings: { generationMs, nativeMs, coverageMs: 0 },
+  timings: { generationMs, candidateGenerationMs, supportedQualificationMs, nativeMs, coverageMs: 0 },
   drift,
   oracle: oracleSummary,
   mathOracle: mathOracleSummary,
   bundle,
 };
 const coverageStarted = performance.now();
-const coverage = measureTexFuzzCoverage(generated);
+const compactCoverage = values["coverage-format"] === "compact";
+const coverage = compactCoverage ? measureTexFuzzCompactCoverage(generated) : measureTexFuzzCoverage(generated);
 output.timings.coverageMs = performance.now() - coverageStarted;
 const outPath = resolve(values.out);
 const coveragePath = resolve(values["coverage-out"]);
@@ -572,9 +590,10 @@ console.log(JSON.stringify({
   bundle: bundle ? { minimizedSource: bundle.minimizedCase?.source, shrink: bundle.shrink } : undefined,
   coverage: {
     path: coveragePath,
+    format: values["coverage-format"],
     features: Object.keys(coverage.featureCounts).length,
-    pairs: Object.keys(coverage.featurePairCounts).length,
-    triples: Object.keys(coverage.featureTripleCounts).length,
+    pairs: compactCoverage ? "deferred" : Object.keys(coverage.featurePairCounts).length,
+    triples: compactCoverage ? "deferred" : Object.keys(coverage.featureTripleCounts).length,
     maximumDepths: coverage.maximumDepthCounts,
   },
 }, null, 2));
