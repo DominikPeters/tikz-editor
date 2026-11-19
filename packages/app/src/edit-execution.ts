@@ -11,6 +11,7 @@ import { applySourcePatches, composeSourcePatches } from "@tikz-editor/core/edit
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { editedSlice, EMPTY_FRAGMENT } from "@tikz-editor/core/edit/fragment";
 import { drawingLayerOffset, insertDrawingLayer } from "./drawing-layer";
+import { rootDelimitersSurvive } from "./root-inventory";
 import { buildEditParseOptions } from "./edit-parse-options";
 import { documentKindForSource } from "./store/workspace-state";
 import { scanTikzFigures } from "@tikz-editor/core/parser/figure-scan";
@@ -56,17 +57,22 @@ export function executeDocumentEdit(
   if (!nested && activeRootId != null && snapshot.activeRootId != null && snapshot.activeRootId !== activeRootId) {
     return { kind: "unsupported", reason: "The figure is still catching up." };
   }
-  // Positional picture ids cannot be reused after pictures are inserted or
-  // removed: a missing id falls back to the first picture during parsing.
-  if (!nested && ref?.kind === "tikz-figure" && snapshot.source !== source &&
-    scanTikzFigures(source).filter(figure => !figure.isTemplate).length !== snapshot.figures.length) {
-    return { kind: "unsupported", reason: "The figure is still catching up." };
+  if (!nested && ref?.kind === "tikz-figure" && snapshot.source !== source) {
+    const current = scanTikzFigures(source).filter(figure => !figure.isTemplate);
+    const before = snapshot.figures[ref.index];
+    const after = current[ref.index];
+    if (current.length !== snapshot.figures.length || !before || !after ||
+      !rootDelimitersSurvive(snapshot.source, source, before, after)) {
+      return { kind: "unsupported", reason: "The figure is still catching up." };
+    }
   }
   if ((ref?.kind === "beamer-frame-tikz" && ref.layer && snapshot.overlayLayer?.rootId !== activeRootId) ||
     (slideOverlay && context.drawingLayerRootId && context.drawingLayerRootId !== snapshot.overlayLayer?.rootId)) {
     return { kind: "unsupported", reason: "The figure is still catching up." };
   }
-  const span = options.nestedFigureSpan ?? (nested ? resolveNestedEditSpan(context) : null);
+  const span = nested && snapshot.source !== source
+    ? resolveNestedEditSpan(context)
+    : options.nestedFigureSpan ?? (nested ? resolveNestedEditSpan(context) : null);
   const propertyEdit = action.kind === "setProperty" || action.kind === "setProperties";
   if (nested && (!span || (!propertyEdit && !options.geometry && snapshot.source !== source))) {
     return { kind: "unsupported", reason: "The figure is still catching up." };
@@ -170,8 +176,20 @@ export function resolveNestedEditSpan(context: EditExecutionContext): Span | nul
     return span.from === expected.from && span.to === expected.to ? span : null;
   }
   const frame = scanBeamerDocument(source).frames[ref.frameIndex];
-  if (!frame) return null;
-  return ref.layer
-    ? beamerOverlayPicturesIn(createBeamerSyntaxContext(source), frame.bodySpan)[ref.index]?.span ?? null
-    : frame.children[ref.index]?.span ?? null;
+  const previousFrame = scanBeamerDocument(snapshot.source).frames[ref.frameIndex];
+  if (!frame || !previousFrame) return null;
+  if (!ref.layer) {
+    const before = previousFrame.children[ref.index];
+    const after = frame.children[ref.index];
+    return before && after && rootDelimitersSurvive(snapshot.source, source, before, after) ? after.span : null;
+  }
+
+  const before = beamerOverlayPicturesIn(createBeamerSyntaxContext(snapshot.source), previousFrame.bodySpan)[ref.index];
+  const after = beamerOverlayPicturesIn(createBeamerSyntaxContext(source), frame.bodySpan)[ref.index];
+  if (!before || !after) return null;
+  const delimiters = (text: string, span: Span) => scanTikzFigures(text)
+    .find(picture => picture.span.from === span.from && picture.span.to === span.to);
+  const oldRoot = delimiters(snapshot.source, before.span);
+  const newRoot = delimiters(source, after.span);
+  return oldRoot && newRoot && rootDelimitersSurvive(snapshot.source, source, oldRoot, newRoot) ? after.span : null;
 }

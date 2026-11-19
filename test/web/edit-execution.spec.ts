@@ -41,6 +41,18 @@ it.each(["remove", "insert", "damage"])("rejects a stale picture edit after a %s
   expect(result).toMatchObject({ kind: "unsupported", reason: expect.stringContaining("catching up") });
 });
 
+it.each(["figure:1", "frame:0:tikzpicture:1"])("rejects a stale %s when insertion and removal preserve the picture count", async rootId => {
+  const picture = (coordinate: number) => String.raw`\begin{tikzpicture}\draw (0,0)--(${coordinate},1);\end{tikzpicture}`;
+  const document = (body: string) => rootId.startsWith("frame:")
+    ? String.raw`\documentclass{beamer}\begin{document}\begin{frame}${body}\end{frame}\end{document}`
+    : body;
+  const { state, documentId } = await setup(document([picture(1), picture(2), picture(3)].join("\n")), rootId);
+  const changed = document([picture(4), picture(1), picture(2)].join("\n"));
+  const result = executeDocumentEdit({ ...state, documentId, source: changed },
+    { kind: "setProperty", elementId: "path:0", level: "command", key: "draw", value: "red" });
+  expect(result).toMatchObject({ kind: "unsupported", reason: expect.stringContaining("catching up") });
+});
+
 it("keeps stale picture edits available when the root inventory is unchanged", async () => {
   const picture = String.raw`\begin{tikzpicture}\draw (0,0)--(1,1);\end{tikzpicture}`;
   const multi = [picture, picture, picture].join("\n");
