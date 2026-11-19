@@ -231,6 +231,16 @@ describe("TeX math SVG rendering", () => {
     expect(provider.getDisplayMathAlignment?.({ ...params, delimiter: "align-star", targetWidth: texLength(160) })).toBeNull();
   });
 
+  it("also budgets caret entries for source outside the parsed math list", () => {
+    const contentStart = 100_001;
+    const source = "$" + " ".repeat(contentStart - 1) + "x$";
+    const box = createTexDerivedInlineMathBoxProvider().getInlineMathBox({
+      source, content: "x", delimiter: "dollar", sourceStart: 0,
+      sourceEnd: source.length, contentStart, contentEnd: contentStart + 1,
+    });
+    expect(box).toBeNull();
+  });
+
   it("generates 2-D caret map entries for script layout", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const source = String.raw`$x^2$`;

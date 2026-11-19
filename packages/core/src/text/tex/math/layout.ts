@@ -462,9 +462,12 @@ interface TexMathAtomLayout {
   readonly depth: TexLength;
   readonly italicCorrection: TexLength;
   readonly isCharacterNucleus: boolean;
-  readonly scriptShiftsAsCharacter?: boolean;
-  readonly scriptBaseWidth?: TexLength;
-  readonly scriptSuperscriptOffset?: TexLength;
+  /** Script attachment can differ from the painted dimensions of a box. */
+  readonly scriptAttachment?: {
+    readonly shiftBasis: "character" | "box";
+    readonly advance?: TexLength;
+    readonly superscriptOffset?: TexLength;
+  };
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -481,15 +484,17 @@ type NumericMathAtomLayout = Omit<
   | "height"
   | "depth"
   | "italicCorrection"
-  | "scriptBaseWidth"
-  | "scriptSuperscriptOffset"
+  | "scriptAttachment"
 > & {
   readonly width: number;
   readonly height: number;
   readonly depth: number;
   readonly italicCorrection: number;
-  readonly scriptBaseWidth?: number;
-  readonly scriptSuperscriptOffset?: number;
+  readonly scriptAttachment?: {
+    readonly shiftBasis: "character" | "box";
+    readonly advance?: number;
+    readonly superscriptOffset?: number;
+  };
 };
 
 function mathAtomLayout(layout: NumericMathAtomLayout): TexMathAtomLayout {
@@ -498,8 +503,7 @@ function mathAtomLayout(layout: NumericMathAtomLayout): TexMathAtomLayout {
     height,
     depth,
     italicCorrection,
-    scriptBaseWidth,
-    scriptSuperscriptOffset,
+    scriptAttachment,
     ...rest
   } = layout;
   return {
@@ -508,12 +512,11 @@ function mathAtomLayout(layout: NumericMathAtomLayout): TexMathAtomLayout {
     height: texLength(height),
     depth: texLength(depth),
     italicCorrection: texLength(italicCorrection),
-    ...(scriptBaseWidth !== undefined
-      ? { scriptBaseWidth: texLength(scriptBaseWidth) }
-      : {}),
-    ...(scriptSuperscriptOffset !== undefined
-      ? { scriptSuperscriptOffset: texLength(scriptSuperscriptOffset) }
-      : {}),
+    ...(scriptAttachment && { scriptAttachment: {
+      shiftBasis: scriptAttachment.shiftBasis,
+      ...(scriptAttachment.advance !== undefined && { advance: texLength(scriptAttachment.advance) }),
+      ...(scriptAttachment.superscriptOffset !== undefined && { superscriptOffset: texLength(scriptAttachment.superscriptOffset) }),
+    } }),
   };
 }
 
@@ -1053,14 +1056,15 @@ function layoutAtom(
 
   const items: TexMathHListItem[] = [...nucleus.items];
   const hasSubscript = Boolean(atom.subscript);
-  let scriptStartX: number = hasSubscript && nucleus.scriptBaseWidth !== undefined
-    ? nucleus.scriptBaseWidth
+  const { advance, superscriptOffset } = nucleus.scriptAttachment ?? {};
+  let scriptStartX: number = hasSubscript && advance !== undefined
+    ? advance
     : nucleus.width;
   let atomWidth: number = scriptStartX;
   let height: number = nucleus.height;
   let depth: number = nucleus.depth;
   const delta: number = atom.subscript
-    ? nucleus.scriptSuperscriptOffset ?? (nucleus.isCharacterNucleus ? nucleus.italicCorrection : 0)
+    ? superscriptOffset ?? (nucleus.isCharacterNucleus ? nucleus.italicCorrection : 0)
     : 0;
   if (!atom.subscript && nucleus.isCharacterNucleus && nucleus.italicCorrection !== 0) {
     items.push(mathLayoutItem({
@@ -1075,13 +1079,13 @@ function layoutAtom(
   } else if (
     !atom.subscript &&
     atom.superscript &&
-    nucleus.scriptSuperscriptOffset !== undefined &&
-    nucleus.scriptSuperscriptOffset !== 0
+    superscriptOffset !== undefined &&
+    superscriptOffset !== 0
   ) {
     items.push(mathLayoutItem({
       kind: "kern",
-      x: nucleus.scriptBaseWidth ?? nucleus.width,
-      width: nucleus.scriptSuperscriptOffset,
+      x: advance ?? nucleus.width,
+      width: superscriptOffset,
       reason: "italic-correction",
       sourceSpan: nucleus.sourceSpan,
     }));
@@ -1550,14 +1554,12 @@ function layoutSizedDelimiterNucleus(
   baseAtPt: TexLength
 ): TexMathAtomLayout | null {
   const delimiterStyle = delimiterSizeStyle(style);
-  const axis = mathParameterToPt(fontProfile, "axisHeight", delimiterStyle, baseAtPt);
   const delimiter = layoutMathDelimiter(
     nucleus.delimiter,
     fontProfile,
     delimiterStyle,
     baseAtPt,
     sizedDelimiterTargetHeight(nucleus.command),
-    axis,
     nucleus.delimiterSourceSpan
   );
   if (!delimiter) {
@@ -1902,11 +1904,7 @@ function layoutAlphabetNucleus(
   }
   // amsbsy opens a formula in the bold math version, including its fontdimens.
   // bm substitutes noads in the ambient version and keeps its layout parameters.
-  const innerFontProfile = nucleus.alphabet === "boldsymbol" ? {
-    ...fontProfile,
-    resolveMathFont: (request: Parameters<TexMathFontProfile["resolveMathFont"]>[0]) =>
-      resolveBoldMathFont(fontProfile, request.family, request.style, texLength(request.baseAtPt ?? baseAtPt), "boldsymbol"),
-  } : fontProfile;
+  const innerFontProfile = nucleus.alphabet === "boldsymbol" ? boldMathVersion(fontProfile, baseAtPt) : fontProfile;
   const result = layoutTexMathList(nucleus.list, {
     fontProfile: innerFontProfile,
     style,
@@ -1919,8 +1917,13 @@ function layoutAlphabetNucleus(
   }
   const hlist = result.hlist;
   const child = childHList("nucleus", 0, 0, hlist, nucleus.sourceSpan);
-  const unboxedCharacter = hlist.items[0]?.kind === "glyph" &&
-    hlist.items.slice(1).every(item => item.kind === "kern" && item.reason === "italic-correction");
+  const first = hlist.items[0];
+  const character = first?.kind === "glyph" && hlist.items.slice(1).every(item => item.kind === "kern" && item.reason === "italic-correction")
+    ? first : null;
+  // Ordinary alphabet switches preserve character script shifts. amsbsy
+  // boxes its formula, so its scripts are placed relative to the box.
+  const characterShifts = nucleus.alphabet !== "boldsymbol" && singleAtom?.atomClass === "ord" &&
+    (character !== null || isSingleCharacterCleanBoxList(nucleus.list));
   return mathAtomLayout({
     items: [child],
     width: child.width,
@@ -1928,15 +1931,10 @@ function layoutAlphabetNucleus(
     depth: child.depth,
     italicCorrection: 0,
     isCharacterNucleus: false,
-    // TeX's math-alphabet switch changes the math family of a single
-    // character; it does not turn that character into an inner subformula.
-    // Scripts therefore start from the character shift (zero) rather than
-    // applying \supdrop to the alphabet wrapper's height.
-    scriptShiftsAsCharacter: nucleus.alphabet !== "boldsymbol" && singleAtom?.atomClass === "ord" &&
-      (isSingleCharacterCleanBoxList(nucleus.list) || unboxedCharacter),
-    ...(singleAtom?.atomClass === "ord" && unboxedCharacter && nucleus.alphabet !== "boldsymbol" && hlist.items[0]?.kind === "glyph"
-      ? { scriptBaseWidth: hlist.items[0].width, scriptSuperscriptOffset: roundTexPt(hlist.width - hlist.items[0].width) }
-      : {}),
+    ...(characterShifts && { scriptAttachment: {
+      shiftBasis: "character",
+      ...(character && { advance: character.width, superscriptOffset: roundTexPt(hlist.width - character.width) }),
+    } }),
     sourceSpan: nucleus.sourceSpan,
   });
 }
@@ -3688,7 +3686,6 @@ function wrapMatrixWithDelimiters(
     delimiterStyle,
     baseAtPt,
     targetHeight,
-    axis,
     nucleus.beginSourceSpan
   );
   const right = layoutMathDelimiter(
@@ -3697,7 +3694,6 @@ function wrapMatrixWithDelimiters(
     delimiterStyle,
     baseAtPt,
     targetHeight,
-    axis,
     nucleus.endSourceSpan ?? nucleus.sourceSpan
   );
   if (!left || !right) {
@@ -3776,7 +3772,6 @@ function wrapCasesWithDelimiters(
     delimiterStyle,
     baseAtPt,
     targetHeight,
-    axis,
     nucleus.beginSourceSpan
   );
   const right = layoutMathDelimiter(
@@ -3785,7 +3780,6 @@ function wrapCasesWithDelimiters(
     delimiterStyle,
     baseAtPt,
     targetHeight,
-    axis,
     nucleus.endSourceSpan ?? nucleus.sourceSpan
   );
   if (!left || !right) {
@@ -4091,14 +4085,12 @@ function wrapFractionWithDelimiters(params: {
     params.style,
     params.baseAtPt
   );
-  const axis = mathParameterToPt(params.fontProfile, "axisHeight", params.style, params.baseAtPt);
   const left = layoutMathDelimiter(
     params.leftDelimiter,
     params.fontProfile,
     delimiterStyle,
     params.baseAtPt,
     targetHeight,
-    axis,
     params.sourceSpan
   );
   const right = layoutMathDelimiter(
@@ -4107,7 +4099,6 @@ function wrapFractionWithDelimiters(params: {
     delimiterStyle,
     params.baseAtPt,
     targetHeight,
-    axis,
     params.sourceSpan
   );
   if (!left || !right) {
@@ -4200,11 +4191,7 @@ function layoutRadicalNucleus(
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   if (alphabet === "bm") {
-    return layoutRadicalNucleus(nucleus, {
-      ...fontProfile,
-      resolveMathFont: request => resolveBoldMathFont(fontProfile, request.family, request.style,
-        texLength(request.baseAtPt ?? baseAtPt), "boldsymbol"),
-    }, style, _cramped, baseAtPt, "boldsymbol");
+    return layoutRadicalNucleus(nucleus, boldMathVersion(fontProfile, baseAtPt), style, _cramped, baseAtPt, "boldsymbol");
   }
   // Indexed roots build both degree and radicand in fresh math boxes;
   // the primitive unindexed square root keeps the ambient family.
@@ -5164,14 +5151,14 @@ function layoutAccentNucleus(
     height: roundTexPt(Math.max(base.height, -accentY + accentHeight)),
     depth: base.depth,
     // Accent boxes have no operator italic correction; scripts retain the
-    // underlying character correction through scriptSuperscriptOffset.
+    // underlying character correction through their attachment metrics.
     italicCorrection: 0,
     isCharacterNucleus: false,
-    scriptShiftsAsCharacter: scriptGlyphBase !== null,
-    ...(scriptGlyphBase ? {
-      scriptBaseWidth: scriptGlyphBase.width,
-      scriptSuperscriptOffset: scriptGlyphBase.italicCorrection,
-    } : {}),
+    ...(scriptGlyphBase && { scriptAttachment: {
+      shiftBasis: "character",
+      advance: scriptGlyphBase.width,
+      superscriptOffset: scriptGlyphBase.italicCorrection,
+    } }),
     sourceSpan: nucleus.sourceSpan,
   });
 }
@@ -5688,11 +5675,7 @@ function layoutExtensibleArrowNucleus(
   if (alphabet === "bm") {
     // bm's grouped mathop construction uses its boldmath box fallback, so
     // the arrow assembly and its fontdimens belong to the bold math version.
-    return layoutExtensibleArrowNucleus(nucleus, {
-      ...fontProfile,
-      resolveMathFont: request => resolveBoldMathFont(fontProfile, request.family, request.style,
-        texLength(request.baseAtPt ?? baseAtPt), "boldsymbol"),
-    }, style, cramped, baseAtPt, "boldsymbol");
+    return layoutExtensibleArrowNucleus(nucleus, boldMathVersion(fontProfile, baseAtPt), style, cramped, baseAtPt, "boldsymbol");
   }
   // Measurement happens in fresh scriptstyle formulas, which reset an
   // inherited math alphabet. The actual limits retain the outer alphabet.
@@ -5862,8 +5845,7 @@ function layoutLargeOperatorNucleus(
     depth: roundTexPt(depth),
     italicCorrection,
     isCharacterNucleus: false,
-    scriptBaseWidth: roundTexPt(cursor),
-    scriptSuperscriptOffset: italicCorrection,
+    scriptAttachment: { shiftBasis: "box", advance: roundTexPt(cursor), superscriptOffset: italicCorrection },
     sourceSpan: nucleus.sourceSpan,
   });
 }
@@ -5891,8 +5873,7 @@ function layoutLeftRightNucleus(
     fontProfile,
     delimiterStyle,
     baseAtPt,
-    targetHeight,
-    axis
+    targetHeight
   );
   if (!body) {
     return null;
@@ -5903,7 +5884,6 @@ function layoutLeftRightNucleus(
     delimiterStyle,
     baseAtPt,
     targetHeight,
-    axis,
     nucleus.leftDelimiterSourceSpan
   );
   const right = layoutMathDelimiter(
@@ -5912,7 +5892,6 @@ function layoutLeftRightNucleus(
     delimiterStyle,
     baseAtPt,
     targetHeight,
-    axis,
     nucleus.rightDelimiterSourceSpan
   );
   if (!left || !right) {
@@ -5999,8 +5978,7 @@ function expandMiddleDelimitersInHList(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   baseAtPt: TexLength,
-  targetHeight: number,
-  axis: number
+  targetHeight: number
 ): TexMathHList | null {
   if (!hlist.items.some((item) => item.kind === "middle-delimiter")) {
     return hlist;
@@ -6020,7 +5998,6 @@ function expandMiddleDelimitersInHList(
       style,
       baseAtPt,
       targetHeight,
-      axis,
       item.delimiterSourceSpan
     );
     if (!delimiter) {
@@ -6059,9 +6036,8 @@ function selectRadicalDelimiter(
     return smallCandidate.delimiter;
   }
 
-  const largeCandidate = selectDelimiterFromStyleLadder(
-    fontProfile, "extension", 112, delimiterProbeStyles(style), baseAtPt, targetHeight, sourceSpan
-  );
+  const extension = fontProfile.resolveMathFont({ family: "extension", style, baseAtPt });
+  const largeCandidate = selectDelimiterFromChain(extension, "extension", 112, targetHeight, sourceSpan);
   return largeCandidate?.delimiter ?? smallCandidate?.delimiter ?? null;
 }
 
@@ -6071,7 +6047,6 @@ function layoutMathDelimiter(
   style: TexMathStyle,
   baseAtPt: TexLength,
   targetHeight: number,
-  _axis: number,
   sourceSpan: TexMathSourceSpan
 ): TexMathDelimiterLayout | null {
   if (delimiter === ".") {
@@ -6086,36 +6061,18 @@ function layoutMathDelimiter(
   if (!spec) {
     return null;
   }
-  const probeStyles = delimiterProbeStyles(style);
-  const smallCandidate = selectDelimiterFromStyleLadder(
-    fontProfile,
-    spec.smallFamily,
-    spec.smallCode,
-    probeStyles,
-    baseAtPt,
-    targetHeight,
-    sourceSpan
-  );
-  const selected = smallCandidate?.largeEnough
-    ? smallCandidate
-    : largestDelimiterCandidate(
-      smallCandidate,
-      spec.largeCode === null
-        ? null
-        : selectDelimiterFromStyleLadder(
-          fontProfile,
-          "extension",
-          spec.largeCode,
-          probeStyles,
-          baseAtPt,
-          targetHeight,
-          sourceSpan
-        )
-    ) ?? smallCandidate;
+  // LuaTeX tries both delimiter chains in the current math size.
+  const candidate = (family: TexMathFontFamily, code: number) =>
+    selectDelimiterFromChain(fontProfile.resolveMathFont({ family, style, baseAtPt }),
+      family, code, targetHeight, sourceSpan);
+  const small = candidate(spec.smallFamily, spec.smallCode);
+  const large = small?.largeEnough || spec.largeCode === null ? null : candidate("extension", spec.largeCode);
+  const selected = large && (!small || delimiterTotalHeight(large.delimiter) > delimiterTotalHeight(small.delimiter))
+    ? large : small;
   if (!selected) {
     return null;
   }
-  const shiftAxis = mathParameterToPt(fontProfile, "axisHeight", selected.style, baseAtPt);
+  const shiftAxis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const shift = roundTexPt((selected.delimiter.height - selected.delimiter.depth) / 2 - shiftAxis);
   return mathDelimiterLayout({
     ...selected.delimiter,
@@ -6123,77 +6080,8 @@ function layoutMathDelimiter(
   });
 }
 
-function selectDelimiterFromStyleLadder(
-  fontProfile: TexMathFontProfile,
-  family: TexMathFontFamily,
-  code: number,
-  styles: readonly TexMathStyle[],
-  baseAtPt: TexLength,
-  targetHeight: number,
-  sourceSpan: TexMathSourceSpan
-): {
-  readonly delimiter: TexMathDelimiterLayout;
-  readonly largeEnough: boolean;
-  readonly style: TexMathStyle;
-} | null {
-  let best: {
-    readonly delimiter: TexMathDelimiterLayout;
-    readonly largeEnough: boolean;
-    readonly style: TexMathStyle;
-  } | null = null;
-  for (const style of styles) {
-    const candidate = selectDelimiterFromChain(
-      fontProfile.resolveMathFont({ family, style, baseAtPt }),
-      family,
-      code,
-      targetHeight,
-      sourceSpan
-    );
-    if (!candidate) {
-      continue;
-    }
-    const styledCandidate = { ...candidate, style };
-    if (candidate.largeEnough) {
-      return styledCandidate;
-    }
-    best = largestDelimiterCandidate(best, styledCandidate);
-  }
-  return best;
-}
-
-function largestDelimiterCandidate(
-  left: {
-    readonly delimiter: TexMathDelimiterLayout;
-    readonly largeEnough: boolean;
-    readonly style: TexMathStyle;
-  } | null | undefined,
-  right: {
-    readonly delimiter: TexMathDelimiterLayout;
-    readonly largeEnough: boolean;
-    readonly style: TexMathStyle;
-  } | null | undefined
-): {
-  readonly delimiter: TexMathDelimiterLayout;
-  readonly largeEnough: boolean;
-  readonly style: TexMathStyle;
-} | null {
-  if (!left) {
-    return right ?? null;
-  }
-  if (!right) {
-    return left;
-  }
-  return delimiterTotalHeight(right.delimiter) > delimiterTotalHeight(left.delimiter) ? right : left;
-}
-
 function delimiterTotalHeight(delimiter: TexMathDelimiterLayout): number {
   return delimiter.height + delimiter.depth;
-}
-
-function delimiterProbeStyles(style: TexMathStyle): readonly TexMathStyle[] {
-  // LuaTeX searches the small and large delimiter chains in the current
-  // size; it does not try larger math styles before the extension font.
-  return [style];
 }
 
 function delimiterSpec(
@@ -6892,6 +6780,15 @@ function resolveMathSymbolParts(
       sourceSpan: nucleus.sourceSpan,
     });
   });
+}
+
+/** A new math version supplies both glyphs and the font parameters used by the box. */
+function boldMathVersion(profile: TexMathFontProfile, baseAtPt: TexLength): TexMathFontProfile {
+  return {
+    ...profile,
+    resolveMathFont: request => resolveBoldMathFont(profile, request.family, request.style,
+      texLength(request.baseAtPt ?? baseAtPt), "boldsymbol"),
+  };
 }
 
 function resolveBoldMathFont(
@@ -7952,7 +7849,7 @@ function initialScriptShifts(
   fontProfile: TexMathFontProfile,
   baseAtPt: TexLength
 ): { readonly shiftUp: TexLength; readonly shiftDown: TexLength } {
-  if (nucleus.isCharacterNucleus || nucleus.scriptShiftsAsCharacter) {
+  if (nucleus.isCharacterNucleus || nucleus.scriptAttachment?.shiftBasis === "character") {
     return { shiftUp: texLength(0), shiftDown: texLength(0) };
   }
   return {

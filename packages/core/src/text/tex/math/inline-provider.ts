@@ -111,7 +111,7 @@ export function createTexDerivedInlineMathBoxProvider(
       return getMathBox(params, "display", getCache(), configuredFontProfile, params.atPt ?? baseAtPt);
     },
     getDisplayMathAlignment: (params) => {
-      return getDisplayMathAlignment(params, configuredFontProfile, params.atPt ?? baseAtPt);
+      return withCaretBudget(budget => getDisplayMathAlignment(params, configuredFontProfile, params.atPt ?? baseAtPt, budget));
     },
   };
 }
@@ -178,7 +178,11 @@ function getMathBox(
     cache.boxes.set(key, null, key.length * 2 + 64);
     return null;
   }
-  const caretMap = buildInlineMathCaretMap(hlist, params, fontProfile);
+  const caretMap = withCaretBudget(budget => buildInlineMathCaretMap(hlist, params, fontProfile, budget));
+  if (!caretMap) {
+    cache.boxes.set(key, null, key.length * 2 + 64);
+    return null;
+  }
   const box = {
     source: params.source,
     content: params.content,
@@ -532,9 +536,22 @@ function collectMathItemExtents(
   return extents;
 }
 
+const MAX_MATH_CARET_ENTRIES = 100_000;
+
+class MathCaretBudgetExceeded extends Error {}
+
+function withCaretBudget<T>(build: (budget: { remaining: number }) => T): T | null {
+  try {
+    return build({ remaining: MAX_MATH_CARET_ENTRIES });
+  } catch (error) {
+    if (error instanceof MathCaretBudgetExceeded) return null;
+    throw error;
+  }
+}
+
 /** Bound geometry expansion before allocating caret entries for assembly glyphs. */
 function mathCaretMapWithinBudget(items: readonly TexMathHListItem[]): boolean {
-  let remaining = 100_000;
+  let remaining = MAX_MATH_CARET_ENTRIES;
   const pending = [...items];
   for (let item = pending.pop(); item !== undefined; item = pending.pop()) {
     // Source-bearing kern/glue nodes also expand into caret entries.
@@ -554,13 +571,18 @@ function buildInlineMathCaretMap(
     readonly contentStart: number;
     readonly contentEnd: number;
   },
-  fontProfile: TexMathFontProfile
+  fontProfile: TexMathFontProfile,
+  budget: { remaining: number }
 ): TexMathCaretMap {
   const entries: TexMathCaretEntry[] = [];
   const addEntry = (entry: TexMathCaretEntry) => {
     if (!Number.isFinite(entry.sourceOffset) || !Number.isFinite(entry.x) || !Number.isFinite(entry.y)) {
       return;
     }
+    // Charge before storing a candidate. Synthetic boundaries and tags
+    // also count, and all rows of a display share one budget.
+    if (budget.remaining === 0) throw new MathCaretBudgetExceeded();
+    budget.remaining -= 1;
     entries.push({
       ...entry,
       sourceOffset: Math.max(params.sourceStart, Math.min(params.sourceEnd, Math.floor(entry.sourceOffset))),
@@ -1388,7 +1410,8 @@ function getDisplayMathAlignment(
     readonly displayLabels?: readonly (TexMathDisplayLabel | null)[];
   },
   configuredFontProfile: TexMathFontProfile | undefined,
-  baseAtPt: TexLength
+  baseAtPt: TexLength,
+  budget: { remaining: number }
 ): TexMathDisplayAlignment | null {
   if (!texMathDisplayAlignmentDelimiter(params.delimiter)) {
     return null;
@@ -1480,7 +1503,7 @@ function getDisplayMathAlignment(
         sourceEnd: rowSourceSpan.end,
         contentStart: rowSourceSpan.start,
         contentEnd: rowSourceSpan.end,
-      }, fontProfile);
+      }, fontProfile, budget);
       return {
         rowIndex,
         x: texVListLocalX(0),
@@ -1558,7 +1581,7 @@ function getDisplayMathAlignment(
         sourceEnd: row.sourceSpan.end,
         contentStart: row.sourceSpan.start,
         contentEnd: row.sourceSpan.end,
-      }, fontProfile);
+      }, fontProfile, budget);
       return {
         rowIndex,
         x: texVListLocalX(0),
@@ -1676,7 +1699,7 @@ function getDisplayMathAlignment(
       sourceEnd: row.sourceSpan.end,
       contentStart: row.sourceSpan.start,
       contentEnd: row.sourceSpan.end,
-    }, fontProfile);
+    }, fontProfile, budget);
     return {
       rowIndex,
       x: texVListLocalX(0),
