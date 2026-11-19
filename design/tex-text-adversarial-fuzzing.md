@@ -1,5 +1,20 @@
 # Adversarial Fuzzing for the TeX Text Engine
 
+## Running a soak
+
+Build the fuzz tools with `npm run build:tex-fuzz`, then run
+`npm run fuzz:soak -- --rounds 3 --seed 20261115`. The runner starts new
+batches for one hour per round and lets active batches finish. It runs
+editing and TeX suites side by side. Use `--parallel 2` on a machine with
+capacity for four concurrent jobs, or `--duration` for a short trial.
+
+The TeX comparison batches use the installed LuaLaTeX packages and inherit
+settings such as `TEXMFHOME`. The runner saves each batch's seed, command,
+environment overrides, and output log under a new directory in
+`artifacts/fuzz-soak/`. The first failing batch stops new launches across
+all rounds. See `summary.json` for the result and each round's
+`results.json` for batch details.
+
 ## Status
 
 Operational, with completion criteria still open (updated October 2026).
