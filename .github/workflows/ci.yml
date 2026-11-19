@@ -288,7 +288,8 @@ jobs:
             patchelf \
             xvfb
       - run: npm ci
-      - run: cargo install tauri-driver --locked
+      # A fallback cache restores the binary without Cargo's install metadata.
+      - run: cargo install tauri-driver --locked --force
         if: steps.cache-tauri-driver.outputs.cache-hit != 'true'
       - run: npm run -w @tikz-editor/desktop tauri:build -- --no-bundle
       - run: xvfb-run -a npm run test:desktop:e2e
@@ -332,9 +333,10 @@ jobs:
           npm run -w @tikz-editor/desktop tauri:build -- --ci --bundles nsis,msi --config $config
       - name: Test Windows native code
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib
+      # A fallback cache restores the binary without Cargo's install metadata.
       - name: Install tauri-driver
         if: steps.cache-tauri-driver.outputs.cache-hit != 'true'
-        run: cargo install tauri-driver --locked
+        run: cargo install tauri-driver --locked --force
       - name: Ensure WebView2 Runtime is installed
         shell: pwsh
         run: |
