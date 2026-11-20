@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { selectBeamerOraclePage } from "./lib/beamer-frame-oracle.mjs";
 import { ensureDistBuildFresh } from "./ensure-dist-build.mjs";
 import { corpusGraphicsResolver } from "./lib/beamer-corpus.mjs";
-import { compareColorMasks, compareBlockPaint, compareImagePaint, paintContractFailures } from "./lib/beamer-paint-compare.mjs";
+import { beamerPaintTolerance, compareColorMasks, compareBlockPaint, compareImagePaint, paintContractFailures } from "./lib/beamer-paint-compare.mjs";
 import {
   buildNativeBeamerPageTrace,
   compareBeamerPageTraces,
@@ -483,6 +483,7 @@ export async function compareBeamerFrame(options, runtime = {}) {
     options.width * render.svg.viewBox.height / render.svg.viewBox.width
   );
   let paint = null;
+  let imageSamplingScale = 2;
   if (!options.structuralOnly) {
     const rendererPng = join(runDir, "renderer.png");
     const oraclePng = join(runDir, "oracle.png");
@@ -512,8 +513,22 @@ export async function compareBeamerFrame(options, runtime = {}) {
     );
     // Measure image interiors before downsampling. At high shrink factors a
     // three-pixel window in the preview can blend in the surrounding paint.
-    const imageSamples = options.paintImages ? compareImagePaint(render, nativePageTrace,
+    let imageSamples = options.paintImages ? compareImagePaint(render, nativePageTrace,
       rendererPng, oraclePng, options.width * 2, rasterHeight * 2) : [];
+    // Shrunk or clipped graphics can still put a probe's window near an
+    // interpolated edge at 2×. Recheck the same points and RGB limit with a
+    // smaller window in page coordinates only when those image probes fail.
+    if (paintContractFailures({ tolerance: beamerPaintTolerance, samples: imageSamples }).length > 0) {
+      imageSamplingScale = 4;
+      const nativeImagePng = join(runDir, "renderer-image-paint.png");
+      const oracleImagePng = join(runDir, "oracle-image-paint.png");
+      const width = options.width * imageSamplingScale;
+      const height = rasterHeight * imageSamplingScale;
+      rasterizeSvg(rendererSvg, nativeImagePng, width, height);
+      rasterizePdfPage(join(oracleDir, oracleReport.artifacts.pdf ?? "probe.pdf"), oracleImagePng,
+        oracleReport.input.compiledPage, width, height);
+      imageSamples = compareImagePaint(render, nativePageTrace, nativeImagePng, oracleImagePng, width, height);
+    }
     downsampleComparisonRaster(rendererPng, options.width, rasterHeight);
     downsampleComparisonRaster(oraclePng, options.width, rasterHeight);
     paint = compareBlockPaint(render, nativePageTrace, oraclePageTrace, rendererPng, oraclePng,
@@ -565,7 +580,8 @@ export async function compareBeamerFrame(options, runtime = {}) {
       background: "white",
       normalizedRmse: rasterRmse(join(runDir, "oracle.png"), join(runDir, "renderer.png")),
       oracleBackend: "pdftocairo",
-      sampling: { scale: 2, downsampleFilter: "box", sharedByNativeAndOracle: true },
+      sampling: { scale: 2, downsampleFilter: "box", sharedByNativeAndOracle: true,
+        ...(imageSamplingScale !== 2 ? { imagePaintScale: imageSamplingScale } : {}) },
     },
     artifacts: {
       input: "input.tex",
@@ -574,6 +590,7 @@ export async function compareBeamerFrame(options, runtime = {}) {
       ...(options.structuralOnly ? {} : {
         rendererPng: "renderer.png",
         oraclePng: "oracle.png",
+        ...(imageSamplingScale !== 2 ? { rendererImagePaintPng: "renderer-image-paint.png", oracleImagePaintPng: "oracle-image-paint.png" } : {}),
         sideBySidePng: "side-by-side.png",
         differencePng: "difference.png",
         ...(!options.pdfOnly ? {

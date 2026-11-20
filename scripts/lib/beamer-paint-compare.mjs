@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
 
+export const beamerPaintTolerance = 2;
+
 // Compare flat fills separately from glyph geometry. A global raster
 // threshold could hide a small but completely wrong block background.
 export function blockPaintProbes(render, nativeTrace, oracleTrace) {
@@ -68,7 +70,7 @@ export function compareBlockPaint(render, nativeTrace, oracleTrace, nativePng, o
     ids.add(probe.id);
   }
   const samples = samplePaint([...automaticProbes, ...additionalProbes], render.svg.viewBox, nativePng, oraclePng, width, height);
-  return { tolerance: 2, samples: [...samples, ...imageSamples] };
+  return { tolerance: beamerPaintTolerance, samples: [...samples, ...imageSamples] };
 }
 
 function samplePaint(probes, viewBox, nativePng, oraclePng, width, height) {

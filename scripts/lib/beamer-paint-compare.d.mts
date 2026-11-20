@@ -1,5 +1,6 @@
 import type { RenderBeamerFrameResult } from "../../packages/core/src/beamer/types.js";
 import type { NativeBeamerPageTrace, OracleBeamerPageTrace } from "./beamer-frame-compare.mjs";
+export const beamerPaintTolerance: number;
 export interface BeamerPaintComparison {
   readonly tolerance: number;
   readonly samples: readonly { readonly id: string; readonly maxChannelDelta: number }[];
