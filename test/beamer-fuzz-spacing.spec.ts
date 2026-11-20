@@ -113,6 +113,54 @@ const cases = [
     baselines: [["Alpha", 50.047487], ["Witness", 118.828644]],
   },
   {
+    name: "starts consecutive displays from the correct empty-line baseline",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,T]
+\begin{column}{.4\textwidth}Peer.\end{column}
+\begin{column}{.55\textwidth}
+\[E=\sum_{i=1}^{n}w_i x_i\]
+\par
+\[\begin{aligned}a+b&=c\\ d-e&=f\end{aligned}\]
+\end{column}\end{columns}\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Peer.", 49.650345], ["a+b=c", 87.693069], ["Witness", 112.906906]],
+  },
+  {
+    name: "combines below-display glue with the next alignment environment's topsep",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,T]
+\begin{column}{.4\textwidth}Peer.\end{column}
+\begin{column}{.55\textwidth}
+\begin{flushleft}\[\begin{aligned}a+b&=c\\ d-e&=f\end{aligned}\]\end{flushleft}\par
+\begin{center}\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]\end{center}
+\par Tail.
+\end{column}\end{columns}\par Witness`, 10, "Madrid", "169"),
+    baselines: [["a+b=c", 63.805649], ["abx", 108.457169], ["Witness", 147.96907]],
+  },
+  {
+    name: "uses the last item depth before a display following a column list",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,T]
+\begin{column}{.4\textwidth}Peer.\end{column}
+\begin{column}{.55\textwidth}
+\begin{description}
+\item[Stage 1] Content.
+\item[Stage 2] \begin{enumerate}\item First.\end{enumerate}
+\end{description}\par
+\visible<1->{\[\begin{aligned}a+b&=c\\ d-e&=f\end{aligned}\]}
+\par Tail.
+\end{column}\end{columns}\par Witness`, 10, "Madrid", "169"),
+    baselines: [["a+b=c", 87.290451], ["Tail.", 123.011612], ["Witness", 130.659363]],
+  },
+  {
+    name: "keeps a list and its surrounding center environment in the same column flow",
+    source: slide(String.raw`\begin{itemize}
+\item Intro.
+\item \begin{columns}[onlytextwidth,t]
+\begin{column}{.46\textwidth}Peer.\end{column}
+\begin{column}{.50\textwidth}\begin{center}
+\begin{itemize}\item Content in the center.\item \begin{tikzpicture}\node {Picture};\end{tikzpicture}\end{itemize}
+\end{center}\end{column}\end{columns}\end{itemize}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Peer.", 61.525757], ["Contentinthecenter.", 71.976089], ["Picture", 83.703903], ["Witness", 97.041077]],
+  },
+  {
     name: "uses normal display skips after a scoped ragged-left paragraph",
     source: slide(String.raw`\begin{alertblock}{Message passing}
 {\footnotesize\color{black}\raggedleft

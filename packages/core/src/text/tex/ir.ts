@@ -5372,11 +5372,13 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const displaySkipCommand = list && (displayState.displaySkipSelectionFrom ?? -1) < list.sourceStart
         ? list.displaySkipCommand : displayState.displaySkipCommand;
       const precedingLineAlignment = alignmentAt(node.sourceStart).alignment;
+      const previousItem = items.at(-1);
+      const precedingMaterialEnd = previousItem?.kind === "display-math" ? previousItem.sourceEnd : previousParagraphBlockEnd;
       items.push({
         kind: "display-math",
         fontSizePt: displaySize,
         ...(precedingLineAlignment !== undefined ? { precedingLineAlignment } : {}),
-        ...(previousParagraphBlockEnd !== undefined && hasExplicitParagraphBoundaryBetween(previousParagraphBlockEnd, node.sourceStart) ? { startsAfterExplicitPar: true } : {}),
+        ...(precedingMaterialEnd !== undefined && hasExplicitParagraphBoundaryBetween(precedingMaterialEnd, node.sourceStart) ? { startsAfterExplicitPar: true } : {}),
         ...(displaySkip !== undefined ? { baselineSkip: displaySkip } : {}),
         ...(displaySkipCommand !== undefined ? { displaySkipCommand } : {}),
         normalFontSizePt,

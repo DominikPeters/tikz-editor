@@ -3507,7 +3507,7 @@ async function prepareColumnContent(params: {
       theme,
       diagnostics,
       listProfile,
-      ...(node.kind === "list" && previousDepth !== undefined ? { initialPreviousDepth: previousDepth } : {}),
+      ...(previousDepth !== undefined && (node.kind === "list" || flow.at(-1)?.kind === "paragraph") ? { initialPreviousDepth: previousDepth } : {}),
       macroBindings,
       references,
       leftSidebarWidth: params.leftSidebarWidth,
@@ -3715,7 +3715,7 @@ async function prepareColumnFlowNode(params: {
       font: bodyFont,
       colorResolver: beamerAlertColorResolver(theme),
       alignment: node.kind === "paragraph" ? node.alignment ?? "left" : "left",
-      ...(initialPreviousDepth !== undefined ? { initialPreviousDepth } : {}),
+      ...(node.kind === "list" && initialPreviousDepth !== undefined ? { initialPreviousDepth } : {}),
       ...(params.leadingDisplayBaselineSkipPt !== undefined ? { leadingDisplayBaselineSkipPt: params.leadingDisplayBaselineSkipPt } : {}),
       listProfile,
       macroBindings,
@@ -3729,6 +3729,8 @@ async function prepareColumnFlowNode(params: {
     const startsWithDisplay = firstMaterial?.hboxRole?.kind === "display-empty-line" && firstMaterial.hboxRole.position === "before-display";
     if (paragraph && params.firstInColumn && startsWithDisplay && params.leadingDisplayBaselineSkipPt !== 0) {
       paragraph = runBeamerRenderOperation(params.work, () => layoutParagraph({ ...layoutParams, leadingDisplayBaselineSkipPt: 0 }));
+    } else if (paragraph && startsWithDisplay && initialPreviousDepth !== undefined) {
+      paragraph = runBeamerRenderOperation(params.work, () => layoutParagraph({ ...layoutParams, initialPreviousDepth }));
     }
     if (!paragraph) {
       if (!hasProjectedContent(source, node.span, overlays, step, references)) {
@@ -3762,7 +3764,7 @@ async function prepareColumnFlowNode(params: {
       leadingSkipPt: leadingBeamerTrivlistAdjustment(projection.mapped.text, paragraph, params.listProfile.trivlistTopsepPt) +
         // A column minipage starts with \leavevmode. A leading trivlist ends
         // that empty line, then inserts normal interline glue before its first box.
-        (initialPreviousDepth === undefined && params.leadingDisplayBaselineSkipPt !== 0 && (node.kind === "list" || /^\s*\\begin\s*\{(?:center|flushleft|flushright|itemize|enumerate|description)\}/u.test(projection.mapped.text))
+        ((node.kind !== "list" || initialPreviousDepth === undefined) && params.leadingDisplayBaselineSkipPt !== 0 && (node.kind === "list" || /^\s*\\begin\s*\{(?:center|flushleft|flushright|itemize|enumerate|description)\}/u.test(projection.mapped.text))
           ? (() => {
               const baseline = firstMaterial?.hboxRole?.kind === "external-flow"
                 ? firstMaterial.hboxRole.baselineSkipPt ?? paragraphStartingBaselineSkip(paragraph, bodyFont.lineHeightPt)

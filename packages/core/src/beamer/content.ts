@@ -1196,13 +1196,25 @@ function parseColumnFlow(
     // Splitting off its closing brace paints it as a literal paragraph and
     // changes the reference baseline of bottom-aligned columns.
     let ancestor = context.syntax.tree.resolveInner(token.span.from + 1, 1);
+    let insideAlignment = false;
     while (ancestor.parent) {
       ancestor = ancestor.parent;
       if (ancestor.from < bodySpan.from) break;
+      if (ancestor.name === "Environment" && ancestor.from < token.span.from) {
+        const boundary = context.syntax.environmentBoundaryByStart.get(ancestor.from);
+        if (boundary && ["center", "flushleft", "flushright"].includes(boundary.name)) {
+          insideAlignment = true;
+          break;
+        }
+      }
       if (ancestor.name === "Group" && ancestor.from < token.span.from && ancestor.to <= bodySpan.to &&
           !overlays.commands.some(command => command.branches.some(branch => branch.span.from === ancestor.from && branch.span.to === ancestor.to))) {
         span = { from: ancestor.from, to: ancestor.to };
       }
+    }
+    if (insideAlignment) {
+      index = endIndex;
+      continue;
     }
     structural.push({
       span,

@@ -96,6 +96,7 @@ export interface SimpleTexParagraphVerticalSkip {
   readonly listStretch?: TexLength;
   readonly listShrink?: TexLength;
   readonly trivlistSize?: TexLength;
+  readonly trivlistAfterDisplay?: boolean;
 }
 
 export function planSimpleTexParagraphVerticalSkips(
@@ -390,7 +391,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
       trivlistTopsepPt: listProfile.liveListTopsepPt ?? texProfileDepthValue(resolvedListProfile?.topsepPtByDepth ?? listProfile.topsepPtByDepth, activeList.depth),
       trivlistPartopsepPt: 0,
     } : listProfile;
-    let trivlistVerticalSkipBefore = followsDisplay || suppressInitialTopsep
+    let trivlistVerticalSkipBefore = (followsDisplay && !enteringTrivlist) || suppressInitialTopsep
       ? texLength(0)
       : texArticleTrivlistVerticalSkipBefore(
           state,
@@ -426,6 +427,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
       ...(trivlistVerticalSkipBefore > 0
         ? { trivlistSize: trivlistVerticalSkipBefore }
         : {}),
+      ...(followsDisplay && !state.hasInterveningPenalty ? { trivlistAfterDisplay: true } : {}),
       size: texLength(
         quoteVerticalSkipBefore + listVerticalSkipBefore + trivlistVerticalSkipBefore
       ),
@@ -634,6 +636,7 @@ function paragraphBoundaryGlueItems(
       origin: {
         kind: "trivlist-boundary",
         beforeBlockIndex: skip.blockIndex,
+        ...(skip.trivlistAfterDisplay ? { afterDisplay: true } : {}),
       },
       size: skip.trivlistSize ?? texLength(0),
     });
@@ -784,6 +787,7 @@ function leadingDisplayEmptyLineGlue(
   profile: TexDisplayMathLayoutProfile,
   isInterior: boolean
 ): TexGlueItem {
+  const suppressInitialBaseline = !isInterior && profile.leadingDisplay?.emptyLineBaselineSkipPt === 0;
   return {
     kind: "glue",
     sourceSpan: item.sourceSpan,
@@ -791,11 +795,11 @@ function leadingDisplayEmptyLineGlue(
     origin: {
       kind: "display-math-interline",
       side: "above",
-      ...(isInterior ? { purpose: "leading-empty-line-baseline" as const } : {}),
+      ...(!suppressInitialBaseline ? { purpose: "leading-empty-line-baseline" as const } : {}),
     },
     // A containing environment may already ship the leading line and request
     // zero additional baseline (for example Beamer column[T]'s colheadskip).
-    size: texLength(!isInterior && profile.leadingDisplay?.emptyLineBaselineSkipPt === 0
+    size: texLength(suppressInitialBaseline
       ? 0 : item.baselineSkip ?? profile.leadingDisplay?.emptyLineBaselineSkipPt ?? 0),
     stretchOrder: "normal",
     shrinkOrder: "normal",
@@ -869,6 +873,7 @@ function resolveDisplayMathVerticalGlueInItems(
     readonly previousParagraphMeasurement?: TexVListParagraphBoxMeasurement;
     readonly previousDisplaySkipVariant?: TexDisplayMathSkipVariant;
     readonly previousDisplayMaterialMetrics?: TexBoxMetrics;
+    readonly previousDisplayBelowSkip?: TexLength;
     readonly previousDepthSuppressed?: boolean;
   } = {}
 ): {
@@ -876,6 +881,7 @@ function resolveDisplayMathVerticalGlueInItems(
   readonly previousParagraphMeasurement?: TexVListParagraphBoxMeasurement;
   readonly previousDisplaySkipVariant: TexDisplayMathSkipVariant;
   readonly previousDisplayMaterialMetrics?: TexBoxMetrics;
+  readonly previousDisplayBelowSkip?: TexLength;
   readonly previousDepthSuppressed: boolean;
 } {
   const items: TexVListItem[] = [];
@@ -883,6 +889,7 @@ function resolveDisplayMathVerticalGlueInItems(
   let previousDisplaySkipVariant: TexDisplayMathSkipVariant =
     state.previousDisplaySkipVariant ?? "normal";
   let previousDisplayMaterialMetrics = state.previousDisplayMaterialMetrics;
+  let previousDisplayBelowSkip = state.previousDisplayBelowSkip;
   let previousDepthSuppressed = state.previousDepthSuppressed ?? false;
   let plainParagraphInterlinePending =
     !previousDepthSuppressed && (previousParagraphMeasurement !== undefined ||
@@ -940,6 +947,7 @@ function resolveDisplayMathVerticalGlueInItems(
         items.push(materialItem);
         previousParagraphMeasurement = undefined;
         previousDisplayMaterialMetrics = materialMetrics;
+        previousDisplayBelowSkip = undefined;
         previousDepthSuppressed = false;
         plainParagraphInterlinePending = materialMetrics !== undefined;
         paragraphBoundaryInterlineAlreadyInserted = false;
@@ -954,6 +962,7 @@ function resolveDisplayMathVerticalGlueInItems(
           ...(previousParagraphMeasurement !== undefined ? { previousParagraphMeasurement: previousParagraphMeasurement } : {}),
           previousDisplaySkipVariant,
           ...(previousDisplayMaterialMetrics !== undefined ? { previousDisplayMaterialMetrics: previousDisplayMaterialMetrics } : {}),
+          ...(previousDisplayBelowSkip !== undefined ? { previousDisplayBelowSkip } : {}),
           previousDepthSuppressed,
         }
       );
@@ -964,6 +973,7 @@ function resolveDisplayMathVerticalGlueInItems(
       previousParagraphMeasurement = nested.previousParagraphMeasurement;
       previousDisplaySkipVariant = nested.previousDisplaySkipVariant;
       previousDisplayMaterialMetrics = nested.previousDisplayMaterialMetrics;
+      previousDisplayBelowSkip = nested.previousDisplayBelowSkip;
       previousDepthSuppressed = nested.previousDepthSuppressed;
       if (previousDepthSuppressed) plainParagraphInterlinePending = false;
       else if (previousDisplayMaterialMetrics) plainParagraphInterlinePending = true;
@@ -977,6 +987,7 @@ function resolveDisplayMathVerticalGlueInItems(
       items.push(item);
       previousParagraphMeasurement = undefined;
       previousDisplayMaterialMetrics = item.box.metrics;
+      previousDisplayBelowSkip = undefined;
       previousDepthSuppressed = false;
       plainParagraphInterlinePending = true;
       paragraphBoundaryInterlineAlreadyInserted = false;
@@ -1021,6 +1032,7 @@ function resolveDisplayMathVerticalGlueInItems(
       }
       previousParagraphMeasurement = paragraphMeasurement;
       previousDisplayMaterialMetrics = undefined;
+      previousDisplayBelowSkip = undefined;
       previousDepthSuppressed = false;
       plainParagraphInterlinePending = true;
       paragraphBoundaryInterlineAlreadyInserted = false;
@@ -1046,11 +1058,13 @@ function resolveDisplayMathVerticalGlueInItems(
         previousDisplaySkipVariant = variant;
       }
       plainParagraphInterlinePending = false;
-      items.push(resolveDisplayMathBoundaryGlueItem(
+      const resolvedGlue = resolveDisplayMathBoundaryGlueItem(
         item,
         variant,
         options.displayMathProfile
-      ));
+      );
+      items.push(resolvedGlue);
+      if (item.origin.side === "below") previousDisplayBelowSkip = resolvedGlue.size;
       if (
         item.origin.side === "above" &&
         !previousDepthSuppressed &&
@@ -1098,7 +1112,12 @@ function resolveDisplayMathVerticalGlueInItems(
       item.kind === "glue" &&
       isParagraphBoundaryGlueOrigin(item.origin)
     ) {
-      items.push(item);
+      if (item.origin?.kind === "trivlist-boundary" && item.origin.afterDisplay && previousDisplayBelowSkip !== undefined) {
+        // The preceding below-display skip participates in \addvspace.
+        const additionalSkip = item.size - previousDisplayBelowSkip;
+        if (additionalSkip <= 0) continue;
+        items.push({ ...item, size: texLength(additionalSkip) });
+      } else items.push(item);
       plainParagraphInterlinePending = false;
       if (!previousDepthSuppressed && shouldInsertParagraphBoundaryInterlineGlue(sourceItems, index)) {
         const nextParagraph = nextParagraphMeasurement(
@@ -1219,6 +1238,7 @@ function resolveDisplayMathVerticalGlueInItems(
     }
     if (item.kind === "display-math") {
       previousParagraphMeasurement = undefined;
+      previousDisplayBelowSkip = undefined;
       plainParagraphInterlinePending = false;
       previousDisplayMaterialMetrics = {
         width: item.box.width,
@@ -1248,6 +1268,7 @@ function resolveDisplayMathVerticalGlueInItems(
     ...(previousParagraphMeasurement !== undefined ? { previousParagraphMeasurement: previousParagraphMeasurement } : {}),
     previousDisplaySkipVariant,
     ...(previousDisplayMaterialMetrics !== undefined ? { previousDisplayMaterialMetrics: previousDisplayMaterialMetrics } : {}),
+    ...(previousDisplayBelowSkip !== undefined ? { previousDisplayBelowSkip } : {}),
     previousDepthSuppressed,
   };
 }

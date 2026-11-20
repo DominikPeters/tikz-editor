@@ -81,6 +81,7 @@ export type TexGlueOrigin =
   | {
       readonly kind: "trivlist-boundary";
       readonly beforeBlockIndex: number;
+      readonly afterDisplay?: boolean;
     }
   | {
       readonly kind: "paragraph-boundary-interline";
