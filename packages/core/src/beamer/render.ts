@@ -2593,6 +2593,7 @@ async function prepareBlockWithTheme(params: {
   const titleBoxExtent =
     titleAscent + Math.max(titleDepth, geometry.titleDepthFloorPt);
   const firstBodyHeight = firstBody ? paragraphStartingMaterialHeight(firstBody)
+    : firstFlowItem?.kind === "columns" ? firstFlowItem.box.height
     : firstFlowItem?.kind === "block" ? firstFlowItem.block.flowBoxHeight : undefined;
   const firstBodyBaselineSkip = firstBody ? paragraphStartingBaselineSkip(firstBody, theoremBodyFont.lineHeightPt)
     : firstFlowItem?.kind === "block" ? (firstFlowItem.block.theme ?? params.theme).fonts["normal-text"].lineHeightPt : theoremBodyFont.lineHeightPt;
@@ -2603,7 +2604,11 @@ async function prepareBlockWithTheme(params: {
           : 1) + geometry.bodyInitialVSkipEx * fontXHeightPt(params.theme.fonts[plan.bodyFontRole])
       : geometry.bodyTopPaddingPt;
   const lastFlowItem = bodyFlow?.items.at(-1)?.item;
-  const bodyEndingDepth = body ? paragraphEndingMaterialDepth(body)
+  const closesWithBlockSkip = plan.style === "default" &&
+    body?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin?.kind === "external-flow-after";
+  // A default colorbox ending in its last nested block's vertical skip
+  // has zero physical depth.
+  const bodyEndingDepth = body ? closesWithBlockSkip ? 0 : paragraphEndingMaterialDepth(body)
     : lastFlowItem?.kind === "columns" ? lastFlowItem.box.depth
     : lastFlowItem?.kind === "paragraph" ? paragraphEndingMaterialDepth(lastFlowItem.paragraph)
     : lastFlowItem?.kind === "block" ? lastFlowItem.endingDepth : 0;
@@ -2653,7 +2658,7 @@ async function prepareBlockWithTheme(params: {
         : naturalHeight,
     endingDepth:
       geometry.flowEndingDepth === "body-last-line"
-        ? body ? paragraphLastLineDepth(body) : bodyEndingDepth
+        ? body && !closesWithBlockSkip ? paragraphLastLineDepth(body) : bodyEndingDepth
         : 0,
   };
 }
@@ -3548,7 +3553,8 @@ async function prepareColumnContent(params: {
         // title box. T columns clear that depth with \nointerlineskip instead.
         const nextHeight = prepared.kind === "block"
           ? prepared.block.flowBoxHeight : paragraphStartingMaterialHeight(prepared.paragraph);
-        const interline = bodyFont.lineHeightPt - (previousDepth ?? 0) - nextHeight;
+        const baseline = firstRole?.kind === "external-flow" ? firstRole.baselineSkipPt ?? bodyFont.lineHeightPt : bodyFont.lineHeightPt;
+        const interline = baseline - (previousDepth ?? 0) - nextHeight;
         prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) + (interline < 0 ? 1 : interline);
       }
       if (previous?.kind === "paragraph" && prepared.kind === "paragraph" && previous.trailingSkipPt > 0 && previousDepth !== undefined) {
@@ -3790,7 +3796,7 @@ async function prepareColumnFlowNode(params: {
       // minipage's terminal \unskip drops the final trivlist skip; retain it
       // only when another flow item follows, as for the list's trailing glue.
       trailingSkipPt: node.kind === "list" ? trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont)
-        : Math.max(0, trailingBeamerTrivlistSkip(projection.mapped.text, params.listProfile.trivlistTopsepPt) - trailingDisplaySkip(paragraph)),
+        : Math.max(0, trailingBeamerTrivlistSkip(projection.mapped.text, params.listProfile.trivlistTopsepPt) - trailingCollapsibleSkip(paragraph)),
     };
   }
   if (node.kind === "unsupported") {
@@ -5374,13 +5380,14 @@ function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerRefe
     references.ambientTextAt?.(origin?.kind === "direct" ? origin.from : 0) ?? "").fonts["normal-text"] : font;
   const skip = beamerListSizeOverrides(references.theme).find(entry => Math.abs(entry.fontSizePt - active.sizePt) < .001)?.topsepPt ?? 3;
   const closing = trailingBeamerListSkip(mapped.text, skip);
-  // endtrivlist uses addvspace, so a terminal display skip and the list's
-  // closing topsep contribute their maximum rather than their sum.
-  return Math.max(0, closing - trailingDisplaySkip(paragraph));
+  // endtrivlist uses addvspace, so a terminal block or display skip and
+  // the list's closing topsep contribute their maximum.
+  return Math.max(0, closing - trailingCollapsibleSkip(paragraph));
 }
 
-function trailingDisplaySkip(paragraph: LaidParagraph | undefined): number {
+function trailingCollapsibleSkip(paragraph: LaidParagraph | undefined): number {
   const last = paragraph?.layout.vlistLayout.boxReport.items.at(-1);
-  return last?.glue?.origin?.kind === "display-math-boundary" && last.glue.origin.side === "below"
-    ? Math.max(0, Number(last.height)) : 0;
+  const origin = last?.glue?.origin;
+  return origin?.kind === "external-flow-after" || (origin?.kind === "display-math-boundary" && origin.side === "below")
+    ? Math.max(0, Number(last?.height ?? 0)) : 0;
 }

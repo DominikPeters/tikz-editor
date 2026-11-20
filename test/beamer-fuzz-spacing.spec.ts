@@ -91,6 +91,98 @@ const cases = [
     baselines: [["Intro.", 50.12532], ["Witness", 127.170013]],
   },
   {
+    name: "opens a nested list after an explicit paragraph following a display",
+    source: slide(String.raw`\begin{description}
+\item[Stage 1] \begin{flushleft}
+\[E=\sum_{i=1}^{n}w_i x_i\]
+\end{flushleft}
+\par
+\begin{description}
+\item[Inner] \[E=\sum_{i=1}^{n}w_i x_i\]
+\item[Next] Content.
+\end{description}
+\item[Stage 2] Tail.
+\end{description}
+\par Witness`, 10, "Madrid"),
+    baselines: [["Inner", 96.281235], ["NextContent.", 138.798645], ["Witness", 166.349518]],
+  },
+  {
+    name: "keeps the parent label pending across columns before a nested enumeration",
+    source: slide(String.raw`\begin{enumerate}
+\item Intro.
+\item \begin{columns}[onlytextwidth,c]
+\begin{column}{.46\textwidth}
+\[E=\sum_{i=1}^{n}w_i x_i\]
+\end{column}
+\begin{column}{.50\textwidth}Peer.\end{column}
+\end{columns}
+\par
+\begin{enumerate}
+\item Inner content.
+\item Following content.
+\end{enumerate}
+\item Tail.
+\end{enumerate}
+\par Witness`, 11, "Madrid"),
+    baselines: [["Peer.", 72.542618], ["Innercontent.", 93.603897], ["Witness", 133.695175]],
+  },
+  {
+    name: "opens an adjacent outer list when a nested item consumes its first label",
+    source: slide(String.raw`\begin{alertblock}{Outer block}
+\begin{description}
+\item[Stage 1] First content.
+\item[Stage 2] Second content.
+\end{description}
+\par
+\begin{itemize}
+\item \begin{enumerate}\item Inner content.\item Next content.\end{enumerate}
+\end{itemize}
+\end{alertblock}
+\par Witness`, 11, "Madrid"),
+    baselines: [["Innercontent.", 99.797791], ["Nextcontent.", 111.198151], ["Witness", 131.362549]],
+  },
+  {
+    name: "combines closing list glue and flushleft glue within the same outer item",
+    source: slide(String.raw`\begin{itemize}
+\item Intro.\par
+\begin{description}\item[Stage 1] First content.\item[Stage 2] Second content.\end{description}
+\par
+\begin{flushleft}
+{\small\color{blue}\centering
+\begin{tikzpicture}\node {Picture};\end{tikzpicture}\par}
+\end{flushleft}
+\item Tail.
+\end{itemize}
+\par Witness`, 11, "default"),
+    baselines: [["Picture", 86.840576], ["Witness", 119.27742]],
+  },
+  {
+    name: "combines a terminal default block's small skip with its closing list glue",
+    source: slide(String.raw`\begin{alertblock}{Outer block}
+\begin{enumerate}
+\item First content.
+\item \begin{block}{Child block}
+\begin{center}\begin{tikzpicture}\node {Picture};\end{tikzpicture}\end{center}
+\end{block}
+\end{enumerate}
+\end{alertblock}
+\par Witness`, 9, "default", "169"),
+    baselines: [["Childblock", 70.321487], ["Picture", 80.160645], ["Witness", 99.207489]],
+  },
+  {
+    name: "uses the first centered columns box when placing a default block's body",
+    source: slide(String.raw`\begin{exampleblock}{Outer block}
+\begin{columns}[onlytextwidth,c]
+\begin{column}{.62\textwidth}
+\rule{1pt}{30pt}\par Tall content.
+\end{column}
+\begin{column}{.34\textwidth}Short content.\end{column}
+\end{columns}
+\end{exampleblock}
+\par Witness`, 11, "default"),
+    baselines: [["Shortcontent.", 72.559509], ["Tallcontent.", 89.60318], ["Witness", 100.737305]],
+  },
+  {
     name: "retains scoped outer topsep after closing nested lists",
     source: slide(String.raw`Top line.\par
 {\small\centering
@@ -216,6 +308,24 @@ const cases = [
 \end{columns}\end{description}
 \par Witness`, 12, "Madrid", "169"),
     baselines: [["Messagepassing", 63.225632], ["Peer.", 78.600174], ["Witness", 131.862442]],
+  },
+  {
+    name: "uses the active font's baseline before a scoped block after another block",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,T]
+\begin{column}{.62\textwidth}Peer.\end{column}
+\begin{column}{.34\textwidth}
+\begin{block}{First block}
+Before \rule[-2pt]{20pt}{12pt} after.
+\par \begin{tikzpicture}\node {Box};\end{tikzpicture}
+\end{block}
+\par
+{\scriptsize\color{teal}\raggedright
+\visible<1->{\begin{block}{Next block}
+\begin{tikzpicture}\node {Picture};\end{tikzpicture}
+\end{block}}\par}
+\end{column}\end{columns}
+\par Witness`, 9, "default"),
+    baselines: [["Nextblock", 83.838852], ["Picture", 91.066483], ["Witness", 99.907257]],
   },
   {
     name: "breaks after the anonymous center label before an overwide table",
