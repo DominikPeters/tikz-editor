@@ -132,6 +132,7 @@ export type SimpleTexScopePathRole =
       readonly sourceStart?: number;
       readonly listKind: SimpleTexListKind;
       readonly depth: number;
+      readonly listRegisterDepth?: number;
       readonly labelDepth: number;
       readonly fontSizePt?: TexLength;
       readonly ownLeftMarginEm: number;
@@ -808,6 +809,8 @@ export interface SimpleTexListContext {
   readonly listStart?: number;
   readonly kind: SimpleTexListKind;
   readonly depth: number;
+  /** LaTeX's list register selection can diverge from the structural depth in minipages. */
+  readonly listRegisterDepth?: number;
   readonly labelDepth: number;
   readonly itemIndex: number;
   /** Enumerate's counter advances only for items without an authored label. */
@@ -982,6 +985,7 @@ const PARAGRAPH_IR_MAX_SOURCE_LENGTH = 16384;
 
 export interface SimpleTexParagraphIrOptions {
   readonly boxesClearingPendingItemLabels?: readonly number[];
+  readonly minipageListDepthResets?: readonly number[];
   readonly inheritedItemLabels?: readonly SimpleTexListContext[];
   readonly listBodyFontSizes?: readonly (number | undefined)[];
   readonly listBodyBaselineSkips?: readonly (number | undefined)[];
@@ -1379,7 +1383,7 @@ function buildSimpleTexParagraphIr(
       [...(options?.bibliographyMargins ?? [])],
       options?.descriptionLabelWidthPt ?? null,
       [...(options?.descriptionLabelWidths ?? [])],
-      options?.boxesClearingPendingItemLabels, options?.inheritedItemLabels, options?.fontSizePt, options?.baselineSkipPt, options?.namedFontSizes, options?.listBodyFontSizes, options?.listBodyBaselineSkips, options?.listBodyDisplaySkipCommands, options?.groupListItemBodies,
+      options?.boxesClearingPendingItemLabels, options?.minipageListDepthResets, options?.inheritedItemLabels, options?.fontSizePt, options?.baselineSkipPt, options?.namedFontSizes, options?.listBodyFontSizes, options?.listBodyBaselineSkips, options?.listBodyDisplaySkipCommands, options?.groupListItemBodies,
     ])
     : null;
   if (key !== null) {
@@ -4790,6 +4794,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
   };
   const environmentStack: ActiveSimpleTexEnvironment[] = [];
   const scopeStack: Exclude<SimpleTexScopePathRole, { readonly kind: "list-item" }>[] = [];
+  let listRegisterDepth = 0;
   let pendingParagraphVerticalAdjustments: SimpleTexVerticalGlueBlockItem[] = [];
   let horizontalModeResumedAfterDisplay = false;
   let pendingListLabel: SimpleTexListLabel | undefined;
@@ -5012,6 +5017,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
           itemIndex: parent.itemIndex, labelCounter: parent.labelCounter, showLabel: true,
           ownLeftMarginEm: parent.ownLeftMarginEm, totalLeftMarginEm: parent.totalLeftMarginEm,
           fontSizePt: parent.fontSizePt, labelFontSizePt: parent.labelFontSizePt ?? parent.fontSizePt, listStart: parent.sourceStart,
+          ...(parent.scopeRole.listRegisterDepth !== undefined ? { listRegisterDepth: parent.scopeRole.listRegisterDepth } : {}),
           ...(parent.itemCommandSpan ? { itemCommandSpan: parent.itemCommandSpan } : {}),
           ...(parent.kind === "enumerate" ? { enumerateCounters: listStack.slice(0, depthIndex + 1).filter(entry => entry.kind === "enumerate").map(entry => entry.labelCounter) } : {}),
           ...(parent.enumerateTemplate ? { enumerateTemplate: parent.enumerateTemplate } : {}),
@@ -5119,6 +5125,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       fontDepth: listStack.filter(entry => entry.kind === "itemize" || entry.kind === "enumerate").length,
       ...(activeList.enumerateTemplate !== undefined ? { enumerateTemplate: activeList.enumerateTemplate } : {}),
       depth: activeList.depth,
+      ...(activeList.scopeRole.listRegisterDepth !== undefined ? { listRegisterDepth: activeList.scopeRole.listRegisterDepth } : {}),
       labelDepth: activeList.labelDepth,
       itemIndex: activeList.itemIndex,
       ...(activeList.itemCommandSpan !== undefined ? { itemCommandSpan: activeList.itemCommandSpan } : {}),
@@ -5139,6 +5146,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     pendingListShowLabel = false;
     pendingListLabel = undefined;
     const depth = currentQuoteDepth + listStack.length + 1;
+    listRegisterDepth += 1;
     const labelDepth = listStack.filter((entry) => entry.kind === kind).length + 1;
     const margins =
       options?.listLeftMarginEmByDepth ?? articleListLeftMarginEmByDepth;
@@ -5170,6 +5178,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       sourceStart,
       listKind: kind,
       depth,
+      ...(listRegisterDepth > 0 && listRegisterDepth !== depth ? { listRegisterDepth } : {}),
       labelDepth,
       ownLeftMarginEm: ownMargin,
       totalLeftMarginEm: (listStack.at(-1)?.totalLeftMarginEm ?? 0) + ownMargin,
@@ -5198,6 +5207,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     name: SimpleTexQuoteEnvironmentName
   ): Extract<SimpleTexScopePathRole, { readonly kind: "quote" }> => {
     currentQuoteDepth += 1;
+    listRegisterDepth += 1;
     if (name === "quotation") {
       currentQuotationDepth += 1;
       quotationItemLabelPendingStack.push(true);
@@ -5212,6 +5222,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
 
   const endQuote = (name: SimpleTexQuoteEnvironmentName) => {
     currentQuoteDepth -= 1;
+    listRegisterDepth -= 1;
     if (name === "quotation") {
       currentQuotationDepth -= 1;
       quotationItemLabelPendingStack.pop();
@@ -5481,6 +5492,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
           }
         } else if (isSimpleTexListEnvironmentName(node.name)) {
           listStack.pop();
+          listRegisterDepth -= 1;
           const topology = listTopologyStack.pop();
           if (topology) {
             closeOpenListItemTopology(topology, node.sourceStart);
@@ -5677,12 +5689,14 @@ function buildSimpleTexParagraphBlocksFromNodes(
           itemIndex: list.itemIndex, labelCounter: list.labelCounter, showLabel: true,
           ownLeftMarginEm: list.ownLeftMarginEm, totalLeftMarginEm: list.totalLeftMarginEm,
           fontSizePt: list.fontSizePt, labelFontSizePt: list.labelFontSizePt ?? list.fontSizePt, listStart: list.sourceStart,
+          ...(list.scopeRole.listRegisterDepth !== undefined ? { listRegisterDepth: list.scopeRole.listRegisterDepth } : {}),
           ...(list.itemCommandSpan ? { itemCommandSpan: list.itemCommandSpan } : {}),
           ...(list.enumerateTemplate ? { enumerateTemplate: list.enumerateTemplate } : {}),
           ...(list.kind === "enumerate" ? { enumerateCounters: listStack.slice(0, depthIndex + 1).filter(entry => entry.kind === "enumerate").map(entry => entry.labelCounter) } : {}),
           ...(pending.label ? { label: pending.label } : {}) });
       }
       const clearsPendingLabels = options?.boxesClearingPendingItemLabels?.includes(node.sourceStart);
+      if (options?.minipageListDepthResets?.includes(node.sourceStart)) listRegisterDepth = 0;
       const consumedItemLabels = clearsPendingLabels ? pendingItemLabels : [];
       if (clearsPendingLabels) {
         inheritedItemLabels = [];

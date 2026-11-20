@@ -278,6 +278,7 @@ export type TexVBoxRole =
       readonly sourceStart?: number;
       readonly listKind: SimpleTexListKind;
       readonly depth: number;
+      readonly listRegisterDepth?: number;
       readonly labelDepth: number;
       readonly fontSizePt?: TexLength;
       readonly ownLeftMarginEm: number;

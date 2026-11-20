@@ -49,6 +49,7 @@ import {
 
 export interface TexParagraphLayoutOptions {
   readonly boxesClearingPendingItemLabels?: readonly number[];
+  readonly minipageListDepthResets?: readonly number[];
   readonly inheritedItemLabels?: SimpleTexParagraphIrOptions["inheritedItemLabels"];
   readonly commitPostDisplayParagraph?: NonNullable<TexLayoutIrOptions["commitPostDisplayParagraph"]>;
   readonly resolveBlockBox?: NonNullable<TexLayoutIrOptions["resolveBlockBox"]>;
@@ -140,6 +141,7 @@ export function layoutSimpleTexParagraph(
       ...(options.listProfile?.groupItemBodies ? { groupListItemBodies: true } : {}),
       ...(options.inheritedItemLabels ? { inheritedItemLabels: options.inheritedItemLabels } : {}),
       ...(options.boxesClearingPendingItemLabels ? { boxesClearingPendingItemLabels: options.boxesClearingPendingItemLabels } : {}),
+      ...(options.minipageListDepthResets?.length ? { minipageListDepthResets: options.minipageListDepthResets } : {}),
       fontSizePt: font.atPt,
       ...(options.baselineSkip !== undefined ? { baselineSkipPt: options.baselineSkip } : {}),
       ...(options.namedFontSizes !== undefined ? { namedFontSizes: options.namedFontSizes } : {}),

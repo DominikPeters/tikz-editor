@@ -1,6 +1,6 @@
 import { createBeamerAmbientBlockTheme } from "./ambient-block-theme.js";
 import { beamerItemActionCommitsParagraph } from "./item-actions.js";
-import { projectBeamerInlineFlow, beamerBoxesClearingPendingItemLabels } from "./inline-flow.js";
+import { projectBeamerInlineFlow, beamerInlineListEffects } from "./inline-flow.js";
 import { matchTexSyntaxEnvironments } from "../text/tex/syntax-index.js";
 import type { SimpleTexBoxBlockItem } from "../text/tex/ir.js";
 import type { TexVListItem } from "../text/tex/vlist/types.js";
@@ -2430,6 +2430,7 @@ async function prepareBlockWithTheme(params: {
         sourceSpan: node.span,
         paragraphId,
         role: "block-body",
+        inMinipage: plan.style === "rounded",
         bounds: { x: 0, y: 0, width: params.width, height: 0 },
         font: theoremBodyFont,
         mathFont: params.theme.fonts[plan.bodyFontRole],
@@ -3711,6 +3712,7 @@ async function prepareColumnFlowNode(params: {
       sourceSpan: node.span,
       paragraphId: node.id,
       role: "body" as const,
+      inMinipage: true,
       bounds: { x: 0, y: 0, width, height: 0 },
       font: bodyFont,
       colorResolver: beamerAlertColorResolver(theme),
@@ -3754,17 +3756,20 @@ async function prepareColumnFlowNode(params: {
         height: placeholder.height,
       };
     }
+    const firstBox = paragraph.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "glue" && item.itemKind !== "penalty");
+    const startsWithTrivlist = firstBox?.role?.kind === "trivlist";
+    const startsWithList = node.kind === "list" || firstBox?.role?.kind === "list";
     return {
       kind: "paragraph",
       visibility,
       paragraph,
-      startsWithVerticalEnvironment: node.kind === "list" || startsWithDisplay || /^\s*\\begin\s*\{(?:center|flushleft|flushright|itemize|enumerate|description)\}/u.test(projection.mapped.text),
-      replacesColumnHeadSkip: /^\s*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(projection.mapped.text) &&
+      startsWithVerticalEnvironment: startsWithList || startsWithDisplay || startsWithTrivlist,
+      replacesColumnHeadSkip: startsWithTrivlist &&
         !paragraph.layout.vlistLayout.boxReport.items.some(item => item.role?.kind === "trivlist" && item.role.noParList),
       leadingSkipPt: leadingBeamerTrivlistAdjustment(projection.mapped.text, paragraph, params.listProfile.trivlistTopsepPt) +
         // A column minipage starts with \leavevmode. A leading trivlist ends
         // that empty line, then inserts normal interline glue before its first box.
-        ((node.kind !== "list" || initialPreviousDepth === undefined) && params.leadingDisplayBaselineSkipPt !== 0 && (node.kind === "list" || /^\s*\\begin\s*\{(?:center|flushleft|flushright|itemize|enumerate|description)\}/u.test(projection.mapped.text))
+        ((node.kind !== "list" || initialPreviousDepth === undefined) && params.leadingDisplayBaselineSkipPt !== 0 && (startsWithList || startsWithTrivlist)
           ? (() => {
               const baseline = firstMaterial?.hboxRole?.kind === "external-flow"
                 ? firstMaterial.hboxRole.baselineSkipPt ?? paragraphStartingBaselineSkip(paragraph, bodyFont.lineHeightPt)
@@ -4268,6 +4273,7 @@ function layoutParagraph(params: {
   initialBaselineSkipPt?: number;
   initialPreviousDepth?: number;
   leadingDisplayBaselineSkipPt?: number;
+  inMinipage?: boolean;
   listProfile?: TexListLayoutProfile;
   disableAutomaticHyphenation?: boolean;
   macroBindings?: ReadonlyMap<string, MacroBinding>;
@@ -4407,7 +4413,7 @@ function layoutParagraph(params: {
     return values ? [[key, values.slice(Math.min(listDepthOffset, values.length - 1))] as const] : [];
   }));
   const layoutOptions = {
-    boxesClearingPendingItemLabels: beamerBoxesClearingPendingItemLabels(mapped, params.references.inlineFlow ?? []),
+    ...beamerInlineListEffects(mapped, params.references.inlineFlow ?? [], params.inMinipage ?? false),
     inheritedItemLabels: [...(params.references.inlineFlowItemLabels?.values() ?? [])].filter(transfer => mapped.sourceMap.charOrigins.some(origin => origin.kind === "direct" && origin.from === transfer.targetOffset)).flatMap(transfer => transfer.labels),
     commitPostDisplayParagraph: (sourceEnd: number) => params.references.itemActionCommitsParagraph?.(mapped, sourceEnd) ?? false,
     namedFontSizes: Object.fromEntries(namedSizes.map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),

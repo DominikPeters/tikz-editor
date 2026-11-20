@@ -1,6 +1,6 @@
 import type { Span } from "../ast/types.js";
 import { createMappedText, concatMappedText, sliceMappedText, type MappedText } from "../text/source-map.js";
-import type { PreparedFrameFlowItem, PreparedColumnFlowItem } from "./render-model.js";
+import type { LaidParagraph, PreparedFrameFlowItem, PreparedColumnFlowItem } from "./render-model.js";
 
 export type BeamerInlineFlow = {
   span: Span;
@@ -37,20 +37,40 @@ export function projectBeamerInlineFlow(mapped: MappedText, boxes: readonly Beam
   return concatMappedText(parts);
 }
 
-/** LaTeX list/trivlist everypar and endtrivlist clear @inlabel globally,
- * including when they execute inside a structural minipage. Plain minipage
- * prose does not consume the surrounding deferred item label. */
-function clearsPendingItemLabel(item: PreparedFrameFlowItem | PreparedColumnFlowItem): boolean {
-  if (item.kind === "paragraph") return item.paragraph.layout.vlistLayout.boxReport.items.some(box => box.role?.kind === "list" || box.role?.kind === "trivlist");
-  if (item.kind === "block") return !!item.block.body?.layout.vlistLayout.boxReport.items.some(box => box.role?.kind === "list" || box.role?.kind === "trivlist") || !!item.block.bodyFlow?.items.some(flow => clearsPendingItemLabel(flow.item));
-  if (item.kind === "columns") return item.columns.some(column => column.flow.some(clearsPendingItemLabel));
-  return false;
+export function beamerInlineListEffects(mapped: MappedText, boxes: readonly BeamerInlineFlow[], inMinipage: boolean) {
+  if (boxes.length === 0) return {};
+  const boxesClearingPendingItemLabels: number[] = [];
+  const minipageListDepthResets: number[] = [];
+  for (const match of mapped.text.matchAll(/\\begin\{minipage\}/gu)) {
+    const origin = mapped.sourceMap.charOrigins[match.index];
+    if (origin?.kind !== "direct") continue;
+    const box = boxes.find(box => box.span.from === origin.from);
+    if (!box) continue;
+    // List/trivlist everypar and endtrivlist clear @inlabel globally.
+    if (containsListScope(box.item, "trivlist")) boxesClearingPendingItemLabels.push(match.index);
+    if (inMinipage && resetsMinipageListDepth(box.item)) minipageListDepthResets.push(match.index);
+  }
+  return {
+    ...(boxesClearingPendingItemLabels.length ? { boxesClearingPendingItemLabels } : {}),
+    ...(minipageListDepthResets.length ? { minipageListDepthResets } : {}),
+  };
 }
 
-export function beamerBoxesClearingPendingItemLabels(mapped: MappedText, boxes: readonly BeamerInlineFlow[]): readonly number[] {
-  const clearing = new Set(boxes.filter(box => clearsPendingItemLabel(box.item)).map(box => box.span.from));
-  return [...mapped.text.matchAll(/\\begin\{minipage\}/gu)].flatMap(match => {
-    const origin = mapped.sourceMap.charOrigins[match.index];
-    return origin?.kind === "direct" && clearing.has(origin.from) ? [match.index] : [];
-  });
+/** LaTeX minipages share @mplistdepth. A nested minipage starts it at
+ * zero and a list globally changes the register, replacing the outer value. */
+function resetsMinipageListDepth(item: PreparedFrameFlowItem | PreparedColumnFlowItem): boolean {
+  if (item.kind === "columns") return containsListScope(item, "quote");
+  if (item.kind !== "block") return false;
+  return item.block.plan.style === "rounded" && containsListScope(item, "quote") ||
+    !!item.block.bodyFlow?.items.some(flow => resetsMinipageListDepth(flow.item));
+}
+
+function containsListScope(item: PreparedFrameFlowItem | PreparedColumnFlowItem, otherScope: "quote" | "trivlist"): boolean {
+  const contains = (paragraph: LaidParagraph | null) =>
+    paragraph?.layout.vlistLayout.boxReport.items.some(box => box.role?.kind === "list" || box.role?.kind === otherScope) ?? false;
+  if (item.kind === "paragraph") return contains(item.paragraph);
+  if (item.kind === "block") return contains(item.block.body) ||
+    !!item.block.bodyFlow?.items.some(flow => containsListScope(flow.item, otherScope));
+  if (item.kind === "columns") return item.columns.some(column => column.flow.some(child => containsListScope(child, otherScope)));
+  return false;
 }

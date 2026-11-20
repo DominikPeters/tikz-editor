@@ -83,6 +83,19 @@ const cases = [
     baselines: [["Topline.", 53.242203], ["Witness", 114.234146]],
   },
   {
+    name: "uses the reset list registers after a nested rounded minipage",
+    source: slide(String.raw`\begin{exampleblock}{Outer}
+\begin{itemize}\item Intro.
+\item \begin{itemize}
+\item \begin{alertblock}{Inner}\begin{description}\item[Stage] \begin{tikzpicture}\node {Picture};\end{tikzpicture}\end{description}\end{alertblock}
+\item \begin{enumerate}\item First content.\item Second content.\item Third content.\end{enumerate}
+\end{itemize}
+\item {\scriptsize\color{blue}\centering Tail.\par}
+\end{itemize}\end{exampleblock}
+\par Witness`, 12, "Madrid"),
+    baselines: [["Firstcontent.", 137.84903], ["Secondcontent.", 152.099487], ["Thirdcontent.", 166.34993], ["Witness", 196.366135]],
+  },
+  {
     name: "starts a display after nested columns without another empty-line baseline",
     source: slide(String.raw`\begin{columns}[onlytextwidth,T]\begin{column}{.46\textwidth}\begin{columns}[onlytextwidth,c]\begin{column}{.38\textwidth}Alpha\end{column}\begin{column}{.58\textwidth}\[E=\sum_{i=1}^{n}w_i x_i\]\end{column}\end{columns}\par\[E=\sum_{i=1}^{n}w_i x_i\]\par Tail\end{column}\begin{column}{.46\textwidth}Peer\end{column}\end{columns}\par Witness`, 12),
     baselines: [["Alpha", 66.31813], ["Tail", 136.525543], ["Witness", 145.501419]],
@@ -189,6 +202,28 @@ const cases = [
     name: "breaks after the anonymous center label before an overwide table",
     source: slide(String.raw`\begin{columns}[onlytextwidth,T]\begin{column}{.22\textwidth}Alpha\par\begin{center}\begin{tabular}{lrr}Method&Cost&Error\\\hline Fresh&12&17\\Local&14&1\\\end{tabular}\end{center}\par Tail\end{column}\begin{column}{.7\textwidth}Peer\end{column}\end{columns}\par Witness`, 12),
     baselines: [["Alpha", 48.556689], ["MethodCostError", 82.425209], ["Tail", 132.850907], ["Peer", 48.556689], ["Witness", 141.826791]],
+  },
+  {
+    name: "retains the empty leading box before a scoped center environment in a nested column",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,T]
+\begin{column}{.62\textwidth}
+\begin{columns}[onlytextwidth,c]
+\begin{column}{.46\textwidth}
+Before \rule[-6pt]{18pt}{18pt} after.
+\par
+\textrm{A local update} can change the measurements used by several neighboring components. The estimate is $\sum_{i=1}^{n}x_i$.
+\end{column}
+\begin{column}{.50\textwidth}
+{\small\color{blue}\centering{\footnotesize\color{black}\raggedright
+\begin{center}\begin{tabular}{lrr}Method&Cost&Error\\\hline
+Local0&29&27\\
+Cached1&15&4\\
+\end{tabular}\end{center}\par}\par}
+\end{column}\end{columns}
+\end{column}
+\begin{column}{.34\textwidth}Peer.\end{column}
+\end{columns}\par Witness`, 11, "default"),
+    baselines: [["Peer.", 44.097488], ["MethodCostError", 91.351578], ["Cached1154", 112.632248], ["Witness", 151.144791]],
   },
   {
     name: "inserts interline glue after nested columns",

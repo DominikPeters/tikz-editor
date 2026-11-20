@@ -257,6 +257,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
         ? {
             kind: listRole.listKind,
             depth: listRole.depth,
+            ...(listRole.listRegisterDepth !== undefined ? { listRegisterDepth: listRole.listRegisterDepth } : {}),
             labelDepth: listRole.labelDepth,
             itemIndex: listItemRole?.itemIndex ?? 0,
             ownLeftMarginEm: listRole.ownLeftMarginEm,
@@ -505,6 +506,7 @@ function paragraphScopeFromVListAncestors(
       listContext: {
         kind: listRole.listKind,
         depth: listRole.depth,
+        ...(listRole.listRegisterDepth !== undefined ? { listRegisterDepth: listRole.listRegisterDepth } : {}),
         labelDepth: listRole.labelDepth,
         itemIndex: listItemRole.itemIndex,
         ownLeftMarginEm: listRole.ownLeftMarginEm,
@@ -2031,11 +2033,15 @@ function texArticleTrivlistVerticalSkipBefore(
 
 function listProfileForContext(profile: TexListLayoutProfile | undefined, context: SimpleTexListContext | undefined): TexListLayoutProfile | undefined {
   if (!profile || !context) return profile;
-  const size = context.depth === 1 ? profile.sizeOverrides?.find(item => Math.abs(item.fontSizePt - Number(context.fontSizePt)) < .001) : undefined;
+  const registerDepth = context.listRegisterDepth ?? context.depth;
+  const size = registerDepth === 1 ? profile.sizeOverrides?.find(item => Math.abs(item.fontSizePt - Number(context.fontSizePt)) < .001) : undefined;
   const index = context.depth - 1;
   function replace(values: readonly number[], value: number | undefined): readonly number[];
   function replace(values: readonly number[] | undefined, value: number | undefined): readonly number[] | undefined;
   function replace(values: readonly number[] | undefined, value: number | undefined): readonly number[] | undefined {
+    if (value === undefined && values !== undefined && registerDepth - 1 !== index) {
+      value = texProfileDepthValue(values, registerDepth);
+    }
     if (value === undefined) return values;
     const copy = [...values ?? []];
     while (copy.length <= index) copy.push(0);
