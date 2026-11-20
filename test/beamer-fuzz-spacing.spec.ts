@@ -183,6 +183,49 @@ const cases = [
     baselines: [["Shortcontent.", 72.559509], ["Tallcontent.", 89.60318], ["Witness", 100.737305]],
   },
   {
+    name: "preserves the closing center skip in a default block",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,c]
+\begin{column}{.38\textwidth}
+\begin{alertblock}{Alpha}
+\begin{center}\begin{tikzpicture}\node {Picture};\end{tikzpicture}\end{center}
+\end{alertblock}
+\end{column}
+\begin{column}{.58\textwidth}Peer.\end{column}
+\end{columns}\par Witness`, 11, "default", "169"),
+    baselines: [["Peer.", 59.552444], ["Picture", 70.341248], ["Witness", 90.642776]],
+  },
+  {
+    name: "suppresses the first list's opening skip in a rounded block with columns",
+    source: slide(String.raw`\begin{alertblock}{Alpha}
+\begin{enumerate}\item Intro.\item Next.\end{enumerate}
+\par
+\begin{columns}[onlytextwidth,b]
+\begin{column}{.46\textwidth}First column.\end{column}
+\begin{column}{.50\textwidth}Second column.\end{column}
+\end{columns}
+\end{alertblock}
+\par Witness`, 10),
+    baselines: [["Next.", 73.462555], ["Secondcolumn.", 87.713013], ["Witness", 106.461853]],
+  },
+  {
+    name: "uses a smaller font's baseline when grouped prose follows a column list",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,c]
+\begin{column}{.38\textwidth}
+\rule{1pt}{42pt}\par Peer.
+\end{column}
+\begin{column}{.58\textwidth}
+\begin{itemize}
+\item Text.
+\item<2-> \[E=\sum_{i=1}^{n}w_i x_i\]
+\end{itemize}
+\par
+{\scriptsize\color{blue}\centering
+\uncover<1,3>{\textbf{Intermediate results carry} both a numerical estimate and an explicit dependency set. The estimate is $\alpha+\beta$.}\par}
+\end{column}\end{columns}
+\par Witness`, 11, "default", "169"),
+    baselines: [["Peer.", 101.056442], ["Intermediateresultscarrybothanumericalestimateandanexplicit", 109.303452], ["Witness", 128.048782]],
+  },
+  {
     name: "retains scoped outer topsep after closing nested lists",
     source: slide(String.raw`Top line.\par
 {\small\centering

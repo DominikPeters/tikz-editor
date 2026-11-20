@@ -1577,6 +1577,7 @@ async function prepareFrameFlow(params: {
   textHeight: number;
   plain: boolean;
   availableHeight: number;
+  startsInMinipage?: boolean;
   diagnostics: Diagnostic[];
   theme: ResolvedBeamerTheme;
   metadata: Partial<
@@ -1597,6 +1598,7 @@ async function prepareFrameFlow(params: {
     const nodeTheme = ambientTextTheme(params.theme, params.references.ambientTextAt?.(node.span.from) ?? "");
     const bodyFont = nodeTheme.fonts["normal-text"];
     const listProfile = beamerListLayoutProfile(nodeTheme, params.references.crampedLists);
+    const startsInMinipage = params.startsInMinipage && result.length === 0;
     const visibility = resolveBeamerOverlaySpanVisibility(
       params.overlays,
       node.span,
@@ -1643,7 +1645,7 @@ async function prepareFrameFlow(params: {
         node,
         textWidth: params.textWidth,
         bodyFont,
-        listProfile,
+        listProfile: startsInMinipage ? { ...listProfile, suppressInitialTopsep: true } : listProfile,
         macroBindings: params.macroBindings,
         references: params.references,
         overlays: params.overlays,
@@ -2460,6 +2462,7 @@ async function prepareBlockWithTheme(params: {
       textWidth: params.width, paperWidth: params.paperWidth, leftSidebarWidth: params.leftSidebarWidth,
       ...requireDefined(params.references.frameLayout, "Expected the enclosing frame geometry"),
       availableHeight: Number.POSITIVE_INFINITY, diagnostics: params.diagnostics,
+      startsInMinipage: plan.style === "rounded",
       theme: { ...params.theme, fonts: { ...params.theme.fonts, "normal-text": theoremBodyFont } },
       macroBindings: params.macroBindings, references: params.references, overlays: params.overlays, step: params.step,
       ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
@@ -2527,11 +2530,18 @@ async function prepareBlockWithTheme(params: {
     ? terminalBodyFlow?.kind === "paragraph" ? terminalBodyFlow.trailingListGlue.naturalPt
       : terminalBodyFlow?.kind === "block" ? terminalBodyFlow.block.plan.geometry.afterSkipPt : 0
     : 0;
-  const trailingBodyListSkip = body && plan.style === "default"
-    ? trailingScopedBeamerListSkip(createIdentityMappedText(params.source.slice(params.node.bodySpan.from, params.node.bodySpan.to), params.node.bodySpan.from), params.references, theoremBodyFont, body)
-    : 0;
+  let trailingBodySkip = 0;
+  if (body && plan.style === "default") {
+    const bodySource = params.source.slice(params.node.bodySpan.from, params.node.bodySpan.to);
+    const terminalScope = body.layout.vlistLayout.boxReport.items.filter(item => item.role?.kind === "trivlist").at(-1)?.role;
+    const alignmentSkip = terminalScope?.kind === "trivlist" && !terminalScope.noParList
+      ? Math.max(0, trailingBeamerTrivlistSkip(bodySource, beamerTrivlistSpacing(params.theme).naturalPt) - trailingCollapsibleSkip(body))
+      : 0;
+    trailingBodySkip = trailingScopedBeamerListSkip(createIdentityMappedText(bodySource, params.node.bodySpan.from),
+      params.references, theoremBodyFont, body) + alignmentSkip;
+  }
   const bodyExtent = body ? (plan.style === "default"
-    ? paragraphMaterialExtent(body) + trailingBodyListSkip
+    ? paragraphMaterialExtent(body) + trailingBodySkip
     : paragraphLineExtent(body)) : (bodyFlow?.extent ?? 0) - terminalBodySkip;
   const titleLine = title.layout.report.lines[0];
   // The title template packs its paragraph into a vbox, whose reference is
@@ -2608,9 +2618,10 @@ async function prepareBlockWithTheme(params: {
           : 1) + geometry.bodyInitialVSkipEx * fontXHeightPt(params.theme.fonts[plan.bodyFontRole])
       : geometry.bodyTopPaddingPt;
   const lastFlowItem = bodyFlow?.items.at(-1)?.item;
-  const closesWithBodySkip = plan.style === "default" && (trailingBodyListSkip > 0 ||
+  const closesWithBodySkip = plan.style === "default" && (trailingBodySkip > 0 ||
     body?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin?.kind === "external-flow-after" ||
-    lastFlowItem?.kind === "block" && lastFlowItem.block.plan.geometry.afterSkipPt > 0);
+    lastFlowItem?.kind === "block" && lastFlowItem.block.plan.geometry.afterSkipPt > 0 ||
+    lastFlowItem?.kind === "paragraph" && lastFlowItem.trailingListGlue.naturalPt > 0);
   // A default colorbox ending in vertical glue has zero physical depth.
   const bodyEndingDepth = closesWithBodySkip ? 0 : body ? paragraphEndingMaterialDepth(body)
     : lastFlowItem?.kind === "columns" ? lastFlowItem.box.depth
@@ -3544,6 +3555,10 @@ async function prepareColumnContent(params: {
         : undefined;
       const leadingBlock = flow.length === 0 && column.alignment !== "T" &&
         (prepared.kind === "block" || prepared.kind === "paragraph" && firstRole?.kind === "external-flow" && firstRole.flowKind === "block");
+      const startingBaseline = prepared.kind === "paragraph"
+        ? (firstRole?.kind === "external-flow" ? firstRole.baselineSkipPt : undefined) ??
+          paragraphStartingBaselineSkip(prepared.paragraph, bodyFont.lineHeightPt)
+        : bodyFont.lineHeightPt;
       if (prepared.kind === "block" && prepared.block.packageBox) {
         const spacing = tcolorboxSurroundingSpacing(prepared.block.packageBox.plan, {
           baselineSkipPt: bodyFont.lineHeightPt, previousDepthPt: previousDepth ?? null,
@@ -3557,18 +3572,19 @@ async function prepareColumnContent(params: {
         // title box. T columns clear that depth with \nointerlineskip instead.
         const nextHeight = prepared.kind === "block"
           ? prepared.block.flowBoxHeight : paragraphStartingMaterialHeight(prepared.paragraph);
-        const baseline = firstRole?.kind === "external-flow" ? firstRole.baselineSkipPt ?? bodyFont.lineHeightPt : bodyFont.lineHeightPt;
-        const interline = baseline - (previousDepth ?? 0) - nextHeight;
+        const interline = startingBaseline - (previousDepth ?? 0) - nextHeight;
         prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) + (interline < 0 ? 1 : interline);
       }
-      if (previous?.kind === "paragraph" && prepared.kind === "paragraph" && previous.trailingSkipPt > 0 && previousDepth !== undefined) {
+      const precedingSkip = previous?.kind === "paragraph" ? previous.trailingSkipPt
+        : previous?.kind === "block" ? previous.block.plan.geometry.afterSkipPt : 0;
+      if (prepared.kind === "paragraph" && precedingSkip > 0 && previousDepth !== undefined) {
         const material = prepared.paragraph.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "glue" && item.itemKind !== "penalty" && item.itemKind !== "vbox");
         const boundary = prepared.paragraph.layout.vlistLayout.boxReport.items.find(item => item.glue?.origin?.kind === "trivlist-boundary");
         if (boundary && material && boundary.y <= material.y) {
           // Adjacent list/trivlist boundaries use addvspace's maximum skip,
           // followed by ordinary interline glue from the previous last box.
-          const interline = bodyFont.lineHeightPt - previousDepth - paragraphStartingMaterialHeight(prepared.paragraph);
-          prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) - Math.min(previous.trailingSkipPt, Number(boundary.height)) + (paragraphNeedsInterline ? 0 : interline < 0 ? 1 : interline);
+          const interline = startingBaseline - previousDepth - paragraphStartingMaterialHeight(prepared.paragraph);
+          prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) - Math.min(precedingSkip, Number(boundary.height)) + (paragraphNeedsInterline ? 0 : interline < 0 ? 1 : interline);
         }
       }
       flow.push(prepared);
@@ -3771,8 +3787,8 @@ async function prepareColumnFlowNode(params: {
       : undefined;
     // The opening environment can be inside a group in the minipage's
     // first flow node. Later nodes use the preceding flow's baseline.
-    const startsWithTrivlist = firstBox?.role?.kind === "trivlist" ||
-      /^\s*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(projection.mapped.text);
+    const startsWithStandaloneTrivlist = /^\s*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(projection.mapped.text);
+    const startsWithTrivlist = firstBox?.role?.kind === "trivlist" || startsWithStandaloneTrivlist;
     const startsWithList = node.kind === "list" || firstBox?.role?.kind === "list" ||
       /^\s*\\begin\s*\{(?:itemize|enumerate|description)\}/u.test(projection.mapped.text);
     const listClosingSkipPt = node.kind === "list" ? trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont) : undefined;
@@ -3781,7 +3797,7 @@ async function prepareColumnFlowNode(params: {
       visibility,
       paragraph,
       startsWithVerticalEnvironment: startsWithList || startsWithDisplay || startsWithTrivlist,
-      replacesColumnHeadSkip: startsWithTrivlist &&
+      replacesColumnHeadSkip: startsWithStandaloneTrivlist &&
         !paragraph.layout.vlistLayout.boxReport.items.some(item => item.role?.kind === "trivlist" && item.role.noParList),
       leadingSkipPt: leadingBeamerTrivlistAdjustment(projection.mapped.text, paragraph, params.listProfile.trivlistTopsepPt) +
         // A column minipage starts with \leavevmode. A leading trivlist ends
@@ -3794,10 +3810,9 @@ async function prepareColumnFlowNode(params: {
               const skip = Math.round((baseline - paragraphStartingMaterialHeight(paragraph)) * 65_536) / 65_536;
               return skip >= 0 ? skip : 1;
             })() : 0),
-      // A plain TeX paragraph contributes its line hboxes, not the TikZ-node
-      // strut carried by the shared text frontend's enclosing vlist. Lists,
-      // on the other hand, intentionally carry their vertical list glue.
-      advanceHeight: node.kind === "paragraph" ? paragraphMaterialExtent(paragraph) : paragraph.height,
+      // The TeX list ships its boxes and glue with their measured dimensions.
+      // The shared text frontend's synthetic strut does not advance the column.
+      advanceHeight: paragraphMaterialExtent(paragraph),
       // minipage's terminal \unskip drops the final trivlist skip; retain it
       // only when another flow item follows, as for the list's trailing glue.
       ...(listClosingSkipPt !== undefined ? { listClosingSkipPt } : {}),

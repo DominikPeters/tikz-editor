@@ -309,20 +309,28 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const enteringTrivlist = scope.trivlistScopes.some(role => !state.previousEmittedTrivlistScopes.includes(role));
     const innermostList = lastVListAncestorRole(roles, "list");
     const innermostTrivlist = scope.trivlistScopes.at(-1);
-    // A nested list can consume the anonymous item of a freshly opened
-    // center/flush environment before it has shipped any material.
-    const startsWithPendingTrivlist = enteringTrivlist && innermostList !== undefined && innermostTrivlist !== undefined &&
-      roles.indexOf(innermostList) > roles.indexOf(innermostTrivlist);
+    // Boxes can ship while the surrounding center/flush label stays pending.
+    const startsWithPendingTrivlist = innermostList?.noParList === true && previousList?.listStart !== innermostList.sourceStart;
     const pendingParent = previousList && paragraph.ancestorListLabels?.find(ancestor =>
       !ancestor.inherited && ancestor.depth === previousList.depth);
     const startsWithPendingParent = pendingParent !== undefined && pendingParent.listStart === previousList?.listStart &&
       pendingParent.itemIndex === previousList?.itemIndex;
-    const opensAdjacentParent = pendingParent !== undefined && pendingParent.listStart !== previousList?.listStart;
-    const boundaryList = opensAdjacentParent ? pendingParent : scope.listContext;
-    const boundaryProfile = opensAdjacentParent ? listProfileForContext(resolvedListProfile, pendingParent) : resolvedListProfile;
+    const adjacentParent = previousList && !followsDisplay && !parentTransition ? paragraph.ancestorListLabels?.find(ancestor => {
+      if (ancestor.inherited || ancestor.depth > previousList.depth) return false;
+      const previousListStart = ancestor.depth === previousList.depth ? previousList.listStart : state.lastListItemsByDepth.get(ancestor.depth)?.listStart;
+      return previousListStart !== undefined && previousListStart !== ancestor.listStart;
+    }) : undefined;
+    const boundaryList = adjacentParent ?? scope.listContext;
+    const boundaryProfile = listProfileForContext(resolvedListProfile, adjacentParent);
     let parentTransitionFlex: { stretch: TexLength; shrink: TexLength } | undefined;
     let listVerticalSkipBefore: TexLength;
     if (suppressInitialTopsep || startsWithPendingParent || startsWithPendingTrivlist) listVerticalSkipBefore = texLength(0);
+    else if (adjacentParent && previousList) {
+      listVerticalSkipBefore = texLength(
+        texArticleListExitBoundarySkip(state, previousList.depth, adjacentParent.depth - 1, font, resolvedListProfile) +
+        rememberListTopsep(state, adjacentParent.depth, startsListInVerticalMode, font, boundaryProfile)
+      );
+    }
     else if (followsDisplay && parentTransition) {
       // A nested list consumes the parent's pending label. The paragraph skip
       // from the parent item still follows the display.
@@ -409,7 +417,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
           state.previousEmittedListContext !== undefined || scope.listContext !== undefined,
           font
         );
-    const activeList = scope.listContext ?? (enteringTrivlist ? undefined : state.previousEmittedListContext);
+    const activeList = enteringTrivlist && innermostTrivlist?.enclosingListDepth === 0
+      ? undefined : scope.listContext ?? (enteringTrivlist ? undefined : state.previousEmittedListContext);
     const trivlistProfile = listProfile && activeList ? { ...listProfile,
       trivlistTopsepPt: listProfile.liveListTopsepPt ?? texProfileDepthValue(resolvedListProfile?.topsepPtByDepth ?? listProfile.topsepPtByDepth, activeList.depth),
       trivlistPartopsepPt: 0,

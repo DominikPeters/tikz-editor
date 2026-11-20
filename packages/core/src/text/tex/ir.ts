@@ -125,6 +125,7 @@ export type SimpleTexScopePathRole =
       readonly noParList?: boolean;
       readonly envName: SimpleTexTrivlistEnvironmentName;
       readonly depth: number;
+      readonly enclosingListDepth?: number;
       readonly alignment: TexParagraphAlignment;
     }
   | {
@@ -132,6 +133,7 @@ export type SimpleTexScopePathRole =
       readonly sourceStart?: number;
       readonly listKind: SimpleTexListKind;
       readonly depth: number;
+      readonly noParList?: boolean;
       readonly listRegisterDepth?: number;
       readonly labelDepth: number;
       readonly fontSizePt?: TexLength;
@@ -5178,6 +5180,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       sourceStart,
       listKind: kind,
       depth,
+      ...(scopeStack.some(role => role.kind === "trivlist" && !consumedTrivlistLabels.has(role)) ? { noParList: true } : {}),
       ...(listRegisterDepth > 0 && listRegisterDepth !== depth ? { listRegisterDepth } : {}),
       labelDepth,
       ownLeftMarginEm: ownMargin,
@@ -5240,6 +5243,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       ...(pendingListShowLabel || inheritedItemLabels.length > 0 ? { noParList: true } : {}),
       envName: name,
       depth,
+      enclosingListDepth: listStack.length + currentQuoteDepth,
       alignment: simpleTexTrivlistAlignment(name),
     };
   };

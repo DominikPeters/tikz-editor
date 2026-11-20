@@ -271,6 +271,7 @@ export type TexVBoxRole =
       readonly noParList?: boolean;
       readonly envName: SimpleTexTrivlistEnvironmentName;
       readonly depth: number;
+      readonly enclosingListDepth?: number;
       readonly alignment: TexParagraphAlignment;
     }
   | {
@@ -278,6 +279,7 @@ export type TexVBoxRole =
       readonly sourceStart?: number;
       readonly listKind: SimpleTexListKind;
       readonly depth: number;
+      readonly noParList?: boolean;
       readonly listRegisterDepth?: number;
       readonly labelDepth: number;
       readonly fontSizePt?: TexLength;
