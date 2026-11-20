@@ -237,6 +237,28 @@ const cases = [
     baselines: [["Topline.", 53.242203], ["Witness", 114.234146]],
   },
   {
+    name: "retains the outer item boundary before a list that consumes an alignment label",
+    source: slide(String.raw`Lead text.\par
+{\small\centering
+\begin{description}
+\item[Stage 1] \begin{itemize}
+\item Alpha.
+\item \[E=\sum_{i=1}^{n}w_i x_i\]
+\end{itemize}
+\item[Stage 2] \begin{flushleft}
+\begin{enumerate}
+\item \begin{columns}[onlytextwidth,t]
+\begin{column}{.38\textwidth}First column.\end{column}
+\begin{column}{.58\textwidth}Second column.\end{column}
+\end{columns}
+\item Tail.
+\end{enumerate}
+\end{flushleft}
+\end{description}\par}
+\par Witness`, 12, "Madrid", "169"),
+    baselines: [["Firstcolumn.", 138.567368], ["Stage2", 151.487778], ["Tail.", 164.408203], ["Witness", 186.733902]],
+  },
+  {
     name: "uses the reset list registers after a nested rounded minipage",
     source: slide(String.raw`\begin{exampleblock}{Outer}
 \begin{itemize}\item Intro.

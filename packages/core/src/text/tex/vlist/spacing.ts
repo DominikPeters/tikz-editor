@@ -322,9 +322,11 @@ function planSimpleTexParagraphVerticalSkipsInto(
     }) : undefined;
     const boundaryList = adjacentParent ?? scope.listContext;
     const boundaryProfile = listProfileForContext(resolvedListProfile, adjacentParent);
+    const suppressesListEntry = suppressInitialTopsep || startsWithPendingParent ||
+      startsWithPendingTrivlist && !parentTransition && !adjacentParent;
     let parentTransitionFlex: { stretch: TexLength; shrink: TexLength } | undefined;
     let listVerticalSkipBefore: TexLength;
-    if (suppressInitialTopsep || startsWithPendingParent || startsWithPendingTrivlist) listVerticalSkipBefore = texLength(0);
+    if (suppressesListEntry) listVerticalSkipBefore = texLength(0);
     else if (adjacentParent && previousList) {
       listVerticalSkipBefore = texLength(
         texArticleListExitBoundarySkip(state, previousList.depth, adjacentParent.depth - 1, font, resolvedListProfile) +
@@ -393,7 +395,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
     delete state.externalPendingParskip;
     const externalAfterSkip = state.externalAfterSkip;
     state.externalAfterSkip = 0;
-    const listFlex = followsDisplay || suppressInitialTopsep || startsWithPendingParent || startsWithPendingTrivlist
+    const listFlex = followsDisplay || suppressesListEntry
       ? { stretch: texLength(0), shrink: texLength(0) }
       : outsideListBoundary ? texProfileListVerticalGlueFlex(
           undefined, outsideListBoundary, hasPreviousEmittedParagraph, false,
