@@ -3756,9 +3756,15 @@ async function prepareColumnFlowNode(params: {
         height: placeholder.height,
       };
     }
-    const firstBox = paragraph.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "glue" && item.itemKind !== "penalty");
-    const startsWithTrivlist = firstBox?.role?.kind === "trivlist";
-    const startsWithList = node.kind === "list" || firstBox?.role?.kind === "list";
+    const firstBox = params.firstInColumn
+      ? paragraph.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "glue" && item.itemKind !== "penalty")
+      : undefined;
+    // The opening environment can be inside a group in the minipage's
+    // first flow node. Later nodes use the preceding flow's baseline.
+    const startsWithTrivlist = firstBox?.role?.kind === "trivlist" ||
+      /^\s*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(projection.mapped.text);
+    const startsWithList = node.kind === "list" || firstBox?.role?.kind === "list" ||
+      /^\s*\\begin\s*\{(?:itemize|enumerate|description)\}/u.test(projection.mapped.text);
     return {
       kind: "paragraph",
       visibility,
