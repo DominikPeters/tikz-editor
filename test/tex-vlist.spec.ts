@@ -350,17 +350,17 @@ describe("TeX vlist lowering", () => {
       { kind: "paragraph", text: "Alpha" },
       {
         kind: "vbox",
-        role: { kind: "trivlist", envName: "center", depth: 1, alignment: "center" },
+        role: { kind: "trivlist", envName: "center", depth: 1, enclosingListDepth: 0, alignment: "center" },
         children: ["Beta"],
       },
       {
         kind: "vbox",
-        role: { kind: "trivlist", envName: "flushleft", depth: 1, alignment: "ragged-right" },
+        role: { kind: "trivlist", envName: "flushleft", depth: 1, enclosingListDepth: 0, alignment: "ragged-right" },
         children: ["Gamma"],
       },
       {
         kind: "vbox",
-        role: { kind: "trivlist", envName: "flushright", depth: 1, alignment: "ragged-left" },
+        role: { kind: "trivlist", envName: "flushright", depth: 1, enclosingListDepth: 0, alignment: "ragged-left" },
         children: ["Delta"],
       },
       { kind: "paragraph", text: "Epsilon" },
@@ -700,7 +700,7 @@ describe("TeX vlist lowering", () => {
       {
         kind: "glue",
         size: 13.6,
-        origin: { kind: "display-math-interline", side: "above" },
+        origin: { kind: "display-math-interline", side: "above", purpose: "leading-empty-line-baseline" },
         role: undefined,
       },
       {

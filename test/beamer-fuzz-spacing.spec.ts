@@ -19,6 +19,57 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "top-aligns a column beginning with a grouped block",
+    source: slide(String.raw`Lead text.\par
+\begin{itemize}
+\item Intro.
+\item \begin{columns}[onlytextwidth,t]
+\begin{column}{.46\textwidth}
+\begin{alertblock}{Left title}Left body.\end{alertblock}
+\end{column}
+\begin{column}{.50\textwidth}
+{\small\raggedright
+\begin{block}{Right title}
+\begin{tikzpicture}\node {Picture};\end{tikzpicture}
+\end{block}\par}
+\end{column}
+\end{columns}
+\item Next item.
+\end{itemize}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Righttitle", 91.302414], ["Lefttitle", 91.416412], ["Picture", 108.598358], ["Nextitem.", 132.843201], ["Witness", 147.093643]],
+  },
+  {
+    name: "keeps a rounded block's first list closing skip across a size change",
+    source: slide(String.raw`Lead text.\par
+\begin{block}{Alpha}
+\begin{enumerate}\item First.\item Second.\end{enumerate}
+\par
+{\small\centering
+\begin{description}\item[Stage 1] Third.\item[Stage 2] Fourth.\end{description}\par}
+\end{block}
+\par Witness`, 11, "Boadilla", "169"),
+    baselines: [["Second.", 88.916031], ["Stage1Third.", 108.866669], ["Stage2Fourth.", 123.117111], ["Witness", 145.134064]],
+  },
+  {
+    name: "adds the list paragraph skip once after an explicitly ended display",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,t]
+\begin{column}{.46\textwidth}Peer text.\end{column}
+\begin{column}{.50\textwidth}
+{\small\centering
+\begin{description}
+\item[Stage 1] \[E=\sum_{i=1}^{n}w_i x_i\]
+\par
+Continued text.
+\item[Stage 2] Next item.
+\end{description}\par}
+\end{column}
+\end{columns}
+\par Witness`, 11, "Boadilla", "169"),
+    baselines: [["Continuedtext.", 118.737808], ["Stage2Nextitem.", 132.988251], ["Witness", 143.114914]],
+  },
+  {
     name: "starts a rounded block's flush environment without an extra lineskip",
     source: slide(String.raw`\begin{block}{Alpha}\begin{flushleft}\begin{tikzpicture}\draw (0,0) rectangle (2,1);\node at (1,.5){Box};\end{tikzpicture}\end{flushleft}\par Tail\end{block}\par Witness`),
     baselines: [["Alpha", 46.952881], ["Box", 72.597809], ["Tail", 104.221405], ["Witness", 124.395721]],

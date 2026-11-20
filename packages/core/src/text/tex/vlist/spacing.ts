@@ -95,6 +95,7 @@ export interface SimpleTexParagraphVerticalSkip {
   readonly listSize: TexLength;
   readonly listStretch?: TexLength;
   readonly listShrink?: TexLength;
+  readonly resumesDisplayParagraph?: boolean;
   readonly trivlistSize?: TexLength;
   readonly trivlistAfterDisplay?: boolean;
 }
@@ -305,6 +306,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
       return !ancestor.inherited && previous !== undefined && previous.listStart === ancestor.listStart && previous.itemIndex !== ancestor.itemIndex;
     });
     const previousList = state.previousEmittedListContext;
+    const resumesDisplayParagraph = followsDisplay && startsAfterExplicitPar && previousList !== undefined &&
+      scope.listContext !== undefined && previousList.listStart === scope.listContext.listStart &&
+      previousList.itemIndex === scope.listContext.itemIndex && !scope.listContext.showLabel;
     const roles = ancestors.length ? ancestors : paragraph.scopePath ?? [];
     const enteringTrivlist = scope.trivlistScopes.some(role => !state.previousEmittedTrivlistScopes.includes(role));
     const innermostList = lastVListAncestorRole(roles, "list");
@@ -326,7 +330,14 @@ function planSimpleTexParagraphVerticalSkipsInto(
       startsWithPendingTrivlist && !parentTransition && !adjacentParent;
     let parentTransitionFlex: { stretch: TexLength; shrink: TexLength } | undefined;
     let listVerticalSkipBefore: TexLength;
-    if (suppressesListEntry) listVerticalSkipBefore = texLength(0);
+    if (suppressesListEntry) {
+      // A minipage suppresses the opening glue but still captures the
+      // list's topsep for \endlist, before another size can change it.
+      if (suppressInitialTopsep && scope.listContext) {
+        rememberListTopsep(state, scope.listContext.depth, startsListInVerticalMode, font, resolvedListProfile);
+      }
+      listVerticalSkipBefore = texLength(0);
+    }
     else if (adjacentParent && previousList) {
       listVerticalSkipBefore = texLength(
         texArticleListExitBoundarySkip(state, previousList.depth, adjacentParent.depth - 1, font, resolvedListProfile) +
@@ -344,7 +355,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
       (previousList.depth === scope.listContext.depth || (startsAfterExplicitPar && previousList.depth < scope.listContext.depth)) &&
       !paragraph.ancestorListLabels?.some(label => !label.inherited)
       ? rememberListTopsep(state, scope.listContext.depth, startsListInVerticalMode, font, resolvedListProfile)
-      : state.previousEmittedListContext && scope.listContext && state.previousEmittedListContext.itemIndex !== scope.listContext.itemIndex
+      : previousList && scope.listContext && (previousList.itemIndex !== scope.listContext.itemIndex || resumesDisplayParagraph)
         ? texArticleListParagraphSkip(scope.listContext.depth, font, resolvedListProfile) : texLength(0);
     else if (parentTransition) {
       const parentProfile = listProfileForContext(listProfile, parentTransition);
@@ -458,6 +469,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
       ...(listFlex.shrink > 0
         ? { listShrink: listFlex.shrink }
         : {}),
+      ...(resumesDisplayParagraph ? { resumesDisplayParagraph: true } : {}),
       ...(trivlistVerticalSkipBefore > 0
         ? { trivlistSize: trivlistVerticalSkipBefore }
         : {}),
@@ -658,6 +670,7 @@ function paragraphBoundaryGlueItems(
       origin: {
         kind: "list-boundary",
         beforeBlockIndex: skip.blockIndex,
+        ...(skip.resumesDisplayParagraph ? { resumesDisplayParagraph: true } : {}),
       },
       size: skip.listSize,
       ...(skip.listStretch != null ? { stretch: skip.listStretch } : {}),
@@ -930,6 +943,7 @@ function resolveDisplayMathVerticalGlueInItems(
     !previousDepthSuppressed && (previousParagraphMeasurement !== undefined ||
     previousDisplayMaterialMetrics !== undefined);
   let paragraphBoundaryInterlineAlreadyInserted = false;
+  let displayInterlineAlreadyInserted = false;
   for (const [index, item] of sourceItems.entries()) {
     const path = [...pathPrefix, index];
     if (item.kind === "glue" && item.origin?.kind === "explicit-command" && item.origin.command === "nointerlineskip") {
@@ -1099,6 +1113,7 @@ function resolveDisplayMathVerticalGlueInItems(
         options.displayMathProfile
       );
       items.push(resolvedGlue);
+      displayInterlineAlreadyInserted = false;
       if (item.origin.side === "below") previousDisplayBelowSkip = resolvedGlue.size;
       if (
         item.origin.side === "above" &&
@@ -1139,6 +1154,7 @@ function resolveDisplayMathVerticalGlueInItems(
               nextParagraph ? nextParagraph.baselineSkip ?? options.lineHeight : item.origin.baselineSkip ?? options.lineHeight
             )
           ));
+          displayInterlineAlreadyInserted = nextParagraph !== undefined;
         }
       }
       continue;
@@ -1154,7 +1170,11 @@ function resolveDisplayMathVerticalGlueInItems(
         items.push({ ...item, size: texLength(additionalSkip) });
       } else items.push(item);
       plainParagraphInterlinePending = false;
-      if (!previousDepthSuppressed && shouldInsertParagraphBoundaryInterlineGlue(sourceItems, index)) {
+      // An explicit paragraph in the same item only adds parskip after
+      // the display. Its next baseline was already accounted for above.
+      const resumesDisplayParagraph = item.origin?.kind === "list-boundary" && item.origin.resumesDisplayParagraph;
+      if (!previousDepthSuppressed && !(resumesDisplayParagraph && displayInterlineAlreadyInserted) &&
+          shouldInsertParagraphBoundaryInterlineGlue(sourceItems, index)) {
         const nextParagraph = nextParagraphMeasurement(
           sourceItems,
           index,

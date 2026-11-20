@@ -3550,8 +3550,7 @@ async function prepareColumnContent(params: {
         (previous?.kind === "block" || previous?.kind === "columns" ||
           previous?.kind === "paragraph" && !prepared.startsWithVerticalEnvironment);
       const firstRole = prepared.kind === "paragraph" && !prepared.startsWithVerticalEnvironment
-        ? prepared.paragraph.layout.vlistLayout.boxReport.items.find(item =>
-            item.itemKind !== "vbox" && item.itemKind !== "glue" && item.itemKind !== "penalty")?.hboxRole
+        ? columnLeadingHBoxRole(prepared.paragraph)
         : undefined;
       const leadingBlock = flow.length === 0 && column.alignment !== "T" &&
         (prepared.kind === "block" || prepared.kind === "paragraph" && firstRole?.kind === "external-flow" && firstRole.flowKind === "block");
@@ -4125,14 +4124,21 @@ function measureColumnVerticalBox(
   // Its empty first line gives a top-aligned minipage zero height; the block
   // follows below that reference. Ordinary prose shares the initial line.
   const first = flow[0];
+  const firstRole = first?.kind === "paragraph" ? columnLeadingHBoxRole(first.paragraph) : undefined;
+  const startsWithBlock = firstRole?.kind === "external-flow" && firstRole.flowKind === "block";
   const firstReference = first?.kind === "columns" || (first?.kind === "block" && !first.block.packageBox) ||
-    (first?.kind === "paragraph" && first.startsWithVerticalEnvironment)
+    (first?.kind === "paragraph" && (first.startsWithVerticalEnvironment || startsWithBlock))
     ? 0 : firstFlowReferenceFromTop(flow);
   return {
     height: firstReference,
     depth: Math.max(0, naturalHeight - firstReference),
     referenceFromContentTop: firstReference,
   };
+}
+
+function columnLeadingHBoxRole(paragraph: LaidParagraph) {
+  return paragraph.layout.vlistLayout.boxReport.items.find(item =>
+    item.itemKind !== "vbox" && item.itemKind !== "glue" && item.itemKind !== "penalty")?.hboxRole;
 }
 
 function firstFlowReferenceFromTop(
