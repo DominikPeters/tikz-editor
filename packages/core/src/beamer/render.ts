@@ -107,7 +107,7 @@ import type {
   BeamerTheoremBodyNode,
   BeamerTitlePageBodyNode,
 } from "./content-types.js";
-import { resolveBeamerPageGeometry } from "./geometry.js";
+import { beamerCentimetersToPoints, beamerPageHeightForShrink, resolveBeamerPageGeometry } from "./geometry.js";
 import {
   beamerOverlaySpecContains,
   projectBeamerOverlayText,
@@ -632,7 +632,7 @@ async function renderBeamerFrameStep(params: {
   diagnostics.push(...includeGraphicsDiagnostics(source, frame.bodySpan));
   const inheritedMacroDeclarations = [...macroBindings.values()].some(binding => /\\(?:newcommand|renewcommand|providecommand|def|let)\b/u.test(binding.kind === "text" ? binding.value : binding.body));
   const references: BeamerReferenceContext = {
-    ambientTextAt: createBeamerAmbientText(source),
+    ambientTextAt: createBeamerAmbientText(source, span => resolveBeamerOverlaySpanVisibility(bodyIr.overlays, span, step) !== "removed"),
     compilationDate: context.compilationDate,
     tocSections: document.sections,
     currentSectionId: frame.sectionId,
@@ -847,7 +847,9 @@ async function renderBeamerFrameStep(params: {
     const shrinkTopSkip = shrink && frame.options?.alignment === "top" ? TOP_ALIGNED_FRAME_SKIP_PT : 0;
     const frameBlockTop = availableContentBounds.y + (continuationPages ? 0 : shrink ? shrinkTopSkip : verticalPacking.topOffset);
     if (shrink) {
-      bodyTransform = beamerFrameBodyTransform(beamerFrameShrinkScale(shrink, rigidPositioned.extent, availableContentBounds.height - shrinkTopSkip),
+      const fitHeight = availableContentBounds.height + beamerPageHeightForShrink(page.aspectRatio) - page.page.height -
+        (shrinkTopSkip > 0 ? beamerCentimetersToPoints(0.2) : 0);
+      bodyTransform = beamerFrameBodyTransform(beamerFrameShrinkScale(shrink, rigidPositioned.extent, fitHeight),
         { x: availableContentBounds.x, y: frameBlockTop });
     }
     for (const placement of positioned.items) {
@@ -2436,7 +2438,6 @@ async function prepareBlockWithTheme(params: {
         mathFont: params.theme.fonts[plan.bodyFontRole],
         colorResolver: beamerAlertColorResolver(params.theme),
         alignment: "left",
-        disableAutomaticHyphenation: true,
         // Lists inside blocks use the same theme templates (margins,
         // markers) as frame-level lists.
         listProfile: { ...beamerListLayoutProfile(params.theme, params.references.crampedLists), suppressInitialTopsep: plan.style !== "default" },
@@ -2526,8 +2527,11 @@ async function prepareBlockWithTheme(params: {
     ? terminalBodyFlow?.kind === "paragraph" ? terminalBodyFlow.trailingListGlue.naturalPt
       : terminalBodyFlow?.kind === "block" ? terminalBodyFlow.block.plan.geometry.afterSkipPt : 0
     : 0;
+  const trailingBodyListSkip = body && plan.style === "default"
+    ? trailingScopedBeamerListSkip(createIdentityMappedText(params.source.slice(params.node.bodySpan.from, params.node.bodySpan.to), params.node.bodySpan.from), params.references, theoremBodyFont, body)
+    : 0;
   const bodyExtent = body ? (plan.style === "default"
-    ? paragraphMaterialExtent(body) + trailingScopedBeamerListSkip(createIdentityMappedText(params.source.slice(params.node.bodySpan.from, params.node.bodySpan.to), params.node.bodySpan.from), params.references, theoremBodyFont, body)
+    ? paragraphMaterialExtent(body) + trailingBodyListSkip
     : paragraphLineExtent(body)) : (bodyFlow?.extent ?? 0) - terminalBodySkip;
   const titleLine = title.layout.report.lines[0];
   // The title template packs its paragraph into a vbox, whose reference is
@@ -2604,11 +2608,11 @@ async function prepareBlockWithTheme(params: {
           : 1) + geometry.bodyInitialVSkipEx * fontXHeightPt(params.theme.fonts[plan.bodyFontRole])
       : geometry.bodyTopPaddingPt;
   const lastFlowItem = bodyFlow?.items.at(-1)?.item;
-  const closesWithBlockSkip = plan.style === "default" &&
-    body?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin?.kind === "external-flow-after";
-  // A default colorbox ending in its last nested block's vertical skip
-  // has zero physical depth.
-  const bodyEndingDepth = body ? closesWithBlockSkip ? 0 : paragraphEndingMaterialDepth(body)
+  const closesWithBodySkip = plan.style === "default" && (trailingBodyListSkip > 0 ||
+    body?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin?.kind === "external-flow-after" ||
+    lastFlowItem?.kind === "block" && lastFlowItem.block.plan.geometry.afterSkipPt > 0);
+  // A default colorbox ending in vertical glue has zero physical depth.
+  const bodyEndingDepth = closesWithBodySkip ? 0 : body ? paragraphEndingMaterialDepth(body)
     : lastFlowItem?.kind === "columns" ? lastFlowItem.box.depth
     : lastFlowItem?.kind === "paragraph" ? paragraphEndingMaterialDepth(lastFlowItem.paragraph)
     : lastFlowItem?.kind === "block" ? lastFlowItem.endingDepth : 0;
@@ -2658,7 +2662,7 @@ async function prepareBlockWithTheme(params: {
         : naturalHeight,
     endingDepth:
       geometry.flowEndingDepth === "body-last-line"
-        ? body && !closesWithBlockSkip ? paragraphLastLineDepth(body) : bodyEndingDepth
+        ? body && !closesWithBodySkip ? paragraphLastLineDepth(body) : bodyEndingDepth
         : 0,
   };
 }
@@ -3771,6 +3775,7 @@ async function prepareColumnFlowNode(params: {
       /^\s*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(projection.mapped.text);
     const startsWithList = node.kind === "list" || firstBox?.role?.kind === "list" ||
       /^\s*\\begin\s*\{(?:itemize|enumerate|description)\}/u.test(projection.mapped.text);
+    const listClosingSkipPt = node.kind === "list" ? trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont) : undefined;
     return {
       kind: "paragraph",
       visibility,
@@ -3795,8 +3800,10 @@ async function prepareColumnFlowNode(params: {
       advanceHeight: node.kind === "paragraph" ? paragraphMaterialExtent(paragraph) : paragraph.height,
       // minipage's terminal \unskip drops the final trivlist skip; retain it
       // only when another flow item follows, as for the list's trailing glue.
-      trailingSkipPt: node.kind === "list" ? trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont)
-        : Math.max(0, trailingBeamerTrivlistSkip(projection.mapped.text, params.listProfile.trivlistTopsepPt) - trailingCollapsibleSkip(paragraph)),
+      ...(listClosingSkipPt !== undefined ? { listClosingSkipPt } : {}),
+      trailingSkipPt: Math.max(0, (listClosingSkipPt ?? trailingBeamerTrivlistSkip(
+        projection.mapped.text, params.listProfile.trivlistTopsepPt
+      )) - trailingCollapsibleSkip(paragraph)),
     };
   }
   if (node.kind === "unsupported") {
@@ -4075,7 +4082,7 @@ function measureColumnVerticalBox(
     const last = flow.at(-1);
     // endlist's closing glue follows a terminal display skip. endminipage's
     // single unskip leaves glue in the box, so its physical depth is zero.
-    const depth = last?.kind === "paragraph" ? last.trailingSkipPt > 0 && last.paragraph.layout.vlistLayout.boxReport.items.at(-1)?.itemKind === "glue"
+    const depth = last?.kind === "paragraph" ? (last.listClosingSkipPt ?? last.trailingSkipPt) > 0 && last.paragraph.layout.vlistLayout.boxReport.items.at(-1)?.itemKind === "glue"
       ? 0 : paragraphEndingMaterialDepth(last.paragraph)
       : last?.kind === "block" ? last.block.endingDepth : last?.kind === "columns" ? last.box.depth : 0;
     return {
@@ -4424,6 +4431,7 @@ function layoutParagraph(params: {
     const values = spacingProfile[key];
     return values ? [[key, values.slice(Math.min(listDepthOffset, values.length - 1))] as const] : [];
   }));
+  const enclosingCounters = params.references.ambientTextAt?.enumerateCountersAt?.(params.sourceSpan.from) ?? [];
   const layoutOptions = {
     ...beamerInlineListEffects(mapped, params.references.inlineFlow ?? [], params.inMinipage ?? false),
     inheritedItemLabels: [...(params.references.inlineFlowItemLabels?.values() ?? [])].filter(transfer => mapped.sourceMap.charOrigins.some(origin => origin.kind === "direct" && origin.from === transfer.targetOffset)).flatMap(transfer => transfer.labels),
@@ -4497,7 +4505,11 @@ function layoutParagraph(params: {
       ...listSpacing,
       ...(listDepthOffset > 0 ? { sizeOverrides: [] } : {}),
       fontDepthOffset: params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0,
-      enumerateDepthOffset: params.references.ambientTextAt?.enumerateDepthAt?.(params.sourceSpan.from) ?? 0,
+      enumerateDepthOffset: enclosingCounters.length,
+      ...(enclosingCounters.length > 0 && spacingProfile.resolveEnumerateText ? {
+        resolveEnumerateText: (counters: readonly number[], depth: number) =>
+          spacingProfile.resolveEnumerateText?.([...enclosingCounters.slice(0, Math.max(0, depth - counters.length)), ...counters], depth),
+      } : {}),
       ...(params.listProfile?.bodyFontSizePtByDepth ? {
         bodyFontSizePtByDepth: params.listProfile.bodyFontSizePtByDepth.slice(params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0),
       } : {}),

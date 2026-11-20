@@ -1,18 +1,21 @@
+import type { Span } from "../ast/types.js";
 import { matchTexSyntaxEnvironments } from "../text/tex/syntax-index.js";
-import { beamerControlSequencesIn, beamerRequiredArgumentAfter, beamerOptionalArgumentAfter, createBeamerSyntaxContext } from "./syntax.js";
+import { beamerControlSequencesIn, beamerRequiredArgumentAfter, beamerOptionalArgumentAfter, beamerOverlayArgumentAfter, createBeamerSyntaxContext } from "./syntax.js";
 
 const declarations = new Set("tiny scriptsize footnotesize small normalsize large Large LARGE huge Huge rmfamily sffamily ttfamily bfseries mdseries itshape upshape slshape normalfont centering raggedleft raggedright".split(" "));
 
 /** Formatting declarations still active at a structural split. The generic
  * paragraph frontend executes them itself when no split occurs. */
-export function createBeamerAmbientText(source: string) {
+export function createBeamerAmbientText(source: string, executesItem: (span: Span) => boolean) {
   const context = createBeamerSyntaxContext(source);
-  const environments = [...matchTexSyntaxEnvironments(context.syntax).values()];
+  const environments = [...matchTexSyntaxEnvironments(context.syntax).values()]
+    .sort((left, right) => left.begin.span.from - right.begin.span.from);
+  const controls = beamerControlSequencesIn(context, { from: 0, to: source.length });
   const storedOptions = new Set(environments.filter(env => env.name === "tcolorbox").flatMap(env => {
     const options = beamerOptionalArgumentAfter(context, env.begin.span.to, source.length);
     return options ? [options.span.from] : [];
   }));
-  const events = beamerControlSequencesIn(context, { from: 0, to: source.length }).flatMap(command => {
+  const events = controls.flatMap(command => {
     if (!declarations.has(command.name) && command.name !== "color") return [];
     let to = command.to;
     if (command.name === "color") {
@@ -52,7 +55,21 @@ export function createBeamerAmbientText(source: string) {
     cache.set(offset, text);
     return text;
   };
-  const allLists = environments.filter(env => ["itemize", "enumerate", "description"].includes(env.name));
+  const allLists = environments.filter(env => ["itemize", "enumerate", "description"].includes(env.name)).reverse();
+  const enumerationItems = new Map<number, Span[]>();
+  for (const command of controls) {
+    if (command.name !== "item") continue;
+    const owner = allLists.find(env => env.begin.span.to <= command.from && command.from < env.end.span.from);
+    if (owner?.name !== "enumerate") continue;
+    const limit = owner.end.span.from;
+    const overlay = beamerOverlayArgumentAfter(context, command.to, limit);
+    if (beamerOptionalArgumentAfter(context, overlay?.span.to ?? command.to, limit)) continue;
+    const span = { from: command.from, to: command.to };
+    if (!executesItem(span)) continue;
+    const items = enumerationItems.get(owner.begin.span.from) ?? [];
+    items.push(span);
+    enumerationItems.set(owner.begin.span.from, items);
+  }
   const minipages = environments.filter(env => ["column", "minipage"].includes(env.name));
   const listDepthAt = (offset: number, includeEnclosingLists = false) => {
     const start = includeEnclosingLists ? 0 : Math.max(0, ...minipages.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).map(env => env.begin.span.to));
@@ -61,6 +78,8 @@ export function createBeamerAmbientText(source: string) {
   return Object.assign(at, {
     listDepthAt,
     itemDepthAt: (offset: number) => lists.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).length,
-    enumerateDepthAt: (offset: number) => enumerations.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).length,
+    enumerateCountersAt: (offset: number) => enumerations
+      .filter(env => env.begin.span.to <= offset && offset < env.end.span.from)
+      .map(env => enumerationItems.get(env.begin.span.from)?.filter(item => item.to <= offset).length ?? 0),
   });
 }

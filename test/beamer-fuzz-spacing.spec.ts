@@ -285,6 +285,49 @@ const cases = [
     baselines: [["Peer.", 61.525757], ["Contentinthecenter.", 71.976089], ["Picture", 83.703903], ["Witness", 97.041077]],
   },
   {
+    name: "suppresses a nested description's opening skip while its center label is pending",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,b]
+\begin{column}{.54\textwidth}
+\begin{center}
+\only<1,3>{\begin{description}
+\item[Stage 1] \begin{tikzpicture}\node {Picture};\end{tikzpicture}
+\end{description}}
+\end{center}
+\end{column}
+\begin{column}{.42\textwidth}Peer.\end{column}
+\end{columns}\par Witness`, 11, "Madrid"),
+    baselines: [["Picture", 57.249619], ["Stage1", 60.831284], ["Peer.", 60.831284], ["Witness", 73.751694]],
+  },
+  {
+    name: "formats nested enumeration labels with the enclosing counter across a block",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,c]
+\begin{column}{.46\textwidth}Peer.\end{column}
+\begin{column}{.50\textwidth}
+\begin{enumerate}
+\item First.
+\only<2>{\item Removed.}
+\item[Special] Custom label.
+\item \begin{exampleblock}{Incremental refinement}
+\begin{enumerate}\item \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\]\end{enumerate}
+\end{exampleblock}
+\end{enumerate}
+\end{column}\end{columns}\par Witness`, 9, "default"),
+    baselines: [["2.2.1", 74.01709], ["Witness", 102.941895]],
+  },
+  {
+    name: "hyphenates a word that exceeds a narrow block's line width",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,T]
+\begin{column}{.1564\textwidth}
+\begin{alertblock}{Constraint propagation}
+{\small\color{blue}\raggedleft
+\textit{The final diagram} records the order in which information crosses the partition. Intermediate results carry both a numerical estimate and an explicit dependency set. The estimate is $\frac{a+b}{1+c}$.\par}
+\end{alertblock}
+\end{column}
+\begin{column}{.80\textwidth}Peer.\end{column}
+\end{columns}\par Witness`, 12, "Madrid"),
+    baselines: [["Intermedi-", 166.375122], ["Witness", 260.676056]],
+  },
+  {
     name: "uses normal display skips after a scoped ragged-left paragraph",
     source: slide(String.raw`\begin{alertblock}{Message passing}
 {\footnotesize\color{black}\raggedleft

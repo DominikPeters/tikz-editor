@@ -6,6 +6,7 @@ import { resolveBeamerTheme } from "./theme/resolve.js";
 import type { ResolvedBeamerTheme } from "./theme/types.js";
 import { beamerClassOptionValue } from "./class-options.js";
 
+const SCALED_POINTS_PER_POINT = 65_536;
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 
 const STANDARD_PAGE_SIZES_CM = {
@@ -34,8 +35,8 @@ export function resolveBeamerPageGeometry(
   const aspectRatio = beamerClassOptionValue(document, "aspectratio") ?? "43";
   const [widthCm, heightCm] =
     pageSizeLookup[aspectRatio] ?? customPageSizeCm(aspectRatio);
-  const pageWidth = cmToTexPt(widthCm);
-  const pageHeight = cmToTexPt(heightCm);
+  const pageWidth = widthCm * TEX_POINTS_PER_CM;
+  const pageHeight = heightCm * TEX_POINTS_PER_CM;
   const marginLeft = theme.dimensions.textMarginLeftPt;
   const marginRight = theme.dimensions.textMarginRightPt;
   const sidebarLeft = resolveHorizontalThemeDimension(
@@ -95,6 +96,13 @@ function customPageSizeCm(aspectRatio: string): readonly [number, number] {
   return [height * numerator / denominator, height];
 }
 
-function cmToTexPt(value: number): number {
-  return value * TEX_POINTS_PER_CM;
+export function beamerCentimetersToPoints(value: number): number {
+  // TeX first rounds the decimal in the authored unit, then converts
+  // centimeters by the exact ratio 7227 / 254 and truncates to scaled points.
+  const scaledCentimeters = Math.round(value * SCALED_POINTS_PER_POINT);
+  return Math.trunc(scaledCentimeters * 7227 / 254) / SCALED_POINTS_PER_POINT;
+}
+
+export function beamerPageHeightForShrink(aspectRatio: string): number {
+  return beamerCentimetersToPoints((pageSizeLookup[aspectRatio] ?? STANDARD_PAGE_SIZES_CM["43"])[1]);
 }

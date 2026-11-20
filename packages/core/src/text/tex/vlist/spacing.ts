@@ -211,6 +211,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
           state.externalPendingParskip = Number(parskip);
         }
       }
+      // A shipped box replaces the preceding block's skip as TeX's last
+      // material, even when it stays in the same item.
+      state.externalAfterSkip = 0;
       continue;
     }
     if (item.kind === "glue" && item.origin?.kind === "external-flow-after") {
@@ -302,6 +305,14 @@ function planSimpleTexParagraphVerticalSkipsInto(
       return !ancestor.inherited && previous !== undefined && previous.listStart === ancestor.listStart && previous.itemIndex !== ancestor.itemIndex;
     });
     const previousList = state.previousEmittedListContext;
+    const roles = ancestors.length ? ancestors : paragraph.scopePath ?? [];
+    const enteringTrivlist = scope.trivlistScopes.some(role => !state.previousEmittedTrivlistScopes.includes(role));
+    const innermostList = lastVListAncestorRole(roles, "list");
+    const innermostTrivlist = scope.trivlistScopes.at(-1);
+    // A nested list can consume the anonymous item of a freshly opened
+    // center/flush environment before it has shipped any material.
+    const startsWithPendingTrivlist = enteringTrivlist && innermostList !== undefined && innermostTrivlist !== undefined &&
+      roles.indexOf(innermostList) > roles.indexOf(innermostTrivlist);
     const pendingParent = previousList && paragraph.ancestorListLabels?.find(ancestor =>
       !ancestor.inherited && ancestor.depth === previousList.depth);
     const startsWithPendingParent = pendingParent !== undefined && pendingParent.listStart === previousList?.listStart &&
@@ -311,7 +322,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const boundaryProfile = opensAdjacentParent ? listProfileForContext(resolvedListProfile, pendingParent) : resolvedListProfile;
     let parentTransitionFlex: { stretch: TexLength; shrink: TexLength } | undefined;
     let listVerticalSkipBefore: TexLength;
-    if (suppressInitialTopsep || startsWithPendingParent) listVerticalSkipBefore = texLength(0);
+    if (suppressInitialTopsep || startsWithPendingParent || startsWithPendingTrivlist) listVerticalSkipBefore = texLength(0);
     else if (followsDisplay && parentTransition) {
       // A nested list consumes the parent's pending label. The paragraph skip
       // from the parent item still follows the display.
@@ -344,6 +355,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
     if (!hasPreviousEmittedParagraph && scope.listContext && paragraph.ancestorListLabels?.some(label => label.inherited)) {
       state.noParListDepths.add(scope.listContext.depth);
     }
+    if (startsWithPendingTrivlist && scope.listContext) state.noParListDepths.add(scope.listContext.depth);
     for (const ancestor of paragraph.ancestorListLabels ?? []) {
       if (ancestor.inherited) continue;
       for (let depth = ancestor.depth + 1; depth <= (scope.listContext?.depth ?? 0); depth++) state.noParListDepths.add(depth);
@@ -373,7 +385,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
     delete state.externalPendingParskip;
     const externalAfterSkip = state.externalAfterSkip;
     state.externalAfterSkip = 0;
-    const listFlex = followsDisplay || suppressInitialTopsep || startsWithPendingParent
+    const listFlex = followsDisplay || suppressInitialTopsep || startsWithPendingParent || startsWithPendingTrivlist
       ? { stretch: texLength(0), shrink: texLength(0) }
       : outsideListBoundary ? texProfileListVerticalGlueFlex(
           undefined, outsideListBoundary, hasPreviousEmittedParagraph, false,
@@ -397,7 +409,6 @@ function planSimpleTexParagraphVerticalSkipsInto(
           state.previousEmittedListContext !== undefined || scope.listContext !== undefined,
           font
         );
-    const enteringTrivlist = scope.trivlistScopes.some(role => !state.previousEmittedTrivlistScopes.includes(role));
     const activeList = scope.listContext ?? (enteringTrivlist ? undefined : state.previousEmittedListContext);
     const trivlistProfile = listProfile && activeList ? { ...listProfile,
       trivlistTopsepPt: listProfile.liveListTopsepPt ?? texProfileDepthValue(resolvedListProfile?.topsepPtByDepth ?? listProfile.topsepPtByDepth, activeList.depth),

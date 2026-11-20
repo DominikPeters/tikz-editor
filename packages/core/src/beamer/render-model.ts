@@ -110,6 +110,8 @@ export type PreparedColumnFlowItem =
       replacesColumnHeadSkip?: boolean;
       advanceHeight: number;
       trailingSkipPt: number;
+      /** List closing skip before it is combined with a terminal display or block skip. */
+      listClosingSkipPt?: number;
     }
   | {
       kind: "vertical-space";

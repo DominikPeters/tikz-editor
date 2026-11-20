@@ -62,7 +62,7 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   ambientTextAt?: ((offset: number) => string) & {
     itemDepthAt?: (offset: number) => number;
     listDepthAt?: (offset: number, includeEnclosingLists?: boolean) => number;
-    enumerateDepthAt?: (offset: number) => number;
+    enumerateCountersAt?: (offset: number) => readonly number[];
   };
   macroBindingsAt?: (offset: number) => ReadonlyMap<string, MacroBinding>;
   frameLayout?: { paperHeight: number; textHeight: number; plain: boolean; metadata: Partial<Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>> };

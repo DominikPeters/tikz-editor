@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { renderBeamerFrame, scanBeamerDocument, buildBeamerCaretStopDomain } from "../packages/core/src/beamer/index.js";
 import { beamerFrameShrinkScale, beamerFrameShrinkWidth, crampedBeamerListProfile, inverseTransformBeamerPoint, resolveBeamerFrameShrink, transformBeamerPoint } from "../packages/core/src/beamer/frame-shrink.js";
+import { beamerCentimetersToPoints, beamerPageHeightForShrink } from "../packages/core/src/beamer/geometry.js";
 import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/index.js";
 import { buildNativeBeamerPageTrace, compareBeamerPageTraces, type OracleBeamerPageTrace } from "../scripts/lib/beamer-frame-compare.mjs";
 import { buildSelectionRects } from "../packages/app/src/ui/builds-panel/build-selection.js";
@@ -32,6 +33,9 @@ describe("Beamer frame shrink", () => {
     expect(beamerFrameShrinkWidth(20138549 / 65536, shrink)).toBe(25271826 / 65536);
     expect(beamerFrameShrinkScale(shrink, 62.52432, 246.26038)).toBe(.80011);
     expect(beamerFrameShrinkScale(shrink, 400.75, 246.26038)).toBe(.61565);
+    // Measured on a 4:3 LuaLaTeX frame whose fit is on a scaled-point boundary.
+    const available = beamerPageHeightForShrink("43") - 46.776519775390625 - 12.658004760742188 - beamerCentimetersToPoints(.2);
+    expect(beamerFrameShrinkScale(shrink, 580.90747, available)).toBe(.35866);
     expect(resolveBeamerFrameShrink(document.frames[1])).toEqual({ minimumScale: 1, widthMultiplier: 1 });
     expect(resolveBeamerFrameShrink(document.frames[2])).toBeNull();
   });

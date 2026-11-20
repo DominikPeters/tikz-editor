@@ -5,6 +5,8 @@ import { execFileSync } from "node:child_process";
 export function blockPaintProbes(render, nativeTrace, oracleTrace) {
   const probes = [];
   const glyphs = [...nativeTrace.glyphs, ...oracleTrace.glyphs];
+  const pictures = render.layout.items.filter(item =>
+    (item.kind === "tikzpicture" || item.kind === "graphics") && item.visibility !== "hidden");
   for (const block of render.layout.items.filter(item => item.kind === "block" && item.visibility !== "hidden")) {
     // Each nested block has its own probes. Its paint (including rounded
     // transitions and shadows) is not a flat sample of the parent's fill.
@@ -21,6 +23,8 @@ export function blockPaintProbes(render, nativeTrace, oracleTrace) {
         for (let x = bounds.x + bounds.width - 8; x >= bounds.x + 8; x -= 4) {
           if (!nestedBlocks.some(item => x >= item.bounds.x - 6 && x <= item.bounds.x + item.bounds.width + 6 &&
               y >= item.bounds.y - 6 && y <= item.bounds.y + item.bounds.height + 6) &&
+              !pictures.some(item => x >= item.bounds.x - 2 && x <= item.bounds.x + item.bounds.width + 2 &&
+                y >= item.bounds.y - 2 && y <= item.bounds.y + item.bounds.height + 2) &&
               !glyphs.some(g => x >= g.x - 2 && x <= g.x + g.width + 2 &&
               y >= g.y - g.height - 2 && y <= g.y + g.depth + 2)) {
             point = { x, y };
