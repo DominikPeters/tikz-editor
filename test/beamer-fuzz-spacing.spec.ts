@@ -29,6 +29,11 @@ const cases = [
     baselines: [["Alpha", 40.755554], ["Witness", 109.287582]],
   },
   {
+    name: "inserts interline glue only once for a list after a block in a column",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,t]\begin{column}{.54\textwidth}\begin{exampleblock}{Block title}Block body\end{exampleblock}\par\begin{description}\item[First] \[E=mc^2\]\item[Next] Label\end{description}\end{column}\begin{column}{.42\textwidth}Peer column\end{column}\end{columns}`, 10, "Madrid"),
+    baselines: [["Blocktitle", 65.651886], ["First", 103.182831], ["NextLabel", 131.683731]],
+  },
+  {
     name: "starts a display after nested columns without another empty-line baseline",
     source: slide(String.raw`\begin{columns}[onlytextwidth,T]\begin{column}{.46\textwidth}\begin{columns}[onlytextwidth,c]\begin{column}{.38\textwidth}Alpha\end{column}\begin{column}{.58\textwidth}\[E=\sum_{i=1}^{n}w_i x_i\]\end{column}\end{columns}\par\[E=\sum_{i=1}^{n}w_i x_i\]\par Tail\end{column}\begin{column}{.46\textwidth}Peer\end{column}\end{columns}\par Witness`, 12),
     baselines: [["Alpha", 66.31813], ["Tail", 136.525543], ["Witness", 145.501419]],

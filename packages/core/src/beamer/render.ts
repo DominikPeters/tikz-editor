@@ -3519,9 +3519,9 @@ async function prepareColumnContent(params: {
     });
     if (prepared) {
       const previous = flow.at(-1);
-      const paragraphNeedsInterline = prepared.kind === "paragraph" &&
-        (previous?.kind === "block" ||
-          previous?.kind === "columns" && node.kind !== "list" ||
+      // Lists already lay out their first interline skip from initialPreviousDepth.
+      const paragraphNeedsInterline = prepared.kind === "paragraph" && node.kind !== "list" &&
+        (previous?.kind === "block" || previous?.kind === "columns" ||
           previous?.kind === "paragraph" && !prepared.startsWithVerticalEnvironment);
       if (prepared.kind === "block" && prepared.block.packageBox) {
         const spacing = tcolorboxSurroundingSpacing(prepared.block.packageBox.plan, {
