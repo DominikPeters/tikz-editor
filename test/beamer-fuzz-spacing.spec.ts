@@ -72,6 +72,25 @@ const cases = [
     baselines: [["Picture", 98.303329], ["Stage2Contentafter.", 111.697495], ["Witness", 121.00209]],
   },
   {
+    name: "exits a nested list only once before an overlay item's terminal display",
+    source: slide(String.raw`\visible<1,3>{
+\begin{enumerate}
+\item Intro.
+\item<2-> \begin{description}
+\item<1->[Stage 1] Content.
+\item<2->[Stage 2] More content.
+\end{description}
+\par
+\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]
+\end{enumerate}}
+\par \begin{tikzpicture}[font=\scriptsize]
+\fill<2-3>[magenta] (0,0) rectangle (.8,.3);
+\node[anchor=west] at (2,0.15) {Witness};
+\end{tikzpicture}
+\only<4>{}`, 10, "Madrid"),
+    baselines: [["Intro.", 50.12532], ["Witness", 127.170013]],
+  },
+  {
     name: "retains scoped outer topsep after closing nested lists",
     source: slide(String.raw`Top line.\par
 {\small\centering

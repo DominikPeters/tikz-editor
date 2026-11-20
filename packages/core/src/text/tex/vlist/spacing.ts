@@ -239,7 +239,10 @@ function planSimpleTexParagraphVerticalSkipsInto(
       } : previousProfile;
       const closingSkip = texArticleTrivlistExitBoundarySkip(state, state.previousEmittedTrivlistScopes,
         commonTrivlistScopePrefixLength(state.previousEmittedTrivlistScopes, trivlistScopes), font, closingProfile);
-      const closingListSkip = previousList && previousList.depth > (listRole?.depth ?? 0)
+      // A resumed empty line belongs to its display's scope. The display
+      // has already accounted for any list outside that scope.
+      const resumesDisplay = isDisplayEmptyLineHBox(item) && item.role.position === "after-display-vspace";
+      const closingListSkip = !resumesDisplay && previousList && previousList.depth > (listRole?.depth ?? 0)
         ? texArticleListExitBoundarySkip(state, previousList.depth, listRole?.depth ?? 0, font, previousProfile) : texLength(0);
       const boundarySkip = texLength(Math.max(closingSkip, closingListSkip));
       if (boundarySkip > 0) skips.push({ blockIndex: -4_000_000 - (item.sourceSpan?.start ?? 0), vlistPath: path, segmentIndex: 0,
