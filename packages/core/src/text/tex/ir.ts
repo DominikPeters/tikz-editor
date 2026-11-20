@@ -739,6 +739,7 @@ export interface SimpleTexPlaceholderBlockItem extends SimpleTexSourceRange {
 
 export interface SimpleTexDisplayMathState {
   readonly startsAfterExplicitPar?: boolean;
+  readonly precedingLineAlignment?: TexParagraphAlignment;
   readonly fontSizePt?: TexLength;
   readonly baselineSkip?: TexLength;
   /** Only class size commands that assign display registers replace this state. */
@@ -5370,9 +5371,11 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const displaySkip = useListFont ? list.baselineSkipPt : displayState.baselineSkip;
       const displaySkipCommand = list && (displayState.displaySkipSelectionFrom ?? -1) < list.sourceStart
         ? list.displaySkipCommand : displayState.displaySkipCommand;
+      const precedingLineAlignment = alignmentAt(node.sourceStart).alignment;
       items.push({
         kind: "display-math",
         fontSizePt: displaySize,
+        ...(precedingLineAlignment !== undefined ? { precedingLineAlignment } : {}),
         ...(previousParagraphBlockEnd !== undefined && hasExplicitParagraphBoundaryBetween(previousParagraphBlockEnd, node.sourceStart) ? { startsAfterExplicitPar: true } : {}),
         ...(displaySkip !== undefined ? { baselineSkip: displaySkip } : {}),
         ...(displaySkipCommand !== undefined ? { displaySkipCommand } : {}),

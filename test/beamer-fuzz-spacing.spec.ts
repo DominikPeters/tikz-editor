@@ -113,6 +113,31 @@ const cases = [
     baselines: [["Alpha", 50.047487], ["Witness", 118.828644]],
   },
   {
+    name: "uses normal display skips after a scoped ragged-left paragraph",
+    source: slide(String.raw`\begin{alertblock}{Message passing}
+{\footnotesize\color{black}\raggedleft
+\begin{tikzpicture}\node {Picture};\end{tikzpicture}\par}
+\par
+{\footnotesize\color{teal}\raggedleft
+\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]\par}
+\end{alertblock}
+\par Witness`, 10, "Boadilla", "169"),
+    baselines: [["Picture", 63.035385], ["abx", 87.732788], ["Witness", 118.100616]],
+  },
+  {
+    name: "inserts leading interline glue before a scoped block in a centered column",
+    source: slide(String.raw`\begin{description}
+\item[Stage 2] \begin{columns}[onlytextwidth,c]
+\begin{column}{.46\textwidth}
+{\small\color{blue}\raggedright\begin{alertblock}{Message passing}
+\[\begin{aligned}a+b&=c\\ d-e&=f\end{aligned}\]
+\end{alertblock}\par}\end{column}
+\begin{column}{.50\textwidth}Peer.\end{column}
+\end{columns}\end{description}
+\par Witness`, 12, "Madrid", "169"),
+    baselines: [["Messagepassing", 63.225632], ["Peer.", 78.600174], ["Witness", 131.862442]],
+  },
+  {
     name: "breaks after the anonymous center label before an overwide table",
     source: slide(String.raw`\begin{columns}[onlytextwidth,T]\begin{column}{.22\textwidth}Alpha\par\begin{center}\begin{tabular}{lrr}Method&Cost&Error\\\hline Fresh&12&17\\Local&14&1\\\end{tabular}\end{center}\par Tail\end{column}\begin{column}{.7\textwidth}Peer\end{column}\end{columns}\par Witness`, 12),
     baselines: [["Alpha", 48.556689], ["MethodCostError", 82.425209], ["Tail", 132.850907], ["Peer", 48.556689], ["Witness", 141.826791]],

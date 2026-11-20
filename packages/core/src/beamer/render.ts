@@ -3528,6 +3528,12 @@ async function prepareColumnContent(params: {
       const paragraphNeedsInterline = prepared.kind === "paragraph" && node.kind !== "list" &&
         (previous?.kind === "block" || previous?.kind === "columns" ||
           previous?.kind === "paragraph" && !prepared.startsWithVerticalEnvironment);
+      const firstRole = prepared.kind === "paragraph" && !prepared.startsWithVerticalEnvironment
+        ? prepared.paragraph.layout.vlistLayout.boxReport.items.find(item =>
+            item.itemKind !== "vbox" && item.itemKind !== "glue" && item.itemKind !== "penalty")?.hboxRole
+        : undefined;
+      const leadingBlock = flow.length === 0 && column.alignment !== "T" &&
+        (prepared.kind === "block" || prepared.kind === "paragraph" && firstRole?.kind === "external-flow" && firstRole.flowKind === "block");
       if (prepared.kind === "block" && prepared.block.packageBox) {
         const spacing = tcolorboxSurroundingSpacing(prepared.block.packageBox.plan, {
           baselineSkipPt: bodyFont.lineHeightPt, previousDepthPt: previousDepth ?? null,
@@ -3535,8 +3541,7 @@ async function prepareColumnContent(params: {
         // \addvspace replaces T's negative -1ex lastskip before applying the
         // box skip. The column's \leavevmode has already cleared minipage mode.
         prepared.leadingSkipPt = spacing.beforePt + (flow.length === 0 && column.alignment === "T" && !prepared.block.packageBox.plan.noBeforeAfter ? fontXHeightPt(bodyFont) : 0);
-      } else if ((previousDepth != null || (flow.length === 0 && column.alignment !== "T" && prepared.kind === "block")) &&
-          (prepared.kind === "block" || paragraphNeedsInterline)) {
+      } else if (leadingBlock || (previousDepth != null && (prepared.kind === "block" || paragraphNeedsInterline))) {
         // column's \leavevmode starts an empty line before a leading block's
         // \par. Its depth is zero, so normal baseline glue precedes the first
         // title box. T columns clear that depth with \nointerlineskip instead.
@@ -4423,7 +4428,7 @@ function layoutParagraph(params: {
       const depth = item.kind === "block" ? item.block.endingDepth : item.box.depth;
       const advance = item.kind === "block" ? item.block.naturalHeight : item.box.height + item.box.depth;
       const after = item.kind === "block" ? item.block.plan.geometry.afterSkipPt : 0;
-      return [{ kind: "hbox", role: { kind: "external-flow", ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
+      return [{ kind: "hbox", role: { kind: "external-flow", flowKind: item.kind, ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
         advance: texLength(advance), box: { metrics: { width: texLength(0), height: texLength(height), depth: texLength(depth) }, renderItems: [] } },
         ...(after ? [{ kind: "glue" as const, size: texLength(after), origin: { kind: "external-flow-after" as const } }] : [])];
     },

@@ -753,7 +753,7 @@ function displayMathBoundaryGlueItem(
   const displayLeftEdge = texLength(roundTexPt(
     Math.max(0, (item.targetWidth - materialWidth) / 2)
   ));
-  const alignment = item.scopePath?.filter(role => role.kind === "trivlist").at(-1)?.alignment;
+  const alignment = item.precedingLineAlignment ?? item.scopePath?.filter(role => role.kind === "trivlist").at(-1)?.alignment;
   if (variant === "short" && (alignment === "center" || alignment === "ragged-left")) variant = "normal";
   // Even a zero-width line has TeX's two-quad pre-display allowance. A wide
   // equation in a narrow column can therefore require the normal skips.

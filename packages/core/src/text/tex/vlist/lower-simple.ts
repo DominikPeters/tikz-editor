@@ -202,6 +202,7 @@ function displayMathItemFromSimpleTexDisplayMath(
   const scopePath = scopePathForVerticalBlockItem(item);
   const targetWidth = scopedDisplayMathTargetWidth(scopePath, options);
   const displayState = { ...(item.startsAfterExplicitPar ? { startsAfterExplicitPar: true } : {}), ...(item.fontSizePt !== undefined ? { fontSizePt: item.fontSizePt } : {}), ...(item.baselineSkip !== undefined ? { baselineSkip: item.baselineSkip } : {}),
+    ...(item.precedingLineAlignment !== undefined ? { precedingLineAlignment: item.precedingLineAlignment } : {}),
     ...(item.displaySkipCommand !== undefined ? { displaySkipCommand: item.displaySkipCommand } : {}), ...(item.normalFontSizePt !== undefined ? { normalFontSizePt: item.normalFontSizePt } : {}) };
   if (
     item.delimiter === "align" ||
