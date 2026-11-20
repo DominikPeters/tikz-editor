@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { selectBeamerOraclePage } from "./lib/beamer-frame-oracle.mjs";
 import { ensureDistBuildFresh } from "./ensure-dist-build.mjs";
 import { corpusGraphicsResolver } from "./lib/beamer-corpus.mjs";
-import { compareColorMasks, compareBlockPaint, paintContractFailures } from "./lib/beamer-paint-compare.mjs";
+import { compareColorMasks, compareBlockPaint, compareImagePaint, paintContractFailures } from "./lib/beamer-paint-compare.mjs";
 import {
   buildNativeBeamerPageTrace,
   compareBeamerPageTraces,
@@ -482,12 +482,12 @@ export async function compareBeamerFrame(options, runtime = {}) {
   const rasterHeight = Math.round(
     options.width * render.svg.viewBox.height / render.svg.viewBox.width
   );
+  let paint = null;
   if (!options.structuralOnly) {
     const rendererPng = join(runDir, "renderer.png");
     const oraclePng = join(runDir, "oracle.png");
     const oracleVectorPng = join(runDir, "oracle-vector.png");
     rasterizeSvg(rendererSvg, rendererPng, options.width * 2, rasterHeight * 2);
-    downsampleComparisonRaster(rendererPng, options.width, rasterHeight);
     // This second oracle raster deliberately uses the same SVG rasterizer as
     // the native output. It is the useful visual check for glyph outline and
     // scale fidelity: comparing librsvg with Poppler can otherwise make
@@ -510,7 +510,14 @@ export async function compareBeamerFrame(options, runtime = {}) {
       options.width * 2,
       rasterHeight * 2
     );
+    // Measure image interiors before downsampling. At high shrink factors a
+    // three-pixel window in the preview can blend in the surrounding paint.
+    const imageSamples = options.paintImages ? compareImagePaint(render, nativePageTrace,
+      rendererPng, oraclePng, options.width * 2, rasterHeight * 2) : [];
+    downsampleComparisonRaster(rendererPng, options.width, rasterHeight);
     downsampleComparisonRaster(oraclePng, options.width, rasterHeight);
+    paint = compareBlockPaint(render, nativePageTrace, oraclePageTrace, rendererPng, oraclePng,
+      options.width, rasterHeight, options.paintProbes, imageSamples);
     createVisualComparisons(runDir);
     if (!options.pdfOnly) createSameRasterizerComparisons(runDir);
   }
@@ -550,8 +557,7 @@ export async function compareBeamerFrame(options, runtime = {}) {
       selectedTrace: oracleReport.tex.selectedPage,
     },
     structural: structuralComparison,
-    paint: options.structuralOnly ? null : compareBlockPaint(render, nativePageTrace, oraclePageTrace,
-      join(runDir, "renderer.png"), join(runDir, "oracle.png"), options.width, rasterHeight, options.paintProbes, options.paintImages),
+    paint,
     colorMasks: options.structuralOnly ? null : compareColorMasks(join(runDir, "renderer.png"), join(runDir, "oracle.png"), options.width, rasterHeight, options.paintColors),
     raster: options.structuralOnly ? null : {
       width: options.width,

@@ -4,6 +4,11 @@ export interface BeamerPaintComparison {
   readonly tolerance: number;
   readonly samples: readonly { readonly id: string; readonly maxChannelDelta: number }[];
 }
+export interface BeamerPaintSample extends BeamerPaintProbe {
+  readonly native: readonly number[];
+  readonly oracle: readonly number[];
+  readonly maxChannelDelta: number;
+}
 export interface BeamerPaintProbe {
   readonly id: string;
   /** SVG page coordinates in TeX points. */
@@ -11,7 +16,8 @@ export interface BeamerPaintProbe {
   readonly y: number;
 }
 export function blockPaintProbes(render: RenderBeamerFrameResult, native: NativeBeamerPageTrace, oracle: Pick<OracleBeamerPageTrace, "glyphs">): { id: string; x: number; y: number }[];
-export function compareBlockPaint(render: RenderBeamerFrameResult, native: NativeBeamerPageTrace, oracle: OracleBeamerPageTrace, nativePng: string, oraclePng: string, width: number, height: number, additionalProbes?: readonly BeamerPaintProbe[], paintImages?: boolean): BeamerPaintComparison;
+export function compareImagePaint(render: RenderBeamerFrameResult, native: NativeBeamerPageTrace, nativePng: string, oraclePng: string, width: number, height: number): BeamerPaintSample[];
+export function compareBlockPaint(render: RenderBeamerFrameResult, native: NativeBeamerPageTrace, oracle: OracleBeamerPageTrace, nativePng: string, oraclePng: string, width: number, height: number, additionalProbes?: readonly BeamerPaintProbe[], imageSamples?: readonly BeamerPaintSample[]): BeamerPaintComparison;
 export function paintContractFailures(paint?: BeamerPaintComparison | null): string[];
 
 export interface BeamerColorMaskComparison {

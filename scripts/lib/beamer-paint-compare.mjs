@@ -42,15 +42,20 @@ function pixelRgb(path, x, y) {
   return values;
 }
 
-export function compareBlockPaint(render, nativeTrace, oracleTrace, nativePng, oraclePng, width, height, additionalProbes = [], paintImages = false) {
-  const automaticProbes = blockPaintProbes(render, nativeTrace, oracleTrace);
-  if (paintImages) for (const graphic of nativeTrace.rectangles.filter(rect => rect.role === "image")) {
+export function compareImagePaint(render, nativeTrace, nativePng, oraclePng, width, height) {
+  const probes = [];
+  for (const graphic of nativeTrace.rectangles.filter(rect => rect.role === "image")) {
     const points = graphic.paintProbes ?? [.25, .75].flatMap(y => [.25, .75].map(x => ({ x: graphic.x + graphic.width * x, y: graphic.y + graphic.height * y })));
     for (const [index, point] of points.entries()) {
-      automaticProbes.push({ id: `${graphic.id}:image:${Math.floor(index / 2)}:${index % 2}`, ...point });
+      probes.push({ id: `${graphic.id}:image:${Math.floor(index / 2)}:${index % 2}`, ...point });
     }
   }
-  const ids = new Set(automaticProbes.map(probe => probe.id));
+  return samplePaint(probes, render.svg.viewBox, nativePng, oraclePng, width, height);
+}
+
+export function compareBlockPaint(render, nativeTrace, oracleTrace, nativePng, oraclePng, width, height, additionalProbes = [], imageSamples = []) {
+  const automaticProbes = blockPaintProbes(render, nativeTrace, oracleTrace);
+  const ids = new Set([...automaticProbes, ...imageSamples].map(probe => probe.id));
   for (const probe of additionalProbes) {
     if (typeof probe.id !== "string" || !probe.id || ids.has(probe.id) || !Number.isFinite(probe.x) || !Number.isFinite(probe.y) ||
         probe.x <= 0 || probe.x >= render.svg.viewBox.width || probe.y <= 0 || probe.y >= render.svg.viewBox.height) {
@@ -58,14 +63,18 @@ export function compareBlockPaint(render, nativeTrace, oracleTrace, nativePng, o
     }
     ids.add(probe.id);
   }
-  const samples = [...automaticProbes, ...additionalProbes].map(probe => {
-    const x = Math.round(probe.x * width / render.svg.viewBox.width);
-    const y = Math.round(probe.y * height / render.svg.viewBox.height);
+  const samples = samplePaint([...automaticProbes, ...additionalProbes], render.svg.viewBox, nativePng, oraclePng, width, height);
+  return { tolerance: 2, samples: [...samples, ...imageSamples] };
+}
+
+function samplePaint(probes, viewBox, nativePng, oraclePng, width, height) {
+  return probes.map(probe => {
+    const x = Math.round(probe.x * width / viewBox.width);
+    const y = Math.round(probe.y * height / viewBox.height);
     const native = pixelRgb(nativePng, x, y);
     const oracle = pixelRgb(oraclePng, x, y);
     return { ...probe, native, oracle, maxChannelDelta: Math.max(...native.map((v, i) => Math.abs(v - oracle[i]))) };
   });
-  return { tolerance: 2, samples };
 }
 
 export function paintContractFailures(paint) {
