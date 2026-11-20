@@ -125,7 +125,7 @@ interface SimpleTexParagraphVerticalSkipState {
   previousEmittedContentKind: "paragraph" | "display" | undefined;
   readonly quotePartopsepByDepth: Map<number, boolean>;
   readonly trivlistTopsepByScope: Map<TexTrivlistScopeRole, TexLength>;
-  readonly listPartopsepByDepth: Map<number, boolean>;
+  readonly listTopsepByDepth: Map<number, TexLength>;
   readonly noParListDepths: Set<number>;
   readonly lastListItemsByDepth: Map<number, { listStart: number | undefined; itemIndex: number }>;
   readonly emittedListItemKeys: Set<string>;
@@ -299,6 +299,12 @@ function planSimpleTexParagraphVerticalSkipsInto(
     let parentTransitionFlex: { stretch: TexLength; shrink: TexLength } | undefined;
     let listVerticalSkipBefore: TexLength;
     if (suppressInitialTopsep) listVerticalSkipBefore = texLength(0);
+    else if (followsDisplay && parentTransition) {
+      // A nested list consumes the parent's pending label. The paragraph skip
+      // from the parent item still follows the display.
+      const parentProfile = listProfileForContext(listProfile, parentTransition);
+      listVerticalSkipBefore = texArticleListParagraphSkip(parentTransition.depth, font, parentProfile);
+    }
     else if (followsDisplay) listVerticalSkipBefore = state.previousEmittedListContext && scope.listContext &&
       state.previousEmittedListContext.listStart !== scope.listContext.listStart &&
       state.previousEmittedListContext.depth === scope.listContext.depth && !parentTransition &&
@@ -336,10 +342,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
     if (!state.previousEmittedListContext && !suppressInitialTopsep) for (const ancestor of paragraph.ancestorListLabels ?? []) {
       if (ancestor.inherited) continue;
       const profile = listProfileForContext(listProfile, ancestor);
-      const skip = texArticleOutsideListBoundarySkip(startsListInVerticalMode, font, profile, ancestor.depth);
+      const skip = rememberListTopsep(state, ancestor.depth, startsListInVerticalMode, font, profile);
       if (skip > listVerticalSkipBefore) outsideListBoundary = ancestor;
       listVerticalSkipBefore = texLength(Math.max(listVerticalSkipBefore, skip));
-      state.listPartopsepByDepth.set(ancestor.depth, startsListInVerticalMode);
     }
     // LaTeX's next item/end-list uses \addvspace: the larger of that
     // boundary and an immediately preceding block's smallskip survives.
@@ -458,7 +463,7 @@ function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphV
     previousEmittedContentKind: undefined,
     quotePartopsepByDepth: new Map(),
     trivlistTopsepByScope: new Map(),
-    listPartopsepByDepth: new Map(),
+    listTopsepByDepth: new Map(),
     noParListDepths: new Set(),
     lastListItemsByDepth: new Map(),
     emittedListItemKeys: new Set(),
@@ -2059,7 +2064,7 @@ function texArticleListVerticalSkipBefore(
     return texLength(previous?.kind === "bibliography" && current?.kind === "bibliography" ? profile?.bibliographyParsepPt ?? 0 : 0);
   }
   if (!hasPreviousEmittedParagraph && current) {
-    state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
+    rememberListTopsep(state, current.depth, startsListInVerticalMode, font, profile);
     return texArticleInitialListSkip(
       current.depth,
       startsListInVerticalMode,
@@ -2068,13 +2073,7 @@ function texArticleListVerticalSkipBefore(
     );
   }
   if (!previous && current) {
-    state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
-    return texArticleOutsideListBoundarySkip(
-      startsListInVerticalMode,
-      font,
-      profile,
-      current.depth
-    );
+    return rememberListTopsep(state, current.depth, startsListInVerticalMode, font, profile);
   }
   if (previous && !current) {
     return texArticleListExitBoundarySkip(
@@ -2093,11 +2092,11 @@ function texArticleListVerticalSkipBefore(
     // separate boundaries; \@endparenv closes the first paragraph scope.
     return texLength(
       texArticleListExitBoundarySkip(state, previous.depth, previous.depth - 1, font, listProfileForContext(profile, previous)) +
-      texArticleOutsideListBoundarySkip(startsListInVerticalMode, font, profile, current.depth)
+      rememberListTopsep(state, current.depth, startsListInVerticalMode, font, profile)
     );
   }
   if (current.depth > previous.depth) {
-    state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
+    rememberListTopsep(state, current.depth, startsListInVerticalMode, font, profile);
     return texArticleNestedListBoundarySkip(
       previous.depth,
       current.depth,
@@ -2228,43 +2227,35 @@ function texArticleListExitBoundarySkip(
   if (currentDepth <= 0) {
     let size = texLength(0);
     for (let depth = previousDepth; depth > 0; depth -= 1) {
-      const usesPartopsep = state.listPartopsepByDepth.get(depth) ?? false;
-      state.listPartopsepByDepth.delete(depth);
+      const topsep = state.listTopsepByDepth.get(depth) ?? texArticleOutsideListBoundarySkip(false, font, profile, depth);
+      state.listTopsepByDepth.delete(depth);
       if (state.noParListDepths.delete(depth)) continue;
-      size = texLength(Math.max(
-        size,
-        texArticleOutsideListBoundarySkip(
-          usesPartopsep,
-          font,
-          profile,
-          depth
-        )
-      ));
+      size = texLength(Math.max(size, topsep));
     }
     return size;
   }
 
   let size = texLength(0);
   for (let depth = previousDepth; depth > currentDepth; depth -= 1) {
-    const usesPartopsep = state.listPartopsepByDepth.get(depth) ?? false;
-    state.listPartopsepByDepth.delete(depth);
+    state.listTopsepByDepth.delete(depth);
     if (state.noParListDepths.delete(depth)) continue;
-    const depthSize = depth <= 1
-      ? texArticleOutsideListBoundarySkip(
-          usesPartopsep,
-          font,
-          profile,
-          depth
-        )
-      : texArticleNestedListBoundarySkip(
-          depth,
-          depth - 1,
-          font,
-          profile
-        );
+    const depthSize = texArticleNestedListBoundarySkip(depth, depth - 1, font, profile);
     size = texLength(Math.max(size, depthSize));
   }
   return size;
+}
+
+/** LaTeX captures @topsepadd on entry, even when the last item is a nested list. */
+function rememberListTopsep(
+  state: SimpleTexParagraphVerticalSkipState,
+  depth: number,
+  startsInVerticalMode: boolean,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
+  const topsep = texArticleOutsideListBoundarySkip(startsInVerticalMode, font, profile, depth);
+  state.listTopsepByDepth.set(depth, topsep);
+  return topsep;
 }
 
 function texArticleNestedListBoundarySkip(

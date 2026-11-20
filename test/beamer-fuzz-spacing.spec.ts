@@ -3,8 +3,8 @@ import { renderBeamerFrame } from "../packages/core/src/beamer/index.js";
 import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/index.js";
 import { buildNativeBeamerPageTrace } from "../scripts/lib/beamer-frame-compare.mjs";
 
-function slide(body: string, size = 11, theme = "Boadilla"): string {
-  return String.raw`\documentclass[${size}pt]{beamer}
+function slide(body: string, size = 11, theme = "Boadilla", aspectRatio = "43"): string {
+  return String.raw`\documentclass[${size}pt,aspectratio=${aspectRatio}]{beamer}
 \usepackage{tikz}
 \usetheme{${theme}}
 \setbeamertemplate{navigation symbols}{}
@@ -32,6 +32,55 @@ const cases = [
     name: "inserts interline glue only once for a list after a block in a column",
     source: slide(String.raw`\begin{columns}[onlytextwidth,t]\begin{column}{.54\textwidth}\begin{exampleblock}{Block title}Block body\end{exampleblock}\par\begin{description}\item[First] \[E=mc^2\]\item[Next] Label\end{description}\end{column}\begin{column}{.42\textwidth}Peer column\end{column}\end{columns}`, 10, "Madrid"),
     baselines: [["Blocktitle", 65.651886], ["First", 103.182831], ["NextLabel", 131.683731]],
+  },
+  {
+    name: "carries display depth and combines closing center glue before a column list",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,T]
+\begin{column}{.62\textwidth}Peer column\end{column}
+\begin{column}{.34\textwidth}
+\begin{center}\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]\end{center}
+\par
+\begin{description}\item[Stage 1] The first line is a reference point.\end{description}
+\end{column}\end{columns}\par Witness`, 9),
+    baselines: [["Stage1Thefirstlineis", 87.633789], ["Witness", 116.982117]],
+  },
+  {
+    name: "inherits the enclosing cramped list's topsep inside a column",
+    source: slide(String.raw`\begin{exampleblock}{Outer block}
+\begin{itemize}\item First.
+\item \begin{columns}[onlytextwidth,t]
+\begin{column}{.46\textwidth}\begin{flushright}\begin{tikzpicture}\node {Picture};\end{tikzpicture}\end{flushright}\end{column}
+\begin{column}{.50\textwidth}\begin{flushleft}\begin{exampleblock}{Incremental analysis}
+\begin{tabular}{lrr}Method&Cost&Error\\\hline Local0&3&22\\Cached1&4&20\\\end{tabular}
+\end{exampleblock}\end{flushleft}\end{column}
+\end{columns}\end{itemize}\end{exampleblock}\par Witness`, 11, "Madrid", "169"),
+    baselines: [["Incrementalanalysis", 101.288498], ["MethodCostError", 118.833603], ["Witness", 189.050339]],
+  },
+  {
+    name: "retains parent paragraph glue when a nested list follows a display",
+    source: slide(String.raw`\begin{columns}[onlytextwidth,T]
+\begin{column}{.54\textwidth}Peer column\end{column}
+\begin{column}{.42\textwidth}
+{\small\color{blue}\centering
+\begin{itemize}
+\item {\scriptsize\color{blue}\centering\[\begin{aligned}a+b&=c\\ d-e&=f\end{aligned}\]\par}
+\item \begin{description}
+\item[Stage 1] \begin{tikzpicture}\node {Picture};\end{tikzpicture}
+\item[Stage 2] Content after.
+\end{description}\end{itemize}\par}
+\end{column}\end{columns}\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Picture", 98.303329], ["Stage2Contentafter.", 111.697495], ["Witness", 121.00209]],
+  },
+  {
+    name: "retains scoped outer topsep after closing nested lists",
+    source: slide(String.raw`Top line.\par
+{\small\centering
+\begin{description}
+\item[Stage 1] \begin{itemize}\item First inner item.\end{itemize}
+\item[Stage 2] \begin{enumerate}\item Second inner item.\end{enumerate}
+\end{description}\par}
+\par Witness`, 12, "Madrid", "169"),
+    baselines: [["Topline.", 53.242203], ["Witness", 114.234146]],
   },
   {
     name: "starts a display after nested columns without another empty-line baseline",
@@ -100,5 +149,24 @@ describe("Beamer fuzz spacing regressions", () => {
       expect(line, text).toBeDefined();
       expect(line!.baselineY, text).toBeCloseTo(expected, 2);
     }
+  });
+
+  it("retains the nested enumerate marker size when a rounded block starts a minipage", async () => {
+    const rendered = await renderBeamerFrame(slide(String.raw`\begin{description}
+\item[Stage 1] \begin{enumerate}\item Text\end{enumerate}
+\item[Stage 2] \begin{enumerate}
+\item \begin{alertblock}{Incremental analysis}
+\begin{enumerate}\item Before and after.\item \[E=\sum_{i=1}^{n}w_i x_i\]\end{enumerate}
+\end{alertblock}
+\item Trailing item.
+\end{enumerate}\end{description}\par Witness`, 10));
+    expect(rendered.diagnostics).toEqual([]);
+    const trace = buildNativeBeamerPageTrace(rendered, computerModernTexMetricProvider);
+    const innerLabel = trace.lines.find(line => line.role === "block-body" && line.text === "2");
+    expect(innerLabel?.baselineY).toBeCloseTo(90.253922, 2);
+    const markers = trace.rectangles.filter(rect => rect.role === "list-marker" && rect.id.includes(":block:0:body:"));
+    expect(markers).toHaveLength(3);
+    expect(markers[1]?.width).toBeCloseTo(6.259689, 2);
+    expect(markers[2]?.width).toBeCloseTo(6.259689, 2);
   });
 });

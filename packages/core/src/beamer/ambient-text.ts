@@ -37,6 +37,7 @@ export function createBeamerAmbientText(source: string) {
     events.push({ from: env.begin.span.from, to: env.begin.span.to, end: env.end.span.to, text: "\\raggedright" });
   }
   const lists = environments.filter(env => ["itemize", "enumerate"].includes(env.name));
+  const enumerations = lists.filter(env => env.name === "enumerate");
   for (const env of lists) {
     const depth = lists.filter(parent => parent.begin.span.from < env.begin.span.from && env.end.span.to < parent.end.span.to).length;
     if (depth > 0) events.push({ from: env.begin.span.from, to: env.begin.span.to, end: env.end.span.to,
@@ -53,9 +54,13 @@ export function createBeamerAmbientText(source: string) {
   };
   const allLists = environments.filter(env => ["itemize", "enumerate", "description"].includes(env.name));
   const minipages = environments.filter(env => ["column", "minipage"].includes(env.name));
-  const listDepthAt = (offset: number) => {
-    const start = Math.max(0, ...minipages.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).map(env => env.begin.span.to));
+  const listDepthAt = (offset: number, includeEnclosingLists = false) => {
+    const start = includeEnclosingLists ? 0 : Math.max(0, ...minipages.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).map(env => env.begin.span.to));
     return allLists.filter(env => start <= env.begin.span.from && env.begin.span.to <= offset && offset < env.end.span.from).length;
   };
-  return Object.assign(at, { listDepthAt, itemDepthAt: (offset: number) => lists.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).length });
+  return Object.assign(at, {
+    listDepthAt,
+    itemDepthAt: (offset: number) => lists.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).length,
+    enumerateDepthAt: (offset: number) => enumerations.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).length,
+  });
 }

@@ -121,18 +121,19 @@ function texListItemLabelContent(
   }
   if (listContext.kind === "enumerate") {
     if (listContext.enumerateTemplate !== undefined) return { kind: "text", text: enumerateTemplateText(listContext.enumerateTemplate, listContext.labelCounter ?? listContext.itemIndex) ?? "" };
+    const labelDepth = listContext.labelDepth + (listContext.inherited ? 0 : listProfile?.enumerateDepthOffset ?? 0);
     const marker = listProfile?.resolveEnumerateMarker?.(
       listContext.labelCounter ?? listContext.itemIndex,
-      listContext.labelDepth,
+      labelDepth,
       listContext.labelFontSizePt ?? paragraph.fontSizePt ?? listContext.fontSizePt
     );
     if (marker) {
       return { kind: "marker", marker };
     }
-    const classLabel = listProfile?.resolveEnumerateText?.(listContext.enumerateCounters ?? [listContext.labelCounter ?? listContext.itemIndex], listContext.labelDepth);
+    const classLabel = listProfile?.resolveEnumerateText?.(listContext.enumerateCounters ?? [listContext.labelCounter ?? listContext.itemIndex], labelDepth);
     return {
       kind: "text",
-      text: classLabel ?? texDefaultEnumerateLabelText(listContext.labelCounter ?? listContext.itemIndex, listContext.labelDepth),
+      text: classLabel ?? texDefaultEnumerateLabelText(listContext.labelCounter ?? listContext.itemIndex, labelDepth),
     };
   }
   return undefined;

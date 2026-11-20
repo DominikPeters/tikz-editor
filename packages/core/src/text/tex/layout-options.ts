@@ -114,6 +114,8 @@ export interface TexListLayoutProfile {
   readonly parsepShrinkPtByDepth?: readonly number[];
   readonly initialItemBaselineAdjustmentPt: number;
   readonly itemizeMarkersByDepth?: readonly TexListMarkerProfile[];
+  /** Enumerations enclosing the source fragment, even across minipages. */
+  readonly enumerateDepthOffset?: number;
   readonly resolveItemizeMarker?: (labelDepth: number, fontSizePt: number | undefined, listDepth?: number) => TexListMarkerProfile | undefined;
   readonly resolveEnumerateMarker?: (
     itemIndex: number,

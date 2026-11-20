@@ -3489,7 +3489,12 @@ async function prepareColumnContent(params: {
   const width = resolveBeamerColumnWidth(column.width.value, textWidth, params.paperWidth) ?? textWidth;
   const flow: PreparedColumnFlowItem[] = [];
   const bodyFont = ambientTextTheme(theme, references.ambientTextAt?.(column.bodySpan.from) ?? "").fonts["normal-text"];
-  const listProfile = beamerListLayoutProfile(theme, references.crampedLists);
+  const baseListProfile = beamerListLayoutProfile(theme, references.crampedLists);
+  // Minipages reset list depth, but still inherit the outer list's live topsep.
+  const listProfile = baseListProfile.liveListTopsepPt !== undefined &&
+    (references.ambientTextAt?.listDepthAt?.(column.bodySpan.from, true) ?? 0) > 0
+    ? { ...baseListProfile, trivlistTopsepPt: baseListProfile.liveListTopsepPt, trivlistPartopsepPt: 0 }
+    : baseListProfile;
   let previousDepth: number | undefined;
 
   for (const node of column.children) {
@@ -3552,7 +3557,7 @@ async function prepareColumnContent(params: {
       }
       flow.push(prepared);
       if (prepared.kind === "paragraph") {
-        previousDepth = paragraphLastLineDepth(prepared.paragraph);
+        previousDepth = paragraphEndingMaterialDepth(prepared.paragraph);
       } else if (prepared.kind === "tikzpicture" || prepared.kind === "unsupported") {
         previousDepth = 0;
       } else if (prepared.kind === "columns") {
@@ -3767,7 +3772,7 @@ async function prepareColumnFlowNode(params: {
       // minipage's terminal \unskip drops the final trivlist skip; retain it
       // only when another flow item follows, as for the list's trailing glue.
       trailingSkipPt: node.kind === "list" ? trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont)
-        : trailingBeamerTrivlistSkip(projection.mapped.text, params.listProfile.trivlistTopsepPt),
+        : Math.max(0, trailingBeamerTrivlistSkip(projection.mapped.text, params.listProfile.trivlistTopsepPt) - trailingDisplaySkip(paragraph)),
     };
   }
   if (node.kind === "unsupported") {
@@ -4467,6 +4472,7 @@ function layoutParagraph(params: {
       ...listSpacing,
       ...(listDepthOffset > 0 ? { sizeOverrides: [] } : {}),
       fontDepthOffset: params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0,
+      enumerateDepthOffset: params.references.ambientTextAt?.enumerateDepthAt?.(params.sourceSpan.from) ?? 0,
       ...(params.listProfile?.bodyFontSizePtByDepth ? {
         bodyFontSizePtByDepth: params.listProfile.bodyFontSizePtByDepth.slice(params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0),
       } : {}),
@@ -5351,8 +5357,11 @@ function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerRefe
   const closing = trailingBeamerListSkip(mapped.text, skip);
   // endtrivlist uses addvspace, so a terminal display skip and the list's
   // closing topsep contribute their maximum rather than their sum.
+  return Math.max(0, closing - trailingDisplaySkip(paragraph));
+}
+
+function trailingDisplaySkip(paragraph: LaidParagraph | undefined): number {
   const last = paragraph?.layout.vlistLayout.boxReport.items.at(-1);
-  const existing = last?.glue?.origin?.kind === "display-math-boundary" && last.glue.origin.side === "below"
+  return last?.glue?.origin?.kind === "display-math-boundary" && last.glue.origin.side === "below"
     ? Math.max(0, Number(last.height)) : 0;
-  return Math.max(0, closing - existing);
 }
