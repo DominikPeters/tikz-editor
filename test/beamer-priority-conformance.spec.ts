@@ -37,6 +37,15 @@ describe("Beamer corpus-priority reproduction contracts", () => {
         probe.y < child.bounds.y - 6 || probe.y > child.bounds.y + child.bounds.height + 6).toBe(true);
     }
     expect(probes.filter(probe => probe.id.startsWith(child.id + ":"))).toHaveLength(2);
+
+    const bodyProbe = probes.find(probe => probe.id === `${parent.id}:block-body`)!;
+    const marked = { ...render, layout: { ...render.layout, items: [...render.layout.items, {
+      id: "projected-marker", kind: "list-marker" as const, parentId: parent.id, sourceSpan: parent.sourceSpan,
+      bounds: { x: bodyProbe.x + .5, y: bodyProbe.y - .5, width: 1, height: 1 },
+    }] } };
+    const flatBodyProbe = blockPaintProbes(marked, trace, { glyphs: trace.glyphs }).find(probe => probe.id === bodyProbe.id);
+    expect(flatBodyProbe).toBeDefined();
+    expect(flatBodyProbe).not.toEqual(bodyProbe);
   });
   it("rejects case-only identities and filenames while allowing shared source frames", () => {
     expect(priorityManifestFailures([{ id: "top", file: "columns.tex" }, { id: "bottom", file: "columns.tex" }])).toEqual([]);

@@ -63,6 +63,24 @@ describe("Beamer list label paint and authored navigation symbols", () => {
     expect(page.svg.svg).toContain('color="#000000"');
   });
 
+  it("scopes projected list marker colors to example and alert blocks", async () => {
+    const source = deck(String.raw`\usetheme{Boadilla}`, String.raw`
+\begin{exampleblock}{Example}
+\begin{block}{Ordinary}
+\begin{enumerate}\item Example item.\end{enumerate}
+\end{block}
+\end{exampleblock}
+\begin{alertblock}{Alert}
+\begin{enumerate}\item Alert item.\end{enumerate}
+\end{alertblock}
+\begin{enumerate}\item Outside item.\end{enumerate}`);
+    const page = await prepareBeamerDocument(source).renderFrame();
+    expect(page.diagnostics).toEqual([]);
+    expect(page.svg.svg).toContain("beamer-enumerate-ball-1-1-008000");
+    expect(page.svg.svg).toContain("beamer-enumerate-ball-1-1-ff0000");
+    expect(page.svg.svg).toContain("beamer-enumerate-ball-1-1-3333b3");
+  });
+
   it("paints the corpus shrink reproduction with blue counters and no navigation strip", async () => {
     const source = readFileSync(new URL("./fixtures/beamer/corpus-followups/flow-frame-options.tex", import.meta.url), "utf8");
     const page = await prepareBeamerDocument(source).renderFrame({ frameIndex: 1 });
