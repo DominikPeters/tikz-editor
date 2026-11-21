@@ -285,6 +285,7 @@ export type TexVBoxRole =
       readonly listKind: SimpleTexListKind;
       readonly depth: number;
       readonly noParList?: boolean;
+      readonly inheritsPendingLabel?: boolean;
       readonly listRegisterDepth?: number;
       readonly labelDepth: number;
       readonly fontSizePt?: TexLength;

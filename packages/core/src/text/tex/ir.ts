@@ -134,6 +134,7 @@ export type SimpleTexScopePathRole =
       readonly listKind: SimpleTexListKind;
       readonly depth: number;
       readonly noParList?: boolean;
+      readonly inheritsPendingLabel?: boolean;
       readonly listRegisterDepth?: number;
       readonly labelDepth: number;
       readonly fontSizePt?: TexLength;
@@ -5157,6 +5158,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
   };
 
   const beginList = (kind: SimpleTexListKind, sourceStart: number, enumerateTemplate?: string) => {
+    const inheritsPendingLabel = pendingListShowLabel || inheritedItemLabels.length > 0;
     pendingListLabels.push({ show: pendingListShowLabel, label: pendingListLabel });
     pendingListShowLabel = false;
     pendingListLabel = undefined;
@@ -5194,6 +5196,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       listKind: kind,
       depth,
       ...(scopeStack.some(role => role.kind === "trivlist" && !consumedTrivlistLabels.has(role)) ? { noParList: true } : {}),
+      ...(inheritsPendingLabel ? { inheritsPendingLabel: true } : {}),
       ...(listRegisterDepth > 0 && listRegisterDepth !== depth ? { listRegisterDepth } : {}),
       labelDepth,
       ownLeftMarginEm: ownMargin,
@@ -5571,7 +5574,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
           pendingListShowLabel = parentLabel?.show ?? false;
           const parent = listStack.at(-1);
           if (options?.groupListItemBodies && parent && !pendingListShowLabel &&
-              openScope.kind === "list" && !openScope.noParList) {
+              openScope.kind === "list" && !openScope.noParList && !openScope.inheritsPendingLabel) {
             parent.deferredParagraph = { kind: "nested-list-ended" };
           }
         } else if (!isSimpleTexTrivlistEnvironmentName(node.name)) {

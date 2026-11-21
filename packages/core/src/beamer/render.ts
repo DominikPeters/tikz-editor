@@ -3800,9 +3800,11 @@ async function prepareColumnFlowNode(params: {
     const startsWithTrivlist = firstBox?.role?.kind === "trivlist" || startsWithStandaloneTrivlist;
     const startsWithList = node.kind === "list" || firstBox?.role?.kind === "list" ||
       /^\s*\\begin\s*\{(?:itemize|enumerate|description)\}/u.test(projection.mapped.text);
+    const lastTrivlist = paragraph.layout.vlistLayout.boxReport.items.filter(item => item.role?.kind === "trivlist").at(-1)?.role;
     const closingEnvironmentSkipPt = node.kind === "list"
       ? trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont)
-      : trailingBeamerTrivlistSkip(projection.mapped.text, params.listProfile.trivlistTopsepPt);
+      : lastTrivlist?.kind === "trivlist" && lastTrivlist.noParList ? 0
+        : trailingBeamerTrivlistSkip(projection.mapped.text, params.listProfile.trivlistTopsepPt);
     return {
       kind: "paragraph",
       visibility,
@@ -4104,11 +4106,18 @@ function measureColumnVerticalBox(
     // minipage[b] is a vbox: its reference is the final baseline, and its
     // last box keeps its depth. Aligning geometric bottoms loses descenders.
     const last = flow.at(-1);
-    // endtrivlist rewrites the terminal display skip even when its natural
-    // size survives. endminipage's single unskip leaves a zero-depth box.
-    const depth = last?.kind === "paragraph" ? (last.closingEnvironmentSkipPt ?? last.trailingSkipPt) > 0 && last.paragraph.layout.vlistLayout.boxReport.items.at(-1)?.itemKind === "glue"
-      ? 0 : paragraphEndingMaterialDepth(last.paragraph)
-      : last?.kind === "block" ? last.block.endingDepth : last?.kind === "columns" ? last.box.depth : 0;
+    let depth = last?.kind === "block" ? last.block.endingDepth : last?.kind === "columns" ? last.box.depth : 0;
+    if (last?.kind === "paragraph") {
+      const items = last.paragraph.layout.vlistLayout.boxReport.items;
+      const tail = items.at(-1);
+      const lastList = items.filter(item => item.role?.kind === "list").at(-1);
+      const closesNestedList = lastList?.role?.kind === "list" && lastList.role.depth > 1 && !lastList.role.noParList && !lastList.role.inheritsPendingLabel &&
+        (lastList.sourceSpan?.end ?? -1) >= (tail?.sourceSpan?.end ?? 0);
+      // endtrivlist rewrites a terminal display skip or a nested list's
+      // closing skip. endminipage's single unskip leaves zero depth.
+      const closesWithGlue = (last.closingEnvironmentSkipPt ?? last.trailingSkipPt) > 0 && (tail?.itemKind === "glue" || closesNestedList);
+      depth = closesWithGlue ? 0 : paragraphEndingMaterialDepth(last.paragraph);
+    }
     return {
       height: naturalHeight - depth,
       depth,

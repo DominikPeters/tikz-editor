@@ -19,6 +19,95 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "ends a bottom-aligned column at zero depth after closing two lists",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,b]
+\begin{column}{.46\textwidth}
+Left one.\par Left two.\par Left three.\par Left four.
+\end{column}
+\begin{column}{.50\textwidth}
+\begin{enumerate}
+\item First.
+\item Second.\par
+\visible<1,3>{\begin{description}
+\item[Stage] \begin{tabular}{lrr}Method&Cost&Error\\\hline
+Local0&7&24\\
+Cached1&2&10\\
+Fresh2&12&21\\
+Fresh3&26&11\\
+\end{tabular}
+\end{description}}
+\end{enumerate}
+\end{column}
+\end{columns}
+\par Witness`, 11, "Boadilla", "169"),
+    baselines: [["Leftone.", 100.55188], ["Fresh32611", 135.436966], ["Witness", 152.233536]],
+  },
+  {
+    name: "retains bottom-column depth when the terminal nested list inherits a pending label",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,b]
+\begin{column}{.46\textwidth}
+Left one.\par Left two.\par Left three.
+\end{column}
+\begin{column}{.50\textwidth}
+\begin{description}
+\item[Stage] Before.
+\item[Last] \begin{enumerate}
+\item First.
+\item Closing paragraph.
+\end{enumerate}
+\end{description}
+\end{column}
+\end{columns}
+\par Witness`, 9, "Madrid", "169"),
+    baselines: [["Leftone.", 56.888367], ["Closingparagraph.", 77.694016], ["Witness", 88.096848]],
+  },
+  {
+    name: "retains display depth in a bottom column when flushleft receives a pending label",
+    source: slide(String.raw`Lead text.\par
+\begin{alertblock}{Alpha}
+\begin{enumerate}
+\item First.
+\item \begin{columns}[onlytextwidth,b]
+\begin{column}{.46\textwidth}
+Left one.\par Left two.\par Left three.\par Left four.
+\end{column}
+\begin{column}{.50\textwidth}
+\begin{flushleft}
+{\footnotesize\color{black}\raggedright
+\[\begin{aligned}a+b&=c\\d-e&=f\end{aligned}\]\par}
+\end{flushleft}
+\end{column}
+\end{columns}
+\end{enumerate}
+\end{alertblock}
+\par Witness`, 9, "Boadilla", "169"),
+    baselines: [["2", 91.797287], ["a+b=c", 99.402145], ["Witness", 129.674866]],
+  },
+  {
+    name: "keeps a later item label when the preceding nested list inherited a pending label",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,t]
+\begin{column}{.54\textwidth}
+\begin{enumerate}
+\item \begin{enumerate}\item Inner.\end{enumerate}
+\item \begin{block}{Alpha}
+\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]
+\end{block}
+\par
+\begin{tabular}{lrr}Method&Cost&Error\\\hline
+Local0&7&24\\
+Cached1&2&10\\
+\end{tabular}
+\end{enumerate}
+\end{column}
+\begin{column}{.42\textwidth}Peer.\end{column}
+\end{columns}
+\par Witness`, 9),
+    baselines: [["2", 128.452789], ["MethodCostError", 119.137619], ["Witness", 150.328033]],
+  },
+  {
     name: "keeps the opening list skip after a standalone display in a block",
     source: slide(String.raw`Lead text.\par
 \begin{exampleblock}{Alpha}
