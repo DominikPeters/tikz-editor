@@ -289,6 +289,7 @@ export type TexVBoxRole =
       readonly listRegisterDepth?: number;
       readonly labelDepth: number;
       readonly fontSizePt?: TexLength;
+      readonly registerFontSizePt?: TexLength;
       readonly ownLeftMarginEm: number;
       readonly totalLeftMarginEm: number;
     }

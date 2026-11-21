@@ -1222,6 +1222,17 @@ Column text.
 \par Witness`, 10, "default", "43"),
     baselines: [["Stage1Words.", 71.099792], ["cd", 104.787918], ["Witness", 128.158813]],
   },
+  {
+    name: "keeps the enclosing size's list registers when a scriptsize group opens inside footnotesize",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize {\scriptsize
+\begin{description}
+\item[Stage 1] \[\begin{aligned}a+b&=c\\ d-e&=f\end{aligned}\]
+\item[Stage 2] Words here.
+\end{description}\par}}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Stage1", 57.725616], ["Stage2Wordshere.", 88.544601], ["Witness", 102.795044]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

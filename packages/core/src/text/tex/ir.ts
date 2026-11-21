@@ -817,6 +817,8 @@ export interface SimpleTexListContext {
   /** Itemize/enumerate nesting excludes descriptions (Beamer \@itemdepth). */
   readonly fontDepth?: number;
   readonly labelFontSizePt?: TexLength;
+  /** The size at the last \normalsize/\small/\footnotesize, which selects the list registers. */
+  readonly registerFontSizePt?: TexLength;
   readonly enumerateTemplate?: string;
   readonly enumerateCounters?: readonly number[];
   /** Distinguishes adjacent authored lists with the same kind and depth. */
@@ -4632,7 +4634,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
 ): SimpleTexParagraphBlockScanResult {
   const initialSize = texLength(options?.fontSizePt ?? 10);
   const initialBaseline = options?.baselineSkipPt === undefined ? undefined : texLength(options.baselineSkipPt);
-  type SizeState = SimpleTexDisplayMathState & { sizePt: TexLength; color?: string; fontDeclarations: readonly SimpleTexFontDeclarationName[]; selectionFrom?: number; displaySkipSelectionFrom?: number };
+  type SizeState = SimpleTexDisplayMathState & { sizePt: TexLength; color?: string; fontDeclarations: readonly SimpleTexFontDeclarationName[]; selectionFrom?: number; displaySkipSelectionFrom?: number; registerSizePt?: TexLength; registerSelectionFrom?: number };
   const normalFontSizePt = texLength(options?.namedFontSizes?.normalsize?.sizePt ?? 10);
   const initialState: SizeState = { sizePt: initialSize, fontDeclarations: [], ...(initialBaseline !== undefined ? { baselineSkip: initialBaseline } : {}), normalFontSizePt };
   let sizeState: SizeState = initialState;
@@ -4692,8 +4694,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const selected = options?.namedFontSizes?.[name];
       sizeState = { ...sizeState, selectionFrom: node.sourceEnd, sizePt: texLength(selected?.sizePt ?? defaultSizes[name] ?? node.sizePt ?? initialSize),
         baselineSkip: texLength(selected?.baselineSkipPt ?? defaultBaselines[name] ?? initialBaseline ?? 12),
+        // Only these size commands reinstall \@listi, so \scriptsize inherits the registers.
         ...((name === "normalsize" || name === "small" || name === "footnotesize")
-          ? { displaySkipCommand: name, displaySkipSelectionFrom: node.sourceEnd } : {}) };
+          ? { displaySkipCommand: name, displaySkipSelectionFrom: node.sourceEnd,
+            registerSizePt: texLength(selected?.sizePt ?? defaultSizes[name] ?? node.sizePt ?? initialSize), registerSelectionFrom: node.sourceEnd } : {}) };
     } else if (node.sizePt != null) {
       const baselineSkip = node.baselineSkipPt ?? sizeState.baselineSkip;
       sizeState = { ...sizeState, selectionFrom: node.sourceEnd, sizePt: node.sizePt, ...(baselineSkip !== undefined ? { baselineSkip } : {}) };
@@ -4773,6 +4777,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     readonly fontSizePt: TexLength;
     readonly baselineSkipPt?: TexLength;
     readonly displaySkipCommand?: SimpleTexDisplayMathState["displaySkipCommand"];
+    readonly registerFontSizePt?: TexLength;
     labelFontSizePt?: TexLength;
     spacing?: SimpleTexListContext["spacing"];
     fontState?: SimpleTexFontState;
@@ -5162,6 +5167,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       ...(pendingListLabel !== undefined ? { label: pendingListLabel } : {}),
       listStart: activeList.sourceStart,
       fontSizePt: activeList.fontSizePt,
+      ...(activeList.registerFontSizePt !== undefined ? { registerFontSizePt: activeList.registerFontSizePt } : {}),
       ...(activeList.labelFontSizePt !== undefined ? { labelFontSizePt: activeList.labelFontSizePt } : {}),
       ...(activeList.spacing ? { spacing: activeList.spacing } : {}),
     };
@@ -5199,6 +5205,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
       ? parent.displaySkipCommand : selected.displaySkipCommand;
     const displaySkipCommand = (kind === "itemize" || kind === "enumerate"
       ? options?.listBodyDisplaySkipCommands?.[fontDepth] : undefined) ?? inheritedDisplaySkipCommand;
+    const registerFontSizePt = parent && (selected.registerSelectionFrom ?? -1) < parent.sourceStart
+      ? parent.registerFontSizePt : selected.registerSizePt;
     const scopeRole = {
       kind: "list",
       ...(options?.listBodyFontSizes ? { fontSizePt: texLength(bodySize ?? inheritedSize) } : {}),
@@ -5208,6 +5216,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       ...(scopeStack.some(role => role.kind === "trivlist" && !consumedTrivlistLabels.has(role)) ? { noParList: true } : {}),
       ...(inheritsPendingLabel ? { inheritsPendingLabel: true } : {}),
       ...(listRegisterDepth > 0 && listRegisterDepth !== depth ? { listRegisterDepth } : {}),
+      ...(registerFontSizePt !== undefined ? { registerFontSizePt } : {}),
       labelDepth,
       ownLeftMarginEm: ownMargin,
       totalLeftMarginEm: (listStack.at(-1)?.totalLeftMarginEm ?? 0) + ownMargin,
@@ -5225,6 +5234,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       totalLeftMarginEm: scopeRole.totalLeftMarginEm,
       scopeRole,
       fontSizePt: texLength(bodySize ?? inheritedSize),
+      ...(registerFontSizePt !== undefined ? { registerFontSizePt } : {}),
       ...(displaySkipCommand !== undefined ? { displaySkipCommand } : {}),
       ...(bodySkip !== undefined || inheritedSkip !== undefined ? { baselineSkipPt: texLength(bodySkip ?? inheritedSkip ?? 12) } : {}),
       ...(fontState !== undefined ? { fontState } : {}),
@@ -5762,6 +5772,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
           itemIndex: list.itemIndex, labelCounter: list.labelCounter, showLabel: true,
           ownLeftMarginEm: list.ownLeftMarginEm, totalLeftMarginEm: list.totalLeftMarginEm,
           fontSizePt: list.fontSizePt, labelFontSizePt: list.labelFontSizePt ?? list.fontSizePt, listStart: list.sourceStart,
+          ...(list.registerFontSizePt !== undefined ? { registerFontSizePt: list.registerFontSizePt } : {}),
           ...(list.scopeRole.listRegisterDepth !== undefined ? { listRegisterDepth: list.scopeRole.listRegisterDepth } : {}),
           ...(list.itemCommandSpan ? { itemCommandSpan: list.itemCommandSpan } : {}),
           ...(list.enumerateTemplate ? { enumerateTemplate: list.enumerateTemplate } : {}),

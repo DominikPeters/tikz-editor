@@ -247,6 +247,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
             ownLeftMarginEm: listRole.ownLeftMarginEm,
             totalLeftMarginEm: listRole.totalLeftMarginEm,
             ...(listRole.fontSizePt !== undefined ? { fontSizePt: listRole.fontSizePt } : {}),
+            ...(listRole.registerFontSizePt !== undefined ? { registerFontSizePt: listRole.registerFontSizePt } : {}),
             ...(listRole.sourceStart !== undefined ? { listStart: listRole.sourceStart } : {}),
             showLabel: false,
           }
@@ -629,6 +630,7 @@ function paragraphScopeFromVListAncestors(
           !state.emittedListItemKeys.has(listItemKey),
         ...(item.paragraph.listContext?.label !== undefined ? { label: item.paragraph.listContext.label } : {}),
         ...((item.paragraph.listContext?.fontSizePt ?? listRole.fontSizePt) !== undefined ? { fontSizePt: item.paragraph.listContext?.fontSizePt ?? listRole.fontSizePt } : {}),
+        ...((item.paragraph.listContext?.registerFontSizePt ?? listRole.registerFontSizePt) !== undefined ? { registerFontSizePt: item.paragraph.listContext?.registerFontSizePt ?? listRole.registerFontSizePt } : {}),
         ...(item.paragraph.listContext?.spacing !== undefined ? { spacing: item.paragraph.listContext.spacing } : {}),
         ...((item.paragraph.listContext?.listStart ?? listRole.sourceStart) !== undefined ? { listStart: item.paragraph.listContext?.listStart ?? listRole.sourceStart } : {}),
       },
@@ -2166,7 +2168,8 @@ function texArticleTrivlistVerticalSkipBefore(
 function listProfileForContext(profile: TexListLayoutProfile | undefined, context: SimpleTexListContext | undefined): TexListLayoutProfile | undefined {
   if (!profile || !context) return profile;
   const registerDepth = context.listRegisterDepth ?? context.depth;
-  const size = registerDepth === 1 ? profile.sizeOverrides?.find(item => Math.abs(item.fontSizePt - Number(context.fontSizePt)) < .001) : undefined;
+  const registerSize = Number(context.registerFontSizePt ?? context.fontSizePt);
+  const size = registerDepth === 1 ? profile.sizeOverrides?.find(item => Math.abs(item.fontSizePt - registerSize) < .001) : undefined;
   const index = context.depth - 1;
   function replace(values: readonly number[], value: number | undefined): readonly number[];
   function replace(values: readonly number[] | undefined, value: number | undefined): readonly number[] | undefined;
