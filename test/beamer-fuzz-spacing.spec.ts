@@ -1061,6 +1061,38 @@ describe("Beamer fuzz spacing regressions", () => {
     }
   });
 
+  it("shares the block and alignment skips before a color change inside the alignment", async () => {
+    const source = slide(String.raw`Lead.\par
+\begin{columns}[onlytextwidth,t]
+\begin{column}{0.38\textwidth}
+\begin{block}{Incremental analysis}
+\begin{tabular}{lr}Method&Cost\\\hline
+Fresh&15\\
+Cached&16\\
+\end{tabular}
+\end{block}
+\par
+\begin{flushright}{\small\color{teal}
+\begin{columns}[onlytextwidth,t]
+\begin{column}{0.62\textwidth}First nested cell.\end{column}
+\begin{column}{0.34\textwidth}
+\begin{tabular}{lr}Cost&Value\\\hline
+Fresh&14\\
+Global&12\\
+\end{tabular}
+\end{column}
+\end{columns}\par}\end{flushright}
+\end{column}
+\begin{column}{0.58\textwidth}Outer witness.\end{column}
+\end{columns}
+\par Following text.`, 9, "Madrid", "169").replace("[t,shrink=5]", "[t]");
+    const rendered = await renderBeamerFrame(source);
+    expect(rendered.diagnostics).toEqual([]);
+    const trace = buildNativeBeamerPageTrace(rendered, computerModernTexMetricProvider);
+    expect(trace.lines.find(line => line.text === "Firstnestedcell.")?.baselineY).toBeCloseTo(141.05864, 2);
+    expect(trace.lines.find(line => line.text === "Followingtext.")?.baselineY).toBeCloseTo(161.004639, 2);
+  });
+
   it("centers an extracted picture inside a ragged-left group", async () => {
     const rendered = await renderBeamerFrame(slide(String.raw`Lead text.\par
 {\footnotesize\color{blue}\raggedleft

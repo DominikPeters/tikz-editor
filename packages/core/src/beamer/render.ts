@@ -3588,8 +3588,12 @@ async function prepareColumnContent(params: {
         if (boundary && material && boundary.y <= material.y) {
           // \color in vertical mode places a color-stack operation between
           // the previous skip and the trivlist, so \addvspace sees no skip.
+          // A color change inside the trivlist happens after its opening glue.
           const prefix = source.slice(node.span.from, boundary.sourceSpan?.start ?? node.span.from);
-          const colorChange = getTexSyntaxIndex(prefix, texFragmentParser).controls.some(control => control.name === "color");
+          const syntax = getTexSyntaxIndex(prefix, texFragmentParser);
+          const opening = syntax.environmentBoundaries.find(environment => environment.kind === "begin" &&
+            /^(?:center|flushleft|flushright|figure|table)$/u.test(environment.name));
+          const colorChange = syntax.controls.some(control => control.name === "color" && control.span.from < (opening?.span.from ?? prefix.length));
           const overlappingSkip = colorChange ? 0 : Math.min(collapsibleSkip, Number(boundary.height));
           const interline = startingBaseline - previousDepth - paragraphStartingMaterialHeight(prepared.paragraph);
           const addedInterline = precedingSkip > 0 && !paragraphNeedsInterline ? (interline < 0 ? 1 : interline) : 0;
