@@ -289,6 +289,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
         if (!listRole) state.previousEmittedListContext = undefined;
         state.previousDisplayListDepth = listRole?.depth ?? 0;
         state.previousEmittedContentKind = "display";
+        state.emittedParagraphCount += 1;
         continue;
       }
       state.previousEmittedQuoteDepth = quoteDepth;

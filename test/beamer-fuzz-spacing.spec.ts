@@ -1121,6 +1121,19 @@ Left one.\par Left two.\par Left three.\par Left four.
 \par Witness`, 10, "Madrid", "169"),
     baselines: [["Leftfour.", 118.261459], ["x", 95.356232], ["AItem.", 118.156952], ["Witness", 129.661819]],
   },
+  {
+    name: "keeps a list's opening topsep after a display that begins a rounded block's body",
+    source: slide(String.raw`Lead text.\par
+\begin{alertblock}{Title}
+\[x\]
+\par
+\begin{itemize}
+\item Words.
+\end{itemize}
+\end{alertblock}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Title", 65.75618], ["x", 84.756775], ["Words.", 104.707413], ["Witness", 123.351746]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {
