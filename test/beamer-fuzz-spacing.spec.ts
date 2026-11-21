@@ -19,6 +19,43 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "keeps the opening list skip after a standalone display in a block",
+    source: slide(String.raw`Lead text.\par
+\begin{exampleblock}{Alpha}
+\begin{tikzpicture}[font=\scriptsize]\node {Picture};\end{tikzpicture}
+\par
+\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]
+\par
+\begin{itemize}
+\item First.
+\item Second.
+\end{itemize}
+\par Tail.
+\end{exampleblock}
+\par Witness`, 10, "default", "169"),
+    baselines: [["cdy", 102.078354], ["First.", 121.563629], ["Witness", 161.46489]],
+  },
+  {
+    name: "keeps the display's leading baseline when an explicit paragraph ends the column's empty line",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,c]
+\begin{column}{.46\textwidth}
+Left one.\par Left two.\par Left three.\par Left four.\par Left five.\par Left six.\par Left seven.
+\end{column}
+\begin{column}{.50\textwidth}
+\only<2>{\begin{enumerate}\item Hidden.\end{enumerate}}
+\par
+\[\begin{aligned}a+b&=c\\d-e&=f\end{aligned}\]
+\par
+\begin{flushleft}
+\[\begin{aligned}g+h&=i\\j-k&=l\end{aligned}\]
+\end{flushleft}
+\end{column}
+\end{columns}
+\par Witness`, 12),
+    baselines: [["Leftone.", 54.796082], ["a+b=c", 72.833298], ["g+h=i", 115.109634], ["Witness", 146.424576]],
+  },
+  {
     name: "combines a nested list's closing glue with the display skip before another equation",
     source: slide(String.raw`Lead text.\par
 {\scriptsize\color{teal}\raggedleft

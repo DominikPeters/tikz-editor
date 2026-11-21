@@ -3761,7 +3761,10 @@ async function prepareColumnFlowNode(params: {
     let paragraph = runBeamerRenderOperation(params.work, () => layoutParagraph(layoutParams));
     const firstMaterial = paragraph?.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "glue" && item.itemKind !== "penalty" && item.itemKind !== "vbox");
     const startsWithDisplay = firstMaterial?.hboxRole?.kind === "display-empty-line" && firstMaterial.hboxRole.position === "before-display";
-    if (paragraph && params.firstInColumn && startsWithDisplay && params.leadingDisplayBaselineSkipPt !== 0) {
+    // A leading \par ships the column's initial \leavevmode line before
+    // the display starts another empty paragraph on the baseline grid.
+    const closesInitialLine = /^\s*(?:[{}]\s*)*\\par(?![A-Za-z@])/u.test(projection.mapped.text);
+    if (paragraph && params.firstInColumn && startsWithDisplay && !closesInitialLine && params.leadingDisplayBaselineSkipPt !== 0) {
       paragraph = runBeamerRenderOperation(params.work, () => layoutParagraph({ ...layoutParams, leadingDisplayBaselineSkipPt: 0 }));
     } else if (paragraph && startsWithDisplay && initialPreviousDepth !== undefined) {
       paragraph = runBeamerRenderOperation(params.work, () => layoutParagraph({ ...layoutParams, initialPreviousDepth }));

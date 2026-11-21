@@ -372,9 +372,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
       }
       listVerticalSkipBefore = texLength(Math.max(0, adjustment));
     }
-    else if (followsDisplay) listVerticalSkipBefore = previousList && scope.listContext &&
-      previousList.listStart !== scope.listContext.listStart &&
-      (previousList.depth === scope.listContext.depth || (startsAfterExplicitPar && previousList.depth < scope.listContext.depth)) &&
+    else if (followsDisplay) listVerticalSkipBefore = scope.listContext &&
+      previousList?.listStart !== scope.listContext.listStart &&
+      (previousList?.depth === scope.listContext.depth || (startsAfterExplicitPar && (previousList?.depth ?? 0) < scope.listContext.depth)) &&
       !paragraph.ancestorListLabels?.some(label => !label.inherited)
       ? rememberListTopsep(state, scope.listContext.depth, startsListInVerticalMode, font, resolvedListProfile)
       : previousList && scope.listContext && (previousList.itemIndex !== scope.listContext.itemIndex || resumesDisplayParagraph)
