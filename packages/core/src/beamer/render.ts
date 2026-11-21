@@ -3576,14 +3576,19 @@ async function prepareColumnContent(params: {
       }
       const precedingSkip = previous?.kind === "paragraph" ? previous.trailingSkipPt
         : previous?.kind === "block" ? previous.block.plan.geometry.afterSkipPt : 0;
-      if (prepared.kind === "paragraph" && precedingSkip > 0 && previousDepth !== undefined) {
+      const collapsibleSkip = precedingSkip || (previous?.kind === "paragraph" ? trailingCollapsibleSkip(previous.paragraph) : 0);
+      if (prepared.kind === "paragraph" && collapsibleSkip > 0 && previousDepth !== undefined) {
         const material = prepared.paragraph.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "glue" && item.itemKind !== "penalty" && item.itemKind !== "vbox");
         const boundary = prepared.paragraph.layout.vlistLayout.boxReport.items.find(item => item.glue?.origin?.kind === "trivlist-boundary");
         if (boundary && material && boundary.y <= material.y) {
-          // Adjacent list/trivlist boundaries use addvspace's maximum skip,
-          // followed by ordinary interline glue from the previous last box.
+          // \color in vertical mode places a color-stack operation between
+          // the previous skip and the trivlist, so \addvspace sees no skip.
+          const prefix = source.slice(node.span.from, boundary.sourceSpan?.start ?? node.span.from);
+          const colorChange = getTexSyntaxIndex(prefix, texFragmentParser).controls.some(control => control.name === "color");
+          const overlappingSkip = colorChange ? 0 : Math.min(collapsibleSkip, Number(boundary.height));
           const interline = startingBaseline - previousDepth - paragraphStartingMaterialHeight(prepared.paragraph);
-          prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) - Math.min(precedingSkip, Number(boundary.height)) + (paragraphNeedsInterline ? 0 : interline < 0 ? 1 : interline);
+          const addedInterline = precedingSkip > 0 && !paragraphNeedsInterline ? (interline < 0 ? 1 : interline) : 0;
+          prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) - overlappingSkip + addedInterline;
         }
       }
       flow.push(prepared);

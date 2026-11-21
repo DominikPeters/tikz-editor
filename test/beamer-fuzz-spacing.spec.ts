@@ -19,6 +19,58 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "retains the closing list skip before a center environment with a color change",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,c]
+\begin{column}{.62\textwidth}Peer text.\end{column}
+\begin{column}{.34\textwidth}
+\begin{enumerate}
+\item<1-> First item.
+\item<2-> \[\begin{aligned}a+b&=c\\d-e&=f\end{aligned}\]
+\end{enumerate}
+\par
+{\small\color{black}\raggedright
+\begin{center}Centered text.\end{center}\par}
+\par
+\begin{enumerate}\item Tail.\end{enumerate}
+\end{column}\end{columns}
+\par Witness`, 9, "default"),
+    baselines: [["Peertext.", 83.955276], ["Centeredtext.", 106.924149], ["1.Tail.", 125.877243], ["Witness", 132.855209]],
+  },
+  {
+    name: "combines a terminal display skip with a following center environment",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,c]
+\begin{column}{.62\textwidth}Peer text.\end{column}
+\begin{column}{.34\textwidth}
+\begin{enumerate}
+\item First item.
+\item \[\begin{aligned}a+b&=c\\d-e&=f\end{aligned}\]
+\end{enumerate}
+\par
+{\small\raggedright
+\begin{center}Centered text.\end{center}\par}
+\par Tail.
+\end{column}\end{columns}
+\par Witness`, 9, "default"),
+    baselines: [["Peertext.", 77.252838], ["Centeredtext.", 96.369324], ["Tail.", 112.472336], ["Witness", 119.450302]],
+  },
+  {
+    name: "keeps the opening skip for a nested list after a rounded block",
+    source: slide(String.raw`Lead text.\par
+\begin{description}
+\item[Stage 1] First item.
+\item[Stage 2] Next item.\par
+\[E=\sum_{i=1}^{n}w_i x_i\]
+\par
+\begin{alertblock}{Alpha}Block body.\end{alertblock}
+\par
+\begin{enumerate}\item Tail.\end{enumerate}
+\end{description}
+\par Witness`, 9, "Boadilla", "169"),
+    baselines: [["Alpha", 117.034348], ["Blockbody.", 130.986481], ["Tail.", 152.181656], ["Witness", 165.43457]],
+  },
+  {
     name: "top-aligns a column beginning with a grouped block",
     source: slide(String.raw`Lead text.\par
 \begin{itemize}

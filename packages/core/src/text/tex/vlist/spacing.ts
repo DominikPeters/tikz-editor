@@ -394,8 +394,11 @@ function planSimpleTexParagraphVerticalSkipsInto(
     }
     // LaTeX's next item/end-list uses \addvspace: the larger of that
     // boundary and an immediately preceding block's smallskip survives.
+    // A newly opened nested list pushes its color before \addvspace, so
+    // that boundary follows the block's skip separately.
     if (state.externalAfterSkip && !state.hasInterveningPenalty &&
         state.previousEmittedListContext != null &&
+        (scope.listContext?.depth ?? 0) <= state.previousEmittedListContext.depth &&
         (scope.listContext?.depth !== state.previousEmittedListContext.depth ||
          scope.listContext.itemIndex !== state.previousEmittedListContext.itemIndex)) {
       listVerticalSkipBefore = texLength(Math.max(0, Number(listVerticalSkipBefore) - state.externalAfterSkip));
