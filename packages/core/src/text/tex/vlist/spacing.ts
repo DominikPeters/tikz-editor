@@ -437,8 +437,15 @@ function planSimpleTexParagraphVerticalSkipsInto(
       // The parent's \addvspace{\itemsep} collapses into the skip of a block that
       // just closed; the parsep part is that block's pending parskip.
       const collapsesIntoBlock = state.externalAfterSkip > 0 && state.externalPendingParskip !== undefined && !state.hasInterveningPenalty;
-      const itemSkip = collapsesIntoBlock
-        ? texLength(Math.max(0, texArticleListItemSepSkip(parentTransition.depth, font, parentProfile) - state.externalAfterSkip))
+      // Only a block in the list's first item takes the parsep from that pending parskip;
+      // after an earlier item TeX also keeps the item boundary's own parsep.
+      const blockIsLaterItem = (previous?.itemIndex ?? 0) > 1;
+      const collapsedItemSkip = collapsesIntoBlock
+        ? Math.max(0, texArticleListItemSepSkip(parentTransition.depth, font, parentProfile) - state.externalAfterSkip) +
+          (blockIsLaterItem ? texProfileDepthValue(parentProfile?.parsepPtByDepth ?? [], parentTransition.depth) : 0)
+        : undefined;
+      const itemSkip = collapsedItemSkip !== undefined
+        ? texLength(collapsedItemSkip)
         : texArticleListItemBoundarySkip(parentTransition.depth, font, parentProfile);
       listVerticalSkipBefore = texLength(Math.max(closing, itemSkip));
       // The nested list that opens here overwrites \@topsepadd, retiring the block's leak.

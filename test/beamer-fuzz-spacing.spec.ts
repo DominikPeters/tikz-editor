@@ -1383,6 +1383,21 @@ Right.
 \par Witness`, 11, "Madrid", "43"),
     baselines: [["Alpha.", 104.366714], ["Beta.", 115.767075], ["Witness", 132.48761]],
   },
+  {
+    name: "keeps the item parsep before a nested list that follows a block holding a list in a later item",
+    source: slide(String.raw`Lead.\par
+{\footnotesize
+\begin{itemize}
+\item Short.
+\item \begin{block}{T}\begin{enumerate}\item A\end{enumerate}\end{block}
+\item \begin{itemize}
+\item Alpha.
+\item Beta.
+\end{itemize}
+\end{itemize}\par}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["Alpha.", 116.790741], ["Beta.", 128.191101], ["Witness", 144.911636]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {
