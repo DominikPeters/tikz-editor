@@ -1411,6 +1411,39 @@ Between.\par
 \par Witness`, 11, "Madrid", "43"),
     baselines: [["Between.", 88.93399], ["a=c", 117.434891], ["Witness", 138.905579]],
   },
+  {
+    name: "collapses an outer item's boundary into the below skip of a display that ended a nested list",
+    source: slide(String.raw`Lead.\par
+{\small
+\begin{enumerate}
+\item First text.
+\par
+\begin{enumerate}
+\item \[E=x\]
+\end{enumerate}
+\item Second.
+\end{enumerate}\par}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["E=x", 93.684174], ["Witness", 129.405304]],
+  },
+  {
+    name: "collapses the item boundary into a nested list's final display before a list in the next outer item",
+    source: slide(String.raw`Lead.\par
+{\small
+\begin{enumerate}
+\item First text.
+\par
+\begin{enumerate}
+\item \[E=x\]
+\end{enumerate}
+\item \begin{itemize}
+\item \[F=y\]
+\item Alpha.
+\end{itemize}
+\end{enumerate}\par}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["E=x", 93.684097], ["F=y", 122.184998], ["Alpha.", 139.285538], ["Witness", 157.906128]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

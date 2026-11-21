@@ -390,6 +390,18 @@ function planSimpleTexParagraphVerticalSkipsInto(
         rememberListTopsep(state, adjacentParent.depth, startsListInVerticalMode, font, boundaryProfile)
       );
     }
+    else if (followsDisplay && parentTransition && previousList?.depth === parentTransition.depth + 1 &&
+        scope.trivlistScopes.length === 0 && !state.hasInterveningPenalty) {
+      // A list that opens in the next outer item follows the display that ended a nested list: the
+      // closing skips collapse into the display's below skip, as for a plain next item.
+      let adjustment = 0;
+      for (let depth = Math.min(previousList.depth, state.previousDisplayListDepth ?? previousList.depth); depth > parentTransition.depth; depth--) {
+        if (state.noParListDepths.has(depth)) continue;
+        adjustment += (state.listParagraphSkipByDepth.get(depth) ?? texArticleListParagraphSkip(depth, font, resolvedListProfile)) -
+          (state.listParagraphSkipByDepth.get(depth - 1) ?? texArticleListParagraphSkip(depth - 1, font, resolvedListProfile));
+      }
+      listVerticalSkipBefore = texLength(Math.max(0, adjustment));
+    }
     else if (followsDisplay && parentTransition) {
       // A nested list consumes the parent's pending label. The paragraph skip
       // from the parent item still follows the display.
@@ -424,6 +436,15 @@ function planSimpleTexParagraphVerticalSkipsInto(
         state.noParListDepths.delete(openingList.depth);
         listVerticalSkipBefore = rememberListTopsep(state, openingList.depth, startsListInVerticalMode, font,
           listProfileForContext(resolvedListProfile, openingList));
+      } else if (previousList && scope.listContext?.depth === previousList.depth - 1 && !state.hasInterveningPenalty) {
+        // A nested list ended with the display: \endlist and the next \item's \addvspace collapse into its below skip.
+        let adjustment = 0;
+        for (let depth = Math.min(previousList.depth, state.previousDisplayListDepth ?? previousList.depth); depth > scope.listContext.depth; depth--) {
+          if (state.noParListDepths.has(depth)) continue;
+          adjustment += (state.listParagraphSkipByDepth.get(depth) ?? texArticleListParagraphSkip(depth, font, resolvedListProfile)) -
+            (state.listParagraphSkipByDepth.get(depth - 1) ?? texArticleListParagraphSkip(depth - 1, font, resolvedListProfile));
+        }
+        listVerticalSkipBefore = texLength(Math.max(0, adjustment));
       } else {
         listVerticalSkipBefore = previousList && scope.listContext && (previousList.itemIndex !== scope.listContext.itemIndex || resumesDisplayParagraph)
           ? texArticleListParagraphSkip(scope.listContext.depth, font, resolvedListProfile) : texLength(0);
