@@ -197,6 +197,8 @@ export type PreparedFrameFlowItem =
       block: PreparedBlock;
       naturalHeight: number;
       boxHeight: number;
+      /** The baseline skip of the size active before the block, when it differs from the frame's. */
+      startingBaselineSkip?: number;
       endingDepth: number;
     }
   | {

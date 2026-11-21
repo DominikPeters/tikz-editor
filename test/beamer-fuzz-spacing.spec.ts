@@ -1072,6 +1072,16 @@ More text.
 \par Witness`, 10, "Madrid", "169"),
     baselines: [["Itemtext.", 59.150665], ["x", 79.101303], ["Moretext.", 90.976685], ["Witness", 105.227127]],
   },
+  {
+    name: "uses the declared size's baselineskip for the glue above a block's title box",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize\color{blue}\raggedleft
+\begin{alertblock}{Title}
+Body text.
+\end{alertblock}\par}
+\par Witness`, 11, "default", "43"),
+    baselines: [["Title", 57.647461], ["Bodytext.", 68.097794], ["Witness", 83.868301]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

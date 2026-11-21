@@ -137,7 +137,7 @@ export function positionPreparedFrameFlow(
       const glue = verticalInterlineGlue(
         previousDepth,
         item.boxHeight,
-        baselineSkip
+        item.startingBaselineSkip ?? baselineSkip
       );
       const referenceY = cursor + glue + item.boxHeight;
       const contentTop = referenceY - item.boxHeight;

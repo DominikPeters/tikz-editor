@@ -1786,6 +1786,9 @@ async function prepareFrameFlow(params: {
         ...(params.work !== undefined ? { work: params.work } : {}),
       }));
       if (block) {
+        // A size declaration before the block sets the baselineskip that
+        // TeX uses for the interline glue above its title box.
+        const ambientSize = activeBeamerNamedSize(params.references.ambientTextAt?.(node.span.from) ?? "", params.references.theme);
         result.push({
           kind: "block",
           visibility,
@@ -1793,6 +1796,7 @@ async function prepareFrameFlow(params: {
           block,
           naturalHeight: block.naturalHeight,
           boxHeight: block.flowBoxHeight,
+          ...(ambientSize ? { startingBaselineSkip: ambientSize.lineHeightPt } : {}),
           endingDepth: block.endingDepth,
         });
       }
