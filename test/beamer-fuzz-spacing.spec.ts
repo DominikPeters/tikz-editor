@@ -1444,6 +1444,23 @@ Between.\par
 \par Witness`, 11, "Madrid", "43"),
     baselines: [["E=x", 93.684097], ["F=y", 122.184998], ["Alpha.", 139.285538], ["Witness", 157.906128]],
   },
+  {
+    name: "adds the item parsep to the larger of itemsep and the nested list's closing skip",
+    source: slide(String.raw`Lead.\par
+{\small
+\begin{enumerate}
+\item First text.
+\par
+\begin{enumerate}
+\item Inner.
+\end{enumerate}
+\item \begin{itemize}
+\item Alpha.
+\end{itemize}
+\end{enumerate}\par}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["Inner.", 82.283844], ["Alpha.", 98.434357], ["Witness", 117.054947]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

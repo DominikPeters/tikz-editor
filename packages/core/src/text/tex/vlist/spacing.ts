@@ -468,7 +468,11 @@ function planSimpleTexParagraphVerticalSkipsInto(
       const itemSkip = collapsedItemSkip !== undefined
         ? texLength(collapsedItemSkip)
         : texArticleListItemBoundarySkip(parentTransition.depth, font, parentProfile);
-      listVerticalSkipBefore = texLength(Math.max(closing, itemSkip));
+      // \addvspace{\itemsep} merges with the closing skip; the parsep is the paragraph's own \parskip.
+      const itemParsep = texProfileDepthValue(parentProfile?.parsepPtByDepth ?? [], parentTransition.depth);
+      listVerticalSkipBefore = collapsedItemSkip === undefined && closing > 0
+        ? texLength(Math.max(closing, texArticleListItemSepSkip(parentTransition.depth, font, parentProfile)) + itemParsep)
+        : texLength(Math.max(closing, itemSkip));
       // The nested list that opens here overwrites \@topsepadd, retiring the block's leak.
       retireBlockLeak(state, parentTransition.depth);
       if (itemSkip >= closing) parentTransitionFlex = texProfileListVerticalGlueFlex(
