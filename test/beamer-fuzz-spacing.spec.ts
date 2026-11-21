@@ -1307,6 +1307,22 @@ Column text.
 \par Witness`, 10, "default", "43"),
     baselines: [["Words.", 53.989822], ["Title", 71.090363], ["Witness", 102.507843]],
   },
+  {
+    name: "uses lineskip before a display that follows a columns box deeper than its baseline glue",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,t]
+\begin{column}{0.5\textwidth}
+Left one.\par Left two.\par Left three.
+\end{column}
+\begin{column}{0.4\textwidth}
+Right.
+\end{column}
+\end{columns}
+\par
+\[x\]
+\par Witness`, 9, "Boadilla", "43"),
+    baselines: [["Leftthree.", 66.263916], ["x", 77.710831], ["Witness", 92.8638]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

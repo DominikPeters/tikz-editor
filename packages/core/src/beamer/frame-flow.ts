@@ -102,7 +102,7 @@ export function positionPreparedFrameFlow(
         : previous?.kind === "block" && !previous.block.packageBox ? previous.block.plan.geometry.afterSkipPt : 0;
       const sharedTrivlistSkip = Math.min(previousSkip, item.leadingTrivlistSkipPt ?? 0);
       const glue = (leadingDisplay
-        ? -(previousDepth ?? 0)
+        ? leadingDisplayGlue(previousDepth, item.startingBaselineSkip)
         : verticalInterlineGlue(previousDepth, item.boxHeight, item.startingBaselineSkip)) + item.leadingAdjustment - sharedTrivlistSkip;
       const referenceY = cursor + glue + item.boxHeight;
       const contentTop = referenceY - item.boxHeight;
@@ -329,6 +329,17 @@ export function leadingBeamerTrivlistAdjustment(
 
 export function paragraphLastLineDepth(paragraph: LaidParagraph): number {
   return Number(paragraph.layout.report.lines.at(-1)?.descent ?? 0);
+}
+
+/**
+ * A display's leading empty line already carries its own baseline glue. The flow
+ * removes the previous depth from it, except when that glue would go negative:
+ * TeX then uses \lineskip instead of the baseline glue.
+ */
+function leadingDisplayGlue(previousDepth: number | null, ownBaselineGlue: number): number {
+  if (previousDepth == null) return 0;
+  const candidate = Math.round((ownBaselineGlue - previousDepth) * 65_536) / 65_536;
+  return candidate >= 0 ? -previousDepth : TEX_LINE_SKIP_PT - ownBaselineGlue;
 }
 
 function verticalInterlineGlue(
