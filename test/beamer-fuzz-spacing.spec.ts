@@ -1369,6 +1369,20 @@ Right.
 \par Witness`, 11, "Madrid", "43"),
     baselines: [["Alpha.", 103.416687], ["Beta.", 115.767075], ["Witness", 132.48761]],
   },
+  {
+    name: "opens a nested list on the label line after a block that holds a list without the leaked skips",
+    source: slide(String.raw`Lead.\par
+{\footnotesize
+\begin{itemize}
+\item \begin{block}{T}\begin{enumerate}\item A\end{enumerate}\end{block}
+\item \begin{itemize}
+\item Alpha.
+\item Beta.
+\end{itemize}
+\end{itemize}\par}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["Alpha.", 104.366714], ["Beta.", 115.767075], ["Witness", 132.48761]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

@@ -133,6 +133,7 @@ interface SimpleTexParagraphVerticalSkipState {
   readonly listTopsepByDepth: Map<number, TexLength>;
   /** A block holding a list reinstalls the normal \itemsep in the list that owns the item. */
   readonly leakedItemsepByDepth: Map<number, number>;
+  readonly topsepBeforeLeakByDepth: Map<number, TexLength | undefined>;
   readonly listParagraphSkipByDepth: Map<number, TexLength>;
   readonly noParListDepths: Set<number>;
   readonly lastListItemsByDepth: Map<number, { listStart: number | undefined; itemIndex: number }>;
@@ -228,6 +229,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
         // The outermost list's \end takes the chain's largest skip, so depth 1
         // gets the leak even when the block's own list roles start deeper.
         const owner = listRoles[0];
+        if (owner) state.topsepBeforeLeakByDepth.set(owner.depth, state.listTopsepByDepth.get(owner.depth));
         if (owner) state.leakedItemsepByDepth.set(owner.depth, (listProfile.uncrampedItemsepPtByDepth ?? listProfile.itemsepPtByDepth)[0] ?? 0);
         const targets = first && first.depth > 1 ? [{ ...first, depth: 1 }, ...listRoles] : listRoles;
         for (const role of targets) {
@@ -432,8 +434,15 @@ function planSimpleTexParagraphVerticalSkipsInto(
       const previous = state.previousEmittedListContext;
       const closing = previous && previous.depth > parentTransition.depth
         ? texArticleListExitBoundarySkip(state, previous.depth, parentTransition.depth, font, resolvedListProfile) : texLength(0);
-      const itemSkip = texArticleListItemBoundarySkip(parentTransition.depth, font, parentProfile);
+      // The parent's \addvspace{\itemsep} collapses into the skip of a block that
+      // just closed; the parsep part is that block's pending parskip.
+      const collapsesIntoBlock = state.externalAfterSkip > 0 && state.externalPendingParskip !== undefined && !state.hasInterveningPenalty;
+      const itemSkip = collapsesIntoBlock
+        ? texLength(Math.max(0, texArticleListItemSepSkip(parentTransition.depth, font, parentProfile) - state.externalAfterSkip))
+        : texArticleListItemBoundarySkip(parentTransition.depth, font, parentProfile);
       listVerticalSkipBefore = texLength(Math.max(closing, itemSkip));
+      // The nested list that opens here overwrites \@topsepadd, retiring the block's leak.
+      retireBlockLeak(state, parentTransition.depth);
       if (itemSkip >= closing) parentTransitionFlex = texProfileListVerticalGlueFlex(
         { ...parentTransition, itemIndex: state.lastListItemsByDepth.get(parentTransition.depth)?.itemIndex ?? 0 },
         parentTransition, hasPreviousEmittedParagraph, false, parentProfile);
@@ -594,6 +603,7 @@ function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphV
     trivlistTopsepByScope: new Map(),
     listTopsepByDepth: new Map(),
     leakedItemsepByDepth: new Map(),
+    topsepBeforeLeakByDepth: new Map(),
     listParagraphSkipByDepth: new Map(),
     noParListDepths: new Set(),
     lastListItemsByDepth: new Map(),
@@ -2252,8 +2262,16 @@ function texArticleListVerticalSkipBefore(
     state, previous, current, hasPreviousEmittedParagraph, startsListInVerticalMode, exitsTrivlistScope, font, profile);
   // The block's leaked registers serve the first following item of the owning
   // list; later items and the list's closing skip see the list's own values.
-  if (current?.showLabel && state.leakedItemsepByDepth.delete(current.depth)) state.listTopsepByDepth.delete(current.depth);
+  if (current?.showLabel) retireBlockLeak(state, current.depth);
   return skip;
+}
+
+function retireBlockLeak(state: SimpleTexParagraphVerticalSkipState, depth: number): void {
+  if (!state.leakedItemsepByDepth.delete(depth)) return;
+  const before = state.topsepBeforeLeakByDepth.get(depth);
+  state.topsepBeforeLeakByDepth.delete(depth);
+  if (before === undefined) state.listTopsepByDepth.delete(depth);
+  else state.listTopsepByDepth.set(depth, before);
 }
 
 function texArticleListVerticalSkipBeforeLeaking(
