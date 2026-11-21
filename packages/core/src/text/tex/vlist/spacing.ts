@@ -463,16 +463,14 @@ function planSimpleTexParagraphVerticalSkipsInto(
     } : listProfile;
     // Minipage mode suppresses an opening skip. The closing alignment still
     // uses the registers it captured before the next list selects its own.
-    const trivlistBoundary = followsDisplay && !enteringTrivlist
-      ? texLength(0)
-      : texArticleTrivlistVerticalSkipBefore(
-          state,
-          state.previousEmittedTrivlistScopes,
-          scope.trivlistScopes,
-          startsListInVerticalMode,
-          font,
-          trivlistProfile
-        );
+    const trivlistBoundary = texArticleTrivlistVerticalSkipBefore(
+      state,
+      state.previousEmittedTrivlistScopes,
+      scope.trivlistScopes,
+      startsListInVerticalMode,
+      font,
+      trivlistProfile
+    );
     let trivlistVerticalSkipBefore = suppressInitialTopsep ? texLength(0) : trivlistBoundary;
     if (externalAfterSkip && !state.hasInterveningPenalty && scope.trivlistScopes.some(scope => !state.previousEmittedTrivlistScopes.includes(scope))) {
       trivlistVerticalSkipBefore = texLength(Math.max(0, trivlistVerticalSkipBefore - externalAfterSkip));

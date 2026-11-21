@@ -19,6 +19,26 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "closes an alignment around a terminal list display before the next paragraph",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,c]
+\begin{column}{.62\textwidth}
+Peer one.\par Peer two.
+\end{column}
+\begin{column}{.34\textwidth}
+\begin{flushleft}
+\begin{enumerate}
+\item First.
+\item \[E=\sum_{i=1}^{n}w_i x_i\]
+\end{enumerate}
+\end{flushleft}
+\par Tail.
+\end{column}
+\end{columns}
+\par Witness`, 10, "Boadilla", "169"),
+    baselines: [["Peerone.", 75.690231], ["E=wx", 87.989471], ["Tail.", 115.393768], ["Witness", 123.041519]],
+  },
+  {
     name: "ends a bottom-aligned column at zero depth after closing two lists",
     source: slide(String.raw`Lead text.\par
 \begin{columns}[onlytextwidth,b]
