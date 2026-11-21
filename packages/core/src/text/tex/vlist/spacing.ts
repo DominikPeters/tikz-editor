@@ -216,6 +216,18 @@ function planSimpleTexParagraphVerticalSkipsInto(
           state.externalPendingParskip = Number(parskip);
         }
       }
+      // A block holding a list or alignment leaves that inner list's closing
+      // skip in the enclosing lists' \@topsepadd: the normal-size topsep plus
+      // the enclosing list's parsep (TeX measured 5pt at \small/\footnotesize).
+      if (item.role.flowKind === "block" && item.role.containsList && listProfile) {
+        for (const role of scope) {
+          if (role.kind !== "list") continue;
+          const leaked = (listProfile.topsepPtByDepth[0] ?? 0) + Number(texArticleListParagraphSkip(
+            role.depth, font, listProfileForContext(listProfile, simpleListContextForRole(role, 0))));
+          const existing = state.listTopsepByDepth.get(role.depth);
+          if (existing === undefined || leaked > existing) state.listTopsepByDepth.set(role.depth, texLength(leaked));
+        }
+      }
       // A shipped box replaces the preceding block's skip as TeX's last
       // material, even when it stays in the same item.
       state.externalAfterSkip = 0;
@@ -237,21 +249,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
       );
       const listRole = lastVListAncestorRole(scope, "list");
       const listItemRole = lastVListAncestorRole(scope, "list-item");
-      const displayListContext: SimpleTexListContext | undefined = listRole
-        ? {
-            kind: listRole.listKind,
-            depth: listRole.depth,
-            ...(listRole.listRegisterDepth !== undefined ? { listRegisterDepth: listRole.listRegisterDepth } : {}),
-            labelDepth: listRole.labelDepth,
-            itemIndex: listItemRole?.itemIndex ?? 0,
-            ownLeftMarginEm: listRole.ownLeftMarginEm,
-            totalLeftMarginEm: listRole.totalLeftMarginEm,
-            ...(listRole.fontSizePt !== undefined ? { fontSizePt: listRole.fontSizePt } : {}),
-            ...(listRole.registerFontSizePt !== undefined ? { registerFontSizePt: listRole.registerFontSizePt } : {}),
-            ...(listRole.sourceStart !== undefined ? { listStart: listRole.sourceStart } : {}),
-            showLabel: false,
-          }
-        : undefined;
+      const displayListContext = listRole ? simpleListContextForRole(listRole, listItemRole?.itemIndex ?? 0) : undefined;
       // A display outside a just-closed center/flush environment still owns
       // that environment's closing glue before its leading empty line.
       const previousList = state.previousEmittedListContext;
@@ -2163,6 +2161,25 @@ function texArticleTrivlistVerticalSkipBefore(
   // An authored penalty separates the closing and opening glue, preventing
   // LaTeX \addvspace from collapsing them across adjacent environments.
   return texLength(state.hasInterveningPenalty ? exitSize + entrySize : Math.max(exitSize, entrySize));
+}
+
+function simpleListContextForRole(
+  listRole: Extract<TexVBoxRole, { readonly kind: "list" }>,
+  itemIndex: number
+): SimpleTexListContext {
+  return {
+    kind: listRole.listKind,
+    depth: listRole.depth,
+    ...(listRole.listRegisterDepth !== undefined ? { listRegisterDepth: listRole.listRegisterDepth } : {}),
+    labelDepth: listRole.labelDepth,
+    itemIndex,
+    ownLeftMarginEm: listRole.ownLeftMarginEm,
+    totalLeftMarginEm: listRole.totalLeftMarginEm,
+    ...(listRole.fontSizePt !== undefined ? { fontSizePt: listRole.fontSizePt } : {}),
+    ...(listRole.registerFontSizePt !== undefined ? { registerFontSizePt: listRole.registerFontSizePt } : {}),
+    ...(listRole.sourceStart !== undefined ? { listStart: listRole.sourceStart } : {}),
+    showLabel: false,
+  };
 }
 
 function listProfileForContext(profile: TexListLayoutProfile | undefined, context: SimpleTexListContext | undefined): TexListLayoutProfile | undefined {

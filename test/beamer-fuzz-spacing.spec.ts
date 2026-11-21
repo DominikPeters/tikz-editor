@@ -1251,6 +1251,30 @@ Column text.
 \par Witness`, 10, "Madrid", "169"),
     baselines: [["Alphatext.", 71.976074], ["Betatext.", 86.701538], ["Witness", 101.902023]],
   },
+  {
+    name: "closes a list with the leaked topsep and parsep after a block holding a list, before text",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize
+\begin{description}
+\item[Inner] \begin{exampleblock}{Title}
+\begin{itemize}\item Block item.\end{itemize}
+\end{exampleblock}
+\end{description}\par}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["InnerBlockitem.", 79.58107], ["Witness", 100.09697]],
+  },
+  {
+    name: "applies the same leaked closing skip before a following picture",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize
+\begin{description}
+\item[Inner] \begin{exampleblock}{Title}
+\begin{itemize}\item Block item.\end{itemize}
+\end{exampleblock}
+\end{description}\par}
+\par \begin{tikzpicture}[font=\scriptsize]\node[anchor=west] at (2,0.15) {Witness};\end{tikzpicture}`, 10, "Madrid", "169"),
+    baselines: [["InnerBlockitem.", 79.58107], ["Witness", 96.864029]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

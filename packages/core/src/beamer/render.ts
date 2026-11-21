@@ -1,6 +1,6 @@
 import { createBeamerAmbientBlockTheme } from "./ambient-block-theme.js";
 import { beamerItemActionCommitsParagraph } from "./item-actions.js";
-import { projectBeamerInlineFlow, beamerInlineListEffects } from "./inline-flow.js";
+import { projectBeamerInlineFlow, beamerInlineListEffects, containsListScope } from "./inline-flow.js";
 import { matchTexSyntaxEnvironments } from "../text/tex/syntax-index.js";
 import type { SimpleTexBoxBlockItem } from "../text/tex/ir.js";
 import type { TexVListItem } from "../text/tex/vlist/types.js";
@@ -4513,7 +4513,7 @@ function layoutParagraph(params: {
       const depth = item.kind === "block" ? item.block.endingDepth : item.box.depth;
       const advance = item.kind === "block" ? item.block.naturalHeight : item.box.height + item.box.depth;
       const after = item.kind === "block" ? item.block.plan.geometry.afterSkipPt : 0;
-      return [{ kind: "hbox", role: { kind: "external-flow", flowKind: item.kind, ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
+      return [{ kind: "hbox", role: { kind: "external-flow", flowKind: item.kind, ...(item.kind === "block" && containsListScope(item, "trivlist") ? { containsList: true } : {}), ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
         advance: texLength(advance), box: { metrics: { width: texLength(0), height: texLength(height), depth: texLength(depth) }, renderItems: [] } },
         ...(after ? [{ kind: "glue" as const, size: texLength(after), origin: { kind: "external-flow-after" as const } }] : [])];
     },
@@ -5475,6 +5475,12 @@ function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerRefe
         : BEAMER_LIST_LAYOUT_PROFILE.parsepPtByDepth[Math.min(depth - 1, BEAMER_LIST_LAYOUT_PROFILE.parsepPtByDepth.length) - 1] ?? 0;
       closing = Math.max(closing, topsep + enclosingParsep);
     }
+  }
+  // A block holding a list leaks its closing skip into the enclosing list: the
+  // normal-size topsep plus that list's parsep.
+  if (outerClosing > 0 && paragraph?.layout.vlistLayout.boxReport.items.some(item =>
+      item.hboxRole?.kind === "external-flow" && item.hboxRole.flowKind === "block" && item.hboxRole.containsList)) {
+    closing = Math.max(closing, (BEAMER_LIST_LAYOUT_PROFILE.topsepPtByDepth[0] ?? 0) + (registers?.parsepPt ?? 0));
   }
   const tail = paragraph?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin;
   // A separately laid-out flow item still follows the list's endtrivlist.

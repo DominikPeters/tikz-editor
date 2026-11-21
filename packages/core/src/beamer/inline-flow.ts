@@ -73,7 +73,7 @@ function resetsMinipageListDepth(item: PreparedFrameFlowItem | PreparedColumnFlo
     !!item.block.bodyFlow?.items.some(flow => resetsMinipageListDepth(flow.item));
 }
 
-function containsListScope(item: PreparedFrameFlowItem | PreparedColumnFlowItem, otherScope: "quote" | "trivlist"): boolean {
+export function containsListScope(item: PreparedFrameFlowItem | PreparedColumnFlowItem, otherScope: "quote" | "trivlist"): boolean {
   const contains = (paragraph: LaidParagraph | null) =>
     paragraph?.layout.vlistLayout.boxReport.items.some(box => box.role?.kind === "list" || box.role?.kind === otherScope) ?? false;
   if (item.kind === "paragraph") return contains(item.paragraph);
