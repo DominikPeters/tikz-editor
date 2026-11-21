@@ -1210,6 +1210,18 @@ Column text.
 \par Witness`, 9, "Madrid", "169"),
     baselines: [["B", 72.99231], ["Columntext.", 85.133698], ["Witness", 94.795502]],
   },
+  {
+    name: "ends a default block at zero depth when its list closes after a display",
+    source: slide(String.raw`Lead text.\par
+\begin{block}{Title}
+\begin{description}
+\item[Stage 1] Words.
+\item[Stage 2] \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\]
+\end{description}
+\end{block}
+\par Witness`, 10, "default", "43"),
+    baselines: [["Stage1Words.", 71.099792], ["cd", 104.787918], ["Witness", 128.158813]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

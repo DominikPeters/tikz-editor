@@ -2629,6 +2629,8 @@ async function prepareBlockWithTheme(params: {
   const lastFlowItem = bodyFlow?.items.at(-1)?.item;
   const closesWithBodySkip = plan.style === "default" && (trailingBodySkip > 0 || closingAlignmentSkip > 0 ||
     body?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin?.kind === "external-flow-after" ||
+    // A display's below skip also ends the box in glue, whatever its last text line's depth.
+    body?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin?.kind === "display-math-boundary" ||
     lastFlowItem?.kind === "block" && lastFlowItem.block.plan.geometry.afterSkipPt > 0 ||
     lastFlowItem?.kind === "paragraph" && (lastFlowItem.trailingListGlue.naturalPt > 0 || lastFlowItem.closesWithTrivlistSkip));
   // A default colorbox ending in vertical glue has zero physical depth.
