@@ -264,7 +264,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
           state.previousEmittedContentKind === "paragraph" && listRole && listItemRole && previousList &&
           previousList.listStart === listRole.sourceStart && previousList.itemIndex === listItemRole.itemIndex) {
         const parskip = texArticleListParagraphSkip(listRole.depth, font, previousProfile);
-        if (parskip > 0) skips.push({ blockIndex: -4_000_000 - (item.sourceSpan?.start ?? 0), vlistPath: path, segmentIndex: 0,
+        if (parskip > 0) skips.push({ blockIndex: -4_000_000 - item.sourceSpan.start, vlistPath: path, segmentIndex: 0,
           quoteSize: texLength(0), listSize: parskip, size: parskip });
       }
       if (item.kind === "display-math" || item.kind === "display-alignment") {
