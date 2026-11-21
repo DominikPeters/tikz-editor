@@ -337,6 +337,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const boundaryProfile = listProfileForContext(resolvedListProfile, adjacentParent);
     const suppressesListEntry = suppressInitialTopsep || startsWithPendingParent ||
       startsWithPendingTrivlist && !parentTransition && !adjacentParent;
+    const closingBeforePendingTrivlist = startsWithPendingTrivlist && previousList && scope.listContext &&
+      previousList.depth >= scope.listContext.depth ? scope.listContext.depth : undefined;
     let parentTransitionFlex: { stretch: TexLength; shrink: TexLength } | undefined;
     let listVerticalSkipBefore: TexLength;
     if (suppressesListEntry) {
@@ -345,7 +347,11 @@ function planSimpleTexParagraphVerticalSkipsInto(
       if (suppressInitialTopsep && scope.listContext) {
         rememberListTopsep(state, scope.listContext.depth, startsListInVerticalMode, font, resolvedListProfile);
       }
-      listVerticalSkipBefore = texLength(0);
+      // The new list inherits the alignment's label and skips its own
+      // opening glue. A preceding list still closes normally.
+      listVerticalSkipBefore = previousList && closingBeforePendingTrivlist !== undefined
+        ? texArticleListExitBoundarySkip(state, previousList.depth, closingBeforePendingTrivlist - 1, font, resolvedListProfile)
+        : texLength(0);
     }
     else if (adjacentParent && previousList) {
       listVerticalSkipBefore = texLength(
@@ -488,7 +494,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
 
     // Adjacent list and alignment environments share addvspace's last skip.
     if (!state.hasInterveningPenalty &&
-        previousList && previousList.depth > (scope.listContext?.depth ?? 0) &&
+        previousList && (previousList.depth > (scope.listContext?.depth ?? 0) || closingBeforePendingTrivlist !== undefined) &&
         trivlistVerticalSkipBefore > 0) {
       listVerticalSkipBefore = texLength(Math.max(0, listVerticalSkipBefore - trivlistVerticalSkipBefore));
     }
@@ -2219,11 +2225,12 @@ function texArticleListVerticalSkipBefore(
   if (!previous || !current) {
     return texLength(0);
   }
-  if (previous.depth === current.depth && previous.listStart !== undefined && current.listStart !== undefined && previous.listStart !== current.listStart) {
+  const previousListStart = previous.depth === current.depth ? previous.listStart : state.lastListItemsByDepth.get(current.depth)?.listStart;
+  if (previous.depth >= current.depth && previousListStart !== undefined && current.listStart !== undefined && previousListStart !== current.listStart) {
     // The closed list's trailing skip and the next list's initial skip are
     // separate boundaries; \@endparenv closes the first paragraph scope.
     return texLength(
-      texArticleListExitBoundarySkip(state, previous.depth, previous.depth - 1, font, listProfileForContext(profile, previous)) +
+      texArticleListExitBoundarySkip(state, previous.depth, current.depth - 1, font, listProfileForContext(profile, previous)) +
       rememberListTopsep(state, current.depth, startsListInVerticalMode, font, profile)
     );
   }

@@ -19,6 +19,37 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "closes both lists before opening a sibling list",
+    source: slide(String.raw`Lead text.\par
+\alt<1-2>{\begin{description}
+\item[First] First text.
+\item[Outer] \begin{description}
+\item[Inner] Nested text.
+\end{description}
+\end{description}
+\par
+\begin{itemize}
+\item Middle text.
+\item \only<1-2>{\begin{enumerate}\item Last nested text.\end{enumerate}}
+\end{itemize}
+\par
+\begin{description}\item[Last] Last text.\end{description}}{Alternate.}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["InnerNestedtext.", 72.926041], ["Middletext.", 90.026581], ["LastLasttext.", 117.577454], ["Witness", 131.827896]],
+  },
+  {
+    name: "retains the preceding list's closing glue when a centered list skips its own opening glue",
+    source: slide(String.raw`Lead text.\par
+\begin{description}
+\item[Stage] Intro.\par
+\begin{enumerate}\item First.\item Second.\end{enumerate}
+\par
+\begin{center}\begin{itemize}\item Centered text.\end{itemize}\end{center}
+\end{description}
+\par Witness`, 11, "Madrid"),
+    baselines: [["Second.", 92.544174], ["Centeredtext.", 107.364639], ["Witness", 123.135147]],
+  },
+  {
     name: "shares a block's closing skip with the following center environment",
     source: slide(String.raw`Lead text.\par
 \only<1,3>{\begin{exampleblock}{Alpha}
