@@ -388,6 +388,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
       if (openingList && (!pendingAncestor || pendingAncestor.depth > previousDepth) &&
           previousList?.listStart !== openingList.listStart &&
           (previousDepth === openingList.depth || (startsAfterExplicitPar && previousDepth < openingList.depth))) {
+        // The previous list's closing boundary is absorbed into the display
+        // skip. Its pending-label state ends before the new list starts.
+        state.noParListDepths.delete(openingList.depth);
         listVerticalSkipBefore = rememberListTopsep(state, openingList.depth, startsListInVerticalMode, font,
           listProfileForContext(resolvedListProfile, openingList));
       } else {

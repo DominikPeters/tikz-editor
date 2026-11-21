@@ -19,6 +19,22 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "closes a sibling list opened after a nested list's terminal display",
+    source: slide(String.raw`Lead text.\par
+\begin{description}
+\item[Outer] \begin{description}
+\item[First] \[\begin{aligned}a+b&=c\\d-e&=f\end{aligned}\]
+\end{description}
+\par
+\begin{description}\item[Second] Sibling content.\end{description}
+\par
+Resumed outer paragraph.
+\item[Tail] Last text.
+\end{description}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["SecondSiblingcontent.", 103.687973], ["Resumedouterparagraph.", 116.988403], ["Witness", 142.639206]],
+  },
+  {
     name: "ends a block at zero depth when an alignment closes over a larger display skip",
     source: slide(String.raw`Lead text.\par
 \begin{alertblock}{Alpha}
