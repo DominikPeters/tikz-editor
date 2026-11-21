@@ -19,6 +19,19 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "shares a block's closing skip with the following center environment",
+    source: slide(String.raw`Lead text.\par
+\only<1,3>{\begin{exampleblock}{Alpha}
+Block text.
+\end{exampleblock}
+\par
+\begin{center}
+Centered paragraph.
+\end{center}}
+\par Witness`, 11, "Madrid"),
+    baselines: [["Blocktext.", 83.130066], ["Centeredparagraph.", 109.004562], ["Witness", 130.47525]],
+  },
+  {
     name: "keeps a post-display list's opening glue when its first label moves to a nested list",
     source: slide(String.raw`Lead text.\par
 \begin{description}

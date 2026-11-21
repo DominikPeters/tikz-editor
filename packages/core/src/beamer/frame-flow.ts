@@ -96,10 +96,11 @@ export function positionPreparedFrameFlow(
       // there, rather than adding another minimum lineskip outside the box.
       const leadingDisplay = firstBox?.hboxRole?.kind === "display-empty-line" && firstBox.hboxRole.position === "before-display";
       const previous = flow[index - 1];
-      // The picture's closing trivlist and the following alignment share
-      // the same addvspace boundary, even when the picture is extracted.
-      const sharedTrivlistSkip = previous?.kind === "tikzpicture"
-        ? Math.min(previous.surroundingGlue.bottom.naturalPt, item.leadingTrivlistSkipPt ?? 0) : 0;
+      // A following alignment's addvspace shares the preceding picture or
+      // block's closing skip, even when those boxes are extracted.
+      const previousSkip = previous?.kind === "tikzpicture" ? previous.surroundingGlue.bottom.naturalPt
+        : previous?.kind === "block" && !previous.block.packageBox ? previous.block.plan.geometry.afterSkipPt : 0;
+      const sharedTrivlistSkip = Math.min(previousSkip, item.leadingTrivlistSkipPt ?? 0);
       const glue = (leadingDisplay
         ? -(previousDepth ?? 0)
         : verticalInterlineGlue(previousDepth, item.boxHeight, item.startingBaselineSkip)) + item.leadingAdjustment - sharedTrivlistSkip;
