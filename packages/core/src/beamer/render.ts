@@ -5461,7 +5461,13 @@ function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerRefe
       if (!/^(?:\s|\}|\\par(?![A-Za-z@]))*$/u.test(gap)) break;
       chain++;
     }
+    const environments = [...matchTexSyntaxEnvironments(getTexSyntaxIndex(mapped.text, texFragmentParser)).values()];
     for (let depth = 2; depth <= chain; depth++) {
+      // A list that starts on its item's label line takes LaTeX's noparlist
+      // path, which suppresses its closing topsep.
+      const listEnd = ends[ends.length - depth];
+      const environment = listEnd ? environments.find(candidate => candidate.end.span.from === listEnd.index) : undefined;
+      if (environment && /\\item\s*(?:<[^>]*>\s*)?(?:\[[^\]]*\]\s*)?$/u.test(mapped.text.slice(0, environment.begin.span.from))) continue;
       const topsep = BEAMER_LIST_LAYOUT_PROFILE.topsepPtByDepth[Math.min(depth, BEAMER_LIST_LAYOUT_PROFILE.topsepPtByDepth.length) - 1] ?? 0;
       const enclosingParsep = depth === 2 ? registers?.parsepPt ?? 0
         : BEAMER_LIST_LAYOUT_PROFILE.parsepPtByDepth[Math.min(depth - 1, BEAMER_LIST_LAYOUT_PROFILE.parsepPtByDepth.length) - 1] ?? 0;

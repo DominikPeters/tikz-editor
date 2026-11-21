@@ -1193,6 +1193,23 @@ Left one.\par Left two.\par Left three.\par Left four.
 \par Witness`, 10, "Madrid", "169"),
     baselines: [["Beta.", 70.075974], ["x", 104.277054], ["Witness", 123.277649]],
   },
+  {
+    name: "suppresses the closing topsep of a list that starts on its item's label line",
+    source: slide(String.raw`Lead text.\par
+{\small
+\begin{description}
+\item[Outer] Words.
+\item[Nested] \begin{enumerate}\item A\item B\end{enumerate}
+\end{description}
+\par
+\begin{columns}[onlytextwidth,c]
+\begin{column}{0.50\textwidth}
+Column text.
+\end{column}
+\end{columns}\par}
+\par Witness`, 9, "Madrid", "169"),
+    baselines: [["B", 72.99231], ["Columntext.", 85.133698], ["Witness", 94.795502]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {
