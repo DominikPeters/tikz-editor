@@ -480,4 +480,20 @@ Fraction:
     expect(compareBeamerPageTraces(resized, oracle).summary.unmatchedNativeRectangles).toBe(1);
   });
 
+  it("matches coincident projected-marker carrier rules while retaining distinct extents", () => {
+    const page = { x: 0, y: 0, width: 160, height: 90 };
+    const marker = { id: "bullet", role: "list-marker", x: 8, y: 21, width: 4, height: 4 } as const;
+    const native: NativeBeamerPageTrace = {
+      coordinateSystem: COORDINATE_SYSTEM, page, untracedRegions: [], rectangles: [marker], glyphs: [], lines: [],
+    };
+    const rule = { path: "marker", x: marker.x, y: marker.y, width: marker.width, height: marker.height, depth: 0, totalHeight: marker.height };
+    const oracle: OracleBeamerPageTrace = {
+      coordinateSystem: COORDINATE_SYSTEM, page, shipoutOrigin: { x: 0, y: 0 }, boxes: [], glyphs: [], lines: [],
+      rules: [rule, { ...rule, path: "coincident" }, { ...rule, path: "distinct", y: rule.y + .001 }],
+    };
+    const { geometry } = compareBeamerPageTraces(native, oracle);
+    expect(geometry.matches).toHaveLength(1);
+    expect(geometry.unmatchedOracle.map(candidate => candidate.path)).toEqual(["distinct"]);
+  });
+
 });

@@ -962,7 +962,12 @@ function compareRectangles(nativeRectangles, oracleRules) {
       )),
     });
   }
-  const unmatchedOracle = [...available].map((index) => oracleRules[index]);
+  // A projected marker can ship two coincident shading carrier rules. The
+  // paint occupies one rectangle. Keep distinct rules in the comparison.
+  const ruleExtent = ({ x, y, width, height, depth, totalHeight }) => JSON.stringify([x, y, width, height, depth, totalHeight]);
+  const markerRuleExtents = new Set(matches.filter(match => match.role === "list-marker").map(match => ruleExtent(match.oracle)));
+  const unmatchedOracle = [...available].map((index) => oracleRules[index])
+    .filter(rule => !markerRuleExtents.has(ruleExtent(rule)));
   return {
     matches,
     unmatchedNative,
