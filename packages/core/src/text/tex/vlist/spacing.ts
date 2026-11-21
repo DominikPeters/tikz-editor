@@ -372,13 +372,23 @@ function planSimpleTexParagraphVerticalSkipsInto(
       }
       listVerticalSkipBefore = texLength(Math.max(0, adjustment));
     }
-    else if (followsDisplay) listVerticalSkipBefore = scope.listContext &&
-      previousList?.listStart !== scope.listContext.listStart &&
-      (previousList?.depth === scope.listContext.depth || (startsAfterExplicitPar && (previousList?.depth ?? 0) < scope.listContext.depth)) &&
-      !paragraph.ancestorListLabels?.some(label => !label.inherited)
-      ? rememberListTopsep(state, scope.listContext.depth, startsListInVerticalMode, font, resolvedListProfile)
-      : previousList && scope.listContext && (previousList.itemIndex !== scope.listContext.itemIndex || resumesDisplayParagraph)
-        ? texArticleListParagraphSkip(scope.listContext.depth, font, resolvedListProfile) : texLength(0);
+    else if (followsDisplay) {
+      const previousDepth = previousList?.depth ?? 0;
+      const pendingAncestor = paragraph.ancestorListLabels?.find(label => !label.inherited);
+      // A newly opened list can pass its label to a deeper list before any
+      // paragraph ships. The opening glue belongs to the shallower list.
+      const openingList = pendingAncestor && pendingAncestor.depth > previousDepth
+        ? pendingAncestor : scope.listContext;
+      if (openingList && (!pendingAncestor || pendingAncestor.depth > previousDepth) &&
+          previousList?.listStart !== openingList.listStart &&
+          (previousDepth === openingList.depth || (startsAfterExplicitPar && previousDepth < openingList.depth))) {
+        listVerticalSkipBefore = rememberListTopsep(state, openingList.depth, startsListInVerticalMode, font,
+          listProfileForContext(resolvedListProfile, openingList));
+      } else {
+        listVerticalSkipBefore = previousList && scope.listContext && (previousList.itemIndex !== scope.listContext.itemIndex || resumesDisplayParagraph)
+          ? texArticleListParagraphSkip(scope.listContext.depth, font, resolvedListProfile) : texLength(0);
+      }
+    }
     else if (parentTransition) {
       const parentProfile = listProfileForContext(listProfile, parentTransition);
       const previous = state.previousEmittedListContext;

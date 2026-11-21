@@ -19,6 +19,23 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "keeps a post-display list's opening glue when its first label moves to a nested list",
+    source: slide(String.raw`Lead text.\par
+\begin{description}
+\item[Outer] \alt<1,3>{\[E=\sum_{i=1}^{n}w_i x_i\]}{Alternate.}
+\par
+\begin{description}
+\item[Middle] \begin{itemize}
+\item Inner text.
+\end{itemize}
+\item[Next] More text.
+\end{description}
+\item[Tail] Last text.
+\end{description}
+\par Witness`, 12, "Boadilla", "169"),
+    baselines: [["E=wx", 82.362167], ["MiddleInnertext.", 113.755035], ["Witness", 159.831497]],
+  },
+  {
     name: "shares the vertical skip between an extracted centered picture and flushleft",
     source: slide(String.raw`Lead text.\par
 \uncover<1,3>{\begin{center}
