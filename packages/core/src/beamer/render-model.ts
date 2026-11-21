@@ -174,6 +174,7 @@ export type PreparedFrameFlowItem =
       boxHeight: number;
       startingBaselineSkip: number;
       leadingAdjustment: number;
+      leadingTrivlistSkipPt?: number;
       endingDepth: number;
       closesWithTrivlistSkip?: boolean;
       trailingListGlue: {

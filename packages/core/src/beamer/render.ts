@@ -2077,6 +2077,7 @@ function prepareFrameParagraph(params: {
     ? BEAMER_LIST_LAYOUT_PROFILE.topsepShrinkPtByDepth?.[0] ?? 0
     : 0;
   const namedSize = activeBeamerNamedSize(projectedSource, params.references.theme);
+  const startsWithTrivlist = /^\s*(?:\\par(?![A-Za-z@])\s*)*\\begin\s*\{\s*(?:center|flushleft|flushright)\s*\}/u.test(paragraphSource);
   return {
     kind: "paragraph",
     visibility: resolveBeamerOverlaySpanVisibility(
@@ -2096,6 +2097,7 @@ function prepareFrameParagraph(params: {
       paragraph,
       trivlistTopsep
     ),
+    ...(startsWithTrivlist ? { leadingTrivlistSkipPt: trivlistTopsep } : {}),
     endingDepth: paragraphEndingMaterialDepth(paragraph),
     ...(closingTrivlistSkip > 0 ? { closesWithTrivlistSkip: true } : {}),
     trailingListGlue: {

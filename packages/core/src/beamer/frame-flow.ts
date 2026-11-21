@@ -95,9 +95,14 @@ export function positionPreparedFrameFlow(
       // skip in the measured paragraph prefix. Consume the preceding depth
       // there, rather than adding another minimum lineskip outside the box.
       const leadingDisplay = firstBox?.hboxRole?.kind === "display-empty-line" && firstBox.hboxRole.position === "before-display";
+      const previous = flow[index - 1];
+      // The picture's closing trivlist and the following alignment share
+      // the same addvspace boundary, even when the picture is extracted.
+      const sharedTrivlistSkip = previous?.kind === "tikzpicture"
+        ? Math.min(previous.surroundingGlue.bottom.naturalPt, item.leadingTrivlistSkipPt ?? 0) : 0;
       const glue = (leadingDisplay
         ? -(previousDepth ?? 0)
-        : verticalInterlineGlue(previousDepth, item.boxHeight, item.startingBaselineSkip)) + item.leadingAdjustment;
+        : verticalInterlineGlue(previousDepth, item.boxHeight, item.startingBaselineSkip)) + item.leadingAdjustment - sharedTrivlistSkip;
       const referenceY = cursor + glue + item.boxHeight;
       const contentTop = referenceY - item.boxHeight;
       const visualBottom = contentTop + item.naturalHeight;
@@ -148,9 +153,11 @@ export function positionPreparedFrameFlow(
       continue;
     }
     if (item.kind === "tikzpicture") {
+      // The alignment's opening skip is vertical glue. TeX computes the
+      // interline glue using the height of the picture box itself.
       const glue = verticalInterlineGlue(
         previousDepth,
-        item.boxHeight,
+        item.tikz.height,
         baselineSkip
       );
       const referenceY = cursor + glue + item.boxHeight;

@@ -19,6 +19,21 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "shares the vertical skip between an extracted centered picture and flushleft",
+    source: slide(String.raw`Lead text.\par
+\uncover<1,3>{\begin{center}
+\begin{tikzpicture}[font=\scriptsize]\node {Centered};\end{tikzpicture}
+\end{center}
+\par
+\begin{flushleft}
+{\scriptsize\color{black}\raggedleft
+Aligned text.\par}
+\end{flushleft}
+\par Tail.}
+\par Witness`, 9, "Madrid", "169"),
+    baselines: [["Centered", 55.787582], ["Alignedtext.", 71.044754], ["Tail.", 87.147751], ["Witness", 97.550583]],
+  },
+  {
     name: "closes an alignment around a terminal list display before the next paragraph",
     source: slide(String.raw`Lead text.\par
 \begin{columns}[onlytextwidth,c]
