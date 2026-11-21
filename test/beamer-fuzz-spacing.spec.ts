@@ -1346,6 +1346,17 @@ Right.
 \par \begin{tikzpicture}[font=\scriptsize]\node[anchor=west] at (2,0.15) {Witness};\end{tikzpicture}`, 10, "Boadilla", "169"),
     baselines: [["Plain.", 121.017212], ["Witness", 136.428604]],
   },
+  {
+    name: "closes a scriptsize list with the enclosing small registers before a picture",
+    source: slide(String.raw`Lead text.\par
+{\small
+\begin{itemize}\item First.\end{itemize}
+\par
+{\scriptsize\raggedleft
+\begin{itemize}\item Second.\end{itemize}\par}\par}
+\par \begin{tikzpicture}[font=\scriptsize]\node[anchor=west] at (2,0.15) {Witness};\end{tikzpicture}`, 11, "Boadilla", "43"),
+    baselines: [["Second.", 79.023117], ["Witness", 94.100494]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

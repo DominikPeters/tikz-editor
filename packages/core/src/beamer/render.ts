@@ -5448,7 +5448,14 @@ function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerRefe
   const origin = mapped.sourceMap.charOrigins[end.index];
   const active = references.theme ? ambientTextTheme(references.theme,
     references.ambientTextAt?.(origin?.kind === "direct" ? origin.from : 0) ?? "").fonts["normal-text"] : font;
-  const registers = beamerListSizeOverrides(references.theme).find(entry => Math.abs(entry.fontSizePt - active.sizePt) < .001);
+  // Only \normalsize, \small and \footnotesize reinstall the list registers;
+  // \scriptsize and the other sizes inherit the last of them still in scope.
+  const ambient = references.ambientTextAt?.(origin?.kind === "direct" ? origin.from : 0) ?? "";
+  const registerCommand = [...ambient.matchAll(/\\(normalsize|small|footnotesize)(?![A-Za-z])/gu)].at(-1)?.[1];
+  const registerOverrides = beamerListSizeOverrides(references.theme);
+  const registers = registerCommand === undefined
+    ? registerOverrides.find(entry => Math.abs(entry.fontSizePt - active.sizePt) < .001)
+    : registerCommand === "normalsize" ? undefined : registerOverrides[registerCommand === "small" ? 0 : 1];
   // A default block keeps the surrounding list depth, so its list closes with that
   // deeper level's topsep; only first-level lists use the size registers.
   const baseTopsep = listDepthOffset > 0
