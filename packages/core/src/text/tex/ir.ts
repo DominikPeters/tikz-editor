@@ -4986,8 +4986,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const precedingParagraphEnd = lastItem?.kind === "display-math" ? lastItem.sourceEnd : previousParagraphBlockEnd;
       const startsAfterExplicitPar = precedingParagraphEnd !== undefined &&
         hasExplicitParagraphBoundaryBetween(precedingParagraphEnd, rawStart);
+      // Only a \color after the last \par or environment end sits between the
+      // preceding skip and this block.
       const followsColorChange = previousParagraphBlockEnd !== undefined &&
-        /\\color\b/u.test(textSliceAtSourceOffsets(previousParagraphBlockEnd, rawStart));
+        /\\color\b/u.test(textSliceAtSourceOffsets(previousParagraphBlockEnd, rawStart).split(/\\par(?![A-Za-z@])|\\end\s*\{[^}]*\}/u).at(-1) ?? "");
       const scopePath = currentSimpleTexScopePath();
       let nodes = simpleTexInlineNodesAfterHorizontalVSpace(
         inlineNodes,

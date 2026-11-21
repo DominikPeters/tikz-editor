@@ -1275,6 +1275,23 @@ Column text.
 \par \begin{tikzpicture}[font=\scriptsize]\node[anchor=west] at (2,0.15) {Witness};\end{tikzpicture}`, 10, "Madrid", "169"),
     baselines: [["InnerBlockitem.", 79.58107], ["Witness", 96.864029]],
   },
+  {
+    name: "does not mistake an opening group's color for one between a closing list and the next paragraph",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize\color{teal}\raggedleft
+\begin{description}
+\item[Outer] \begin{description}
+\item[Inner] \begin{exampleblock}{Title}
+\begin{enumerate}
+\item Text.
+\item \[x\]
+\end{enumerate}
+\end{exampleblock}
+\end{description}
+\end{description}\par}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["InnerText.", 81.774429], ["x", 101.725052], ["Witness", 122.164948]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

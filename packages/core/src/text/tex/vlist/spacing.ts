@@ -220,12 +220,21 @@ function planSimpleTexParagraphVerticalSkipsInto(
       // skip in the enclosing lists' \@topsepadd: the normal-size topsep plus
       // the enclosing list's parsep (TeX measured 5pt at \small/\footnotesize).
       if (item.role.flowKind === "block" && item.role.containsList && listProfile) {
-        for (const role of scope) {
-          if (role.kind !== "list") continue;
+        const listRoles = scope.filter((role): role is Extract<TexVBoxRole, { readonly kind: "list" }> => role.kind === "list");
+        const first = listRoles[0];
+        // The outermost list's \end takes the chain's largest skip, so depth 1
+        // gets the leak even when the block's own list roles start deeper.
+        const targets = first && first.depth > 1 ? [{ ...first, depth: 1 }, ...listRoles] : listRoles;
+        for (const role of targets) {
+          const context = simpleListContextForRole(role, 0);
+          // A synthetic outer list takes its registers from the size command alone,
+          // not from the inner list's per-depth body font.
+          const { fontSizePt: _bodySize, ...registerContext } = context;
           const leaked = (listProfile.topsepPtByDepth[0] ?? 0) + Number(texArticleListParagraphSkip(
-            role.depth, font, listProfileForContext(listProfile, simpleListContextForRole(role, 0))));
+            role.depth, font, listProfileForContext(listProfile, listRoles.includes(role) ? context : registerContext)));
           const existing = state.listTopsepByDepth.get(role.depth);
-          if (existing === undefined || leaked > existing) state.listTopsepByDepth.set(role.depth, texLength(leaked));
+          // A list opened on its item's label line has no closing skip to raise.
+          if (existing === undefined ? listRoles.includes(role) : leaked > existing) state.listTopsepByDepth.set(role.depth, texLength(leaked));
         }
       }
       // A shipped box replaces the preceding block's skip as TeX's last
