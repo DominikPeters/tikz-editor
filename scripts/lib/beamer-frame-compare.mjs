@@ -821,7 +821,12 @@ export function compareBeamerPageTraces(nativeTrace, oracleTrace) {
     rect.x < -.01 || rect.y < -.01 || rect.x + rect.width > nativeTrace.page.width + .01 || rect.y + rect.height > nativeTrace.page.height + .01);
   const pageRules = oracleTrace.rules.filter(rule => rule.width > 0 && rule.totalHeight > 0 && (
     (rule.x >= -.01 && rule.y >= -.01 && rule.x + rule.width <= oracleTrace.page.width + .01 && rule.y + rule.totalHeight <= oracleTrace.page.height + .01) ||
-    partialNative.some(rect => Math.abs(rect.width - rule.width) <= .02 && Math.abs(rect.height - rule.totalHeight) <= .02)
+    partialNative.some(rect => Math.abs(rect.width - rule.width) <= .02 && Math.abs(rect.height - rule.totalHeight) <= .02 && (
+      // A covered marker can have the same dimensions as a clipped one,
+      // but Beamer moves the covered material entirely outside the page.
+      (rule.x < oracleTrace.page.width && rule.x + rule.width > 0 && rule.y < oracleTrace.page.height && rule.y + rule.totalHeight > 0) ||
+      (Math.abs(rect.x - rule.x) <= .02 && Math.abs(rect.y - rule.y) <= .02)
+    ))
   ));
   const coveredOracleRules = pageRules.filter((rule) =>
     (nativeTrace.coveredRectangles ?? []).some((covered) =>

@@ -470,6 +470,7 @@ Fraction:
       coordinateSystem: COORDINATE_SYSTEM, page, shipoutOrigin: { x: 0, y: 0 }, boxes: [], glyphs: [], lines: [],
       rules: [
         { ...rectangle, path: "transition", depth: 0, totalHeight: 2.66 },
+        { ...rectangle, path: "covered-rule", x: 1600, y: -1300, depth: 0, totalHeight: 2.66 },
         { path: "mask-carrier", x: 0, y: -70, width: 160, height: 80, depth: 0, totalHeight: 80 },
       ],
     };
