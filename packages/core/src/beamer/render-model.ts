@@ -175,6 +175,8 @@ export type PreparedFrameFlowItem =
       startingBaselineSkip: number;
       leadingAdjustment: number;
       leadingTrivlistSkipPt?: number;
+      /** The closing skip of a trailing center/flush environment, included in naturalHeight. */
+      trailingTrivlistSkipPt?: number;
       endingDepth: number;
       closesWithTrivlistSkip?: boolean;
       trailingListGlue: {

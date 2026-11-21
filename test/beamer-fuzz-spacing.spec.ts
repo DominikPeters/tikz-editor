@@ -1339,6 +1339,13 @@ Right.
 \par Witness`, 12, "Madrid", "169"),
     baselines: [["Stage2Text.", 70.076736], ["MethodCostError", 83.814133], ["Witness", 113.576706]],
   },
+  {
+    name: "drops a trailing alignment's skip from a rounded block that ends a minipage around a nested block",
+    source: slide(String.raw`Lead text.\par
+\begin{alertblock}{Outer}\begin{alertblock}{Inner}Text.\end{alertblock}\par\begin{flushright}Plain.\end{flushright}\end{alertblock}
+\par \begin{tikzpicture}[font=\scriptsize]\node[anchor=west] at (2,0.15) {Witness};\end{tikzpicture}`, 10, "Boadilla", "169"),
+    baselines: [["Plain.", 121.017212], ["Witness", 136.428604]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

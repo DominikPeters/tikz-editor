@@ -2102,6 +2102,7 @@ function prepareFrameParagraph(params: {
       trivlistTopsep
     ),
     ...(startsWithTrivlist ? { leadingTrivlistSkipPt: trivlistTopsep } : {}),
+    ...(trailingTrivlistSkip > 0 ? { trailingTrivlistSkipPt: trailingTrivlistSkip } : {}),
     endingDepth: paragraphEndingMaterialDepth(paragraph),
     ...(closingTrivlistSkip > 0 ? { closesWithTrivlistSkip: true } : {}),
     trailingListGlue: {
@@ -2535,7 +2536,7 @@ async function prepareBlockWithTheme(params: {
   // Rounded bodies end a minipage, whose terminal unskip removes the last
   // list/block skip. Intermediate body items retain that glue.
   const terminalBodySkip = plan.style === "rounded"
-    ? terminalBodyFlow?.kind === "paragraph" ? terminalBodyFlow.trailingListGlue.naturalPt
+    ? terminalBodyFlow?.kind === "paragraph" ? terminalBodyFlow.trailingListGlue.naturalPt + (terminalBodyFlow.trailingTrivlistSkipPt ?? 0)
       : terminalBodyFlow?.kind === "block" ? terminalBodyFlow.block.plan.geometry.afterSkipPt : 0
     : 0;
   let trailingBodySkip = 0;
