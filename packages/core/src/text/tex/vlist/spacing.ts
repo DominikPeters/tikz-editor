@@ -2389,7 +2389,9 @@ function texArticleListExitBoundarySkip(
       const topsep = state.listTopsepByDepth.get(depth) ?? texArticleOutsideListBoundarySkip(false, font, profile, depth);
       state.listTopsepByDepth.delete(depth);
       if (state.noParListDepths.delete(depth)) continue;
-      size = texLength(Math.max(size, topsep));
+      // In Beamer, a nested list's closing skip includes the enclosing list's parsep.
+      const enclosingParsep = profile && depth > 1 ? state.listParagraphSkipByDepth.get(depth - 1) ?? 0 : 0;
+      size = texLength(Math.max(size, topsep + enclosingParsep));
     }
     return size;
   }

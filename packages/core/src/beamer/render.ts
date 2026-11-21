@@ -5442,7 +5442,28 @@ function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerRefe
   const active = references.theme ? ambientTextTheme(references.theme,
     references.ambientTextAt?.(origin?.kind === "direct" ? origin.from : 0) ?? "").fonts["normal-text"] : font;
   const registers = beamerListSizeOverrides(references.theme).find(entry => Math.abs(entry.fontSizePt - active.sizePt) < .001);
-  const closing = trailingBeamerListSkip(mapped.text, registers?.topsepPt ?? 3);
+  const outerClosing = trailingBeamerListSkip(mapped.text, registers?.topsepPt ?? 3);
+  // Lists that end back to back each addvspace their closing skip, so the
+  // largest survives. A nested list exits with its topsep plus the enclosing
+  // list's parsep, which exceeds the outer topsep at \small and \footnotesize.
+  let closing = outerClosing;
+  if (outerClosing > 0) {
+    const ends = [...mapped.text.matchAll(/\\end\s*\{(?:itemize|enumerate|description)\}/gu)];
+    let chain = 0;
+    for (let index = ends.length - 1; index >= 0; index--) {
+      const end = requireDefined(ends[index], "Expected a list end.");
+      const next = ends[index + 1]?.index ?? mapped.text.length;
+      const gap = mapped.text.slice(end.index + end[0].length, next);
+      if (!/^(?:\s|\}|\\par(?![A-Za-z@]))*$/u.test(gap)) break;
+      chain++;
+    }
+    for (let depth = 2; depth <= chain; depth++) {
+      const topsep = BEAMER_LIST_LAYOUT_PROFILE.topsepPtByDepth[Math.min(depth, BEAMER_LIST_LAYOUT_PROFILE.topsepPtByDepth.length) - 1] ?? 0;
+      const enclosingParsep = depth === 2 ? registers?.parsepPt ?? 0
+        : BEAMER_LIST_LAYOUT_PROFILE.parsepPtByDepth[Math.min(depth - 1, BEAMER_LIST_LAYOUT_PROFILE.parsepPtByDepth.length) - 1] ?? 0;
+      closing = Math.max(closing, topsep + enclosingParsep);
+    }
+  }
   const tail = paragraph?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin;
   // A separately laid-out flow item still follows the list's endtrivlist.
   // Its closing glue adjusts the display skip by the active list parskip.

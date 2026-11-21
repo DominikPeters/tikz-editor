@@ -1134,6 +1134,34 @@ Left one.\par Left two.\par Left three.\par Left four.
 \par Witness`, 10, "Madrid", "169"),
     baselines: [["Title", 65.75618], ["x", 84.756775], ["Words.", 104.707413], ["Witness", 123.351746]],
   },
+  {
+    name: "adds the enclosing parsep to back-to-back nested list closings before a picture",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize
+\begin{description}
+\item[Outer] Outer text.
+\par
+\begin{description}
+\item[Inner] Inner text.
+\end{description}
+\end{description}\par}
+\par \begin{tikzpicture}[font=\scriptsize]\node[anchor=west] at (2,0.15) {Witness};\end{tikzpicture}`, 10, "Madrid", "169"),
+    baselines: [["InnerInnertext.", 71.97612], ["Witness", 83.943665]],
+  },
+  {
+    name: "adds the enclosing parsep to back-to-back nested list closings before text",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize
+\begin{description}
+\item[Outer] Outer text.
+\par
+\begin{description}
+\item[Inner] Inner text.
+\end{description}
+\end{description}\par}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["InnerInnertext.", 71.97612], ["Witness", 87.176605]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {
