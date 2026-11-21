@@ -747,7 +747,13 @@ function materializeDisplayMathVerticalGlueInItems(
       continue;
     }
     if (item.kind === "display-math") {
-      if ((index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay) {
+      const previous = sourceItems[index - 1];
+      // With no room for the label, TeX breaks it onto its own line. The
+      // display then follows the remaining empty line of the paragraph.
+      const overfullLabel = item.targetWidth === 0 && previous?.kind === "paragraph" &&
+        previous.sourceSpan.start === previous.sourceSpan.end && previous.paragraph.listContext?.showLabel === true;
+      const insertsEmptyLine = overfullLabel || ((index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay !== undefined);
+      if (insertsEmptyLine) {
         items.push(leadingDisplayEmptyLineGlue(item, profile, index > 0));
         items.push(displayEmptyLineHBox(item, "before-display"));
       }
@@ -755,8 +761,8 @@ function materializeDisplayMathVerticalGlueInItems(
         item,
         "above",
         profile,
-        (index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay ? "short" : undefined,
-        font
+        insertsEmptyLine ? "short" : undefined,
+        overfullLabel ? undefined : font
       ));
       items.push(item);
       items.push(displayMathBoundaryGlueItem(item, "below", profile));

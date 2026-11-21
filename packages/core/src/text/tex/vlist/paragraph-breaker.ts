@@ -139,7 +139,11 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
           broadOverfullTolerance,
         })
       : null;
-    const broken = overfullFallback ?? normalBreak;
+    // A description label can consume a narrow column's entire measure.
+    // TeX still ships unbreakable table and picture boxes overfull there.
+    const broken = overfullFallback ?? normalBreak ?? (lineWidth === 0 && !runs.some(run => run.kind === "text")
+      ? breakTexParagraphAsSingleLine({ runs, shapedRuns: blockShapedRuns, measurement: runAdapter.measurement, width: lineWidth })
+      : null);
     if (!broken) {
       return {
         status: "failed",

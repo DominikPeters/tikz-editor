@@ -19,6 +19,34 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "resumes the empty paragraph after a display in a nested visibility action",
+    source: slide(String.raw`Lead text.\par
+\visible<1-2>{Visible text.\par
+\only<1-2>{\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]}}
+\par \begin{tikzpicture}[font=\scriptsize]\node {Witness};\end{tikzpicture}
+\only<3>{}`, 12, "Madrid"),
+    baselines: [["cdy", 105.16124], ["Witness", 128.218933]],
+  },
+  {
+    name: "ships overfull boxes and a display below their labels in a narrow description column",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,c]
+\begin{column}{.14\textwidth}
+\begin{description}
+\item[Stage 1] \begin{tabular}{lrr}Method&Cost&Error\\\hline
+Cached0&13&6\\
+Cached1&9&3\\
+\end{tabular}
+\item[Stage 2] \begin{tikzpicture}\node[draw] {Picture};\end{tikzpicture}
+\item[Stage 3] \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]
+\end{description}
+\end{column}
+\begin{column}{.76\textwidth}Peer text.\end{column}
+\end{columns}
+\par Witness`, 12, "default", "169"),
+    baselines: [["MethodCostError", 76.32547], ["Peertext.", 123.701172], ["Picture", 132.678955], ["abx", 174.926315], ["Witness", 201.696289]],
+  },
+  {
     name: "uses zero depth for a bottom-aligned column ending with a centered display",
     source: slide(String.raw`Lead text.\par
 \alt<1-2>{\begin{columns}[onlytextwidth,b]
