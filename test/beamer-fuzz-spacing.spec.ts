@@ -19,6 +19,23 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "ends a block at zero depth when an alignment closes over a larger display skip",
+    source: slide(String.raw`Lead text.\par
+\begin{alertblock}{Alpha}
+\begin{itemize}\item Item text.\end{itemize}
+\par
+\begin{center}
+{\small\color{blue}\centering Preceding paragraph.\par
+\[\begin{aligned}a+b&=c\\d-e&=f\end{aligned}\]\par}
+\end{center}
+\end{alertblock}
+\par \begin{tikzpicture}[font=\scriptsize]
+\fill<2->[magenta] (0,0) rectangle (.8,.3);
+\node[anchor=west] at (2,.15) {Witness};
+\end{tikzpicture}`, 10, "default", "169"),
+    baselines: [["Precedingparagraph.", 91.247971], ["a+b=c", 118.038773], ["Witness", 153.567093]],
+  },
+  {
     name: "closes both lists before opening a sibling list",
     source: slide(String.raw`Lead text.\par
 \alt<1-2>{\begin{description}

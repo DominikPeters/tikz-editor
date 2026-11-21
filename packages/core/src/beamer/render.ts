@@ -2535,14 +2535,15 @@ async function prepareBlockWithTheme(params: {
       : terminalBodyFlow?.kind === "block" ? terminalBodyFlow.block.plan.geometry.afterSkipPt : 0
     : 0;
   let trailingBodySkip = 0;
+  let closingAlignmentSkip = 0;
   if (body && plan.style === "default") {
     const bodySource = params.source.slice(params.node.bodySpan.from, params.node.bodySpan.to);
     const terminalScope = body.layout.vlistLayout.boxReport.items.filter(item => item.role?.kind === "trivlist").at(-1)?.role;
-    const alignmentSkip = terminalScope?.kind === "trivlist" && !terminalScope.noParList
-      ? Math.max(0, trailingBeamerTrivlistSkip(bodySource, beamerTrivlistSpacing(params.theme).naturalPt) - trailingCollapsibleSkip(body))
+    closingAlignmentSkip = terminalScope?.kind === "trivlist" && !terminalScope.noParList
+      ? trailingBeamerTrivlistSkip(bodySource, beamerTrivlistSpacing(params.theme).naturalPt)
       : 0;
     trailingBodySkip = trailingScopedBeamerListSkip(createIdentityMappedText(bodySource, params.node.bodySpan.from),
-      params.references, theoremBodyFont, body) + alignmentSkip;
+      params.references, theoremBodyFont, body) + Math.max(0, closingAlignmentSkip - trailingCollapsibleSkip(body));
   }
   const bodyExtent = body ? (plan.style === "default"
     ? paragraphMaterialExtent(body) + trailingBodySkip
@@ -2622,7 +2623,7 @@ async function prepareBlockWithTheme(params: {
           : 1) + geometry.bodyInitialVSkipEx * fontXHeightPt(params.theme.fonts[plan.bodyFontRole])
       : geometry.bodyTopPaddingPt;
   const lastFlowItem = bodyFlow?.items.at(-1)?.item;
-  const closesWithBodySkip = plan.style === "default" && (trailingBodySkip > 0 ||
+  const closesWithBodySkip = plan.style === "default" && (trailingBodySkip > 0 || closingAlignmentSkip > 0 ||
     body?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin?.kind === "external-flow-after" ||
     lastFlowItem?.kind === "block" && lastFlowItem.block.plan.geometry.afterSkipPt > 0 ||
     lastFlowItem?.kind === "paragraph" && (lastFlowItem.trailingListGlue.naturalPt > 0 || lastFlowItem.closesWithTrivlistSkip));
