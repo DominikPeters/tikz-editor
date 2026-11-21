@@ -213,7 +213,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
           const minimum = item.role.pendingListBoundaries?.some(label => label.inherited) ? -Number(parskip) : 0;
           skips[skips.length - 1] = { ...skip, listSize: texLength(Math.max(minimum, skip.listSize - parskip)),
             size: texLength(Math.max(minimum, skip.size - parskip)), vlistPath: path };
-          state.externalPendingParskip = Number(parskip);
+          // A columns box holding an alignment or list ends by clearing the pending parskip.
+          if (!(item.role.flowKind === "columns" && item.role.containsList)) state.externalPendingParskip = Number(parskip);
         }
       }
       // A block holding a list or alignment leaves that inner list's closing

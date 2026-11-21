@@ -1323,6 +1323,22 @@ Right.
 \par Witness`, 9, "Boadilla", "43"),
     baselines: [["Leftthree.", 66.263916], ["x", 77.710831], ["Witness", 92.8638]],
   },
+  {
+    name: "clears the pending parskip after a columns box that holds an alignment",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize
+\begin{description}
+\item[Stage 2] \begin{columns}[onlytextwidth,T]
+\begin{column}{0.42\textwidth}
+\begin{center}Text.\end{center}
+\end{column}
+\end{columns}
+\par
+\begin{tabular}{lrr}Method&Cost&Error\\\hline Global0&8&17\\\end{tabular}
+\end{description}\par}
+\par Witness`, 12, "Madrid", "169"),
+    baselines: [["Stage2Text.", 70.076736], ["MethodCostError", 83.814133], ["Witness", 113.576706]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {
