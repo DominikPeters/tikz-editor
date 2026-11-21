@@ -1398,6 +1398,19 @@ Right.
 \par Witness`, 11, "Madrid", "43"),
     baselines: [["Alpha.", 116.790741], ["Beta.", 128.191101], ["Witness", 144.911636]],
   },
+  {
+    name: "keeps the baseline glue after a list that ends in a display when an earlier display precedes it",
+    source: slide(String.raw`Lead.\par
+{\small
+\[E=x\]
+\par
+Between.\par
+\begin{itemize}
+\item \[a=c\]
+\end{itemize}\par}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["Between.", 88.93399], ["a=c", 117.434891], ["Witness", 138.905579]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

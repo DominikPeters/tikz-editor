@@ -1131,6 +1131,7 @@ function resolveDisplayMathVerticalGlueInItems(
       previousDisplaySkipVariant = nested.previousDisplaySkipVariant;
       previousDisplayMaterialMetrics = nested.previousDisplayMaterialMetrics;
       previousDisplayBelowSkip = nested.previousDisplayBelowSkip;
+      displayInterlineAlreadyInserted = false;
       previousDepthSuppressed = nested.previousDepthSuppressed;
       if (previousDepthSuppressed) plainParagraphInterlinePending = false;
       else if (previousDisplayMaterialMetrics) plainParagraphInterlinePending = true;
@@ -1193,6 +1194,7 @@ function resolveDisplayMathVerticalGlueInItems(
       previousDepthSuppressed = false;
       plainParagraphInterlinePending = true;
       paragraphBoundaryInterlineAlreadyInserted = false;
+      displayInterlineAlreadyInserted = false;
       items.push(item);
       continue;
     }
