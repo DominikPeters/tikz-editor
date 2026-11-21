@@ -258,6 +258,15 @@ function planSimpleTexParagraphVerticalSkipsInto(
         // Its preceding display skip participates in endtrivlist's addvspace.
         ...(closesAfterDisplay ? { trivlistAfterDisplay: true, listExitAfterDisplay: closingSkip === 0 } : {}),
         size: boundarySkip });
+      // \[ in vertical mode starts a paragraph, so \parskip (a list's \parsep)
+      // precedes its leading empty line just as it does a text paragraph.
+      else if ((item.kind === "display-math" || item.kind === "display-alignment") && item.startsAfterExplicitPar &&
+          state.previousEmittedContentKind === "paragraph" && listRole && listItemRole && previousList &&
+          previousList.listStart === listRole.sourceStart && previousList.itemIndex === listItemRole.itemIndex) {
+        const parskip = texArticleListParagraphSkip(listRole.depth, font, previousProfile);
+        if (parskip > 0) skips.push({ blockIndex: -4_000_000 - (item.sourceSpan?.start ?? 0), vlistPath: path, segmentIndex: 0,
+          quoteSize: texLength(0), listSize: parskip, size: parskip });
+      }
       if (item.kind === "display-math" || item.kind === "display-alignment") {
         state.previousEmittedTrivlistScopes = trivlistScopes;
         if (!listRole) state.previousEmittedListContext = undefined;

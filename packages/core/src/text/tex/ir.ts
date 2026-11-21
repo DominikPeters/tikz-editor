@@ -4972,8 +4972,12 @@ function buildSimpleTexParagraphBlocksFromNodes(
       (beforeDisplay || closesTrivlist) && hasOnlyDeclarations && hasTrivlistLabel;
     if (start < end || permitsEmpty) {
       const listContext = currentSimpleTexListContext();
-      const startsAfterExplicitPar = previousParagraphBlockEnd !== undefined &&
-        hasExplicitParagraphBoundaryBetween(previousParagraphBlockEnd, rawStart);
+      // Text resumed after a display continues that display's paragraph; only
+      // a \par after the display (not one before it) starts a new paragraph.
+      const lastItem = items.at(-1);
+      const precedingParagraphEnd = lastItem?.kind === "display-math" ? lastItem.sourceEnd : previousParagraphBlockEnd;
+      const startsAfterExplicitPar = precedingParagraphEnd !== undefined &&
+        hasExplicitParagraphBoundaryBetween(precedingParagraphEnd, rawStart);
       const scopePath = currentSimpleTexScopePath();
       let nodes = simpleTexInlineNodesAfterHorizontalVSpace(
         inlineNodes,

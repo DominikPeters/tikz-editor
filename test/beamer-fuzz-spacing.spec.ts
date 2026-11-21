@@ -1047,6 +1047,31 @@ Cached1&15&4\\
     source: slide(String.raw`\begin{itemize}\item\begin{flushright}\begin{block}{Alpha}\begin{itemize}\item First\item Second\end{itemize}\end{block}\end{flushright}\item Tail\end{itemize}\par Witness`),
     baselines: [["Alpha", 49.803329], ["Tail", 99.274241], ["Witness", 115.044739]],
   },
+  {
+    name: "ships a list's parsep before a display that starts a paragraph after an explicit par",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize
+\begin{itemize}
+\item Item text.
+\par
+\[x\]
+\end{itemize}\par}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Itemtext.", 59.150696], ["x", 79.101318], ["Witness", 95.251831]],
+  },
+  {
+    name: "continues a display's paragraph without a parsep when no par follows the display",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize
+\begin{itemize}
+\item Item text.
+\par
+\[x\]
+More text.
+\end{itemize}\par}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Itemtext.", 59.150665], ["x", 79.101303], ["Moretext.", 90.976685], ["Witness", 105.227127]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {
