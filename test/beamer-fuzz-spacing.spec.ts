@@ -19,6 +19,42 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "restores a pending list label when the paragraph break after a block is grouped",
+    source: slide(String.raw`Lead text.\par
+{\small\color{black}\raggedleft
+\begin{itemize}
+\item First.\par
+\item \begin{itemize}
+\item Inner text.
+\end{itemize}
+\item {\small\color{teal}\centering
+\begin{exampleblock}{Alpha}
+\begin{block}{Beta}Block text.\end{block}
+\end{exampleblock}\par}
+\end{itemize}\par}
+\par \begin{tikzpicture}[font=\scriptsize]\node {Witness};\end{tikzpicture}`, 10, "Madrid", "169"),
+    baselines: [["Innertext.", 73.875961], ["Blocktext.", 131.693848], ["Witness", 167.534683]],
+  },
+  {
+    name: "combines closing alignment and display glue in a block with columns",
+    source: slide(String.raw`Lead text.\par
+\begin{block}{Alpha}
+{\footnotesize\color{black}\raggedright
+\begin{tikzpicture}[font=\scriptsize]\node {Picture};\end{tikzpicture}\par}
+\par
+\begin{columns}[onlytextwidth,b]
+\begin{column}{.38\textwidth}Left.\end{column}
+\begin{column}{.58\textwidth}Right.\end{column}
+\end{columns}
+\par
+\begin{flushleft}
+\[\begin{aligned}a+b&=c\\d-e&=f\end{aligned}\]
+\end{flushleft}
+\end{block}
+\par \begin{tikzpicture}[font=\scriptsize]\node {Witness};\end{tikzpicture}`, 9, "default", "169"),
+    baselines: [["Picture", 60.124817], ["a+b=c", 97.136124], ["Witness", 129.556213]],
+  },
+  {
     name: "resumes the empty paragraph after a display in a nested visibility action",
     source: slide(String.raw`Lead text.\par
 \visible<1-2>{Visible text.\par

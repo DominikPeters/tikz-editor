@@ -2070,7 +2070,8 @@ function prepareFrameParagraph(params: {
   }
   const projectedSource = projection.mapped.text;
   const trivlistTopsep = params.listProfile.trivlistTopsepPt ?? 9;
-  const trailingTrivlistSkip = trailingBeamerTrivlistSkip(projectedSource, trivlistTopsep);
+  const closingTrivlistSkip = trailingBeamerTrivlistSkip(projectedSource, trivlistTopsep);
+  const trailingTrivlistSkip = Math.max(0, closingTrivlistSkip - trailingCollapsibleSkip(paragraph));
   const trailingListSkip = trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont, paragraph);
   const trailingListShrink = trailingListSkip > 0
     ? BEAMER_LIST_LAYOUT_PROFILE.topsepShrinkPtByDepth?.[0] ?? 0
@@ -2096,6 +2097,7 @@ function prepareFrameParagraph(params: {
       trivlistTopsep
     ),
     endingDepth: paragraphEndingMaterialDepth(paragraph),
+    ...(closingTrivlistSkip > 0 ? { closesWithTrivlistSkip: true } : {}),
     trailingListGlue: {
       naturalPt: trailingListSkip,
       shrinkPt: trailingListShrink,
@@ -2621,7 +2623,7 @@ async function prepareBlockWithTheme(params: {
   const closesWithBodySkip = plan.style === "default" && (trailingBodySkip > 0 ||
     body?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin?.kind === "external-flow-after" ||
     lastFlowItem?.kind === "block" && lastFlowItem.block.plan.geometry.afterSkipPt > 0 ||
-    lastFlowItem?.kind === "paragraph" && lastFlowItem.trailingListGlue.naturalPt > 0);
+    lastFlowItem?.kind === "paragraph" && (lastFlowItem.trailingListGlue.naturalPt > 0 || lastFlowItem.closesWithTrivlistSkip));
   // A default colorbox ending in vertical glue has zero physical depth.
   const bodyEndingDepth = closesWithBodySkip ? 0 : body ? paragraphEndingMaterialDepth(body)
     : lastFlowItem?.kind === "columns" ? lastFlowItem.box.depth
