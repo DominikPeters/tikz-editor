@@ -9,6 +9,27 @@ import {
 const nonNull = <T>(value: T | null): value is T => value != null;
 
 describe("semantic evaluator / coordinates and path ops", () => {
+    it("uses the adjusted border chord for a bend between overlapping nodes", () => {
+      const source = String.raw`\begin{tikzpicture}
+    \begin{scope}[scale=0.8,rotate=-12]
+    \node[draw,rounded corners=1pt,inner sep=1pt,minimum width=.35cm,minimum height=.25cm] (F) at (.325,-.65) {F};
+    \node[draw,rounded corners=1pt,inner sep=1pt,minimum width=.35cm,minimum height=.25cm] (G) at (.650,-.65) {G};
+    \begin{scope}[xshift=.5pt,yshift=-.5pt]
+    \draw[->,thick] (F) to[bend left=20] (G);
+    \end{scope}
+    \end{scope}
+    \end{tikzpicture}`;
+      const result = evaluateSemantic(source);
+      const connector = elementsOfKind(result.scene.elements, "Path").at(-1);
+      const curve = connector?.commands.find(command => command.kind === "C");
+      expect(curve).toBeDefined();
+      // Transformed control points recorded from PGF.
+      expect(curve!.c1.x).toBeCloseTo(8.06155, 2);
+      expect(curve!.c1.y).toBeCloseTo(-15.3447, 2);
+      expect(curve!.c2.x).toBeCloseTo(7.23546, 2);
+      expect(curve!.c2.y).toBeCloseTo(-15.08788, 2);
+    });
+
     it("supports relative and polar coordinates", () => {
       const source = String.raw`\begin{tikzpicture}
     \draw (0,0) -- ++(1,0) -- +(90:1cm);

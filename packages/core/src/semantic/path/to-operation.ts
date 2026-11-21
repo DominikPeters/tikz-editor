@@ -213,7 +213,7 @@ function applyToLikeOperation(
   let effectiveStartPoint = resolvedStartPoint ?? startPoint;
   let effectiveTargetPoint = resolvedTargetPoint;
   const frame = curveFrame(context);
-  const curved = effectiveStartPoint ? extractToCurveOptions(item.options, effectiveStartPoint, effectiveTargetPoint, frame) : null;
+  let curved = startPoint ? extractToCurveOptions(item.options, startPoint, evaluated.world, frame) : null;
   if (effectiveStartPoint && curved) {
     if (config.startCoordinateRaw) {
       effectiveStartPoint = maybeResolveNamedCoordinateBorderPointFromRawAlongAngle(
@@ -224,6 +224,14 @@ function applyToLikeOperation(
       );
     }
     effectiveTargetPoint = maybeResolveNamedCoordinateBorderPointFromRawAlongAngle(target.raw, effectiveTargetPoint, frame.worldAngle(curved.in), context);
+    if (curved.relative) {
+      // PGF chooses the border anchors from the original node centers,
+      // then rotates the controls along the chord joining those anchors.
+      const chord = frame.toLocal(effectiveTargetPoint.x - effectiveStartPoint.x, effectiveTargetPoint.y - effectiveStartPoint.y);
+      const baseHeading = Math.atan2(chord.y, chord.x) * 180 / Math.PI;
+      const turn = baseHeading - curved.baseHeading;
+      curved = { ...curved, baseHeading, out: curved.out + turn, in: curved.in + turn };
+    }
   }
 
   let path = activePath;
