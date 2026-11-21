@@ -2253,9 +2253,12 @@ function texArticleListVerticalSkipBefore(
   if (previous.depth >= current.depth && previousListStart !== undefined && current.listStart !== undefined && previousListStart !== current.listStart) {
     // The closed list's trailing skip and the next list's initial skip are
     // separate boundaries; \@endparenv closes the first paragraph scope.
+    // In Beamer a nested sibling list opens with its topsep plus the
+    // enclosing list's parsep, as a first nested list does.
+    const enclosingParsep = profile && current.depth > 1 ? state.listParagraphSkipByDepth.get(current.depth - 1) ?? 0 : 0;
     return texLength(
       texArticleListExitBoundarySkip(state, previous.depth, current.depth - 1, font, listProfileForContext(profile, previous)) +
-      rememberListTopsep(state, current.depth, startsListInVerticalMode, font, profile)
+      rememberListTopsep(state, current.depth, startsListInVerticalMode, font, profile) + enclosingParsep
     );
   }
   if (current.depth > previous.depth) {

@@ -1233,6 +1233,24 @@ Column text.
 \par Witness`, 10, "Madrid", "169"),
     baselines: [["Stage1", 57.725616], ["Stage2Wordshere.", 88.544601], ["Witness", 102.795044]],
   },
+  {
+    name: "adds the enclosing parsep to a nested sibling list's opening skip",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize
+\begin{description}
+\item[Stage 2] Words.
+\par
+\begin{itemize}
+\item Alpha text.
+\end{itemize}
+\par
+\begin{itemize}
+\item Beta text.
+\end{itemize}
+\end{description}\par}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Alphatext.", 71.976074], ["Betatext.", 86.701538], ["Witness", 101.902023]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {
