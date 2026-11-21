@@ -5418,11 +5418,16 @@ function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerRefe
   const origin = mapped.sourceMap.charOrigins[end.index];
   const active = references.theme ? ambientTextTheme(references.theme,
     references.ambientTextAt?.(origin?.kind === "direct" ? origin.from : 0) ?? "").fonts["normal-text"] : font;
-  const skip = beamerListSizeOverrides(references.theme).find(entry => Math.abs(entry.fontSizePt - active.sizePt) < .001)?.topsepPt ?? 3;
-  const closing = trailingBeamerListSkip(mapped.text, skip);
+  const registers = beamerListSizeOverrides(references.theme).find(entry => Math.abs(entry.fontSizePt - active.sizePt) < .001);
+  const closing = trailingBeamerListSkip(mapped.text, registers?.topsepPt ?? 3);
+  const tail = paragraph?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin;
+  // A separately laid-out flow item still follows the list's endtrivlist.
+  // Its closing glue adjusts the display skip by the active list parskip.
+  const displayAdjustment = closing > 0 && tail?.kind === "display-math-boundary" && tail.side === "below"
+    ? registers?.parsepPt ?? 0 : 0;
   // endtrivlist uses addvspace, so a terminal block or display skip and
   // the list's closing topsep contribute their maximum.
-  return Math.max(0, closing - trailingCollapsibleSkip(paragraph));
+  return Math.max(displayAdjustment, closing - trailingCollapsibleSkip(paragraph));
 }
 
 function trailingCollapsibleSkip(paragraph: LaidParagraph | undefined): number {

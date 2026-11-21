@@ -19,6 +19,37 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "combines a nested list's closing glue with the display skip before another equation",
+    source: slide(String.raw`Lead text.\par
+{\scriptsize\color{teal}\raggedleft
+\begin{itemize}
+\item First.\par
+\begin{itemize}
+\item Inner.
+\item \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]
+\end{itemize}
+\par
+\visible<1,3>{\[E=\sum_{i=1}^{n}w_i x_i\]}
+\item Tail.
+\end{itemize}\par}
+\par \begin{tikzpicture}[font=\scriptsize]\node {Witness};\end{tikzpicture}`, 10, "default"),
+    baselines: [["cdy", 91.705856], ["E=wx", 111.960541], ["Witness", 146.1604]],
+  },
+  {
+    name: "adjusts a nested list's terminal display skip before a separate picture",
+    source: slide(String.raw`Lead text.\par
+{\small\color{blue}\raggedleft
+\begin{itemize}
+\item First.
+\item \begin{description}
+\item[Stage 1] Before.
+\item[Stage 2] \[\begin{aligned}a+b&=c\\d-e&=f\end{aligned}\]
+\end{description}
+\end{itemize}\par}
+\par \begin{tikzpicture}[font=\scriptsize]\node {Witness};\end{tikzpicture}`, 12, "default", "169"),
+    baselines: [["a+b=c", 109.430084], ["Witness", 149.551392]],
+  },
+  {
     name: "restores a pending list label when the paragraph break after a block is grouped",
     source: slide(String.raw`Lead text.\par
 {\small\color{black}\raggedleft
@@ -773,6 +804,23 @@ describe("Beamer fuzz spacing regressions", () => {
       expect(line, text).toBeDefined();
       expect(line!.baselineY, text).toBeCloseTo(expected, 2);
     }
+  });
+
+  it("centers an extracted picture inside a ragged-left group", async () => {
+    const rendered = await renderBeamerFrame(slide(String.raw`Lead text.\par
+{\footnotesize\color{blue}\raggedleft
+\begin{columns}[onlytextwidth,t]
+\begin{column}{.46\textwidth}Left.\end{column}
+\begin{column}{.50\textwidth}Right.\end{column}
+\end{columns}
+\par
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize]\node[draw] {Centered};\end{tikzpicture}
+\end{center}\par}
+\par Witness`, 12));
+    expect(rendered.diagnostics).toEqual([]);
+    const trace = buildNativeBeamerPageTrace(rendered, computerModernTexMetricProvider);
+    expect(trace.lines.find(line => line.text === "Centered")?.x).toBeCloseTo(167.270462, 2);
   });
 
   it("retains the nested enumerate marker size when a rounded block starts a minipage", async () => {

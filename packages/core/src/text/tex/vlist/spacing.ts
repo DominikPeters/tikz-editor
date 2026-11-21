@@ -96,6 +96,7 @@ export interface SimpleTexParagraphVerticalSkip {
   readonly listStretch?: TexLength;
   readonly listShrink?: TexLength;
   readonly afterDisplayParagraphSkip?: boolean;
+  readonly listExitAfterDisplay?: boolean;
   readonly trivlistSize?: TexLength;
   readonly trivlistAfterDisplay?: boolean;
 }
@@ -128,6 +129,7 @@ interface SimpleTexParagraphVerticalSkipState {
   readonly quotePartopsepByDepth: Map<number, boolean>;
   readonly trivlistTopsepByScope: Map<TexTrivlistScopeRole, TexLength>;
   readonly listTopsepByDepth: Map<number, TexLength>;
+  readonly listParagraphSkipByDepth: Map<number, TexLength>;
   readonly noParListDepths: Set<number>;
   readonly lastListItemsByDepth: Map<number, { listStart: number | undefined; itemIndex: number }>;
   readonly emittedListItemKeys: Set<string>;
@@ -249,11 +251,12 @@ function planSimpleTexParagraphVerticalSkipsInto(
       const closingListSkip = !resumesDisplay && previousList && previousList.depth > (listRole?.depth ?? 0)
         ? texArticleListExitBoundarySkip(state, previousList.depth, listRole?.depth ?? 0, font, previousProfile) : texLength(0);
       const boundarySkip = texLength(Math.max(closingSkip, closingListSkip));
+      const closesAfterDisplay = state.previousEmittedContentKind === "display" && !state.hasInterveningPenalty;
       if (boundarySkip > 0) skips.push({ blockIndex: -4_000_000 - (item.sourceSpan?.start ?? 0), vlistPath: path, segmentIndex: 0,
         quoteSize: texLength(0), listSize: texLength(Math.max(0, closingListSkip - closingSkip)), trivlistSize: closingSkip,
         // A display can follow a closed alignment environment directly.
         // Its preceding display skip participates in endtrivlist's addvspace.
-        ...(state.previousEmittedContentKind === "display" && !state.hasInterveningPenalty ? { trivlistAfterDisplay: true } : {}),
+        ...(closesAfterDisplay ? { trivlistAfterDisplay: true, listExitAfterDisplay: closingSkip === 0 } : {}),
         size: boundarySkip });
       if (item.kind === "display-math" || item.kind === "display-alignment") {
         state.previousEmittedTrivlistScopes = trivlistScopes;
@@ -359,8 +362,15 @@ function planSimpleTexParagraphVerticalSkipsInto(
     else if (closesListAfterDisplay) {
       // endtrivlist adjusts a terminal display's skip by the list's
       // parskip minus the surrounding paragraph skip before addvspace.
-      listVerticalSkipBefore = texLength(Math.max(0,
-        texArticleListParagraphSkip(previousList.depth, font, resolvedListProfile) - (listProfile?.paragraphSkipPt ?? 0)));
+      let adjustment = 0;
+      for (let depth = previousList.depth; depth > 0; depth--) {
+        if (state.noParListDepths.has(depth)) continue;
+        const paragraphSkip = state.listParagraphSkipByDepth.get(depth) ?? texArticleListParagraphSkip(depth, font, resolvedListProfile);
+        const outsideSkip = depth === 1 ? listProfile?.paragraphSkipPt ?? 0
+          : state.listParagraphSkipByDepth.get(depth - 1) ?? texArticleListParagraphSkip(depth - 1, font, resolvedListProfile);
+        adjustment += paragraphSkip - outsideSkip;
+      }
+      listVerticalSkipBefore = texLength(Math.max(0, adjustment));
     }
     else if (followsDisplay) listVerticalSkipBefore = previousList && scope.listContext &&
       previousList.listStart !== scope.listContext.listStart &&
@@ -502,7 +512,14 @@ function planSimpleTexParagraphVerticalSkipsInto(
     state.previousEmittedTrivlistScopes = scope.trivlistScopes;
     state.previousEmittedListContext = scope.listContext;
     rememberListItemsAtDepth(state, ancestors.length ? ancestors : item.paragraph.scopePath ?? []);
-    for (const ancestor of paragraph.ancestorListLabels ?? []) if (!ancestor.inherited) state.lastListItemsByDepth.set(ancestor.depth, { listStart: ancestor.listStart, itemIndex: ancestor.itemIndex });
+    if (scope.listContext) state.listParagraphSkipByDepth.set(scope.listContext.depth,
+      texArticleListParagraphSkip(scope.listContext.depth, font, resolvedListProfile));
+    for (const ancestor of paragraph.ancestorListLabels ?? []) {
+      if (ancestor.inherited) continue;
+      state.lastListItemsByDepth.set(ancestor.depth, { listStart: ancestor.listStart, itemIndex: ancestor.itemIndex });
+      state.listParagraphSkipByDepth.set(ancestor.depth,
+        texArticleListParagraphSkip(ancestor.depth, font, listProfileForContext(listProfile, ancestor)));
+    }
     if (scope.listItemKey) {
       state.emittedListItemKeys.add(scope.listItemKey);
     }
@@ -530,6 +547,7 @@ function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphV
     quotePartopsepByDepth: new Map(),
     trivlistTopsepByScope: new Map(),
     listTopsepByDepth: new Map(),
+    listParagraphSkipByDepth: new Map(),
     noParListDepths: new Set(),
     lastListItemsByDepth: new Map(),
     emittedListItemKeys: new Set(),
@@ -689,6 +707,7 @@ function paragraphBoundaryGlueItems(
         kind: "list-boundary",
         beforeBlockIndex: skip.blockIndex,
         ...(skip.afterDisplayParagraphSkip ? { afterDisplayParagraphSkip: true } : {}),
+        ...(skip.listExitAfterDisplay ? { collapsesWithDisplaySkip: true } : {}),
       },
       size: skip.listSize,
       ...(skip.listStretch != null ? { stretch: skip.listStretch } : {}),
@@ -1187,7 +1206,8 @@ function resolveDisplayMathVerticalGlueInItems(
       item.kind === "glue" &&
       isParagraphBoundaryGlueOrigin(item.origin)
     ) {
-      if (item.origin?.kind === "trivlist-boundary" && item.origin.afterDisplay && previousDisplayBelowSkip !== undefined) {
+      if ((item.origin?.kind === "trivlist-boundary" && item.origin.afterDisplay ||
+          item.origin?.kind === "list-boundary" && item.origin.collapsesWithDisplaySkip) && previousDisplayBelowSkip !== undefined) {
         // The preceding below-display skip participates in \addvspace.
         const additionalSkip = item.size - previousDisplayBelowSkip;
         if (additionalSkip <= 0) continue;

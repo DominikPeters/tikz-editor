@@ -78,6 +78,7 @@ export type TexGlueOrigin =
       readonly kind: "list-boundary";
       readonly beforeBlockIndex: number;
       readonly afterDisplayParagraphSkip?: boolean;
+      readonly collapsesWithDisplaySkip?: boolean;
     }
   | {
       readonly kind: "trivlist-boundary";

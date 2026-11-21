@@ -296,7 +296,9 @@ function applyStandaloneAlignment<T extends BeamerFrameBodyNode | BeamerColumnFl
       if (/^\s*\\(?:centering|raggedright|raggedleft)\s*$/u.test(source.slice(node.span.from, node.span.to).replace(/%[^\n]*/gu, ""))) return [];
       return [alignment !== "left" ? { ...node, alignment } : node];
     }
-    if (node.kind === "tikzpicture" && alignment !== "left") return [{ ...node, horizontalAlignment: alignment }];
+    if (node.kind === "tikzpicture" && node.span.from === node.root.span.from && alignment !== "left") {
+      return [{ ...node, horizontalAlignment: alignment }];
+    }
     return [node];
   });
 }
