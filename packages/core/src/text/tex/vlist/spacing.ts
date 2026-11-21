@@ -1241,8 +1241,10 @@ function resolveDisplayMathVerticalGlueInItems(
           item.origin?.kind === "list-boundary" && item.origin.collapsesWithDisplaySkip) && previousDisplayBelowSkip !== undefined) {
         // The preceding below-display skip participates in \addvspace.
         const additionalSkip = item.size - previousDisplayBelowSkip;
-        if (additionalSkip <= 0) continue;
-        items.push({ ...item, size: texLength(additionalSkip) });
+        // A skip absorbed by the display's below skip still owes the baseline glue
+        // before the next box, unless the display's below branch placed it.
+        if (additionalSkip <= 0 && displayInterlineAlreadyInserted) continue;
+        if (additionalSkip > 0) items.push({ ...item, size: texLength(additionalSkip) });
       } else items.push(item);
       plainParagraphInterlinePending = false;
       // Resuming a paragraph or closing a list can add parskip after the

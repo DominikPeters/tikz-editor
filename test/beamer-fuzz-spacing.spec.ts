@@ -1098,6 +1098,29 @@ Body text.
 \par Witness`, 10, "Madrid", "169"),
     baselines: [["OuterOutertext.", 59.150665], ["InnerNestedtext.", 71.976059], ["x", 93.826752], ["Witness", 109.977264]],
   },
+  {
+    name: "keeps the baseline glue before a list that follows a center display whose skip is absorbed",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,b]
+\begin{column}{0.62\textwidth}
+Left one.\par Left two.\par Left three.\par Left four.
+\end{column}
+\begin{column}{0.34\textwidth}
+\begin{enumerate}
+\item Text.\par
+\begin{center}
+\[x\]
+\end{center}
+\par
+\begin{description}
+\item[A] Item.
+\end{description}
+\end{enumerate}
+\end{column}
+\end{columns}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Leftfour.", 118.261459], ["x", 95.356232], ["AItem.", 118.156952], ["Witness", 129.661819]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {
