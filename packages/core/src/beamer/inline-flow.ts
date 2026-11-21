@@ -9,6 +9,9 @@ export type BeamerInlineFlow = {
   item: Extract<PreparedFrameFlowItem, { kind: "block" | "columns" }>;
 };
 
+const inlineFlowBox = String.raw`\begin{minipage}{1pt}X\end{minipage}`;
+const paragraphBreak = String.raw`\par`;
+
 /** Preserve the list/group's native TeX scope. The minipage is only an IR
  * boundary; its box is replaced by the measured Beamer material before layout. */
 export function projectBeamerInlineFlow(mapped: MappedText, boxes: readonly BeamerInlineFlow[]): MappedText {
@@ -26,7 +29,7 @@ export function projectBeamerInlineFlow(mapped: MappedText, boxes: readonly Beam
       end++;
     }
     if (end === mapped.text.length) continue;
-    const text = String.raw`\par\begin{minipage}{1pt}X\end{minipage}\par`;
+    const text = paragraphBreak + inlineFlowBox + paragraphBreak;
     parts.push(sliceMappedText(mapped, cursor, index), createMappedText(text,
       Array.from({ length: text.length }, () => ({ kind: "direct" as const, from: box.span.from, to: box.span.to })),
       Array.from({ length: text.length + 1 }, (_, i) => ({ kind: "offset" as const, offset: i === text.length ? box.span.to : box.span.from }))));
@@ -41,11 +44,15 @@ export function beamerInlineListEffects(mapped: MappedText, boxes: readonly Beam
   if (boxes.length === 0) return {};
   const boxesClearingPendingItemLabels: number[] = [];
   const minipageListDepthResets: number[] = [];
+  const syntheticParagraphBreaks: number[] = [];
   for (const match of mapped.text.matchAll(/\\begin\{minipage\}/gu)) {
     const origin = mapped.sourceMap.charOrigins[match.index];
     if (origin?.kind !== "direct") continue;
     const box = boxes.find(box => box.span.from === origin.from);
     if (!box) continue;
+    if (mapped.text.startsWith(inlineFlowBox, match.index)) {
+      syntheticParagraphBreaks.push(match.index - paragraphBreak.length, match.index + inlineFlowBox.length);
+    }
     // List/trivlist everypar and endtrivlist clear @inlabel globally.
     if (containsListScope(box.item, "trivlist")) boxesClearingPendingItemLabels.push(match.index);
     if (inMinipage && resetsMinipageListDepth(box.item)) minipageListDepthResets.push(match.index);
@@ -53,6 +60,7 @@ export function beamerInlineListEffects(mapped: MappedText, boxes: readonly Beam
   return {
     ...(boxesClearingPendingItemLabels.length ? { boxesClearingPendingItemLabels } : {}),
     ...(minipageListDepthResets.length ? { minipageListDepthResets } : {}),
+    ...(syntheticParagraphBreaks.length ? { syntheticParagraphBreaks } : {}),
   };
 }
 

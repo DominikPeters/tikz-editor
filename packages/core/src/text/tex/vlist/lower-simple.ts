@@ -2,6 +2,7 @@ import type {
   SimpleTexBoxBlockItem,
   SimpleTexBlockItem,
   SimpleTexDisplayMathBlockItem,
+  SimpleTexEmptyListLineBlockItem,
   SimpleTexParagraphBlock,
   SimpleTexPenaltyBlockItem,
   SimpleTexPlaceholderBlockItem,
@@ -79,6 +80,17 @@ export function lowerSimpleTexBlockItemsToVList(
     }
     if (item.kind === "penalty") {
       items.push(penaltyItemFromSimpleTexPenalty(item));
+      continue;
+    }
+    if (item.kind === "empty-list-line") {
+      const scopePath = scopePathForVerticalBlockItem(item);
+      items.push({
+        kind: "hbox",
+        sourceSpan: { start: item.sourceStart, end: item.sourceEnd },
+        ...(scopePath ? { scopePath } : {}),
+        role: { kind: "list-empty-line", ...(item.baselineSkip !== undefined ? { baselineSkipPt: item.baselineSkip } : {}) },
+        box: { metrics: { width: texLength(0), height: texLength(0), depth: texLength(0) }, renderItems: [] },
+      });
       continue;
     }
     if (item.kind === "box") {
@@ -652,6 +664,7 @@ function scopePathForVerticalBlockItem(
     | SimpleTexVerticalGlueBlockItem
     | SimpleTexVerticalRuleBlockItem
     | SimpleTexPenaltyBlockItem
+    | SimpleTexEmptyListLineBlockItem
     | SimpleTexDisplayMathBlockItem
     | SimpleTexBoxBlockItem
     | SimpleTexPlaceholderBlockItem

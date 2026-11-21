@@ -19,6 +19,48 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "ships an empty closing line when the nested list's paragraph hook clears a pending label",
+    source: slide(String.raw`Lead text.\par
+\begin{itemize}
+\item<1-> First.
+\item<2-> Second.\par
+\begin{itemize}
+\item<1-> Inner text.
+\item<2-> Other text.
+\end{itemize}
+\item<3-> \begin{block}{Alpha}
+\alt<1,3>{Block text.}{Alternative text.}
+\end{block}
+\par
+{\small\color{black}\raggedleft
+{\footnotesize\color{blue}\raggedright
+\visible<1,3>{\begin{tabular}{lrr}Method&Cost&Error\\\hline
+Local0&11&20\\
+Local1&17&11\\
+Cached2&10&19\\
+\end{tabular}}\par}\par}
+\end{itemize}
+\par \begin{tikzpicture}[font=\scriptsize]\node[anchor=west] at (2,.15) {Witness};\end{tikzpicture}
+\only<5>{}`),
+    baselines: [["First.", 57.267166], ["Witness", 194.542877]],
+  },
+  {
+    name: "retains the list paragraph skip when an item ends with an equation",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize\color{blue}\raggedleft
+\begin{itemize}
+\item \begin{description}
+\item[Stage 1] Some text.
+\item[Stage 2] More text.
+\end{description}
+\item \alt<1-2>{\begin{center}
+\[\begin{aligned}a+b&=c\\d-e&=f\end{aligned}\]
+\end{center}}{Alternative estimate $x_0$.}
+\end{itemize}\par}
+\par Witness`, 10, "Madrid"),
+    baselines: [["Stage1Sometext.", 59.150635], ["Stage2Moretext.", 68.175919], ["a+b=c", 92.069138], ["Witness", 121.795593]],
+  },
+  {
     name: "combines the closing flushright glue and a display skip before the next display",
     source: slide(String.raw`Lead text.\par
 \begin{columns}[onlytextwidth,t]

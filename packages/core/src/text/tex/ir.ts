@@ -731,6 +731,14 @@ export interface SimpleTexPenaltyBlockItem extends SimpleTexSourceRange {
   readonly scopePath?: readonly SimpleTexScopePathRole[];
 }
 
+export interface SimpleTexEmptyListLineBlockItem extends SimpleTexSourceRange {
+  readonly kind: "empty-list-line";
+  readonly baselineSkip?: TexLength;
+  readonly quoteDepth: number;
+  readonly listScope?: SimpleTexListScope;
+  readonly scopePath?: readonly SimpleTexScopePathRole[];
+}
+
 export interface SimpleTexPlaceholderBlockItem extends SimpleTexSourceRange {
   readonly kind: "placeholder";
   readonly text: string;
@@ -794,6 +802,7 @@ export type SimpleTexBlockItem =
   | SimpleTexVerticalGlueBlockItem
   | SimpleTexVerticalRuleBlockItem
   | SimpleTexPenaltyBlockItem
+  | SimpleTexEmptyListLineBlockItem
   | SimpleTexDisplayMathBlockItem
   | SimpleTexBoxBlockItem
   | SimpleTexPlaceholderBlockItem;
@@ -987,6 +996,7 @@ const PARAGRAPH_IR_MAX_SOURCE_LENGTH = 16384;
 
 export interface SimpleTexParagraphIrOptions {
   readonly boxesClearingPendingItemLabels?: readonly number[];
+  readonly syntheticParagraphBreaks?: readonly number[];
   readonly minipageListDepthResets?: readonly number[];
   readonly inheritedItemLabels?: readonly SimpleTexListContext[];
   readonly listBodyFontSizes?: readonly (number | undefined)[];
@@ -1385,7 +1395,7 @@ function buildSimpleTexParagraphIr(
       [...(options?.bibliographyMargins ?? [])],
       options?.descriptionLabelWidthPt ?? null,
       [...(options?.descriptionLabelWidths ?? [])],
-      options?.boxesClearingPendingItemLabels, options?.minipageListDepthResets, options?.inheritedItemLabels, options?.fontSizePt, options?.baselineSkipPt, options?.namedFontSizes, options?.listBodyFontSizes, options?.listBodyBaselineSkips, options?.listBodyDisplaySkipCommands, options?.groupListItemBodies,
+      options?.boxesClearingPendingItemLabels, options?.syntheticParagraphBreaks, options?.minipageListDepthResets, options?.inheritedItemLabels, options?.fontSizePt, options?.baselineSkipPt, options?.namedFontSizes, options?.listBodyFontSizes, options?.listBodyBaselineSkips, options?.listBodyDisplaySkipCommands, options?.groupListItemBodies,
     ])
     : null;
   if (key !== null) {
@@ -4762,6 +4772,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     labelFontSizePt?: TexLength;
     spacing?: SimpleTexListContext["spacing"];
     fontState?: SimpleTexFontState;
+    deferredParagraph?: "nested-list-ended" | "label-hook-cleared";
   }
   interface ActiveSimpleTexEnvironment {
     readonly name: SimpleTexEnvironmentName;
@@ -4955,7 +4966,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
     // endtrivlist ships its still-pending anonymous item even when its only
     // content was an external block, which did not start a prose paragraph.
     const hasTrivlistLabel = leadingTrivlist !== undefined && !consumedTrivlistLabels.has(leadingTrivlist);
-    const permitsEmpty = allowEmptyListItem && pendingListShowLabel ||
+    const labelHookCleared = listStack.at(-1)?.deferredParagraph === "label-hook-cleared";
+    const permitsEmpty = allowEmptyListItem && pendingListShowLabel && !labelHookCleared ||
       (beforeDisplay || closesTrivlist) && hasOnlyDeclarations && hasTrivlistLabel;
     if (start < end || permitsEmpty) {
       const listContext = currentSimpleTexListContext();
@@ -5070,7 +5082,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         quoteDepth,
         quotationDepth,
         ...(ancestorListLabels.length ? { ancestorListLabels } : {}),
-        ...(listContext !== undefined ? { listContext: listContext } : {}),
+        ...(listContext !== undefined ? { listContext: labelHookCleared ? { ...listContext, showLabel: false } : listContext } : {}),
         ...(scopePath ? { scopePath: scopePath } : {}),
       };
       blocks.push(block);
@@ -5083,6 +5095,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         quotationItemLabelPendingStack[quotationItemLabelPendingStack.length - 1] = false;
       }
       previousParagraphBlockEnd = end;
+      if (activeList?.deferredParagraph === "nested-list-ended") delete activeList.deferredParagraph;
       pendingParagraphVerticalAdjustments = [];
       pendingListLabel = undefined;
       pendingListShowLabel = false;
@@ -5305,6 +5318,15 @@ function buildSimpleTexParagraphBlocksFromNodes(
     ...currentSimpleTexBlockItemScope(),
   });
 
+  const flushEmptyListLine = (sourceStart: number): void => {
+    const list = listStack.at(-1);
+    if (list?.deferredParagraph !== "label-hook-cleared") return;
+    items.push({ kind: "empty-list-line", sourceStart, sourceEnd: sourceStart,
+      ...(list.baselineSkipPt !== undefined ? { baselineSkip: list.baselineSkipPt } : {}),
+      ...currentSimpleTexBlockItemScope() });
+    delete list.deferredParagraph;
+  };
+
   const hasFollowingInlineMaterial = (start: number): boolean => {
     let lookahead = start;
     while (lookahead < sourceNodes.length) {
@@ -5426,6 +5448,16 @@ function buildSimpleTexParagraphBlocksFromNodes(
         prefix.alignmentProfile,
         false
       );
+      const list = listStack.at(-1);
+      const previous = items.at(-1);
+      // A nested list installs \@doendpe's one-shot \par. When the
+      // following item starts with an external box, that \par can clear
+      // the new item's \everypar before any text consumes its label.
+      if (list?.deferredParagraph === "nested-list-ended" && pendingListShowLabel && previous?.kind === "box" &&
+          previous.listScope?.depth === list.depth && previous.listScope.itemIndex === list.itemIndex &&
+          !options?.syntheticParagraphBreaks?.includes(node.sourceStart)) {
+        list.deferredParagraph = "label-hook-cleared";
+      }
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
       currentNoIndent = noIndentForCurrentScope(prefix.noIndent);
@@ -5454,6 +5486,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
         break;
       }
       if (node.boundary === "begin") {
+        const list = listStack.at(-1);
+        // A subsequent list or alignment installs its own paragraph hook
+        // and may consume the still-queued label.
+        if (list?.deferredParagraph === "label-hook-cleared") delete list.deferredParagraph;
         let scopeRole: ActiveSimpleTexEnvironment["scopeRole"];
         if (isSimpleTexQuoteEnvironmentName(node.name)) {
           scopeRole = beginQuote(node.name);
@@ -5475,6 +5511,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         environmentStack.push({ name: node.name, scopeRole });
         scopeStack.push(scopeRole);
       } else {
+        if (isSimpleTexListEnvironmentName(node.name)) flushEmptyListLine(node.sourceStart);
         const openEnvironment = environmentStack.pop();
         if (openEnvironment?.name !== node.name) {
           unsupportedCommand = true;
@@ -5519,6 +5556,11 @@ function buildSimpleTexParagraphBlocksFromNodes(
           const parentLabel = pendingListLabels.pop();
           pendingListLabel = parentLabel?.label;
           pendingListShowLabel = parentLabel?.show ?? false;
+          const parent = listStack.at(-1);
+          if (options?.groupListItemBodies && parent && !pendingListShowLabel &&
+              openScope.kind === "list" && !openScope.noParList) {
+            parent.deferredParagraph = "nested-list-ended";
+          }
         } else if (!isSimpleTexTrivlistEnvironmentName(node.name)) {
           unsupportedCommand = true;
           scanState.aborted = true;
@@ -5554,6 +5596,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         scanState.aborted = true;
         break;
       }
+      flushEmptyListLine(node.sourceStart);
       activeList.itemIndex += 1;
       const labelSize = sizeAt(node.sourceStart);
       activeList.labelFontSizePt = (labelSize.selectionFrom ?? -1) > activeList.sourceStart ? labelSize.sizePt : activeList.fontSizePt;

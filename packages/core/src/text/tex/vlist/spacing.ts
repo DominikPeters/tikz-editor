@@ -95,7 +95,7 @@ export interface SimpleTexParagraphVerticalSkip {
   readonly listSize: TexLength;
   readonly listStretch?: TexLength;
   readonly listShrink?: TexLength;
-  readonly resumesDisplayParagraph?: boolean;
+  readonly afterDisplayParagraphSkip?: boolean;
   readonly trivlistSize?: TexLength;
   readonly trivlistAfterDisplay?: boolean;
 }
@@ -313,6 +313,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const resumesDisplayParagraph = followsDisplay && startsAfterExplicitPar && previousList !== undefined &&
       scope.listContext !== undefined && previousList.listStart === scope.listContext.listStart &&
       previousList.itemIndex === scope.listContext.itemIndex && !scope.listContext.showLabel;
+    const closesListAfterDisplay = followsDisplay && previousList !== undefined &&
+      scope.listContext === undefined && !state.hasInterveningPenalty;
     const roles = ancestors.length ? ancestors : paragraph.scopePath ?? [];
     const enteringTrivlist = scope.trivlistScopes.some(role => !state.previousEmittedTrivlistScopes.includes(role));
     const innermostList = lastVListAncestorRole(roles, "list");
@@ -353,6 +355,12 @@ function planSimpleTexParagraphVerticalSkipsInto(
       // from the parent item still follows the display.
       const parentProfile = listProfileForContext(listProfile, parentTransition);
       listVerticalSkipBefore = texArticleListParagraphSkip(parentTransition.depth, font, parentProfile);
+    }
+    else if (closesListAfterDisplay) {
+      // endtrivlist adjusts a terminal display's skip by the list's
+      // parskip minus the surrounding paragraph skip before addvspace.
+      listVerticalSkipBefore = texLength(Math.max(0,
+        texArticleListParagraphSkip(previousList.depth, font, resolvedListProfile) - (listProfile?.paragraphSkipPt ?? 0)));
     }
     else if (followsDisplay) listVerticalSkipBefore = previousList && scope.listContext &&
       previousList.listStart !== scope.listContext.listStart &&
@@ -476,7 +484,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
       ...(listFlex.shrink > 0
         ? { listShrink: listFlex.shrink }
         : {}),
-      ...(resumesDisplayParagraph ? { resumesDisplayParagraph: true } : {}),
+      ...(resumesDisplayParagraph || closesListAfterDisplay ? { afterDisplayParagraphSkip: true } : {}),
       ...(trivlistVerticalSkipBefore > 0
         ? { trivlistSize: trivlistVerticalSkipBefore }
         : {}),
@@ -677,7 +685,7 @@ function paragraphBoundaryGlueItems(
       origin: {
         kind: "list-boundary",
         beforeBlockIndex: skip.blockIndex,
-        ...(skip.resumesDisplayParagraph ? { resumesDisplayParagraph: true } : {}),
+        ...(skip.afterDisplayParagraphSkip ? { afterDisplayParagraphSkip: true } : {}),
       },
       size: skip.listSize,
       ...(skip.listStretch != null ? { stretch: skip.listStretch } : {}),
@@ -1035,7 +1043,7 @@ function resolveDisplayMathVerticalGlueInItems(
       else if (previousDisplayMaterialMetrics) plainParagraphInterlinePending = true;
       continue;
     }
-    if (item.kind === "hbox" && item.role?.kind === "external-flow") {
+    if (item.kind === "hbox" && (item.role?.kind === "external-flow" || item.role?.kind === "list-empty-line")) {
       const depth = previousParagraphMeasurement ? texParagraphLastLineDepth(previousParagraphMeasurement) : previousDisplayMaterialMetrics?.depth;
       if (depth !== undefined && !previousDepthSuppressed) {
         items.push({ kind: "glue", size: texInterlineGlueSize(depth, item.box.metrics.height, item.role.baselineSkipPt ?? options.lineHeight) });
@@ -1177,10 +1185,10 @@ function resolveDisplayMathVerticalGlueInItems(
         items.push({ ...item, size: texLength(additionalSkip) });
       } else items.push(item);
       plainParagraphInterlinePending = false;
-      // An explicit paragraph in the same item only adds parskip after
-      // the display. Its next baseline was already accounted for above.
-      const resumesDisplayParagraph = item.origin?.kind === "list-boundary" && item.origin.resumesDisplayParagraph;
-      if (!previousDepthSuppressed && !(resumesDisplayParagraph && displayInterlineAlreadyInserted) &&
+      // Resuming a paragraph or closing a list can add parskip after the
+      // display. The below-display branch can already place its baseline.
+      const afterDisplayParagraphSkip = item.origin?.kind === "list-boundary" && item.origin.afterDisplayParagraphSkip;
+      if (!previousDepthSuppressed && !(afterDisplayParagraphSkip && displayInterlineAlreadyInserted) &&
           shouldInsertParagraphBoundaryInterlineGlue(sourceItems, index)) {
         const nextParagraph = nextParagraphMeasurement(
           sourceItems,

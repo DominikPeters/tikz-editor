@@ -77,7 +77,7 @@ export type TexGlueOrigin =
   | {
       readonly kind: "list-boundary";
       readonly beforeBlockIndex: number;
-      readonly resumesDisplayParagraph?: boolean;
+      readonly afterDisplayParagraphSkip?: boolean;
     }
   | {
       readonly kind: "trivlist-boundary";
@@ -223,6 +223,9 @@ export interface TexParagraphItem {
 }
 
 export type TexHBoxRole = { readonly kind: "external-flow"; readonly flowKind?: "block" | "columns"; readonly pendingListBoundaries?: readonly SimpleTexListContext[]; readonly baselineSkipPt?: TexLength } | {
+  readonly kind: "list-empty-line";
+  readonly baselineSkipPt?: TexLength;
+} | {
   readonly kind: "list-label";
   readonly markerPaint?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly traceAsGlyph: boolean };
   readonly labelKind: TexVBoxListItemLabelKind;
