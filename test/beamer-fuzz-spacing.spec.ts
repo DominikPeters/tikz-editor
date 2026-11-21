@@ -19,6 +19,53 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "uses zero depth for a bottom-aligned column ending with a centered display",
+    source: slide(String.raw`Lead text.\par
+\alt<1-2>{\begin{columns}[onlytextwidth,b]
+\begin{column}{.46\textwidth}
+Left one.\par Left two.\par Left three.\par Left four.\par Left five.\par Left six.
+\end{column}
+\begin{column}{.50\textwidth}
+\begin{center}
+{\small\color{blue}\centering
+\[\begin{aligned}a+b&=c\\d-e&=f\end{aligned}\]\par}
+\end{center}
+\end{column}
+\end{columns}}{Alternative text.}
+\par Witness`, 11, "Madrid", "169"),
+    baselines: [["a+b=c", 104.362686], ["Leftsix.", 122.033279], ["Witness", 134.95369]],
+  },
+  {
+    name: "retains a rounded block's leading center registers before a nested list",
+    source: slide(String.raw`Lead text.\par
+\begin{block}{Alpha}
+\begin{center}\begin{tikzpicture}\node {Picture};\end{tikzpicture}\end{center}
+\par
+\begin{enumerate}
+\item \begin{description}
+\item[Stage 1] \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]
+\item[Stage 2] Second.
+\end{description}
+\item Third.
+\end{enumerate}
+\par Tail.
+\end{block}
+\par Witness`, 9, "Boadilla", "169"),
+    baselines: [["Picture", 69.009003], ["Stage2Second.", 126.245117], ["Tail.", 149.900864], ["Witness", 167.537216]],
+  },
+  {
+    name: "keeps list paragraph spacing after a flush environment consumes the previous label",
+    source: slide(String.raw`Lead text.\par
+{\small
+\begin{itemize}
+\item \begin{flushleft}First text.\end{flushleft}
+\item \only<2>{\begin{block}{Alpha}Block body.\end{block}}
+\item Next text.
+\end{itemize}\par}
+\par Witness`, 10, "Madrid"),
+    baselines: [["Nexttext.", 86.226532], ["Witness", 101.427017]],
+  },
+  {
     name: "ships an empty closing line when the nested list's paragraph hook clears a pending label",
     source: slide(String.raw`Lead text.\par
 \begin{itemize}

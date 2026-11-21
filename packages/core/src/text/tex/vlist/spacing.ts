@@ -299,7 +299,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
       (!hasPreviousEmittedParagraph && item.paragraph.tikzTextWidthNode !== true);
     const followsDisplay = state.previousEmittedContentKind === "display";
     const exitsTrivlistScope =
-      state.previousEmittedTrivlistScopes.length > scope.trivlistScopes.length;
+      state.previousEmittedTrivlistScopes.slice(scope.trivlistScopes.length).some(role => !role.noParList);
     // A label transferred into an external minipage is still pending when
     // its first nested list starts. LaTeX's @inlabel/@noparlist path omits
     // that list's opening topsep, just as for an ordinary nested first item.
@@ -451,7 +451,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
       trivlistTopsepPt: listProfile.liveListTopsepPt ?? texProfileDepthValue(resolvedListProfile?.topsepPtByDepth ?? listProfile.topsepPtByDepth, activeList.depth),
       trivlistPartopsepPt: 0,
     } : listProfile;
-    let trivlistVerticalSkipBefore = (followsDisplay && !enteringTrivlist) || suppressInitialTopsep
+    // Minipage mode suppresses an opening skip. The closing alignment still
+    // uses the registers it captured before the next list selects its own.
+    const trivlistBoundary = followsDisplay && !enteringTrivlist
       ? texLength(0)
       : texArticleTrivlistVerticalSkipBefore(
           state,
@@ -461,6 +463,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
           font,
           trivlistProfile
         );
+    let trivlistVerticalSkipBefore = suppressInitialTopsep ? texLength(0) : trivlistBoundary;
     if (externalAfterSkip && !state.hasInterveningPenalty && scope.trivlistScopes.some(scope => !state.previousEmittedTrivlistScopes.includes(scope))) {
       trivlistVerticalSkipBefore = texLength(Math.max(0, trivlistVerticalSkipBefore - externalAfterSkip));
     }

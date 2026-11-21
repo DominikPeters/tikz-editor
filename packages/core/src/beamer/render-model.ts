@@ -111,7 +111,7 @@ export type PreparedColumnFlowItem =
       advanceHeight: number;
       trailingSkipPt: number;
       /** List closing skip before it is combined with a terminal display or block skip. */
-      listClosingSkipPt?: number;
+      closingEnvironmentSkipPt?: number;
     }
   | {
       kind: "vertical-space";
