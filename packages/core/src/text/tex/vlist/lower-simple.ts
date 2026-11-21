@@ -727,6 +727,7 @@ function paragraphInputFromSimpleTexBlock(
     ...(block.startsAfterExplicitPar === true
       ? { startsAfterExplicitPar: true }
       : {}),
+    ...(block.followsColorChange === true ? { followsColorChange: true } : {}),
     ...(block.firstLineIndentEm !== undefined
       ? { firstLineIndentEm: block.firstLineIndentEm }
       : {}),

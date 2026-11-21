@@ -669,6 +669,8 @@ export interface SimpleTexParagraphBlock {
   readonly verticalAdjustments?: readonly SimpleTexVerticalGlueBlockItem[];
   readonly noIndent: boolean;
   readonly startsAfterExplicitPar?: boolean;
+  /** A \color after the previous block leaves a whatsit, so addvspace sees no preceding skip. */
+  readonly followsColorChange?: boolean;
   readonly firstLineIndentEm?: number;
   /** A source space retained when horizontal mode resumes after display math. */
   readonly leadingInterwordSpace?: boolean;
@@ -872,6 +874,7 @@ export interface SimpleTexSegmentInput {
   readonly noIndent: boolean;
   readonly listContext?: SimpleTexListContext;
   readonly startsAfterExplicitPar?: boolean;
+  readonly followsColorChange?: boolean;
   readonly firstLineIndentEm?: number;
   readonly leadingInterwordSpace?: boolean;
   readonly quotationItemFirstParagraph?: boolean;
@@ -4978,6 +4981,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const precedingParagraphEnd = lastItem?.kind === "display-math" ? lastItem.sourceEnd : previousParagraphBlockEnd;
       const startsAfterExplicitPar = precedingParagraphEnd !== undefined &&
         hasExplicitParagraphBoundaryBetween(precedingParagraphEnd, rawStart);
+      const followsColorChange = previousParagraphBlockEnd !== undefined &&
+        /\\color\b/u.test(textSliceAtSourceOffsets(previousParagraphBlockEnd, rawStart));
       const scopePath = currentSimpleTexScopePath();
       let nodes = simpleTexInlineNodesAfterHorizontalVSpace(
         inlineNodes,
@@ -5077,6 +5082,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
           : {}),
         noIndent,
         ...(startsAfterExplicitPar ? { startsAfterExplicitPar: true } : {}),
+        ...(followsColorChange ? { followsColorChange: true } : {}),
         ...(firstLineIndentEm !== undefined ? { firstLineIndentEm: firstLineIndentEm } : {}),
         ...(quotationItemLabelPendingStack.at(-1) === true
           ? { quotationItemFirstParagraph: true }

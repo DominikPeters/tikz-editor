@@ -1177,6 +1177,22 @@ Left one.\par Left two.\par Left three.\par Left four.
 \par Witness`, 10, "Madrid", "169"),
     baselines: [["Lefttwo.", 66.427917], ["Alttext.", 71.105865], ["Leftthree.", 77.828278], ["Witness", 96.876389]],
   },
+  {
+    name: "does not collapse a list's closing skip with an alignment opened after a color change",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize
+\begin{itemize}
+\item Alpha.
+\item Beta.
+\end{itemize}
+\par
+{\footnotesize\color{black}\raggedleft
+\begin{flushright}
+\[x\]
+\end{flushright}\par}\par}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Beta.", 70.075974], ["x", 104.277054], ["Witness", 123.277649]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

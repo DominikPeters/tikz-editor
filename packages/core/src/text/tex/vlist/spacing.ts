@@ -306,6 +306,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
     }
 
     const paragraph = item.paragraph;
+    if (paragraph.followsColorChange) state.hasInterveningPenalty = true;
     const scope = paragraphScopeFromVListAncestors(item, ancestors, state);
     const resolvedListProfile = listProfileForContext(
       listProfileForContext(listProfile, state.previousEmittedListContext),
