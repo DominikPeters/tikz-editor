@@ -250,7 +250,11 @@ function planSimpleTexParagraphVerticalSkipsInto(
         ? texArticleListExitBoundarySkip(state, previousList.depth, listRole?.depth ?? 0, font, previousProfile) : texLength(0);
       const boundarySkip = texLength(Math.max(closingSkip, closingListSkip));
       if (boundarySkip > 0) skips.push({ blockIndex: -4_000_000 - (item.sourceSpan?.start ?? 0), vlistPath: path, segmentIndex: 0,
-        quoteSize: texLength(0), listSize: texLength(Math.max(0, closingListSkip - closingSkip)), trivlistSize: closingSkip, size: boundarySkip });
+        quoteSize: texLength(0), listSize: texLength(Math.max(0, closingListSkip - closingSkip)), trivlistSize: closingSkip,
+        // A display can follow a closed alignment environment directly.
+        // Its preceding display skip participates in endtrivlist's addvspace.
+        ...(state.previousEmittedContentKind === "display" && !state.hasInterveningPenalty ? { trivlistAfterDisplay: true } : {}),
+        size: boundarySkip });
       if (item.kind === "display-math" || item.kind === "display-alignment") {
         state.previousEmittedTrivlistScopes = trivlistScopes;
         if (!listRole) state.previousEmittedListContext = undefined;

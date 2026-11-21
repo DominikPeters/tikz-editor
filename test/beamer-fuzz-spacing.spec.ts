@@ -19,6 +19,29 @@ ${body}
 // Assert painted positions, including the frame shrink transform.
 const cases = [
   {
+    name: "combines the closing flushright glue and a display skip before the next display",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,t]
+\begin{column}{.62\textwidth}
+\begin{columns}[onlytextwidth,b]
+\begin{column}{.46\textwidth}First text.\end{column}
+\begin{column}{.50\textwidth}Second text.\end{column}
+\end{columns}
+\par
+\visible<1,3>{\begin{flushright}
+\[E=\sum_{i=1}^{n}w_i x_i\]
+\end{flushright}}
+\par
+\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]
+\par
+Continued text.
+\end{column}
+\begin{column}{.34\textwidth}Peer text.\end{column}
+\end{columns}
+\par Witness`, 12, "Boadilla", "169"),
+    baselines: [["abx", 165.122986], ["cdy", 178.898407], ["Continuedtext.", 198.193558], ["Witness", 207.180847]],
+  },
+  {
     name: "retains the closing list skip before a center environment with a color change",
     source: slide(String.raw`Lead text.\par
 \begin{columns}[onlytextwidth,c]
