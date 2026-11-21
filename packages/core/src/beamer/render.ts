@@ -3750,6 +3750,10 @@ async function prepareColumnFlowNode(params: {
       overlays,
       step
     );
+    // A structural list node spans its enclosing group, so a list that only
+    // appears in an overlay branch hidden at this step leaves plain text.
+    const isVisibleList = node.kind === "list" &&
+      /\\begin\s*\{(?:itemize|enumerate|description)\}/u.test(projection.mapped.text);
     const layoutParams = {
       mapped: projection.mapped,
       sourceSpan: node.span,
@@ -3760,7 +3764,7 @@ async function prepareColumnFlowNode(params: {
       font: bodyFont,
       colorResolver: beamerAlertColorResolver(theme),
       alignment: node.kind === "paragraph" ? node.alignment ?? "left" : "left",
-      ...(node.kind === "list" && initialPreviousDepth !== undefined ? { initialPreviousDepth } : {}),
+      ...(isVisibleList && initialPreviousDepth !== undefined ? { initialPreviousDepth } : {}),
       ...(params.leadingDisplayBaselineSkipPt !== undefined ? { leadingDisplayBaselineSkipPt: params.leadingDisplayBaselineSkipPt } : {}),
       listProfile,
       macroBindings,
@@ -3809,10 +3813,10 @@ async function prepareColumnFlowNode(params: {
     // first flow node. Later nodes use the preceding flow's baseline.
     const startsWithStandaloneTrivlist = /^\s*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(projection.mapped.text);
     const startsWithTrivlist = firstBox?.role?.kind === "trivlist" || startsWithStandaloneTrivlist;
-    const startsWithList = node.kind === "list" || firstBox?.role?.kind === "list" ||
+    const startsWithList = isVisibleList || firstBox?.role?.kind === "list" ||
       /^\s*\\begin\s*\{(?:itemize|enumerate|description)\}/u.test(projection.mapped.text);
     const lastTrivlist = paragraph.layout.vlistLayout.boxReport.items.filter(item => item.role?.kind === "trivlist").at(-1)?.role;
-    const closingEnvironmentSkipPt = node.kind === "list"
+    const closingEnvironmentSkipPt = isVisibleList
       ? trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont)
       : lastTrivlist?.kind === "trivlist" && lastTrivlist.noParList ? 0
         : trailingBeamerTrivlistSkip(projection.mapped.text, params.listProfile.trivlistTopsepPt);
@@ -3826,7 +3830,7 @@ async function prepareColumnFlowNode(params: {
       leadingSkipPt: leadingBeamerTrivlistAdjustment(projection.mapped.text, paragraph, params.listProfile.trivlistTopsepPt) +
         // A column minipage starts with \leavevmode. A leading trivlist ends
         // that empty line, then inserts normal interline glue before its first box.
-        ((node.kind !== "list" || initialPreviousDepth === undefined) && params.leadingDisplayBaselineSkipPt !== 0 && (startsWithList || startsWithTrivlist)
+        ((!isVisibleList || initialPreviousDepth === undefined) && params.leadingDisplayBaselineSkipPt !== 0 && (startsWithList || startsWithTrivlist)
           ? (() => {
               const baseline = firstMaterial?.hboxRole?.kind === "external-flow"
                 ? firstMaterial.hboxRole.baselineSkipPt ?? paragraphStartingBaselineSkip(paragraph, bodyFont.lineHeightPt)

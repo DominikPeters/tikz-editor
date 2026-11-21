@@ -1162,6 +1162,21 @@ Left one.\par Left two.\par Left three.\par Left four.
 \par Witness`, 10, "Madrid", "169"),
     baselines: [["InnerInnertext.", 71.97612], ["Witness", 87.176605]],
   },
+  {
+    name: "treats a column group as text when its only list is in a hidden overlay branch",
+    source: slide(String.raw`Lead text.\par
+\begin{columns}[onlytextwidth,c]
+\begin{column}{0.54\textwidth}
+Left one.\par Left two.\par Left three.\par Left four.
+\end{column}
+\begin{column}{0.42\textwidth}
+{\scriptsize\raggedleft
+\alt<1>{Alt text.}{\begin{enumerate}\item A\end{enumerate}}\par}
+\end{column}
+\end{columns}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Lefttwo.", 66.427917], ["Alttext.", 71.105865], ["Leftthree.", 77.828278], ["Witness", 96.876389]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {
