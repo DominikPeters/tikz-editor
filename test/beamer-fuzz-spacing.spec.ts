@@ -1082,6 +1082,22 @@ Body text.
 \par Witness`, 11, "default", "43"),
     baselines: [["Title", 57.647461], ["Bodytext.", 68.097794], ["Witness", 83.868301]],
   },
+  {
+    name: "applies the outer list's parsep to a display after a nested list and to the closing skip",
+    source: slide(String.raw`Lead text.\par
+{\footnotesize
+\begin{description}
+\item[Outer] Outer text.
+\par
+\begin{description}
+\item[Inner] Nested text.
+\end{description}
+\par
+\[x\]
+\end{description}\par}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["OuterOutertext.", 59.150665], ["InnerNestedtext.", 71.976059], ["x", 93.826752], ["Witness", 109.977264]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

@@ -126,6 +126,8 @@ interface SimpleTexParagraphVerticalSkipState {
   previousEmittedTrivlistScopes: readonly TexTrivlistScopeRole[];
   previousEmittedListContext: SimpleTexListContext | undefined;
   previousEmittedContentKind: "paragraph" | "display" | undefined;
+  /** The list depth that encloses the last display, which can be shallower than the previous paragraph's list. */
+  previousDisplayListDepth?: number;
   readonly quotePartopsepByDepth: Map<number, boolean>;
   readonly trivlistTopsepByScope: Map<TexTrivlistScopeRole, TexLength>;
   readonly listTopsepByDepth: Map<number, TexLength>;
@@ -235,6 +237,20 @@ function planSimpleTexParagraphVerticalSkipsInto(
       );
       const listRole = lastVListAncestorRole(scope, "list");
       const listItemRole = lastVListAncestorRole(scope, "list-item");
+      const displayListContext: SimpleTexListContext | undefined = listRole
+        ? {
+            kind: listRole.listKind,
+            depth: listRole.depth,
+            ...(listRole.listRegisterDepth !== undefined ? { listRegisterDepth: listRole.listRegisterDepth } : {}),
+            labelDepth: listRole.labelDepth,
+            itemIndex: listItemRole?.itemIndex ?? 0,
+            ownLeftMarginEm: listRole.ownLeftMarginEm,
+            totalLeftMarginEm: listRole.totalLeftMarginEm,
+            ...(listRole.fontSizePt !== undefined ? { fontSizePt: listRole.fontSizePt } : {}),
+            ...(listRole.sourceStart !== undefined ? { listStart: listRole.sourceStart } : {}),
+            showLabel: false,
+          }
+        : undefined;
       // A display outside a just-closed center/flush environment still owns
       // that environment's closing glue before its leading empty line.
       const previousList = state.previousEmittedListContext;
@@ -249,7 +265,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
       // has already accounted for any list outside that scope.
       const resumesDisplay = isDisplayEmptyLineHBox(item) && item.role.position === "after-display-vspace";
       const closingListSkip = !resumesDisplay && previousList && previousList.depth > (listRole?.depth ?? 0)
-        ? texArticleListExitBoundarySkip(state, previousList.depth, listRole?.depth ?? 0, font, previousProfile) : texLength(0);
+        ? texArticleListExitBoundarySkip(state, previousList.depth, listRole?.depth ?? 0, font,
+          listProfileForContext(previousProfile, displayListContext)) : texLength(0);
       const boundarySkip = texLength(Math.max(closingSkip, closingListSkip));
       const closesAfterDisplay = state.previousEmittedContentKind === "display" && !state.hasInterveningPenalty;
       if (boundarySkip > 0) skips.push({ blockIndex: -4_000_000 - (item.sourceSpan?.start ?? 0), vlistPath: path, segmentIndex: 0,
@@ -270,26 +287,14 @@ function planSimpleTexParagraphVerticalSkipsInto(
       if (item.kind === "display-math" || item.kind === "display-alignment") {
         state.previousEmittedTrivlistScopes = trivlistScopes;
         if (!listRole) state.previousEmittedListContext = undefined;
+        state.previousDisplayListDepth = listRole?.depth ?? 0;
         state.previousEmittedContentKind = "display";
         continue;
       }
       state.previousEmittedQuoteDepth = quoteDepth;
       state.previousEmittedQuotationDepth = 0;
       state.previousEmittedTrivlistScopes = trivlistScopes;
-      state.previousEmittedListContext = listRole
-        ? {
-            kind: listRole.listKind,
-            depth: listRole.depth,
-            ...(listRole.listRegisterDepth !== undefined ? { listRegisterDepth: listRole.listRegisterDepth } : {}),
-            labelDepth: listRole.labelDepth,
-            itemIndex: listItemRole?.itemIndex ?? 0,
-            ownLeftMarginEm: listRole.ownLeftMarginEm,
-            totalLeftMarginEm: listRole.totalLeftMarginEm,
-            ...(listRole.fontSizePt !== undefined ? { fontSizePt: listRole.fontSizePt } : {}),
-            ...(listRole.sourceStart !== undefined ? { listStart: listRole.sourceStart } : {}),
-            showLabel: false,
-          }
-        : undefined;
+      state.previousEmittedListContext = displayListContext;
       rememberListItemsAtDepth(state, scope);
       state.previousEmittedContentKind = "paragraph";
       state.emittedParagraphCount += 1;
@@ -378,7 +383,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
       // endtrivlist adjusts a terminal display's skip by the list's
       // parskip minus the surrounding paragraph skip before addvspace.
       let adjustment = 0;
-      for (let depth = previousList.depth; depth > 0; depth--) {
+      for (let depth = Math.min(previousList.depth, state.previousDisplayListDepth ?? previousList.depth); depth > 0; depth--) {
         if (state.noParListDepths.has(depth)) continue;
         const paragraphSkip = state.listParagraphSkipByDepth.get(depth) ?? texArticleListParagraphSkip(depth, font, resolvedListProfile);
         const outsideSkip = depth === 1 ? listProfile?.paragraphSkipPt ?? 0
