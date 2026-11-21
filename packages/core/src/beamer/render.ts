@@ -3552,6 +3552,7 @@ async function prepareColumnContent(params: {
       // T's \colheadskip ships the leading empty line before \vskip-1ex.
       // A first display does not add another empty-line baseline skip.
       firstInColumn: flow.length === 0,
+      ...(flow.length === 0 && column.alignment !== "T" ? { startsHorizontalMode: true } : {}),
       ...((column.alignment === "T" && flow.length === 0) || flow.at(-1)?.kind === "columns"
         ? { leadingDisplayBaselineSkipPt: 0 } : {}),
     });
@@ -3672,6 +3673,8 @@ async function prepareColumnFlowNode(params: {
   initialPreviousDepth?: number;
   leadingDisplayBaselineSkipPt?: number;
   firstInColumn?: boolean;
+  /** The column's `\leavevmode` paragraph is already open, so a leading `\par` ends an empty line. */
+  startsHorizontalMode?: boolean;
   macroBindings: ReadonlyMap<string, MacroBinding>;
   references: BeamerReferenceContext;
   leftSidebarWidth: number;
@@ -3747,12 +3750,16 @@ async function prepareColumnFlowNode(params: {
   }
   if (node.kind === "paragraph" || node.kind === "list") {
     const text = source.slice(node.span.from, node.span.to);
-    const projection = projectBeamerOverlayText(
+    const projected = projectBeamerOverlayText(
       createIdentityMappedText(text, node.span.from),
       node.span,
       overlays,
       step
     );
+    // A column starts with `\leavevmode`, so a leading `\par` ends a paragraph holding only an empty line.
+    const projection = params.startsHorizontalMode === true && node.kind === "paragraph" && /^\s*\\par(?![A-Za-z@])/u.test(projected.mapped.text)
+      ? { ...projected, mapped: concatMappedText([createGeneratedMappedText("\\mbox{}", "column-leading-empty-line"), projected.mapped]) }
+      : projected;
     // A structural list node spans its enclosing group, so a list that only
     // appears in an overlay branch hidden at this step leaves plain text.
     const isVisibleList = node.kind === "list" &&

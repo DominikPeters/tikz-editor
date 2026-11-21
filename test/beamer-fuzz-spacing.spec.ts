@@ -1461,6 +1461,22 @@ Between.\par
 \par Witness`, 11, "Madrid", "43"),
     baselines: [["Inner.", 82.283844], ["Alpha.", 98.434357], ["Witness", 117.054947]],
   },
+  {
+    name: "ends an empty line when a column's content starts with \\par",
+    source: slide(String.raw`Lead.\par
+\begin{columns}[onlytextwidth,t]
+\begin{column}{0.46\textwidth}
+Left.
+\end{column}
+\begin{column}{0.50\textwidth}
+\only<2>{X}
+\par
+Right.
+\end{column}
+\end{columns}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["Left.", 61.953293], ["Right.", 74.873703], ["Witness", 85.186295]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {
