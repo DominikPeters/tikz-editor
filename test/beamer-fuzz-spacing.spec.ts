@@ -1292,6 +1292,21 @@ Column text.
 \par Witness`, 10, "Madrid", "169"),
     baselines: [["InnerText.", 81.774429], ["x", 101.725052], ["Witness", 122.164948]],
   },
+  {
+    name: "closes a default block's list at the surrounding list depth",
+    source: slide(String.raw`Lead text.\par
+\begin{itemize}
+\item Words.
+\par
+\begin{exampleblock}{Title}
+\begin{description}
+\item[Stage 1] Plain words.
+\end{description}
+\end{exampleblock}
+\end{itemize}
+\par Witness`, 10, "default", "43"),
+    baselines: [["Words.", 53.989822], ["Title", 71.090363], ["Witness", 102.507843]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

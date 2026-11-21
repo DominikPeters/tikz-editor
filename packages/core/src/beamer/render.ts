@@ -2547,7 +2547,7 @@ async function prepareBlockWithTheme(params: {
       ? trailingBeamerTrivlistSkip(bodySource, beamerTrivlistSpacing(params.theme).naturalPt)
       : 0;
     trailingBodySkip = trailingScopedBeamerListSkip(createIdentityMappedText(bodySource, params.node.bodySpan.from),
-      params.references, theoremBodyFont, body) + Math.max(0, closingAlignmentSkip - trailingCollapsibleSkip(body));
+      params.references, theoremBodyFont, body, params.references.ambientTextAt?.listDepthAt?.(params.node.bodySpan.from) ?? 0) + Math.max(0, closingAlignmentSkip - trailingCollapsibleSkip(body));
   }
   const bodyExtent = body ? (plan.style === "default"
     ? paragraphMaterialExtent(body) + trailingBodySkip
@@ -5434,7 +5434,7 @@ function emitUnsupportedPlaceholder(params: {
 }
 
 /** Closing list glue uses the registers captured in the list's active size. */
-function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerReferenceContext, font: BeamerThemeFont, paragraph?: LaidParagraph): number {
+function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerReferenceContext, font: BeamerThemeFont, paragraph?: LaidParagraph, listDepthOffset = 0): number {
   const end = [...mapped.text.matchAll(/\\end\s*\{(?:itemize|enumerate|description)\}/gu)].at(-1);
   if (!end) return 0;
   // A transferred parent label makes this list take LaTeX's noparlist path:
@@ -5448,7 +5448,12 @@ function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerRefe
   const active = references.theme ? ambientTextTheme(references.theme,
     references.ambientTextAt?.(origin?.kind === "direct" ? origin.from : 0) ?? "").fonts["normal-text"] : font;
   const registers = beamerListSizeOverrides(references.theme).find(entry => Math.abs(entry.fontSizePt - active.sizePt) < .001);
-  const outerClosing = trailingBeamerListSkip(mapped.text, registers?.topsepPt ?? 3);
+  // A default block keeps the surrounding list depth, so its list closes with that
+  // deeper level's topsep; only first-level lists use the size registers.
+  const baseTopsep = listDepthOffset > 0
+    ? BEAMER_LIST_LAYOUT_PROFILE.topsepPtByDepth[Math.min(listDepthOffset, BEAMER_LIST_LAYOUT_PROFILE.topsepPtByDepth.length - 1)] ?? 3
+    : registers?.topsepPt ?? 3;
+  const outerClosing = trailingBeamerListSkip(mapped.text, baseTopsep);
   // Lists that end back to back each addvspace their closing skip, so the
   // largest survives. A nested list exits with its topsep plus the enclosing
   // list's parsep, which exceeds the outer topsep at \small and \footnotesize.
