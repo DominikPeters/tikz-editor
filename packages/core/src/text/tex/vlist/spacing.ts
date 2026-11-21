@@ -131,6 +131,8 @@ interface SimpleTexParagraphVerticalSkipState {
   readonly quotePartopsepByDepth: Map<number, boolean>;
   readonly trivlistTopsepByScope: Map<TexTrivlistScopeRole, TexLength>;
   readonly listTopsepByDepth: Map<number, TexLength>;
+  /** A block holding a list reinstalls the normal \itemsep in the list that owns the item. */
+  readonly leakedItemsepByDepth: Map<number, number>;
   readonly listParagraphSkipByDepth: Map<number, TexLength>;
   readonly noParListDepths: Set<number>;
   readonly lastListItemsByDepth: Map<number, { listStart: number | undefined; itemIndex: number }>;
@@ -225,6 +227,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
         const first = listRoles[0];
         // The outermost list's \end takes the chain's largest skip, so depth 1
         // gets the leak even when the block's own list roles start deeper.
+        const owner = listRoles[0];
+        if (owner) state.leakedItemsepByDepth.set(owner.depth, (listProfile.uncrampedItemsepPtByDepth ?? listProfile.itemsepPtByDepth)[0] ?? 0);
         const targets = first && first.depth > 1 ? [{ ...first, depth: 1 }, ...listRoles] : listRoles;
         for (const role of targets) {
           const context = simpleListContextForRole(role, 0);
@@ -589,6 +593,7 @@ function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphV
     quotePartopsepByDepth: new Map(),
     trivlistTopsepByScope: new Map(),
     listTopsepByDepth: new Map(),
+    leakedItemsepByDepth: new Map(),
     listParagraphSkipByDepth: new Map(),
     noParListDepths: new Set(),
     lastListItemsByDepth: new Map(),
@@ -2243,8 +2248,34 @@ function texArticleListVerticalSkipBefore(
   font: ResolvedTexFont,
   profile?: TexListLayoutProfile
 ): TexLength {
+  const skip = texArticleListVerticalSkipBeforeLeaking(
+    state, previous, current, hasPreviousEmittedParagraph, startsListInVerticalMode, exitsTrivlistScope, font, profile);
+  // The block's leaked registers serve the first following item of the owning
+  // list; later items and the list's closing skip see the list's own values.
+  if (current?.showLabel && state.leakedItemsepByDepth.delete(current.depth)) state.listTopsepByDepth.delete(current.depth);
+  return skip;
+}
+
+function texArticleListVerticalSkipBeforeLeaking(
+  state: SimpleTexParagraphVerticalSkipState,
+  previous: SimpleTexListContext | undefined,
+  current: SimpleTexListContext | undefined,
+  hasPreviousEmittedParagraph: boolean,
+  startsListInVerticalMode: boolean,
+  exitsTrivlistScope: boolean,
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
+): TexLength {
   if (!previous && !current) {
     return texLength(0);
+  }
+  if (profile && state.leakedItemsepByDepth.size > 0) {
+    const itemsepPtByDepth = [...profile.itemsepPtByDepth];
+    for (const [depth, itemsep] of state.leakedItemsepByDepth) {
+      while (itemsepPtByDepth.length < depth) itemsepPtByDepth.push(0);
+      itemsepPtByDepth[depth - 1] = itemsep;
+    }
+    profile = { ...profile, itemsepPtByDepth };
   }
   // Beamer zeros topsep, partopsep and itemsep, retaining the size-selected
   // parsep (zero at normalsize, 3pt at small, 2pt at footnotesize).
@@ -2422,6 +2453,7 @@ function texArticleListExitBoundarySkip(
     for (let depth = previousDepth; depth > 0; depth -= 1) {
       const topsep = state.listTopsepByDepth.get(depth) ?? texArticleOutsideListBoundarySkip(false, font, profile, depth);
       state.listTopsepByDepth.delete(depth);
+      state.leakedItemsepByDepth.delete(depth);
       if (state.noParListDepths.delete(depth)) continue;
       // In Beamer, a nested list's closing skip includes the enclosing list's parsep.
       const enclosingParsep = profile && depth > 1 ? state.listParagraphSkipByDepth.get(depth - 1) ?? 0 : 0;
@@ -2433,6 +2465,7 @@ function texArticleListExitBoundarySkip(
   let size = texLength(0);
   for (let depth = previousDepth; depth > currentDepth; depth -= 1) {
     state.listTopsepByDepth.delete(depth);
+    state.leakedItemsepByDepth.delete(depth);
     if (state.noParListDepths.delete(depth)) continue;
     const depthSize = texArticleNestedListBoundarySkip(depth, depth - 1, font, profile);
     size = texLength(Math.max(size, depthSize));

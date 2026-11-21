@@ -1357,6 +1357,18 @@ Right.
 \par \begin{tikzpicture}[font=\scriptsize]\node[anchor=west] at (2,0.15) {Witness};\end{tikzpicture}`, 11, "Boadilla", "43"),
     baselines: [["Second.", 79.023117], ["Witness", 94.100494]],
   },
+  {
+    name: "restores the normal item separation after a block that holds a list, once, even in a cramped frame",
+    source: slide(String.raw`Lead.\par
+{\footnotesize
+\begin{itemize}
+\item \begin{block}{T}\begin{enumerate}\item A\end{enumerate}\end{block}
+\item Alpha.
+\item Beta.
+\end{itemize}\par}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["Alpha.", 103.416687], ["Beta.", 115.767075], ["Witness", 132.48761]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

@@ -107,6 +107,8 @@ export interface TexListLayoutProfile {
   readonly topsepShrinkPtByDepth?: readonly number[];
   readonly partopsepPtByDepth: readonly number[];
   readonly itemsepPtByDepth: readonly number[];
+  /** The \itemsep a size command reinstalls when `\beamer@cramped` has zeroed the live one. */
+  readonly uncrampedItemsepPtByDepth?: readonly number[];
   readonly itemsepStretchPtByDepth?: readonly number[];
   readonly itemsepShrinkPtByDepth?: readonly number[];
   readonly parsepPtByDepth: readonly number[];
