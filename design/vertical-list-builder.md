@@ -174,10 +174,15 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
 
 ## Risks and open questions
 
-- **Paragraph builder coupling.** Paragraph measurement currently interleaves
-  with skip planning (`paragraph-measurement.ts`, list label boxes, display
-  interline flags). Step 2 must confirm the paragraph builder can run with
-  skips supplied afterwards, or expose `startParagraph` hooks.
+- **Paragraph builder coupling.** The seam for plain layouts is
+  `vlist/prepare-simple.ts`: `materializeParagraphVerticalGlueInVList` inserts
+  the planned skips as glue items before paragraphs, display glue is added by
+  `materializeDisplayMathVerticalGlueInVList` /
+  `resolveDisplayMathVerticalGlueInVList`, and `layoutTexVListItems` applies
+  the baseline/`\lineskip` rule with measured paragraphs. The shadow builder
+  produces the same glue items at that seam and is compared per paragraph
+  `blockIndex`. Display skips depend on measured `\predisplaysize`, so the
+  display part of the builder runs at the `resolveDisplayMath…` stage.
 - **Stretch/shrink.** Frame shrink and `[c]`/`[b]` packing depend on glue
   flex; the builder must keep natural/stretch/shrink, not just naturals (the
   current planner already tracks some flex).
