@@ -438,6 +438,39 @@ export function makeNodeLineElement(
   };
 }
 
+/**
+ * Slash of `circle solidus` (pgflibraryshapes.multipart.code.tex, \beforebackgroundpath): a 45 degree
+ * line through the circle centre whose half extent along each axis is
+ * 0.437 * (\radius - max(outer xsep, outer ysep) - 0.5 \pgflinewidth). The visual radius is
+ * already the radius without the outer separation.
+ */
+export const CIRCLE_SOLIDUS_SLASH_FACTOR = 0.437;
+
+export function circleSolidusSlashHalfExtent(visualRadius: number, lineWidth: number): number {
+  return CIRCLE_SOLIDUS_SLASH_FACTOR * (visualRadius - 0.5 * lineWidth);
+}
+
+export function makeCircleSolidusElement(
+  sourceId: string,
+  itemId: string,
+  center: WorldPoint,
+  visualRadius: number,
+  style: ResolvedStyle,
+  span: { from: number; to: number },
+  styleChain: StyleChainEntry[] = []
+): ScenePath {
+  const half = circleSolidusSlashHalfExtent(visualRadius, style.lineWidth);
+  return makeNodeLineElement(
+    sourceId,
+    `${itemId}:solidus`,
+    wp(center.x - half, center.y - half),
+    wp(center.x + half, center.y + half),
+    style,
+    span,
+    styleChain
+  );
+}
+
 export function makeNodeMagnifyingHandleElement(
   sourceId: string,
   itemId: string,

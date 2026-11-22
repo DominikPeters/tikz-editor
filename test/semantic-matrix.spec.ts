@@ -91,6 +91,30 @@ describe("semantic matrix nodes", () => {
     expect(result.scene.elements.filter(element => element.kind === "Path" && element.id.includes(":matrix-cell:"))).toHaveLength(6);
   });
 
+  it("draws the circle solidus slash with PGF's 0.437 * (radius - 0.5 line width) extent in nodes and matrices", () => {
+    // pgflibraryshapes.multipart.code.tex: the slash runs +-0.437 * (\radius - outer sep - 0.5\pgflinewidth)
+    // along each axis. TeX (dvisvgm, 3cm node, 0.4pt line): slash dx = 36.988bp = 37.128pt.
+    const slashSpan = (source: string): { radius: number; dx: number; dy: number } => {
+      const result = evaluateSemantic(source);
+      const circle = result.scene.elements.find(element => element.kind === "Circle");
+      const slash = result.scene.elements.find(element => element.id.endsWith(":solidus"));
+      if (circle?.kind !== "Circle" || slash?.kind !== "Path") throw new Error("missing circle solidus elements");
+      const [from, to] = slash.commands.map(command => ("to" in command ? command.to : null));
+      if (!from || !to) throw new Error("missing slash endpoints");
+      return { radius: circle.radius, dx: Math.abs(to.x - from.x), dy: Math.abs(to.y - from.y) };
+    };
+    const plain = slashSpan(
+      String.raw`\begin{tikzpicture}\node[circle solidus,draw,minimum width=3cm,line width=0.4pt] {A\nodepart{lower}B};\end{tikzpicture}`
+    );
+    const inMatrix = slashSpan(
+      String.raw`\begin{tikzpicture}\matrix[circle solidus,draw,minimum width=3cm,line width=0.4pt] {\node{A}; \\};\end{tikzpicture}`
+    );
+    expect(plain.radius).toBeCloseTo(42.679, 2);
+    expect(plain.dx).toBeCloseTo(37.128, 2);
+    expect(plain.dy).toBeCloseTo(plain.dx, 6);
+    expect(inMatrix.dx).toBeCloseTo(2 * 0.437 * (inMatrix.radius - 0.2), 6);
+  });
+
   it("renders matrix containers through the supported node shape dispatch", () => {
     const shapes = [
       "chamfered rectangle",

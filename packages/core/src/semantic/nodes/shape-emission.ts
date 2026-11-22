@@ -9,6 +9,7 @@ import type { ResolvedStyle, SceneElement } from "../types.js";
 import {
   applyNodeBoxPaintMode,
   makeCircleElement,
+  makeCircleSolidusElement,
   makeNodeBoxElement,
   makeNodeChamferedRectangleElement,
   makeNodeCircularSectorElement,
@@ -247,16 +248,7 @@ export function emitNodeShape(state: NodeShapeEmissionContext): void {
         );
         markFeature("shape_circle_split", "supported");
       } else {
-        pushNodeElement(
-          makeNodeLineElement(
-            nodeSourceId,
-            `${item.id}:solidus`,
-            wp(center.x - r * 0.437, center.y - r * 0.437),
-            wp(center.x + r * 0.437, center.y + r * 0.437),
-            nodeDividerStyle,
-            item.span
-          )
-        );
+        pushNodeElement(makeCircleSolidusElement(nodeSourceId, item.id, center, r, nodeDividerStyle, item.span));
         markFeature("shape_circle_solidus", "supported");
       }
       markFeature("svg_circle", "supported");

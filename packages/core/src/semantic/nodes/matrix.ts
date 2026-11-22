@@ -22,6 +22,7 @@ import { placeNodeCenter, registerNamedNodeAnchors } from "./anchors.js";
 import {
   applyNodeBoxPaintMode,
   makeCircleElement,
+  makeCircleSolidusElement,
   makeNodeBoxElement,
   makeNodeCircularSectorElement,
   makeNodeChamferedRectangleElement,
@@ -423,14 +424,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
         params.markFeature("shape_circle_split", "supported");
       } else {
         pushMatrixNodeElement(
-          makeNodeLineElement(
-            params.statement.id,
-            `${params.item.id}:solidus`,
-            wp(matrixCenter.x - radius * 0.52, matrixCenter.y - radius * 0.52),
-            wp(matrixCenter.x + radius * 0.52, matrixCenter.y + radius * 0.52),
-            matrixDividerStyle,
-            params.item.span
-          )
+          makeCircleSolidusElement(params.statement.id, params.item.id, matrixCenter, radius, matrixDividerStyle, params.item.span)
         );
         params.markFeature("shape_circle_solidus", "supported");
       }
