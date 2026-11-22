@@ -280,7 +280,11 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
 
 1. **Beamer containers (step 4), remaining:** extend the embedding to
    title pages, and
-   build column bodies as vlists, until the frame flow is a
+   build column bodies as vlists (a first attempt, parsing a column body like
+   a block body, fails 20 TeX comparisons: nested columns' `[t]`/`[b]`/`[c]`
+   reference points, a column's leading list and closing alignment glue,
+   bottom-aligned columns, and a tcolorbox in a column; the column reference
+   code still reads flow items), until the frame flow is a
    single paragraph item and `positionPreparedFrameFlow`'s glue rules,
    `leadingAdjustment`, `sharedTrivlistSkip`, `trailingListGlue` and the regex
    helpers can go. A chained per-piece builder was considered and rejected: it
