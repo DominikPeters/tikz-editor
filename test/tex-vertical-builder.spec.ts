@@ -67,4 +67,41 @@ describe("VerticalListBuilder", () => {
     b.beginList(listI); b.item(); b.startParagraph("one");
     expect(natural(b, "one")).toBe(0);
   });
+
+  it("appends baseline glue from prevdepth, falling back to lineskip (tex.web §679)", () => {
+    const b = new VerticalListBuilder({ prevDepth: 2 });
+    b.startParagraph("one", { height: 7, depth: 2, baselineSkip: 12 });
+    b.par(true);
+    b.startParagraph("two", { height: 11, depth: 1, baselineSkip: 12 });
+    // 12 - 2 - 7 = 3, then 12 - 2 - 11 < 0 gives \lineskip.
+    expect(natural(b, "one")).toBe(3);
+    expect(natural(b, "two")).toBe(1);
+  });
+
+  it("brackets a display with its skips and resumes the paragraph without parskip", () => {
+    const b = new VerticalListBuilder({ parskip: glue(5) });
+    b.startParagraph("before", { height: 7, depth: 2, baselineSkip: 12 });
+    b.displayAbove(glue(10, 2, 5));
+    b.displayBox("display", { height: 9, depth: 4, baselineSkip: 12 });
+    b.displayBelow(glue(6, 3, 3));
+    b.startParagraph("after", { height: 7, depth: 2, baselineSkip: 12 });
+    // Above skip, then baseline glue 12 - 2 - 9 = 1.
+    expect(natural(b, "display")).toBe(11);
+    // Below skip, then 12 - 4 - 7 = 1; no \parskip for the resumed lines.
+    expect(natural(b, "after")).toBe(7);
+  });
+
+  it("lets a list closing after a display adjust the below skip (\\endtrivlist)", () => {
+    const small: VerticalListRegisters = { topsep: glue(6, 2, 2), partopsep: glue(0), itemsep: glue(3, 2, 1), parsep: glue(3, 2, 1) };
+    const b = new VerticalListBuilder();
+    b.startParagraph("lead"); b.par(true);
+    b.beginList(small);
+    b.item(); b.startParagraph("text");
+    b.displayAbove(glue(0)); b.displayBox("display", undefined); b.displayBelow(glue(6.5));
+    b.endList();
+    b.startParagraph("after");
+    // 6.5 + parskip (3) - outer parskip (0) = 9.5, larger than the list's 6pt topsep.
+    expect(natural(b, "after")).toBe(9.5);
+  });
 });
+
