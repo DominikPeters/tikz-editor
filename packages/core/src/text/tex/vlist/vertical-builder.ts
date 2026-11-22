@@ -220,6 +220,15 @@ export class VerticalListBuilder {
     this.nodes.push({ kind: "box", id });
   }
 
+  /** An item label from an enclosing container is still pending (@inlabel is global). */
+  inheritPendingLabel(): void {
+    this.inLabel = true;
+  }
+
+  get pendingLabel(): boolean {
+    return this.inLabel;
+  }
+
   /** \@trivlist (latex.ltx 12829). */
   private trivlistCore(kind: ListLevel["kind"], topsep: VerticalGlue, partopsep: VerticalGlue, itemsep: VerticalGlue, parsep: VerticalGlue): void {
     let topsepAdd = topsep;

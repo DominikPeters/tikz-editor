@@ -99,7 +99,9 @@ export function runVerticalShadow(
     ...((): Step[] => { let at = 0; return items.map(item => ({ at: (at = item.sourceSpan?.start ?? at), order: 0 as const, item })); })(),
   ].sort((left, right) => left.at - right.at || left.order - right.order);
 
-  const builder = new VerticalListBuilder({ parskip: glue(profile?.paragraphSkipPt ?? 0), listColorWhatsits: profile !== undefined });
+  // Block bodies, columns and inline boxes start in minipage mode (\@setminipage).
+  const builder = new VerticalListBuilder({ parskip: glue(profile?.paragraphSkipPt ?? 0), listColorWhatsits: profile !== undefined,
+    minipage: profile?.suppressInitialTopsep === true });
   const listSizes: (number | undefined)[] = [];
   const nearDisplay = new Set<number>();
   const paragraphs: { blockIndex: number; sourceStart: number; text: string; trace: string; old: number; fragment: boolean }[] = [];
@@ -118,6 +120,7 @@ export function runVerticalShadow(
       switch (event.kind) {
         case "par": builder.par(); break;
         case "list-begin":
+          if (event.inheritsPendingLabel && builder.listDepth === 0 && !builder.pendingLabel) builder.inheritPendingLabel();
           listSizes.push(event.fontSizePt);
           builder.beginList(listRegisters(profile, event.registerDepth, event.fontSizePt));
           break;
