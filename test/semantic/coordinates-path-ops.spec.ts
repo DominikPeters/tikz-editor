@@ -1143,6 +1143,37 @@ describe("semantic evaluator / coordinates and path ops", () => {
       expect("to" in end && Math.abs(end.to.y)).toBeCloseTo(1 * cm, 2);
     });
 
+    it("chooses auto node anchors with PGF's 0.05 dead zone, not a wide band around the axes", () => {
+      // TeX (dvisvgm): for (0,0) -- node[auto,draw] (4,0.8) the box sits with its south east corner at the
+      // path midpoint (offset by the 0.2pt outer sep), i.e. anchor "south east", not "south".
+      const source = String.raw`\begin{tikzpicture}
+    \draw (0,0) -- node[auto,draw] {x} (4,0.8);
+    \draw (6,0) -- node[auto,draw] {z} (6.8,4);
+    \draw (10,0) -- node[auto,draw] {v} (12,0.1);
+  \end{tikzpicture}`;
+      const result = evaluateSemantic(source);
+      const cm = 72.27 / 2.54;
+      const boxes = elementsOfKind(result.scene.elements, "Path").filter((path) => path.id.includes("node"));
+      expect(boxes).toHaveLength(3);
+      const extent = (path: (typeof boxes)[number]) => {
+        const points = path.commands.flatMap((command) => ("to" in command ? [command.to] : []));
+        const xs = points.map((point) => point.x);
+        const ys = points.map((point) => point.y);
+        return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+      };
+      // Slope 11 degrees: south east (box left of and above the midpoint).
+      const first = extent(boxes[0]!);
+      expect(first.maxX).toBeCloseTo(2 * cm - 0.2, 1);
+      expect(first.minY).toBeCloseTo(0.4 * cm + 0.2, 1);
+      // Slope 79 degrees: tangent (0.2, 0.98) is also past the dead zone on both axes, so south east.
+      const second = extent(boxes[1]!);
+      expect(second.maxX).toBeCloseTo(6.4 * cm - 0.2, 1);
+      expect(second.minY).toBeCloseTo(2 * cm + 0.2, 1);
+      // Slope 2.9 degrees: the y component (0.05) is inside the dead zone, so the plain "south" anchor.
+      const third = extent(boxes[2]!);
+      expect((third.minX + third.maxX) / 2).toBeCloseTo(11 * cm, 0);
+    });
+
     it("expands macros in circle radius path options", () => {
       const source = String.raw`\begin{tikzpicture}
     \def\r{1cm}

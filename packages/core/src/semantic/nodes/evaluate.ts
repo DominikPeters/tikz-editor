@@ -33,6 +33,7 @@ import type { DiagnosticPushFn, FeatureMarkFn, PlacementSegment } from "../path/
 import type { WorldPoint } from "../../coords/points.js";
 import type { WorldTransform } from "../../coords/transforms.js";
 import type { NodePlacementRecord, ResolvedStyle, SceneAdornment, SceneElement, ScenePathAttachment, ScenePathCommand } from "../types.js";
+import { autoAnchorFromVector } from "./auto-anchor.js";
 import { cloneCustomStyleRegistry, walkOptionEntriesWithCustomStyles } from "../style/custom-styles.js";
 import { expandOptionListMacros } from "../style/macro-options.js";
 import { resolveContextDelta } from "../style/resolve.js";
@@ -1528,27 +1529,8 @@ function directionToAnchor(direction: WorldPoint): string {
   if (!Number.isFinite(len) || len <= 1e-9) {
     return "center";
   }
-  const x = direction.x / len;
-  const y = direction.y / len;
-
-  const absX = Math.abs(x);
-  const absY = Math.abs(y);
-  if (absX <= 0.35) {
-    return y >= 0 ? "north" : "south";
-  }
-  if (absY <= 0.35) {
-    return x >= 0 ? "east" : "west";
-  }
-  if (x >= 0 && y >= 0) {
-    return "north east";
-  }
-  if (x >= 0 && y < 0) {
-    return "south east";
-  }
-  if (x < 0 && y >= 0) {
-    return "north west";
-  }
-  return "south west";
+  // The anchor points along `direction`; PGF's table is keyed by the tangent, which is `direction` turned by +90 degrees.
+  return autoAnchorFromVector(wp(-1 * (direction.y / len), direction.x / len));
 }
 
 function createNodeTextColorResolver(

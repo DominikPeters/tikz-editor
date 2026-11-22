@@ -13,6 +13,7 @@ import {
   type SemanticContext
 } from "../context.js";
 import { parseLength } from "../coords/parse-length.js";
+import { autoAnchorFromVector } from "../nodes/auto-anchor.js";
 import { applyNameScope } from "../nodes/named-coordinates.js";
 import { intersectRayWithPolygon } from "../nodes/shape-geometry.js";
 import { findTopLevelCharacter, readBalancedBlock, parseStyleValueAsOptionList } from "../style/option-utils.js";
@@ -1164,28 +1165,6 @@ function anchorFacingAway(degrees: number): string {
     return "north";
   }
   return "north west";
-}
-
-function autoAnchorFromVector(vector: Pick<WorldPoint | WorldVector, "x" | "y">): string {
-  if (vector.x > 0.05) {
-    if (vector.y > 0.05) {
-      return "south east";
-    }
-    if (vector.y < -0.05) {
-      return "south west";
-    }
-    return "south";
-  }
-  if (vector.x < -0.05) {
-    if (vector.y > 0.05) {
-      return "north east";
-    }
-    if (vector.y < -0.05) {
-      return "north west";
-    }
-    return "north";
-  }
-  return vector.y > 0 ? "east" : "west";
 }
 
 function pointOnUnitCircle(degrees: number): WorldPoint {
