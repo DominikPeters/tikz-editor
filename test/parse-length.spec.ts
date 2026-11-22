@@ -202,7 +202,9 @@ describe("parseLength units", () => {
       anchorRadius: 8,
       anchorTransform: worldTransform(0, 0, 0, 0, 0, 0)
     });
-    expect(evaluateRawCoordinate("(E.90)", context).world).toEqual({ x: 10, y: 24 });
+    // A singular node transform collapses the border to the centre, as the shared
+    // border routine does for named coordinates (see nodes-helpers.spec.ts).
+    expect(evaluateRawCoordinate("(E.90)", context).world).toEqual({ x: 10, y: 20 });
 
     writeNamedNodeGeometry(context, "P", {
       shape: "diamond",
