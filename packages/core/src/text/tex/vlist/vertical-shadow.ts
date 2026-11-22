@@ -16,20 +16,28 @@ import {
   type VerticalListRegisters,
 } from "./vertical-builder.js";
 
-export interface VerticalShadowBoundary {
-  readonly blockIndex: number;
+/** The builder's skip before one top-level vlist item. */
+export interface VerticalBuilderSkip {
+  /** Index of the item in the top-level vlist items. */
+  readonly index: number;
+  readonly kind: "paragraph" | "box" | "display";
+  /** blockIndex for paragraphs; the old planner's synthetic key for boxes and displays. */
+  readonly key: number;
   readonly sourceStart: number;
   readonly text: string;
+  /** Builder glue since the previous item, minus authored glue items that stay in the vlist. */
+  readonly glue: VerticalGlue;
+  readonly first: boolean;
+  /** The item is a display or next to one; displays are not modelled yet. */
+  readonly nearDisplay: boolean;
+  readonly trace: string;
+}
+
+export interface VerticalShadowBoundary extends VerticalBuilderSkip {
   readonly old: number;
   readonly builder: number;
-  /** The paragraph is next to a display; the builder does not model displays yet. */
-  readonly nearDisplay: boolean;
-  /** The first paragraph of this layout: its leading skip depends on the enclosing container. */
-  readonly first: boolean;
-  /** The paragraph inherits a list from an enclosing container that this layout cannot see. */
-  readonly fragment: boolean;
-  /** Events and items replayed since the previous paragraph, for diagnosis. */
-  readonly trace: string;
+  readonly oldStretch: number;
+  readonly oldShrink: number;
 }
 
 export interface VerticalShadowReport {
@@ -42,6 +50,17 @@ let listener: Listener | undefined;
 
 export function setVerticalShadowListener(next: Listener | undefined): void {
   listener = next;
+}
+
+let builderEnabled = true;
+
+/** Take the builder's glue where it agrees with the old planner (on by default; off restores the old flex). */
+export function setVerticalBuilderEnabled(enabled: boolean): void {
+  builderEnabled = enabled;
+}
+
+export function verticalBuilderEnabled(): boolean {
+  return builderEnabled;
 }
 
 export function verticalShadowEnabled(): boolean {
@@ -77,41 +96,39 @@ function listRegisters(profile: TexListLayoutProfile | undefined, depth: number,
 
 type Step =
   | { readonly at: number; readonly order: 1; readonly event: SimpleTexVerticalEvent }
-  | { readonly at: number; readonly order: 0; readonly item: TexVListItem };
+  | { readonly at: number; readonly order: 0; readonly item: TexVListItem; readonly index: number };
 
-/** Runs the builder over the raw vlist and events and reports per-paragraph skips. */
-export function runVerticalShadow(
+/** Replays the raw vlist and the IR's vertical events through the builder. */
+export function computeVerticalBuilderSkips(
   items: readonly TexVListItem[],
   events: readonly SimpleTexVerticalEvent[],
-  font: ResolvedTexFont,
   profile: TexListLayoutProfile | undefined
-): void {
-  if (!listener) return;
-  const oldSkips = new Map<number, number>();
-  const paragraphIds = new Set(items.flatMap(item => item.kind === "paragraph" ? [item.blockIndex] : []));
-  for (const skip of planSimpleTexParagraphVerticalSkips(items, font, profile)) {
-    if (skip.segmentIndex === 0) oldSkips.set(skip.blockIndex, Number(skip.size));
-  }
+): VerticalBuilderSkip[] {
   const steps: Step[] = [
     // A label line the parser emits at an \item or \end offset is set before that command's glue.
     ...events.map(event => ({ at: event.sourceStart, order: 1 as const, event })),
     // Items without a source span (a block's after-skip) stay after the item before them.
-    ...((): Step[] => { let at = 0; return items.map(item => ({ at: (at = item.sourceSpan?.start ?? at), order: 0 as const, item })); })(),
+    ...((): Step[] => { let at = 0; return items.map((item, index) => ({ at: (at = item.sourceSpan?.start ?? at), order: 0 as const, item, index })); })(),
   ].sort((left, right) => left.at - right.at || left.order - right.order);
 
   // Block bodies, columns and inline boxes start in minipage mode (\@setminipage).
   const builder = new VerticalListBuilder({ parskip: glue(profile?.paragraphSkipPt ?? 0), listColorWhatsits: profile !== undefined,
     minipage: profile?.suppressInitialTopsep === true });
   const listSizes: (number | undefined)[] = [];
-  const nearDisplay = new Set<number>();
-  const paragraphs: { blockIndex: number; sourceStart: number; text: string; trace: string; old: number; fragment: boolean }[] = [];
-  let oldSinceParagraph = 0;
+  const anchors: { index: number; id: string; kind: VerticalBuilderSkip["kind"]; key: number; sourceStart: number; text: string; authored: VerticalGlue; trace: string }[] = [];
+  let authored: VerticalGlue = ZERO_GLUE;
   let trace: string[] = [];
-  let previousWasDisplay = false;
   const trivlistTopsep = (): VerticalGlue => {
     const depth = builder.listDepth;
     if (depth === 0) return glue(profile?.trivlistTopsepPt ?? 8);
-    return listRegisters(profile, depth, listSizes.at(-1)).topsep;
+    // \beamer@cramped sets \topsep after \list captured its own skips; an alignment reads the live value.
+    return builder.currentTopsep() ?? (profile?.liveListTopsepPt !== undefined ? glue(profile.liveListTopsepPt)
+      : listRegisters(profile, depth, listSizes.at(-1)).topsep);
+  };
+  const anchor = (index: number, id: string, kind: VerticalBuilderSkip["kind"], key: number, sourceStart: number, text: string) => {
+    anchors.push({ index, id, kind, key, sourceStart, text, authored, trace: trace.join(" ") });
+    authored = ZERO_GLUE;
+    trace = [];
   };
   for (const step of steps) {
     if (step.order === 1) {
@@ -146,44 +163,58 @@ export function runVerticalShadow(
       }
       continue;
     }
-    const item = step.item;
+    const { item, index } = step;
+    const start = item.sourceSpan?.start ?? 0;
     if (item.kind === "paragraph") {
-      const id = String(item.blockIndex);
+      const id = `p${index}`;
       builder.startParagraph(id);
-      paragraphs.push({ blockIndex: item.blockIndex, sourceStart: item.sourceSpan.start, text: item.paragraph.text.slice(0, 24), trace: trace.join(" "),
-        old: oldSinceParagraph + (oldSkips.get(item.blockIndex) ?? 0),
-        fragment: item.paragraph.listContext !== undefined && builder.listDepth === 0 });
-      oldSinceParagraph = 0;
-      trace = [];
-      if (previousWasDisplay) nearDisplay.add(item.blockIndex);
-      previousWasDisplay = false;
+      anchor(index, id, "paragraph", item.blockIndex, start, item.paragraph.text.slice(0, 24));
     } else if (item.kind === "display-math" || item.kind === "display-alignment") {
-      const last = paragraphs.at(-1);
-      if (last) nearDisplay.add(last.blockIndex);
-      builder.startParagraph(`display:${item.sourceSpan.start}`);
-      previousWasDisplay = true;
-    } else {
-      trace.push(item.kind === "hbox" ? `hbox:${item.role?.kind ?? ""}` : item.kind === "glue" ? `glue:${Number(item.size)}` : item.kind);
-    }
-    if (item.kind === "paragraph") continue;
-    if (item.kind === "vbox" || item.kind === "hbox") {
-      oldSinceParagraph += oldSkips.get(-3_000_000 - (item.sourceSpan?.start ?? 0)) ?? 0;
-      builder.box(`box:${item.sourceSpan?.start ?? 0}`, item.kind === "hbox" && item.role?.kind === "external-flow" && item.role.consumesItemLabels === true);
+      const id = `d${index}`;
+      builder.startParagraph(id);
+      anchor(index, id, "display", -4_000_000 - start, start, "<display>");
+    } else if (item.kind === "vbox" || item.kind === "hbox") {
+      const id = `b${index}`;
+      builder.box(id, item.kind === "hbox" && item.role?.kind === "external-flow" && item.role.consumesItemLabels === true);
+      anchor(index, id, "box", -3_000_000 - start, start, item.kind === "hbox" ? `<${item.role?.kind ?? "hbox"}>` : "<vbox>");
     } else if (item.kind === "glue") {
-      // Authored glue stays in the vlist next to the old planner's skips.
-      oldSinceParagraph += Number(item.size);
-      builder.vskip(glue(Number(item.size)), "authored");
+      trace.push(`glue:${Number(item.size)}`);
+      const value = glue(Number(item.size), Number(item.stretch ?? 0), Number(item.shrink ?? 0));
+      authored = { natural: authored.natural + value.natural, stretch: authored.stretch + value.stretch, shrink: authored.shrink + value.shrink };
+      builder.vskip(value, "authored");
     } else if (item.kind === "penalty") {
       builder.penalty(Number(item.penalty));
     }
   }
+  const displayIndexes = new Set(anchors.flatMap((entry, position) => entry.kind === "display" ? [position] : []));
+  return anchors.map((entry, position) => {
+    const total = builder.glueBefore(entry.id);
+    return {
+      index: entry.index, kind: entry.kind, key: entry.key, sourceStart: entry.sourceStart, text: entry.text, trace: entry.trace,
+      glue: { natural: total.natural - entry.authored.natural, stretch: total.stretch - entry.authored.stretch, shrink: total.shrink - entry.authored.shrink },
+      first: position === 0,
+      nearDisplay: displayIndexes.has(position) || displayIndexes.has(position - 1),
+    };
+  });
+}
+
+/** Reports the builder's skips next to the old planner's, per top-level item. */
+export function runVerticalShadow(
+  items: readonly TexVListItem[],
+  events: readonly SimpleTexVerticalEvent[],
+  font: ResolvedTexFont,
+  profile: TexListLayoutProfile | undefined
+): void {
+  if (!listener) return;
+  const oldSkips = new Map<number, { size: number; stretch: number; shrink: number }>();
+  for (const skip of planSimpleTexParagraphVerticalSkips(items, font, profile)) {
+    if (skip.segmentIndex === 0) oldSkips.set(skip.blockIndex, { size: Number(skip.size), stretch: Number(skip.listStretch ?? 0), shrink: Number(skip.listShrink ?? 0) });
+  }
   listener({
     events,
-    boundaries: paragraphs.map((paragraph, index) => ({
-      first: index === 0,
-      ...paragraph,
-      builder: builder.glueSince(String(paragraph.blockIndex), id => paragraphIds.has(Number(id))).natural,
-      nearDisplay: nearDisplay.has(paragraph.blockIndex),
-    })),
+    boundaries: computeVerticalBuilderSkips(items, events, profile).map(skip => {
+      const old = oldSkips.get(skip.key);
+      return { ...skip, old: old?.size ?? 0, oldStretch: old?.stretch ?? 0, oldShrink: old?.shrink ?? 0, builder: skip.glue.natural };
+    }),
   });
 }

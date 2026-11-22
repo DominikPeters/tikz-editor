@@ -842,12 +842,21 @@ function paragraphBoundaryGlueItems(
 export function materializeParagraphVerticalGlueInVList(
   vlist: TexVListDocument,
   font: ResolvedTexFont,
-  listProfile?: TexListLayoutProfile
+  listProfile?: TexListLayoutProfile,
+  builderSkips?: readonly { readonly index: number; readonly glue: { readonly natural: number; readonly stretch: number; readonly shrink: number } }[]
 ): TexVListDocument {
-  return addParagraphVerticalGlueToVList(
-    vlist,
-    planSimpleTexParagraphVerticalSkips(vlist.items, font, listProfile)
-  );
+  let skips = planSimpleTexParagraphVerticalSkips(vlist.items, font, listProfile);
+  if (builderSkips) {
+    // Where the builder's natural skip matches, its glue (with the stretch and shrink of
+    // the skip that survives \addvspace) replaces the planned flex. See vertical-builder.ts.
+    const byIndex = new Map(builderSkips.map(skip => [skip.index, skip.glue]));
+    skips = skips.map(skip => {
+      const builder = skip.vlistPath.length === 1 && skip.segmentIndex === 0 ? byIndex.get(skip.vlistPath[0] ?? -1) : undefined;
+      if (!builder || Math.abs(builder.natural - Number(skip.size)) > 0.001) return skip;
+      return { ...skip, listStretch: texLength(builder.stretch), listShrink: texLength(builder.shrink) };
+    });
+  }
+  return addParagraphVerticalGlueToVList(vlist, skips);
 }
 
 export function materializeDisplayMathVerticalGlueInVList(

@@ -60,8 +60,8 @@ interface ListLevel {
   /** \@topsep: opening skip used by the first \item when not @noparlist. */
   readonly topsep: VerticalGlue;
   itemsep: VerticalGlue;
-  /** The live \topsep register, read by an alignment nested in this level. */
-  topsepRegister: VerticalGlue;
+  /** An explicitly assigned \topsep, read by an alignment nested in this level. */
+  topsepRegister: VerticalGlue | undefined;
   readonly noParList: boolean;
   /** \@outerparskip and \parskip as they were set by this level. */
   readonly outerParskip: VerticalGlue;
@@ -243,7 +243,7 @@ export class VerticalListBuilder {
     // \@outerparskip\parskip, then \list sets \parskip\parsep.
     this.outerParskip = this.parskip;
     this.parskip = parsep;
-    this.levels.push({ kind, topsepAdd, topsep: listTopsep, itemsep, topsepRegister: topsep, noParList, outerParskip: this.outerParskip,
+    this.levels.push({ kind, topsepAdd, topsep: listTopsep, itemsep, topsepRegister: undefined, noParList, outerParskip: this.outerParskip,
       parskip: this.parskip, savedParskip, savedOuterParskip });
   }
 

@@ -10,7 +10,7 @@ import {
 } from "./spacing.js";
 import type { TexVListDocument } from "./types.js";
 import type { SimpleTexVerticalEvent } from "../ir.js";
-import { runVerticalShadow, verticalShadowEnabled } from "./vertical-shadow.js";
+import { computeVerticalBuilderSkips, runVerticalShadow, verticalBuilderEnabled, verticalShadowEnabled } from "./vertical-shadow.js";
 import { texLength } from "../coordinates.js";
 
 export interface PreparedSimpleTexVList {
@@ -41,10 +41,14 @@ export function prepareSimpleTexVList(
 ): PreparedSimpleTexVList {
   const withListFonts = applyListBodyFonts(vlist, listProfile);
   if (verticalEvents && verticalShadowEnabled()) runVerticalShadow(withListFonts.items, verticalEvents, font, listProfile);
+  const builderSkips = verticalEvents && verticalBuilderEnabled()
+    ? computeVerticalBuilderSkips(withListFonts.items, verticalEvents, listProfile).filter(skip => !skip.first && !skip.nearDisplay)
+    : undefined;
   const paragraphGlue = materializeParagraphVerticalGlueInVList(
     withListFonts,
     font,
-    listProfile
+    listProfile,
+    builderSkips
   );
   const materialized = materializeDisplayMathVerticalGlueInVList(
     paragraphGlue,
