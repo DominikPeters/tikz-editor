@@ -223,7 +223,7 @@ export interface TexParagraphItem {
   readonly paragraph: TexParagraphInput;
 }
 
-export type TexHBoxRole = { readonly kind: "external-flow"; readonly flowKind?: "block" | "columns"; readonly followsColorChange?: boolean; readonly pendingListBoundaries?: readonly SimpleTexListContext[]; readonly baselineSkipPt?: TexLength; /** A block whose body holds a list or alignment leaks that list's closing skip into the enclosing lists. */ readonly containsList?: boolean } | {
+export type TexHBoxRole = { readonly kind: "external-flow"; readonly flowKind?: "block" | "columns"; readonly followsColorChange?: boolean; /** The box placed the item labels that were pending on entry (its first paragraph ran \everypar). */ readonly consumesItemLabels?: boolean; readonly pendingListBoundaries?: readonly SimpleTexListContext[]; readonly baselineSkipPt?: TexLength; /** A block whose body holds a list or alignment leaks that list's closing skip into the enclosing lists. */ readonly containsList?: boolean } | {
   readonly kind: "list-empty-line";
   readonly baselineSkipPt?: TexLength;
 } | {

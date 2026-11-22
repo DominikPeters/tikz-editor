@@ -204,9 +204,19 @@ export class VerticalListBuilder {
     this.nodes.push({ kind: "box", id });
   }
 
-  /** A box appended in vertical mode (a block, a columns box, a picture paragraph's box …). */
-  box(id: string): void {
+  /**
+   * A box appended in vertical mode (a block, a columns box, …). When the
+   * box's first paragraph ran \@item's \everypar, it placed the pending
+   * labels and cleared @inlabel, @newlist and @minipage.
+   */
+  box(id: string, consumesItemLabels = false): void {
     this.horizontal = false;
+    if (consumesItemLabels) {
+      this.inLabel = false;
+      this.newList = false;
+      this.noParItem = false;
+      this.minipage = false;
+    }
     this.nodes.push({ kind: "box", id });
   }
 

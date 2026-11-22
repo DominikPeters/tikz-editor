@@ -165,7 +165,7 @@ export function runVerticalShadow(
     if (item.kind === "paragraph") continue;
     if (item.kind === "vbox" || item.kind === "hbox") {
       oldSinceParagraph += oldSkips.get(-3_000_000 - (item.sourceSpan?.start ?? 0)) ?? 0;
-      builder.box(`box:${item.sourceSpan?.start ?? 0}`);
+      builder.box(`box:${item.sourceSpan?.start ?? 0}`, item.kind === "hbox" && item.role?.kind === "external-flow" && item.role.consumesItemLabels === true);
     } else if (item.kind === "glue") {
       // Authored glue stays in the vlist next to the old planner's skips.
       oldSinceParagraph += Number(item.size);
