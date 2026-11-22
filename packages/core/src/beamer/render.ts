@@ -262,6 +262,8 @@ function beamerListLayoutProfile(
   const profile: TexListLayoutProfile = {
     ...BEAMER_LIST_LAYOUT_PROFILE,
     trivlistTopsepPt: beamerTrivlistSpacing(theme).naturalPt,
+    trivlistTopsepStretchPt: beamerTrivlistSpacing(theme).stretchPt,
+    trivlistTopsepShrinkPt: beamerTrivlistSpacing(theme).shrinkPt,
     sizeOverrides: beamerListSizeOverrides(theme),
     dimensionFontSizePt: beamerNamedFontSize(classSize, "normalsize").sizePt,
     paragraphSkipPt: Number(theme.options["paragraph-skip-pt"] ?? 0),
@@ -2143,7 +2145,8 @@ function prepareFrameParagraph(params: {
     ...(closingTrivlistSkip > 0 ? { closesWithTrivlistSkip: true } : {}),
     trailingListGlue: {
       naturalPt: trailingListSkip,
-      shrinkPt: trailingListShrink,
+      // \endtrivlist's \addvspace\topsep keeps its shrink under the frame box's glue setting.
+      shrinkPt: trailingListShrink + (trailingTrivlistSkip > 0 ? params.listProfile.trivlistTopsepShrinkPt ?? 0 : 0),
     },
     trailingVerticalSpacePreviousDepth:
       previousDepthBeforeTrailingVerticalSpace(paragraph),
@@ -3571,7 +3574,7 @@ async function prepareColumnContent(params: {
   // Minipages reset list depth, but still inherit the outer list's live topsep.
   const listProfile = baseListProfile.liveListTopsepPt !== undefined &&
     (references.ambientTextAt?.listDepthAt?.(column.bodySpan.from, true) ?? 0) > 0
-    ? { ...baseListProfile, trivlistTopsepPt: baseListProfile.liveListTopsepPt, trivlistPartopsepPt: 0 }
+    ? { ...baseListProfile, trivlistTopsepPt: baseListProfile.liveListTopsepPt, trivlistTopsepStretchPt: 0, trivlistTopsepShrinkPt: 0, trivlistPartopsepPt: 0 }
     : baseListProfile;
   // A column inside center/flushleft opens its minipage while that trivlist's first item is
   // still pending, so a list that starts the column adds no opening topsep.

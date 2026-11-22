@@ -180,7 +180,7 @@ export function parseBeamerFrameBody(
       break;
     }
     const end = requireArrayValue(tokens, endIndex);
-    if (params.preserveInlinePictures && ["tikzpicture", "center", "flushleft", "flushright"].includes(token.name)) {
+    if ((params.preserveInlinePictures || params.embedFlowBoxes === true) && ["tikzpicture", "center", "flushleft", "flushright"].includes(token.name)) {
       index = endIndex;
       continue;
     }

@@ -572,8 +572,14 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
       0,
       expect.closeTo(4.560438, 6),
       0,
-      expect.closeTo(4.560438, 6),
     ]);
+    // The center's \addvspace\topsep absorbs the last display's
+    // \belowdisplayshortskip: pdfTeX's list nets those skips to
+    // 9pt plus 3pt minus 5pt, set with the frame's shrink ratio.
+    const trivlistSkip = body.vlistLayout.boxReport.items.find(
+      (item) => item.glue?.origin?.kind === "trivlist-boundary"
+    );
+    expect(Number(trivlistSkip?.height)).toBeCloseTo(9 - 5 * (11 - 7.120875) / 6, 5);
     expect(result.layout.embeddedTikz[0]?.bounds.y).toBeCloseTo(
       160.025921,
       6

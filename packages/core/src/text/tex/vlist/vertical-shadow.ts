@@ -126,7 +126,8 @@ export function createVerticalEventApplier(
   const listSizes: (number | undefined)[] = [];
   const trivlistTopsep = (): VerticalGlue => {
     const depth = builder.listDepth;
-    if (depth === 0) return glue(profile?.trivlistTopsepPt ?? 0.8 * (listSizes.at(-1) ?? 10));
+    if (depth === 0) return glue(profile?.trivlistTopsepPt ?? 0.8 * (listSizes.at(-1) ?? 10),
+      profile?.trivlistTopsepStretchPt ?? 0, profile?.trivlistTopsepShrinkPt ?? 0);
     // \beamer@cramped sets \topsep after \list captured its own skips; an alignment reads the live value.
     return builder.currentTopsep() ?? (profile?.liveListTopsepPt !== undefined ? glue(profile.liveListTopsepPt)
       : listRegisters(profile, depth, listSizes.at(-1)).topsep);

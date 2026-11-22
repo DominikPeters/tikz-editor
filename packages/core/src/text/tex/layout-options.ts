@@ -78,6 +78,8 @@ export interface TexListLayoutProfile {
   readonly selectBodyFontBeforeList?: boolean;
   /** Class-owned center/flushleft/flushright (trivlist) boundary skips. */
   readonly trivlistTopsepPt?: number;
+  readonly trivlistTopsepStretchPt?: number;
+  readonly trivlistTopsepShrinkPt?: number;
   /** Live topsep after a class's begin-list hook, distinct from captured list boundary glue. */
   readonly liveListTopsepPt?: number;
   readonly trivlistPartopsepPt?: number;

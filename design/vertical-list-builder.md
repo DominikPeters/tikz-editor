@@ -260,6 +260,11 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   frame balances against beamer's initial `\vbox{}`, \prevdepth 0pt); the
   frame piece adds no interline glue before such a box. Unsupported package
   boxes stay source cards. The skips' `plus 2pt` stretch is not modeled yet.
+  Top-level pictures (`tikzpicture`, a `center` around one) stay in the
+  frame's text as inline boxes, as they already did in block bodies. The
+  outer `center`'s `\topsep` now carries its 9pt plus 3pt minus 5pt (size11.clo),
+  and absorbs a preceding display's below skip through `\addvspace`, as
+  pdfTeX's list nets it.
   The cooperative-render test used empty blocks to split frame text into
   separate layout units; a frame body is now one unit, so the test puts each
   graphic in its own block body.
@@ -267,7 +272,7 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
 ## Next
 
 1. **Beamer containers (step 4), remaining:** extend the embedding to
-   top-level pictures and title pages, and
+   title pages, and
    build block bodies and columns as nested vlists, until the frame flow is a
    single paragraph item and `positionPreparedFrameFlow`'s glue rules,
    `leadingAdjustment`, `sharedTrivlistSkip`, `trailingListGlue` and the regex
