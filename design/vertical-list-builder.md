@@ -1,6 +1,6 @@
 # One vertical-list builder for text, lists and Beamer containers
 
-Status: in progress (2026-11-22). Steps 1–2 done, step 3 partly (see "Progress"). Survey and evidence: `design/engine-survey/`. TeX references:
+Status: in progress (2026-11-22). Steps 1–3 and the display stage done; Beamer containers next (see "Progress" and "Next"). Survey and evidence: `design/engine-survey/`. TeX references:
 `tex-src/` (see `tex-src/README.md`).
 
 ## Problem
@@ -217,29 +217,48 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   (`materializeParagraphVerticalGlueInVList`). All suites and the fuzz
   regression manifest pass.
 
+- **Layout stage (displays, baseline glue)**: `vlist/vertical-layout.ts`
+  replays the measured vlist and the events through the builder and replaces
+  `resolveDisplayMathVerticalGlueInVList` for documents with events
+  (default; `VLIST_LAYOUT=0` restores the old path). The builder tracks
+  `\prevdepth` and appends baseline/lineskip glue (tex.web §679); displays
+  take the normal/short above skip from `\predisplaysize`, the below skip
+  follows that variant, and horizontal mode resumes after the display;
+  display alignment rows and `\intertext` keep their own glue. Also added:
+  `whatsit` events for vertical-mode `\color`; list events carry the
+  register font size (Beamer selects a nested list's body font, e.g.
+  `\small`, before `\list` reads `\@listi`); `quote`/`quotation` are lists;
+  `thebibliography` has zero itemsep/topsep/partopsep and no color;
+  `\partopsep` only after an explicit `\par` (LuaLaTeX). Across all fidelity
+  fixtures the natural glue equals the old resolution (`VLIST_COMPARE=1`
+  prints per-item differences); stretch/shrink differ in 471 places where TeX's
+  glue arithmetic now carries over (e.g. a zero-size `\parskip` with 1pt
+  stretch). Piece edges (glue before the first and after the last material of
+  a frame piece, block body or column) and material vboxes still come from the
+  old resolution, which is why the old planner still runs.
+
 ## Next
 
-1. **Layout-stage builder.** The measurer looks paragraphs up by `blockIndex`
-   (`createMeasuredParagraphVListMeasurer`), and the display resolution stage
-   already inserts glue after measurement, so no reserved slots are needed.
-   Attach the IR events to `TexVListDocument`, and at
-   `layoutTexVListFromMeasuredParagraphs` run the builder with paragraph
-   measurements, so displays choose normal/short skips from
-   `\predisplaysize` (tex.web §1146). That stage
-   (`resolveDisplayMathVerticalGlueInItems`, ~430 lines) also produces the
-   interline glue (tex.web §679) for paragraph, display and box boundaries
-   inside the grouped list vboxes; the builder should take that over too
-   (`box(height, depth)` appends baselineskip/lineskip glue from `prevdepth`),
-   which means walking the grouped document in order rather than the flat one.
-2. **Displays in the builder**: `display(above, below)` after the variant
-   choice; the empty-line paragraph when a display starts in vertical mode;
-   `\par` after a display ends an empty paragraph without output. Compare
-   final line positions (old vs builder) on all fixtures, then the fidelity
-   suites.
-3. **Beamer containers (step 4)**: build block bodies and columns as nested
-   builders (`minipage: true`, `\leavevmode` for columns), so first-item rules
-   (`leadingBeamerTrivlistAdjustment`, column interline/clamp code) are
-   replaced rather than adjusted.
-4. Delete the planner's scope-diff state once items of all three kinds come
-   from the builder.
-
+1. **Beamer containers (step 4), chained builders.** An experiment that
+   stopped extracting top-level blocks and columns into separate frame pieces
+   (sending them through the inline-flow path as external boxes) broke 439
+   Beamer tests: frame pieces carry geometry, overlay and emission behaviour
+   the inline path does not reproduce, so a single vlist per frame body is a
+   later step. Instead, keep the pieces and run one frame-level builder over
+   them in order: each paragraph piece exposes the builder operations its
+   layout replayed (events and leaves with metrics); blocks, columns, pictures,
+   vertical space and title pages become builder operations from their beamer
+   templates (block begin `\par\vskip\medskipamount`, end `\vskip\smallskipamount`;
+   column `minipage` + `\leavevmode`; a picture paragraph). Piece positions come
+   from the frame builder, replacing `positionPreparedFrameFlow`'s glue,
+   `leadingAdjustment`, `sharedTrivlistSkip`, `trailingListGlue` /
+   `trailingScopedBeamerListSkip`, `trailingBeamerTrivlistSkip` and the
+   column/block-body stacking rules. Columns and block bodies are nested
+   frame-level builders with `minipage: true`.
+2. **Material vboxes** (`\parbox`, `minipage` in text): pass the box body's
+   IR events through `rebaseSimpleTexBoxBody` and build them as nested builders.
+3. **Delete** `planSimpleTexParagraphVerticalSkips`'s scope-diff state,
+   `materializeParagraphVerticalGlueInVList`'s planning and
+   `resolveDisplayMathVerticalGlueInItems` once no caller needs them. Until
+   then the layout stage also runs the old resolution for piece edges, which
+   costs one extra pass per layout.
