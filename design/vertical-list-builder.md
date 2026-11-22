@@ -239,22 +239,22 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
 
 ## Next
 
-1. **Beamer containers (step 4), chained builders.** An experiment that
-   stopped extracting top-level blocks and columns into separate frame pieces
-   (sending them through the inline-flow path as external boxes) broke 439
-   Beamer tests: frame pieces carry geometry, overlay and emission behaviour
-   the inline path does not reproduce, so a single vlist per frame body is a
-   later step. Instead, keep the pieces and run one frame-level builder over
-   them in order: each paragraph piece exposes the builder operations its
-   layout replayed (events and leaves with metrics); blocks, columns, pictures,
-   vertical space and title pages become builder operations from their beamer
-   templates (block begin `\par\vskip\medskipamount`, end `\vskip\smallskipamount`;
-   column `minipage` + `\leavevmode`; a picture paragraph). Piece positions come
-   from the frame builder, replacing `positionPreparedFrameFlow`'s glue,
-   `leadingAdjustment`, `sharedTrivlistSkip`, `trailingListGlue` /
-   `trailingScopedBeamerListSkip`, `trailingBeamerTrivlistSkip` and the
-   column/block-body stacking rules. Columns and block bodies are nested
-   frame-level builders with `minipage: true`.
+1. **Beamer containers (step 4): one vertical list per container.** Top-level
+   blocks and columns go through the same path as nested ones: the frame body
+   is laid out as one TeX vlist in which they are external boxes
+   (`projectBeamerInlineFlow` / `resolveBlockBox`), so the builder places
+   them. A first experiment (`VLIST_INLINE_BLOCKS=1`, top-level parse only)
+   fails 49 of 1,859 Beamer tests: about 30 TeX comparisons, almost all
+   columns placement (`[b]`/`[T]` reference points, nested fractional widths,
+   scoped columns), and about 15 tests that assert today's flow-item
+   structure. The TeX comparisons are fixed in the builder and the IR; the
+   structural tests are updated to the new architecture. Then extend the same
+   treatment to top-level pictures, theorems, `tcolorbox`, proofs and title
+   pages, and build block bodies and columns as nested vlists, until the frame
+   flow is a single paragraph item and `positionPreparedFrameFlow`'s glue rules,
+   `leadingAdjustment`, `sharedTrivlistSkip`, `trailingListGlue` and the regex
+   helpers can go. A chained per-piece builder was considered and rejected: it
+   would preserve the piece boundaries that cause the duplication.
 2. **Material vboxes** (`\parbox`, `minipage` in text): pass the box body's
    IR events through `rebaseSimpleTexBoxBody` and build them as nested builders.
 3. **Delete** `planSimpleTexParagraphVerticalSkips`'s scope-diff state,
