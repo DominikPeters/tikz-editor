@@ -2535,8 +2535,15 @@ async function prepareBlockWithTheme(params: {
   const terminalBodyFlow = bodyFlow?.items.at(-1)?.item;
   // Rounded bodies end a minipage, whose terminal unskip removes the last
   // list/block skip. Intermediate body items retain that glue.
+  // A display's below skip is likewise the paragraph's last item.
+  const terminalDisplaySkip = (paragraph: LaidParagraph): number => {
+    const last = paragraph.layout.vlistLayout.boxReport.items.at(-1);
+    return last?.itemKind === "glue" && last.glue?.origin?.kind === "display-math-boundary" && last.glue.origin.side === "below"
+      ? Number(last.height) : 0;
+  };
   const terminalBodySkip = plan.style === "rounded"
-    ? terminalBodyFlow?.kind === "paragraph" ? terminalBodyFlow.trailingListGlue.naturalPt + (terminalBodyFlow.trailingTrivlistSkipPt ?? 0)
+    ? terminalBodyFlow?.kind === "paragraph" ? terminalBodyFlow.trailingListGlue.naturalPt + (terminalBodyFlow.trailingTrivlistSkipPt ?? 0) +
+        (terminalBodyFlow.trailingListGlue.naturalPt + (terminalBodyFlow.trailingTrivlistSkipPt ?? 0) > 0 ? 0 : terminalDisplaySkip(terminalBodyFlow.paragraph))
       : terminalBodyFlow?.kind === "block" ? terminalBodyFlow.block.plan.geometry.afterSkipPt : 0
     : 0;
   let trailingBodySkip = 0;
@@ -3593,10 +3600,12 @@ async function prepareColumnContent(params: {
         const interline = startingBaseline - (previousDepth ?? 0) - nextHeight;
         // A display paragraph's own vlist already begins with its baseline glue, which that
         // starting height includes; only the previous box's depth is left to correct.
-        const startsWithDisplayGlue = prepared.kind === "paragraph" && previousDepth != null && !leadingBlock &&
-          (leadingGlue => leadingGlue?.glue?.origin?.kind === "display-math-interline" && Number(leadingGlue.height) > 0)(
-            prepared.paragraph.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "penalty"));
-        prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) + (interline < 0 && !startsWithDisplayGlue ? 1 : interline);
+        const leadingGlue = prepared.kind === "paragraph" && previousDepth != null && !leadingBlock
+          ? prepared.paragraph.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "penalty") : undefined;
+        const displayGlue = leadingGlue?.glue?.origin?.kind === "display-math-interline" ? Number(leadingGlue.height) : 0;
+        // TeX still falls back to \lineskip when that whole baseline gap is negative.
+        prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) +
+          (interline + displayGlue < 0 ? 1 - displayGlue : interline);
       }
       const precedingSkip = previous?.kind === "paragraph" ? previous.trailingSkipPt
         : previous?.kind === "block" ? previous.block.plan.geometry.afterSkipPt : 0;

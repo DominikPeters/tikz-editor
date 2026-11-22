@@ -1660,6 +1660,39 @@ Cent.
 \par Witness`, 11, "default", "43"),
     baselines: [["Cent.", 87.573364], ["Witness", 106.193954]],
   },
+  {
+    name: "falls back to lineskip before a display that follows a deep block in a column",
+    source: slide(String.raw`Lead.\par
+\begin{columns}[onlytextwidth,t]
+\begin{column}{0.46\textwidth}Left\end{column}
+\begin{column}{0.50\textwidth}
+\begin{block}{Iter}
+\begin{tabular}{lrr}Method&Cost&Error\\\hline
+Fresh0&13&10\\
+Fresh1&23&13\\
+Global2&8&2\\
+\end{tabular}
+\end{block}
+\[E=\sum_{i=1}^{n}w_i x_i\]
+\end{column}
+\end{columns}
+\par Witness`, 9, "default", "43"),
+    baselines: [["E=wx", 123.583801], ["Witness", 141.40451]],
+  },
+  {
+    name: "unskips a terminal display skip after columns in a rounded block",
+    source: slide(String.raw`Lead.\par
+\begin{alertblock}{Message passing}
+\begin{columns}[onlytextwidth,c]
+\begin{column}{0.38\textwidth}Left\end{column}
+\begin{column}{0.58\textwidth}Right\end{column}
+\end{columns}
+\par
+\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\]
+\end{alertblock}
+\par Witness`, 9, "Madrid", "43"),
+    baselines: [["cd", 102.898178], ["Witness", 123.56134]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {
