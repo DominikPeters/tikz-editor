@@ -146,6 +146,14 @@ function resolveOptionsForNodeAdornmentPlan(
   return rawSignature === expandedSignature ? options : expandedOptions;
 }
 
+function flattenOptionListCustomStyles(options: OptionListAst, customStyles: SemanticContext["stack"][number]["customStyles"]): OptionListAst {
+  const entries: OptionEntry[] = [];
+  walkOptionEntriesWithCustomStyles([options], cloneCustomStyleRegistry(customStyles), (entry) => entries.push(entry), []);
+  return entries.length === options.entries.length && entries.every((entry, index) => entry === options.entries[index])
+    ? options
+    : { ...options, entries };
+}
+
 function nodeAdornmentControlSignature(options: OptionListAst | undefined): string {
   if (!options) {
     return "";
@@ -829,7 +837,12 @@ function evaluatePathInFrame(
         if (pathItem.kind !== "PathOption") throw new Error("Unexpected path operation handler");
         const item = pathItem;
         const expandedOptions = expandOptionListMacros([item.options], builder.treeFrameState.macroBindings, context.macroTraceCollector ?? undefined)[0] ?? item.options;
-        const expandedItem = expandedOptions === item.options ? item : { ...item, options: expandedOptions };
+        const macroExpandedItem = expandedOptions === item.options ? item : { ...item, options: expandedOptions };
+        // circle/ellipse/arc parameters are ordinary keys in PGF, so styles such as big/.style={radius=1cm} apply.
+        const expandedItem =
+          builder.pendingCircleCenter || builder.pendingEllipseCenter || builder.pendingArc
+            ? { ...macroExpandedItem, options: flattenOptionListCustomStyles(macroExpandedItem.options, builder.treeFrameState.customStyles) }
+            : macroExpandedItem;
         if (builder.pendingCircleCenter) {
           const parsed = extractCircleShapeOptions(expandedItem, builder.treeFrameState.macroBindings, context.macroTraceCollector ?? undefined);
           if (parsed.radius != null) {

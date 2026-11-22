@@ -1117,6 +1117,32 @@ describe("semantic evaluator / coordinates and path ops", () => {
       }
     });
 
+    it("reads circle, ellipse and arc parameters from styles used in path options", () => {
+      // PGF runs /tikz/radius, x radius, y radius, start angle, ... as ordinary keys, so styles that set them apply.
+      const source = String.raw`\begin{tikzpicture}
+    \tikzset{big/.style={radius=1.7cm}, wide/.style={x radius=1.5cm,y radius=0.5cm}, quarter/.style={start angle=0,end angle=90,radius=1cm}}
+    \draw (0,0) circle[big];
+    \draw (4,0) ellipse[wide];
+    \draw (8,0) arc[quarter];
+    \draw (0,-4) circle[big,radius=5mm];
+  \end{tikzpicture}`;
+      const result = evaluateSemantic(source);
+      expect(result.diagnostics.filter((diagnostic) => diagnostic.severity === "error")).toEqual([]);
+      const cm = 72.27 / 2.54;
+      const circles = elementsOfKind(result.scene.elements, "Circle");
+      expect(circles.map((circle) => circle.radius)).toEqual([expect.closeTo(1.7 * cm, 3), expect.closeTo(0.5 * cm, 3)]);
+      const ellipses = elementsOfKind(result.scene.elements, "Ellipse");
+      expect(ellipses).toHaveLength(1);
+      expect(ellipses[0]!.rx).toBeCloseTo(1.5 * cm, 3);
+      expect(ellipses[0]!.ry).toBeCloseTo(0.5 * cm, 3);
+      const arc = elementsOfKind(result.scene.elements, "Path").find((path) => path.commands.length > 1 && path.commands[0]?.kind === "M" && path.commands[0].to.x > 8 * cm - 1);
+      expect(arc).toBeDefined();
+      const end = arc!.commands.at(-1)!;
+      // Arc from angle 0 to 90 of radius 1cm starting at (8cm,0) ends at (7cm,1cm).
+      expect("to" in end && end.to.x).toBeCloseTo(7 * cm, 2);
+      expect("to" in end && Math.abs(end.to.y)).toBeCloseTo(1 * cm, 2);
+    });
+
     it("expands macros in circle radius path options", () => {
       const source = String.raw`\begin{tikzpicture}
     \def\r{1cm}
