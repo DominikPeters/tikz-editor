@@ -247,7 +247,14 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
    fails 49 of 1,859 Beamer tests: about 30 TeX comparisons, almost all
    columns placement (`[b]`/`[T]` reference points, nested fractional widths,
    scoped columns), and about 15 tests that assert today's flow-item
-   structure. The TeX comparisons are fixed in the builder and the IR; the
+   structure. After fixing the frame piece's starting baselineskip (it came
+   from a source regex) and settling inline-flow label transfers across
+   nested boxes, 22 remain: all fidelity-campaign and spacing fixtures pass in
+   this mode; left are continuation pages (a block's before-skip is part of
+   its box, so it cannot be discarded at a page break as TeX discards the
+   template's `\vskip\medskipamount`: block before/after skips should become
+   vlist glue), theorem/tcolorbox/placeholder/paint-probe cases, and
+   structural tests. The TeX comparisons are fixed in the builder and the IR; the
    structural tests are updated to the new architecture. Then extend the same
    treatment to top-level pictures, theorems, `tcolorbox`, proofs and title
    pages, and build block bodies and columns as nested vlists, until the frame
