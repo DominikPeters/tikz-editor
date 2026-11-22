@@ -265,6 +265,13 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   outer `center`'s `\topsep` now carries its 9pt plus 3pt minus 5pt (size11.clo),
   and absorbs a preceding display's below skip through `\addvspace`, as
   pdfTeX's list nets it.
+  Block and theorem bodies are vertical lists in the same way: boxes inside
+  them stay in the body's text (`embedNestedFlowBoxes`; the box parse is
+  renamed to its structural id). Column bodies still extract theirs. On the
+  way: a display after an embedded box starts a paragraph (empty line, short
+  skips); a box containing paragraphs ends minipage mode (`\@minipagefalse`
+  is global, ltboxes.dtx), so a following alignment's `\addvspace` applies;
+  a body ending in an embedded box keeps its depth as `\prevdepth`.
   The cooperative-render test used empty blocks to split frame text into
   separate layout units; a frame body is now one unit, so the test puts each
   graphic in its own block body.
@@ -273,7 +280,7 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
 
 1. **Beamer containers (step 4), remaining:** extend the embedding to
    title pages, and
-   build block bodies and columns as nested vlists, until the frame flow is a
+   build column bodies as vlists, until the frame flow is a
    single paragraph item and `positionPreparedFrameFlow`'s glue rules,
    `leadingAdjustment`, `sharedTrivlistSkip`, `trailingListGlue` and the regex
    helpers can go. A chained per-piece builder was considered and rejected: it

@@ -68,6 +68,16 @@ describe("VerticalListBuilder", () => {
     expect(natural(b, "one")).toBe(0);
   });
 
+  it("leaves minipage mode after a box whose paragraphs ran \\everypar", () => {
+    const b = new VerticalListBuilder({ minipage: true });
+    b.box("block", false, undefined, true);
+    b.vskip(glue(3, 1, 1));
+    b.beginTrivlist({ topsep: glue(8, 2, 4), partopsep: glue(0) });
+    b.startParagraph("plain");
+    // \@minipagefalse is global, so the alignment's \addvspace replaces the block's 3pt skip.
+    expect(natural(b, "plain")).toBe(8);
+  });
+
   it("appends baseline glue from prevdepth, falling back to lineskip (tex.web §679)", () => {
     const b = new VerticalListBuilder({ prevDepth: 2 });
     b.startParagraph("one", { height: 7, depth: 2, baselineSkip: 12 });

@@ -200,4 +200,8 @@ export type ParseBeamerFrameBodyParams = {
    * editing leaves this off.
    */
   embedFlowBoxes?: boolean;
+  /** Embed boxes inside the bodies of extracted blocks and theorems (not inside columns yet). */
+  embedNestedFlowBoxes?: boolean;
+  /** Internal: a nested body parse does not repeat the structural parse. */
+  skipStructural?: boolean;
 };

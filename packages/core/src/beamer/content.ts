@@ -243,6 +243,7 @@ export function parseBeamerFrameBody(
               theoremTemplate,
               theoremOccurrences,
               overlays,
+              ...(params.embedNestedFlowBoxes === true ? { embedNested: true } : {}),
             })
           : parseBlock({
             context,
@@ -253,6 +254,7 @@ export function parseBeamerFrameBody(
             diagnostics,
             theoremOccurrences,
             overlays,
+            ...(params.embedNestedFlowBoxes === true ? { embedNested: true } : {}),
           })
       );
     if (params.embedFlowBoxes === true && node.kind !== "tikzpicture" && node.kind !== "unsupported") {
@@ -270,8 +272,8 @@ export function parseBeamerFrameBody(
   }
 
   pushTextNode(source, { from: cursor, to: frame.bodySpan.to }, frame.id, children);
-  const structural = params.embedFlowBoxes === true
-    ? parseBeamerFrameBody({ ...params, embedFlowBoxes: false, overlays, syntax: context.syntax, theoremOccurrences }).children
+  const structural = params.embedFlowBoxes === true && params.skipStructural !== true
+    ? parseBeamerFrameBody({ ...params, embedFlowBoxes: false, embedNestedFlowBoxes: false, overlays, syntax: context.syntax, theoremOccurrences }).children
     : undefined;
   return {
     kind: "frame-body",
@@ -324,6 +326,7 @@ function parseTheorem(params: {
   theoremTemplate: BeamerTheoremTemplateVariant;
   theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
   overlays: BeamerOverlayModel;
+  embedNested?: boolean;
 }): BeamerTheoremBodyNode {
   const {
     context,
@@ -404,7 +407,7 @@ function parseTheorem(params: {
   };
   const bodySpan = { from: cursor, to: end.span.from };
   const children = parseBlockContent(context, bodySpan,
-    `${ownerId}:theorem:${nodeIndex}`, params.overlays, params.theoremOccurrences);
+    `${ownerId}:theorem:${nodeIndex}`, params.overlays, params.theoremOccurrences, params.embedNested === true);
   return {
     kind: "theorem",
     id: `${ownerId}:theorem:${nodeIndex}`,
@@ -802,6 +805,7 @@ function parseBlock(params: {
   diagnostics: Diagnostic[];
   theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
   overlays: BeamerOverlayModel;
+  embedNested?: boolean;
 }): BeamerBlockBodyNode | BeamerUnsupportedBodyNode {
   const {
     context,
@@ -829,7 +833,7 @@ function parseBlock(params: {
       kind: "block", packageBox: "tcolorbox", environment: "block", id,
       span: { from: begin.span.from, to: end.span.to }, beginSpan: begin.span, endSpan: end.span,
       ...(options !== undefined ? { options } : {}), title: parsed.title, bodySpan,
-      children: parseBlockContent(context, bodySpan, id, params.overlays, params.theoremOccurrences),
+      children: parseBlockContent(context, bodySpan, id, params.overlays, params.theoremOccurrences, params.embedNested === true),
     };
   }
   // An action spec (`\begin{block}<2->`) precedes the title; visibility is
@@ -869,7 +873,7 @@ function parseBlock(params: {
     to: end.span.from,
   };
   const children = parseBlockContent(context, bodySpan,
-    `${ownerId}:block:${nodeIndex}`, params.overlays, params.theoremOccurrences);
+    `${ownerId}:block:${nodeIndex}`, params.overlays, params.theoremOccurrences, params.embedNested === true);
   return {
     kind: "block",
     id: `${ownerId}:block:${nodeIndex}`,
@@ -890,9 +894,11 @@ function parseBlockContent(
   bodySpan: Span,
   ownerId: string,
   overlays: BeamerOverlayModel,
-  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>,
+  embed = false
 ): BeamerFrameBodyNode[] {
   return parseBeamerFrameBody({ source: context.source, syntax: context.syntax, preserveInlinePictures: true,
+    ...(embed ? { embedFlowBoxes: true, embedNestedFlowBoxes: true, skipStructural: true } : {}),
     frame: { kind: "frame", id: ownerId, sourceOrder: 0, span: bodySpan,
       beginSpan: { from: bodySpan.from, to: bodySpan.from }, endSpan: { from: bodySpan.to, to: bodySpan.to },
       headerSpan: { from: bodySpan.from, to: bodySpan.from }, bodySpan,

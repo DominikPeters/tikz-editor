@@ -890,7 +890,7 @@ function materializeDisplayMathVerticalGlueInItems(
       // display then follows the remaining empty line of the paragraph.
       const overfullLabel = item.targetWidth === 0 && previous?.kind === "paragraph" &&
         previous.sourceSpan.start === previous.sourceSpan.end && previous.paragraph.listContext?.showLabel === true;
-      const insertsEmptyLine = overfullLabel || ((index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay !== undefined);
+      const insertsEmptyLine = overfullLabel || ((index === 0 || item.startsAfterExplicitPar === true || followsVerticalModeBox(sourceItems, index)) && profile.leadingDisplay !== undefined);
       if (insertsEmptyLine) {
         items.push(leadingDisplayEmptyLineGlue(item, profile, index > 0));
         items.push(displayEmptyLineHBox(item, "before-display"));
@@ -907,7 +907,8 @@ function materializeDisplayMathVerticalGlueInItems(
       continue;
     }
     if (item.kind === "display-alignment") {
-      if ((index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay) {
+      const startsParagraph = index === 0 || item.startsAfterExplicitPar === true || followsVerticalModeBox(sourceItems, index);
+      if (startsParagraph && profile.leadingDisplay) {
         items.push(leadingDisplayEmptyLineGlue(item, profile, index > 0));
         items.push(displayEmptyLineHBox(item, "before-display"));
       }
@@ -915,7 +916,7 @@ function materializeDisplayMathVerticalGlueInItems(
         item,
         "above",
         profile,
-        (index === 0 || item.startsAfterExplicitPar) && profile.leadingDisplay ? "short" : undefined,
+        startsParagraph && profile.leadingDisplay ? "short" : undefined,
         font
       ));
       items.push(...displayAlignmentMaterialItems(item, displayMathProfileForItem(item, profile)));
@@ -925,6 +926,19 @@ function materializeDisplayMathVerticalGlueInItems(
     items.push(item);
   }
   return items;
+}
+
+/**
+ * A display after a box appended in vertical mode (an embedded block or columns box, which end
+ * with \par) starts a paragraph: TeX ships its empty first line and takes the short skips.
+ */
+function followsVerticalModeBox(items: readonly TexVListItem[], index: number): boolean {
+  for (let cursor = index - 1; cursor >= 0; cursor--) {
+    const previous = items[cursor];
+    if (previous?.kind === "glue" || previous?.kind === "penalty") continue;
+    return previous?.kind === "hbox" && previous.role?.kind === "external-flow";
+  }
+  return false;
 }
 
 function displayMathProfileForItem(

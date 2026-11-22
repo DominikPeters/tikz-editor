@@ -313,9 +313,11 @@ export class VerticalListBuilder {
    * box's first paragraph ran \@item's \everypar, it placed the pending
    * labels and cleared @inlabel, @newlist and @minipage.
    */
-  box(id: string, consumesItemLabels = false, metrics?: VerticalBoxMetrics): void {
+  box(id: string, consumesItemLabels = false, metrics?: VerticalBoxMetrics, containsParagraphs = false): void {
     this.horizontal = false;
     this.appendBoxWithInterline(id, metrics);
+    // A paragraph inside the box ran \everypar, and \@minipagefalse is global (ltboxes.dtx).
+    if (containsParagraphs) this.minipage = false;
     if (consumesItemLabels) {
       this.inLabel = false;
       this.newList = false;

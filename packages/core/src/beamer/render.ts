@@ -783,6 +783,7 @@ async function renderBeamerFrameStep(params: {
   references.frameLayout = { paperHeight: page.page.height, textHeight: page.page.height - chrome.headlineInset - chrome.bottomInset,
     plain: frame.options?.plain ?? false, metadata };
   await prepareInlineFlow({ source, frame, bodyIr, theme, references, macroBindings,
+    document: context.document, theoremOccurrences: context.theoremOccurrences,
     textWidth: availableContentBounds.width, paperWidth: page.page.width, leftSidebarWidth: page.frameArea.x,
     overlays: bodyIr.overlays, step, diagnostics,
     ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
@@ -1166,8 +1167,9 @@ async function renderBeamerFrameStep(params: {
     items,
     // A body paragraph whose vertical list holds only embedded blocks or columns has no
     // text of its own; those boxes publish their own paragraphs.
-    paragraphs: paragraphs.filter(paragraph => paragraph.report.lines.length > 0 ||
-      !paragraph.vlistLayout.boxReport.items.some(item => item.hboxRole?.kind === "external-flow")),
+    paragraphs: paragraphs.filter(paragraph => !paragraph.vlistLayout.boxReport.items.some(item => item.hboxRole?.kind === "external-flow") ||
+      paragraph.vlistLayout.boxReport.items.some(item => item.itemKind !== "glue" && item.itemKind !== "penalty" && item.itemKind !== "vbox" &&
+        item.hboxRole?.kind !== "external-flow")),
     graphics,
     spacing,
     embeddedTikz,
@@ -1514,12 +1516,26 @@ function emitFrameFootnoteInsertion(params: {
 }
 
 /** Replaces an id prefix throughout a parsed frame body (plain data). */
+/** Rebinds a parsed subtree's ids from one owner prefix to another. */
+function renameBeamerNodeIds(nodes: readonly BeamerFrameBodyNode[], from: string, to: string): BeamerFrameBodyNode[] {
+  const rename = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(rename);
+    if (node === null || typeof node !== "object") return node;
+    return Object.fromEntries(Object.entries(node).map(([key, entry]) => [key,
+      key === "id" && typeof entry === "string" && (entry === from || entry.startsWith(`${from}:`)) ? to + entry.slice(from.length) : rename(entry)]));
+  };
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- renaming string ids keeps the nodes' shape
+  return rename(nodes) as BeamerFrameBodyNode[];
+}
+
 async function prepareInlineFlow(params: {
   source: string; frame: BeamerFrameModel; bodyIr: BeamerFrameBodyIr; theme: ResolvedBeamerTheme;
   references: BeamerReferenceContext; macroBindings: ReadonlyMap<string, MacroBinding>;
   textWidth: number; paperWidth: number; leftSidebarWidth: number; overlays: BeamerOverlayModel;
   step: number; diagnostics: Diagnostic[]; graphicsResolver?: DocumentGraphicsResolver; work?: BeamerRenderWork;
   resolvePendingLabels?: boolean;
+  /** Document theorem environments and template, for the box parses. */
+  document?: BeamerDocumentModel; theoremOccurrences?: ReadonlyMap<number, BeamerTheoremOccurrence>;
 }): Promise<void> {
   params.references.inlineFlowItemLabels ??= new Map();
   params.references.inlineFlowLabelState ??= { revision: 0 };
@@ -1532,22 +1548,25 @@ async function prepareInlineFlow(params: {
     }
   };
   collect(params.bodyIr.children);
-  const structuralBoxes = new Map<number, BeamerFrameBodyNode | BeamerColumnFlowNode>();
+  // Structural ids of the boxes, and the boxes laid out in a vertical list (frame body, block
+  // and theorem bodies; column bodies still extract theirs).
+  const structuralBoxes = new Map<number, BeamerFrameBodyNode>();
+  const embeddedBoxes = new Set<number>();
   if (params.bodyIr.structuralChildren) {
-    const visit = (nodes: readonly (BeamerFrameBodyNode | BeamerColumnFlowNode)[]) => {
+    const visit = (nodes: readonly (BeamerFrameBodyNode | BeamerColumnFlowNode)[], embedded: boolean) => {
       for (const node of nodes) {
-        if (node.kind === "block" || node.kind === "columns" || node.kind === "theorem") structuralBoxes.set(node.span.from, node);
-        if (node.kind === "columns") for (const column of node.columns) visit(column.children);
-        else if (node.kind === "block" || node.kind === "theorem") visit(node.children);
+        if (node.kind === "block" || node.kind === "columns" || node.kind === "theorem") {
+          structuralBoxes.set(node.span.from, node);
+          if (embedded) embeddedBoxes.add(node.span.from);
+        }
+        if (node.kind === "columns") for (const column of node.columns) visit(column.children, false);
+        else if (node.kind === "block" || node.kind === "theorem") visit(node.children, embedded);
       }
     };
-    visit(params.bodyIr.structuralChildren);
+    visit(params.bodyIr.structuralChildren, true);
   }
   const environments = [...matchTexSyntaxEnvironments(context.syntax).values()];
-  // Theorems, proofs and package boxes are boxes in the frame's vertical list at its top level;
-  // inside a block or column the structural parse still extracts them.
-  const topLevelBoxes = new Set((params.bodyIr.structuralChildren ?? []).filter(node => node.kind === "theorem" || node.kind === "block").map(node => node.span.from));
-  const candidates = environments.filter(env => (["block", "alertblock", "exampleblock", "columns"].includes(env.name) || topLevelBoxes.has(env.begin.span.from)) &&
+  const candidates = environments.filter(env => (["block", "alertblock", "exampleblock", "columns"].includes(env.name) || embeddedBoxes.has(env.begin.span.from)) &&
     env.begin.span.from >= params.frame.bodySpan.from && env.end.span.to <= params.frame.bodySpan.to && !extracted.has(env.begin.span.from))
     .sort((a, b) => (a.end.span.to - a.begin.span.from) - (b.end.span.to - b.begin.span.from));
   // Preparing an outer box can transfer a pending item label into an inner box that was prepared
@@ -1557,15 +1576,23 @@ async function prepareInlineFlow(params: {
     for (const env of candidates) {
       if (params.work) await params.work.checkpoint();
       const span = { from: env.begin.span.from, to: env.end.span.to };
+      const inlineId = `${params.frame.id}:inline:${span.from}`;
+      const embedded = embeddedBoxes.has(span.from);
       const parsed = parseBeamerFrameBody({ source: params.source, syntax: context.syntax,
-        frame: { ...params.frame, id: `${params.frame.id}:inline:${span.from}`, span, bodySpan: span }, overlays: params.overlays });
-      // A top-level box laid out in the frame's vertical list keeps the id the structural parse gives it,
-      // so editing scopes and paragraphs keep referring to the same block or columns node.
+        frame: { ...params.frame, id: inlineId, span, bodySpan: span }, overlays: params.overlays,
+        ...(params.document !== undefined ? { document: params.document } : {}),
+        ...(params.theoremOccurrences !== undefined ? { theoremOccurrences: params.theoremOccurrences } : {}),
+        // The box's own body is a vertical list too: boxes inside it stay in its text.
+        ...(embedded ? { embedNestedFlowBoxes: true } : {}) });
+      // A box keeps the id the structural parse gives it, so editing scopes and paragraph ids refer
+      // to the same node whichever list lays it out.
+      // Columns extract their bodies as the structural parse does, and their column ids are not
+      // prefixed by the columns id, so the structural node is used as it is.
+      const box = parsed.children.find(child => (child.kind === "block" || child.kind === "columns" || child.kind === "theorem") && child.span.from === span.from);
       const structural = structuralBoxes.get(span.from);
-      // The span is exactly the box's environment, and the structural parse knows the document's
-      // theorem environments, which a parse of the span alone does not.
-      const ir = structural?.kind === "block" || structural?.kind === "columns" || structural?.kind === "theorem"
-        ? { ...parsed, children: [structural] } : parsed;
+      const ir = !box || !structural ? parsed
+        : box.kind === "columns" || !embedded ? { ...parsed, children: [structural] }
+          : { ...parsed, children: renameBeamerNodeIds(parsed.children, box.id, structural.id) };
       const ancestors = environments.filter(parent => parent.begin.span.from < span.from && parent.end.span.to > span.to).sort((a, b) => a.begin.span.from - b.begin.span.from);
       let width = params.textWidth;
       for (const parent of ancestors) {
@@ -2733,9 +2760,15 @@ async function prepareBlockWithTheme(params: {
         : naturalHeight,
     endingDepth:
       geometry.flowEndingDepth === "body-last-line"
-        ? body && !closesWithBodySkip ? paragraphLastLineDepth(body) : bodyEndingDepth
+        ? body && !closesWithBodySkip ? (endsWithEmbeddedBox(body) ? paragraphEndingMaterialDepth(body) : paragraphLastLineDepth(body)) : bodyEndingDepth
         : 0,
   };
+}
+
+/** The body's last material is an embedded block or columns box, whose depth TeX keeps as \prevdepth. */
+function endsWithEmbeddedBox(paragraph: LaidParagraph): boolean {
+  const last = [...paragraph.layout.vlistLayout.boxReport.items].reverse().find(item => item.itemKind !== "glue" && item.itemKind !== "penalty");
+  return last?.hboxRole?.kind === "external-flow";
 }
 
 function prepareTcolorbox(params: Parameters<typeof prepareBlock>[0]): PreparedBlock | null {

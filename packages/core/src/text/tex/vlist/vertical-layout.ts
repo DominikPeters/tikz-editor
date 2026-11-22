@@ -273,7 +273,7 @@ export function resolveVerticalListWithBuilder(
         builder.box(leaf.id, role?.kind === "external-flow" && role.consumesItemLabels === true, {
           height: Number(item.box.metrics.height), depth: Number(item.box.metrics.depth),
           baselineSkip: Number(baselineSkip ?? options.lineHeight),
-        });
+        }, role?.kind === "external-flow");
         lastParagraph = undefined;
       } else if (item.kind === "vbox") {
         // A material box (\parbox, minipage): its contents keep the old resolution for now.
