@@ -250,16 +250,16 @@ export class VerticalListBuilder {
   }
 
   /** \addvspace and \@xaddvskip (latex.ltx 7504–7530). */
-  addvspace(value: VerticalGlue, origin = "addvspace"): void {
+  addvspace(value: VerticalGlue, origin = "addvspace", ref?: unknown): void {
     if (this.horizontal || this.minipage) return;
     const last = this.lastskip();
     if (last.natural === 0) {
-      this.vskip(value, origin);
+      this.vskip(value, origin, ref);
       return;
     }
     if (last.natural < value.natural) {
       this.removeLastskip();
-      this.vskip(value, origin);
+      this.vskip(value, origin, ref);
       return;
     }
     if (value.natural < 0 && last.natural >= 0) {

@@ -67,8 +67,21 @@ export type TexDimenExpr = TexLength | string;
 export type TexDisplayMathSkipVariant = "normal" | "short";
 
 export type TexGlueOrigin =
-  | { readonly kind: "external-flow-after" }
-  | { readonly kind: "external-flow-before" }
+  | {
+      readonly kind: "external-flow-after";
+      /** The box's environment ends with \addvspace (tcolorbox), not \vskip. */
+      readonly addvspace?: boolean;
+      /** \prevdepth the environment sets before that skip (tcolorbox's `after skip balanced`); otherwise \nointerlineskip. */
+      readonly prevDepthPt?: number;
+    }
+  | {
+      readonly kind: "external-flow-before";
+      readonly addvspace?: boolean;
+      /** tcolorbox's `before skip balanced`: the skip grows by this minus \prevdepth when 0 <= \prevdepth <= this. */
+      readonly balancedPt?: number;
+      /** \nointerlineskip follows the skip. */
+      readonly noInterline?: boolean;
+    }
   | {
       readonly kind: "explicit-command";
       readonly command: SimpleTexVerticalGlueCommandName;

@@ -108,6 +108,7 @@ export function positionPreparedFrameFlow(
       const sharedTrivlistSkip = Math.min(previousSkip, item.leadingTrivlistSkipPt ?? 0);
       const glue = (leadingDisplay
         ? leadingDisplayGlue(previousDepth, item.startingBaselineSkip)
+        : paragraphStartsWithoutInterline(item.paragraph) ? 0
         : verticalInterlineGlue(previousDepth, item.boxHeight, item.startingBaselineSkip)) + item.leadingAdjustment - sharedTrivlistSkip;
       const referenceY = cursor + glue + item.boxHeight;
       const contentTop = referenceY - item.boxHeight;
@@ -231,6 +232,14 @@ export function paragraphEndingMaterialDepth(
     return Number(item.depth);
   }
   return 0;
+}
+
+/** The first material is a box whose environment issues \nointerlineskip before it (tcolorbox). */
+function paragraphStartsWithoutInterline(paragraph: LaidParagraph): boolean {
+  const items = paragraph.layout.vlistLayout.boxReport.items;
+  const index = items.findIndex(item => item.itemKind !== "glue" && item.itemKind !== "penalty" && item.itemKind !== "vbox");
+  const origin = index > 0 ? items[index - 1]?.glue?.origin : undefined;
+  return origin?.kind === "external-flow-before" && origin.noInterline === true;
 }
 
 export function paragraphStartingMaterialHeight(

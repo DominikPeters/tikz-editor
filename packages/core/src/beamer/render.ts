@@ -1534,7 +1534,7 @@ async function prepareInlineFlow(params: {
   if (params.bodyIr.structuralChildren) {
     const visit = (nodes: readonly (BeamerFrameBodyNode | BeamerColumnFlowNode)[]) => {
       for (const node of nodes) {
-        if (node.kind === "block" || node.kind === "columns") structuralBoxes.set(node.span.from, node);
+        if (node.kind === "block" || node.kind === "columns" || node.kind === "theorem") structuralBoxes.set(node.span.from, node);
         if (node.kind === "columns") for (const column of node.columns) visit(column.children);
         else if (node.kind === "block" || node.kind === "theorem") visit(node.children);
       }
@@ -1542,7 +1542,10 @@ async function prepareInlineFlow(params: {
     visit(params.bodyIr.structuralChildren);
   }
   const environments = [...matchTexSyntaxEnvironments(context.syntax).values()];
-  const candidates = environments.filter(env => ["block", "alertblock", "exampleblock", "columns"].includes(env.name) &&
+  // Theorems, proofs and package boxes are boxes in the frame's vertical list at its top level;
+  // inside a block or column the structural parse still extracts them.
+  const topLevelBoxes = new Set((params.bodyIr.structuralChildren ?? []).filter(node => node.kind === "theorem" || node.kind === "block").map(node => node.span.from));
+  const candidates = environments.filter(env => (["block", "alertblock", "exampleblock", "columns"].includes(env.name) || topLevelBoxes.has(env.begin.span.from)) &&
     env.begin.span.from >= params.frame.bodySpan.from && env.end.span.to <= params.frame.bodySpan.to && !extracted.has(env.begin.span.from))
     .sort((a, b) => (a.end.span.to - a.begin.span.from) - (b.end.span.to - b.begin.span.from));
   // Preparing an outer box can transfer a pending item label into an inner box that was prepared
@@ -1557,9 +1560,10 @@ async function prepareInlineFlow(params: {
       // A top-level box laid out in the frame's vertical list keeps the id the structural parse gives it,
       // so editing scopes and paragraphs keep referring to the same block or columns node.
       const structural = structuralBoxes.get(span.from);
-      const ir = structural?.kind === "block" || structural?.kind === "columns"
-        ? { ...parsed, children: parsed.children.map(child => child.span.from === span.from && child.kind === structural.kind ? structural : child) }
-        : parsed;
+      // The span is exactly the box's environment, and the structural parse knows the document's
+      // theorem environments, which a parse of the span alone does not.
+      const ir = structural?.kind === "block" || structural?.kind === "columns" || structural?.kind === "theorem"
+        ? { ...parsed, children: [structural] } : parsed;
       const ancestors = environments.filter(parent => parent.begin.span.from < span.from && parent.end.span.to > span.to).sort((a, b) => a.begin.span.from - b.begin.span.from);
       let width = params.textWidth;
       for (const parent of ancestors) {
@@ -4596,16 +4600,34 @@ function layoutParagraph(params: {
         ? item.block.flowBoxHeight - (item.block.plan.geometry.flowBoxHeight === "natural" ? before : 0) : item.box.height;
       const depth = item.kind === "block" ? item.block.endingDepth : item.box.depth;
       const advance = item.kind === "block" ? item.block.naturalHeight - before : item.box.height + item.box.depth;
-      const after = item.kind === "block" ? item.block.plan.geometry.afterSkipPt : 0;
+      const after = item.kind === "block" && !item.block.packageBox ? item.block.plan.geometry.afterSkipPt : 0;
+      const baselineSkipPt = ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt;
+      const packageBox = item.kind === "block" ? item.block.packageBox?.plan : undefined;
+      // tcolorbox's `before`/`after` code: \addvspace on both sides with \nointerlineskip, the balanced
+      // variants measured against .3\baselineskip (tcolorbox.sty, `before skip balanced`). With
+      // `nobeforeafter` the box ships without skips or interline glue.
+      // A frame's body starts after beamer's \vbox{} (\prevdepth 0pt), so a box that opens the
+      // frame balances against that depth.
+      const opensFrame = params.role === "body" && /^(?:\s|\\par(?![A-Za-z]))*$/u.test(mapped.text.slice(0, box.sourceStart));
+      const balance = packageBox?.beforeBalanced && !packageBox.noBeforeAfter ? .3 * baselineSkipPt : undefined;
+      const packageGlue = packageBox ? {
+        before: { kind: "glue" as const, size: texLength(packageBox.noBeforeAfter ? 0 : packageBox.beforeSkipPt + (opensFrame && balance !== undefined ? balance : 0)),
+          origin: { kind: "external-flow-before" as const, addvspace: true, noInterline: true,
+            ...(balance !== undefined && !opensFrame ? { balancedPt: balance } : {}) },
+          sourceSpan: { start: box.sourceStart, end: box.sourceStart } },
+        after: { kind: "glue" as const, size: texLength(packageBox.noBeforeAfter ? 0 : packageBox.afterSkipPt),
+          origin: { kind: "external-flow-after" as const, addvspace: true,
+            ...(packageBox.noBeforeAfter ? { prevDepthPt: 0 } : packageBox.afterBalanced ? { prevDepthPt: .3 * baselineSkipPt } : {}) } },
+      } : undefined;
       // \medskipamount and \smallskipamount carry a third of their size as stretch and shrink.
-      return [...(before ? [{ kind: "glue" as const, size: texLength(before), stretch: texLength(before / 3), shrink: texLength(before / 3),
+      return [...(packageGlue ? [packageGlue.before] : []), ...(before ? [{ kind: "glue" as const, size: texLength(before), stretch: texLength(before / 3), shrink: texLength(before / 3),
         origin: { kind: "external-flow-before" as const }, sourceSpan: { start: box.sourceStart, end: box.sourceStart } }] : []),
         { kind: "hbox", role: { kind: "external-flow", flowKind: item.kind, ...(before ? { contentOffsetPt: texLength(before) } : {}),
           ...(item.kind === "block" && before ? { pageTopHeightPt: texLength(item.block.titleAscent) } : {}),
-          ...(item.kind === "columns" ? columnsVisualOverhang(item) : {}), ...(containsListScope(item, "trivlist") ? { containsList: true } : {}), ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), ...(box.followsColorChange ? { followsColorChange: true } : {}), ...(box.consumedItemLabels?.length ? { consumesItemLabels: true } : {}), baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
+          ...(item.kind === "columns" ? columnsVisualOverhang(item) : {}), ...(containsListScope(item, "trivlist") ? { containsList: true } : {}), ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), ...(box.followsColorChange ? { followsColorChange: true } : {}), ...(box.consumedItemLabels?.length ? { consumesItemLabels: true } : {}), baselineSkipPt: texLength(baselineSkipPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
         advance: texLength(advance), box: { metrics: { width: texLength(0), height: texLength(height), depth: texLength(depth) }, renderItems: [] } },
         ...(after ? [{ kind: "glue" as const, size: texLength(after), stretch: texLength(after / 3), shrink: texLength(after / 3),
-          origin: { kind: "external-flow-after" as const } }] : [])];
+          origin: { kind: "external-flow-after" as const } }] : []), ...(packageGlue ? [packageGlue.after] : [])];
     },
     paragraphId: params.paragraphId,
     width: texLength(params.bounds.width),

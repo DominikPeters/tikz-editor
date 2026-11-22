@@ -198,6 +198,25 @@ export function resolveVerticalListWithBuilder(
       if (isPlannedGlue(item)) continue;
       if (item.kind === "glue") {
         flushEvents(at);
+        const origin = item.origin;
+        if (origin?.kind === "external-flow-before" && origin.addvspace === true) {
+          // tcolorbox's before skip (tcolorbox.sty, `before skip balanced`): \addvspace, balanced
+          // against \prevdepth, then \nointerlineskip.
+          const depth = builder.prevDepth;
+          const balance = origin.balancedPt;
+          const extra = balance !== undefined && depth !== undefined && depth >= 0 && depth <= balance ? balance - depth : 0;
+          const size = Number(item.size) + extra;
+          builder.addvspace(glue(size, Number(item.stretch ?? 0), Number(item.shrink ?? 0)), "authored", extra ? { ...item, size: texLength(size) } : item);
+          if (origin.noInterline === true) builder.noInterline();
+          continue;
+        }
+        if (origin?.kind === "external-flow-after" && origin.addvspace === true) {
+          // `after skip balanced` sets \prevdepth before its \addvspace; `after skip` uses \nointerlineskip.
+          if (origin.prevDepthPt !== undefined) builder.setPrevDepth(origin.prevDepthPt);
+          else builder.noInterline();
+          builder.addvspace(glueOf(item), "authored", item);
+          continue;
+        }
         if (item.origin?.kind === "explicit-command" && item.origin.command === "nointerlineskip") {
           builder.vskip(glueOf(item), "authored", item);
           builder.noInterline();

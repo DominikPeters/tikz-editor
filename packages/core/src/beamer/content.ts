@@ -184,11 +184,6 @@ export function parseBeamerFrameBody(
       index = endIndex;
       continue;
     }
-    if (params.embedFlowBoxes === true &&
-        (token.name === "columns" || token.name === "block" || token.name === "alertblock" || token.name === "exampleblock")) {
-      index = endIndex;
-      continue;
-    }
     if (isInsideNativeTextFlow(context, token.span.from, overlays, frame.bodySpan.from)) {
       // Lists, alignment environments and ordinary groups own their inline
       // boxes. Extracting a nested picture would split their TeX scope.
@@ -221,8 +216,7 @@ export function parseBeamerFrameBody(
       index = endIndex;
       continue;
     }
-    pushTextNode(source, { from: cursor, to: token.span.from }, frame.id, children);
-    children.push(
+    const node =
       tikzNode ??
       (token.name === "columns"
         ? parseColumns({
@@ -260,8 +254,16 @@ export function parseBeamerFrameBody(
             theoremOccurrences,
             overlays,
           })
-      )
-    );
+      );
+    if (params.embedFlowBoxes === true && node.kind !== "tikzpicture" && node.kind !== "unsupported") {
+      // Blocks, columns, theorems and package boxes stay in the frame's vertical list as boxes;
+      // `structuralChildren` names their nodes. Later nodes keep the structural parse's numbering.
+      nodeIndex += 1;
+      index = endIndex;
+      continue;
+    }
+    pushTextNode(source, { from: cursor, to: token.span.from }, frame.id, children);
+    children.push(node);
     nodeIndex += 1;
     cursor = end.span.to;
     index = endIndex;
