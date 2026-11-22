@@ -1517,6 +1517,19 @@ Left.
 \par Witness`, 11, "Madrid", "43"),
     baselines: [["Left.", 102.044464], ["Witness", 123.515152]],
   },
+  {
+    name: "keeps the interline glue after a list item whose label line is an empty trivlist, when the list opens a block",
+    source: slide(String.raw`Lead.\par
+\begin{block}{T}
+\begin{itemize}
+\item \begin{flushleft}
+\end{flushleft}
+Alpha.
+\end{itemize}
+\end{block}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["Alpha.", 93.073288], ["Witness", 115.151321]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

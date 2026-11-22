@@ -1161,7 +1161,7 @@ function resolveDisplayMathVerticalGlueInItems(
       displayInterlineAlreadyInserted = false;
       previousDepthSuppressed = nested.previousDepthSuppressed;
       if (previousDepthSuppressed) plainParagraphInterlinePending = false;
-      else if (previousDisplayMaterialMetrics) plainParagraphInterlinePending = true;
+      else if (previousDisplayMaterialMetrics || previousParagraphMeasurement) plainParagraphInterlinePending = true;
       continue;
     }
     if (item.kind === "hbox" && (item.role?.kind === "external-flow" || item.role?.kind === "list-empty-line")) {
