@@ -802,6 +802,21 @@ export interface SimpleTexListScope {
   readonly totalLeftMarginEm: number;
 }
 
+/**
+ * A vertical-mode event in source order (design/vertical-list-builder.md).
+ * Recorded alongside the block items; it does not affect layout yet.
+ */
+export type SimpleTexVerticalEvent = SimpleTexSourceRange & (
+  | { readonly kind: "list-begin"; readonly listKind: SimpleTexListKind; readonly depth: number; readonly inheritsPendingLabel: boolean }
+  | { readonly kind: "item"; readonly depth: number; readonly itemIndex: number; readonly hasLabel: boolean }
+  | { readonly kind: "list-end"; readonly depth: number }
+  | { readonly kind: "trivlist-begin"; readonly envName: string; readonly noParList: boolean }
+  | { readonly kind: "trivlist-end"; readonly envName: string }
+  | { readonly kind: "quote-begin" | "quote-end"; readonly envName: string }
+  | { readonly kind: "par" }
+  | { readonly kind: "group-begin" | "group-end" }
+);
+
 export type SimpleTexBlockItem =
   | SimpleTexParagraphBlockItem
   | SimpleTexVerticalGlueBlockItem
@@ -930,6 +945,8 @@ export interface SimpleTexParagraphBlockScanResult {
   readonly unsupportedCommand: boolean;
   /** List environments the scan closed, in source order; absent when the scan aborted. */
   readonly listStructure?: readonly SimpleTexListTopology[];
+  /** Vertical-mode events in source order (design/vertical-list-builder.md). */
+  readonly verticalEvents?: readonly SimpleTexVerticalEvent[];
 }
 
 export interface SimpleTexParagraphIr {
@@ -940,6 +957,7 @@ export interface SimpleTexParagraphIr {
   readonly partialFallbackSupported: boolean;
   readonly unsupportedCommand: boolean;
   readonly listStructure?: readonly SimpleTexListTopology[];
+  readonly verticalEvents?: readonly SimpleTexVerticalEvent[];
 }
 
 export interface SimpleTexParagraphAnalysis {
@@ -1456,6 +1474,7 @@ function buildSimpleTexParagraphIrForRange(
       simpleTexBlockItemsContainPlaceholder(blockScan.items),
     unsupportedCommand: nodeScan.unsupportedCommand || blockScan.unsupportedCommand,
     ...(blockScan.listStructure ? { listStructure: blockScan.listStructure } : {}),
+    ...(blockScan.verticalEvents?.length ? { verticalEvents: blockScan.verticalEvents } : {}),
   };
 }
 
@@ -4807,6 +4826,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
   // there): the source topology the environment's structural edits need.
   const listTopologyStack: MutableListTopology[] = [];
   const completedListTopologies: SimpleTexListTopology[] = [];
+  const verticalEvents: SimpleTexVerticalEvent[] = [];
+  const recordVerticalEvent = (event: SimpleTexVerticalEvent): void => { verticalEvents.push(event); };
   const closeOpenListItemTopology = (
     topology: MutableListTopology | undefined,
     boundaryStart: number
@@ -5383,6 +5404,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       break;
     }
     if (node.kind === "style-declaration" && node.sizeScope) {
+      recordVerticalEvent({ kind: node.sizeScope.boundary === "begin" ? "group-begin" : "group-end", sourceStart: node.sourceStart, sourceEnd: node.sourceEnd });
       if (node.sizeScope.boundary === "begin") declarationGroupDepth++;
       else {
         const list = listStack.at(-1);
@@ -5477,6 +5499,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     }
 
     if (node.kind === "paragraph-break") {
+      recordVerticalEvent({ kind: "par", sourceStart: node.sourceStart, sourceEnd: node.sourceEnd });
       pushBlock(
         blockStart,
         node.sourceStart,
@@ -5531,12 +5554,17 @@ function buildSimpleTexParagraphBlocksFromNodes(
         // and may consume the still-queued label.
         if (list?.deferredParagraph?.kind === "label-hook-cleared") delete list.deferredParagraph;
         let scopeRole: ActiveSimpleTexEnvironment["scopeRole"];
+        const span = { sourceStart: node.sourceStart, sourceEnd: node.sourceEnd };
         if (isSimpleTexQuoteEnvironmentName(node.name)) {
           scopeRole = beginQuote(node.name);
+          recordVerticalEvent({ kind: "quote-begin", envName: node.name, ...span });
         } else if (isSimpleTexTrivlistEnvironmentName(node.name)) {
           scopeRole = beginTrivlist(node.name);
+          recordVerticalEvent({ kind: "trivlist-begin", envName: node.name, noParList: scopeRole.noParList === true, ...span });
         } else if (isSimpleTexListEnvironmentName(node.name)) {
           scopeRole = beginList(node.name, node.sourceStart, options?.enumerateMiniTemplates ? node.enumerateTemplate : undefined);
+          recordVerticalEvent({ kind: "list-begin", listKind: scopeRole.listKind, depth: scopeRole.depth,
+            inheritsPendingLabel: scopeRole.inheritsPendingLabel === true, ...span });
           listTopologyStack.push({
             name: node.name,
             beginSpan: { from: node.sourceStart, to: node.sourceEnd },
@@ -5552,6 +5580,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
         scopeStack.push(scopeRole);
       } else {
         if (isSimpleTexListEnvironmentName(node.name)) flushEmptyListLine(node.sourceStart);
+        const endSpan = { sourceStart: node.sourceStart, sourceEnd: node.sourceEnd };
+        if (isSimpleTexQuoteEnvironmentName(node.name)) recordVerticalEvent({ kind: "quote-end", envName: node.name, ...endSpan });
+        else if (isSimpleTexTrivlistEnvironmentName(node.name)) recordVerticalEvent({ kind: "trivlist-end", envName: node.name, ...endSpan });
+        else if (isSimpleTexListEnvironmentName(node.name)) recordVerticalEvent({ kind: "list-end", depth: currentQuoteDepth + listStack.length, ...endSpan });
         const openEnvironment = environmentStack.pop();
         if (openEnvironment?.name !== node.name) {
           unsupportedCommand = true;
@@ -5638,6 +5670,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
       }
       flushEmptyListLine(node.sourceStart);
       activeList.itemIndex += 1;
+      recordVerticalEvent({ kind: "item", depth: currentQuoteDepth + listStack.length, itemIndex: activeList.itemIndex,
+        hasLabel: node.labelNodes !== undefined, sourceStart: node.sourceStart, sourceEnd: node.sourceEnd });
       const labelSize = sizeAt(node.sourceStart);
       activeList.labelFontSizePt = (labelSize.selectionFrom ?? -1) > activeList.sourceStart ? labelSize.sizePt : activeList.fontSizePt;
       // latex.ltx's \@item advances \@listctr only in the no-item-argument
@@ -5865,6 +5899,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
   return {
     blocks,
     items,
+    verticalEvents,
     partialFallbackSupported: unsupportedCommand && !scanState.aborted,
     unsupportedCommand,
     ...(scanState.aborted || completedListTopologies.length === 0
