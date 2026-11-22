@@ -5,6 +5,7 @@ import {
 import type { ResolvedTexFont, TexMetricProvider } from "../fonts/types.js";
 import type {
   SimpleTexBlockItem,
+  SimpleTexVerticalEvent,
   SimpleTexParagraphBlock,
   TexParagraphAlignment,
 } from "../ir.js";
@@ -50,6 +51,7 @@ export interface SimpleTexLayoutScopeIr {
 export interface SimpleTexLayoutScopePreparationParams {
   readonly blocks: readonly SimpleTexParagraphBlock[];
   readonly items?: readonly SimpleTexBlockItem[];
+  readonly verticalEvents?: readonly SimpleTexVerticalEvent[];
   readonly defaultAlignment: TexParagraphAlignment;
   readonly font: ResolvedTexFont;
   readonly metricProvider?: TexMetricProvider;
@@ -88,7 +90,8 @@ export function prepareSimpleTexLayoutScope(
     baseVList,
     params.font,
     params.options.listProfile,
-    params.options.displayMathProfile
+    params.options.displayMathProfile,
+    params.verticalEvents
   );
   const paragraphPreparation = prepareTexLayoutParagraphsFromVList({
     vlist: preparedVList.normalized,

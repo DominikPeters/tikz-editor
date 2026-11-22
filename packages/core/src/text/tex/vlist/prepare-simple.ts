@@ -9,6 +9,8 @@ import {
   materializeParagraphVerticalGlueInVList,
 } from "./spacing.js";
 import type { TexVListDocument } from "./types.js";
+import type { SimpleTexVerticalEvent } from "../ir.js";
+import { runVerticalShadow, verticalShadowEnabled } from "./vertical-shadow.js";
 import { texLength } from "../coordinates.js";
 
 export interface PreparedSimpleTexVList {
@@ -34,10 +36,13 @@ export function prepareSimpleTexVList(
   vlist: TexVListDocument,
   font: ResolvedTexFont,
   listProfile?: TexListLayoutProfile,
-  displayMathProfile?: TexDisplayMathLayoutProfile
+  displayMathProfile?: TexDisplayMathLayoutProfile,
+  verticalEvents?: readonly SimpleTexVerticalEvent[]
 ): PreparedSimpleTexVList {
+  const withListFonts = applyListBodyFonts(vlist, listProfile);
+  if (verticalEvents && verticalShadowEnabled()) runVerticalShadow(withListFonts.items, verticalEvents, font, listProfile);
   const paragraphGlue = materializeParagraphVerticalGlueInVList(
-    applyListBodyFonts(vlist, listProfile),
+    withListFonts,
     font,
     listProfile
   );

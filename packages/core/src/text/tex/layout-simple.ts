@@ -242,6 +242,7 @@ export function layoutSimpleTexParagraph(
     const layoutPreparation = prepareSimpleTexLayoutScope({
       blocks,
       ...(analysis.ir?.items !== undefined ? { items: analysis.ir.items } : {}),
+      ...(analysis.ir?.verticalEvents !== undefined ? { verticalEvents: analysis.ir.verticalEvents } : {}),
       defaultAlignment,
       font,
       metricProvider,

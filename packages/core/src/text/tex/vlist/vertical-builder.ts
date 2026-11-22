@@ -59,7 +59,9 @@ interface ListLevel {
   readonly topsepAdd: VerticalGlue;
   /** \@topsep: opening skip used by the first \item when not @noparlist. */
   readonly topsep: VerticalGlue;
-  readonly itemsep: VerticalGlue;
+  itemsep: VerticalGlue;
+  /** The live \topsep register, read by an alignment nested in this level. */
+  topsepRegister: VerticalGlue;
   readonly noParList: boolean;
   /** \@outerparskip and \parskip as they were set by this level. */
   readonly outerParskip: VerticalGlue;
@@ -77,6 +79,15 @@ export interface VerticalListBuilderOptions {
   readonly itemPenalty?: number;
   readonly beginParPenalty?: number;
   readonly endParPenalty?: number;
+  /**
+   * Beamer's itemize/enumerate/description run \usebeamercolor[fg] (a
+   * \color) before \list (beamerbaselocalstructure.sty 195-270, 303-316).
+   * In vertical mode that leaves a color-stack push in the list, so the
+   * list's opening \addvspace does not see a preceding skip. LuaLaTeX's
+   * \showlists puts the matching pop before \@endparenv's glue, so a list's
+   * closing skip still collapses with what follows.
+   */
+  readonly listColorWhatsits?: boolean;
 }
 
 export class VerticalListBuilder {
@@ -92,6 +103,7 @@ export class VerticalListBuilder {
   private readonly itemPenalty: number;
   private readonly beginParPenalty: number;
   private readonly endParPenalty: number;
+  private readonly listColorWhatsits: boolean;
 
   constructor(options: VerticalListBuilderOptions = {}) {
     this.parskip = options.parskip ?? ZERO_GLUE;
@@ -100,6 +112,7 @@ export class VerticalListBuilder {
     this.itemPenalty = options.itemPenalty ?? -51;
     this.beginParPenalty = options.beginParPenalty ?? -51;
     this.endParPenalty = options.endParPenalty ?? -51;
+    this.listColorWhatsits = options.listColorWhatsits === true;
   }
 
   /** The nodes appended so far. */
@@ -211,12 +224,14 @@ export class VerticalListBuilder {
     // \@outerparskip\parskip, then \list sets \parskip\parsep.
     this.outerParskip = this.parskip;
     this.parskip = parsep;
-    this.levels.push({ kind, topsepAdd, topsep: listTopsep, itemsep, noParList, outerParskip: this.outerParskip,
+    this.levels.push({ kind, topsepAdd, topsep: listTopsep, itemsep, topsepRegister: topsep, noParList, outerParskip: this.outerParskip,
       parskip: this.parskip, savedParskip, savedOuterParskip });
   }
 
   /** \list (latex.ltx 12806) with registers from \@list<depth> and the list's own argument. */
   beginList(registers: VerticalListRegisters): void {
+    // In horizontal mode the color node goes into the paragraph that \@trivlist ends.
+    if (this.listColorWhatsits && !this.horizontal) this.whatsit();
     this.trivlistCore("list", registers.topsep, registers.partopsep, registers.itemsep, registers.parsep);
   }
 
@@ -227,6 +242,19 @@ export class VerticalListBuilder {
   beginTrivlist(registers: VerticalTrivlistRegisters): void {
     this.trivlistCore("trivlist", registers.topsep, registers.partopsep, ZERO_GLUE, this.parskip);
     this.item();
+  }
+
+  /** A register assignment such as \setlength{\itemsep}{8pt} at the current level. */
+  setRegister(name: "topsep" | "partopsep" | "itemsep" | "parsep" | "parskip", value: VerticalGlue): void {
+    const level = this.levels.at(-1);
+    if (name === "parskip") this.parskip = value;
+    else if (name === "itemsep" && level) level.itemsep = value;
+    else if (name === "topsep" && level) level.topsepRegister = value;
+  }
+
+  /** The \topsep register an alignment opened here would read, if inside a list. */
+  currentTopsep(): VerticalGlue | undefined {
+    return this.levels.at(-1)?.topsepRegister;
   }
 
   /** \@item (latex.ltx 12921), the vertical part. */
@@ -277,6 +305,23 @@ export class VerticalListBuilder {
     // The environment group restores \parskip and \@outerparskip.
     this.parskip = level.savedParskip;
     this.outerParskip = level.savedOuterParskip;
+  }
+
+  /**
+   * Glue between the previous box accepted by `isAnchor` and the box with this
+   * id, leaving out glue whose origin `exclude` rejects.
+   */
+  glueSince(id: string, isAnchor: (boxId: string) => boolean, exclude: (origin: string) => boolean = () => false): VerticalGlue {
+    const index = this.nodes.findIndex(node => node.kind === "box" && node.id === id);
+    if (index < 0) return ZERO_GLUE;
+    let total = ZERO_GLUE;
+    for (let cursor = index - 1; cursor >= 0; cursor--) {
+      const node = this.nodes[cursor];
+      if (!node) break;
+      if (node.kind === "box" && isAnchor(node.id)) break;
+      if (node.kind === "glue" && !exclude(node.origin)) total = addGlue(total, node.glue);
+    }
+    return total;
   }
 
   /** Total glue between the previous box and the box with this id. */

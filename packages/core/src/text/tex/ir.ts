@@ -807,7 +807,9 @@ export interface SimpleTexListScope {
  * Recorded alongside the block items; it does not affect layout yet.
  */
 export type SimpleTexVerticalEvent = SimpleTexSourceRange & (
-  | { readonly kind: "list-begin"; readonly listKind: SimpleTexListKind; readonly depth: number; readonly inheritsPendingLabel: boolean }
+  | { readonly kind: "list-begin"; readonly listKind: SimpleTexListKind; readonly depth: number; readonly inheritsPendingLabel: boolean;
+      /** Font size selecting \@listi at the list's start; \small etc. install their own registers. */
+      readonly fontSizePt: number; readonly registerDepth: number }
   | { readonly kind: "item"; readonly depth: number; readonly itemIndex: number; readonly hasLabel: boolean }
   | { readonly kind: "list-end"; readonly depth: number }
   | { readonly kind: "trivlist-begin"; readonly envName: string; readonly noParList: boolean }
@@ -815,6 +817,7 @@ export type SimpleTexVerticalEvent = SimpleTexSourceRange & (
   | { readonly kind: "quote-begin" | "quote-end"; readonly envName: string }
   | { readonly kind: "par" }
   | { readonly kind: "group-begin" | "group-end" }
+  | { readonly kind: "registers"; readonly assignments: Partial<Record<"topsep" | "partopsep" | "itemsep" | "parsep" | "parskip", { readonly sizePt: number; readonly stretchPt: number; readonly shrinkPt: number }>> }
 );
 
 export type SimpleTexBlockItem =
@@ -5423,6 +5426,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         return glue ? [[name, glue]] : [];
       }));
       list.spacing = { ...list.spacing, ...assignments };
+      recordVerticalEvent({ kind: "registers", assignments, sourceStart: node.sourceStart, sourceEnd: node.sourceEnd });
     }
 
     if (node.kind === "unsupported-command") {
@@ -5564,7 +5568,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
         } else if (isSimpleTexListEnvironmentName(node.name)) {
           scopeRole = beginList(node.name, node.sourceStart, options?.enumerateMiniTemplates ? node.enumerateTemplate : undefined);
           recordVerticalEvent({ kind: "list-begin", listKind: scopeRole.listKind, depth: scopeRole.depth,
-            inheritsPendingLabel: scopeRole.inheritsPendingLabel === true, ...span });
+            inheritsPendingLabel: scopeRole.inheritsPendingLabel === true, fontSizePt: Number(sizeAt(node.sourceStart).sizePt),
+            registerDepth: scopeRole.listRegisterDepth ?? scopeRole.depth, ...span });
           listTopologyStack.push({
             name: node.name,
             beginSpan: { from: node.sourceStart, to: node.sourceEnd },
