@@ -32,7 +32,7 @@ it.skipIf(process.env.VLIST_SHADOW !== "1")("vertical-list builder shadow compar
   setVerticalShadowListener(undefined);
   mkdirSync("artifacts/vlist-shadow", { recursive: true });
   writeFileSync("artifacts/vlist-shadow/report.json", JSON.stringify(rows));
-  const compared = rows.flatMap(row => "old" in row && !row.nearDisplay && !row.first && !row.fragment ? [row] : []);
+  const compared = rows.flatMap(row => "old" in row && !row.nearDisplay && !row.first ? [row] : []);
   const differing = compared.filter(row => Math.abs(row.old - row.builder) > 0.01);
   console.log(`vertical shadow: ${differing.length} of ${compared.length} compared boundaries differ, in ${new Set(differing.map(row => row.fixture)).size} fixtures`);
 }, 3_600_000);

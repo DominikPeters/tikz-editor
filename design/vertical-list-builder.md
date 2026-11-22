@@ -1,6 +1,6 @@
 # One vertical-list builder for text, lists and Beamer containers
 
-Status: proposal (2026-11-22). Survey and evidence: `design/engine-survey/`. TeX references:
+Status: in progress (2026-11-22). Steps 1–2 done, step 3 partly (see "Progress"). Survey and evidence: `design/engine-survey/`. TeX references:
 `tex-src/` (see `tex-src/README.md`).
 
 ## Problem
@@ -193,3 +193,48 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   (`blockIndex`, `vlistPath`); keep these stable or update consumers.
 - **Performance.** Sequential nested builds replace a fixed-point loop, which
   should help; measure with the slide-switch profiling scripts.
+
+## Progress
+
+- **Step 1 (events)**: `ir.ts` records `SimpleTexVerticalEvent`s: list/item/
+  trivlist/quote begin and end, `\par`, groups, list register assignments, and
+  each list's font size and register depth (`test/tex-vertical-events.spec.ts`).
+- **Step 2 (builder, shadow)**: `vlist/vertical-builder.ts` implements the
+  macros above (`test/tex-vertical-builder.spec.ts`).
+  `vlist/vertical-shadow.ts` replays a raw vlist plus events through it
+  (`computeVerticalBuilderSkips`) and compares per top-level item with the old
+  planner (`VLIST_SHADOW=1 npx vitest run test/vertical-shadow.spec.ts`). Over
+  all fidelity fixtures: 2 of 4,513 inner items differ (both package
+  environments the IR emulates: `lstlisting`, a starred table caption); 24 of
+  2,181 first items; 62 of 1,230 items next to displays.
+  Mechanisms confirmed on the way: Beamer lists push a color before `\list`
+  (the pop precedes `\@endparenv`'s glue, per LuaLaTeX `\showlists`); a block
+  whose first paragraph runs `\everypar` places pending labels inside itself;
+  `\beamer@cramped` sets `\topsep` after `\list` captured its skips, so a
+  nested alignment reads the cramped value.
+- **Step 3 (first layer)**: for inner top-level items whose natural skip the
+  builder reproduces, the glue's stretch/shrink now come from the builder
+  (`materializeParagraphVerticalGlueInVList`). All suites and the fuzz
+  regression manifest pass.
+
+## Next
+
+1. **Skip slots.** At preparation, insert a zero-size `vertical-slot` glue
+   before every paragraph, box and display (paths stay stable for
+   measurement), plus the display glue items. At layout
+   (`layoutTexVListFromMeasuredParagraphs`), run the builder with paragraph
+   measurements so displays can choose normal/short skips from
+   `\predisplaysize` (tex.web §1146), and write slot and display glue sizes.
+   Attach the IR events to `TexVListDocument` so they reach that stage.
+2. **Displays in the builder**: `display(above, below)` after the variant
+   choice; the empty-line paragraph when a display starts in vertical mode;
+   `\par` after a display ends an empty paragraph without output. Compare
+   final line positions (old vs builder) on all fixtures, then the fidelity
+   suites.
+3. **Beamer containers (step 4)**: build block bodies and columns as nested
+   builders (`minipage: true`, `\leavevmode` for columns), so first-item rules
+   (`leadingBeamerTrivlistAdjustment`, column interline/clamp code) are
+   replaced rather than adjusted.
+4. Delete the planner's scope-diff state once items of all three kinds come
+   from the builder.
+
