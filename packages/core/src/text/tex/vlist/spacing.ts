@@ -207,7 +207,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
         const boundary: TexParagraphItem = { kind: "paragraph", blockIndex,
           sourceSpan: item.sourceSpan ?? { start: 0, end: 0 },
           paragraph: { blockIndex, text: "", sourceSpan: item.sourceSpan ?? { start: 0, end: 0 }, nodes: [], noIndent: true,
-            startsAfterExplicitPar: true, quoteDepth: 0, ...(item.role.pendingListBoundaries && list ? { ancestorListLabels: item.role.pendingListBoundaries.filter(label => label.inherited === true || label.depth < list.depth) } : {}), ...(item.scopePath ? { scopePath: item.scopePath } : {}) } };
+            startsAfterExplicitPar: true, quoteDepth: 0, ...(item.role.followsColorChange ? { followsColorChange: true } : {}), ...(item.role.pendingListBoundaries && list ? { ancestorListLabels: item.role.pendingListBoundaries.filter(label => label.inherited === true || label.depth < list.depth) } : {}), ...(item.scopePath ? { scopePath: item.scopePath } : {}) } };
         planSimpleTexParagraphVerticalSkipsInto([boundary], font, listProfile, state, skips, ancestors, pathPrefix);
         const skip = skips.at(-1);
         if (skip) {

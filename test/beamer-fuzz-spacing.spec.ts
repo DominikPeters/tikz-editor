@@ -1693,6 +1693,24 @@ Global2&8&2\\
 \par Witness`, 9, "Madrid", "43"),
     baselines: [["cd", 102.898178], ["Witness", 123.56134]],
   },
+  {
+    name: "keeps a list's closing skip apart from a flushleft columns box after a vertical-mode color",
+    source: slide(String.raw`Lead.\par
+{\scriptsize
+\begin{itemize}
+\item A
+\end{itemize}
+{\color{blue}
+\begin{flushleft}
+\begin{columns}[onlytextwidth,t]
+\begin{column}{0.54\textwidth}
+Inner
+\end{column}
+\end{columns}
+\end{flushleft}\par}\par}
+\par Witness`, 10, "Madrid", "169"),
+    baselines: [["Inner", 75.776199], ["Witness", 102.377045]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

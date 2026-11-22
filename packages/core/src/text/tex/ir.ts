@@ -778,6 +778,8 @@ export interface SimpleTexBoxBlockItem extends SimpleTexSourceRange {
   readonly pendingItemLabels?: readonly SimpleTexListContext[];
   readonly consumedItemLabels?: readonly SimpleTexListContext[];
   readonly kind: "box";
+  /** A \color after the last \par or environment end sits between the preceding skip and this box. */
+  readonly followsColorChange?: boolean;
   readonly text: string;
   readonly command: SimpleTexBoxCommandName;
   readonly width: TexLength;
@@ -5810,6 +5812,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
         items: body.items,
         ...(pendingItemLabels.length ? { pendingItemLabels } : {}),
         ...(consumedItemLabels.length ? { consumedItemLabels } : {}),
+        // Only an alignment's \addvspace after that \color is kept apart from the preceding skip.
+        ...(previousParagraphBlockEnd !== undefined && /\\color\b[\s\S]*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(
+          textSliceAtSourceOffsets(previousParagraphBlockEnd, node.sourceStart).split(/\\end\s*\{[^}]*\}|\\item(?![A-Za-z@])/u).at(-1) ?? "")
+          ? { followsColorChange: true } : {}),
       });
       unsupportedCommand ||= node.body.unsupportedCommand;
       prefix = consumeParagraphPrefix(index + 1);
