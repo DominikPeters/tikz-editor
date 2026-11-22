@@ -2467,3 +2467,35 @@ function expectParagraphPlansCoverVListParagraphs(layout: {
     texVListParagraphItems(layout.vlist.items).map((item) => item.paragraph.blockIndex)
   );
 }
+
+// Reference widths come from LuaLaTeX (the comparison oracle) with the default
+// Latin Modern fonts at 10pt: `\setbox0\hbox{...}\the\wd0`.
+describe("input ligatures and space factor against LuaLaTeX", () => {
+  const naturalWidth = (source: string): number => {
+    const result = layoutSimpleTexParagraph(source, {
+      width: 400,
+      alignment: "ragged-right",
+      tikzTextWidthNode: false,
+      parindent: 0,
+      spaceGlueProfile: "font",
+    });
+    expect(result.supported).toBe(true);
+    return Number(result.report!.lines[0]!.naturalWidth);
+  };
+
+  it("keeps kerning across an empty group or \\relax, as LuaTeX's node-list kerning does", () => {
+    // pdfTeX would give 15.00 here; LuaLaTeX gives 13.89 for all three.
+    expect(naturalWidth("AV")).toBeCloseTo(13.89, 2);
+    expect(naturalWidth("A{}V")).toBeCloseTo(13.89, 2);
+    expect(naturalWidth(String.raw`A\relax V`)).toBeCloseTo(13.89, 2);
+  });
+
+  it("forms --, `` and '' ligatures in roman text but not in typewriter text", () => {
+    expect(naturalWidth("a--b")).toBeCloseTo(15.56, 2);
+    expect(naturalWidth(String.raw`\texttt{a--b}`)).toBeCloseTo(21, 2);
+    expect(naturalWidth(String.raw`\texttt{a---b}`)).toBeCloseTo(26.25, 2);
+    expect(naturalWidth("\\texttt{a``b}")).toBeCloseTo(21, 2);
+    expect(naturalWidth(String.raw`\texttt{a''b}`)).toBeCloseTo(21, 2);
+    expect(naturalWidth(String.raw`{\ttfamily a--b}`)).toBeCloseTo(21, 2);
+  });
+});

@@ -171,6 +171,12 @@ interface SimpleTexSourceRange {
 export interface SimpleTexTextNode extends SimpleTexSourceRange {
   readonly kind: "text";
   readonly text: string;
+  /**
+   * ASCII source (`--`, `''`, ...) that `text` stands for when the node is a
+   * TeX input ligature. Whether the ligature forms is the font's lig/kern
+   * decision (cmtt/lmmono have none), so it is undone for typewriter text.
+   */
+  readonly ligatureSource?: string;
   readonly breakAfterPenalty?: number;
 }
 
@@ -599,6 +605,8 @@ void SIMPLE_TEX_NODE_KIND_REGISTRY_IS_COMPLETE;
 export interface SimpleTexToken {
   readonly kind: "text" | "space" | "forced-break" | "penalty" | "math" | "mbox" | "rule" | "includegraphics" | "raisebox" | "dimension-box" | "tabular" | "transform-box";
   readonly text: string;
+  /** Source characters of an input ligature `text` stands for (see SimpleTexTextNode). */
+  readonly ligatureSource?: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
   readonly table?: TexTabular;
@@ -1973,6 +1981,8 @@ function mergeAdjacentSimpleTexTextNodes(
       node.kind === "text" &&
       previous?.kind === "text" &&
       previous.sourceEnd === node.sourceStart &&
+      previous.ligatureSource === undefined &&
+      node.ligatureSource === undefined &&
       previous.text.length === previous.sourceEnd - previous.sourceStart &&
       node.text.length === node.sourceEnd - node.sourceStart
     ) {
@@ -2323,6 +2333,7 @@ function scanSimpleTexProseConvention(
         node: {
           kind: "text",
           text: replacement,
+          ligatureSource: source,
           sourceStart,
           sourceEnd: sourceStart + source.length,
         },
@@ -6418,9 +6429,12 @@ export function simpleTexInlineNodesToTokens(
     }
 
     skipPostLineBreakSpace = false;
+    // cmtt/lmmono carry no `--`, `''`, ... ligatures: the typed characters stay.
+    const typewriterSource = activeFontState.family === "typewriter" ? node.ligatureSource : undefined;
     tokens.push({
       kind: "text",
-      text: node.text,
+      text: typewriterSource ?? node.text,
+      ...(node.ligatureSource !== undefined && typewriterSource === undefined ? { ligatureSource: node.ligatureSource } : {}),
       sourceStart: node.sourceStart,
       sourceEnd: node.sourceEnd,
       fontState: activeFontState,
