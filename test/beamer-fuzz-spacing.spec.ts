@@ -1565,6 +1565,21 @@ Right.
 \par Witness`, 11, "Madrid", "43"),
     baselines: [["Right.", 61.953171], ["E=x", 128.244141], ["Witness", 136.413742]],
   },
+  {
+    name: "keeps the enclosing parsep after a nested list that took a label pending past a block",
+    source: slide(String.raw`Lead.\par
+{\small
+\begin{enumerate}
+\item \begin{block}{GU}
+\end{block}
+\begin{itemize}
+\item B
+\end{itemize}
+Cee
+\end{enumerate}\par}
+\par Witness`, 11, "default", "43"),
+    baselines: [["Cee", 104.199], ["Witness", 122.819]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

@@ -2388,7 +2388,8 @@ function texArticleListVerticalSkipBeforeLeaking(
       previous.depth,
       current.depth,
       font,
-      profile
+      profile,
+      !current.showLabel
     );
     // A new outer item follows \endlist with \addvspace{\itemsep};
     // the larger of that skip and the inner list's closing topsep survives.
@@ -2500,7 +2501,8 @@ function texArticleListExitBoundarySkip(
   previousDepth: number,
   currentDepth: number,
   font: ResolvedTexFont,
-  profile?: TexListLayoutProfile
+  profile?: TexListLayoutProfile,
+  paragraphContinuesItem = false
 ): TexLength {
   if (currentDepth <= 0) {
     let size = texLength(0);
@@ -2520,7 +2522,13 @@ function texArticleListExitBoundarySkip(
   for (let depth = previousDepth; depth > currentDepth; depth -= 1) {
     state.listTopsepByDepth.delete(depth);
     state.leakedItemsepByDepth.delete(depth);
-    if (state.noParListDepths.delete(depth)) continue;
+    if (state.noParListDepths.delete(depth)) {
+      // @noparlist omits \endtrivlist's closing glue, but the next paragraph
+      // still starts with the enclosing list's \parskip.
+      if (paragraphContinuesItem && depth - 1 === currentDepth) size = texLength(Math.max(size,
+        state.listParagraphSkipByDepth.get(currentDepth) ?? texArticleListParagraphSkip(currentDepth, font, profile)));
+      continue;
+    }
     const depthSize = texArticleNestedListBoundarySkip(depth, depth - 1, font, profile);
     size = texLength(Math.max(size, depthSize));
   }
