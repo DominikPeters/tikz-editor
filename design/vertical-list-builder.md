@@ -219,13 +219,18 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
 
 ## Next
 
-1. **Skip slots.** At preparation, insert a zero-size `vertical-slot` glue
-   before every paragraph, box and display (paths stay stable for
-   measurement), plus the display glue items. At layout
-   (`layoutTexVListFromMeasuredParagraphs`), run the builder with paragraph
-   measurements so displays can choose normal/short skips from
-   `\predisplaysize` (tex.web §1146), and write slot and display glue sizes.
-   Attach the IR events to `TexVListDocument` so they reach that stage.
+1. **Layout-stage builder.** The measurer looks paragraphs up by `blockIndex`
+   (`createMeasuredParagraphVListMeasurer`), and the display resolution stage
+   already inserts glue after measurement, so no reserved slots are needed.
+   Attach the IR events to `TexVListDocument`, and at
+   `layoutTexVListFromMeasuredParagraphs` run the builder with paragraph
+   measurements, so displays choose normal/short skips from
+   `\predisplaysize` (tex.web §1146). That stage
+   (`resolveDisplayMathVerticalGlueInItems`, ~430 lines) also produces the
+   interline glue (tex.web §679) for paragraph, display and box boundaries
+   inside the grouped list vboxes; the builder should take that over too
+   (`box(height, depth)` appends baselineskip/lineskip glue from `prevdepth`),
+   which means walking the grouped document in order rather than the flat one.
 2. **Displays in the builder**: `display(above, below)` after the variant
    choice; the empty-line paragraph when a display starts in vertical mode;
    `\par` after a display ends an empty paragraph without output. Compare
