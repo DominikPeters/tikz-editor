@@ -1530,6 +1530,24 @@ Alpha.
 \par Witness`, 11, "Madrid", "43"),
     baselines: [["Alpha.", 93.073288], ["Witness", 115.151321]],
   },
+  {
+    name: "omits the opening topsep of a list that starts a column inside a centered environment",
+    source: slide(String.raw`Lead.\par
+\begin{center}
+\begin{columns}[onlytextwidth,t]
+\begin{column}{0.54\textwidth}
+\begin{itemize}
+\item Alpha.
+\end{itemize}
+\end{column}
+\begin{column}{0.42\textwidth}
+Right.
+\end{column}
+\end{columns}
+\end{center}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["Right.", 70.503525], ["Alpha.", 83.42395], ["Witness", 102.161957]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

@@ -75,8 +75,10 @@ export function createBeamerAmbientText(source: string, executesItem: (span: Spa
     const start = includeEnclosingLists ? 0 : Math.max(0, ...minipages.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).map(env => env.begin.span.to));
     return allLists.filter(env => start <= env.begin.span.from && env.begin.span.to <= offset && offset < env.end.span.from).length;
   };
+  const alignments = environments.filter(env => ["center", "flushleft", "flushright"].includes(env.name));
   return Object.assign(at, {
     listDepthAt,
+    insideAlignmentAt: (offset: number) => alignments.some(env => env.begin.span.to <= offset && offset < env.end.span.from),
     itemDepthAt: (offset: number) => lists.filter(env => env.begin.span.to <= offset && offset < env.end.span.from).length,
     enumerateCountersAt: (offset: number) => enumerations
       .filter(env => env.begin.span.to <= offset && offset < env.end.span.from)

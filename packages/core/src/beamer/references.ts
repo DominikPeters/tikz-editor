@@ -62,6 +62,7 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   ambientTextAt?: ((offset: number) => string) & {
     itemDepthAt?: (offset: number) => number;
     listDepthAt?: (offset: number, includeEnclosingLists?: boolean) => number;
+    insideAlignmentAt?: (offset: number) => boolean;
     enumerateCountersAt?: (offset: number) => readonly number[];
   };
   macroBindingsAt?: (offset: number) => ReadonlyMap<string, MacroBinding>;

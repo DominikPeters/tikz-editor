@@ -3528,6 +3528,10 @@ async function prepareColumnContent(params: {
     (references.ambientTextAt?.listDepthAt?.(column.bodySpan.from, true) ?? 0) > 0
     ? { ...baseListProfile, trivlistTopsepPt: baseListProfile.liveListTopsepPt, trivlistPartopsepPt: 0 }
     : baseListProfile;
+  // A column inside center/flushleft opens its minipage while that trivlist's first item is
+  // still pending, so a list that starts the column adds no opening topsep.
+  const columnListProfile = references.ambientTextAt?.insideAlignmentAt?.(column.bodySpan.from) === true
+    ? { ...listProfile, suppressInitialTopsep: true } : listProfile;
   let previousDepth: number | undefined;
 
   for (const node of column.children) {
@@ -3539,7 +3543,7 @@ async function prepareColumnContent(params: {
       bodyFont,
       theme,
       diagnostics,
-      listProfile,
+      listProfile: columnListProfile,
       ...(previousDepth !== undefined && (node.kind === "list" || flow.at(-1)?.kind === "paragraph") ? { initialPreviousDepth: previousDepth } : {}),
       macroBindings,
       references,
