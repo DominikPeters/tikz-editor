@@ -540,346 +540,21 @@ export function simpleTexSegmentToLayoutItems(
   tabularProfile?: TexTabularLayoutProfile,
   listProfile?: TexListLayoutProfile
 ): TexLayoutInlineItem[] {
-  const tokens = simpleTexInlineNodesToTokens(segment.nodes, initialFontState);
-  const items: TexLayoutInlineItem[] = [];
-  let spaceFactor = 1000;
-  let hasSeenText = false;
-
-  for (const [tokenIndex, token] of tokens.entries()) {
-    if (token.kind === "space" && !hasSeenText) {
-      continue;
-    }
-
-    if (token.kind === "text") {
-      const font = textFontProfile.resolveTextFont(token.fontState, atPt, metricProvider);
-      const italicCorrectionAfter =
-        token.italicCorrectionAfter === true &&
-        (token.italicCorrectionUnconditional === true || !texItalicCorrectionSuppressedByNextToken(tokens[tokenIndex + 1]));
-      const spaceFactorBefore = spaceFactor;
-      spaceFactor = updateSpaceFactorForText(spaceFactor, token.ligatureSource ?? token.text);
-      if (token.spaceFactorResetAfter) spaceFactor = 1000;
-      items.push({
-        kind: "text",
-        text: token.text,
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        font,
-        italicCorrectionAfter,
-        spaceFactorBefore,
-        spaceFactorAfter: spaceFactor,
-        ...(token.literal ? { literal: token.literal } : {}),
-      });
-      hasSeenText = true;
-      continue;
-    }
-
-    if (token.kind === "math") {
-      const box = mathBoxProvider?.getInlineMathBox({
-        atPt: token.fontState.sizePt ?? atPt,
-        source: token.text,
-        content: token.content ?? "",
-        delimiter: token.delimiter ?? "dollar",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        contentStart: token.contentStart ?? token.sourceStart,
-        contentEnd: token.contentEnd ?? token.sourceEnd,
-      }) ?? null;
-      if (!box) {
-        // Total rendering: a math span the math subsystem cannot handle is
-        // contained as a literal run instead of escalating to node fallback.
-        items.push(...texLiteralItemsForSource({
-          source: token.text,
-          sourceStart: token.sourceStart,
-          literal: { reason: "math-error" },
-          atPt,
-          metricProvider,
-          spaceGlueProfile,
-          textFontProfile,
-        }));
-        hasSeenText = true;
-        spaceFactor = 1000;
-        continue;
-      }
-      items.push({
-        kind: "math",
-        text: token.text,
-        content: token.content ?? "",
-        delimiter: token.delimiter ?? "dollar",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        contentStart: token.contentStart ?? token.sourceStart,
-        contentEnd: token.contentEnd ?? token.sourceEnd,
-        box: token.fontState.color
-          ? {
-              ...box,
-              color: token.fontState.color,
-              ...(box.rootBox ? { rootBox: { ...box.rootBox, color: token.fontState.color } } : {}),
-            }
-          : box,
-      });
-      hasSeenText = true;
-      spaceFactor = 1000;
-      continue;
-    }
-
-    if (token.kind === "transform-box" && token.transformBox) {
-      const box = layoutTexTransformBox({ ...(listProfile !== undefined ? { listProfile } : {}), node: token.transformBox, fontState: token.fontState, atPt, metricProvider, spaceGlueProfile, ...(mathBoxProvider !== undefined ? { mathBoxProvider: mathBoxProvider } : {}), textFontProfile, ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}), ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}), ...(tabularProfile !== undefined ? { tabularProfile: tabularProfile } : {}) });
-      items.push({ kind: "text-box", command: token.transformBox.command, text: token.text, content: token.transformBox.content, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.transformBox.contentStart, contentEnd: token.transformBox.contentEnd, box });
-      hasSeenText = true; spaceFactor = 1000; continue;
-    }
-    if (token.kind === "tabular" && token.table) {
-      const box = layoutTexTabularBox({ table: token.table, source: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, fontState: token.fontState, atPt, metricProvider, spaceGlueProfile, ...(mathBoxProvider !== undefined ? { mathBoxProvider: mathBoxProvider } : {}), textFontProfile, ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}), ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}), ...(tabularProfile !== undefined ? { tabularProfile: tabularProfile } : {}) });
-      items.push({ kind: "text-box", command: "tabular", text: token.text, content: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.table.contentStart, contentEnd: token.table.contentEnd, box });
-      hasSeenText = true; spaceFactor = 1000; continue;
-    }
-
-    if (token.kind === "mbox") {
-      const box = texMBoxFromInlineNodes({
-        command: token.command ?? "mbox",
-        source: token.text,
-        content: token.content ?? "",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        contentStart: token.contentStart ?? token.sourceStart,
-        contentEnd: token.contentEnd ?? token.sourceEnd,
-        children: token.children ?? [],
-        ...(token.boxWidth !== undefined ? { boxWidth: token.boxWidth } : {}),
-        ...(token.boxAlign !== undefined ? { boxAlign: token.boxAlign } : {}),
-        ...(token.backgroundColor !== undefined ? { backgroundColor: token.backgroundColor } : {}),
-        ...(token.frameColor !== undefined ? { frameColor: token.frameColor } : {}),
-        fontState: token.fontState,
-        atPt,
-        metricProvider,
-        spaceGlueProfile,
-        ...(mathBoxProvider !== undefined ? { mathBoxProvider: mathBoxProvider } : {}),
-        textFontProfile,
-        ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}),
-        ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}),
-      });
-      if (!box) {
-        throw new Error(`Failed to lay out TeX \\${token.command ?? "mbox"} for source range ${token.sourceStart}:${token.sourceEnd}.`);
-      }
-      items.push({
-        kind: "text-box",
-        command: token.command ?? "mbox",
-        text: token.text,
-        content: token.content ?? "",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        contentStart: token.contentStart ?? token.sourceStart,
-        contentEnd: token.contentEnd ?? token.sourceEnd,
-        box,
-      });
-      hasSeenText = true;
-      spaceFactor = 1000;
-      continue;
-    }
-
-    if (token.kind === "rule") {
-      const box = texRuleBox({
-        source: token.text,
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        raise: token.ruleRaise ?? texHBoxOffsetY(0),
-        width: token.ruleWidth ?? texLength(0),
-        height: token.ruleHeight ?? texLength(0),
-        ...(token.ruleIsStrut ? { strutBaselineSkipPt: token.ruleStrutBaselineSkipPt ?? texLength(Number(token.fontState.sizePt ?? atPt) * 1.2) } : {}),
-        metricProvider,
-        textFontProfile,
-      });
-      items.push({
-        kind: "text-box",
-        command: "rule",
-        text: token.text,
-        content: "",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        contentStart: token.sourceStart,
-        contentEnd: token.sourceEnd,
-        box,
-      });
-      hasSeenText = true;
-      spaceFactor = 1000;
-      continue;
-    }
-
-    if (token.kind === "includegraphics") {
-      const activeFont = textFontProfile.resolveTextFont(
-        token.fontState,
-        atPt,
-        metricProvider
-      );
-      const box = texIncludeGraphicsBox({
-        source: token.text,
-        filename: token.graphicsFilename ?? "",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        filenameStart: token.graphicsFilenameStart ?? token.sourceStart,
-        filenameEnd: token.graphicsFilenameEnd ?? token.sourceEnd,
-        options: token.graphicsOptions ?? { raw: "" },
-        ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}),
-        ...(dimensionContext ? { dimensionContext: texDimensionContextForFont(dimensionContext, activeFont) } : {}),
-        draftLabel: (label) => texIncludeGraphicsDraftLabel({ label, fontState: token.fontState, at: token.sourceStart, atPt, metricProvider, spaceGlueProfile, textFontProfile }),
-      });
-      items.push({
-        kind: "text-box",
-        command: "includegraphics",
-        text: token.text,
-        content: token.graphicsFilename ?? "",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        contentStart: token.graphicsFilenameStart ?? token.sourceStart,
-        contentEnd: token.graphicsFilenameEnd ?? token.sourceEnd,
-        box,
-      });
-      hasSeenText = true;
-      spaceFactor = 1000;
-      continue;
-    }
-
-    if (token.kind === "raisebox") {
-      const surroundingSizePt = token.fontState.sizePt ?? atPt;
-      const box = texRaiseBoxFromInlineNodes({
-        ...(listProfile !== undefined ? { listProfile } : {}),
-        ...(tabularProfile !== undefined ? { tabularProfile } : {}),
-        source: token.text,
-        content: token.content ?? "",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        contentStart: token.contentStart ?? token.sourceStart,
-        contentEnd: token.contentEnd ?? token.sourceEnd,
-        children: token.children ?? [],
-        lift: texHBoxOffsetY(roundTexPt(
-          (token.lift ?? texHBoxOffsetY(0)) +
-          (token.relativeLiftEm ?? 0) * surroundingSizePt
-        )),
-        ...(token.boxHeight !== undefined ? { boxHeight: token.boxHeight } : {}),
-        ...(token.boxDepth !== undefined ? { boxDepth: token.boxDepth } : {}),
-        fontState: token.fontState,
-        ...(token.childFontScale !== undefined ? { childFontScale: token.childFontScale } : {}),
-        atPt,
-        metricProvider,
-        spaceGlueProfile,
-        ...(mathBoxProvider !== undefined ? { mathBoxProvider: mathBoxProvider } : {}),
-        textFontProfile,
-        ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}),
-        ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}),
-      });
-      if (!box) {
-        throw new Error(`Failed to lay out TeX \\raisebox for source range ${token.sourceStart}:${token.sourceEnd}.`);
-      }
-      items.push({
-        kind: "text-box",
-        command: "raisebox",
-        text: token.text,
-        content: token.content ?? "",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        contentStart: token.contentStart ?? token.sourceStart,
-        contentEnd: token.contentEnd ?? token.sourceEnd,
-        box,
-      });
-      hasSeenText = true;
-      spaceFactor = 1000;
-      continue;
-    }
-
-    if (token.kind === "dimension-box") {
-      const command = token.dimensionCommand ?? "phantom";
-      const box = texDimensionBoxFromInlineNodes({
-        command,
-        source: token.text,
-        content: token.content ?? "",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        contentStart: token.contentStart ?? token.sourceStart,
-        contentEnd: token.contentEnd ?? token.sourceEnd,
-        children: token.children ?? [],
-        fontState: token.fontState,
-        atPt,
-        metricProvider,
-        spaceGlueProfile,
-        ...(mathBoxProvider !== undefined ? { mathBoxProvider: mathBoxProvider } : {}),
-        textFontProfile,
-        ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}),
-        ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}),
-      });
-      if (!box) {
-        throw new Error(`Failed to lay out TeX \\${command} for source range ${token.sourceStart}:${token.sourceEnd}.`);
-      }
-      items.push({
-        kind: "text-box",
-        command,
-        text: token.text,
-        content: token.content ?? "",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        contentStart: token.contentStart ?? token.sourceStart,
-        contentEnd: token.contentEnd ?? token.sourceEnd,
-        box,
-      });
-      hasSeenText = true;
-      spaceFactor = 1000;
-      continue;
-    }
-
-    if (token.kind === "penalty") {
-      items.push({
-        kind: "penalty",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        penalty: token.penalty ?? 0,
-      });
-      continue;
-    }
-
-    if (token.kind === "forced-break") {
-      const font = textFontProfile.resolveTextFont(token.fontState, atPt, metricProvider);
-      items.push({
-        kind: "forced-break",
-        text: " ",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        font,
-        ...(token.lineLeading !== undefined ? { lineLeading: token.lineLeading } : {}),
-        spaceFactor,
-        spaceGlueProfile,
-      });
-      continue;
-    }
-
-    const font = textFontProfile.resolveTextFont(token.fontState, atPt, metricProvider);
-    if (token.nonBreaking) {
-      items.push({
-        kind: "space",
-        text: " ",
-        sourceStart: token.sourceStart,
-        sourceEnd: token.sourceEnd,
-        font,
-        spaceFactor: token.controlSpace ? 1000 : spaceFactor,
-        spaceGlueProfile,
-        nonBreaking: true,
-      });
-      continue;
-    }
-    items.push({
-      kind: "space",
-      text: " ",
-      sourceStart: token.sourceStart,
-      sourceEnd: token.sourceEnd,
-      font,
-      spaceFactor: token.controlSpace ? 1000 : spaceFactor,
-      spaceGlueProfile,
-    });
-  }
-
-  while (
-    items.at(-1)?.kind === "space" ||
-    (items.at(-1)?.kind === "forced-break" && segment.forcedBreakAfter === undefined)
-  ) {
-    items.pop();
-  }
-  return insertTextBoundaryKerns(items, metricProvider);
+  return simpleTexInlineTokensToLayoutItems({
+    tokens: simpleTexInlineNodesToTokens(segment.nodes, initialFontState),
+    atPt,
+    metricProvider,
+    spaceGlueProfile,
+    ...(mathBoxProvider !== undefined ? { mathBoxProvider } : {}),
+    textFontProfile,
+    ...(graphicsResolver !== undefined ? { graphicsResolver } : {}),
+    ...(dimensionContext !== undefined ? { dimensionContext } : {}),
+    ...(tabularProfile !== undefined ? { tabularProfile } : {}),
+    ...(listProfile !== undefined ? { listProfile } : {}),
+    trimEdges: true,
+    // A paragraph segment that ends in `\\` keeps that forced break.
+    keepTrailingForcedBreak: segment.forcedBreakAfter !== undefined,
+  });
 }
 
 function texMBoxFromInlineNodes(params: {
@@ -1925,6 +1600,8 @@ export function simpleTexInlineTokensToLayoutItems(params: {
   readonly tabularProfile?: TexTabularLayoutProfile;
   readonly listProfile?: TexListLayoutProfile;
   readonly trimEdges: boolean;
+  /** With `trimEdges`, leave a final forced break in place (a segment ending in `\\`). */
+  readonly keepTrailingForcedBreak?: boolean;
 }): TexLayoutInlineItem[] {
   const items: TexLayoutInlineItem[] = [];
   let spaceFactor = 1000;
@@ -1970,6 +1647,8 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         contentEnd: token.contentEnd ?? token.sourceEnd,
       }) ?? null;
       if (!box) {
+        // Total rendering: a math span the math subsystem cannot handle is
+        // contained as a literal run instead of escalating to node fallback.
         items.push(...texLiteralItemsForSource({
           source: token.text,
           sourceStart: token.sourceStart,
@@ -1992,7 +1671,14 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         sourceEnd: token.sourceEnd,
         contentStart: token.contentStart ?? token.sourceStart,
         contentEnd: token.contentEnd ?? token.sourceEnd,
-        box,
+        // \textcolor/\color colour the math list too, in every inline context.
+        box: token.fontState.color
+          ? {
+              ...box,
+              color: token.fontState.color,
+              ...(box.rootBox ? { rootBox: { ...box.rootBox, color: token.fontState.color } } : {}),
+            }
+          : box,
       });
       hasSeenText = true;
       spaceFactor = 1000;
@@ -2022,6 +1708,8 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         children: token.children ?? [],
         ...(token.boxWidth !== undefined ? { boxWidth: token.boxWidth } : {}),
         ...(token.boxAlign !== undefined ? { boxAlign: token.boxAlign } : {}),
+        ...(token.backgroundColor !== undefined ? { backgroundColor: token.backgroundColor } : {}),
+        ...(token.frameColor !== undefined ? { frameColor: token.frameColor } : {}),
         fontState: token.fontState,
         atPt: params.atPt,
         metricProvider: params.metricProvider,
@@ -2249,7 +1937,10 @@ export function simpleTexInlineTokensToLayoutItems(params: {
   }
 
   if (params.trimEdges) {
-    while (items.at(-1)?.kind === "space" || items.at(-1)?.kind === "forced-break") {
+    while (
+      items.at(-1)?.kind === "space" ||
+      (items.at(-1)?.kind === "forced-break" && params.keepTrailingForcedBreak !== true)
+    ) {
       items.pop();
     }
   }

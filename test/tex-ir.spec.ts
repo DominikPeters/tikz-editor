@@ -5,6 +5,8 @@ import {
   analyzeSimpleTexResources,
   classicComputerModernTextFontProfile,
   computerModernTexMetricProvider,
+  createTexDerivedInlineMathBoxProvider,
+  renderTexParagraphSvgBody,
   createSimpleTexLayoutDocumentIr,
   createSimpleTexLayoutDocumentIrFromPreparation,
   luaLatexDefaultTextFontProfile,
@@ -2467,6 +2469,36 @@ function expectParagraphPlansCoverVListParagraphs(layout: {
     texVListParagraphItems(layout.vlist.items).map((item) => item.paragraph.blockIndex)
   );
 }
+
+describe("inline contents share one item builder", () => {
+  const paintedColors = (source: string): Set<string> => {
+    const layout = layoutSimpleTexParagraph(source, {
+      width: 400,
+      alignment: "ragged-right",
+      tikzTextWidthNode: false,
+      parindent: 0,
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    expect(layout.supported).toBe(true);
+    const body = renderTexParagraphSvgBody(layout.report!, {
+      lineHeightPt: texLength(12),
+      metricProvider: computerModernTexMetricProvider,
+      ...(layout.vlistLayout ? { vlistLayout: layout.vlistLayout } : {}),
+    });
+    return new Set([...body.matchAll(/(?:fill|stroke)="(#[0-9a-f]{6})"/gu)].map((match) => match[1]!));
+  };
+
+  it("colours math in \\textcolor in paragraphs, \\mbox contents and tabular cells alike", () => {
+    // TeX colours the whole argument of \textcolor, math list included.
+    for (const source of [
+      String.raw`a \textcolor{red}{$x$} b`,
+      String.raw`a \mbox{\textcolor{red}{$x$}} b`,
+      String.raw`\begin{tabular}{c}\textcolor{red}{$x$}\end{tabular}`,
+    ]) {
+      expect(paintedColors(source), source).toContain("#ff0000");
+    }
+  });
+});
 
 // Reference widths come from LuaLaTeX (the comparison oracle) with the default
 // Latin Modern fonts at 10pt: `\setbox0\hbox{...}\the\wd0`.
