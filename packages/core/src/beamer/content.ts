@@ -184,6 +184,11 @@ export function parseBeamerFrameBody(
       index = endIndex;
       continue;
     }
+    if ((globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.VLIST_INLINE_BLOCKS === "1" && !frame.id.includes(":inline:") &&
+        (token.name === "columns" || token.name === "block" || token.name === "alertblock" || token.name === "exampleblock")) {
+      index = endIndex;
+      continue;
+    }
     if (isInsideNativeTextFlow(context, token.span.from, overlays, frame.bodySpan.from)) {
       // Lists, alignment environments and ordinary groups own their inline
       // boxes. Extracting a nested picture would split their TeX scope.
