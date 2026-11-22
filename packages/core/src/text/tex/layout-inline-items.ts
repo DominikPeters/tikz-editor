@@ -557,6 +557,7 @@ export function simpleTexSegmentToLayoutItems(
         (token.italicCorrectionUnconditional === true || !texItalicCorrectionSuppressedByNextToken(tokens[tokenIndex + 1]));
       const spaceFactorBefore = spaceFactor;
       spaceFactor = updateSpaceFactorForText(spaceFactor, token.ligatureSource ?? token.text);
+      if (token.spaceFactorResetAfter) spaceFactor = 1000;
       items.push({
         kind: "text",
         text: token.text,
@@ -1941,6 +1942,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         (token.italicCorrectionUnconditional === true || !texItalicCorrectionSuppressedByNextToken(params.tokens[tokenIndex + 1]));
       const spaceFactorBefore = spaceFactor;
       spaceFactor = updateSpaceFactorForText(spaceFactor, token.ligatureSource ?? token.text);
+      if (token.spaceFactorResetAfter) spaceFactor = 1000;
       items.push({
         kind: "text",
         text: token.text,

@@ -177,6 +177,8 @@ export interface SimpleTexTextNode extends SimpleTexSourceRange {
    * decision (cmtt/lmmono have none), so it is undone for typewriter text.
    */
   readonly ligatureSource?: string;
+  /** `\@`: an empty node that only sets the space factor to 1000. */
+  readonly spaceFactorReset?: true;
   readonly breakAfterPenalty?: number;
 }
 
@@ -607,6 +609,8 @@ export interface SimpleTexToken {
   readonly text: string;
   /** Source characters of an input ligature `text` stands for (see SimpleTexTextNode). */
   readonly ligatureSource?: string;
+  /** A following `\@` set the space factor to 1000 after this token. */
+  readonly spaceFactorResetAfter?: true;
   readonly sourceStart: number;
   readonly sourceEnd: number;
   readonly table?: TexTabular;
@@ -2375,6 +2379,20 @@ function scanSimpleTexProseControl(
       node: {
         kind: "text",
         text: escapedReplacement,
+        sourceStart,
+        sourceEnd: sourceOffset + commandEnd,
+      },
+      end: commandEnd,
+      unsupportedCommand: false,
+    };
+  }
+  if (command?.name === "@") {
+    // latex.ltx `\@` is `\spacefactor\@m`: no material, only the factor.
+    return {
+      node: {
+        kind: "text",
+        text: "",
+        spaceFactorReset: true,
         sourceStart,
         sourceEnd: sourceOffset + commandEnd,
       },
@@ -6425,6 +6443,14 @@ export function simpleTexInlineNodesToTokens(
         }
       }
       skipPostLineBreakSpace = false;
+      continue;
+    }
+
+    if (node.spaceFactorReset) {
+      const previous = tokens.at(-1);
+      if (previous?.kind === "text") {
+        tokens[tokens.length - 1] = { ...previous, spaceFactorResetAfter: true };
+      }
       continue;
     }
 

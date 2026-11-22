@@ -2510,6 +2510,13 @@ describe("input ligatures and space factor against LuaLaTeX", () => {
     expect(extra("]")).toBeCloseTo(1.11, 2);
   });
 
+  it("models \\@ as a space factor of 1000", () => {
+    // Oracle: a. b 17.78, a.\@ b 16.67; A. b 19.17, A\@. b 20.28 (sentence space after a capital).
+    expect(naturalWidth(String.raw`a.\@ b`)).toBeCloseTo(16.67, 2);
+    expect(naturalWidth(String.raw`A\@. b`)).toBeCloseTo(20.28, 2);
+    expect(naturalWidth(String.raw`A. b`)).toBeCloseTo(19.17, 2);
+  });
+
   it("resets the space factor after a double quote (latex.ltx leaves its sfcode at 1000)", () => {
     // Oracle: a." b and a."\ b are both 20.00pt.
     expect(naturalWidth('a." b')).toBeCloseTo(naturalWidth(String.raw`a."\ b`), 2);
