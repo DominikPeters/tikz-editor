@@ -2116,7 +2116,9 @@ describe("simple TeX paragraph layout", () => {
     expect(lowercaseWordSpace).toBeCloseTo(normalSpace ?? 0, 6);
     expect(closingParenSpace).toBeCloseTo(sentenceSpace ?? 0, 6);
     expect(followingNormalSpace).toBeCloseTo(normalSpace ?? 0, 6);
-    expect(closingQuoteSpace).toBeCloseTo(sentenceSpace ?? 0, 6);
+    // latex.ltx zeroes the sfcode of ) ] and ' only: `"` is an ordinary 1000 character, so the
+    // factor resets (LuaLaTeX and pdfLaTeX: `a." b` is exactly as wide as `a."\ b`).
+    expect(closingQuoteSpace).toBeCloseTo(normalSpace ?? 0, 6);
   });
 
   it("scales justified stretch for comma, semicolon, and colon spacefactors", () => {

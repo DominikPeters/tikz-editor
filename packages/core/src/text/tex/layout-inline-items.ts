@@ -556,7 +556,7 @@ export function simpleTexSegmentToLayoutItems(
         token.italicCorrectionAfter === true &&
         (token.italicCorrectionUnconditional === true || !texItalicCorrectionSuppressedByNextToken(tokens[tokenIndex + 1]));
       const spaceFactorBefore = spaceFactor;
-      spaceFactor = updateSpaceFactorForText(spaceFactor, token.text);
+      spaceFactor = updateSpaceFactorForText(spaceFactor, token.ligatureSource ?? token.text);
       items.push({
         kind: "text",
         text: token.text,
@@ -1940,7 +1940,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         token.italicCorrectionAfter === true &&
         (token.italicCorrectionUnconditional === true || !texItalicCorrectionSuppressedByNextToken(params.tokens[tokenIndex + 1]));
       const spaceFactorBefore = spaceFactor;
-      spaceFactor = updateSpaceFactorForText(spaceFactor, token.text);
+      spaceFactor = updateSpaceFactorForText(spaceFactor, token.ligatureSource ?? token.text);
       items.push({
         kind: "text",
         text: token.text,
@@ -2631,7 +2631,8 @@ function defaultTexSfcode(char: string): number {
   if (char === ",") {
     return 1250;
   }
-  if (char === ")" || char === "]" || char === "'" || char === '"') {
+  // latex.ltx:657 sets \sfcode of ) ' ] to 0; " keeps the plain TeX default 1000.
+  if (char === ")" || char === "]" || char === "'") {
     return 0;
   }
   return 1000;

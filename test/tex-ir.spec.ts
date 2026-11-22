@@ -2498,4 +2498,20 @@ describe("input ligatures and space factor against LuaLaTeX", () => {
     expect(naturalWidth(String.raw`\texttt{a''b}`)).toBeCloseTo(21, 2);
     expect(naturalWidth(String.raw`{\ttfamily a--b}`)).toBeCloseTo(21, 2);
   });
+
+  it("keeps the sentence space after quote and bracket characters whose sfcode is 0", () => {
+    // Oracle: a.'' b 21.11 / a.''\ b 20.00; a.' b - a.'\ b = 1.11; a.) b - a.)\ b = 1.11.
+    expect(naturalWidth("a.'' b")).toBeCloseTo(21.11, 2);
+    expect(naturalWidth(String.raw`a.''\ b`)).toBeCloseTo(20, 2);
+    const extra = (closer: string) => naturalWidth(`a.${closer} b`) - naturalWidth(`a.${closer}\\ b`);
+    expect(extra("''")).toBeCloseTo(1.11, 2);
+    expect(extra("'")).toBeCloseTo(1.11, 2);
+    expect(extra(")")).toBeCloseTo(1.11, 2);
+    expect(extra("]")).toBeCloseTo(1.11, 2);
+  });
+
+  it("resets the space factor after a double quote (latex.ltx leaves its sfcode at 1000)", () => {
+    // Oracle: a." b and a."\ b are both 20.00pt.
+    expect(naturalWidth('a." b')).toBeCloseTo(naturalWidth(String.raw`a."\ b`), 2);
+  });
 });
