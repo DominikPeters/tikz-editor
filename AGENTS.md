@@ -9,6 +9,7 @@ WYSIWYG TikZ editor with a parser -> semantic scene graph -> SVG pipeline.
 - `apps/desktop`: Tauri shell for `@tikz-editor/app`; local Tauri docs are in `tauri-docs/`.
 - `apps/landing`: landing/marketing site.
 - `pgf-docs`, `pgf-src`: untracked local PGF manual/source references for renderer behavior. Reference this frequently to make sure that app behavior conforms to PGF; do not guess about TikZ semantics.
+- `tex-src`: untracked TeX/LaTeX references for text, list and Beamer layout: commented LaTeX kernel `.dtx` sources matching the installed TeX Live release, symlinks to the installed kernel and beamer packages, `tex.web`, the TeXbook and the LuaTeX manual (see `tex-src/README.md`). Derive spacing and box behavior from these sources; do not guess about TeX semantics.
 
 ## Core Pipeline
 - Parser: `packages/core/src/parser`
