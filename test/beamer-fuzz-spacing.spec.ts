@@ -1477,6 +1477,46 @@ Right.
 \par Witness`, 11, "Madrid", "43"),
     baselines: [["Left.", 61.953293], ["Right.", 74.873703], ["Witness", 85.186295]],
   },
+  {
+    name: "keeps a list's closing skip across empty groups and hidden overlay branches before columns",
+    source: slide(String.raw`Lead.\par
+\begin{exampleblock}{T}
+\begin{description}
+\item[S1] Text.
+\end{description}
+\par
+\only<2->{Hidden.}
+\par
+\begin{columns}[onlytextwidth,b]
+\begin{column}{0.62\textwidth}
+Left.
+\end{column}
+\begin{column}{0.34\textwidth}
+Right.
+\end{column}
+\end{columns}
+\end{exampleblock}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["Left.", 98.285812], ["Witness", 120.488693]],
+  },
+  {
+    name: "closes a list before a columns box that follows it inside a centered environment",
+    source: slide(String.raw`Lead.\par
+\begin{center}
+Text one.\par
+\begin{enumerate}
+\item Before after.
+\end{enumerate}
+\par
+\begin{columns}[onlytextwidth,t]
+\begin{column}{0.62\textwidth}
+Left.
+\end{column}
+\end{columns}
+\end{center}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["Left.", 102.044464], ["Witness", 123.515152]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

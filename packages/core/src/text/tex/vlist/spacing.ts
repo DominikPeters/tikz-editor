@@ -198,7 +198,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
       const listItem = lastVListAncestorRole(scope, "list-item");
       const trivlists = scope.filter(role => role.kind === "trivlist");
       const changesTrivlist = commonTrivlistScopePrefixLength(state.previousEmittedTrivlistScopes, trivlists) !== Math.max(state.previousEmittedTrivlistScopes.length, trivlists.length);
-      if (changesTrivlist || list && listItem && (!state.previousEmittedListContext ||
+      // A list that just ended closes before a box that sits outside it.
+      const exitsList = state.previousEmittedListContext !== undefined && (list === undefined || state.previousEmittedListContext.depth > list.depth);
+      if (changesTrivlist || exitsList || list && listItem && (!state.previousEmittedListContext ||
           state.previousEmittedListContext.listStart !== list.sourceStart ||
           state.previousEmittedListContext.itemIndex !== listItem.itemIndex)) {
         const blockIndex = -3_000_000 - (item.sourceSpan?.start ?? 0);

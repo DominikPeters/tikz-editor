@@ -303,7 +303,8 @@ export function trailingBeamerListSkip(source: string, topsepPt = 3): number {
     return 0;
   }
   const suffix = source.slice(lastEnd);
-  return /^(?:\s|\}|\\par(?![A-Za-z@])|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? topsepPt : 0;
+  // Empty groups, \relax and colour switches ship nothing, so the list's closing skip still applies.
+  return /^(?:\s|\}|\{\s*\}|\\relax(?![A-Za-z@])|\\color\s*(?:\[[^\]]*\])?\s*\{[^{}]*\}|\\par(?![A-Za-z@])|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? topsepPt : 0;
 }
 
 export function leadingBeamerTrivlistAdjustment(
