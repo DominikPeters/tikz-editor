@@ -1174,6 +1174,57 @@ describe("semantic evaluator / coordinates and path ops", () => {
       expect((third.minX + third.maxX) / 2).toBeCloseTo(11 * cm, 0);
     });
 
+    it("computes node borders of transformed shapes like \\anchorborder", () => {
+      // Reference points measured from TeX (dvisvgm, converted to pt, relative to the picture origin).
+      // (n)--(t) clips with \pgfpointshapeborder (a world-space ray); (n.<angle>) hands the angle to the
+      // shape's \anchorborder in the shape's own frame, so for a transformed node it is M * border(angle).
+      const source = String.raw`\begin{tikzpicture}
+    \node[draw,circle,minimum size=2cm,xscale=2,rotate=20,transform shape] (a) at (0,0) {};
+    \node[draw,ellipse,minimum width=3cm,minimum height=1cm,xscale=1.5,yscale=0.7,rotate=40,transform shape] (e) at (0,-4) {};
+    \coordinate (ta) at (6,1);
+    \coordinate (te) at (6,-3);
+    \draw (a) -- (ta);
+    \draw (a.30) -- (a.100) -- (a.210) -- (a.300);
+    \draw (e) -- (te);
+    \draw (e.30) -- (e.100) -- (e.210) -- (e.300);
+  \end{tikzpicture}`;
+      const result = evaluateSemantic(source);
+      expect(result.diagnostics.filter((diagnostic) => diagnostic.severity === "error")).toEqual([]);
+      const paths = elementsOfKind(result.scene.elements, "Path").filter((path) => path.commands[0]?.kind === "M" && !path.id.includes("node"));
+      const points = (path: (typeof paths)[number]) => path.commands.flatMap((command) => ("to" in command ? [[command.to.x, command.to.y]] : []));
+      const expectPoints = (actual: number[][], expected: number[][]) => {
+        expect(actual).toHaveLength(expected.length);
+        expected.forEach(([x, y], index) => {
+          expect(actual[index]![0]).toBeCloseTo(x!, 1);
+          expect(actual[index]![1]).toBeCloseTo(y!, 1);
+        });
+      };
+      const byStart = (index: number) => points(paths[index]!);
+      expectPoints(byStart(0).slice(0, 1), [[54.36, 9.06]]);
+      expectPoints(byStart(1), [[36.838, 21.948], [-28.653, 24.814], [-36.836, -21.95], [43.899, -18.422]]);
+      expectPoints(byStart(2).slice(0, 1), [[43.405, -106.579]]);
+      expectPoints(byStart(3), [[12.787, -97.416], [-16.8, -107.233], [-12.789, -130.21], [23.048, -117.73]]);
+    });
+
+    it("places labels at numeric angles in the frame of a transformed node", () => {
+      // TeX: label={[draw,minimum size=1cm]30:x} on a slanted, transformed rectangle puts the label box centre at
+      // (46.62pt, 28.86pt) from the node centre, because the angle is applied before the node transform.
+      const source = String.raw`\begin{tikzpicture}
+    \node[draw,rectangle,minimum width=3cm,minimum height=1cm,xslant=0.5,transform shape,label={[draw,minimum size=1cm]30:x}] (r) at (0,-4) {};
+  \end{tikzpicture}`;
+      const result = evaluateSemantic(source);
+      const cm = 72.27 / 2.54;
+      const centers = elementsOfKind(result.scene.elements, "Path").flatMap((path) => {
+        const points = path.commands.flatMap((command) => ("to" in command ? [command.to] : []));
+        return points.length === 4 || points.length === 5
+          ? [{ x: points.reduce((sum, point) => sum + point.x, 0) / points.length, y: points.reduce((sum, point) => sum + point.y, 0) / points.length }]
+          : [];
+      });
+      const expected = { x: 46.62, y: -4 * cm + 28.86 };
+      const nearest = Math.min(...centers.map((center) => Math.hypot(center.x - expected.x, center.y - expected.y)));
+      expect(nearest).toBeLessThan(0.3);
+    });
+
     it("expands macros in circle radius path options", () => {
       const source = String.raw`\begin{tikzpicture}
     \def\r{1cm}

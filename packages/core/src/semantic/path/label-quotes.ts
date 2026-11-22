@@ -15,9 +15,9 @@ import {
 import { parseLength } from "../coords/parse-length.js";
 import { autoAnchorFromVector } from "../nodes/auto-anchor.js";
 import { applyNameScope } from "../nodes/named-coordinates.js";
-import { intersectRayWithPolygon } from "../nodes/shape-geometry.js";
+import { intersectNodeShapeBorder } from "../nodes/shape-border.js";
 import { findTopLevelCharacter, readBalancedBlock, parseStyleValueAsOptionList } from "../style/option-utils.js";
-import { applyMatrixToVector, inverseMatrix } from "../transform.js";
+import { inverseMatrix } from "../transform.js";
 import { stripWrappingBraces } from "../../utils/braces.js";
 
 function worldPoint(x: number, y: number): WorldPoint {
@@ -1059,86 +1059,8 @@ function intersectNodeBorder(geometry: NamedNodeGeometry | null, direction: Worl
   if (!geometry) {
     return null;
   }
-  const dx = direction.x;
-  const dy = direction.y;
-  const len = Math.hypot(dx, dy);
-  if (!Number.isFinite(len) || len <= 1e-9) {
-    return geometry.center;
-  }
-
-  if (geometry.shape === "circle") {
-    const radius = geometry.anchorRadius;
-    const transform = geometry.anchorTransform;
-    const localDirection = (() => {
-      if (!transform) return worldVector(dx, dy);
-      const inverse = inverseMatrix(transform);
-      if (!inverse) return worldVector(dx, dy);
-      return applyMatrixToVector(inverse, worldVector(dx, dy));
-    })();
-    const localLen = Math.hypot(localDirection.x, localDirection.y);
-    if (!Number.isFinite(localLen) || localLen <= 1e-9) {
-      return geometry.center;
-    }
-    const localPoint = worldVector(
-      (localDirection.x / localLen) * radius,
-      (localDirection.y / localLen) * radius
-    );
-    if (!transform) {
-      return worldPoint(geometry.center.x + localPoint.x, geometry.center.y + localPoint.y);
-    }
-    const mapped = applyMatrixToVector(transform, localPoint);
-    return worldPoint(geometry.center.x + mapped.x, geometry.center.y + mapped.y);
-  }
-
-  if (geometry.shape === "rectangle") {
-    const transform = geometry.anchorTransform;
-    const localDirection = (() => {
-      if (!transform) return worldVector(dx, dy);
-      const inverse = inverseMatrix(transform);
-      if (!inverse) return worldVector(dx, dy);
-      return applyMatrixToVector(inverse, worldVector(dx, dy));
-    })();
-    const hw = geometry.anchorHalfWidth;
-    const hh = geometry.anchorHalfHeight;
-    const scale = 1 / Math.max(Math.abs(localDirection.x) / hw, Math.abs(localDirection.y) / hh);
-    const localPoint = worldVector(localDirection.x * scale, localDirection.y * scale);
-    if (!transform) {
-      return worldPoint(geometry.center.x + localPoint.x, geometry.center.y + localPoint.y);
-    }
-    const mapped = applyMatrixToVector(transform, localPoint);
-    return worldPoint(geometry.center.x + mapped.x, geometry.center.y + mapped.y);
-  }
-
-  if (geometry.shape === "ellipse") {
-    const transform = geometry.anchorTransform;
-    const localDirection = (() => {
-      if (!transform) return worldVector(dx, dy);
-      const inverse = inverseMatrix(transform);
-      if (!inverse) return worldVector(dx, dy);
-      return applyMatrixToVector(inverse, worldVector(dx, dy));
-    })();
-    const rx = geometry.anchorHalfWidth;
-    const ry = geometry.anchorHalfHeight;
-    const scale = 1 / Math.sqrt((localDirection.x * localDirection.x) / (rx * rx) + (localDirection.y * localDirection.y) / (ry * ry));
-    if (!Number.isFinite(scale)) {
-      return geometry.center;
-    }
-    const localPoint = worldVector(localDirection.x * scale, localDirection.y * scale);
-    if (!transform) {
-      return worldPoint(geometry.center.x + localPoint.x, geometry.center.y + localPoint.y);
-    }
-    const mapped = applyMatrixToVector(transform, localPoint);
-    return worldPoint(geometry.center.x + mapped.x, geometry.center.y + mapped.y);
-  }
-
-  if (geometry.anchorPolygon && geometry.anchorPolygon.length >= 3) {
-    const hit = intersectRayWithPolygon(worldPoint(0, 0), worldVector(dx, dy), geometry.anchorPolygon);
-    if (hit) {
-      return worldPoint(geometry.center.x + hit.x, geometry.center.y + hit.y);
-    }
-  }
-
-  return geometry.center;
+  // label=<angle>: and pin=<angle>: use the numeric anchor, i.e. the angle is in the shape's own frame.
+  return intersectNodeShapeBorder(geometry, direction, "local") ?? geometry.center;
 }
 
 function anchorFacingAway(degrees: number): string {

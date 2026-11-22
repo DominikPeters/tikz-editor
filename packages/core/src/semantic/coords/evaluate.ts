@@ -18,10 +18,10 @@ import { frameLocalPoint, frameLocalVector, worldPoint, worldVector } from "../.
 import type { FrameLocalPoint, WorldPoint, WorldVector } from "../../coords/points.js";
 import { frameTransform } from "../../coords/transforms.js";
 import type { FrameTransform, WorldTransform } from "../../coords/transforms.js";
-import { applyMatrix, applyMatrixToVector, inverseMatrix } from "../transform.js";
+import { applyMatrix } from "../transform.js";
 import { coordinateSourceUnit, parseLength, parseLengthWithInfo, parseQuantityExpression } from "./parse-length.js";
 import type { CoordinateSourceUnits } from "../types.js";
-import { intersectRayWithPolygon } from "../nodes/shape-geometry.js";
+import { intersectNodeShapeBorder } from "../nodes/shape-border.js";
 
 export type EvaluatedCoordinate = {
   kind: "transformed" | "world-only" | "invalid";
@@ -485,87 +485,8 @@ function normalizeDegrees(value: number): number {
 function resolveNumericAnchorPoint(geometry: NamedNodeGeometry, degrees: number): WorldPoint | null {
   const radians = (degrees * Math.PI) / 180;
   const direction = worldVector(pt(Math.cos(radians)), pt(Math.sin(radians)));
-  return intersectNamedGeometryBorder(geometry, direction);
-}
-
-function intersectNamedGeometryBorder(geometry: NamedNodeGeometry, direction: WorldVector): WorldPoint | null {
-  const dx = direction.x;
-  const dy = direction.y;
-  const len = Math.hypot(dx, dy);
-  if (!Number.isFinite(len) || len <= 1e-9) {
-    return geometry.center;
-  }
-
-  if (geometry.shape === "coordinate") {
-    return geometry.center;
-  }
-
-  const transform = geometry.anchorTransform;
-  let mappingTransform = transform;
-  const localDirection = (() => {
-    if (!transform) {
-      return direction;
-    }
-    const inverse = inverseMatrix(transform);
-    if (!inverse) {
-      mappingTransform = undefined;
-      return direction;
-    }
-    return applyMatrixToVector(inverse, direction);
-  })();
-  const localDx = localDirection.x;
-  const localDy = localDirection.y;
-  const localLen = Math.hypot(localDx, localDy);
-  if (!Number.isFinite(localLen) || localLen <= 1e-9) {
-    return geometry.center;
-  }
-  const fromLocal = (point: WorldVector): WorldPoint => {
-    if (!mappingTransform) {
-      return worldPoint(pt(geometry.center.x + point.x), pt(geometry.center.y + point.y));
-    }
-    const mapped = applyMatrixToVector(mappingTransform, point);
-    return worldPoint(pt(geometry.center.x + mapped.x), pt(geometry.center.y + mapped.y));
-  };
-
-  if (geometry.shape === "circle") {
-    const radius = geometry.anchorRadius;
-    if (!Number.isFinite(radius) || radius <= 1e-9) {
-      return geometry.center;
-    }
-    return fromLocal(worldVector(pt((localDx / localLen) * radius), pt((localDy / localLen) * radius)));
-  }
-
-  if (geometry.shape === "rectangle") {
-    const hw = geometry.anchorHalfWidth;
-    const hh = geometry.anchorHalfHeight;
-    if (!Number.isFinite(hw) || !Number.isFinite(hh) || hw <= 1e-9 || hh <= 1e-9) {
-      return geometry.center;
-    }
-    const scale = 1 / Math.max(Math.abs(localDx) / hw, Math.abs(localDy) / hh);
-    return fromLocal(worldVector(pt(localDx * scale), pt(localDy * scale)));
-  }
-
-  if (geometry.shape === "ellipse") {
-    const rx = geometry.anchorHalfWidth;
-    const ry = geometry.anchorHalfHeight;
-    if (!Number.isFinite(rx) || !Number.isFinite(ry) || rx <= 1e-9 || ry <= 1e-9) {
-      return geometry.center;
-    }
-    const scale = 1 / Math.sqrt((localDx * localDx) / (rx * rx) + (localDy * localDy) / (ry * ry));
-    if (!Number.isFinite(scale)) {
-      return geometry.center;
-    }
-    return fromLocal(worldVector(pt(localDx * scale), pt(localDy * scale)));
-  }
-
-  if (geometry.anchorPolygon && geometry.anchorPolygon.length >= 3) {
-    const border = intersectRayWithPolygon(worldPoint(pt(0), pt(0)), direction, geometry.anchorPolygon);
-    if (border) {
-      return worldPoint(pt(geometry.center.x + border.x), pt(geometry.center.y + border.y));
-    }
-  }
-
-  return geometry.center;
+  // Numeric anchors hand the polar point to the shape's \anchorborder in the shape's own frame.
+  return intersectNodeShapeBorder(geometry, direction, "local") ?? geometry.center;
 }
 
 function evaluateCalcCoordinate(
