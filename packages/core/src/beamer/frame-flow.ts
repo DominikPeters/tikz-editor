@@ -116,8 +116,8 @@ export function positionPreparedFrameFlow(
         item,
         contentTop,
         referenceY,
-        visualTop: contentTop,
-        visualBottom,
+        visualTop: contentTop - (item.visualTopInset ?? 0),
+        visualBottom: visualBottom + (item.visualBottomInset ?? 0),
       });
       cursor = visualBottom;
       previousDepth = item.endingDepth;

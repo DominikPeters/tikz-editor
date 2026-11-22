@@ -71,6 +71,7 @@ import {
   renderTexParagraphSvgBody,
   TEX_ALERT_COLOR_ALIAS,
   texLength,
+  type TexLength,
   texLineX,
   type TexListLayoutProfile,
   type TexMetricProvider,
@@ -449,6 +450,8 @@ export function prepareBeamerDocument(
       syntax: context.syntax,
       theoremOccurrences: context.theoremOccurrences,
       ...(overlays !== undefined ? { overlays } : {}),
+      // Top-level blocks and columns are boxes in the frame's single vertical list.
+      embedFlowBoxes: true,
     });
     bodyIrByFrameIndex.set(frameIndex, bodyIr);
     return bodyIr;
@@ -1139,7 +1142,7 @@ async function renderBeamerFrameStep(params: {
     if (child) item.rootId = child.id;
     else delete item.rootId;
   }
-  const editScopes = collectBeamerEditScopes(frame, bodyIr, document.preamble.metadata);
+  const editScopes = collectBeamerEditScopes(frame, bodyIr.structuralChildren ? { ...bodyIr, children: bodyIr.structuralChildren } : bodyIr, document.preamble.metadata);
   const inlineScopes = collectBeamerEditScopes(frame, { ...bodyIr, children: (references.inlineFlow ?? []).map(box => box.item.node) });
   for (const scope of inlineScopes) if (scope.kind === "column" && !editScopes.some(existing => existing.span.from === scope.span.from && existing.span.to === scope.span.to)) editScopes.push(scope);
   const recovery = collectBeamerRecovery(source, editScopes);
@@ -1159,7 +1162,10 @@ async function renderBeamerFrameStep(params: {
     contentBounds,
     ...(bodyTransform ? { bodyTransform } : {}),
     items,
-    paragraphs,
+    // A body paragraph whose vertical list holds only embedded blocks or columns has no
+    // text of its own; those boxes publish their own paragraphs.
+    paragraphs: paragraphs.filter(paragraph => paragraph.report.lines.length > 0 ||
+      !paragraph.vlistLayout.boxReport.items.some(item => item.hboxRole?.kind === "external-flow")),
     graphics,
     spacing,
     embeddedTikz,
@@ -1505,6 +1511,7 @@ function emitFrameFootnoteInsertion(params: {
   }
 }
 
+/** Replaces an id prefix throughout a parsed frame body (plain data). */
 async function prepareInlineFlow(params: {
   source: string; frame: BeamerFrameModel; bodyIr: BeamerFrameBodyIr; theme: ResolvedBeamerTheme;
   references: BeamerReferenceContext; macroBindings: ReadonlyMap<string, MacroBinding>;
@@ -1523,6 +1530,17 @@ async function prepareInlineFlow(params: {
     }
   };
   collect(params.bodyIr.children);
+  const structuralBoxes = new Map<number, BeamerFrameBodyNode | BeamerColumnFlowNode>();
+  if (params.bodyIr.structuralChildren) {
+    const visit = (nodes: readonly (BeamerFrameBodyNode | BeamerColumnFlowNode)[]) => {
+      for (const node of nodes) {
+        if (node.kind === "block" || node.kind === "columns") structuralBoxes.set(node.span.from, node);
+        if (node.kind === "columns") for (const column of node.columns) visit(column.children);
+        else if (node.kind === "block" || node.kind === "theorem") visit(node.children);
+      }
+    };
+    visit(params.bodyIr.structuralChildren);
+  }
   const environments = [...matchTexSyntaxEnvironments(context.syntax).values()];
   const candidates = environments.filter(env => ["block", "alertblock", "exampleblock", "columns"].includes(env.name) &&
     env.begin.span.from >= params.frame.bodySpan.from && env.end.span.to <= params.frame.bodySpan.to && !extracted.has(env.begin.span.from))
@@ -1534,8 +1552,14 @@ async function prepareInlineFlow(params: {
     for (const env of candidates) {
       if (params.work) await params.work.checkpoint();
       const span = { from: env.begin.span.from, to: env.end.span.to };
-      const ir = parseBeamerFrameBody({ source: params.source, syntax: context.syntax,
+      const parsed = parseBeamerFrameBody({ source: params.source, syntax: context.syntax,
         frame: { ...params.frame, id: `${params.frame.id}:inline:${span.from}`, span, bodySpan: span }, overlays: params.overlays });
+      // A top-level box laid out in the frame's vertical list keeps the id the structural parse gives it,
+      // so editing scopes and paragraphs keep referring to the same block or columns node.
+      const structural = structuralBoxes.get(span.from);
+      const ir = structural?.kind === "block" || structural?.kind === "columns"
+        ? { ...parsed, children: parsed.children.map(child => child.span.from === span.from && child.kind === structural.kind ? structural : child) }
+        : parsed;
       const ancestors = environments.filter(parent => parent.begin.span.from < span.from && parent.end.span.to > span.to).sort((a, b) => a.begin.span.from - b.begin.span.from);
       let width = params.textWidth;
       for (const parent of ancestors) {
@@ -2100,6 +2124,7 @@ function prepareFrameParagraph(params: {
     paragraph,
     naturalHeight:
       paragraphMaterialExtent(paragraph) + trailingTrivlistSkip + trailingListSkip,
+    ...embeddedVisualInsets(paragraph, paragraphMaterialExtent(paragraph)),
     boxHeight: paragraphStartingMaterialHeight(paragraph),
     startingBaselineSkip:
       paragraphStartingBaselineSkip(paragraph, namedSize?.lineHeightPt ?? params.bodyFont.lineHeightPt),
@@ -4242,6 +4267,25 @@ function firstFlowReferenceFromTop(
   return offset;
 }
 
+/** Embedded boxes whose painted material reaches above the paragraph's top or below its extent. */
+function embeddedVisualInsets(paragraph: LaidParagraph, extent: number): { visualTopInset?: number; visualBottomInset?: number } {
+  let top = 0;
+  let bottom = 0;
+  for (const item of paragraph.layout.vlistLayout.boxReport.items) {
+    if (item.hboxRole?.kind !== "external-flow") continue;
+    top = Math.max(top, Number(item.hboxRole.visualAbovePt ?? 0) - Number(item.y));
+    bottom = Math.max(bottom, Number(item.y + item.height + item.depth) + Number(item.hboxRole.visualBelowPt ?? 0) - extent);
+  }
+  return { ...(top > 0 ? { visualTopInset: top } : {}), ...(bottom > 0 ? { visualBottomInset: bottom } : {}) };
+}
+
+/** How far a columns box's painted columns reach above its top and below its bottom. */
+function columnsVisualOverhang(item: Extract<PreparedFrameFlowItem, { kind: "columns" }>): { visualAbovePt?: TexLength; visualBelowPt?: TexLength } {
+  const above = Math.max(0, ...item.columns.map(column => column.box.referenceFromContentTop)) - item.box.height;
+  const below = Math.max(0, ...item.columns.map(column => column.naturalHeight - column.box.referenceFromContentTop)) - item.box.depth;
+  return { ...(above > 0 ? { visualAbovePt: texLength(above) } : {}), ...(below > 0 ? { visualBelowPt: texLength(below) } : {}) };
+}
+
 function paragraphLineExtent(paragraph: LaidParagraph): number {
   let bottom = 0;
   for (const line of paragraph.layout.report.lines) {
@@ -4557,7 +4601,8 @@ function layoutParagraph(params: {
       return [...(before ? [{ kind: "glue" as const, size: texLength(before), stretch: texLength(before / 3), shrink: texLength(before / 3),
         origin: { kind: "external-flow-before" as const }, sourceSpan: { start: box.sourceStart, end: box.sourceStart } }] : []),
         { kind: "hbox", role: { kind: "external-flow", flowKind: item.kind, ...(before ? { contentOffsetPt: texLength(before) } : {}),
-          ...(item.kind === "block" && before ? { pageTopHeightPt: texLength(item.block.titleAscent) } : {}), ...(containsListScope(item, "trivlist") ? { containsList: true } : {}), ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), ...(box.followsColorChange ? { followsColorChange: true } : {}), ...(box.consumedItemLabels?.length ? { consumesItemLabels: true } : {}), baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
+          ...(item.kind === "block" && before ? { pageTopHeightPt: texLength(item.block.titleAscent) } : {}),
+          ...(item.kind === "columns" ? columnsVisualOverhang(item) : {}), ...(containsListScope(item, "trivlist") ? { containsList: true } : {}), ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), ...(box.followsColorChange ? { followsColorChange: true } : {}), ...(box.consumedItemLabels?.length ? { consumesItemLabels: true } : {}), baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
         advance: texLength(advance), box: { metrics: { width: texLength(0), height: texLength(height), depth: texLength(depth) }, renderItems: [] } },
         ...(after ? [{ kind: "glue" as const, size: texLength(after), stretch: texLength(after / 3), shrink: texLength(after / 3),
           origin: { kind: "external-flow-after" as const } }] : [])];

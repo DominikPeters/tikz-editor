@@ -15,11 +15,10 @@ const deck = (body: string) => String.raw`\documentclass{beamer}\usetheme{Madrid
   String.raw`\end{frame}\end{document}`;
 const column = (body: string) => String.raw`\begin{columns}[T]\begin{column}{.48\textwidth}` + body +
   String.raw`\end{column}\begin{column}{.48\textwidth}Other $y^2$\end{column}\end{columns}`;
+// A frame body is one vertical list, so its paragraphs are laid out together.
+// Each block body is a vertical list of its own: a separate layout unit.
 const graphicParagraphs = (prefix: string, count = 12) => Array.from({ length: count }, (_, i) =>
-  `Text ${i} \\includegraphics[width=4pt]{${prefix}${i}}\n` +
-  // The native text frontend keeps blank lines/vspace in one VList chunk.
-  // A real block boundary creates distinct source-backed paragraph units.
-  String.raw`\begin{block}{Separator}\end{block}` + "\n"
+  String.raw`\begin{block}{Unit}` + `Text ${i} \\includegraphics[width=4pt]{${prefix}${i}}` + String.raw`\end{block}` + "\n"
 ).join("");
 
 function resolver(seen: string[], cacheKey = "cooperative-graphics"): DocumentGraphicsResolver {
@@ -74,7 +73,7 @@ describe("cooperative Beamer rendering", () => {
     } });
     expect(new Set(seen).size).toBe(12);
     expect(snapshots.some(names => names.length >= 3 && names.length < 12)).toBe(true);
-    expect(actual.layout.paragraphs.filter(p => p.role === "body").length).toBeGreaterThanOrEqual(12);
+    expect(actual.layout.graphics).toHaveLength(12);
     const normal = await renderBeamerFrame(source, { graphicsResolver: resolver([]) });
     expect(comparable(actual)).toEqual(comparable(normal));
   });

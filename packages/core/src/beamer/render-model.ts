@@ -171,6 +171,9 @@ export type PreparedFrameFlowItem =
       node: BeamerParagraphBodyNode;
       paragraph: LaidParagraph;
       naturalHeight: number;
+      /** Painted material of embedded boxes above the paragraph's top and below its natural bottom. */
+      visualTopInset?: number;
+      visualBottomInset?: number;
       boxHeight: number;
       startingBaselineSkip: number;
       leadingAdjustment: number;

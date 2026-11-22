@@ -168,6 +168,12 @@ export type BeamerFrameBodyIr = {
   frameId: string;
   span: Span;
   children: BeamerFrameBodyNode[];
+  /**
+   * With `embedFlowBoxes`, blocks and columns stay in the frame's vertical list,
+   * so `children` omits them. This is the tree with them extracted: it names
+   * their nodes (ids, edit scopes) independently of how they are laid out.
+   */
+  structuralChildren?: BeamerFrameBodyNode[];
   overlays: BeamerOverlayModel;
   diagnostics: Diagnostic[];
 };
@@ -188,4 +194,10 @@ export type ParseBeamerFrameBodyParams = {
   theoremOccurrences?: ReadonlyMap<number, BeamerTheoremOccurrence>;
   /** Reuse the prepared document's scan for this frame and source revision. */
   overlays?: BeamerOverlayModel;
+  /**
+   * Keep top-level blocks and columns in the surrounding paragraph flow, where layout embeds them as
+   * boxes in one vertical list (design/vertical-list-builder.md, step 4). The structural parse used by
+   * editing leaves this off.
+   */
+  embedFlowBoxes?: boolean;
 };

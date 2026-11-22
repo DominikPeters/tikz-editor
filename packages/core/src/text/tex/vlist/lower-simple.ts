@@ -552,11 +552,13 @@ function attachPostDisplayVSpace(
       glue?.kind === "vertical-glue" &&
       glue.command === "vspace"
     ) {
-      if (!paragraph) {
+      if (!paragraph || paragraph.kind === "box") {
         // Ending the enclosing source fragment (\end{frame}, a following
         // structural environment, and similar boundaries) eventually ends
-        // the horizontal mode resumed by display math. Its empty line is
-        // shipped before the pending \vspace adjustment.
+        // the horizontal mode resumed by display math, as does a box that
+        // joins the vertical list (a block or columns environment starts with
+        // \par). The \vadjust makes that line non-empty, so it is shipped,
+        // followed by the pending \vspace adjustment.
         output.push(
           display,
           postDisplayEmptyLineHBox(display, glue.sourceStart),

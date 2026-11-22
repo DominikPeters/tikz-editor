@@ -237,28 +237,33 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   a frame piece, block body or column) and material vboxes still come from the
   old resolution, which is why the old planner still runs.
 
+- **Step 4 (top-level blocks and columns): default.** The frame body is laid
+  out as one TeX vlist in which top-level blocks and columns are external
+  boxes (`parseBeamerFrameBody({ embedFlowBoxes: true })`, then
+  `projectBeamerInlineFlow` / `resolveBlockBox`). Changes on the way:
+  - a block's template skips (`\vskip\medskipamount` before,
+    `\vskip\smallskipamount` after) are vlist glue with their stretch and
+    shrink, so a continuation page break discards them as TeX does;
+  - the frame IR keeps `structuralChildren` (blocks and columns extracted), so
+    node ids, paragraph ids and edit scopes do not depend on the layout path;
+    an inline parse of a top-level box reuses the structural node;
+  - a body paragraph holding only embedded boxes is not published (the boxes
+    publish their own paragraphs); `[T]` columns report the content rising
+    above their zero-height box as visual insets for `contentBounds`;
+  - after a display, `\vspace` then a box (block or columns start with
+    `\par`) ships the resumed empty line, then the adjustment, then
+    `\baselineskip` to the box (checked against pdfTeX `\showlists` on
+    `kkt_theorem_beamer.tex` frame 13).
+  The cooperative-render test used empty blocks to split frame text into
+  separate layout units; a frame body is now one unit, so the test puts each
+  graphic in its own block body.
+
 ## Next
 
-1. **Beamer containers (step 4): one vertical list per container.** Top-level
-   blocks and columns go through the same path as nested ones: the frame body
-   is laid out as one TeX vlist in which they are external boxes
-   (`projectBeamerInlineFlow` / `resolveBlockBox`), so the builder places
-   them. A first experiment (`VLIST_INLINE_BLOCKS=1`, top-level parse only)
-   fails 49 of 1,859 Beamer tests: about 30 TeX comparisons, almost all
-   columns placement (`[b]`/`[T]` reference points, nested fractional widths,
-   scoped columns), and about 15 tests that assert today's flow-item
-   structure. After fixing the frame piece's starting baselineskip (it came
-   from a source regex) and settling inline-flow label transfers across
-   nested boxes, 22 remain: all fidelity-campaign and spacing fixtures pass in
-   this mode; left are continuation pages (a block's before-skip is part of
-   its box, so it cannot be discarded at a page break as TeX discards the
-   template's `\vskip\medskipamount`: block before/after skips should become
-   vlist glue), theorem/tcolorbox/placeholder/paint-probe cases, and
-   structural tests. The TeX comparisons are fixed in the builder and the IR; the
-   structural tests are updated to the new architecture. Then extend the same
-   treatment to top-level pictures, theorems, `tcolorbox`, proofs and title
-   pages, and build block bodies and columns as nested vlists, until the frame
-   flow is a single paragraph item and `positionPreparedFrameFlow`'s glue rules,
+1. **Beamer containers (step 4), remaining:** extend the embedding to
+   top-level pictures, theorems, `tcolorbox`, proofs and title pages, and
+   build block bodies and columns as nested vlists, until the frame flow is a
+   single paragraph item and `positionPreparedFrameFlow`'s glue rules,
    `leadingAdjustment`, `sharedTrivlistSkip`, `trailingListGlue` and the regex
    helpers can go. A chained per-piece builder was considered and rejected: it
    would preserve the piece boundaries that cause the duplication.

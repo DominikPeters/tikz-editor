@@ -184,7 +184,7 @@ export function parseBeamerFrameBody(
       index = endIndex;
       continue;
     }
-    if ((globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.VLIST_INLINE_BLOCKS === "1" && !frame.id.includes(":inline:") &&
+    if (params.embedFlowBoxes === true &&
         (token.name === "columns" || token.name === "block" || token.name === "alertblock" || token.name === "exampleblock")) {
       index = endIndex;
       continue;
@@ -268,11 +268,15 @@ export function parseBeamerFrameBody(
   }
 
   pushTextNode(source, { from: cursor, to: frame.bodySpan.to }, frame.id, children);
+  const structural = params.embedFlowBoxes === true
+    ? parseBeamerFrameBody({ ...params, embedFlowBoxes: false, overlays, syntax: context.syntax, theoremOccurrences }).children
+    : undefined;
   return {
     kind: "frame-body",
     frameId: frame.id,
     span: frame.bodySpan,
     children: applyStandaloneAlignment(context, splitStandaloneFrameCommands(context, frame.id, children)),
+    ...(structural ? { structuralChildren: structural } : {}),
     overlays,
     diagnostics,
   };
