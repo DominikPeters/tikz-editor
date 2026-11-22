@@ -1526,34 +1526,40 @@ async function prepareInlineFlow(params: {
   const candidates = environments.filter(env => ["block", "alertblock", "exampleblock", "columns"].includes(env.name) &&
     env.begin.span.from >= params.frame.bodySpan.from && env.end.span.to <= params.frame.bodySpan.to && !extracted.has(env.begin.span.from))
     .sort((a, b) => (a.end.span.to - a.begin.span.from) - (b.end.span.to - b.begin.span.from));
-  for (const env of candidates) {
-    if (params.work) await params.work.checkpoint();
-    const span = { from: env.begin.span.from, to: env.end.span.to };
-    const ir = parseBeamerFrameBody({ source: params.source, syntax: context.syntax,
-      frame: { ...params.frame, id: `${params.frame.id}:inline:${span.from}`, span, bodySpan: span }, overlays: params.overlays });
-    const ancestors = environments.filter(parent => parent.begin.span.from < span.from && parent.end.span.to > span.to).sort((a, b) => a.begin.span.from - b.begin.span.from);
-    let width = params.textWidth;
-    for (const parent of ancestors) {
-      if (parent.name === "column") {
-        const optional = beamerOptionalArgumentAfter(context, parent.begin.span.to, parent.contentSpan.to);
-        const dimension = beamerRequiredArgumentAfter(context, optional?.span.to ?? parent.begin.span.to, parent.contentSpan.to);
-        if (dimension) width = requireDefined(resolveBeamerColumnWidth(dimension.value, width, params.paperWidth), "Expected a supported enclosing column width");
+  // Preparing an outer box can transfer a pending item label into an inner box that was prepared
+  // before it (smallest first); repeat the pass until the transfers settle.
+  for (let pass = 0; pass <= candidates.length; pass++) {
+    const passRevision = params.references.inlineFlowLabelState.revision;
+    for (const env of candidates) {
+      if (params.work) await params.work.checkpoint();
+      const span = { from: env.begin.span.from, to: env.end.span.to };
+      const ir = parseBeamerFrameBody({ source: params.source, syntax: context.syntax,
+        frame: { ...params.frame, id: `${params.frame.id}:inline:${span.from}`, span, bodySpan: span }, overlays: params.overlays });
+      const ancestors = environments.filter(parent => parent.begin.span.from < span.from && parent.end.span.to > span.to).sort((a, b) => a.begin.span.from - b.begin.span.from);
+      let width = params.textWidth;
+      for (const parent of ancestors) {
+        if (parent.name === "column") {
+          const optional = beamerOptionalArgumentAfter(context, parent.begin.span.to, parent.contentSpan.to);
+          const dimension = beamerRequiredArgumentAfter(context, optional?.span.to ?? parent.begin.span.to, parent.contentSpan.to);
+          if (dimension) width = requireDefined(resolveBeamerColumnWidth(dimension.value, width, params.paperWidth), "Expected a supported enclosing column width");
+        }
+      }
+      const inherited = params.references.ambientTextAt?.(span.from) ?? "";
+      const theme = ambientTextTheme(params.references.scopedTheme?.at(span.from) ?? params.theme, inherited);
+      const flow = await prepareFrameFlow({ ...params, children: ir.children, theme, textWidth: width,
+        ...requireDefined(params.references.frameLayout, "Expected enclosing frame geometry"), availableHeight: Number.POSITIVE_INFINITY });
+      const item = flow.find(item => item.kind === "block" || item.kind === "columns");
+      if (item?.kind === "block" || item?.kind === "columns") {
+        const labelTargetOffset = environments.filter(child => ["itemize", "enumerate", "description", "center", "flushleft", "flushright"].includes(child.name) &&
+          child.begin.span.from > span.from && child.end.span.to < span.to && resolveBeamerOverlaySpanVisibility(params.overlays, child.begin.span, params.step) !== "removed")
+          .sort((a, b) => a.begin.span.from - b.begin.span.from)[0]?.begin.span.from;
+        const replacement = { span, item, width, ...(labelTargetOffset !== undefined ? { labelTargetOffset } : {}) };
+        const index = params.references.inlineFlow?.findIndex(box => box.span.from === span.from) ?? -1;
+        if (index >= 0 && params.references.inlineFlow) params.references.inlineFlow[index] = replacement;
+        else params.references.inlineFlow?.push(replacement);
       }
     }
-    const inherited = params.references.ambientTextAt?.(span.from) ?? "";
-    const theme = ambientTextTheme(params.references.scopedTheme?.at(span.from) ?? params.theme, inherited);
-    const flow = await prepareFrameFlow({ ...params, children: ir.children, theme, textWidth: width,
-      ...requireDefined(params.references.frameLayout, "Expected enclosing frame geometry"), availableHeight: Number.POSITIVE_INFINITY });
-    const item = flow.find(item => item.kind === "block" || item.kind === "columns");
-    if (item?.kind === "block" || item?.kind === "columns") {
-      const labelTargetOffset = environments.filter(child => ["itemize", "enumerate", "description", "center", "flushleft", "flushright"].includes(child.name) &&
-        child.begin.span.from > span.from && child.end.span.to < span.to && resolveBeamerOverlaySpanVisibility(params.overlays, child.begin.span, params.step) !== "removed")
-        .sort((a, b) => a.begin.span.from - b.begin.span.from)[0]?.begin.span.from;
-      const replacement = { span, item, width, ...(labelTargetOffset !== undefined ? { labelTargetOffset } : {}) };
-      const index = params.references.inlineFlow?.findIndex(box => box.span.from === span.from) ?? -1;
-      if (index >= 0 && params.references.inlineFlow) params.references.inlineFlow[index] = replacement;
-      else params.references.inlineFlow?.push(replacement);
-    }
+    if (params.references.inlineFlowLabelState.revision === passRevision) break;
   }
   if (params.resolvePendingLabels !== false && params.references.inlineFlow?.some(box => box.labelTargetOffset !== undefined)) {
     for (let attempt = 0; attempt <= candidates.length; attempt++) {
