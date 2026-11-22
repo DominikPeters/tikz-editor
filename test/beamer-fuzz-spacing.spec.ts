@@ -1580,6 +1580,86 @@ Cee
 \par Witness`, 11, "default", "43"),
     baselines: [["Cee", 104.199], ["Witness", 122.819]],
   },
+  {
+    name: "drops the ending depth of a block whose flow ends with a display after columns",
+    source: slide(String.raw`Lead.\par
+\begin{alertblock}{M}
+\begin{columns}[onlytextwidth,c]
+\begin{column}{0.38\textwidth}
+Left
+\end{column}
+\end{columns}
+\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\]
+\end{alertblock}
+\par Witness`, 11, "default", "43"),
+    baselines: [["cd", 108.668259], ["Witness", 134.490112]],
+  },
+  {
+    name: "shares a picture center's closing topsep with a grouped center that follows",
+    source: slide(String.raw`Lead.\par
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize]\node[draw] {P};\end{tikzpicture}
+\end{center}
+\par
+{\begin{center}
+Body text.
+\end{center}}
+\par Witness`, 11, "default", "43"),
+    baselines: [["Bodytext.", 84.438263], ["Witness", 105.908951]],
+  },
+  {
+    name: "adds the outer parskip when a nested list takes a label left pending past a block",
+    source: slide(String.raw`Lead.\par
+{\small
+\begin{itemize}
+\item First.
+\item
+\begin{alertblock}{Inc}
+Body.
+\end{alertblock}
+\par
+\begin{enumerate}
+\item Enum.
+\end{enumerate}
+\end{itemize}\par}
+\par Witness`, 11, "default", "43"),
+    baselines: [["1.Enum.", 104.198837], ["Witness", 122.819427]],
+  },
+  {
+    name: "raises a list's closing skip by its parskip after an alignment's closing topsep",
+    source: slide(String.raw`Lead.\par
+{\small
+\begin{itemize}
+\item First.
+\item \begin{flushright}
+Text
+\par
+\begin{center}
+Cent.
+\end{center}
+\end{flushright}
+\end{itemize}\par}
+\par Witness`, 11, "default", "43"),
+    baselines: [["Cent.", 87.573364], ["Witness", 106.193954]],
+  },
+  {
+    name: "keeps the parskip after a label-line nested list apart from a following center's topsep",
+    source: slide(String.raw`Lead.\par
+{\small
+\begin{itemize}
+\item First.
+\item
+\begin{enumerate}
+\item Enum.
+\end{enumerate}
+\par
+\begin{center}
+Cent.
+\end{center}
+\end{itemize}\par}
+\par Witness`, 11, "default", "43"),
+    baselines: [["Cent.", 87.573364], ["Witness", 106.193954]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

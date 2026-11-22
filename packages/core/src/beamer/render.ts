@@ -2081,7 +2081,7 @@ function prepareFrameParagraph(params: {
     ? BEAMER_LIST_LAYOUT_PROFILE.topsepShrinkPtByDepth?.[0] ?? 0
     : 0;
   const namedSize = activeBeamerNamedSize(projectedSource, params.references.theme);
-  const startsWithTrivlist = /^\s*(?:\\par(?![A-Za-z@])\s*)*\\begin\s*\{\s*(?:center|flushleft|flushright)\s*\}/u.test(paragraphSource);
+  const startsWithTrivlist = /^\s*(?:(?:\\par(?![A-Za-z@])|\\(?:visible|uncover|invisible)\s*<[^>]*>\s*\{|\{)\s*)*\\begin\s*\{\s*(?:center|flushleft|flushright)\s*\}/u.test(paragraphSource);
   return {
     kind: "paragraph",
     visibility: resolveBeamerOverlaySpanVisibility(
@@ -2628,10 +2628,12 @@ async function prepareBlockWithTheme(params: {
           : 1) + geometry.bodyInitialVSkipEx * fontXHeightPt(params.theme.fonts[plan.bodyFontRole])
       : geometry.bodyTopPaddingPt;
   const lastFlowItem = bodyFlow?.items.at(-1)?.item;
+  const terminalParagraph = body ?? (lastFlowItem?.kind === "paragraph" ? lastFlowItem.paragraph : undefined);
+  const terminalGlueKind = terminalParagraph?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin?.kind;
   const closesWithBodySkip = plan.style === "default" && (trailingBodySkip > 0 || closingAlignmentSkip > 0 ||
-    body?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin?.kind === "external-flow-after" ||
+    terminalGlueKind === "external-flow-after" ||
     // A display's below skip also ends the box in glue, whatever its last text line's depth.
-    body?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin?.kind === "display-math-boundary" ||
+    terminalGlueKind === "display-math-boundary" ||
     lastFlowItem?.kind === "block" && lastFlowItem.block.plan.geometry.afterSkipPt > 0 ||
     lastFlowItem?.kind === "paragraph" && (lastFlowItem.trailingListGlue.naturalPt > 0 || lastFlowItem.closesWithTrivlistSkip));
   // A default colorbox ending in vertical glue has zero physical depth.

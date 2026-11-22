@@ -323,6 +323,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
     }
 
     const paragraph = item.paragraph;
+    const noParListDepthsBefore = new Set(state.noParListDepths);
     if (paragraph.followsColorChange) state.hasInterveningPenalty = true;
     const scope = paragraphScopeFromVListAncestors(item, ancestors, state);
     const resolvedListProfile = listProfileForContext(
@@ -460,12 +461,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
       // The parent's \addvspace{\itemsep} collapses into the skip of a block that
       // just closed; the parsep part is that block's pending parskip.
       const collapsesIntoBlock = state.externalAfterSkip > 0 && state.externalPendingParskip !== undefined && !state.hasInterveningPenalty;
-      // Only a block in the list's first item takes the parsep from that pending parskip;
-      // after an earlier item TeX also keeps the item boundary's own parsep.
-      const blockIsLaterItem = (previous?.itemIndex ?? 0) > 1;
+      // The parsep comes from the block's pending parskip (added below).
       const collapsedItemSkip = collapsesIntoBlock
-        ? Math.max(0, texArticleListItemSepSkip(parentTransition.depth, font, parentProfile) - state.externalAfterSkip) +
-          (blockIsLaterItem ? texProfileDepthValue(parentProfile?.parsepPtByDepth ?? [], parentTransition.depth) : 0)
+        ? Math.max(0, texArticleListItemSepSkip(parentTransition.depth, font, parentProfile) - state.externalAfterSkip)
         : undefined;
       const itemSkip = collapsedItemSkip !== undefined
         ? texLength(collapsedItemSkip)
@@ -516,7 +514,13 @@ function planSimpleTexParagraphVerticalSkipsInto(
          scope.listContext.itemIndex !== state.previousEmittedListContext.itemIndex)) {
       listVerticalSkipBefore = texLength(Math.max(0, Number(listVerticalSkipBefore) - state.externalAfterSkip));
     }
-    if (state.externalPendingParskip && scope.listContext?.itemIndex === state.previousEmittedListContext?.itemIndex) {
+    // After a block, a paragraph in the same item starts with the pending \parskip. A nested list
+    // taking the still-pending label goes through @donoparitem, which adds the same \@outerparskip.
+    const opensOnPendingLabel = scope.listContext !== undefined && scope.listContext.depth > (previousList?.depth ?? 0) &&
+      paragraph.ancestorListLabels?.some(label => !label.inherited && label.depth < (scope.listContext?.depth ?? 0)) === true;
+    const continuesBlockItem = opensOnPendingLabel || (scope.listContext?.itemIndex === previousList?.itemIndex &&
+      (scope.listContext?.depth ?? 0) <= (previousList?.depth ?? 0));
+    if (state.externalPendingParskip && continuesBlockItem) {
       listVerticalSkipBefore = texLength(Number(listVerticalSkipBefore) + state.externalPendingParskip);
     }
     delete state.externalPendingParskip;
@@ -567,8 +571,22 @@ function planSimpleTexParagraphVerticalSkipsInto(
       trivlistVerticalSkipBefore = texLength(Math.max(0, trivlistVerticalSkipBefore - externalAfterSkip));
     }
 
-    // Adjacent list and alignment environments share addvspace's last skip.
-    if (!state.hasInterveningPenalty &&
+    // An alignment closing inside a list leaves its topsep as \lastskip; the list's \endtrivlist
+    // raises that skip by \parskip - \@outerparskip before its own \addvspace.
+    if (!state.hasInterveningPenalty && previousList && !scope.listContext && trivlistVerticalSkipBefore > 0 && !followsDisplay) {
+      const closingDepth = state.previousEmittedTrivlistScopes.slice(scope.trivlistScopes.length)
+        .filter(role => !role.noParList).at(-1)?.enclosingListDepth ?? 0;
+      if (closingDepth > 0 && closingDepth <= previousList.depth && !noParListDepthsBefore.has(closingDepth)) {
+        trivlistVerticalSkipBefore = texLength(trivlistVerticalSkipBefore +
+          (state.listParagraphSkipByDepth.get(closingDepth) ?? texArticleListParagraphSkip(closingDepth, font, resolvedListProfile)) -
+          (listProfile?.paragraphSkipPt ?? 0));
+      }
+    }
+    // Adjacent list and alignment environments share addvspace's last skip. A @noparlist list
+    // leaves no closing glue, only the \parskip that follows the alignment's opening skip.
+    const closesOnlyNoParList = previousList !== undefined && scope.listContext !== undefined &&
+      previousList.depth === scope.listContext.depth + 1 && noParListDepthsBefore.has(previousList.depth);
+    if (!state.hasInterveningPenalty && !closesOnlyNoParList &&
         previousList && (previousList.depth > (scope.listContext?.depth ?? 0) || closingBeforePendingTrivlist !== undefined) &&
         trivlistVerticalSkipBefore > 0) {
       listVerticalSkipBefore = texLength(Math.max(0, listVerticalSkipBefore - trivlistVerticalSkipBefore));
