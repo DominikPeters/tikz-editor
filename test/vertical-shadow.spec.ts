@@ -16,6 +16,9 @@ it.skipIf(process.env.VLIST_SHADOW !== "1")("vertical-list builder shadow compar
     for (const b of report.boundaries) rows.push({ fixture: current, ...b });
   });
   const only = process.env.SHADOW_ONLY;
+  // Label the layout-stage comparison (VLIST_COMPARE=1) with the fixture it came from.
+  const log = console.log;
+  console.log = (...args: unknown[]) => { log(...(typeof args[0] === "string" && args[0].startsWith("VLCMP") ? [`[${current}]`, ...args] : args)); };
   for (const dir of readdirSync(root)) {
     const m = existsSync(new URL(`${dir}/cases.json`, root)) ? "cases.json" : existsSync(new URL(`${dir}/closed-cases.json`, root)) ? "closed-cases.json" : null;
     if (!m) continue;
@@ -30,6 +33,7 @@ it.skipIf(process.env.VLIST_SHADOW !== "1")("vertical-list builder shadow compar
     }
   }
   setVerticalShadowListener(undefined);
+  console.log = log;
   mkdirSync("artifacts/vlist-shadow", { recursive: true });
   writeFileSync("artifacts/vlist-shadow/report.json", JSON.stringify(rows));
   const compared = rows.flatMap(row => "old" in row && !row.nearDisplay && !row.first ? [row] : []);

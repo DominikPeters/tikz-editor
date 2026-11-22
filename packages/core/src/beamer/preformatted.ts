@@ -116,7 +116,9 @@ export function projectBeamerPreformatted(mapped: MappedText, source: string, di
     }
     pieces.push(sliceMappedText(mapped, cursor, env.span.from),
       generated(env.name === "lstlisting"
-        ? `\\par\\vskip${6 - beamerTrivlistSpacing(theme).naturalPt}pt\\begin{flushleft}${basic} `
+        // \lst@aboveskip (\medskipamount) stands in for flushleft's larger topsep. The \nobreak penalty keeps
+        // flushleft's \addvspace from replacing the negative correction, as \addvspace would otherwise do.
+        ? `\\par\\vskip${6 - beamerTrivlistSpacing(theme).naturalPt}pt\\penalty10000\\begin{flushleft}${basic} `
         : `\\begin{flushleft}${basic} `),
       ...lines, generated(env.name === "lstlisting"
         ? `\\end{flushleft}\\vskip${6 - beamerTrivlistSpacing(theme).naturalPt + (theme?.fonts["normal-text"].lineHeightPt ?? 13.6) - followingSkip}pt\\normalfont\\fontsize{${surroundingFont?.sizePt ?? theme?.fonts["normal-text"].sizePt ?? 10.95}pt}{${surroundingFont?.lineHeightPt ?? theme?.fonts["normal-text"].lineHeightPt ?? 13.6}pt}\\selectfont `

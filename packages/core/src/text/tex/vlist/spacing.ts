@@ -1533,7 +1533,7 @@ function isParagraphBoundaryGlueOrigin(origin: TexGlueItem["origin"]): boolean {
     origin?.kind === "trivlist-boundary";
 }
 
-function materialVBoxMetrics(
+export function materialVBoxMetrics(
   item: TexVBoxItem,
   paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>
 ): TexBoxMetrics | undefined {
@@ -1549,7 +1549,7 @@ function materialVBoxMetrics(
   return laidOut.positioned[0]?.metrics;
 }
 
-function isMaterialTexVBoxItem(item: TexVBoxItem): boolean {
+export function isMaterialTexVBoxItem(item: TexVBoxItem): boolean {
   return item.material !== undefined;
 }
 
@@ -1753,7 +1753,7 @@ function displayAlignmentIntertextBlockIndex(sourceStart: number): number {
   return -1_000_000 - Math.max(0, sourceStart);
 }
 
-function displayAlignmentIntertextLeadingSize(
+export function displayAlignmentIntertextLeadingSize(
   previousDepth: TexLength,
   paragraph: TexVListParagraphBoxMeasurement | undefined,
   openedInterline: TexDisplayAlignmentItem["alignment"]["openedInterline"]
@@ -1771,13 +1771,13 @@ function displayAlignmentIntertextLeadingSize(
   );
 }
 
-function displayAlignmentPreviousDepth(
+export function displayAlignmentPreviousDepth(
   paragraph: TexVListParagraphBoxMeasurement
 ): TexLength {
   return texParagraphLastLineDepth(paragraph);
 }
 
-function texParagraphLastLineDepth(
+export function texParagraphLastLineDepth(
   paragraph: TexVListParagraphBoxMeasurement
 ): TexLength {
   if (paragraph.lastLineMetrics) {
@@ -1795,7 +1795,7 @@ function texParagraphLastLineDepth(
   )));
 }
 
-function texMaterialBoundaryPreviousDepth(
+export function texMaterialBoundaryPreviousDepth(
   paragraph: TexVListParagraphBoxMeasurement,
   lineHeight: TexLength
 ): TexLength {
@@ -1990,7 +1990,7 @@ function nextDisplayMathItem(
   return item?.kind === "display-math" ? item : undefined;
 }
 
-function displayMathSkipVariant(
+export function displayMathSkipVariant(
   displayLeftEdge: TexLength,
   previousParagraphMeasurement: TexVListParagraphBoxMeasurement | undefined
 ): TexDisplayMathSkipVariant {
@@ -2006,7 +2006,7 @@ function displayMathSkipVariant(
   return displayLeftEdge <= preDisplaySize ? "normal" : "short";
 }
 
-function resolveDisplayMathBoundaryGlueItem(
+export function resolveDisplayMathBoundaryGlueItem(
   item: TexGlueItem,
   variant: TexDisplayMathSkipVariant,
   profile: TexDisplayMathLayoutProfile = latexArticleDisplaySkipsPt
@@ -2148,7 +2148,7 @@ function texInterlineGlueSize(
   return baselineGlue < 0 ? latexNormalLineSkipPt : baselineGlue;
 }
 
-function texOpenedInterlineGlueSize(
+export function texOpenedInterlineGlueSize(
   previousDepth: TexLength,
   nextHeight: TexLength,
   openedInterline: TexDisplayAlignmentItem["alignment"]["openedInterline"]

@@ -93,13 +93,18 @@ export function prepareSimpleTexLayoutScope(
     params.options.displayMathProfile,
     params.verticalEvents
   );
-  const paragraphPreparation = prepareTexLayoutParagraphsFromVList({
+  const preparedParagraphs = prepareTexLayoutParagraphsFromVList({
     vlist: preparedVList.normalized,
     defaultAlignment: params.defaultAlignment,
     font: params.font,
     metricProvider,
     options: params.options,
   });
+  // The vertical-list builder replays the IR's events at layout time.
+  const paragraphPreparation = params.verticalEvents ? { ...preparedParagraphs, vlist: { ...preparedParagraphs.vlist,
+    verticalBuilder: { events: params.verticalEvents,
+      ...(params.options.listProfile !== undefined ? { listProfile: params.options.listProfile } : {}),
+      ...(params.options.tikzTextWidthNode === true ? { startsHorizontal: true } : {}) } } } : preparedParagraphs;
   return {
     kind: "simple-tex-layout-document-preparation",
     rawVList: baseVList,

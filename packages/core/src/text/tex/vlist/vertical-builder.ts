@@ -12,6 +12,8 @@
  * See design/vertical-list-builder.md.
  */
 
+import { roundTexPt } from "../fonts/units.js";
+
 /** TeX glue with finite stretch and shrink, in points. */
 export interface VerticalGlue {
   readonly natural: number;
@@ -48,13 +50,13 @@ export interface VerticalTrivlistRegisters {
 }
 
 export type VerticalListNode =
-  | { readonly kind: "glue"; readonly glue: VerticalGlue; readonly origin: string }
-  | { readonly kind: "penalty"; readonly penalty: number }
+  | { readonly kind: "glue"; readonly glue: VerticalGlue; readonly origin: string; readonly ref?: unknown }
+  | { readonly kind: "penalty"; readonly penalty: number; readonly ref?: unknown }
   | { readonly kind: "whatsit" }
   | { readonly kind: "box"; readonly id: string };
 
 interface ListLevel {
-  readonly kind: "list" | "trivlist";
+  readonly kind: "list" | "trivlist" | "quote";
   /** \@topsepadd, captured at \@trivlist and used by \@endparenv. */
   readonly topsepAdd: VerticalGlue;
   /** \@topsep: opening skip used by the first \item when not @noparlist. */
@@ -88,6 +90,20 @@ export interface VerticalListBuilderOptions {
    * closing skip still collapses with what follows.
    */
   readonly listColorWhatsits?: boolean;
+  /** \prevdepth when the list starts; undefined means "ignore" (-1000pt). */
+  readonly prevDepth?: number;
+  readonly lineskip?: number;
+  readonly lineskipLimit?: number;
+  /** The list starts in horizontal mode (TikZ node text with a text width begins a paragraph). */
+  readonly horizontal?: boolean;
+}
+
+/** What baseline glue needs to know about a box appended to the list (tex.web §679). */
+export interface VerticalBoxMetrics {
+  readonly height: number;
+  readonly depth: number;
+  /** \baselineskip in force for this box (natural size). */
+  readonly baselineSkip: number;
 }
 
 export class VerticalListBuilder {
@@ -96,6 +112,8 @@ export class VerticalListBuilder {
   private parskip: VerticalGlue;
   private outerParskip: VerticalGlue;
   private horizontal = false;
+  /** An explicit \par (or nothing yet) separates the current point from the last paragraph. */
+  private afterExplicitPar = true;
   private minipage: boolean;
   private inLabel = false;
   private newList = false;
@@ -104,6 +122,10 @@ export class VerticalListBuilder {
   private readonly beginParPenalty: number;
   private readonly endParPenalty: number;
   private readonly listColorWhatsits: boolean;
+  /** \prevdepth, or undefined for TeX's ignore_depth. */
+  private prevDepthValue: number | undefined;
+  private readonly lineskip: number;
+  private readonly lineskipLimit: number;
 
   constructor(options: VerticalListBuilderOptions = {}) {
     this.parskip = options.parskip ?? ZERO_GLUE;
@@ -113,6 +135,81 @@ export class VerticalListBuilder {
     this.beginParPenalty = options.beginParPenalty ?? -51;
     this.endParPenalty = options.endParPenalty ?? -51;
     this.listColorWhatsits = options.listColorWhatsits === true;
+    this.prevDepthValue = options.prevDepth;
+    this.lineskip = options.lineskip ?? 1;
+    this.lineskipLimit = options.lineskipLimit ?? 0;
+    this.horizontal = options.horizontal === true;
+  }
+
+  get prevDepth(): number | undefined {
+    return this.prevDepthValue;
+  }
+
+  get inHorizontalMode(): boolean {
+    return this.horizontal;
+  }
+
+  /**
+   * append_to_vlist (tex.web §679): baselineskip − prevdepth − height, or
+   * \lineskip when that is below \lineskiplimit; none after ignore_depth.
+   */
+  private appendBoxWithInterline(id: string, metrics: VerticalBoxMetrics | undefined): void {
+    if (metrics && this.prevDepthValue !== undefined) {
+      // TeX works in scaled points.
+      const gap = roundTexPt(metrics.baselineSkip - this.prevDepthValue - metrics.height);
+      this.nodes.push({ kind: "glue", glue: glue(gap < this.lineskipLimit ? this.lineskip : gap), origin: "interline" });
+    }
+    this.nodes.push({ kind: "box", id });
+    if (metrics) this.prevDepthValue = metrics.depth;
+  }
+
+  /** An explicit \prevdepth assignment (undefined: ignore_depth). */
+  setPrevDepth(depth: number | undefined): void {
+    this.prevDepthValue = depth;
+  }
+
+  /** \nointerlineskip: \prevdepth := -1000pt. */
+  noInterline(): void {
+    this.prevDepthValue = undefined;
+  }
+
+  /** A rule in vertical mode: no baseline glue before it, ignore_depth after it (tex.web §1056). */
+  rule(id: string): void {
+    this.horizontal = false;
+    this.nodes.push({ kind: "box", id });
+    this.prevDepthValue = undefined;
+  }
+
+  /**
+   * A display ends the current paragraph's lines, then appends
+   * \predisplaypenalty and the above skip (tex.web §1203). `ref` carries the
+   * resolved display glue item.
+   */
+  displayAbove(above: VerticalGlue, ref?: unknown): void {
+    this.horizontal = false;
+    this.nodes.push({ kind: "penalty", penalty: 10_000 });
+    this.vskip(above, "display-above", ref);
+  }
+
+  /** The display box, with baseline glue from \prevdepth (tex.web §1205). */
+  displayBox(id: string, metrics: VerticalBoxMetrics | undefined): void {
+    this.appendBoxWithInterline(id, metrics);
+  }
+
+  /** A display alignment row whose baseline glue was computed by the alignment itself. */
+  rawBox(id: string, depth: number): void {
+    this.nodes.push({ kind: "box", id });
+    this.prevDepthValue = depth;
+  }
+
+  /**
+   * \postdisplaypenalty and the below skip; TeX then resumes horizontal mode,
+   * and an immediate \par ends an empty paragraph that adds nothing (tex.web §1206).
+   */
+  displayBelow(below: VerticalGlue, ref?: unknown): void {
+    this.nodes.push({ kind: "penalty", penalty: 0 });
+    this.vskip(below, "display-below", ref);
+    this.horizontal = true;
   }
 
   /** The nodes appended so far. */
@@ -121,7 +218,7 @@ export class VerticalListBuilder {
   }
 
   get listDepth(): number {
-    return this.levels.filter(level => level.kind === "list").length;
+    return this.levels.filter(level => level.kind !== "trivlist").length;
   }
 
   /** \lastskip: the last node's glue, or zero when the last node is not glue. */
@@ -130,12 +227,13 @@ export class VerticalListBuilder {
     return last?.kind === "glue" ? last.glue : ZERO_GLUE;
   }
 
-  vskip(value: VerticalGlue, origin = "vskip"): void {
-    this.nodes.push({ kind: "glue", glue: value, origin });
+  /** \vskip; `ref` ties an authored skip to the item it came from. */
+  vskip(value: VerticalGlue, origin = "vskip", ref?: unknown): void {
+    this.nodes.push({ kind: "glue", glue: value, origin, ...(ref !== undefined ? { ref } : {}) });
   }
 
-  penalty(value: number): void {
-    this.nodes.push({ kind: "penalty", penalty: value });
+  penalty(value: number, ref?: unknown): void {
+    this.nodes.push({ kind: "penalty", penalty: value, ...(ref !== undefined ? { ref } : {}) });
   }
 
   /** A non-discardable node, e.g. a \color stack operation in vertical mode. */
@@ -185,8 +283,9 @@ export class VerticalListBuilder {
   }
 
   /** \par in horizontal mode ends the paragraph; in vertical mode it does nothing. */
-  par(): void {
+  par(explicit = false): void {
     this.horizontal = false;
+    if (explicit) this.afterExplicitPar = true;
   }
 
   /**
@@ -194,14 +293,19 @@ export class VerticalListBuilder {
    * or the container is still in minipage mode, then \everypar's effects from
    * \@item: \@minipagefalse, \@newlistfalse, the pending label is placed.
    */
-  startParagraph(id: string): void {
-    if (this.horizontal) return;
-    if (this.nodes.length > 0 && !this.minipage) this.vskip(this.parskip, "parskip");
+  startParagraph(id: string, metrics?: VerticalBoxMetrics): void {
+    if (this.horizontal) {
+      // Lines resumed after a display belong to the same paragraph: no \parskip.
+      this.appendBoxWithInterline(id, metrics);
+      return;
+    }
+    if (this.nodes.length > 0 && !this.minipage) this.vskip(this.parskip, `${this.levels.at(-1)?.kind ?? "list"}:parskip`);
+    this.afterExplicitPar = false;
     this.minipage = false;
     this.newList = false;
     this.inLabel = false;
     this.horizontal = true;
-    this.nodes.push({ kind: "box", id });
+    this.appendBoxWithInterline(id, metrics);
   }
 
   /**
@@ -209,15 +313,15 @@ export class VerticalListBuilder {
    * box's first paragraph ran \@item's \everypar, it placed the pending
    * labels and cleared @inlabel, @newlist and @minipage.
    */
-  box(id: string, consumesItemLabels = false): void {
+  box(id: string, consumesItemLabels = false, metrics?: VerticalBoxMetrics): void {
     this.horizontal = false;
+    this.appendBoxWithInterline(id, metrics);
     if (consumesItemLabels) {
       this.inLabel = false;
       this.newList = false;
       this.noParItem = false;
       this.minipage = false;
     }
-    this.nodes.push({ kind: "box", id });
   }
 
   /** An item label from an enclosing container is still pending (@inlabel is global). */
@@ -232,7 +336,10 @@ export class VerticalListBuilder {
   /** \@trivlist (latex.ltx 12829). */
   private trivlistCore(kind: ListLevel["kind"], topsep: VerticalGlue, partopsep: VerticalGlue, itemsep: VerticalGlue, parsep: VerticalGlue): void {
     let topsepAdd = topsep;
-    if (!this.horizontal) topsepAdd = addGlue(topsepAdd, partopsep);
+    // \@trivlist adds \partopsep in vertical mode. LuaLaTeX gives none for a list or alignment that
+    // opens right after another one closed without an explicit \par (test/tex-shaping.spec.ts,
+    // "keeps separate trivlist boundary glue across an authored penalty"), so only an explicit \par counts.
+    if (!this.horizontal && this.afterExplicitPar) topsepAdd = addGlue(topsepAdd, partopsep);
     else this.par();
     const noParList = this.inLabel;
     if (noParList) this.noParItem = true;
@@ -248,10 +355,16 @@ export class VerticalListBuilder {
   }
 
   /** \list (latex.ltx 12806) with registers from \@list<depth> and the list's own argument. */
-  beginList(registers: VerticalListRegisters): void {
+  beginList(registers: VerticalListRegisters, colorWhatsit = this.listColorWhatsits): void {
     // In horizontal mode the color node goes into the paragraph that \@trivlist ends.
-    if (this.listColorWhatsits && !this.horizontal) this.whatsit();
+    if (colorWhatsit && !this.horizontal) this.whatsit();
     this.trivlistCore("list", registers.topsep, registers.partopsep, registers.itemsep, registers.parsep);
+  }
+
+  /** quote and quotation: \list with an empty \item (article.cls). */
+  beginQuote(registers: VerticalListRegisters): void {
+    this.trivlistCore("quote", registers.topsep, registers.partopsep, registers.itemsep, registers.parsep);
+    this.item();
   }
 
   /**
@@ -285,17 +398,17 @@ export class VerticalListBuilder {
       this.noParItem = false;
       if (!this.minipage) {
         const tail = this.removeLastskip();
-        this.vskip(addGlue(addGlue(tail, this.outerParskip), negateGlue(this.parskip)), "donoparitem");
+        this.vskip(addGlue(addGlue(tail, this.outerParskip), negateGlue(this.parskip)), `${level.kind}:donoparitem`);
       }
     } else {
       if (this.horizontal) this.par();
       if (this.newList) {
         this.addpenalty(this.beginParPenalty);
-        this.addvspace(level.topsep, "topsep");
-        this.addvspace(negateGlue(this.parskip), "topsep-parskip");
+        this.addvspace(level.topsep, `${level.kind}:topsep`);
+        this.addvspace(negateGlue(this.parskip), `${level.kind}:topsep-parskip`);
       } else {
         this.addpenalty(this.itemPenalty);
-        this.addvspace(level.itemsep, "itemsep");
+        this.addvspace(level.itemsep, `${level.kind}:itemsep`);
       }
     }
     this.inLabel = true;
@@ -316,10 +429,10 @@ export class VerticalListBuilder {
       const last = this.lastskip();
       if (last.natural > 0) {
         this.removeLastskip();
-        this.vskip(addGlue(addGlue(last, this.parskip), negateGlue(this.outerParskip)), "endtrivlist");
+        this.vskip(addGlue(addGlue(last, this.parskip), negateGlue(this.outerParskip)), `${level.kind}:endtrivlist`);
       }
       this.addpenalty(this.endParPenalty);
-      this.addvspace(level.topsepAdd, "endparenv");
+      this.addvspace(level.topsepAdd, `${level.kind}:endparenv`);
     }
     // The environment group restores \parskip and \@outerparskip.
     this.parskip = level.savedParskip;

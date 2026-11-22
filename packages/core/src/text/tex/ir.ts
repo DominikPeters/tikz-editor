@@ -138,6 +138,7 @@ export type SimpleTexScopePathRole =
       readonly listRegisterDepth?: number;
       readonly labelDepth: number;
       readonly fontSizePt?: TexLength;
+      readonly registerFontSizePt?: TexLength;
       readonly ownLeftMarginEm: number;
       readonly totalLeftMarginEm: number;
     }
@@ -829,6 +830,8 @@ export type SimpleTexVerticalEvent = SimpleTexSourceRange & (
   | { readonly kind: "quote-begin" | "quote-end"; readonly envName: string }
   | { readonly kind: "par" }
   | { readonly kind: "group-begin" | "group-end" }
+  /** A \color in vertical mode leaves a color-stack node, so a following \addvspace sees no skip. */
+  | { readonly kind: "whatsit" }
   | { readonly kind: "registers"; readonly assignments: Partial<Record<"topsep" | "partopsep" | "itemsep" | "parsep" | "parskip", { readonly sizePt: number; readonly stretchPt: number; readonly shrinkPt: number }>> }
 );
 
@@ -4860,6 +4863,19 @@ function buildSimpleTexParagraphBlocksFromNodes(
   const completedListTopologies: SimpleTexListTopology[] = [];
   const verticalEvents: SimpleTexVerticalEvent[] = [];
   const recordVerticalEvent = (event: SimpleTexVerticalEvent): void => { verticalEvents.push(event); };
+  const recordedColorWhatsits = new Set<number>();
+  /** Records the \color in the last segment of [from, to) after `boundary` as a vertical-mode whatsit. */
+  const recordColorWhatsit = (from: number, to: number, boundary: RegExp): void => {
+    const slice = textSliceAtSourceOffsets(from, to);
+    let segmentStart = 0;
+    for (const match of slice.matchAll(new RegExp(boundary.source, "gu"))) segmentStart = match.index + match[0].length;
+    const color = slice.slice(segmentStart).search(/\\color\b/u);
+    if (color < 0) return;
+    const at = from + segmentStart + color;
+    if (recordedColorWhatsits.has(at)) return;
+    recordedColorWhatsits.add(at);
+    recordVerticalEvent({ kind: "whatsit", sourceStart: at, sourceEnd: at + "\\color".length });
+  };
   const closeOpenListItemTopology = (
     topology: MutableListTopology | undefined,
     boundaryStart: number
@@ -5045,6 +5061,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       // preceding skip and this block.
       const followsColorChange = previousParagraphBlockEnd !== undefined &&
         /\\color\b/u.test(textSliceAtSourceOffsets(previousParagraphBlockEnd, rawStart).split(/\\par(?![A-Za-z@])|\\end\s*\{[^}]*\}/u).at(-1) ?? "");
+      if (followsColorChange && previousParagraphBlockEnd !== undefined) recordColorWhatsit(previousParagraphBlockEnd, rawStart, /\\par(?![A-Za-z@])|\\end\s*\{[^}]*\}/u);
       const scopePath = currentSimpleTexScopePath();
       let nodes = simpleTexInlineNodesAfterHorizontalVSpace(
         inlineNodes,
@@ -5597,7 +5614,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
         } else if (isSimpleTexListEnvironmentName(node.name)) {
           scopeRole = beginList(node.name, node.sourceStart, options?.enumerateMiniTemplates ? node.enumerateTemplate : undefined);
           recordVerticalEvent({ kind: "list-begin", listKind: scopeRole.listKind, depth: scopeRole.depth,
-            inheritsPendingLabel: scopeRole.inheritsPendingLabel === true, fontSizePt: Number(sizeAt(node.sourceStart).sizePt),
+            inheritsPendingLabel: scopeRole.inheritsPendingLabel === true,
+            // Beamer selects the list's body font (by item depth) before \list reads \@listi.
+            fontSizePt: Number(scopeRole.registerFontSizePt ?? scopeRole.fontSizePt ?? sizeAt(node.sourceStart).sizePt),
             registerDepth: scopeRole.listRegisterDepth ?? scopeRole.depth, ...span });
           listTopologyStack.push({
             name: node.name,
@@ -5885,6 +5904,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
           textSliceAtSourceOffsets(previousParagraphBlockEnd, node.sourceStart).split(/\\end\s*\{[^}]*\}|\\item(?![A-Za-z@])/u).at(-1) ?? "")
           ? { followsColorChange: true } : {}),
       });
+      const pushedBox = items.at(-1);
+      if (previousParagraphBlockEnd !== undefined && pushedBox?.kind === "box" && pushedBox.followsColorChange === true) {
+        recordColorWhatsit(previousParagraphBlockEnd, node.sourceStart, /\\end\s*\{[^}]*\}|\\item(?![A-Za-z@])/u);
+      }
       unsupportedCommand ||= node.body.unsupportedCommand;
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
@@ -5933,7 +5956,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
   return {
     blocks,
     items,
-    verticalEvents,
+    // Color whatsits are recorded when the following block is pushed; restore source order.
+    verticalEvents: verticalEvents.map((event, index) => ({ event, index }))
+      .sort((left, right) => left.event.sourceStart - right.event.sourceStart || left.index - right.index).map(entry => entry.event),
     partialFallbackSupported: unsupportedCommand && !scanState.aborted,
     unsupportedCommand,
     ...(scanState.aborted || completedListTopologies.length === 0

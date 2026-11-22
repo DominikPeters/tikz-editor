@@ -18,6 +18,7 @@ import type {
   TexAlignmentProfile,
   TexParagraphAlignment,
   TexSpaceGlueProfile,
+  SimpleTexVerticalEvent,
 } from "../ir.js";
 import type { TexDimensionContext } from "../dimensions.js";
 import type {
@@ -27,6 +28,7 @@ import type {
 } from "../layout-inline-items.js";
 import type {
   TexDisplayMathLayoutProfile,
+  TexListLayoutProfile,
   TexListMarkerProfile,
 } from "../layout-options.js";
 import type {
@@ -468,6 +470,13 @@ export interface TexVListDocument {
   readonly kind: "vlist";
   readonly sourceSpan?: TexSourceSpan;
   readonly items: readonly TexVListItem[];
+  /** IR vertical events and list registers for the vertical-list builder (design/vertical-list-builder.md). */
+  readonly verticalBuilder?: {
+    readonly events: readonly SimpleTexVerticalEvent[];
+    readonly listProfile?: TexListLayoutProfile;
+    /** The text starts in horizontal mode (a TikZ node with text width). */
+    readonly startsHorizontal?: boolean;
+  };
 }
 
 export interface PositionedTexVListItem {

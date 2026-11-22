@@ -9,7 +9,7 @@ const natural = (builder: VerticalListBuilder, id: string) => builder.glueBefore
 describe("VerticalListBuilder", () => {
   it("opens, separates and closes a list started in vertical mode", () => {
     const b = new VerticalListBuilder({ parskip: glue(0, 1) });
-    b.startParagraph("lead"); b.par();
+    b.startParagraph("lead"); b.par(true);
     b.beginList(listI);
     b.item(); b.startParagraph("one"); b.par();
     b.item(); b.startParagraph("two"); b.par();
@@ -39,7 +39,7 @@ describe("VerticalListBuilder", () => {
   it("raises an alignment's closing topsep by parskip - outerparskip at \\endlist", () => {
     const small: VerticalListRegisters = { topsep: glue(6, 2, 2), partopsep: glue(0), itemsep: glue(3, 2, 1), parsep: glue(3, 2, 1) };
     const b = new VerticalListBuilder();
-    b.startParagraph("lead"); b.par();
+    b.startParagraph("lead"); b.par(true);
     b.beginList(small);
     b.item(); b.startParagraph("text"); b.par();
     b.beginTrivlist({ topsep: glue(9), partopsep: glue(0) });
@@ -53,7 +53,7 @@ describe("VerticalListBuilder", () => {
 
   it("keeps a whatsit between a closing skip and an alignment's addvspace", () => {
     const b = new VerticalListBuilder();
-    b.startParagraph("lead"); b.par();
+    b.startParagraph("lead"); b.par(true);
     b.beginList(listI); b.item(); b.startParagraph("one"); b.par(); b.endList();
     b.whatsit();
     b.beginTrivlist({ topsep: glue(8), partopsep: glue(0) });
