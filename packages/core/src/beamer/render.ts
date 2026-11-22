@@ -1016,7 +1016,8 @@ async function renderBeamerFrameStep(params: {
       const visibility = external.item.visibility === "hidden" || paragraph.hiddenSourceSpans?.some(span => span.from <= external.span.from && external.span.to <= span.to) ? "hidden" : "visible";
       const local = createSvgModelBuilder();
       const x = paragraph.role === "frame-title" || paragraph.role === "frame-subtitle" ? page.frameArea.x : paragraph.bounds.x;
-      const y = paragraph.bounds.y + Number(box.y);
+      const offset = box.hboxRole?.kind === "external-flow" ? Number(box.hboxRole.contentOffsetPt ?? 0) : 0;
+      const y = paragraph.bounds.y + Number(box.y) - offset;
       const item = external.item;
       if (item.kind === "block") await emitPreparedBlock({ prepared: item.block, x, y,
         parentId: paragraph.paragraphId, visibility, items, paragraphs, spacing, embeddedTikz, modelBuilder: local,
@@ -4543,13 +4544,23 @@ function layoutParagraph(params: {
         }
       }
       const item = external.item;
-      const height = item.kind === "block" ? item.block.flowBoxHeight : item.box.height;
+      // The block template's \par\vskip\medskipamount is vertical glue before the box, not part of it
+      // (beamerinnerthemedefault.sty 390, beamerbaseauxtemplates.sty 752); the block's geometry is
+      // measured from above that skip, so the box keeps the skip as a drawing offset.
+      const before = item.kind === "block" && !item.block.packageBox ? item.block.plan.geometry.beforeSkipPt : 0;
+      const height = item.kind === "block"
+        ? item.block.flowBoxHeight - (item.block.plan.geometry.flowBoxHeight === "natural" ? before : 0) : item.box.height;
       const depth = item.kind === "block" ? item.block.endingDepth : item.box.depth;
-      const advance = item.kind === "block" ? item.block.naturalHeight : item.box.height + item.box.depth;
+      const advance = item.kind === "block" ? item.block.naturalHeight - before : item.box.height + item.box.depth;
       const after = item.kind === "block" ? item.block.plan.geometry.afterSkipPt : 0;
-      return [{ kind: "hbox", role: { kind: "external-flow", flowKind: item.kind, ...(containsListScope(item, "trivlist") ? { containsList: true } : {}), ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), ...(box.followsColorChange ? { followsColorChange: true } : {}), ...(box.consumedItemLabels?.length ? { consumesItemLabels: true } : {}), baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
+      // \medskipamount and \smallskipamount carry a third of their size as stretch and shrink.
+      return [...(before ? [{ kind: "glue" as const, size: texLength(before), stretch: texLength(before / 3), shrink: texLength(before / 3),
+        origin: { kind: "external-flow-before" as const }, sourceSpan: { start: box.sourceStart, end: box.sourceStart } }] : []),
+        { kind: "hbox", role: { kind: "external-flow", flowKind: item.kind, ...(before ? { contentOffsetPt: texLength(before) } : {}),
+          ...(item.kind === "block" && before ? { pageTopHeightPt: texLength(item.block.titleAscent) } : {}), ...(containsListScope(item, "trivlist") ? { containsList: true } : {}), ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), ...(box.followsColorChange ? { followsColorChange: true } : {}), ...(box.consumedItemLabels?.length ? { consumesItemLabels: true } : {}), baselineSkipPt: texLength(ambientTextTheme(requireDefined(params.references.theme, "Expected Beamer font context"), params.references.ambientTextAt?.(external.span.from) ?? "").fonts["normal-text"].lineHeightPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
         advance: texLength(advance), box: { metrics: { width: texLength(0), height: texLength(height), depth: texLength(depth) }, renderItems: [] } },
-        ...(after ? [{ kind: "glue" as const, size: texLength(after), origin: { kind: "external-flow-after" as const } }] : [])];
+        ...(after ? [{ kind: "glue" as const, size: texLength(after), stretch: texLength(after / 3), shrink: texLength(after / 3),
+          origin: { kind: "external-flow-after" as const } }] : [])];
     },
     paragraphId: params.paragraphId,
     width: texLength(params.bounds.width),

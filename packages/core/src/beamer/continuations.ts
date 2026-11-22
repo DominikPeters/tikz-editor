@@ -231,10 +231,14 @@ function frameMaterial(flow: readonly PreparedFrameFlowItem[], baselineSkip: num
             if (pendingOuterGap > 0) { result.push(glue(pendingOuterGap)); pendingOuterGap = 0; }
             if (Number(entry.y) > cursor) result.push(glue(Number(entry.y) - cursor));
             const sliced = sliceParagraphBox(item, entry);
-            result.push({ kind: "box", height: Number(entry.metrics.height), depth: Number(entry.metrics.depth),
+            const role = entry.item.kind === "hbox" ? entry.item.role : undefined;
+            // An embedded block or columns box advances the list by its full extent, not its reference height.
+            const advance = entry.item.kind === "hbox" && entry.item.advance !== undefined ? Number(entry.item.advance) : undefined;
+            result.push({ kind: "box", height: advance !== undefined ? advance - Number(entry.metrics.depth) : Number(entry.metrics.height), depth: Number(entry.metrics.depth),
+              ...(role?.kind === "external-flow" && role.pageTopHeightPt !== undefined ? { splitTopHeight: Number(role.pageTopHeightPt) } : {}),
               placement: { item: sliced, contentTop: 0, referenceY: Number(entry.metrics.height), visualTop: 0, visualBottom: Number(entry.metrics.height + entry.metrics.depth) },
             });
-            cursor = Number(entry.y + entry.metrics.height + entry.metrics.depth);
+            cursor = Number(entry.y) + (advance ?? Number(entry.metrics.height + entry.metrics.depth));
           }
         }
       };
