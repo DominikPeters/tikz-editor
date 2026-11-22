@@ -1548,6 +1548,23 @@ Right.
 \par Witness`, 11, "Madrid", "43"),
     baselines: [["Right.", 70.503525], ["Alpha.", 83.42395], ["Witness", 102.161957]],
   },
+  {
+    name: "does not clamp the baseline glue before a display paragraph that follows a block in a column",
+    source: slide(String.raw`Lead.\par
+\begin{columns}[onlytextwidth,t]
+\begin{column}{0.5\textwidth}
+\begin{block}{Iter}
+Block text.
+\end{block}
+\[E=x\]
+\end{column}
+\begin{column}{0.4\textwidth}
+Right.
+\end{column}
+\end{columns}
+\par Witness`, 11, "Madrid", "43"),
+    baselines: [["Right.", 61.953171], ["E=x", 128.244141], ["Witness", 136.413742]],
+  },
 ] as const;
 
 describe("Beamer fuzz spacing regressions", () => {

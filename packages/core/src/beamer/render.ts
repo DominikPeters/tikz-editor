@@ -3589,7 +3589,12 @@ async function prepareColumnContent(params: {
         const nextHeight = prepared.kind === "block"
           ? prepared.block.flowBoxHeight : paragraphStartingMaterialHeight(prepared.paragraph);
         const interline = startingBaseline - (previousDepth ?? 0) - nextHeight;
-        prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) + (interline < 0 ? 1 : interline);
+        // A display paragraph's own vlist already begins with its baseline glue, which that
+        // starting height includes; only the previous box's depth is left to correct.
+        const startsWithDisplayGlue = prepared.kind === "paragraph" && previousDepth != null && !leadingBlock &&
+          (leadingGlue => leadingGlue?.glue?.origin?.kind === "display-math-interline" && Number(leadingGlue.height) > 0)(
+            prepared.paragraph.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "penalty"));
+        prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) + (interline < 0 && !startsWithDisplayGlue ? 1 : interline);
       }
       const precedingSkip = previous?.kind === "paragraph" ? previous.trailingSkipPt
         : previous?.kind === "block" ? previous.block.plan.geometry.afterSkipPt : 0;
