@@ -1802,6 +1802,71 @@ Witness.
     expect(baseline("Witness.")).toBeCloseTo(149.586288, 3);
   });
 
+  it("keeps a column's block skip apart from a following alignment's after a color change", async () => {
+    // \\color's whatsit follows the block's closing skip, so \\addvspace sees no \\lastskip and adds the
+    // center's topsep in full; the block is the column's first material. LuaLaTeX baselines.
+    const source = String.raw`\documentclass[9pt]{beamer}
+\usetheme{Madrid}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Colors}
+Lead.\par
+\begin{columns}[onlytextwidth,t]
+\begin{column}{0.46\textwidth}Left.\end{column}
+\begin{column}{0.50\textwidth}
+\begin{alertblock}{Block}
+Body text.
+\end{alertblock}
+\par
+{\color{blue}
+\begin{center}
+Centered text.
+\end{center}\par}
+Witness.
+\end{column}
+\end{columns}
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("Centeredtext.")).toBeCloseTo(112.599701, 3);
+    expect(baseline("Witness.")).toBeCloseTo(129.549698, 3);
+  });
+
+  it("lets only a T column's leading alignment replace its head skip", async () => {
+    // A later no-par trivlist (flushright in a description item) does not change the leading center's
+    // \\vskip-1ex replacement. LuaLaTeX baselines.
+    const source = String.raw`\documentclass[12pt]{beamer}
+\usetheme{Madrid}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Columns}
+Lead.\par
+\begin{columns}[onlytextwidth,T]
+\begin{column}{0.38\textwidth}
+\begin{center}
+Centered.
+\end{center}
+\begin{description}
+\item[Stage] \begin{flushright}
+Flush right.
+\end{flushright}
+\end{description}
+\end{column}
+\begin{column}{0.58\textwidth}
+Right text.
+\end{column}
+\end{columns}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("Centered.")).toBeCloseTo(86.926987, 3);
+    expect(baseline("StageFlushright.")).toBeCloseTo(114.426987, 3);
+    expect(baseline("Witness.")).toBeCloseTo(126.214996, 3);
+  });
+
   it("shares the block and alignment skips before a color change inside the alignment", async () => {
     const source = slide(String.raw`Lead.\par
 \begin{columns}[onlytextwidth,t]

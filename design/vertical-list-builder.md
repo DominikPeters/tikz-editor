@@ -346,6 +346,9 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   `\addvspace` merges with the box's closing skip. A Beamer list reads its
   registers from its body font: `\usebeamerfont{itemize/enumerate subbody}`
   (`\small`) runs before `\list` and redefines `\@listi`.
+  A `\color` after a box (not only after a paragraph) is a whatsit between
+  the box's closing skip and a following `\addvspace`. Only a `[T]`
+  column's leading alignment decides whether it replaces the head skip.
 
 ## Next
 

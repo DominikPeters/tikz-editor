@@ -5066,9 +5066,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
         hasExplicitParagraphBoundaryBetween(precedingParagraphEnd, rawStart);
       // Only a \color after the last \par or environment end sits between the
       // preceding skip and this block.
-      const followsColorChange = previousParagraphBlockEnd !== undefined &&
-        /\\color\b/u.test(textSliceAtSourceOffsets(previousParagraphBlockEnd, rawStart).split(/\\par(?![A-Za-z@])|\\end\s*\{[^}]*\}/u).at(-1) ?? "");
-      if (followsColorChange && previousParagraphBlockEnd !== undefined) recordColorWhatsit(previousParagraphBlockEnd, rawStart, /\\par(?![A-Za-z@])|\\end\s*\{[^}]*\}/u);
+      const colorScanStart = Math.max(previousParagraphBlockEnd ?? -1, previousVerticalMaterialEnd ?? -1);
+      const followsColorChange = colorScanStart >= 0 &&
+        /\\color\b/u.test(textSliceAtSourceOffsets(colorScanStart, rawStart).split(/\\par(?![A-Za-z@])|\\end\s*\{[^}]*\}/u).at(-1) ?? "");
+      if (followsColorChange) recordColorWhatsit(colorScanStart, rawStart, /\\par(?![A-Za-z@])|\\end\s*\{[^}]*\}/u);
       const scopePath = currentSimpleTexScopePath();
       let nodes = simpleTexInlineNodesAfterHorizontalVSpace(
         inlineNodes,
@@ -5377,6 +5378,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
   let currentQuotationDepth = 0;
   const quotationItemLabelPendingStack: boolean[] = [];
   let previousParagraphBlockEnd: number | undefined;
+  /** End of the last vertical material (a paragraph or a box): a later \color sits between it and what follows. */
+  let previousVerticalMaterialEnd: number | undefined;
   let declarationGroupDepth = 0;
   let index = prefix.start;
 
@@ -5906,6 +5909,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       }
       // A minipage or \parbox body is a vertical list of its own, typeset with the enclosing
       // document's list and font registers (only its labels and paragraph state start afresh).
+      const boxColorScanStart = Math.max(previousParagraphBlockEnd ?? -1, previousVerticalMaterialEnd ?? -1);
       const boxScan = options ? buildSimpleTexParagraphBlocksFromNodes(text, node.body.nodes, sourceOffset, node.contentEnd, {
         ...withoutItemLabelState(options), fontSizePt: Number(sizeAt(node.sourceStart).sizePt),
         ...(sizeAt(node.sourceStart).baselineSkip !== undefined ? { baselineSkipPt: Number(sizeAt(node.sourceStart).baselineSkip) } : {}),
@@ -5934,14 +5938,15 @@ function buildSimpleTexParagraphBlocksFromNodes(
         // A list inside the box clears @inlabel globally, an enclosing trivlist's label included.
         ...(clearsPendingLabels ? { clearsItemLabels: true } : {}),
         // Only an alignment's \addvspace after that \color is kept apart from the preceding skip.
-        ...(previousParagraphBlockEnd !== undefined && /\\color\b[\s\S]*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(
-          textSliceAtSourceOffsets(previousParagraphBlockEnd, node.sourceStart).split(/\\end\s*\{[^}]*\}|\\item(?![A-Za-z@])/u).at(-1) ?? "")
+        ...(boxColorScanStart >= 0 && /\\color\b[\s\S]*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(
+          textSliceAtSourceOffsets(boxColorScanStart, node.sourceStart).split(/\\end\s*\{[^}]*\}|\\item(?![A-Za-z@])/u).at(-1) ?? "")
           ? { followsColorChange: true } : {}),
       });
       const pushedBox = items.at(-1);
-      if (previousParagraphBlockEnd !== undefined && pushedBox?.kind === "box" && pushedBox.followsColorChange === true) {
-        recordColorWhatsit(previousParagraphBlockEnd, node.sourceStart, /\\end\s*\{[^}]*\}|\\item(?![A-Za-z@])/u);
+      if (boxColorScanStart >= 0 && pushedBox?.kind === "box" && pushedBox.followsColorChange === true) {
+        recordColorWhatsit(boxColorScanStart, node.sourceStart, /\\end\s*\{[^}]*\}|\\item(?![A-Za-z@])/u);
       }
+      previousVerticalMaterialEnd = node.sourceEnd;
       unsupportedCommand ||= node.body.unsupportedCommand;
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);

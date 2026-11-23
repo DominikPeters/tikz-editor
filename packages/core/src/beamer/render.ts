@@ -3569,6 +3569,7 @@ function prepareColumnFlowNode(params: {
     // The opening environment can be inside a group in the minipage's
     // first flow node. Later nodes use the preceding flow's baseline.
     const startsWithStandaloneTrivlist = /^\s*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(projection.mapped.text);
+    const leadingTrivlist = paragraph.layout.vlistLayout.boxReport.items.find(item => item.role?.kind === "trivlist")?.role;
     const startsWithTrivlist = firstBox?.role?.kind === "trivlist" || startsWithStandaloneTrivlist;
     const startsWithList = isVisibleList || firstBox?.role?.kind === "list" ||
       /^\s*\\begin\s*\{(?:itemize|enumerate|description)\}/u.test(projection.mapped.text);
@@ -3580,8 +3581,8 @@ function prepareColumnFlowNode(params: {
       visibility,
       paragraph,
       startsWithVerticalEnvironment: startsWithList || startsWithDisplay || startsWithTrivlist,
-      replacesColumnHeadSkip: startsWithStandaloneTrivlist &&
-        !paragraph.layout.vlistLayout.boxReport.items.some(item => item.role?.kind === "trivlist" && item.role.noParList),
+      // Only the leading trivlist decides: one inheriting a pending label (no-par) keeps the head skip.
+      replacesColumnHeadSkip: startsWithStandaloneTrivlist && leadingTrivlist?.kind === "trivlist" && leadingTrivlist.noParList !== true,
       leadingSkipPt:
         // A column minipage starts with \leavevmode. A leading trivlist ends
         // that empty line, then inserts normal interline glue before its first box.
