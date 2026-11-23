@@ -505,16 +505,6 @@ export function texParagraphLastLineDepth(
   )));
 }
 
-export function texMaterialBoundaryPreviousDepth(
-  paragraph: TexVListParagraphBoxMeasurement,
-  lineHeight: TexLength
-): TexLength {
-  return texLength(Math.max(
-    texParagraphLastLineDepth(paragraph),
-    lineHeight / 3
-  ));
-}
-
 function displayAlignmentPlainTextNodes(
   intertext: NonNullable<TexDisplayAlignmentItem["alignment"]["intertexts"]>[number],
   text: string

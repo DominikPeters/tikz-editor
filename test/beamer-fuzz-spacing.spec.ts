@@ -1725,9 +1725,10 @@ describe("Beamer fuzz spacing regressions", () => {
     }
   });
 
-  it("lays out a list inside a minipage with the document's list registers", async () => {
-    // A minipage is a vertical list of its own (minipage mode, the frame's \@listi).
-    // LuaLaTeX baselines: Inside 50.896469, A 70.496475, B 87.096481, After list 103.696487.
+  it("centers a minipage holding a list on the math axis below the preceding line", async () => {
+    // A minipage is a vertical list of its own (minipage mode, the frame's \@listi). Its line is a
+    // \vcenter on the math axis (32.99738+27.5224) set \lineskip below "Lead text." (depth 0.12045).
+    // LuaLaTeX baselines: Inside 50.896469, A 70.496475, B 87.096481, After list 103.696487, Witness 112.41625.
     const source = String.raw`\documentclass{beamer}
 \setbeamertemplate{navigation symbols}{}
 \begin{document}
@@ -1743,10 +1744,11 @@ Witness.
 \end{document}`;
     const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
     const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
-    const inside = baseline("Inside.");
-    expect(baseline("A") - inside).toBeCloseTo(70.496475 - 50.896469, 3);
-    expect(baseline("B") - inside).toBeCloseTo(87.096481 - 50.896469, 3);
-    expect(baseline("Afterlist.") - inside).toBeCloseTo(103.696487 - 50.896469, 3);
+    expect(baseline("Inside.")).toBeCloseTo(50.896469, 3);
+    expect(baseline("A")).toBeCloseTo(70.496475, 3);
+    expect(baseline("B")).toBeCloseTo(87.096481, 3);
+    expect(baseline("Afterlist.")).toBeCloseTo(103.696487, 3);
+    expect(baseline("Witness.")).toBeCloseTo(112.41625, 3);
   });
 
   it("shares the block and alignment skips before a color change inside the alignment", async () => {

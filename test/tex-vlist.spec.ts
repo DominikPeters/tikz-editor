@@ -3923,7 +3923,9 @@ describe("TeX vlist layout", () => {
     ]);
   });
 
-  it("uses strut-like previous depth before material vboxes", () => {
+  it("uses the last line's own depth as \\prevdepth before a material vbox", () => {
+    // LuaLaTeX: Alpha\par\parbox[t]{70pt}{Beta} in a minipage sets \baselineskip glue 3.23 = 12pt - 1.94pt
+    // (the depth of "Alpha") - 6.83pt: no strut is involved, so the parbox's first baseline is 12pt down.
     const document = {
       kind: "vlist",
       items: [{
@@ -4010,7 +4012,7 @@ describe("TeX vlist layout", () => {
       { lineIndex: 0, y: 0 },
       { lineIndex: 1, y: 12 },
       { lineIndex: 2, y: 24 },
-      { lineIndex: 3, y: 32.1 },
+      { lineIndex: 3, y: 36 },
     ]);
   });
 });

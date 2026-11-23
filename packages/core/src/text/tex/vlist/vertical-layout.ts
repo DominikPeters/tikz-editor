@@ -15,7 +15,6 @@ import {
   isMaterialTexVBoxItem,
   materialVBoxMetrics,
   resolveDisplayMathBoundaryGlueItem,
-  texMaterialBoundaryPreviousDepth,
   texOpenedInterlineGlueSize,
   texParagraphLastLineDepth,
 } from "./spacing.js";
@@ -299,8 +298,6 @@ export function resolveVerticalListWithBuilder(
           paragraphMeasurements, withoutInitialPreviousDepth(options), path);
         const material = { ...item, items: nested.items };
         const metrics = materialVBoxMetrics(material, paragraphMeasurements);
-        // After a paragraph, the material box's baseline glue sees at least a strut's depth.
-        if (lastParagraph && builder.prevDepth !== undefined) builder.setPrevDepth(Number(texMaterialBoundaryPreviousDepth(lastParagraph, options.lineHeight)));
         builder.box(leaf.id, false, metrics ? { height: Number(metrics.height), depth: Number(metrics.depth),
           baselineSkip: Number(options.lineHeight) } : undefined);
         leafById.set(leaf.id, { ...leaf, item: material });

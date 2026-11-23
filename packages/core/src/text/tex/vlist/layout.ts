@@ -212,9 +212,13 @@ function layoutTexVBoxItem(
   const children = offsetPositionedTexVListItems(laidOut.positioned, childOffset);
   const cursor = texVListY(roundTexPt(top + advance));
   const lastBox = children.filter(child => child.item.kind !== "penalty" && (child.item.kind !== "hbox" || child.item.affectsVBoxBaseline !== false)).at(-1);
+  // minipage/\parbox positions: [b] is a \vbox (last baseline), [c] a \vcenter (its middle sits on
+  // the math axis: height (h+d)/2 + axis_height), [t] a \vtop (first baseline).
   const baselineY = item.material && item.alignment === "bottom"
     ? texVListY(roundTexPt(cursor - (lastBox?.lastDepth ?? lastBox?.metrics.depth ?? 0)))
-    : baselineYForVBox(children, top);
+    : item.material?.axisHeight !== undefined && item.alignment === "center"
+      ? texVListY(roundTexPt(top + (cursor - top) / 2 + item.material.axisHeight))
+      : baselineYForVBox(children, top);
   return {
     children,
     metrics: metricsForVBox(

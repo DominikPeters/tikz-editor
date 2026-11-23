@@ -395,6 +395,8 @@ export interface TexVBoxItem {
     readonly command: SimpleTexBoxCommandName;
     /** The box body's vertical events, replayed by its own vertical-list builder. */
     readonly verticalEvents?: readonly SimpleTexVerticalEvent[];
+    /** Math axis height of the enclosing font: a centered box is a \vcenter around it. */
+    readonly axisHeight?: TexLength;
   };
   readonly layout?: TexVBoxLayout;
   readonly width?: TexDimenExpr;

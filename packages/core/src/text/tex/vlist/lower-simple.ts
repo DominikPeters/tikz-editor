@@ -34,6 +34,7 @@ import type {
 import type { TexMathBoxProvider, TexMathDisplayLabel } from "../layout-inline-items.js";
 import { parseTexMathAlignedBody } from "../math/index.js";
 import { texLength, type TexLength } from "../coordinates.js";
+import { roundTexPt } from "../fonts/units.js";
 import type { TexDimensionContext } from "../dimensions.js";
 
 export interface LowerSimpleTexBlockItemsToVListOptions {
@@ -172,6 +173,7 @@ function vboxItemFromSimpleTexBox(
     ...(dimensionContext !== undefined ? { dimensionContext } : {}),
   });
   const itemScopePath = scopePathForVerticalBlockItem(item);
+  const axisFontSize = item.fontSizePt ?? (options.font ? Number(options.font.atPt) : undefined);
   return {
     kind: "vbox",
     sourceSpan: {
@@ -182,6 +184,8 @@ function vboxItemFromSimpleTexBox(
     material: {
       command: item.command,
       ...(item.verticalEvents !== undefined ? { verticalEvents: item.verticalEvents } : {}),
+      // \fontdimen22 (axis_height) of the Computer Modern / Latin Modern symbol font is 0.25em.
+      ...(item.alignment === "center" && axisFontSize !== undefined ? { axisHeight: texLength(roundTexPt(axisFontSize * 0.25)) } : {}),
     },
     width: item.width,
     ...(item.height !== undefined ? { height: item.height } : {}),

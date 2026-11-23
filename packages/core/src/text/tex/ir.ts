@@ -806,6 +806,8 @@ export interface SimpleTexBoxBlockItem extends SimpleTexSourceRange {
   readonly items: readonly SimpleTexBlockItem[];
   /** The box body's own vertical events: a minipage or \parbox is a vertical list of its own. */
   readonly verticalEvents?: readonly SimpleTexVerticalEvent[];
+  /** The enclosing font size, whose math axis a centered box straddles (\vcenter). */
+  readonly fontSizePt?: number;
 }
 
 export interface SimpleTexListScope {
@@ -5920,6 +5922,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         contentStart: node.contentStart,
         contentEnd: node.contentEnd,
         ...currentSimpleTexBlockItemScope(),
+        ...(options ? { fontSizePt: Number(sizeAt(node.sourceStart).sizePt) } : {}),
         items: body.items,
         ...(boxBody.verticalEvents !== undefined ? { verticalEvents: boxBody.verticalEvents } : {}),
         ...(pendingItemLabels.length ? { pendingItemLabels } : {}),
