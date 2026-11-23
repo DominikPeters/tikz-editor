@@ -2007,6 +2007,65 @@ Witness.
     expect(baseline("Witness.")).toBeCloseTo(78.752884, 3);
   });
 
+  it("draws an inherited enumerate label at its own list depth inside a nested block", async () => {
+    // The inner enumerate's pending "2" moves into the inner block's itemize; it is a second-level label
+    // (the smaller subitem ball), whose height sets that first line. LuaLaTeX baselines.
+    const source = String.raw`\documentclass[9pt]{beamer}
+\usetheme{Boadilla}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Balls}
+Lead.\par
+\begin{enumerate}
+\item First outer.
+\item \begin{alertblock}{Outer block}
+\begin{enumerate}
+\item A local update.
+\item \begin{block}{Inner block}
+\begin{itemize}
+\item The final diagram.
+\end{itemize}
+\end{block}
+\end{enumerate}
+\end{alertblock}
+\end{enumerate}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("Thefinaldiagram.")).toBeCloseTo(120.43277, 3);
+    expect(baseline("Witness.")).toBeCloseTo(144.847763, 3);
+  });
+
+  it("numbers an inherited enumerate label from its own depth inside a nested block", async () => {
+    // Same structure, default theme: the label keeps its enclosing counters ("2.2"). LuaLaTeX baseline.
+    const source = String.raw`\documentclass[9pt]{beamer}
+
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Balls}
+Lead.\par
+\begin{enumerate}
+\item First outer.
+\item \begin{alertblock}{Outer block}
+\begin{enumerate}
+\item A local update.
+\item \begin{block}{Inner block}
+\begin{itemize}
+\item The final diagram.
+\end{itemize}
+\end{block}
+\end{enumerate}
+\end{alertblock}
+\end{enumerate}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    expect(trace.lines.find(line => line.text === "2.2Thefinaldiagram.")?.baselineY).toBeCloseTo(102.723801, 3);
+  });
+
   it("reads a nested list's registers from its body font, not the ambient size", async () => {
     // Beamer selects the subbody font (\small) before \list, which redefines \@listi: the inner
     // list's \itemsep and \parsep are \small's (4.5pt at 12pt), not \footnotesize's. LuaLaTeX baselines.

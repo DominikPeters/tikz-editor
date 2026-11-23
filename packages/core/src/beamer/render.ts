@@ -4301,7 +4301,10 @@ function layoutParagraph(params: {
       if (box.consumedItemLabels?.length && external.labelTargetOffset !== undefined && params.references.inlineFlowItemLabels) {
         const transfer = { targetOffset: external.labelTargetOffset, labels: box.consumedItemLabels.map(label => {
           const owner = label.itemCommandSpan ? projectInputRange(mapped.sourceMap, label.itemCommandSpan.start, label.itemCommandSpan.end) : undefined;
-          return { ...label, fontDepth: (label.fontDepth ?? label.depth) + (params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0), ...(owner?.kind === "source-range" ? { originalItemCommandSpan: { start: owner.from, end: owner.to } } : {}) };
+          // The label leaves this body's offsets behind: carry its absolute font and enumerate depth.
+          return { ...label, fontDepth: (label.fontDepth ?? label.depth) + (params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0),
+            ...(label.kind === "enumerate" ? { labelDepth: label.labelDepth + enclosingCounters.length } : {}),
+            ...(owner?.kind === "source-range" ? { originalItemCommandSpan: { start: owner.from, end: owner.to } } : {}) };
         }) };
         if (JSON.stringify(params.references.inlineFlowItemLabels.get(external.span.from)) !== JSON.stringify(transfer)) {
           params.references.inlineFlowItemLabels.set(external.span.from, transfer);
