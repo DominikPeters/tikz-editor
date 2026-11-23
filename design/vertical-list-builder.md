@@ -364,6 +364,10 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   An overfull label's empty line before a display also counts when only
   declarations precede the display; that line has no visible node, so the
   short skips hold even under `\centering`.
+  A `\color` after a list's last material in vertical mode is a trailing
+  whatsit (a zero-size `vertical-whatsit` marker): `\endminipage`'s
+  `\unskip` then removes nothing, and a `[b]` column keeps its closing glue
+  at zero depth.
 
 ## Next
 

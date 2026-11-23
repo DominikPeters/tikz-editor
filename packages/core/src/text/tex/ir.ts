@@ -6011,6 +6011,12 @@ function buildSimpleTexParagraphBlocksFromNodes(
       true
     );
   }
+  // A \color after the list's last material, in vertical mode, appends a whatsit there: the list then ends in
+  // that whatsit, and a minipage's closing \unskip finds no glue to remove.
+  if (!scanState.aborted) {
+    const trailingStart = Math.max(previousParagraphBlockEnd ?? -1, previousVerticalMaterialEnd ?? -1);
+    if (trailingStart >= 0) recordColorWhatsit(trailingStart, sourceEnd, /\\end\s*\{[^}]*\}/u);
+  }
   completedListTopologies.sort((left, right) => left.beginSpan.from - right.beginSpan.from);
   return {
     blocks,

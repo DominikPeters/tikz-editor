@@ -67,6 +67,8 @@ export type TexDimenExpr = TexLength | string;
 export type TexDisplayMathSkipVariant = "normal" | "short";
 
 export type TexGlueOrigin =
+  /** A whatsit (a \color in vertical mode) after a list's closing glue: the list ends in it, not in glue. */
+  | { readonly kind: "vertical-whatsit" }
   | {
       readonly kind: "external-flow-after";
       /** The box's environment ends with \addvspace (tcolorbox), not \vskip. */

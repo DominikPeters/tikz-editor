@@ -337,7 +337,13 @@ export function resolveVerticalListWithBuilder(
       pending = [];
       continue;
     }
-    if (node.kind === "whatsit") continue;
+    if (node.kind === "whatsit") {
+      // After the last box and its closing glue, the whatsit ends the list: \unskip there removes nothing.
+      if (position > lastLeafPosition && pending.some(item => item.kind === "glue")) {
+        pending.push({ kind: "glue", size: texLength(0), origin: { kind: "vertical-whatsit" } });
+      }
+      continue;
+    }
     if (node.kind === "penalty") {
       if (isPenaltyItem(node.ref)) pending.push(node.ref);
       continue;

@@ -1977,6 +1977,36 @@ Witness.
     expect(baseline("Witness.")).toBeCloseTo(187.659271, 3);
   });
 
+  it("keeps a column's closing glue when a color whatsit ends the column", async () => {
+    // {\\color{blue}\\par} after the itemize appends a whatsit in vertical mode: \\endminipage's \\unskip finds no
+    // glue, so the [b] column keeps \\endlist's skip and has zero depth. LuaLaTeX baselines.
+    const source = String.raw`\documentclass{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Whatsit}
+Lead.\par
+\begin{columns}[onlytextwidth,b]
+\begin{column}{0.4\textwidth}
+Left one.\par Left two.
+\end{column}
+\begin{column}{0.5\textwidth}
+\begin{itemize}
+\item Right item.
+\end{itemize}
+\par
+{\color{blue}\par}
+\end{column}
+\end{columns}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("Leftone.")).toBeCloseTo(51.552872, 3);
+    expect(baseline("Rightitem.")).toBeCloseTo(59.897171, 3);
+    expect(baseline("Witness.")).toBeCloseTo(78.752884, 3);
+  });
+
   it("reads a nested list's registers from its body font, not the ambient size", async () => {
     // Beamer selects the subbody font (\small) before \list, which redefines \@listi: the inner
     // list's \itemsep and \parsep are \small's (4.5pt at 12pt), not \footnotesize's. LuaLaTeX baselines.
