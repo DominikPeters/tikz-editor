@@ -2066,6 +2066,31 @@ Witness.
     expect(trace.lines.find(line => line.text === "2.2Thefinaldiagram.")?.baselineY).toBeCloseTo(102.723801, 3);
   });
 
+  it("keeps an alignment's topsep apart from the previous skip after a vertical color whatsit", async () => {
+    // {\\color{blue}\\par} leaves a whatsit between \\endtrivlist's skip and the center's \\addvspace, which then
+    // sees no \\lastskip and adds its topsep in full, even though only a display follows. LuaLaTeX baselines.
+    const source = String.raw`\documentclass[9pt]{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Whatsit}
+Lead.\par
+\begin{flushleft}
+Left text.
+\end{flushleft}
+\par
+{\color{blue}\par}
+\begin{center}
+\[a+b=c\]
+\end{center}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("a+b=c")).toBeCloseTo(94.452789, 3);
+    expect(baseline("Witness.")).toBeCloseTo(113.402786, 3);
+  });
+
   it("reads a nested list's registers from its body font, not the ambient size", async () => {
     // Beamer selects the subbody font (\small) before \list, which redefines \@listi: the inner
     // list's \itemsep and \parsep are \small's (4.5pt at 12pt), not \footnotesize's. LuaLaTeX baselines.

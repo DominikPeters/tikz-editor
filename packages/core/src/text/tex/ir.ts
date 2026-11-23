@@ -5632,6 +5632,12 @@ function buildSimpleTexParagraphBlocksFromNodes(
         if (list?.deferredParagraph?.kind === "label-hook-cleared") delete list.deferredParagraph;
         let scopeRole: ActiveSimpleTexEnvironment["scopeRole"];
         const span = { sourceStart: node.sourceStart, sourceEnd: node.sourceEnd };
+        // A \color between the last material and this environment ran in vertical mode: its whatsit sits
+        // between the preceding closing skip and this environment's \addvspace.
+        if (isSimpleTexTrivlistEnvironmentName(node.name) || isSimpleTexListEnvironmentName(node.name) || isSimpleTexQuoteEnvironmentName(node.name)) {
+          const colorScanStart = Math.max(previousParagraphBlockEnd ?? -1, previousVerticalMaterialEnd ?? -1);
+          if (colorScanStart >= 0) recordColorWhatsit(colorScanStart, node.sourceStart, /\\end\s*\{[^}]*\}/u);
+        }
         if (isSimpleTexQuoteEnvironmentName(node.name)) {
           scopeRole = beginQuote(node.name);
           recordVerticalEvent({ kind: "quote-begin", envName: node.name, ...span });
