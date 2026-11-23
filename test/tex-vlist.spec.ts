@@ -30,7 +30,6 @@ import {
 import type { DocumentGraphicsResolver } from "../packages/core/src/graphics/index.js";
 import { texInterwordGlueForSpaceFactor } from "../packages/core/src/text/tex/space-glue.js";
 import {
-  addParagraphVerticalGlueToVList,
   attachTexHBoxesBeforeVListParagraphs,
   breakSimpleTexLayoutDocumentParagraphs,
   computeTexVListNaturalTotalHeight as computeTexVListNaturalTotalHeightCore,
@@ -47,9 +46,7 @@ import {
   lowerSimpleTexBlockItemsToVList as lowerSimpleTexBlockItemsToVListCore,
   lowerSimpleTexBlocksToVList as lowerSimpleTexBlocksToVListCore,
   materializeDisplayMathVerticalGlueInVList,
-  materializeParagraphVerticalGlueInVList,
   normalizeSimpleTexVList,
-  planSimpleTexParagraphVerticalSkips,
   prepareTexLayoutParagraphsFromVList,
   prepareSimpleTexLayoutDocument as prepareSimpleTexLayoutDocumentCore,
   prepareSimpleTexVList,
@@ -812,7 +809,7 @@ describe("TeX vlist lowering", () => {
           size: 1,
           stretchOrder: "normal",
           shrinkOrder: "normal",
-          origin: { kind: "display-math-interline", side: "above" },
+          origin: { kind: "paragraph-boundary-interline", boundary: "plain" },
         },
       },
       {
@@ -845,7 +842,7 @@ describe("TeX vlist lowering", () => {
           size: 1,
           stretchOrder: "normal",
           shrinkOrder: "normal",
-          origin: { kind: "display-math-interline", side: "below" },
+          origin: { kind: "paragraph-boundary-interline", boundary: "plain" },
         },
       },
       {
@@ -2698,7 +2695,6 @@ describe("TeX vlist scopes", () => {
           },
         },
         children: [
-          { kind: "glue", size: 13 },
           { kind: "hbox", size: undefined },
           { kind: "paragraph", text: "Alpha" },
         ],
@@ -2726,7 +2722,6 @@ describe("TeX vlist scopes", () => {
           },
         },
         children: [
-          { kind: "glue", size: 4 },
           { kind: "hbox", size: undefined },
           { kind: "paragraph", text: "Beta" },
         ],
@@ -2960,7 +2955,8 @@ describe("TeX vlist scopes", () => {
     expect(preparation.paragraphPlans).toHaveLength(1);
     expect(preparation.paragraphPlans[0]).toMatchObject({
       blockIndex: 0,
-      vlistPath: [0, 0, 2],
+      // The prepared list holds no environment glue; the builder places it at layout time.
+      vlistPath: [0, 0, 1],
       segmentIndex: 0,
       segment: { text: "Alpha" },
       breakContext: {
@@ -2980,7 +2976,6 @@ describe("TeX vlist scopes", () => {
       },
     });
     expect(flattenVListLeaves(preparation.vlist.items)).toEqual([
-      "glue:13",
       "hbox",
       "paragraph:Alpha",
     ]);
@@ -3028,7 +3023,7 @@ describe("TeX vlist scopes", () => {
     });
     expect(result.entries[0]?.paragraph).toEqual({
       blockIndex: 0,
-      vlistPath: [0, 1],
+      vlistPath: [0, 0],
       forcedBreakAfter: undefined,
     });
     expect(result.entries[0]?.broken.lines[0]).toMatchObject({
@@ -3058,9 +3053,9 @@ describe("TeX vlist scopes", () => {
       "paragraph",
       "paragraph",
     ]);
+    // Environment glue is the vertical-list builder's, at layout time.
     expect(preparation.materializedVList.items.map((item) => item.kind)).toEqual([
       "paragraph",
-      "glue",
       "paragraph",
     ]);
     expect(preparation.normalizedVList.items.map((item) => item.kind)).toEqual([
@@ -3069,7 +3064,6 @@ describe("TeX vlist scopes", () => {
     ]);
     expect(flattenVListLeaves(preparation.vlist.items)).toEqual([
       "paragraph:Alpha",
-      "glue:10",
       "hbox",
       "paragraph:Beta",
     ]);
@@ -3112,219 +3106,22 @@ describe("TeX vlist scopes", () => {
 
     const attached = attachTexHBoxesBeforeVListParagraphs(
       prepared.normalized,
-      [{ vlistPath: [0, 3], hbox: label }]
+      [{ vlistPath: [0, 1], hbox: label }]
     );
 
     expect(flattenVListLeaves(attached.vlist.items)).toEqual([
-      "glue:10",
       "paragraph:Alpha",
-      "glue:4",
       "hbox",
       "paragraph:Beta",
     ]);
     expect(attached.paragraphPathRemaps).toEqual([
-      { from: [0, 1], to: [0, 1] },
-      { from: [0, 3], to: [0, 4] },
+      { from: [0, 0], to: [0, 0] },
+      { from: [0, 1], to: [0, 2] },
     ]);
   });
 });
 
 describe("TeX vlist spacing", () => {
-  it("inserts named vlist glue before paragraph items from paragraph skip facts", () => {
-    const parsed = parseSimpleTexParagraphIr(String.raw`Alpha \par Beta \par Gamma`);
-    const vlist = addParagraphVerticalGlueToVList(
-      lowerSimpleTexBlocksToVList(parsed.blocks),
-      texFixture<Parameters<typeof addParagraphVerticalGlueToVList>[1]>([
-        { blockIndex: 0, vlistPath: [0], segmentIndex: 0, quoteSize: 0, listSize: 0, size: 0 },
-        { blockIndex: 1, vlistPath: [1], segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
-        { blockIndex: 1, vlistPath: [1], segmentIndex: 1, quoteSize: 99, listSize: 0, size: 99 },
-        { blockIndex: 2, vlistPath: [2], segmentIndex: 0, quoteSize: 0, listSize: 4, size: 4 },
-      ])
-    );
-
-    expect(vlist.items.map((item) =>
-      item.kind === "paragraph"
-        ? {
-            kind: item.kind,
-            text: item.paragraph.text,
-          }
-        : {
-            kind: item.kind,
-            size: item.kind === "glue" ? item.size : undefined,
-            origin: item.kind === "glue" ? item.origin : undefined,
-          }
-    )).toEqual([
-      { kind: "paragraph", text: "Alpha" },
-      {
-        kind: "glue",
-        size: 10,
-        origin: {
-          kind: "quote-boundary",
-          beforeBlockIndex: 1,
-        },
-      },
-      { kind: "paragraph", text: "Beta" },
-      {
-        kind: "glue",
-        size: 4,
-        origin: {
-          kind: "list-boundary",
-          beforeBlockIndex: 2,
-        },
-      },
-      { kind: "paragraph", text: "Gamma" },
-    ]);
-  });
-
-  it("plans article quote/list vertical skips from vlist paragraph items", () => {
-    const parsed = parseSimpleTexParagraphIr(
-      String.raw`Alpha \par \begin{quote} Beta \par Gamma \end{quote} \par Delta`
-    );
-    const vlist = lowerSimpleTexBlocksToVList(parsed.blocks);
-    const skips = planSimpleTexParagraphVerticalSkips(
-      vlist.items,
-      computerModernTexMetricProvider.resolveFont()
-    );
-
-    expect(skips).toEqual([
-      { blockIndex: 0, vlistPath: [0], segmentIndex: 0, quoteSize: 0, listSize: 0, size: 0 },
-      { blockIndex: 1, vlistPath: [1], segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
-      { blockIndex: 2, vlistPath: [2], segmentIndex: 0, quoteSize: 4, listSize: 0, size: 4 },
-      { blockIndex: 3, vlistPath: [3], segmentIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
-    ]);
-  });
-
-  it("uses document-profile list parameters at each nested depth", () => {
-    const parsed = parseSimpleTexParagraphIr(
-      String.raw`\begin{itemize}\item Outer\begin{itemize}\item Inner\end{itemize}\item After\end{itemize}`
-    );
-    const vlist = lowerSimpleTexBlocksToVList(parsed.blocks);
-    const skips = planSimpleTexParagraphVerticalSkips(
-      vlist.items,
-      computerModernTexMetricProvider.resolveFont(),
-      {
-        leftMarginEmByDepth: [2, 2, 2],
-        topsepPtByDepth: [3, 2, 2],
-        partopsepPtByDepth: [0, 0, 0],
-        itemsepPtByDepth: [3, 0, 0],
-        parsepPtByDepth: [0, 0, 0],
-        initialItemBaselineAdjustmentPt: 0,
-      }
-    );
-
-    expect(skips.map((skip) => skip.listSize)).toEqual([3, 2, 3]);
-  });
-
-  it("plans LaTeX trivlist vertical skips for center environments", () => {
-    const parsed = parseSimpleTexParagraphIr(
-      String.raw`Alpha \par \begin{center} Beta \par Gamma \end{center} \par Delta`
-    );
-    const replacementParsed = parseSimpleTexParagraphIr(
-      String.raw`\begin{center} Alpha \end{center} \par \begin{flushleft} Beta \end{flushleft}`
-    );
-    const vlist = lowerSimpleTexBlocksToVList(parsed.blocks);
-    const replacementVList = lowerSimpleTexBlocksToVList(replacementParsed.blocks);
-    const replacementTikzNodeVList = lowerSimpleTexBlocksToVList(replacementParsed.blocks, {
-      tikzTextWidthNode: true,
-    });
-    const font = computerModernTexMetricProvider.resolveFont();
-    const skips = planSimpleTexParagraphVerticalSkips(vlist.items, font);
-    const replacementSkips = planSimpleTexParagraphVerticalSkips(replacementVList.items, font);
-    const replacementTikzNodeSkips = planSimpleTexParagraphVerticalSkips(
-      replacementTikzNodeVList.items,
-      font
-    );
-    const materialized = materializeParagraphVerticalGlueInVList(vlist, font);
-
-    expect(skips.map((skip) => ({
-      blockIndex: skip.blockIndex,
-      vlistPath: skip.vlistPath,
-      quoteSize: skip.quoteSize,
-      listSize: skip.listSize,
-      trivlistSize: skip.trivlistSize ?? 0,
-      size: skip.size,
-    }))).toEqual([
-      { blockIndex: 0, vlistPath: [0], quoteSize: 0, listSize: 0, trivlistSize: 0, size: 0 },
-      { blockIndex: 1, vlistPath: [1], quoteSize: 0, listSize: 0, trivlistSize: 10, size: 10 },
-      { blockIndex: 2, vlistPath: [2], quoteSize: 0, listSize: 0, trivlistSize: 0, size: 0 },
-      { blockIndex: 3, vlistPath: [3], quoteSize: 0, listSize: 0, trivlistSize: 10, size: 10 },
-    ]);
-    expect(replacementSkips.map((skip) => ({
-      blockIndex: skip.blockIndex,
-      trivlistSize: skip.trivlistSize ?? 0,
-      size: skip.size,
-    }))).toEqual([
-      { blockIndex: 0, trivlistSize: 10, size: 10 },
-      { blockIndex: 1, trivlistSize: 10, size: 10 },
-    ]);
-    expect(replacementTikzNodeSkips.map((skip) => ({
-      blockIndex: skip.blockIndex,
-      trivlistSize: skip.trivlistSize ?? 0,
-      size: skip.size,
-    }))).toEqual([
-      { blockIndex: 0, trivlistSize: 8, size: 8 },
-      { blockIndex: 1, trivlistSize: 10, size: 10 },
-    ]);
-    expect(materialized.items.map((item) =>
-      item.kind === "glue"
-        ? {
-            kind: item.kind,
-            size: item.size,
-            origin: item.origin,
-            scopeKinds: item.scopePath?.map((role) => role.kind),
-          }
-        : item.kind === "paragraph"
-          ? { kind: item.kind, text: item.paragraph.text }
-          : { kind: item.kind }
-    )).toEqual([
-      { kind: "paragraph", text: "Alpha" },
-      {
-        kind: "glue",
-        size: 10,
-        origin: {
-          kind: "trivlist-boundary",
-          beforeBlockIndex: 1,
-        },
-        scopeKinds: ["trivlist"],
-      },
-      { kind: "paragraph", text: "Beta" },
-      { kind: "paragraph", text: "Gamma" },
-      {
-        kind: "glue",
-        size: 10,
-        origin: {
-          kind: "trivlist-boundary",
-          beforeBlockIndex: 3,
-        },
-        scopeKinds: undefined,
-      },
-      { kind: "paragraph", text: "Delta" },
-    ]);
-  });
-
-  it("uses itemsep only for a list item following a nested trivlist", () => {
-    const parsed = parseSimpleTexParagraphIr(
-      String.raw`\begin{enumerate}\item Alpha \begin{center}Beta \par Gamma\end{center}\item Delta\end{enumerate}`
-    );
-    const vlist = lowerSimpleTexBlocksToVList(parsed.blocks, {
-      tikzTextWidthNode: true,
-    });
-    const font = computerModernTexMetricProvider.resolveFont();
-    const skips = planSimpleTexParagraphVerticalSkips(vlist.items, font);
-
-    expect(skips.map((skip) => ({
-      blockIndex: skip.blockIndex,
-      listSize: skip.listSize,
-      trivlistSize: skip.trivlistSize ?? 0,
-      size: skip.size,
-    }))).toEqual([
-      { blockIndex: 0, listSize: 11, trivlistSize: 0, size: 11 },
-      { blockIndex: 1, listSize: 4, trivlistSize: 8, size: 12 },
-      { blockIndex: 2, listSize: 4, trivlistSize: 0, size: 4 },
-      { blockIndex: 3, listSize: 4, trivlistSize: 8, size: 12 },
-    ]);
-  });
-
   it("keeps named skip commands inside centered trivlist scopes", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`\begin{center}\smallskip Alpha \par \medskip Beta \par \bigskip Gamma\end{center}`
@@ -3359,24 +3156,6 @@ describe("TeX vlist spacing", () => {
       { kind: "paragraph", text: "Beta" },
       { kind: "glue", command: "bigskip", size: 12 },
       { kind: "paragraph", text: "Gamma" },
-    ]);
-  });
-
-  it("reuses the quote entry topsepadd when leaving a TikZ text-width node quote", () => {
-    const parsed = parseSimpleTexParagraphIr(
-      String.raw`\begin{quote} Beta \end{quote} \par Delta`
-    );
-    const vlist = lowerSimpleTexBlocksToVList(parsed.blocks, {
-      tikzTextWidthNode: true,
-    });
-    const skips = planSimpleTexParagraphVerticalSkips(
-      vlist.items,
-      computerModernTexMetricProvider.resolveFont()
-    );
-
-    expect(skips).toEqual([
-      { blockIndex: 0, vlistPath: [0], segmentIndex: 0, quoteSize: 8, listSize: 0, size: 8 },
-      { blockIndex: 1, vlistPath: [1], segmentIndex: 0, quoteSize: 8, listSize: 0, size: 8 },
     ]);
   });
 
@@ -3453,171 +3232,7 @@ describe("TeX vlist spacing", () => {
     expect(layout.metrics).toEqual({ width: 100, height: 7, depth: 33 });
   });
 
-  it("materializes named paragraph boundary glue through the vlist transform", () => {
-    const parsed = parseSimpleTexParagraphIr(
-      String.raw`Alpha \par \begin{quote} Beta \par \begin{itemize}\item Gamma\end{itemize}\end{quote}`
-    );
-    const baseVList = lowerSimpleTexBlocksToVList(parsed.blocks);
-    const vlist = materializeParagraphVerticalGlueInVList(
-      baseVList,
-      computerModernTexMetricProvider.resolveFont()
-    );
-
-    expect(vlist.items.map((item) =>
-      item.kind === "paragraph"
-        ? {
-            kind: item.kind,
-            text: item.paragraph.text,
-          }
-        : item.kind === "glue"
-          ? {
-              kind: item.kind,
-              size: item.size,
-              origin: item.origin,
-              scopeKinds: item.scopePath?.map((role) => role.kind),
-            }
-          : { kind: item.kind }
-    )).toEqual([
-      { kind: "paragraph", text: "Alpha" },
-      {
-        kind: "glue",
-        size: 10,
-        origin: {
-          kind: "quote-boundary",
-          beforeBlockIndex: 1,
-        },
-        scopeKinds: ["quote"],
-      },
-      { kind: "paragraph", text: "Beta" },
-      {
-        kind: "glue",
-        size: 10,
-        origin: {
-          kind: "list-boundary",
-          beforeBlockIndex: 2,
-        },
-        scopeKinds: ["quote", "list", "list-item"],
-      },
-      { kind: "paragraph", text: "Gamma" },
-    ]);
-  });
-
-  it("materializes paragraph boundary glue inside pre-grouped vboxes", () => {
-    const parsed = parseSimpleTexParagraphIr(
-      String.raw`Alpha \par \begin{quote} Beta \par Gamma \end{quote} \par Delta`
-    );
-    const font = computerModernTexMetricProvider.resolveFont();
-    const grouped = groupSimpleTexVListScopes(
-      lowerSimpleTexBlocksToVList(parsed.blocks),
-      font
-    );
-
-    const skips = planSimpleTexParagraphVerticalSkips(grouped.items, font);
-    const materialized = materializeParagraphVerticalGlueInVList(grouped, font);
-    const quote = materialized.items[1];
-
-    expect(skips.map((skip) => ({
-      blockIndex: skip.blockIndex,
-      size: skip.size,
-      quoteSize: skip.quoteSize,
-      listSize: skip.listSize,
-    }))).toEqual([
-      { blockIndex: 0, size: 0, quoteSize: 0, listSize: 0 },
-      { blockIndex: 1, size: 10, quoteSize: 10, listSize: 0 },
-      { blockIndex: 2, size: 4, quoteSize: 4, listSize: 0 },
-      { blockIndex: 3, size: 10, quoteSize: 10, listSize: 0 },
-    ]);
-    expect(materialized.items.map((item) => item.kind)).toEqual([
-      "paragraph",
-      "vbox",
-      "glue",
-      "paragraph",
-    ]);
-    expect(quote?.kind === "vbox" ? flattenVListLeaves(quote.items) : null).toEqual([
-      "glue:10",
-      "paragraph:Beta",
-      "glue:4",
-      "paragraph:Gamma",
-    ]);
-    expect(flattenVListLeaves(materialized.items)).toEqual([
-      "paragraph:Alpha",
-      "glue:10",
-      "paragraph:Beta",
-      "glue:4",
-      "paragraph:Gamma",
-      "glue:10",
-      "paragraph:Delta",
-    ]);
-  });
-
-  it("plans paragraph boundary glue from grouped vbox roles", () => {
-    const parsed = parseSimpleTexParagraphIr(
-      String.raw`Alpha \par \begin{quote} Beta \par \begin{itemize}\item Gamma \par More\item Delta\end{itemize}\end{quote}`
-    );
-    const font = computerModernTexMetricProvider.resolveFont();
-    const grouped = groupSimpleTexVListScopes(
-      lowerSimpleTexBlocksToVList(parsed.blocks),
-      font
-    );
-    const scrubbed = {
-      ...grouped,
-      items: stripParagraphScopeMetadata(grouped.items),
-    };
-
-    expect(planSimpleTexParagraphVerticalSkips(scrubbed.items, font).map((skip) => ({
-      blockIndex: skip.blockIndex,
-      vlistPath: skip.vlistPath,
-      quoteSize: skip.quoteSize,
-      listSize: skip.listSize,
-      size: skip.size,
-    }))).toEqual([
-      { blockIndex: 0, vlistPath: [0], quoteSize: 0, listSize: 0, size: 0 },
-      { blockIndex: 1, vlistPath: [1, 0], quoteSize: 10, listSize: 0, size: 10 },
-      { blockIndex: 2, vlistPath: [1, 1, 0, 0], quoteSize: 0, listSize: 10, size: 10 },
-      { blockIndex: 3, vlistPath: [1, 1, 0, 1], quoteSize: 0, listSize: 2, size: 2 },
-      { blockIndex: 4, vlistPath: [1, 1, 1, 0], quoteSize: 0, listSize: 4, size: 4 },
-    ]);
-
-    expect(flattenVListLeaves(materializeParagraphVerticalGlueInVList(scrubbed, font).items)).toEqual([
-      "paragraph:Alpha",
-      "glue:10",
-      "paragraph:Beta",
-      "glue:10",
-      "paragraph:Gamma",
-      "glue:2",
-      "paragraph:More",
-      "glue:4",
-      "paragraph:Delta",
-    ]);
-  });
-
-  it("uses outside-list topsep when exiting a first-level list nested in quote", () => {
-    const parsed = parseSimpleTexParagraphIr(
-      String.raw`\begin{quote} Before \par \begin{itemize}\item Item\end{itemize} \par After\end{quote}`
-    );
-    const font = computerModernTexMetricProvider.resolveFont();
-    const grouped = groupSimpleTexVListScopes(
-      lowerSimpleTexBlocksToVList(parsed.blocks),
-      font
-    );
-    const scrubbed = {
-      ...grouped,
-      items: stripParagraphScopeMetadata(grouped.items),
-    };
-
-    expect(planSimpleTexParagraphVerticalSkips(scrubbed.items, font).map((skip) => ({
-      blockIndex: skip.blockIndex,
-      quoteSize: skip.quoteSize,
-      listSize: skip.listSize,
-      size: skip.size,
-    }))).toEqual([
-      { blockIndex: 0, quoteSize: 10, listSize: 0, size: 10 },
-      { blockIndex: 1, quoteSize: 0, listSize: 10, size: 10 },
-      { blockIndex: 2, quoteSize: 0, listSize: 10, size: 10 },
-    ]);
-  });
-
-  it("normalizes simple TeX vlists by materializing boundary glue and grouping scopes", () => {
+  it("normalizes simple TeX vlists by grouping scopes", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`Alpha \par \begin{quote} Beta \par \begin{itemize}\item Gamma\end{itemize}\end{quote}`
     );
@@ -3626,11 +3241,10 @@ describe("TeX vlist spacing", () => {
     const prepared = prepareSimpleTexVList(baseVList, font);
     const normalized = normalizeSimpleTexVList(baseVList, font);
 
+    // Environment glue is placed by the vertical-list builder at layout time.
     expect(flattenVListLeaves(prepared.materialized.items)).toEqual([
       "paragraph:Alpha",
-      "glue:10",
       "paragraph:Beta",
-      "glue:10",
       "paragraph:Gamma",
     ]);
     expect(prepared.normalized).toEqual(normalized);
@@ -3665,7 +3279,6 @@ describe("TeX vlist spacing", () => {
       layout: item.kind === "vbox" ? item.layout : undefined,
       size: item.kind === "glue" ? item.size : undefined,
     })) : null).toEqual([
-      { kind: "glue", role: undefined, layout: undefined, size: 10 },
       { kind: "paragraph", role: undefined, layout: undefined, size: undefined },
       {
         kind: "vbox",
@@ -3689,9 +3302,7 @@ describe("TeX vlist spacing", () => {
     ]);
     expect(flattenVListLeaves(normalized.items)).toEqual([
       "paragraph:Alpha",
-      "glue:10",
       "paragraph:Beta",
-      "glue:10",
       "paragraph:Gamma",
     ]);
     expect(texVListParagraphItems(normalized.items).map((item) => item.paragraph.text)).toEqual([
@@ -3988,93 +3599,16 @@ describe("TeX vlist layout", () => {
       },
     ]);
     expect(layout.metrics).toEqual({ width: 100, height: 7, depth: 25 });
-    expect(layout.boxReport).toEqual({
-      kind: "tex-vlist-boxes",
-      metrics: { width: 100, height: 7, depth: 25 },
-      baseline: { kind: "explicit", y: 7 },
-      tree: [
-        {
-          itemKind: "paragraph",
-          path: [0],
-          sourceSpan: { start: 0, end: 5 },
-          x: 0,
-          y: 0,
-          width: 80,
-          height: 7,
-          depth: 3,
-          totalHeight: 10,
-          blockIndex: 0,
-        },
-        {
-          itemKind: "glue",
-          path: [1],
-          x: 0,
-          y: 10,
-          width: 0,
-          height: 12,
-          depth: 0,
-          totalHeight: 12,
-          glue: {
-            size: 4,
-            stretch: 2,
-            stretchOrder: "normal",
-          },
-        },
-        {
-          itemKind: "paragraph",
-          path: [2],
-          sourceSpan: { start: 0, end: 5 },
-          x: 0,
-          y: 22,
-          width: 90,
-          height: 7,
-          depth: 3,
-          totalHeight: 10,
-          blockIndex: 1,
-        },
-      ],
-      items: [
-        {
-          itemKind: "paragraph",
-          path: [0],
-          sourceSpan: { start: 0, end: 5 },
-          x: 0,
-          y: 0,
-          width: 80,
-          height: 7,
-          depth: 3,
-          totalHeight: 10,
-          blockIndex: 0,
-        },
-        {
-          itemKind: "glue",
-          path: [1],
-          x: 0,
-          y: 10,
-          width: 0,
-          height: 12,
-          depth: 0,
-          totalHeight: 12,
-          glue: {
-            size: 4,
-            stretch: 2,
-            stretchOrder: "normal",
-          },
-        },
-        {
-          itemKind: "paragraph",
-          path: [2],
-          sourceSpan: { start: 0, end: 5 },
-          x: 0,
-          y: 22,
-          width: 90,
-          height: 7,
-          depth: 3,
-          totalHeight: 10,
-          blockIndex: 1,
-        },
-      ],
-    });
+    // The builder places Beta's baseline glue as its own node after the stretched skip (tex.web §679).
+    const flat = (nodes: readonly { itemKind: string; path: readonly number[]; y: number; height: number; children?: readonly unknown[] }[]): unknown[] =>
+      nodes.map((node) => ({ itemKind: node.itemKind, path: node.path, y: node.y, height: node.height }));
+    expect(layout.boxReport.metrics).toEqual({ width: 100, height: 7, depth: 25 });
+    expect(flat(layout.boxReport.tree as never)).toEqual([
+      { itemKind: "paragraph", path: [0], y: 0, height: 7 },
+      { itemKind: "glue", path: [1], y: 10, height: 10 },
+      { itemKind: "glue", path: [2], y: 20, height: 2 },
+      { itemKind: "paragraph", path: [3], y: 22, height: 7 },
+    ]);
 
     expect(() => layoutTexVListFromMeasuredParagraphs(document, {
       width: 100,
@@ -4519,7 +4053,8 @@ describe("TeX vlist report assembly", () => {
     );
     const rawVList = lowerSimpleTexBlocksToVList(parsed.blocks);
     const font = computerModernTexMetricProvider.resolveFont();
-    const document = prepareSimpleTexVList(rawVList, font).normalized;
+    // The vertical-list builder replays the IR's environment events at layout time.
+    const document = { ...prepareSimpleTexVList(rawVList, font).normalized, verticalBuilder: { events: parsed.verticalEvents ?? [] } };
 
     const layout = layoutTexVListFromMeasuredParagraphs(document, {
       width: 100,
@@ -4528,8 +4063,8 @@ describe("TeX vlist report assembly", () => {
       firstLineAscent: 7,
       paragraphMeasurements: [
         paragraphMeasurement(0, [0], { width: 100, height: 7, depth: 5 }),
-        paragraphMeasurement(1, [1], { width: 100, height: 7, depth: 5 }, [1, 1]),
-        paragraphMeasurement(2, [2], { width: 100, height: 7, depth: 5 }, [3]),
+        paragraphMeasurement(1, [1], { width: 100, height: 7, depth: 5 }, [1, 0]),
+        paragraphMeasurement(2, [2], { width: 100, height: 7, depth: 5 }, [2]),
       ],
     });
 
@@ -4538,17 +4073,16 @@ describe("TeX vlist report assembly", () => {
       22,
       44,
     ]);
+    // Zero \baselineskip glue (12pt - 5pt - 7pt) is left out.
     expect(layout.items.map((item) => item.item.kind)).toEqual([
       "paragraph",
       "vbox",
-      "glue",
       "glue",
       "paragraph",
     ]);
     expect(layout.items[1]?.item.kind === "vbox" ? layout.items[1].item.role : null)
       .toEqual({ kind: "quote", depth: 1 });
     expect(layout.items[1]?.children?.map((item) => item.item.kind)).toEqual([
-      "glue",
       "glue",
       "paragraph",
     ]);
@@ -4671,8 +4205,8 @@ describe("TeX vlist report assembly", () => {
         ? item.item.origin.boundary
         : undefined,
     }))).toEqual([
+      // A zero \baselineskip glue (12pt - 5pt - 7pt) adds nothing and is left out of the list.
       { blockIndex: 0, y: 0, height: 7, depth: 5, interlineBoundary: undefined },
-      { blockIndex: null, y: 12, height: 0, depth: 0, interlineBoundary: "plain" },
       { blockIndex: 1, y: 12, height: 7, depth: 5, interlineBoundary: undefined },
     ]);
 

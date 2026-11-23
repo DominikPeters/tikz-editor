@@ -181,6 +181,7 @@ function vboxItemFromSimpleTexBox(
     ...(itemScopePath !== undefined ? { scopePath: itemScopePath } : {}),
     material: {
       command: item.command,
+      ...(item.verticalEvents !== undefined ? { verticalEvents: item.verticalEvents } : {}),
     },
     width: item.width,
     ...(item.height !== undefined ? { height: item.height } : {}),

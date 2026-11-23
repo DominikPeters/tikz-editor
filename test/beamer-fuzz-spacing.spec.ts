@@ -1725,6 +1725,30 @@ describe("Beamer fuzz spacing regressions", () => {
     }
   });
 
+  it("lays out a list inside a minipage with the document's list registers", async () => {
+    // A minipage is a vertical list of its own (minipage mode, the frame's \@listi).
+    // LuaLaTeX baselines: Inside 50.896469, A 70.496475, B 87.096481, After list 103.696487.
+    const source = String.raw`\documentclass{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Mini}
+Lead text.\par
+\begin{minipage}{4cm}
+Inside.\par\smallskip
+\begin{itemize}\item A\item B\end{itemize}
+After list.
+\end{minipage}\par
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    const inside = baseline("Inside.");
+    expect(baseline("A") - inside).toBeCloseTo(70.496475 - 50.896469, 3);
+    expect(baseline("B") - inside).toBeCloseTo(87.096481 - 50.896469, 3);
+    expect(baseline("Afterlist.") - inside).toBeCloseTo(103.696487 - 50.896469, 3);
+  });
+
   it("shares the block and alignment skips before a color change inside the alignment", async () => {
     const source = slide(String.raw`Lead.\par
 \begin{columns}[onlytextwidth,t]

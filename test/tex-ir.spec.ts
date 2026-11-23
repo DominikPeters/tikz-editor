@@ -24,6 +24,7 @@ import {
   lowerSimpleTexBlocksToVList,
   prepareSimpleTexVList,
   texVListParagraphItems,
+  type PositionedTexVListItem,
   type TexVListItem,
 } from "../packages/core/src/text/tex/vlist/index.js";
 
@@ -1814,9 +1815,10 @@ Beta`;
         rightskipStretchMode: "ragged-right-infinite-otherwise-zero",
       },
     });
-    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+    expect(laidOutLeaves(String.raw`\begin{quote} Alpha Beta \end{quote}`)).toEqual([
       "glue:10",
       "paragraph:Alpha Beta",
+      "glue:10",
     ]);
   });
 
@@ -1869,10 +1871,11 @@ Beta`;
         rightMarginWidth: 2.5 * font.atPt,
       },
     ]);
-    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+    expect(laidOutLeaves(String.raw`\begin{quotation} Alpha Beta \par Gamma Delta \end{quotation}`)).toEqual([
       "glue:10",
       "paragraph:Alpha Beta",
       "paragraph:Gamma Delta",
+      "glue:10",
     ]);
   });
 
@@ -2077,7 +2080,7 @@ Beta`;
       options: {},
     });
 
-    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+    expect(laidOutLeaves(String.raw`Before \par \begin{itemize}\item Alpha \par More \item Beta \begin{itemize}\item Nested\end{itemize}\end{itemize} \par After`)).toEqual([
       "paragraph:Before",
       "glue:10",
       "hbox",
@@ -2106,8 +2109,9 @@ Beta`;
       options: {},
     });
 
-    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
-      "glue:13",
+    // pdfTeX nets the opening \addvspace sequence to \topsep + \partopsep (8pt + 2pt).
+    expect(laidOutLeaves(String.raw`\begin{itemize}\item A \begin{itemize}\item B \begin{itemize}\item C\item D\end{itemize}\item E\end{itemize}\item F\end{itemize}`)).toEqual([
+      "glue:10",
       "hbox",
       "paragraph:A",
       "glue:8",
@@ -2125,6 +2129,7 @@ Beta`;
       "glue:8",
       "hbox",
       "paragraph:F",
+      "glue:10",
     ]);
   });
 
@@ -2148,7 +2153,7 @@ Beta`;
       { text: "Gamma", quoteRightskipMode: "ragged-right-infinite-otherwise-zero" },
       { text: "Delta", quoteRightskipMode: "default" },
     ]);
-    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+    expect(laidOutLeaves(String.raw`Alpha \par \begin{quote} Beta \par Gamma \end{quote} \par Delta`)).toEqual([
       "paragraph:Alpha",
       "glue:10",
       "paragraph:Beta",
@@ -2170,7 +2175,7 @@ Beta`;
       options: {},
     });
 
-    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
+    expect(laidOutLeaves(String.raw`Alpha \par \begin{quote} Beta \par Gamma \end{quote} \par Delta`, "justified")).toEqual([
       "paragraph:Alpha",
       "glue:10",
       "paragraph:Beta",
@@ -2220,9 +2225,9 @@ Beta`;
       "paragraph",
       "paragraph",
     ]);
+    // List glue is placed by the vertical-list builder at layout time, not in the prepared list.
     expect(preparation.materializedVList.items.map((item) => item.kind)).toEqual([
       "paragraph",
-      "glue",
       "paragraph",
     ]);
     expect(preparation.normalizedVList.items.map((item) => item.kind)).toEqual([
@@ -2231,9 +2236,15 @@ Beta`;
     ]);
     expect(flattenVListLeaves(preparation.vlist.items)).toEqual([
       "paragraph:Alpha",
+      "hbox",
+      "paragraph:Beta",
+    ]);
+    expect(laidOutLeaves(String.raw`Alpha \par \begin{itemize}\item Beta\end{itemize}`)).toEqual([
+      "paragraph:Alpha",
       "glue:10",
       "hbox",
       "paragraph:Beta",
+      "glue:10",
     ]);
     expect(preparation.paragraphPreparation.paragraphPlans.map((plan) => ({
       blockIndex: plan.blockIndex,
@@ -2336,13 +2347,15 @@ Beta`;
       { text: "Alpha", quoteRightskipMode: "ragged-right-infinite-otherwise-zero" },
       { text: "Beta", quoteRightskipMode: "ragged-right-infinite-otherwise-zero" },
     ]);
-    expect(flattenVListLeaves(layout.vlist.items)).toEqual([
-      "glue:13",
+    // pdfTeX: the quote's and the list's opening skips net to 10pt; no double count.
+    expect(laidOutLeaves(String.raw`\begin{quote}\begin{itemize}\item Alpha\item Beta\end{itemize}\end{quote}`)).toEqual([
+      "glue:10",
       "hbox",
       "paragraph:Alpha",
       "glue:4",
       "hbox",
       "paragraph:Beta",
+      "glue:10",
     ]);
   });
 
@@ -2425,6 +2438,22 @@ Beta`;
     ]);
   });
 });
+
+/**
+ * The vertical list as laid out: the builder places the environments' glue (pdfTeX-checked).
+ * Baseline glue and zero glue are left out.
+ */
+function laidOutLeaves(source: string, alignment: "ragged-right" | "justified" = "ragged-right"): readonly string[] {
+  const result = layoutSimpleTexParagraph(source, { paragraphId: "tex:laid-out-leaves", width: 300, alignment });
+  const leaves = (items: readonly PositionedTexVListItem[]): string[] => items.flatMap((entry) => {
+    const item = entry.item;
+    if (item.kind === "vbox" && item.material === undefined) return leaves(entry.children ?? []);
+    if (item.kind === "paragraph") return [`paragraph:${item.paragraph.text}`];
+    if (item.kind === "glue") return item.origin?.kind === "paragraph-boundary-interline" || Number(item.size) === 0 ? [] : [`glue:${Number(item.size)}`];
+    return [item.kind];
+  });
+  return leaves(result.vlistLayout?.items ?? []);
+}
 
 function flattenVListLeaves(items: readonly TexVListItem[]): readonly string[] {
   const leaves: string[] = [];

@@ -804,6 +804,8 @@ export interface SimpleTexBoxBlockItem extends SimpleTexSourceRange {
   readonly listScope?: SimpleTexListScope;
   readonly scopePath?: readonly SimpleTexScopePathRole[];
   readonly items: readonly SimpleTexBlockItem[];
+  /** The box body's own vertical events: a minipage or \parbox is a vertical list of its own. */
+  readonly verticalEvents?: readonly SimpleTexVerticalEvent[];
 }
 
 export interface SimpleTexListScope {
@@ -1492,7 +1494,8 @@ function buildSimpleTexParagraphIrForRange(
       simpleTexBlockItemsContainPlaceholder(blockScan.items),
     unsupportedCommand: nodeScan.unsupportedCommand || blockScan.unsupportedCommand,
     ...(blockScan.listStructure ? { listStructure: blockScan.listStructure } : {}),
-    ...(blockScan.verticalEvents?.length ? { verticalEvents: blockScan.verticalEvents } : {}),
+    // Every vertical list is resolved by the builder, which replays these events (none for plain paragraphs).
+    verticalEvents: blockScan.verticalEvents ?? [],
   };
 }
 
@@ -5895,7 +5898,15 @@ function buildSimpleTexParagraphBlocksFromNodes(
         pendingListLabel = undefined;
         for (const pending of pendingListLabels) { pending.show = false; pending.label = undefined; }
       }
-      const body = rebaseSimpleTexBoxBody(node.body, blocks.length);
+      // A minipage or \parbox body is a vertical list of its own, typeset with the enclosing
+      // document's list and font registers (only its labels and paragraph state start afresh).
+      const boxScan = options ? buildSimpleTexParagraphBlocksFromNodes(text, node.body.nodes, sourceOffset, node.contentEnd, {
+        ...withoutItemLabelState(options), fontSizePt: Number(sizeAt(node.sourceStart).sizePt),
+        ...(sizeAt(node.sourceStart).baselineSkip !== undefined ? { baselineSkipPt: Number(sizeAt(node.sourceStart).baselineSkip) } : {}),
+      }) : undefined;
+      const boxBody: SimpleTexParagraphIr = boxScan && !boxScan.unsupportedCommand
+        ? { ...node.body, blocks: boxScan.blocks, items: boxScan.items, verticalEvents: boxScan.verticalEvents ?? [] } : node.body;
+      const body = rebaseSimpleTexBoxBody(boxBody, blocks.length);
       blocks.push(...body.blocks);
       items.push({
         kind: "box",
@@ -5910,6 +5921,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         contentEnd: node.contentEnd,
         ...currentSimpleTexBlockItemScope(),
         items: body.items,
+        ...(boxBody.verticalEvents !== undefined ? { verticalEvents: boxBody.verticalEvents } : {}),
         ...(pendingItemLabels.length ? { pendingItemLabels } : {}),
         ...(consumedItemLabels.length ? { consumedItemLabels } : {}),
         // Only an alignment's \addvspace after that \color is kept apart from the preceding skip.
@@ -6013,6 +6025,13 @@ function hasNonSpaceSourceText(
     }
   }
   return false;
+}
+
+/** Options for a nested box body: the enclosing paragraph's item-label bookkeeping stays outside it. */
+function withoutItemLabelState(options: SimpleTexParagraphIrOptions): SimpleTexParagraphIrOptions {
+  const { inheritedItemLabels: _labels, boxesClearingPendingItemLabels: _clearing, syntheticParagraphBreaks: _breaks,
+    minipageListDepthResets: _resets, ...rest } = options;
+  return rest;
 }
 
 function rebaseSimpleTexBoxBody(

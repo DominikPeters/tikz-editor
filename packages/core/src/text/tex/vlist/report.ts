@@ -1,5 +1,4 @@
-import { resolveVerticalListWithBuilder, verticalGlueProfile } from "./vertical-layout.js";
-import { verticalLayoutEnabled } from "./vertical-shadow.js";
+import { resolveVerticalListWithBuilder } from "./vertical-layout.js";
 import type { KnuthPlassLayoutMode } from "../../knuth-plass/index.js";
 import type { ParagraphLayoutReport } from "../../knuth-plass/paragraph/report.js";
 import type {
@@ -50,9 +49,6 @@ import {
   texVListParagraphMeasurementMap,
   validateTexVListParagraphMeasurements,
 } from "./paragraph-measurement.js";
-import {
-  resolveDisplayMathVerticalGlueInVList,
-} from "./spacing.js";
 import { texVListBoxLayoutReport } from "./box-report.js";
 import {
   assertAllReportLinesPlaced,
@@ -302,20 +298,7 @@ export function layoutTexVListFromMeasuredParagraphs(
     ...(options.initialPreviousDepth !== undefined ? { initialPreviousDepth: options.initialPreviousDepth } : {}),
     ...(options.displayMathProfile !== undefined ? { displayMathProfile: options.displayMathProfile } : {}),
   };
-  const resolvedDocument = (verticalLayoutEnabled() ? resolveVerticalListWithBuilder(document, paragraphMeasurements, resolveOptions) : undefined) ??
-    resolveDisplayMathVerticalGlueInVList(document, paragraphMeasurements, resolveOptions);
-  const compare = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.VLIST_COMPARE === "1";
-  if (compare && document.verticalBuilder) {
-    const oldRows = verticalGlueProfile(resolveDisplayMathVerticalGlueInVList(document, paragraphMeasurements, resolveOptions).items);
-    const newRows = verticalGlueProfile((resolveVerticalListWithBuilder(document, paragraphMeasurements, resolveOptions) ?? document).items);
-    const lines: string[] = [];
-    for (let index = 0; index < Math.max(oldRows.length, newRows.length); index++) {
-      const a = oldRows[index], b = newRows[index];
-      const mark = a?.key !== b?.key || Math.abs((a?.glue ?? 0) - (b?.glue ?? 0)) > 0.01 ? "!!" : a?.flex !== b?.flex ? "~~" : "  ";
-      lines.push(`${mark} ${(a?.key ?? "-").padEnd(28)} old ${String(a?.glue ?? "-").padStart(7)}${a?.flex ?? ""} new ${String(b?.glue ?? "-").padStart(7)}${b?.flex ?? ""} | old: ${a?.parts ?? ""} | new: ${b?.parts ?? ""}`);
-    }
-    if (lines.some(line => line.startsWith("!!") || line.startsWith("~~"))) console.log("VLCMP\n" + lines.join("\n"));
-  }
+  const resolvedDocument = resolveVerticalListWithBuilder(document, paragraphMeasurements, resolveOptions);
   const measurer = createMeasuredParagraphVListMeasurer(paragraphMeasurements);
   const naturalTotalHeight = computeTexVListNaturalTotalHeight(
     resolvedDocument.items,

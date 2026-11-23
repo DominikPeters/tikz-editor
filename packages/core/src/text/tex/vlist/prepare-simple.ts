@@ -4,13 +4,8 @@ import type {
   TexListLayoutProfile,
 } from "../layout-options.js";
 import { groupSimpleTexVListScopes } from "./scopes.js";
-import {
-  materializeDisplayMathVerticalGlueInVList,
-  materializeParagraphVerticalGlueInVList,
-} from "./spacing.js";
+import { materializeDisplayMathVerticalGlueInVList } from "./spacing.js";
 import type { TexVListDocument } from "./types.js";
-import type { SimpleTexVerticalEvent } from "../ir.js";
-import { computeVerticalBuilderSkips, runVerticalShadow, verticalBuilderEnabled, verticalShadowEnabled } from "./vertical-shadow.js";
 import { texLength } from "../coordinates.js";
 
 export interface PreparedSimpleTexVList {
@@ -36,20 +31,10 @@ export function prepareSimpleTexVList(
   vlist: TexVListDocument,
   font: ResolvedTexFont,
   listProfile?: TexListLayoutProfile,
-  displayMathProfile?: TexDisplayMathLayoutProfile,
-  verticalEvents?: readonly SimpleTexVerticalEvent[]
+  displayMathProfile?: TexDisplayMathLayoutProfile
 ): PreparedSimpleTexVList {
-  const withListFonts = applyListBodyFonts(vlist, listProfile);
-  if (verticalEvents && verticalShadowEnabled()) runVerticalShadow(withListFonts.items, verticalEvents, font, listProfile);
-  const builderSkips = verticalEvents && verticalBuilderEnabled()
-    ? computeVerticalBuilderSkips(withListFonts.items, verticalEvents, listProfile).filter(skip => !skip.first && !skip.nearDisplay)
-    : undefined;
-  const paragraphGlue = materializeParagraphVerticalGlueInVList(
-    withListFonts,
-    font,
-    listProfile,
-    builderSkips
-  );
+  // Paragraph, list and quote glue is the vertical-list builder's, at layout time.
+  const paragraphGlue = applyListBodyFonts(vlist, listProfile);
   const materialized = materializeDisplayMathVerticalGlueInVList(
     paragraphGlue,
     displayMathProfile,

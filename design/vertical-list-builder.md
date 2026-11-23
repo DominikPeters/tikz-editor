@@ -305,23 +305,32 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   not separate flow pieces; `\vfill`/`\vskip` in horizontal mode end the
   paragraph first (tex.web `head_for_vmode`). `\vfill` is second-order
   (`0pt plus 1fill`), the order the frame's centering fills use.
+- **Old planner deleted.** Every vertical list is resolved by the builder: the
+  IR always records events (none for plain paragraphs), a list built without
+  events treats each paragraph as ending in `\par`, and a material box
+  (`minipage`, `\parbox`) is a nested builder replaying its body's events
+  (the body is re-scanned with the enclosing document's list and font
+  registers; LuaLaTeX agrees on its list spacing). The planner
+  (`planSimpleTexParagraphVerticalSkips` and its state),
+  `materializeParagraphVerticalGlueInVList`, `addParagraphVerticalGlueToVList`,
+  `resolveDisplayMathVerticalGlueInVList` and the shadow comparison tool are
+  gone (spacing.ts: 2,744 to 692 lines); the event applier lives in
+  `vlist/vertical-events.ts`. Tests that asserted the planner's prepared-list
+  glue now assert the laid-out list; values that changed were checked against
+  pdfTeX `\showlists` (a list opening at the top of a box nets to
+  `\topsep + \partopsep`, and a list or quote ends with its closing
+  `\addvspace`).
   The cooperative-render test used empty blocks to split frame text into
   separate layout units; a frame body is now one unit, so the test puts each
   graphic in its own block body.
 
 ## Next
 
-1. **Beamer containers (step 4), remaining:** with every frame-level
-   construct in the frame's vertical list, delete the frame flow's per-kind
-   branches until it is a
-   single paragraph item and `positionPreparedFrameFlow`'s glue rules,
-   `leadingAdjustment`, `sharedTrivlistSkip`, `trailingListGlue` and the regex
-   helpers can go. A chained per-piece builder was considered and rejected: it
-   would preserve the piece boundaries that cause the duplication.
-2. **Material vboxes** (`\parbox`, `minipage` in text): pass the box body's
-   IR events through `rebaseSimpleTexBoxBody` and build them as nested builders.
-3. **Delete** `planSimpleTexParagraphVerticalSkips`'s scope-diff state,
-   `materializeParagraphVerticalGlueInVList`'s planning and
-   `resolveDisplayMathVerticalGlueInItems` once no caller needs them. Until
-   then the layout stage also runs the old resolution for piece edges, which
-   costs one extra pass per layout.
+1. **Frame flow**: the frame body is a single paragraph item plus source
+   cards; the remaining per-kind branches of `positionPreparedFrameFlow` and
+   the frame emitter (block, columns) are only reached through
+   `prepareFrameFlow`'s single-box preparation and can be folded away once
+   that preparation returns the prepared box directly.
+2. **Material boxes**: the minipage's vertical position in its line is 0.47pt
+   off in the minipage-with-list case (`test/beamer-fuzz-spacing.spec.ts`
+   checks the internal spacing only).

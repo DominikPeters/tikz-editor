@@ -46,7 +46,8 @@ Alpha.
     const display = items.find(entry => entry.item.kind === "display-math")!;
     expect(paragraph.bounds.y + display.y + display.metrics.height).toBeCloseTo(120.596008, 3);
     const prefix = items.find(entry => entry.item.kind === "glue" && entry.item.origin?.kind === "display-math-interline" && entry.item.origin.side === "above");
-    expect(prefix?.item.kind === "glue" ? prefix.item.size : undefined).toBe(0);
+    // No leading baseline glue: the vertical list may carry a zero item or none.
+    expect(prefix?.item.kind === "glue" ? prefix.item.size : 0).toBe(0);
   });
 
 });

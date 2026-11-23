@@ -15,7 +15,6 @@ import {
   isMaterialTexVBoxItem,
   materialVBoxMetrics,
   resolveDisplayMathBoundaryGlueItem,
-  resolveDisplayMathVerticalGlueInVList,
   texMaterialBoundaryPreviousDepth,
   texOpenedInterlineGlueSize,
   texParagraphLastLineDepth,
@@ -27,7 +26,7 @@ import type {
   TexVListParagraphBoxMeasurement,
 } from "./types.js";
 import { glue, VerticalListBuilder, type VerticalGlue, type VerticalListNode } from "./vertical-builder.js";
-import { createVerticalEventApplier } from "./vertical-shadow.js";
+import { createVerticalEventApplier } from "./vertical-events.js";
 
 export interface VerticalLayoutOptions {
   readonly lineHeight: TexLength;
@@ -54,6 +53,12 @@ interface Leaf {
 
 function glueOf(item: TexGlueItem): VerticalGlue {
   return glue(Number(item.size), Number(item.stretch ?? 0), Number(item.shrink ?? 0));
+}
+
+/** A nested list starts with TeX's ignore_depth, whatever the enclosing list's \prevdepth. */
+function withoutInitialPreviousDepth(options: VerticalLayoutOptions): VerticalLayoutOptions {
+  const { initialPreviousDepth: _enclosing, ...nested } = options;
+  return nested;
 }
 
 function isGlueItem(value: unknown): value is TexGlueItem {
@@ -87,10 +92,14 @@ function generatedGlueItem(node: Extract<VerticalListNode, { kind: "glue" }>, be
 export function resolveVerticalListWithBuilder(
   document: TexVListDocument,
   paragraphMeasurements: ReadonlyMap<string, TexVListParagraphBoxMeasurement>,
-  options: VerticalLayoutOptions
-): TexVListDocument | undefined {
-  const context = document.verticalBuilder;
-  if (!context) return undefined;
+  options: VerticalLayoutOptions,
+  /** The document's path in the enclosing list, for a nested material box. */
+  pathPrefix: readonly number[] = []
+): TexVListDocument {
+  // A list without recorded events (built directly, not from the IR) has no environments to replay.
+  const context = document.verticalBuilder ?? { events: [] };
+  // Without recorded events every paragraph item is its own paragraph (its \par is implicit).
+  const implicitParagraphEnds = document.verticalBuilder === undefined;
   const profile: TexListLayoutProfile | undefined = context.listProfile;
   const builder = new VerticalListBuilder({
     parskip: glue(profile?.paragraphSkipPt ?? 0),
@@ -250,6 +259,7 @@ export function resolveVerticalListWithBuilder(
           lastParagraph = measurement;
           continue;
         }
+        if (implicitParagraphEnds) builder.par(true);
         builder.startParagraph(leaf.id, {
           height: Number(measurement.ruleLeadingMetrics.height),
           depth: Number(texParagraphLastLineDepth(measurement)),
@@ -282,8 +292,11 @@ export function resolveVerticalListWithBuilder(
         }, role?.kind === "external-flow");
         lastParagraph = undefined;
       } else if (item.kind === "vbox") {
-        // A material box (\parbox, minipage): its contents keep the old resolution for now.
-        const nested = resolveDisplayMathVerticalGlueInVList({ kind: "vlist", items: item.items }, paragraphMeasurements, options);
+        // A material box (\parbox, minipage) is a vertical list of its own: a nested builder replays its
+        // body's events, starting in minipage mode (\@minipagetrue, \parskip 0pt from \@parboxrestore).
+        const nested = resolveVerticalListWithBuilder({ kind: "vlist", items: item.items, verticalBuilder: { events: item.material?.verticalEvents ?? [],
+          ...(profile !== undefined ? { listProfile: { ...profile, paragraphSkipPt: 0, suppressInitialTopsep: true } } : {}) } },
+          paragraphMeasurements, withoutInitialPreviousDepth(options), path);
         const material = { ...item, items: nested.items };
         const metrics = materialVBoxMetrics(material, paragraphMeasurements);
         // After a paragraph, the material box's baseline glue sees at least a strut's depth.
@@ -301,7 +314,7 @@ export function resolveVerticalListWithBuilder(
       }
     }
   };
-  walk(document.items, []);
+  walk(document.items, pathPrefix);
   flushEvents(Infinity);
   if ((globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.VLIST_TRACE === "1") {
     console.log("VLTRACE events", events.map(event => `${event.kind}@${event.sourceStart}${"depth" in event ? ":" + String(event.depth) : ""}`).join(" "));
@@ -384,7 +397,7 @@ export function resolveVerticalListWithBuilder(
     }
     return output;
   };
-  const items = rebuild(document.items, []);
+  const items = rebuild(document.items, pathPrefix);
   // A container's closing skips (\endlist, \endtrivlist) are the builder's: the container decides what
   // its end does with them (a minipage's \unskip, a frame box's glue setting).
   items.push(...pendingAttached, ...pending);

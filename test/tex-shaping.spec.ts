@@ -75,13 +75,23 @@ function relayoutFromExistingVListLayout(
   const linePlacementsByIndex = new Map(
     layout.linePlacements.map((placement) => [placement.lineIndex, placement])
   );
+  // Placement paths address the laid-out list, which holds the builder's glue; measure the
+  // input document's paragraphs by block index instead.
+  const inputPaths = new Map<number, readonly number[]>();
+  const collectPaths = (items: readonly TexVListDocument["items"][number][], prefix: readonly number[]) => {
+    for (const [index, item] of items.entries()) {
+      if (item.kind === "paragraph") inputPaths.set(item.blockIndex, [...prefix, index]);
+      else if (item.kind === "vbox") collectPaths(item.items, [...prefix, index]);
+    }
+  };
+  collectPaths(document.items, []);
   const paragraphMeasurements = texFixture<
     Parameters<typeof layoutTexVListFromMeasuredParagraphs>[1]["paragraphMeasurements"]
   >(layout.paragraphPlacements.map((placement) => {
       const advance = placement.metrics.height + placement.metrics.depth;
       return {
         blockIndex: placement.blockIndex,
-        vlistPath: placement.vlistPath,
+        vlistPath: inputPaths.get(placement.blockIndex) ?? placement.vlistPath,
         lineIndices: placement.lineIndices,
         lineOffsets: placement.lineIndices.map((lineIndex) => ({
           lineIndex,
@@ -2779,7 +2789,9 @@ describe("simple TeX paragraph layout", () => {
       items: [
         { kind: "paragraph", y: 0, height: undefined, stretchOrder: undefined, size: undefined, text: "Alpha" },
         { kind: "glue", y: 9.1, height: 3, stretchOrder: "normal", size: 3, text: undefined },
-        { kind: "glue", y: 12.1, height: 40.96, stretchOrder: "fill", size: 0, text: undefined },
+        { kind: "glue", y: 12.1, height: 37.73, stretchOrder: "fill", size: 0, text: undefined },
+        // Beta's \baselineskip glue is its own node, after the \vfill (tex.web §679).
+        { kind: "glue", y: 49.83, height: 3.23, stretchOrder: "normal", size: 3.23, text: undefined },
         { kind: "paragraph", y: 53.06, height: undefined, stretchOrder: undefined, size: undefined, text: "Beta" },
       ],
     });
@@ -2828,13 +2840,14 @@ describe("simple TeX paragraph layout", () => {
     expect(stretched?.linePlacements.map((placement) => placement.y)).toEqual([0, 25.06]);
     expect(stretched?.items.map((item) =>
       item.item.kind === "glue" ? item.metrics.height : null
-    )).toEqual([null, 15.96, null]);
+    // The explicit skip stretches; Beta's \baselineskip glue is its own node.
+    )).toEqual([null, 12.73, 3.23, null]);
     expect(stretched?.metrics).toEqual({ width: 150, height: 8.5, depth: 23.5 });
 
     expect(shrunk?.linePlacements.map((placement) => placement.y)).toEqual([0, 20.06]);
     expect(shrunk?.items.map((item) =>
       item.item.kind === "glue" ? item.metrics.height : null
-    )).toEqual([null, 10.96, null]);
+    )).toEqual([null, 7.73, 3.23, null]);
     expect(shrunk?.metrics).toEqual({ width: 150, height: 8.5, depth: 18.5 });
   });
 
@@ -2886,10 +2899,11 @@ describe("simple TeX paragraph layout", () => {
       metrics: center.metrics,
       itemY: center.items.map((item) => item.y),
     }).toEqual({
-      baseline: { kind: "explicit", y: 25.48 },
-      linePlacementYs: [16.98, 26.08],
-      metrics: { width: 150, height: 25.48, depth: 24.52 },
-      itemY: [16.98, 26.08],
+      // The second line keeps the \baselineskip glue (12pt) it has in the natural layout.
+      baseline: { kind: "explicit", y: 23.865 },
+      linePlacementYs: [15.365, 27.695],
+      metrics: { width: 150, height: 23.865, depth: 26.135 },
+      itemY: [15.365, 24.465, 27.695],
     });
     expect(bottom && {
       baseline: bottom.baseline,
@@ -2897,10 +2911,10 @@ describe("simple TeX paragraph layout", () => {
       metrics: bottom.metrics,
       itemY: bottom.items.map((item) => item.y),
     }).toEqual({
-      baseline: { kind: "explicit", y: 42.46 },
-      linePlacementYs: [33.96, 43.06],
-      metrics: { width: 150, height: 42.46, depth: 7.54 },
-      itemY: [33.96, 43.06],
+      baseline: { kind: "explicit", y: 39.23 },
+      linePlacementYs: [30.73, 43.06],
+      metrics: { width: 150, height: 39.23, depth: 10.77 },
+      itemY: [30.73, 39.83, 43.06],
     });
   });
 

@@ -65,11 +65,7 @@ export {
 } from "./layout.js";
 export { groupSimpleTexVListScopes } from "./scopes.js";
 export {
-  addParagraphVerticalGlueToVList,
   materializeDisplayMathVerticalGlueInVList,
-  materializeParagraphVerticalGlueInVList,
-  planSimpleTexParagraphVerticalSkips,
-  resolveDisplayMathVerticalGlueInVList,
   type SimpleTexParagraphVerticalSkip,
 } from "./spacing.js";
 export {

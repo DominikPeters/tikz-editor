@@ -90,8 +90,7 @@ export function prepareSimpleTexLayoutScope(
     baseVList,
     params.font,
     params.options.listProfile,
-    params.options.displayMathProfile,
-    params.verticalEvents
+    params.options.displayMathProfile
   );
   const preparedParagraphs = prepareTexLayoutParagraphsFromVList({
     vlist: preparedVList.normalized,

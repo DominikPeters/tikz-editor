@@ -393,6 +393,8 @@ export interface TexVBoxItem {
   readonly role?: TexVBoxRole;
   readonly material?: {
     readonly command: SimpleTexBoxCommandName;
+    /** The box body's vertical events, replayed by its own vertical-list builder. */
+    readonly verticalEvents?: readonly SimpleTexVerticalEvent[];
   };
   readonly layout?: TexVBoxLayout;
   readonly width?: TexDimenExpr;
