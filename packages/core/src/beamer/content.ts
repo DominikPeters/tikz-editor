@@ -608,7 +608,7 @@ function splitTitlePageCommands(
   context: BeamerSyntaxContext,
   frameId: string,
   children: readonly BeamerFrameBodyNode[],
-  /** A title page is a sequence of boxes and \vfill glue in the frame's vertical list. */
+  /** Title pages and contents are boxes and \vfill glue in the frame's vertical list. */
   embedTitlePages = false
 ): BeamerFrameBodyNode[] {
   const { source } = context;
@@ -623,18 +623,13 @@ function splitTitlePageCommands(
     const commands = beamerControlSequencesIn(context, child.span).filter(
       (command) => command.name === "titlepage" || command.name === "maketitle" || command.name === "tableofcontents"
     );
-    if (commands.length === 0 || embedTitlePages && commands.every(command => command.name !== "tableofcontents")) {
-      titlePageIndex += commands.length;
-      // (embedded title pages keep their numbering so later contents ids match the structural parse)
+    if (commands.length === 0 || embedTitlePages) {
+      // Embedded title pages and contents stay in the text; the structural parse names them.
       result.push(child);
       continue;
     }
     let cursor = child.span.from;
     for (const command of commands) {
-      if (embedTitlePages && command.name !== "tableofcontents") {
-        titlePageIndex += 1;
-        continue;
-      }
       const before = trimSpan(source, { from: cursor, to: command.from });
       if (before.to > before.from) {
         result.push({

@@ -298,14 +298,18 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   with its fill unit (the paragraph is laid out again to its target height).
   The inmargin template's one internal `\vfill` sits between the title and
   the author block; it no longer also counts a trailing fill.
+  `\tableofcontents` follows the same scheme (a `\vfill` before each
+  section, one after the last); `\nointerlineskip` keeps its effect across
+  that glue.
   The cooperative-render test used empty blocks to split frame text into
   separate layout units; a frame body is now one unit, so the test puts each
   graphic in its own block body.
 
 ## Next
 
-1. **Beamer containers (step 4), remaining:** extend the embedding to
-   `\tableofcontents`, until the frame flow is a
+1. **Beamer containers (step 4), remaining:** with every frame-level
+   construct in the frame's vertical list, delete the frame flow's per-kind
+   branches until it is a
    single paragraph item and `positionPreparedFrameFlow`'s glue rules,
    `leadingAdjustment`, `sharedTrivlistSkip`, `trailingListGlue` and the regex
    helpers can go. A chained per-piece builder was considered and rejected: it

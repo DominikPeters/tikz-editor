@@ -167,6 +167,7 @@ import type {
   PreparedColumnFlowItem,
   PreparedFrameFlowItem,
   PreparedTitlePage,
+  PreparedContents,
 } from "./render-model.js";
 import {
   prepareUnsupportedPlaceholder,
@@ -905,28 +906,9 @@ async function renderBeamerFrameStep(params: {
           ...(params.work !== undefined ? { work: params.work } : {}),
         });
       } else if (placement.item.kind === "contents") {
-        const contents = placement.item.contents;
-        for (const row of contents.rows) {
-          const y = frameBlockTop + placement.contentTop + row.top + row.fillWeight * verticalPacking.fillUnit;
-          const x = availableContentBounds.x;
-          const emit = (paragraph: LaidParagraph, px: number, py: number, color: string) => {
-            positionParagraphLayout(paragraph.layout, svgPoint(pt(px), pt(py)));
-            paragraphs.push(paragraph.layout);
-            items.push({ id: paragraph.layout.paragraphId, kind: "text", sourceSpan: paragraph.layout.sourceSpan,
-              bounds: paragraph.layout.bounds, parentId: contents.node.id, paragraphId: paragraph.layout.paragraphId });
-            bodyModelBuilder.addPart({ basePartId: paragraph.layout.paragraphId, sourceId: paragraph.layout.paragraphId, elementId: null,
-              markup: paragraphMarkup(paragraph.svgBody, px, py, color) });
-          };
-          emit(row.paragraph, x + row.x, y, textColor(theme, row.colorRole));
-          const top = frameBlockTop + placement.contentTop + row.fillWeight * verticalPacking.fillUnit;
-          if (row.marker) {
-            const id = `${row.paragraph.layout.paragraphId}:marker`;
-            items.push({ id, kind: "list-marker", sourceSpan: row.paragraph.layout.sourceSpan,
-              bounds: { ...row.marker.bounds, x: x + row.marker.bounds.x, y: top + row.marker.bounds.y }, parentId: contents.node.id });
-            bodyModelBuilder.addPart({ basePartId: id, sourceId: id, elementId: null, markup: `<g transform="translate(${x} ${top})">${row.marker.markup}</g>` });
-          }
-          if (row.number) emit(row.number.paragraph, x + row.number.x, top + row.number.top, textColor(theme, "section number projected text"));
-        }
+        const contentTop = frameBlockTop + placement.contentTop;
+        emitPreparedContents({ prepared: placement.item.contents, x: availableContentBounds.x,
+          origin: weight => contentTop + weight * verticalPacking.fillUnit, items, paragraphs, modelBuilder: bodyModelBuilder, theme });
       } else if (placement.item.kind === "unsupported") {
         emitUnsupportedPlaceholder({
           placeholder: placement.item.placeholder,
@@ -1004,18 +986,20 @@ async function renderBeamerFrameStep(params: {
     for (const external of references.inlineFlow ?? []) {
       const box = paragraph.vlistLayout.boxReport.items.find(item => item.hboxRole?.kind === "external-flow" && item.sourceSpan?.start === external.span.from && item.sourceSpan.end === external.span.to);
       if (!box) continue;
-      if (external.item.kind === "title-page") {
+      if (external.item.kind === "title-page" || external.item.kind === "contents") {
         // Each segment's origin is where its natural top landed after the fills above it.
         const origins = new Map<number, number>();
         for (const item of paragraph.vlistLayout.boxReport.items) {
           const role = item.hboxRole;
-          if (role?.kind !== "external-flow" || role.flowKind !== "title-page" || role.fillWeight === undefined ||
+          if (role?.kind !== "external-flow" || role.flowKind !== external.item.kind || role.fillWeight === undefined ||
             item.sourceSpan?.start !== external.span.from) continue;
           origins.set(role.fillWeight, paragraph.bounds.y + Number(item.y) - Number(role.contentOffsetPt ?? 0));
         }
         const origin = Math.min(...origins.values());
-        emitPreparedTitlePage({ prepared: external.item.titlePage, x: paragraph.bounds.x, y: origin,
-          fillOffset: weight => (origins.get(weight) ?? origin) - origin, items, paragraphs, modelBuilder: bodyModelBuilder, theme });
+        const at = (weight: number) => origins.get(weight) ?? origin;
+        if (external.item.kind === "title-page") emitPreparedTitlePage({ prepared: external.item.titlePage, x: paragraph.bounds.x, y: origin,
+          fillOffset: weight => at(weight) - origin, items, paragraphs, modelBuilder: bodyModelBuilder, theme });
+        else emitPreparedContents({ prepared: external.item.contents, x: paragraph.bounds.x, origin: at, items, paragraphs, modelBuilder: bodyModelBuilder, theme });
         continue;
       }
       const visibility = external.item.visibility === "hidden" || paragraph.hiddenSourceSpans?.some(span => span.from <= external.span.from && external.span.to <= span.to) ? "hidden" : "visible";
@@ -1145,7 +1129,7 @@ async function renderBeamerFrameStep(params: {
     else delete item.rootId;
   }
   const editScopes = collectBeamerEditScopes(frame, bodyIr.structuralChildren ? { ...bodyIr, children: bodyIr.structuralChildren } : bodyIr, document.preamble.metadata);
-  const inlineScopes = collectBeamerEditScopes(frame, { ...bodyIr, children: (references.inlineFlow ?? []).flatMap(box => box.item.kind === "title-page" ? [] : [box.item.node]) });
+  const inlineScopes = collectBeamerEditScopes(frame, { ...bodyIr, children: (references.inlineFlow ?? []).flatMap(box => box.item.kind === "title-page" || box.item.kind === "contents" ? [] : [box.item.node]) });
   for (const scope of inlineScopes) if (scope.kind === "column" && !editScopes.some(existing => existing.span.from === scope.span.from && existing.span.to === scope.span.to)) editScopes.push(scope);
   const recovery = collectBeamerRecovery(source, editScopes);
   diagnostics.push(...beamerRecoveryDiagnostics(recovery));
@@ -1572,9 +1556,25 @@ async function prepareInlineFlow(params: {
   const frameLayout = params.references.frameLayout;
   if (frameLayout && params.bodyIr.children.length > 0) {
     for (const node of params.bodyIr.structuralChildren ?? []) {
-      if (node.kind !== "title-page") continue;
+      if (node.kind !== "title-page" && node.kind !== "contents") continue;
       if (resolveBeamerOverlaySpanVisibility(params.overlays, node.span, params.step) === "removed") continue;
       const theme = ambientTextTheme(params.references.scopedTheme?.at(node.span.from) ?? params.theme, params.references.ambientTextAt?.(node.span.from) ?? "");
+      const visibility = resolveBeamerOverlaySpanVisibility(params.overlays, node.span, params.step);
+      if (node.kind === "contents") {
+        const unsupportedOptions = (node.options?.value ?? "").split(",").map(value => value.trim()).filter(value => value && !["hideallsubsections", "hideothersubsections"].includes(value));
+        if (unsupportedOptions.length) params.diagnostics.push({ severity: "warning", code: "beamer-contents-unsupported-options",
+          message: `Unsupported contents options: ${unsupportedOptions.join(", ")}. Only default section/subsection contents and hide-all/other-subsection filters are implemented.`, span: node.options?.span ?? node.span });
+        const contents = prepareBeamerContents({ node, sections: params.references.tocSections ?? [],
+          currentSectionId: params.references.currentSectionId ?? null, theme, width: params.textWidth,
+          layout: (mapped, font, width, id) => layoutParagraph({ mapped, font, sourceSpan: node.span, paragraphId: id, role: "body",
+            bounds: { x: 0, y: 0, width, height: 0 }, alignment: "left", macroBindings: params.macroBindings,
+            references: params.references, paperWidth: params.paperWidth }) });
+        const replacement = { span: node.span, width: params.textWidth, item: { kind: "contents" as const, visibility, contents } };
+        const index = params.references.inlineFlow?.findIndex(box => box.span.from === node.span.from) ?? -1;
+        if (index >= 0 && params.references.inlineFlow) params.references.inlineFlow[index] = replacement;
+        else params.references.inlineFlow?.push(replacement);
+        continue;
+      }
       const titlePage = runBeamerRenderOperation(params.work, () => prepareTitlePage({ node, width: params.textWidth, theme,
         metadata: frameLayout.metadata, macroBindings: params.macroBindings, references: params.references,
         ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
@@ -2066,35 +2066,45 @@ function prepareTitlePage(params: {
 }
 
 /**
- * A title page in the frame's vertical list: the template's boxes, with \vfill glue where it
- * stretches. Each segment is placed after the fills above it; its height is its share of the
- * page's natural height, which already holds the template's interline glue.
+ * Template material in the frame's vertical list (a title page, a table of contents): its boxes,
+ * with \vfill glue where the template stretches. Each segment holds the entries after the same
+ * number of fills; its height is its share of the material's natural height, which already holds
+ * the template's interline glue.
  */
-function titlePageVListItems(page: PreparedTitlePage, sourceSpan: { start: number; end: number }): TexVListItem[] {
+function templateVListItems(material: {
+  flowKind: "title-page" | "contents";
+  naturalHeight: number;
+  entries: readonly { top: number; fillWeight: number }[];
+  /** Weight of the fill before the first segment that no entry counts (a title page's leading \vfill). */
+  leadingFill: number;
+  trailingFill: number;
+  /** The template's leading \vbox{}, one \baselineskip below the previous baseline (colorbox styles). */
+  leadingEmptyBoxPt?: number;
+}, sourceSpan: { start: number; end: number }): TexVListItem[] {
   const fil = (weight: number): TexVListItem => ({ kind: "glue", size: texLength(0), stretch: texLength(weight), stretchOrder: "fil", shrinkOrder: "normal",
     origin: { kind: "explicit-command", command: "vfill" }, sourceSpan });
   const noInterline: TexVListItem = { kind: "glue", size: texLength(0), origin: { kind: "explicit-command", command: "nointerlineskip" }, sourceSpan };
   const box = (height: number, fillWeight: number | undefined, contentTop: number, baselineSkip?: number): TexVListItem => ({ kind: "hbox", sourceSpan,
-    role: { kind: "external-flow", flowKind: "title-page", ...(fillWeight !== undefined ? { fillWeight } : {}), contentOffsetPt: texLength(contentTop),
+    role: { kind: "external-flow", flowKind: material.flowKind, ...(fillWeight !== undefined ? { fillWeight } : {}), contentOffsetPt: texLength(contentTop),
       ...(baselineSkip !== undefined ? { baselineSkipPt: texLength(baselineSkip) } : {}) },
     box: { metrics: { width: texLength(0), height: texLength(height), depth: texLength(0) }, renderItems: [] } });
-  const firstTop = page.leadingEmptyBoxPt ?? 0;
-  const weights = [...new Set(page.text.map(entry => entry.fillWeight))].sort((a, b) => a - b);
-  const tops = weights.map(weight => weight === (weights[0] ?? 0) ? firstTop : Math.min(...page.text.filter(entry => entry.fillWeight === weight).map(entry => entry.top)));
+  const firstTop = material.leadingEmptyBoxPt ?? 0;
+  const weights = [...new Set(material.entries.map(entry => entry.fillWeight))].sort((a, b) => a - b);
+  const tops = weights.map((weight, index) => index === 0 ? firstTop : Math.min(...material.entries.filter(entry => entry.fillWeight === weight).map(entry => entry.top)));
   const ordered = tops.every((top, index) => index === 0 || top >= (tops[index - 1] ?? 0));
-  const segments = ordered && weights.length > 0 ? weights.map((weight, index) => ({ weight, top: tops[index] ?? firstTop, bottom: tops[index + 1] ?? page.naturalHeight }))
-    : [{ weight: 0, top: firstTop, bottom: page.naturalHeight }];
-  // colorbox and rounded templates open with \vbox{} (normal baseline glue), then \vfill.
-  const items: TexVListItem[] = page.leadingEmptyBoxPt !== undefined ? [box(0, undefined, 0, page.leadingEmptyBoxPt)] : [noInterline];
-  if (page.leadingFillWeight > 0) items.push(fil(page.leadingFillWeight));
-  let previousWeight = segments[0]?.weight ?? 0;
+  const segments = ordered && weights.length > 0 ? weights.map((weight, index) => ({ weight, top: tops[index] ?? firstTop, bottom: tops[index + 1] ?? material.naturalHeight }))
+    : [{ weight: 0, top: firstTop, bottom: material.naturalHeight }];
+  // colorbox and rounded title pages open with \vbox{} (normal baseline glue), then \vfill.
+  const items: TexVListItem[] = material.leadingEmptyBoxPt !== undefined ? [box(0, undefined, 0, material.leadingEmptyBoxPt)] : [noInterline];
+  if (material.leadingFill > 0) items.push(fil(material.leadingFill));
+  let previousWeight = 0;
   for (const [index, segment] of segments.entries()) {
     if (segment.weight > previousWeight) items.push(fil(segment.weight - previousWeight));
     previousWeight = segment.weight;
-    if (index > 0 || page.leadingEmptyBoxPt !== undefined) items.push(noInterline);
+    if (index > 0 || material.leadingEmptyBoxPt !== undefined) items.push(noInterline);
     items.push(box(Math.max(0, segment.bottom - segment.top), segment.weight, segment.top));
   }
-  if (page.trailingFillWeight > 0) items.push(fil(page.trailingFillWeight));
+  if (material.trailingFill > 0) items.push(fil(material.trailingFill));
   return items;
 }
 
@@ -3079,6 +3089,38 @@ function blockChromeMarkup(params: {
     `<path d="${bodyPath}" fill="${params.bodyFill}" />` +
     `</g>`
   );
+}
+
+/** A table of contents' rows, each placed from the origin of its fill segment. */
+function emitPreparedContents(params: {
+  prepared: PreparedContents;
+  x: number;
+  origin: (fillWeight: number) => number;
+  items: BeamerFrameLayoutItem[];
+  paragraphs: BeamerParagraphLayout[];
+  modelBuilder: ReturnType<typeof createSvgModelBuilder>;
+  theme: ResolvedBeamerTheme;
+}): void {
+  const { prepared: contents, x, theme } = params;
+  const emit = (paragraph: LaidParagraph, px: number, py: number, color: string) => {
+    positionParagraphLayout(paragraph.layout, svgPoint(pt(px), pt(py)));
+    params.paragraphs.push(paragraph.layout);
+    params.items.push({ id: paragraph.layout.paragraphId, kind: "text", sourceSpan: paragraph.layout.sourceSpan,
+      bounds: paragraph.layout.bounds, parentId: contents.node.id, paragraphId: paragraph.layout.paragraphId });
+    params.modelBuilder.addPart({ basePartId: paragraph.layout.paragraphId, sourceId: paragraph.layout.paragraphId, elementId: null,
+      markup: paragraphMarkup(paragraph.svgBody, px, py, color) });
+  };
+  for (const row of contents.rows) {
+    const top = params.origin(row.fillWeight);
+    emit(row.paragraph, x + row.x, top + row.top, textColor(theme, row.colorRole));
+    if (row.marker) {
+      const id = `${row.paragraph.layout.paragraphId}:marker`;
+      params.items.push({ id, kind: "list-marker", sourceSpan: row.paragraph.layout.sourceSpan,
+        bounds: { ...row.marker.bounds, x: x + row.marker.bounds.x, y: top + row.marker.bounds.y }, parentId: contents.node.id });
+      params.modelBuilder.addPart({ basePartId: id, sourceId: id, elementId: null, markup: `<g transform="translate(${x} ${top})">${row.marker.markup}</g>` });
+    }
+    if (row.number) emit(row.number.paragraph, x + row.number.x, top + row.number.top, textColor(theme, "section number projected text"));
+  }
 }
 
 function emitPreparedTitlePage(params: {
@@ -4524,7 +4566,18 @@ function layoutParagraph(params: {
         }
       }
       const item = external.item;
-      if (item.kind === "title-page") return titlePageVListItems(item.titlePage, { start: box.sourceStart, end: box.sourceEnd });
+      const span = { start: box.sourceStart, end: box.sourceEnd };
+      if (item.kind === "title-page") {
+        const page = item.titlePage;
+        return templateVListItems({ flowKind: "title-page", naturalHeight: page.naturalHeight, entries: page.text,
+          leadingFill: page.leadingFillWeight, trailingFill: page.trailingFillWeight,
+          ...(page.leadingEmptyBoxPt !== undefined ? { leadingEmptyBoxPt: page.leadingEmptyBoxPt } : {}) }, span);
+      }
+      if (item.kind === "contents") {
+        const contents = item.contents;
+        return templateVListItems({ flowKind: "contents", naturalHeight: contents.naturalHeight, entries: contents.rows, leadingFill: 0,
+          trailingFill: contents.fillWeight - Math.max(0, ...contents.rows.map(row => row.fillWeight)) }, span);
+      }
       // The block template's \par\vskip\medskipamount is vertical glue before the box, not part of it
       // (beamerinnerthemedefault.sty 390, beamerbaseauxtemplates.sty 752); the block's geometry is
       // measured from above that skip, so the box keeps the skip as a drawing offset.

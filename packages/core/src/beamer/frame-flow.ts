@@ -210,9 +210,12 @@ export function paragraphEndingMaterialDepth(
 function paragraphStartsWithoutInterline(paragraph: LaidParagraph): boolean {
   const items = paragraph.layout.vlistLayout.boxReport.items;
   const index = items.findIndex(item => item.itemKind !== "glue" && item.itemKind !== "penalty" && item.itemKind !== "vbox");
-  const origin = index > 0 ? items[index - 1]?.glue?.origin : undefined;
-  return origin?.kind === "external-flow-before" && origin.noInterline === true ||
-    origin?.kind === "explicit-command" && origin.command === "nointerlineskip";
+  // \nointerlineskip sets \prevdepth to -1000pt; glue after it (a \vfill) leaves that in place.
+  return items.slice(0, Math.max(0, index)).some(item => {
+    const origin = item.glue?.origin;
+    return origin?.kind === "external-flow-before" && origin.noInterline === true ||
+      origin?.kind === "explicit-command" && origin.command === "nointerlineskip";
+  });
 }
 
 export function paragraphStartingMaterialHeight(
