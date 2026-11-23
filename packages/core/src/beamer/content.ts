@@ -439,17 +439,10 @@ function splitStandaloneFrameCommands(
   children: readonly BeamerFrameBodyNode[],
   embedTitlePages = false
 ): BeamerFrameBodyNode[] {
-  return splitStandaloneVerticalSpaces(
-    context,
-    frameId,
-    splitVerticalFillCommands(
-      context,
-      stripFrameTitleCommands(
-        context,
-        splitTitlePageCommands(context, frameId, children, embedTitlePages)
-      )
-    )
-  );
+  const stripped = stripFrameTitleCommands(context, splitTitlePageCommands(context, frameId, children, embedTitlePages));
+  // In a vertical list \vspace and \vfill are glue like any other: no separate flow pieces.
+  if (embedTitlePages) return stripped;
+  return splitStandaloneVerticalSpaces(context, frameId, splitVerticalFillCommands(context, stripped));
 }
 
 /**

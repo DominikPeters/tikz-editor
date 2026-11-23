@@ -313,12 +313,13 @@ describe("Beamer canvas editing contract", () => {
       expect(joined).not.toContain("Short title");
       expect(joined).not.toContain("Command-form subtitle");
       // `\vfill` ends the paragraph like TeX vertical glue; the prose on
-      // both sides survives as separate paragraphs and the glue itself is
-      // structural source, not editable text.
+      // both sides stays in the frame's one vertical list with the glue
+      // between the two paragraphs, which is structural source, not editable text.
       expect(joined).not.toContain("vfill");
-      expect(
-        page.layout.paragraphs.filter((p) => p.role === "body").map((p) => p.paragraphId)
-      ).toEqual(["frame:0:paragraph:0", "frame:0:paragraph:0:1"]);
+      const body = page.layout.paragraphs.filter((p) => p.role === "body");
+      expect(body.map((p) => p.paragraphId)).toEqual(["frame:0:paragraph:0"]);
+      expect(body[0]?.vlistLayout.boxReport.items.filter((item) => item.itemKind === "paragraph")).toHaveLength(2);
+      expect(body[0]?.vlistLayout.boxReport.items.some((item) => item.glue?.stretchOrder === "fill")).toBe(true);
 
       // Argument-bearing macro calls publish whole-invocation atoms, except
       // style macros (K1), whose argument is editable text.

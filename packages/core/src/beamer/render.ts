@@ -2081,7 +2081,7 @@ function templateVListItems(material: {
   /** The template's leading \vbox{}, one \baselineskip below the previous baseline (colorbox styles). */
   leadingEmptyBoxPt?: number;
 }, sourceSpan: { start: number; end: number }): TexVListItem[] {
-  const fil = (weight: number): TexVListItem => ({ kind: "glue", size: texLength(0), stretch: texLength(weight), stretchOrder: "fil", shrinkOrder: "normal",
+  const fil = (weight: number): TexVListItem => ({ kind: "glue", size: texLength(0), stretch: texLength(weight), stretchOrder: "fill", shrinkOrder: "normal",
     origin: { kind: "explicit-command", command: "vfill" }, sourceSpan });
   const noInterline: TexVListItem = { kind: "glue", size: texLength(0), origin: { kind: "explicit-command", command: "nointerlineskip" }, sourceSpan };
   const box = (height: number, fillWeight: number | undefined, contentTop: number, baselineSkip?: number): TexVListItem => ({ kind: "hbox", sourceSpan,
@@ -4270,7 +4270,7 @@ function finalVListGlue(paragraph: LaidParagraph): number {
 function verticalListFillWeight(paragraph: LaidParagraph): number {
   let weight = 0;
   for (const item of paragraph.layout.vlistLayout.boxReport.items) {
-    if (item.glue?.stretchOrder === "fil") weight += Number(item.glue.stretch ?? 0);
+    if (item.glue?.stretchOrder === "fill") weight += Number(item.glue.stretch ?? 0);
   }
   return weight;
 }

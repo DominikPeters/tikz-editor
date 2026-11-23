@@ -5776,6 +5776,19 @@ function buildSimpleTexParagraphBlocksFromNodes(
           hasFollowingInlineMaterial(index + 1)
         )
       ) {
+        // \vfill and \vskip are vertical-mode commands: in horizontal mode TeX ends the paragraph
+        // first (tex.web `head_for_vmode`: back_input, then a \par token).
+        if ((node.command === "vfill" || node.command === "vskip") && !horizontalModeResumedAfterDisplay) {
+          recordVerticalEvent({ kind: "par", sourceStart: node.sourceStart, sourceEnd: node.sourceStart });
+          pushBlock(blockStart, node.sourceStart, currentNoIndent, quotationFirstLineIndentEm(), currentQuoteDepth,
+            currentQuotationDepth, prefix.alignment, prefix.alignmentProfile, false);
+          items.push(verticalGlueBlockItem(node));
+          prefix = consumeParagraphPrefix(index + 1);
+          blockStart = sourceStartForNodeIndex(prefix.start);
+          currentNoIndent = noIndentForCurrentScope(prefix.noIndent);
+          index = prefix.start;
+          continue;
+        }
         // LaTeX defines the named skips as \vspace of their skip registers.
         if (!["vspace", "smallskip", "medskip", "bigskip"].includes(node.command)) {
           unsupportedCommand = true;

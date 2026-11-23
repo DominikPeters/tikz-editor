@@ -760,11 +760,12 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
-  it("rejects primitive vertical glue in the middle of a paragraph", () => {
+  it("ends the paragraph at primitive vertical glue in horizontal mode", () => {
+    // tex.web head_for_vmode: \vskip in horizontal mode inserts \par first.
     const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \vskip 3pt Beta`, 120);
 
-    expect(analysis.ir?.unsupportedCommand).toBe(true);
-    expect(analysis.fallbackReason).toContain("not supported");
+    expect(analysis.fallbackReason).toBeNull();
+    expect(analysis.ir?.items.map((item) => item.kind)).toEqual(["paragraph", "vertical-glue", "paragraph"]);
   });
 
   it("parses explicit TeX hrule commands as vertical rule block items", () => {

@@ -301,6 +301,10 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   `\tableofcontents` follows the same scheme (a `\vfill` before each
   section, one after the last); `\nointerlineskip` keeps its effect across
   that glue.
+  `\vspace` and `\vfill` between paragraphs are glue in the vertical list,
+  not separate flow pieces; `\vfill`/`\vskip` in horizontal mode end the
+  paragraph first (tex.web `head_for_vmode`). `\vfill` is second-order
+  (`0pt plus 1fill`), the order the frame's centering fills use.
   The cooperative-render test used empty blocks to split frame text into
   separate layout units; a frame body is now one unit, so the test puts each
   graphic in its own block body.
