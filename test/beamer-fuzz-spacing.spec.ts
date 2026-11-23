@@ -2091,6 +2091,56 @@ Witness.
     expect(baseline("Witness.")).toBeCloseTo(113.402786, 3);
   });
 
+  it("ships a cleared item label as an empty line only in vertical mode", async () => {
+    // \\@doendpe's \\par clears the block item's \\everypar, so its label stays pending. \\endtrivlist's
+    // \\leavevmode ships it as an empty line only after an explicit \\par; with "Before after." still open it
+    // merely ends that paragraph. LuaLaTeX baselines for both.
+    const open = String.raw`\documentclass[9pt]{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Labels}
+Lead.\par
+\begin{itemize}
+\item Two.
+\par
+\begin{itemize}
+\item Inner.
+\end{itemize}
+\item \begin{alertblock}{Block}
+Body.
+\end{alertblock}
+\par
+Before after.
+\end{itemize}
+Witness.
+\end{frame}
+\end{document}`;
+    const closed = String.raw`\documentclass[9pt]{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Labels}
+Lead.\par
+\begin{itemize}
+\item Two.
+\par
+\begin{itemize}
+\item Inner.
+\end{itemize}
+\item \begin{alertblock}{Block}
+Body.
+\end{alertblock}
+\par
+Before after.\par
+\end{itemize}
+Witness.
+\end{frame}
+\end{document}`;
+    const baseline = async (source: string) => buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider)
+      .lines.find(line => line.text === "Witness.")?.baselineY ?? NaN;
+    expect(await baseline(open)).toBeCloseTo(119.352783, 3);
+    expect(await baseline(closed)).toBeCloseTo(130.30278, 3);
+  });
+
   it("reads a nested list's registers from its body font, not the ambient size", async () => {
     // Beamer selects the subbody font (\small) before \list, which redefines \@listi: the inner
     // list's \itemsep and \parsep are \small's (4.5pt at 12pt), not \footnotesize's. LuaLaTeX baselines.

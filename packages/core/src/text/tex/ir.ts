@@ -4850,7 +4850,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     labelFontSizePt?: TexLength;
     spacing?: SimpleTexListContext["spacing"];
     fontState?: SimpleTexFontState;
-    deferredParagraph?: { kind: "nested-list-ended" } | { kind: "label-hook-cleared"; groupDepth: number };
+    deferredParagraph?: { kind: "nested-list-ended" } | { kind: "label-hook-cleared"; groupDepth: number; clearedAt: number };
   }
   interface ActiveSimpleTexEnvironment {
     readonly name: SimpleTexEnvironmentName;
@@ -5446,6 +5446,15 @@ function buildSimpleTexParagraphBlocksFromNodes(
   const flushEmptyListLine = (sourceStart: number): void => {
     const list = listStack.at(-1);
     if (list?.deferredParagraph?.kind !== "label-hook-cleared") return;
+    // \@item's \indent\par and \endtrivlist's \leavevmode ship the pending label as an empty line only in
+    // vertical mode. A paragraph started since (without \everypar's label) is still open here: \indent
+    // joins it and \par merely ends it.
+    const openParagraph = previousParagraphBlockEnd !== undefined && previousParagraphBlockEnd > list.deferredParagraph.clearedAt &&
+      !hasExplicitParagraphBoundaryBetween(previousParagraphBlockEnd, sourceStart);
+    if (openParagraph) {
+      delete list.deferredParagraph;
+      return;
+    }
     items.push({ kind: "empty-list-line", sourceStart, sourceEnd: sourceStart,
       ...(list.baselineSkipPt !== undefined ? { baselineSkip: list.baselineSkipPt } : {}),
       ...currentSimpleTexBlockItemScope() });
@@ -5596,7 +5605,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       if (list?.deferredParagraph?.kind === "nested-list-ended" && pendingListShowLabel && previous?.kind === "box" &&
           previous.listScope?.depth === list.depth && previous.listScope.itemIndex === list.itemIndex &&
           !options?.syntheticParagraphBreaks?.includes(node.sourceStart)) {
-        list.deferredParagraph = { kind: "label-hook-cleared", groupDepth: declarationGroupDepth };
+        list.deferredParagraph = { kind: "label-hook-cleared", groupDepth: declarationGroupDepth, clearedAt: node.sourceStart };
       }
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
