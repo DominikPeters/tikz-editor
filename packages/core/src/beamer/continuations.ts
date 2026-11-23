@@ -172,7 +172,7 @@ function frameMaterial(flow: readonly PreparedFrameFlowItem[], baselineSkip: num
     if (item.kind !== "paragraph") {
       const blockBefore = item.kind === "block" && item.block.plan.style === "default" ? item.block.plan.geometry.beforeSkipPt : 0;
       if (blockBefore > 0) result.push(glue(blockBefore, blockBefore / 3, blockBefore / 3));
-      const depth = item.kind === "block" || item.kind === "tikzpicture" ? item.endingDepth : item.kind === "columns" ? item.box.depth : 0;
+      const depth = item.kind === "block" ? item.endingDepth : item.kind === "columns" ? item.box.depth : 0;
       const height = item.kind === "columns" ? item.box.height : placement.visualBottom - placement.contentTop - depth - blockBefore;
       result.push({ kind: "box", height, depth,
         ...(blockBefore ? { splitTopHeight: item.kind === "block" ? item.block.titleAscent : height } : {}),

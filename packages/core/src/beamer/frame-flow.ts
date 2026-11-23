@@ -103,8 +103,7 @@ export function positionPreparedFrameFlow(
       const previous = flow[index - 1];
       // A following alignment's addvspace shares the preceding picture or
       // block's closing skip, even when those boxes are extracted.
-      const previousSkip = previous?.kind === "tikzpicture" ? previous.surroundingGlue.bottom.naturalPt
-        : previous?.kind === "block" && !previous.block.packageBox ? previous.block.plan.geometry.afterSkipPt : 0;
+      const previousSkip = previous?.kind === "block" && !previous.block.packageBox ? previous.block.plan.geometry.afterSkipPt : 0;
       const sharedTrivlistSkip = Math.min(previousSkip, item.leadingTrivlistSkipPt ?? 0);
       const glue = (leadingDisplay
         ? leadingDisplayGlue(previousDepth, item.startingBaselineSkip)
@@ -156,28 +155,6 @@ export function positionPreparedFrameFlow(
         visualBottom,
       });
       cursor = visualBottom + item.block.plan.geometry.afterSkipPt;
-      previousDepth = item.endingDepth;
-      continue;
-    }
-    if (item.kind === "tikzpicture") {
-      // The alignment's opening skip is vertical glue. TeX computes the
-      // interline glue using the height of the picture box itself.
-      const glue = verticalInterlineGlue(
-        previousDepth,
-        item.tikz.height,
-        baselineSkip
-      );
-      const referenceY = cursor + glue + item.boxHeight;
-      const contentTop = referenceY - item.boxHeight;
-      const visualBottom = contentTop + item.naturalHeight;
-      items.push({
-        item,
-        contentTop,
-        referenceY,
-        visualTop: contentTop,
-        visualBottom,
-      });
-      cursor = visualBottom;
       previousDepth = item.endingDepth;
       continue;
     }

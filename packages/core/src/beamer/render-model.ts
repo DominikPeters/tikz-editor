@@ -205,26 +205,6 @@ export type PreparedFrameFlowItem =
       /** The baseline skip of the size active before the block, when it differs from the frame's. */
       startingBaselineSkip?: number;
       endingDepth: number;
-    }
-  | {
-      kind: "tikzpicture";
-      visibility: BeamerOverlayVisibility;
-      node: Extract<BeamerFrameBodyNode, { kind: "tikzpicture" }>;
-      tikz: Extract<PreparedColumnFlowItem, { kind: "tikzpicture" }>;
-      naturalHeight: number;
-      boxHeight: number;
-      contentInsetTop: number;
-      endingDepth: number;
-      surroundingGlue: {
-        top: {
-          naturalPt: number;
-          shrinkPt: number;
-        };
-        bottom: {
-          naturalPt: number;
-          shrinkPt: number;
-        };
-      };
     };
 
 export type PositionedFrameFlowItem = {

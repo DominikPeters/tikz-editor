@@ -922,24 +922,6 @@ async function renderBeamerFrameStep(params: {
           }
           if (row.number) emit(row.number.paragraph, x + row.number.x, top + row.number.top, textColor(theme, "section number projected text"));
         }
-      } else if (placement.item.kind === "tikzpicture") {
-        const tikz = placement.item.tikz;
-        const x = tikz.horizontalAlignment === "center"
-          ? availableContentBounds.x +
-            (availableContentBounds.width - tikz.width) / 2
-          : availableContentBounds.x + (tikz.horizontalAlignment === "right" ? availableContentBounds.width - tikz.width : 0);
-        emitEmbeddedTikz({
-          tikz,
-          x,
-          y:
-            frameBlockTop +
-            placement.contentTop +
-            placement.item.contentInsetTop,
-          parentId: null,
-          items,
-          embeddedTikz,
-          modelBuilder: bodyModelBuilder,
-        });
       } else if (placement.item.kind === "unsupported") {
         emitUnsupportedPlaceholder({
           placeholder: placement.item.placeholder,
@@ -1655,8 +1637,10 @@ async function prepareFrameFlow(params: {
   const result: PreparedFrameFlowItem[] = [];
   const bodyFont = params.theme.fonts["normal-text"];
   const listProfile = beamerListLayoutProfile(params.theme, params.references.crampedLists);
-  for (const node of params.children) {
+  for (const child of params.children) {
     if (params.work) await params.work.checkpoint();
+    // Pictures stay in the text of the vertical list that holds them, as inline boxes.
+    const node: BeamerFrameBodyNode = child.kind === "tikzpicture" ? { kind: "paragraph", id: child.id, span: child.span } : child;
     const nodeTheme = ambientTextTheme(params.theme, params.references.ambientTextAt?.(node.span.from) ?? "");
     const bodyFont = nodeTheme.fonts["normal-text"];
     const listProfile = beamerListLayoutProfile(nodeTheme, params.references.crampedLists);
@@ -1787,48 +1771,6 @@ async function prepareFrameFlow(params: {
           depth: Math.max(0, ...columns.map((column) => column.box.depth)),
         },
       });
-      continue;
-    }
-    if (node.kind === "tikzpicture") {
-      const tikz = await prepareEmbeddedTikz({
-        source: params.source,
-        ambientText: params.references.ambientTextAt?.(node.root.span.from) ?? "",
-        theme: nodeTheme,
-        node,
-        width: params.textWidth,
-        overlays: params.overlays, step: params.step,
-        bodyFont,
-        diagnostics: params.diagnostics,
-        visibility,
-        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
-        ...(params.work !== undefined ? { work: params.work } : {}),
-      });
-      if (tikz) {
-        const surroundingGlue = node.span.from !== node.root.span.from
-          ? {
-              top: beamerTrivlistSpacing(nodeTheme),
-              bottom: beamerTrivlistSpacing(nodeTheme),
-            }
-          : {
-              top: { naturalPt: 0, shrinkPt: 0 },
-              bottom: { naturalPt: 0, shrinkPt: 0 },
-            };
-        const centerSkip = surroundingGlue.top.naturalPt;
-        result.push({
-          kind: "tikzpicture",
-          visibility,
-          node,
-          tikz,
-          naturalHeight:
-            tikz.height +
-            surroundingGlue.top.naturalPt +
-            surroundingGlue.bottom.naturalPt,
-          boxHeight: tikz.height + centerSkip,
-          contentInsetTop: centerSkip,
-          endingDepth: 0,
-          surroundingGlue,
-        });
-      }
       continue;
     }
     if (node.kind === "block" || node.kind === "theorem") {
@@ -2188,22 +2130,6 @@ async function shrinkFrameParagraphGlueToAvailableHeight(
   }
 ): Promise<PreparedFrameFlowItem[]> {
   const fitted = [...flow];
-  for (let index = 0; index < fitted.length; index += 1) {
-    if (params.work) await params.work.checkpoint();
-    const item = fitted[index];
-    const next = fitted[index + 1];
-    if (item?.kind !== "paragraph" || next?.kind !== "tikzpicture") {
-      continue;
-    }
-    fitted[index] = cancelTrailingDisplayGlueBeforeCenteredTikz(
-      item,
-      next
-    );
-    fitted[index + 1] = suppressCenteredTikzTopGlueAfterNormalDisplay(
-      item,
-      next
-    );
-  }
   // beamerbaseframesize.sty packs the assembled frame into
   // `\vbox to\textheight`. If the material is overfull, ordinary-order glue
   // inside the frame body (notably display skips) receives the box's shrink
@@ -2231,18 +2157,14 @@ async function shrinkFrameParagraphGlueToAvailableHeight(
     if (item?.kind !== "paragraph") {
       continue;
     }
-    const rawFullyShrunk = runBeamerRenderOperation(params.work, () => prepareFrameParagraph({
+    const fullyShrunk = runBeamerRenderOperation(params.work, () => prepareFrameParagraph({
       ...params,
       node: item.node,
       targetHeight: 0,
     }));
-    if (!rawFullyShrunk) {
+    if (!fullyShrunk) {
       continue;
     }
-    const fullyShrunk = cancelTrailingDisplayGlueBeforeCenteredTikz(
-      rawFullyShrunk,
-      fitted[index + 1]
-    );
     shrinkable.push({
       index,
       item,
@@ -2252,20 +2174,12 @@ async function shrinkFrameParagraphGlueToAvailableHeight(
       ) + item.trailingListGlue.shrinkPt,
       paragraphMaximumShrink: Math.max(
         0,
-        item.paragraph.height - rawFullyShrunk.paragraph.height
+        item.paragraph.height - fullyShrunk.paragraph.height
       ),
     });
   }
   const totalShrink = shrinkable.reduce(
     (sum, candidate) => sum + candidate.maximumShrink,
-    0
-  ) + fitted.reduce(
-    (sum, item) =>
-      sum +
-      (item.kind === "tikzpicture"
-        ? item.surroundingGlue.top.shrinkPt +
-          item.surroundingGlue.bottom.shrinkPt
-        : 0),
     0
   );
   const ratio = totalShrink > 0
@@ -2276,18 +2190,14 @@ async function shrinkFrameParagraphGlueToAvailableHeight(
     const targetHeight =
       candidate.item.paragraph.height -
       candidate.paragraphMaximumShrink * ratio;
-    const rawRelaid = runBeamerRenderOperation(params.work, () => prepareFrameParagraph({
+    const relaid = runBeamerRenderOperation(params.work, () => prepareFrameParagraph({
       ...params,
       node: candidate.item.node,
       targetHeight,
     }));
-    if (!rawRelaid) {
+    if (!relaid) {
       continue;
     }
-    const relaid = cancelTrailingDisplayGlueBeforeCenteredTikz(
-      rawRelaid,
-      fitted[candidate.index + 1]
-    );
     const index = candidate.index;
     fitted[index] = {
       ...relaid,
@@ -2296,92 +2206,7 @@ async function shrinkFrameParagraphGlueToAvailableHeight(
         relaid.trailingListGlue.shrinkPt * ratio,
     };
   }
-  for (let index = 0; index < fitted.length; index += 1) {
-    const item = fitted[index];
-    if (item?.kind !== "tikzpicture") {
-      continue;
-    }
-    const topSkip = Math.max(
-      0,
-      item.surroundingGlue.top.naturalPt -
-        item.surroundingGlue.top.shrinkPt * ratio
-    );
-    const bottomSkip = Math.max(
-      0,
-      item.surroundingGlue.bottom.naturalPt -
-        item.surroundingGlue.bottom.shrinkPt * ratio
-    );
-    fitted[index] = {
-      ...item,
-      naturalHeight: item.tikz.height + topSkip + bottomSkip,
-      boxHeight: item.tikz.height + topSkip,
-      contentInsetTop: topSkip,
-    };
-  }
   return fitted;
-}
-
-function cancelTrailingDisplayGlueBeforeCenteredTikz(
-  paragraph: Extract<PreparedFrameFlowItem, { kind: "paragraph" }>,
-  next: PreparedFrameFlowItem | undefined
-): Extract<PreparedFrameFlowItem, { kind: "paragraph" }> {
-  if (
-    next?.kind !== "tikzpicture" ||
-    next.surroundingGlue.bottom.naturalPt === 0
-  ) {
-    return paragraph;
-  }
-  const trailing = paragraph.paragraph.layout.vlistLayout.boxReport.items.at(-1);
-  if (
-    trailing?.itemKind !== "glue" ||
-    trailing.glue?.origin?.kind !== "display-math-boundary" ||
-    trailing.glue.origin.side !== "below" ||
-    trailing.glue.origin.variant !== "short"
-  ) {
-    return paragraph;
-  }
-  // LaTeX's center environment is a trivlist. Its opening \addvspace and
-  // negative list glues cancel an immediately preceding \belowdisplayskip;
-  // the center \topsep remains. Keep the display VList intact for source and
-  // box reporting, but omit that canceled terminal glue from the assembled
-  // frame extent. Applying this at every trial height also removes the
-  // canceled glue's shrink capacity from the enclosing frame vbox.
-  return {
-    ...paragraph,
-    naturalHeight: Math.max(0, paragraph.naturalHeight - trailing.height),
-  };
-}
-
-function suppressCenteredTikzTopGlueAfterNormalDisplay(
-  paragraph: Extract<PreparedFrameFlowItem, { kind: "paragraph" }>,
-  tikz: Extract<PreparedFrameFlowItem, { kind: "tikzpicture" }>
-): Extract<PreparedFrameFlowItem, { kind: "tikzpicture" }> {
-  if (tikz.surroundingGlue.top.naturalPt === 0) {
-    return tikz;
-  }
-  const trailing = paragraph.paragraph.layout.vlistLayout.boxReport.items.at(-1);
-  if (
-    trailing?.itemKind !== "glue" ||
-    trailing.glue?.origin?.kind !== "display-math-boundary" ||
-    trailing.glue.origin.side !== "below" ||
-    trailing.glue.origin.variant === "short"
-  ) {
-    return tikz;
-  }
-  // When the normal \belowdisplayskip is larger than center's \topsep,
-  // LaTeX's opening \addvspace keeps the display skip and contributes no
-  // separate top glue. The closing topsep remains below the environment.
-  return {
-    ...tikz,
-    naturalHeight:
-      tikz.naturalHeight - tikz.surroundingGlue.top.naturalPt,
-    boxHeight: tikz.boxHeight - tikz.surroundingGlue.top.naturalPt,
-    contentInsetTop: 0,
-    surroundingGlue: {
-      ...tikz.surroundingGlue,
-      top: { naturalPt: 0, shrinkPt: 0 },
-    },
-  };
 }
 
 async function prepareBlock(params: Parameters<typeof prepareBlockWithTheme>[0]): Promise<PreparedBlock | null> {
@@ -3025,13 +2850,6 @@ async function emitPreparedBlock(params: {
       await emitPreparedBlock({ ...params, prepared: item.block, x: params.x,
         y: params.y + block.bodyParagraphTop + placement.contentTop, parentId: block.node.id, visibility: params.visibility === "hidden" || item.visibility === "hidden" ? "hidden" : "visible" });
       childIds.push(item.node.id);
-    } else if (item.kind === "tikzpicture") {
-      // Reuse paragraph-owned picture painting so source ownership and ordered
-      // paint splitting remain identical to ordinary block text.
-      const x = params.x + (item.tikz.horizontalAlignment === "center" ? (block.width - item.tikz.width) / 2 : item.tikz.horizontalAlignment === "right" ? block.width - item.tikz.width : 0);
-      const y = params.y + block.bodyParagraphTop + placement.contentTop + item.contentInsetTop;
-      emitEmbeddedTikz({ tikz: item.tikz, x, y, parentId: block.node.id,
-        items: params.items, embeddedTikz: params.embeddedTikz, modelBuilder: params.modelBuilder });
     }
   }
 
