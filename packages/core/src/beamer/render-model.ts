@@ -176,16 +176,9 @@ export type PreparedFrameFlowItem =
       visualBottomInset?: number;
       boxHeight: number;
       startingBaselineSkip: number;
-      leadingAdjustment: number;
-      leadingTrivlistSkipPt?: number;
-      /** The closing skip of a trailing center/flush environment, included in naturalHeight. */
-      trailingTrivlistSkipPt?: number;
       endingDepth: number;
+      /** The vertical list ends with an alignment's closing skip. */
       closesWithTrivlistSkip?: boolean;
-      trailingListGlue: {
-        naturalPt: number;
-        shrinkPt: number;
-      };
       /**
        * TeX vertical glue preserves `\prevdepth`. When a paragraph-owned
        * `\vspace` is followed by a columns hbox, retain the depth of the box

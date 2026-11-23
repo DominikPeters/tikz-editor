@@ -3000,8 +3000,11 @@ describe("simple TeX paragraph layout", () => {
       size: item.item.kind === "glue" ? item.item.size : undefined,
       text: item.item.kind === "paragraph" ? item.item.paragraph.text : undefined,
     }))).toEqual([
+      // pdfTeX: the quote's \@topsep (10pt, less \parskip 4pt), then the \smallskip,
+      // then the list's \parskip before the paragraph.
+      { kind: "glue", size: 6, text: undefined },
       { kind: "glue", size: 3, text: undefined },
-      { kind: "glue", size: 10, text: undefined },
+      { kind: "glue", size: 4, text: undefined },
       { kind: "paragraph", size: undefined, text: "Alpha" },
     ]);
   });
@@ -5799,13 +5802,14 @@ unordered.`;
     expect(vlistLayout?.paragraphPlacements[0]).toMatchObject({
       blockIndex: 0,
       x: 47,
-      y: 13,
+      // pdfTeX nets the quote's and itemize's opening skips to 8pt, then \parskip 2pt.
+      y: 10,
       vlistPath: [0, 0, 0, 2],
     });
     expect(vlistLayout?.linePlacements[0]).toMatchObject({
       lineIndex: 0,
       x: 47,
-      y: 13,
+      y: 10,
     });
     expect(report?.lines[0]).toMatchObject({
       lineIndex: 0,

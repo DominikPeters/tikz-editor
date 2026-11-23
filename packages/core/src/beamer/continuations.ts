@@ -130,7 +130,7 @@ function sliceParagraphLine(item: Extract<PreparedFrameFlowItem, { kind: "paragr
     svgBody: `<defs><clipPath id="${clipId}"><rect x="-1000" y="0" width="10000" height="${height}"/></clipPath></defs><g clip-path="url(#${clipId})"><g transform="translate(0 ${-top})">${original.svgBody}</g></g>`,
     listMarkers: original.listMarkers.filter((marker) => marker.bounds.y < top + height && marker.bounds.y + marker.bounds.height > top).map((marker) => ({ ...marker, bounds: { ...marker.bounds, y: marker.bounds.y - top } })),
   };
-  return { ...item, paragraph, naturalHeight: height, boxHeight: Number(line.ascent), endingDepth: Number(line.descent), leadingAdjustment: 0, trailingListGlue: { naturalPt: 0, shrinkPt: 0 } };
+  return { ...item, paragraph, naturalHeight: height, boxHeight: Number(line.ascent), endingDepth: Number(line.descent) };
 }
 
 function sliceParagraphBox(item: Extract<PreparedFrameFlowItem, { kind: "paragraph" }>, entry: PositionedTexVListItem): PreparedFrameFlowItem {
@@ -154,7 +154,7 @@ function sliceParagraphBox(item: Extract<PreparedFrameFlowItem, { kind: "paragra
     svgBody: `<defs><clipPath id="${clipId}"><rect x="-1000" y="0" width="10000" height="${height}"/></clipPath></defs><g clip-path="url(#${clipId})"><g transform="translate(0 ${-top})">${original.svgBody}</g></g>`,
     listMarkers: [],
   };
-  return { ...item, paragraph, naturalHeight: height, boxHeight: Number(entry.metrics.height), endingDepth: Number(entry.metrics.depth), leadingAdjustment: 0, trailingListGlue: { naturalPt: 0, shrinkPt: 0 } };
+  return { ...item, paragraph, naturalHeight: height, boxHeight: Number(entry.metrics.height), endingDepth: Number(entry.metrics.depth) };
 }
 
 function frameMaterial(flow: readonly PreparedFrameFlowItem[], baselineSkip: number, plain: boolean, breaks: BeamerContinuationBreaks): VerticalMaterial[] {
@@ -244,7 +244,7 @@ function frameMaterial(flow: readonly PreparedFrameFlowItem[], baselineSkip: num
       };
       walk(vlist.items);
       const extra = item.naturalHeight - cursor;
-      if (extra > 0) result.push(glue(extra, item.trailingListGlue.naturalPt > 0 ? 2 : 3, item.trailingListGlue.shrinkPt || 5));
+      if (extra > 0) result.push(glue(extra, 3, 5));
     }
     outerCursor = placement.visualBottom;
     if (item.kind === "block") { const skip = item.block.plan.geometry.afterSkipPt; result.push(glue(skip, skip / 3, skip / 3)); outerCursor += skip; }

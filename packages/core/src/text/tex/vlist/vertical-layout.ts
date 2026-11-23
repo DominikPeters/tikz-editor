@@ -114,7 +114,7 @@ export function resolveVerticalListWithBuilder(
   /** amsmath's \intertext is a \vtop in a \noalign: no \parskip and no automatic baseline glue. */
   let intertextPending = false;
   /** The baseline skip of the empty line a display starts in vertical mode; undefined when suppressed. */
-  let emptyLineBaseline: { readonly size: number | undefined } | undefined;
+  let emptyLineBaseline: { readonly size: number | undefined; readonly item: TexGlueItem } | undefined;
   let carryAt = 0;
   let leafCount = 0;
 
@@ -192,7 +192,7 @@ export function resolveVerticalListWithBuilder(
           (item.origin.purpose === undefined || item.origin.purpose === "leading-empty-line-baseline")) {
         // The empty line a display starts in vertical mode: its baseline skip, or none at all when an
         // enclosing environment (Beamer column[T]) already shipped the line.
-        emptyLineBaseline = { size: item.origin.purpose === undefined ? undefined : Number(item.size) };
+        emptyLineBaseline = { size: item.origin.purpose === undefined ? undefined : Number(item.size), item };
         continue;
       }
       if (isPlannedGlue(item)) continue;
@@ -223,6 +223,9 @@ export function resolveVerticalListWithBuilder(
           continue;
         }
         builder.vskip(glueOf(item), "authored", item);
+        // LaTeX's \vspace ends with \vskip\z@skip (ltspace.dtx), so a following \addvspace sees a zero
+        // \lastskip and adds its skip instead of comparing with the \vspace.
+        if (item.origin?.kind === "explicit-command" && item.origin.command === "vspace") builder.vskip(glue(0), "vspace-zero");
         continue;
       }
       if (item.kind === "penalty") {
@@ -264,6 +267,9 @@ export function resolveVerticalListWithBuilder(
         const baseline = emptyLineBaseline;
         emptyLineBaseline = undefined;
         if (baseline && baseline.size === undefined) builder.noInterline();
+        // At the top of a container (ignore_depth) the empty line still sits one \baselineskip down:
+        // the enclosing list's \prevdepth is outside this list.
+        else if (baseline?.size && builder.prevDepth === undefined) builder.vskip(glue(baseline.size), "authored", baseline.item);
         const resumed = item.role.position === "after-display-vspace" ? displayBaselineSkip : undefined;
         builder.startParagraph(leaf.id, { height: 0, depth: 0, baselineSkip: baseline?.size ?? resumed ?? Number(options.lineHeight) });
         lastParagraph = undefined;
@@ -332,7 +338,7 @@ export function resolveVerticalListWithBuilder(
       continue;
     }
     // Zero glue only matters after the last box: it still ends the list in glue (TeX's \vskip-\lastskip).
-    if (node.glue.natural === 0 && node.glue.stretch === 0 && node.glue.shrink === 0 && position < lastLeafPosition) continue;
+    if (node.glue.natural === 0 && node.glue.stretch === 0 && node.glue.shrink === 0 && (position < lastLeafPosition || node.origin !== "cancelled")) continue;
     const next = nodes.slice(position + 1).find(candidate => candidate.kind === "box" && leafById.has(candidate.id));
     const nextItem = next?.kind === "box" ? leafById.get(next.id)?.item : undefined;
     let generated = generatedGlueItem(node, nextItem?.kind === "paragraph" ? nextItem.blockIndex : -1);
@@ -378,16 +384,6 @@ export function resolveVerticalListWithBuilder(
     }
     return output;
   };
-  // Until Beamer containers are nested builders, the glue before a piece's first material and
-  // after its last stays as the old resolution placed it: the stacking code around the piece
-  // owns those boundaries (design/vertical-list-builder.md, step 4).
-  const oldResolved = resolveDisplayMathVerticalGlueInVList(document, paragraphMeasurements, options);
-  const oldEdges = edgeGlue(oldResolved.items);
-  const firstLeaf = [...leafById.values()].find(leaf => before.has(leaf.id));
-  if (firstLeaf) {
-    const attached = (before.get(firstLeaf.id) ?? []).filter(entry => entry.kind !== "glue");
-    before.set(firstLeaf.id, [...oldEdges.leading, ...attached]);
-  }
   const items = rebuild(document.items, []);
   // A container's closing skips (\endlist, \endtrivlist) are the builder's: the container decides what
   // its end does with them (a minipage's \unskip, a frame box's glue setting).
@@ -395,30 +391,6 @@ export function resolveVerticalListWithBuilder(
   return { ...document, items };
 }
 
-/** Glue before the first material item and after the last, in document order. */
-function edgeGlue(items: readonly TexVListItem[]): { leading: TexVListItem[]; trailing: TexVListItem[] } {
-  const flat: TexVListItem[] = [];
-  const visit = (list: readonly TexVListItem[]) => {
-    for (const item of list) {
-      if (item.kind === "vbox" && !isMaterialTexVBoxItem(item)) visit(item.items);
-      else flat.push(item);
-    }
-  };
-  visit(items);
-  const isMaterial = (item: TexVListItem) => item.kind !== "glue" && item.kind !== "penalty" &&
-    !(item.kind === "hbox" && (item.verticalPlacement?.kind === "paragraph-first-line-baseline" || item.affectsVBoxBaseline === false));
-  const first = flat.findIndex(isMaterial);
-  let last = -1;
-  for (let index = flat.length - 1; index >= 0; index--) {
-    const item = flat[index];
-    if (item && isMaterial(item)) { last = index; break; }
-  }
-  if (first < 0) return { leading: [], trailing: flat.filter(item => item.kind === "glue" || item.kind === "penalty") };
-  return {
-    leading: flat.slice(0, first).filter(item => item.kind === "glue"),
-    trailing: flat.slice(last + 1).filter(item => item.kind === "glue" || item.kind === "penalty"),
-  };
-}
 
 /** Development aid: glue before each material item, flattened, for comparing two resolutions. */
 export function verticalGlueProfile(items: readonly TexVListItem[]): { key: string; glue: number; flex: string; parts: string }[] {

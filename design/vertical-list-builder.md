@@ -285,6 +285,13 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   box in a column follows the column's `\leavevmode` line; a T column's
   `\nointerlineskip` leaves a package box nothing to balance, and the box's
   `\addvspace` replaces the `\vskip-1ex`.
+  The glue before a container's first material is the builder's too: the
+  layout stage no longer runs the old resolution at all for documents with
+  events, and `leadingBeamerTrivlistAdjustment`, `sharedTrivlistSkip`,
+  `leadingAdjustment`, `leadingTrivlistSkipPt` and `trailingListGlue` are
+  gone. `\vspace` ends with `\vskip\z@skip` (ltspace.dtx), so a following
+  `\addvspace` adds to it rather than replacing it; a display opening a
+  container keeps its empty line's `\baselineskip`.
   The cooperative-render test used empty blocks to split frame text into
   separate layout units; a frame body is now one unit, so the test puts each
   graphic in its own block body.
@@ -292,10 +299,7 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
 ## Next
 
 1. **Beamer containers (step 4), remaining:** extend the embedding to
-   title pages, and
-   remove the leading-edge rules (the glue before a container's first
-   material still comes from the old resolution: `leadingAdjustment`,
-   `leadingBeamerTrivlistAdjustment`, `sharedTrivlistSkip`), until the frame flow is a
+   title pages, until the frame flow is a
    single paragraph item and `positionPreparedFrameFlow`'s glue rules,
    `leadingAdjustment`, `sharedTrivlistSkip`, `trailingListGlue` and the regex
    helpers can go. A chained per-piece builder was considered and rejected: it

@@ -87,7 +87,6 @@ import { parseBeamerFrameBody } from "./content.js";
 import { beamerRecoveryDiagnostics, collectBeamerEditScopes, collectBeamerRecovery } from "./edit-scopes.js";
 import { emitEmbeddedTikz } from "./embedded-tikz.js";
 import {
-  leadingBeamerTrivlistAdjustment,
   paragraphEndingMaterialDepth,
   paragraphLastLineDepth,
   paragraphStartingMaterialHeight,
@@ -2077,12 +2076,10 @@ function prepareFrameParagraph(params: {
     return null;
   }
   const projectedSource = projection.mapped.text;
-  const trivlistTopsep = params.listProfile.trivlistTopsepPt ?? 9;
   // The vertical list ends with the closing skips the builder placed (\endtrivlist's and \endlist's
   // \addvspace); they are part of the material extent and shrink with the frame box's glue setting.
   const closing = trailingVListGlue(paragraph);
   const namedSize = activeBeamerNamedSize(projectedSource, params.references.theme);
-  const startsWithTrivlist = /^\s*(?:(?:\\par(?![A-Za-z@])|\\(?:visible|uncover|invisible)\s*<[^>]*>\s*\{|\{)\s*)*\\begin\s*\{\s*(?:center|flushleft|flushright)\s*\}/u.test(paragraphSource);
   return {
     kind: "paragraph",
     visibility: resolveBeamerOverlaySpanVisibility(
@@ -2097,15 +2094,8 @@ function prepareFrameParagraph(params: {
     boxHeight: paragraphStartingMaterialHeight(paragraph),
     startingBaselineSkip:
       paragraphStartingBaselineSkip(paragraph, namedSize?.lineHeightPt ?? params.bodyFont.lineHeightPt),
-    leadingAdjustment: leadingBeamerTrivlistAdjustment(
-      paragraphSource,
-      paragraph,
-      trivlistTopsep
-    ),
-    ...(startsWithTrivlist ? { leadingTrivlistSkipPt: trivlistTopsep } : {}),
     endingDepth: paragraphEndingMaterialDepth(paragraph),
     ...(closing.trivlist ? { closesWithTrivlistSkip: true } : {}),
-    trailingListGlue: { naturalPt: 0, shrinkPt: 0 },
     trailingVerticalSpacePreviousDepth:
       previousDepthBeforeTrailingVerticalSpace(paragraph),
   };
@@ -2171,7 +2161,7 @@ async function shrinkFrameParagraphGlueToAvailableHeight(
       maximumShrink: Math.max(
         0,
         item.naturalHeight - fullyShrunk.naturalHeight
-      ) + item.trailingListGlue.shrinkPt,
+      ),
       paragraphMaximumShrink: Math.max(
         0,
         item.paragraph.height - fullyShrunk.paragraph.height
@@ -2199,12 +2189,7 @@ async function shrinkFrameParagraphGlueToAvailableHeight(
       continue;
     }
     const index = candidate.index;
-    fitted[index] = {
-      ...relaid,
-      naturalHeight:
-        relaid.naturalHeight -
-        relaid.trailingListGlue.shrinkPt * ratio,
-    };
+    fitted[index] = relaid;
   }
   return fitted;
 }
@@ -2378,9 +2363,7 @@ async function prepareBlockWithTheme(params: {
             naturalHeight: paragraphLineExtent(paragraph),
             boxHeight: paragraphStartingMaterialHeight(paragraph),
             startingBaselineSkip: theoremBodyFont.lineHeightPt,
-            leadingAdjustment: 0,
-            endingDepth: paragraphEndingMaterialDepth(paragraph),
-            trailingListGlue: { naturalPt: 0, shrinkPt: 0 },
+                    endingDepth: paragraphEndingMaterialDepth(paragraph),
             trailingVerticalSpacePreviousDepth: null,
           });
           continue;
@@ -2422,8 +2405,7 @@ async function prepareBlockWithTheme(params: {
       ? Number(last.height) : 0;
   };
   const terminalBodySkip = plan.style === "rounded"
-    ? terminalBodyFlow?.kind === "paragraph" ? terminalBodyFlow.trailingListGlue.naturalPt + (terminalBodyFlow.trailingTrivlistSkipPt ?? 0) +
-        (terminalBodyFlow.trailingListGlue.naturalPt + (terminalBodyFlow.trailingTrivlistSkipPt ?? 0) > 0 ? 0 : terminalDisplaySkip(terminalBodyFlow.paragraph))
+    ? terminalBodyFlow?.kind === "paragraph" ? terminalDisplaySkip(terminalBodyFlow.paragraph)
       : terminalBodyFlow?.kind === "block" ? terminalBodyFlow.block.plan.geometry.afterSkipPt : 0
     : 0;
   // A default block's body keeps its vertical list's closing skips (\endlist, \endtrivlist): they end
@@ -2514,7 +2496,7 @@ async function prepareBlockWithTheme(params: {
     // A display's below skip also ends the box in glue, whatever its last text line's depth.
     terminalGlueKind === "display-math-boundary" ||
     lastFlowItem?.kind === "block" && lastFlowItem.block.plan.geometry.afterSkipPt > 0 ||
-    lastFlowItem?.kind === "paragraph" && (lastFlowItem.trailingListGlue.naturalPt > 0 || lastFlowItem.closesWithTrivlistSkip));
+    lastFlowItem?.kind === "paragraph" && lastFlowItem.closesWithTrivlistSkip === true);
   // A default colorbox ending in vertical glue has zero physical depth.
   const bodyEndingDepth = closesWithBodySkip ? 0 : body ? paragraphEndingMaterialDepth(body)
     : lastFlowItem?.kind === "columns" ? lastFlowItem.box.depth
@@ -3732,7 +3714,7 @@ async function prepareColumnFlowNode(params: {
       startsWithVerticalEnvironment: startsWithList || startsWithDisplay || startsWithTrivlist,
       replacesColumnHeadSkip: startsWithStandaloneTrivlist &&
         !paragraph.layout.vlistLayout.boxReport.items.some(item => item.role?.kind === "trivlist" && item.role.noParList),
-      leadingSkipPt: leadingBeamerTrivlistAdjustment(projection.mapped.text, paragraph, params.listProfile.trivlistTopsepPt) +
+      leadingSkipPt:
         // A column minipage starts with \leavevmode. A leading trivlist ends
         // that empty line, then inserts normal interline glue before its first box.
         ((!isVisibleList || initialPreviousDepth === undefined) && params.leadingDisplayBaselineSkipPt !== 0 && (startsWithList || startsWithTrivlist)

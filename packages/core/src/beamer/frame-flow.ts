@@ -100,15 +100,10 @@ export function positionPreparedFrameFlow(
       // skip in the measured paragraph prefix. Consume the preceding depth
       // there, rather than adding another minimum lineskip outside the box.
       const leadingDisplay = firstBox?.hboxRole?.kind === "display-empty-line" && firstBox.hboxRole.position === "before-display";
-      const previous = flow[index - 1];
-      // A following alignment's addvspace shares the preceding picture or
-      // block's closing skip, even when those boxes are extracted.
-      const previousSkip = previous?.kind === "block" && !previous.block.packageBox ? previous.block.plan.geometry.afterSkipPt : 0;
-      const sharedTrivlistSkip = Math.min(previousSkip, item.leadingTrivlistSkipPt ?? 0);
       const glue = (leadingDisplay
         ? leadingDisplayGlue(previousDepth, item.startingBaselineSkip)
         : paragraphStartsWithoutInterline(item.paragraph) ? 0
-        : verticalInterlineGlue(previousDepth, item.boxHeight, item.startingBaselineSkip)) + item.leadingAdjustment - sharedTrivlistSkip;
+        : verticalInterlineGlue(previousDepth, item.boxHeight, item.startingBaselineSkip));
       const referenceY = cursor + glue + item.boxHeight;
       const contentTop = referenceY - item.boxHeight;
       const visualBottom = contentTop + item.naturalHeight;
@@ -270,26 +265,6 @@ export function previousDepthBeforeTrailingVerticalSpace(
   return 0;
 }
 
-export function leadingBeamerTrivlistAdjustment(
-  source: string,
-  paragraph: LaidParagraph,
-  topsepPt = 9
-): number {
-  if (
-    !/\\begin\s*\{\s*(?:center|flushleft|flushright|figure|table)\s*\}/u.test(source)
-  ) {
-    return 0;
-  }
-  const boundary = paragraph.layout.vlistLayout.boxReport.items.find(
-    (item) =>
-      item.itemKind === "glue" &&
-      item.glue?.origin?.kind === "trivlist-boundary"
-  );
-  const firstMaterial = paragraph.layout.vlistLayout.boxReport.items.find(item =>
-    item.itemKind !== "glue" && item.itemKind !== "penalty" && item.itemKind !== "vbox");
-  if (boundary && firstMaterial && boundary.y > firstMaterial.y) return 0;
-  return Math.max(0, topsepPt - Number(boundary?.height ?? topsepPt));
-}
 
 export function paragraphLastLineDepth(paragraph: LaidParagraph): number {
   return Number(paragraph.layout.report.lines.at(-1)?.descent ?? 0);
