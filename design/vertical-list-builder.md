@@ -376,7 +376,7 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
    a frame holding both a `[t]` minipage and `{\small\begin{minipage}...}`.
 2. **Known Beamer quirk (not emulated)**: LaTeX's `\@item` appends to the
    global `\@labels` box, and Beamer typesets every slide in one TeX run. A
-   label left unconsumed on one slide (fuzz seed 140: item 1 holds a nested
+   label left unconsumed on one slide (fuzz seeds 140 and 61; seed 140: item 1 holds a nested
    itemize and item 2's nested columns are followed by a tabular) is printed
    in front of the first item's label on the next slide. Native slides are
    laid out independently and do not carry that state.
