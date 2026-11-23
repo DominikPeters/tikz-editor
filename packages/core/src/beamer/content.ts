@@ -280,7 +280,7 @@ export function parseBeamerFrameBody(
     kind: "frame-body",
     frameId: frame.id,
     span: frame.bodySpan,
-    children: applyStandaloneAlignment(context, splitStandaloneFrameCommands(context, frame.id, children)),
+    children: applyStandaloneAlignment(context, splitStandaloneFrameCommands(context, frame.id, children, params.embedFlowBoxes === true)),
     ...(structural ? { structuralChildren: structural } : {}),
     overlays,
     diagnostics,
@@ -436,7 +436,8 @@ function parseTheorem(params: {
 function splitStandaloneFrameCommands(
   context: BeamerSyntaxContext,
   frameId: string,
-  children: readonly BeamerFrameBodyNode[]
+  children: readonly BeamerFrameBodyNode[],
+  embedTitlePages = false
 ): BeamerFrameBodyNode[] {
   return splitStandaloneVerticalSpaces(
     context,
@@ -445,7 +446,7 @@ function splitStandaloneFrameCommands(
       context,
       stripFrameTitleCommands(
         context,
-        splitTitlePageCommands(context, frameId, children)
+        splitTitlePageCommands(context, frameId, children, embedTitlePages)
       )
     )
   );
@@ -606,7 +607,9 @@ function hasBalancedBraces(source: string, span: Span): boolean {
 function splitTitlePageCommands(
   context: BeamerSyntaxContext,
   frameId: string,
-  children: readonly BeamerFrameBodyNode[]
+  children: readonly BeamerFrameBodyNode[],
+  /** A title page is a sequence of boxes and \vfill glue in the frame's vertical list. */
+  embedTitlePages = false
 ): BeamerFrameBodyNode[] {
   const { source } = context;
   const result: BeamerFrameBodyNode[] = [];
@@ -620,12 +623,18 @@ function splitTitlePageCommands(
     const commands = beamerControlSequencesIn(context, child.span).filter(
       (command) => command.name === "titlepage" || command.name === "maketitle" || command.name === "tableofcontents"
     );
-    if (commands.length === 0) {
+    if (commands.length === 0 || embedTitlePages && commands.every(command => command.name !== "tableofcontents")) {
+      titlePageIndex += commands.length;
+      // (embedded title pages keep their numbering so later contents ids match the structural parse)
       result.push(child);
       continue;
     }
     let cursor = child.span.from;
     for (const command of commands) {
+      if (embedTitlePages && command.name !== "tableofcontents") {
+        titlePageIndex += 1;
+        continue;
+      }
       const before = trimSpan(source, { from: cursor, to: command.from });
       if (before.to > before.from) {
         result.push({

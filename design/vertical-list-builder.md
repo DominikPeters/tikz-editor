@@ -292,6 +292,12 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   gone. `\vspace` ends with `\vskip\z@skip` (ltspace.dtx), so a following
   `\addvspace` adds to it rather than replacing it; a display opening a
   container keeps its empty line's `\baselineskip`.
+  Title pages are template material in the frame's vertical list: the
+  template's boxes (colorbox styles open with `\vbox{}`), separated by
+  `\vfill` glue where the template stretches. The frame box sets that glue
+  with its fill unit (the paragraph is laid out again to its target height).
+  The inmargin template's one internal `\vfill` sits between the title and
+  the author block; it no longer also counts a trailing fill.
   The cooperative-render test used empty blocks to split frame text into
   separate layout units; a frame body is now one unit, so the test puts each
   graphic in its own block body.
@@ -299,7 +305,7 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
 ## Next
 
 1. **Beamer containers (step 4), remaining:** extend the embedding to
-   title pages, until the frame flow is a
+   `\tableofcontents`, until the frame flow is a
    single paragraph item and `positionPreparedFrameFlow`'s glue rules,
    `leadingAdjustment`, `sharedTrivlistSkip`, `trailingListGlue` and the regex
    helpers can go. A chained per-piece builder was considered and rejected: it

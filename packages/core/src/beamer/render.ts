@@ -786,7 +786,7 @@ async function renderBeamerFrameStep(params: {
     ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
     ...(params.work !== undefined ? { work: params.work } : {}),
   });
-  const preparedFrameFlow = await prepareFrameFlow({
+  const frameFlowParams = {
     source,
     children: bodyIr.children,
     textWidth: availableContentBounds.width,
@@ -807,7 +807,8 @@ async function renderBeamerFrameStep(params: {
     step,
     ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
     ...(params.work !== undefined ? { work: params.work } : {}),
-  });
+  };
+  let preparedFrameFlow = await prepareFrameFlow(frameFlowParams);
   const continuationPages = allowFrameBreaks == null ? null : splitBeamerFrameContinuations({
     flow: preparedFrameFlow, baselineSkip: theme.fonts["normal-text"].lineHeightPt,
     plain: frame.options?.plain ?? false, factor: allowFrameBreaks,
@@ -841,6 +842,11 @@ async function renderBeamerFrameStep(params: {
       shrink ? "top" : frame.options?.alignment ?? "center",
       theme.options["symmetric-frame-center"] === true
     );
+    // \vfill glue inside the frame's vertical list takes its share of the frame's fill.
+    if (!continuationPages && !shrink && verticalPacking.fillUnit > 0 &&
+      preparedFrameFlow.some(item => item.kind === "paragraph" && verticalListFillWeight(item.paragraph) > 0)) {
+      preparedFrameFlow = await prepareFrameFlow({ ...frameFlowParams, fillUnit: verticalPacking.fillUnit });
+    }
     const positioned = continuationPages?.[continuationIndex - 1] ?? positionPreparedFrameFlow(
       preparedFrameFlow,
       theme.fonts["normal-text"].lineHeightPt,
@@ -866,7 +872,7 @@ async function renderBeamerFrameStep(params: {
       if (placement.item.kind === "title-page") {
         emitPreparedTitlePage({
           prepared: placement.item.titlePage,
-          fillUnit: verticalPacking.fillUnit,
+          fillOffset: weight => weight * verticalPacking.fillUnit,
           x: availableContentBounds.x,
           y: frameBlockTop + placement.contentTop,
           items,
@@ -998,6 +1004,20 @@ async function renderBeamerFrameStep(params: {
     for (const external of references.inlineFlow ?? []) {
       const box = paragraph.vlistLayout.boxReport.items.find(item => item.hboxRole?.kind === "external-flow" && item.sourceSpan?.start === external.span.from && item.sourceSpan.end === external.span.to);
       if (!box) continue;
+      if (external.item.kind === "title-page") {
+        // Each segment's origin is where its natural top landed after the fills above it.
+        const origins = new Map<number, number>();
+        for (const item of paragraph.vlistLayout.boxReport.items) {
+          const role = item.hboxRole;
+          if (role?.kind !== "external-flow" || role.flowKind !== "title-page" || role.fillWeight === undefined ||
+            item.sourceSpan?.start !== external.span.from) continue;
+          origins.set(role.fillWeight, paragraph.bounds.y + Number(item.y) - Number(role.contentOffsetPt ?? 0));
+        }
+        const origin = Math.min(...origins.values());
+        emitPreparedTitlePage({ prepared: external.item.titlePage, x: paragraph.bounds.x, y: origin,
+          fillOffset: weight => (origins.get(weight) ?? origin) - origin, items, paragraphs, modelBuilder: bodyModelBuilder, theme });
+        continue;
+      }
       const visibility = external.item.visibility === "hidden" || paragraph.hiddenSourceSpans?.some(span => span.from <= external.span.from && external.span.to <= span.to) ? "hidden" : "visible";
       const local = createSvgModelBuilder();
       const x = paragraph.role === "frame-title" || paragraph.role === "frame-subtitle" ? page.frameArea.x : paragraph.bounds.x;
@@ -1125,7 +1145,7 @@ async function renderBeamerFrameStep(params: {
     else delete item.rootId;
   }
   const editScopes = collectBeamerEditScopes(frame, bodyIr.structuralChildren ? { ...bodyIr, children: bodyIr.structuralChildren } : bodyIr, document.preamble.metadata);
-  const inlineScopes = collectBeamerEditScopes(frame, { ...bodyIr, children: (references.inlineFlow ?? []).map(box => box.item.node) });
+  const inlineScopes = collectBeamerEditScopes(frame, { ...bodyIr, children: (references.inlineFlow ?? []).flatMap(box => box.item.kind === "title-page" ? [] : [box.item.node]) });
   for (const scope of inlineScopes) if (scope.kind === "column" && !editScopes.some(existing => existing.span.from === scope.span.from && existing.span.to === scope.span.to)) editScopes.push(scope);
   const recovery = collectBeamerRecovery(source, editScopes);
   diagnostics.push(...beamerRecoveryDiagnostics(recovery));
@@ -1548,6 +1568,24 @@ async function prepareInlineFlow(params: {
   const candidates = environments.filter(env => (["block", "alertblock", "exampleblock", "columns"].includes(env.name) || embeddedBoxes.has(env.begin.span.from)) &&
     env.begin.span.from >= params.frame.bodySpan.from && env.end.span.to <= params.frame.bodySpan.to && !extracted.has(env.begin.span.from))
     .sort((a, b) => (a.end.span.to - a.begin.span.from) - (b.end.span.to - b.begin.span.from));
+  // A title page is template material in the frame's vertical list (boxes separated by \vfill).
+  const frameLayout = params.references.frameLayout;
+  if (frameLayout && params.bodyIr.children.length > 0) {
+    for (const node of params.bodyIr.structuralChildren ?? []) {
+      if (node.kind !== "title-page") continue;
+      if (resolveBeamerOverlaySpanVisibility(params.overlays, node.span, params.step) === "removed") continue;
+      const theme = ambientTextTheme(params.references.scopedTheme?.at(node.span.from) ?? params.theme, params.references.ambientTextAt?.(node.span.from) ?? "");
+      const titlePage = runBeamerRenderOperation(params.work, () => prepareTitlePage({ node, width: params.textWidth, theme,
+        metadata: frameLayout.metadata, macroBindings: params.macroBindings, references: params.references,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+        paperWidth: params.paperWidth, paperHeight: frameLayout.paperHeight, textHeight: frameLayout.textHeight, plain: frameLayout.plain }));
+      const replacement = { span: node.span, width: params.textWidth,
+        item: { kind: "title-page" as const, visibility: resolveBeamerOverlaySpanVisibility(params.overlays, node.span, params.step), titlePage } };
+      const index = params.references.inlineFlow?.findIndex(box => box.span.from === node.span.from) ?? -1;
+      if (index >= 0 && params.references.inlineFlow) params.references.inlineFlow[index] = replacement;
+      else params.references.inlineFlow?.push(replacement);
+    }
+  }
   // Preparing an outer box can transfer a pending item label into an inner box that was prepared
   // before it (smallest first); repeat the pass until the transfers settle.
   for (let pass = 0; pass <= candidates.length; pass++) {
@@ -1632,6 +1670,8 @@ async function prepareFrameFlow(params: {
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
   work?: BeamerRenderWork;
+  /** The frame box's glue set for first-order infinite glue, once the frame has been packed. */
+  fillUnit?: number;
 }): Promise<PreparedFrameFlowItem[]> {
   const result: PreparedFrameFlowItem[] = [];
   const bodyFont = params.theme.fonts["normal-text"];
@@ -1685,7 +1725,7 @@ async function prepareFrameFlow(params: {
       continue;
     }
     if (node.kind === "paragraph") {
-      const paragraph = runBeamerRenderOperation(params.work, () => prepareFrameParagraph({
+      const paragraphParams = {
         source: params.source,
         node,
         textWidth: params.textWidth,
@@ -1698,7 +1738,14 @@ async function prepareFrameFlow(params: {
         ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
         colorResolver: beamerAlertColorResolver(nodeTheme),
         paperWidth: params.paperWidth,
-      }));
+      };
+      let paragraph = runBeamerRenderOperation(params.work, () => prepareFrameParagraph(paragraphParams));
+      // The frame box sets its \vfill glue (a title page's, an authored one) with the frame's fill unit.
+      const fills = paragraph ? verticalListFillWeight(paragraph.paragraph) : 0;
+      if (paragraph && fills > 0 && (params.fillUnit ?? 0) > 0) {
+        const targetHeight = paragraph.paragraph.height + fills * (params.fillUnit ?? 0);
+        paragraph = runBeamerRenderOperation(params.work, () => prepareFrameParagraph({ ...paragraphParams, targetHeight }));
+      }
       if (paragraph) {
         result.push(paragraph);
       } else if (hasProjectedContent(params.source, node.span, params.overlays, params.step, params.references)) {
@@ -1970,8 +2017,9 @@ function prepareTitlePage(params: {
     };
     appendBlock("title", 0);
     for (const field of ["author", "institute", "date"] as const) appendBlock(field, 1);
+    // The template's only \vfill sits between the title and the author block (the entries' fill weight).
     return { node: params.node, plan, width: params.width, text, boxes,
-      naturalHeight: cursor, leadingFillWeight: 0, trailingFillWeight: 1 };
+      naturalHeight: cursor, leadingFillWeight: 0, trailingFillWeight: 0 };
   }
   // An empty vbox precedes the leading vfill. The following title colorbox
   // exceeds baselineskip, so TeX inserts lineskip before its outer hbox.
@@ -2014,7 +2062,40 @@ function prepareTitlePage(params: {
     cursor += extent(graphic);
   }
   return { node: params.node, plan, width: params.width, text, boxes,
-    naturalHeight: cursor, leadingFillWeight: 1, trailingFillWeight: 1 };
+    naturalHeight: cursor, leadingFillWeight: 1, trailingFillWeight: 1, leadingEmptyBoxPt: normal.lineHeightPt };
+}
+
+/**
+ * A title page in the frame's vertical list: the template's boxes, with \vfill glue where it
+ * stretches. Each segment is placed after the fills above it; its height is its share of the
+ * page's natural height, which already holds the template's interline glue.
+ */
+function titlePageVListItems(page: PreparedTitlePage, sourceSpan: { start: number; end: number }): TexVListItem[] {
+  const fil = (weight: number): TexVListItem => ({ kind: "glue", size: texLength(0), stretch: texLength(weight), stretchOrder: "fil", shrinkOrder: "normal",
+    origin: { kind: "explicit-command", command: "vfill" }, sourceSpan });
+  const noInterline: TexVListItem = { kind: "glue", size: texLength(0), origin: { kind: "explicit-command", command: "nointerlineskip" }, sourceSpan };
+  const box = (height: number, fillWeight: number | undefined, contentTop: number, baselineSkip?: number): TexVListItem => ({ kind: "hbox", sourceSpan,
+    role: { kind: "external-flow", flowKind: "title-page", ...(fillWeight !== undefined ? { fillWeight } : {}), contentOffsetPt: texLength(contentTop),
+      ...(baselineSkip !== undefined ? { baselineSkipPt: texLength(baselineSkip) } : {}) },
+    box: { metrics: { width: texLength(0), height: texLength(height), depth: texLength(0) }, renderItems: [] } });
+  const firstTop = page.leadingEmptyBoxPt ?? 0;
+  const weights = [...new Set(page.text.map(entry => entry.fillWeight))].sort((a, b) => a - b);
+  const tops = weights.map(weight => weight === (weights[0] ?? 0) ? firstTop : Math.min(...page.text.filter(entry => entry.fillWeight === weight).map(entry => entry.top)));
+  const ordered = tops.every((top, index) => index === 0 || top >= (tops[index - 1] ?? 0));
+  const segments = ordered && weights.length > 0 ? weights.map((weight, index) => ({ weight, top: tops[index] ?? firstTop, bottom: tops[index + 1] ?? page.naturalHeight }))
+    : [{ weight: 0, top: firstTop, bottom: page.naturalHeight }];
+  // colorbox and rounded templates open with \vbox{} (normal baseline glue), then \vfill.
+  const items: TexVListItem[] = page.leadingEmptyBoxPt !== undefined ? [box(0, undefined, 0, page.leadingEmptyBoxPt)] : [noInterline];
+  if (page.leadingFillWeight > 0) items.push(fil(page.leadingFillWeight));
+  let previousWeight = segments[0]?.weight ?? 0;
+  for (const [index, segment] of segments.entries()) {
+    if (segment.weight > previousWeight) items.push(fil(segment.weight - previousWeight));
+    previousWeight = segment.weight;
+    if (index > 0 || page.leadingEmptyBoxPt !== undefined) items.push(noInterline);
+    items.push(box(Math.max(0, segment.bottom - segment.top), segment.weight, segment.top));
+  }
+  if (page.trailingFillWeight > 0) items.push(fil(page.trailingFillWeight));
+  return items;
 }
 
 function prepareFrameParagraph(params: {
@@ -3004,7 +3085,8 @@ function emitPreparedTitlePage(params: {
   prepared: PreparedTitlePage;
   x: number;
   y: number;
-  fillUnit: number;
+  /** How far the template's \vfill glue above an entry moved it (by the entry's fill weight). */
+  fillOffset: (weight: number) => number;
   items: BeamerFrameLayoutItem[];
   paragraphs: BeamerParagraphLayout[];
   modelBuilder: ReturnType<typeof createSvgModelBuilder>;
@@ -3029,7 +3111,7 @@ function emitPreparedTitlePage(params: {
   for (const entry of page.text) {
     const { paragraph } = entry;
     const x = params.x + entry.x;
-    const y = params.y + entry.top + entry.fillWeight * params.fillUnit;
+    const y = params.y + entry.top + params.fillOffset(entry.fillWeight);
     positionParagraphLayout(paragraph.layout, svgPoint(pt(x), pt(y)), paragraphLineExtent(paragraph));
     params.paragraphs.push(paragraph.layout);
     childIds.push(paragraph.layout.paragraphId);
@@ -3040,7 +3122,7 @@ function emitPreparedTitlePage(params: {
   }
   params.items.push({ id: page.node.id, kind: "title-page", sourceSpan: page.node.span,
     bounds: { x: params.x - page.plan.outerBleedPt, y: params.y,
-      width: page.width + 2 * page.plan.outerBleedPt, height: page.naturalHeight + (page.plan.style === "inmargin" ? params.fillUnit : 0) },
+      width: page.width + 2 * page.plan.outerBleedPt, height: page.naturalHeight + params.fillOffset(Math.max(0, ...page.text.map(entry => entry.fillWeight))) },
     parentId: null, childIds });
 }
 
@@ -4142,6 +4224,15 @@ function finalVListGlue(paragraph: LaidParagraph): number {
   return last?.kind === "glue" ? Number(last.size) : 0;
 }
 
+/** The total \vfill-order stretch in a vertical list. */
+function verticalListFillWeight(paragraph: LaidParagraph): number {
+  let weight = 0;
+  for (const item of paragraph.layout.vlistLayout.boxReport.items) {
+    if (item.glue?.stretchOrder === "fil") weight += Number(item.glue.stretch ?? 0);
+  }
+  return weight;
+}
+
 /** The glue after a vertical list's last material: the closing skips of its environments. */
 function trailingVListGlue(paragraph: LaidParagraph): { naturalPt: number; trivlist: boolean; list: boolean } {
   let naturalPt = 0;
@@ -4433,6 +4524,7 @@ function layoutParagraph(params: {
         }
       }
       const item = external.item;
+      if (item.kind === "title-page") return titlePageVListItems(item.titlePage, { start: box.sourceStart, end: box.sourceEnd });
       // The block template's \par\vskip\medskipamount is vertical glue before the box, not part of it
       // (beamerinnerthemedefault.sty 390, beamerbaseauxtemplates.sty 752); the block's geometry is
       // measured from above that skip, so the box keeps the skip as a drawing offset.
@@ -5223,7 +5315,8 @@ function resolveFrameVerticalPacking(
       (item.kind === "title-page"
         ? item.titlePage.leadingFillWeight +
           item.titlePage.trailingFillWeight
-        : item.kind === "contents" ? item.contents.fillWeight : 0),
+        : item.kind === "contents" ? item.contents.fillWeight
+        : item.kind === "paragraph" ? verticalListFillWeight(item.paragraph) : 0),
     0
   );
   if (alignment === "top") {

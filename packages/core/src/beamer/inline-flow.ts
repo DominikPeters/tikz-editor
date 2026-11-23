@@ -6,7 +6,7 @@ export type BeamerInlineFlow = {
   span: Span;
   width: number;
   labelTargetOffset?: number;
-  item: Extract<PreparedFrameFlowItem, { kind: "block" | "columns" }>;
+  item: Extract<PreparedFrameFlowItem, { kind: "block" | "columns" | "title-page" }>;
 };
 
 const inlineFlowBox = String.raw`\begin{minipage}{1pt}X\end{minipage}`;

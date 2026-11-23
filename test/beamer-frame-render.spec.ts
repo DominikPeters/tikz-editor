@@ -135,16 +135,17 @@ describe("headless Beamer frame renderer", () => {
     expect(titlePage.bounds).toEqual(
       expect.objectContaining({
         x: expect.closeTo(6.935, 6),
-        y: expect.closeTo(6.344435, 6),
+        // Within 1sp: the title page now takes its \vfill share through the frame's glue set.
+        y: expect.closeTo(6.344435, 5),
         width: expect.closeTo(441.374094, 6),
         height: expect.closeTo(138.49335, 6),
       })
     );
-    expect(baseline(title)).toBeCloseTo(45.453035, 6);
-    expect(baseline(subtitle)).toBeCloseTo(62.653035, 6);
+    expect(baseline(title)).toBeCloseTo(45.453035, 5);
+    expect(baseline(subtitle)).toBeCloseTo(62.653035, 5);
     expect(result.layout.embeddedTikz[0]?.bounds.y).toBeCloseTo(
       147.060003,
-      6
+      5
     );
     expect(result.svg.svg).toContain(
       'data-beamer-title-page-template="beamer/title-page/rounded-shadow"'

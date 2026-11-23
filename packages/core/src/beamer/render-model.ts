@@ -87,6 +87,8 @@ export type PreparedTitlePage = {
   naturalHeight: number;
   leadingFillWeight: number;
   trailingFillWeight: number;
+  /** The template's leading \vbox{}, one \baselineskip below the previous baseline (colorbox styles). */
+  leadingEmptyBoxPt?: number;
 };
 
 export type PreparedColumns = {
