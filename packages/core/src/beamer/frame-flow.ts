@@ -5,7 +5,6 @@ import type {
   PreparedFrameFlowItem,
 } from "./render-model.js";
 import { flattenPositionedTexVListItems } from "../text/tex/vlist/traversal.js";
-import { tcolorboxSurroundingSpacing } from "./tcolorbox.js";
 
 const TEX_LINE_SKIP_PT = 1;
 
@@ -28,17 +27,16 @@ export function paragraphStartingBaselineSkip(paragraph: LaidParagraph, fallback
 /**
  * Position already-measured frame material using TeX's `\prevdepth` and
  * baseline-skip rules. Theme planning and paint are deliberately absent from
- * this module; callers provide only the active normal-text baseline skip.
+ * this module.
  */
 export function positionPreparedFrameFlow(
   flow: readonly PreparedFrameFlowItem[],
-  baselineSkip: number,
   initialPreviousDepth: number | null = 0
 ): { items: PositionedFrameFlowItem[]; extent: number } {
   const items: PositionedFrameFlowItem[] = [];
   let cursor = 0;
   let previousDepth = initialPreviousDepth;
-  for (const [index, item] of flow.entries()) {
+  for (const item of flow) {
     if (item.kind === "unsupported") {
       const contentTop = cursor + (previousDepth == null ? 0 : TEX_LINE_SKIP_PT);
       const visualBottom = contentTop + item.height;
@@ -53,92 +51,29 @@ export function positionPreparedFrameFlow(
       previousDepth = 0;
       continue;
     }
-    if (item.kind === "paragraph") {
-      const firstBox = item.paragraph.layout.vlistLayout.boxReport.items.find(
-        material => material.itemKind !== "glue" && material.itemKind !== "penalty" && material.itemKind !== "vbox"
-      );
-      // A leading display's empty line already includes its full baseline
-      // skip in the measured paragraph prefix. Consume the preceding depth
-      // there, rather than adding another minimum lineskip outside the box.
-      const leadingDisplay = firstBox?.hboxRole?.kind === "display-empty-line" && firstBox.hboxRole.position === "before-display";
-      const glue = (leadingDisplay
-        ? leadingDisplayGlue(previousDepth, item.startingBaselineSkip)
-        : paragraphStartsWithoutInterline(item.paragraph) ? 0
-        : verticalInterlineGlue(previousDepth, item.boxHeight, item.startingBaselineSkip));
-      const referenceY = cursor + glue + item.boxHeight;
-      const contentTop = referenceY - item.boxHeight;
-      const visualBottom = contentTop + item.naturalHeight;
-      items.push({
-        item,
-        contentTop,
-        referenceY,
-        visualTop: contentTop - (item.visualTopInset ?? 0),
-        visualBottom: visualBottom + (item.visualBottomInset ?? 0),
-      });
-      cursor = visualBottom;
-      previousDepth = item.endingDepth;
-      if (
-        item.trailingVerticalSpacePreviousDepth != null &&
-        flow[index + 1]?.kind === "columns"
-      ) {
-        previousDepth = item.trailingVerticalSpacePreviousDepth;
-      }
-      continue;
-    }
-    if (item.kind === "block") {
-      if (item.block.packageBox) {
-        const spacing = tcolorboxSurroundingSpacing(item.block.packageBox.plan, { baselineSkipPt: baselineSkip, previousDepthPt: previousDepth });
-        const contentTop = cursor + spacing.beforePt;
-        const visualBottom = contentTop + item.naturalHeight;
-        items.push({ item, contentTop, referenceY: visualBottom, visualTop: contentTop, visualBottom });
-        cursor = visualBottom + spacing.afterPt;
-        previousDepth = spacing.endingDepthPt;
-        continue;
-      }
-      const glue = verticalInterlineGlue(
-        previousDepth,
-        item.boxHeight,
-        item.startingBaselineSkip ?? baselineSkip
-      );
-      const referenceY = cursor + glue + item.boxHeight;
-      const contentTop = referenceY - item.boxHeight;
-      const visualBottom = contentTop + item.naturalHeight;
-      items.push({
-        item,
-        contentTop,
-        referenceY,
-        visualTop: contentTop,
-        visualBottom,
-      });
-      cursor = visualBottom + item.block.plan.geometry.afterSkipPt;
-      previousDepth = item.endingDepth;
-      continue;
-    }
-    const glue = verticalInterlineGlue(
-      previousDepth,
-      item.box.height,
-      item.baselineSkip ?? baselineSkip
+    const firstBox = item.paragraph.layout.vlistLayout.boxReport.items.find(
+      material => material.itemKind !== "glue" && material.itemKind !== "penalty" && material.itemKind !== "vbox"
     );
-    const referenceY = cursor + glue + item.box.height;
-    const columnTops = item.columns.map(
-      (column) => referenceY - column.box.referenceFromContentTop
-    );
-    const visualTop = Math.min(...columnTops);
-    const visualBottom = Math.max(
-      ...item.columns.map(
-        (column, columnIndex) =>
-          requireArrayValue(columnTops, columnIndex) + column.naturalHeight
-      )
-    );
+    // A leading display's empty line already includes its full baseline
+    // skip in the measured paragraph prefix. Consume the preceding depth
+    // there, rather than adding another minimum lineskip outside the box.
+    const leadingDisplay = firstBox?.hboxRole?.kind === "display-empty-line" && firstBox.hboxRole.position === "before-display";
+    const glue = (leadingDisplay
+      ? leadingDisplayGlue(previousDepth, item.startingBaselineSkip)
+      : paragraphStartsWithoutInterline(item.paragraph) ? 0
+      : verticalInterlineGlue(previousDepth, item.boxHeight, item.startingBaselineSkip));
+    const referenceY = cursor + glue + item.boxHeight;
+    const contentTop = referenceY - item.boxHeight;
+    const visualBottom = contentTop + item.naturalHeight;
     items.push({
       item,
-      contentTop: visualTop,
+      contentTop,
       referenceY,
-      visualTop,
-      visualBottom,
+      visualTop: contentTop - (item.visualTopInset ?? 0),
+      visualBottom: visualBottom + (item.visualBottomInset ?? 0),
     });
-    cursor = referenceY + item.box.depth;
-    previousDepth = item.box.depth;
+    cursor = visualBottom;
+    previousDepth = item.endingDepth;
   }
   return { items, extent: cursor };
 }
@@ -198,38 +133,6 @@ export function paragraphStartingMaterialHeight(
   }
   return Number(first?.height ?? paragraph.layout.vlistLayout.metrics.height);
 }
-
-export function previousDepthBeforeTrailingVerticalSpace(
-  paragraph: LaidParagraph
-): number | null {
-  const items = paragraph.layout.vlistLayout.boxReport.items;
-  const trailing = items.at(-1);
-  if (
-    trailing?.itemKind !== "glue" ||
-    trailing.glue?.origin?.kind !== "explicit-command" ||
-    trailing.glue.origin.command !== "vspace"
-  ) {
-    return null;
-  }
-  for (let index = items.length - 2; index >= 0; index -= 1) {
-    const item = requireArrayValue(items, index);
-    if (item.itemKind === "glue" || item.itemKind === "penalty") {
-      continue;
-    }
-    if (
-      item.itemKind === "hbox" &&
-      item.hboxRole?.kind === "display-empty-line"
-    ) {
-      return Number(item.depth);
-    }
-    if (item.itemKind === "paragraph" || item.itemKind === "vbox") {
-      return paragraphLastLineDepth(paragraph);
-    }
-    return Number(item.depth);
-  }
-  return 0;
-}
-
 
 export function paragraphLastLineDepth(paragraph: LaidParagraph): number {
   return Number(paragraph.layout.report.lines.at(-1)?.descent ?? 0);

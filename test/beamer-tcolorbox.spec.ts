@@ -4,7 +4,7 @@ import { parseBeamerFrameBody } from "../packages/core/src/beamer/content.js";
 import { createBeamerAmbientText } from "../packages/core/src/beamer/ambient-text.js";
 import { scanBeamerDocument } from "../packages/core/src/beamer/scan.js";
 import { prepareBeamerDocument, renderBeamerFrame } from "../packages/core/src/beamer/render.js";
-import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxPlan, tcolorboxSurroundingSpacing } from "../packages/core/src/beamer/tcolorbox.js";
+import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxPlan } from "../packages/core/src/beamer/tcolorbox.js";
 import { createIdentityMappedText } from "../packages/core/src/text/source-map.js";
 import { texLength } from "../packages/core/src/text/tex/coordinates.js";
 import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/index.js";
@@ -99,17 +99,6 @@ Before [\itshape italic] after brackets.\begin{block}{Next}Following.\end{block}
     expect(body.sourceMap.charOrigins[body.text.indexOf("Body")]).toMatchObject({ kind: "direct", from: source.indexOf("Body.") });
     expect(body.sourceMap.charOrigins[0]).toMatchObject({ kind: "direct", from: source.indexOf(String.raw`\small`) });
     expect(plan.fontTitle?.value).toBe(String.raw`\bfseries`);
-  });
-
-  it("uses balanced before/after skips and restores the following baseline depth", () => {
-    const source = deck(String.raw`\begin{tcolorbox}Body.\end{tcolorbox}`);
-    const plan = planFor(source);
-    expect(tcolorboxSurroundingSpacing(plan, { baselineSkipPt: 13.6, previousDepthPt: 2 })).toMatchObject({ afterPt: 6.8, endingDepthPt: 4.08 });
-    expect(tcolorboxSurroundingSpacing(plan, { baselineSkipPt: 13.6, previousDepthPt: 2 }).beforePt).toBeCloseTo(8.88, 6);
-    expect(tcolorboxSurroundingSpacing(plan, { baselineSkipPt: 13.6, previousDepthPt: null, atStart: true }).beforePt).toBe(0);
-    expect(tcolorboxSurroundingSpacing(plan, { baselineSkipPt: 13.6, previousDepthPt: 2, insideMinipage: true, parskipPt: 1 }).beforePt).toBe(-1);
-    plan.noBeforeAfter = true;
-    expect(tcolorboxSurroundingSpacing(plan, { baselineSkipPt: 13.6, previousDepthPt: 2 })).toEqual({ beforePt: 0, afterPt: 0, endingDepthPt: 0 });
   });
 
   it("fills a rounded frame and bottom-rounded body, and optionally a separately colored title", () => {

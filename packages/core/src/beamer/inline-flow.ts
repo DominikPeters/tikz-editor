@@ -1,12 +1,12 @@
 import type { Span } from "../ast/types.js";
 import { createMappedText, concatMappedText, sliceMappedText, type MappedText } from "../text/source-map.js";
-import type { LaidParagraph, PreparedFrameFlowItem, PreparedColumnFlowItem, PreparedTemplateFlowItem } from "./render-model.js";
+import type { LaidParagraph, PreparedFrameFlowItem, PreparedColumnFlowItem, PreparedFlowBox, PreparedTemplateFlowItem } from "./render-model.js";
 
 export type BeamerInlineFlow = {
   span: Span;
   width: number;
   labelTargetOffset?: number;
-  item: Extract<PreparedFrameFlowItem, { kind: "block" | "columns" }> | PreparedTemplateFlowItem;
+  item: PreparedFlowBox | PreparedTemplateFlowItem;
 };
 
 const inlineFlowBox = String.raw`\begin{minipage}{1pt}X\end{minipage}`;
@@ -67,14 +67,14 @@ export function beamerInlineListEffects(mapped: MappedText, boxes: readonly Beam
 
 /** LaTeX minipages share @mplistdepth. A nested minipage starts it at
  * zero and a list globally changes the register, replacing the outer value. */
-function resetsMinipageListDepth(item: PreparedFrameFlowItem | PreparedColumnFlowItem): boolean {
+function resetsMinipageListDepth(item: PreparedFlowBox | PreparedFrameFlowItem | PreparedColumnFlowItem): boolean {
   if (item.kind === "columns") return containsListScope(item, "quote");
   if (item.kind !== "block") return false;
   return item.block.plan.style === "rounded" && containsListScope(item, "quote") ||
     !!item.block.bodyFlow?.items.some(flow => resetsMinipageListDepth(flow.item));
 }
 
-export function containsListScope(item: PreparedFrameFlowItem | PreparedColumnFlowItem, otherScope: "quote" | "trivlist"): boolean {
+export function containsListScope(item: PreparedFlowBox | PreparedFrameFlowItem | PreparedColumnFlowItem, otherScope: "quote" | "trivlist"): boolean {
   // An embedded box records whether its own vertical lists hold such a scope.
   const contains = (paragraph: LaidParagraph | null) =>
     paragraph?.layout.vlistLayout.boxReport.items.some(box => box.role?.kind === "list" || box.role?.kind === otherScope ||

@@ -176,16 +176,6 @@ export function measureTcolorboxGeometry(plan: TcolorboxPlan, titleHeightPt: num
   return { heightPt, titleTopPt, bodyTopPt, interiorTopPt, interiorBottomPt: heightPt - plan.bottomRulePt };
 }
 
-/** Before/after balanced skip uses .3 baselineskip as the following paragraph's prevdepth. */
-export function tcolorboxSurroundingSpacing(plan: TcolorboxPlan, args: { baselineSkipPt: number; previousDepthPt: number | null; parskipPt?: number; atStart?: boolean; insideMinipage?: boolean }): { beforePt: number; afterPt: number; endingDepthPt: number | null } {
-  if (plan.noBeforeAfter) return { beforePt: 0, afterPt: 0, endingDepthPt: 0 };
-  const parskip = args.parskipPt ?? 0;
-  const depth = args.previousDepthPt;
-  const balanced = plan.beforeBalanced && depth != null && depth >= 0 ? Math.max(0, .3 * args.baselineSkipPt - depth) : 0;
-  const beforePt = args.atStart ? 0 : args.insideMinipage ? -Math.max(0, parskip) : plan.beforeSkipPt + balanced - parskip;
-  return { beforePt, afterPt: plan.afterSkipPt - parskip, endingDepthPt: plan.afterBalanced ? .3 * args.baselineSkipPt : null };
-}
-
 /** Standard skin fills the outer frame first, then the inner content (top corners square with a title). */
 export function emitTcolorboxBackground(plan: TcolorboxPlan, geometry: TcolorboxGeometry): string {
   const frame = roundedPath(0, 0, plan.widthPt, geometry.heightPt, plan.sharpCorners ? 0 : plan.outerArcPt, true, true);

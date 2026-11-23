@@ -157,8 +157,8 @@ function sliceParagraphBox(item: Extract<PreparedFrameFlowItem, { kind: "paragra
   return { ...item, paragraph, naturalHeight: height, boxHeight: Number(entry.metrics.height), endingDepth: Number(entry.metrics.depth) };
 }
 
-function frameMaterial(flow: readonly PreparedFrameFlowItem[], baselineSkip: number, plain: boolean, breaks: BeamerContinuationBreaks): VerticalMaterial[] {
-  const positioned = positionPreparedFrameFlow(flow, baselineSkip, plain ? null : 0);
+function frameMaterial(flow: readonly PreparedFrameFlowItem[], plain: boolean, breaks: BeamerContinuationBreaks): VerticalMaterial[] {
+  const positioned = positionPreparedFrameFlow(flow, plain ? null : 0);
   const result: VerticalMaterial[] = [];
   let outerCursor = 0;
   for (const placement of positioned.items) {
@@ -169,13 +169,10 @@ function frameMaterial(flow: readonly PreparedFrameFlowItem[], baselineSkip: num
       pendingOuterGap = 0;
     }
     if (item.kind !== "paragraph") {
-      const blockBefore = item.kind === "block" && item.block.plan.style === "default" ? item.block.plan.geometry.beforeSkipPt : 0;
-      if (blockBefore > 0) result.push(glue(blockBefore, blockBefore / 3, blockBefore / 3));
-      const depth = item.kind === "block" ? item.endingDepth : item.kind === "columns" ? item.box.depth : 0;
-      const height = item.kind === "columns" ? item.box.height : placement.visualBottom - placement.contentTop - depth - blockBefore;
-      result.push({ kind: "box", height, depth,
-        ...(blockBefore ? { splitTopHeight: item.kind === "block" ? item.block.titleAscent : height } : {}),
-        placement: { ...placement, contentTop: -blockBefore, referenceY: height, visualTop: placement.visualTop - placement.contentTop - blockBefore, visualBottom: placement.visualBottom - placement.contentTop - blockBefore },
+      // A source card is one rigid box.
+      const height = placement.visualBottom - placement.contentTop;
+      result.push({ kind: "box", height, depth: 0,
+        placement: { ...placement, contentTop: 0, referenceY: height, visualTop: placement.visualTop - placement.contentTop, visualBottom: height },
       });
     } else {
       const vlist = item.paragraph.layout.vlistLayout;
@@ -246,7 +243,6 @@ function frameMaterial(flow: readonly PreparedFrameFlowItem[], baselineSkip: num
       if (extra > 0) result.push(glue(extra, 3, 5));
     }
     outerCursor = placement.visualBottom;
-    if (item.kind === "block") { const skip = item.block.plan.geometry.afterSkipPt; result.push(glue(skip, skip / 3, skip / 3)); outerCursor += skip; }
   }
   return result;
 }
@@ -288,7 +284,7 @@ export function splitBeamerFrameContinuations(params: {
   alignment: "top" | "center" | "bottom"; footnoteHeight: number; breaks: BeamerContinuationBreaks;
   plainExitHeight: number;
 }): { items: PositionedFrameFlowItem[]; extent: number }[] {
-  let remaining = frameMaterial(params.flow, params.baselineSkip, params.plain, params.breaks);
+  let remaining = frameMaterial(params.flow, params.plain, params.breaks);
   const parts: VerticalMaterial[][] = [];
   const topNatural = params.alignment === "top" ? .2 * 72.27 / 2.54 : 0;
   const topStretch = params.alignment === "center" ? .4 * params.paperHeight : params.alignment === "top" ? .5 * params.paperHeight : 0;

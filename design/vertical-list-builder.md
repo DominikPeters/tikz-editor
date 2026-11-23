@@ -1,6 +1,6 @@
 # One vertical-list builder for text, lists and Beamer containers
 
-Status: in progress (2026-11-22). Steps 1–3 and the display stage done; Beamer containers next (see "Progress" and "Next"). Survey and evidence: `design/engine-survey/`. TeX references:
+Status: in progress (2026-11-23). Every vertical list is resolved by the builder; inline material boxes next (see "Progress" and "Next"). Survey and evidence: `design/engine-survey/`. TeX references:
 `tex-src/` (see `tex-src/README.md`).
 
 ## Problem
@@ -324,13 +324,24 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   separate layout units; a frame body is now one unit, so the test puts each
   graphic in its own block body.
 
+- **Frame flow folded.** A block or columns box is prepared directly by
+  `prepareFlowBox` and only ever placed as a box in the text of the vertical
+  list that holds it, so frame and block-body flows are paragraphs and
+  source cards. The block/columns branches of `positionPreparedFrameFlow`,
+  the frame and block-body emitters, the continuation splitter and the
+  block-body metrics are gone, with `tcolorboxSurroundingSpacing` and the
+  paragraph's `trailingVerticalSpacePreviousDepth` (the builder's
+  `external-flow-before`/`after` glue and `\prevdepth` replace both).
+- **Material box position.** A `[c]` minipage or `\parbox` is a `\vcenter`:
+  height (h+d)/2 + axis_height (0.25em of the enclosing size), not its first
+  line's height. The baseline glue above it uses the previous line's own
+  depth; the earlier `\baselineskip/3` floor was not TeX's (LuaLaTeX
+  `\showbox`: glue 3.23 = 12 - 1.94 - 6.83 before a `[t]` parbox). Checked
+  against LuaLaTeX for `[c]`, `[t]`, `[b]` minipages and a `\parbox` in their
+  own paragraphs.
+
 ## Next
 
-1. **Frame flow**: the frame body is a single paragraph item plus source
-   cards; the remaining per-kind branches of `positionPreparedFrameFlow` and
-   the frame emitter (block, columns) are only reached through
-   `prepareFrameFlow`'s single-box preparation and can be folded away once
-   that preparation returns the prepared box directly.
-2. **Material boxes**: the minipage's vertical position in its line is 0.47pt
-   off in the minipage-with-list case (`test/beamer-fuzz-spacing.spec.ts`
-   checks the internal spacing only).
+1. **Inline material boxes**: a minipage that shares its line with text is
+   still a source card ("not supported by the simple text path"), and so is
+   a frame holding both a `[t]` minipage and `{\small\begin{minipage}...}`.

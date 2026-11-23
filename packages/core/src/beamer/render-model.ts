@@ -164,26 +164,17 @@ export type PreparedFrameFlowItem =
       endingDepth: number;
       /** The vertical list ends with an alignment's closing skip. */
       closesWithTrivlistSkip?: boolean;
-      /**
-       * TeX vertical glue preserves `\prevdepth`. When a paragraph-owned
-       * `\vspace` is followed by a columns hbox, retain the depth of the box
-       * immediately preceding that glue rather than the enclosing vlist's
-       * zero depth.
-       */
-      trailingVerticalSpacePreviousDepth: number | null;
-    }
-  | PreparedColumns
-  | {
-      kind: "block";
-      visibility: BeamerOverlayVisibility;
-      node: BeamerBlockBodyNode | BeamerTheoremBodyNode;
-      block: PreparedBlock;
-      naturalHeight: number;
-      boxHeight: number;
-      /** The baseline skip of the size active before the block, when it differs from the frame's. */
-      startingBaselineSkip?: number;
-      endingDepth: number;
     };
+
+export type PreparedBlockFlowBox = {
+  kind: "block";
+  visibility: BeamerOverlayVisibility;
+  node: BeamerBlockBodyNode | BeamerTheoremBodyNode;
+  block: PreparedBlock;
+};
+
+/** A block or columns box, laid out as one box of the vertical list whose text holds it. */
+export type PreparedFlowBox = PreparedColumns | PreparedBlockFlowBox;
 
 export type PositionedFrameFlowItem = {
   item: PreparedFrameFlowItem;

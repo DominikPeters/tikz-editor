@@ -91,10 +91,10 @@ import {
   paragraphStartingMaterialHeight,
   paragraphStartingBaselineSkip,
   positionPreparedFrameFlow,
-  previousDepthBeforeTrailingVerticalSpace,
 } from "./frame-flow.js";
 import type {
   BeamerBlockBodyNode,
+  BeamerColumnsBodyNode,
   BeamerColumnAlignment,
   BeamerColumnBodyNode,
   BeamerColumnFlowNode,
@@ -166,6 +166,8 @@ import type {
   PreparedColumnFlowItem,
   PreparedTikzPicture,
   PreparedFrameFlowItem,
+  PreparedFlowBox,
+  PreparedColumns,
   PreparedTitlePage,
   PreparedContents,
 } from "./render-model.js";
@@ -830,7 +832,6 @@ async function renderBeamerFrameStep(params: {
   if (preparedFrameFlow.length > 0) {
     const rigidPositioned = positionPreparedFrameFlow(
       preparedFrameFlow,
-      theme.fonts["normal-text"].lineHeightPt,
       // beamerbaseframe.sty issues \nointerlineskip after its initial
       // empty vbox on plain frames, before the first authored material.
       frame.options?.plain ? null : 0
@@ -849,7 +850,6 @@ async function renderBeamerFrameStep(params: {
     }
     const positioned = continuationPages?.[continuationIndex - 1] ?? positionPreparedFrameFlow(
       preparedFrameFlow,
-      theme.fonts["normal-text"].lineHeightPt,
       frame.options?.plain ? null : 0
     );
     const shrinkTopSkip = shrink && frame.options?.alignment === "top" ? TOP_ALIGNED_FRAME_SKIP_PT : 0;
@@ -862,12 +862,8 @@ async function renderBeamerFrameStep(params: {
     }
     for (const placement of positioned.items) {
       if (params.work) await params.work.checkpoint();
-      if (
-        placement.item.visibility === "hidden" &&
-        !["block", "paragraph", "columns", "tikzpicture"].includes(placement.item.kind)
-      ) {
-        continue;
-      }
+      // A hidden paragraph still reserves its space; a hidden source card paints nothing.
+      if (placement.item.visibility === "hidden" && placement.item.kind !== "paragraph") continue;
       if (placement.item.kind === "paragraph") {
         emitFrameParagraph({
           prepared: placement.item,
@@ -878,21 +874,7 @@ async function renderBeamerFrameStep(params: {
           modelBuilder: bodyModelBuilder,
           theme,
         });
-      } else if (placement.item.kind === "columns") {
-        await emitPreparedColumns({
-          prepared: placement.item,
-          referenceY: frameBlockTop + placement.referenceY,
-          spacing,
-          bounds: availableContentBounds,
-          paperWidth: page.page.width,
-          items,
-          paragraphs,
-          embeddedTikz,
-          modelBuilder: bodyModelBuilder,
-          theme,
-          ...(params.work !== undefined ? { work: params.work } : {}),
-        });
-      } else if (placement.item.kind === "unsupported") {
+      } else {
         emitUnsupportedPlaceholder({
           placeholder: placement.item.placeholder,
           x: availableContentBounds.x,
@@ -900,21 +882,6 @@ async function renderBeamerFrameStep(params: {
           parentId: null,
           items,
           modelBuilder: bodyModelBuilder,
-        });
-      } else {
-        await emitPreparedBlock({
-          spacing, embeddedTikz, paperWidth: page.page.width,
-          ...(params.work !== undefined ? { work: params.work } : {}),
-          prepared: placement.item.block,
-          x: availableContentBounds.x,
-          y: frameBlockTop + placement.contentTop,
-          parentId: null,
-          items,
-          paragraphs,
-          modelBuilder: bodyModelBuilder,
-          theme,
-          visibility:
-            placement.item.visibility === "hidden" ? "hidden" : "visible",
         });
       }
     }
@@ -1596,10 +1563,12 @@ async function prepareInlineFlow(params: {
       }
       const inherited = params.references.ambientTextAt?.(span.from) ?? "";
       const theme = ambientTextTheme(params.references.scopedTheme?.at(span.from) ?? params.theme, inherited);
-      const flow = await prepareFrameFlow({ ...params, children: ir.children, theme, textWidth: width,
-        ...requireDefined(params.references.frameLayout, "Expected enclosing frame geometry"), availableHeight: Number.POSITIVE_INFINITY });
-      const item = flow.find(item => item.kind === "block" || item.kind === "columns");
-      if (item?.kind === "block" || item?.kind === "columns") {
+      const node = ir.children.find(child => (child.kind === "block" || child.kind === "columns" || child.kind === "theorem") && child.span.from === span.from);
+      const item = node?.kind === "block" || node?.kind === "columns" || node?.kind === "theorem"
+        ? await prepareFlowBox({ ...params, children: [], theme, textWidth: width,
+          ...requireDefined(params.references.frameLayout, "Expected enclosing frame geometry"), availableHeight: Number.POSITIVE_INFINITY }, node)
+        : null;
+      if (item) {
         const labelTargetOffset = environments.filter(child => ["itemize", "enumerate", "description", "center", "flushleft", "flushright"].includes(child.name) &&
           child.begin.span.from > span.from && child.end.span.to < span.to && resolveBeamerOverlaySpanVisibility(params.overlays, child.begin.span, params.step) !== "removed")
           .sort((a, b) => a.begin.span.from - b.begin.span.from)[0]?.begin.span.from;
@@ -1623,7 +1592,74 @@ async function prepareInlineFlow(params: {
   }
 }
 
-async function prepareFrameFlow(params: {
+/** Prepare one block or columns box; the vertical list holding it places it as an inline box. */
+async function prepareFlowBox(
+  params: FrameFlowParams,
+  node: BeamerColumnsBodyNode | BeamerBlockBodyNode | BeamerTheoremBodyNode
+): Promise<PreparedFlowBox | null> {
+  const nodeTheme = ambientTextTheme(params.theme, params.references.ambientTextAt?.(node.span.from) ?? "");
+  const bodyFont = nodeTheme.fonts["normal-text"];
+  const visibility = resolveBeamerOverlaySpanVisibility(params.overlays, node.span, params.step);
+  if (visibility === "removed") return null;
+  if (node.kind === "columns") {
+    if (node.columns.length === 0) {
+      params.diagnostics.push({
+        severity: "warning",
+        code: "beamer-render-empty-columns",
+        message: "The columns environment has no renderable columns.",
+        span: node.span,
+      });
+      return null;
+    }
+    // Retain the existing asynchronous column schedule, including warnings
+    // produced before an earlier column's embedded picture completes. Each
+    // column shares the frame budget and checks the same cancellation signal.
+    const columns = await Promise.all(node.columns.map(column => prepareColumnContent({
+      source: params.source,
+      column,
+      textWidth: params.textWidth,
+      diagnostics: params.diagnostics,
+      theme: nodeTheme,
+      macroBindings: params.macroBindings,
+      references: params.references,
+      leftSidebarWidth: params.leftSidebarWidth,
+      overlays: params.overlays,
+      step: params.step,
+      ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+      paperWidth: params.paperWidth,
+      ...(params.work !== undefined ? { work: params.work } : {}),
+    })));
+    return {
+      kind: "columns",
+      baselineSkip: bodyFont.lineHeightPt,
+      visibility,
+      node,
+      columns,
+      box: {
+        height: Math.max(0, ...columns.map((column) => column.box.height)),
+        depth: Math.max(0, ...columns.map((column) => column.box.depth)),
+      },
+    };
+  }
+  const block = await runBeamerRenderOperation(params.work, () => prepareBlock({
+    source: params.source,
+    node,
+    width: params.textWidth,
+    leftSidebarWidth: params.leftSidebarWidth,
+    theme: nodeTheme,
+    macroBindings: params.macroBindings,
+    references: params.references,
+    overlays: params.overlays,
+    step: params.step,
+    ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+    paperWidth: params.paperWidth,
+    diagnostics: params.diagnostics,
+    ...(params.work !== undefined ? { work: params.work } : {}),
+  }));
+  return block ? { kind: "block", visibility, node, block } : null;
+}
+
+type FrameFlowParams = {
   source: string;
   children: readonly BeamerFrameBodyNode[];
   textWidth: number;
@@ -1647,7 +1683,9 @@ async function prepareFrameFlow(params: {
   work?: BeamerRenderWork;
   /** The frame box's glue set for first-order infinite glue, once the frame has been packed. */
   fillUnit?: number;
-}): Promise<PreparedFrameFlowItem[]> {
+};
+
+async function prepareFrameFlow(params: FrameFlowParams): Promise<PreparedFrameFlowItem[]> {
   const result: PreparedFrameFlowItem[] = [];
   const bodyFont = params.theme.fonts["normal-text"];
   const listProfile = beamerListLayoutProfile(params.theme, params.references.crampedLists);
@@ -1714,79 +1752,9 @@ async function prepareFrameFlow(params: {
       }
       continue;
     }
-    if (node.kind === "columns") {
-      if (node.columns.length === 0) {
-        params.diagnostics.push({
-          severity: "warning",
-          code: "beamer-render-empty-columns",
-          message: "The columns environment has no renderable columns.",
-          span: node.span,
-        });
-        continue;
-      }
-      // Retain the existing asynchronous column schedule, including warnings
-      // produced before an earlier column's embedded picture completes. Each
-      // column shares the frame budget and checks the same cancellation signal.
-      const columns = await Promise.all(node.columns.map(column => prepareColumnContent({
-        source: params.source,
-        column,
-        textWidth: params.textWidth,
-        diagnostics: params.diagnostics,
-        theme: nodeTheme,
-        macroBindings: params.macroBindings,
-        references: params.references,
-        leftSidebarWidth: params.leftSidebarWidth,
-        overlays: params.overlays,
-        step: params.step,
-        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
-        paperWidth: params.paperWidth,
-        ...(params.work !== undefined ? { work: params.work } : {}),
-      })));
-      result.push({
-        kind: "columns",
-        baselineSkip: bodyFont.lineHeightPt,
-        visibility,
-        node,
-        columns,
-        box: {
-          height: Math.max(0, ...columns.map((column) => column.box.height)),
-          depth: Math.max(0, ...columns.map((column) => column.box.depth)),
-        },
-      });
-      continue;
-    }
-    if (node.kind === "block" || node.kind === "theorem") {
-      const block = await runBeamerRenderOperation(params.work, () => prepareBlock({
-        source: params.source,
-        node,
-        width: params.textWidth,
-        leftSidebarWidth: params.leftSidebarWidth,
-        theme: nodeTheme,
-        macroBindings: params.macroBindings,
-        references: params.references,
-        overlays: params.overlays,
-        step: params.step,
-        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
-        paperWidth: params.paperWidth,
-        diagnostics: params.diagnostics,
-        ...(params.work !== undefined ? { work: params.work } : {}),
-      }));
-      if (block) {
-        // A size declaration before the block sets the baselineskip that
-        // TeX uses for the interline glue above its title box.
-        const ambientSize = activeBeamerNamedSize(params.references.ambientTextAt?.(node.span.from) ?? "", params.references.theme);
-        result.push({
-          kind: "block",
-          visibility,
-          node,
-          block,
-          naturalHeight: block.naturalHeight,
-          boxHeight: block.flowBoxHeight,
-          ...(ambientSize ? { startingBaselineSkip: ambientSize.lineHeightPt } : {}),
-          endingDepth: block.endingDepth,
-        });
-      }
-      continue;
+    if (node.kind !== "unsupported") {
+      // Blocks and columns are boxes in the text of the vertical list that holds them.
+      throw new Error(`A ${node.kind} box must be laid out in its vertical list`);
     }
     params.diagnostics.push({
       severity: "warning",
@@ -2123,8 +2091,6 @@ function prepareFrameParagraph(params: {
       paragraphStartingBaselineSkip(paragraph, namedSize?.lineHeightPt ?? params.bodyFont.lineHeightPt),
     endingDepth: paragraphEndingMaterialDepth(paragraph),
     ...(closing.trivlist ? { closesWithTrivlistSkip: true } : {}),
-    trailingVerticalSpacePreviousDepth:
-      previousDepthBeforeTrailingVerticalSpace(paragraph),
   };
 }
 
@@ -2154,10 +2120,7 @@ async function shrinkFrameParagraphGlueToAvailableHeight(
   // so re-run those VLists against the remaining frame height.
   const overflow = Math.max(
     0,
-    positionPreparedFrameFlow(
-      fitted,
-      params.bodyFont.lineHeightPt
-    ).extent - params.availableHeight
+    positionPreparedFrameFlow(fitted).extent - params.availableHeight
   );
   if (overflow === 0) {
     return fitted;
@@ -2369,11 +2332,8 @@ async function prepareBlockWithTheme(params: {
       ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
       ...(params.work !== undefined ? { work: params.work } : {}),
     });
-    const positioned = positionPreparedFrameFlow(flow, theoremBodyFont.lineHeightPt);
-    const first = positioned.items[0];
-    // Keep the negative head skip of T columns. Their visual top can be
-    // above the physical hbox that establishes this body's reference.
-    const origin = first?.item.kind === "columns" ? first.referenceY - first.item.box.height : first?.contentTop ?? 0;
+    const positioned = positionPreparedFrameFlow(flow);
+    const origin = positioned.items[0]?.contentTop ?? 0;
     bodyFlow = { extent: positioned.extent - origin, items: positioned.items.map(item => ({ ...item,
       contentTop: item.contentTop - origin, referenceY: item.referenceY - origin,
       visualTop: item.visualTop - origin, visualBottom: item.visualBottom - origin })) };
@@ -2391,7 +2351,6 @@ async function prepareBlockWithTheme(params: {
             boxHeight: paragraphStartingMaterialHeight(paragraph),
             startingBaselineSkip: theoremBodyFont.lineHeightPt,
                     endingDepth: paragraphEndingMaterialDepth(paragraph),
-            trailingVerticalSpacePreviousDepth: null,
           });
           continue;
         }
@@ -2408,7 +2367,7 @@ async function prepareBlockWithTheme(params: {
       flow.push({ kind: "unsupported", visibility, placeholder, height: placeholder.height });
     }
     if (flow.length > 0) {
-      const positioned = positionPreparedFrameFlow(flow, theoremBodyFont.lineHeightPt);
+      const positioned = positionPreparedFrameFlow(flow);
       const origin = requireArrayValue(positioned.items, 0).contentTop;
       bodyFlow = {
         extent: positioned.extent - origin,
@@ -2432,8 +2391,7 @@ async function prepareBlockWithTheme(params: {
       ? Number(last.height) : 0;
   };
   const terminalBodySkip = plan.style === "rounded"
-    ? terminalBodyFlow?.kind === "paragraph" ? terminalDisplaySkip(terminalBodyFlow.paragraph)
-      : terminalBodyFlow?.kind === "block" ? terminalBodyFlow.block.plan.geometry.afterSkipPt : 0
+    ? terminalBodyFlow?.kind === "paragraph" ? terminalDisplaySkip(terminalBodyFlow.paragraph) : 0
     : 0;
   // A default block's body keeps its vertical list's closing skips (\endlist, \endtrivlist): they end
   // the colorbox in glue, which leaves it zero depth.
@@ -2504,11 +2462,8 @@ async function prepareBlockWithTheme(params: {
     geometry.transitionHeightPt;
   const titleBoxExtent =
     titleAscent + Math.max(titleDepth, geometry.titleDepthFloorPt);
-  const firstBodyHeight = firstBody ? paragraphStartingMaterialHeight(firstBody)
-    : firstFlowItem?.kind === "columns" ? firstFlowItem.box.height
-    : firstFlowItem?.kind === "block" ? firstFlowItem.block.flowBoxHeight : undefined;
-  const firstBodyBaselineSkip = firstBody ? paragraphStartingBaselineSkip(firstBody, theoremBodyFont.lineHeightPt)
-    : firstFlowItem?.kind === "block" ? (firstFlowItem.block.theme ?? params.theme).fonts["normal-text"].lineHeightPt : theoremBodyFont.lineHeightPt;
+  const firstBodyHeight = firstBody ? paragraphStartingMaterialHeight(firstBody) : undefined;
+  const firstBodyBaselineSkip = firstBody ? paragraphStartingBaselineSkip(firstBody, theoremBodyFont.lineHeightPt) : theoremBodyFont.lineHeightPt;
   const bodyBaselineInset =
     firstBodyHeight !== undefined && geometry.bodyFirstBaselineSkipPt != null
       ? (firstBodyBaselineSkip - firstBodyHeight >= 0
@@ -2522,13 +2477,10 @@ async function prepareBlockWithTheme(params: {
     terminalGlueKind === "external-flow-after" ||
     // A display's below skip also ends the box in glue, whatever its last text line's depth.
     terminalGlueKind === "display-math-boundary" ||
-    lastFlowItem?.kind === "block" && lastFlowItem.block.plan.geometry.afterSkipPt > 0 ||
     lastFlowItem?.kind === "paragraph" && lastFlowItem.closesWithTrivlistSkip === true);
   // A default colorbox ending in vertical glue has zero physical depth.
   const bodyEndingDepth = closesWithBodySkip ? 0 : body ? paragraphEndingMaterialDepth(body)
-    : lastFlowItem?.kind === "columns" ? lastFlowItem.box.depth
-    : lastFlowItem?.kind === "paragraph" ? paragraphEndingMaterialDepth(lastFlowItem.paragraph)
-    : lastFlowItem?.kind === "block" ? lastFlowItem.endingDepth : 0;
+    : lastFlowItem?.kind === "paragraph" ? paragraphEndingMaterialDepth(lastFlowItem.paragraph) : 0;
   const bodyBoxHeight = bodyBaselineInset + bodyExtent - bodyEndingDepth;
   const titleBodyInterline = params.theme.fonts[plan.bodyFontRole].lineHeightPt - (geometry.titleExtraHeightPt > 0 ? 0 : titleDepth) - bodyBoxHeight;
   const titleBodyGap = plan.style === "default" && geometry.flowBoxHeight === "title-ascent"
@@ -2842,24 +2794,11 @@ async function emitPreparedBlock(params: {
         visibility: item.visibility === "hidden" ? "hidden" : "visible" }, paragraphIndex++);
       continue;
     }
-    if ((params.visibility === "hidden" || item.visibility === "hidden") && !["block", "columns", "tikzpicture"].includes(item.kind)) continue;
-    if (item.kind === "unsupported") {
-      emitUnsupportedPlaceholder({ placeholder: item.placeholder, x: params.x,
-        y: params.y + block.bodyParagraphTop + placement.contentTop, parentId: block.node.id,
-        items: params.items, modelBuilder: params.modelBuilder });
-      childIds.push(item.placeholder.id);
-    } else if (item.kind === "columns") {
-      await emitPreparedColumns({ prepared: item, visibility: params.visibility ?? "visible", referenceY: params.y + block.bodyParagraphTop + placement.referenceY,
-        spacing: params.spacing, bounds: { x: params.x, y: params.y + block.bodyParagraphTop, width: block.width, height: block.bodyBackgroundHeight },
-        paperWidth: params.paperWidth, items: params.items, paragraphs: params.paragraphs,
-        embeddedTikz: params.embeddedTikz, modelBuilder: params.modelBuilder, theme: params.theme,
-        ...(params.work !== undefined ? { work: params.work } : {}) });
-      childIds.push(item.node.id);
-    } else {
-      await emitPreparedBlock({ ...params, prepared: item.block, x: params.x,
-        y: params.y + block.bodyParagraphTop + placement.contentTop, parentId: block.node.id, visibility: params.visibility === "hidden" || item.visibility === "hidden" ? "hidden" : "visible" });
-      childIds.push(item.node.id);
-    }
+    if (params.visibility === "hidden" || item.visibility === "hidden") continue;
+    emitUnsupportedPlaceholder({ placeholder: item.placeholder, x: params.x,
+      y: params.y + block.bodyParagraphTop + placement.contentTop, parentId: block.node.id,
+      items: params.items, modelBuilder: params.modelBuilder });
+    childIds.push(item.placeholder.id);
   }
 
 
@@ -3211,7 +3150,7 @@ function emitFrameParagraph(params: {
 }
 
 async function emitPreparedColumns(params: {
-  prepared: Extract<PreparedFrameFlowItem, { kind: "columns" }>;
+  prepared: PreparedColumns;
   referenceY: number;
   spacing: BeamerSpacingLayout[];
   bounds: BeamerRect;
@@ -4002,7 +3941,7 @@ function embeddedVisualInsets(paragraph: LaidParagraph, extent: number): { visua
 }
 
 /** How far a columns box's painted columns reach above its top and below its bottom. */
-function columnsVisualOverhang(item: Extract<PreparedFrameFlowItem, { kind: "columns" }>): { visualAbovePt?: TexLength; visualBelowPt?: TexLength } {
+function columnsVisualOverhang(item: PreparedColumns): { visualAbovePt?: TexLength; visualBelowPt?: TexLength } {
   const above = Math.max(0, ...item.columns.map(column => column.box.referenceFromContentTop)) - item.box.height;
   const below = Math.max(0, ...item.columns.map(column => column.naturalHeight - column.box.referenceFromContentTop)) - item.box.depth;
   return { ...(above > 0 ? { visualAbovePt: texLength(above) } : {}), ...(below > 0 ? { visualBelowPt: texLength(below) } : {}) };
