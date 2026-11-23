@@ -288,8 +288,10 @@ export function createMeasuredParagraphVListMeasurer(
         firstLine.y + (firstLine.metrics?.height ?? measurement.standardMetrics.height)
       );
       return {
+        // A centered or ragged-left line's \leftskip has natural width 0: an overfull line (no room to
+        // stretch) starts at the paragraph's margin, never left of it.
         ...(item.x !== undefined ? { x: item.verticalPlacement.paragraphOriginX !== undefined && measurement.firstLineXStart !== undefined
-          ? texVListLocalX(roundTexPt(item.x + measurement.firstLineXStart - item.verticalPlacement.paragraphOriginX)) : item.x } : {}),
+          ? texVListLocalX(roundTexPt(item.x + Math.max(0, measurement.firstLineXStart - item.verticalPlacement.paragraphOriginX))) : item.x } : {}),
         y: texVListY(roundTexPt(cursor + paragraphBaseline - item.box.metrics.height)),
         metrics: item.box.metrics,
         advance: item.advance ?? texLength(0),

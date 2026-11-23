@@ -1971,6 +1971,8 @@ Witness.
     const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
     const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
     expect(baseline("abx")).toBeCloseTo(91.681152, 3);
+    // The overfull label line cannot stretch its \\leftskip: the label stays at the list margin.
+    expect(trace.lines.find(line => line.text === "Stage1")?.x).toBeCloseTo(311.471771, 2);
     expect(baseline("Stage2")).toBeCloseTo(120.211273, 3);
     expect(baseline("Witness.")).toBeCloseTo(187.659271, 3);
   });
