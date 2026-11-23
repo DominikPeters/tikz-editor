@@ -1849,6 +1849,66 @@ Witness.
     expect(baseline("Witness.")).toBeCloseTo(162.216965, 3);
   });
 
+  it("keeps the ambient list registers when a nested minipage leaves the list depth at zero", async () => {
+    // The inner rounded block (a minipage) resets the shared \\@mplistdepth; the outer \\endlist then leaves it
+    // at -1, so the description runs at depth 0, where no \\@list<n> exists: it keeps size9.clo's load-time
+    // \\@listi registers (topsep 6pt, itemsep = parsep 4pt). LuaLaTeX baselines.
+    const source = String.raw`\documentclass[9pt]{beamer}
+\usetheme{Boadilla}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Depth}
+Lead.\par
+\begin{block}{Outer}
+\begin{itemize}
+\item \begin{exampleblock}{Inner}
+\begin{itemize}
+\item Deep.
+\end{itemize}
+\end{exampleblock}
+\end{itemize}
+\par
+\begin{description}
+\item[Stage 1] One.
+\item[Stage 2] Two.
+\end{description}
+\end{block}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("Stage1One.")).toBeCloseTo(118.400803, 3);
+    expect(baseline("Stage2Two.")).toBeCloseTo(137.3508, 3);
+    expect(baseline("Witness.")).toBeCloseTo(157.6698, 3);
+  });
+
+  it("gives an alignment inside a block in a list the list's topsep", async () => {
+    // The flushright reads the live \\topsep: inside the enumerate that is \\@listi's 3pt, not the class's
+    // ambient 6pt (size9.clo). LuaLaTeX baselines.
+    const source = String.raw`\documentclass[9pt]{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Topsep}
+Lead.\par
+\begin{enumerate}
+\item First.
+\par
+\begin{alertblock}{Block}
+\begin{flushright}
+Right text.
+\end{flushright}
+\end{alertblock}
+\end{enumerate}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("Righttext.")).toBeCloseTo(80.563797, 3);
+    expect(baseline("Witness.")).toBeCloseTo(99.367798, 3);
+  });
+
   it("reads a nested list's registers from its body font, not the ambient size", async () => {
     // Beamer selects the subbody font (\small) before \list, which redefines \@listi: the inner
     // list's \itemsep and \parsep are \small's (4.5pt at 12pt), not \footnotesize's. LuaLaTeX baselines.

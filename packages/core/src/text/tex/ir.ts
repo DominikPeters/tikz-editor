@@ -136,6 +136,8 @@ export type SimpleTexScopePathRole =
       readonly noParList?: boolean;
       readonly inheritsPendingLabel?: boolean;
       readonly listRegisterDepth?: number;
+      /** \@listdepth is zero or below here (a minipage reset it), so the list keeps the ambient registers. */
+      readonly ambientRegisters?: boolean;
       readonly labelDepth: number;
       readonly fontSizePt?: TexLength;
       readonly registerFontSizePt?: TexLength;
@@ -5306,6 +5308,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
       ...(inheritsTrivlistLabel || scopeStack.some(role => role.kind === "trivlist" && !consumedTrivlistLabels.has(role)) ? { noParList: true } : {}),
       ...(inheritsPendingLabel ? { inheritsPendingLabel: true } : {}),
       ...(listRegisterDepth > 0 && listRegisterDepth !== depth ? { listRegisterDepth } : {}),
+      // A minipage reset left \@listdepth at zero or below: no \@list<n> runs.
+      ...(listRegisterDepth <= 0 ? { ambientRegisters: true } : {}),
       ...(registerFontSizePt !== undefined ? { registerFontSizePt } : {}),
       labelDepth,
       ownLeftMarginEm: ownMargin,
@@ -5641,7 +5645,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
             inheritsPendingLabel: scopeRole.inheritsPendingLabel === true || scopeRole.noParList === true,
             // Beamer selects the list's body font (by item depth) before \list reads \@listi.
             fontSizePt: Number(scopeRole.registerFontSizePt ?? scopeRole.fontSizePt ?? sizeAt(node.sourceStart).sizePt),
-            registerDepth: scopeRole.listRegisterDepth ?? scopeRole.depth, ...span });
+            registerDepth: scopeRole.ambientRegisters ? 0 : scopeRole.listRegisterDepth ?? scopeRole.depth, ...span });
           listTopologyStack.push({
             name: node.name,
             beginSpan: { from: node.sourceStart, to: node.sourceEnd },

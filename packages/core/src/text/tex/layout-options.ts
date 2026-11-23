@@ -83,6 +83,12 @@ export interface TexListLayoutProfile {
   /** Live topsep after a class's begin-list hook, distinct from captured list boundary glue. */
   readonly liveListTopsepPt?: number;
   readonly trivlistPartopsepPt?: number;
+  /** The ambient \parsep (= \itemsep) a list at \@listdepth 0 keeps (its topsep is the trivlist's). */
+  readonly ambientListParsepPt?: number;
+  readonly ambientListParsepStretchPt?: number;
+  readonly ambientListParsepShrinkPt?: number;
+  /** A cramped frame's \itemsep0pt replaces that list's \itemsep (otherwise it is the \parsep). */
+  readonly ambientListItemsepZero?: boolean;
   /** Size commands replace the first-level list defaults in LaTeX classes. */
   readonly sizeOverrides?: readonly { readonly fontSizePt: number; readonly topsepPt: number; readonly topsepStretchPt: number; readonly topsepShrinkPt: number; readonly parsepPt: number; readonly parsepStretchPt: number; readonly parsepShrinkPt: number; readonly itemsepPt: number; readonly itemsepStretchPt: number; readonly itemsepShrinkPt: number }[];
   /** Class-owned body font switches; omitted depths inherit the ambient font. */

@@ -44,6 +44,7 @@ export function crampedBeamerListProfile(profile: TexListLayoutProfile): TexList
   return {
     ...profile,
     liveListTopsepPt: .5,
+    ambientListItemsepZero: true,
     itemsepPtByDepth: zeros,
     uncrampedItemsepPtByDepth: profile.uncrampedItemsepPtByDepth ?? profile.itemsepPtByDepth,
     itemsepStretchPtByDepth: zeros,

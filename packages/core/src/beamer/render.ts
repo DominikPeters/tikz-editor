@@ -80,7 +80,7 @@ import { parseSimpleTexTabularRegisters, parseSimpleTexParagraphIr } from "../te
 import { collectBeamerParagraphSpacing } from "./spacing.js";
 import { resolveBeamerColumnPositions, resolveBeamerColumnWidth } from "./column-dimensions.js";
 import { beamerFrameBodyTransform, beamerFrameShrinkScale, beamerFrameShrinkWidth, crampedBeamerListProfile, resolveBeamerFrameShrink, transformBeamerPoint, transformBeamerRect } from "./frame-shrink.js";
-import { beamerDisplayMathProfile, beamerListSizeOverrides, beamerNamedFontSize, beamerNamedFontSizes, beamerTrivlistSpacing } from "./theme/font-sizes.js";
+import { beamerDisplayMathProfile, beamerListSizeOverrides, beamerNamedFontSize, beamerNamedFontSizes, beamerTrivlistSpacing, beamerAmbientListParsep } from "./theme/font-sizes.js";
 import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxPlan } from "./tcolorbox.js";
 import { parseBeamerFrameBody } from "./content.js";
 import { beamerRecoveryDiagnostics, collectBeamerEditScopes, collectBeamerRecovery } from "./edit-scopes.js";
@@ -264,6 +264,9 @@ function beamerListLayoutProfile(
     trivlistTopsepPt: beamerTrivlistSpacing(theme).naturalPt,
     trivlistTopsepStretchPt: beamerTrivlistSpacing(theme).stretchPt,
     trivlistTopsepShrinkPt: beamerTrivlistSpacing(theme).shrinkPt,
+    ambientListParsepPt: beamerAmbientListParsep(theme).naturalPt,
+    ambientListParsepStretchPt: beamerAmbientListParsep(theme).stretchPt,
+    ambientListParsepShrinkPt: beamerAmbientListParsep(theme).shrinkPt,
     sizeOverrides: beamerListSizeOverrides(theme),
     dimensionFontSizePt: beamerNamedFontSize(classSize, "normalsize").sizePt,
     paragraphSkipPt: Number(theme.options["paragraph-skip-pt"] ?? 0),
@@ -3330,10 +3333,7 @@ async function prepareColumnContent(params: {
   const bodyFont = ambientTextTheme(theme, references.ambientTextAt?.(column.bodySpan.from) ?? "").fonts["normal-text"];
   const baseListProfile = beamerListLayoutProfile(theme, references.crampedLists);
   // Minipages reset list depth, but still inherit the outer list's live topsep.
-  const listProfile = baseListProfile.liveListTopsepPt !== undefined &&
-    (references.ambientTextAt?.listDepthAt?.(column.bodySpan.from, true) ?? 0) > 0
-    ? { ...baseListProfile, trivlistTopsepPt: baseListProfile.liveListTopsepPt, trivlistTopsepStretchPt: 0, trivlistTopsepShrinkPt: 0, trivlistPartopsepPt: 0 }
-    : baseListProfile;
+  const listProfile = trivlistInsideListProfile(baseListProfile, references.ambientTextAt?.listDepthAt?.(column.bodySpan.from, true) ?? 0);
   // A column inside center/flushleft opens its minipage while that trivlist's first item is
   // still pending, so a list that starts the column adds no opening topsep.
   const columnListProfile = references.ambientTextAt?.insideAlignmentAt?.(column.bodySpan.from) === true
@@ -3905,6 +3905,28 @@ function measureColumnVerticalBox(
   };
 }
 
+/**
+ * A trivlist (center, flushleft, flushright) reads the live \topsep: inside a list that is the list's own
+ * register (\@list<n>'s, or \beamer@cramped's 0.5pt in a shrunk frame), not the class's ambient value. A
+ * box body (a block's colorbox, a column's minipage) keeps the enclosing list's registers.
+ */
+function trivlistInsideListProfile(profile: TexListLayoutProfile, enclosingListDepth: number): TexListLayoutProfile {
+  if (enclosingListDepth <= 0) return profile;
+  if (profile.liveListTopsepPt !== undefined) {
+    return { ...profile, trivlistTopsepPt: profile.liveListTopsepPt, trivlistTopsepStretchPt: 0, trivlistTopsepShrinkPt: 0, trivlistPartopsepPt: 0 };
+  }
+  const index = Math.min(enclosingListDepth, profile.topsepPtByDepth.length) - 1;
+  const topsep = profile.topsepPtByDepth[index];
+  if (topsep === undefined) return profile;
+  return {
+    ...profile,
+    trivlistTopsepPt: topsep,
+    trivlistTopsepStretchPt: profile.topsepStretchPtByDepth?.[index] ?? 0,
+    trivlistTopsepShrinkPt: profile.topsepShrinkPtByDepth?.[index] ?? 0,
+    trivlistPartopsepPt: 0,
+  };
+}
+
 function columnLeadingHBoxRole(paragraph: LaidParagraph) {
   return paragraph.layout.vlistLayout.boxReport.items.find(item =>
     item.itemKind !== "vbox" && item.itemKind !== "glue" && item.itemKind !== "penalty")?.hboxRole;
@@ -4386,7 +4408,9 @@ function layoutParagraph(params: {
     },
     ...(params.initialPreviousDepth !== undefined ? { initialPreviousDepth: params.initialPreviousDepth } : {}),
     listProfile: {
-      ...spacingProfile,
+      ...(params.role === "block-body"
+        ? trivlistInsideListProfile(spacingProfile, params.references.ambientTextAt?.listDepthAt?.(params.sourceSpan.from, true) ?? 0)
+        : spacingProfile),
       ...listSpacing,
       ...(listDepthOffset > 0 ? { sizeOverrides: [] } : {}),
       fontDepthOffset: params.references.ambientTextAt?.itemDepthAt?.(params.sourceSpan.from) ?? 0,

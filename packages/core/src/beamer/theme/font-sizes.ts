@@ -54,6 +54,18 @@ export function beamerTrivlistSpacing(theme?: Pick<ResolvedBeamerTheme, "options
   return { naturalPt, stretchPt, shrinkPt };
 }
 
+/** The list registers sizeNN.clo's \@listi sets once at load (\let\@listI\@listi \@listi): what a list
+ * reads when its \@listdepth falls to zero, where \@list\romannumeral0 is undefined. \itemsep is \parsep. */
+export function beamerAmbientListParsep(theme?: Pick<ResolvedBeamerTheme, "options">): { naturalPt: number; stretchPt: number; shrinkPt: number } {
+  const profiles = {
+    "8": [4,2,1], "9": [4,2,1], "10": [4,2,1], "11": [4.5,2,1],
+    "12": [5,2.5,1], "14": [6,2.5,1], "17": [7,3,1], "20": [8,4,2],
+  } satisfies Record<string, readonly [number, number, number]>;
+  const lookup: Readonly<Partial<Record<string, readonly [number, number, number]>>> = profiles;
+  const [naturalPt, stretchPt, shrinkPt] = lookup[String(theme?.options["class-font-size"] ?? "11")] ?? profiles["11"];
+  return { naturalPt, stretchPt, shrinkPt };
+}
+
 // sizeNN.clo changes display and first-level list registers only in these
 // three declarations. Other named sizes inherit the active registers.
 type RegisterCommand = "normalsize" | "small" | "footnotesize";

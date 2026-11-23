@@ -19,6 +19,17 @@ function at(values: readonly number[] | undefined, depth: number): number {
 }
 
 function listRegisters(profile: TexListLayoutProfile | undefined, depth: number, fontSizePt: number | undefined): VerticalListRegisters {
+  // At \@listdepth 0 (a minipage reset it) \csname @list\romannumeral0\endcsname is \relax: the list keeps
+  // the ambient registers, those the class size file's \@listi set at load.
+  if (depth <= 0 && profile?.ambientListParsepPt !== undefined) {
+    const parsep = glue(profile.ambientListParsepPt, profile.ambientListParsepStretchPt ?? 0, profile.ambientListParsepShrinkPt ?? 0);
+    return {
+      topsep: glue(profile.trivlistTopsepPt ?? 0, profile.trivlistTopsepStretchPt ?? 0, profile.trivlistTopsepShrinkPt ?? 0),
+      partopsep: glue(profile.trivlistPartopsepPt ?? at(profile.partopsepPtByDepth, 1)),
+      itemsep: profile.ambientListItemsepZero ? glue(0) : parsep,
+      parsep,
+    };
+  }
   if (!profile) {
     // article.cls \@listi–\@listiii (size10.clo), in em of the list's font as the old planner keeps them.
     const em = fontSizePt ?? 10;

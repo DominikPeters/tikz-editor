@@ -355,6 +355,10 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   \indent\par`) stays visible when that item is covered. A label-only line
   on a negative measure gets TeX's empty second line (the final pass breaks
   at the label's `\penalty0`).
+  A list whose `\@listdepth` a nested minipage left at zero runs no
+  `\@list<n>` and keeps the class size file's load-time `\@listi`
+  registers. A trivlist inside a list (also in a block or column body) reads
+  that list's `\topsep`, not the class's ambient one.
 
 ## Next
 
