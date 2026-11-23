@@ -75,8 +75,10 @@ function resetsMinipageListDepth(item: PreparedFrameFlowItem | PreparedColumnFlo
 }
 
 export function containsListScope(item: PreparedFrameFlowItem | PreparedColumnFlowItem, otherScope: "quote" | "trivlist"): boolean {
+  // An embedded box records whether its own vertical lists hold such a scope.
   const contains = (paragraph: LaidParagraph | null) =>
-    paragraph?.layout.vlistLayout.boxReport.items.some(box => box.role?.kind === "list" || box.role?.kind === otherScope) ?? false;
+    paragraph?.layout.vlistLayout.boxReport.items.some(box => box.role?.kind === "list" || box.role?.kind === otherScope ||
+      box.hboxRole?.kind === "external-flow" && (otherScope === "trivlist" ? box.hboxRole.containsList === true : box.hboxRole.containsQuoteList === true)) ?? false;
   if (item.kind === "paragraph") return contains(item.paragraph);
   if (item.kind === "block") return contains(item.block.body) ||
     !!item.block.bodyFlow?.items.some(flow => containsListScope(flow.item, otherScope));

@@ -3,7 +3,6 @@ import type { TcolorboxGeometry, TcolorboxPlan } from "./tcolorbox.js";
 import type {
   BeamerBlockBodyNode,
   BeamerColumnBodyNode,
-  BeamerFrameBodyNode,
   BeamerParagraphBodyNode,
   BeamerTheoremBodyNode,
   BeamerTitlePageBodyNode,
@@ -100,8 +99,8 @@ export type PreparedColumns = {
   box: Pick<ColumnVerticalBox, "height" | "depth">;
 };
 
+/** A column body is one vertical list: its text (with its boxes inline), or a source card. */
 export type PreparedColumnFlowItem =
-  | (PreparedColumns & { height: number; leadingSkipPt?: number })
   | PreparedUnsupportedFlowItem
   | {
       kind: "paragraph";
@@ -112,37 +111,25 @@ export type PreparedColumnFlowItem =
       replacesColumnHeadSkip?: boolean;
       advanceHeight: number;
       trailingSkipPt: number;
-      /** List closing skip before it is combined with a terminal display or block skip. */
+      /** The vertical list's final glue, which \endminipage's \unskip removes when the column ends. */
       closingEnvironmentSkipPt?: number;
-    }
-  | {
-      kind: "vertical-space";
-      visibility: BeamerOverlayVisibility;
-      node: Extract<BeamerFrameBodyNode, { kind: "vertical-space" }>;
-      height: number;
-      relativeUnitPt?: number;
-    }
-  | {
-      kind: "tikzpicture";
-      visibility: BeamerOverlayVisibility;
-      id: string;
-      sourceSpan: Span;
-      horizontalAlignment: "left" | "center" | "right";
-      width: number;
-      height: number;
-      model: BeamerEmbeddedTikzLayout["model"];
-      coveredModel?: BeamerEmbeddedTikzLayout["model"];
-      viewBox: BeamerEmbeddedTikzLayout["viewBox"];
-      /** Painted statements under an overlay rule, with their bounds in the picture's SVG coordinates. */
-      ruledShapes?: readonly { sourceSpan: Span; bounds: { x: number; y: number; width: number; height: number } }[];
-    }
-  | {
-      kind: "block";
-      visibility: BeamerOverlayVisibility;
-      block: PreparedBlock;
-      height: number;
-      leadingSkipPt?: number;
     };
+
+/** A TikZ picture prepared for painting as an inline box. */
+export type PreparedTikzPicture = {
+  kind: "tikzpicture";
+  visibility: BeamerOverlayVisibility;
+  id: string;
+  sourceSpan: Span;
+  horizontalAlignment: "left" | "center" | "right";
+  width: number;
+  height: number;
+  model: BeamerEmbeddedTikzLayout["model"];
+  coveredModel?: BeamerEmbeddedTikzLayout["model"];
+  viewBox: BeamerEmbeddedTikzLayout["viewBox"];
+  /** Painted statements under an overlay rule, with their bounds in the picture's SVG coordinates. */
+  ruledShapes?: readonly { sourceSpan: Span; bounds: { x: number; y: number; width: number; height: number } }[];
+};
 
 export type PreparedColumnContent = {
   column: BeamerColumnBodyNode;

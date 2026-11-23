@@ -76,13 +76,12 @@ import {
   type TexListLayoutProfile,
   type TexMetricProvider,
 } from "../text/tex/index.js";
-import { parseTexDimensionExpression } from "../text/tex/dimensions.js";
 import { parseSimpleTexTabularRegisters, parseSimpleTexParagraphIr } from "../text/tex/ir.js";
 import { collectBeamerParagraphSpacing } from "./spacing.js";
 import { resolveBeamerColumnPositions, resolveBeamerColumnWidth } from "./column-dimensions.js";
 import { beamerFrameBodyTransform, beamerFrameShrinkScale, beamerFrameShrinkWidth, crampedBeamerListProfile, resolveBeamerFrameShrink, transformBeamerPoint, transformBeamerRect } from "./frame-shrink.js";
 import { beamerDisplayMathProfile, beamerListSizeOverrides, beamerNamedFontSize, beamerNamedFontSizes, beamerTrivlistSpacing } from "./theme/font-sizes.js";
-import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxPlan, tcolorboxSurroundingSpacing } from "./tcolorbox.js";
+import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxPlan } from "./tcolorbox.js";
 import { parseBeamerFrameBody } from "./content.js";
 import { beamerRecoveryDiagnostics, collectBeamerEditScopes, collectBeamerRecovery } from "./edit-scopes.js";
 import { emitEmbeddedTikz } from "./embedded-tikz.js";
@@ -165,6 +164,7 @@ import type {
   PreparedBlock,
   PreparedColumnContent,
   PreparedColumnFlowItem,
+  PreparedTikzPicture,
   PreparedFrameFlowItem,
   PreparedTitlePage,
   PreparedContents,
@@ -1571,13 +1571,12 @@ async function prepareInlineFlow(params: {
       if (params.work) await params.work.checkpoint();
       const span = { from: env.begin.span.from, to: env.end.span.to };
       const inlineId = `${params.frame.id}:inline:${span.from}`;
-      const embedded = embeddedBoxes.has(span.from);
       const parsed = parseBeamerFrameBody({ source: params.source, syntax: context.syntax,
         frame: { ...params.frame, id: inlineId, span, bodySpan: span }, overlays: params.overlays,
         ...(params.document !== undefined ? { document: params.document } : {}),
         ...(params.theoremOccurrences !== undefined ? { theoremOccurrences: params.theoremOccurrences } : {}),
         // The box's own body is a vertical list too: boxes inside it stay in its text.
-        ...(embedded ? { embedNestedFlowBoxes: true } : {}) });
+        embedNestedFlowBoxes: true });
       // A box keeps the id the structural parse gives it, so editing scopes and paragraph ids refer
       // to the same node whichever list lays it out.
       const box = parsed.children.find(child => (child.kind === "block" || child.kind === "columns" || child.kind === "theorem") && child.span.from === span.from);
@@ -1585,8 +1584,7 @@ async function prepareInlineFlow(params: {
       // Column ids are prefixed by the owner, not by the columns id: rename the box, then the owner.
       const owner = structural?.kind === "columns" ? structural.id.replace(/:columns:\d+$/u, "") : undefined;
       const ir = !box || !structural ? parsed
-        : !embedded ? { ...parsed, children: [structural] }
-          : { ...parsed, children: renameBeamerNodeIds(renameBeamerNodeIds(parsed.children, box.id, structural.id), inlineId, owner ?? inlineId) };
+        : { ...parsed, children: renameBeamerNodeIds(renameBeamerNodeIds(parsed.children, box.id, structural.id), inlineId, owner ?? inlineId) };
       const ancestors = environments.filter(parent => parent.begin.span.from < span.from && parent.end.span.to > span.to).sort((a, b) => a.begin.span.from - b.begin.span.from);
       let width = params.textWidth;
       for (const parent of ancestors) {
@@ -3257,23 +3255,12 @@ async function emitPreparedColumns(params: {
     columnChildIds.push(columnId);
     for (const [flowIndex, flowItem] of preparedColumn.flow.entries()) {
       if (params.work) await params.work.checkpoint();
-      if (
-        flowItem.visibility === "hidden" &&
-        !["block", "paragraph", "columns", "tikzpicture"].includes(flowItem.kind)
-      ) {
-        flowY += columnFlowAdvance(
-          flowItem,
-          preparedColumn.flow[flowIndex + 1] != null
-        );
+      if (flowItem.visibility === "hidden" && flowItem.kind !== "paragraph") {
+        flowY += columnFlowAdvance(flowItem, preparedColumn.flow[flowIndex + 1] != null);
         continue;
       }
-      if (flowItem.kind === "paragraph" || flowItem.kind === "block" || flowItem.kind === "columns") flowY += flowItem.leadingSkipPt ?? 0;
-      if (flowItem.kind === "vertical-space") {
-        params.spacing.push({ command: flowItem.node.command, sourceSpan: flowItem.node.span,
-          sizePt: flowItem.height, ...(flowItem.relativeUnitPt !== undefined ? { relativeUnitPt: flowItem.relativeUnitPt } : {}),
-          bounds: { x, y: flowY, width: preparedColumn.width, height: flowItem.height } });
-        flowY += flowItem.height;
-      } else if (flowItem.kind === "paragraph") {
+      if (flowItem.kind === "paragraph") {
+        flowY += flowItem.leadingSkipPt ?? 0;
         const laid = flowItem.paragraph;
         const visibility = covered || flowItem.visibility === "hidden" ? "hidden" : "visible";
         if (visibility === "hidden") { laid.layout.visibility = "hidden"; laid.layout.hiddenSourceSpans = [laid.layout.sourceSpan]; }
@@ -3325,34 +3312,7 @@ async function emitPreparedColumns(params: {
           (preparedColumn.flow[flowIndex + 1]
             ? flowItem.trailingSkipPt
             : 0);
-      } else if (flowItem.kind === "block") {
-        await emitPreparedBlock({
-          spacing: params.spacing, embeddedTikz: params.embeddedTikz, paperWidth: params.paperWidth,
-          ...(params.work !== undefined ? { work: params.work } : {}),
-          prepared: flowItem.block,
-          x,
-          y: flowY,
-          parentId: columnId,
-          items: params.items,
-          paragraphs: params.paragraphs,
-          modelBuilder: params.modelBuilder,
-          theme: params.theme,
-          visibility:
-            covered || flowItem.visibility === "hidden" ? "hidden" : "visible",
-        });
-        childIds.push(flowItem.block.node.id);
-        flowY +=
-          flowItem.height +
-          (preparedColumn.flow[flowIndex + 1]
-            ? flowItem.block.plan.geometry.afterSkipPt
-            : 0);
-      } else if (flowItem.kind === "columns") {
-        await emitPreparedColumns({ ...params, prepared: flowItem, visibility: covered ? "hidden" : "visible",
-          referenceY: flowY + flowItem.box.height,
-          bounds: { x, y: flowY, width: preparedColumn.width, height: flowItem.height } });
-        childIds.push(flowItem.node.id);
-        flowY += flowItem.height;
-      } else if (flowItem.kind === "unsupported") {
+      } else {
         emitUnsupportedPlaceholder({
           placeholder: flowItem.placeholder,
           x,
@@ -3362,18 +3322,6 @@ async function emitPreparedColumns(params: {
           modelBuilder: params.modelBuilder,
         });
         childIds.push(flowItem.placeholder.id);
-        flowY += flowItem.height;
-      } else {
-        emitEmbeddedTikz({
-          tikz: covered ? { ...flowItem, visibility: "hidden" } : flowItem,
-          x: x + (flowItem.horizontalAlignment === "center" ? (preparedColumn.width - flowItem.width) / 2 : flowItem.horizontalAlignment === "right" ? preparedColumn.width - flowItem.width : 0),
-          y: flowY,
-          parentId: columnId,
-          items: params.items,
-          embeddedTikz: params.embeddedTikz,
-          modelBuilder: params.modelBuilder,
-        });
-        childIds.push(flowItem.id);
         flowY += flowItem.height;
       }
     }
@@ -3410,13 +3358,7 @@ function columnFlowAdvance(
   item: PreparedColumnFlowItem,
   hasNext: boolean
 ): number {
-  if (item.kind === "paragraph") {
-    return (item.leadingSkipPt ?? 0) + item.advanceHeight + (hasNext ? item.trailingSkipPt : 0);
-  }
-  if (item.kind === "block") {
-    return (item.leadingSkipPt ?? 0) + item.height + (hasNext ? item.block.plan.geometry.afterSkipPt : 0);
-  }
-  return (item.kind === "columns" ? item.leadingSkipPt ?? 0 : 0) + item.height;
+  return item.kind === "paragraph" ? (item.leadingSkipPt ?? 0) + item.advanceHeight + (hasNext ? item.trailingSkipPt : 0) : item.height;
 }
 
 async function prepareColumnContent(params: {
@@ -3458,9 +3400,12 @@ async function prepareColumnContent(params: {
     ? { ...listProfile, suppressInitialTopsep: true } : listProfile;
   let previousDepth: number | undefined;
 
-  for (const node of column.children) {
+  for (const child of column.children) {
     if (params.work) await params.work.checkpoint();
-    const prepared = await prepareColumnFlowNode({
+    // A column body is one vertical list: its boxes, pictures and spacing are material of its text.
+    const node: Extract<BeamerColumnFlowNode, { kind: "paragraph" | "list" | "unsupported" }> =
+      child.kind === "paragraph" || child.kind === "list" || child.kind === "unsupported" ? child : { kind: "paragraph", id: child.id, span: child.span };
+    const prepared = prepareColumnFlowNode({
       source,
       node,
       width,
@@ -3481,20 +3426,18 @@ async function prepareColumnContent(params: {
       // A first display does not add another empty-line baseline skip.
       firstInColumn: flow.length === 0,
       ...(flow.length === 0 && column.alignment !== "T" ? { startsHorizontalMode: true } : {}),
-      ...((column.alignment === "T" && flow.length === 0) || flow.at(-1)?.kind === "columns"
-        ? { leadingDisplayBaselineSkipPt: 0 } : {}),
+      ...(column.alignment === "T" && flow.length === 0 ? { leadingDisplayBaselineSkipPt: 0 } : {}),
     });
     if (prepared) {
       const previous = flow.at(-1);
       // Lists already lay out their first interline skip from initialPreviousDepth.
       const paragraphNeedsInterline = prepared.kind === "paragraph" && node.kind !== "list" &&
-        (previous?.kind === "block" || previous?.kind === "columns" ||
-          previous?.kind === "paragraph" && !prepared.startsWithVerticalEnvironment);
+          previous?.kind === "paragraph" && !prepared.startsWithVerticalEnvironment;
       const firstRole = prepared.kind === "paragraph" && !prepared.startsWithVerticalEnvironment
         ? columnLeadingHBoxRole(prepared.paragraph)
         : undefined;
       const leadingBlock = flow.length === 0 && column.alignment !== "T" &&
-        (prepared.kind === "block" || prepared.kind === "paragraph" && firstRole?.kind === "external-flow" && firstRole.packageBox !== true);
+        prepared.kind === "paragraph" && firstRole?.kind === "external-flow" && firstRole.packageBox !== true;
       const startingBaseline = prepared.kind === "paragraph"
         ? (firstRole?.kind === "external-flow" ? firstRole.baselineSkipPt : undefined) ??
           paragraphStartingBaselineSkip(prepared.paragraph, bodyFont.lineHeightPt)
@@ -3504,31 +3447,22 @@ async function prepareColumnContent(params: {
       if (prepared.kind === "paragraph" && leadingPackageBox?.kind === "external-flow-before" && flow.length === 0 && column.alignment === "T" && leadingPackageBox.noBeforeAfter !== true) {
         // The package box's \addvspace replaces T's negative \vskip-1ex (tcolorbox.sty, latex.ltx \@xaddvskip).
         prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) + fontXHeightPt(bodyFont);
-      } else if (prepared.kind === "block" && prepared.block.packageBox) {
-        const spacing = tcolorboxSurroundingSpacing(prepared.block.packageBox.plan, {
-          baselineSkipPt: bodyFont.lineHeightPt, previousDepthPt: previousDepth ?? null,
-        });
-        // \addvspace replaces T's negative -1ex lastskip before applying the
-        // box skip. The column's \leavevmode has already cleared minipage mode.
-        prepared.leadingSkipPt = spacing.beforePt + (flow.length === 0 && column.alignment === "T" && !prepared.block.packageBox.plan.noBeforeAfter ? fontXHeightPt(bodyFont) : 0);
-      } else if (leadingBlock || (previousDepth != null && (prepared.kind === "block" || paragraphNeedsInterline))) {
+      } else if (prepared.kind === "paragraph" && (leadingBlock || (previousDepth != null && paragraphNeedsInterline))) {
         // column's \leavevmode starts an empty line before a leading block's
         // \par. Its depth is zero, so normal baseline glue precedes the first
         // title box. T columns clear that depth with \nointerlineskip instead.
-        const nextHeight = prepared.kind === "block"
-          ? prepared.block.flowBoxHeight : paragraphStartingMaterialHeight(prepared.paragraph);
+        const nextHeight = paragraphStartingMaterialHeight(prepared.paragraph);
         const interline = startingBaseline - (previousDepth ?? 0) - nextHeight;
         // A display paragraph's own vlist already begins with its baseline glue, which that
         // starting height includes; only the previous box's depth is left to correct.
-        const leadingGlue = prepared.kind === "paragraph" && previousDepth != null && !leadingBlock
+        const leadingGlue = previousDepth != null && !leadingBlock
           ? prepared.paragraph.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "penalty") : undefined;
         const displayGlue = leadingGlue?.glue?.origin?.kind === "display-math-interline" ? Number(leadingGlue.height) : 0;
         // TeX still falls back to \lineskip when that whole baseline gap is negative.
         prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) +
           (interline + displayGlue < 0 ? 1 - displayGlue : interline);
       }
-      const precedingSkip = previous?.kind === "paragraph" ? previous.trailingSkipPt
-        : previous?.kind === "block" ? previous.block.plan.geometry.afterSkipPt : 0;
+      const precedingSkip = previous?.kind === "paragraph" ? previous.trailingSkipPt : 0;
       const collapsibleSkip = precedingSkip || (previous?.kind === "paragraph" ? trailingCollapsibleSkip(previous.paragraph) : 0);
       if (prepared.kind === "paragraph" && collapsibleSkip > 0 && previousDepth !== undefined) {
         const material = prepared.paragraph.layout.vlistLayout.boxReport.items.find(item => item.itemKind !== "glue" && item.itemKind !== "penalty" && item.itemKind !== "vbox");
@@ -3549,17 +3483,7 @@ async function prepareColumnContent(params: {
         }
       }
       flow.push(prepared);
-      if (prepared.kind === "paragraph") {
-        previousDepth = paragraphEndingMaterialDepth(prepared.paragraph);
-      } else if (prepared.kind === "tikzpicture" || prepared.kind === "unsupported") {
-        previousDepth = 0;
-      } else if (prepared.kind === "columns") {
-        const glue = bodyFont.lineHeightPt - (previousDepth ?? 0) - prepared.box.height;
-        prepared.leadingSkipPt = previousDepth == null && column.alignment === "T" ? 0 : glue < 0 ? 1 : glue;
-        previousDepth = prepared.box.depth;
-      } else if (prepared.kind === "block") {
-        previousDepth = prepared.block.endingDepth;
-      }
+      previousDepth = prepared.kind === "paragraph" ? paragraphEndingMaterialDepth(prepared.paragraph) : 0;
     }
   }
 
@@ -3570,24 +3494,7 @@ async function prepareColumnContent(params: {
     // retain below-display and structural glue before following flow boxes.
     if (last?.itemKind === "glue") terminal.advanceHeight -= Number(last.height);
   }
-  const naturalHeight = flow.reduce(
-    (height, item, index) =>
-      height + ((item.kind === "paragraph" || item.kind === "block" || item.kind === "columns") ? item.leadingSkipPt ?? 0 : 0) +
-      (item.kind === "paragraph"
-        ? item.advanceHeight +
-          (flow[index + 1] ? item.trailingSkipPt : 0)
-        : item.kind === "block" &&
-            item.block.plan.style === "inmargin" &&
-            !flow[index + 1]
-          // TeX drops the terminal \smallskip glue when the in-margin block's
-          // vtop becomes the final material in a column minipage.
-          ? item.height - item.block.plan.geometry.boxBottomSkipPt
-          : item.height) +
-      (item.kind === "block" && flow[index + 1]
-        ? item.block.plan.geometry.afterSkipPt
-        : 0),
-    0
-  );
+  const naturalHeight = flow.reduce((height, item, index) => height + columnFlowAdvance(item, flow[index + 1] !== undefined), 0);
   return {
     column,
     width,
@@ -3602,9 +3509,9 @@ async function prepareColumnContent(params: {
   };
 }
 
-async function prepareColumnFlowNode(params: {
+function prepareColumnFlowNode(params: {
   source: string;
-  node: BeamerColumnFlowNode;
+  node: Extract<BeamerColumnFlowNode, { kind: "paragraph" | "list" | "unsupported" }>;
   width: number;
   bodyFont: BeamerThemeFont;
   theme: ResolvedBeamerTheme;
@@ -3623,7 +3530,7 @@ async function prepareColumnFlowNode(params: {
   graphicsResolver?: DocumentGraphicsResolver;
   paperWidth: number;
   work?: BeamerRenderWork;
-}): Promise<PreparedColumnFlowItem | null> {
+}): PreparedColumnFlowItem | null {
   const {
     source,
     node,
@@ -3635,7 +3542,6 @@ async function prepareColumnFlowNode(params: {
     initialPreviousDepth,
     macroBindings,
     references,
-    leftSidebarWidth,
     overlays,
     step,
     graphicsResolver,
@@ -3648,45 +3554,6 @@ async function prepareColumnFlowNode(params: {
   );
   if (visibility === "removed") {
     return null;
-  }
-  if (node.kind === "columns") {
-    const flow = await prepareFrameFlow({ source, children: [node], textWidth: width, paperWidth,
-      leftSidebarWidth, theme, macroBindings, references, overlays, step, diagnostics,
-      ...requireDefined(references.frameLayout, "Expected the enclosing frame geometry"),
-      availableHeight: Number.POSITIVE_INFINITY,
-      ...(graphicsResolver !== undefined ? { graphicsResolver } : {}),
-      ...(params.work !== undefined ? { work: params.work } : {}),
-    });
-    const columns = flow.find(item => item.kind === "columns");
-    return columns?.kind === "columns" ? { ...columns, height: columns.box.height + columns.box.depth } : null;
-  }
-  if (node.kind === "vertical-space") {
-    return {
-      kind: "vertical-space",
-      visibility,
-      node,
-      ...measureVerticalSpace(node, bodyFont),
-    };
-  }
-  if (node.kind === "block" || node.kind === "theorem") {
-    const block = await runBeamerRenderOperation(params.work, () => prepareBlock({
-      source,
-      node,
-      width,
-      leftSidebarWidth,
-      theme,
-      macroBindings,
-      references,
-      overlays,
-      step,
-      ...(graphicsResolver !== undefined ? { graphicsResolver } : {}),
-      paperWidth,
-      diagnostics,
-      ...(params.work !== undefined ? { work: params.work } : {}),
-    }));
-    return block
-      ? { kind: "block", visibility, block, height: block.naturalHeight }
-      : null;
   }
   if (node.kind === "paragraph" || node.kind === "list") {
     const text = source.slice(node.span.from, node.span.to);
@@ -3794,33 +3661,19 @@ async function prepareColumnFlowNode(params: {
       trailingSkipPt: 0,
     };
   }
-  if (node.kind === "unsupported") {
-    diagnostics.push({
-      severity: "warning",
-      code: "beamer-render-unsupported-flow-node",
-      message: node.message,
-      span: node.span,
-    });
-    const placeholder = prepareUnsupportedPlaceholder(source, node, width);
-    return {
-      kind: "unsupported",
-      visibility,
-      placeholder,
-      height: placeholder.height,
-    };
-  }
-  return prepareEmbeddedTikz({
-    overlays, step,
-    ambientText: params.references.ambientTextAt?.(node.root.span.from) ?? "",
-    source, theme,
-    node,
-    width,
-    bodyFont,
-    diagnostics,
-    visibility,
-    ...(graphicsResolver !== undefined ? { graphicsResolver } : {}),
-    ...(params.work !== undefined ? { work: params.work } : {}),
+  diagnostics.push({
+    severity: "warning",
+    code: "beamer-render-unsupported-flow-node",
+    message: node.message,
+    span: node.span,
   });
+  const placeholder = prepareUnsupportedPlaceholder(source, node, width);
+  return {
+    kind: "unsupported",
+    visibility,
+    placeholder,
+    height: placeholder.height,
+  };
 }
 
 /** Covered paths still contribute their PGF geometry but do not paint. */
@@ -3870,9 +3723,7 @@ async function prepareEmbeddedTikz(params: {
   visibility: BeamerOverlayVisibility;
   graphicsResolver?: DocumentGraphicsResolver;
   work?: BeamerRenderWork;
-}): Promise<Extract<PreparedColumnFlowItem, {
-  kind: "tikzpicture";
-}> | null> {
+}): Promise<PreparedTikzPicture | null> {
   const textEngine = await createTexNodeTextEngine({
     mathFontProfile: createBeamerTexMathFontProfile(params.bodyFont),
     namedFontSizes: Object.fromEntries(beamerNamedFontSizes(params.theme).map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),
@@ -4068,7 +3919,7 @@ function measureColumnVerticalBox(
     // minipage[b] is a vbox: its reference is the final baseline, and its
     // last box keeps its depth. Aligning geometric bottoms loses descenders.
     const last = flow.at(-1);
-    let depth = last?.kind === "block" ? last.block.endingDepth : last?.kind === "columns" ? last.box.depth : 0;
+    let depth = 0;
     if (last?.kind === "paragraph") {
       // After \endminipage's single \unskip, remaining glue leaves the vbox zero depth.
       const items = last.paragraph.layout.vlistLayout.items;
@@ -4104,8 +3955,7 @@ function measureColumnVerticalBox(
   const firstRole = first?.kind === "paragraph" ? columnLeadingHBoxRole(first.paragraph) : undefined;
   // Blocks and columns both start with \par; a package box does not.
   const startsWithBlock = firstRole?.kind === "external-flow" && firstRole.packageBox !== true;
-  const firstReference = first?.kind === "columns" || (first?.kind === "block" && !first.block.packageBox) ||
-    (first?.kind === "paragraph" && (first.startsWithVerticalEnvironment || startsWithBlock))
+  const firstReference = first?.kind === "paragraph" && (first.startsWithVerticalEnvironment || startsWithBlock)
     ? 0 : firstFlowReferenceFromTop(flow);
   return {
     height: firstReference,
@@ -4124,18 +3974,8 @@ function firstFlowReferenceFromTop(
 ): number {
   let offset = 0;
   for (const item of flow) {
-    if (item.kind === "paragraph" || item.kind === "block") offset += item.leadingSkipPt ?? 0;
-    if (item.kind === "vertical-space") {
-      offset += item.height;
-      continue;
-    }
-    if (item.kind === "tikzpicture" || item.kind === "unsupported") {
-      return offset + item.height;
-    }
-    if (item.kind === "block") {
-      return offset + item.height;
-    }
-    if (item.kind === "columns") return offset + item.box.height;
+    if (item.kind === "unsupported") return offset + item.height;
+    offset += item.leadingSkipPt ?? 0;
     const firstLine = item.paragraph.layout.report.lines[0];
     if (!firstLine) {
       offset += item.advanceHeight;
@@ -4549,7 +4389,7 @@ function layoutParagraph(params: {
         origin: { kind: "external-flow-before" as const }, sourceSpan: { start: box.sourceStart, end: box.sourceStart } }] : []),
         { kind: "hbox", role: { kind: "external-flow", flowKind: item.kind, ...(packageBox ? { packageBox: true } : {}), ...(before ? { contentOffsetPt: texLength(before) } : {}),
           ...(item.kind === "block" && before ? { pageTopHeightPt: texLength(item.block.titleAscent) } : {}),
-          ...(item.kind === "columns" ? columnsVisualOverhang(item) : {}), ...(containsListScope(item, "trivlist") ? { containsList: true } : {}), ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), ...(box.followsColorChange ? { followsColorChange: true } : {}), ...(box.consumedItemLabels?.length ? { consumesItemLabels: true } : {}), baselineSkipPt: texLength(baselineSkipPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
+          ...(item.kind === "columns" ? columnsVisualOverhang(item) : {}), ...(containsListScope(item, "trivlist") ? { containsList: true } : {}), ...(containsListScope(item, "quote") ? { containsQuoteList: true } : {}), ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), ...(box.followsColorChange ? { followsColorChange: true } : {}), ...(box.consumedItemLabels?.length ? { consumesItemLabels: true } : {}), baselineSkipPt: texLength(baselineSkipPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
         advance: texLength(advance), box: { metrics: { width: texLength(0), height: texLength(height), depth: texLength(depth) }, renderItems: [] } },
         ...(after ? [{ kind: "glue" as const, size: texLength(after), stretch: texLength(after / 3), shrink: texLength(after / 3),
           origin: { kind: "external-flow-after" as const } }] : []), ...(packageGlue ? [packageGlue.after] : [])];
@@ -5274,20 +5114,6 @@ function mappedTemplateText(primitive: Extract<
   );
 }
 
-function measureVerticalSpace(
-  node: Extract<BeamerFrameBodyNode, { kind: "vertical-space" }>, font: BeamerThemeFont
-): { height: number; relativeUnitPt?: number } {
-  if (node.command !== "vspace") {
-    return { height: { smallskip: 3, medskip: 6, bigskip: 12 }[node.command] };
-  }
-  const dimension = parseTexDimensionExpression(node.value.value);
-  if (dimension?.kind === "absolute") return { height: dimension.value };
-  if (dimension?.kind === "contextual" && (dimension.reference === "em" || dimension.reference === "ex")) {
-    const relativeUnitPt = dimension.reference === "em" ? font.sizePt : fontXHeightPt(font);
-    return { height: dimension.factor * relativeUnitPt, relativeUnitPt };
-  }
-  return { height: 0 };
-}
 
 function resolveFrameVerticalPacking(
   available: BeamerRect,

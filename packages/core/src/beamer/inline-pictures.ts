@@ -1,10 +1,10 @@
 import type { Span } from "../ast/types.js";
 import { concatMappedText, createMappedText, sliceMappedText, type MappedText } from "../text/source-map.js";
-import type { PreparedColumnFlowItem } from "./render-model.js";
+import type { PreparedTikzPicture } from "./render-model.js";
 
 export type BeamerInlinePicture = {
   span: Span;
-  tikz: Extract<PreparedColumnFlowItem, {kind: "tikzpicture"}>;
+  tikz: PreparedTikzPicture;
 };
 
 /** Let the normal TeX paragraph/trivlist frontend own the picture's box.

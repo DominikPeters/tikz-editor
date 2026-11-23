@@ -1,14 +1,14 @@
 import { formatSvgNumber as fmt } from "../svg/format.js";
 import { namespaceSvgModel } from "../svg/namespace.js";
 import type { createSvgModelBuilder } from "../svg/model.js";
-import type { PreparedColumnFlowItem } from "./render-model.js";
+import type { PreparedTikzPicture } from "./render-model.js";
 import type {
   BeamerEmbeddedTikzLayout,
   BeamerFrameLayoutItem,
 } from "./types.js";
 
 export function emitEmbeddedTikz(params: {
-  tikz: Extract<PreparedColumnFlowItem, { kind: "tikzpicture" }>;
+  tikz: PreparedTikzPicture;
   x: number;
   y: number;
   parentId: string | null;
