@@ -141,9 +141,20 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
       : null;
     // A description label can consume a narrow column's entire measure.
     // TeX still ships unbreakable table and picture boxes overfull there.
-    const broken = overfullFallback ?? normalBreak ?? (lineWidth === 0 && !runs.some(run => run.kind === "text")
+    const brokenOrNull = overfullFallback ?? normalBreak ?? (lineWidth === 0 && !runs.some(run => run.kind === "text")
       ? breakTexParagraphAsSingleLine({ runs, shapedRuns: blockShapedRuns, measurement: runAdapter.measurement, width: lineWidth })
       : null);
+    // A label alone (\@item's \indent\par: the label box, then \penalty0) on a negative measure, where the
+    // left margin is wider than the column: every break is overfull, and TeX's final pass takes the penalty
+    // as an artificial break (tex.web 854), so the label line is followed by an empty \parfillskip line.
+    const rawWidth = enclosingWidth - breakContext.scopePolicy.leftMarginWidth - breakContext.scopePolicy.rightMarginWidth;
+    // Before a display the display's own empty line (`\[` in vertical mode) already carries that line.
+    const labelOnly = plan.lineLabel !== undefined && plan.beforeDisplay !== true &&
+      !runs.some(run => run.kind === "text") && runs.at(-1)?.kind === "penalty";
+    const labelLine = brokenOrNull?.lines.length === 1 ? brokenOrNull.lines[0] : undefined;
+    const broken = brokenOrNull && labelLine && labelOnly && rawWidth < 0
+      ? { ...brokenOrNull, lines: [labelLine, { ...labelLine, lineIndex: labelLine.lineIndex + 1, startRun: labelLine.endRun + 1, startTextOffset: 0 }] }
+      : brokenOrNull;
     if (!broken) {
       return {
         status: "failed",

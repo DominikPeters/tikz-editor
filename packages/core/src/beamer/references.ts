@@ -58,6 +58,8 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   inlineFlow?: BeamerInlineFlow[];
   inlineFlowLabelState?: { revision: number };
   inlineFlowItemLabels?: Map<number, { targetOffset: number; labels: readonly SimpleTexListContext[] }>;
+  /** Boxes started while a trivlist label was pending: box start -> the list environment inheriting it. */
+  inlineFlowTrivlistLabels?: Map<number, number>;
   blockThemeAt?: (offset: number) => ResolvedBeamerTheme;
   ambientTextAt?: ((offset: number) => string) & {
     itemDepthAt?: (offset: number) => number;

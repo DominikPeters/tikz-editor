@@ -1465,6 +1465,7 @@ async function prepareInlineFlow(params: {
   document?: BeamerDocumentModel; theoremOccurrences?: ReadonlyMap<number, BeamerTheoremOccurrence>;
 }): Promise<void> {
   params.references.inlineFlowItemLabels ??= new Map();
+  params.references.inlineFlowTrivlistLabels ??= new Map();
   params.references.inlineFlowLabelState ??= { revision: 0 };
   const context = createBeamerSyntaxContext(params.source);
   const extracted = new Set<number>();
@@ -4267,6 +4268,8 @@ function layoutParagraph(params: {
   const layoutOptions = {
     ...beamerInlineListEffects(mapped, params.references.inlineFlow ?? [], params.inMinipage ?? false),
     inheritedItemLabels: [...(params.references.inlineFlowItemLabels?.values() ?? [])].filter(transfer => mapped.sourceMap.charOrigins.some(origin => origin.kind === "direct" && origin.from === transfer.targetOffset)).flatMap(transfer => transfer.labels),
+    ...([...(params.references.inlineFlowTrivlistLabels?.values() ?? [])].some(target => mapped.sourceMap.charOrigins.some(origin => origin.kind === "direct" && origin.from === target))
+      ? { inheritedTrivlistLabel: true } : {}),
     commitPostDisplayParagraph: (sourceEnd: number) => params.references.itemActionCommitsParagraph?.(mapped, sourceEnd) ?? false,
     namedFontSizes: Object.fromEntries(namedSizes.map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),
     resolveBlockBox: (box: SimpleTexBoxBlockItem): readonly TexVListItem[] | undefined => {
@@ -4282,6 +4285,14 @@ function layoutParagraph(params: {
           params.references.inlineFlowItemLabels.set(external.span.from, transfer);
           if (params.references.inlineFlowLabelState) params.references.inlineFlowLabelState.revision += 1;
         }
+      }
+      // A trivlist label pending at the box start makes the box's first list a no-par list.
+      const trivlistTarget = box.pendingTrivlistLabel ? external.labelTargetOffset : undefined;
+      const trivlistLabels = params.references.inlineFlowTrivlistLabels;
+      if (trivlistLabels && trivlistLabels.get(external.span.from) !== trivlistTarget) {
+        if (trivlistTarget === undefined) trivlistLabels.delete(external.span.from);
+        else trivlistLabels.set(external.span.from, trivlistTarget);
+        if (params.references.inlineFlowLabelState) params.references.inlineFlowLabelState.revision += 1;
       }
       const item = external.item;
       const span = { start: box.sourceStart, end: box.sourceEnd };
@@ -4524,7 +4535,10 @@ function layoutParagraph(params: {
     const role = item.hboxRole;
     if (role?.kind !== "list-label" || role.consumerOffset === undefined) return false;
     const offset = role.consumerOffset;
-    return params.hiddenSourceSpans?.some(span => span.from <= offset && offset < span.to);
+    // A following \item ships a still-pending label (\@item's \if@inlabel \indent\par) before its own
+    // overlay covers that item: a consumer at the start of the item's covered span stays visible.
+    const shippedByItem = /^\\item(?![A-Za-z@])/u.test(params.references.source.slice(offset, offset + 6));
+    return params.hiddenSourceSpans?.some(span => (shippedByItem ? span.from < offset : span.from <= offset) && offset < span.to);
   });
   if (coveredLabels.length) params = { ...params, hiddenSourceSpans: [
     ...params.hiddenSourceSpans ?? [],

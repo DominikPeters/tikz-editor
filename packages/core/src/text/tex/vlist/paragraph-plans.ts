@@ -77,6 +77,8 @@ export interface TexLayoutParagraphPlan {
   readonly breakContext: TexLayoutParagraphBreakContext;
   readonly dimensionContext?: TexDimensionContext;
   readonly overfullSingleLineFallback?: boolean;
+  /** The paragraph is the part before a display; the display's own empty line follows it. */
+  readonly beforeDisplay?: boolean;
   readonly lineLabel?: TexLayoutParagraphLineLabel;
 }
 
@@ -304,6 +306,7 @@ export function prepareTexLayoutParagraphsFromVList(
         ...(preserveTrailingInterwordSpace
           ? { preserveTrailingInterwordSpace: true }
           : {}),
+        ...(paragraph.preDisplayFontSizePt !== undefined ? { beforeDisplay: true } : {}),
         ...(paragraph.overfullSingleLineFallback === true
           ? { overfullSingleLineFallback: true }
           : {}),

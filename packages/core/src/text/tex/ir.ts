@@ -792,6 +792,8 @@ export interface SimpleTexBoxBlockItem extends SimpleTexSourceRange {
   readonly consumedItemLabels?: readonly SimpleTexListContext[];
   /** A list inside the box ends every pending label: \endtrivlist and \everypar set @inlabel false globally. */
   readonly clearsItemLabels?: boolean;
+  /** An enclosing trivlist's \item label is pending where the box starts; its first list inherits it. */
+  readonly pendingTrivlistLabel?: boolean;
   readonly kind: "box";
   /** A \color after the last \par or environment end sits between the preceding skip and this box. */
   readonly followsColorChange?: boolean;
@@ -1049,6 +1051,8 @@ export interface SimpleTexParagraphIrOptions {
   readonly syntheticParagraphBreaks?: readonly number[];
   readonly minipageListDepthResets?: readonly number[];
   readonly inheritedItemLabels?: readonly SimpleTexListContext[];
+  /** An enclosing trivlist's \item label is still pending where this box body starts (@inlabel is global). */
+  readonly inheritedTrivlistLabel?: boolean;
   readonly listBodyFontSizes?: readonly (number | undefined)[];
   readonly listBodyBaselineSkips?: readonly (number | undefined)[];
   readonly listBodyDisplaySkipCommands?: readonly (SimpleTexDisplayMathState["displaySkipCommand"] | undefined)[];
@@ -1445,7 +1449,7 @@ function buildSimpleTexParagraphIr(
       [...(options?.bibliographyMargins ?? [])],
       options?.descriptionLabelWidthPt ?? null,
       [...(options?.descriptionLabelWidths ?? [])],
-      options?.boxesClearingPendingItemLabels, options?.syntheticParagraphBreaks, options?.minipageListDepthResets, options?.inheritedItemLabels, options?.fontSizePt, options?.baselineSkipPt, options?.namedFontSizes, options?.listBodyFontSizes, options?.listBodyBaselineSkips, options?.listBodyDisplaySkipCommands, options?.groupListItemBodies,
+      options?.boxesClearingPendingItemLabels, options?.syntheticParagraphBreaks, options?.minipageListDepthResets, options?.inheritedItemLabels, options?.inheritedTrivlistLabel ?? false, options?.fontSizePt, options?.baselineSkipPt, options?.namedFontSizes, options?.listBodyFontSizes, options?.listBodyBaselineSkips, options?.listBodyDisplaySkipCommands, options?.groupListItemBodies,
     ])
     : null;
   if (key !== null) {
@@ -5256,6 +5260,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
   };
 
   const beginList = (kind: SimpleTexListKind, sourceStart: number, enumerateTemplate?: string) => {
+    const inheritsTrivlistLabel = inheritedTrivlistLabel;
+    inheritedTrivlistLabel = false;
     const inheritsPendingLabel = pendingListShowLabel || inheritedItemLabels.length > 0;
     pendingListLabels.push({ show: pendingListShowLabel, label: pendingListLabel });
     pendingListShowLabel = false;
@@ -5297,7 +5303,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       sourceStart,
       listKind: kind,
       depth,
-      ...(scopeStack.some(role => role.kind === "trivlist" && !consumedTrivlistLabels.has(role)) ? { noParList: true } : {}),
+      ...(inheritsTrivlistLabel || scopeStack.some(role => role.kind === "trivlist" && !consumedTrivlistLabels.has(role)) ? { noParList: true } : {}),
       ...(inheritsPendingLabel ? { inheritsPendingLabel: true } : {}),
       ...(listRegisterDepth > 0 && listRegisterDepth !== depth ? { listRegisterDepth } : {}),
       ...(registerFontSizePt !== undefined ? { registerFontSizePt } : {}),
@@ -5358,9 +5364,11 @@ function buildSimpleTexParagraphBlocksFromNodes(
     name: SimpleTexTrivlistEnvironmentName
   ): Extract<SimpleTexScopePathRole, { readonly kind: "trivlist" }> => {
     const depth = scopeStack.filter((role) => role.kind === "trivlist").length + 1;
+    const inheritsTrivlistLabel = inheritedTrivlistLabel;
+    inheritedTrivlistLabel = false;
     return {
       kind: "trivlist",
-      ...(pendingListShowLabel || inheritedItemLabels.length > 0 ? { noParList: true } : {}),
+      ...(pendingListShowLabel || inheritedItemLabels.length > 0 || inheritsTrivlistLabel ? { noParList: true } : {}),
       envName: name,
       depth,
       enclosingListDepth: listStack.length + currentQuoteDepth,
@@ -5369,6 +5377,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
   };
 
   let inheritedItemLabels = [...(options?.inheritedItemLabels ?? [])];
+  // An inherited trivlist label makes the body's first list or trivlist a no-par list (\@trivlist with
+  // @inlabel); that environment's own label then carries it on, so the inheritance ends there.
+  let inheritedTrivlistLabel = options?.inheritedTrivlistLabel === true;
   const consumedTrivlistLabels = new Set<SimpleTexScopePathRole>();
   let prefix = consumeParagraphPrefix(0);
   let blockStart = sourceStartForNodeIndex(prefix.start);
@@ -5626,7 +5637,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
         } else if (isSimpleTexListEnvironmentName(node.name)) {
           scopeRole = beginList(node.name, node.sourceStart, options?.enumerateMiniTemplates ? node.enumerateTemplate : undefined);
           recordVerticalEvent({ kind: "list-begin", listKind: scopeRole.listKind, depth: scopeRole.depth,
-            inheritsPendingLabel: scopeRole.inheritsPendingLabel === true,
+            // A no-par list (an enclosing trivlist's label is pending) also starts inside that label.
+            inheritsPendingLabel: scopeRole.inheritsPendingLabel === true || scopeRole.noParList === true,
             // Beamer selects the list's body font (by item depth) before \list reads \@listi.
             fontSizePt: Number(scopeRole.registerFontSizePt ?? scopeRole.fontSizePt ?? sizeAt(node.sourceStart).sizePt),
             registerDepth: scopeRole.listRegisterDepth ?? scopeRole.depth, ...span });
@@ -5895,11 +5907,14 @@ function buildSimpleTexParagraphBlocksFromNodes(
           ...(list.kind === "enumerate" ? { enumerateCounters: listStack.slice(0, depthIndex + 1).filter(entry => entry.kind === "enumerate").map(entry => entry.labelCounter) } : {}),
           ...(pending.label ? { label: pending.label } : {}) });
       }
+      // Read before this box's label bookkeeping consumes it.
+      const trivlistLabelPending = inheritedTrivlistLabel || scopeStack.some(role => role.kind === "trivlist" && !consumedTrivlistLabels.has(role));
       const clearsPendingLabels = options?.boxesClearingPendingItemLabels?.includes(node.sourceStart);
       if (options?.minipageListDepthResets?.includes(node.sourceStart)) listRegisterDepth = 0;
       const consumedItemLabels = clearsPendingLabels ? pendingItemLabels : [];
       if (clearsPendingLabels) {
         inheritedItemLabels = [];
+        inheritedTrivlistLabel = false;
         for (const role of scopeStack) if (role.kind === "trivlist") consumedTrivlistLabels.add(role);
       }
       if (consumedItemLabels.length) {
@@ -5937,6 +5952,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         ...(consumedItemLabels.length ? { consumedItemLabels } : {}),
         // A list inside the box clears @inlabel globally, an enclosing trivlist's label included.
         ...(clearsPendingLabels ? { clearsItemLabels: true } : {}),
+        ...(trivlistLabelPending ? { pendingTrivlistLabel: true } : {}),
         // Only an alignment's \addvspace after that \color is kept apart from the preceding skip.
         ...(boxColorScanStart >= 0 && /\\color\b[\s\S]*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(
           textSliceAtSourceOffsets(boxColorScanStart, node.sourceStart).split(/\\end\s*\{[^}]*\}|\\item(?![A-Za-z@])/u).at(-1) ?? "")
@@ -6043,7 +6059,7 @@ function hasNonSpaceSourceText(
 
 /** Options for a nested box body: the enclosing paragraph's item-label bookkeeping stays outside it. */
 function withoutItemLabelState(options: SimpleTexParagraphIrOptions): SimpleTexParagraphIrOptions {
-  const { inheritedItemLabels: _labels, boxesClearingPendingItemLabels: _clearing, syntheticParagraphBreaks: _breaks,
+  const { inheritedItemLabels: _labels, inheritedTrivlistLabel: _trivlist, boxesClearingPendingItemLabels: _clearing, syntheticParagraphBreaks: _breaks,
     minipageListDepthResets: _resets, ...rest } = options;
   return rest;
 }

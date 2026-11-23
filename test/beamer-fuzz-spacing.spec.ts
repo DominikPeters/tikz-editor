@@ -1775,6 +1775,80 @@ Witness.
     expect(baseline("Witness.")).toBeCloseTo(107.357224, 3);
   });
 
+  it("passes a pending trivlist label into a default block's first list", async () => {
+    // The flushleft's label is pending when the block starts (its template resets \\everypar), so the
+    // block body's itemize is a no-par list: no topsep, and no \\addvspace at its end. LuaLaTeX baselines.
+    const source = String.raw`\documentclass{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Labels}
+Lead.\par
+\begin{flushleft}
+\begin{exampleblock}{Title}
+\begin{itemize}\item Inner.\end{itemize}
+\end{exampleblock}
+\end{flushleft}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("Inner.")).toBeCloseTo(84.376724, 3);
+    expect(baseline("Witness.")).toBeCloseTo(106.97673, 3);
+  });
+
+  it("shows a label that the next covered item ships", async () => {
+    // The block leaves the description label pending (its template resets \\everypar); \\item<2->'s \\@item
+    // ships it as an empty line before Beamer covers that item, so it is visible on slide 1. LuaLaTeX baselines.
+    const source = String.raw`\documentclass{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Labels}
+Lead.\par
+\begin{description}
+\item<1->[Stage 1] \begin{alertblock}{Geometric}
+Body.
+\end{alertblock}
+\item<2->[Stage 2] Second.
+\end{description}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source, { step: 1 }), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("Stage1")).toBeCloseTo(94.97673, 3);
+    expect(baseline("Witness.")).toBeCloseTo(128.176743, 3);
+  });
+
+  it("breaks a label-only line on a negative measure", async () => {
+    // The description's left margin is wider than the column: the label line (label box, \\penalty0) breaks
+    // at the penalty in TeX's final pass, leaving an empty second line. LuaLaTeX baselines.
+    const source = String.raw`\documentclass{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Labels}
+Lead.\par
+\begin{columns}[onlytextwidth,c]
+\begin{column}{0.13\textwidth}
+\begin{description}
+\item[Stage 1] \begin{alertblock}{Geo}
+Body.
+\end{alertblock}
+\item[Stage 2] Second.
+\end{description}
+\end{column}
+\begin{column}{0.58\textwidth}Right.\end{column}
+\end{columns}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("Stage1")).toBeCloseTo(96.097183, 3);
+    expect(baseline("Stage2")).toBeCloseTo(126.297195, 3);
+    expect(baseline("Witness.")).toBeCloseTo(162.216965, 3);
+  });
+
   it("reads a nested list's registers from its body font, not the ambient size", async () => {
     // Beamer selects the subbody font (\small) before \list, which redefines \@listi: the inner
     // list's \itemsep and \parsep are \small's (4.5pt at 12pt), not \footnotesize's. LuaLaTeX baselines.

@@ -349,14 +349,15 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   A `\color` after a box (not only after a paragraph) is a whatsit between
   the box's closing skip and a following `\addvspace`. Only a `[T]`
   column's leading alignment decides whether it replaces the head skip.
+  A trivlist label still pending where a box starts is passed into the box
+  body (`inheritedTrivlistLabel`): its first list or trivlist is a no-par
+  list. A label shipped by the next `\item` (`\@item`'s `\if@inlabel
+  \indent\par`) stays visible when that item is covered. A label-only line
+  on a negative measure gets TeX's empty second line (the final pass breaks
+  at the label's `\penalty0`).
 
 ## Next
 
 1. **Inline material boxes**: a minipage that shares its line with text is
    still a source card ("not supported by the simple text path"), and so is
    a frame holding both a `[t]` minipage and `{\small\begin{minipage}...}`.
-2. **Trivlist labels into boxes**: a `flushleft`/`center` item label still
-   pending when a default-style block starts makes the block's first list a
-   no-par list in TeX (no topsep); the label transfer into box bodies only
-   carries list labels, so native adds the topsep (2.9pt in the 11pt default
-   theme). Rounded blocks are unaffected (minipage body).

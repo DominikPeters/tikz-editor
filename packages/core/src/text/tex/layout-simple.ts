@@ -52,6 +52,7 @@ export interface TexParagraphLayoutOptions {
   readonly syntheticParagraphBreaks?: readonly number[];
   readonly minipageListDepthResets?: readonly number[];
   readonly inheritedItemLabels?: SimpleTexParagraphIrOptions["inheritedItemLabels"];
+  readonly inheritedTrivlistLabel?: boolean;
   readonly commitPostDisplayParagraph?: NonNullable<TexLayoutIrOptions["commitPostDisplayParagraph"]>;
   readonly resolveBlockBox?: NonNullable<TexLayoutIrOptions["resolveBlockBox"]>;
   readonly namedFontSizes?: TexLayoutIrOptions["namedFontSizes"];
@@ -141,6 +142,7 @@ export function layoutSimpleTexParagraph(
       ...(options.listProfile?.bodyDisplaySkipCommandByDepth ? { listBodyDisplaySkipCommands: options.listProfile.bodyDisplaySkipCommandByDepth } : {}),
       ...(options.listProfile?.groupItemBodies ? { groupListItemBodies: true } : {}),
       ...(options.inheritedItemLabels ? { inheritedItemLabels: options.inheritedItemLabels } : {}),
+      ...(options.inheritedTrivlistLabel ? { inheritedTrivlistLabel: true } : {}),
       ...(options.boxesClearingPendingItemLabels ? { boxesClearingPendingItemLabels: options.boxesClearingPendingItemLabels } : {}),
       ...(options.syntheticParagraphBreaks ? { syntheticParagraphBreaks: options.syntheticParagraphBreaks } : {}),
       ...(options.minipageListDepthResets?.length ? { minipageListDepthResets: options.minipageListDepthResets } : {}),
