@@ -1,5 +1,5 @@
 import type { ResolvedTexFont } from "../fonts/types.js";
-import { roundTexPt } from "../fonts/units.js";
+import { roundTexPt, texPreDisplayGapPt } from "../fonts/units.js";
 import {
   texHBoxX,
   texHBoxY,
@@ -206,7 +206,7 @@ function displayMathBoundaryGlueItem(
   if (variant === "short" && (alignment === "center" || alignment === "ragged-left")) variant = "normal";
   // Even a zero-width line has TeX's two-quad pre-display allowance. A wide
   // equation in a narrow column can therefore require the normal skips.
-  if (variant === "short" && font && displayLeftEdge <= 2 * (item.fontSizePt ?? font.atPt) * font.data.fontdimen.quad) variant = "normal";
+  if (variant === "short" && font && displayLeftEdge <= texPreDisplayGapPt((item.fontSizePt ?? font.atPt) * font.data.fontdimen.quad)) variant = "normal";
   const skip = profile[side][variant ?? "normal"];
   return {
     kind: "glue",

@@ -17,7 +17,7 @@ import {
 function optionalLayoutSourceOffset(value: number | undefined): LayoutSourceOffset | undefined {
   return value === undefined ? undefined : layoutSourceOffset(value);
 }
-import { roundTexPt } from "./fonts/units.js";
+import { roundTexPt, texPreDisplayGapPt } from "./fonts/units.js";
 import type {
   ResolvedTexFont,
   ShapedTexTextRun,
@@ -598,10 +598,10 @@ function texLinePreDisplaySize(
   }
   if (texLineHasInlineListLabel(line)) {
     return texLength(roundTexPt(
-      Math.max(0, line.xEnd + 2 * atPt - latexArticleListLeftMarginEm * atPt)
+      Math.max(0, line.xEnd + texPreDisplayGapPt(atPt) - latexArticleListLeftMarginEm * atPt)
     ));
   }
-  return texLength(roundTexPt(Math.max(0, line.xEnd - line.xStart) + 2 * atPt));
+  return texLength(roundTexPt(Math.max(0, line.xEnd - line.xStart) + texPreDisplayGapPt(atPt)));
 }
 
 function texLineHasInlineListLabel(line: LineReport<"layout">): boolean {

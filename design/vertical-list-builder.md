@@ -359,6 +359,8 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   `\@list<n>` and keeps the class size file's load-time `\@listi`
   registers. A trivlist inside a list (also in a block or column body) reads
   that list's `\topsep`, not the class's ambient one.
+  Display skips use LuaTeX's pre-display gap: `(quad div 1000sp) × 2000`
+  (17.97485pt at 9pt), not exactly two quads.
 
 ## Next
 

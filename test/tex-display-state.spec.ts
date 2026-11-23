@@ -3,6 +3,7 @@ import {
   createTexDerivedInlineMathBoxProvider, layoutSimpleTexParagraph, parseSimpleTexParagraphIr, texLength,
 } from "../packages/core/src/text/tex/index.js";
 import { flattenPositionedTexVListItems } from "../packages/core/src/text/tex/vlist/index.js";
+import { texPreDisplayGapPt } from "../packages/core/src/text/tex/fonts/units.js";
 
 function layout(source: string, width = 220) {
   const result = layoutSimpleTexParagraph(source, { width: texLength(width), parindent: texLength(0),
@@ -118,5 +119,15 @@ describe("AMS display extent owns normal skips", () => {
     const ir = parseSimpleTexParagraphIr(String.raw`\begin{alignat}{2}a&=b&c&=d\end{alignat}`);
     expect(ir.items.some(item => item.kind === "display-math")).toBe(false);
     expect(ir.nodes.some(node => node.kind === "literal")).toBe(true);
+  });
+});
+
+describe("LuaTeX pre-display gap", () => {
+  it("truncates the quad to whole thousands of scaled points before doubling it", () => {
+    // \predisplaysize of an empty line in LuaLaTeX (lmsans at each class size).
+    expect(texPreDisplayGapPt(9)).toBeCloseTo(17.97485, 5);
+    expect(texPreDisplayGapPt(10)).toBeCloseTo(19.98901, 5);
+    expect(texPreDisplayGapPt(10.95)).toBeCloseTo(21.8811, 5);
+    expect(texPreDisplayGapPt(12)).toBeCloseTo(23.98682, 5);
   });
 });

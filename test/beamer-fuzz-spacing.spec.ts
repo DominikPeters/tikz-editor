@@ -1909,6 +1909,36 @@ Witness.
     expect(baseline("Witness.")).toBeCloseTo(99.367798, 3);
   });
 
+  it("uses LuaTeX's truncated pre-display gap to choose display skips", async () => {
+    // \\predisplaysize = shift + (quad div 1000sp) * 2000: 61.4055pt + 17.97485pt at 9pt, just below the
+    // aligned display's left edge (79.39168pt), so it takes \\abovedisplayshortskip. LuaLaTeX baselines.
+    const source = String.raw`\documentclass[9pt]{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t,shrink=5]{Displays}
+Lead.\par
+\begin{columns}[onlytextwidth,T]
+\begin{column}{0.54\textwidth}Left.\end{column}
+\begin{column}{0.42\textwidth}
+\begin{description}
+\item[Stage 2] \begin{itemize}
+\item A local update.
+\item \[\begin{pmatrix}a&b\\c&d\end{pmatrix}\]
+\end{itemize}
+\par
+\[\begin{aligned}a+b&=c\\ d-e&=f\end{aligned}\]
+\end{description}
+\end{column}
+\end{columns}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("a+b=c")).toBeCloseTo(118.765228, 3);
+    expect(baseline("Witness.")).toBeCloseTo(142.022934, 3);
+  });
+
   it("reads a nested list's registers from its body font, not the ambient size", async () => {
     // Beamer selects the subbody font (\small) before \list, which redefines \@listi: the inner
     // list's \itemsep and \parsep are \small's (4.5pt at 12pt), not \footnotesize's. LuaLaTeX baselines.

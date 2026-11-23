@@ -11,3 +11,11 @@ export function roundTexPt<T extends number>(value: T): T {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Rounding preserves the caller's coordinate frame while arithmetic erases its numeric brand.
   return (Math.round(value * 1e6) / 1e6) as T;
 }
+
+/**
+ * The pre-display allowance LuaTeX adds to a line's width (\predisplaygapfactor = 2000): it divides the quad
+ * by 1000 in scaled points before multiplying, so the gap is slightly under two quads (17.97485pt at 9pt).
+ */
+export function texPreDisplayGapPt(quadPt: number): TexLength {
+  return texLength(Math.trunc(Math.round(quadPt * 65_536) / 1000) * 2000 / 65_536);
+}
