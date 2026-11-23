@@ -361,6 +361,9 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   that list's `\topsep`, not the class's ambient one.
   Display skips use LuaTeX's pre-display gap: `(quad div 1000sp) × 2000`
   (17.97485pt at 9pt), not exactly two quads.
+  An overfull label's empty line before a display also counts when only
+  declarations precede the display; that line has no visible node, so the
+  short skips hold even under `\centering`.
 
 ## Next
 

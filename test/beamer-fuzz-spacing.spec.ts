@@ -1939,6 +1939,42 @@ Witness.
     expect(baseline("Witness.")).toBeCloseTo(142.022934, 3);
   });
 
+  it("follows an overfull label's empty line with the short display skips", async () => {
+    // The description's margin exceeds the narrow column: the label line breaks at its \\penalty0, leaving an
+    // empty line before the display even when only declarations ({\\scriptsize\\centering) precede it. That
+    // line has no visible node, so the display takes the short skips despite \\centering. LuaLaTeX baselines.
+    const source = String.raw`\documentclass[12pt]{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Displays}
+Lead.\par
+\begin{columns}[onlytextwidth,t]
+\begin{column}{0.54\textwidth}Left.\end{column}
+\begin{column}{0.42\textwidth}
+\begin{columns}[onlytextwidth,b]
+\begin{column}{0.62\textwidth}
+Tab.
+\end{column}
+\begin{column}{0.34\textwidth}
+\begin{description}
+\item[Stage 1] {\scriptsize\centering
+\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}\]\par}
+\item[Stage 2] Before after.
+\end{description}
+\end{column}
+\end{columns}
+\end{column}
+\end{columns}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("abx")).toBeCloseTo(91.681152, 3);
+    expect(baseline("Stage2")).toBeCloseTo(120.211273, 3);
+    expect(baseline("Witness.")).toBeCloseTo(187.659271, 3);
+  });
+
   it("reads a nested list's registers from its body font, not the ambient size", async () => {
     // Beamer selects the subbody font (\small) before \list, which redefines \@listi: the inner
     // list's \itemsep and \parsep are \small's (4.5pt at 12pt), not \footnotesize's. LuaLaTeX baselines.

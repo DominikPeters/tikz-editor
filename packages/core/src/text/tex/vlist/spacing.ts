@@ -92,6 +92,11 @@ export function materializeDisplayMathVerticalGlueInVList(
   };
 }
 
+function declarationOnlyNode(node: SimpleTexInlineNode): boolean {
+  return node.kind === "group" ? node.children.every(declarationOnlyNode)
+    : node.kind === "space" || node.kind === "comment" || node.kind === "style-declaration" || node.kind === "font-declaration";
+}
+
 function materializeDisplayMathVerticalGlueInItems(
   sourceItems: readonly TexVListItem[],
   profile: TexDisplayMathLayoutProfile,
@@ -110,8 +115,10 @@ function materializeDisplayMathVerticalGlueInItems(
       const previous = sourceItems[index - 1];
       // With no room for the label, TeX breaks it onto its own line. The
       // display then follows the remaining empty line of the paragraph.
+      // The paragraph holds no material (at most declarations such as {\scriptsize\centering).
       const overfullLabel = item.targetWidth === 0 && previous?.kind === "paragraph" &&
-        previous.sourceSpan.start === previous.sourceSpan.end && previous.paragraph.listContext?.showLabel === true;
+        (previous.sourceSpan.start === previous.sourceSpan.end || previous.paragraph.nodes.every(declarationOnlyNode)) &&
+        previous.paragraph.listContext?.showLabel === true;
       const insertsEmptyLine = overfullLabel || ((index === 0 || item.startsAfterExplicitPar === true || followsVerticalModeBox(sourceItems, index)) && profile.leadingDisplay !== undefined);
       if (insertsEmptyLine) {
         items.push(leadingDisplayEmptyLineGlue(item, profile, index > 0));
@@ -122,7 +129,8 @@ function materializeDisplayMathVerticalGlueInItems(
         "above",
         profile,
         insertsEmptyLine ? "short" : undefined,
-        overfullLabel ? undefined : font
+        overfullLabel ? undefined : font,
+        overfullLabel
       ));
       items.push(item);
       items.push(displayMathBoundaryGlueItem(item, "below", profile));
@@ -192,7 +200,9 @@ function displayMathBoundaryGlueItem(
   side: "above" | "below",
   profile: TexDisplayMathLayoutProfile,
   variant?: TexDisplayMathSkipVariant,
-  font?: ResolvedTexFont
+  font?: ResolvedTexFont,
+  /** The preceding line is the empty line an overfull label leaves: no visible node, so the short skips hold. */
+  emptyPrecedingLine = false
 ): TexGlueItem {
   profile = displayMathProfileForItem(item, profile);
   if (item.kind === "display-alignment" || item.box.fullDisplayWidth) variant = "normal";
@@ -203,7 +213,7 @@ function displayMathBoundaryGlueItem(
     Math.max(0, (item.targetWidth - materialWidth) / 2)
   ));
   const alignment = item.precedingLineAlignment ?? item.scopePath?.filter(role => role.kind === "trivlist").at(-1)?.alignment;
-  if (variant === "short" && (alignment === "center" || alignment === "ragged-left")) variant = "normal";
+  if (variant === "short" && !emptyPrecedingLine && (alignment === "center" || alignment === "ragged-left")) variant = "normal";
   // Even a zero-width line has TeX's two-quad pre-display allowance. A wide
   // equation in a narrow column can therefore require the normal skips.
   if (variant === "short" && font && displayLeftEdge <= texPreDisplayGapPt((item.fontSizePt ?? font.atPt) * font.data.fontdimen.quad)) variant = "normal";
