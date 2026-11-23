@@ -244,8 +244,9 @@ export class VerticalListBuilder {
   private removeLastskip(): VerticalGlue {
     const last = this.nodes.at(-1);
     if (last?.kind !== "glue") return ZERO_GLUE;
-    // \vskip-\lastskip cancels the tail glue; collapsing it keeps the list readable.
-    this.nodes.pop();
+    // \vskip-\lastskip cancels the tail glue. The pair is kept as one zero glue node: it adds no
+    // space, but the list still holds glue there (a vbox ending in it has zero depth).
+    this.nodes[this.nodes.length - 1] = { kind: "glue", glue: ZERO_GLUE, origin: "cancelled" };
     return last.glue;
   }
 

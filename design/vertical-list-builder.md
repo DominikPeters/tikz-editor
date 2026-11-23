@@ -272,6 +272,19 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   skips); a box containing paragraphs ends minipage mode (`\@minipagefalse`
   is global, ltboxes.dtx), so a following alignment's `\addvspace` applies;
   a body ending in an embedded box keeps its depth as `\prevdepth`.
+  Column bodies are vertical lists too, and every container's closing skips
+  now come from the builder instead of the trailing regex helpers
+  (`trailingBeamerTrivlistSkip`, `trailingBeamerListSkip`,
+  `trailingScopedBeamerListSkip` are gone): the frame body keeps them (they
+  shrink with the frame box), a default block's colorbox ends in them (zero
+  depth), and a column's `\endminipage` `\unskip`s the last one. On the way:
+  the builder keeps the glue an `\addvspace` cancels as a zero node (latex.ltx
+  writes `\vskip-\lastskip`), so a list closing two lists still ends in glue
+  and a bottom-aligned column gets zero depth; an alignment starting on an
+  inherited item label takes `\@noparlist`'s path; a leading block or columns
+  box in a column follows the column's `\leavevmode` line; a T column's
+  `\nointerlineskip` leaves a package box nothing to balance, and the box's
+  `\addvspace` replaces the `\vskip-1ex`.
   The cooperative-render test used empty blocks to split frame text into
   separate layout units; a frame body is now one unit, so the test puts each
   graphic in its own block body.
@@ -280,11 +293,9 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
 
 1. **Beamer containers (step 4), remaining:** extend the embedding to
    title pages, and
-   build column bodies as vlists (a first attempt, parsing a column body like
-   a block body, fails 20 TeX comparisons: nested columns' `[t]`/`[b]`/`[c]`
-   reference points, a column's leading list and closing alignment glue,
-   bottom-aligned columns, and a tcolorbox in a column; the column reference
-   code still reads flow items), until the frame flow is a
+   remove the leading-edge rules (the glue before a container's first
+   material still comes from the old resolution: `leadingAdjustment`,
+   `leadingBeamerTrivlistAdjustment`, `sharedTrivlistSkip`), until the frame flow is a
    single paragraph item and `positionPreparedFrameFlow`'s glue rules,
    `leadingAdjustment`, `sharedTrivlistSkip`, `trailingListGlue` and the regex
    helpers can go. A chained per-piece builder was considered and rejected: it

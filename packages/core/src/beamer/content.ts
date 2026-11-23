@@ -230,6 +230,7 @@ export function parseBeamerFrameBody(
             theoremOccurrences,
             theoremTemplate,
             overlays,
+            ...(params.embedNestedFlowBoxes === true ? { embedNested: true } : {}),
           })
         : isProofEnvironment(token.name) ||
             theoremOccurrences.has(token.span.from)
@@ -907,6 +908,12 @@ function parseBlockContent(
   }).children;
 }
 
+/** A title page or table of contents inside a column has no column layout; it stays a source card. */
+function columnFlowNode(node: BeamerFrameBodyNode): BeamerColumnFlowNode {
+  if (node.kind !== "contents" && node.kind !== "title-page") return node;
+  return { kind: "unsupported", id: `${node.id}:unsupported`, span: node.span, message: "This content is not supported inside a column in this preview." };
+}
+
 function parseColumns(params: {
   context: BeamerSyntaxContext;
   frameId: string;
@@ -918,6 +925,7 @@ function parseColumns(params: {
   theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
   theoremTemplate: BeamerTheoremTemplateVariant;
   overlays: BeamerOverlayModel;
+  embedNested?: boolean;
 }): BeamerColumnsBodyNode {
   const {
     context,
@@ -1016,17 +1024,20 @@ function parseColumns(params: {
       alignment: resolveColumnAlignment(columnOptions?.value, alignment),
       width,
       bodySpan,
-      children: parseColumnFlow(
-        context,
-        frameId,
-        columns.length,
-        bodySpan,
-        tokens.filter(token => token.span.from >= bodySpan.from && token.span.to <= bodySpan.to),
-        diagnostics,
-        theoremOccurrences,
-        theoremTemplate,
-        params.overlays
-      ),
+      // A column is a minipage: with embedding its body is one vertical list like a block body.
+      children: params.embedNested === true
+        ? parseBlockContent(context, bodySpan, `${frameId}:column:${columns.length}`, params.overlays, theoremOccurrences, true).map(columnFlowNode)
+        : parseColumnFlow(
+          context,
+          frameId,
+          columns.length,
+          bodySpan,
+          tokens.filter(token => token.span.from >= bodySpan.from && token.span.to <= bodySpan.to),
+          diagnostics,
+          theoremOccurrences,
+          theoremTemplate,
+          params.overlays
+        ),
     });
   }
   return {

@@ -293,34 +293,6 @@ export function previousDepthBeforeTrailingVerticalSpace(
   return 0;
 }
 
-export function trailingBeamerTrivlistSkip(source: string, topsepPt = 9): number {
-  const endPattern = /\\end\s*\{\s*(?:center|flushleft|flushright|figure|table)\s*\}/gu;
-  let lastEnd = -1;
-  for (const match of source.matchAll(endPattern)) {
-    lastEnd = match.index + match[0].length;
-  }
-  if (lastEnd < 0) {
-    return 0;
-  }
-  const suffix = source.slice(lastEnd);
-  return /^(?:\s|\}|\\par(?![A-Za-z@])|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? topsepPt : 0;
-}
-
-export function trailingBeamerListSkip(source: string, topsepPt = 3): number {
-  const endPattern =
-    /\\end\s*\{\s*(?:itemize|enumerate|description)\s*\}/gu;
-  let lastEnd = -1;
-  for (const match of source.matchAll(endPattern)) {
-    lastEnd = match.index + match[0].length;
-  }
-  if (lastEnd < 0) {
-    return 0;
-  }
-  const suffix = source.slice(lastEnd);
-  // Empty groups, \relax and colour switches ship nothing, so the list's closing skip still applies.
-  return /^(?:\s|\}|\{\s*\}|\\relax(?![A-Za-z@])|\\color\s*(?:\[[^\]]*\])?\s*\{[^{}]*\}|\\par(?![A-Za-z@])|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? topsepPt : 0;
-}
-
 export function leadingBeamerTrivlistAdjustment(
   source: string,
   paragraph: LaidParagraph,

@@ -78,6 +78,18 @@ describe("VerticalListBuilder", () => {
     expect(natural(b, "plain")).toBe(8);
   });
 
+  it("keeps the glue an \\addvspace cancels, so a list closing two lists still ends in glue", () => {
+    const b = new VerticalListBuilder();
+    b.beginList(listI); b.item(); b.startParagraph("lead"); b.par(true);
+    b.beginList(listII); b.item(); b.startParagraph("inner"); b.par();
+    b.endList();
+    b.endList();
+    const tail = b.list.slice(b.list.findIndex(node => node.kind === "box" && node.id === "inner") + 1);
+    // latex.ltx \@xaddvskip writes \vskip-\lastskip: the inner closing skip stays as zero glue.
+    expect(tail.filter(node => node.kind === "glue").length).toBeGreaterThan(1);
+    expect(tail.some(node => node.kind === "glue" && node.origin === "cancelled")).toBe(true);
+  });
+
   it("appends baseline glue from prevdepth, falling back to lineskip (tex.web §679)", () => {
     const b = new VerticalListBuilder({ prevDepth: 2 });
     b.startParagraph("one", { height: 7, depth: 2, baselineSkip: 12 });

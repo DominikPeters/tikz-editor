@@ -184,9 +184,9 @@ describe("headless Beamer frame renderer", () => {
       "frame-title",
       "footline",
       "footline",
+      // Each column is one vertical list: the intro and its list, then the diagram's inline box.
       "body",
       "body",
-      "body", // The diagram now occupies a source-backed inline paragraph box.
     ]);
     expect(result.layout.embeddedTikz).toHaveLength(1);
 
@@ -206,7 +206,7 @@ describe("headless Beamer frame renderer", () => {
         source.slice(paragraph.sourceSpan.from, paragraph.sourceSpan.to)
           .startsWith("KKT conditions")
     )!;
-    expect(intro.report.lines).toHaveLength(2);
+    expect(intro.report.lines.filter(line => Number(line.xStart) === 0)).toHaveLength(2);
     expect(intro.report.lines[0]?.segments[0]?.sourceStartRaw).toBe(
       intro.sourceSpan.from
     );
@@ -236,11 +236,10 @@ describe("headless Beamer frame renderer", () => {
       expect.closeTo(186.685236, 6),
       expect.closeTo(200.285236, 6),
     ]);
-    const list = bodyParagraphs.find(
-      (paragraph) => paragraph.paragraphId === "frame:1:column:0:list:0"
-    )!;
-    expect(list.report.lines.map((line) => line.xStart)).toEqual(
-      list.report.lines.map(() => expect.closeTo(21.9, 6))
+    const listLines = intro.report.lines.slice(2);
+    expect(listLines.length).toBeGreaterThan(0);
+    expect(listLines.map((line) => line.xStart)).toEqual(
+      listLines.map(() => expect.closeTo(21.9, 6))
     );
     const markers = result.layout.items.filter(
       (item) => item.kind === "list-marker"

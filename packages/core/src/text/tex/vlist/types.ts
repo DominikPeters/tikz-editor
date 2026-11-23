@@ -81,6 +81,8 @@ export type TexGlueOrigin =
       readonly balancedPt?: number;
       /** \nointerlineskip follows the skip. */
       readonly noInterline?: boolean;
+      /** tcolorbox's `nobeforeafter`: no \par and no \addvspace precede the box. */
+      readonly noBeforeAfter?: boolean;
     }
   | {
       readonly kind: "explicit-command";
@@ -239,7 +241,7 @@ export interface TexParagraphItem {
   readonly paragraph: TexParagraphInput;
 }
 
-export type TexHBoxRole = { readonly kind: "external-flow"; readonly flowKind?: "block" | "columns"; /** The box's material starts this far above the box (a block template's skip, emitted as glue before it). */ readonly contentOffsetPt?: TexLength; /** Height that \\topskip measures when the box starts a continuation page (a block's title ascent). */ readonly pageTopHeightPt?: TexLength; /** Painted material above the box's top and below its bottom (a [T] column's content rises above the box). */ readonly visualAbovePt?: TexLength; readonly visualBelowPt?: TexLength; readonly followsColorChange?: boolean; /** The box placed the item labels that were pending on entry (its first paragraph ran \everypar). */ readonly consumesItemLabels?: boolean; readonly pendingListBoundaries?: readonly SimpleTexListContext[]; readonly baselineSkipPt?: TexLength; /** A block whose body holds a list or alignment leaks that list's closing skip into the enclosing lists. */ readonly containsList?: boolean } | {
+export type TexHBoxRole = { readonly kind: "external-flow"; readonly flowKind?: "block" | "columns"; /** A package box (tcolorbox) rather than a Beamer block template. */ readonly packageBox?: boolean; /** The box's material starts this far above the box (a block template's skip, emitted as glue before it). */ readonly contentOffsetPt?: TexLength; /** Height that \\topskip measures when the box starts a continuation page (a block's title ascent). */ readonly pageTopHeightPt?: TexLength; /** Painted material above the box's top and below its bottom (a [T] column's content rises above the box). */ readonly visualAbovePt?: TexLength; readonly visualBelowPt?: TexLength; readonly followsColorChange?: boolean; /** The box placed the item labels that were pending on entry (its first paragraph ran \everypar). */ readonly consumesItemLabels?: boolean; readonly pendingListBoundaries?: readonly SimpleTexListContext[]; readonly baselineSkipPt?: TexLength; /** A block whose body holds a list or alignment leaks that list's closing skip into the enclosing lists. */ readonly containsList?: boolean } | {
   readonly kind: "list-empty-line";
   readonly baselineSkipPt?: TexLength;
 } | {

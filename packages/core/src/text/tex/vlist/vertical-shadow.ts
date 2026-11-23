@@ -149,6 +149,9 @@ export function createVerticalEventApplier(
       case "item": builder.item(); break;
       case "list-end": builder.endList(); listSizes.pop(); break;
       case "trivlist-begin":
+        // A box whose first paragraph took an enclosing item's label (@inlabel is global): the alignment
+        // starts on that label line and takes \@noparlist's path.
+        if (event.noParList && builder.listDepth === 0 && !builder.pendingLabel) builder.inheritPendingLabel();
         builder.beginTrivlist({ topsep: trivlistTopsep(), partopsep: glue(profile ? profile.trivlistPartopsepPt ?? 0 : 2) });
         break;
       case "trivlist-end": builder.endList(); break;

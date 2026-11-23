@@ -94,8 +94,6 @@ import {
   paragraphStartingBaselineSkip,
   positionPreparedFrameFlow,
   previousDepthBeforeTrailingVerticalSpace,
-  trailingBeamerListSkip,
-  trailingBeamerTrivlistSkip,
 } from "./frame-flow.js";
 import type {
   BeamerBlockBodyNode,
@@ -1559,7 +1557,7 @@ async function prepareInlineFlow(params: {
           structuralBoxes.set(node.span.from, node);
           if (embedded) embeddedBoxes.add(node.span.from);
         }
-        if (node.kind === "columns") for (const column of node.columns) visit(column.children, false);
+        if (node.kind === "columns") for (const column of node.columns) visit(column.children, embedded);
         else if (node.kind === "block" || node.kind === "theorem") visit(node.children, embedded);
       }
     };
@@ -1586,13 +1584,13 @@ async function prepareInlineFlow(params: {
         ...(embedded ? { embedNestedFlowBoxes: true } : {}) });
       // A box keeps the id the structural parse gives it, so editing scopes and paragraph ids refer
       // to the same node whichever list lays it out.
-      // Columns extract their bodies as the structural parse does, and their column ids are not
-      // prefixed by the columns id, so the structural node is used as it is.
       const box = parsed.children.find(child => (child.kind === "block" || child.kind === "columns" || child.kind === "theorem") && child.span.from === span.from);
       const structural = structuralBoxes.get(span.from);
+      // Column ids are prefixed by the owner, not by the columns id: rename the box, then the owner.
+      const owner = structural?.kind === "columns" ? structural.id.replace(/:columns:\d+$/u, "") : undefined;
       const ir = !box || !structural ? parsed
-        : box.kind === "columns" || !embedded ? { ...parsed, children: [structural] }
-          : { ...parsed, children: renameBeamerNodeIds(parsed.children, box.id, structural.id) };
+        : !embedded ? { ...parsed, children: [structural] }
+          : { ...parsed, children: renameBeamerNodeIds(renameBeamerNodeIds(parsed.children, box.id, structural.id), inlineId, owner ?? inlineId) };
       const ancestors = environments.filter(parent => parent.begin.span.from < span.from && parent.end.span.to > span.to).sort((a, b) => a.begin.span.from - b.begin.span.from);
       let width = params.textWidth;
       for (const parent of ancestors) {
@@ -2138,12 +2136,9 @@ function prepareFrameParagraph(params: {
   }
   const projectedSource = projection.mapped.text;
   const trivlistTopsep = params.listProfile.trivlistTopsepPt ?? 9;
-  const closingTrivlistSkip = trailingBeamerTrivlistSkip(projectedSource, trivlistTopsep);
-  const trailingTrivlistSkip = Math.max(0, closingTrivlistSkip - trailingCollapsibleSkip(paragraph));
-  const trailingListSkip = trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont, paragraph);
-  const trailingListShrink = trailingListSkip > 0
-    ? BEAMER_LIST_LAYOUT_PROFILE.topsepShrinkPtByDepth?.[0] ?? 0
-    : 0;
+  // The vertical list ends with the closing skips the builder placed (\endtrivlist's and \endlist's
+  // \addvspace); they are part of the material extent and shrink with the frame box's glue setting.
+  const closing = trailingVListGlue(paragraph);
   const namedSize = activeBeamerNamedSize(projectedSource, params.references.theme);
   const startsWithTrivlist = /^\s*(?:(?:\\par(?![A-Za-z@])|\\(?:visible|uncover|invisible)\s*<[^>]*>\s*\{|\{)\s*)*\\begin\s*\{\s*(?:center|flushleft|flushright)\s*\}/u.test(paragraphSource);
   return {
@@ -2155,8 +2150,7 @@ function prepareFrameParagraph(params: {
     ),
     node: params.node,
     paragraph,
-    naturalHeight:
-      paragraphMaterialExtent(paragraph) + trailingTrivlistSkip + trailingListSkip,
+    naturalHeight: paragraphMaterialExtent(paragraph),
     ...embeddedVisualInsets(paragraph, paragraphMaterialExtent(paragraph)),
     boxHeight: paragraphStartingMaterialHeight(paragraph),
     startingBaselineSkip:
@@ -2167,14 +2161,9 @@ function prepareFrameParagraph(params: {
       trivlistTopsep
     ),
     ...(startsWithTrivlist ? { leadingTrivlistSkipPt: trivlistTopsep } : {}),
-    ...(trailingTrivlistSkip > 0 ? { trailingTrivlistSkipPt: trailingTrivlistSkip } : {}),
     endingDepth: paragraphEndingMaterialDepth(paragraph),
-    ...(closingTrivlistSkip > 0 ? { closesWithTrivlistSkip: true } : {}),
-    trailingListGlue: {
-      naturalPt: trailingListSkip,
-      // \endtrivlist's \addvspace\topsep keeps its shrink under the frame box's glue setting.
-      shrinkPt: trailingListShrink + (trailingTrivlistSkip > 0 ? params.listProfile.trivlistTopsepShrinkPt ?? 0 : 0),
-    },
+    ...(closing.trivlist ? { closesWithTrivlistSkip: true } : {}),
+    trailingListGlue: { naturalPt: 0, shrinkPt: 0 },
     trailingVerticalSpacePreviousDepth:
       previousDepthBeforeTrailingVerticalSpace(paragraph),
   };
@@ -2612,19 +2601,11 @@ async function prepareBlockWithTheme(params: {
         (terminalBodyFlow.trailingListGlue.naturalPt + (terminalBodyFlow.trailingTrivlistSkipPt ?? 0) > 0 ? 0 : terminalDisplaySkip(terminalBodyFlow.paragraph))
       : terminalBodyFlow?.kind === "block" ? terminalBodyFlow.block.plan.geometry.afterSkipPt : 0
     : 0;
-  let trailingBodySkip = 0;
-  let closingAlignmentSkip = 0;
-  if (body && plan.style === "default") {
-    const bodySource = params.source.slice(params.node.bodySpan.from, params.node.bodySpan.to);
-    const terminalScope = body.layout.vlistLayout.boxReport.items.filter(item => item.role?.kind === "trivlist").at(-1)?.role;
-    closingAlignmentSkip = terminalScope?.kind === "trivlist" && !terminalScope.noParList
-      ? trailingBeamerTrivlistSkip(bodySource, beamerTrivlistSpacing(params.theme).naturalPt)
-      : 0;
-    trailingBodySkip = trailingScopedBeamerListSkip(createIdentityMappedText(bodySource, params.node.bodySpan.from),
-      params.references, theoremBodyFont, body, params.references.ambientTextAt?.listDepthAt?.(params.node.bodySpan.from) ?? 0) + Math.max(0, closingAlignmentSkip - trailingCollapsibleSkip(body));
-  }
+  // A default block's body keeps its vertical list's closing skips (\endlist, \endtrivlist): they end
+  // the colorbox in glue, which leaves it zero depth.
+  const trailingBodySkip = body && plan.style === "default" ? trailingVListGlue(body).naturalPt : 0;
   const bodyExtent = body ? (plan.style === "default"
-    ? paragraphMaterialExtent(body) + trailingBodySkip
+    ? paragraphMaterialExtent(body)
     : paragraphLineExtent(body)) : (bodyFlow?.extent ?? 0) - terminalBodySkip;
   const titleLine = title.layout.report.lines[0];
   // The title template packs its paragraph into a vbox, whose reference is
@@ -2703,7 +2684,7 @@ async function prepareBlockWithTheme(params: {
   const lastFlowItem = bodyFlow?.items.at(-1)?.item;
   const terminalParagraph = body ?? (lastFlowItem?.kind === "paragraph" ? lastFlowItem.paragraph : undefined);
   const terminalGlueKind = terminalParagraph?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin?.kind;
-  const closesWithBodySkip = plan.style === "default" && (trailingBodySkip > 0 || closingAlignmentSkip > 0 ||
+  const closesWithBodySkip = plan.style === "default" && (trailingBodySkip > 0 ||
     terminalGlueKind === "external-flow-after" ||
     // A display's below skip also ends the box in glue, whatever its last text line's depth.
     terminalGlueKind === "display-math-boundary" ||
@@ -3651,12 +3632,17 @@ async function prepareColumnContent(params: {
         ? columnLeadingHBoxRole(prepared.paragraph)
         : undefined;
       const leadingBlock = flow.length === 0 && column.alignment !== "T" &&
-        (prepared.kind === "block" || prepared.kind === "paragraph" && firstRole?.kind === "external-flow" && firstRole.flowKind === "block");
+        (prepared.kind === "block" || prepared.kind === "paragraph" && firstRole?.kind === "external-flow" && firstRole.packageBox !== true);
       const startingBaseline = prepared.kind === "paragraph"
         ? (firstRole?.kind === "external-flow" ? firstRole.baselineSkipPt : undefined) ??
           paragraphStartingBaselineSkip(prepared.paragraph, bodyFont.lineHeightPt)
         : bodyFont.lineHeightPt;
-      if (prepared.kind === "block" && prepared.block.packageBox) {
+      const leadingPackageBox = prepared.kind === "paragraph" && firstRole?.kind === "external-flow" && firstRole.packageBox === true
+        ? prepared.paragraph.layout.vlistLayout.boxReport.items.find(item => item.glue?.origin?.kind === "external-flow-before")?.glue?.origin : undefined;
+      if (prepared.kind === "paragraph" && leadingPackageBox?.kind === "external-flow-before" && flow.length === 0 && column.alignment === "T" && leadingPackageBox.noBeforeAfter !== true) {
+        // The package box's \addvspace replaces T's negative \vskip-1ex (tcolorbox.sty, latex.ltx \@xaddvskip).
+        prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) + fontXHeightPt(bodyFont);
+      } else if (prepared.kind === "block" && prepared.block.packageBox) {
         const spacing = tcolorboxSurroundingSpacing(prepared.block.packageBox.plan, {
           baselineSkipPt: bodyFont.lineHeightPt, previousDepthPt: previousDepth ?? null,
         });
@@ -3868,6 +3854,7 @@ async function prepareColumnFlowNode(params: {
       alignment: node.kind === "paragraph" ? node.alignment ?? "left" : "left",
       ...(isVisibleList && initialPreviousDepth !== undefined ? { initialPreviousDepth } : {}),
       ...(params.leadingDisplayBaselineSkipPt !== undefined ? { leadingDisplayBaselineSkipPt: params.leadingDisplayBaselineSkipPt } : {}),
+      ...(params.firstInColumn && params.leadingDisplayBaselineSkipPt === 0 ? { opensWithoutPrevDepth: true } : {}),
       listProfile,
       macroBindings,
       references,
@@ -3917,11 +3904,9 @@ async function prepareColumnFlowNode(params: {
     const startsWithTrivlist = firstBox?.role?.kind === "trivlist" || startsWithStandaloneTrivlist;
     const startsWithList = isVisibleList || firstBox?.role?.kind === "list" ||
       /^\s*\\begin\s*\{(?:itemize|enumerate|description)\}/u.test(projection.mapped.text);
-    const lastTrivlist = paragraph.layout.vlistLayout.boxReport.items.filter(item => item.role?.kind === "trivlist").at(-1)?.role;
-    const closingEnvironmentSkipPt = isVisibleList
-      ? trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont)
-      : lastTrivlist?.kind === "trivlist" && lastTrivlist.noParList ? 0
-        : trailingBeamerTrivlistSkip(projection.mapped.text, params.listProfile.trivlistTopsepPt);
+    // The vertical list ends with its closing skips; \endminipage's \unskip (ltboxes.dtx) removes the
+    // last glue when the column ends here (see the column's natural height).
+    const closingEnvironmentSkipPt = finalVListGlue(paragraph);
     return {
       kind: "paragraph",
       visibility,
@@ -3943,10 +3928,8 @@ async function prepareColumnFlowNode(params: {
       // The TeX list ships its boxes and glue with their measured dimensions.
       // The shared text frontend's synthetic strut does not advance the column.
       advanceHeight: paragraphMaterialExtent(paragraph),
-      // minipage's terminal \unskip drops the final trivlist skip; retain it
-      // only when another flow item follows, as for the list's trailing glue.
       closingEnvironmentSkipPt,
-      trailingSkipPt: Math.max(0, closingEnvironmentSkipPt - trailingCollapsibleSkip(paragraph)),
+      trailingSkipPt: 0,
     };
   }
   if (node.kind === "unsupported") {
@@ -4225,15 +4208,11 @@ function measureColumnVerticalBox(
     const last = flow.at(-1);
     let depth = last?.kind === "block" ? last.block.endingDepth : last?.kind === "columns" ? last.box.depth : 0;
     if (last?.kind === "paragraph") {
-      const items = last.paragraph.layout.vlistLayout.boxReport.items;
-      const tail = items.at(-1);
-      const lastList = items.filter(item => item.role?.kind === "list").at(-1);
-      const closesNestedList = lastList?.role?.kind === "list" && lastList.role.depth > 1 && !lastList.role.noParList && !lastList.role.inheritsPendingLabel &&
-        (lastList.sourceSpan?.end ?? -1) >= (tail?.sourceSpan?.end ?? 0);
-      // endtrivlist rewrites a terminal display skip or a nested list's
-      // closing skip. endminipage's single unskip leaves zero depth.
-      const closesWithGlue = (last.closingEnvironmentSkipPt ?? last.trailingSkipPt) > 0 && (tail?.itemKind === "glue" || closesNestedList);
-      depth = closesWithGlue ? 0 : paragraphEndingMaterialDepth(last.paragraph);
+      // After \endminipage's single \unskip, remaining glue leaves the vbox zero depth.
+      const items = last.paragraph.layout.vlistLayout.items;
+      const remaining = last.closingEnvironmentSkipPt ? items.slice(0, -1) : items;
+      const tail = [...remaining].reverse().find(item => item.item.kind !== "penalty");
+      depth = tail?.item.kind === "glue" ? 0 : paragraphEndingMaterialDepth(last.paragraph);
     }
     return {
       height: naturalHeight - depth,
@@ -4261,7 +4240,8 @@ function measureColumnVerticalBox(
   // follows below that reference. Ordinary prose shares the initial line.
   const first = flow[0];
   const firstRole = first?.kind === "paragraph" ? columnLeadingHBoxRole(first.paragraph) : undefined;
-  const startsWithBlock = firstRole?.kind === "external-flow" && firstRole.flowKind === "block";
+  // Blocks and columns both start with \par; a package box does not.
+  const startsWithBlock = firstRole?.kind === "external-flow" && firstRole.packageBox !== true;
   const firstReference = first?.kind === "columns" || (first?.kind === "block" && !first.block.packageBox) ||
     (first?.kind === "paragraph" && (first.startsWithVerticalEnvironment || startsWithBlock))
     ? 0 : firstFlowReferenceFromTop(flow);
@@ -4354,6 +4334,29 @@ function paragraphLineExtent(paragraph: LaidParagraph): number {
   // Block bodies are minipages: \endminipage removes the terminal display
   // skip with \unskip. The final painted equation still contributes its box.
   return bottom || paragraphMaterialExtent(paragraph);
+}
+
+/** The natural size of the vertical list's final item when it is glue (what \unskip removes). */
+function finalVListGlue(paragraph: LaidParagraph): number {
+  const last = paragraph.layout.vlistLayout.items.at(-1)?.item;
+  return last?.kind === "glue" ? Number(last.size) : 0;
+}
+
+/** The glue after a vertical list's last material: the closing skips of its environments. */
+function trailingVListGlue(paragraph: LaidParagraph): { naturalPt: number; trivlist: boolean; list: boolean } {
+  let naturalPt = 0;
+  let trivlist = false;
+  let list = false;
+  const items = paragraph.layout.vlistLayout.boxReport.items;
+  for (let index = items.length - 1; index >= 0; index--) {
+    const item = requireArrayValue(items, index);
+    if (item.itemKind === "penalty") continue;
+    if (item.itemKind !== "glue") break;
+    naturalPt += Number(item.glue?.size ?? 0);
+    if (item.glue?.origin?.kind === "trivlist-boundary") trivlist = true;
+    if (item.glue?.origin?.kind === "list-boundary") list = true;
+  }
+  return { naturalPt, trivlist, list };
 }
 
 function paragraphMaterialExtent(paragraph: LaidParagraph): number {
@@ -4469,6 +4472,8 @@ function layoutParagraph(params: {
   initialPreviousDepth?: number;
   leadingDisplayBaselineSkipPt?: number;
   inMinipage?: boolean;
+  /** The list opens after \nointerlineskip (a T column's \vskip-1ex\nointerlineskip): \prevdepth is -1000pt. */
+  opensWithoutPrevDepth?: boolean;
   listProfile?: TexListLayoutProfile;
   disableAutomaticHyphenation?: boolean;
   macroBindings?: ReadonlyMap<string, MacroBinding>;
@@ -4642,13 +4647,14 @@ function layoutParagraph(params: {
       // tcolorbox's `before`/`after` code: \addvspace on both sides with \nointerlineskip, the balanced
       // variants measured against .3\baselineskip (tcolorbox.sty, `before skip balanced`). With
       // `nobeforeafter` the box ships without skips or interline glue.
-      // A frame's body starts after beamer's \vbox{} (\prevdepth 0pt), so a box that opens the
-      // frame balances against that depth.
-      const opensFrame = params.role === "body" && /^(?:\s|\\par(?![A-Za-z]))*$/u.test(mapped.text.slice(0, box.sourceStart));
+      // A frame's body starts after beamer's \vbox{} and a column's after its \leavevmode line
+      // (\prevdepth 0pt), so a box that opens either balances against that depth; a T column's
+      // \nointerlineskip leaves nothing to balance.
+      const opensFrame = params.role === "body" && params.opensWithoutPrevDepth !== true && /^(?:\s|\\par(?![A-Za-z]))*$/u.test(mapped.text.slice(0, box.sourceStart));
       const balance = packageBox?.beforeBalanced && !packageBox.noBeforeAfter ? .3 * baselineSkipPt : undefined;
       const packageGlue = packageBox ? {
         before: { kind: "glue" as const, size: texLength(packageBox.noBeforeAfter ? 0 : packageBox.beforeSkipPt + (opensFrame && balance !== undefined ? balance : 0)),
-          origin: { kind: "external-flow-before" as const, addvspace: true, noInterline: true,
+          origin: { kind: "external-flow-before" as const, addvspace: true, noInterline: true, ...(packageBox.noBeforeAfter ? { noBeforeAfter: true } : {}),
             ...(balance !== undefined && !opensFrame ? { balancedPt: balance } : {}) },
           sourceSpan: { start: box.sourceStart, end: box.sourceStart } },
         after: { kind: "glue" as const, size: texLength(packageBox.noBeforeAfter ? 0 : packageBox.afterSkipPt),
@@ -4658,7 +4664,7 @@ function layoutParagraph(params: {
       // \medskipamount and \smallskipamount carry a third of their size as stretch and shrink.
       return [...(packageGlue ? [packageGlue.before] : []), ...(before ? [{ kind: "glue" as const, size: texLength(before), stretch: texLength(before / 3), shrink: texLength(before / 3),
         origin: { kind: "external-flow-before" as const }, sourceSpan: { start: box.sourceStart, end: box.sourceStart } }] : []),
-        { kind: "hbox", role: { kind: "external-flow", flowKind: item.kind, ...(before ? { contentOffsetPt: texLength(before) } : {}),
+        { kind: "hbox", role: { kind: "external-flow", flowKind: item.kind, ...(packageBox ? { packageBox: true } : {}), ...(before ? { contentOffsetPt: texLength(before) } : {}),
           ...(item.kind === "block" && before ? { pageTopHeightPt: texLength(item.block.titleAscent) } : {}),
           ...(item.kind === "columns" ? columnsVisualOverhang(item) : {}), ...(containsListScope(item, "trivlist") ? { containsList: true } : {}), ...(box.pendingItemLabels ? { pendingListBoundaries: box.pendingItemLabels } : {}), ...(box.followsColorChange ? { followsColorChange: true } : {}), ...(box.consumedItemLabels?.length ? { consumesItemLabels: true } : {}), baselineSkipPt: texLength(baselineSkipPt) }, sourceSpan: { start: box.sourceStart, end: box.sourceEnd },
         advance: texLength(advance), box: { metrics: { width: texLength(0), height: texLength(height), depth: texLength(depth) }, renderItems: [] } },
@@ -5579,77 +5585,6 @@ function emitUnsupportedPlaceholder(params: {
     elementId: null,
     markup: unsupportedPlaceholderMarkup(placeholder, bounds),
   });
-}
-
-/** Closing list glue uses the registers captured in the list's active size. */
-function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerReferenceContext, font: BeamerThemeFont, paragraph?: LaidParagraph, listDepthOffset = 0): number {
-  const end = [...mapped.text.matchAll(/\\end\s*\{(?:itemize|enumerate|description)\}/gu)].at(-1);
-  if (!end) return 0;
-  // A transferred parent label makes this list take LaTeX's noparlist path:
-  // its opening and closing topsep are both suppressed.
-  const terminalList = [...matchTexSyntaxEnvironments(getTexSyntaxIndex(mapped.text, texFragmentParser)).values()]
-    .find(env => env.end.span.from === end.index);
-  const beginOrigin = terminalList ? mapped.sourceMap.charOrigins[terminalList.begin.span.from] : undefined;
-  if (beginOrigin?.kind === "direct" && [...(references.inlineFlowItemLabels?.values() ?? [])]
-    .some(transfer => beginOrigin.from === transfer.targetOffset)) return 0;
-  const origin = mapped.sourceMap.charOrigins[end.index];
-  const active = references.theme ? ambientTextTheme(references.theme,
-    references.ambientTextAt?.(origin?.kind === "direct" ? origin.from : 0) ?? "").fonts["normal-text"] : font;
-  // Only \normalsize, \small and \footnotesize reinstall the list registers;
-  // \scriptsize and the other sizes inherit the last of them still in scope.
-  const ambient = references.ambientTextAt?.(origin?.kind === "direct" ? origin.from : 0) ?? "";
-  const registerCommand = [...ambient.matchAll(/\\(normalsize|small|footnotesize)(?![A-Za-z])/gu)].at(-1)?.[1];
-  const registerOverrides = beamerListSizeOverrides(references.theme);
-  const registers = registerCommand === undefined
-    ? registerOverrides.find(entry => Math.abs(entry.fontSizePt - active.sizePt) < .001)
-    : registerCommand === "normalsize" ? undefined : registerOverrides[registerCommand === "small" ? 0 : 1];
-  // A default block keeps the surrounding list depth, so its list closes with that
-  // deeper level's topsep; only first-level lists use the size registers.
-  const baseTopsep = listDepthOffset > 0
-    ? BEAMER_LIST_LAYOUT_PROFILE.topsepPtByDepth[Math.min(listDepthOffset, BEAMER_LIST_LAYOUT_PROFILE.topsepPtByDepth.length - 1)] ?? 3
-    : registers?.topsepPt ?? 3;
-  const outerClosing = trailingBeamerListSkip(mapped.text, baseTopsep);
-  // Lists that end back to back each addvspace their closing skip, so the
-  // largest survives. A nested list exits with its topsep plus the enclosing
-  // list's parsep, which exceeds the outer topsep at \small and \footnotesize.
-  let closing = outerClosing;
-  if (outerClosing > 0) {
-    const ends = [...mapped.text.matchAll(/\\end\s*\{(?:itemize|enumerate|description)\}/gu)];
-    let chain = 0;
-    for (let index = ends.length - 1; index >= 0; index--) {
-      const end = requireDefined(ends[index], "Expected a list end.");
-      const next = ends[index + 1]?.index ?? mapped.text.length;
-      const gap = mapped.text.slice(end.index + end[0].length, next);
-      if (!/^(?:\s|\}|\\par(?![A-Za-z@]))*$/u.test(gap)) break;
-      chain++;
-    }
-    const environments = [...matchTexSyntaxEnvironments(getTexSyntaxIndex(mapped.text, texFragmentParser)).values()];
-    for (let depth = 2; depth <= chain; depth++) {
-      // A list that starts on its item's label line takes LaTeX's noparlist
-      // path, which suppresses its closing topsep.
-      const listEnd = ends[ends.length - depth];
-      const environment = listEnd ? environments.find(candidate => candidate.end.span.from === listEnd.index) : undefined;
-      if (environment && /\\item\s*(?:<[^>]*>\s*)?(?:\[[^\]]*\]\s*)?$/u.test(mapped.text.slice(0, environment.begin.span.from))) continue;
-      const topsep = BEAMER_LIST_LAYOUT_PROFILE.topsepPtByDepth[Math.min(depth, BEAMER_LIST_LAYOUT_PROFILE.topsepPtByDepth.length) - 1] ?? 0;
-      const enclosingParsep = depth === 2 ? registers?.parsepPt ?? 0
-        : BEAMER_LIST_LAYOUT_PROFILE.parsepPtByDepth[Math.min(depth - 1, BEAMER_LIST_LAYOUT_PROFILE.parsepPtByDepth.length) - 1] ?? 0;
-      closing = Math.max(closing, topsep + enclosingParsep);
-    }
-  }
-  // A block holding a list leaks its closing skip into the enclosing list: the
-  // normal-size topsep plus that list's parsep.
-  if (outerClosing > 0 && paragraph?.layout.vlistLayout.boxReport.items.some(item =>
-      item.hboxRole?.kind === "external-flow" && item.hboxRole.flowKind === "block" && item.hboxRole.containsList)) {
-    closing = Math.max(closing, (BEAMER_LIST_LAYOUT_PROFILE.topsepPtByDepth[0] ?? 0) + (registers?.parsepPt ?? 0));
-  }
-  const tail = paragraph?.layout.vlistLayout.boxReport.items.at(-1)?.glue?.origin;
-  // A separately laid-out flow item still follows the list's endtrivlist.
-  // Its closing glue adjusts the display skip by the active list parskip.
-  const displayAdjustment = closing > 0 && tail?.kind === "display-math-boundary" && tail.side === "below"
-    ? registers?.parsepPt ?? 0 : 0;
-  // endtrivlist uses addvspace, so a terminal block or display skip and
-  // the list's closing topsep contribute their maximum.
-  return Math.max(displayAdjustment, closing - trailingCollapsibleSkip(paragraph));
 }
 
 function trailingCollapsibleSkip(paragraph: LaidParagraph | undefined): number {

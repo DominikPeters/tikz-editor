@@ -308,6 +308,8 @@ export function resolveVerticalListWithBuilder(
   let pending: TexVListItem[] = [];
   const mergeable = new Set<TexVListItem>();
   const nodes = builder.list;
+  let lastLeafPosition = -1;
+  for (const [position, node] of nodes.entries()) if (node.kind === "box" && leafById.has(node.id)) lastLeafPosition = position;
   for (const [position, node] of nodes.entries()) {
     if (node.kind === "box") {
       const leaf = leafById.get(node.id);
@@ -329,7 +331,8 @@ export function resolveVerticalListWithBuilder(
       pending.push(generatedGlueItem(node, -1));
       continue;
     }
-    if (node.glue.natural === 0 && node.glue.stretch === 0 && node.glue.shrink === 0) continue;
+    // Zero glue only matters after the last box: it still ends the list in glue (TeX's \vskip-\lastskip).
+    if (node.glue.natural === 0 && node.glue.stretch === 0 && node.glue.shrink === 0 && position < lastLeafPosition) continue;
     const next = nodes.slice(position + 1).find(candidate => candidate.kind === "box" && leafById.has(candidate.id));
     const nextItem = next?.kind === "box" ? leafById.get(next.id)?.item : undefined;
     let generated = generatedGlueItem(node, nextItem?.kind === "paragraph" ? nextItem.blockIndex : -1);
@@ -339,6 +342,10 @@ export function resolveVerticalListWithBuilder(
       const kind = prior?.kind === "glue" && mergeable.has(prior) ? prior.origin?.kind : undefined;
       const boundary = kind === "quote-boundary" ? "quote" : kind === "list-boundary" ? "list" : kind === "trivlist-boundary" ? "trivlist" : "plain";
       generated = { ...generated, origin: { kind: "paragraph-boundary-interline", boundary } };
+    }
+    if (node.origin === "cancelled") {
+      pending.push(generated);
+      continue;
     }
     // Consecutive list skips (an \addvspace and the \parskip after it) form one boundary glue item.
     const previous = pending.at(-1);
@@ -382,7 +389,9 @@ export function resolveVerticalListWithBuilder(
     before.set(firstLeaf.id, [...oldEdges.leading, ...attached]);
   }
   const items = rebuild(document.items, []);
-  items.push(...pendingAttached, ...oldEdges.trailing);
+  // A container's closing skips (\endlist, \endtrivlist) are the builder's: the container decides what
+  // its end does with them (a minipage's \unskip, a frame box's glue setting).
+  items.push(...pendingAttached, ...pending);
   return { ...document, items };
 }
 
