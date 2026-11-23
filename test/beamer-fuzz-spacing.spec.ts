@@ -2141,6 +2141,34 @@ Witness.
     expect(await baseline(closed)).toBeCloseTo(130.30278, 3);
   });
 
+  it("keeps a grouped block in its enclosing block body's vertical list", async () => {
+    // The group around the inner block no longer splits the body into separate flow pieces: \\endlist's
+    // skip and the block's \\vskip\\medskipamount add up in one list. LuaLaTeX baselines.
+    const source = String.raw`\documentclass[10pt]{beamer}
+\usetheme{Boadilla}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Groups}
+Lead.\par
+\begin{exampleblock}{Outer}
+\begin{enumerate}
+\item One.
+\end{enumerate}
+\par
+{\footnotesize\centering
+\begin{block}{Inner}
+Body.
+\end{block}\par}
+\end{exampleblock}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("Inner")).toBeCloseTo(97.933197, 3);
+    expect(baseline("Witness.")).toBeCloseTo(137.147202, 3);
+  });
+
   it("reads a nested list's registers from its body font, not the ambient size", async () => {
     // Beamer selects the subbody font (\small) before \list, which redefines \@listi: the inner
     // list's \itemsep and \parsep are \small's (4.5pt at 12pt), not \footnotesize's. LuaLaTeX baselines.

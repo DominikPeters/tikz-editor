@@ -157,7 +157,9 @@ export function parseBeamerFrameBody(
       }
       if (ancestor.name === "Group" && ancestor.from < token.span.from && !overlays.commands.some(command => command.branches.some(branch => branch.span.from === ancestor.from && branch.span.to === ancestor.to))) group = { from: ancestor.from, to: ancestor.to };
     }
-    if (group && !textContainer && (token.name === "columns" || isBlockEnvironment(token.name))) {
+    // With embedded flow boxes the group stays in the text: its block or columns is a box of the same
+    // vertical list, so the glue on either side of it is resolved there.
+    if (group && !textContainer && params.embedFlowBoxes !== true && (token.name === "columns" || isBlockEnvironment(token.name))) {
       pushTextNode(source, { from: cursor, to: group.from }, frame.id, children);
       const bodySpan = { from: group.from + 1, to: group.to - 1 };
       const nested = parseBeamerFrameBody({ ...params, frame: { ...frame, id: `${frame.id}:group:${group.from}`, span: group, bodySpan } });
