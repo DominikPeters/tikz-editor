@@ -790,6 +790,8 @@ export interface SimpleTexBoxBlockItem extends SimpleTexSourceRange {
   /** Labels still pending on entry, whether or not this box consumes them. */
   readonly pendingItemLabels?: readonly SimpleTexListContext[];
   readonly consumedItemLabels?: readonly SimpleTexListContext[];
+  /** A list inside the box ends every pending label: \endtrivlist and \everypar set @inlabel false globally. */
+  readonly clearsItemLabels?: boolean;
   readonly kind: "box";
   /** A \color after the last \par or environment end sits between the preceding skip and this box. */
   readonly followsColorChange?: boolean;
@@ -5284,8 +5286,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
       ? parent.displaySkipCommand : selected.displaySkipCommand;
     const displaySkipCommand = (kind === "itemize" || kind === "enumerate"
       ? options?.listBodyDisplaySkipCommands?.[fontDepth] : undefined) ?? inheritedDisplaySkipCommand;
-    const registerFontSizePt = parent && (selected.registerSelectionFrom ?? -1) < parent.sourceStart
-      ? parent.registerFontSizePt : selected.registerSizePt;
+    // Beamer selects the body font (\usebeamerfont{itemize/enumerate subbody}: \small) before \list, and
+    // that size command redefines \@listi: the list reads the body size's registers.
+    const registerFontSizePt = bodySize !== undefined ? texLength(bodySize)
+      : parent && (selected.registerSelectionFrom ?? -1) < parent.sourceStart ? parent.registerFontSizePt : selected.registerSizePt;
     const scopeRole = {
       kind: "list",
       ...(options?.listBodyFontSizes ? { fontSizePt: texLength(bodySize ?? inheritedSize) } : {}),
@@ -5927,6 +5931,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
         ...(boxBody.verticalEvents !== undefined ? { verticalEvents: boxBody.verticalEvents } : {}),
         ...(pendingItemLabels.length ? { pendingItemLabels } : {}),
         ...(consumedItemLabels.length ? { consumedItemLabels } : {}),
+        // A list inside the box clears @inlabel globally, an enclosing trivlist's label included.
+        ...(clearsPendingLabels ? { clearsItemLabels: true } : {}),
         // Only an alignment's \addvspace after that \color is kept apart from the preceding skip.
         ...(previousParagraphBlockEnd !== undefined && /\\color\b[\s\S]*\\begin\s*\{(?:center|flushleft|flushright)\}/u.test(
           textSliceAtSourceOffsets(previousParagraphBlockEnd, node.sourceStart).split(/\\end\s*\{[^}]*\}|\\item(?![A-Za-z@])/u).at(-1) ?? "")

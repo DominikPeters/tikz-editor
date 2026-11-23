@@ -1751,6 +1751,57 @@ Witness.
     expect(baseline("Witness.")).toBeCloseTo(112.41625, 3);
   });
 
+  it("lets a list inside a block end an enclosing trivlist's pending label", async () => {
+    // The flushleft's \item label is still pending when the block starts; the inner list's
+    // \endtrivlist clears @inlabel globally, so \endtrivlist of the flushleft ships no empty line and
+    // its \addvspace merges with the block's closing skip. LuaLaTeX baselines.
+    const source = String.raw`\documentclass[10pt]{beamer}
+\usetheme{Boadilla}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Labels}
+Lead.\par
+\begin{flushleft}
+\begin{exampleblock}{Title}
+\begin{itemize}\item Inner.\end{itemize}
+\end{exampleblock}
+\end{flushleft}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("Inner.")).toBeCloseTo(82.732224, 3);
+    expect(baseline("Witness.")).toBeCloseTo(107.357224, 3);
+  });
+
+  it("reads a nested list's registers from its body font, not the ambient size", async () => {
+    // Beamer selects the subbody font (\small) before \list, which redefines \@listi: the inner
+    // list's \itemsep and \parsep are \small's (4.5pt at 12pt), not \footnotesize's. LuaLaTeX baselines.
+    const source = String.raw`\documentclass[12pt]{beamer}
+\usetheme{Boadilla}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[t]{Registers}
+Lead.\par
+\begin{enumerate}
+\item {\footnotesize
+\begin{alertblock}{Title}
+\begin{enumerate}\item One.\item Two.\end{enumerate}
+\end{alertblock}\par}
+\item Third.
+\end{enumerate}
+Witness.
+\end{frame}
+\end{document}`;
+    const trace = buildNativeBeamerPageTrace(await renderBeamerFrame(source), computerModernTexMetricProvider);
+    const baseline = (text: string) => trace.lines.find(line => line.text === text)?.baselineY ?? NaN;
+    expect(baseline("One.")).toBeCloseTo(87.35083, 3);
+    expect(baseline("Two.")).toBeCloseTo(109.950836, 3);
+    expect(baseline("Third.")).toBeCloseTo(132.086288, 3);
+    expect(baseline("Witness.")).toBeCloseTo(149.586288, 3);
+  });
+
   it("shares the block and alignment skips before a color change inside the alignment", async () => {
     const source = slide(String.raw`Lead.\par
 \begin{columns}[onlytextwidth,t]

@@ -340,8 +340,20 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
   against LuaLaTeX for `[c]`, `[t]`, `[b]` minipages and a `\parbox` in their
   own paragraphs.
 
+- **Fuzz sweep regressions (seeds 70-72).** A box holding a list ends every
+  pending label, a trivlist's included (`\endtrivlist` clears `@inlabel`
+  globally), so the enclosing `\endtrivlist` ships no empty line and its
+  `\addvspace` merges with the box's closing skip. A Beamer list reads its
+  registers from its body font: `\usebeamerfont{itemize/enumerate subbody}`
+  (`\small`) runs before `\list` and redefines `\@listi`.
+
 ## Next
 
 1. **Inline material boxes**: a minipage that shares its line with text is
    still a source card ("not supported by the simple text path"), and so is
    a frame holding both a `[t]` minipage and `{\small\begin{minipage}...}`.
+2. **Trivlist labels into boxes**: a `flushleft`/`center` item label still
+   pending when a default-style block starts makes the block's first list a
+   no-par list in TeX (no topsep); the label transfer into box bodies only
+   carries list labels, so native adds the topsep (2.9pt in the 11pt default
+   theme). Rounded blocks are unaffected (minipage body).
