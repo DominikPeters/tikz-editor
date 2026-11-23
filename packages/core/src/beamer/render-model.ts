@@ -152,21 +152,17 @@ export type PreparedColumnContent = {
   box: ColumnVerticalBox;
 };
 
-export type PreparedFrameFlowItem =
-  | PreparedUnsupportedFlowItem
+/** Template material laid out in the frame's vertical list as boxes separated by \vfill glue. */
+export type PreparedTemplateFlowItem =
   | { kind: "contents"; visibility: BeamerOverlayVisibility; contents: PreparedContents }
   | {
       kind: "title-page";
       visibility: BeamerOverlayVisibility;
       titlePage: PreparedTitlePage;
-    }
-  | {
-      kind: "vertical-space";
-      visibility: BeamerOverlayVisibility;
-      node: Extract<BeamerFrameBodyNode, { kind: "vertical-space" }>;
-      height: number;
-      relativeUnitPt?: number;
-    }
+    };
+
+export type PreparedFrameFlowItem =
+  | PreparedUnsupportedFlowItem
   | {
       kind: "paragraph";
       visibility: BeamerOverlayVisibility;

@@ -831,7 +831,6 @@ async function renderBeamerFrameStep(params: {
     const rigidPositioned = positionPreparedFrameFlow(
       preparedFrameFlow,
       theme.fonts["normal-text"].lineHeightPt,
-      0,
       // beamerbaseframe.sty issues \nointerlineskip after its initial
       // empty vbox on plain frames, before the first authored material.
       frame.options?.plain ? null : 0
@@ -851,7 +850,6 @@ async function renderBeamerFrameStep(params: {
     const positioned = continuationPages?.[continuationIndex - 1] ?? positionPreparedFrameFlow(
       preparedFrameFlow,
       theme.fonts["normal-text"].lineHeightPt,
-      shrink ? 0 : verticalPacking.fillUnit,
       frame.options?.plain ? null : 0
     );
     const shrinkTopSkip = shrink && frame.options?.alignment === "top" ? TOP_ALIGNED_FRAME_SKIP_PT : 0;
@@ -870,18 +868,7 @@ async function renderBeamerFrameStep(params: {
       ) {
         continue;
       }
-      if (placement.item.kind === "title-page") {
-        emitPreparedTitlePage({
-          prepared: placement.item.titlePage,
-          fillOffset: weight => weight * verticalPacking.fillUnit,
-          x: availableContentBounds.x,
-          y: frameBlockTop + placement.contentTop,
-          items,
-          paragraphs,
-          modelBuilder: bodyModelBuilder,
-          theme,
-        });
-      } else if (placement.item.kind === "paragraph") {
+      if (placement.item.kind === "paragraph") {
         emitFrameParagraph({
           prepared: placement.item,
           x: availableContentBounds.x,
@@ -905,10 +892,6 @@ async function renderBeamerFrameStep(params: {
           theme,
           ...(params.work !== undefined ? { work: params.work } : {}),
         });
-      } else if (placement.item.kind === "contents") {
-        const contentTop = frameBlockTop + placement.contentTop;
-        emitPreparedContents({ prepared: placement.item.contents, x: availableContentBounds.x,
-          origin: weight => contentTop + weight * verticalPacking.fillUnit, items, paragraphs, modelBuilder: bodyModelBuilder, theme });
       } else if (placement.item.kind === "unsupported") {
         emitUnsupportedPlaceholder({
           placeholder: placement.item.placeholder,
@@ -918,12 +901,6 @@ async function renderBeamerFrameStep(params: {
           items,
           modelBuilder: bodyModelBuilder,
         });
-      } else if (placement.item.kind === "vertical-space") {
-        const item = placement.item;
-        spacing.push({ command: item.node.command, sourceSpan: item.node.span, sizePt: item.height,
-          ...(item.relativeUnitPt !== undefined ? { relativeUnitPt: item.relativeUnitPt } : {}),
-          bounds: { x: availableContentBounds.x, y: frameBlockTop + placement.contentTop,
-            width: availableContentBounds.width, height: item.height } });
       } else {
         await emitPreparedBlock({
           spacing, embeddedTikz, paperWidth: page.page.width,
@@ -1679,7 +1656,9 @@ async function prepareFrameFlow(params: {
   for (const child of params.children) {
     if (params.work) await params.work.checkpoint();
     // Pictures stay in the text of the vertical list that holds them, as inline boxes.
-    const node: BeamerFrameBodyNode = child.kind === "tikzpicture" ? { kind: "paragraph", id: child.id, span: child.span } : child;
+    // Pictures, spacing, title pages and contents are material of the vertical list that holds them.
+    const node: BeamerFrameBodyNode = child.kind === "tikzpicture" || child.kind === "vertical-space" || child.kind === "title-page" || child.kind === "contents"
+      ? { kind: "paragraph", id: child.id, span: child.span } : child;
     const nodeTheme = ambientTextTheme(params.theme, params.references.ambientTextAt?.(node.span.from) ?? "");
     const bodyFont = nodeTheme.fonts["normal-text"];
     const listProfile = beamerListLayoutProfile(nodeTheme, params.references.crampedLists);
@@ -1690,38 +1669,6 @@ async function prepareFrameFlow(params: {
       params.step
     );
     if (visibility === "removed") {
-      continue;
-    }
-    if (node.kind === "contents") {
-      const unsupportedOptions = (node.options?.value ?? "").split(",").map(value => value.trim()).filter(value => value && !["hideallsubsections", "hideothersubsections"].includes(value));
-      if (unsupportedOptions.length) params.diagnostics.push({ severity: "warning", code: "beamer-contents-unsupported-options",
-        message: `Unsupported contents options: ${unsupportedOptions.join(", ")}. Only default section/subsection contents and hide-all/other-subsection filters are implemented.`, span: node.options?.span ?? node.span });
-      result.push({ kind: "contents", visibility, contents: prepareBeamerContents({ node, sections: params.references.tocSections ?? [],
-        currentSectionId: params.references.currentSectionId ?? null, theme: nodeTheme, width: params.textWidth,
-        layout: (mapped, font, width, id) => layoutParagraph({ mapped, font, sourceSpan: node.span, paragraphId: id, role: "body",
-          bounds: { x: 0, y: 0, width, height: 0 }, alignment: "left", macroBindings: params.macroBindings,
-          references: params.references, paperWidth: params.paperWidth }),
-      }) });
-      continue;
-    }
-    if (node.kind === "title-page") {
-      result.push({
-        kind: "title-page",
-        visibility,
-        titlePage: runBeamerRenderOperation(params.work, () => prepareTitlePage({
-          node,
-          width: params.textWidth,
-          theme: nodeTheme,
-          metadata: params.metadata,
-          macroBindings: params.macroBindings,
-          references: params.references,
-          ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
-          paperWidth: params.paperWidth,
-          paperHeight: params.paperHeight,
-          textHeight: params.textHeight,
-          plain: params.plain,
-        })),
-      });
       continue;
     }
     if (node.kind === "paragraph") {
@@ -1767,15 +1714,6 @@ async function prepareFrameFlow(params: {
           span: node.span,
         });
       }
-      continue;
-    }
-    if (node.kind === "vertical-space") {
-      result.push({
-        kind: "vertical-space",
-        visibility,
-        node,
-        ...measureVerticalSpace(node, bodyFont),
-      });
       continue;
     }
     if (node.kind === "columns") {
@@ -2919,7 +2857,7 @@ async function emitPreparedBlock(params: {
         embeddedTikz: params.embeddedTikz, modelBuilder: params.modelBuilder, theme: params.theme,
         ...(params.work !== undefined ? { work: params.work } : {}) });
       childIds.push(item.node.id);
-    } else if (item.kind === "block") {
+    } else {
       await emitPreparedBlock({ ...params, prepared: item.block, x: params.x,
         y: params.y + block.bodyParagraphTop + placement.contentTop, parentId: block.node.id, visibility: params.visibility === "hidden" || item.visibility === "hidden" ? "hidden" : "visible" });
       childIds.push(item.node.id);
@@ -5365,11 +5303,7 @@ function resolveFrameVerticalPacking(
   const internalFillWeight = flow.reduce(
     (sum, item) =>
       sum +
-      (item.kind === "title-page"
-        ? item.titlePage.leadingFillWeight +
-          item.titlePage.trailingFillWeight
-        : item.kind === "contents" ? item.contents.fillWeight
-        : item.kind === "paragraph" ? verticalListFillWeight(item.paragraph) : 0),
+      (item.kind === "paragraph" ? verticalListFillWeight(item.paragraph) : 0),
     0
   );
   if (alignment === "top") {

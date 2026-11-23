@@ -1,12 +1,12 @@
 import type { Span } from "../ast/types.js";
 import { createMappedText, concatMappedText, sliceMappedText, type MappedText } from "../text/source-map.js";
-import type { LaidParagraph, PreparedFrameFlowItem, PreparedColumnFlowItem } from "./render-model.js";
+import type { LaidParagraph, PreparedFrameFlowItem, PreparedColumnFlowItem, PreparedTemplateFlowItem } from "./render-model.js";
 
 export type BeamerInlineFlow = {
   span: Span;
   width: number;
   labelTargetOffset?: number;
-  item: Extract<PreparedFrameFlowItem, { kind: "block" | "columns" | "title-page" | "contents" }>;
+  item: Extract<PreparedFrameFlowItem, { kind: "block" | "columns" }> | PreparedTemplateFlowItem;
 };
 
 const inlineFlowBox = String.raw`\begin{minipage}{1pt}X\end{minipage}`;
@@ -53,6 +53,7 @@ export function beamerInlineListEffects(mapped: MappedText, boxes: readonly Beam
     if (mapped.text.startsWith(inlineFlowBox, match.index)) {
       syntheticParagraphBreaks.push(match.index - paragraphBreak.length, match.index + inlineFlowBox.length);
     }
+    if (box.item.kind === "title-page" || box.item.kind === "contents") continue;
     // List/trivlist everypar and endtrivlist clear @inlabel globally.
     if (containsListScope(box.item, "trivlist")) boxesClearingPendingItemLabels.push(match.index);
     if (inMinipage && resetsMinipageListDepth(box.item)) minipageListDepthResets.push(match.index);

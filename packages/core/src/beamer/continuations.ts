@@ -158,12 +158,11 @@ function sliceParagraphBox(item: Extract<PreparedFrameFlowItem, { kind: "paragra
 }
 
 function frameMaterial(flow: readonly PreparedFrameFlowItem[], baselineSkip: number, plain: boolean, breaks: BeamerContinuationBreaks): VerticalMaterial[] {
-  const positioned = positionPreparedFrameFlow(flow, baselineSkip, 0, plain ? null : 0);
+  const positioned = positionPreparedFrameFlow(flow, baselineSkip, plain ? null : 0);
   const result: VerticalMaterial[] = [];
   let outerCursor = 0;
   for (const placement of positioned.items) {
     const item = placement.item;
-    if (item.kind === "vertical-space") { result.push(glue(item.height)); outerCursor += item.height; continue; }
     let pendingOuterGap = Math.max(0, placement.contentTop - outerCursor);
     if (item.kind !== "paragraph" || item.paragraph.layout.vlistLayout.items[0]?.item.kind === "paragraph" || item.paragraph.layout.vlistLayout.items[0]?.item.kind === "vbox") {
       if (pendingOuterGap > 0) result.push(glue(pendingOuterGap));

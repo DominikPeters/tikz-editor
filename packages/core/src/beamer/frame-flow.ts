@@ -33,51 +33,12 @@ export function paragraphStartingBaselineSkip(paragraph: LaidParagraph, fallback
 export function positionPreparedFrameFlow(
   flow: readonly PreparedFrameFlowItem[],
   baselineSkip: number,
-  fillUnit = 0,
   initialPreviousDepth: number | null = 0
 ): { items: PositionedFrameFlowItem[]; extent: number } {
   const items: PositionedFrameFlowItem[] = [];
   let cursor = 0;
   let previousDepth = initialPreviousDepth;
   for (const [index, item] of flow.entries()) {
-    if (item.kind === "contents") {
-      const bottom = cursor + item.contents.naturalHeight + item.contents.fillWeight * fillUnit;
-      items.push({ item, contentTop: cursor, referenceY: bottom, visualTop: cursor, visualBottom: bottom });
-      cursor = bottom;
-      previousDepth = 0;
-      continue;
-    }
-    if (item.kind === "title-page") {
-      // The template starts with an empty vbox. Its baseline glue consumes
-      // the preceding depth, just like any other box in TeX's vertical list.
-      const contentTop =
-        cursor - (item.titlePage.plan.style === "colorbox" || item.titlePage.plan.style === "rounded" ? previousDepth ?? 0 : 0) + item.titlePage.leadingFillWeight * fillUnit;
-      const visualBottom =
-        contentTop + item.titlePage.naturalHeight;
-      items.push({
-        item,
-        contentTop,
-        referenceY: contentTop,
-        visualTop: contentTop,
-        visualBottom,
-      });
-      cursor =
-        visualBottom + item.titlePage.trailingFillWeight * fillUnit;
-      previousDepth = 0;
-      continue;
-    }
-    if (item.kind === "vertical-space") {
-      items.push({
-        item,
-        contentTop: cursor,
-        referenceY: cursor,
-        visualTop: cursor,
-        visualBottom: cursor,
-      });
-      cursor += item.height;
-      if (previousDepth != null) previousDepth = 0;
-      continue;
-    }
     if (item.kind === "unsupported") {
       const contentTop = cursor + (previousDepth == null ? 0 : TEX_LINE_SKIP_PT);
       const visualBottom = contentTop + item.height;
