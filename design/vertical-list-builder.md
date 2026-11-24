@@ -379,4 +379,11 @@ over a fixed seed set (failure count must not rise), and the corpus tests.
    label left unconsumed on one slide (fuzz seeds 140 and 61; seed 140: item 1 holds a nested
    itemize and item 2's nested columns are followed by a tabular) is printed
    in front of the first item's label on the next slide. Native slides are
-   laid out independently and do not carry that state.
+   laid out independently and do not carry that state. In seed 140 the
+   label is left unconsumed because item 2 opens with `columns`, whose
+   `\@doendpe` clears `\everypar` before the label is set; removing the
+   tabular does not avoid it. The leaked label also enlarges the receiving
+   first line, so on slide 2 its `[T]` column sits about 0.03pt
+   (0.016pt after shrink) lower than the native one. That column has no
+   overlay specifications and matches exactly on slide 1, so this offset is
+   part of the quirk, not a separate bug.
