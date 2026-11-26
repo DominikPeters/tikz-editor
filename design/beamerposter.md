@@ -33,9 +33,18 @@ poster editing operations and the first milestone.
 - **Length registers** and **local theme files**: see
   [the template design](beamer-preamble-and-templates.md#built-so-far).
 
-Found and not yet fixed: `\hspace` in body text is shown as source; with
-`\setbeamerfont{normal text}{size=\large}` and the rounded inner theme,
-blocks are placed 0.6pt off on decks (1.7pt at A2).
+- **Poster layout and body content** (2026-11-27): stock outer-theme heights
+  follow the head/foot fonts; `\vfill` and frame `[t]/[c]/[b]` glue are
+  weighed as in beamerbaseframe.sty (the corpus Berlin poster went from
+  114.7pt to 1.25pt off); `\hspace`, `\quad` and kin; tcolorbox styles from
+  `\tcbset` and boxed titles (sparse-recovery: 2 to 91 matched lines).
+- **Performance:** glyph outlines are defined once per SVG (Gemini poster
+  6.5 MB to 1.8 MB) and runtime-font outlines are drawn on first use.
+
+Found and not yet fixed: `\hfill` and `\hspace{\fill}` (infinite glue in
+the line breaker); with `\setbeamerfont{normal text}{size=\large}` and the
+rounded inner theme, blocks are placed 0.6pt off on decks (1.7pt at A2);
+the Gemini colour theme in `colorthemes/` is found only through TEXINPUTS.
 
 ## First milestone
 

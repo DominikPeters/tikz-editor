@@ -3,12 +3,14 @@ import { requestedDeckStep } from "../../root-key";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import {
   applyDeckEditAction,
+  beamerProjectFiles,
   buildBeamerObjectIndex,
   buildDeckDocumentInspector,
   buildDeckFrameInspector,
   buildDeckObjectInspector,
   buildDeckSlideContext,
   scanBeamerDocument,
+  withBeamerProjectFiles,
   type DeckDocumentEditAction,
   type BeamerFrameLayout,
   type BeamerObjectNode,
@@ -100,8 +102,9 @@ export function DeckInspectorPanel(): JSX.Element {
   if (model) {
     lastModelRef.current = { documentId: activeDocumentId, rootId: activeRootId, model };
   }
+  // A reparse while the render lags keeps the project files (local themes, included files) of the render's scan.
   const currentDocument = useMemo(() => deckDocument && snapshot.source === source
-    ? deckDocument : scanBeamerDocument(source), [deckDocument, snapshot.source, source]);
+    ? deckDocument : withBeamerProjectFiles(scanBeamerDocument(source), deckDocument ? beamerProjectFiles(deckDocument) : undefined), [deckDocument, snapshot.source, source]);
   const previous = lastModelRef.current;
   const rendered = currentDocument.frames.length === 0 ? null : model ??
     (previous?.documentId === activeDocumentId && previous.rootId === activeRootId ? previous.model : null);

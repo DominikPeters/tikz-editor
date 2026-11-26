@@ -9,13 +9,18 @@ import { beamerExMultiple } from "./font-metrics.js";
 import { beamerClassFontSize, beamerFontSizeProfile, beamerNamedFontSize, type BeamerFontSizeProfile } from "./font-sizes.js";
 import { beamerPosterListDimensionsEm, beamerPosterUnsupportedLoad, scanBeamerPoster, type BeamerPosterSettings } from "../poster.js";
 import { scanBeamerFontDeclarations, applyBeamerFontRoleDeclaration } from "./font-declarations.js";
-import { scanBeamerNavigationTemplates } from "./template-declarations.js";
+import { parseBeamerElementFont, scanBeamerNavigationTemplates, scanBeamerTemplateDeclarations, type BeamerTemplateSetEvent } from "./template-declarations.js";
+import { collectTemplateDefinitions, findUnsupportedTemplateCommand } from "./template-machine.js";
 import { scanBeamerFontspecDeclarations, type BeamerFontspecEvent } from "./fontspec.js";
 import { hasRuntimeTexFont } from "../../text/tex/fonts/runtime-registry.js";
 import { applyBeamerColorDeclaration, beamerColorRgbToCss, diagnoseBeamerColorDeclarations, resolveBeamerColorExpressionRgb, scanBeamerColorDeclarations, type BeamerColorDeclarationEvent, type BeamerColorRgb } from "./color-declarations.js";
 import { beamerProjectFiles, beamerThemeFileName, scanBeamerThemeFileDocument, type BeamerProjectFiles } from "../project-files.js";
+import { beamerClassOptionEntries } from "../class-options.js";
 import { beamerControlSequencesIn, createBeamerSyntaxContext } from "../syntax.js";
 import type {
+  BeamerInterpretedTemplate,
+  BeamerTemplateElementFont,
+  BeamerTemplateProgramUnit,
   BeamerThemeColor,
   BeamerThemeComponentProvenance,
   BeamerThemeDimensions,
@@ -45,6 +50,10 @@ type MutableTheme = {
   diagnostics: Diagnostic[];
   /** fontspec families defined with \newfontfamily, by command. */
   fontFamilyCommands?: Record<string, BeamerRuntimeTypeface>;
+  /** \setbeamerfont declarations by element name. */
+  elementFonts?: Record<string, BeamerTemplateElementFont>;
+  /** \setbeamertemplate bodies the interpreter lays out, and the text that defines their macros. */
+  interpreted?: { templates: Record<string, BeamerInterpretedTemplate>; units: BeamerTemplateProgramUnit[]; blockFallback?: BeamerThemeTemplateRef };
 };
 
 type ComponentApplier = (state: MutableTheme, use: BeamerThemeUse) => void;
@@ -82,11 +91,13 @@ export function resolveBeamerTheme(
 ): ResolvedBeamerTheme {
   const poster = scanBeamerPoster(document);
   const state = createDefaultTheme(beamerClassFontSize(document), poster);
+  if (beamerClassOptionEntries(document).some(entry => entry.kind !== "unknown" && entry.key === "compress")) state.options["class-compress"] = true;
   state.diagnostics.push(...(poster?.diagnostics ?? []));
   const indirectPoster = beamerPosterUnsupportedLoad(document);
   if (indirectPoster) state.diagnostics.push(indirectPoster);
   const uses = executingThemeUseList(document);
   const colorEvents = applyBeamerPreambleThemeEvents(state, document, uses, beamerProjectFiles(document), 0, null);
+  finalizeInterpretedTemplates(state, document);
   const sansOverride = document.preamble.macroDefinitions.filter(definition => definition.nameRaw === "\\sfdefault" &&
     definition.span.from > Math.max(-1, ...uses.filter(use => use.kind === "theme" || use.kind === "font-theme").map(use => use.source.span.from))).at(-1);
   if (sansOverride && (sansOverride.kind === "MacroCommandDefinition" ? sansOverride.bodyRaw : sansOverride.kind === "MacroDefinition" ? sansOverride.valueRaw : "").replace(/[{}\s]/gu, "") === "lmss") {
@@ -121,7 +132,93 @@ export function resolveBeamerTheme(
     options: Object.freeze({ ...state.options }),
     appliedComponents: Object.freeze([...state.appliedComponents]),
     diagnostics: Object.freeze([...state.diagnostics]),
+    ...(state.elementFonts ? { elementFonts: Object.freeze({ ...state.elementFonts }) } : {}),
+    ...(state.interpreted && Object.keys(state.interpreted.templates).length > 0 ? { interpreted: Object.freeze({
+      templates: Object.freeze({ ...state.interpreted.templates }), units: Object.freeze([...state.interpreted.units]),
+    }) } : {}),
   };
+}
+
+const INTERPRETED_TEMPLATE_ROLES: ReadonlySet<string> = new Set([
+  "headline", "footline", "block begin", "block end", "block alerted begin", "block alerted end", "block example begin", "block example end",
+]);
+
+/** Whether the `\setbeamertemplate` whose name argument ends at `from` is one of the interpreted roles. */
+function interpretedTemplateRoleAt(source: string, from: number): boolean {
+  const match = /^\s*\{([^{}]*)\}\s*(\[|\{)/u.exec(source.slice(from, from + 120));
+  return match !== null && INTERPRETED_TEMPLATE_ROLES.has((match[1] ?? "").replace(/\s+/gu, " ").trim()) && match[2] === "{";
+}
+
+function applyInterpretedTemplateSet(
+  state: MutableTheme,
+  event: BeamerTemplateSetEvent,
+  loadedAt: { span: Span; file: string } | null
+): void {
+  const role = event.role;
+  if (!INTERPRETED_TEMPLATE_ROLES.has(role)) return;
+  state.interpreted ??= { templates: {}, units: [] };
+  const edge = role === "headline" ? "headline" : role === "footline" ? "footline" : null;
+  const stock = (id: string) => edge ? { ...DEFAULT_REF(id) } : null;
+  if (event.choice !== null) {
+    // `[default]` restores the stock template; other choices stay stock.
+    if (edge && event.choice === "default") {
+      delete state.interpreted.templates[role];
+      state.templates[edge] = DEFAULT_REF(`beamer/${edge}/none`);
+    }
+    return;
+  }
+  const body = event.body ?? "";
+  if (body.trim() === "" && edge) {
+    // Empty by intent: nothing is drawn.
+    delete state.interpreted.templates[role];
+    state.templates[edge] = DEFAULT_REF(`beamer/${edge}/none`);
+    return;
+  }
+  const previous = edge ? state.templates[edge] : null;
+  const replaced = state.interpreted.templates[role];
+  const fallback = previous && previous.id !== `interpreted/${edge}` ? previous : replaced?.fallback ?? stock(`beamer/${edge}/none`) ?? DEFAULT_REF("beamer/block/default");
+  state.interpreted.templates[role] = {
+    role, body, file: loadedAt?.file ?? null, offset: loadedAt ? null : event.bodyOffset,
+    reportAt: loadedAt?.span ?? event.span, fallback,
+  };
+  if (edge) state.templates[edge] = DEFAULT_REF(`interpreted/${edge}`);
+  else if (role === "block begin" || role === "block end") {
+    const other = role === "block begin" ? "block end" : "block begin";
+    if (state.interpreted.templates[other] && state.templates.block.id !== "interpreted/block") {
+      state.interpreted.blockFallback = state.templates.block;
+      state.templates.block = DEFAULT_REF("interpreted/block");
+    }
+  }
+}
+
+/** Check the interpreted templates once every definition they may use is known. */
+function finalizeInterpretedTemplates(state: MutableTheme, document: BeamerDocumentModel): void {
+  const interpreted = state.interpreted;
+  if (!interpreted || Object.keys(interpreted.templates).length === 0) return;
+  interpreted.units.push({ file: null, text: document.source.slice(document.preamble.span.from, document.preamble.span.to), offset: document.preamble.span.from });
+  const definitions = collectTemplateDefinitions(interpreted.units.map(unit => unit.text));
+  for (const [role, template] of Object.entries(interpreted.templates)) {
+    const unsupported = findUnsupportedTemplateCommand(template.body, definitions);
+    if (unsupported === null) continue;
+    interpreted.templates[role] = { ...template, unsupported };
+    const what = role === "headline" ? "draws its title, author and institute in the headline colors and fonts instead"
+      : role.startsWith("block") ? "draws stock blocks in the theme's colors and fonts instead"
+      : "draws the stock template in the theme's colors and fonts instead";
+    state.diagnostics.push({
+      severity: "warning", code: "beamer-template-unsupported",
+      message: `The ${role} template uses ${unsupported}, which this preview does not support; it ${what}.`,
+      span: template.reportAt,
+    });
+  }
+  const begin = interpreted.templates["block begin"]; const end = interpreted.templates["block end"];
+  if ((begin !== undefined) !== (end !== undefined) && !state.diagnostics.some(item => item.code === "beamer-template-block-pair")) {
+    const lone = begin ?? end;
+    state.diagnostics.push({
+      severity: "warning", code: "beamer-template-block-pair",
+      message: "A block template needs both its begin and end parts; this preview draws stock blocks instead.",
+      span: (lone ?? { reportAt: document.preamble.span }).reportAt,
+    });
+  }
 }
 
 /** Preserve unrounded xcolor channels when entering another color scope. */
@@ -426,7 +523,7 @@ function applyBeamerPreambleThemeEvents(
   loadedAt: { span: Span; file: string } | null
 ): BeamerColorDeclarationEvent[] {
   const colorEvents = scanBeamerColorDeclarations(document);
-  const events = [...uses.map(use => ({ kind: "theme-use" as const, span: use.source.span, use })), ...colorEvents, ...scanBeamerNavigationTemplates(document), ...scanBeamerFontDeclarations(document), ...scanBeamerFontspecDeclarations(document)]
+  const events = [...uses.map(use => ({ kind: "theme-use" as const, span: use.source.span, use })), ...colorEvents, ...scanBeamerNavigationTemplates(document), ...scanBeamerFontDeclarations(document), ...scanBeamerFontspecDeclarations(document), ...scanBeamerTemplateDeclarations(document)]
     .sort((left, right) => left.span.from - right.span.from);
   const report = (diagnostic: Diagnostic) => state.diagnostics.push(loadedAt
     ? { ...diagnostic, span: loadedAt.span, message: `${loadedAt.file}: ${diagnostic.message}` }
@@ -442,6 +539,11 @@ function applyBeamerPreambleThemeEvents(
     }
     if (event.kind === "fontspec") {
       applyBeamerFontspec(state, event, files, report);
+      continue;
+    }
+    if (event.kind === "template-set") { applyInterpretedTemplateSet(state, event, loadedAt); continue; }
+    if (event.kind === "element-font") {
+      state.elementFonts = { ...state.elementFonts, [event.element]: { ...state.elementFonts?.[event.element], ...parseBeamerElementFont(event.values, beamerFontSizeProfile(state), state.fontFamilyCommands) } };
       continue;
     }
     if (event.kind === "navigation-template") {
@@ -493,15 +595,20 @@ function applyLocalThemeFile(
   markApplied(state, use.kind, use.name, use);
   const { document } = scanBeamerThemeFileDocument(text);
   const at = loadedAt ?? { span: use.source.span, file };
+  state.interpreted ??= { templates: {}, units: [] };
+  state.interpreted.units.push({ file, text: document.source.slice(document.preamble.span.from, document.preamble.span.to), offset: null });
   applyBeamerPreambleThemeEvents(state, document, executingThemeUseList(document), files, depth, at);
   // Template code in theme files is not executed yet: say so once per file.
+  const interpretedSpans = new Set(Object.values(state.interpreted.templates).filter(template => template.file === file).map(template => template.reportAt.from));
+  void interpretedSpans;
   const templates = beamerControlSequencesIn(createBeamerSyntaxContext(document.source), document.preamble.span)
-    .filter(command => command.name === "setbeamertemplate" || command.name === "defbeamertemplate");
+    .filter(command => command.name === "setbeamertemplate" || command.name === "defbeamertemplate")
+    .filter(command => !interpretedTemplateRoleAt(document.source, command.to));
   if (templates.length > 0) {
     state.diagnostics.push({
       severity: "warning",
       code: "beamer-local-theme-templates",
-      message: `${file} defines ${templates.length} template${templates.length === 1 ? "" : "s"}; this preview applies its colors and fonts, and draws stock templates instead.`,
+      message: `${file} defines ${templates.length} template${templates.length === 1 ? "" : "s"} beyond those this preview lays out; it applies the file's colors and fonts, and draws stock templates for the others.`,
       span: at.span,
     });
   }
@@ -1573,7 +1680,8 @@ function applySplitOuterTheme(
 ): void {
   markApplied(state, "outer-theme", "split", use);
   state.templates.headline = templateRef("beamer/headline/split", {
-    compress: optionBoolean(use.options.compress, false),
+    // \ifbeamer@compress comes from the class option; split declares no option of its own.
+    compress: optionBoolean(use.options.compress, false) || state.options["class-compress"] === true,
   });
   state.templates.footline = DEFAULT_REF("beamer/footline/split");
   state.colors["section in head/foot"] = {
@@ -1595,7 +1703,8 @@ function applySidebarOuterTheme(
   use: BeamerThemeUse
 ): void {
   markApplied(state, "outer-theme", "sidebar", use);
-  const side = optionString(use.options.side, "left") === "right"
+  // \DeclareOptionBeamer{left}/{right} are bare keys: [right] arrives as options.right.
+  const side = optionString(use.options.side, "left") === "right" || (optionBoolean(use.options.right, false) && !optionBoolean(use.options.left, false))
     ? "right"
     : "left";
   // beamerouterthemesidebar.sty: `\usebeamerfont{frametitle}` then both
@@ -1713,7 +1822,7 @@ const outerThemeAppliers = new Map<string, ComponentApplier>([
     markApplied(state, "outer-theme", "shadow", use);
     state.templates.headline = templateRef(
       "beamer/headline/shadow",
-      { compress: optionBoolean(use.options.compress, false) }
+      { compress: optionBoolean(use.options.compress, false) || state.options["class-compress"] === true }
     );
     state.templates.frameTitle = DEFAULT_REF("beamer/frame-title/shadow");
     state.colors.frametitle = { parent: "subsection in head/foot" };

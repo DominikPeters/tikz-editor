@@ -17,7 +17,7 @@ import type { LocalAssetReadResult } from "./platform/types";
 import type { DocumentFileRef } from "./store/types";
 import { isImportedGraphicPath, readImportedGraphic } from "./imported-graphics.js";
 import { BoundedLru } from "./bounded-lru";
-import { beamerProjectFileWatchPaths, invalidateProjectFilePath, prepareBeamerProjectFiles } from "./project-files";
+import { beamerProjectFileWatchPaths, cachedInputFileTexts, documentUsesProjectFiles, invalidateProjectFilePath, NO_PROJECT_FILES, prepareBeamerProjectFiles } from "./project-files";
 import type { BeamerProjectFiles } from "@tikz-editor/core/beamer";
 
 type ResolvedImageMimeType = "image/png" | "image/jpeg" | "image/svg+xml";
@@ -80,7 +80,18 @@ export async function prepareDocumentGraphicsContext(params: {
   const readLocalAsset = async (path: string): Promise<LocalAssetReadResult> => readImportedGraphic(platform.persistence, path) ?? await platform.files?.readLocalAsset?.(path) ?? { status: "missing", path };
   const baseDirectory = documentDirectory(params.documentFileRef);
   const prefixes = texGraphicsPathPrefixes(params.source);
-  const includeCandidates = collectIncludeGraphicsCandidates(params.source);
+  // Project files first: `\input` files bring their own images. Documents
+  // without any skip the asynchronous step, so their image reads start at once.
+  const project = !documentUsesProjectFiles(params.source) ? NO_PROJECT_FILES : await prepareBeamerProjectFiles({
+    source: params.source,
+    resolvePath: name => resolveLocalImagePath(name, baseDirectory),
+    readLocalAsset: platform.files?.readLocalAsset,
+    findFont: platform.files?.findFont,
+  });
+  const includeCandidates = [
+    ...collectIncludeGraphicsCandidates(params.source),
+    ...project.entries.filter(([name]) => !name.endsWith(".sty")).flatMap(([, text]) => collectIncludeGraphicsCandidates(text)),
+  ];
   const entries = new Map<string, PreparedAssetEntry>();
 
   for (const include of includeCandidates) {
@@ -107,12 +118,6 @@ export async function prepareDocumentGraphicsContext(params: {
     });
   }
 
-  const project = await prepareBeamerProjectFiles({
-    source: params.source,
-    resolvePath: name => resolveLocalImagePath(name, baseDirectory),
-    readLocalAsset: platform.files?.readLocalAsset,
-    findFont: platform.files?.findFont,
-  });
   const graphicsKey = imageAssetResolverCacheKey({
     baseDirectory,
     entries: [...entries.values()],
@@ -168,7 +173,7 @@ export function documentGraphicsWatchPaths(params: {
 }): string[] {
   const baseDirectory = documentDirectory(params.documentFileRef);
   const prefixes = texGraphicsPathPrefixes(params.source);
-  const paths = collectIncludeGraphicsCandidates(params.source).flatMap((include) => {
+  const paths = [...collectIncludeGraphicsCandidates(params.source), ...cachedInputFileTexts().flatMap(text => collectIncludeGraphicsCandidates(text))].flatMap((include) => {
     const descriptor = includeGraphicsPathDescriptor(include.filename, baseDirectory, prefixes);
     return descriptor?.kind === "unsupported" ? [descriptor.path] : descriptor?.candidates ?? [];
   });

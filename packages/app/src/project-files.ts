@@ -1,5 +1,5 @@
 import {
-  beamerFontFileRequests, beamerThemeFileName, buildRuntimeTexFont, collectBeamerProjectFiles, createBeamerProjectFiles,
+  beamerFontFileRequests, beamerInputFileRequests, beamerThemeFileName, buildRuntimeTexFont, collectBeamerProjectFiles, createBeamerProjectFiles,
   loadRuntimeHarfBuzz, registerRuntimeTexFont, registerRuntimeTexFontTransfer, runtimeTexFontId, scanBeamerDocument,
   type BeamerProjectFiles, type RuntimeTexFontData, type RuntimeTexFontTransfer,
 } from "@tikz-editor/core/beamer";
@@ -25,8 +25,16 @@ const textCache = new Map<string, string | null>();
 // Built fonts by path, kept while the file's revision is unchanged.
 const fontCache = new Map<string, { readonly revision: string; readonly id: `otf:${string}`; readonly data: RuntimeTexFontData }>();
 const THEME_USE = /\\use(?:color|font|inner|outer)?theme(?![A-Za-z@])/u;
+const INPUT_USE = /\\(?:input|include)\s*\{/u;
 const FONTSPEC = /\\(?:setmainfont|setsansfont|setmonofont|newfontfamily|renewfontfamily|setfontfamily)(?![A-Za-z@])/u;
 const NONE: PreparedProjectFiles = { files: undefined, entries: [], fonts: [], fontNames: [] };
+
+/** Whether a document may load project files at all; callers skip the asynchronous step otherwise. */
+export function documentUsesProjectFiles(source: string): boolean {
+  return THEME_USE.test(source) || FONTSPEC.test(source) || INPUT_USE.test(source);
+}
+
+export const NO_PROJECT_FILES = NONE;
 
 export async function prepareBeamerProjectFiles(params: {
   readonly source: string;
@@ -35,7 +43,7 @@ export async function prepareBeamerProjectFiles(params: {
   readonly findFont?: ((names: readonly string[], byFileName: boolean) => Promise<string | null>) | undefined;
 }): Promise<PreparedProjectFiles> {
   const { readLocalAsset } = params;
-  if (!readLocalAsset || (!THEME_USE.test(params.source) && !FONTSPEC.test(params.source))) return NONE;
+  if (!readLocalAsset || (!THEME_USE.test(params.source) && !FONTSPEC.test(params.source) && !INPUT_USE.test(params.source))) return NONE;
   const read = async (name: string): Promise<string | null> => {
     const path = params.resolvePath(name);
     if (path === null) return null;
@@ -45,7 +53,7 @@ export async function prepareBeamerProjectFiles(params: {
     textCache.set(path, text);
     return text;
   };
-  const collected = THEME_USE.test(params.source) ? await collectBeamerProjectFiles(params.source, read) : new Map<string, string>();
+  const collected = THEME_USE.test(params.source) || INPUT_USE.test(params.source) ? await collectBeamerProjectFiles(params.source, read) : new Map<string, string>();
   const entries = [...collected].sort(([left], [right]) => left.localeCompare(right));
   const fonts = await loadProjectFonts(params, collected, readLocalAsset);
   if (collected.size === 0 && fonts.names.size === 0) return NONE;
@@ -114,14 +122,20 @@ export function beamerProjectFilesCacheKey(entries: readonly (readonly [string, 
 
 /** Files the document names directly; their own uses are found once read. */
 export function beamerProjectFileWatchPaths(source: string, resolvePath: (name: string) => string | null): string[] {
-  if (!THEME_USE.test(source) && !FONTSPEC.test(source)) return [];
+  if (!THEME_USE.test(source) && !FONTSPEC.test(source) && !INPUT_USE.test(source)) return [];
   const names = scanBeamerDocument(source).preamble.themes.flatMap(use => use.name.value.split(",")
     .map(name => name.trim()).filter(name => /^[A-Za-z0-9_-]+$/u.test(name))
     .map(name => beamerThemeFileName(use.kind, name)));
+  names.push(...beamerInputFileRequests(source).flat());
   const paths = [...new Set(names)].flatMap(name => resolvePath(name) ?? []);
   for (const path of textCache.keys()) if (textCache.get(path) !== null) paths.push(path);
   for (const path of fontCache.keys()) paths.push(path);
   return [...new Set(paths)];
+}
+
+/** Texts of the `\input` files read so far, whose images the watcher follows. */
+export function cachedInputFileTexts(): string[] {
+  return [...textCache].flatMap(([path, text]) => text !== null && !path.endsWith(".sty") ? [text] : []);
 }
 
 export function invalidateProjectFilePath(path: string): void {

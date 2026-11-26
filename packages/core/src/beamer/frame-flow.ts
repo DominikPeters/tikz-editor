@@ -21,6 +21,31 @@ export function paragraphStartingBaselineSkip(paragraph: LaidParagraph, fallback
 }
 
 /**
+ * `\vfill` glue in a frame-level paragraph chunk. The frame body is a vbox
+ * set to the frame text height, so this glue stretches in proportion to its
+ * order-2 weight, competing with the frame's own top/bottom skips
+ * (beamerbaseframe.sty `\beamer@frametopskip`, `\beamer@framebottomskip`).
+ * Beamer's body splitter makes `\vfill` lead its chunk, so only glue before
+ * the first and after the last material box is placed; glue between boxes of
+ * one chunk is not (it would need per-line shifting inside the paragraph).
+ */
+export function paragraphFillWeights(paragraph: LaidParagraph): { leading: number; trailing: number; materialless: boolean } {
+  const items = paragraph.layout.vlistLayout.boxReport.items;
+  const isMaterial = (kind: string) => kind !== "glue" && kind !== "penalty" && kind !== "vbox";
+  const first = items.findIndex(item => isMaterial(item.itemKind));
+  const last = items.reduce((found, item, index) => isMaterial(item.itemKind) ? index : found, -1);
+  let leading = 0;
+  let trailing = 0;
+  for (const [index, item] of items.entries()) {
+    if (item.itemKind !== "glue" || item.glue?.stretchOrder !== "fill") continue;
+    const weight = Number(item.glue.stretch ?? 0);
+    if (first < 0 || index < first) leading += weight;
+    else if (index > last) trailing += weight;
+  }
+  return { leading, trailing, materialless: first < 0 };
+}
+
+/**
  * Position already-measured frame material using TeX's `\prevdepth` and
  * baseline-skip rules. Theme planning and paint are deliberately absent from
  * this module; callers provide only the active normal-text baseline skip.
@@ -88,6 +113,16 @@ export function positionPreparedFrameFlow(
       continue;
     }
     if (item.kind === "paragraph") {
+      const fill = paragraphFillWeights(item.paragraph);
+      if (fill.materialless) {
+        // Only vertical glue (`\vfill` chunk): no box, so no baselineskip
+        // glue is inserted and \prevdepth is untouched.
+        const contentTop = cursor;
+        cursor += item.naturalHeight + (fill.leading + fill.trailing) * fillUnit;
+        items.push({ item, contentTop, referenceY: contentTop, visualTop: contentTop, visualBottom: cursor });
+        continue;
+      }
+      cursor += fill.leading * fillUnit;
       const firstBox = item.paragraph.layout.vlistLayout.boxReport.items.find(
         material => material.itemKind !== "glue" && material.itemKind !== "penalty" && material.itemKind !== "vbox"
       );
@@ -108,7 +143,7 @@ export function positionPreparedFrameFlow(
         visualTop: contentTop,
         visualBottom,
       });
-      cursor = visualBottom;
+      cursor = visualBottom + fill.trailing * fillUnit;
       previousDepth = item.endingDepth;
       if (
         item.trailingVerticalSpacePreviousDepth != null &&
@@ -120,7 +155,10 @@ export function positionPreparedFrameFlow(
     }
     if (item.kind === "block") {
       if (item.block.packageBox) {
-        const spacing = tcolorboxSurroundingSpacing(item.block.packageBox.plan, { baselineSkipPt: baselineSkip, previousDepthPt: previousDepth });
+        const previousItem = flow[index - 1];
+        const previousBox = previousItem?.kind === "block" ? previousItem.block.packageBox : undefined;
+        const spacing = tcolorboxSurroundingSpacing(item.block.packageBox.plan, { baselineSkipPt: baselineSkip, previousDepthPt: previousDepth,
+          ...(previousBox && !previousBox.plan.noBeforeAfter ? { previousAfterSkipPt: previousBox.plan.afterSkipPt } : {}) });
         const contentTop = cursor + spacing.beforePt;
         const visualBottom = contentTop + item.naturalHeight;
         items.push({ item, contentTop, referenceY: visualBottom, visualTop: contentTop, visualBottom });

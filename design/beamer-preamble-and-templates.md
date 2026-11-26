@@ -37,10 +37,22 @@ interpreter.
   presentation. A local theme poster matches the same declarations written
   inline.
 
-Not yet: `\input` files and local packages, length assignments inside theme
-files, structural expansion of user macros in frame bodies (Gemini's
-`\separatorcolumn` is dropped; its own layout comes out the same because its
-columns fill the paper), file-aware edits.
+- **Template interpreter, first slice** (`beamer/theme/template-*.ts`):
+  headline, footline and block begin/end from the preamble and local theme
+  files, over the vocabulary above minus `adjustwidth`, `minipage`,
+  `parbox` and `\hbox`/`\vbox`, with the fallbacks per role. Gemini's
+  headline and footline match LuaLaTeX; its alerted/example blocks fall back
+  (they use `adjustwidth`).
+- **`\input` and `\include`** (`beamer/input-files.ts`): preamble files
+  execute in place; body files render read-only after the source, edits map
+  to the `\input` command. Argument-free macros whose body is one `column`
+  count in the columns layout. The inspector shows local themes and the
+  poster page (read-only).
+
+Not yet: local packages, length assignments inside theme
+files, `\input` inside groups or text, `adjustwidth` and box commands in
+templates, file-aware edits, incremental reparsing for documents with
+included text or column macros (they reparse in full on each edit).
 
 ## Evidence
 

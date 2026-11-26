@@ -411,6 +411,16 @@ export interface TexLayoutPenaltyItem {
 export interface TexLayoutKernItem {
   readonly kind: "kern";
   readonly role?: "list-label";
+  /**
+   * Glue from `\hspace` or `\quad`: the item is a line break opportunity
+   * when `breakPenalty` is below 10000, and disappears at a line break.
+   */
+  readonly skip?: {
+    readonly breakPenalty: number;
+    readonly preserveAtLineStart?: boolean;
+    /** Removed at the end of a paragraph, like all trailing glue. */
+    readonly glue: boolean;
+  };
   readonly sourceStart: number;
   readonly sourceEnd: number;
   readonly font: ResolvedTexFont;
@@ -532,6 +542,66 @@ export function simpleTexInlineNodesToLayoutItems(
   );
 }
 
+function pushTexHorizontalSkip(
+  items: TexLayoutInlineItem[],
+  token: ReturnType<typeof simpleTexInlineNodesToTokens>[number],
+  context: {
+    readonly atPt: TexLength;
+    readonly metricProvider: TexMetricProvider;
+    readonly textFontProfile: TexTextFontProfile;
+    readonly dimensionContext?: TexDimensionContext;
+  }
+): void {
+  const font = context.textFontProfile.resolveTextFont(token.fontState, context.atPt, context.metricProvider);
+  const zero = texLength(0);
+  const base: TexDimensionContext = context.dimensionContext ?? { linewidth: zero, textwidth: zero, columnwidth: zero, paperwidth: zero, em: zero, ex: zero };
+  const width = texLength(roundTexPt(token.skipWidth
+    ? resolveTexDimensionExpression(token.skipWidth, texDimensionContextForFont(base, font))
+    : 0));
+  if (token.skipStar) {
+    // \hspace*: \vrule width 0pt, \nobreak, glue: a box as far as breaking goes.
+    const box = texRuleBox({
+      source: token.text,
+      sourceStart: token.sourceStart,
+      sourceEnd: token.sourceEnd,
+      raise: texHBoxOffsetY(0),
+      width,
+      height: texLength(0),
+      invisible: true,
+      metricProvider: context.metricProvider,
+      textFontProfile: context.textFontProfile,
+    });
+    items.push({ kind: "text-box", command: "rule", text: token.text, content: "", sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.sourceStart, contentEnd: token.sourceEnd, box });
+    return;
+  }
+  const previous = items.at(-1);
+  const breakable = !token.skipKern && previous !== undefined &&
+    previous.kind !== "space" && previous.kind !== "forced-break" && previous.kind !== "penalty" &&
+    !(previous.kind === "kern" && previous.skip !== undefined);
+  items.push({
+    kind: "kern",
+    sourceStart: token.sourceStart,
+    sourceEnd: token.sourceEnd,
+    font,
+    width,
+    skip: {
+      breakPenalty: breakable ? 0 : 10_000,
+      glue: !token.skipKern,
+      ...(previous === undefined ? { preserveAtLineStart: true } : {}),
+    },
+  });
+}
+
+function texSpaceFollowsSkipGlue(items: readonly TexLayoutInlineItem[]): boolean {
+  const previous = items.at(-1);
+  return previous?.kind === "kern" && previous.skip?.glue === true;
+}
+
+function texItemIsTrailingDiscardable(item: TexLayoutInlineItem | undefined, forcedBreakKept: boolean): boolean {
+  return item?.kind === "space" || (item?.kind === "kern" && item.skip?.glue === true) ||
+    (item?.kind === "forced-break" && !forcedBreakKept);
+}
+
 export function simpleTexSegmentToLayoutItems(
   segment: SimpleTexParagraphSegment,
   atPt: TexLength,
@@ -552,6 +622,12 @@ export function simpleTexSegmentToLayoutItems(
 
   for (const [tokenIndex, token] of tokens.entries()) {
     if (token.kind === "space" && !hasSeenText) {
+      continue;
+    }
+
+    if (token.kind === "hskip") {
+      pushTexHorizontalSkip(items, token, { atPt, metricProvider, textFontProfile, ...(dimensionContext !== undefined ? { dimensionContext } : {}) });
+      hasSeenText = true;
       continue;
     }
 
@@ -853,7 +929,7 @@ export function simpleTexSegmentToLayoutItems(
     }
 
     const font = textFontProfile.resolveTextFont(token.fontState, atPt, metricProvider);
-    if (token.nonBreaking) {
+    if (token.nonBreaking || texSpaceFollowsSkipGlue(items)) {
       items.push({
         kind: "space",
         text: " ",
@@ -877,10 +953,7 @@ export function simpleTexSegmentToLayoutItems(
     });
   }
 
-  while (
-    items.at(-1)?.kind === "space" ||
-    (items.at(-1)?.kind === "forced-break" && segment.forcedBreakAfter === undefined)
-  ) {
+  while (texItemIsTrailingDiscardable(items.at(-1), segment.forcedBreakAfter !== undefined)) {
     items.pop();
   }
   return insertTextBoundaryKerns(items, metricProvider);
@@ -1163,6 +1236,8 @@ function texRuleBox(params: {
   readonly width: TexLength;
   readonly height: TexLength;
   readonly strutBaselineSkipPt?: TexLength;
+  /** An empty box: `\hspace*` is a zero-height rule that paints nothing. */
+  readonly invisible?: true;
   readonly metricProvider: TexMetricProvider;
   readonly textFontProfile: TexTextFontProfile;
 }): TexMathBox {
@@ -1194,7 +1269,7 @@ function texRuleBox(params: {
     height,
     depth,
     sourceSpan,
-    items: params.strutBaselineSkipPt === undefined ? [rule] : [],
+    items: params.strutBaselineSkipPt === undefined && !params.invisible ? [rule] : [],
   };
   return {
     source: params.source,
@@ -1939,6 +2014,12 @@ export function simpleTexInlineTokensToLayoutItems(params: {
       continue;
     }
 
+    if (token.kind === "hskip") {
+      pushTexHorizontalSkip(items, token, { atPt: params.atPt, metricProvider: params.metricProvider, textFontProfile: params.textFontProfile, ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}) });
+      hasSeenText = true;
+      continue;
+    }
+
     if (token.kind === "text") {
       const font = params.textFontProfile.resolveTextFont(token.fontState, params.atPt, params.metricProvider);
       const italicCorrectionAfter =
@@ -2227,7 +2308,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
     }
 
     const font = params.textFontProfile.resolveTextFont(token.fontState, params.atPt, params.metricProvider);
-    if (token.nonBreaking) {
+    if (token.nonBreaking || texSpaceFollowsSkipGlue(items)) {
       items.push({
         kind: "space",
         text: " ",
@@ -2252,7 +2333,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
   }
 
   if (params.trimEdges) {
-    while (items.at(-1)?.kind === "space" || items.at(-1)?.kind === "forced-break") {
+    while (texItemIsTrailingDiscardable(items.at(-1), false)) {
       items.pop();
     }
   }

@@ -1,5 +1,5 @@
 import { resolveBeamerThemeColor } from "./resolve.js";
-import { beamerExMultiple, beamerFontExPt } from "./font-metrics.js";
+import { beamerExMultiple, beamerFontExPt, beamerFontSpacePt } from "./font-metrics.js";
 import { measureBeamerHeadingStack, beamerSubtitlePrimitive } from "./heading-layout.js";
 import type { BeamerDelimitedSourceValue } from "../types.js";
 import {
@@ -51,14 +51,14 @@ type SmoothGeometry = {
   topInsetPt: number;
 };
 
-// Where the frame title's first skip starts relative to the end of the
-// headline box (measured against LuaLaTeX: smoothbars -0.14ex, smoothtree
-// -0.07ex; both are ex multiples at 11pt, the poster check keeps them in ex).
-const SMOOTH_BARS_FRAME_TITLE_START_EX = -0.14;
-const SMOOTH_TREE_FRAME_TITLE_START_EX = -0.07;
-// Smoothbars' LuaLaTeX positions need two more scaled points than the
-// truncated product (0.14ex = 24442sp, measured 24444sp at 11pt).
-const SMOOTH_BARS_FRAME_TITLE_START_EXTRA_SP = -2 / 65_536;
+// Both frame-title templates open with `\nointerlineskip\vskip-<d>ex` before
+// `\usebeamerfont{headline}`, so that first skip is in the ex of the
+// frame-title font (the title box is typeset in it), not the headline font.
+// The box therefore starts `<d>ex` above the end of the headline: 0.1ex for
+// smoothbars, 0.05ex for smoothtree.
+function frameTitleTopSkip(context: BeamerFrameTemplateContext, decimal: number): number {
+  return beamerExMultiple(decimal, beamerFontExPt(context.theme.fonts["frame-title"]));
+}
 
 function smoothBarsGeometry(context: BeamerFrameTemplateContext, subsection: boolean): SmoothGeometry {
   const ex = beamerFontExPt(context.theme.fonts.headline);
@@ -78,8 +78,7 @@ function smoothBarsGeometry(context: BeamerFrameTemplateContext, subsection: boo
   // above-title shading (1ex tall with a subsection, 2ex without), `\vskip-1.09ex`,
   // the title box (`\vskip0.5ex`, strut line, `\vskip0.05ex`), `\vskip-0.05ex`
   // and the 1ex fade strip.
-  const start = headlineInset + m(SMOOTH_BARS_FRAME_TITLE_START_EX) + SMOOTH_BARS_FRAME_TITLE_START_EXTRA_SP;
-  const transitionBoxTop = start - m(0.1);
+  const transitionBoxTop = headlineInset - frameTitleTopSkip(context, 0.1);
   const transitionHeight = m(subsection ? 1 : 2);
   const backgroundY = transitionBoxTop + m(1) + m(1) - m(1.09);
   const backgroundHeight = m(0.5) + lineHeight + m(0.05);
@@ -120,8 +119,7 @@ function smoothTreeGeometry(
   // above its baseline, the title box (`\vskip-1.2ex`, then a line whose
   // baseline is one baselineskip below that, strut depth .3), `\vskip-0.2ex`
   // and the 1ex fade strip.
-  const start = headlineInset + m(SMOOTH_TREE_FRAME_TITLE_START_EX);
-  const transitionBoxTop = start - m(0.05);
+  const transitionBoxTop = headlineInset - frameTitleTopSkip(context, 0.05);
   const backgroundY = transitionBoxTop + m(0.85);
   const titleBaseline = backgroundY - m(1.2) + lineHeight;
   const backgroundHeight = titleBaseline - backgroundY + beamerExMultiple(0.3, lineHeight);
@@ -158,7 +156,6 @@ const HORIZONTAL_MARGIN_PT = 8.5359039306640625;
 const SMOOTH_TREE_SECTION_INDENT_PT = 6;
 const SMOOTH_TREE_SUBSECTION_INDENT_PT = 12;
 const SMOOTH_TREE_FRAME_TITLE_X_PT = 26.603256;
-const SHADOW_FRAME_TITLE_X_PT = 13.230301;
 
 /**
  * The shadow theme's frame-title minipage: `\vbox{}\vskip-.75ex` (ex of the
@@ -510,7 +507,11 @@ export function planShadowFrameTitle(
     return { inset: 0, primitives: [] };
   }
   const shadow = shadowFrameTitleGeometry(context);
-  const width = context.page.page.width - SHADOW_FRAME_TITLE_X_PT - HORIZONTAL_MARGIN_PT;
+  // The \paperwidth minipage follows the shading picture after a stray
+  // end-of-line space, in the frame-title font; its 0.3cm skips then give the
+  // line `\paperwidth - 0.6cm`, so the text starts that space plus 0.3cm in.
+  const titleX = beamerFontSpacePt(context.theme.fonts["frame-title"]) + HORIZONTAL_MARGIN_PT;
+  const width = context.page.page.width - 2 * HORIZONTAL_MARGIN_PT;
   const measured = measureBeamerHeadingStack(context, width, { subtitleStart: "" });
   const extra = measured ? measured.extent - context.theme.fonts["frame-title"].lineHeightPt : 0;
   return {
@@ -555,10 +556,10 @@ export function planShadowFrameTitle(
       }),
       frameTitleText(
         context,
-        SHADOW_FRAME_TITLE_X_PT,
+        titleX,
         shadow.baselinePt
       ),
-      ...(measured?.subtitle ? beamerSubtitlePrimitive(context, SHADOW_FRAME_TITLE_X_PT, width,
+      ...(measured?.subtitle ? beamerSubtitlePrimitive(context, titleX, width,
         shadow.baselinePt + measured.subtitleBaseline) : []),
 
     ],

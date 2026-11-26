@@ -179,6 +179,20 @@ export interface SimpleTexSpaceNode extends SimpleTexSourceRange {
   readonly controlSpace?: boolean;
 }
 
+/**
+ * Horizontal space in text: `\hspace{len}`, `\hspace*{len}`, `\quad`, `\,`.
+ * The width keeps its font-relative units until the font is known.
+ */
+export interface SimpleTexHorizontalSkipNode extends SimpleTexSourceRange {
+  readonly kind: "hskip";
+  readonly text: string;
+  readonly width: TexDimensionExpression;
+  /** `\kern`-like: no line break is allowed at it (`\enspace`, `\,`). */
+  readonly kern?: true;
+  /** `\hspace*`: the space is a box and survives line breaks. */
+  readonly star?: true;
+}
+
 export interface SimpleTexCommentNode extends SimpleTexSourceRange {
   readonly kind: "comment";
   readonly text: string;
@@ -511,6 +525,7 @@ export interface SimpleTexBoxNode extends SimpleTexSourceRange {
 export type SimpleTexInlineNode =
   | SimpleTexTextNode
   | SimpleTexSpaceNode
+  | SimpleTexHorizontalSkipNode
   | SimpleTexCommentNode
   | SimpleTexLineBreakNode
   | SimpleTexMathNode
@@ -546,6 +561,7 @@ export type SimpleTexNode = SimpleTexInlineNode | SimpleTexControlNode;
 export const SIMPLE_TEX_INLINE_NODE_KINDS = [
   "text",
   "space",
+  "hskip",
   "comment",
   "line-break",
   "math",
@@ -593,7 +609,7 @@ const SIMPLE_TEX_NODE_KIND_REGISTRY_IS_COMPLETE: [
 void SIMPLE_TEX_NODE_KIND_REGISTRY_IS_COMPLETE;
 
 export interface SimpleTexToken {
-  readonly kind: "text" | "space" | "forced-break" | "penalty" | "math" | "mbox" | "rule" | "includegraphics" | "raisebox" | "dimension-box" | "tabular" | "transform-box";
+  readonly kind: "text" | "space" | "hskip" | "forced-break" | "penalty" | "math" | "mbox" | "rule" | "includegraphics" | "raisebox" | "dimension-box" | "tabular" | "transform-box";
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -629,6 +645,9 @@ export interface SimpleTexToken {
   readonly fontState: SimpleTexFontState;
   readonly nonBreaking?: boolean;
   readonly controlSpace?: boolean;
+  readonly skipWidth?: TexDimensionExpression;
+  readonly skipKern?: true;
+  readonly skipStar?: true;
   readonly italicCorrectionAfter?: boolean;
   /** An inner font command committed its correction before an enclosing group closed. */
   readonly italicCorrectionUnconditional?: boolean;
@@ -1532,6 +1551,9 @@ function scanSimpleTexIrNodes(
         index = lineBreak.end;
         continue;
       }
+
+      const hskip = scanSimpleTexHorizontalSkip(text, index, sourceOffset);
+      if (hskip) { nodes.push(hskip.node); index = hskip.end; continue; }
 
       const url = scanSimpleTexUrl(text, index, sourceOffset);
       if (url) { nodes.push(url.node); index = url.end; continue; }
@@ -2525,6 +2547,24 @@ function scanSimpleTexVerticalGlueCommand(
       return null;
     }
     const rawLength = text.slice(argumentStart + 1, argumentEnd - 1);
+    // \fill is 0pt plus 1fill; \stretch{n} is 0pt plus nfill.
+    const fill = /^\s*\\(?:fill|stretch\s*\{\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*\})\s*$/u.exec(rawLength);
+    if (fill) {
+      return {
+        node: {
+          kind: "vertical-glue",
+          text: text.slice(start, argumentEnd),
+          command: "vspace",
+          sourceStart: sourceOffset + start,
+          sourceEnd: sourceOffset + argumentEnd,
+          size: texLength(0),
+          stretch: texLength(fill[1] === undefined ? 1 : Number(fill[1])),
+          stretchOrder: "fill",
+        },
+        end: argumentEnd,
+        unsupportedCommand: false,
+      };
+    }
     const parsed = parseTexSemanticLength(rawLength);
     const relativeSize = parseSimpleTexRelativeLength(rawLength);
     return {
@@ -3277,6 +3317,57 @@ function scanSimpleTexMBoxCommand(
     },
     end: groupEnd,
     unsupportedCommand: unsupportedDimension || childScan.unsupportedCommand || !childrenAreInline || hasForcedBreak,
+  };
+}
+
+const HORIZONTAL_SKIP_EM: Readonly<Record<string, { readonly factor: number; readonly kern: boolean }>> = {
+  quad: { factor: 1, kern: false },
+  qquad: { factor: 2, kern: false },
+  enskip: { factor: 0.5, kern: false },
+  enspace: { factor: 0.5, kern: true },
+  thinspace: { factor: 1 / 6, kern: true },
+  negthinspace: { factor: -1 / 6, kern: true },
+};
+
+/** `\hspace[*]{len}` and the em-sized spaces of the LaTeX kernel. */
+function scanSimpleTexHorizontalSkip(
+  text: string,
+  start: number,
+  sourceOffset: number
+): { node: SimpleTexHorizontalSkipNode; end: number } | null {
+  const command = getRecoveredTexSyntaxIndex(text, texFragmentParser).controlByStart.get(start);
+  if (!command) return null;
+  const sourceStart = sourceOffset + start;
+  const commandEnd = command.commandSpan.to;
+  if (command.kind === "symbol" && command.name === ",") {
+    return { node: { kind: "hskip", text: text.slice(start, commandEnd), width: { kind: "contextual", raw: "1/6em", factor: 1 / 6, reference: "em" }, kern: true, sourceStart, sourceEnd: sourceOffset + commandEnd }, end: commandEnd };
+  }
+  if (command.kind !== "word") return null;
+  const em = HORIZONTAL_SKIP_EM[command.name];
+  if (em) {
+    const end = skipSimpleTexControlWordSpaces(text, commandEnd);
+    return {
+      node: {
+        kind: "hskip", text: text.slice(start, commandEnd),
+        width: { kind: "contextual", raw: `${em.factor}em`, factor: em.factor, reference: "em" },
+        ...(em.kern ? { kern: true as const } : {}), sourceStart, sourceEnd: sourceOffset + end,
+      },
+      end,
+    };
+  }
+  if (command.name !== "hspace") return null;
+  let cursor = commandEnd;
+  const star = text[cursor] === "*";
+  if (star) cursor += 1;
+  cursor = skipSimpleTexControlWordSpaces(text, cursor);
+  if (text[cursor] !== "{") return null;
+  const groupEnd = findBalancedSimpleTexGroupEnd(text, cursor);
+  if (groupEnd === null) return null;
+  const width = parseTexDimensionExpression(text.slice(cursor + 1, groupEnd - 1));
+  if (!width) return null;
+  return {
+    node: { kind: "hskip", text: text.slice(start, groupEnd), width, ...(star ? { star: true as const } : {}), sourceStart, sourceEnd: sourceOffset + groupEnd },
+    end: groupEnd,
   };
 }
 
@@ -4576,6 +4667,7 @@ export function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInl
   return (
     node.kind === "text" ||
     node.kind === "space" ||
+    node.kind === "hskip" ||
     node.kind === "comment" ||
     node.kind === "line-break" ||
     node.kind === "math" ||
@@ -6235,6 +6327,21 @@ export function simpleTexInlineNodesToTokens(
         ...(node.nonBreaking !== undefined ? { nonBreaking: node.nonBreaking } : {}),
         ...(node.controlSpace !== undefined ? { controlSpace: node.controlSpace } : {}),
       });
+      continue;
+    }
+
+    if (node.kind === "hskip") {
+      tokens.push({
+        kind: "hskip",
+        text: node.text,
+        sourceStart: node.sourceStart,
+        sourceEnd: node.sourceEnd,
+        fontState: activeFontState,
+        skipWidth: node.width,
+        ...(node.kern ? { skipKern: true as const } : {}),
+        ...(node.star ? { skipStar: true as const } : {}),
+      });
+      skipPostLineBreakSpace = false;
       continue;
     }
 

@@ -44,6 +44,7 @@ import {
 import type { BeamerTheoremTemplateVariant } from "./types.js";
 import { projectBeamerPreformatted } from "./preformatted.js";
 import { parseTcolorboxOptions } from "./tcolorbox.js";
+import { beamerVirtualRoot, beamerVirtualSource, directBeamerVirtualUses } from "./input-files.js";
 
 const LIST_ENVIRONMENTS = new Set([
   "itemize",
@@ -89,6 +90,22 @@ export function parseBeamerFrameBody(
   const theoremTemplate =
     params.document?.preamble.theoremTemplate ?? "default";
   const overlays = params.overlays ?? scanBeamerFrameOverlays(source, frame, context.syntax);
+  // `\input` files at this level are parsed where they are used; their text
+  // sits in the document's virtual tail (input-files.ts).
+  const inputs = directBeamerVirtualUses(context.syntax, frame.bodySpan, "input");
+  if (inputs.length > 0) {
+    const parts: Span[] = [];
+    let from = frame.bodySpan.from;
+    for (const input of inputs) { parts.push({ from, to: input.invocation.from }, input.span); from = input.invocation.to; }
+    parts.push({ from, to: frame.bodySpan.to });
+    const merged: BeamerFrameBodyNode[] = [];
+    for (const [partIndex, part] of parts.entries()) {
+      const nested = parseBeamerFrameBody({ ...params, overlays, frame: { ...frame, id: `${frame.id}:part:${partIndex}`, span: part, bodySpan: part } });
+      merged.push(...nested.children);
+      diagnostics.push(...nested.diagnostics);
+    }
+    return { kind: "frame-body", frameId: frame.id, span: frame.bodySpan, children: merged, overlays, diagnostics };
+  }
   const children: BeamerFrameBodyNode[] = [];
   let cursor = frame.bodySpan.from;
   let nodeIndex = 0;
@@ -495,12 +512,12 @@ function stripFrameTitleCommands(
  * cut body chunks in front of each `\vfill` — the glue then leads its own
  * chunk, which the frontend supports, and the surrounding prose survives.
  */
-function splitVerticalFillCommands(
+function splitVerticalFillCommands<T extends BeamerFrameBodyNode | BeamerColumnFlowNode>(
   context: BeamerSyntaxContext,
-  children: readonly BeamerFrameBodyNode[]
-): BeamerFrameBodyNode[] {
+  children: readonly T[]
+): Array<T | BeamerParagraphBodyNode> {
   const { source } = context;
-  const result: BeamerFrameBodyNode[] = [];
+  const result: Array<T | BeamerParagraphBodyNode> = [];
   for (const child of children) {
     if (child.kind !== "paragraph") {
       result.push(child);
@@ -509,7 +526,9 @@ function splitVerticalFillCommands(
     const cuts: Span[] = [];
     let pieceStart = child.span.from;
     for (const command of beamerControlSequencesIn(context, child.span)) {
-      if (command.name !== "vfill") {
+      const fillSpace = command.name === "vspace" &&
+        /^\*?\s*\{\s*\\fill\s*\}/u.test(source.slice(command.to, command.to + 24));
+      if (command.name !== "vfill" && !fillSpace) {
         continue;
       }
       const before = trimSpan(source, { from: pieceStart, to: command.from });
@@ -540,7 +559,7 @@ function emitParagraphPieces(
   source: string,
   child: BeamerParagraphBodyNode,
   removals: readonly Span[],
-  target: BeamerFrameBodyNode[]
+  target: Array<BeamerFrameBodyNode | BeamerColumnFlowNode>
 ): void {
   let cursor = child.span.from;
   let pieceIndex = 0;
@@ -802,9 +821,6 @@ function parseBlock(params: {
     const options = beamerOptionalArgumentAfter(context, begin.span.to, end.span.from) ?? undefined;
     const parsed = parseTcolorboxOptions(context.source, options, begin.span);
     const bodySpan = { from: options?.span.to ?? begin.span.to, to: end.span.from };
-    const setup = beamerControlSequencesIn(context, { from: 0, to: begin.span.from }).find(command => command.name === "tcbset");
-    if (setup) parsed.diagnostics.push({ severity: "warning", code: "beamer-tcolorbox-unsupported-setup",
-      span: { from: setup.from, to: setup.to }, message: "Global tcolorbox style declarations are not supported in this preview." });
     const lowerPart = beamerControlSequencesIn(context, bodySpan).find(command => ["tcblower", "tcbsubtitle"].includes(command.name));
     const nestedBox = beamerEnvironmentBoundariesIn(context, bodySpan).find(token => token.kind === "begin" && (token.name === "tcolorbox" || isBlockEnvironment(token.name)));
     if (lowerPart || nestedBox) parsed.diagnostics.push({ severity: "warning", code: "beamer-tcolorbox-unsupported-content",
@@ -920,7 +936,7 @@ function parseColumns(params: {
   // environment then inherits that class default before applying its keys.
   const alignment = resolveColumnAlignment(options?.value, "center");
   const columns: BeamerColumnBodyNode[] = [];
-  const heads: { beginSpan: Span; endSpan: Span; bodyTo: number }[] = [];
+  const heads: { beginSpan: Span; endSpan: Span; bodyTo: number; virtual?: { invocation: Span } }[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = requireArrayValue(tokens, index);
     if (token.kind !== "begin" || token.name !== "column") {
@@ -951,10 +967,23 @@ function parseColumns(params: {
     heads.push({ beginSpan: { from: command.from, to: command.to },
       endSpan: { from: end.span.from, to: end.span.from }, bodyTo: end.span.from });
   }
-  heads.sort((a, b) => a.beginSpan.from - b.beginSpan.from);
+  // A macro whose body is a column (Gemini's `\separatorcolumn`) is a column
+  // of its own here; its text sits in the virtual tail.
+  const headKey = (head: { beginSpan: Span; virtual?: { invocation: Span } }) => head.virtual?.invocation.from ?? head.beginSpan.from;
+  for (const macro of directBeamerVirtualUses(context.syntax, { from: options?.span.to ?? begin.span.to, to: end.span.from }, "macro")) {
+    if (heads.some(head => macro.invocation.from >= head.beginSpan.from && macro.invocation.from < head.endSpan.to)) continue;
+    const macroTokens = beamerEnvironmentBoundariesIn(context, macro.span);
+    const first = macroTokens.findIndex(token => token.kind === "begin" && token.name === "column");
+    const last = first < 0 ? -1 : matchingEnvironmentEnd(macroTokens, first);
+    if (last < 0) continue;
+    heads.push({ beginSpan: requireArrayValue(macroTokens, first).span, endSpan: requireArrayValue(macroTokens, last).span,
+      bodyTo: requireArrayValue(macroTokens, last).span.from, virtual: { invocation: macro.invocation } });
+  }
+  heads.sort((a, b) => headKey(a) - headKey(b));
   for (const [index, head] of heads.entries()) {
     if (head.endSpan.from === head.endSpan.to) {
-      head.bodyTo = heads[index + 1]?.beginSpan.from ?? end.span.from;
+      const following = heads[index + 1];
+      head.bodyTo = following ? headKey(following) : end.span.from;
       head.endSpan = { from: head.bodyTo, to: head.bodyTo };
     }
     let cursor = head.beginSpan.to;
@@ -987,6 +1016,31 @@ function parseColumns(params: {
       from: trailingOverlay?.span.to ?? width.span.to,
       to: head.bodyTo,
     };
+    const flow = parseColumnFlow(
+      context,
+      frameId,
+      columns.length,
+      bodySpan,
+      (head.virtual ? beamerEnvironmentBoundariesIn(context, bodySpan) : tokens).filter(token => token.span.from >= bodySpan.from && token.span.to <= bodySpan.to),
+      diagnostics,
+      theoremOccurrences,
+      theoremTemplate,
+      params.overlays
+    );
+    if (head.virtual) {
+      // The column belongs to the macro use: nothing in it is the document's text.
+      const use = head.virtual.invocation;
+      const home = beamerVirtualSource(context.syntax);
+      const owner = home ? beamerVirtualRoot(home, use) : use;
+      columns.push({
+        kind: "column", id: `${frameId}:columns:${nodeIndex}:column:${columns.length}`,
+        span: owner, beginSpan: owner, endSpan: owner,
+        ...(columnOptions !== undefined ? { options: { ...columnOptions, span: owner, contentSpan: owner } } : {}),
+        alignment: resolveColumnAlignment(columnOptions?.value, alignment),
+        width: { ...width, span: owner, contentSpan: owner }, bodySpan: { from: owner.to, to: owner.to }, children: flow,
+      });
+      continue;
+    }
     columns.push({
       kind: "column",
       id: `${frameId}:columns:${nodeIndex}:column:${columns.length}`,
@@ -997,17 +1051,7 @@ function parseColumns(params: {
       alignment: resolveColumnAlignment(columnOptions?.value, alignment),
       width,
       bodySpan,
-      children: parseColumnFlow(
-        context,
-        frameId,
-        columns.length,
-        bodySpan,
-        tokens.filter(token => token.span.from >= bodySpan.from && token.span.to <= bodySpan.to),
-        diagnostics,
-        theoremOccurrences,
-        theoremTemplate,
-        params.overlays
-      ),
+      children: flow,
     });
   }
   return {
@@ -1092,7 +1136,15 @@ function parseColumnFlow(
   const structural: Array<{
     span: Span;
     node: BeamerColumnFlowNode;
+    /** Replaces `node` when set: the nodes of an `\input` file. */
+    spliced?: readonly BeamerColumnFlowNode[];
   }> = [];
+  for (const input of directBeamerVirtualUses(context.syntax, bodySpan, "input")) {
+    const owner = `${frameId}:column:${columnIndex}:input:${input.invocation.from}`;
+    const nodes = parseColumnFlow(context, owner, 0, input.span, beamerEnvironmentBoundariesIn(context, input.span),
+      diagnostics, theoremOccurrences, theoremTemplate, overlays);
+    structural.push({ span: input.invocation, node: { kind: "unsupported", id: owner, span: input.invocation, message: "" }, spliced: nodes });
+  }
   // Preserve unsupported outer environments before extracting nested lists or pictures.
   for (let index = 0; index < tokens.length; index += 1) {
     const endIndex = findUnsupportedEnvironmentEndIndex(
@@ -1247,7 +1299,8 @@ function parseColumnFlow(
       `${frameId}:column:${columnIndex}`,
       result
     );
-    result.push(entry.node);
+    if (entry.spliced) result.push(...entry.spliced);
+    else result.push(entry.node);
     cursor = entry.span.to;
   }
   pushTextNode(
@@ -1256,7 +1309,7 @@ function parseColumnFlow(
     `${frameId}:column:${columnIndex}`,
     result
   );
-  return applyStandaloneAlignment(context, result);
+  return applyStandaloneAlignment(context, splitVerticalFillCommands(context, result));
 }
 
 function scanTikzRootsInSpan(

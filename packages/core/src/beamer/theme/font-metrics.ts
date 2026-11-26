@@ -26,3 +26,13 @@ export function beamerFontExPt(font: BeamerThemeFont): number {
 export function beamerExMultiple(decimal: number, exPt: number): number {
   return texDecimalTimesDimensionPt(String(decimal), exPt) ?? decimal * exPt;
 }
+
+/**
+ * The font's interword space (`\fontdimen2`) at its size, rounded to scaled
+ * points: the glue a stray end-of-line space contributes in that font.
+ */
+export function beamerFontSpacePt(font: BeamerThemeFont): number {
+  const profile = createBeamerTexTextFontProfile(font);
+  const resolved = profile.resolveTextFont(profile.defaultFontState, texLength(font.sizePt), profile.metricProvider);
+  return Math.round(resolved.data.fontdimen.space * font.sizePt * SP_PER_PT) / SP_PER_PT;
+}

@@ -1,0 +1,23 @@
+\documentclass[11pt]{beamer}
+\usepackage[most]{tcolorbox}
+\setbeamertemplate{navigation symbols}{}
+\definecolor{nb}{HTML}{2E4057}
+\tcbset{
+  posterbox/.style={
+    enhanced, colback=white, colframe=nb, boxrule=1.5pt, arc=4mm,
+    left=8mm,right=8mm,top=6mm,bottom=6mm,
+    fonttitle=\Large\bfseries\color{white}, coltitle=white, colbacktitle=nb,
+    attach boxed title to top left={xshift=6mm,yshift=-3mm},
+    boxed title style={sharp corners,colback=nb}
+  }
+}
+\begin{document}
+\begin{frame}[t]{Boxed titles}
+\begin{tcolorbox}[posterbox,title=Problem]
+Body text for the first box, with a few words so that it wraps over more than a single line of this narrow frame.
+\end{tcolorbox}
+\begin{tcolorbox}[posterbox,title=Other,colframe=red!70!black,colbacktitle=red!70!black]
+Second box.
+\end{tcolorbox}
+\end{frame}
+\end{document}

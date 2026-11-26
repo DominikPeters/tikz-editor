@@ -81,13 +81,14 @@ import { collectBeamerParagraphSpacing } from "./spacing.js";
 import { resolveBeamerColumnPositions, resolveBeamerColumnWidth } from "./column-dimensions.js";
 import { beamerFrameBodyTransform, beamerFrameShrinkScale, beamerFrameShrinkWidth, crampedBeamerListProfile, resolveBeamerFrameShrink, transformBeamerPoint, transformBeamerRect } from "./frame-shrink.js";
 import { beamerClassNormalSize, beamerDisplayMathProfile, beamerFontSizeProfile, beamerListSizeOverrides, beamerNamedFontSize, beamerNamedFontSizes, beamerTrivlistSpacing } from "./theme/font-sizes.js";
-import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxPlan, tcolorboxSurroundingSpacing } from "./tcolorbox.js";
+import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxBoxedTitle, resolveTcolorboxPlan, tcolorboxSurroundingSpacing } from "./tcolorbox.js";
 import { parseBeamerFrameBody } from "./content.js";
 import { beamerRecoveryDiagnostics, collectBeamerEditScopes, collectBeamerRecovery } from "./edit-scopes.js";
 import { emitEmbeddedTikz } from "./embedded-tikz.js";
 import {
   leadingBeamerTrivlistAdjustment,
   paragraphEndingMaterialDepth,
+  paragraphFillWeights,
   paragraphLastLineDepth,
   paragraphStartingMaterialHeight,
   paragraphStartingBaselineSkip,
@@ -110,6 +111,7 @@ import type {
 import { resolveBeamerPageGeometry } from "./geometry.js";
 import { beamerPosterMacroBindings, scanBeamerPoster } from "./poster.js";
 import { withBeamerProjectFiles } from "./project-files.js";
+import { beamerColumnMacros, buildBeamerEffectivePreamble, buildBeamerVirtualSource, rehomeBeamerVirtualSpans, registerBeamerVirtualSource, type BeamerVirtualSource } from "./input-files.js";
 import { projectBeamerLengthRegisters, scanBeamerLengthRegisters, type BeamerLengthRegisters } from "./lengths.js";
 import {
   beamerOverlaySpecContains,
@@ -145,6 +147,10 @@ import {
   resolveBeamerListLabelColor,
   resolveBeamerTheme,
   resolveBeamerThemeColor,
+  interpretBlockTemplate,
+  withParagraphSkip,
+  TemplateUnsupported,
+  type TemplatePaint,
 } from "./theme/index.js";
 import { documentWithPresentationTheme, planPresentationThemeSwitch } from "./theme-switch.js";
 import type {
@@ -308,6 +314,8 @@ type BeamerRenderContext = {
   readonly compilationDate: BeamerCompilationDate;
   readonly noteCommands: readonly BeamerNoteCommand[];
   readonly source: string;
+  /** Text read from other files and macros, after the source (input-files.ts). */
+  readonly virtual?: BeamerVirtualSource;
   readonly syntax: TexSyntaxIndex;
   readonly document: BeamerDocumentModel;
   readonly theme: ResolvedBeamerTheme;
@@ -331,21 +339,36 @@ function createBeamerRenderContext(
     options.previousSyntax,
     options.exactSyntax
   );
-  const document = withBeamerProjectFiles(scanBeamerDocumentWithSyntax(syntaxContext), options.projectFiles);
+  const scanned = scanBeamerDocumentWithSyntax(syntaxContext);
+  // The preamble as TeX reads it (\input files, macros that load packages or
+  // set lengths), for the scanners that read literal declarations.
+  const effective = buildBeamerEffectivePreamble(source, scanned, options.projectFiles);
+  const preambleSyntax = effective ? createBeamerSyntaxContext(effective.source) : syntaxContext;
+  const preambleDocument = withBeamerProjectFiles(effective ? scanBeamerDocumentWithSyntax(preambleSyntax) : scanned, options.projectFiles);
+  const columnMacros = beamerColumnMacros(effective?.bindings ?? collectMacroBindings(scanned.preamble.macroDefinitions));
+  // Frame bodies keep the document's offsets: included text and column macros sit after the source.
+  const virtual = buildBeamerVirtualSource(source, scanned, options.projectFiles, columnMacros);
+  const bodySyntaxContext = virtual
+    ? createBeamerSyntaxContext(virtual.source, [...(options.structuralMasks ?? []), ...noteCommands.map(note => note.bodySpan)], undefined, options.exactSyntax)
+    : syntaxContext;
+  if (virtual) registerBeamerVirtualSource(bodySyntaxContext.syntax, virtual);
+  const document = withBeamerProjectFiles(virtual ? { ...scanBeamerDocumentWithSyntax(bodySyntaxContext), source } : scanned, options.projectFiles);
   const themeSwitch = options.presentationTheme === undefined
     ? null
-    : planPresentationThemeSwitch(document, options.presentationTheme);
+    : planPresentationThemeSwitch(preambleDocument, options.presentationTheme);
   // Only the theme sees the switched uses; spans elsewhere stay the source's.
-  const theme = resolveBeamerTheme(themeSwitch ? withBeamerProjectFiles(documentWithPresentationTheme(document, themeSwitch), options.projectFiles) : document);
+  const resolvedTheme = resolveBeamerTheme(themeSwitch ? withBeamerProjectFiles(documentWithPresentationTheme(preambleDocument, themeSwitch), options.projectFiles) : preambleDocument);
+  const theme = effective ? { ...resolvedTheme, diagnostics: resolvedTheme.diagnostics.map(diagnostic => ({ ...diagnostic, span: effective.toDocument(diagnostic.span) })) } : resolvedTheme;
   const dateBindings = beamerDateBindings(document, syntaxContext);
   const preambleFont = { ...theme.fonts["normal-text"], ...beamerClassNormalSize(theme) };
-  const lengths = scanBeamerLengthRegisters(document, { em: preambleFont.sizePt, ex: fontXHeightPt(preambleFont) }, syntaxContext);
-  const posterBindings = beamerPosterMacroBindings(scanBeamerPoster(document, syntaxContext));
+  const scannedLengths = scanBeamerLengthRegisters(preambleDocument, { em: preambleFont.sizePt, ex: fontXHeightPt(preambleFont) }, preambleSyntax);
+  const lengths = effective ? { ...scannedLengths, diagnostics: scannedLengths.diagnostics.map(diagnostic => ({ ...diagnostic, span: effective.toDocument(diagnostic.span) })) } : scannedLengths;
+  const posterBindings = beamerPosterMacroBindings(scanBeamerPoster(preambleDocument, preambleSyntax));
   const pointMacroBindings = new Map<number, ReadonlyMap<string, MacroBinding>>();
   const bindingsAt = (offset: number): ReadonlyMap<string, MacroBinding> => {
     const cached = pointMacroBindings.get(offset);
     if (cached) return cached;
-    const prefix = source.slice(0, offset);
+    const prefix = effective && offset >= scanned.preamble.span.to ? effective.definitionsBefore(offset) : source.slice(0, offset);
     let collected = collectMacroBindings(collectContextDefinitions(prefix));
     // A callable or alias can execute a declaration whose command name never
     // appears at the call site. Replay the supported macro stream in that case.
@@ -365,8 +388,9 @@ function createBeamerRenderContext(
   return {
     compilationDate: dateBindings.date,
     noteCommands,
-    source,
-    syntax: syntaxContext.syntax,
+    source: virtual?.source ?? source,
+    ...(virtual ? { virtual } : {}),
+    syntax: bodySyntaxContext.syntax,
     document,
     theme,
     macroBindingsAt: bindingsAt,
@@ -376,7 +400,7 @@ function createBeamerRenderContext(
       return { ...index, lengthRegisters: lengths.registers, diagnostics: [...index.diagnostics, ...lengths.diagnostics] };
     })(),
     overlaysByFrameId,
-    page: resolveBeamerPageGeometry(document, theme),
+    page: resolveBeamerPageGeometry(preambleDocument, theme),
     navigationModel: createBeamerNavigationModel(document),
     theoremOccurrences: resolveBeamerTheoremOccurrences(
       document,
@@ -532,7 +556,7 @@ export function prepareBeamerDocument(
       requireStep(bodyIr, step);
       const work = options.cooperative ? new BeamerRenderWork(options.cooperative) : undefined;
       const counters = await frameCounterContext(options.graphicsResolver, work);
-      return renderBeamerFrameStep({
+      return rehomeBeamerVirtualSpans(await renderBeamerFrameStep({
         context,
         frame,
         frameIndex,
@@ -543,7 +567,7 @@ export function prepareBeamerDocument(
         ...(options.graphicsResolver !== undefined ? { graphicsResolver: options.graphicsResolver } : {}),
         ...(options.drawingLayer !== undefined ? { drawingLayer: options.drawingLayer } : {}),
         ...(work !== undefined ? { work } : {}),
-      });
+      }), context.virtual);
     },
     async renderFramePages(options = {}) {
       options.cooperative?.signal?.throwIfAborted();
@@ -575,6 +599,7 @@ export function prepareBeamerDocument(
         if (work) await work.checkpoint();
         pages.push(await renderBeamerFrameStep({ context, frame, frameIndex, bodyIr, step: 1, continuation, frameCounter, ...(options.graphicsResolver !== undefined ? { graphicsResolver: options.graphicsResolver } : {}), ...(work !== undefined ? { work } : {}) }));
       }
+      for (const page of pages) rehomeBeamerVirtualSpans(page, context.virtual);
       return {
         document: context.document,
         frame,
@@ -688,6 +713,18 @@ async function renderBeamerFrameStep(params: {
         bounds: { x: 0, y: 0, width: 10000, height: 0 }, font: theme.fonts[role], alignment: "left", macroBindings,
         references: { ...references, renderDiagnostics: [] }, paperWidth: page.page.width });
       return Number(measured?.layout.report.lines[0]?.naturalWidth ?? 0);
+    },
+    ...(references.lengthRegisters !== undefined ? { lengthRegisters: references.lengthRegisters } : {}),
+    measureTemplateParagraph: request => {
+      const laid = layoutParagraph({ mapped: request.mapped, sourceSpan: request.owner, paragraphId: request.id, role: "headline",
+        bounds: { x: 0, y: 0, width: request.width, height: 0 }, font: request.font, colorResolver: beamerAlertColorResolver(theme),
+        alignment: request.alignment, justify: request.justify, initialBaselineSkipPt: request.baselineSkipPt, macroBindings,
+        references: { ...references, renderDiagnostics: [] },
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), paperWidth: page.page.width });
+      if (!laid) return null;
+      return { extent: paragraphMaterialExtent(laid), firstHeight: paragraphStartingMaterialHeight(laid), endingDepth: paragraphEndingMaterialDepth(laid),
+        baselineSkip: paragraphStartingBaselineSkip(laid, request.font.lineHeightPt), firstBaseline: firstLineBaselineOffset(laid),
+        naturalWidth: Number(laid.layout.report.lines[0]?.naturalWidth ?? 0), laid };
     },
     measureFrameHeading: (value, role, width, struts) => {
       if (/\\begin\s*\{(?:columns|block|alertblock|exampleblock)\}/u.test(value.value) && !metadataMeasurements.some(request => request.value.contentSpan.from === value.contentSpan.from && request.width === width)) metadataMeasurements.push({ value, role, width });
@@ -1304,9 +1341,9 @@ function renderChrome(params: {
         elementId: null,
         markup: rectMarkup(
           primitive.bounds,
-          primitive.paint === "foreground"
+          primitive.colorHex ?? (primitive.paint === "foreground"
             ? color.fg ?? color.bg ?? "transparent"
-            : color.bg ?? color.fg ?? "transparent",
+            : color.bg ?? color.fg ?? "transparent"),
           primitive.id
         ),
       });
@@ -1360,7 +1397,7 @@ function renderChrome(params: {
       mapped = concatMappedText([createGeneratedMappedText("\\strut {", "Beamer structural heading strut", primitive.sourceSpan), mapped,
         createGeneratedMappedText("}\\strut", "Beamer structural heading strut", primitive.sourceSpan)]);
     }
-    const font = theme.fonts[primitive.fontRole];
+    const font = primitive.font ?? theme.fonts[primitive.fontRole];
     const laid = layoutParagraph({
       mapped,
       sourceSpan: primitive.sourceSpan,
@@ -1409,7 +1446,7 @@ function renderChrome(params: {
         laid.svgBody,
         primitive.bounds.x,
         y,
-        textColor(theme, primitive.colorRole)
+        primitive.colorHex ?? textColor(theme, primitive.colorRole)
       ),
     });
   }
@@ -2357,6 +2394,25 @@ async function prepareBlockWithTheme(params: {
       : params.node.environment,
     theme: params.theme,
   });
+  const interpreted = params.node.kind === "block" ? interpretBlockTemplate({
+    theme: params.theme, environment: params.node.environment, metadata: params.references.frameLayout?.metadata ?? {},
+    owner: params.node.span, width: params.width, paperWidth: params.paperWidth, paperHeight: params.references.frameLayout?.paperHeight ?? 0,
+    registers: params.references.lengthRegisters, title: { value: params.node.title.value, from: params.node.title.contentSpan.from },
+    idPrefix: `${params.node.id}:tpl`,
+    measure: request => {
+      const laid = layoutParagraph({ mapped: request.mapped, sourceSpan: request.owner, paragraphId: request.id, role: "block-title",
+        bounds: { x: 0, y: 0, width: request.width, height: 0 }, font: request.font, colorResolver: beamerAlertColorResolver(params.theme),
+        alignment: request.alignment, justify: request.justify, initialBaselineSkipPt: request.baselineSkipPt, macroBindings: params.macroBindings,
+        references: params.references,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), paperWidth: params.paperWidth,
+        textWidth: params.width, columnWidth: params.width });
+      if (!laid) return null;
+      return { extent: paragraphMaterialExtent(laid), firstHeight: paragraphStartingMaterialHeight(laid), endingDepth: paragraphEndingMaterialDepth(laid),
+        baselineSkip: paragraphStartingBaselineSkip(laid, request.font.lineHeightPt), firstBaseline: firstLineBaselineOffset(laid),
+        naturalWidth: Number(laid.layout.report.lines[0]?.naturalWidth ?? 0), laid };
+    },
+  }) : null;
+  const bodyWidth = interpreted ? interpreted.slot.width : params.width;
   const titleFont = params.theme.fonts[plan.titleFontRole];
   const theoremTitleFont =
     params.node.kind === "theorem" &&
@@ -2438,15 +2494,16 @@ async function prepareBlockWithTheme(params: {
       params.step
     );
     return layoutParagraph({
-        mapped: bodyProjection.mapped,
+        mapped: interpreted ? withParagraphSkip(bodyProjection.mapped, interpreted.slot.parskip, node.span) : bodyProjection.mapped,
         sourceSpan: node.span,
         paragraphId,
         role: "block-body",
-        bounds: { x: 0, y: 0, width: params.width, height: 0 },
+        bounds: { x: 0, y: 0, width: bodyWidth, height: 0 },
         font: theoremBodyFont,
         mathFont: params.theme.fonts[plan.bodyFontRole],
         colorResolver: beamerAlertColorResolver(params.theme),
-        alignment: "left",
+        alignment: interpreted?.slot.alignment ?? "left",
+        ...(interpreted?.slot.justify ? { justify: true } : {}),
         disableAutomaticHyphenation: true,
         // Lists inside blocks use the same theme templates (margins,
         // markers) as frame-level lists.
@@ -2467,7 +2524,7 @@ async function prepareBlockWithTheme(params: {
   let bodyFlow: PreparedBlock["bodyFlow"] = null;
   if (!body && params.node.children.some(child => child.kind !== "paragraph" && child.kind !== "unsupported")) {
     const flow = await prepareFrameFlow({ source: params.source, children: params.node.children,
-      textWidth: params.width, paperWidth: params.paperWidth, leftSidebarWidth: params.leftSidebarWidth,
+      textWidth: bodyWidth, paperWidth: params.paperWidth, leftSidebarWidth: params.leftSidebarWidth,
       ...requireDefined(params.references.frameLayout, "Expected the enclosing frame geometry"),
       availableHeight: Number.POSITIVE_INFINITY, diagnostics: params.diagnostics,
       theme: { ...params.theme, fonts: { ...params.theme.fonts, "normal-text": theoremBodyFont } },
@@ -2618,6 +2675,28 @@ async function prepareBlockWithTheme(params: {
     : lastFlowItem?.kind === "columns" ? lastFlowItem.box.depth
     : lastFlowItem?.kind === "paragraph" ? paragraphEndingMaterialDepth(lastFlowItem.paragraph)
     : lastFlowItem?.kind === "block" ? lastFlowItem.endingDepth : 0;
+  if (interpreted) {
+    // The theme's templates place everything around the body, whose measured extent is final.
+    try {
+      const laidOut = interpreted.layout({ extent: bodyExtent, endingDepth: bodyEndingDepth, firstHeight: firstBodyHeight ?? 0, baselineSkip: firstBodyBaselineSkip });
+      const titlePaint = laidOut.paint.find((paint): paint is Extract<TemplatePaint, { kind: "text" }> => paint.kind === "text");
+      const fills = laidOut.paint.filter((paint): paint is Extract<TemplatePaint, { kind: "fill" }> => paint.kind === "fill")
+        .map(paint => ({ x: paint.x, y: paint.y, width: paint.w, height: paint.h, color: paint.color }));
+      const laidTitle = titlePaint?.laid;
+      if (laidTitle) {
+        return {
+          node: params.node, interpreted: { fills, bodyX: laidOut.slot.x, bodyWidth: laidOut.slot.width, titleColor: titlePaint.color, bodyColor: interpreted.slot.color },
+          plan: { ...plan, geometry: { ...plan.geometry, beforeSkipPt: 0, afterSkipPt: 0, outerBleedPt: 0, shadowExtentPt: 0, boxBottomSkipPt: 0, bodyBottomRaisePt: 0 } },
+          width: params.width, title: laidTitle, body, bodyFlow, titleXOffset: titlePaint.x, titleTop: titlePaint.y,
+          titleAscent: 0, titleDepth: 0, titleBackgroundHeight: 0, bodyBackgroundTop: laidOut.slot.y, bodyParagraphTop: laidOut.slot.y,
+          bodyBackgroundHeight: 0, backgroundTop: 0, backgroundBottom: laidOut.height, naturalHeight: laidOut.height,
+          flowBoxHeight: laidOut.firstHeight, endingDepth: laidOut.endingDepth,
+        };
+      }
+    } catch (error) {
+      if (!(error instanceof TemplateUnsupported)) throw error;
+    }
+  }
   const bodyBoxHeight = bodyBaselineInset + bodyExtent - bodyEndingDepth;
   const titleBodyInterline = params.theme.fonts[plan.bodyFontRole].lineHeightPt - (geometry.titleExtraHeightPt > 0 ? 0 : titleDepth) - bodyBoxHeight;
   const titleBodyGap = plan.style === "default" && geometry.flowBoxHeight === "title-ascent"
@@ -2673,11 +2752,10 @@ function prepareTcolorbox(params: Parameters<typeof prepareBlock>[0]): PreparedB
   const node = params.node;
   if (node.kind !== "block") return null;
   const font = params.theme.fonts["normal-text"];
-  const { plan, diagnostics } = resolveTcolorboxPlan({ source: params.source,
-    options: parseTcolorboxOptions(params.source, node.options, node.beginSpan),
-    dimensions: { linewidth: texLength(params.width), textwidth: texLength(params.width), columnwidth: texLength(params.width),
-      paperwidth: texLength(params.paperWidth), em: texLength(font.sizePt), ex: texLength(fontXHeightPt(font)) },
-    baselineSkipPt: font.lineHeightPt });
+  const options = parseTcolorboxOptions(params.source, node.options, node.beginSpan);
+  const dimensions = { linewidth: texLength(params.width), textwidth: texLength(params.width), columnwidth: texLength(params.width),
+    paperwidth: texLength(params.paperWidth), em: texLength(font.sizePt), ex: texLength(fontXHeightPt(font)) };
+  const { plan, diagnostics } = resolveTcolorboxPlan({ source: params.source, options, dimensions, baselineSkipPt: font.lineHeightPt });
   params.diagnostics.push(...diagnostics);
   if (!plan) return null;
   const measure = (span: Span, role: "block-title" | "block-body", width: number) => {
@@ -2685,19 +2763,28 @@ function prepareTcolorbox(params: Parameters<typeof prepareBlock>[0]): PreparedB
     return layoutParagraph({ mapped: projectTcolorboxFontDeclaration(projection.mapped, role === "block-title" ? plan.fontTitle : plan.fontUpper),
       sourceSpan: span, paragraphId: `${node.id}:${role === "block-title" ? "title" : "body"}`, role,
       bounds: { x: 0, y: 0, width, height: 0 }, font, alignment: "left",
-      initialBaselineSkipPt: font.lineHeightPt,
+      // tcolorbox's default `halign=justify` overrides Beamer's ragged-right text.
+      justify: true, initialBaselineSkipPt: font.lineHeightPt,
       listProfile: { ...beamerListLayoutProfile(params.theme, params.references.crampedLists), suppressInitialTopsep: true },
       macroBindings: params.macroBindings, references: params.references, hiddenSourceSpans: projection.hiddenSourceSpans,
       ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), colorResolver: beamerAlertColorResolver(params.theme),
       paperWidth: params.paperWidth, textWidth: params.width, columnWidth: params.width });
   };
-  const title = plan.title.value ? measure(plan.title.contentSpan, "block-title", plan.titleWidthPt) : null;
+  // A boxed title is an hbox: one line at its natural width, in a box of its own.
+  let title = plan.title.value ? measure(plan.title.contentSpan, "block-title", plan.boxedTitle ? 1e4 : plan.titleWidthPt) : null;
+  let boxedTitle: ReturnType<typeof resolveTcolorboxBoxedTitle> = null;
+  if (plan.boxedTitle && title) {
+    const naturalWidth = Math.max(0, ...title.layout.report.lines.map(line => Number(line.naturalWidth)));
+    title = measure(plan.title.contentSpan, "block-title", naturalWidth + .01) ?? title;
+    boxedTitle = resolveTcolorboxBoxedTitle({ source: params.source, plan, options, dimensions, baselineSkipPt: font.lineHeightPt,
+      contentWidthPt: naturalWidth, contentHeightPt: paragraphLineExtent(title) });
+  }
   const body = measure(node.bodySpan, "block-body", plan.bodyWidthPt);
-  const geometry = measureTcolorboxGeometry(plan, title ? paragraphLineExtent(title) : 0, body ? paragraphLineExtent(body) : 0);
+  const geometry = measureTcolorboxGeometry(plan, title ? paragraphLineExtent(title) : 0, body ? paragraphLineExtent(body) : 0, boxedTitle ?? undefined);
   const blockPlan = planBeamerBlockTemplate({ environment: "block", theme: params.theme });
   return { node, plan: { ...blockPlan, geometry: { ...blockPlan.geometry, beforeSkipPt: 0, afterSkipPt: plan.afterSkipPt,
     outerBleedPt: 0, shadowExtentPt: 0 } }, packageBox: { plan, geometry },
-    width: plan.widthPt, title, body, bodyFlow: null, titleXOffset: plan.titleXPt,
+    width: plan.widthPt, title, body, bodyFlow: null, titleXOffset: geometry.titleXPt,
     titleTop: geometry.titleTopPt, titleAscent: title ? paragraphStartingMaterialHeight(title) : 0,
     titleDepth: title ? paragraphEndingMaterialDepth(title) : 0, titleBackgroundHeight: geometry.interiorTopPt,
     bodyBackgroundTop: geometry.interiorTopPt, bodyParagraphTop: geometry.bodyTopPt, bodyBackgroundHeight: geometry.interiorBottomPt - geometry.interiorTopPt,
@@ -2745,7 +2832,17 @@ async function emitPreparedBlock(params: {
     params.theme,
     block.plan.bodyColorRole
   );
-  if (block.plan.style === "default" && titleColor.bg) {
+  if (block.interpreted) {
+    // The theme's templates paint their own boxes.
+    for (const [index, fill] of block.interpreted.fills.entries()) {
+      const bounds = { x: params.x + fill.x, y: params.y + fill.y, width: fill.width, height: fill.height };
+      params.items.push({
+        id: `${block.node.id}:template:${index}:background`, kind: "background", sourceSpan: block.node.span, bounds, parentId: block.node.id,
+        ...(params.visibility !== undefined ? { visibility: params.visibility } : {}),
+      });
+    }
+  }
+  if (block.plan.style === "default" && titleColor.bg && !block.interpreted) {
     params.items.push({
       id: `${block.node.id}:title:background`,
       kind: "background",
@@ -2760,7 +2857,7 @@ async function emitPreparedBlock(params: {
       ...(params.visibility !== undefined ? { visibility: params.visibility } : {}),
     });
   }
-  if (block.plan.style === "default" && bodyColor.bg) {
+  if (block.plan.style === "default" && bodyColor.bg && !block.interpreted) {
     params.items.push({
       id: `${block.node.id}:body:background`,
       kind: "background",
@@ -2780,13 +2877,15 @@ async function emitPreparedBlock(params: {
     sourceId: block.node.id,
     elementId: null,
     markup: overlayVisibilityMarkup(
-      blockChromeMarkup({
-        block,
-        x: params.x,
-        y: params.y,
-        titleFill: titleColor.bg ?? "transparent",
-        bodyFill: bodyColor.bg ?? "transparent",
-      }),
+      block.interpreted
+        ? block.interpreted.fills.map(fill => rectMarkup({ x: params.x + fill.x, y: params.y + fill.y, width: fill.width, height: fill.height }, fill.color)).join("")
+        : blockChromeMarkup({
+          block,
+          x: params.x,
+          y: params.y,
+          titleFill: titleColor.bg ?? "transparent",
+          bodyFill: bodyColor.bg ?? "transparent",
+        }),
       params.visibility
     ),
   });
@@ -2820,12 +2919,14 @@ async function emitPreparedBlock(params: {
         block.title.svgBody,
         titleX,
         titleY,
-        titleColor.fg ?? textColor(params.theme, "normal text")
+        block.interpreted?.titleColor ?? titleColor.fg ?? textColor(params.theme, "normal text")
       ),
       params.visibility
     ),
   });
 
+  const bodyX = params.x + (block.interpreted?.bodyX ?? 0);
+  const bodyWidth = block.interpreted?.bodyWidth ?? block.width;
   const childIds = [block.title.layout.paragraphId];
   const paragraphCount = block.body ? 1 : (block.bodyFlow?.items.filter(p => p.item.kind === "paragraph").length ?? 0);
   const emitBody = (entry: { paragraph: LaidParagraph; top: number; visibility: "visible" | "hidden" }, bodyIndex: number) => {
@@ -2838,7 +2939,7 @@ async function emitPreparedBlock(params: {
     }
     positionParagraphLayout(
       body.layout,
-      svgPoint(pt(params.x), pt(bodyY)),
+      svgPoint(pt(bodyX), pt(bodyY)),
       paragraphLineExtent(body)
     );
     params.paragraphs.push(body.layout);
@@ -2858,7 +2959,7 @@ async function emitPreparedBlock(params: {
         kind: "list-marker",
         sourceSpan: marker.sourceSpan ?? body.layout.sourceSpan,
         bounds: {
-          x: params.x + marker.bounds.x,
+          x: bodyX + marker.bounds.x,
           y: bodyY + marker.bounds.y,
           width: marker.bounds.width,
           height: marker.bounds.height,
@@ -2875,9 +2976,9 @@ async function emitPreparedBlock(params: {
       markup: overlayVisibilityMarkup(
         paragraphMarkup(
           body.svgBody,
-          params.x,
+          bodyX,
           bodyY,
-          bodyColor.fg ?? textColor(params.theme, "normal text")
+          block.interpreted?.bodyColor ?? bodyColor.fg ?? textColor(params.theme, "normal text")
         ),
         visibility
       ),
@@ -2886,7 +2987,7 @@ async function emitPreparedBlock(params: {
       const qedRects = proofQedRectangles({
         block: { ...block, body },
         bodyY,
-        x: params.x,
+        x: bodyX,
         fontSizePt: params.theme.fonts[block.plan.bodyFontRole].sizePt,
       });
       const qedColor =
@@ -2927,25 +3028,25 @@ async function emitPreparedBlock(params: {
     }
     if ((params.visibility === "hidden" || item.visibility === "hidden") && !["block", "columns", "tikzpicture"].includes(item.kind)) continue;
     if (item.kind === "unsupported") {
-      emitUnsupportedPlaceholder({ placeholder: item.placeholder, x: params.x,
+      emitUnsupportedPlaceholder({ placeholder: item.placeholder, x: bodyX,
         y: params.y + block.bodyParagraphTop + placement.contentTop, parentId: block.node.id,
         items: params.items, modelBuilder: params.modelBuilder });
       childIds.push(item.placeholder.id);
     } else if (item.kind === "columns") {
       await emitPreparedColumns({ prepared: item, visibility: params.visibility ?? "visible", referenceY: params.y + block.bodyParagraphTop + placement.referenceY,
-        spacing: params.spacing, bounds: { x: params.x, y: params.y + block.bodyParagraphTop, width: block.width, height: block.bodyBackgroundHeight },
+        spacing: params.spacing, bounds: { x: bodyX, y: params.y + block.bodyParagraphTop, width: bodyWidth, height: block.bodyBackgroundHeight },
         paperWidth: params.paperWidth, items: params.items, paragraphs: params.paragraphs,
         embeddedTikz: params.embeddedTikz, modelBuilder: params.modelBuilder, theme: params.theme,
         ...(params.work !== undefined ? { work: params.work } : {}) });
       childIds.push(item.node.id);
     } else if (item.kind === "block") {
-      await emitPreparedBlock({ ...params, prepared: item.block, x: params.x,
+      await emitPreparedBlock({ ...params, prepared: item.block, x: bodyX,
         y: params.y + block.bodyParagraphTop + placement.contentTop, parentId: block.node.id, visibility: params.visibility === "hidden" || item.visibility === "hidden" ? "hidden" : "visible" });
       childIds.push(item.node.id);
     } else if (item.kind === "tikzpicture") {
       // Reuse paragraph-owned picture painting so source ownership and ordered
       // paint splitting remain identical to ordinary block text.
-      const x = params.x + (item.tikz.horizontalAlignment === "center" ? (block.width - item.tikz.width) / 2 : item.tikz.horizontalAlignment === "right" ? block.width - item.tikz.width : 0);
+      const x = bodyX + (item.tikz.horizontalAlignment === "center" ? (bodyWidth - item.tikz.width) / 2 : item.tikz.horizontalAlignment === "right" ? bodyWidth - item.tikz.width : 0);
       const y = params.y + block.bodyParagraphTop + placement.contentTop + item.contentInsetTop;
       emitEmbeddedTikz({ tikz: item.tikz, x, y, parentId: block.node.id,
         items: params.items, embeddedTikz: params.embeddedTikz, modelBuilder: params.modelBuilder });
@@ -2973,7 +3074,7 @@ function emitPreparedTcolorbox(params: Parameters<typeof emitPreparedBlock>[0]):
   params.modelBuilder.addPart({ basePartId: `${block.node.id}:background`, sourceId: block.node.id, elementId: null,
     markup: overlayVisibilityMarkup(`<g transform="translate(${params.x} ${params.y})">${emitTcolorboxBackground(plan, geometry)}</g>`, hidden ? "hidden" : "visible") });
   for (const [paragraph, dx, dy, color] of [
-    [block.title, plan.titleXPt, geometry.titleTopPt, plan.titleColor],
+    [block.title, geometry.titleXPt, geometry.titleTopPt, plan.titleColor],
     [block.body, plan.bodyXPt, geometry.bodyTopPt, plan.textColor],
   ] as const) {
     if (!paragraph) continue;
@@ -3536,8 +3637,10 @@ async function prepareColumnContent(params: {
           previous?.kind === "columns" && node.kind !== "list" ||
           previous?.kind === "paragraph" && !prepared.startsWithVerticalEnvironment);
       if (prepared.kind === "block" && prepared.block.packageBox) {
+        const previousBox = previous?.kind === "block" ? previous.block.packageBox : undefined;
         const spacing = tcolorboxSurroundingSpacing(prepared.block.packageBox.plan, {
           baselineSkipPt: bodyFont.lineHeightPt, previousDepthPt: previousDepth ?? null,
+          ...(previousBox && !previousBox.plan.noBeforeAfter ? { previousAfterSkipPt: previousBox.plan.afterSkipPt } : {}),
         });
         // \addvspace replaces T's negative -1ex lastskip before applying the
         // box skip. The column's \leavevmode has already cleared minipage mode.
@@ -5143,6 +5246,7 @@ function mappedTemplateText(primitive: Extract<
       primitive.source.value.contentSpan.from
     );
   }
+  if (primitive.source.kind === "text") return primitive.source.mapped;
   return createGeneratedMappedText(
     primitive.source.text,
     "Beamer template-generated text",
@@ -5187,7 +5291,8 @@ function resolveFrameVerticalPacking(
       (item.kind === "title-page"
         ? item.titlePage.leadingFillWeight +
           item.titlePage.trailingFillWeight
-        : item.kind === "contents" ? item.contents.fillWeight : 0),
+        : item.kind === "contents" ? item.contents.fillWeight
+        : item.kind === "paragraph" ? paragraphFillWeights(item.paragraph).leading + paragraphFillWeights(item.paragraph).trailing : 0),
     0
   );
   if (alignment === "top") {

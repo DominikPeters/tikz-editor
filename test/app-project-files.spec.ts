@@ -60,6 +60,24 @@ describe("project files in the document graphics context", () => {
     expect(changed.resolver.cacheKey).not.toBe(first.resolver.cacheKey);
   });
 
+  it("reads \\input files relative to the document, with TeX's .tex default, and their images", async () => {
+    const directory = "/tmp/project-files-input/poster";
+    const input = String.raw`\documentclass{beamer}
+\input{../shared/sizes}
+\begin{document}\begin{frame}\input{blocks/intro}\end{frame}\end{document}`;
+    const files = new Map([
+      ["/tmp/project-files-input/shared/sizes.tex", String.raw`\newlength{\colwidth}`],
+      [`${directory}/blocks/intro.tex`, String.raw`\includegraphics{figures/a.png}`],
+    ]);
+    const reads: string[] = [];
+    platformWith(directory, files, reads);
+    const context = await prepareDocumentGraphicsContext({ source: input, documentFileRef: ref(directory) });
+    expect(context.previewBundle.projectFiles?.map(([name]) => name)).toEqual(["../shared/sizes.tex", "blocks/intro.tex"]);
+    expect(reads).toContain(`${directory}/figures/a.png`);
+    expect(documentGraphicsWatchPaths({ source: input, documentFileRef: ref(directory) })).toEqual(expect.arrayContaining([
+      "/tmp/project-files-input/shared/sizes.tex", `${directory}/blocks/intro.tex`, `${directory}/figures/a.png`]));
+  });
+
   it("adds nothing for documents without theme files", async () => {
     const reads: string[] = [];
     platformWith("/tmp/project-files-none", new Map(), reads);

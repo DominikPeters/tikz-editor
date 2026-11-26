@@ -8,7 +8,7 @@ const THEME = String.raw`\ProvidesPackage{beamerthememine}
 \mode<presentation>{
 \usecolortheme{mine}
 \setbeamerfont{block title}{series=\bfseries}
-\setbeamertemplate{headline}{\begin{beamercolorbox}{headline}\inserttitle\end{beamercolorbox}}
+\setbeamertemplate{frametitle}{\begin{beamercolorbox}{frametitle}\insertframetitle\end{beamercolorbox}}
 }
 \mode<all>`;
 

@@ -33,13 +33,13 @@ describe("Beamer visible source placeholders", () => {
   });
 
   it("keeps unsupported package skins in one source-owned placeholder", async () => {
-    const opaque = String.raw`\begin{tcolorbox}[enhanced]Unrendered body.\end{tcolorbox}`;
+    const opaque = String.raw`\begin{tcolorbox}[frame hidden]Unrendered body.\end{tcolorbox}`;
     const source = frameSource(`Before.${opaque}After.`);
     const result = await renderBeamerFrame(source);
     const [card] = sourceCards(result);
     expect(sourceCards(result)).toHaveLength(1);
     expect(source.slice(card.sourceSpan.from, card.sourceSpan.to)).toBe(opaque);
-    expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: "beamer-tcolorbox-unsupported-option", span: expect.objectContaining({ from: source.indexOf("enhanced") }) }));
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: "beamer-tcolorbox-unsupported-option", span: expect.objectContaining({ from: source.indexOf("frame hidden") }) }));
   });
 
   it("keeps surrounding text, source spans and non-overlapping flow geometry", async () => {

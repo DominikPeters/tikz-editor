@@ -131,7 +131,8 @@ function layoutItemsToRuns(
           width: item.width,
           stretch: texLength(0),
           shrink: texLength(0),
-          breakPenalty: 10_000,
+          breakPenalty: item.skip?.breakPenalty ?? 10_000,
+          ...(item.skip?.preserveAtLineStart ? { preserveAtLineStart: true } : {}),
         },
       } satisfies SpaceRun);
       continue;

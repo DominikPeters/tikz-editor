@@ -143,7 +143,7 @@ function ThemeCard(props: { card: DeckThemeCard; onApplyTheme: (entry: BeamerThe
           <div className={css.deckThemeName}>{card.name}</div>
           <div className={css.deckThemeMeta}>
             {card.supported
-              ? [card.group ? GROUP_LABELS[card.group] : null, components || null].filter(Boolean).join(" — ")
+              ? [card.local ? "Local theme" : card.group ? GROUP_LABELS[card.group] : null, components || null].filter(Boolean).join(" — ")
               : "Not previewed: the preview uses Beamer's default look."}
           </div>
         </div>

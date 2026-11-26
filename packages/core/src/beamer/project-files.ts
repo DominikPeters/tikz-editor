@@ -1,3 +1,4 @@
+import { beamerInputFileCandidates, findBeamerInputUses } from "./input-files.js";
 import { scanBeamerDocument } from "./scan.js";
 import { beamerFontspecFileRequests, scanBeamerFontspecDeclarations, type BeamerFontFileRequest } from "./theme/fontspec.js";
 import type { BeamerDocumentModel, BeamerThemeKind } from "./types.js";
@@ -78,8 +79,10 @@ const PROJECT_FILE_SEARCH_DEPTH = 4;
 
 /**
  * Read the project files a document needs, following theme files that load
- * further themes. `read` returns null for a file the project does not have
- * (a stock theme, for instance).
+ * further themes and `\input`/`\include` files, which TeX finds with a
+ * `.tex` extension by default. `read` returns null for a file the project
+ * does not have (a stock theme, for instance); names are relative to the
+ * document's folder, as TeX reads them.
  */
 export async function collectBeamerProjectFiles(
   source: string,
@@ -87,20 +90,31 @@ export async function collectBeamerProjectFiles(
 ): Promise<ReadonlyMap<string, string>> {
   const files = new Map<string, string>();
   const tried = new Set<string>();
-  let pending = beamerThemeFileRequests(scanBeamerDocument(source));
+  let pending: string[][] = [...beamerThemeFileRequests(scanBeamerDocument(source)).map(name => [name]), ...beamerInputFileRequests(source)];
   for (let depth = 0; depth < PROJECT_FILE_SEARCH_DEPTH && pending.length > 0; depth += 1) {
-    const next: string[] = [];
-    for (const name of pending) {
-      if (tried.has(name)) continue;
-      tried.add(name);
-      const text = await read(name);
-      if (text === null) continue;
-      files.set(name, text);
-      next.push(...beamerThemeFileRequests(scanBeamerThemeFileDocument(text).document));
+    const next: string[][] = [];
+    for (const alternatives of pending) {
+      for (const name of alternatives) {
+        if (tried.has(name)) { if (files.has(name)) break; continue; }
+        tried.add(name);
+        const text = await read(name);
+        if (text === null) continue;
+        files.set(name, text);
+        if (/\\use(?:color|font|inner|outer)?theme(?![A-Za-z@])/u.test(text)) {
+          next.push(...beamerThemeFileRequests(scanBeamerThemeFileDocument(text).document).map(theme => [theme]));
+        }
+        next.push(...beamerInputFileRequests(text));
+        break;
+      }
     }
     pending = next;
   }
   return files;
+}
+
+/** Each `\input`/`\include` in the text, as the file names TeX would try, in order. */
+export function beamerInputFileRequests(text: string): string[][] {
+  return findBeamerInputUses(text).map(use => beamerInputFileCandidates(use.name)).filter(candidates => candidates.length > 0);
 }
 
 function beamerThemeFileRequests(document: BeamerDocumentModel): string[] {

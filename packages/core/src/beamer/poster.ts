@@ -17,6 +17,8 @@ export type BeamerPosterSettings = {
   span: Span;
   size: BeamerPosterSize;
   portrait: boolean;
+  /** The package's `scale` option (1 when absent). */
+  scale: number;
   /** `\myfontscale`: `scale` × the size's font scale, rounded to two decimals. */
   fontScale: number;
   /** Paper as `\geometry` computes it at package load, in TeX points. */
@@ -239,7 +241,7 @@ function scanUncached(document: BeamerDocumentModel, context: BeamerSyntaxContex
     if (register === "\\paperwidth") paper.widthPt = Number(length);
     else paper.heightPt = Number(length);
   }
-  return { span: loaded.span, size, portrait, fontScale, geometryPaper, paper, diagnostics };
+  return { span: loaded.span, size, portrait, scale: Number(scale), fontScale, geometryPaper, paper, diagnostics };
 }
 
 type BeamerOptionValue = { span: Span; contentSpan: Span; value: string };

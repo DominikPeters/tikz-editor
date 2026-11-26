@@ -125,7 +125,7 @@ Before [\itshape italic] after brackets.\begin{block}{Next}Following.\end{block}
     expect(emitTcolorboxBackground(plan, geometry)).not.toContain("C");
   });
 
-  it.each(["enhanced", "breakable", "sidebyside", "height=50pt", "overlay={code}", "left=\\dimexpr2pt+3pt\\relax", "fonttitle=\\myfont"])('diagnoses and preserves the bounded box for unsupported option "%s"', option => {
+  it.each(["frame hidden", "breakable", "sidebyside", "height=50pt", "overlay={code}", "left=\\dimexpr2pt+3pt\\relax", "fonttitle=\\myfont"])('diagnoses and preserves the bounded box for unsupported option "%s"', option => {
     const source = deck(String.raw`Before.\begin{tcolorbox}[${option}]Body.\end{tcolorbox}After.`);
     const ir = bodyIr(source);
     expect(ir.children.map(node => node.kind)).toEqual(["paragraph", "unsupported", "paragraph"]);
@@ -140,14 +140,19 @@ Before [\itshape italic] after brackets.\begin{block}{Next}Following.\end{block}
     expect(ir.diagnostics[0].code).toBe("beamer-tcolorbox-unsupported-content");
   });
 
-  it("diagnoses global style setup while comments containing setup commands stay inert", () => {
-    const body = String.raw`\begin{tcolorbox}Body.\end{tcolorbox}`;
-    expect(bodyIr(deck(body, String.raw`\tcbset{left=1pt}`)).diagnostics[0].code).toBe("beamer-tcolorbox-unsupported-setup");
-    expect(bodyIr(deck(body, "% \\tcbset{left=1pt}\n")).diagnostics).toEqual([]);
+  it("applies global \\tcbset defaults and named styles, and keeps commented setup inert", () => {
+    const body = String.raw`\begin{tcolorbox}[posterbox,title=T]Body.\end{tcolorbox}`;
+    const setup = String.raw`\tcbset{left=1pt,posterbox/.style={enhanced,colframe=red,boxrule=2pt,sub},sub/.style={right=5pt},}`;
+    const source = deck(body, setup);
+    expect(bodyIr(source).diagnostics).toEqual([]);
+    expect(planFor(source)).toMatchObject({ leftPt: 1, rightPt: 5, leftRulePt: 2, frameColor: "#ff0000" });
+    const commented = deck(body, "% \\tcbset{posterbox/.style={left=1pt}}\n");
+    expect(bodyIr(commented).children[0].kind).toBe("unsupported");
+    expect(bodyIr(deck(body, String.raw`\tcbset{posterbox/.style={left=#1}}`)).diagnostics[0].code).toBe("beamer-tcolorbox-unsupported-setup");
   });
 
   it("recognizes package boxes in command-form columns and keeps unsupported options local", () => {
-    const source = deck(String.raw`\begin{columns}\column{.5\textwidth}\begin{tcolorbox}[title=Left]One.\end{tcolorbox}\column{.5\textwidth}\begin{tcolorbox}[enhanced]Two.\end{tcolorbox}After.\end{columns}`);
+    const source = deck(String.raw`\begin{columns}\column{.5\textwidth}\begin{tcolorbox}[title=Left]One.\end{tcolorbox}\column{.5\textwidth}\begin{tcolorbox}[frame hidden]Two.\end{tcolorbox}After.\end{columns}`);
     const columns = bodyIr(source).children[0];
     expect(columns.kind).toBe("columns");
     if (columns.kind !== "columns") throw new Error("Expected columns");
@@ -166,7 +171,7 @@ Before [\itshape italic] after brackets.\begin{block}{Next}Following.\end{block}
     expect(summary.maxAbsoluteGlyphDyPt).toBeLessThan(.01);
   });
   it("keeps a package box inside a Beamer block in a bounded source card", async () => {
-    const nested = String.raw`\begin{tcolorbox}[enhanced]Unknown skin.\end{tcolorbox}`;
+    const nested = String.raw`\begin{tcolorbox}[frame hidden]Unknown skin.\end{tcolorbox}`;
     const source = deck(String.raw`\begin{block}{Outer}Before.${nested}After.\end{block}`);
     const result = await renderBeamerFrame(source);
     const cards = result.layout.items.filter(item => item.kind === "unsupported");

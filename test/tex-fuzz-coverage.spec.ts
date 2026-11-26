@@ -85,10 +85,11 @@ describe("TeX fuzz semantic coverage", () => {
     expect(accounting.excluded).toEqual([
       "control-kind:unsupported-command",
       "inline-kind:comment",
+      "inline-kind:hskip",
       "inline-kind:literal",
     ]);
     expect(accounting.generated).toContain("inline-kind:includegraphics");
-    expect(Object.keys(TEX_FUZZ_EXPLICIT_EXCLUSIONS)).toHaveLength(3);
+    expect(Object.keys(TEX_FUZZ_EXPLICIT_EXCLUSIONS)).toHaveLength(4);
   });
 
   it("defines every feature reached by aggressive and document generation", () => {

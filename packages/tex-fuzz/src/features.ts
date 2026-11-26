@@ -188,6 +188,7 @@ function mathCommandDefinition(
 export const TEX_FUZZ_EXPLICIT_EXCLUSIONS: Readonly<Record<string, string>> = {
   "inline-kind:comment": "Source-trivia coverage is exercised by parser tests rather than semantic generation.",
   "inline-kind:literal": "Produced by malformed parsing rather than valid AST generation.",
+  "inline-kind:hskip": "Horizontal skips are covered by the body-construct LuaLaTeX fixtures (test/beamer-body-constructs.spec.ts); the generator has no contextual-dimension node yet.",
   "control-kind:unsupported-command": "Used only as an oracle classification canary.",
 };
 

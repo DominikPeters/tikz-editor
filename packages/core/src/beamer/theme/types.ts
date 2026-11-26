@@ -1,5 +1,7 @@
 import type { Diagnostic } from "../../diagnostics/types.js";
 import type { Span } from "../../ast/types.js";
+import type { MappedText } from "../../text/source-map.js";
+import type { TemplateParagraphMeasure, TemplateParagraphRequest } from "./template-machine.js";
 import type {
   BeamerBlockEnvironment,
 } from "../content-types.js";
@@ -165,6 +167,48 @@ export type ResolvedBeamerTheme = {
   options: Readonly<Record<string, string | boolean>>;
   appliedComponents: readonly BeamerThemeComponentProvenance[];
   diagnostics: readonly Diagnostic[];
+  /** `\setbeamerfont` declarations by element name, including elements that are not font roles. */
+  elementFonts?: Readonly<Record<string, BeamerTemplateElementFont>>;
+  /** Template bodies from the preamble and local theme files that the interpreter lays out. */
+  interpreted?: {
+    templates: Readonly<Record<string, BeamerInterpretedTemplate>>;
+    units: readonly BeamerTemplateProgramUnit[];
+  };
+};
+
+/** A `\setbeamerfont` element's declarations, applied over the font in force at `\usebeamerfont`. */
+export type BeamerTemplateElementFont = {
+  family?: BeamerThemeFont["family"];
+  typeface?: BeamerThemeFont["typeface"];
+  series?: BeamerThemeFont["series"];
+  shape?: BeamerThemeFont["shape"];
+  sizePt?: number;
+  lineHeightPt?: number;
+};
+
+/** The source of a `\setbeamertemplate` body that the interpreter lays out. */
+export type BeamerInterpretedTemplate = {
+  /** The template name: `headline`, `footline`, `block begin`, `block alerted end`, ... */
+  role: string;
+  body: string;
+  /** The theme file defining it, or null for the main document. */
+  file: string | null;
+  /** Offset of `body` in the main document, when it is the main document's text. */
+  offset: number | null;
+  /** Where diagnostics are reported. */
+  reportAt: Span;
+  /** The stock template this one replaced, used when the body cannot be laid out. */
+  fallback: BeamerThemeTemplateRef;
+  /** The first construct outside the vocabulary, found when the theme was resolved. */
+  unsupported?: string;
+};
+
+/** Text whose definitions (macros, lengths) the interpreter runs before laying out a template. */
+export type BeamerTemplateProgramUnit = {
+  file: string | null;
+  text: string;
+  /** Offset of `text` in the main document, or null for a theme file. */
+  offset: number | null;
 };
 
 export type BeamerThemeUse = {
@@ -178,6 +222,12 @@ export type BeamerTemplateTextSource =
   | {
       kind: "mapped";
       value: BeamerDelimitedSourceValue;
+    }
+  | {
+      /** Interpreted template text, with its own source mapping. */
+      kind: "text";
+      mapped: MappedText;
+      sourceSpan: Span;
     }
   | {
       kind: "derived";
@@ -260,6 +310,8 @@ export type BeamerTemplatePrimitive =
       colorRole: string;
       /** Color-box fills use the background; rules/hooks use the foreground. */
       paint?: "background" | "foreground";
+      /** An explicit CSS colour, from an interpreted template. */
+      colorHex?: string;
     }
   | {
       kind: "text";
@@ -282,6 +334,9 @@ export type BeamerTemplatePrimitive =
       disableAutomaticHyphenation?: boolean;
       /** Stock short metadata is set in an unbreakable TeX hbox. */
       unbreakable?: boolean;
+      /** An interpreted template's font and colour, replacing the role's. */
+      font?: BeamerThemeFont;
+      colorHex?: string;
     }
   | {
       kind: "vector";
@@ -380,6 +435,10 @@ export type BeamerFrameTemplateContext = {
   measureFrameHeading?: (value: BeamerDelimitedSourceValue, role: "frame-title" | "frame-subtitle", width: number, struts?: { start: string; end: string; baselineSkipPt?: number }) => {
     firstHeight: number; extent: number; endingDepth: number; baselineSkip: number; xHeight: number;
   } | null;
+  /** Lays out a paragraph of an interpreted template (width, alignment and font given). */
+  measureTemplateParagraph?: (request: TemplateParagraphRequest) => TemplateParagraphMeasure | null;
+  /** User length registers set in the preamble, in points. */
+  lengthRegisters?: ReadonlyMap<string, number>;
   document: BeamerDocumentModel;
   frame: BeamerFrameModel;
   frameIndex: number;

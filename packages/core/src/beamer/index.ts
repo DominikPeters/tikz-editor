@@ -123,7 +123,8 @@ export {
 } from "./overlay-pictures.js";
 export { beamerTikzLayerPreambleInsertion } from "./tikz-layer-preamble.js";
 export { scanBeamerDocument, scanBeamerDocumentClass } from "./scan.js";
-export { beamerFontFileRequests, beamerThemeFileName, collectBeamerProjectFiles, createBeamerProjectFiles, type BeamerProjectFiles } from "./project-files.js";
+export { beamerFontFileRequests, beamerInputFileRequests, beamerThemeFileName, beamerProjectFiles, collectBeamerProjectFiles, createBeamerProjectFiles, withBeamerProjectFiles, type BeamerProjectFiles } from "./project-files.js";
+export { beamerInputFileCandidates, findBeamerInputUses, type BeamerVirtualSegment } from "./input-files.js";
 export { buildRuntimeTexFont, loadRuntimeHarfBuzz, type RuntimeHarfBuzz, type RuntimeTexFontData, type RuntimeTexFontTransfer } from "../text/tex/fonts/runtime-opentype.js";
 export { registerRuntimeTexFont, registerRuntimeTexFontTransfer, runtimeTexFontId } from "../text/tex/fonts/runtime-registry.js";
 export { scanBeamerNoteCommands, beamerSpeakerNotes, type BeamerNoteCommand } from "./notes.js";

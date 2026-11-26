@@ -11,6 +11,7 @@ import type {
   BeamerThemeTemplateRef,
 } from "./types.js";
 import { planBeamerNavigationSymbols } from "./navigation-symbols.js";
+import { planFallbackHeadline, planInterpretedEdge } from "./template-chrome.js";
 import { isBlankBeamerFrameHeading } from "../frame-headings.js";
 import { resolveBeamerThemeColor } from "./resolve.js";
 import {
@@ -87,6 +88,7 @@ const sidebarPlanners = new Map<string, EdgePlanner>([
 
 const headlinePlanners = new Map<string, EdgePlanner>([
   ["beamer/headline/none", emptyEdge],
+  ["interpreted/headline", planInterpretedHeadline],
   ["beamer/headline/sidebar", planSidebarHeadline],
   ["beamer/headline/infolines", planInfolinesHeadline],
   ["beamer/headline/tree", planTreeHeadline],
@@ -101,6 +103,7 @@ const headlinePlanners = new Map<string, EdgePlanner>([
 
 const footlinePlanners = new Map<string, EdgePlanner>([
   ["beamer/footline/none", emptyFootline],
+  ["interpreted/footline", planInterpretedFootline],
   ["beamer/footline/infolines", planInfolinesFootline],
   ["beamer/footline/split", planSplitFootline],
   ["beamer/footline/miniframes", planMiniFramesFootline],
@@ -171,6 +174,28 @@ export function planBeamerFrameChrome(
       ...footline.primitives,
     ],
   };
+}
+
+/**
+ * A headline from a `\setbeamertemplate` body. If the body cannot be laid
+ * out, a poster draws its title, author and institute instead (the stock
+ * headline is empty and would erase them); other documents draw the stock
+ * template the body replaced.
+ */
+function planInterpretedHeadline(context: BeamerFrameTemplateContext): BeamerChromeTemplatePlan {
+  const source = context.theme.interpreted?.templates.headline;
+  if (!source) return emptyEdge();
+  const plan = planInterpretedEdge(context, source, "headline");
+  if (plan) return plan;
+  const poster = typeof context.theme.options["poster-font-scale"] === "string" || typeof context.theme.options["poster-font-scale"] === "number";
+  if (source.fallback.id === "beamer/headline/none" || poster) return planFallbackHeadline(context);
+  return getPlanner(headlinePlanners, source.fallback)(context, source.fallback);
+}
+
+function planInterpretedFootline(context: BeamerFrameTemplateContext): BeamerChromeTemplatePlan {
+  const source = context.theme.interpreted?.templates.footline;
+  if (!source) return emptyFootline();
+  return planInterpretedEdge(context, source, "footline") ?? getPlanner(footlinePlanners, source.fallback)(context, source.fallback);
 }
 
 function planDefaultFrameTitle(

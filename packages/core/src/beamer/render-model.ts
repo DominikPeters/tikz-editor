@@ -50,6 +50,14 @@ export type PreparedBlock = {
   width: number;
   title: LaidParagraph | null;
   packageBox?: { plan: TcolorboxPlan; geometry: TcolorboxGeometry };
+  /** A block laid out from the theme's `block begin` and `block end` templates. */
+  interpreted?: {
+    fills: readonly { x: number; y: number; width: number; height: number; color: string }[];
+    bodyX: number;
+    bodyWidth: number;
+    titleColor: string;
+    bodyColor: string;
+  };
   body: LaidParagraph | null;
   /** Mixed supported text and bounded source cards, positioned within the body. */
   bodyFlow: { items: PositionedFrameFlowItem[]; extent: number } | null;
