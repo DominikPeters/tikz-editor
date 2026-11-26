@@ -875,7 +875,7 @@ async function computeDeckSnapshot(
     previousSession.structuralMaskKey === structuralMaskKey ? previousSession : null;
   // Parsed afresh, a deck whose structure is unchanged keeps its rendered pages.
   const exact = sameSession && request.exactParse && !sameSession.parseExact
-    ? prepareBeamerDocument(request.source, { ...(structuralMask ? { structuralMasks: [structuralMask] } : {}), exactSyntax: true })
+    ? prepareBeamerDocument(request.source, { ...(structuralMask ? { structuralMasks: [structuralMask] } : {}), exactSyntax: true, ...(graphicsContext.projectFiles ? { projectFiles: graphicsContext.projectFiles } : {}) })
     : null;
   if (sameSession && exact && sameSyntaxTree(exact.syntax.tree, sameSession.prepared.syntax.tree)) {
     session = { ...sameSession, parseExact: true, renderedPages: sameSession.renderedPages.fork() };
@@ -883,6 +883,7 @@ async function computeDeckSnapshot(
     // Any earlier document reparses correctly: what changed is found by diffing.
     const prepared = exact ?? prepareBeamerDocument(request.source, {
       ...(structuralMask ? { structuralMasks: [structuralMask] } : {}),
+      ...(graphicsContext.projectFiles ? { projectFiles: graphicsContext.projectFiles } : {}),
       ...((deckComputeSession?.prepared.syntax) === undefined ? {} : { previousSyntax: deckComputeSession.prepared.syntax }),
       ...((request.exactParse) === undefined ? {} : { exactSyntax: request.exactParse })
     });
@@ -1155,7 +1156,7 @@ type OverlayLayerPlacement = {
  */
 const overlayLayerPlacements = new BoundedLru<string, OverlayLayerPlacement>(8, 8 * 1024 * 1024);
 async function renderLayerFrame(source: string, frameIndex: number, step: number, graphicsContext: PreparedDocumentGraphicsContext, work?: CooperativeWorkOptions) {
-  const prepared = deckComputeSession?.source === source ? deckComputeSession.prepared : prepareBeamerDocument(source);
+  const prepared = deckComputeSession?.source === source ? deckComputeSession.prepared : prepareBeamerDocument(source, graphicsContext.projectFiles ? { projectFiles: graphicsContext.projectFiles } : {});
   const stepCount = prepared.frameStepCount(frameIndex);
   return prepared.renderFrame({ frameIndex, step: Math.min(Math.max(1, step), Math.max(1, stepCount)),
     graphicsResolver: graphicsContext.resolver, ...((work) === undefined ? {} : { cooperative: work }) });

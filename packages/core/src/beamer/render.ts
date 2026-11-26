@@ -109,6 +109,7 @@ import type {
 } from "./content-types.js";
 import { resolveBeamerPageGeometry } from "./geometry.js";
 import { beamerPosterMacroBindings, scanBeamerPoster } from "./poster.js";
+import { withBeamerProjectFiles } from "./project-files.js";
 import { projectBeamerLengthRegisters, scanBeamerLengthRegisters, type BeamerLengthRegisters } from "./lengths.js";
 import {
   beamerOverlaySpecContains,
@@ -330,12 +331,12 @@ function createBeamerRenderContext(
     options.previousSyntax,
     options.exactSyntax
   );
-  const document = scanBeamerDocumentWithSyntax(syntaxContext);
+  const document = withBeamerProjectFiles(scanBeamerDocumentWithSyntax(syntaxContext), options.projectFiles);
   const themeSwitch = options.presentationTheme === undefined
     ? null
     : planPresentationThemeSwitch(document, options.presentationTheme);
   // Only the theme sees the switched uses; spans elsewhere stay the source's.
-  const theme = resolveBeamerTheme(themeSwitch ? documentWithPresentationTheme(document, themeSwitch) : document);
+  const theme = resolveBeamerTheme(themeSwitch ? withBeamerProjectFiles(documentWithPresentationTheme(document, themeSwitch), options.projectFiles) : document);
   const dateBindings = beamerDateBindings(document, syntaxContext);
   const preambleFont = { ...theme.fonts["normal-text"], ...beamerClassNormalSize(theme) };
   const lengths = scanBeamerLengthRegisters(document, { em: preambleFont.sizePt, ex: fontXHeightPt(preambleFont) }, syntaxContext);

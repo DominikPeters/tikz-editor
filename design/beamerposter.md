@@ -19,6 +19,24 @@ is small. Most of the work is general and has its own design:
 This document covers what is specific to posters: the corpus, the package,
 poster editing operations and the first milestone.
 
+## Built so far
+
+- **The package** (2026-11-26, `beamer/poster.ts`): page, text width, font
+  table with the three extra sizes, `\normalfont`, list indents and
+  `\labelsep`, as described below. Four probe posters (A0, A1, A3; 11pt and
+  17pt classes; Madrid; blocks, columns, lists, description, display math)
+  match LuaLaTeX to 0.002pt. Fixes found on the way also apply to decks:
+  named sizes inside `\textbf{...}` and other command arguments, theme
+  margins in `em`/`ex` evaluated in the font current at theme load, the
+  description list margin's units, and TeX's scaled-point arithmetic for
+  paper dimensions and `.333333\paperwidth`-style factors.
+- **Length registers** and **local theme files**: see
+  [the template design](beamer-preamble-and-templates.md#built-so-far).
+
+Found and not yet fixed: `\hspace` in body text is shown as source; with
+`\setbeamerfont{normal text}{size=\large}` and the rounded inner theme,
+blocks are placed 0.6pt off on decks (1.7pt at A2).
+
 ## First milestone
 
 One vertical slice: the Gemini template poster rendered and editable end to

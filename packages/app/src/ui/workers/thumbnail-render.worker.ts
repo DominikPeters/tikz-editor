@@ -1,6 +1,7 @@
 import { renderTikzToSvgAsync } from "@tikz-editor/core/render/index";
 import { withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
-import { prepareBeamerDocument, type PreparedBeamerDocument } from "@tikz-editor/core/beamer/index";
+import { prepareBeamerDocument, type BeamerProjectFiles, type PreparedBeamerDocument } from "@tikz-editor/core/beamer/index";
+import { beamerProjectFilesFromBundle } from "../../project-files";
 import {
   createDocumentGraphicsResolverFromPreviewBundle,
   type DocumentGraphicsResolver
@@ -28,11 +29,14 @@ self.onmessage = (event: MessageEvent<ThumbnailWorkerRequestMessage | null>) => 
       message.bundle.cacheKey,
       createDocumentGraphicsResolverFromPreviewBundle(message.bundle)
     );
+    const projectFiles = beamerProjectFilesFromBundle(message.bundle);
+    if (projectFiles) projectFilesByBundle.set(message.bundle.cacheKey, projectFiles);
     return;
   }
 
   if (message.type === "unregisterGraphics") {
     graphicsResolvers.delete(message.cacheKey);
+    projectFilesByBundle.delete(message.cacheKey);
     return;
   }
 
@@ -67,7 +71,8 @@ async function pumpQueue(): Promise<void> {
     const graphicsResolver = resolveGraphicsResolver(next.graphicsPreviewBundleKey);
     let frameCount: number | undefined;
     const svg = await withTexGlyphOutlines(async () => next.deckFrameIndex != null
-      ? await renderDeckFrameThumbnail(next.source, next.deckFrameIndex, graphicsResolver, next.presentationTheme, next.deckStep, (count) => { frameCount = count; })
+      ? await renderDeckFrameThumbnail(next.source, next.deckFrameIndex, graphicsResolver, next.presentationTheme, next.deckStep, (count) => { frameCount = count; },
+        next.graphicsPreviewBundleKey ? projectFilesByBundle.get(next.graphicsPreviewBundleKey) : undefined)
       : (await renderTikzToSvgAsync(next.source, {
           parse: {
             recover: next.parseOptions.recover ?? true,
@@ -161,18 +166,21 @@ function cleanupCancellationMarks(): void {
 // Document-level Beamer passes are shared across the whole thumbnail sweep.
 // Theme gallery previews keep their own, so they do not evict the sorter's;
 // the gallery asks for one theme's frames together.
-let deckPrepared: { source: string; prepared: PreparedBeamerDocument } | null = null;
-let themePreviewPrepared: { source: string; theme: string; prepared: PreparedBeamerDocument } | null = null;
+let deckPrepared: { source: string; files: string | undefined; prepared: PreparedBeamerDocument } | null = null;
+let themePreviewPrepared: { source: string; theme: string; files: string | undefined; prepared: PreparedBeamerDocument } | null = null;
+const projectFilesByBundle = new Map<string, BeamerProjectFiles>();
 
-function preparedDeck(source: string, presentationTheme: string | undefined): PreparedBeamerDocument {
+function preparedDeck(source: string, presentationTheme: string | undefined, projectFiles: BeamerProjectFiles | undefined): PreparedBeamerDocument {
+  const files = projectFiles?.cacheKey;
+  const withFiles = projectFiles ? { projectFiles } : {};
   if (presentationTheme === undefined) {
-    if (deckPrepared?.source !== source) {
-      deckPrepared = { source, prepared: prepareBeamerDocument(source) };
+    if (deckPrepared?.source !== source || deckPrepared.files !== files) {
+      deckPrepared = { source, files, prepared: prepareBeamerDocument(source, withFiles) };
     }
     return deckPrepared.prepared;
   }
-  if (themePreviewPrepared?.source !== source || themePreviewPrepared.theme !== presentationTheme) {
-    themePreviewPrepared = { source, theme: presentationTheme, prepared: prepareBeamerDocument(source, { presentationTheme }) };
+  if (themePreviewPrepared?.source !== source || themePreviewPrepared.theme !== presentationTheme || themePreviewPrepared.files !== files) {
+    themePreviewPrepared = { source, theme: presentationTheme, files, prepared: prepareBeamerDocument(source, { presentationTheme, ...withFiles }) };
   }
   return themePreviewPrepared.prepared;
 }
@@ -183,9 +191,10 @@ async function renderDeckFrameThumbnail(
   graphicsResolver: DocumentGraphicsResolver | undefined,
   presentationTheme: string | undefined,
   requestedStep: number | undefined,
-  reportFrameCount: (count: number) => void
+  reportFrameCount: (count: number) => void,
+  projectFiles?: BeamerProjectFiles
 ): Promise<string> {
-  const prepared = preparedDeck(source, presentationTheme);
+  const prepared = preparedDeck(source, presentationTheme, projectFiles);
   reportFrameCount(prepared.document.frames.length);
   // Sorter thumbnails show the frame's final overlay step (handout view).
   const finalStep = Math.max(1, prepared.frameStepCount(frameIndex));

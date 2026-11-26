@@ -42,6 +42,8 @@ export type DocumentGraphicsPreviewBundle = {
   readonly version: 1;
   readonly cacheKey: string;
   readonly entries: readonly DocumentGraphicsPreviewBundleEntry[];
+  /** The document's project text files (local theme files), by TeX file name. */
+  readonly projectFiles?: readonly (readonly [string, string])[];
 };
 
 export function documentGraphicsPreviewRequestKey(params: {

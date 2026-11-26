@@ -4,6 +4,7 @@ import { execOracleTool as execFileSync, spawnOracleTool as spawnSync } from "./
 import {
   mkdirSync,
   copyFileSync,
+  existsSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
@@ -188,6 +189,8 @@ export async function loadCoreRenderer() {
   await outlines.loadAllTexGlyphOutlines();
   return {
     prepareBeamerDocument: beamer.prepareBeamerDocument,
+    collectBeamerProjectFiles: beamer.collectBeamerProjectFiles,
+    createBeamerProjectFiles: beamer.createBeamerProjectFiles,
     computerModernTexMetricProvider: core.computerModernTexMetricProvider,
   };
 }
@@ -398,8 +401,19 @@ export async function compareBeamerFrame(options, runtime = {}) {
   const graphicsInput = options.sourceDir ? join(options.sourceDir, basename(options.inputPath)) : options.inputPath;
   const graphicsResolver = runtime.graphicsResolver ?? corpusGraphicsResolver(source, graphicsInput, assetDir).resolver;
   const { computerModernTexMetricProvider } = coreRenderer;
+  // Local theme files next to the document, as TeX finds them.
+  const projectDir = options.sourceDir ?? dirname(options.inputPath);
+  const projectFileTexts = coreRenderer.collectBeamerProjectFiles
+    ? await coreRenderer.collectBeamerProjectFiles(source, async name => {
+      const path = join(projectDir, name);
+      return existsSync(path) ? readFileSync(path, "utf8") : null;
+    })
+    : new Map();
+  const projectFiles = projectFileTexts.size > 0
+    ? coreRenderer.createBeamerProjectFiles(projectFileTexts, createHash("sha256").update(JSON.stringify([...projectFileTexts])).digest("hex"))
+    : undefined;
   const preparedDocument = runtime.preparedDocument ??
-    coreRenderer.prepareBeamerDocument(source);
+    coreRenderer.prepareBeamerDocument(source, projectFiles ? { projectFiles } : {});
   const framePages = runtime.framePages ?? await preparedDocument.renderFramePages({
     frameIndex: options.frameNumber - 1,
     graphicsResolver,

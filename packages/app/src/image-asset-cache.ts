@@ -17,6 +17,8 @@ import type { LocalAssetReadResult } from "./platform/types";
 import type { DocumentFileRef } from "./store/types";
 import { isImportedGraphicPath, readImportedGraphic } from "./imported-graphics.js";
 import { BoundedLru } from "./bounded-lru";
+import { beamerProjectFileWatchPaths, invalidateProjectFilePath, prepareBeamerProjectFiles } from "./project-files";
+import type { BeamerProjectFiles } from "@tikz-editor/core/beamer";
 
 type ResolvedImageMimeType = "image/png" | "image/jpeg" | "image/svg+xml";
 type RawAssetMimeType = ResolvedImageMimeType | "application/pdf";
@@ -66,6 +68,8 @@ export function getImageAssetCacheGeneration(): number { return cacheGeneration;
 export type PreparedDocumentGraphicsContext = {
   readonly resolver: DocumentGraphicsResolver;
   readonly previewBundle: DocumentGraphicsPreviewBundle;
+  /** Local theme files and the like; their contents are part of the cache key. */
+  readonly projectFiles?: BeamerProjectFiles;
 };
 
 export async function prepareDocumentGraphicsContext(params: {
@@ -103,10 +107,16 @@ export async function prepareDocumentGraphicsContext(params: {
     });
   }
 
-  const cacheKey = imageAssetResolverCacheKey({
+  const project = await prepareBeamerProjectFiles({
+    source: params.source,
+    resolvePath: name => resolveLocalImagePath(name, baseDirectory),
+    readLocalAsset: platform.files?.readLocalAsset,
+  });
+  const graphicsKey = imageAssetResolverCacheKey({
     baseDirectory,
     entries: [...entries.values()],
   });
+  const cacheKey = project.files ? `${graphicsKey}|${project.files.cacheKey}` : graphicsKey;
   const resolver: DocumentGraphicsResolver = {
     cacheKey,
     resolve(request: DocumentGraphicsResolveRequest): DocumentGraphicsResolution {
@@ -138,9 +148,10 @@ export async function prepareDocumentGraphicsContext(params: {
       resolution: graphicsPreviewResolution(entry.resolution),
     })),
   };
-  rememberPreviewBundle(previewBundle);
+  const bundle: DocumentGraphicsPreviewBundle = project.entries.length > 0 ? { ...previewBundle, projectFiles: project.entries } : previewBundle;
+  rememberPreviewBundle(bundle);
 
-  return { resolver, previewBundle };
+  return { resolver, previewBundle: bundle, ...(project.files ? { projectFiles: project.files } : {}) };
 }
 
 /** Active editor subscriptions are independent of asynchronous preview preparation. */
@@ -154,6 +165,7 @@ export function documentGraphicsWatchPaths(params: {
     const descriptor = includeGraphicsPathDescriptor(include.filename, baseDirectory, prefixes);
     return descriptor?.kind === "unsupported" ? [descriptor.path] : descriptor?.candidates ?? [];
   });
+  paths.push(...beamerProjectFileWatchPaths(params.source, name => resolveLocalImagePath(name, baseDirectory)));
   return [...new Set(paths)].sort();
 }
 
@@ -171,6 +183,7 @@ export function getDocumentGraphicsPreviewBundle(
 }
 
 export function invalidateImageAssetPath(path: string): void {
+  invalidateProjectFilePath(path);
   const comparablePath = comparableLocalPath(path);
   for (const key of pathCache.keys()) {
     const entry = pathCache.peek(key);

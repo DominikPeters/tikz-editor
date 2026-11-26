@@ -123,6 +123,7 @@ export {
 } from "./overlay-pictures.js";
 export { beamerTikzLayerPreambleInsertion } from "./tikz-layer-preamble.js";
 export { scanBeamerDocument, scanBeamerDocumentClass } from "./scan.js";
+export { beamerThemeFileName, collectBeamerProjectFiles, createBeamerProjectFiles, type BeamerProjectFiles } from "./project-files.js";
 export { scanBeamerNoteCommands, beamerSpeakerNotes, type BeamerNoteCommand } from "./notes.js";
 export { beamerFrameNotes, checkBeamerNoteBody, editBeamerFrameNote, type BeamerFrameNote, type BeamerNoteBodyProblem, type BeamerNoteEdit } from "./note-editing.js";
 export { beamerCompiledPages, beamerTexEngine, createBeamerCompileDocument, type BeamerCompiledPages, type BeamerTexEngine } from "./compile.js";

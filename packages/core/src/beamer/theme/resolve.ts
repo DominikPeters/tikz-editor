@@ -9,7 +9,9 @@ import { beamerClassFontSize, beamerFontSizeProfile, beamerNamedFontSize, type B
 import { beamerPosterListDimensionsEm, beamerPosterUnsupportedLoad, scanBeamerPoster, type BeamerPosterSettings } from "../poster.js";
 import { scanBeamerFontDeclarations, applyBeamerFontRoleDeclaration } from "./font-declarations.js";
 import { scanBeamerNavigationTemplates } from "./template-declarations.js";
-import { applyBeamerColorDeclaration, beamerColorRgbToCss, diagnoseBeamerColorDeclarations, resolveBeamerColorExpressionRgb, scanBeamerColorDeclarations, type BeamerColorRgb } from "./color-declarations.js";
+import { applyBeamerColorDeclaration, beamerColorRgbToCss, diagnoseBeamerColorDeclarations, resolveBeamerColorExpressionRgb, scanBeamerColorDeclarations, type BeamerColorDeclarationEvent, type BeamerColorRgb } from "./color-declarations.js";
+import { beamerProjectFiles, beamerThemeFileName, scanBeamerThemeFileDocument, type BeamerProjectFiles } from "../project-files.js";
+import { beamerControlSequencesIn, createBeamerSyntaxContext } from "../syntax.js";
 import type {
   BeamerThemeColor,
   BeamerThemeComponentProvenance,
@@ -77,51 +79,8 @@ export function resolveBeamerTheme(
   state.diagnostics.push(...(poster?.diagnostics ?? []));
   const indirectPoster = beamerPosterUnsupportedLoad(document);
   if (indirectPoster) state.diagnostics.push(indirectPoster);
-  const uses = document.preamble.themes
-    .flatMap((source) =>
-      source.name.value.split(",").map((name): BeamerThemeUse => ({
-        kind: source.kind,
-        name: name.trim(),
-        options: parseThemeOptions(source.options?.value),
-        source,
-      }))
-    )
-    .filter((use) => use.name.length > 0 && !document.preamble.macroDefinitions.some(definition => definition.span.from <= use.source.span.from && definition.span.to >= use.source.span.to));
-
-  const colorEvents = scanBeamerColorDeclarations(document);
-  const events = [...uses.map(use => ({ kind: "theme-use" as const, span: use.source.span, use })), ...colorEvents, ...scanBeamerNavigationTemplates(document), ...scanBeamerFontDeclarations(document)]
-    .sort((left, right) => left.span.from - right.span.from);
-  for (const event of events) {
-    if (event.kind === "font-declaration") {
-      applyBeamerFontRoleDeclaration(state, event, beamerFontSizeProfile(state));
-      continue;
-    }
-    if (event.kind === "navigation-template") {
-      if (event.templateId) state.templates.navigationSymbols = DEFAULT_REF(event.templateId);
-      if (event.diagnostic) state.diagnostics.push(event.diagnostic);
-      continue;
-    }
-    if (event.kind !== "theme-use") {
-      applyBeamerColorDeclaration(state, event, document.source, role => resolveMutableThemeColor(state, role), (role, field) => {
-        let channels: BeamerColorRgb | null = null;
-        resolveBeamerColorRecord(state.colors, state.colorAliases, state.colorAliasRgb, role, (name, rgb) => { if (name === field) channels = rgb; });
-        return channels;
-      });
-      continue;
-    }
-    const use = event.use;
-    const applier = componentRegistry[use.kind].get(normalizeName(use.name));
-    if (applier) {
-      applier(state, use);
-      continue;
-    }
-    state.diagnostics.push({
-      severity: "warning",
-      code: "beamer-unknown-theme-component",
-      message: `The Beamer ${use.kind} component '${use.name}' is not registered; class defaults remain active for that component.`,
-      span: use.source.span,
-    });
-  }
+  const uses = executingThemeUseList(document);
+  const colorEvents = applyBeamerPreambleThemeEvents(state, document, uses, beamerProjectFiles(document), 0, null);
   const sansOverride = document.preamble.macroDefinitions.filter(definition => definition.nameRaw === "\\sfdefault" &&
     definition.span.from > Math.max(-1, ...uses.filter(use => use.kind === "theme" || use.kind === "font-theme").map(use => use.source.span.from))).at(-1);
   if (sansOverride && (sansOverride.kind === "MacroCommandDefinition" ? sansOverride.bodyRaw : sansOverride.kind === "MacroDefinition" ? sansOverride.valueRaw : "").replace(/[{}\s]/gu, "") === "lmss") {
@@ -385,6 +344,109 @@ function resolveMutableThemeColor(
   role: string
 ): ResolvedBeamerThemeColor {
   return resolveBeamerColorRecord(state.colors, state.colorAliases, state.colorAliasRgb, role);
+}
+
+function executingThemeUseList(document: BeamerDocumentModel): BeamerThemeUse[] {
+  return document.preamble.themes
+    .flatMap((source) =>
+      source.name.value.split(",").map((name): BeamerThemeUse => ({
+        kind: source.kind,
+        name: name.trim(),
+        options: parseThemeOptions(source.options?.value),
+        source,
+      }))
+    )
+    .filter((use) => use.name.length > 0 && !document.preamble.macroDefinitions.some(definition => definition.span.from <= use.source.span.from && definition.span.to >= use.source.span.to));
+}
+
+const LOCAL_THEME_DEPTH = 4;
+
+/**
+ * Apply a preamble's theme uses and literal declarations in source order.
+ * A use without a stock component loads the project's theme file, if it has
+ * one, and applies that file's declarations at the use. Diagnostics from a
+ * theme file are reported at the `\usetheme` that loaded it (`loadedAt`).
+ */
+function applyBeamerPreambleThemeEvents(
+  state: MutableTheme,
+  document: BeamerDocumentModel,
+  uses: readonly BeamerThemeUse[],
+  files: BeamerProjectFiles | undefined,
+  depth: number,
+  loadedAt: { span: Span; file: string } | null
+): BeamerColorDeclarationEvent[] {
+  const colorEvents = scanBeamerColorDeclarations(document);
+  const events = [...uses.map(use => ({ kind: "theme-use" as const, span: use.source.span, use })), ...colorEvents, ...scanBeamerNavigationTemplates(document), ...scanBeamerFontDeclarations(document)]
+    .sort((left, right) => left.span.from - right.span.from);
+  const report = (diagnostic: Diagnostic) => state.diagnostics.push(loadedAt
+    ? { ...diagnostic, span: loadedAt.span, message: `${loadedAt.file}: ${diagnostic.message}` }
+    : diagnostic);
+  for (const event of events) {
+    if (event.kind === "font-declaration") {
+      applyBeamerFontRoleDeclaration(state, event, beamerFontSizeProfile(state));
+      continue;
+    }
+    if (event.kind === "navigation-template") {
+      if (event.templateId) state.templates.navigationSymbols = DEFAULT_REF(event.templateId);
+      if (event.diagnostic) report(event.diagnostic);
+      continue;
+    }
+    if (event.kind !== "theme-use") {
+      const before = state.diagnostics.length;
+      applyBeamerColorDeclaration(state, event, document.source, role => resolveMutableThemeColor(state, role), (role, field) => {
+        let channels: BeamerColorRgb | null = null;
+        resolveBeamerColorRecord(state.colors, state.colorAliases, state.colorAliasRgb, role, (name, rgb) => { if (name === field) channels = rgb; });
+        return channels;
+      });
+      if (loadedAt) for (const diagnostic of state.diagnostics.splice(before)) report(diagnostic);
+      continue;
+    }
+    const use = event.use;
+    const applier = componentRegistry[use.kind].get(normalizeName(use.name));
+    if (applier) {
+      applier(state, use);
+      continue;
+    }
+    const file = beamerThemeFileName(use.kind, use.name);
+    const text = depth < LOCAL_THEME_DEPTH ? files?.readText(file) ?? null : null;
+    if (text !== null) {
+      applyLocalThemeFile(state, use, file, text, files, depth + 1, loadedAt);
+      continue;
+    }
+    report({
+      severity: "warning",
+      code: "beamer-unknown-theme-component",
+      message: `The Beamer ${use.kind} component '${use.name}' is not registered; class defaults remain active for that component.`,
+      span: use.source.span,
+    });
+  }
+  return colorEvents;
+}
+
+function applyLocalThemeFile(
+  state: MutableTheme,
+  use: BeamerThemeUse,
+  file: string,
+  text: string,
+  files: BeamerProjectFiles | undefined,
+  depth: number,
+  loadedAt: { span: Span; file: string } | null
+): void {
+  markApplied(state, use.kind, use.name, use);
+  const { document } = scanBeamerThemeFileDocument(text);
+  const at = loadedAt ?? { span: use.source.span, file };
+  applyBeamerPreambleThemeEvents(state, document, executingThemeUseList(document), files, depth, at);
+  // Template code in theme files is not executed yet: say so once per file.
+  const templates = beamerControlSequencesIn(createBeamerSyntaxContext(document.source), document.preamble.span)
+    .filter(command => command.name === "setbeamertemplate" || command.name === "defbeamertemplate");
+  if (templates.length > 0) {
+    state.diagnostics.push({
+      severity: "warning",
+      code: "beamer-local-theme-templates",
+      message: `${file} defines ${templates.length} template${templates.length === 1 ? "" : "s"}; this preview applies its colors and fonts, and draws stock templates instead.`,
+      span: at.span,
+    });
+  }
 }
 
 function createDefaultTheme(classFontSize = "11", poster: BeamerPosterSettings | null = null): MutableTheme {

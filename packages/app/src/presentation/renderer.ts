@@ -58,7 +58,7 @@ export class BeamerPresentationRenderer implements PresentationRenderer {
   private pending = new Map<string, { signal: AbortSignal; promise: Promise<PresentationPage> }>();
   private renderQueue: Promise<unknown> = Promise.resolve();
   private constructor(readonly source: string, private graphics: PreparedDocumentGraphicsContext) {
-    this.prepared = prepareBeamerDocument(source);
+    this.prepared = prepareBeamerDocument(source, graphics.projectFiles ? { projectFiles: graphics.projectFiles } : {});
     this.frames = this.prepared.document.frames.map((frame, index) => ({ index, title: frame.title?.value ?? `Slide ${index + 1}`, steps: this.prepared.frameStepCount(index) }));
   }
   static async create(source: string, fileRef: DocumentFileRef | null): Promise<BeamerPresentationRenderer> {

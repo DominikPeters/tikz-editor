@@ -16,6 +16,32 @@ LaTeX content over a measured vocabulary, with defined fallbacks.
 Stock themes keep their planners and are not re-derived through the
 interpreter.
 
+## Built so far
+
+- **Length registers** (2026-11-26, `beamer/lengths.ts`): top-level
+  `\newlength`, `\setlength` and `\addtolength` in the main file, in order,
+  with calc sums and `\dimexpr`. Built-in registers take their preamble
+  values (pdfLaTeX probes): `\paperwidth` and `\textwidth` follow the class
+  and beamerposter, `\linewidth` and `\columnwidth` keep the class text
+  width until the document starts, and `em`/`ex` are the class font's.
+  Registers resolve in column widths, `\vspace` and text dimensions
+  (`\rule`, `\includegraphics`); a Gemini-style length poster matches
+  LuaLaTeX. `\settowidth` and assignments in groups or frames are reported.
+- **Local theme files** (`beamer/project-files.ts`): a theme use without a
+  stock component loads `beamer…theme<name>.sty` from the document's folder
+  and applies its colour and font declarations and nested theme uses at the
+  use, with `\mode<...>` switches and groups opened. Diagnostics from the
+  file are reported at the `\usetheme`; template code in it is reported, not
+  run. The app reads these files with the images (desktop; the web build has
+  no folder), watches them, and passes them to the canvas, thumbnails and
+  presentation. A local theme poster matches the same declarations written
+  inline.
+
+Not yet: `\input` files and local packages, length assignments inside theme
+files, structural expansion of user macros in frame bodies (Gemini's
+`\separatorcolumn` is dropped; its own layout comes out the same because its
+columns fill the paper), file-aware edits.
+
 ## Evidence
 
 - **Posters.** 63 projects in `artifacts/beamerposter-corpus`: about 30

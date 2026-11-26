@@ -1,5 +1,6 @@
 import { isRecord } from "../../validation";
 import { createDocumentGraphicsResolverFromPreviewBundle } from "@tikz-editor/core/graphics/index";
+import { beamerProjectFilesFromBundle } from "../../project-files";
 import type { DocumentGraphicsPreviewBundle } from "@tikz-editor/core/graphics/index";
 import { documentGraphicsPreviewBundleBytes, getDocumentGraphicsPreviewBundle } from "../../image-asset-cache";
 import type {
@@ -136,7 +137,11 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest, ownedBun
     const svg = await withTexGlyphOutlines(async () => {
       if (request.deckFrameIndex != null) {
         const { prepareBeamerDocument } = await import("@tikz-editor/core/beamer/index");
-        const prepared = prepareBeamerDocument(request.source, request.presentationTheme === undefined ? {} : { presentationTheme: request.presentationTheme });
+        const projectFiles = beamerProjectFilesFromBundle(previewBundle);
+        const prepared = prepareBeamerDocument(request.source, {
+          ...(request.presentationTheme === undefined ? {} : { presentationTheme: request.presentationTheme }),
+          ...(projectFiles ? { projectFiles } : {}),
+        });
         frameCount = prepared.document.frames.length;
         const finalStep = Math.max(1, prepared.frameStepCount(request.deckFrameIndex));
         const step = request.deckStep === undefined ? finalStep : Math.min(Math.max(1, request.deckStep), finalStep);

@@ -1,3 +1,4 @@
+import type { BeamerProjectFiles } from "./project-files.js";
 import type {
   MacroAliasStatement,
   MacroCommandDefinitionStatement,
@@ -400,6 +401,8 @@ export type PrepareBeamerDocumentOptions = {
    * previews. Unknown names are ignored.
    */
   presentationTheme?: string;
+  /** The project's text files TeX would find, such as local theme files. */
+  projectFiles?: BeamerProjectFiles;
 };
 
 export type BeamerEmbeddedTikzLayout = {
