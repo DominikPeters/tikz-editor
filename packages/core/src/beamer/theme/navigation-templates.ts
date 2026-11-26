@@ -1,37 +1,64 @@
 import type { BeamerDelimitedSourceValue } from "../types.js";
 import { texLength } from "../../text/tex/coordinates.js";
+import { texScannedDimensionPt } from "../../text/tex/dimensions.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
+import { beamerExMultiple, beamerFontExPt } from "./font-metrics.js";
 import type {
   BeamerChromeTemplatePlan,
   BeamerFrameTemplateContext,
   BeamerNavigationSectionEntry,
   BeamerTemplatePrimitive,
+  BeamerThemeFontRole,
   BeamerThemeTemplateRef,
 } from "./types.js";
 import { resolveBeamerThemeColor } from "./resolve.js";
 
-// TeX Live 2025 source contracts:
+// TeX Live 2026 source contracts:
 // - beamerouterthemetree.sty: three ht=2.5ex,dp=1.125ex navigation rows.
 // - beamerouterthemesplit.sty: half-page section/subsection boxes and the
 //   matching author/title footline.
 // - beamerouterthememiniframes.sty: the section-navigation strip, optional
 //   subsection row, separation lines, and four footline variants.
-// All three execute inside Beamer's 6pt `headline`/`footline` font. These
-// constants are the resulting 11pt-class LuaLaTeX/Latin Modern boxes from
-// those ex-based templates.
-const NAVIGATION_ROW_HEIGHT_PT = 9.656997680664;
-const NAVIGATION_BASELINE_PT = 6.660003662109375;
-const MINI_FRAMES_SECTION_HEIGHT_PT = 14.778717041015625;
-const MINI_FRAMES_EMPTY_SECTION_HEIGHT_PT = 11.654998779296875;
-const SPLIT_HEADLINE_HEIGHT_PT = 17.848785400390625;
-const SPLIT_CENTER_BASELINE_PT = 10.173141479492188;
+// Every height here is a multiple of `ex` in the head/foot font the box is
+// typeset in (stock Beamer: `tiny structure`, which beamerposter scales), so
+// the dimensions are computed from that font's x-height like TeX does and
+// follow poster font sizes. At the 11pt-class deck size they reproduce the
+// LuaLaTeX/Latin Modern measurements to the scaled point.
 const SEPARATION_LINE_HEIGHT_PT = 3;
 const FOOTLINE_RESERVE_PT = 4;
-const HORIZONTAL_MARGIN_PT = 8.5359039306640625;
+// \.3cm leftskip/rightskip and text margins as TeX scans the length.
+const HORIZONTAL_MARGIN_PT = texScannedDimensionPt(".3", "cm") ?? 8.5359039306640625;
 const MINI_FRAME_DIAMETER_PT = 72.27 / 2.54 * 0.1;
 const MINI_FRAME_STEP_PT = 72.27 / 2.54 * 0.14;
 const MINI_FRAME_STROKE_PT = 0.4;
 const SINGAPORE_HEAD_FADE_HEIGHT_PT = 1.25 * 72.27 / 2.54;
+const SP = 1 / 65_536;
+
+/**
+ * The ht=2.5ex,dp=1.125ex color box Beamer's outer themes stack for their
+ * head and foot rows, in the ex of the font it is typeset in.
+ */
+type HeadFootBar = {
+  ex: number;
+  /** `ht=2.5ex`: also where the text baseline sits. */
+  baselinePt: number;
+  /** `ht` plus `dp=1.125ex`. */
+  heightPt: number;
+};
+
+function headFootBar(
+  context: BeamerFrameTemplateContext,
+  role: BeamerThemeFontRole
+): HeadFootBar {
+  const ex = beamerFontExPt(context.theme.fonts[role]);
+  const baselinePt = beamerExMultiple(2.5, ex);
+  return { ex, baselinePt, heightPt: baselinePt + beamerExMultiple(1.125, ex) };
+}
+
+/** A raised or lowered length such as `1.9pt`, kept in scaled points. */
+function spPt(pt: number): number {
+  return Math.round(pt * 65_536) * SP;
+}
 
 export function planTreeHeadline(
   context: BeamerFrameTemplateContext,
@@ -51,6 +78,8 @@ export function planTreeHeadline(
     primitives,
     y,
     id: "title",
+    // `title in head/foot` sets no size of its own: the headline font.
+    bar: headFootBar(context, "headline"),
     text: title,
     colorRole: "title in head/foot",
     x: HORIZONTAL_MARGIN_PT,
@@ -62,13 +91,11 @@ export function planTreeHeadline(
     primitives,
     y,
     id: "section",
+    bar: headFootBar(context, "section-in-head-foot"),
     text: section,
     colorRole: "section in head/foot",
     x: HORIZONTAL_MARGIN_PT + (hooks ? 8.4 : 6),
-    ...(hooks && section ? { hook: {
-          x: HORIZONTAL_MARGIN_PT + 2,
-          verticalTopOffset: -0.2349853515625,
-        } } : {}),
+    ...(hooks && section ? { hook: { x: HORIZONTAL_MARGIN_PT + 2 } } : {}),
   });
   const subsection = context.navigation.currentSubsection?.title;
   y = appendTreeRow({
@@ -76,13 +103,11 @@ export function planTreeHeadline(
     primitives,
     y,
     id: "subsection",
+    bar: headFootBar(context, "subsection-in-head-foot"),
     text: subsection,
     colorRole: "subsection in head/foot",
     x: HORIZONTAL_MARGIN_PT + (hooks ? 15.8 : 12),
-    ...(hooks && subsection ? { hook: {
-          x: HORIZONTAL_MARGIN_PT + 9.4,
-          verticalTopOffset: -0.2349853515625,
-        } } : {}),
+    ...(hooks && subsection ? { hook: { x: HORIZONTAL_MARGIN_PT + 9.4 } } : {}),
   });
   y += appendSeparationLine(
     primitives,
@@ -103,9 +128,9 @@ export function planSplitHeadline(
   if (!compressed && sections.length === 0) {
     return { inset: 0, primitives: [] };
   }
-  const height = compressed
-    ? NAVIGATION_ROW_HEIGHT_PT
-    : splitHeadlineHeight(context);
+  // Both half-page boxes sit inside `\usebeamerfont{section in head/foot}`.
+  const bar = headFootBar(context, "section-in-head-foot");
+  const height = compressed ? bar.heightPt : splitHeadlineHeight(bar, context);
   const half = context.page.page.width / 2;
   const primitives: BeamerTemplatePrimitive[] = [];
   appendBackground(
@@ -124,8 +149,8 @@ export function planSplitHeadline(
   );
 
   if (compressed) {
-    appendHorizontalSectionTitles(context, primitives, 0, half, height);
-    appendHorizontalSubsectionTitles(context, primitives, half, half, height);
+    appendHorizontalSectionTitles(context, primitives, 0, half, height, bar.baselinePt);
+    appendHorizontalSubsectionTitles(context, primitives, half, half, height, bar.baselinePt);
   } else {
     appendVerticalNavigationTitles({
       context,
@@ -138,7 +163,7 @@ export function planSplitHeadline(
       x: HORIZONTAL_MARGIN_PT,
       width: half - 2 * HORIZONTAL_MARGIN_PT,
       height,
-      centerBaseline: splitCenterBaseline(height),
+      centerBaseline: splitCenterBaseline(bar, height),
       alignment: "right",
       colorRole: "section in head/foot",
       shadedColorRole: "section in head/foot shaded",
@@ -156,7 +181,7 @@ export function planSplitHeadline(
       x: half + HORIZONTAL_MARGIN_PT,
       width: half - 2 * HORIZONTAL_MARGIN_PT,
       height,
-      centerBaseline: splitCenterBaseline(height),
+      centerBaseline: splitCenterBaseline(bar, height),
       alignment: "left",
       colorRole: "subsection in head/foot",
       shadedColorRole: "subsection in head/foot shaded",
@@ -169,7 +194,8 @@ export function planSplitHeadline(
 export function planSplitFootline(
   context: BeamerFrameTemplateContext
 ): BeamerChromeTemplatePlan {
-  const height = NAVIGATION_ROW_HEIGHT_PT;
+  const bar = headFootBar(context, "footline");
+  const height = bar.heightPt;
   const y = context.page.page.height - height;
   const half = context.page.page.width / 2;
   const primitives: BeamerTemplatePrimitive[] = [];
@@ -200,7 +226,7 @@ export function planSplitFootline(
     },
     colorRole: "author in head/foot",
     alignment: "right",
-    baselineY: y + NAVIGATION_BASELINE_PT,
+    baselineY: y + bar.baselinePt,
   });
   appendMetadataText({
     context,
@@ -215,7 +241,7 @@ export function planSplitFootline(
     },
     colorRole: "title in head/foot",
     alignment: "left",
-    baselineY: y + NAVIGATION_BASELINE_PT,
+    baselineY: y + bar.baselinePt,
   });
   return { inset: height + FOOTLINE_RESERVE_PT, primitives };
 }
@@ -236,9 +262,18 @@ export function planMiniFramesHeadline(
     "headline:upper-separation"
   );
   const sections = context.navigation.model.sections;
-  const sectionHeight = sections.length > 0
-    ? MINI_FRAMES_SECTION_HEIGHT_PT
-    : MINI_FRAMES_EMPTY_SECTION_HEIGHT_PT;
+  // The section box has no ht/dp of its own: \vskip2.5ex, the navigation row
+  // (its mini-frame rows hang below the baseline), \vskip1.125ex. The
+  // navigation vbox is `\vskip-\baselineskip` plus the interline glue that
+  // restores it, so the text baseline sits 2.5ex below the box top and the
+  // depth below it is the deeper of the section boxes' 0.75ex and the lowest
+  // mini-frame row.
+  const headBar = headFootBar(context, "headline");
+  const navigationDepth = Math.max(
+    beamerExMultiple(0.75, beamerFontExPt(context.theme.fonts["section-in-head-foot"])),
+    miniFrameLowering(miniFrameRowCount(sections))
+  );
+  const sectionHeight = headBar.heightPt + navigationDepth;
   appendBackground(
     primitives,
     context,
@@ -246,7 +281,9 @@ export function planMiniFramesHeadline(
     { x: 0, y, width: context.page.page.width, height: sectionHeight },
     "section in head/foot"
   );
-  appendMiniFrameSections(context, primitives, y, sectionHeight, sections);
+  appendMiniFrameSections(context, primitives, y, sectionHeight, sections, {
+    titleBaselineY: y + headBar.baselinePt,
+  });
   y += sectionHeight;
 
   if (ref.options.subsection !== false) {
@@ -257,6 +294,8 @@ export function planMiniFramesHeadline(
       "middle separation line head",
       "headline:middle-separation"
     );
+    // The subsection box starts before \usebeamerfont{subsection in head/foot},
+    // so its ex belongs to the headline font.
     appendBackground(
       primitives,
       context,
@@ -265,7 +304,7 @@ export function planMiniFramesHeadline(
         x: 0,
         y,
         width: context.page.page.width,
-        height: NAVIGATION_ROW_HEIGHT_PT,
+        height: headBar.heightPt,
       },
       "subsection in head/foot"
     );
@@ -279,17 +318,17 @@ export function planMiniFramesHeadline(
           x: HORIZONTAL_MARGIN_PT,
           y,
           width: context.page.page.width - 2 * HORIZONTAL_MARGIN_PT,
-          height: NAVIGATION_ROW_HEIGHT_PT,
+          height: headBar.heightPt,
         },
         source: { kind: "mapped", value: subsection },
         fontRole: "subsection-in-head-foot",
         colorRole: "subsection in head/foot",
         alignment: "left",
         verticalAlignment: "top",
-        baselineY: y + NAVIGATION_BASELINE_PT,
+        baselineY: y + headBar.baselinePt,
       });
     }
-    y += NAVIGATION_ROW_HEIGHT_PT;
+    y += headBar.heightPt;
   }
   y += appendSeparationLine(
     primitives,
@@ -342,6 +381,7 @@ export function planMiniFramesFootline(
     return { inset: FOOTLINE_RESERVE_PT, primitives: [] };
   }
   const rows = style === "authorinstitutetitle" ? 2 : 1;
+  const bar = headFootBar(context, "footline");
   const primitives: BeamerTemplatePrimitive[] = [];
   const topSeparation = hasBackground(context, "upper separation line foot")
     ? SEPARATION_LINE_HEIGHT_PT
@@ -350,7 +390,7 @@ export function planMiniFramesFootline(
     ? SEPARATION_LINE_HEIGHT_PT
     : 0;
   const paintHeight =
-    topSeparation + rows * NAVIGATION_ROW_HEIGHT_PT + bottomSeparation;
+    topSeparation + rows * bar.heightPt + bottomSeparation;
   let y = context.page.page.height - paintHeight;
   y += appendSeparationLine(
     primitives,
@@ -366,18 +406,20 @@ export function planMiniFramesFootline(
       y,
       "author in head/foot",
       "author",
-      "institute"
+      "institute",
+      bar
     );
-    y += NAVIGATION_ROW_HEIGHT_PT;
+    y += bar.heightPt;
     appendMiniMetadataRow(
       context,
       primitives,
       y,
       "title in head/foot",
       "title",
-      null
+      null,
+      bar
     );
-    y += NAVIGATION_ROW_HEIGHT_PT;
+    y += bar.heightPt;
   } else {
     const [left, right, colorRole] =
       style === "authorinstitute"
@@ -391,9 +433,10 @@ export function planMiniFramesFootline(
       y,
       colorRole,
       left,
-      right
+      right,
+      bar
     );
-    y += NAVIGATION_ROW_HEIGHT_PT;
+    y += bar.heightPt;
   }
   appendSeparationLine(
     primitives,
@@ -413,15 +456,13 @@ function appendTreeRow(params: {
   primitives: BeamerTemplatePrimitive[];
   y: number;
   id: string;
+  bar: HeadFootBar;
   text: BeamerDelimitedSourceValue | undefined;
   colorRole: string;
   x: number;
-  hook?: {
-    x: number;
-    verticalTopOffset: number;
-  };
+  hook?: { x: number };
 }): number {
-  const { context, primitives, y } = params;
+  const { context, primitives, y, bar } = params;
   appendBackground(
     primitives,
     context,
@@ -430,11 +471,15 @@ function appendTreeRow(params: {
       x: 0,
       y,
       width: context.page.page.width,
-      height: NAVIGATION_ROW_HEIGHT_PT,
+      height: bar.heightPt,
     },
     params.colorRole
   );
   if (params.hook) {
+    // \raise1.9pt\hbox{\vrule height1.875ex\vrule width5pt height0.4pt} on
+    // the row's 2.5ex baseline.
+    const raise = spPt(1.9);
+    const hookHeight = beamerExMultiple(1.875, bar.ex);
     primitives.push(
       {
         kind: "fill",
@@ -442,9 +487,9 @@ function appendTreeRow(params: {
         sourceSpan: params.text?.span ?? context.frame.span,
         bounds: {
           x: params.hook.x,
-          y: y + params.hook.verticalTopOffset,
+          y: y + bar.baselinePt - raise - hookHeight,
           width: 0.4,
-          height: 4.995,
+          height: hookHeight,
         },
         colorRole: params.colorRole,
         paint: "foreground",
@@ -455,7 +500,7 @@ function appendTreeRow(params: {
         sourceSpan: params.text?.span ?? context.frame.span,
         bounds: {
           x: params.hook.x + 0.4,
-          y: y + 4.360015869140625,
+          y: y + bar.baselinePt - raise - spPt(0.4),
           width: 5,
           height: 0.4,
         },
@@ -473,7 +518,7 @@ function appendTreeRow(params: {
         x: params.x,
         y,
         width: context.page.page.width - params.x - HORIZONTAL_MARGIN_PT,
-        height: NAVIGATION_ROW_HEIGHT_PT,
+        height: bar.heightPt,
       },
       source: { kind: "mapped", value: params.text },
       fontRole: params.id === "subsection"
@@ -484,10 +529,10 @@ function appendTreeRow(params: {
       colorRole: params.colorRole,
       alignment: "left",
       verticalAlignment: "top",
-      baselineY: y + NAVIGATION_BASELINE_PT,
+      baselineY: y + bar.baselinePt,
     });
   }
-  return y + NAVIGATION_ROW_HEIGHT_PT;
+  return y + bar.heightPt;
 }
 
 export function appendMiniFrameSections(
@@ -497,10 +542,10 @@ export function appendMiniFrameSections(
   height: number,
   sections: readonly BeamerNavigationSectionEntry[],
   options: {
-    titleBaselineY?: number;
-    miniFrameCenterY?: number;
+    /** Absolute baseline of the navigation row; its section titles and mini frames hang from it. */
+    titleBaselineY: number;
     miniFrameIndexing?: "subsection" | "global";
-  } = {}
+  }
 ): void {
   if (sections.length === 0) {
     return;
@@ -528,28 +573,69 @@ export function appendMiniFrameSections(
         : "section in head/foot shaded",
       alignment,
       verticalAlignment: "top",
-      baselineY: options.titleBaselineY ?? y + NAVIGATION_BASELINE_PT,
+      baselineY: options.titleBaselineY,
     });
   }
   appendMiniFrameShapes(
     context,
     primitives,
     sections,
-    options.miniFrameCenterY ?? y + 10.320587158203125,
+    options.titleBaselineY,
     options.miniFrameIndexing ?? "subsection"
   );
+}
+
+// beamerouterthemedefault.sty: `mini frame size=.14cm,mini frame offset=-0.01cm`;
+// beamerbasenavigation.sty \slideentry raises each frame box by
+// -(offset+size)*ypos-.05cm. Lengths are scanned like TeX does.
+const MINI_FRAME_BOX_SIZE_SP = Math.round((texScannedDimensionPt(".14", "cm") ?? 0) * 65_536);
+const MINI_FRAME_OFFSET_SP = Math.round((texScannedDimensionPt("-.01", "cm") ?? 0) * 65_536);
+const MINI_FRAME_BASE_DROP_SP = Math.round((texScannedDimensionPt(".05", "cm") ?? 0) * 65_536);
+
+/** `\beamer@ypos` of every frame of a section: its subsection number, plus one once a frame precedes the first subsection. */
+function miniFrameRowOf(
+  section: BeamerNavigationSectionEntry,
+  indexing: "subsection" | "global"
+): Map<number, number> {
+  const rows = new Map<number, number>();
+  if (indexing === "global") {
+    for (const { frameIndex } of section.frames) rows.set(frameIndex, 1);
+    return rows;
+  }
+  const offset = section.directFrames.length > 0 ? 1 : 0;
+  for (const { frameIndex } of section.directFrames) rows.set(frameIndex, 1);
+  for (const [position, subsection] of section.subsections.entries()) {
+    for (const { frameIndex } of subsection.frames) rows.set(frameIndex, position + 1 + offset);
+  }
+  return rows;
+}
+
+/** The deepest `\beamer@ypos` over the navigation, which sets how far the mini-frame rows hang. */
+function miniFrameRowCount(sections: readonly BeamerNavigationSectionEntry[]): number {
+  let rows = 0;
+  for (const section of sections) {
+    for (const row of miniFrameRowOf(section, "subsection").values()) rows = Math.max(rows, row);
+  }
+  return rows;
+}
+
+/** How far the row `ypos` hangs below the navigation baseline, in points. */
+function miniFrameLowering(ypos: number): number {
+  if (ypos <= 0) return 0;
+  return ((MINI_FRAME_OFFSET_SP + MINI_FRAME_BOX_SIZE_SP) * ypos + MINI_FRAME_BASE_DROP_SP) / 65_536;
 }
 
 function appendMiniFrameShapes(
   context: BeamerFrameTemplateContext,
   primitives: BeamerTemplatePrimitive[],
   sections: readonly BeamerNavigationSectionEntry[],
-  centerY: number,
+  baselineY: number,
   indexing: "subsection" | "global"
 ): void {
-  const frames = sections.flatMap((section) =>
-    section.frames.map((frame) => ({ section, frame }))
-  );
+  const frames = sections.flatMap((section) => {
+    const rows = miniFrameRowOf(section, indexing);
+    return section.frames.map((frame) => ({ section, frame, row: rows.get(frame.frameIndex) ?? 1 }));
+  });
   if (frames.length === 0) {
     return;
   }
@@ -563,19 +649,26 @@ function appendMiniFrameShapes(
     measureNavigationTitleWidth(context, lastSection.title) +
     1;
   const slideIndices = new Map<string, number>();
-  const positioned = frames.map(({ section, frame }, frameIndex) => {
+  const positioned = frames.map(({ section, frame, row }, frameIndex) => {
     if (indexing === "global") {
-      return { section, frame, slideIndex: frameIndex };
+      return { section, frame, row, slideIndex: frameIndex };
     }
     const subsectionKey = frame.frame.subsectionId ??
       `${section.section.id}:direct`;
     const slideIndex = slideIndices.get(subsectionKey) ?? 0;
     slideIndices.set(subsectionKey, slideIndex + 1);
-    return { section, frame, slideIndex };
+    return { section, frame, row, slideIndex };
   });
   const maxSlideIndex = Math.max(
     ...positioned.map(({ slideIndex }) => slideIndex)
   );
+  // The picture's lower-left corner is lowered by (size+offset)*ypos+.05cm
+  // below the baseline and the circle's center is half a diameter above it,
+  // so the center is (size+offset)*ypos below the baseline.
+  const centerOf = (row: number) => baselineY + (miniFrameLowering(row) - MINI_FRAME_DIAMETER_PT / 2);
+  const centers = positioned.map(({ row }) => centerOf(row));
+  const top = Math.min(...centers) - MINI_FRAME_DIAMETER_PT / 2;
+  const bottom = Math.max(...centers) + MINI_FRAME_DIAMETER_PT / 2;
   const totalWidth = MINI_FRAME_DIAMETER_PT +
     maxSlideIndex * MINI_FRAME_STEP_PT;
   primitives.push({
@@ -584,13 +677,13 @@ function appendMiniFrameShapes(
     sourceSpan: lastSection.section.span,
     bounds: {
       x: startX,
-      y: centerY - MINI_FRAME_DIAMETER_PT / 2,
+      y: top,
       width: totalWidth,
-      height: MINI_FRAME_DIAMETER_PT,
+      height: bottom - top,
     },
     templateId: "beamer/mini-frames/default",
     layoutKind: "mini-frame-navigation",
-    shapes: positioned.flatMap(({ section, frame, slideIndex }) => {
+    shapes: positioned.flatMap(({ section, frame, row, slideIndex }) => {
       const currentSection = section === context.navigation.currentSection;
       const currentSubsection =
         frame.frame.subsectionId === context.navigation.currentSubsection?.subsection.id;
@@ -602,7 +695,7 @@ function appendMiniFrameShapes(
         kind: "circle" as const,
         cx: startX + slideIndex * MINI_FRAME_STEP_PT +
           MINI_FRAME_DIAMETER_PT / 2,
-        cy: centerY,
+        cy: centerOf(row),
         radius: MINI_FRAME_DIAMETER_PT / 2,
         ...(currentFrame
           ? { fillColorRole: role, strokeColorRole: role }
@@ -679,7 +772,8 @@ function appendHorizontalSectionTitles(
   primitives: BeamerTemplatePrimitive[],
   x: number,
   width: number,
-  height: number
+  height: number,
+  baselinePt: number
 ): void {
   const sections = context.navigation.model.sections;
   appendHorizontalTitles(
@@ -695,7 +789,8 @@ function appendHorizontalSectionTitles(
     height,
     "section in head/foot",
     "section in head/foot shaded",
-    "section-in-head-foot"
+    "section-in-head-foot",
+    baselinePt
   );
 }
 
@@ -704,7 +799,8 @@ function appendHorizontalSubsectionTitles(
   primitives: BeamerTemplatePrimitive[],
   x: number,
   width: number,
-  height: number
+  height: number,
+  baselinePt: number
 ): void {
   const subsections = context.navigation.currentSection?.subsections ?? [];
   appendHorizontalTitles(
@@ -720,7 +816,8 @@ function appendHorizontalSubsectionTitles(
     height,
     "subsection in head/foot",
     "subsection in head/foot shaded",
-    "subsection-in-head-foot"
+    "subsection-in-head-foot",
+    baselinePt
   );
 }
 
@@ -737,7 +834,8 @@ function appendHorizontalTitles(
   height: number,
   colorRole: string,
   shadedColorRole: string,
-  fontRole: "section-in-head-foot" | "subsection-in-head-foot"
+  fontRole: "section-in-head-foot" | "subsection-in-head-foot",
+  baselinePt: number
 ): void {
   if (entries.length === 0) {
     return;
@@ -759,7 +857,7 @@ function appendHorizontalTitles(
       colorRole: entry.active ? colorRole : shadedColorRole,
       alignment: "center",
       verticalAlignment: "top",
-      baselineY: NAVIGATION_BASELINE_PT,
+      baselineY: baselinePt,
     });
   }
 }
@@ -770,7 +868,8 @@ function appendMiniMetadataRow(
   y: number,
   colorRole: string,
   left: "title" | "author",
-  right: "author" | "institute" | null
+  right: "author" | "institute" | null,
+  bar: HeadFootBar
 ): void {
   appendBackground(
     primitives,
@@ -780,7 +879,7 @@ function appendMiniMetadataRow(
       x: 0,
       y,
       width: context.page.page.width,
-      height: NAVIGATION_ROW_HEIGHT_PT,
+      height: bar.heightPt,
     },
     colorRole
   );
@@ -793,11 +892,11 @@ function appendMiniMetadataRow(
       x: HORIZONTAL_MARGIN_PT,
       y,
       width: context.page.page.width - 2 * HORIZONTAL_MARGIN_PT,
-      height: NAVIGATION_ROW_HEIGHT_PT,
+      height: bar.heightPt,
     },
     colorRole,
     alignment: "left",
-    baselineY: y + NAVIGATION_BASELINE_PT,
+    baselineY: y + bar.baselinePt,
   });
   if (right) {
     appendMetadataText({
@@ -809,13 +908,13 @@ function appendMiniMetadataRow(
         x: HORIZONTAL_MARGIN_PT,
         y,
         width: context.page.page.width - 2 * HORIZONTAL_MARGIN_PT,
-        height: NAVIGATION_ROW_HEIGHT_PT,
+        height: bar.heightPt,
       },
       colorRole: right === "institute"
         ? "institute in head/foot"
         : "author in head/foot",
       alignment: "right",
-      baselineY: y + NAVIGATION_BASELINE_PT,
+      baselineY: y + bar.baselinePt,
     });
   }
 }
@@ -907,7 +1006,10 @@ function metadataValue(
   return metadata?.shortValue ?? metadata?.value;
 }
 
-function splitHeadlineHeight(context: BeamerFrameTemplateContext): number {
+function splitHeadlineHeight(
+  bar: HeadFootBar,
+  context: BeamerFrameTemplateContext
+): number {
   const sectionRows = context.navigation.model.sections.length;
   const subsectionRows = Math.max(
     0,
@@ -919,13 +1021,13 @@ function splitHeadlineHeight(context: BeamerFrameTemplateContext): number {
   if (rows === 0) {
     return 0;
   }
-  // The source uses 2.4375ex per row plus 1.825ex. Lock the 2-row profile to
-  // the oracle and scale the row contribution for larger navigation models.
-  return SPLIT_HEADLINE_HEIGHT_PT +
-    (rows - 2) * context.theme.fonts.headline.lineHeightPt;
+  // beamerouterthemesplit.sty: \@tempdimb=2.4375ex, \multiply by the row
+  // count, \advance by 1.825ex.
+  return rows * beamerExMultiple(2.4375, bar.ex) + beamerExMultiple(1.825, bar.ex);
 }
 
-function splitCenterBaseline(height: number): number {
-  return SPLIT_CENTER_BASELINE_PT +
-    (height - SPLIT_HEADLINE_HEIGHT_PT) / 2;
+function splitCenterBaseline(bar: HeadFootBar, height: number): number {
+  // The navigation vbox is centered between two \vfil in the \vbox to height;
+  // its first baseline lies `(15/32)ex` below the center of that box.
+  return height / 2 + 0.46875 * bar.ex;
 }

@@ -1,4 +1,5 @@
 import { resolveBeamerThemeColor } from "./resolve.js";
+import { beamerExMultiple, beamerFontExPt } from "./font-metrics.js";
 import { measureBeamerHeadingStack, beamerSubtitlePrimitive } from "./heading-layout.js";
 import type { BeamerDelimitedSourceValue } from "../types.js";
 import {
@@ -17,7 +18,7 @@ import type {
   BeamerThemeTemplateRef,
 } from "./types.js";
 
-// TeX Live 2025 source contracts:
+// TeX Live 2026 source contracts:
 // - beamerouterthemesmoothbars.sty declares the compressed section strip,
 //   optional subsection row, and its paired shaded frame-title template.
 // - beamerouterthemesmoothtree.sty uses the same fade construction around a
@@ -25,78 +26,163 @@ import type {
 // - beamerouterthemeshadow.sty loads `split`, appends a 2pt-deep headline
 //   shadow, and replaces only the frame-title template.
 //
-// The exact boxes below are the resulting 11pt-class LuaLaTeX/Latin Modern
-// page coordinates. Keeping them in the template module preserves the
-// source-owned overlap/protrusion behavior without teaching frame composition
-// about aggregate theme names.
-const SMOOTH_BARS_WITH_SUBSECTION = {
-  headlineInsetPt: 24.242401,
-  headlinePaintHeightPt: 23.310013,
-  sectionBaselinePt: 5.860809,
-  subsectionBaselinePt: 21.51181,
-  headlineFadeY: 23.176819,
-  frameTransitionY: 23.603012,
-  frameTransitionHeightPt: 2.664001,
-  frameBackgroundY: 26.027267,
-  frameBackgroundHeightPt: 19.465195,
-  frameTitleBaselinePt: 39.959213,
-  frameBottomFadeY: 45.359268,
-  topInsetPt: 50.760454,
-} as const;
+// The boxes are stacked exactly as those templates do: skips and box heights
+// in ex of the headline font (shadings are declared under
+// `\usebeamerfont*{headline}`), frame-title lines in the frame-title font's
+// baselineskip. Each product is scanned like TeX scans `<decimal>ex`. At the
+// 11pt-class deck size this reproduces the LuaLaTeX/Latin Modern page
+// coordinates the earlier hard-coded values were measured from, and under
+// beamerposter the bars grow with the head/foot font.
+type SmoothGeometry = {
+  headlineInsetPt: number;
+  headlinePaintHeightPt: number;
+  sectionBaselinePt: number;
+  subsectionBaselinePt?: number;
+  titleBaselinePt?: number;
+  headlineFadeY: number;
+  /** The 1ex fade strips. */
+  fadeHeightPt: number;
+  frameTransitionY: number;
+  frameTransitionHeightPt: number;
+  frameBackgroundY: number;
+  frameBackgroundHeightPt: number;
+  frameTitleBaselinePt: number;
+  frameBottomFadeY: number;
+  topInsetPt: number;
+};
 
-const SMOOTH_BARS_WITHOUT_SUBSECTION = {
-  // With no subsection row the headline is an overfull box: \headheight is
-  // 6.260406pt and \headdp is 9.990005pt. A frame title overlaps that depth,
-  // while a title-page frame must reserve the full box.
-  headlineInsetPt: 16.250412,
-  headlinePaintHeightPt: 15.984009,
-  sectionBaselinePt: 6.260406,
-  headlineFadeY: 15.850815,
-  frameTransitionY: 12.947021,
-  frameTransitionHeightPt: 5.328003,
-  frameBackgroundY: 18.035278,
-  frameBackgroundHeightPt: 19.465195,
-  frameTitleBaselinePt: 31.967224,
-  frameBottomFadeY: 37.367279,
-  topInsetPt: 42.76846,
-} as const;
+// Where the frame title's first skip starts relative to the end of the
+// headline box (measured against LuaLaTeX: smoothbars -0.14ex, smoothtree
+// -0.07ex; both are ex multiples at 11pt, the poster check keeps them in ex).
+const SMOOTH_BARS_FRAME_TITLE_START_EX = -0.14;
+const SMOOTH_TREE_FRAME_TITLE_START_EX = -0.07;
+// Smoothbars' LuaLaTeX positions need two more scaled points than the
+// truncated product (0.14ex = 24442sp, measured 24444sp at 11pt).
+const SMOOTH_BARS_FRAME_TITLE_START_EXTRA_SP = -2 / 65_536;
 
-const SMOOTH_TREE = {
-  headlineInsetPt: 25.041611,
-  headlinePaintHeightPt: 24.642014,
-  titleBaselinePt: 5.79422,
-  sectionBaselinePt: 14.452209,
-  subsectionBaselinePt: 23.110199,
-  headlineFadeY: 24.50882,
-  frameTransitionY: 24.322327,
-  frameTransitionHeightPt: 2.664001,
-  frameBackgroundY: 26.986328,
-  frameBackgroundHeightPt: 20.203262,
-  frameTitleBaselinePt: 41.789536,
-  frameBottomFadeY: 46.656799,
-  topInsetPt: 52.057985,
-} as const;
+function smoothBarsGeometry(context: BeamerFrameTemplateContext, subsection: boolean): SmoothGeometry {
+  const ex = beamerFontExPt(context.theme.fonts.headline);
+  const m = (decimal: number) => beamerExMultiple(decimal, ex);
+  const lineHeight = context.theme.fonts["frame-title"].lineHeightPt;
+  // Headline: the barshade, then `\vskip-0.05ex` and the 1ex fade strip, then
+  // a negative skip back up over both for the section (and subsection) boxes.
+  const shade = m(subsection ? 8.75 : 6);
+  const fadeY = shade - m(0.05);
+  const sectionTop = fadeY + m(1) - m(subsection ? 9.75 : 6.85);
+  const sectionBottom = sectionTop + m(2.25) + m(3.75);
+  const subsectionBaseline = sectionBottom + m(2.125);
+  const headlineInset = subsection
+    ? subsectionBaseline + m(1.125) - m(0.1)
+    : sectionBottom;
+  // Frame title: `\vskip-0.1ex`, a ht=1ex,dp=1ex box carrying the
+  // above-title shading (1ex tall with a subsection, 2ex without), `\vskip-1.09ex`,
+  // the title box (`\vskip0.5ex`, strut line, `\vskip0.05ex`), `\vskip-0.05ex`
+  // and the 1ex fade strip.
+  const start = headlineInset + m(SMOOTH_BARS_FRAME_TITLE_START_EX) + SMOOTH_BARS_FRAME_TITLE_START_EXTRA_SP;
+  const transitionBoxTop = start - m(0.1);
+  const transitionHeight = m(subsection ? 1 : 2);
+  const backgroundY = transitionBoxTop + m(1) + m(1) - m(1.09);
+  const backgroundHeight = m(0.5) + lineHeight + m(0.05);
+  const fadeBottomY = backgroundY + backgroundHeight - m(0.05);
+  return {
+    headlineInsetPt: headlineInset,
+    headlinePaintHeightPt: shade,
+    sectionBaselinePt: sectionTop + m(2.25),
+    ...(subsection ? { subsectionBaselinePt: subsectionBaseline } : {}),
+    headlineFadeY: fadeY,
+    fadeHeightPt: m(1),
+    frameTransitionY: transitionBoxTop + m(1) - transitionHeight,
+    frameTransitionHeightPt: transitionHeight,
+    frameBackgroundY: backgroundY,
+    frameBackgroundHeightPt: backgroundHeight,
+    frameTitleBaselinePt: backgroundY + m(0.5) + beamerExMultiple(0.7, lineHeight),
+    frameBottomFadeY: fadeBottomY,
+    topInsetPt: fadeBottomY + m(1) + frameTitleTrailingSkip(context),
+  };
+}
+
+function smoothTreeGeometry(
+  context: BeamerFrameTemplateContext
+): SmoothGeometry & { titleBaselinePt: number; subsectionBaselinePt: number } {
+  const ex = beamerFontExPt(context.theme.fonts.headline);
+  const m = (decimal: number) => beamerExMultiple(decimal, ex);
+  const lineHeight = context.theme.fonts["frame-title"].lineHeightPt;
+  // Headline: the 9.25ex treeshade, a 1ex fade strip after `\vskip-0.05ex`,
+  // `\vskip-9.15ex`, then the 2.25ex title box and two 3.25ex rows.
+  const shade = m(9.25);
+  const fadeY = shade - m(0.05);
+  const titleTop = fadeY + m(1) - m(9.15);
+  const titleBottom = titleTop + m(1.125) + m(1.125);
+  const sectionBottom = titleBottom + m(2.125) + m(1.125);
+  const subsectionBottom = sectionBottom + m(2.125) + m(1.125);
+  const headlineInset = subsectionBottom - m(0.4);
+  // Frame title: `\vskip-0.05ex`, a ht=0.85ex box whose 1ex shading hangs
+  // above its baseline, the title box (`\vskip-1.2ex`, then a line whose
+  // baseline is one baselineskip below that, strut depth .3), `\vskip-0.2ex`
+  // and the 1ex fade strip.
+  const start = headlineInset + m(SMOOTH_TREE_FRAME_TITLE_START_EX);
+  const transitionBoxTop = start - m(0.05);
+  const backgroundY = transitionBoxTop + m(0.85);
+  const titleBaseline = backgroundY - m(1.2) + lineHeight;
+  const backgroundHeight = titleBaseline - backgroundY + beamerExMultiple(0.3, lineHeight);
+  const fadeBottomY = backgroundY + backgroundHeight - m(0.2);
+  return {
+    headlineInsetPt: headlineInset,
+    headlinePaintHeightPt: shade,
+    titleBaselinePt: titleTop + m(1.125),
+    sectionBaselinePt: titleBottom + m(2.125),
+    subsectionBaselinePt: sectionBottom + m(2.125),
+    headlineFadeY: fadeY,
+    fadeHeightPt: m(1),
+    frameTransitionY: transitionBoxTop + m(0.85) - m(1),
+    frameTransitionHeightPt: m(1),
+    frameBackgroundY: backgroundY,
+    frameBackgroundHeightPt: backgroundHeight,
+    frameTitleBaselinePt: titleBaseline,
+    frameBottomFadeY: fadeBottomY,
+    topInsetPt: fadeBottomY + m(1) + frameTitleTrailingSkip(context),
+  };
+}
+
+/**
+ * beamerbaseframe.sty's `\vskip0.25em` after the frame-title box, in the
+ * restored body font.
+ */
+function frameTitleTrailingSkip(context: BeamerFrameTemplateContext): number {
+  return beamerExMultiple(0.25, context.theme.fonts["normal-text"].sizePt);
+}
 
 const SHADOW_HEADLINE_EXTRA_INSET_PT = 2;
 const SHADOW_FADE_HEIGHT_PT = 8;
-const SHADOW_FRAME_TITLE_HEIGHT_PT = 18.604858;
-const SHADOW_FRAME_TITLE_BASELINE_PT = 13.204804;
-const SHADOW_FRAME_TITLE_INSET_PT = 19.342059;
 const HORIZONTAL_MARGIN_PT = 8.5359039306640625;
 const SMOOTH_TREE_SECTION_INDENT_PT = 6;
 const SMOOTH_TREE_SUBSECTION_INDENT_PT = 12;
 const SMOOTH_TREE_FRAME_TITLE_X_PT = 26.603256;
 const SHADOW_FRAME_TITLE_X_PT = 13.230301;
-const FADE_HEIGHT_PT = 2.664001;
+
+/**
+ * The shadow theme's frame-title minipage: `\vbox{}\vskip-.75ex` (ex of the
+ * frame-title font it is typeset in) above a strut line one baselineskip
+ * down, with the strut's .3 depth below it; the template nets `\vskip-2pt`
+ * and the box's own +2pt out of the inset before beamerbaseframe's 0.25em.
+ */
+function shadowFrameTitleGeometry(context: BeamerFrameTemplateContext) {
+  const font = context.theme.fonts["frame-title"];
+  const baselinePt = font.lineHeightPt - beamerExMultiple(0.75, beamerFontExPt(font));
+  const heightPt = baselinePt + beamerExMultiple(0.3, font.lineHeightPt);
+  return {
+    baselinePt,
+    heightPt,
+    insetPt: heightPt + frameTitleTrailingSkip(context) - 2,
+  };
+}
 
 export function planSmoothBarsHeadline(
   context: BeamerFrameTemplateContext,
   ref: BeamerThemeTemplateRef
 ): BeamerChromeTemplatePlan {
   const subsection = ref.options.subsection !== false;
-  const geometry = subsection
-    ? SMOOTH_BARS_WITH_SUBSECTION
-    : SMOOTH_BARS_WITHOUT_SUBSECTION;
+  const geometry = smoothBarsGeometry(context, subsection);
   const primitives: BeamerTemplatePrimitive[] = [
     gradientPrimitive({
       context,
@@ -129,7 +215,7 @@ export function planSmoothBarsHeadline(
         x: 0,
         y: geometry.headlineFadeY,
         width: context.page.page.width,
-        height: FADE_HEIGHT_PT,
+        height: geometry.fadeHeightPt,
       },
       templateId: "beamer/headline/smoothbars-fade",
       layoutKind: "headline-decoration",
@@ -156,18 +242,17 @@ export function planSmoothBarsHeadline(
     context.navigation.model.sections,
     {
       titleBaselineY: geometry.sectionBaselinePt,
-      miniFrameCenterY: geometry.sectionBaselinePt + 3.8,
       miniFrameIndexing: "global",
     }
   );
-  if (subsection && context.navigation.currentSubsection) {
+  if (subsection && geometry.subsectionBaselinePt !== undefined && context.navigation.currentSubsection) {
     const title = context.navigation.currentSubsection.title;
     primitives.push(textPrimitive({
       context,
       id: "headline:subsection",
       text: title,
       x: HORIZONTAL_MARGIN_PT,
-      baselineY: SMOOTH_BARS_WITH_SUBSECTION.subsectionBaselinePt,
+      baselineY: geometry.subsectionBaselinePt,
       colorRole: "subsection in head/foot",
       fontRole: "subsection-in-head-foot",
     }));
@@ -186,9 +271,7 @@ export function planSmoothBarsFrameTitle(
     return { inset: 0, primitives: [] };
   }
   const subsection = ref.options.subsection !== false;
-  const geometry = subsection
-    ? SMOOTH_BARS_WITH_SUBSECTION
-    : SMOOTH_BARS_WITHOUT_SUBSECTION;
+  const geometry = smoothBarsGeometry(context, subsection);
   const transitionStops = subsection
     ? [
         backgroundStop(0, "subsection in head/foot"),
@@ -240,7 +323,8 @@ export function planSmoothBarsFrameTitle(
         geometry.frameTitleBaselinePt - geometry.headlineInsetPt + measured.subtitleBaseline) : []),
       frameBottomFade(
         context,
-        geometry.frameBottomFadeY - geometry.headlineInsetPt + extra
+        geometry.frameBottomFadeY - geometry.headlineInsetPt + extra,
+        geometry.fadeHeightPt
       ),
     ],
   };
@@ -249,6 +333,7 @@ export function planSmoothBarsFrameTitle(
 export function planSmoothTreeHeadline(
   context: BeamerFrameTemplateContext
 ): BeamerChromeTemplatePlan {
+  const geometry = smoothTreeGeometry(context);
   const primitives: BeamerTemplatePrimitive[] = [
     gradientPrimitive({
       context,
@@ -257,7 +342,7 @@ export function planSmoothTreeHeadline(
         x: 0,
         y: 0,
         width: context.page.page.width,
-        height: SMOOTH_TREE.headlinePaintHeightPt,
+        height: geometry.headlinePaintHeightPt,
       },
       templateId: "beamer/headline/smoothtree-shade",
       layoutKind: "background",
@@ -276,9 +361,9 @@ export function planSmoothTreeHeadline(
       id: "headline:smoothtree:fade",
       bounds: {
         x: 0,
-        y: SMOOTH_TREE.headlineFadeY,
+        y: geometry.headlineFadeY,
         width: context.page.page.width,
-        height: FADE_HEIGHT_PT,
+        height: geometry.fadeHeightPt,
       },
       templateId: "beamer/headline/smoothtree-fade",
       layoutKind: "headline-decoration",
@@ -296,7 +381,7 @@ export function planSmoothTreeHeadline(
       id: "headline:title",
       text: title,
       x: HORIZONTAL_MARGIN_PT,
-      baselineY: SMOOTH_TREE.titleBaselinePt,
+      baselineY: geometry.titleBaselinePt,
       colorRole: "title in head/foot",
       fontRole: "headline",
     }));
@@ -307,7 +392,7 @@ export function planSmoothTreeHeadline(
       id: "headline:section",
       text: context.navigation.currentSection.title,
       x: HORIZONTAL_MARGIN_PT + SMOOTH_TREE_SECTION_INDENT_PT,
-      baselineY: SMOOTH_TREE.sectionBaselinePt,
+      baselineY: geometry.sectionBaselinePt,
       colorRole: "section in head/foot",
       fontRole: "section-in-head-foot",
     }));
@@ -318,13 +403,13 @@ export function planSmoothTreeHeadline(
       id: "headline:subsection",
       text: context.navigation.currentSubsection.title,
       x: HORIZONTAL_MARGIN_PT + SMOOTH_TREE_SUBSECTION_INDENT_PT,
-      baselineY: SMOOTH_TREE.subsectionBaselinePt,
+      baselineY: geometry.subsectionBaselinePt,
       colorRole: "subsection in head/foot",
       fontRole: "subsection-in-head-foot",
     }));
   }
   return {
-    inset: SMOOTH_TREE.headlineInsetPt,
+    inset: geometry.headlineInsetPt,
     primitives,
   };
 }
@@ -335,20 +420,21 @@ export function planSmoothTreeFrameTitle(
   if (!context.frame.title) {
     return { inset: 0, primitives: [] };
   }
+  const geometry = smoothTreeGeometry(context);
   const width = context.page.page.width - SMOOTH_TREE_FRAME_TITLE_X_PT - HORIZONTAL_MARGIN_PT;
   const measured = measureBeamerHeadingStack(context, width, { titleEnd: context.frame.subtitle ? "" : "\\strut" });
   const extra = measured ? measured.extent - context.theme.fonts["frame-title"].lineHeightPt : 0;
   return {
-    inset: SMOOTH_TREE.topInsetPt - SMOOTH_TREE.headlineInsetPt + extra,
+    inset: geometry.topInsetPt - geometry.headlineInsetPt + extra,
     primitives: [
       gradientPrimitive({
         context,
         id: "frame-title:transition",
         bounds: {
           x: 0,
-          y: SMOOTH_TREE.frameTransitionY - SMOOTH_TREE.headlineInsetPt,
+          y: geometry.frameTransitionY - geometry.headlineInsetPt,
           width: context.page.page.width,
-          height: SMOOTH_TREE.frameTransitionHeightPt,
+          height: geometry.frameTransitionHeightPt,
         },
         templateId: "beamer/frame-title/smooth-transition",
         layoutKind: "background",
@@ -364,22 +450,23 @@ export function planSmoothTreeFrameTitle(
         sourceSpan: context.frame.title.span,
         bounds: {
           x: 0,
-          y: SMOOTH_TREE.frameBackgroundY - SMOOTH_TREE.headlineInsetPt,
+          y: geometry.frameBackgroundY - geometry.headlineInsetPt,
           width: context.page.page.width,
-          height: SMOOTH_TREE.frameBackgroundHeightPt + extra,
+          height: geometry.frameBackgroundHeightPt + extra,
         },
         colorRole: "frametitle",
       }] : []),
       frameTitleText(
         context,
         SMOOTH_TREE_FRAME_TITLE_X_PT,
-        SMOOTH_TREE.frameTitleBaselinePt - SMOOTH_TREE.headlineInsetPt
+        geometry.frameTitleBaselinePt - geometry.headlineInsetPt
       ),
       ...(measured?.subtitle ? beamerSubtitlePrimitive(context, SMOOTH_TREE_FRAME_TITLE_X_PT, width,
-        SMOOTH_TREE.frameTitleBaselinePt - SMOOTH_TREE.headlineInsetPt + measured.subtitleBaseline) : []),
+        geometry.frameTitleBaselinePt - geometry.headlineInsetPt + measured.subtitleBaseline) : []),
       frameBottomFade(
         context,
-        SMOOTH_TREE.frameBottomFadeY - SMOOTH_TREE.headlineInsetPt + extra
+        geometry.frameBottomFadeY - geometry.headlineInsetPt + extra,
+        geometry.fadeHeightPt
       ),
     ],
   };
@@ -422,18 +509,19 @@ export function planShadowFrameTitle(
   if (!context.frame.title) {
     return { inset: 0, primitives: [] };
   }
+  const shadow = shadowFrameTitleGeometry(context);
   const width = context.page.page.width - SHADOW_FRAME_TITLE_X_PT - HORIZONTAL_MARGIN_PT;
   const measured = measureBeamerHeadingStack(context, width, { subtitleStart: "" });
   const extra = measured ? measured.extent - context.theme.fonts["frame-title"].lineHeightPt : 0;
   return {
-    inset: SHADOW_FRAME_TITLE_INSET_PT + extra,
+    inset: shadow.insetPt + extra,
     primitives: [
       gradientPrimitive({
         context,
         id: "frame-title:shadow",
         bounds: {
           x: 0,
-          y: SHADOW_FRAME_TITLE_HEIGHT_PT + extra - 4,
+          y: shadow.heightPt + extra - 4,
           width: context.page.page.width,
           height: SHADOW_FADE_HEIGHT_PT,
         },
@@ -455,7 +543,7 @@ export function planShadowFrameTitle(
           x: 0,
           y: -2,
           width: context.page.page.width,
-          height: SHADOW_FRAME_TITLE_HEIGHT_PT + extra + 2,
+          height: shadow.heightPt + extra + 2,
         },
         templateId: "beamer/frame-title/shadow-shade",
         layoutKind: "frame-title",
@@ -468,10 +556,10 @@ export function planShadowFrameTitle(
       frameTitleText(
         context,
         SHADOW_FRAME_TITLE_X_PT,
-        SHADOW_FRAME_TITLE_BASELINE_PT
+        shadow.baselinePt
       ),
       ...(measured?.subtitle ? beamerSubtitlePrimitive(context, SHADOW_FRAME_TITLE_X_PT, width,
-        SHADOW_FRAME_TITLE_BASELINE_PT + measured.subtitleBaseline) : []),
+        shadow.baselinePt + measured.subtitleBaseline) : []),
 
     ],
   };
@@ -506,7 +594,8 @@ function frameTitleText(
 
 function frameBottomFade(
   context: BeamerFrameTemplateContext,
-  y: number
+  y: number,
+  heightPt: number
 ): BeamerTemplatePrimitive {
   return gradientPrimitive({
     context,
@@ -515,7 +604,7 @@ function frameBottomFade(
       x: 0,
       y,
       width: context.page.page.width,
-      height: FADE_HEIGHT_PT,
+      height: heightPt,
     },
     templateId: "beamer/frame-title/smooth-fade",
     layoutKind: "headline-decoration",

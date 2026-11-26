@@ -127,7 +127,7 @@ describe("Beamer structural theme templates", () => {
       id: "frame:0:headline:section:hook-vertical",
       kind: "fill",
       paint: "foreground",
-      bounds: expect.objectContaining({ width: 0.4, height: 4.995 }),
+      bounds: expect.objectContaining({ width: 0.4, height: expect.closeTo(4.995, 4) }),
     }));
     expect(chrome.primitives).toContainEqual(expect.objectContaining({
       id: "frame:0:headline:subsection:hook-horizontal",
@@ -238,31 +238,35 @@ describe("Beamer structural theme templates", () => {
     expect(chrome.topInset).toBeCloseTo(37.664975, 5);
   });
 
+  // The insets are the ex/em arithmetic of the stock templates (not hard-coded
+  // measurements): they sit 0.0003pt above the values this table used to hold,
+  // and the LuaLaTeX block baselines on the same decks (test/beamer-poster-bars)
+  // moved from 2.5e-4pt off to under 8e-5pt off.
   it.each([
     {
       name: "Darmstadt",
-      topInset: 50.760454,
+      topInset: 50.760757,
       bottomInset: 4,
       shadeId: "frame:0:headline:smoothbars:shade",
       titleBaseline: 39.959213,
     },
     {
       name: "Frankfurt",
-      topInset: 42.76846,
+      topInset: 42.768768,
       bottomInset: 4,
       shadeId: "frame:0:headline:smoothbars:shade",
       titleBaseline: 31.967224,
     },
     {
       name: "JuanLesPins",
-      topInset: 52.057985,
+      topInset: 52.058289,
       bottomInset: 4,
       shadeId: "frame:0:headline:smoothtree:shade",
       titleBaseline: 41.789536,
     },
     {
       name: "Warsaw",
-      topInset: 39.190844,
+      topInset: 39.191132,
       bottomInset: 13.656998,
       shadeId: "frame:0:headline:section:background",
       titleBaseline: 33.053589,

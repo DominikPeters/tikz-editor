@@ -3,6 +3,7 @@ import { resolveBeamerThemeColor } from "./resolve.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import type { BeamerDelimitedSourceValue } from "../types.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
+import { beamerExMultiple, beamerFontExPt } from "./font-metrics.js";
 import {
   backgroundGradientStop,
   gradientRectPrimitive,
@@ -17,9 +18,6 @@ import type {
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 const FRAME_TITLE_HORIZONTAL_PADDING_PT = 0.3 * TEX_POINTS_PER_CM;
-const SIDEBAR_SUBSECTION_BASELINE_STEP_PT = 8.004;
-const SIDEBAR_FRAME_TITLE_ABSOLUTE_BASELINE_PT = 26.999969;
-const SIDEBAR_FRAME_TITLE_INSET_PT = -0.1426;
 
 export function planSidebarPageDecoration(
   context: BeamerFrameTemplateContext,
@@ -107,11 +105,21 @@ export function planSidebarPageDecoration(
   const hideAllSubsections = ref.options.hideAllSubsections === true;
   const hideOtherSubsections = ref.options.hideOtherSubsections === true;
   const sectionFont = context.theme.fonts["section-in-sidebar"];
-  const sectionProfile = createBeamerTexTextFontProfile(sectionFont);
-  const sectionResolved = sectionProfile.resolveTextFont(sectionProfile.defaultFontState, texLength(sectionFont.sizePt), sectionProfile.metricProvider);
-  const sectionEx = sectionResolved.data.fontdimen.xheight * sectionFont.sizePt;
-  let baselineY = authorBaseline + authorMetrics.extent - authorMetrics.firstHeight + 1.25 * authorFont.sizePt + sectionFont.lineHeightPt + sectionEx;
-  for (const section of context.navigation.model.sections) {
+  const subsectionFont = context.theme.fonts["subsection-in-sidebar"];
+  const sectionEx = beamerFontExPt(sectionFont);
+  const subsectionEx = beamerFontExPt(subsectionFont);
+  // \beamer@sidebarformat: `\vbox{}`, the paragraph's first baseline one
+  // baselineskip down, an empty `\vbox{}` one baselineskip below that, and
+  // `\vskip-1.5ex`, so an entry reaches (baselineskip - 1.5ex) below its
+  // last baseline. Sections add `\vskip1ex` above (all in the entry's own font).
+  const sectionBelow = sectionFont.lineHeightPt - beamerExMultiple(1.5, sectionEx);
+  const subsectionBelow = subsectionFont.lineHeightPt - beamerExMultiple(1.5, subsectionEx);
+  let baselineY = authorBaseline + authorMetrics.extent - authorMetrics.firstHeight + 1.25 * authorFont.sizePt +
+    beamerExMultiple(1, sectionEx) + sectionFont.lineHeightPt;
+  let below = 0;
+  for (const [sectionPosition, section] of context.navigation.model.sections.entries()) {
+    if (sectionPosition > 0) baselineY += below + beamerExMultiple(1, sectionEx) + sectionFont.lineHeightPt;
+    below = sectionBelow;
     const sectionActive = section === context.navigation.currentSection;
     primitives.push(sidebarText({
       context,
@@ -131,7 +139,8 @@ export function planSidebarPageDecoration(
       ? []
       : section.subsections;
     for (const subsection of subsections) {
-      baselineY += SIDEBAR_SUBSECTION_BASELINE_STEP_PT;
+      baselineY += below + subsectionFont.lineHeightPt;
+      below = subsectionBelow;
       primitives.push(sidebarText({
         context,
         id:
@@ -147,7 +156,6 @@ export function planSidebarPageDecoration(
         alignment: "left",
       }));
     }
-    baselineY += 2 * sectionFont.lineHeightPt - .5 * sectionEx;
   }
   return { inset: 0, primitives };
 }
@@ -241,11 +249,22 @@ export function planSidebarFrameTitle(
   // Both vfil glues share the fixed-height vbox's spare space. Wrapping
   // moves the first baseline upward by half the added paragraph extent.
   const extra = measured?.lastBaseline ?? 0;
+  // The vbox to \beamer@headheight holds the strut line (ht .7, dp .3 of the
+  // baselineskip), the interline glue to an empty \vbox{} (baselineskip less
+  // that depth) and `\vskip-1em`, all in the frame-title font; the spare
+  // height splits between the two \vfil.
+  const titleFont = context.theme.fonts["frame-title"];
+  const lineHeight = titleFont.lineHeightPt;
+  const content = lineHeight + (lineHeight - beamerExMultiple(0.3, lineHeight)) - titleFont.sizePt;
+  // \vfil has no shrink: an overfull box keeps the glue at zero.
+  const absoluteBaseline = Math.max(0, headHeight - content) / 2 + beamerExMultiple(0.7, lineHeight);
   return {
     // The fixed-height title vbox cancels the separately reserved headline
-    // with `\vskip-\beamer@headheight`. Its remaining strut/depth and
-    // trailing `\vskip-.2em` form this slightly negative box extent.
-    inset: SIDEBAR_FRAME_TITLE_INSET_PT,
+    // with `\vskip-\beamer@headheight`. What is left is the trailing
+    // `\vskip-.2em` of the frame-title font plus beamerbaseframe.sty's
+    // `\vskip.25em` of the body font.
+    inset: -beamerExMultiple(0.2, titleFont.sizePt) +
+      beamerExMultiple(0.25, context.theme.fonts["normal-text"].sizePt),
     primitives: [{
       kind: "text",
       id: `${context.frame.id}:frame-title:text`,
@@ -263,10 +282,10 @@ export function planSidebarFrameTitle(
       colorRole: "frametitle",
       alignment: "left",
       verticalAlignment: "top",
-      baselineY: SIDEBAR_FRAME_TITLE_ABSOLUTE_BASELINE_PT - headHeight - extra / 2,
+      baselineY: absoluteBaseline - headHeight - extra / 2,
     }, ...(measured?.subtitle ? beamerSubtitlePrimitive(context,
       context.page.frameArea.x + FRAME_TITLE_HORIZONTAL_PADDING_PT, width,
-      SIDEBAR_FRAME_TITLE_ABSOLUTE_BASELINE_PT - headHeight - extra / 2 + measured.subtitleBaseline) : [])],
+      absoluteBaseline - headHeight - extra / 2 + measured.subtitleBaseline) : [])],
   };
 }
 

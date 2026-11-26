@@ -5,6 +5,7 @@ import type { Diagnostic } from "../../diagnostics/types.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import type { BeamerDocumentModel, BeamerThemeKind } from "../types.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
+import { beamerExMultiple } from "./font-metrics.js";
 import { beamerClassFontSize, beamerFontSizeProfile, beamerNamedFontSize, type BeamerFontSizeProfile } from "./font-sizes.js";
 import { beamerPosterListDimensionsEm, beamerPosterUnsupportedLoad, scanBeamerPoster, type BeamerPosterSettings } from "../poster.js";
 import { scanBeamerFontDeclarations, applyBeamerFontRoleDeclaration } from "./font-declarations.js";
@@ -1597,14 +1598,17 @@ function applySidebarOuterTheme(
   const side = optionString(use.options.side, "left") === "right"
     ? "right"
     : "left";
+  // beamerouterthemesidebar.sty: `\usebeamerfont{frametitle}` then both
+  // \beamer@sidebarwidth and \beamer@headheight default to 2.5\baselineskip.
+  const defaultExtentPt = beamerExMultiple(2.5, state.fonts["frame-title"].lineHeightPt);
   const widthPt = optionLengthPt(
     use.options.width,
-    45,
+    defaultExtentPt,
     state.fonts["frame-title"].sizePt
   );
   const headHeightPt = optionLengthPt(
     use.options.height,
-    45,
+    defaultExtentPt,
     state.fonts["frame-title"].sizePt
   );
   state.dimensions.sidebarWidthLeft = {
