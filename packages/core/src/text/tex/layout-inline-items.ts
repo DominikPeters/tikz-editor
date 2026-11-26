@@ -112,6 +112,11 @@ export interface TexLayoutSpaceItem {
   readonly preserveAtLineStart?: boolean;
   /** A following non-discardable horizontal-mode node keeps this glue. */
   readonly preserveAtLineEnd?: boolean;
+  /**
+   * Kerns of the neighbouring characters against the font's space glyph,
+   * which luaotfload adds to the interword glue's width (spacekern).
+   */
+  readonly spaceKern?: TexLength;
 }
 
 export interface TexLayoutForcedBreakItem {
@@ -2259,8 +2264,17 @@ function insertTextBoundaryKerns(
   metricProvider: TexMetricProvider
 ): TexLayoutInlineItem[] {
   const result: TexLayoutInlineItem[] = [];
-  for (const item of items) {
+  for (const [index, original] of items.entries()) {
+    let item = original;
     const previous = result.at(-1);
+    if (item.kind === "space" && fontHasSpaceKerns(item.font)) {
+      const next = items[index + 1];
+      const left = previous?.kind === "text" && previous.font.id === item.font.id ? previous.text.at(-1) : undefined;
+      const right = next?.kind === "text" && next.font.id === item.font.id ? next.text[0] : undefined;
+      const kern = (left ? spaceKernWidth(`${left} `, item.font, metricProvider) : 0) +
+        (right ? spaceKernWidth(` ${right}`, item.font, metricProvider) : 0);
+      if (Math.abs(kern) > 0.00001) item = { ...item, spaceKern: texLength(roundTexPt(kern)) };
+    }
     if (previous?.kind === "text" && item.kind === "text") {
       const width = textBoundaryKernWidth(previous, item, metricProvider);
       if (Math.abs(width) > 0.00001) {
@@ -2276,6 +2290,24 @@ function insertTextBoundaryKerns(
     result.push(item);
   }
   return result;
+}
+
+const spaceKernFonts = new WeakMap<object, boolean>();
+
+function fontHasSpaceKerns(font: ResolvedTexFont): boolean {
+  if (font.data.ligKernEncoding !== "unicode") return false;
+  let known = spaceKernFonts.get(font.data);
+  if (known === undefined) {
+    known = font.data.ligKerns.some(rule => rule[0] === "kern" && (rule[1] === 0x20 || rule[2] === 0x20));
+    spaceKernFonts.set(font.data, known);
+  }
+  return known;
+}
+
+/** The kern a character pair with the space glyph gets, in points. */
+function spaceKernWidth(pair: string, font: ResolvedTexFont, metricProvider: TexMetricProvider): number {
+  const shaped = metricProvider.shapeText(pair, font);
+  return shaped.items.reduce((sum, item) => item.kind === "kern" ? sum + Number(item.width) : sum, 0);
 }
 
 function textBoundaryKernWidth(
@@ -2344,7 +2376,8 @@ export function texMBoxHListFromLayoutItems(params: {
       const glue = texInterwordGlueForSpaceFactor(
         item.font,
         item.spaceFactor,
-        item.spaceGlueProfile
+        item.spaceGlueProfile,
+        "spaceKern" in item ? Number(item.spaceKern ?? 0) : 0
       );
       const layoutGlue = texMBoxGlueItem(cursor, glue, item.sourceStart, item.sourceEnd);
       items.push(layoutGlue);

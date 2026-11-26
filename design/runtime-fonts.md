@@ -10,6 +10,39 @@ font packages such as `times` or `helvet`. Today they fall back to the
 bundled faces. Posters with the Gemini theme (Lato for text, Raleway for
 headings) are the first target.
 
+## Built so far
+
+- **Runtime builder** (2026-11-26, `text/tex/fonts/runtime-opentype.ts`):
+  harfbuzzjs reads an OpenType file and produces the same records as the
+  build-time generator: advances, bounding-box heights and depths, space
+  with luaotfload's 1/2 stretch and 1/3 shrink, the x-height of `x`,
+  ligatures under the font's Unicode presentation forms or luaotfload's
+  private codes (0xF0000 plus the glyph's index among unencoded glyphs), and
+  pair kerns with `kern` on and `calt` off. A LuaLaTeX oracle
+  (`scripts/generate-runtime-font-oracle.mjs`) checks Lato Light, Regular
+  and Light Italic and Raleway Regular and Bold: every metric, ligature and
+  kern matches.
+- **TeX behaviours found on the way:** no kern after the hyphen character
+  (TeX's discretionary blocks it); kerns against the space glyph are added
+  to the neighbouring interword glue (luaotfload's spacekern), now done by
+  the text layer's space items; with `Ligatures=TeX`, `"`, `'` and `` ` ``
+  become curly quotes before kerning.
+- **fontspec in themes** (`beamer/theme/fontspec.ts`): `\setmainfont`,
+  `\setsansfont`, `\setmonofont` and `\newfontfamily` in the preamble and
+  in local theme files, face options with `*`, `Path=` and `Extension=`,
+  and `\setbeamerfont{...}{family=\Cmd}`. A Lato/Raleway deck matches
+  LuaLaTeX to 0.0001pt in the comparison harness, which now loads fonts the
+  way LuaLaTeX finds them.
+
+Correction to the search order below: luaotfload's default name lookup
+prefers **system fonts** over the TeX tree for a family name (the Lato
+in `~/Library/Fonts` won over TeX Live's, with different metrics); only a
+font named by file goes to the TeX tree first.
+
+Not yet: loading fonts in the app (WebAssembly in the Vite builds, desktop
+lookup of TeX Live and system fonts, bundled fallbacks, worker transport),
+pdfLaTeX font packages, family commands used in frame bodies.
+
 ## Today
 
 Every face is converted at build time by

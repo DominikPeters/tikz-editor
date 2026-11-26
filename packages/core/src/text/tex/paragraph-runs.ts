@@ -238,7 +238,8 @@ function layoutItemsToRuns(
       : texInterwordGlueForSpaceFactor(
         item.font,
         item.spaceFactor,
-        item.spaceGlueProfile
+        item.spaceGlueProfile,
+        "spaceKern" in item ? Number(item.spaceKern ?? 0) : 0
       );
     const glue = pendingItalicCorrection > 0 && !forced
       ? {

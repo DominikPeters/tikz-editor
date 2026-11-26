@@ -1308,6 +1308,9 @@ function normalizeGlyphCode(code) {
 
 function normalizeFontName(value) {
   const normalized = String(value ?? "").toLowerCase();
+  // Runtime OpenType fonts (otf:<file>) and fontspec faces traced by file.
+  const file = /^"?(?:otf|file):([^:"]+?)(?:\.(?:otf|ttf))?"?$/u.exec(normalized);
+  if (file) return file[1];
   // Luaotfload's named font requests contain a colon before the face name.
   // Retain the exact Fira face rather than collapsing every request to "name".
   const fira = /^"?name:fira sans(?::| (light italic|light|italic):)/u.exec(normalized);

@@ -157,6 +157,11 @@ end
 local function font_name(font_id)
   local data = font.getfont(font_id)
   if not data then return "" end
+  -- fontspec requests by family name carry "name:"; the file says which face it is.
+  local name = tostring(data.name or "")
+  if name:find("^name:") and data.filename then
+    return clean("file:" .. tostring(data.filename):gsub("^.*/", ""))
+  end
   return clean(data.name or data.fullname or data.psname or data.filename or "")
 end
 

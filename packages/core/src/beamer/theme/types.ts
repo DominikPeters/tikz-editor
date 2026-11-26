@@ -34,9 +34,19 @@ export type BeamerThemeFontRole =
   | "block-title"
   | "block-body";
 
+/** A fontspec family whose faces are runtime OpenType fonts (runtime-registry.ts ids). */
+export type BeamerRuntimeTypeface = {
+  readonly kind: "runtime";
+  readonly name: string;
+  readonly upright: `otf:${string}`;
+  readonly italic: `otf:${string}`;
+  readonly bold: `otf:${string}`;
+  readonly boldItalic: `otf:${string}`;
+};
+
 export type BeamerThemeFont = {
   family: "serif" | "sans" | "monospace";
-  typeface?: "fira";
+  typeface?: "fira" | BeamerRuntimeTypeface;
   /** professionalfonts suppresses Beamer's replacements of math alphabets. */
   suppressMathReplacements?: boolean;
   mathFamily?: "serif" | "sans";

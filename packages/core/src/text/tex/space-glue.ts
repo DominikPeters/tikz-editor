@@ -13,7 +13,9 @@ export interface TexInterwordGlue {
 export function texInterwordGlueForSpaceFactor(
   font: ResolvedTexFont,
   spaceFactor: number,
-  spaceGlueProfile: TexSpaceGlueProfile
+  spaceGlueProfile: TexSpaceGlueProfile,
+  /** Kerns against the space glyph (luaotfload's spacekern), added to the width. */
+  spaceKern: number = 0
 ): TexInterwordGlue {
   const normalized = Number.isFinite(spaceFactor) && spaceFactor > 0 ? spaceFactor : 1000;
   if (spaceGlueProfile === "tikz-fixed") {
@@ -29,7 +31,7 @@ export function texInterwordGlueForSpaceFactor(
   const baseStretch = tfmToPt(font, font.data.fontdimen.stretch);
   const baseShrink = tfmToPt(font, font.data.fontdimen.shrink);
   return {
-    width: texLength(roundTexPt(baseSpace + (normalized >= 2000 ? extraSpace : 0))),
+    width: texLength(roundTexPt(baseSpace + (normalized >= 2000 ? extraSpace : 0) + spaceKern)),
     stretch: texLength(
       spaceGlueProfile === "font-fixed"
         ? 0

@@ -1,4 +1,5 @@
 import { scanBeamerDocument } from "./scan.js";
+import { beamerFontspecFileRequests, scanBeamerFontspecDeclarations, type BeamerFontFileRequest } from "./theme/fontspec.js";
 import type { BeamerDocumentModel, BeamerThemeKind } from "./types.js";
 
 /**
@@ -10,6 +11,8 @@ import type { BeamerDocumentModel, BeamerThemeKind } from "./types.js";
 export type BeamerProjectFiles = {
   readonly cacheKey: string;
   readText(name: string): string | null;
+  /** The registered runtime font (runtime-registry.ts) for a font file name, if the host loaded it. */
+  fontId?(name: string): `otf:${string}` | null;
 };
 
 const THEME_FILE_PREFIX: Readonly<Record<BeamerThemeKind, string>> = {
@@ -109,4 +112,14 @@ function beamerThemeFileRequests(document: BeamerDocumentModel): string[] {
 
 export function createBeamerProjectFiles(files: ReadonlyMap<string, string>, cacheKey: string): BeamerProjectFiles {
   return { cacheKey, readText: name => files.get(name) ?? null };
+}
+
+/**
+ * Font file names the document's fontspec declarations (in its preamble and
+ * in the given theme files) may load, each with fontspec's `Path=` folder.
+ * The host loads what it finds and answers `fontId` for those names.
+ */
+export function beamerFontFileRequests(source: string, themeFiles: ReadonlyMap<string, string> = new Map()): BeamerFontFileRequest[] {
+  const documents = [scanBeamerDocument(source), ...[...themeFiles.values()].map(text => scanBeamerThemeFileDocument(text).document)];
+  return documents.flatMap(document => beamerFontspecFileRequests(scanBeamerFontspecDeclarations(document)));
 }

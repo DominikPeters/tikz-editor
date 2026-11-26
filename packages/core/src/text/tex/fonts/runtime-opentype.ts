@@ -145,6 +145,18 @@ export function buildRuntimeTexFont(hb: RuntimeHarfBuzz, bytes: Uint8Array, name
       if (kern !== 0) ligKerns.push(["kern", left, right, round(kern / upem)]);
     }
   }
+  // Kerns against the space glyph: luaotfload applies them to the adjacent
+  // interword glue (its spacekern feature); see the text layer's space items.
+  if (font.nominalGlyph(0x20) !== undefined) {
+    for (const code of present) {
+      const before = shape([code, 0x20]);
+      const left = (before[0]?.xAdvance ?? 0) - advance(code);
+      if (before.length === 2 && left !== 0 && code !== 0x2d) ligKerns.push(["kern", code, 0x20, round(left / upem)]);
+      const after = shape([0x20, code]);
+      const right = (after[0]?.xAdvance ?? 0) - advance(0x20);
+      if (after.length === 2 && right !== 0) ligKerns.push(["kern", 0x20, code, round(right / upem)]);
+    }
+  }
   for (const [input, ligature] of ligatureOf) {
     const components = [...input].map(char => char.codePointAt(0) ?? 0);
     const ligatureAdvance = chars[ligature]?.width ?? 0;
@@ -195,7 +207,9 @@ export function buildRuntimeTexFont(hb: RuntimeHarfBuzz, bytes: Uint8Array, name
 function svgPathAt10pt(commands: readonly { type: string; values: readonly number[] }[], upem: number): string {
   const scale = 10 / upem;
   const number = (value: number) => {
-    const text = value.toFixed(6).replace(/\.?0+$/u, "");
+    // Four decimals are exact for 1000- and 2000-unit fonts, and within
+    // 0.00005pt at 10pt otherwise.
+    const text = value.toFixed(4).replace(/\.?0+$/u, "");
     return text === "-0" || text === "" ? "0" : text;
   };
   return commands.map(command => {

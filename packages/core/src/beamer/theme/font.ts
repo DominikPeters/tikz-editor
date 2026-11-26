@@ -57,15 +57,27 @@ export function createBeamerTexTextFontProfile(
     if (state.shape === "slanted") return `lmromanslant${atPt < 8.5 ? 8 : atPt < 9.5 ? 9 : atPt < 11 ? 10 : atPt < 15 ? 12 : 17}-regular`;
     return null;
   };
+  // A fontspec family (runtime OpenType faces) replaces the role's own
+  // family; slanted text uses the italic face, as fontspec's FakeSlant does not apply.
+  const runtimeFace = (state: SimpleTexFontState): `otf:${string}` | null => {
+    const typeface = role.typeface;
+    if (typeof typeface !== "object") return null;
+    const family = role.family === "serif" ? "roman" : role.family === "monospace" ? "typewriter" : "sans";
+    if (state.family !== family) return null;
+    const italic = state.shape === "italic" || state.shape === "slanted";
+    return state.series === "bold" ? italic ? typeface.boldItalic : typeface.bold : italic ? typeface.italic : typeface.upright;
+  };
   return {
     ...luaLatexDefaultTextFontProfile,
     defaultFontState: { ...luaLatexDefaultTextFontProfile.defaultFontState, emphasisStyle: "beamer" },
-    id: `lualatex-beamer-${role.typeface ?? "lm"}-${role.family}-${role.series}-${role.shape}`,
+    id: `lualatex-beamer-${typeof role.typeface === "object" ? role.typeface.upright : role.typeface ?? "lm"}-${role.family}-${role.series}-${role.shape}`,
     label: `LuaLaTeX Beamer ${role.family}`,
     resolveTextFontId(state, atPt) {
       const normalized = normalize(state);
       const roman = romanFontId(normalized, state.sizePt ?? atPt ?? role.sizePt);
       if (roman) return roman;
+      const runtime = runtimeFace(normalized);
+      if (runtime) return runtime;
       if (role.typeface === "fira" && normalized.family === "sans") {
         const italic = normalized.shape === "italic" || normalized.shape === "slanted";
         return `firasans-${normalized.series === "bold" ? italic ? "italic" : "regular" : italic ? "lightitalic" : "light"}`;
@@ -81,6 +93,11 @@ export function createBeamerTexTextFontProfile(
       const roman = romanFontId(normalized, atPt);
       if (roman) return {
         ...(metricProvider ?? computerModernTexMetricProvider).resolveFont({ fontId: roman, atPt }),
+        ...(state.color ? { color: state.color } : {}),
+      };
+      const runtime = runtimeFace(normalized);
+      if (runtime) return {
+        ...(metricProvider ?? computerModernTexMetricProvider).resolveFont({ fontId: runtime, atPt }),
         ...(state.color ? { color: state.color } : {}),
       };
       if (role.typeface === "fira" && normalized.family === "sans") {

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execOracleTool as execFileSync, spawnOracleTool as spawnSync } from "./lib/oracle-tool-process.mjs";
+import { execFileSync as execNodeFileSync } from "node:child_process";
 import {
   mkdirSync,
   copyFileSync,
@@ -191,9 +192,18 @@ export async function loadCoreRenderer() {
     prepareBeamerDocument: beamer.prepareBeamerDocument,
     collectBeamerProjectFiles: beamer.collectBeamerProjectFiles,
     createBeamerProjectFiles: beamer.createBeamerProjectFiles,
+    beamerFontFileRequests: beamer.beamerFontFileRequests,
+    buildRuntimeTexFont: beamer.buildRuntimeTexFont,
+    registerRuntimeTexFont: beamer.registerRuntimeTexFont,
+    runtimeTexFontId: beamer.runtimeTexFontId,
     computerModernTexMetricProvider: core.computerModernTexMetricProvider,
   };
 }
+
+const SYSTEM_FONT_DIRECTORIES = [
+  join(process.env.HOME ?? "", "Library", "Fonts"), "/Library/Fonts", "/System/Library/Fonts",
+  "/usr/share/fonts", "/usr/local/share/fonts", join(process.env.HOME ?? "", ".fonts"),
+];
 
 function runOracle(options, runDir, inputPath) {
   const oracleRoot = join(runDir, "oracle");
@@ -409,8 +419,36 @@ export async function compareBeamerFrame(options, runtime = {}) {
       return existsSync(path) ? readFileSync(path, "utf8") : null;
     })
     : new Map();
-  const projectFiles = projectFileTexts.size > 0
-    ? coreRenderer.createBeamerProjectFiles(projectFileTexts, createHash("sha256").update(JSON.stringify([...projectFileTexts])).digest("hex"))
+  // fontspec fonts: from fontspec's Path=, the document's folder, then TeX Live.
+  const fontIds = new Map();
+  const fontRequests = coreRenderer.beamerFontFileRequests?.(source, projectFileTexts) ?? [];
+  if (fontRequests.length > 0) {
+    const hb = await import("harfbuzzjs");
+    for (const request of fontRequests) {
+      const texLive = name => { try { return execNodeFileSync("kpsewhich", [name], { encoding: "utf8" }).trim() || null; } catch { return null; } };
+      const system = name => SYSTEM_FONT_DIRECTORIES.map(directory => join(directory, name)).find(path => existsSync(path)) ?? null;
+      const local = name => [request.path ? join(projectDir, request.path, name) : null, join(projectDir, name)].find(path => path && existsSync(path)) ?? null;
+      // luaotfload's default: a family name prefers system fonts over the TeX
+      // tree, whichever file name matches; a file name prefers the TeX tree.
+      const passes = request.byFileName ? [local, texLive, system] : [local, system, texLive];
+      let chosen = null;
+      for (const pass of passes) {
+        for (const name of request.names) {
+          const found = pass(name);
+          if (found) { chosen = { name, found }; break; }
+        }
+        if (chosen) break;
+      }
+      if (!chosen || fontIds.has(chosen.name)) continue;
+      if (process.env.TIKZ_FONT_DEBUG) process.stderr.write(`[fonts] ${chosen.name} -> ${chosen.found}\n`);
+      const id = coreRenderer.runtimeTexFontId(chosen.name);
+      coreRenderer.registerRuntimeTexFont(id, coreRenderer.buildRuntimeTexFont(hb, readFileSync(chosen.found), chosen.name));
+      for (const name of request.names) if (!fontIds.has(name)) fontIds.set(name, id);
+    }
+  }
+  const projectFiles = projectFileTexts.size > 0 || fontIds.size > 0
+    ? { ...coreRenderer.createBeamerProjectFiles(projectFileTexts, createHash("sha256").update(JSON.stringify([...projectFileTexts, ...fontIds])).digest("hex")),
+      fontId: name => fontIds.get(name) ?? null }
     : undefined;
   const preparedDocument = runtime.preparedDocument ??
     coreRenderer.prepareBeamerDocument(source, projectFiles ? { projectFiles } : {});

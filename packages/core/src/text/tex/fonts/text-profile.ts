@@ -9,6 +9,9 @@ import type {
 } from "./types.js";
 import { texLength, type TexLength } from "../coordinates.js";
 
+/** A generated text font, or a runtime OpenType font (runtime-registry.ts). */
+export type TexTextFontId = DefaultComputerModernTextFont | `otf:${string}`;
+
 export interface TexTextFontProfile {
   readonly id: string;
   readonly label: string;
@@ -16,7 +19,7 @@ export interface TexTextFontProfile {
   readonly encoding: "OT1" | "TU";
   readonly metricProvider: TexMetricProvider;
   readonly defaultFontState: SimpleTexFontState;
-  readonly resolveTextFontId: (state: SimpleTexFontState, atPt?: TexLength) => DefaultComputerModernTextFont;
+  readonly resolveTextFontId: (state: SimpleTexFontState, atPt?: TexLength) => TexTextFontId;
   readonly resolveTextFont: (
     state: SimpleTexFontState,
     atPt: TexLength,
@@ -42,7 +45,7 @@ function makeTextFontProfile(params: {
   readonly engine: TexTextFontProfile["engine"];
   readonly encoding: TexTextFontProfile["encoding"];
   readonly defaultFontState: SimpleTexFontState;
-  readonly resolveTextFontId: (state: SimpleTexFontState, atPt?: TexLength) => DefaultComputerModernTextFont;
+  readonly resolveTextFontId: (state: SimpleTexFontState, atPt?: TexLength) => TexTextFontId;
 }): TexTextFontProfile {
   return {
     ...params,

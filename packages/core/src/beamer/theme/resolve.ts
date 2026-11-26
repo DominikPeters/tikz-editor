@@ -9,6 +9,8 @@ import { beamerClassFontSize, beamerFontSizeProfile, beamerNamedFontSize, type B
 import { beamerPosterListDimensionsEm, beamerPosterUnsupportedLoad, scanBeamerPoster, type BeamerPosterSettings } from "../poster.js";
 import { scanBeamerFontDeclarations, applyBeamerFontRoleDeclaration } from "./font-declarations.js";
 import { scanBeamerNavigationTemplates } from "./template-declarations.js";
+import { scanBeamerFontspecDeclarations, type BeamerFontspecEvent } from "./fontspec.js";
+import { hasRuntimeTexFont } from "../../text/tex/fonts/runtime-registry.js";
 import { applyBeamerColorDeclaration, beamerColorRgbToCss, diagnoseBeamerColorDeclarations, resolveBeamerColorExpressionRgb, scanBeamerColorDeclarations, type BeamerColorDeclarationEvent, type BeamerColorRgb } from "./color-declarations.js";
 import { beamerProjectFiles, beamerThemeFileName, scanBeamerThemeFileDocument, type BeamerProjectFiles } from "../project-files.js";
 import { beamerControlSequencesIn, createBeamerSyntaxContext } from "../syntax.js";
@@ -18,6 +20,7 @@ import type {
   BeamerThemeDimensions,
   BeamerThemeFont,
   BeamerThemeFontRole,
+  BeamerRuntimeTypeface,
   BeamerThemeTemplateRef,
   BeamerThemeTemplates,
   BeamerThemeUse,
@@ -39,6 +42,8 @@ type MutableTheme = {
   options: Record<string, string | boolean>;
   appliedComponents: BeamerThemeComponentProvenance[];
   diagnostics: Diagnostic[];
+  /** fontspec families defined with \newfontfamily, by command. */
+  fontFamilyCommands?: Record<string, BeamerRuntimeTypeface>;
 };
 
 type ComponentApplier = (state: MutableTheme, use: BeamerThemeUse) => void;
@@ -362,6 +367,50 @@ function executingThemeUseList(document: BeamerDocumentModel): BeamerThemeUse[] 
 const LOCAL_THEME_DEPTH = 4;
 
 /**
+ * A fontspec declaration: the family's faces from the runtime fonts the host
+ * loaded. `\setsansfont` changes every sans role (Beamer's text is sans),
+ * `\setmainfont` every serif role, and `\newfontfamily` defines a family for
+ * `\setbeamerfont{...}{family=\Cmd}`. A family whose upright face is not
+ * loaded keeps the current font and is reported.
+ */
+function applyBeamerFontspec(
+  state: MutableTheme,
+  event: BeamerFontspecEvent,
+  files: BeamerProjectFiles | undefined,
+  report: (diagnostic: Diagnostic) => void
+): void {
+  const resolve = (names: readonly string[]) => {
+    for (const name of names) {
+      const id = files?.fontId?.(name);
+      // Only fonts this realm registered can be laid out.
+      if (id && hasRuntimeTexFont(id)) return id;
+    }
+    return null;
+  };
+  const upright = resolve(event.faces.upright);
+  if (!upright) {
+    report({ severity: "warning", code: "beamer-font-unavailable", span: event.span,
+      message: `The font '${event.name}' is not available to this preview; the current font is used instead.` });
+    return;
+  }
+  const italic = resolve(event.faces.italic) ?? upright;
+  const bold = resolve(event.faces.bold) ?? upright;
+  const typeface: BeamerRuntimeTypeface = { kind: "runtime", name: event.name, upright, italic, bold, boldItalic: resolve(event.faces.boldItalic) ?? bold };
+  if (event.unsupportedOptions.length > 0) {
+    report({ severity: "warning", code: "beamer-font-option-unsupported", span: event.span,
+      message: `fontspec options ${event.unsupportedOptions.join(", ")} are not applied in this preview.` });
+  }
+  if (typeof event.target === "object") {
+    state.fontFamilyCommands = { ...state.fontFamilyCommands, [event.target.command]: typeface };
+    return;
+  }
+  const family = event.target === "main" ? "serif" : event.target === "sans" ? "sans" : "monospace";
+  for (const font of Object.values(state.fonts)) {
+    if (font.family === family) font.typeface = typeface;
+  }
+}
+
+/**
  * Apply a preamble's theme uses and literal declarations in source order.
  * A use without a stock component loads the project's theme file, if it has
  * one, and applies that file's declarations at the use. Diagnostics from a
@@ -376,7 +425,7 @@ function applyBeamerPreambleThemeEvents(
   loadedAt: { span: Span; file: string } | null
 ): BeamerColorDeclarationEvent[] {
   const colorEvents = scanBeamerColorDeclarations(document);
-  const events = [...uses.map(use => ({ kind: "theme-use" as const, span: use.source.span, use })), ...colorEvents, ...scanBeamerNavigationTemplates(document), ...scanBeamerFontDeclarations(document)]
+  const events = [...uses.map(use => ({ kind: "theme-use" as const, span: use.source.span, use })), ...colorEvents, ...scanBeamerNavigationTemplates(document), ...scanBeamerFontDeclarations(document), ...scanBeamerFontspecDeclarations(document)]
     .sort((left, right) => left.span.from - right.span.from);
   const report = (diagnostic: Diagnostic) => state.diagnostics.push(loadedAt
     ? { ...diagnostic, span: loadedAt.span, message: `${loadedAt.file}: ${diagnostic.message}` }
@@ -384,6 +433,14 @@ function applyBeamerPreambleThemeEvents(
   for (const event of events) {
     if (event.kind === "font-declaration") {
       applyBeamerFontRoleDeclaration(state, event, beamerFontSizeProfile(state));
+      // family=\Raleway selects a \newfontfamily family for the role.
+      const command = event.values.family?.trim();
+      const typeface = command ? state.fontFamilyCommands?.[command] : undefined;
+      if (typeface) state.fonts[event.role] = { ...state.fonts[event.role], family: "sans", typeface };
+      continue;
+    }
+    if (event.kind === "fontspec") {
+      applyBeamerFontspec(state, event, files, report);
       continue;
     }
     if (event.kind === "navigation-template") {

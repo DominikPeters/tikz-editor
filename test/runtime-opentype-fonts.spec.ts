@@ -10,6 +10,7 @@ type OracleFont = {
   params: Record<string, number>;
   chars: Record<string, { width: number; height: number; depth: number }>;
   kerns: [number, number, number][];
+  spaceKerns: [number, number, number][];
   ligatures: Record<string, number[]>;
 };
 
@@ -71,7 +72,8 @@ describe.each(oracle.fonts)("runtime OpenType font $file against LuaLaTeX", (exp
     // With fontspec's default Ligatures=TeX, luaotfload replaces " ' ` by
     // curly quotes before kerning; the editor's text layer does that itself.
     const substituted = new Set([0x22, 0x27, 0x60]);
-    const measured = (pair: string) => pair.split(",").every(code => !substituted.has(Number(code)));
+    // Pairs with the space glyph are checked by the spacekern test below.
+    const measured = (pair: string) => pair.split(",").every(code => !substituted.has(Number(code)) && Number(code) !== 0x20);
     const expectedKerns = new Map(expected.kerns.filter(([left, right]) => !substituted.has(left) && !substituted.has(right))
       .map(([left, right, kern]) => [`${left},${right}`, kern]));
     // The oracle's kerns are rounded to scaled points at 10pt; luaotfload
@@ -79,6 +81,17 @@ describe.each(oracle.fonts)("runtime OpenType font $file against LuaLaTeX", (exp
     for (const [pair, kern] of expectedKerns) expect(kerns.get(pair), `kern ${pair}`).toBeCloseTo(kern, 5);
     const asciiPairs = [...kerns.keys()].filter(pair => measured(pair) && pair.split(",").every(code => Number(code) < 0xfb00));
     expect(asciiPairs.filter(pair => !expectedKerns.has(pair))).toEqual([]);
+  });
+
+  it.skipIf(!bytes)("kerns against the space glyph as luaotfload's spacekern does", () => {
+    const kerns = new Map(built!.font.ligKerns.filter(rule => rule[0] === "kern" && (rule[1] === 0x20 || rule[2] === 0x20))
+      .map(rule => [`${rule[1]},${rule[2]}`, rule[3]]));
+    const substituted = new Set([0x22, 0x27, 0x60]);
+    const expectedKerns = expected.spaceKerns.filter(([left, right, kern]) => Math.abs(kern) > 1e-5 && !substituted.has(left) && !substituted.has(right));
+    expect(expectedKerns.length).toBeGreaterThan(0);
+    for (const [left, right, kern] of expectedKerns) expect(kerns.get(`${left},${right}`), `space kern ${left},${right}`).toBeCloseTo(kern, 5);
+    const expectedPairs = new Set(expectedKerns.map(([left, right]) => `${left},${right}`));
+    expect([...kerns.keys()].filter(pair => !expectedPairs.has(pair) && pair.split(",").every(code => !substituted.has(Number(code))))).toEqual([]);
   });
 
   it.skipIf(!bytes)("draws outlines in 10pt units with y up negative", () => {

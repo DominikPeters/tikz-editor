@@ -27,6 +27,12 @@ function probe(fontPath) {
     const hex = code => `\\char"${code.toString(16).toUpperCase()}`;
     const pairs = PAIR_CODES.flatMap(left => PAIR_CODES.map(right =>
       `\\setbox\\probe=\\hbox{${hex(left)}${hex(right)}}\\directlua{pair(${left},${right})}`));
+    // Interword glue next to each character: luaotfload adds kerns against
+    // the space glyph to it (spacekern).
+    const spaces = PAIR_CODES.flatMap(code => [
+      `\\setbox\\probe=\\hbox{${hex(code)}\\ }\\directlua{space(${code},32)}`,
+      `\\setbox\\probe=\\hbox{\\ ${hex(code)}}\\directlua{space(32,${code})}`,
+    ]);
     const ligatures = LIGATURES.map(text => `\\setbox\\probe=\\hbox{${text}}\\directlua{lig("${text}")}`);
     // Lua lives in its own file: inside \directlua, TeX would read `%` as a comment.
     const lua = `local f = font.getfont(font.current())
@@ -44,6 +50,14 @@ function pair(left, right)
   end
   if kern ~= 0 then texio.write_nl(string.format("ORACLE kern %d %d %.9f", left, right, kern/size)) end
 end
+function space(left, right)
+  local width = 0
+  for n in node.traverse(tex.box.probe.list) do
+    if n.id == node.id("glue") then width = width + n.width end
+  end
+  local kern = width - p.space
+  if kern ~= 0 then texio.write_nl(string.format("ORACLE spacekern %d %d %.9f", left, right, kern/size)) end
+end
 function lig(text)
   local codes = {}
   for n in node.traverse(tex.box.probe.list) do
@@ -60,19 +74,21 @@ end
 \begin{document}
 \directlua{dofile("oracle.lua")}
 ${ligatures.join("\n")}
+${spaces.join("%\n")}
 ${pairs.join("%\n")}
 \end{document}
 `;
     writeFileSync(join(dir, "oracle.tex"), source);
     execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "oracle.tex"], { cwd: dir, stdio: "pipe", maxBuffer: 64 * 1024 * 1024 });
     const log = readFileSync(join(dir, "oracle.log"), "utf8").replace(/\n(?!ORACLE|\(|\)|!|l\.)/gu, "");
-    const result = { file: basename(fontPath), params: {}, chars: {}, kerns: [], ligatures: {} };
+    const result = { file: basename(fontPath), params: {}, chars: {}, kerns: [], spaceKerns: [], ligatures: {} };
     for (const line of log.split("\n")) {
       const fields = line.trim().split(/\s+/u);
       if (fields[0] !== "ORACLE") continue;
       if (fields[1] === "param") for (let index = 2; index + 1 < fields.length; index += 2) result.params[fields[index]] = Number(fields[index + 1]);
       if (fields[1] === "char") result.chars[fields[2]] = { width: Number(fields[3]), height: Number(fields[4]), depth: Number(fields[5]) };
       if (fields[1] === "kern") result.kerns.push([Number(fields[2]), Number(fields[3]), Number(fields[4])]);
+      if (fields[1] === "spacekern") result.spaceKerns.push([Number(fields[2]), Number(fields[3]), Number(fields[4])]);
       if (fields[1] === "lig") result.ligatures[fields[2]] = (fields[3] ?? "").split(",").filter(Boolean).map(Number);
     }
     return result;
