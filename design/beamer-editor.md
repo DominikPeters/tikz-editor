@@ -63,9 +63,15 @@ These were settled in design discussion and are treated as fixed below:
 ## Non-Goals
 
 - Reimplement all of Beamer or LaTeX.
-- Support arbitrary `\setbeamertemplate` structural hacks (corpus: rare).
+- Execute arbitrary `\setbeamertemplate` code. Template bodies within a
+  measured vocabulary are interpreted, with fallbacks per role; see
+  [beamer-preamble-and-templates.md](beamer-preamble-and-templates.md)
+  (revised 2026-11-26: 4 of 8 deck-corpus projects and most posters override
+  structural templates).
 - Frame transitions (`\transfade` etc.) and continuous animation.
-- Poster classes (`beamerposter`), `pgfpages` handout layouts, article mode.
+- `pgfpages` handout layouts, article mode. (Posters made with
+  `beamerposter` are in scope since 2026-11-26; see
+  [beamerposter.md](beamerposter.md).)
 - Pixel-identical math rendering across the full LaTeX surface. Supported
   math uses the native TeX math IR; unsupported constructs fall back at the
   smallest source-backed box boundary.
