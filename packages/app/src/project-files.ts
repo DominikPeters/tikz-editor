@@ -1,4 +1,8 @@
-import { beamerThemeFileName, collectBeamerProjectFiles, createBeamerProjectFiles, scanBeamerDocument, type BeamerProjectFiles } from "@tikz-editor/core/beamer";
+import {
+  beamerFontFileRequests, beamerThemeFileName, buildRuntimeTexFont, collectBeamerProjectFiles, createBeamerProjectFiles,
+  loadRuntimeHarfBuzz, registerRuntimeTexFont, runtimeTexFontId, scanBeamerDocument,
+  type BeamerProjectFiles, type RuntimeTexFontData,
+} from "@tikz-editor/core/beamer";
 import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
 import type { LocalAssetReadResult } from "./platform/types";
 
@@ -11,18 +15,26 @@ export type PreparedProjectFiles = {
   readonly files: BeamerProjectFiles | undefined;
   /** File name and text, for worker transport. */
   readonly entries: readonly (readonly [string, string])[];
+  /** Runtime fonts by registered id, for worker transport, and fontspec file names to ids. */
+  readonly fonts: readonly (readonly [string, RuntimeTexFontData])[];
+  readonly fontNames: readonly (readonly [string, string])[];
 };
 
 const textCache = new Map<string, string | null>();
+// Built fonts by path, kept while the file's revision is unchanged.
+const fontCache = new Map<string, { readonly revision: string; readonly id: `otf:${string}`; readonly data: RuntimeTexFontData }>();
 const THEME_USE = /\\use(?:color|font|inner|outer)?theme(?![A-Za-z@])/u;
+const FONTSPEC = /\\(?:setmainfont|setsansfont|setmonofont|newfontfamily|renewfontfamily|setfontfamily)(?![A-Za-z@])/u;
+const NONE: PreparedProjectFiles = { files: undefined, entries: [], fonts: [], fontNames: [] };
 
 export async function prepareBeamerProjectFiles(params: {
   readonly source: string;
   readonly resolvePath: (name: string) => string | null;
   readonly readLocalAsset: ((path: string) => Promise<LocalAssetReadResult>) | undefined;
+  readonly findFont?: ((names: readonly string[], byFileName: boolean) => Promise<string | null>) | undefined;
 }): Promise<PreparedProjectFiles> {
   const { readLocalAsset } = params;
-  if (!readLocalAsset || !THEME_USE.test(params.source)) return { files: undefined, entries: [] };
+  if (!readLocalAsset || (!THEME_USE.test(params.source) && !FONTSPEC.test(params.source))) return NONE;
   const read = async (name: string): Promise<string | null> => {
     const path = params.resolvePath(name);
     if (path === null) return null;
@@ -32,10 +44,67 @@ export async function prepareBeamerProjectFiles(params: {
     textCache.set(path, text);
     return text;
   };
-  const collected = await collectBeamerProjectFiles(params.source, read);
-  if (collected.size === 0) return { files: undefined, entries: [] };
+  const collected = THEME_USE.test(params.source) ? await collectBeamerProjectFiles(params.source, read) : new Map<string, string>();
   const entries = [...collected].sort(([left], [right]) => left.localeCompare(right));
-  return { files: createBeamerProjectFiles(collected, beamerProjectFilesCacheKey(entries)), entries };
+  const fonts = await loadProjectFonts(params, collected, readLocalAsset);
+  if (collected.size === 0 && fonts.names.size === 0) return NONE;
+  const fontNames = [...fonts.names].sort(([left], [right]) => left.localeCompare(right));
+  const key = beamerProjectFilesCacheKey([...entries, ...fontNames.map(([name, id]) => [name, `${id}@${fonts.revisions.get(id) ?? ""}`] as const)]);
+  return {
+    files: { ...createBeamerProjectFiles(collected, key), fontId: (name: string) => fonts.names.get(name) ?? null },
+    entries,
+    fonts: [...fonts.data],
+    fontNames,
+  };
+}
+
+/**
+ * fontspec faces: from the document's folder (and `Path=`) first, then where
+ * the platform finds them (desktop: system fonts or TeX Live, in luaotfload's
+ * order). Each font is built once per file revision and registered.
+ */
+async function loadProjectFonts(
+  params: Parameters<typeof prepareBeamerProjectFiles>[0],
+  themeFiles: ReadonlyMap<string, string>,
+  readLocalAsset: (path: string) => Promise<LocalAssetReadResult>
+): Promise<{ names: Map<string, `otf:${string}`>; data: Map<string, RuntimeTexFontData>; revisions: Map<string, string> }> {
+  const names = new Map<string, `otf:${string}`>();
+  const data = new Map<string, RuntimeTexFontData>();
+  const revisions = new Map<string, string>();
+  const requests = FONTSPEC.test(params.source) || [...themeFiles.values()].some(text => FONTSPEC.test(text))
+    ? beamerFontFileRequests(params.source, themeFiles) : [];
+  for (const request of requests) {
+    if (request.names.some(name => names.has(name))) continue;
+    let found: { name: string; read: Extract<LocalAssetReadResult, { status: "ok" }> } | null = null;
+    for (const name of request.names) {
+      const path = request.path && /^(?:\/|[A-Za-z]:[\\/])/u.test(request.path)
+        ? `${request.path.replace(/[\\/]?$/u, "/")}${name}`
+        : params.resolvePath(`${request.path ?? ""}${name}`);
+      if (path === null) continue;
+      const result = await readLocalAsset(path);
+      if (result.status === "ok") { found = { name, read: result }; break; }
+    }
+    if (!found && params.findFont) {
+      const path = await params.findFont(request.names, request.byFileName);
+      const result = path ? await readLocalAsset(path) : null;
+      const name = path?.split(/[\\/]/u).at(-1);
+      if (result?.status === "ok" && name) found = { name, read: result };
+    }
+    if (!found) continue;
+    const cached = fontCache.get(found.read.path);
+    let entry = cached?.revision === found.read.revision ? cached : undefined;
+    if (!entry) {
+      const hb = await loadRuntimeHarfBuzz();
+      const font = buildRuntimeTexFont(hb, decodeBase64(found.read.bytesBase64), found.name);
+      entry = { revision: found.read.revision, id: runtimeTexFontId(found.name), data: font };
+      fontCache.set(found.read.path, entry);
+    }
+    registerRuntimeTexFont(entry.id, entry.data);
+    data.set(entry.id, entry.data);
+    revisions.set(entry.id, entry.revision);
+    for (const name of request.names) if (!names.has(name)) names.set(name, entry.id);
+  }
+  return { names, data, revisions };
 }
 
 export function beamerProjectFilesCacheKey(entries: readonly (readonly [string, string])[]): string {
@@ -44,27 +113,54 @@ export function beamerProjectFilesCacheKey(entries: readonly (readonly [string, 
 
 /** Files the document names directly; their own uses are found once read. */
 export function beamerProjectFileWatchPaths(source: string, resolvePath: (name: string) => string | null): string[] {
-  if (!THEME_USE.test(source)) return [];
+  if (!THEME_USE.test(source) && !FONTSPEC.test(source)) return [];
   const names = scanBeamerDocument(source).preamble.themes.flatMap(use => use.name.value.split(",")
     .map(name => name.trim()).filter(name => /^[A-Za-z0-9_-]+$/u.test(name))
     .map(name => beamerThemeFileName(use.kind, name)));
   const paths = [...new Set(names)].flatMap(name => resolvePath(name) ?? []);
   for (const path of textCache.keys()) if (textCache.get(path) !== null) paths.push(path);
+  for (const path of fontCache.keys()) paths.push(path);
   return [...new Set(paths)];
 }
 
 export function invalidateProjectFilePath(path: string): void {
   textCache.delete(path);
+  fontCache.delete(path);
 }
 
-function decodeUtf8Base64(base64: string): string {
+function decodeBase64(base64: string): Uint8Array {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return new TextDecoder().decode(bytes);
+  return bytes;
 }
 
-/** Project files carried in a worker's graphics bundle. */
-export function beamerProjectFilesFromBundle(bundle: { readonly cacheKey: string; readonly projectFiles?: readonly (readonly [string, string])[] } | null | undefined): BeamerProjectFiles | undefined {
-  return bundle?.projectFiles?.length ? createBeamerProjectFiles(new Map(bundle.projectFiles), bundle.cacheKey) : undefined;
+function decodeUtf8Base64(base64: string): string {
+  return new TextDecoder().decode(decodeBase64(base64));
+}
+
+/**
+ * Project files and runtime fonts carried in a worker's graphics bundle. The
+ * fonts are registered in the worker, which builds none itself.
+ */
+export function beamerProjectFilesFromBundle(bundle: {
+  readonly cacheKey: string;
+  readonly projectFiles?: readonly (readonly [string, string])[];
+  readonly runtimeFonts?: readonly (readonly [string, RuntimeTexFontData])[];
+  readonly projectFontNames?: readonly (readonly [string, string])[];
+} | null | undefined): BeamerProjectFiles | undefined {
+  if (!bundle?.projectFiles?.length && !bundle?.runtimeFonts?.length) return undefined;
+  for (const [id, data] of bundle.runtimeFonts ?? []) registerRuntimeTexFont(id, data);
+  const fontNames = new Map(bundle.projectFontNames ?? []);
+  return {
+    ...createBeamerProjectFiles(new Map(bundle.projectFiles ?? []), bundle.cacheKey),
+    fontId: (name: string) => {
+      const id = fontNames.get(name);
+      return id !== undefined && isRuntimeFontId(id) ? id : null;
+    },
+  };
+}
+
+function isRuntimeFontId(id: string): id is `otf:${string}` {
+  return id.startsWith("otf:");
 }

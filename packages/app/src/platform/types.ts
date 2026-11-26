@@ -46,6 +46,12 @@ export type PlatformFileApi = {
   >;
   readLinkedText?: (fileRef: DocumentFileRef) => Promise<LinkedTextReadResult>;
   readLocalAsset?: (path: string) => Promise<LocalAssetReadResult>;
+  /**
+   * The installed font file for one fontspec face, from its candidate file
+   * names: system fonts first for a family name, the TeX tree first for a
+   * file name (`byFileName`), as luaotfload looks them up. Desktop only.
+   */
+  findFont?: (names: readonly string[], byFileName: boolean) => Promise<string | null>;
   /** Persist a selected browser asset without embedding bytes in TeX source. */
   storeGraphicAsset?: (asset: { path: string; bytes: ArrayBuffer }) => Promise<void>;
   /** Image files and folders up to two levels below `directory`, relative to it. */

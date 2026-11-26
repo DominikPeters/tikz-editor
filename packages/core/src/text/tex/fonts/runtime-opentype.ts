@@ -1,40 +1,8 @@
+import type * as HarfBuzz from "harfbuzzjs";
 import type { GeneratedTexCharMetric, GeneratedTexFont, GeneratedTexLigKern, TexGlyphOutlines } from "./types.js";
 
-/**
- * The part of harfbuzzjs this module uses. The host loads harfbuzzjs (and
- * its WebAssembly) and passes the module in, so core stays free of a bundler-
- * specific asset import.
- */
-export type RuntimeHarfBuzz = {
-  readonly Blob: new (data: Uint8Array) => RuntimeHarfBuzzBlob;
-  readonly Face: new (blob: RuntimeHarfBuzzBlob, index?: number) => RuntimeHarfBuzzFace;
-  readonly Font: new (face: RuntimeHarfBuzzFace) => RuntimeHarfBuzzFont;
-  readonly Buffer: new () => RuntimeHarfBuzzBuffer;
-  readonly Feature: new (tag: string, value?: number) => RuntimeHarfBuzzFeature;
-  shape(font: RuntimeHarfBuzzFont, buffer: RuntimeHarfBuzzBuffer, features?: RuntimeHarfBuzzFeature[]): void;
-};
-
-type RuntimeHarfBuzzBlob = object;
-type RuntimeHarfBuzzFeature = object;
-
-type RuntimeHarfBuzzFace = {
-  readonly upem: number;
-  collectUnicodes(): Uint32Array;
-  referenceTable(table: string): Uint8Array | undefined;
-};
-
-type RuntimeHarfBuzzFont = {
-  nominalGlyph(unicode: number): number | undefined;
-  glyphHAdvance(glyph: number): number;
-  glyphExtents(glyph: number): { xBearing: number; yBearing: number; width: number; height: number } | undefined;
-  glyphToJson(glyph: number): readonly { type: string; values: readonly number[] }[];
-};
-
-type RuntimeHarfBuzzBuffer = {
-  addCodePoints(codePoints: number[]): void;
-  guessSegmentProperties(): void;
-  getGlyphInfosAndPositions(): readonly { codepoint: number; xAdvance?: number }[];
-};
+/** harfbuzzjs, loaded by `loadRuntimeHarfBuzz` (or by a test) and passed in. */
+export type RuntimeHarfBuzz = typeof HarfBuzz;
 
 export type RuntimeTexFontData = {
   readonly font: GeneratedTexFont;
@@ -227,4 +195,19 @@ function readFixed(table: Uint8Array | undefined, offset: number): number {
   if (!table || table.length < offset + 4) return 0;
   const view = new DataView(table.buffer, table.byteOffset, table.byteLength);
   return view.getInt32(offset) / 65536;
+}
+
+let harfbuzz: Promise<RuntimeHarfBuzz> | null = null;
+
+/** harfbuzzjs and its WebAssembly, loaded on first use. */
+export function loadRuntimeHarfBuzz(): Promise<RuntimeHarfBuzz> {
+  const loading = harfbuzz ?? import("harfbuzzjs").then(async module => {
+    // In the apps' builds the module's initialisation is an exported promise
+    // (apps/harfbuzz-wasm-plugin.ts); in Node it has already run.
+    const ready: unknown = Reflect.get(module, "__tikzHarfBuzzReady");
+    if (ready instanceof Promise) await ready;
+    return module;
+  });
+  harfbuzz = loading;
+  return loading;
 }

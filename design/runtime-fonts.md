@@ -39,9 +39,18 @@ prefers **system fonts** over the TeX tree for a family name (the Lato
 in `~/Library/Fonts` won over TeX Live's, with different metrics); only a
 font named by file goes to the TeX tree first.
 
-Not yet: loading fonts in the app (WebAssembly in the Vite builds, desktop
-lookup of TeX Live and system fonts, bundled fallbacks, worker transport),
-pdfLaTeX font packages, family commands used in frame bodies.
+- **App loading** (desktop only; decided against bundled fallbacks): faces
+  come from the document's folder and `Path=` first, then from
+  `desktop_find_font`, which searches the system font folders and
+  `kpsewhich` in luaotfload's order. Fonts are built once per file
+  revision, registered, watched, and passed to the thumbnail worker in the
+  graphics bundle. `apps/harfbuzz-wasm-plugin.ts` turns harfbuzzjs's
+  top-level `await` into an exported promise and lets Vite serve and emit
+  `harfbuzz.wasm`; the package loads in its own chunk on first use. The
+  web build has no folder and keeps the current font, with a warning.
+
+Not yet: pdfLaTeX font packages, family commands used in frame bodies,
+trying the desktop app on a real Gemini poster.
 
 ## Today
 

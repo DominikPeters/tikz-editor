@@ -111,6 +111,7 @@ export async function prepareDocumentGraphicsContext(params: {
     source: params.source,
     resolvePath: name => resolveLocalImagePath(name, baseDirectory),
     readLocalAsset: platform.files?.readLocalAsset,
+    findFont: platform.files?.findFont,
   });
   const graphicsKey = imageAssetResolverCacheKey({
     baseDirectory,
@@ -148,7 +149,13 @@ export async function prepareDocumentGraphicsContext(params: {
       resolution: graphicsPreviewResolution(entry.resolution),
     })),
   };
-  const bundle: DocumentGraphicsPreviewBundle = project.entries.length > 0 ? { ...previewBundle, projectFiles: project.entries } : previewBundle;
+  const bundle: DocumentGraphicsPreviewBundle = project.entries.length > 0 || project.fonts.length > 0
+    ? {
+        ...previewBundle,
+        ...(project.entries.length > 0 ? { projectFiles: project.entries } : {}),
+        ...(project.fonts.length > 0 ? { runtimeFonts: project.fonts, projectFontNames: project.fontNames } : {}),
+      }
+    : previewBundle;
   rememberPreviewBundle(bundle);
 
   return { resolver, previewBundle: bundle, ...(project.files ? { projectFiles: project.files } : {}) };

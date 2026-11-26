@@ -1,12 +1,13 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { harfbuzzWasm } from "../harfbuzz-wasm-plugin";
 import path from "path";
 
 const profilingBuild = process.env.TIKZ_PROFILE_BUILD === "1";
 
 export default defineConfig(({ command }) => ({
   base: command === "build" ? "/editor/web/" : "/",
-  plugins: [react()],
+  plugins: [react(), harfbuzzWasm()],
   publicDir: path.resolve(__dirname, "../../packages/app/public"),
   define: {
     "import.meta.env.TIKZ_EDITOR_VERSION": JSON.stringify(process.env.npm_package_version ?? "0.1.0")

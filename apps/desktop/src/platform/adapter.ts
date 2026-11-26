@@ -471,6 +471,10 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
         }
         return await read(path);
       },
+      findFont: async (names, byFileName) => {
+        const find = getBridge().findFont;
+        return find ? await find(names, byFileName) : null;
+      },
       listGraphicsFiles: async (directory) => {
         const list = getBridge().listGraphicsFiles;
         return list ? await list(directory) : { files: [], directories: [] };

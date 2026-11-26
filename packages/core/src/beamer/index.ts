@@ -124,7 +124,7 @@ export {
 export { beamerTikzLayerPreambleInsertion } from "./tikz-layer-preamble.js";
 export { scanBeamerDocument, scanBeamerDocumentClass } from "./scan.js";
 export { beamerFontFileRequests, beamerThemeFileName, collectBeamerProjectFiles, createBeamerProjectFiles, type BeamerProjectFiles } from "./project-files.js";
-export { buildRuntimeTexFont, type RuntimeHarfBuzz, type RuntimeTexFontData } from "../text/tex/fonts/runtime-opentype.js";
+export { buildRuntimeTexFont, loadRuntimeHarfBuzz, type RuntimeHarfBuzz, type RuntimeTexFontData } from "../text/tex/fonts/runtime-opentype.js";
 export { registerRuntimeTexFont, runtimeTexFontId } from "../text/tex/fonts/runtime-registry.js";
 export { scanBeamerNoteCommands, beamerSpeakerNotes, type BeamerNoteCommand } from "./notes.js";
 export { beamerFrameNotes, checkBeamerNoteBody, editBeamerFrameNote, type BeamerFrameNote, type BeamerNoteBodyProblem, type BeamerNoteEdit } from "./note-editing.js";

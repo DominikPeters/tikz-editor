@@ -83,6 +83,7 @@ export type DesktopBridge = {
   }) => Promise<DesktopSaveTextResult>;
   readLinkedText?: (path: string) => Promise<DesktopLinkedTextReadResult>;
   readLocalAsset?: (path: string) => Promise<DesktopLocalAssetReadResult>;
+  findFont?: (names: readonly string[], byFileName: boolean) => Promise<string | null>;
   listGraphicsFiles?: (directory: string) => Promise<GraphicsFileListing>;
   writeGraphicsFile?: (path: string, bytesBase64: string) => Promise<GraphicsFileWriteResult>;
   moveGraphicsFile?: (from: string, to: string) => Promise<GraphicsFileWriteResult>;
@@ -238,6 +239,7 @@ export function createDefaultBridge(): DesktopBridge {
     ),
     readLinkedText: async (path) => await invoke<DesktopLinkedTextReadResult>("desktop_read_linked_text", { path }),
     readLocalAsset: async (path) => await invoke<DesktopLocalAssetReadResult>("desktop_read_local_asset", { path }),
+    findFont: async (names, byFileName) => await invoke<string | null>("desktop_find_font", { names, byFileName }),
     listGraphicsFiles: async (directory) => await invoke<GraphicsFileListing>("desktop_list_graphics_files", { directory }),
     writeGraphicsFile: async (path, bytesBase64) => await invoke<GraphicsFileWriteResult>("desktop_write_graphics_file", { path, bytesBase64 }),
     moveGraphicsFile: async (from, to) => await invoke<GraphicsFileWriteResult>("desktop_move_graphics_file", { from, to }),

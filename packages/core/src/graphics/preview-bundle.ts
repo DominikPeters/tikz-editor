@@ -1,3 +1,4 @@
+import type { RuntimeTexFontData } from "../text/tex/fonts/runtime-opentype.js";
 import type { SimpleTexGraphicsOptions } from "../text/tex/ir.js";
 import type {
   DocumentGraphicsResolution,
@@ -44,6 +45,9 @@ export type DocumentGraphicsPreviewBundle = {
   readonly entries: readonly DocumentGraphicsPreviewBundleEntry[];
   /** The document's project text files (local theme files), by TeX file name. */
   readonly projectFiles?: readonly (readonly [string, string])[];
+  /** Runtime OpenType fonts by registered id, and fontspec file names to those ids. */
+  readonly runtimeFonts?: readonly (readonly [string, RuntimeTexFontData])[];
+  readonly projectFontNames?: readonly (readonly [string, string])[];
 };
 
 export function documentGraphicsPreviewRequestKey(params: {

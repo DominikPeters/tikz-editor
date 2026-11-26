@@ -2316,6 +2316,106 @@ fn desktop_read_linked_text(path: String) -> Result<LinkedTextReadPayload, Strin
     read_linked_text_payload(Path::new(&path))
 }
 
+/// System font folders, as luaotfload's font database scans them.
+fn system_font_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    let home = env::var_os("HOME").map(PathBuf::from);
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = &home {
+            dirs.push(home.join("Library").join("Fonts"));
+        }
+        dirs.push(PathBuf::from("/Library/Fonts"));
+        dirs.push(PathBuf::from("/System/Library/Fonts"));
+        dirs.push(PathBuf::from("/System/Library/Fonts/Supplemental"));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local) = env::var_os("LOCALAPPDATA") {
+            dirs.push(PathBuf::from(local).join("Microsoft").join("Windows").join("Fonts"));
+        }
+        if let Some(windir) = env::var_os("WINDIR") {
+            dirs.push(PathBuf::from(windir).join("Fonts"));
+        }
+    }
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        if let Some(home) = &home {
+            dirs.push(home.join(".local").join("share").join("fonts"));
+            dirs.push(home.join(".fonts"));
+        }
+        dirs.push(PathBuf::from("/usr/local/share/fonts"));
+        dirs.push(PathBuf::from("/usr/share/fonts"));
+    }
+    let _ = &home;
+    dirs
+}
+
+fn find_font_in_dir(dir: &Path, name: &str, depth: usize) -> Option<PathBuf> {
+    let candidate = dir.join(name);
+    if candidate.is_file() {
+        return Some(candidate);
+    }
+    if depth == 0 {
+        return None;
+    }
+    let entries = fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_font_in_dir(&path, name, depth - 1) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn find_system_font(name: &str) -> Option<PathBuf> {
+    system_font_dirs()
+        .iter()
+        .find_map(|dir| find_font_in_dir(dir, name, 3))
+}
+
+fn find_tex_font(name: &str) -> Option<PathBuf> {
+    let kpsewhich = find_executable_base("kpsewhich")?;
+    let output = std::process::Command::new(kpsewhich).arg(name).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!path.is_empty()).then(|| PathBuf::from(path))
+}
+
+/// The font file a fontspec request loads, found as luaotfload does by
+/// default: a family name prefers system fonts over the TeX tree, a file
+/// name the TeX tree. `names` are one face's candidate file names, in order.
+#[tauri::command]
+async fn desktop_find_font(names: Vec<String>, by_file_name: bool) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let names: Vec<String> = names
+            .into_iter()
+            .filter(|name| !name.contains('/') && !name.contains('\\') && !name.contains(".."))
+            .collect();
+        let passes: [fn(&str) -> Option<PathBuf>; 2] = if by_file_name {
+            [find_tex_font, find_system_font]
+        } else {
+            [find_system_font, find_tex_font]
+        };
+        for pass in passes {
+            for name in &names {
+                if let Some(path) = pass(name) {
+                    return Some(path.to_string_lossy().to_string());
+                }
+            }
+        }
+        None
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 #[tauri::command]
 fn desktop_read_local_asset(path: String) -> Result<LocalAssetReadPayload, String> {
     let requested_path = PathBuf::from(path);
@@ -3255,6 +3355,7 @@ pub fn run() {
             desktop_save_text,
             desktop_read_linked_text,
             desktop_read_local_asset,
+            desktop_find_font,
             desktop_write_linked_text,
             desktop_sync_linked_file_watches,
             desktop_sync_local_asset_watches,
