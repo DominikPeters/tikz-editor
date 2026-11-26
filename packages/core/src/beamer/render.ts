@@ -75,7 +75,7 @@ import {
   type TexListLayoutProfile,
   type TexMetricProvider,
 } from "../text/tex/index.js";
-import { parseTexDimensionExpression } from "../text/tex/dimensions.js";
+import { evaluateTexLengthExpression, parseTexDimensionExpression } from "../text/tex/dimensions.js";
 import { parseSimpleTexTabularRegisters, parseSimpleTexParagraphIr } from "../text/tex/ir.js";
 import { collectBeamerParagraphSpacing } from "./spacing.js";
 import { resolveBeamerColumnPositions, resolveBeamerColumnWidth } from "./column-dimensions.js";
@@ -109,6 +109,7 @@ import type {
 } from "./content-types.js";
 import { resolveBeamerPageGeometry } from "./geometry.js";
 import { beamerPosterMacroBindings, scanBeamerPoster } from "./poster.js";
+import { projectBeamerLengthRegisters, scanBeamerLengthRegisters, type BeamerLengthRegisters } from "./lengths.js";
 import {
   beamerOverlaySpecContains,
   projectBeamerOverlayText,
@@ -336,6 +337,8 @@ function createBeamerRenderContext(
   // Only the theme sees the switched uses; spans elsewhere stay the source's.
   const theme = resolveBeamerTheme(themeSwitch ? documentWithPresentationTheme(document, themeSwitch) : document);
   const dateBindings = beamerDateBindings(document, syntaxContext);
+  const preambleFont = { ...theme.fonts["normal-text"], ...beamerClassNormalSize(theme) };
+  const lengths = scanBeamerLengthRegisters(document, { em: preambleFont.sizePt, ex: fontXHeightPt(preambleFont) }, syntaxContext);
   const posterBindings = beamerPosterMacroBindings(scanBeamerPoster(document, syntaxContext));
   const pointMacroBindings = new Map<number, ReadonlyMap<string, MacroBinding>>();
   const bindingsAt = (offset: number): ReadonlyMap<string, MacroBinding> => {
@@ -367,7 +370,10 @@ function createBeamerRenderContext(
     theme,
     macroBindingsAt: bindingsAt,
     macroBindingsForFrame: frame => bindingsAt(frame.span.from),
-    references: buildBeamerReferenceIndex(document, syntaxContext.syntax, overlaysByFrameId),
+    references: (() => {
+      const index = buildBeamerReferenceIndex(document, syntaxContext.syntax, overlaysByFrameId);
+      return { ...index, lengthRegisters: lengths.registers, diagnostics: [...index.diagnostics, ...lengths.diagnostics] };
+    })(),
     overlaysByFrameId,
     page: resolveBeamerPageGeometry(document, theme),
     navigationModel: createBeamerNavigationModel(document),
@@ -1540,7 +1546,7 @@ async function prepareInlineFlow(params: {
       if (parent.name === "column") {
         const optional = beamerOptionalArgumentAfter(context, parent.begin.span.to, parent.contentSpan.to);
         const dimension = beamerRequiredArgumentAfter(context, optional?.span.to ?? parent.begin.span.to, parent.contentSpan.to);
-        if (dimension) width = requireDefined(resolveBeamerColumnWidth(dimension.value, width, params.paperWidth), "Expected a supported enclosing column width");
+        if (dimension) width = requireDefined(resolveBeamerColumnWidth(dimension.value, width, params.paperWidth, params.references.lengthRegisters), "Expected a supported enclosing column width");
       }
     }
     const inherited = params.references.ambientTextAt?.(span.from) ?? "";
@@ -1683,7 +1689,7 @@ async function prepareFrameFlow(params: {
         kind: "vertical-space",
         visibility,
         node,
-        ...measureVerticalSpace(node, bodyFont),
+        ...measureVerticalSpace(node, bodyFont, params.references.lengthRegisters),
       });
       continue;
     }
@@ -2040,7 +2046,7 @@ function prepareFrameParagraph(params: {
     params.step
   );
   const overprintMapped = projectBeamerOverprints({ mapped: projection.mapped, sourceSpan: params.node.span, overlays: params.overlays, step: params.step,
-    width: raw => raw === undefined ? params.textWidth : resolveBeamerColumnWidth(raw, params.textWidth, params.paperWidth),
+    width: raw => raw === undefined ? params.textWidth : resolveBeamerColumnWidth(raw, params.textWidth, params.paperWidth, params.references.lengthRegisters),
     measure: (mapped, width) => {
       const measured = layoutParagraph({ mapped, sourceSpan: params.node.span, paragraphId: `${params.node.id}:overprint-measure`, role: "body", bounds: { x: 0, y: 0, width, height: 0 }, font: params.bodyFont,
         ...(params.colorResolver !== undefined ? { colorResolver: params.colorResolver } : {}), alignment: "left", listProfile: params.listProfile, macroBindings: params.macroBindings, references: params.references, ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), paperWidth: params.paperWidth });
@@ -3491,7 +3497,7 @@ async function prepareColumnContent(params: {
     macroBindings,
     references,
   } = params;
-  const width = resolveBeamerColumnWidth(column.width.value, textWidth, params.paperWidth) ?? textWidth;
+  const width = resolveBeamerColumnWidth(column.width.value, textWidth, params.paperWidth, references.lengthRegisters) ?? textWidth;
   const flow: PreparedColumnFlowItem[] = [];
   const bodyFont = ambientTextTheme(theme, references.ambientTextAt?.(column.bodySpan.from) ?? "").fonts["normal-text"];
   const listProfile = beamerListLayoutProfile(theme, references.crampedLists);
@@ -3670,7 +3676,7 @@ async function prepareColumnFlowNode(params: {
       kind: "vertical-space",
       visibility,
       node,
-      ...measureVerticalSpace(node, bodyFont),
+      ...measureVerticalSpace(node, bodyFont, params.references.lengthRegisters),
     };
   }
   if (node.kind === "block" || node.kind === "theorem") {
@@ -4327,6 +4333,7 @@ function layoutParagraph(params: {
   }
   mapped = projectBeamerInlineFlow(mapped, params.references.inlineFlow ?? []);
   mapped = projectBeamerDateRegisters(mapped, params.references.compilationDate);
+  mapped = projectBeamerLengthRegisters(mapped, params.references.lengthRegisters);
   if (params.references.theme?.options["alert-bold"] === true) mapped = projectBeamerAlertWeight(mapped, params.sourceSpan);
   mapped = projectBeamerScientificNotation(mapped, params.references.renderDiagnostics, params.references.source);
   const namedSize = activeBeamerNamedSize(mapped.text, params.references.theme);
@@ -4366,7 +4373,7 @@ function layoutParagraph(params: {
   );
   mapped = referenceProjection.mapped;
   mapped = projectBeamerOverlayAreas(mapped, {
-    dimension: raw => resolveBeamerColumnWidth(raw, params.bounds.width, params.paperWidth ?? params.bounds.width),
+    dimension: raw => resolveBeamerColumnWidth(raw, params.bounds.width, params.paperWidth ?? params.bounds.width, params.references.lengthRegisters),
     firstHeight: (body, width) => {
       const measured = layoutParagraph({ ...params, mapped: body, alignment: "left", bounds: { ...params.bounds, width } });
       return measured ? paragraphStartingMaterialHeight(measured) : null;
@@ -5143,12 +5150,17 @@ function mappedTemplateText(primitive: Extract<
 }
 
 function measureVerticalSpace(
-  node: Extract<BeamerFrameBodyNode, { kind: "vertical-space" }>, font: BeamerThemeFont
+  node: Extract<BeamerFrameBodyNode, { kind: "vertical-space" }>, font: BeamerThemeFont,
+  registers?: BeamerLengthRegisters
 ): { height: number; relativeUnitPt?: number } {
   if (node.command !== "vspace") {
     return { height: { smallskip: 3, medskip: 6, bigskip: 12 }[node.command] };
   }
   const dimension = parseTexDimensionExpression(node.value.value);
+  if (!dimension && registers) {
+    const evaluated = evaluateTexLengthExpression(node.value.value, name => registers.get(name), { em: font.sizePt, ex: fontXHeightPt(font) });
+    if (evaluated !== null) return { height: evaluated };
+  }
   if (dimension?.kind === "absolute") return { height: dimension.value };
   if (dimension?.kind === "contextual" && (dimension.reference === "em" || dimension.reference === "ex")) {
     const relativeUnitPt = dimension.reference === "em" ? font.sizePt : fontXHeightPt(font);

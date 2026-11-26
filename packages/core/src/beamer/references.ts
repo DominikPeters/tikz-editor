@@ -1,3 +1,4 @@
+import type { BeamerLengthRegisters } from "./lengths.js";
 import type { SimpleTexListContext } from "../text/tex/ir.js";
 import type { BeamerInlineFlow } from "./inline-flow.js";
 import type { MacroBinding } from "../macros/types.js";
@@ -50,6 +51,8 @@ export type BeamerReferenceIndex = {
   equationNumbers?: ReadonlyMap<number, string>;
   specs: ReadonlyMap<number, BeamerOverlaySpec>;
   diagnostics: readonly Diagnostic[];
+  /** User length registers at the end of the preamble (lengths.ts). */
+  lengthRegisters?: BeamerLengthRegisters;
 };
 
 export type BeamerReferenceContext = BeamerReferenceIndex & {

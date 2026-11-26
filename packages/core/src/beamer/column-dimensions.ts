@@ -1,9 +1,14 @@
 import { parseTexDimensionExpression } from "../text/tex/dimensions.js";
+import { resolveBeamerLengthExpression, type BeamerLengthRegisters } from "./lengths.js";
 
 /** Only dimensions the column renderer resolves are exposed as draggable values. */
-export function resolveBeamerColumnWidth(expression: string, textWidth: number, paperWidth: number): number | null {
+export function resolveBeamerColumnWidth(expression: string, textWidth: number, paperWidth: number, registers?: BeamerLengthRegisters): number | null {
   const dimension = parseTexDimensionExpression(expression);
-  if (!dimension) return null;
+  if (!dimension) {
+    // User registers and calc/\dimexpr sums (\colwidth, \textwidth-2\sepwidth).
+    const evaluated = registers ? resolveBeamerLengthExpression(expression, { textWidth, paperWidth }, registers) : null;
+    return evaluated === null ? null : Math.max(0, evaluated);
+  }
   if (dimension.kind === "absolute") return Math.max(0, dimension.value);
   if (dimension.reference === "em" || dimension.reference === "ex") return null;
   return Math.max(0, dimension.factor * (dimension.reference === "paperwidth" ? paperWidth : textWidth));
@@ -16,6 +21,7 @@ export function resolveBeamerColumnPositions(params: {
   widths: readonly number[];
   textWidth: number;
   paperWidth: number;
+  registers?: BeamerLengthRegisters;
   textLeft: number;
   leftMargin: number;
   rightMargin: number;
@@ -27,7 +33,7 @@ export function resolveBeamerColumnPositions(params: {
   const totalwidth = keys.get("totalwidth");
   const explicit = totalwidth !== undefined || (keys.has("onlytextwidth") && keys.get("onlytextwidth") !== "false");
   const width = totalwidth === undefined ? params.textWidth
-    : resolveBeamerColumnWidth(totalwidth, params.textWidth, params.paperWidth) ?? params.textWidth;
+    : resolveBeamerColumnWidth(totalwidth, params.textWidth, params.paperWidth, params.registers) ?? params.textWidth;
   const available = explicit ? width : width + params.leftMargin + params.rightMargin;
   const free = Math.max(0, available - params.widths.reduce((sum, width) => sum + width, 0));
   const glue = free / (explicit ? Math.max(1, params.widths.length - 1) : params.widths.length + 1);

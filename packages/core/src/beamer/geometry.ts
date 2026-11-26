@@ -87,6 +87,13 @@ function resolveHorizontalThemeDimension(
     : dimension.valuePt;
 }
 
+/** The page `beamer.cls` sets from `aspectratio`, before any poster package. */
+export function beamerClassPagePt(document: BeamerDocumentModel): { widthPt: number; heightPt: number } {
+  const aspectRatio = beamerClassOptionValue(document, "aspectratio") ?? "43";
+  const [widthCm, heightCm] = pageSizeLookup[aspectRatio] ?? customPageSizeCm(aspectRatio);
+  return { widthPt: cmToTexPt(widthCm), heightPt: cmToTexPt(heightCm) };
+}
+
 function customPageSizeCm(aspectRatio: string): readonly [number, number] {
   if (!/^\d+$/.test(aspectRatio)) {
     return STANDARD_PAGE_SIZES_CM["43"];

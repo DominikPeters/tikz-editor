@@ -263,3 +263,58 @@ function hasSingleBalancedDimensionBraceLayer(trimmed: string): boolean {
   }
   return depth === 0;
 }
+
+/**
+ * A length expression as `\setlength` with calc, `\addtolength` or
+ * `\dimexpr ... \relax` reads it: terms of `[decimal]\register` or
+ * `<decimal><unit>`, joined by `+` and `-`, each optionally multiplied or
+ * divided by a number (`*2`, `/3`, `*\real{0.5}`). Factors and units are
+ * scanned to scaled points as TeX does. `lookup` gives a register's current
+ * value in points; an unknown register makes the expression unsupported.
+ */
+export function evaluateTexLengthExpression(
+  text: string,
+  lookup: (name: string) => number | undefined,
+  fontUnits?: { readonly em: number; readonly ex: number }
+): number | null {
+  let rest = stripBalancedDimensionBraceLayers(text).trim();
+  const dimexpr = /^\\dimexpr(?![A-Za-z@])([\s\S]*?)(?:\\relax(?![A-Za-z@]))?\s*$/u.exec(rest);
+  if (dimexpr) rest = (dimexpr[1] ?? "").trim();
+  if (!rest) return null;
+  let totalSp = 0;
+  let first = true;
+  const term = /^\s*([+-])?\s*(\d*(?:\.\d*)?)\s*(?:\\([A-Za-z@]+)|([A-Za-z]{2}))\s*/u;
+  const scale = /^\s*([*/])\s*(?:\\real\s*\{\s*([+-]?\d*(?:\.\d*)?)\s*\}|([+-]?\d*(?:\.\d*)?))\s*/u;
+  while (rest.length > 0) {
+    const match = term.exec(rest);
+    if (!match || (!first && !match[1])) return null;
+    first = false;
+    rest = rest.slice(match[0].length);
+    const negative = match[1] === "-";
+    const decimal = match[2] ?? "";
+    let valuePt: number | null;
+    if (match[3] !== undefined) {
+      const name = match[3];
+      const base = name === "relax" ? undefined : lookup(name);
+      if (base === undefined) return null;
+      valuePt = decimal === "" ? base : texDecimalTimesDimensionPt(decimal, base);
+    } else {
+      const unit = match[4] ?? "";
+      if ((unit === "em" || unit === "ex") && fontUnits) {
+        valuePt = texDecimalTimesDimensionPt(decimal === "" ? "1" : decimal, fontUnits[unit]);
+      } else {
+        valuePt = decimal === "" ? null : texScannedDimensionPt(decimal, unit);
+      }
+    }
+    if (valuePt === null) return null;
+    let sp = Math.round(valuePt * 65536);
+    for (let factor = scale.exec(rest); factor; factor = scale.exec(rest)) {
+      rest = rest.slice(factor[0].length);
+      const number = Number(factor[2] ?? factor[3] ?? "");
+      if (!Number.isFinite(number) || (factor[1] === "/" && number === 0)) return null;
+      sp = Math.round(factor[1] === "*" ? sp * number : sp / number);
+    }
+    totalSp += negative ? -sp : sp;
+  }
+  return totalSp / 65536;
+}
