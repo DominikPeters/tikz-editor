@@ -4,6 +4,7 @@ import type {
   SvgViewBox
 } from "./types.js";
 import { formatSvgNumber as fmt } from "./format.js";
+import { texGlyphSvgDefinitions } from "../text/tex/fonts/glyph-svg.js";
 
 type XmlFormatter = (xml: string, options?: XmlFormatterOptions) => string;
 
@@ -38,6 +39,8 @@ export type SvgModelBuilder = {
     viewBox: SvgViewBox;
     defs: string[];
     diagnostics: Array<{ code: string; message: string }>;
+    /** False when only the parts are used and a later model defines the glyphs (default true). */
+    glyphDefs?: boolean;
   }) => SvgRenderModel;
 };
 
@@ -97,11 +100,17 @@ export function createSvgModelBuilder(): SvgModelBuilder {
     viewBox: SvgViewBox;
     defs: string[];
     diagnostics: Array<{ code: string; message: string }>;
+    glyphDefs?: boolean;
   }): SvgRenderModel => {
+    // Text refers to its glyph outlines by id; the model defines each distinct
+    // outline once, so every serialization of it is a standalone document.
+    const defs = input.glyphDefs === false
+      ? [...input.defs]
+      : [...input.defs, ...texGlyphSvgDefinitions(parts.map((part) => part.markup).join(""))];
     return {
       viewBox: input.viewBox,
-      defs: [...input.defs],
-      defsFingerprint: fingerprintDefs(input.defs),
+      defs,
+      defsFingerprint: fingerprintDefs(defs),
       parts: [...parts],
       diagnostics: [...input.diagnostics]
     };

@@ -35,7 +35,7 @@ async function select(page: Page, part: string, title: string, occurrence = 0): 
 async function firstList(page: Page, occurrence = 0): Promise<void> {
   await expectSourceCanvasConsistency(page);
   const offset = (await readStoreSource(page)).indexOf(occurrence === 0 ? "Alpha" : "Gamma");
-  await page.getByTestId("canvas-svg-layer").locator(`path[data-source-start='${offset}']`).first().click({ force: true });
+  await page.getByTestId("canvas-svg-layer").locator(`:is(path, use)[data-source-start='${offset}']`).first().click({ force: true });
   await expect(page.getByTestId("canvas-text-edit-textarea")).toBeAttached();
   for (let level = 0; level < 4; level++) {
     await page.keyboard.press("Escape");

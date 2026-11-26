@@ -7,7 +7,13 @@ import type { TexGlyphOutlines } from "./types.js";
 // has blank glyphs: async callers render through `withTexGlyphOutlines`, which
 // waits for the outlines and renders again.
 
-const loaded = new Map<string, TexGlyphOutlines>();
+/** A font's outlines: all of them, or a function that draws one when asked (runtime fonts). */
+export type TexGlyphOutlineSource = TexGlyphOutlines | ((code: number) => string);
+
+const loaded = new Map<string, TexGlyphOutlineSource>();
+// Fonts outside the generated table whose outlines need an asynchronous step
+// (a worker's runtime fonts load harfbuzz first).
+const runtimeLoaders = new Map<string, () => Promise<TexGlyphOutlineSource>>();
 const pending = new Map<string, Promise<void>>();
 let generation = 0;
 
@@ -27,15 +33,34 @@ export function texGlyphOutlinesLoading(): boolean {
 /** The glyph's SVG path at 10pt, or "" while its font's outlines are not loaded (which starts loading them). */
 export function texGlyphOutline(fontId: string, code: number): string {
   const outlines = loaded.get(fontId);
-  if (outlines) return outlines[String(code)] ?? "";
+  if (outlines) return typeof outlines === "function" ? outlines(code) : outlines[String(code)] ?? "";
   void loadTexGlyphOutlines([fontId]);
   return "";
 }
 
 /** Installs outlines directly, for fonts outside the generated table. */
-export function installTexGlyphOutlines(fontId: string, outlines: TexGlyphOutlines): void {
+export function installTexGlyphOutlines(fontId: string, outlines: TexGlyphOutlineSource): void {
+  loaded.delete(fontId);
+  runtimeLoaders.delete(fontId);
   loaded.set(fontId, outlines);
   generation += 1;
+}
+
+/**
+ * Outlines for a font outside the generated table that arrive when `loader`
+ * resolves: the first render that paints the font starts it, and
+ * `withTexGlyphOutlines` renders again once it has installed them.
+ */
+export function registerTexGlyphOutlineLoader(fontId: string, loader: () => Promise<TexGlyphOutlineSource>): void {
+  loaded.delete(fontId);
+  pending.delete(fontId);
+  runtimeLoaders.set(fontId, loader);
+  generation += 1;
+}
+
+/** Resolves once every outline load that is under way has finished. */
+export async function settleTexGlyphOutlineLoads(): Promise<void> {
+  while (pending.size > 0) await Promise.all(pending.values());
 }
 
 export function loadTexGlyphOutlines(fontIds: Iterable<string>): Promise<void> {
@@ -44,14 +69,23 @@ export function loadTexGlyphOutlines(fontIds: Iterable<string>): Promise<void> {
     if (loaded.has(fontId)) continue;
     let load = pending.get(fontId);
     if (!load) {
-      const loader = Object.hasOwn(TEX_GLYPH_OUTLINE_LOADERS, fontId) ? TEX_GLYPH_OUTLINE_LOADERS[fontId] : undefined;
-      if (!loader) continue;
-      load = loader().then(
-        (module) => { installTexGlyphOutlines(fontId, module.default); },
+      const runtimeLoader = runtimeLoaders.get(fontId);
+      const generated = Object.hasOwn(TEX_GLYPH_OUTLINE_LOADERS, fontId) ? TEX_GLYPH_OUTLINE_LOADERS[fontId] : undefined;
+      const start = runtimeLoader ?? (generated ? () => generated().then((module): TexGlyphOutlineSource => module.default) : undefined);
+      if (!start) continue;
+      const loading = start();
+      const thisLoad = loading.then(
+        (outlines) => {
+          // A newer registration for this id replaced the loader meanwhile.
+          if (runtimeLoader && runtimeLoaders.get(fontId) !== runtimeLoader) return;
+          loaded.set(fontId, outlines);
+          generation += 1;
+        },
         () => {
           // Offline or a stale deployment: glyphs stay blank, and a later render retries.
         }
-      ).finally(() => pending.delete(fontId));
+      ).finally(() => { if (pending.get(fontId) === thisLoad) pending.delete(fontId); });
+      load = thisLoad;
       pending.set(fontId, load);
     }
     loads.push(load);

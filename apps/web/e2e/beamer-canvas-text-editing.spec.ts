@@ -321,7 +321,7 @@ test("KKT display math caret and highlights align with the rendered glyphs", asy
   expect(start).toBeGreaterThan(0);
   const documentOffset = KKT_SOURCE.indexOf("g_i(x)=0");
   const glyph = page.locator(
-    `[data-testid="canvas-svg-layer"] path[data-tex-glyph][data-source-start="${documentOffset}"][data-source-end="${documentOffset + 1}"]`
+    `[data-testid="canvas-svg-layer"] use[data-tex-glyph][data-source-start="${documentOffset}"][data-source-end="${documentOffset + 1}"]`
   );
   await expect(glyph).toHaveCount(1);
   const setSelection = async (end: number) => {

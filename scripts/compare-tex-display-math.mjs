@@ -405,7 +405,7 @@ function glyphsFromMathSvgBody(svgBody, originX, baselineY, role, sourceSpan = n
   const fragmentBoundaryTolerance = 1e-5;
   const glyphs = [];
   const integrityErrors = [];
-  const pathPattern = /<path\b[^>]*>/g;
+  const pathPattern = /<(?:path|use)\b[^>]*>/g;
   for (const match of svgBody.matchAll(pathPattern)) {
     const tag = match[0];
     const fontId = readSvgAttribute(tag, "data-tex-font");

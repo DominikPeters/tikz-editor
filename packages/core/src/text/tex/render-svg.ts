@@ -23,7 +23,7 @@ import {
   type TexVListY,
 } from "./coordinates.js";
 import { luaLatexDefaultTextFontProfile } from "./fonts/text-profile.js";
-import { texGlyphSvgPath } from "./fonts/glyph-svg.js";
+import { texGlyphSvgId } from "./fonts/glyph-svg.js";
 import type {
   ResolvedTexFont,
   TexMetricProvider,
@@ -780,15 +780,15 @@ function renderTexGlyphPath(
   if (item.code === 32) {
     return "";
   }
-  const d = texGlyphSvgPath(font, item.code);
-  if (!d) {
+  const glyphId = texGlyphSvgId(font, item.code);
+  if (!glyphId) {
     return "";
   }
   const formatted = placement ?? texGlyphSvgPlacement(font, baseline);
   const sourceAttrs = sourceBacked
     ? ` data-source-start="${item.sourceStart}" data-source-end="${item.sourceEnd}"`
     : "";
-  return `<path data-tex-font="${formatted.fontId}" data-tex-glyph="${item.code}"${sourceAttrs} d="${d}" transform="translate(${formatPt(x)} ${formatted.baseline})${formatted.scaleSuffix}" data-tex-font-at-pt="${formatPt(font.atPt)}" />`;
+  return `<use data-tex-font="${formatted.fontId}" data-tex-glyph="${item.code}"${sourceAttrs} href="#${glyphId}" transform="translate(${formatPt(x)} ${formatted.baseline})${formatted.scaleSuffix}" data-tex-font-at-pt="${formatPt(font.atPt)}" />`;
 }
 
 type TexGlyphSvgPlacement = {

@@ -1,8 +1,9 @@
 import {
   beamerFontFileRequests, beamerThemeFileName, buildRuntimeTexFont, collectBeamerProjectFiles, createBeamerProjectFiles,
-  loadRuntimeHarfBuzz, registerRuntimeTexFont, runtimeTexFontId, scanBeamerDocument,
-  type BeamerProjectFiles, type RuntimeTexFontData,
+  loadRuntimeHarfBuzz, registerRuntimeTexFont, registerRuntimeTexFontTransfer, runtimeTexFontId, scanBeamerDocument,
+  type BeamerProjectFiles, type RuntimeTexFontData, type RuntimeTexFontTransfer,
 } from "@tikz-editor/core/beamer";
+import { loadTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
 import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
 import type { LocalAssetReadResult } from "./platform/types";
 
@@ -15,8 +16,8 @@ export type PreparedProjectFiles = {
   readonly files: BeamerProjectFiles | undefined;
   /** File name and text, for worker transport. */
   readonly entries: readonly (readonly [string, string])[];
-  /** Runtime fonts by registered id, for worker transport, and fontspec file names to ids. */
-  readonly fonts: readonly (readonly [string, RuntimeTexFontData])[];
+  /** Runtime fonts by registered id, for worker transport (metrics and file; workers draw outlines on demand), and fontspec file names to ids. */
+  readonly fonts: readonly (readonly [string, RuntimeTexFontTransfer])[];
   readonly fontNames: readonly (readonly [string, string])[];
 };
 
@@ -53,7 +54,7 @@ export async function prepareBeamerProjectFiles(params: {
   return {
     files: { ...createBeamerProjectFiles(collected, key), fontId: (name: string) => fonts.names.get(name) ?? null },
     entries,
-    fonts: [...fonts.data],
+    fonts: [...fonts.data].map(([id, data]) => [id, { font: data.font, bytes: data.bytes }] as const),
     fontNames,
   };
 }
@@ -141,16 +142,19 @@ function decodeUtf8Base64(base64: string): string {
 
 /**
  * Project files and runtime fonts carried in a worker's graphics bundle. The
- * fonts are registered in the worker, which builds none itself.
+ * fonts are registered in the worker, which builds no metrics itself and
+ * draws outlines from the font files only for the glyphs it paints.
  */
 export function beamerProjectFilesFromBundle(bundle: {
   readonly cacheKey: string;
   readonly projectFiles?: readonly (readonly [string, string])[];
-  readonly runtimeFonts?: readonly (readonly [string, RuntimeTexFontData])[];
+  readonly runtimeFonts?: readonly (readonly [string, RuntimeTexFontTransfer])[];
   readonly projectFontNames?: readonly (readonly [string, string])[];
 } | null | undefined): BeamerProjectFiles | undefined {
   if (!bundle?.projectFiles?.length && !bundle?.runtimeFonts?.length) return undefined;
-  for (const [id, data] of bundle.runtimeFonts ?? []) registerRuntimeTexFont(id, data);
+  for (const [id, transfer] of bundle.runtimeFonts ?? []) registerRuntimeTexFontTransfer(id, transfer);
+  // Start drawing outlines (harfbuzz loads first) while the render waits in the queue.
+  void loadTexGlyphOutlines((bundle.runtimeFonts ?? []).map(([id]) => id));
   const fontNames = new Map(bundle.projectFontNames ?? []);
   return {
     ...createBeamerProjectFiles(new Map(bundle.projectFiles ?? []), bundle.cacheKey),

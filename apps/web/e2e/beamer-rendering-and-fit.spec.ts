@@ -12,7 +12,7 @@ test("distinguishes absolute values from norms in the KKT slide deck", async ({ 
   await gotoApp(page); await setSource(page, source);
   await page.getByTestId("figure-navigator").getByRole("button", { name: "2. Why KKT conditions matter", exact: true }).click();
   const start = source.indexOf(formula) + 1;
-  const glyph = (offset: number) => page.getByTestId("canvas-svg-layer").locator(`path[data-source-start="${start + offset}"]`);
+  const glyph = (offset: number) => page.getByTestId("canvas-svg-layer").locator(`:is(path, use)[data-source-start="${start + offset}"]`);
   for (const offset of [0, 2]) {
     await expect(glyph(offset)).toHaveAttribute("data-tex-glyph", "106");
     await expect(glyph(offset)).toHaveAttribute("data-tex-font", /^cmsy/u);

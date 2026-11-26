@@ -80,7 +80,7 @@ test("a new source revision cannot reuse cached SVG or old text geometry", async
     __TIKZ_EDITOR_APP_TEST_API__: { setSource: (source: string) => void };
   }).__TIKZ_EDITOR_APP_TEST_API__.setSource(source), latest);
   await page.getByTestId("figure-navigator").getByRole("button", { name: "2. Second", exact: true }).click();
-  const glyph = page.getByTestId("canvas-svg-layer").locator(`path[data-source-start="${latest.indexOf("New second slide.")}"]`);
+  const glyph = page.getByTestId("canvas-svg-layer").locator(`:is(path, use)[data-source-start="${latest.indexOf("New second slide.")}"]`);
   await expect(glyph).toHaveAttribute("data-tex-glyph", "78");
   await expect.poll(() => page.evaluate(() => (window as typeof window & {
     __TIKZ_EDITOR_APP_TEST_API__: { getSnapshotSource: () => string };

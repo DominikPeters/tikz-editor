@@ -7,8 +7,10 @@ import {
 } from "../packages/core/src/text/tex/fonts/glyph-outlines.js";
 import type { TexGlyphOutlines } from "../packages/core/src/text/tex/fonts/types.js";
 
+// Glyphs are placed by reference to one outline definition each.
 const glyphPaths = (svg: string, font: string) =>
-  [...svg.matchAll(new RegExp(`data-tex-font="${font}"[^>]* d="([^"]*)"`, "gu"))].map((match) => match[1]);
+  [...svg.matchAll(new RegExp(`data-tex-font="${font}"[^>]* href="#([^"]*)"`, "gu"))]
+    .map((match) => new RegExp(`<path id="${match[1]}" d="([^"]*)"`, "u").exec(svg)?.[1]);
 
 describe("lazily loaded glyph outlines", () => {
   // Original OpenType exclamation outlines, unitsPerEm=1000, at 10 TeX pt.

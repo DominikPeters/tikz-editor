@@ -32,7 +32,7 @@ describe("production TeX engine fuzz histories", () => {
     const actual = await createTexFuzzFreshEngine();
     const engine = { ...actual, renderFromCache: (key: string) => {
       const payload = actual.renderFromCache(key);
-      return payload ? { ...payload, body: payload.body.replace(/<path\b[^>]*\/>/, "") } : null;
+      return payload ? { ...payload, body: payload.body.replace(/<use\b[^>]*\/>/, "") } : null;
     } };
     const findings = await checkTexFuzzEngineHistory(caseFromTexFuzzAst([{ kind: "text", value: "Alpha" }]), { engine });
     expect(findings.map((finding) => finding.fingerprint.code)).toContain("engine-history-fresh-mismatch");

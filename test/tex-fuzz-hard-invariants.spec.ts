@@ -138,7 +138,7 @@ describe("TeX fuzz renderer hard invariants", () => {
       lineHeightPt: texLength(12), metricProvider: computerModernTexMetricProvider });
     expect(checkTexFuzzPaintedMathContent(caseData, 160, svg)).toEqual([]);
     const leaf = caseData.sourceMap.find((span) => span.kind === "math.atom")!;
-    const glyph = svg.match(new RegExp(`<path\\b[^>]*data-source-start="${leaf.start}"[^>]*>`))![0];
+    const glyph = svg.match(new RegExp(`<use\\b[^>]*data-source-start="${leaf.start}"[^>]*>`))![0];
     expect(checkTexFuzzPaintedMathContent(caseData, 160, svg.replace(glyph, "")).map((finding) => finding.fingerprint.code))
       .toContain("math-leaf-paint-loss");
     expect(checkTexFuzzPaintedMathContent(caseData, 160, svg + glyph).map((finding) => finding.fingerprint.code))

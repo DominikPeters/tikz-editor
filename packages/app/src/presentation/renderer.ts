@@ -4,6 +4,7 @@ import { expandMacroBindingsMapped } from "@tikz-editor/core/macros";
 import { createIdentityMappedText } from "@tikz-editor/core/text/source-map";
 import { computerModernTexMetricProvider, createTexDerivedInlineMathBoxProvider, layoutSimpleTexParagraph, renderTexParagraphSvgBody, texLength } from "@tikz-editor/core/text/tex";
 import { withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
+import { texGlyphSvgDefs } from "@tikz-editor/core/text/tex/fonts/glyph-svg";
 import { BoundedLru } from "../bounded-lru";
 import { prepareDocumentGraphicsContext, type PreparedDocumentGraphicsContext } from "../image-asset-cache";
 import type { DocumentFileRef } from "../store/types";
@@ -26,7 +27,7 @@ function renderNotes(prepared: PreparedBeamerDocument, cursor: PresentationCurso
   const body = renderTexParagraphSvgBody(layout.report, { lineHeightPt: texLength(14), vlistLayout: layout.vlistLayout,
     metricProvider: computerModernTexMetricProvider, textFontProfile: profile, baseFontSizePt: texLength(11) });
   const height = Math.max(14, Number(layout.vlistLayout.metrics.height) + Number(layout.vlistLayout.metrics.depth));
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 316 ${height + 16}" width="316" height="${height + 16}"><g transform="translate(8 8)">${body}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 316 ${height + 16}" width="316" height="${height + 16}">${texGlyphSvgDefs(body)}<g transform="translate(8 8)">${body}</g></svg>`;
 }
 
 async function decodeSvg(svg: string, signal: AbortSignal): Promise<void> {

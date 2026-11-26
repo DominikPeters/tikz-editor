@@ -166,7 +166,7 @@ describe("Beamer overlays", () => {
       expect(paint).toHaveLength(2);
       expect(paint.every(marker => marker.visible)).toBe(true);
       expect(source.slice(paint[1].from, paint[1].to)).toBe("\\item");
-      const glyphAt = (start: number) => page.svg.svg.match(new RegExp(`<path[^>]*data-source-start="${start}"[^>]*>`))?.[0];
+      const glyphAt = (start: number) => page.svg.svg.match(new RegExp(`<use[^>]*data-source-start="${start}"[^>]*>`))?.[0];
       expect(glyphAt(labelStart)).toBeDefined();
       expect(glyphAt(labelStart)?.includes('visibility="hidden"')).toBe(index === 0);
       expect(glyphAt(alwaysStart)).toBeDefined();
@@ -192,10 +192,10 @@ describe("Beamer overlays", () => {
     const alwaysStart = source.indexOf("Y]");
     for (const [index, page] of result.pages.entries()) {
       expect(listMarkerPaint(page)[0].visible).toBe(true);
-      const childPaint = page.svg.svg.match(new RegExp(`<(?:path|g)[^>]*data-source-start="${childStart}"[^>]*>`))?.[0];
+      const childPaint = page.svg.svg.match(new RegExp(`<(?:path|use|g)[^>]*data-source-start="${childStart}"[^>]*>`))?.[0];
       expect(childPaint).toBeDefined();
       expect(childPaint?.includes('visibility="hidden"')).toBe(index === 0);
-      const siblingPaint = page.svg.svg.match(new RegExp(`<path[^>]*data-source-start="${alwaysStart}"[^>]*>`))?.[0];
+      const siblingPaint = page.svg.svg.match(new RegExp(`<use[^>]*data-source-start="${alwaysStart}"[^>]*>`))?.[0];
       expect(siblingPaint).toBeDefined();
       expect(siblingPaint).not.toContain('visibility="hidden"');
       const label = page.layout.paragraphs.flatMap(paragraph => paragraph.listStructure ?? [])[0].items[0].labelSpan!;
@@ -214,7 +214,7 @@ describe("Beamer overlays", () => {
     const widths: number[] = [];
     for (const [index, page] of result.pages.entries()) {
       expect(listMarkerPaint(page).every(marker => marker.visible)).toBe(true);
-      const glyphAt = (start: number) => page.svg.svg.match(new RegExp(`<path[^>]*data-source-start="${start}"[^>]*>`))?.[0];
+      const glyphAt = (start: number) => page.svg.svg.match(new RegExp(`<use[^>]*data-source-start="${start}"[^>]*>`))?.[0];
       expect(glyphAt(coveredStart)).toContain('data-tex-glyph="102"');
       expect(glyphAt(coveredStart)?.includes('visibility="hidden"')).toBe(index === 0);
       expect(glyphAt(alwaysStart)).toContain('data-tex-glyph="105"');
@@ -259,7 +259,7 @@ describe("Beamer overlays", () => {
     if (environment === "description") {
       const labelStart = source.indexOf("Term");
       for (const [index, page] of result.pages.entries()) {
-        const glyph = page.svg.svg.match(new RegExp(`<path[^>]*data-source-start="${labelStart}"[^>]*>`))?.[0];
+        const glyph = page.svg.svg.match(new RegExp(`<use[^>]*data-source-start="${labelStart}"[^>]*>`))?.[0];
         expect(glyph).toBeDefined();
         expect(glyph?.includes('visibility="hidden"')).toBe(index === 0);
       }

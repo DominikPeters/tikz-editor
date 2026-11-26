@@ -1424,7 +1424,7 @@ function traceMathSvgBodyGlyphs(segment, baselineY, computerModernTexMetricProvi
     return [];
   }
   const glyphs = [];
-  for (const pathTagMatch of segment.mathSvgBody.matchAll(/<path\b[^>]*>/g)) {
+  for (const pathTagMatch of segment.mathSvgBody.matchAll(/<(?:path|use)\b[^>]*>/g)) {
     const attrs = parseSvgAttributes(pathTagMatch[0]);
     const code = Number(attrs.get("data-tex-glyph"));
     const fontId = attrs.get("data-tex-font");

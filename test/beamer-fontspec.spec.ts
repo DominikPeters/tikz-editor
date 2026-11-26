@@ -56,7 +56,7 @@ describe("fontspec families in the theme", () => {
   // Theme resolution accepts only registered fonts; these stand in for loaded files.
   const stub = { font: { family: "stub", codingScheme: "Unicode OpenType", ligKernEncoding: "unicode" as const, checksum: "", designSize: 10,
     source: { kind: "opentype" as const, name: "stub" }, fontdimen: { slant: 0, space: 0.25, stretch: 0.125, shrink: 0.08, xheight: 0.5, quad: 1 },
-    chars: Object.fromEntries([...Array.from({ length: 95 }, (_, index) => 32 + index)].map(code => [String(code), { code, width: 0.5, height: 0.7, depth: 0 }])), ligKerns: [] }, outlines: {} };
+    chars: Object.fromEntries([...Array.from({ length: 95 }, (_, index) => 32 + index)].map(code => [String(code), { code, width: 0.5, height: 0.7, depth: 0 }])), ligKerns: [] }, bytes: new Uint8Array(), outline: () => "" };
   registerRuntimeTexFont("otf:Lato-Light.ttf", stub);
   registerRuntimeTexFont("otf:Raleway-Regular.otf", stub);
   const ids = new Map([["Lato-Light.ttf", "otf:Lato-Light.ttf"], ["Raleway-Regular.otf", "otf:Raleway-Regular.otf"]] as const);

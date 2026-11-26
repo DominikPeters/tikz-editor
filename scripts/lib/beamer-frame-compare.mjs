@@ -475,7 +475,7 @@ function nativeEmbeddedTikzGlyphs(embedded, metricProvider) {
       const explicit = parseSvgTransform(readSvgAttribute(tag, "transform") ?? "");
       const local = name === "svg" ? multiplyMatrices(explicit, svgViewportTransform(tag)) : explicit;
       const transform = multiplyMatrices(stack.at(-1), local);
-      if (name === "path") {
+      if (name === "path" || name === "use") {
         const fontId = readSvgAttribute(tag, "data-tex-font");
         const code = Number(readSvgAttribute(tag, "data-tex-glyph"));
         if (fontId && Number.isFinite(code)) {
@@ -1138,7 +1138,7 @@ function featuresFromNativeMathSvg(params) {
     if (tag.startsWith("</")) { if (transforms.length > 1) transforms.pop(); continue; }
     const name = /^<([\w:-]+)/u.exec(tag)?.[1];
     const local = parseSvgTransform(readSvgAttribute(tag, "transform") ?? ""); const transform = multiplyMatrices(transforms.at(-1), local);
-    if (name === "path") {
+    if (name === "path" || name === "use") {
       const fontId = readSvgAttribute(tag, "data-tex-font"); const code = Number(readSvgAttribute(tag, "data-tex-glyph"));
       const explicitSize = Number(readSvgAttribute(tag, "data-tex-font-at-pt"));
       const atPt = explicitSize > 0 ? explicitSize : parseTranslateScale(readSvgAttribute(tag, "transform") ?? "")?.scale / 10;

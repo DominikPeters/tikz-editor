@@ -1,5 +1,6 @@
 import { requireArrayValue } from "../../utils/collections.js";
 import { layoutTexMathList, parseTexMath, renderTexMathHListSvgBody, TEX_MATH_SVG_UNITS_PER_PT } from "../../text/tex/math/index.js";
+import { texGlyphSvgDefs } from "../../text/tex/fonts/glyph-svg.js";
 import type { CommandTable } from "./table.js";
 
 /**
@@ -54,7 +55,7 @@ function render(source: string): { readonly svg: string; readonly widthEm: numbe
   const viewBox = [-pad, -height - pad, width + 2 * pad, height + depth + 2 * pad].map((value) => value.toFixed(1)).join(" ");
   const body = renderTexMathHListSvgBody(hlist);
   return {
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" fill="currentColor">${body}</svg>`,
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" fill="currentColor">${texGlyphSvgDefs(body)}${body}</svg>`,
     // At 10pt to the em.
     widthEm: (width + 2 * pad) / units / 10,
   };

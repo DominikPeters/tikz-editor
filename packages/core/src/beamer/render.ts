@@ -1036,7 +1036,7 @@ async function renderBeamerFrameStep(params: {
         items, paragraphs, spacing, embeddedTikz, modelBuilder: local, theme,
         paperWidth: page.page.width, ...(params.work !== undefined ? { work: params.work } : {}) });
       const id = item.node.id;
-      const markup = local.build({ viewBox: page.page, defs: [], diagnostics: [] }).parts.map(part => part.markup).join("");
+      const markup = local.build({ viewBox: page.page, defs: [], diagnostics: [], glyphDefs: false }).parts.map(part => part.markup).join("");
       (paragraph.role === "frame-title" || paragraph.role === "frame-subtitle" ? modelBuilder : bodyModelBuilder).addPart({ basePartId: id, sourceId: id, elementId: null, markup });
       picturePaintOwners.push({ paragraphId: paragraph.paragraphId, span: external.span, sourceId: id });
     }
@@ -1054,7 +1054,7 @@ async function renderBeamerFrameStep(params: {
   }
   const bodyItemEnd = items.length;
   const bodyParagraphEnd = paragraphs.length;
-  const bodyModel = bodyModelBuilder.build({ viewBox: page.page, defs: [], diagnostics: [] });
+  const bodyModel = bodyModelBuilder.build({ viewBox: page.page, defs: [], diagnostics: [], glyphDefs: false });
   const transformMarkup = bodyTransform ? `matrix(${bodyTransform.map(fmt).join(" ")})` : null;
   for (const part of bodyModel.parts) {
     const markup = transformMarkup ? `<g transform="${transformMarkup}">${part.markup}</g>` : part.markup;
@@ -5254,7 +5254,7 @@ function hideOverlayPaintInSvg(
     return markup;
   }
   return markup.replace(
-    /<(path|g)\b([^>]*\bdata-source-start="(\d+)"[^>]*\bdata-source-end="(\d+)"[^>]*)>/gu,
+    /<(path|use|g)\b([^>]*\bdata-source-start="(\d+)"[^>]*\bdata-source-end="(\d+)"[^>]*)>/gu,
     (whole, tag: string, attributes: string, fromRaw: string, toRaw: string) => {
       if (!sourceSpanIsHidden(
         { from: Number(fromRaw), to: Number(toRaw) },

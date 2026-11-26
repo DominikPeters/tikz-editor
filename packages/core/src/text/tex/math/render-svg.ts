@@ -1,5 +1,5 @@
 import type { GeneratedTexFont, ResolvedTexFont } from "../fonts/types.js";
-import { texGlyphSvgPath } from "../fonts/glyph-svg.js";
+import { texGlyphSvgId } from "../fonts/glyph-svg.js";
 import { texGlyphOutline } from "../fonts/glyph-outlines.js";
 import {
   texHBoxX,
@@ -164,8 +164,8 @@ function renderMathGlyphPath(
   originX: TexHBoxX,
   originY: TexHBoxY
 ): string {
-  const d = texGlyphSvgPath(font, item.code);
-  if (!d) {
+  const glyphId = texGlyphSvgId(font, item.code);
+  if (!glyphId) {
     return "";
   }
   const scale = (font.atPt / 10) * TEX_MATH_SVG_UNITS_PER_PT;
@@ -177,14 +177,14 @@ function renderMathGlyphPath(
     : "";
   return [
     literal,
-    `<path data-tex-font="${escapeXmlAttribute(font.id)}"`,
+    `<use data-tex-font="${escapeXmlAttribute(font.id)}"`,
     ` data-tex-glyph="${item.code}"`,
     ` data-source-start="${item.sourceSpan.start}"`,
     ` data-source-end="${item.sourceSpan.end}"`,
     item.color
       ? ` fill="${escapeXmlAttribute(item.color)}" stroke="none"`
       : "",
-    ` d="${d}"`,
+    ` href="#${glyphId}"`,
     ` transform="translate(${formatSvgNumber(x * TEX_MATH_SVG_UNITS_PER_PT)} ${formatSvgNumber(y * TEX_MATH_SVG_UNITS_PER_PT)}) scale(${formatSvgNumber(scale)})"`,
     ` data-tex-font-at-pt="${formatSvgNumber(font.atPt)}" />`,
     literal ? "</g>" : "",

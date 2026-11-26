@@ -491,7 +491,7 @@ export function checkTexFuzzPaintedMathContent(
     /^[A-Za-z0-9]$/.test(caseData.source.slice(span.start, span.end)) &&
     !hidden.some((range) => span.start >= range.start && span.end <= range.end));
   const counts = new Map<string, number>();
-  for (const match of svgBody.matchAll(/<path\b[^>]*data-tex-glyph[^>]*>/g)) {
+  for (const match of svgBody.matchAll(/<use\b[^>]*data-tex-glyph[^>]*>/g)) {
     const start = match[0].match(/\bdata-source-start="(\d+)"/)?.[1];
     const end = match[0].match(/\bdata-source-end="(\d+)"/)?.[1];
     if (start === undefined || end === undefined) continue;

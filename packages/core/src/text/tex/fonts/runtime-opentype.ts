@@ -1,12 +1,21 @@
 import type * as HarfBuzz from "harfbuzzjs";
-import type { GeneratedTexCharMetric, GeneratedTexFont, GeneratedTexLigKern, TexGlyphOutlines } from "./types.js";
+import type { GeneratedTexCharMetric, GeneratedTexFont, GeneratedTexLigKern } from "./types.js";
 
 /** harfbuzzjs, loaded by `loadRuntimeHarfBuzz` (or by a test) and passed in. */
 export type RuntimeHarfBuzz = typeof HarfBuzz;
 
-export type RuntimeTexFontData = {
+/**
+ * A runtime font as it travels to workers: the metrics, and the font file from
+ * which a worker draws glyph outlines when it needs them.
+ */
+export type RuntimeTexFontTransfer = {
   readonly font: GeneratedTexFont;
-  readonly outlines: TexGlyphOutlines;
+  readonly bytes: Uint8Array;
+};
+
+export type RuntimeTexFontData = RuntimeTexFontTransfer & {
+  /** A glyph's SVG path at 10pt, built on first use ("" for the space and for codes the font lacks). */
+  readonly outline: (code: number) => string;
 };
 
 // luaotfload numbers glyphs without a Unicode mapping from here, in glyph order.
@@ -22,19 +31,8 @@ const LIGATURE_INPUTS = ["ff", "fi", "fl", "ffi", "ffl", "fj", "ffj", "ft", "fft
 
 const round = (value: number) => Number(value.toFixed(6));
 
-/**
- * Metrics, ligature/kern program and outlines of an OpenType font, as
- * LuaLaTeX with fontspec (luaotfload node mode) sets it: widths are
- * advances, heights and depths the glyph's bounding box, the space and its
- * stretch (1/2) and shrink (1/3) luaotfload's defaults, the x-height that of
- * `x`. Ligatures resolve to the font's Unicode presentation forms where its
- * cmap has them and to luaotfload's private codes otherwise. Kerns are those
- * HarfBuzz applies with `kern` on and contextual alternates off.
- */
-export function buildRuntimeTexFont(hb: RuntimeHarfBuzz, bytes: Uint8Array, name: string): RuntimeTexFontData {
-  const face = new hb.Face(new hb.Blob(bytes), 0);
-  const font = new hb.Font(face);
-  const upem = face.upem;
+/** The luaotfload code of each glyph (Unicode, else private from PRIVATE_BASE in glyph order), and the inverse. */
+function glyphCodes(face: HarfBuzz.Face, font: HarfBuzz.Font): { readonly glyphToCode: Map<number, number>; readonly codeToGlyph: Map<number, number> } {
   const glyphToCode = new Map<number, number>();
   for (const unicode of face.collectUnicodes()) {
     const glyph = font.nominalGlyph(unicode);
@@ -47,10 +45,50 @@ export function buildRuntimeTexFont(hb: RuntimeHarfBuzz, bytes: Uint8Array, name
   for (let glyph = 0; glyph < numGlyphs; glyph += 1) {
     if (!glyphToCode.has(glyph)) glyphToCode.set(glyph, PRIVATE_BASE + privateIndex++);
   }
+  const codeToGlyph = new Map<number, number>();
+  for (const [glyph, code] of glyphToCode) codeToGlyph.set(code, glyph);
+  return { glyphToCode, codeToGlyph };
+}
+
+/** Outlines drawn from the font when asked for, one glyph at a time, each once. */
+function lazyOutlines(font: HarfBuzz.Font, upem: number, codeToGlyph: () => ReadonlyMap<number, number>): (code: number) => string {
+  const drawn = new Map<number, string>();
+  return (code) => {
+    const known = drawn.get(code);
+    if (known !== undefined) return known;
+    const glyph = code === 0x20 ? undefined : codeToGlyph().get(code);
+    const path = glyph === undefined ? "" : svgPathAt10pt(font.glyphToJson(glyph), upem);
+    drawn.set(code, path);
+    return path;
+  };
+}
+
+/** Outlines of a font file, for a worker that received the metrics and the bytes (`RuntimeTexFontTransfer`). */
+export function createRuntimeOutlines(hb: RuntimeHarfBuzz, bytes: Uint8Array): (code: number) => string {
+  const face = new hb.Face(new hb.Blob(bytes), 0);
+  const font = new hb.Font(face);
+  let codes: ReadonlyMap<number, number> | undefined;
+  return lazyOutlines(font, face.upem, () => codes ??= glyphCodes(face, font).codeToGlyph);
+}
+
+/**
+ * Metrics, ligature/kern program and outlines of an OpenType font, as
+ * LuaLaTeX with fontspec (luaotfload node mode) sets it: widths are
+ * advances, heights and depths the glyph's bounding box, the space and its
+ * stretch (1/2) and shrink (1/3) luaotfload's defaults, the x-height that of
+ * `x`. Ligatures resolve to the font's Unicode presentation forms where its
+ * cmap has them and to luaotfload's private codes otherwise. Kerns are those
+ * HarfBuzz applies with `kern` on and contextual alternates off. Outlines are
+ * most of the cost and only painting needs them, so each is drawn on first use.
+ */
+export function buildRuntimeTexFont(hb: RuntimeHarfBuzz, bytes: Uint8Array, name: string): RuntimeTexFontData {
+  const face = new hb.Face(new hb.Blob(bytes), 0);
+  const font = new hb.Font(face);
+  const upem = face.upem;
+  const { glyphToCode, codeToGlyph } = glyphCodes(face, font);
   const codeOf = (glyph: number) => glyphToCode.get(glyph) ?? PRIVATE_BASE;
 
   const chars: Record<string, GeneratedTexCharMetric> = {};
-  const outlines: Record<string, string> = {};
   const addGlyph = (glyph: number) => {
     const code = codeOf(glyph);
     if (chars[code]) return code;
@@ -64,10 +102,6 @@ export function buildRuntimeTexFont(hb: RuntimeHarfBuzz, bytes: Uint8Array, name
       depth: round(Math.max(0, -bottom) / upem),
       italicCorrection: 0,
     };
-    if (code !== 0x20) {
-      const path = svgPathAt10pt(font.glyphToJson(glyph), upem);
-      if (path) outlines[code] = path;
-    }
     return code;
   };
   for (const [glyph, code] of glyphToCode) if (code < PRIVATE_BASE && code <= 0xffff) addGlyph(glyph);
@@ -168,7 +202,8 @@ export function buildRuntimeTexFont(hb: RuntimeHarfBuzz, bytes: Uint8Array, name
       chars,
       ligKerns,
     },
-    outlines,
+    bytes,
+    outline: lazyOutlines(font, upem, () => codeToGlyph),
   };
 }
 

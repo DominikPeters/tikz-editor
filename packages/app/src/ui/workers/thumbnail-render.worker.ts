@@ -1,5 +1,5 @@
 import { renderTikzToSvgAsync } from "@tikz-editor/core/render/index";
-import { withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
+import { settleTexGlyphOutlineLoads, withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
 import { prepareBeamerDocument, type BeamerProjectFiles, type PreparedBeamerDocument } from "@tikz-editor/core/beamer/index";
 import { beamerProjectFilesFromBundle } from "../../project-files";
 import {
@@ -70,6 +70,8 @@ async function pumpQueue(): Promise<void> {
   try {
     const graphicsResolver = resolveGraphicsResolver(next.graphicsPreviewBundleKey);
     let frameCount: number | undefined;
+    // Runtime fonts draw outlines once harfbuzz has loaded; render after, not twice.
+    await settleTexGlyphOutlineLoads();
     const svg = await withTexGlyphOutlines(async () => next.deckFrameIndex != null
       ? await renderDeckFrameThumbnail(next.source, next.deckFrameIndex, graphicsResolver, next.presentationTheme, next.deckStep, (count) => { frameCount = count; },
         next.graphicsPreviewBundleKey ? projectFilesByBundle.get(next.graphicsPreviewBundleKey) : undefined)

@@ -97,6 +97,9 @@ describe("fontspec fonts in the document graphics context", () => {
     expect(asked[0]?.at(-1)).toBe("false");
     expect(context.projectFiles?.fontId?.("Lato-Light.ttf")).toBe("otf:Lato-Light.ttf");
     expect(context.previewBundle.runtimeFonts?.map(([id]) => id)).toEqual(["otf:Lato-Light.ttf"]);
+    // The bundle goes to workers as metrics and the font file; they draw outlines on demand.
+    expect(Object.keys(context.previewBundle.runtimeFonts?.[0]?.[1] ?? {}).sort()).toEqual(["bytes", "font"]);
+    expect(() => structuredClone(context.previewBundle)).not.toThrow();
     const prepared = prepareBeamerDocument(fontSource, { projectFiles: context.projectFiles! });
     expect(prepared.theme.fonts["normal-text"].typeface).toMatchObject({ upright: "otf:Lato-Light.ttf" });
     // A worker rebuilds the files from the bundle and registers the fonts.

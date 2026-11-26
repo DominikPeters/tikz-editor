@@ -14,6 +14,8 @@ export default defineConfig(({ command }) => ({
   },
   worker: {
     format: "es",
+    // Workers draw runtime-font outlines with harfbuzzjs, which needs the same rewrite as the app.
+    plugins: () => [harfbuzzWasm()],
     rollupOptions: {
       // As Vite sets for the app: chunks both bundles share (font outlines)
       // then come out identical, so the browser downloads each once.

@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { buildRuntimeTexFont, type RuntimeHarfBuzz } from "../packages/core/src/text/tex/fonts/runtime-opentype.js";
+import { buildRuntimeTexFont, createRuntimeOutlines, type RuntimeHarfBuzz } from "../packages/core/src/text/tex/fonts/runtime-opentype.js";
 
 type OracleFont = {
   file: string;
@@ -95,9 +95,32 @@ describe.each(oracle.fonts)("runtime OpenType font $file against LuaLaTeX", (exp
   });
 
   it.skipIf(!bytes)("draws outlines in 10pt units with y up negative", () => {
-    const x = built!.outlines[String(0x78)];
+    const x = built!.outline(0x78);
     expect(x).toMatch(/^M/u);
     const ys = [...(x ?? "").matchAll(/-?\d+(?:\.\d+)?/gu)].map(match => Number(match[0])).filter((_, index) => index % 2 === 1);
     expect(Math.min(...ys)).toBeCloseTo(-(expected.params.xheight ?? 0) * 10, 2);
+  });
+
+  it.skipIf(!bytes)("draws each outline when first asked, and a worker's from the file draws the same", () => {
+    const drawn = vi.spyOn(hb.Font.prototype, "glyphToJson");
+    try {
+      const fresh = buildRuntimeTexFont(hb, bytes!, expected.file);
+      expect(drawn).not.toHaveBeenCalled();
+      const x = fresh.outline(0x78);
+      expect(drawn).toHaveBeenCalledTimes(1);
+      expect(fresh.outline(0x78)).toBe(x);
+      expect(drawn).toHaveBeenCalledTimes(1);
+      expect(fresh.outline(0x20)).toBe("");
+      expect(fresh.outline(0x10ffff)).toBe("");
+      expect(createRuntimeOutlines(hb, bytes!)(0x78)).toBe(x);
+      // Ligature glyphs are numbered privately, in both.
+      const ligature = fresh.font.ligKerns.find(entry => entry[0] === "lig" && entry[3] >= 0xf0000);
+      if (ligature) {
+        expect(fresh.outline(ligature[3])).toMatch(/^M/u);
+        expect(createRuntimeOutlines(hb, bytes!)(ligature[3])).toBe(fresh.outline(ligature[3]));
+      }
+    } finally {
+      drawn.mockRestore();
+    }
   });
 });

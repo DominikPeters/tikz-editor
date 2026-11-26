@@ -1,3 +1,4 @@
+import { texGlyphOutline } from "../packages/core/src/text/tex/fonts/glyph-outlines.js";
 import { describe, expect, it } from "vitest";
 import type { ParagraphLayoutReport } from "../packages/core/src/text/knuth-plass/paragraph/report.js";
 import {
@@ -184,7 +185,7 @@ function renderedMathGlyphBoundsForRange(
   svgBody: string, selectedStart: number, selectedEnd: number, originX: number, baselineY: number
 ): RenderedMathGlyphBounds[] {
   const glyphBounds: RenderedMathGlyphBounds[] = [];
-  for (const pathTagMatch of svgBody.matchAll(/<path\b[^>]*>/g)) {
+  for (const pathTagMatch of svgBody.matchAll(/<use\b[^>]*>/g)) {
     const attrs = parseSvgAttributes(pathTagMatch[0]);
     const sourceStart = Number(attrs.get("data-source-start"));
     const sourceEnd = Number(attrs.get("data-source-end"));
@@ -199,7 +200,7 @@ function renderedMathGlyphBoundsForRange(
     }
     const transform = parseMathGlyphTransform(attrs.get("transform") ?? "");
     expect(transform).not.toBeNull();
-    const points = svgPathControlPoints(attrs.get("d") ?? "");
+    const points = svgPathControlPoints(texGlyphOutline(attrs.get("data-tex-font") ?? "", Number(attrs.get("data-tex-glyph"))));
     expect(points.length).toBeGreaterThan(0);
     const transformed = points.map((point) => ({
       x: originX + (transform!.translateX + point.x * transform!.scale) / 100,
@@ -245,7 +246,7 @@ async function expectDisplayMathGeometryMatchesSvg(
       }] : []) : [];
     for (const paint of paints) {
       const ranges = new Map<string, { start: number; end: number; count: number }>();
-      for (const match of paint.svgBody.matchAll(/<path\b[^>]*>/g)) {
+      for (const match of paint.svgBody.matchAll(/<use\b[^>]*>/g)) {
         const attrs = parseSvgAttributes(match[0]);
         const start = Number(attrs.get("data-source-start"));
         const end = Number(attrs.get("data-source-end"));
