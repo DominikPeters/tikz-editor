@@ -5,6 +5,7 @@ import type {
 import { resolveBeamerTheme } from "./theme/resolve.js";
 import type { ResolvedBeamerTheme } from "./theme/types.js";
 import { beamerClassOptionValue } from "./class-options.js";
+import { scanBeamerPoster } from "./poster.js";
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 
@@ -34,8 +35,13 @@ export function resolveBeamerPageGeometry(
   const aspectRatio = beamerClassOptionValue(document, "aspectratio") ?? "43";
   const [widthCm, heightCm] =
     pageSizeLookup[aspectRatio] ?? customPageSizeCm(aspectRatio);
-  const pageWidth = cmToTexPt(widthCm);
-  const pageHeight = cmToTexPt(heightCm);
+  // beamerposter's \geometry call replaces the aspect-ratio page. A later
+  // \setlength{\paperwidth} changes the page but not the text width that
+  // \geometry computed (Berkeley's 48in poster keeps A0's text width).
+  const poster = scanBeamerPoster(document);
+  const pageWidth = poster?.paper.widthPt ?? cmToTexPt(widthCm);
+  const pageHeight = poster?.paper.heightPt ?? cmToTexPt(heightCm);
+  const textWidthExcess = poster ? pageWidth - poster.geometryPaper.widthPt : 0;
   const marginLeft = theme.dimensions.textMarginLeftPt;
   const marginRight = theme.dimensions.textMarginRightPt;
   const sidebarLeft = resolveHorizontalThemeDimension(
@@ -65,7 +71,7 @@ export function resolveBeamerPageGeometry(
     textArea: {
       x: sidebarLeft + marginLeft,
       y: 0,
-      width: Math.max(0, frameWidth - marginLeft - marginRight),
+      width: Math.max(0, frameWidth - marginLeft - marginRight - textWidthExcess),
       height: pageHeight,
     },
     themeId: theme.id,

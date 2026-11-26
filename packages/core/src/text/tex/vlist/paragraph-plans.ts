@@ -224,7 +224,7 @@ export function prepareTexLayoutParagraphsFromVList(
         const context = { ...ancestor, ...(ancestor.labelFontSizePt !== undefined ? { fontSizePt: ancestor.labelFontSizePt } : {}) };
         const parentScope = texVBoxLayoutForScopeRole({ kind: "list", listKind: context.kind,
           depth: context.depth, labelDepth: context.labelDepth, ownLeftMarginEm: context.ownLeftMarginEm,
-          totalLeftMarginEm: context.totalLeftMarginEm }, params.font, params.options.listProfile?.dimensionFontSizePt);
+          totalLeftMarginEm: context.totalLeftMarginEm }, params.font, params.options.listProfile?.dimensionFontSizePt, params.options.listProfile?.labelSepEm);
         const labelLayout = texListItemLayoutForParagraph([{ layout: parentScope }],
           { ...paragraph, listContext: context, ...(context.fontSizePt !== undefined ? { fontSizePt: context.fontSizePt } : {}) }, params.options.listProfile);
         if (!labelLayout) continue;

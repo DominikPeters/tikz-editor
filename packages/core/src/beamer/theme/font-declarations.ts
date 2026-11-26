@@ -2,7 +2,7 @@ import type { Span } from "../../ast/types.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import type { BeamerDocumentModel } from "../types.js";
 import { beamerControlSequencesIn, beamerRequiredArgumentAfter, createBeamerSyntaxContext } from "../syntax.js";
-import { beamerNamedFontSize, beamerNamedFontSizes } from "./font-sizes.js";
+import { beamerNamedFontSize, beamerNamedFontSizes, type BeamerFontSizeProfile } from "./font-sizes.js";
 import type { BeamerThemeFont, BeamerThemeFontRole, ResolvedBeamerTheme } from "./types.js";
 
 export type BeamerFontDeclaration = {
@@ -44,10 +44,12 @@ export function scanBeamerFontDeclarations(document: BeamerDocumentModel, span: 
   return declarations;
 }
 
-export function applyBeamerFontDeclaration(font: BeamerThemeFont, declaration: BeamerFontDeclaration, classSize: string): BeamerThemeFont {
+export function applyBeamerFontDeclaration(font: BeamerThemeFont, declaration: BeamerFontDeclaration, classSize: BeamerFontSizeProfile): BeamerThemeFont {
   const result = { ...font };
-  const namedSize = /^\\(tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)$/u.exec(declaration.values.size ?? "");
-  const command = beamerNamedFontSizes().find(([name]) => name === namedSize?.[1])?.[0];
+  const namedSize = /^\\([A-Za-z]+)$/u.exec(declaration.values.size ?? "");
+  // beamerposter's \veryHuge and kin are size commands only on posters.
+  const sizeOptions = typeof classSize === "string" ? {} : { "class-font-size": classSize.classSize, ...(classSize.posterFontScale !== undefined ? { "poster-font-scale": String(classSize.posterFontScale) } : {}) };
+  const command = beamerNamedFontSizes({ options: sizeOptions }).find(([name]) => name === namedSize?.[1])?.[0];
   if (command) Object.assign(result, beamerNamedFontSize(classSize, command));
   const explicit = /^\\fontsize\s*\{([\d.]+)(?:pt)?\}\s*\{([\d.]+)(?:pt)?\}(?:\s*\\selectfont)?$/u.exec(declaration.values.size ?? "");
   if (explicit && Number(explicit[1]) > 0 && Number.isFinite(Number(explicit[1])) &&
@@ -73,7 +75,7 @@ export function applyBeamerFontDeclaration(font: BeamerThemeFont, declaration: B
 export function applyBeamerFontRoleDeclaration(state: {
   fonts: Record<BeamerThemeFontRole, BeamerThemeFont>;
   fontRoleOverrides?: ResolvedBeamerTheme["fontRoleOverrides"];
-}, declaration: BeamerFontDeclaration, classSize: string): void {
+}, declaration: BeamerFontDeclaration, classSize: BeamerFontSizeProfile): void {
   state.fonts[declaration.role] = applyBeamerFontDeclaration(state.fonts[declaration.role], declaration, classSize);
   const fields = ["family", "series", "shape"] as const;
   const own = state.fontRoleOverrides?.[declaration.role] ?? [];

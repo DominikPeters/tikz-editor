@@ -995,6 +995,10 @@ export interface SimpleTexParagraphIrOptions {
   readonly bibliographyMargins?: ReadonlyMap<number, number>;
   /** Beamer's description label column (TexListLayoutProfile.descriptionLabelWidthPt). */
   readonly descriptionLabelWidthPt?: number;
+  /** The font whose em list registers are given in (TexListLayoutProfile.dimensionFontSizePt). */
+  readonly listDimensionFontSizePt?: number;
+  /** `\labelsep` in em of that font (TexListLayoutProfile.labelSepEm). */
+  readonly listLabelSepEm?: number;
   /** Description columns set by a list's widest label (`\begin{description}[Longest]`), keyed by its source start. */
   readonly descriptionLabelWidths?: ReadonlyMap<number, number>;
   /** Identifies all color alias results; change this when any alias changes. */
@@ -1378,6 +1382,7 @@ function buildSimpleTexParagraphIr(
       [...(options?.bibliographyMargins ?? [])],
       options?.descriptionLabelWidthPt ?? null,
       [...(options?.descriptionLabelWidths ?? [])],
+      options?.listDimensionFontSizePt ?? null, options?.listLabelSepEm ?? null,
       options?.boxesClearingPendingItemLabels, options?.inheritedItemLabels, options?.fontSizePt, options?.baselineSkipPt, options?.namedFontSizes, options?.listBodyFontSizes, options?.listBodyBaselineSkips, options?.listBodyDisplaySkipCommands, options?.groupListItemBodies,
     ])
     : null;
@@ -4653,6 +4658,16 @@ function buildSimpleTexParagraphBlocksFromNodes(
       sizeHistory.push({ from: node.sourceEnd, state: outer });
       return { ...node, children };
     }
+    // Command arguments are TeX groups as well: a size command inside
+    // \textbf{...} or \mbox{...} selects the document's named size there.
+    if (node.kind === "font-command" || node.kind === "color-command" || node.kind === "mbox" ||
+      node.kind === "raisebox" || node.kind === "dimension-box") {
+      const outer = sizeState;
+      const children = resolveSizeNodes(node.children).filter(isSimpleTexInlineNode);
+      sizeState = outer;
+      sizeHistory.push({ from: node.sourceEnd, state: outer });
+      return { ...node, children };
+    }
     if (node.kind === "rule" && node.strut) {
       const { strutBaselineSkipPt: _strutBaselineSkipPt, ...rule } = node;
       return { ...rule, ...(sizeState.baselineSkip !== undefined ? { strutBaselineSkipPt: sizeState.baselineSkip } : {}) };
@@ -5144,10 +5159,11 @@ function buildSimpleTexParagraphBlocksFromNodes(
     const marginDepthIndex = options?.listLeftMarginEmByDepth
       ? listStack.length
       : depth - 1;
-    // Beamer's description: its label column and `\labelsep` (0.5em).
+    // Beamer's description: its label column and `\labelsep`, in em of the
+    // font the list registers use (the class font, also under beamerposter).
     const descriptionColumn = options?.descriptionLabelWidths?.get(sourceStart) ?? options?.descriptionLabelWidthPt;
     const descriptionMargin = kind === "description" && options?.descriptionLabelWidthPt !== undefined && descriptionColumn !== undefined
-      ? descriptionColumn / normalFontSizePt + 0.5
+      ? descriptionColumn / (options.listDimensionFontSizePt ?? normalFontSizePt) + (options.listLabelSepEm ?? 0.5)
       : undefined;
     const ownMargin = (kind === "bibliography" ? options?.bibliographyMargins?.get(sourceStart) : undefined) ?? descriptionMargin ?? margins[
       Math.min(marginDepthIndex, margins.length - 1)

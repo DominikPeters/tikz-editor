@@ -30,7 +30,8 @@ export interface TexVBoxRoleListScopeInput {
 export function texVBoxLayoutForScopeRole(
   role: TexVBoxRole,
   font: ResolvedTexFont,
-  dimensionFontSizePt = Number(font.atPt)
+  dimensionFontSizePt = Number(font.atPt),
+  labelSepEm = 0.5
 ): TexVBoxLayout {
   if (role.kind === "quote") {
     const ownMarginWidth = texArticleQuoteOwnMarginWidth(role.depth, font);
@@ -73,8 +74,8 @@ export function texVBoxLayoutForScopeRole(
     rightMarginWidth: texLength(0),
     list: {
       ownLeftMarginWidth: texLength(role.ownLeftMarginEm * listDimensionSize),
-      labelRightEdge: texLength(role.totalLeftMarginEm * listDimensionSize - 0.5 * listDimensionSize),
-      descriptionLabelSepWidth: texLength(role.listKind === "bibliography" ? 0 : 0.5 * listDimensionSize),
+      labelRightEdge: texLength(role.totalLeftMarginEm * listDimensionSize - labelSepEm * listDimensionSize),
+      descriptionLabelSepWidth: texLength(role.listKind === "bibliography" ? 0 : labelSepEm * listDimensionSize),
     },
     paragraphPolicy: {
       resetInheritedAlignment: true,

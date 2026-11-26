@@ -48,7 +48,7 @@ export function groupSimpleTexVListScopes(
         role: scope.role,
         items: [],
         sourceSpan: undefined,
-        layout: texVBoxLayoutForScopeRole(scope.role, font, listProfile?.dimensionFontSizePt),
+        layout: texVBoxLayoutForScopeRole(scope.role, font, listProfile?.dimensionFontSizePt, listProfile?.labelSepEm),
       };
       appendItem(stack, rootItems, mutableFrameToVBox(frame));
       stack.push(frame);

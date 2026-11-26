@@ -133,6 +133,8 @@ export function layoutSimpleTexParagraph(
       ...(options.listProfile?.bibliographyMargins !== undefined ? { bibliographyMargins: options.listProfile.bibliographyMargins } : {}),
       ...(options.listProfile?.descriptionLabelWidthPt !== undefined ? { descriptionLabelWidthPt: options.listProfile.descriptionLabelWidthPt } : {}),
       ...(options.listProfile?.descriptionLabelWidths !== undefined ? { descriptionLabelWidths: options.listProfile.descriptionLabelWidths } : {}),
+      ...(options.listProfile?.dimensionFontSizePt !== undefined ? { listDimensionFontSizePt: options.listProfile.dimensionFontSizePt } : {}),
+      ...(options.listProfile?.labelSepEm !== undefined ? { listLabelSepEm: options.listProfile.labelSepEm } : {}),
       ...(options.colorResolver?.cacheKey !== undefined ? { colorResolverCacheKey: options.colorResolver.cacheKey } : {}),
       ...(options.listProfile?.bodyFontSizePtByDepth ? { listBodyFontSizes: options.listProfile.bodyFontSizePtByDepth } : {}),
       ...(options.listProfile?.bodyBaselineSkipPtByDepth ? { listBodyBaselineSkips: options.listProfile.bodyBaselineSkipPtByDepth } : {}),

@@ -1,3 +1,4 @@
+import { texDecimalTimesDimensionPt } from "../../text/tex/dimensions.js";
 import { measureBeamerHeadingStack, beamerSubtitlePrimitive } from "./heading-layout.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
@@ -423,7 +424,7 @@ function planInfolinesFootline(
   const y = context.page.page.height - paintHeight;
   const baselineY = y +
     Math.round(2.25 * ex * 65536) / 65536;
-  const third = context.page.page.width / 3;
+  const third = texDecimalTimesDimensionPt(".333333", context.page.page.width) ?? context.page.page.width / 3;
   const primitives: BeamerTemplatePrimitive[] = [
     infolinesFill(context, 0, y, third, paintHeight, "palette tertiary", "author"),
     infolinesFill(context, third, y, third, paintHeight, "palette secondary", "title"),

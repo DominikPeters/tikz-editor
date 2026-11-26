@@ -67,6 +67,65 @@ export function texDimensionUnitFactor(unit: string): number | null {
   }
 }
 
+// TeX's unit table (tex.web §458): a unit is num/denom points.
+const TEX_UNIT_RATIOS: Readonly<Record<string, readonly [number, number]>> = {
+  pt: [1, 1], in: [7227, 100], pc: [12, 1], cm: [7227, 254], mm: [7227, 2540],
+  bp: [7227, 7200], dd: [1238, 1157], cc: [14856, 1157],
+};
+
+/**
+ * A decimal dimension as TeX scans it (tex.web §448–§458): the fraction is
+ * rounded to 2^-16 with `round_decimals`, the unit applied with
+ * `xn_over_d`, and the result kept in scaled points. `84.1cm` is
+ * 2392.876938pt here, not the 2392.876772pt of the real-number product.
+ */
+export function texScannedDimensionPt(decimal: string, unit: string): number | null {
+  const match = /^\s*([+-]?)(\d*)(?:\.(\d*))?\s*$/u.exec(decimal);
+  if (!match || (!match[2] && !match[3])) return null;
+  // Number("") is 0: an empty integer part, as in ".5cm".
+  if (unit === "sp") return (match[1] === "-" ? -1 : 1) * Number(match[2] ?? "") / 65536;
+  const ratio = TEX_UNIT_RATIOS[unit];
+  if (!ratio) return null;
+  const negative = match[1] === "-";
+  let integer = Number(match[2] ?? "");
+  // round_decimals: at most 17 fraction digits matter.
+  const digits = (match[3] ?? "").slice(0, 17);
+  let a = 0;
+  for (let k = digits.length - 1; k >= 0; k -= 1) a = Math.floor((a + Number(digits[k]) * 131072) / 10);
+  let fraction = Math.floor((a + 1) / 2);
+  const [num, denom] = ratio;
+  if (num !== 1 || denom !== 1) {
+    const product = integer * num;
+    const remainder = product % denom;
+    integer = Math.floor(product / denom);
+    fraction = Math.floor((num * fraction + 65536 * remainder) / denom);
+    integer += Math.floor(fraction / 65536);
+    fraction %= 65536;
+  }
+  const scaled = integer * 65536 + fraction;
+  return (negative ? -scaled : scaled) / 65536;
+}
+
+/**
+ * `<decimal>\register` as TeX scans it (tex.web §455): the fraction is
+ * rounded to 2^-16 and the product truncated to scaled points, so
+ * `.333333\paperwidth` is 0.333328 of the width, not a third.
+ */
+export function texDecimalTimesDimensionPt(decimal: string, dimensionPt: number): number | null {
+  const match = /^\s*([+-]?)(\d*)(?:\.(\d*))?\s*$/u.exec(decimal);
+  if (!match || (!match[2] && !match[3])) return null;
+  const digits = (match[3] ?? "").slice(0, 17);
+  let a = 0;
+  for (let k = digits.length - 1; k >= 0; k -= 1) a = Math.floor((a + Number(digits[k]) * 131072) / 10);
+  const fraction = Math.floor((a + 1) / 2);
+  const integer = Number(match[2] ?? "");
+  const value = Math.round(dimensionPt * 65536);
+  const magnitude = Math.abs(value);
+  const product = integer * magnitude + Math.floor(magnitude * fraction / 65536);
+  const negative = (match[1] === "-") !== (value < 0);
+  return (negative ? -product : product) / 65536;
+}
+
 export function parseTexDimensionText(text: string): TexLength | null {
   const match = /^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*([A-Za-z]{2})\s*$/.exec(text);
   if (!match) {

@@ -117,6 +117,7 @@ export const FEATURE_IDS = [
   "beamer_float_captions",
   "beamer_frame_continuations",
   "beamer_overlay_pictures", // TikZ `overlay` pictures: empty boxes in the text, drawn over the page.
+  "beamer_poster", // beamerposter page sizes, scaled font table and list registers.
   "render_pipeline"
 ] as const;
 

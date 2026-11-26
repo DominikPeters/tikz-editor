@@ -5,7 +5,8 @@ import type { Diagnostic } from "../../diagnostics/types.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import type { BeamerDocumentModel, BeamerThemeKind } from "../types.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
-import { beamerClassFontSize, beamerNamedFontSize } from "./font-sizes.js";
+import { beamerClassFontSize, beamerFontSizeProfile, beamerNamedFontSize, type BeamerFontSizeProfile } from "./font-sizes.js";
+import { beamerPosterListDimensionsEm, beamerPosterUnsupportedLoad, scanBeamerPoster, type BeamerPosterSettings } from "../poster.js";
 import { scanBeamerFontDeclarations, applyBeamerFontRoleDeclaration } from "./font-declarations.js";
 import { scanBeamerNavigationTemplates } from "./template-declarations.js";
 import { applyBeamerColorDeclaration, beamerColorRgbToCss, diagnoseBeamerColorDeclarations, resolveBeamerColorExpressionRgb, scanBeamerColorDeclarations, type BeamerColorRgb } from "./color-declarations.js";
@@ -71,7 +72,11 @@ const DEFAULT_REF = (id: string): BeamerThemeTemplateRef => ({
 export function resolveBeamerTheme(
   document: BeamerDocumentModel
 ): ResolvedBeamerTheme {
-  const state = createDefaultTheme(beamerClassFontSize(document));
+  const poster = scanBeamerPoster(document);
+  const state = createDefaultTheme(beamerClassFontSize(document), poster);
+  state.diagnostics.push(...(poster?.diagnostics ?? []));
+  const indirectPoster = beamerPosterUnsupportedLoad(document);
+  if (indirectPoster) state.diagnostics.push(indirectPoster);
   const uses = document.preamble.themes
     .flatMap((source) =>
       source.name.value.split(",").map((name): BeamerThemeUse => ({
@@ -88,7 +93,7 @@ export function resolveBeamerTheme(
     .sort((left, right) => left.span.from - right.span.from);
   for (const event of events) {
     if (event.kind === "font-declaration") {
-      applyBeamerFontRoleDeclaration(state, event, String(state.options["class-font-size"]));
+      applyBeamerFontRoleDeclaration(state, event, beamerFontSizeProfile(state));
       continue;
     }
     if (event.kind === "navigation-template") {
@@ -382,7 +387,10 @@ function resolveMutableThemeColor(
   return resolveBeamerColorRecord(state.colors, state.colorAliases, state.colorAliasRgb, role);
 }
 
-function createDefaultTheme(classSize = "11"): MutableTheme {
+function createDefaultTheme(classFontSize = "11", poster: BeamerPosterSettings | null = null): MutableTheme {
+  // beamerposter redefines the size commands before any theme selects a size.
+  const classSize: BeamerFontSizeProfile = poster ? { classSize: classFontSize, posterFontScale: poster.fontScale } : classFontSize;
+  const posterLists = poster ? beamerPosterListDimensionsEm(poster.fontScale) : null;
   const normalFont: BeamerThemeFont = {
     family: "sans",
     series: "medium",
@@ -595,7 +603,8 @@ function createDefaultTheme(classSize = "11"): MutableTheme {
     dimensions: {
       textMarginLeftPt: cmToTexPt(1),
       textMarginRightPt: cmToTexPt(1),
-      listLeftMarginEmByDepth: [2, 2, 2],
+      listLeftMarginEmByDepth: posterLists?.leftMarginEmByDepth ?? [2, 2, 2],
+      ...(posterLists ? { listLabelSepEm: posterLists.labelSepEm } : {}),
       sidebarWidthLeft: { kind: "absolute", valuePt: 0 },
       sidebarWidthRight: { kind: "absolute", valuePt: 0 },
     },
@@ -619,7 +628,7 @@ function createDefaultTheme(classSize = "11"): MutableTheme {
         DEFAULT_REF("beamer/enumeration/default"),
       ],
     },
-    options: { "class-font-size": classSize },
+    options: { "class-font-size": classFontSize, ...(poster ? { "poster-font-scale": String(poster.fontScale) } : {}) },
     appliedComponents: [
       {
         kind: "class-defaults",
@@ -1212,7 +1221,7 @@ const innerThemeAppliers = new Map<string, ComponentApplier>([
   }],
   ["inmargin", (state, use) => {
     markApplied(state, "inner-theme", "inmargin", use);
-    const normalFont = state.fonts["normal-text"];
+    const normalFont = preambleFont(state);
     const xHeightEm = themeFontXHeightPt(normalFont) / normalFont.sizePt;
     state.colors.sidebar = { parent: "block title" };
     state.colors["sidebar left"] = { parent: "sidebar" };
@@ -1600,8 +1609,8 @@ const outerThemeAppliers = new Map<string, ComponentApplier>([
     state.colors["section in head/foot"] = { parent: "palette tertiary" };
     state.colors["subsection in head/foot"] = { parent: "palette primary" };
     // beamerouterthemeinfolines.sty: text margin left/right=1em.
-    state.dimensions.textMarginLeftPt = state.fonts["normal-text"].sizePt;
-    state.dimensions.textMarginRightPt = state.fonts["normal-text"].sizePt;
+    state.dimensions.textMarginLeftPt = preambleFont(state).sizePt;
+    state.dimensions.textMarginRightPt = preambleFont(state).sizePt;
   }],
   ["metropolis", applyModernOuter("metropolis")],
   ["moloch", applyModernOuter("moloch")],
@@ -1700,10 +1709,10 @@ function applyModernFonts(
     }
     state.fonts["frame-title"] = {
       ...state.fonts["frame-title"],
-      ...beamerNamedFontSize(String(state.options["class-font-size"] ?? "11"), "large"),
+      ...beamerNamedFontSize(beamerFontSizeProfile(state), "large"),
       series: "bold",
     };
-    const classSize = String(state.options["class-font-size"] ?? "11");
+    const classSize = beamerFontSizeProfile(state);
     if (family === "moloch") {
       state.fonts["frame-subtitle"] = { ...state.fonts["frame-title"], ...beamerNamedFontSize(classSize, "small") };
     }
@@ -1945,6 +1954,15 @@ function optionLengthPt(
     default:
       return amount;
   }
+}
+
+/**
+ * The font in effect while theme files load: `em` and `ex` in their
+ * `\setbeamersize` calls are evaluated then, in the class's normal size.
+ * beamerposter's larger sizes take effect only once a size is selected.
+ */
+function preambleFont(state: MutableTheme): BeamerThemeFont {
+  return { ...state.fonts["normal-text"], ...beamerNamedFontSize(String(state.options["class-font-size"] ?? "11"), "normalsize") };
 }
 
 function themeFontXHeightPt(font: BeamerThemeFont): number {

@@ -4,7 +4,7 @@ import type { BeamerSectionModel } from "./types.js";
 import type { BeamerThemeFont, ResolvedBeamerTheme } from "./theme/types.js";
 import { createBeamerTexTextFontProfile } from "./theme/font.js";
 import { resolveBeamerThemeColor } from "./theme/resolve.js";
-import { beamerNamedFontSize } from "./theme/font-sizes.js";
+import { beamerFontSizeProfile, beamerNamedFontSize } from "./theme/font-sizes.js";
 import { texLength } from "../text/tex/coordinates.js";
 import { beamerContentsSphere } from "./theme/list-markers.js";
 import { createIdentityMappedText, createGeneratedMappedText, type MappedText } from "../text/source-map.js";
@@ -69,7 +69,7 @@ export function prepareBeamerContents(params: {
       const id = `${node.id}:${section.id}:sphere`.replace(/[^A-Za-z0-9_-]/gu, "-");
       row.marker = { bounds, markup: beamerContentsSphere({ id, x: centerX, y: centerY, size, background, canvas, section: topLevel }) };
       if (topLevel) {
-        const numberFont = { ...font, ...beamerNamedFontSize(String(theme.options["class-font-size"] ?? "11"), "scriptsize") };
+        const numberFont = { ...font, ...beamerNamedFontSize(beamerFontSizeProfile(theme), "scriptsize") };
         const number = params.layout(createGeneratedMappedText(String(sectionIndex), "Beamer section number", section.span), numberFont, size, `${node.id}:${section.id}:number`);
         if (number) {
           const line = number.layout.report.lines[0];

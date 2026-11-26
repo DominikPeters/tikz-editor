@@ -7,7 +7,7 @@ import { getTexSyntaxIndex, matchTexSyntaxEnvironments } from "../text/tex/synta
 import { concatMappedText, createGeneratedMappedText, projectInputRange, sliceMappedText, type MappedText } from "../text/source-map.js";
 import { resolveBeamerThemeColor } from "./theme/resolve.js";
 import type { ResolvedBeamerTheme } from "./theme/types.js";
-import { beamerNamedFontSize } from "./theme/font-sizes.js";
+import { beamerFontSizeProfile, beamerNamedFontSize } from "./theme/font-sizes.js";
 
 export interface BeamerCaptionLayoutOptions {
   readonly widthPt: number;
@@ -54,7 +54,7 @@ export function projectBeamerCaptions(mapped: MappedText, source: string, theme?
     return createGeneratedMappedText(text, "Beamer float/caption", hit.kind === "source-range" ? { from: hit.from, to: hit.to } : undefined);
   };
   const captionColor = theme ? resolveBeamerThemeColor(theme, "caption name").fg ?? "#3333b3" : "#3333b3";
-  const captionFont = beamerNamedFontSize(String(theme?.options["class-font-size"] ?? "11"), "small");
+  const captionFont = beamerNamedFontSize(beamerFontSizeProfile(theme), "small");
   const captionFontDeclaration = `\\fontsize{${captionFont.sizePt}pt}{${captionFont.lineHeightPt}pt}\\selectfont`;
   for (const env of subfigures) {
     const float = floats.find(float => float.contentSpan.from <= env.span.from && env.span.to <= float.contentSpan.to);
@@ -76,7 +76,7 @@ export function projectBeamerCaptions(mapped: MappedText, source: string, theme?
     }
     const panelIndex = subfigures.filter(panel => float.contentSpan.from <= panel.span.from && panel.span.from < env.span.from).length;
     const label = String.fromCharCode(97 + panelIndex);
-    const font = beamerNamedFontSize(String(theme?.options["class-font-size"] ?? "11"), "footnotesize");
+    const font = beamerNamedFontSize(beamerFontSizeProfile(theme), "footnotesize");
     const parts: MappedText[] = [generated(`\\scalebox{1}{\\begin{minipage}[${alignment}]{${width}pt}`, env.begin.span)];
     let cursor = widthArg.span.to;
     for (const command of syntax.controlsIn({ from: cursor, to: env.end.span.from })) {

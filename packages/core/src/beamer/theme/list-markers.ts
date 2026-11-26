@@ -10,7 +10,7 @@ import type {
   ResolvedBeamerTheme,
 } from "./types.js";
 import { resolveBeamerThemeColor } from "./resolve.js";
-import { beamerNamedFontSize } from "./font-sizes.js";
+import { beamerFontSizeProfile, beamerNamedFontSize } from "./font-sizes.js";
 
 const WHITE = "#ffffff";
 const BLACK = "#000000";
@@ -50,7 +50,7 @@ export function resolveBeamerItemizeMarkers(
     fontId: "cmsy10",
     atPt: texLength(font.sizePt),
   });
-  const tiny = beamerNamedFontSize(String(theme.options["class-font-size"] ?? "11"), "tiny");
+  const tiny = beamerNamedFontSize(beamerFontSizeProfile(theme), "tiny");
   const tinySymbolFont = fontProfile.metricProvider.resolveFont({
     // umsa.fd selects msam5 below 6pt and msam7 for the larger tiny sizes.
     fontId: tiny.sizePt < 6 ? "msam5" : "msam7",
@@ -68,7 +68,7 @@ export function resolveBeamerItemizeMarkers(
     // The sphere helper selects \normalsize, and the deeper square
     // templates select \small independently of the list body's size.
     const markerSizePt = family === "ball"
-      ? beamerNamedFontSize(String(theme.options["class-font-size"] ?? "11"), "normalsize").sizePt
+      ? beamerNamedFontSize(beamerFontSizeProfile(theme), "normalsize").sizePt
       : family === "square" && index > 0 ? 10 : font.sizePt;
     const markerXHeightEm = markerSizePt === font.sizePt ? xHeightEm : fontProfile.resolveTextFont(
       fontProfile.defaultFontState, texLength(markerSizePt), fontProfile.metricProvider
@@ -123,7 +123,7 @@ export function resolveBeamerEnumerateMarker(
     texLength(ambientSizePt ?? bodyFont.sizePt),
     fontProfile.metricProvider
   );
-  const projectedSize = beamerNamedFontSize(String(theme.options["class-font-size"] ?? "11"), family === "ball" ? "tiny" : "scriptsize");
+  const projectedSize = beamerNamedFontSize(beamerFontSizeProfile(theme), family === "ball" ? "tiny" : "scriptsize");
   const projectedFont = fontProfile.resolveTextFont(fontProfile.defaultFontState,
     texLength(projectedSize.sizePt), fontProfile.metricProvider);
   const text = String(itemIndex);
@@ -143,7 +143,7 @@ export function resolveBeamerEnumerateMarker(
   const projectedCenterPt =
     (projectedHeight - projectedDepth) / 2;
   const xHeightEm = resolvedBodyFont.data.fontdimen.xheight * (ambientSizePt ?? bodyFont.sizePt) / bodyFont.sizePt;
-  const normalSize = beamerNamedFontSize(String(theme.options["class-font-size"] ?? "11"), "normalsize").sizePt;
+  const normalSize = beamerNamedFontSize(beamerFontSizeProfile(theme), "normalsize").sizePt;
   const normalFont = fontProfile.resolveTextFont(fontProfile.defaultFontState, texLength(normalSize), fontProfile.metricProvider);
   const shadingXHeightEm = normalFont.data.fontdimen.xheight * normalSize / bodyFont.sizePt;
   if (family === "circle") {

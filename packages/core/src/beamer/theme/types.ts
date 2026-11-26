@@ -92,6 +92,8 @@ export type BeamerThemeDimensions = {
   textMarginLeftPt: number;
   textMarginRightPt: number;
   listLeftMarginEmByDepth: readonly [number, number, number];
+  /** `\labelsep` in em of the class font; LaTeX's default is 0.5em. */
+  listLabelSepEm?: number;
   sidebarWidthLeft:
     | { kind: "absolute"; valuePt: number }
     | { kind: "page-width"; ratio: number };

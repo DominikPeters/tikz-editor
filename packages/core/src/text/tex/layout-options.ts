@@ -68,6 +68,8 @@ export interface TexListMarkerProfile {
 export interface TexListLayoutProfile {
   /** Class-owned list dimensions are assigned before later font changes. */
   readonly dimensionFontSizePt?: number;
+  /** `\labelsep` in em of `dimensionFontSizePt`; LaTeX classes use 0.5em. */
+  readonly labelSepEm?: number;
   readonly fontDepthOffset?: number;
   /** Beamer loads enumerate.sty's literal mini templates. */
   readonly enumerateMiniTemplates?: boolean;

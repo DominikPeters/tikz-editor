@@ -80,7 +80,7 @@ import { parseSimpleTexTabularRegisters, parseSimpleTexParagraphIr } from "../te
 import { collectBeamerParagraphSpacing } from "./spacing.js";
 import { resolveBeamerColumnPositions, resolveBeamerColumnWidth } from "./column-dimensions.js";
 import { beamerFrameBodyTransform, beamerFrameShrinkScale, beamerFrameShrinkWidth, crampedBeamerListProfile, resolveBeamerFrameShrink, transformBeamerPoint, transformBeamerRect } from "./frame-shrink.js";
-import { beamerDisplayMathProfile, beamerListSizeOverrides, beamerNamedFontSize, beamerNamedFontSizes, beamerTrivlistSpacing } from "./theme/font-sizes.js";
+import { beamerClassNormalSize, beamerDisplayMathProfile, beamerFontSizeProfile, beamerListSizeOverrides, beamerNamedFontSize, beamerNamedFontSizes, beamerTrivlistSpacing } from "./theme/font-sizes.js";
 import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxPlan, tcolorboxSurroundingSpacing } from "./tcolorbox.js";
 import { parseBeamerFrameBody } from "./content.js";
 import { beamerRecoveryDiagnostics, collectBeamerEditScopes, collectBeamerRecovery } from "./edit-scopes.js";
@@ -108,6 +108,7 @@ import type {
   BeamerTitlePageBodyNode,
 } from "./content-types.js";
 import { resolveBeamerPageGeometry } from "./geometry.js";
+import { beamerPosterMacroBindings, scanBeamerPoster } from "./poster.js";
 import {
   beamerOverlaySpecContains,
   projectBeamerOverlayText,
@@ -255,14 +256,16 @@ function beamerListLayoutProfile(
   cramped = false
 ): TexListLayoutProfile {
   const markerCache = new Map<number, ReturnType<typeof resolveBeamerItemizeMarkers>>();
-  const classSize = String(theme.options["class-font-size"] ?? "11");
-  const small = beamerNamedFontSize(classSize, "small");
-  const footnotesize = beamerNamedFontSize(classSize, "footnotesize");
+  const sizes = beamerFontSizeProfile(theme);
+  const small = beamerNamedFontSize(sizes, "small");
+  const footnotesize = beamerNamedFontSize(sizes, "footnotesize");
   const profile: TexListLayoutProfile = {
     ...BEAMER_LIST_LAYOUT_PROFILE,
     trivlistTopsepPt: beamerTrivlistSpacing(theme).naturalPt,
     sizeOverrides: beamerListSizeOverrides(theme),
-    dimensionFontSizePt: beamerNamedFontSize(classSize, "normalsize").sizePt,
+    // List registers are em of the class font, also under beamerposter.
+    dimensionFontSizePt: beamerClassNormalSize(theme).sizePt,
+    ...(theme.dimensions.listLabelSepEm !== undefined ? { labelSepEm: theme.dimensions.listLabelSepEm } : {}),
     paragraphSkipPt: Number(theme.options["paragraph-skip-pt"] ?? 0),
     selectBodyFontBeforeList: true,
     enumerateMiniTemplates: true,
@@ -333,6 +336,7 @@ function createBeamerRenderContext(
   // Only the theme sees the switched uses; spans elsewhere stay the source's.
   const theme = resolveBeamerTheme(themeSwitch ? documentWithPresentationTheme(document, themeSwitch) : document);
   const dateBindings = beamerDateBindings(document, syntaxContext);
+  const posterBindings = beamerPosterMacroBindings(scanBeamerPoster(document, syntaxContext));
   const pointMacroBindings = new Map<number, ReadonlyMap<string, MacroBinding>>();
   const bindingsAt = (offset: number): ReadonlyMap<string, MacroBinding> => {
     const cached = pointMacroBindings.get(offset);
@@ -346,6 +350,7 @@ function createBeamerRenderContext(
     }
     collected.delete("\\arraystretch");
     for (const [name, binding] of dateBindings.bindings) if (!collected.has(name)) collected.set(name, binding);
+    for (const [name, binding] of posterBindings) if (!collected.has(name)) collected.set(name, binding);
     pointMacroBindings.set(offset, collected);
     return collected;
   };

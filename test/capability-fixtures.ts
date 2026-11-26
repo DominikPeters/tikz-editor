@@ -362,6 +362,8 @@ Alpha.\newpage Beta.\par\framebreak Gamma.
 \begin{document}\begin{frame}Text.
 \begin{tikzpicture}[remember picture, overlay]\node[anchor=north east] at (current page.north east) {Corner};\end{tikzpicture}
 \end{frame}\end{document}`,
+  beamer_poster: String.raw`\documentclass{beamer}\usepackage[size=a1,orientation=portrait,scale=1.4]{beamerposter}
+\begin{document}\begin{frame}Poster text {\veryHuge large}.\end{frame}\end{document}`,
   beamer_float_captions: String.raw`\documentclass{beamer}
 \begin{document}\begin{frame}Before.\begin{figure}\rule{20pt}{10pt}\caption{Alpha}\end{figure}After.\end{frame}\end{document}`,
   beamer_references: String.raw`\documentclass{beamer}

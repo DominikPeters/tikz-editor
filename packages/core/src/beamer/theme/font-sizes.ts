@@ -4,6 +4,7 @@ import { requireArrayValue } from "../../utils/collections.js";
 import type { BeamerDocumentModel } from "../types.js";
 import type { ResolvedBeamerTheme } from "./types.js";
 import { beamerClassFontOption, beamerClassOptionEntries } from "../class-options.js";
+import { beamerPosterFontSizes, type BeamerPosterFontSizeName } from "../poster.js";
 
 const names = ["tiny", "scriptsize", "footnotesize", "small", "normalsize", "large", "Large", "LARGE", "huge", "Huge"] as const;
 export type BeamerNamedFontSize = typeof names[number];
@@ -32,15 +33,54 @@ export function beamerClassFontSize(document: BeamerDocumentModel): string {
   return size;
 }
 
-export function beamerNamedFontSizes(theme?: Pick<ResolvedBeamerTheme, "options">): readonly (readonly [BeamerNamedFontSize, number, number])[] {
-  const sizes = profileLookup[String(theme?.options["class-font-size"] ?? "11")] ?? profiles["11"];
+/**
+ * What selects the named sizes: the class size option, and for a poster the
+ * beamerposter font scale, whose redefinitions replace the class's sizes.
+ * A bare string is a class size.
+ */
+export type BeamerFontSizeProfile = string | { readonly classSize: string; readonly posterFontScale?: number | undefined };
+
+export function beamerFontSizeProfile(theme?: Pick<ResolvedBeamerTheme, "options">): BeamerFontSizeProfile {
+  const classSize = String(theme?.options["class-font-size"] ?? "11");
+  const posterFontScale = theme?.options["poster-font-scale"];
+  return posterFontScale === undefined || typeof posterFontScale === "boolean"
+    ? classSize
+    : { classSize, posterFontScale: Number(posterFontScale) };
+}
+
+function profileClassSize(profile: BeamerFontSizeProfile): string {
+  return typeof profile === "string" ? profile : profile.classSize;
+}
+
+function profilePosterScale(profile: BeamerFontSizeProfile): number | undefined {
+  return typeof profile === "string" ? undefined : profile.posterFontScale;
+}
+
+/** Every size command the profile defines, with size and baseline skip. */
+export function beamerNamedFontSizes(theme?: Pick<ResolvedBeamerTheme, "options">): readonly (readonly [BeamerNamedFontSize | BeamerPosterFontSizeName, number, number])[] {
+  const profile = beamerFontSizeProfile(theme);
+  const posterScale = profilePosterScale(profile);
+  if (posterScale !== undefined) return beamerPosterFontSizes(posterScale);
+  const sizes = profileLookup[profileClassSize(profile)] ?? profiles["11"];
   return names.map((name, index) => [name, ...requireArrayValue(sizes, index)] as const);
 }
 
-export function beamerNamedFontSize(classSize: string, name: BeamerNamedFontSize): { sizePt: number; lineHeightPt: number } {
-  const sizes = profileLookup[classSize] ?? profiles["11"];
-  const [sizePt, lineHeightPt] = requireArrayValue(sizes, names.indexOf(name));
+export function beamerNamedFontSize(profile: BeamerFontSizeProfile, name: BeamerNamedFontSize | BeamerPosterFontSizeName): { sizePt: number; lineHeightPt: number } {
+  const posterScale = profilePosterScale(profile);
+  if (posterScale !== undefined) {
+    const entry = beamerPosterFontSizes(posterScale).find(([candidate]) => candidate === name);
+    if (entry) return { sizePt: entry[1], lineHeightPt: entry[2] };
+  }
+  const sizes = profileLookup[profileClassSize(profile)] ?? profiles["11"];
+  // beamerposter's extra sizes exist only on posters; elsewhere they are
+  // undefined commands and the lookup fails.
+  const [sizePt, lineHeightPt] = requireArrayValue(sizes, names.findIndex(candidate => candidate === name));
   return { sizePt, lineHeightPt };
+}
+
+/** The class's own normal size: the font beamerposter's list registers use. */
+export function beamerClassNormalSize(theme?: Pick<ResolvedBeamerTheme, "options">): { sizePt: number; lineHeightPt: number } {
+  return beamerNamedFontSize(profileClassSize(beamerFontSizeProfile(theme)), "normalsize");
 }
 
 /** Normal-size \topsep from the same sizeNN.clo profile, used by trivlist. */
@@ -79,9 +119,15 @@ export function beamerDisplayMathProfile(theme?: Pick<ResolvedBeamerTheme, "opti
       below: { normal, short: { sizePt: belowShort, stretchPt: belowShortStretch, shrinkPt: belowShortShrink } },
     };
   };
+  const profile = beamerFontSizeProfile(theme);
+  // beamerposter's size commands are bare \fontsize selections: the display
+  // registers keep the values the class's own \normalsize last set.
+  const poster = profilePosterScale(profile) !== undefined;
   return { ...convert(registers.normalsize),
-    leadingDisplay: { emptyLineBaselineSkipPt: beamerNamedFontSize(classSize, "normalsize").lineHeightPt },
-    sizeOverrides: { normalsize: convert(registers.normalsize), small: convert(registers.small), footnotesize: convert(registers.footnotesize) },
+    leadingDisplay: { emptyLineBaselineSkipPt: beamerNamedFontSize(profile, "normalsize").lineHeightPt },
+    sizeOverrides: poster
+      ? { normalsize: convert(registers.normalsize), small: convert(registers.normalsize), footnotesize: convert(registers.normalsize) }
+      : { normalsize: convert(registers.normalsize), small: convert(registers.small), footnotesize: convert(registers.footnotesize) },
   };
 }
 
@@ -99,6 +145,8 @@ const listRegisters: Readonly<Record<string, readonly [ListRegisters, ListRegist
 
 export function beamerListSizeOverrides(theme?: Pick<ResolvedBeamerTheme, "options">): NonNullable<TexListLayoutProfile["sizeOverrides"]> {
   const classSize = String(theme?.options["class-font-size"] ?? "11");
+  // beamerposter's size commands leave the list registers alone.
+  if (profilePosterScale(beamerFontSizeProfile(theme)) !== undefined) return [];
   const registers = listRegisters[classSize] ?? requireDefined(listRegisters["11"], "Missing default Beamer list registers");
   return (["small", "footnotesize"] as const).map((name, index) => {
     const [topsepPt, topsepStretchPt, topsepShrinkPt, parsepPt, parsepStretchPt, parsepShrinkPt] = requireArrayValue(registers, index);
