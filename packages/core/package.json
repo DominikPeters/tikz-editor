@@ -63,6 +63,7 @@
     "@lezer/lr": "^1.4.11",
     "@tikz-editor/lezer-tex": "1.2.0",
     "@tikz-editor/lezer-tikz": "1.2.0",
+    "harfbuzzjs": "^1.6.4",
     "xml-formatter": "^3.6.7"
   },
   "devDependencies": {
