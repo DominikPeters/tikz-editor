@@ -24,7 +24,7 @@ function bp(value: number): number {
 export function planBeamerBlockTemplate(
   context: BeamerBlockTemplateContext
 ): BeamerBlockTemplatePlan {
-  const templateId = context.theme.templates.block.id;
+  const templateId = context.templateId ?? context.theme.templates.block.id;
   const style = templateId.includes("/inmargin")
     ? "inmargin"
     : templateId.includes("/rounded")

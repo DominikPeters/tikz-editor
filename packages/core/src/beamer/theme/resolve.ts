@@ -15,6 +15,8 @@ import { scanBeamerFontspecDeclarations, type BeamerFontspecEvent } from "./font
 import { hasRuntimeTexFont } from "../../text/tex/fonts/runtime-registry.js";
 import { applyBeamerColorDeclaration, beamerColorRgbToCss, diagnoseBeamerColorDeclarations, resolveBeamerColorExpressionRgb, scanBeamerColorDeclarations, type BeamerColorDeclarationEvent, type BeamerColorRgb } from "./color-declarations.js";
 import { beamerProjectFiles, beamerThemeFileName, scanBeamerThemeFileDocument, type BeamerProjectFiles } from "../project-files.js";
+import { applyBeamerModes } from "../modes.js";
+import { scanBeamerDocument } from "../scan.js";
 import { beamerClassOptionEntries } from "../class-options.js";
 import { beamerControlSequencesIn, createBeamerSyntaxContext } from "../syntax.js";
 import type {
@@ -52,8 +54,14 @@ type MutableTheme = {
   fontFamilyCommands?: Record<string, BeamerRuntimeTypeface>;
   /** \setbeamerfont declarations by element name. */
   elementFonts?: Record<string, BeamerTemplateElementFont>;
-  /** \setbeamertemplate bodies the interpreter lays out, and the text that defines their macros. */
-  interpreted?: { templates: Record<string, BeamerInterpretedTemplate>; units: BeamerTemplateProgramUnit[]; blockFallback?: BeamerThemeTemplateRef };
+  /** \setbeamertemplate bodies the interpreter lays out. */
+  interpreted?: { templates: Record<string, BeamerInterpretedTemplate> };
+  /**
+   * The effective preamble in TeX's reading order: the main preamble with
+   * each local theme file (and the themes it loads) spliced in at its load
+   * command. Template macros and spacing registers are read from it.
+   */
+  units: BeamerTemplateProgramUnit[];
 };
 
 type ComponentApplier = (state: MutableTheme, use: BeamerThemeUse) => void;
@@ -95,8 +103,10 @@ export function resolveBeamerTheme(
   state.diagnostics.push(...(poster?.diagnostics ?? []));
   const indirectPoster = beamerPosterUnsupportedLoad(document);
   if (indirectPoster) state.diagnostics.push(indirectPoster);
-  const uses = executingThemeUseList(document);
-  const colorEvents = applyBeamerPreambleThemeEvents(state, document, uses, beamerProjectFiles(document), 0, null);
+  // What \mode skips in presentation mode is not read (modes.ts).
+  const preamble = presentationModePreamble(document);
+  const uses = executingThemeUseList(preamble);
+  const colorEvents = applyBeamerPreambleThemeEvents(state, preamble, uses, beamerProjectFiles(document), 0, null, null);
   finalizeInterpretedTemplates(state, document);
   const sansOverride = document.preamble.macroDefinitions.filter(definition => definition.nameRaw === "\\sfdefault" &&
     definition.span.from > Math.max(-1, ...uses.filter(use => use.kind === "theme" || use.kind === "font-theme").map(use => use.source.span.from))).at(-1);
@@ -134,7 +144,7 @@ export function resolveBeamerTheme(
     diagnostics: Object.freeze([...state.diagnostics]),
     ...(state.elementFonts ? { elementFonts: Object.freeze({ ...state.elementFonts }) } : {}),
     ...(state.interpreted && Object.keys(state.interpreted.templates).length > 0 ? { interpreted: Object.freeze({
-      templates: Object.freeze({ ...state.interpreted.templates }), units: Object.freeze([...state.interpreted.units]),
+      templates: Object.freeze({ ...state.interpreted.templates }), units: Object.freeze([...state.units]),
     }) } : {}),
   };
 }
@@ -156,12 +166,13 @@ function applyInterpretedTemplateSet(
 ): void {
   const role = event.role;
   if (!INTERPRETED_TEMPLATE_ROLES.has(role)) return;
-  state.interpreted ??= { templates: {}, units: [] };
+  state.interpreted ??= { templates: {} };
   const edge = role === "headline" ? "headline" : role === "footline" ? "footline" : null;
-  const stock = (id: string) => edge ? { ...DEFAULT_REF(id) } : null;
   if (event.choice !== null) {
+    // A predefined block template replaces the body.
+    if (!edge) { delete state.interpreted.templates[role]; return; }
     // `[default]` restores the stock template; other choices stay stock.
-    if (edge && event.choice === "default") {
+    if (event.choice === "default") {
       delete state.interpreted.templates[role];
       state.templates[edge] = DEFAULT_REF(`beamer/${edge}/none`);
     }
@@ -176,27 +187,38 @@ function applyInterpretedTemplateSet(
   }
   const previous = edge ? state.templates[edge] : null;
   const replaced = state.interpreted.templates[role];
-  const fallback = previous && previous.id !== `interpreted/${edge}` ? previous : replaced?.fallback ?? stock(`beamer/${edge}/none`) ?? DEFAULT_REF("beamer/block/default");
+  // A block family keeps the stock blocks in force (the very object, see
+  // finalizeInterpretedTemplates) as its fallback.
+  const fallback = edge
+    ? previous && previous.id !== `interpreted/${edge}` ? previous : replaced?.fallback ?? DEFAULT_REF(`beamer/${edge}/none`)
+    : state.templates.block;
   state.interpreted.templates[role] = {
     role, body, file: loadedAt?.file ?? null, offset: loadedAt ? null : event.bodyOffset,
     reportAt: loadedAt?.span ?? event.span, fallback,
   };
   if (edge) state.templates[edge] = DEFAULT_REF(`interpreted/${edge}`);
-  else if (role === "block begin" || role === "block end") {
-    const other = role === "block begin" ? "block end" : "block begin";
-    if (state.interpreted.templates[other] && state.templates.block.id !== "interpreted/block") {
-      state.interpreted.blockFallback = state.templates.block;
-      state.templates.block = DEFAULT_REF("interpreted/block");
-    }
-  }
 }
+
+/** The begin/end template roles of each block environment's family. */
+const BLOCK_TEMPLATE_FAMILIES = [
+  { family: "block", begin: "block begin", end: "block end" },
+  { family: "block alerted", begin: "block alerted begin", end: "block alerted end" },
+  { family: "block example", begin: "block example begin", end: "block example end" },
+] as const;
 
 /** Check the interpreted templates once every definition they may use is known. */
 function finalizeInterpretedTemplates(state: MutableTheme, document: BeamerDocumentModel): void {
   const interpreted = state.interpreted;
-  if (!interpreted || Object.keys(interpreted.templates).length === 0) return;
-  interpreted.units.push({ file: null, text: document.source.slice(document.preamble.span.from, document.preamble.span.to), offset: document.preamble.span.from });
-  const definitions = collectTemplateDefinitions(interpreted.units.map(unit => unit.text));
+  if (!interpreted) return;
+  // A stock block template chosen later (an inner theme's `\setbeamertemplate{blocks}[...]`
+  // sets all three families) replaces the interpreted ones.
+  for (const { begin, end } of BLOCK_TEMPLATE_FAMILIES) {
+    for (const role of [begin, end]) {
+      if (interpreted.templates[role] && interpreted.templates[role].fallback !== state.templates.block) delete interpreted.templates[role];
+    }
+  }
+  if (Object.keys(interpreted.templates).length === 0) return;
+  const definitions = collectTemplateDefinitions(state.units.map(unit => unit.text));
   for (const [role, template] of Object.entries(interpreted.templates)) {
     const unsupported = findUnsupportedTemplateCommand(template.body, definitions);
     if (unsupported === null) continue;
@@ -210,12 +232,13 @@ function finalizeInterpretedTemplates(state: MutableTheme, document: BeamerDocum
       span: template.reportAt,
     });
   }
-  const begin = interpreted.templates["block begin"]; const end = interpreted.templates["block end"];
-  if ((begin !== undefined) !== (end !== undefined) && !state.diagnostics.some(item => item.code === "beamer-template-block-pair")) {
-    const lone = begin ?? end;
+  for (const { family, begin, end } of BLOCK_TEMPLATE_FAMILIES) {
+    const opening = interpreted.templates[begin]; const closing = interpreted.templates[end];
+    if ((opening !== undefined) === (closing !== undefined)) continue;
+    const lone = opening ?? closing;
     state.diagnostics.push({
       severity: "warning", code: "beamer-template-block-pair",
-      message: "A block template needs both its begin and end parts; this preview draws stock blocks instead.",
+      message: `A ${family} template needs both its begin and end parts; this preview draws stock blocks instead.`,
       span: (lone ?? { reportAt: document.preamble.span }).reportAt,
     });
   }
@@ -479,7 +502,7 @@ function applyBeamerFontspec(
 ): void {
   const resolve = (names: readonly string[]) => {
     for (const name of names) {
-      const id = files?.fontId?.(name);
+      const id = files?.fontId?.(name, event.path);
       // Only fonts this realm registered can be laid out.
       if (id && hasRuntimeTexFont(id)) return id;
     }
@@ -513,6 +536,9 @@ function applyBeamerFontspec(
  * A use without a stock component loads the project's theme file, if it has
  * one, and applies that file's declarations at the use. Diagnostics from a
  * theme file are reported at the `\usetheme` that loaded it (`loadedAt`).
+ * The preamble's text goes to `state.units`, split at each local theme
+ * load, so that the file's units follow the text before its load command.
+ * `region` is the file's text in `document.source` (null: the main preamble).
  */
 function applyBeamerPreambleThemeEvents(
   state: MutableTheme,
@@ -520,8 +546,16 @@ function applyBeamerPreambleThemeEvents(
   uses: readonly BeamerThemeUse[],
   files: BeamerProjectFiles | undefined,
   depth: number,
-  loadedAt: { span: Span; file: string } | null
+  loadedAt: { span: Span; file: string } | null,
+  region: PreambleRegion | null
 ): BeamerColorDeclarationEvent[] {
+  const unit = region ?? { file: null, from: document.preamble.span.from, to: document.preamble.span.to, origin: 0 };
+  let cursor = unit.from;
+  const pushUnit = (end: number) => {
+    if (end <= cursor) return;
+    state.units.push({ file: unit.file, text: document.source.slice(cursor, end), offset: unit.file === null ? cursor : null, fileOffset: cursor - unit.origin });
+    cursor = end;
+  };
   const colorEvents = scanBeamerColorDeclarations(document);
   const events = [...uses.map(use => ({ kind: "theme-use" as const, span: use.source.span, use })), ...colorEvents, ...scanBeamerNavigationTemplates(document), ...scanBeamerFontDeclarations(document), ...scanBeamerFontspecDeclarations(document), ...scanBeamerTemplateDeclarations(document)]
     .sort((left, right) => left.span.from - right.span.from);
@@ -570,6 +604,8 @@ function applyBeamerPreambleThemeEvents(
     const file = beamerThemeFileName(use.kind, use.name);
     const text = depth < LOCAL_THEME_DEPTH ? files?.readText(file) ?? null : null;
     if (text !== null) {
+      // TeX reads the file at its load command.
+      pushUnit(Math.min(unit.to, use.source.span.to));
       applyLocalThemeFile(state, use, file, text, files, depth + 1, loadedAt);
       continue;
     }
@@ -580,7 +616,23 @@ function applyBeamerPreambleThemeEvents(
       span: use.source.span,
     });
   }
+  pushUnit(unit.to);
   return colorEvents;
+}
+
+/** A file's text within the source the preamble scanners read; `origin` is where the file starts. */
+type PreambleRegion = { file: string; from: number; to: number; origin: number };
+
+/**
+ * The main preamble as presentation mode reads it: what `\mode` skips is
+ * blanked and kept braced bodies are at top level (modes.ts). Offsets are
+ * those of the source; the document itself is returned when nothing changes.
+ */
+function presentationModePreamble(document: BeamerDocumentModel): BeamerDocumentModel {
+  const { from, to } = document.preamble.span;
+  const applied = applyBeamerModes(document.source, "beamer", from, to);
+  if (applied === document.source) return document;
+  return scanBeamerDocument(`${applied.slice(0, to)}\\begin{document}\n\\end{document}\n`);
 }
 
 function applyLocalThemeFile(
@@ -593,14 +645,10 @@ function applyLocalThemeFile(
   loadedAt: { span: Span; file: string } | null
 ): void {
   markApplied(state, use.kind, use.name, use);
-  const { document } = scanBeamerThemeFileDocument(text);
+  const { document, offset } = scanBeamerThemeFileDocument(text);
   const at = loadedAt ?? { span: use.source.span, file };
-  state.interpreted ??= { templates: {}, units: [] };
-  state.interpreted.units.push({ file, text: document.source.slice(document.preamble.span.from, document.preamble.span.to), offset: null });
-  applyBeamerPreambleThemeEvents(state, document, executingThemeUseList(document), files, depth, at);
-  // Template code in theme files is not executed yet: say so once per file.
-  const interpretedSpans = new Set(Object.values(state.interpreted.templates).filter(template => template.file === file).map(template => template.reportAt.from));
-  void interpretedSpans;
+  applyBeamerPreambleThemeEvents(state, document, executingThemeUseList(document), files, depth, at, { file, from: offset, to: offset + text.length, origin: offset });
+  // Templates outside the interpreted roles are not executed: say so once per file.
   const templates = beamerControlSequencesIn(createBeamerSyntaxContext(document.source), document.preamble.span)
     .filter(command => command.name === "setbeamertemplate" || command.name === "defbeamertemplate")
     .filter(command => !interpretedTemplateRoleAt(document.source, command.to));
@@ -864,6 +912,7 @@ function createDefaultTheme(classFontSize = "11", poster: BeamerPosterSettings |
       },
     ],
     diagnostics: [],
+    units: [],
   };
 }
 

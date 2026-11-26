@@ -1,6 +1,7 @@
 import { installTexGlyphOutlines, registerTexGlyphOutlineLoader } from "./glyph-outlines.js";
 import { createRuntimeOutlines, loadRuntimeHarfBuzz, type RuntimeTexFontData, type RuntimeTexFontTransfer } from "./runtime-opentype.js";
 import type { GeneratedTexFont } from "./types.js";
+import { computeSourceFingerprint } from "../../../utils/source-fingerprint.js";
 
 /**
  * Fonts built at runtime from OpenType files (runtime-opentype.ts), next to
@@ -13,6 +14,17 @@ const fontBytes = new Map<string, Uint8Array>();
 
 export function runtimeTexFontId(fileName: string): `otf:${string}` {
   return `otf:${fileName}`;
+}
+
+/**
+ * The id of one revision of a font file the host loaded: the file name, then
+ * a hash of its resolved path and revision. Files of the same name in other
+ * folders (or other documents), and later revisions of the file, get ids of
+ * their own, so registering one never changes another's metrics.
+ */
+export function runtimeTexFontFileId(fileName: string, path: string, revision: string): `otf:${string}` {
+  const hash = computeSourceFingerprint(`${path}\n${revision}`).split(":")[1] ?? "";
+  return `otf:${fileName}#${hash}`;
 }
 
 /** Registers a font built in this thread, whose outlines it draws itself. */

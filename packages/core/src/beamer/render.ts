@@ -149,6 +149,7 @@ import {
   resolveBeamerTheme,
   resolveBeamerThemeColor,
   interpretBlockTemplate,
+  interpretedBlockPair,
   withListDepthOffset,
   withParagraphSkip,
   TemplateUnsupported,
@@ -689,7 +690,8 @@ async function renderBeamerFrameStep(params: {
     itemActionCommitsParagraph: (mapped, sourceEnd) => beamerItemActionCommitsParagraph(mapped, sourceEnd, bodyIr.overlays.items, bodyIr.overlays.commands),
     crampedLists: shrink != null || (frame.options?.entries.some(entry => entry.key === "squeeze") ?? false),
     ...(allowFrameBreaks != null ? { continuationBreaks: collectBeamerContinuationBreaks(context.syntax, frame) } : {}),
-    footnotes: buildBeamerFrameFootnotes(document, context.syntax, frame, context.overlaysByFrameId, step, theme.templates.block.id.includes("/rounded")),
+    // Rounded blocks are minipages; an interpreted block is laid out by its template.
+    footnotes: buildBeamerFrameFootnotes(document, context.syntax, frame, context.overlaysByFrameId, step, theme.templates.block.id.includes("/rounded") && !interpretedBlockPair(theme, "block")),
     tableRegisters: parseSimpleTexTabularRegisters(source.slice(document.preamble.span.from, document.preamble.span.to)),
     arrayPackage: context.syntax.controlsIn(document.preamble.span).some(control => {
       if (control.name !== "usepackage" && control.name !== "RequirePackage") return false;
@@ -2406,12 +2408,6 @@ async function prepareBlockWithTheme(params: {
   work?: BeamerRenderWork;
 }): Promise<PreparedBlock | null> {
   if (params.node.kind === "block" && params.node.packageBox === "tcolorbox") return prepareTcolorbox(params);
-  const plan = planBeamerBlockTemplate({
-    environment: params.node.kind === "theorem"
-      ? params.node.blockEnvironment
-      : params.node.environment,
-    theme: params.theme,
-  });
   const interpreted = params.node.kind === "block" ? interpretBlockTemplate({
     theme: params.theme, environment: params.node.environment, metadata: params.references.frameLayout?.metadata ?? {},
     owner: params.node.span, width: params.width, paperWidth: params.paperWidth, paperHeight: params.references.frameLayout?.paperHeight ?? 0,
@@ -2430,6 +2426,14 @@ async function prepareBlockWithTheme(params: {
         naturalWidth: Number(laid.layout.report.lines[0]?.naturalWidth ?? 0), laid };
     },
   }) : null;
+  const plan = planBeamerBlockTemplate({
+    environment: params.node.kind === "theorem"
+      ? params.node.blockEnvironment
+      : params.node.environment,
+    theme: params.theme,
+    // The interpreted pair draws the block; the plan adds no stock decoration.
+    ...(interpreted ? { templateId: "interpreted/block" } : {}),
+  });
   const bodyWidth = interpreted ? interpreted.slot.width : params.width;
   const titleFont = params.theme.fonts[plan.titleFontRole];
   const theoremTitleFont =

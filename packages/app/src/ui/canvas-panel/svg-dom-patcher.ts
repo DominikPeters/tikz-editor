@@ -16,6 +16,8 @@ export class SvgDomPatcher {
   private readonly contentLayer: SVGGElement;
   private readonly elementByPartId = new Map<string, SVGElement>();
   private readonly fingerprintByPartId = new Map<string, string>();
+  /** Glyph definitions in the DOM; they outlive the models the diff compares. */
+  private readonly installedGlyphDefs = new Set<string>();
   private readonly domParser = new DOMParser();
 
   constructor(private readonly host: HTMLElement) {
@@ -63,7 +65,7 @@ export class SvgDomPatcher {
         this.replaceAll(operation.model);
         return;
       case "appendGlyphDefs":
-        this.glyphDefsElement.insertAdjacentHTML("beforeend", operation.defs.join(""));
+        this.appendGlyphDefs(operation.defs);
         return;
       case "replaceDefs":
         this.replaceDefs(operation.defs);
@@ -83,7 +85,9 @@ export class SvgDomPatcher {
   private replaceAll(model: SvgRenderModel): void {
     this.setViewBox(model.viewBox);
     this.replaceDefs(model.defs);
-    this.glyphDefsElement.innerHTML = (model.glyphDefs ?? []).join("");
+    this.glyphDefsElement.replaceChildren();
+    this.installedGlyphDefs.clear();
+    this.appendGlyphDefs(model.glyphDefs ?? []);
     this.elementByPartId.clear();
     this.fingerprintByPartId.clear();
     this.contentLayer.replaceChildren();
@@ -97,6 +101,18 @@ export class SvgDomPatcher {
       this.fingerprintByPartId.set(part.partId, part.fingerprint);
     }
     this.contentLayer.appendChild(content);
+  }
+
+  /**
+   * A glyph id is a hash of its outline, so a definition already in the DOM is
+   * never appended twice (the diff only knows the previous model, which may
+   * have lost a glyph the DOM still defines).
+   */
+  private appendGlyphDefs(defs: readonly string[]): void {
+    const added = defs.filter((def) => !this.installedGlyphDefs.has(def));
+    if (added.length === 0) return;
+    for (const def of added) this.installedGlyphDefs.add(def);
+    this.glyphDefsElement.insertAdjacentHTML("beforeend", added.join(""));
   }
 
   private replaceDefs(defs: readonly string[]): void {

@@ -172,6 +172,7 @@ export type ResolvedBeamerTheme = {
   /** Template bodies from the preamble and local theme files that the interpreter lays out. */
   interpreted?: {
     templates: Readonly<Record<string, BeamerInterpretedTemplate>>;
+    /** The effective preamble in reading order, which defines the templates' macros and spacing registers. */
     units: readonly BeamerTemplateProgramUnit[];
   };
 };
@@ -204,11 +205,19 @@ export type BeamerInterpretedTemplate = {
 };
 
 /** Text whose definitions (macros, lengths) the interpreter runs before laying out a template. */
+/**
+ * A piece of the effective preamble, in TeX's reading order: the main
+ * preamble up to a local theme's load command, that theme file's text (and
+ * the files it loads in turn, spliced in alike), the main preamble after it.
+ */
 export type BeamerTemplateProgramUnit = {
+  /** The theme file, or null for the main document. */
   file: string | null;
   text: string;
-  /** Offset of `text` in the main document, or null for a theme file. */
+  /** Offset of `text` in the main document, or null for a theme file (its templates are not edited in place). */
   offset: number | null;
+  /** Offset of `text` in its own file. */
+  fileOffset: number;
 };
 
 export type BeamerThemeUse = {
@@ -509,4 +518,6 @@ export type BeamerBlockTemplatePlan = {
 export type BeamerBlockTemplateContext = {
   environment: BeamerBlockEnvironment;
   theme: ResolvedBeamerTheme;
+  /** The template drawing this environment when it is not the theme's stock one (`interpreted/block`). */
+  templateId?: string;
 };

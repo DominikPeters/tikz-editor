@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { documentGraphicsWatchPaths } from "../image-asset-cache";
+import { documentGraphicsWatchPaths, subscribeDocumentGraphicsWatchPaths } from "../image-asset-cache";
 import type { PlatformFileApi } from "../platform/types";
 import type { DocumentFileRef } from "../store/types";
 
@@ -11,6 +11,7 @@ type WatchState = {
   owner: symbol | null;
 };
 const watchStates = new WeakMap<PlatformFileApi, WatchState>();
+type WatchedDocuments = { source: string; documentFileRef?: DocumentFileRef | null; additionalDocuments?: readonly { source: string; documentFileRef?: DocumentFileRef | null }[] };
 
 function samePaths(left: readonly string[] | null, right: readonly string[]): boolean {
   return left?.length === right.length && left.every((path, index) => path === right[index]);
@@ -56,11 +57,23 @@ export function createActiveDocumentAssetWatchOwner(files: PlatformFileApi) {
       ownedState.running = false;
     })();
   }
+  let watched: WatchedDocuments | null = null;
+  const resync = (): void => {
+    if (ownedState.owner === owner && watched) enqueue([...new Set([watched, ...(watched.additionalDocuments ?? [])].flatMap(documentGraphicsWatchPaths))]);
+  };
+  // Nested themes, `\input` files, their images and fonts are found while
+  // a render prepares the document; follow them without waiting for an edit.
+  // A preparation that finds the same files again does not notify, and an
+  // unchanged path set is not sent to the platform again.
+  const unsubscribe = subscribeDocumentGraphicsWatchPaths(resync);
   return {
-    update(params: { source: string; documentFileRef?: DocumentFileRef | null; additionalDocuments?: readonly { source: string; documentFileRef?: DocumentFileRef | null }[] }): void {
-      if (ownedState.owner === owner) enqueue([...new Set([params, ...(params.additionalDocuments ?? [])].flatMap(documentGraphicsWatchPaths))]);
+    update(params: WatchedDocuments): void {
+      watched = params;
+      resync();
     },
     dispose(): void {
+      unsubscribe();
+      watched = null;
       if (ownedState.owner !== owner) return;
       ownedState.owner = null;
       enqueue([]);

@@ -1,4 +1,5 @@
 import { beamerInputFileCandidates, findBeamerInputUses } from "./input-files.js";
+import { applyBeamerModes } from "./modes.js";
 import { scanBeamerDocument } from "./scan.js";
 import { beamerFontspecFileRequests, scanBeamerFontspecDeclarations, type BeamerFontFileRequest } from "./theme/fontspec.js";
 import type { BeamerDocumentModel, BeamerThemeKind } from "./types.js";
@@ -12,8 +13,8 @@ import type { BeamerDocumentModel, BeamerThemeKind } from "./types.js";
 export type BeamerProjectFiles = {
   readonly cacheKey: string;
   readText(name: string): string | null;
-  /** The registered runtime font (runtime-registry.ts) for a font file name, if the host loaded it. */
-  fontId?(name: string): `otf:${string}` | null;
+  /** The registered runtime font (runtime-registry.ts) for a font file name under fontspec's `Path=`, if the host loaded it. */
+  fontId?(name: string, path?: string): `otf:${string}` | null;
 };
 
 const THEME_FILE_PREFIX: Readonly<Record<BeamerThemeKind, string>> = {
@@ -45,34 +46,15 @@ export function beamerProjectFiles(document: BeamerDocumentModel): BeamerProject
 
 /**
  * A theme file as a document whose preamble is the file's text, so the
- * preamble scanners (colors, fonts, theme uses) run on it unchanged.
- * `\mode<...>` switches are blanked, and a braced `\mode<...>{...}` keeps
- * its contents at top level, as TeX sees them in presentation mode. Offsets
+ * preamble scanners (colors, fonts, theme uses) run on it unchanged. What
+ * `\mode` skips in presentation mode is blanked, and a kept braced
+ * `\mode<...>{...}` body is at top level, as TeX sees it (modes.ts). Offsets
  * in the result are those of `text` plus `offset`.
  */
 export function scanBeamerThemeFileDocument(text: string): { document: BeamerDocumentModel; offset: number } {
   const prefix = "\\documentclass{beamer}\n";
-  const source = `${prefix}${blankModeSwitches(text)}\n\\begin{document}\n\\end{document}\n`;
+  const source = `${prefix}${applyBeamerModes(text)}\n\\begin{document}\n\\end{document}\n`;
   return { document: scanBeamerDocument(source), offset: prefix.length };
-}
-
-function blankModeSwitches(text: string): string {
-  const chars = text.split("");
-  for (const match of text.matchAll(/\\mode\s*<[^>]*>/gu)) {
-    for (let index = match.index; index < match.index + match[0].length; index += 1) chars[index] = " ";
-    let open = match.index + match[0].length;
-    while (open < chars.length && /\s/u.test(chars[open] ?? "")) open += 1;
-    if (chars[open] !== "{") continue;
-    let depth = 0;
-    for (let index = open; index < chars.length; index += 1) {
-      const char = chars[index];
-      if (char === "\\") { index += 1; continue; }
-      if (char === "%") { while (index < chars.length && chars[index] !== "\n") index += 1; continue; }
-      if (char === "{") depth += 1;
-      if (char === "}" && --depth === 0) { chars[open] = " "; chars[index] = " "; break; }
-    }
-  }
-  return chars.join("");
 }
 
 const PROJECT_FILE_SEARCH_DEPTH = 4;

@@ -20,5 +20,5 @@ export {
 export { planBeamerFrameChrome } from "./templates.js";
 export { planBeamerTitlePageTemplate } from "./title-page.js";
 export type * from "./types.js";
-export { interpretBlockTemplate, withListDepthOffset, withParagraphSkip } from "./template-block.js";
+export { interpretBlockTemplate, interpretedBlockPair, withListDepthOffset, withParagraphSkip } from "./template-block.js";
 export { TemplateUnsupported, type TemplatePaint } from "./template-machine.js";

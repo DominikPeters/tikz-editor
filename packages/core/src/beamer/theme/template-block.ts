@@ -87,17 +87,28 @@ function machineFor(input: InterpretedBlockInput): TemplateMachine | null {
 }
 
 /**
- * Interpret a theme's `block begin` and `block end` as one stream around the
- * body. Returns null when either half is missing or outside the vocabulary,
- * so the caller draws the stock block (the body is never discarded).
+ * The environment's own begin/end pair (`block alerted begin` and `end` for
+ * an alertblock), when the theme interprets both halves and both are within
+ * the vocabulary; null means the stock block template draws it.
+ */
+export function interpretedBlockPair(theme: ResolvedBeamerTheme, environment: BeamerBlockEnvironment): { begin: BeamerInterpretedTemplate; end: BeamerInterpretedTemplate } | null {
+  const [beginRole, endRole] = ROLES[environment];
+  const templates = theme.interpreted?.templates;
+  const begin = templates?.[beginRole];
+  const end = templates?.[endRole];
+  return begin && end && begin.unsupported === undefined && end.unsupported === undefined ? { begin, end } : null;
+}
+
+/**
+ * Interpret a theme's `block begin` and `block end` (or the alerted or
+ * example pair) as one stream around the body. Returns null when either
+ * half is missing or outside the vocabulary, so the caller draws the stock
+ * block (the body is never discarded).
  */
 export function interpretBlockTemplate(input: InterpretedBlockInput): InterpretedBlockPlan | null {
-  if (input.theme.templates.block.id !== "interpreted/block") return null;
-  const [beginRole, endRole] = ROLES[input.environment];
-  const templates = input.theme.interpreted?.templates;
-  const begin: BeamerInterpretedTemplate | undefined = templates?.[beginRole];
-  const end: BeamerInterpretedTemplate | undefined = templates?.[endRole];
-  if (!begin || !end || begin.unsupported !== undefined || end.unsupported !== undefined) return null;
+  const pair = interpretedBlockPair(input.theme, input.environment);
+  if (!pair) return null;
+  const { begin, end } = pair;
   const run = (body: InterpretedBlockBody | null): { box: TemplateBox; slot: TemplateSlotContext } | null => {
     const machine = machineFor(input);
     if (!machine) return null;

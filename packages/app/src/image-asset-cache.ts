@@ -17,7 +17,7 @@ import type { LocalAssetReadResult } from "./platform/types";
 import type { DocumentFileRef } from "./store/types";
 import { isImportedGraphicPath, readImportedGraphic } from "./imported-graphics.js";
 import { BoundedLru } from "./bounded-lru";
-import { beamerProjectFileWatchPaths, cachedInputFileTexts, documentUsesProjectFiles, invalidateProjectFilePath, NO_PROJECT_FILES, prepareBeamerProjectFiles } from "./project-files";
+import { beamerProjectFileWatchPaths, documentUsesProjectFiles, invalidateProjectFilePath, NO_PROJECT_FILES, prepareBeamerProjectFiles } from "./project-files";
 import type { BeamerProjectFiles } from "@tikz-editor/core/beamer";
 
 type ResolvedImageMimeType = "image/png" | "image/jpeg" | "image/svg+xml";
@@ -61,6 +61,16 @@ const pendingPathReads = new Map<string, {
 // single document exceeds the history budget.
 const previewBundles = new BoundedLru<string, DocumentGraphicsPreviewBundle>(MAX_PREVIEW_BUNDLES, 48 * 1024 * 1024, true);
 let cacheGeneration = 0;
+// Graphics found in project files, by file text: these files change rarely,
+// and scanning them on every edit would displace the main document's
+// incremental resource parse.
+const projectFileGraphics = new BoundedLru<string, readonly ImageIncludeCandidate[]>(64, 4 * 1024 * 1024);
+// What each document's last preparation found it depends on beyond its own
+// source (nested themes, `\input` files and their images, fonts), by
+// document. The active watcher reads these and listens for changes.
+const MAX_DISCOVERED_DOCUMENTS = 32;
+const discoveredWatchPaths = new Map<string, readonly string[]>();
+const discoveredWatchListeners = new Set<() => void>();
 
 /** Synchronous freshness fence for completed page caches. */
 export function getImageAssetCacheGeneration(): number { return cacheGeneration; }
@@ -88,10 +98,15 @@ export async function prepareDocumentGraphicsContext(params: {
     readLocalAsset: platform.files?.readLocalAsset,
     findFont: platform.files?.findFont,
   });
-  const includeCandidates = [
-    ...collectIncludeGraphicsCandidates(params.source),
-    ...project.entries.filter(([name]) => !name.endsWith(".sty")).flatMap(([, text]) => collectIncludeGraphicsCandidates(text)),
-  ];
+  // Theme files' templates and `\input` files draw images too. TeX looks
+  // them up from the main document's folder and \graphicspath, wherever the
+  // file that names them lives.
+  const projectGraphics = project.entries.flatMap(([, text]) => projectFileGraphicsCandidates(text));
+  const includeCandidates = [...collectIncludeGraphicsCandidates(params.source), ...projectGraphics];
+  recordDiscoveredWatchPaths(params.documentFileRef, [
+    ...project.dependencies,
+    ...projectGraphics.flatMap(include => includeGraphicsWatchCandidates(include.filename, baseDirectory, prefixes)),
+  ]);
   const entries = new Map<string, PreparedAssetEntry>();
 
   for (const include of includeCandidates) {
@@ -173,12 +188,41 @@ export function documentGraphicsWatchPaths(params: {
 }): string[] {
   const baseDirectory = documentDirectory(params.documentFileRef);
   const prefixes = texGraphicsPathPrefixes(params.source);
-  const paths = [...collectIncludeGraphicsCandidates(params.source), ...cachedInputFileTexts().flatMap(text => collectIncludeGraphicsCandidates(text))].flatMap((include) => {
-    const descriptor = includeGraphicsPathDescriptor(include.filename, baseDirectory, prefixes);
-    return descriptor?.kind === "unsupported" ? [descriptor.path] : descriptor?.candidates ?? [];
-  });
+  const paths = collectIncludeGraphicsCandidates(params.source).flatMap(include => includeGraphicsWatchCandidates(include.filename, baseDirectory, prefixes));
   paths.push(...beamerProjectFileWatchPaths(params.source, name => resolveLocalImagePath(name, baseDirectory)));
+  if (documentUsesProjectFiles(params.source)) paths.push(...discoveredWatchPaths.get(discoveredWatchKey(params.documentFileRef)) ?? []);
   return [...new Set(paths)].sort();
+}
+
+/**
+ * Called when a preparation discovers dependencies a document's watch paths
+ * did not include before (or no longer has), so the active watcher can
+ * follow files found only by reading other files. Preparations that find
+ * the same paths again do not notify.
+ */
+export function subscribeDocumentGraphicsWatchPaths(listener: () => void): () => void {
+  discoveredWatchListeners.add(listener);
+  return () => { discoveredWatchListeners.delete(listener); };
+}
+
+function discoveredWatchKey(fileRef: DocumentFileRef | null | undefined): string {
+  return fileRef ? `${fileRef.provider ?? ""}\u0000${fileRef.path ?? fileRef.name}` : "";
+}
+
+function recordDiscoveredWatchPaths(fileRef: DocumentFileRef | null | undefined, found: readonly string[]): void {
+  const key = discoveredWatchKey(fileRef);
+  const paths = [...new Set(found)].sort();
+  const previous = discoveredWatchPaths.get(key);
+  if (previous?.length === paths.length && previous.every((path, index) => path === paths[index])) return;
+  if (!previous && paths.length === 0) return;
+  discoveredWatchPaths.delete(key);
+  if (paths.length > 0) discoveredWatchPaths.set(key, paths);
+  while (discoveredWatchPaths.size > MAX_DISCOVERED_DOCUMENTS) {
+    const oldest = discoveredWatchPaths.keys().next().value;
+    if (oldest === undefined) break;
+    discoveredWatchPaths.delete(oldest);
+  }
+  for (const listener of discoveredWatchListeners) listener();
 }
 
 export async function prepareDocumentGraphicsResolver(params: {
@@ -542,6 +586,24 @@ function pathCacheEntryBytes(key: string, entry: PathCacheEntry): number {
   return 512 + (key.length + entry.path.length + entry.signature.length +
     entry.watchedPaths.reduce((length, path) => length + path.length, 0) +
     (entry.resolution.status === "resolved" ? entry.resolution.dataBase64.length : 0)) * 2;
+}
+
+function includeGraphicsWatchCandidates(filename: string, baseDirectory: string | null, prefixes: readonly string[]): readonly string[] {
+  const descriptor = includeGraphicsPathDescriptor(filename, baseDirectory, prefixes);
+  return descriptor?.kind === "unsupported" ? [descriptor.path] : descriptor?.candidates ?? [];
+}
+
+/**
+ * `\includegraphics` in a project file. Names that are macro parameters or
+ * macros (`\includegraphics{#1}` in a theme's definitions) are left to the
+ * renderer, which asks for the expanded name.
+ */
+function projectFileGraphicsCandidates(text: string): readonly ImageIncludeCandidate[] {
+  const cached = projectFileGraphics.get(text);
+  if (cached) return cached;
+  const found = collectIncludeGraphicsCandidates(text).filter(include => !/[#\\]/u.test(include.filename));
+  projectFileGraphics.set(text, found, text.length * 2 + 256);
+  return found;
 }
 
 function collectIncludeGraphicsCandidates(source: string): ImageIncludeCandidate[] {

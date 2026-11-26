@@ -52,6 +52,27 @@ describe("canvas SVG patching", () => {
     patcher.dispose();
   });
 
+  it("does not append a glyph definition the DOM still holds after its last use was removed", () => {
+    const glyph = (id: string) => `<path id="tg-${id}" d="M0 0L1 1"/>`;
+    const host = document.createElement("div");
+    const patcher = new SvgDomPatcher(host);
+    const withB = { ...model([part("a", '<use href="#tg-a"/><use href="#tg-b"/>')]), glyphDefs: [glyph("a"), glyph("b")] };
+    const withoutB = { ...model([part("a", '<use href="#tg-a"/>')]), glyphDefs: [glyph("a")] };
+    patcher.applyOperations(diffSvgModels(null, withB));
+    let previous: SvgRenderModel = withB;
+    for (let cycle = 0; cycle < 4; cycle += 1) {
+      patcher.applyOperations(diffSvgModels(previous, withoutB));
+      patcher.applyOperations(diffSvgModels(withoutB, withB));
+      previous = withB;
+    }
+    expect(host.querySelectorAll("#tg-b")).toHaveLength(1);
+    expect(host.querySelectorAll('path[id^="tg-"]')).toHaveLength(2);
+    patcher.applyOperations([{ kind: "replaceAll", model: withoutB }]);
+    patcher.applyOperations(diffSvgModels(withoutB, withB));
+    expect(host.querySelectorAll("#tg-b")).toHaveLength(1);
+    patcher.dispose();
+  });
+
   it("batches dense changes and preserves unchanged DOM nodes across reordering", () => {
     const host = document.createElement("div");
     const patcher = new SvgDomPatcher(host);

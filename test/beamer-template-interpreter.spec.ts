@@ -292,6 +292,56 @@ describe("template interpreter: blocks", () => {
   });
 });
 
+describe("template interpreter: block families", () => {
+  // The same template as the alerted pair: LuaLaTeX draws the alertblocks exactly as BLOCK_POSTER's blocks
+  // (artifacts/review-fixes/fixes/alerted.tex renders identically to normal.tex).
+  const ALERTED_ONLY = BLOCK_POSTER
+    .replace("\\setbeamertemplate{block begin}", "\\setbeamertemplate{block alerted begin}")
+    .replace("\\setbeamertemplate{block end}", "\\setbeamertemplate{block alerted end}")
+    .replaceAll("{block}", "{alertblock}");
+
+  it("lays out an alerted pair without the normal pair being overridden", async () => {
+    const { backgrounds, lines, diagnostics } = await layoutOf(ALERTED_ONLY);
+    expect(diagnostics.some(item => item.code === "beamer-template-block-pair" || item.code === "beamer-template-unsupported")).toBe(false);
+    const near = (y: number) => backgrounds.find(bounds => Math.abs(bounds.y - y) < 0.01)!;
+    expect(near(6.69).height).toBeCloseTo(78.352, 2);
+    expect(near(62.912).height).toBeCloseTo(0.684, 2);
+    const byText = (prefix: string) => lines.find(line => line.text.startsWith(prefix))!;
+    expect(byText("First title").baseline).toBeCloseTo(43.69, 2);
+    expect(byText("A body with").baseline).toBeCloseTo(220.746, 2);
+  });
+
+  it("draws the other families with their own stock template", async () => {
+    const mixed = ALERTED_ONLY.replace("\\begin{alertblock}{Second}", "\\begin{block}{Second}").replace(/\\end\{alertblock\}\n\\end\{frame\}/u, "\\end{block}\n\\end{frame}");
+    const interpreted = await layoutOf(ALERTED_ONLY);
+    const { lines, theme } = await layoutOf(mixed);
+    expect(theme.templates.block.id).toBe("beamer/block/default");
+    const byText = (prefix: string) => lines.find(line => line.text.startsWith(prefix))!;
+    // The alertblock keeps the template's layout; the block below is the stock one, so it sits elsewhere.
+    expect(byText("First title").baseline).toBeCloseTo(43.69, 2);
+    expect(byText("Second").baseline).not.toBeCloseTo(interpreted.lines.find(line => line.text.startsWith("Second"))!.baseline, 0);
+  });
+
+  it("reports a lone half of each family", async () => {
+    const lone = ALERTED_ONLY.replace(/\\setbeamertemplate\{block alerted end\}\n\{[\s\S]*?\n\}\n/u, "")
+      .replace("\\begin{document}", "\\setbeamertemplate{block example end}{\\par}\n\\begin{document}");
+    const { theme, lines } = await layoutOf(lone);
+    const pairs = theme.diagnostics.filter(item => item.code === "beamer-template-block-pair").map(item => item.message);
+    expect(pairs).toHaveLength(2);
+    expect(pairs[0]).toContain("block alerted template");
+    expect(pairs[1]).toContain("block example template");
+    expect(lines.some(line => line.text.startsWith("One short"))).toBe(true);
+  });
+
+  it("gives way to a stock block template chosen later", async () => {
+    const later = ALERTED_ONLY.replace("\\begin{document}", "\\useinnertheme{rounded}\n\\begin{document}");
+    const { theme, diagnostics } = await layoutOf(later);
+    expect(theme.templates.block.id).toBe("beamer/block/rounded");
+    expect(theme.interpreted?.templates["block alerted begin"]).toBeUndefined();
+    expect(diagnostics.some(item => item.code === "beamer-template-block-pair")).toBe(false);
+  });
+});
+
 describe("template interpreter: adjustwidth and block body flow", () => {
   // Values: LuaLaTeX trace of ADJUST_POSTER (artifacts/beamerposter-probes/templates2/adj.tex).
   it("runs adjustwidth as a list: margins, \\parskip and the glue around it", async () => {
