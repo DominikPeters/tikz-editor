@@ -45,8 +45,9 @@ describe("semantic source bindings", () => {
     const nextSvg = nextScope.run(() => emitSvg(next.semantic.scene, { textEngine, textSourceCoordinates: "layout", reuse }));
     retainSceneTextLayout(nextScope, next.semantic.scene);
     const changes = diffSvgModels(firstSvg.model, nextSvg.model);
-    expect(changes).toHaveLength(1);
-    expect(changes[0]).toMatchObject({ kind: "upsertPart", part: { sourceId: "path:0" } });
+    // New glyphs only append to the glyph definitions; nothing else is replaced.
+    expect(changes.map(change => change.kind)).toEqual(["appendGlyphDefs", "upsertPart"]);
+    expect(changes[1]).toMatchObject({ kind: "upsertPart", part: { sourceId: "path:0" } });
     const currentReport = getTextLayoutReportProvider(nextScope.layoutContext)!.getParagraphReport!(paragraphId)!;
     expect(currentReport.lines[0].segments[0].sourceStartRaw).toBe(updated.indexOf("Later"));
     expect(oldReport.lines[0].segments[0].sourceStartRaw).toBe(source.indexOf("Later"));

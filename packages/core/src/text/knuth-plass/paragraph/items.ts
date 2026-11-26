@@ -17,6 +17,8 @@ export interface GlueItem {
   kind: 'glue';
   width: number;
   stretch: number;
+  /** Infinite stretch order (1 fil, 2 fill, 3 filll); `stretch` is then its coefficient. */
+  stretchOrder?: 1 | 2 | 3;
   shrink: number;
   payload: {
     runIndex: number;
@@ -256,6 +258,7 @@ export function runsToItems(
         kind: 'glue',
         width,
         stretch,
+        ...(run.texGlue?.stretchOrder !== undefined ? { stretchOrder: run.texGlue.stretchOrder } : {}),
         shrink,
         payload: {
           runIndex: run.runIndex,

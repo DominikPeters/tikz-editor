@@ -12,6 +12,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 export class SvgDomPatcher {
   private readonly rootSvg: SVGSVGElement;
   private readonly defsElement: SVGDefsElement;
+  private readonly glyphDefsElement: SVGDefsElement;
   private readonly contentLayer: SVGGElement;
   private readonly elementByPartId = new Map<string, SVGElement>();
   private readonly fingerprintByPartId = new Map<string, string>();
@@ -33,7 +34,8 @@ export class SvgDomPatcher {
     this.contentLayer = document.createElementNS(SVG_NS, "g");
     this.contentLayer.setAttribute("data-layer", "content");
 
-    this.rootSvg.append(this.defsElement, this.contentLayer);
+    this.glyphDefsElement = document.createElementNS(SVG_NS, "defs");
+    this.rootSvg.append(this.defsElement, this.glyphDefsElement, this.contentLayer);
     this.host.replaceChildren(this.rootSvg);
   }
 
@@ -60,6 +62,9 @@ export class SvgDomPatcher {
       case "replaceAll":
         this.replaceAll(operation.model);
         return;
+      case "appendGlyphDefs":
+        this.glyphDefsElement.insertAdjacentHTML("beforeend", operation.defs.join(""));
+        return;
       case "replaceDefs":
         this.replaceDefs(operation.defs);
         return;
@@ -78,6 +83,7 @@ export class SvgDomPatcher {
   private replaceAll(model: SvgRenderModel): void {
     this.setViewBox(model.viewBox);
     this.replaceDefs(model.defs);
+    this.glyphDefsElement.innerHTML = (model.glyphDefs ?? []).join("");
     this.elementByPartId.clear();
     this.fingerprintByPartId.clear();
     this.contentLayer.replaceChildren();

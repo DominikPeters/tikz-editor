@@ -35,6 +35,23 @@ describe("canvas SVG patching", () => {
     }
   });
 
+  it("appends glyph definitions without rewriting the other definitions or earlier glyphs", () => {
+    const glyph = (id: string) => `<path id="tg-${id}" d="M0 0L1 1"/>`;
+    const host = document.createElement("div");
+    const patcher = new SvgDomPatcher(host);
+    const before = { ...model([part("a", '<use href="#tg-a"/>')]), defs: ["<clipPath id=\"clip\"/>"], glyphDefs: [glyph("a")] };
+    patcher.applyOperations(diffSvgModels(null, before));
+    const clip = host.querySelector("#clip"), first = host.querySelector("#tg-a");
+    const after = { ...model([part("a", '<use href="#tg-a"/><use href="#tg-b"/>')]), defs: before.defs, glyphDefs: [glyph("a"), glyph("b")] };
+    const operations = diffSvgModels(before, after);
+    expect(operations.map((operation) => operation.kind)).toEqual(["appendGlyphDefs", "upsertPart"]);
+    patcher.applyOperations(operations);
+    expect(host.querySelector("#clip")).toBe(clip);
+    expect(host.querySelector("#tg-a")).toBe(first);
+    expect(host.querySelectorAll('path[id^="tg-"]')).toHaveLength(2);
+    patcher.dispose();
+  });
+
   it("batches dense changes and preserves unchanged DOM nodes across reordering", () => {
     const host = document.createElement("div");
     const patcher = new SvgDomPatcher(host);

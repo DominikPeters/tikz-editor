@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildDeckDocumentInspector, prepareBeamerDocument, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
-import { beamerInputFileCandidates, findBeamerInputUses } from "../packages/core/src/beamer/input-files.js";
+import { beamerInputFileCandidates, beamerMainSyntaxForReparse, findBeamerInputUses } from "../packages/core/src/beamer/input-files.js";
 import { parseBeamerFrameBody } from "../packages/core/src/beamer/content.js";
 import { collectBeamerProjectFiles, createBeamerProjectFiles } from "../packages/core/src/beamer/project-files.js";
 
@@ -108,6 +108,34 @@ ${separator}
     const sepSpans = layout.items.filter(item => item.kind === "column").map(item => item.sourceSpan).filter(span => uses.includes(span.from));
     expect(sepSpans).toHaveLength(3);
     for (const item of layout.items) expect(item.sourceSpan.to).toBeLessThanOrEqual(macro.length);
+  });
+});
+
+describe("macros with arguments and several columns", () => {
+  const frame = (columns: string) => String.raw`\begin{document}
+\begin{frame}[t]
+\begin{columns}[t]
+${columns}
+\end{columns}
+\end{frame}
+\end{document}`;
+  it("realise a column macro with an argument like the written-out column", async () => {
+    const written = frame("\\begin{column}{0.3\\paperwidth}A\\end{column}\n\\begin{column}{\\colwidth}B\\end{column}");
+    const expected = await render(`${HEAD}${written}`);
+    const macro = `${HEAD}\\newcommand{\\col}[2]{\\begin{column}{#1}#2\\end{column}}\n${frame("\\col{0.3\\paperwidth}{A}\n\\col{\\colwidth}{B}")}`;
+    const layout = await render(macro);
+    expect(columnXs(layout)).toEqual(columnXs(expected));
+    expect(columnXs(layout)).toHaveLength(2);
+    for (const item of layout.items) expect(item.sourceSpan.to).toBeLessThanOrEqual(macro.length);
+  });
+
+  it("realise a macro whose body is two columns", async () => {
+    const pair = String.raw`\begin{column}{\sepwidth}\end{column}\begin{column}{\colwidth}C\end{column}`;
+    const expected = await render(`${HEAD}${frame(pair + "\n" + pair)}`);
+    const macro = `${HEAD}\\newcommand{\\pair}{${pair}}\n${frame("\\pair\n\\pair")}`;
+    const layout = await render(macro);
+    expect(columnXs(layout)).toEqual(columnXs(expected));
+    expect(columnXs(layout)).toHaveLength(4);
   });
 });
 
@@ -232,3 +260,132 @@ function parseColumnsOf(source: string) {
   if (columns?.kind !== "columns") throw new Error("Expected columns");
   return columns.columns[0].children;
 }
+
+describe("\\input inside text and groups", () => {
+  const TIKZ = String.raw`\begin{tikzpicture}
+\draw[fill=blue!20] (0,0) rectangle (3,1.5);
+\node at (1.5,0.75) {Schematic};
+\end{tikzpicture}
+`;
+  const frame = (body: string) => String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}{Title}
+${body}
+\end{frame}
+\end{document}
+`;
+  const assertInside = (layout: Awaited<ReturnType<typeof render>>, source: string) => {
+    const spans = [
+      ...layout.items.map(item => item.sourceSpan),
+      ...layout.embeddedTikz.map(picture => picture.sourceSpan),
+      ...layout.graphics.map(graphic => graphic.sourceSpan),
+      ...layout.paragraphs.flatMap(paragraph => [paragraph.sourceSpan, ...paragraph.editableTextSpans.map(entry => entry.span),
+        ...paragraph.atomicRenderSpans.map(atom => atom.span), ...(paragraph.readOnlySourceSpans ?? []), ...(paragraph.hiddenSourceSpans ?? [])]),
+    ];
+    for (const span of spans) expect(span.to).toBeLessThanOrEqual(source.length);
+  };
+
+  it("draws a picture from a file inside a figure like the inline picture, owned by the use", async () => {
+    const source = frame("Above.\n\\begin{figure}\n\\centering\n\\input{fig.tikz}\n\\caption{Cap.}\n\\end{figure}\nBelow.");
+    const inline = frame("Above.\n\\begin{figure}\n\\centering\n" + TIKZ.trimEnd() + "\n\\caption{Cap.}\n\\end{figure}\nBelow.");
+    const included = await render(source, files({ "fig.tikz": TIKZ }));
+    const expected = await render(inline);
+    assertInside(included, source);
+    const use = source.indexOf("\\input{fig.tikz}");
+    expect(included.embeddedTikz).toHaveLength(1);
+    expect(included.embeddedTikz[0]?.sourceSpan).toEqual({ from: use, to: use + "\\input{fig.tikz}".length });
+    for (const key of ["x", "y", "width", "height"] as const) {
+      expect(included.embeddedTikz[0]?.bounds[key]).toBeCloseTo(expected.embeddedTikz[0]?.bounds[key] ?? -1, 3);
+    }
+    expect(included.paragraphs.length).toBe(expected.paragraphs.length);
+    // Nothing of the included text can be typed into.
+    for (const paragraph of included.paragraphs) {
+      for (const editable of paragraph.editableTextSpans) {
+        expect(editable.span.to <= use || editable.span.from >= use + "\\input{fig.tikz}".length).toBe(true);
+      }
+    }
+  });
+
+  it("scales an included picture inside \\scalebox", async () => {
+    const source = frame("\\scalebox{0.6}{\\input{plot}}");
+    const layout = await render(source, files({ "plot.tex": TIKZ }));
+    assertInside(layout, source);
+    expect(layout.paragraphs.some(paragraph => paragraph.atomicRenderSpans.length > 0 || paragraph.editableTextSpans.length === 0)).toBe(true);
+  });
+
+  it("keeps prose around an \\input in one paragraph", async () => {
+    const source = frame("Before \\input{words} after, and more.\n\\begin{itemize}\n\\item One \\input{words} item.\n\\end{itemize}");
+    const layout = await render(source, files({ "words.tex": "the included words\n" }));
+    assertInside(layout, source);
+    const body = layout.paragraphs.filter(paragraph => paragraph.role === "body");
+    expect(body).toHaveLength(1);
+    const text = body[0]?.report.lines.map(line => line.segments.map(segment => segment.text).join("")).join(" ") ?? "";
+    expect(text).toContain("Before the included words");
+    expect(text).toMatch(/One the included words\s+item/u);
+    // The words before and after the use stay editable, the file's do not.
+    const use = source.indexOf("\\input{words}");
+    const spans = body[0]?.editableTextSpans.map(entry => entry.span) ?? [];
+    expect(spans.some(span => span.from < use && span.to <= use)).toBe(true);
+    expect(spans.some(span => span.from >= use + "\\input{words}".length)).toBe(true);
+    expect(spans.every(span => span.to <= use || span.from >= use + "\\input{words}".length)).toBe(true);
+  });
+
+  it("reads nested inputs inside text", async () => {
+    const source = frame("A \\input{one} Z");
+    const layout = await render(source, files({ "one.tex": "one \\input{two}\n", "two.tex": "two\n" }));
+    assertInside(layout, source);
+    const text = layout.paragraphs.filter(paragraph => paragraph.role === "body").map(paragraph => paragraph.report.lines.map(line => line.segments.map(segment => segment.text).join("")).join(" ")).join(" ");
+    expect(text).toMatch(/A one two\s+Z/u);
+  });
+});
+
+describe("incremental reparse of documents with a virtual tail", () => {
+  const doc = (word: string) => String.raw`\documentclass{beamer}
+\usepackage[size=a1,orientation=landscape]{beamerposter}
+\newlength{\sepwidth}\newlength{\colwidth}
+\setlength{\sepwidth}{0.04\paperwidth}\setlength{\colwidth}{0.44\paperwidth}
+\newcommand{\separatorcolumn}{\begin{column}{\sepwidth}\end{column}}
+\begin{document}
+\begin{frame}[t]
+\begin{columns}[t]
+\separatorcolumn
+\begin{column}{\colwidth}
+${word} text.
+\input{blocks/a}
+\end{column}
+\separatorcolumn
+\end{columns}
+\end{frame}
+\end{document}
+`;
+  const project = files({ "blocks/a.tex": "\\begin{block}{B}\nIncluded.\n\\end{block}\n" });
+  const trees = (source: string, extra: object) => {
+    const prepared = prepareBeamerDocument(source, { projectFiles: project, ...extra });
+    return { prepared, tree: String(prepared.syntax.tree) };
+  };
+
+  for (const masked of [false, true]) {
+    it(`matches a fresh parse after an edit${masked ? " under a structural mask" : ""}`, async () => {
+      const first = doc("Alpha");
+      const second = doc("Alpha beta gamma");
+      const masks = masked ? { structuralMasks: [{ from: first.indexOf("Alpha"), to: first.indexOf("Alpha") + 5 }] } : {};
+      const before = trees(first, masks);
+      const incremental = trees(second, { ...masks, previousSyntax: before.prepared.syntax });
+      const fresh = trees(second, { ...masks, exactSyntax: true });
+      expect(incremental.tree).toBe(fresh.tree);
+      expect(incremental.prepared.syntax.source).toBe(fresh.prepared.syntax.source);
+      expect(incremental.prepared.syntax.source.length).toBeGreaterThan(second.length);
+      const a = (await incremental.prepared.renderFrame({ frameIndex: 0 })).layout;
+      const b = (await fresh.prepared.renderFrame({ frameIndex: 0 })).layout;
+      expect(a.paragraphs.map(paragraph => paragraph.bounds)).toEqual(b.paragraphs.map(paragraph => paragraph.bounds));
+      expect(a.items.map(item => item.sourceSpan)).toEqual(b.items.map(item => item.sourceSpan));
+    });
+  }
+
+  it("reparses the document's own source from its own earlier tree", () => {
+    const first = trees(doc("Alpha"), {});
+    expect(beamerMainSyntaxForReparse(first.prepared.syntax)?.source).toBe(doc("Alpha"));
+    expect(beamerMainSyntaxForReparse(undefined)).toBeUndefined();
+  });
+});

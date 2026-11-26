@@ -96,6 +96,7 @@ export interface SimpleTexParagraphVerticalSkip {
   readonly listStretch?: TexLength;
   readonly listShrink?: TexLength;
   readonly trivlistSize?: TexLength;
+  readonly trivlistShrink?: TexLength;
 }
 
 export function planSimpleTexParagraphVerticalSkips(
@@ -242,7 +243,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
         ? texArticleListExitBoundarySkip(state, previousList.depth, listRole?.depth ?? 0, font, previousProfile) : texLength(0);
       const boundarySkip = texLength(Math.max(closingSkip, closingListSkip));
       if (boundarySkip > 0) skips.push({ blockIndex: -4_000_000 - (item.sourceSpan?.start ?? 0), vlistPath: path, segmentIndex: 0,
-        quoteSize: texLength(0), listSize: texLength(Math.max(0, closingListSkip - closingSkip)), trivlistSize: closingSkip, size: boundarySkip });
+        quoteSize: texLength(0), listSize: texLength(Math.max(0, closingListSkip - closingSkip)), trivlistSize: closingSkip,
+        ...(closingSkip > 0 && !previousList && (closingProfile?.trivlistShrinkPt ?? 0) > 0 ? { trivlistShrink: texLength(closingProfile?.trivlistShrinkPt ?? 0) } : {}), size: boundarySkip });
       if (item.kind === "display-math" || item.kind === "display-alignment") {
         state.previousEmittedTrivlistScopes = trivlistScopes;
         if (!listRole) state.previousEmittedListContext = undefined;
@@ -420,6 +422,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
         : {}),
       ...(trivlistVerticalSkipBefore > 0
         ? { trivlistSize: trivlistVerticalSkipBefore }
+        : {}),
+      ...(trivlistVerticalSkipBefore > 0 && !activeList && (trivlistProfile?.trivlistShrinkPt ?? 0) > 0
+        ? { trivlistShrink: texLength(trivlistProfile?.trivlistShrinkPt ?? 0) }
         : {}),
       size: texLength(
         quoteVerticalSkipBefore + listVerticalSkipBefore + trivlistVerticalSkipBefore
@@ -631,6 +636,7 @@ function paragraphBoundaryGlueItems(
         beforeBlockIndex: skip.blockIndex,
       },
       size: skip.trivlistSize ?? texLength(0),
+      ...(skip.trivlistShrink != null ? { shrink: skip.trivlistShrink } : {}),
     });
   }
   return glues;

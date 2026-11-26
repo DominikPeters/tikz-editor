@@ -59,8 +59,13 @@ interface ForcedPenalty {
 
 interface GlueMetrics {
   stretch: number;
+  stretchOrder?: 1 | 2 | 3;
   shrink: number;
 }
+
+/** Infinite stretch coefficients of order fil, fill, filll. */
+type InfiniteStretch = readonly [number, number, number];
+const NO_INFINITE_STRETCH: InfiniteStretch = [0, 0, 0];
 
 interface TextPenalty {
   penalty: number;
@@ -80,6 +85,7 @@ interface BreakCandidate {
   spaceCount: number;
   spaceWidth: number;
   stretch: number;
+  infStretch: InfiniteStretch;
   shrink: number;
   break: BreakDecision | null;
   breakPenalty: number;
@@ -97,6 +103,7 @@ interface CandidateScore {
   spaceDeltaPerGap: number;
   xOffset: number;
   constraintViolation: boolean;
+  infiniteGlue?: { order: 1 | 2 | 3; ratio: number };
   artificial?: boolean;
 }
 
@@ -299,6 +306,7 @@ function collectGlueMetrics(model: ParagraphModel): Map<number, GlueMetrics> {
     if (item.kind !== 'glue') continue;
     map.set(item.payload.runIndex, {
       stretch: item.stretch,
+      ...(item.stretchOrder !== undefined ? { stretchOrder: item.stretchOrder } : {}),
       shrink: item.shrink,
     });
   }
@@ -382,12 +390,14 @@ function* generateCandidates(
   let spaceCount = 0;
   let spaceWidth = 0;
   let stretch = 0;
+  let inf: InfiniteStretch = NO_INFINITE_STRETCH;
   let shrink = 0;
 
   let naturalWidthWithoutTrailingSpaces = 0;
   let spaceCountWithoutTrailingSpaces = 0;
   let spaceWidthWithoutTrailingSpaces = 0;
   let stretchWithoutTrailingSpaces = 0;
+  let infWithoutTrailingSpaces: InfiniteStretch = NO_INFINITE_STRETCH;
   let shrinkWithoutTrailingSpaces = 0;
   let lastNonSpaceRun = -1;
   let stoppedAtForcedBoundary = false;
@@ -428,6 +438,7 @@ function* generateCandidates(
           spaceCount,
           spaceWidth,
           stretch,
+          infStretch: inf,
           shrink,
           break: {
             kind: 'hyphen',
@@ -459,6 +470,7 @@ function* generateCandidates(
       spaceCountWithoutTrailingSpaces = spaceCount;
       spaceWidthWithoutTrailingSpaces = spaceWidth;
       stretchWithoutTrailingSpaces = stretch;
+      infWithoutTrailingSpaces = inf;
       shrinkWithoutTrailingSpaces = shrink;
       lastNonSpaceRun = runIndex;
       continue;
@@ -476,6 +488,7 @@ function* generateCandidates(
           spaceCount: isEmptyLine ? 0 : spaceCountWithoutTrailingSpaces,
           spaceWidth: isEmptyLine ? 0 : spaceWidthWithoutTrailingSpaces,
           stretch: isEmptyLine ? 0 : stretchWithoutTrailingSpaces,
+          infStretch: isEmptyLine ? NO_INFINITE_STRETCH : infWithoutTrailingSpaces,
           shrink: isEmptyLine ? 0 : shrinkWithoutTrailingSpaces,
           break: {
             kind: 'forced',
@@ -506,6 +519,7 @@ function* generateCandidates(
           spaceCount,
           spaceWidth,
           stretch,
+          infStretch: inf,
           shrink,
           break: {
             kind: 'space',
@@ -528,13 +542,21 @@ function* generateCandidates(
       spaceCount += 1;
       spaceWidth += width;
       const glue = glueMetrics.get(runIndex);
-      stretch += glue?.stretch ?? 0;
+      if (glue?.stretchOrder !== undefined) {
+        const [fil, fill, filll] = inf;
+        const add = glue.stretch;
+        inf = glue.stretchOrder === 1 ? [fil + add, fill, filll]
+          : glue.stretchOrder === 2 ? [fil, fill + add, filll] : [fil, fill, filll + add];
+      } else {
+        stretch += glue?.stretch ?? 0;
+      }
       shrink += glue?.shrink ?? 0;
       if (run.texGlue?.preserveAtLineEnd === true) {
         naturalWidthWithoutTrailingSpaces = naturalWidth;
         spaceCountWithoutTrailingSpaces = spaceCount;
         spaceWidthWithoutTrailingSpaces = spaceWidth;
         stretchWithoutTrailingSpaces = stretch;
+        infWithoutTrailingSpaces = inf;
         shrinkWithoutTrailingSpaces = shrink;
         lastNonSpaceRun = runIndex;
       }
@@ -552,6 +574,7 @@ function* generateCandidates(
           spaceCount,
           spaceWidth,
           stretch,
+          infStretch: inf,
           shrink,
           break: {
             kind: 'space',
@@ -578,6 +601,7 @@ function* generateCandidates(
     spaceCountWithoutTrailingSpaces = spaceCount;
     spaceWidthWithoutTrailingSpaces = spaceWidth;
     stretchWithoutTrailingSpaces = stretch;
+    infWithoutTrailingSpaces = inf;
     shrinkWithoutTrailingSpaces = shrink;
     lastNonSpaceRun = runIndex;
   }
@@ -590,6 +614,7 @@ function* generateCandidates(
       spaceCount: spaceCountWithoutTrailingSpaces,
       spaceWidth: spaceWidthWithoutTrailingSpaces,
       stretch: stretchWithoutTrailingSpaces,
+      infStretch: infWithoutTrailingSpaces,
       shrink: shrinkWithoutTrailingSpaces,
       break: null,
       breakPenalty: -10_000,
@@ -668,6 +693,16 @@ function scoreCandidate(
     options.rightskipShrink +
     (usesParfill ? options.parfillskipShrink : 0);
 
+  // TeX: the highest infinite stretch order on the line takes the whole
+  // shortfall; the skips of lower orders (and finite stretch) stay natural.
+  const infiniteOptionSkips =
+    (!Number.isFinite(options.leftskipStretch) ? 1 : 0) +
+    (!Number.isFinite(options.rightskipStretch) ? 1 : 0) +
+    (usesParfill && !Number.isFinite(options.parfillskipStretch) ? 1 : 0);
+  const [filStretch, fillStretch, filllStretch] = candidate.infStretch;
+  const infiniteOrder: 0 | 1 | 2 | 3 =
+    filllStretch !== 0 ? 3 : fillStretch !== 0 ? 2 : filStretch !== 0 || infiniteOptionSkips > 0 ? 1 : 0;
+  const hasInfiniteStretch = infiniteOrder > 0;
   const rawDelta = width - lineNaturalWidth;
   const delta = Math.abs(rawDelta) <= DIMEN_EPSILON_PT ? 0 : rawDelta;
   let ratio = 0;
@@ -678,7 +713,7 @@ function scoreCandidate(
 
   if (delta > 0) {
     adjustment = 'stretch';
-    if (!Number.isFinite(totalStretch)) {
+    if (hasInfiniteStretch || !Number.isFinite(totalStretch)) {
       ratio = 0;
       badness = 0;
     } else if (totalStretch <= 0) {
@@ -774,7 +809,7 @@ function scoreCandidate(
 
   const outputRatio =
     delta > 0
-      ? !Number.isFinite(outputStretch)
+      ? hasInfiniteStretch || !Number.isFinite(outputStretch)
         ? 0
         : outputStretch > 0
           ? delta / outputStretch
@@ -797,15 +832,19 @@ function scoreCandidate(
   }
 
   let xOffset = options.leftskipWidth + indentWidth;
-  if (delta > 0 && !Number.isFinite(outputStretch)) {
+  let infiniteGlue: CandidateScore['infiniteGlue'];
+  if (delta > 0 && (hasInfiniteStretch || !Number.isFinite(outputStretch))) {
     const infiniteLeftskip = !Number.isFinite(options.leftskipStretch) ? 1 : 0;
-    const infiniteRightskip = !Number.isFinite(options.rightskipStretch) ? 1 : 0;
-    const infiniteParfill =
-      usesParfill && !Number.isFinite(options.parfillskipStretch) ? 1 : 0;
-    const infiniteStretch =
-      infiniteLeftskip + infiniteRightskip + infiniteParfill;
-    if (infiniteStretch > 0 && infiniteLeftskip > 0) {
-      xOffset += delta / infiniteStretch;
+    const glueCoefficient = infiniteOrder === 3 ? filllStretch : infiniteOrder === 2 ? fillStretch : filStretch;
+    const coefficient = glueCoefficient + (infiniteOrder === 1 ? infiniteOptionSkips : 0);
+    if (coefficient !== 0) {
+      const infiniteRatio = delta / coefficient;
+      if (glueCoefficient !== 0 && infiniteOrder !== 0) {
+        infiniteGlue = { order: infiniteOrder, ratio: infiniteRatio };
+      }
+      if (infiniteOrder === 1 && infiniteLeftskip > 0) {
+        xOffset += infiniteRatio;
+      }
     }
   } else if (
     outputRatio > 0 &&
@@ -844,6 +883,7 @@ function scoreCandidate(
         : 0,
     xOffset: Number.isFinite(xOffset) ? xOffset : 0,
     constraintViolation,
+    ...(infiniteGlue !== undefined ? { infiniteGlue } : {}),
   };
 }
 
@@ -1482,6 +1522,7 @@ export function breakWithDp(
       targetWidth: width,
       lineNaturalWidth: score.lineNaturalWidth,
       glueSetRatio: score.ratio,
+      ...(score.infiniteGlue !== undefined ? { infiniteGlue: score.infiniteGlue } : {}),
       badness: score.badness,
       spaceCount: candidate.spaceCount,
       spaceDeltaPerGap: score.spaceDeltaPerGap,

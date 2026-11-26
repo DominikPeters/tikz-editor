@@ -88,19 +88,21 @@ export function roundClosedPathStartCorner(
   commands: ScenePathCommand[],
   closingFrom: WorldPoint,
   start: WorldPoint,
-  cornerRoundedCorners: number | null
+  cornerRoundedCorners: number | null,
+  /** Index of the subpath's `M`: a rectangle can follow an earlier move (`\path[fill] ... rectangle`). */
+  subpathStart = 0
 ): void {
   if (!cornerRoundedCorners || cornerRoundedCorners <= 0) {
     return;
   }
 
-  const move = commands[0];
+  const move = commands[subpathStart];
   if (move?.kind !== "M") {
     return;
   }
 
   const firstSegmentIndex = commands.findIndex(
-    (command, index) => index > 0 && (command.kind === "L" || command.kind === "C" || command.kind === "A")
+    (command, index) => index > subpathStart && (command.kind === "L" || command.kind === "C" || command.kind === "A")
   );
   if (firstSegmentIndex === -1) {
     return;
@@ -117,7 +119,7 @@ export function roundClosedPathStartCorner(
 
   move.to = rounded.exit;
 
-  for (let index = commands.length - 1; index >= 0; index -= 1) {
+  for (let index = commands.length - 1; index > subpathStart; index -= 1) {
     const command = requireArrayValue(commands, index);
     if (command.kind === "L" || command.kind === "C" || command.kind === "A") {
       command.to = rounded.entry;

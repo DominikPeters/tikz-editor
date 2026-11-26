@@ -3773,13 +3773,12 @@ describe("TeX math parser", () => {
     expect(layoutTexMathList(result.list).supported).toBe(true);
   });
 
-  it("reports malformed scripts and groups without throwing", () => {
+  it("scripts an empty nucleus like TeX and reports unfinished groups without throwing", () => {
     const result = parseTexMath(String.raw`^2 + \frac{x`);
 
     expect(result.list.items.length).toBeGreaterThan(0);
     // (The fraction is still being typed: its open numerator and missing denominator are recovered.)
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      "missing-script-target",
       "incomplete-input",
       "incomplete-input",
     ]);

@@ -13,9 +13,9 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
   },
   "parse": {
     "failedHard": 0,
-    "parsedClean": 1541,
-    "parsedWithRecovery": 646,
-    "recoverableRate": 0.2954,
+    "parsedClean": 1842,
+    "parsedWithRecovery": 345,
+    "recoverableRate": 0.1578,
   },
   "sampleHardFailures": [],
   "semantic": {
@@ -30,10 +30,10 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
     "semanticEmptySceneSnippets": 723,
     "semanticErrorRate": 0.0489,
     "semanticErrorSnippets": 107,
-    "semanticUnsupportedRate": 0.4646,
-    "semanticUnsupportedSnippets": 1016,
-    "semanticWarningRate": 0.4714,
-    "semanticWarningSnippets": 1031,
+    "semanticUnsupportedRate": 0.465,
+    "semanticUnsupportedSnippets": 1017,
+    "semanticWarningRate": 0.4719,
+    "semanticWarningSnippets": 1032,
   },
   "semanticCoverage": {
     "allUnknownSnippetRate": 0.1975,
@@ -71,26 +71,26 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
     "snippetsWithPathStatements": 1703,
     "statementTotals": {
       "foreachStatements": 156,
-      "pathStatementRate": 0.7763,
+      "pathStatementRate": 0.7762,
       "pathStatements": 3707,
       "scopeStatements": 95,
-      "totalStatements": 4775,
-      "unknownStatementRate": 0.1711,
-      "unknownStatements": 817,
+      "totalStatements": 4776,
+      "unknownStatementRate": 0.1713,
+      "unknownStatements": 818,
     },
   },
   "topDiagnosticCodes": [
     {
       "code": "parse-error",
-      "count": 1102,
-    },
-    {
-      "code": "missing-semicolon",
-      "count": 556,
+      "count": 781,
     },
     {
       "code": "stray-token",
       "count": 419,
+    },
+    {
+      "code": "missing-semicolon",
+      "count": 244,
     },
     {
       "code": "malformed-coordinate",
@@ -106,21 +106,13 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
     },
     {
       "code": "missing-group-close",
-      "count": 11,
+      "count": 10,
     },
   ],
   "topRecoveryFiles": [
     {
-      "count": 81,
-      "filePath": "pgfmanual-en-dv-stylesheets.tex",
-    },
-    {
       "count": 78,
       "filePath": "pgfmanual-en-tikz-animations.tex",
-    },
-    {
-      "count": 65,
-      "filePath": "pgfmanual-en-dv-axes.tex",
     },
     {
       "count": 31,
@@ -128,41 +120,45 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
     },
     {
       "count": 23,
-      "filePath": "pgfmanual-en-library-plot-handlers.tex",
-    },
-    {
-      "count": 23,
       "filePath": "pgfmanual-en-tikz-graphs.tex",
     },
     {
-      "count": 21,
-      "filePath": "pgfmanual-en-base-transformations.tex",
-    },
-    {
-      "count": 19,
-      "filePath": "pgfmanual-en-base-points.tex",
-    },
-    {
-      "count": 18,
-      "filePath": "pgfmanual-en-dv-visualizers.tex",
-    },
-    {
       "count": 15,
-      "filePath": "pgfmanual-en-base-paths.tex",
+      "filePath": "pgfmanual-en-library-folding.tex",
+    },
+    {
+      "count": 13,
+      "filePath": "pgfmanual-en-tutorial-chains.tex",
+    },
+    {
+      "count": 13,
+      "filePath": "pgfmanual-en-tutorial.tex",
+    },
+    {
+      "count": 11,
+      "filePath": "pgfmanual-en-tikz-plots.tex",
+    },
+    {
+      "count": 10,
+      "filePath": "pgfmanual-en-tikz-arrows.tex",
+    },
+    {
+      "count": 8,
+      "filePath": "pgfmanual-en-library-external.tex",
+    },
+    {
+      "count": 8,
+      "filePath": "pgfmanual-en-tikz-decorations.tex",
     },
   ],
   "topSemanticDiagnosticCodes": [
     {
       "code": "unsupported-statement",
-      "count": 816,
+      "count": 817,
     },
     {
       "code": "unsupported-option-key:sibling angle",
       "count": 139,
-    },
-    {
-      "code": "foreach-body-parse-error",
-      "count": 109,
     },
     {
       "code": "unsupported-coordinate-form:explicit",
@@ -171,6 +167,10 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
     {
       "code": "unsupported-option-flag:baseline",
       "count": 70,
+    },
+    {
+      "code": "foreach-body-parse-error",
+      "count": 65,
     },
     {
       "code": "unsupported-option-flag:post",
@@ -204,7 +204,7 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
   "topSemanticUnsupportedCodes": [
     {
       "code": "unsupported-statement",
-      "count": 816,
+      "count": 817,
     },
     {
       "code": "unsupported-option-key:sibling angle",

@@ -180,6 +180,8 @@ export type PreparedFrameFlowItem =
       boxHeight: number;
       startingBaselineSkip: number;
       leadingAdjustment: number;
+      /** How much of `leadingAdjustment` (a frame-leading trivlist topsep) shrinks in an overfull frame. */
+      leadingShrinkPt?: number;
       endingDepth: number;
       trailingListGlue: {
         naturalPt: number;

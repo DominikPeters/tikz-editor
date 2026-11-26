@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { texGlyphOutline, texGlyphOutlineGeneration, withTexGlyphOutlines } from "../packages/core/src/text/tex/fonts/glyph-outlines.js";
-import { buildRuntimeTexFont, loadRuntimeHarfBuzz } from "../packages/core/src/text/tex/fonts/runtime-opentype.js";
+import { buildRuntimeTexFont, loadRuntimeHarfBuzz, setRuntimeHarfBuzzLoader } from "../packages/core/src/text/tex/fonts/runtime-opentype.js";
 import { registerRuntimeTexFont, registerRuntimeTexFontTransfer, runtimeTexFont } from "../packages/core/src/text/tex/fonts/runtime-registry.js";
 
 function texLiveFont(file: string): Uint8Array | null {
@@ -17,6 +17,8 @@ function texLiveFont(file: string): Uint8Array | null {
 }
 
 const bytes = texLiveFont("Lato-Light.ttf");
+const nodeLoader = async () => await import("harfbuzzjs");
+setRuntimeHarfBuzzLoader(nodeLoader);
 
 describe("runtime font outlines", () => {
   it.skipIf(!bytes)("a transferred font has metrics at once and outlines once harfbuzz has drawn them", async () => {
@@ -61,5 +63,20 @@ describe("runtime font outlines", () => {
     registerRuntimeTexFont("otf:Local.ttf", built);
     expect(texGlyphOutline("otf:Local.ttf", 120)).toBe(built.outline(120));
     expect(texGlyphOutline("otf:Local.ttf", 120)).toMatch(/^M/u);
+  });
+
+  it.skipIf(!bytes)("stays blank without a harfbuzz loader and draws once one is registered", async () => {
+    const hb = await loadRuntimeHarfBuzz();
+    const built = buildRuntimeTexFont(hb, bytes!, "Lato-Light.ttf");
+    setRuntimeHarfBuzzLoader(null);
+    try {
+      await expect(loadRuntimeHarfBuzz()).rejects.toThrow(/loader/u);
+      registerRuntimeTexFontTransfer("otf:NoLoader.ttf", structuredClone({ font: built.font, bytes: built.bytes }));
+      expect(await withTexGlyphOutlines(() => texGlyphOutline("otf:NoLoader.ttf", 120))).toBe("");
+      setRuntimeHarfBuzzLoader(nodeLoader);
+      expect(await withTexGlyphOutlines(() => texGlyphOutline("otf:NoLoader.ttf", 120))).toBe(built.outline(120));
+    } finally {
+      setRuntimeHarfBuzzLoader(nodeLoader);
+    }
   });
 });

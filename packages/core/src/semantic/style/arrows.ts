@@ -56,11 +56,24 @@ export function parseArrowSpecification(raw: string, style: ResolvedStyle): { st
   const endRaw = trimmed.slice(splitIndex + 1).trim();
   const start = parseArrowSideSpecification(startRaw, "start", style);
   const end = parseArrowSideSpecification(endRaw, "end", style);
+  const usesShorthand = /[<>]/u.test(startRaw.replace(/\[[^\]]*\]/gu, "") + endRaw.replace(/\[[^\]]*\]/gu, ""));
+  const remember = (marker: ArrowMarker | null): ArrowMarker | null =>
+    marker && usesShorthand ? { ...marker, shorthandSpec: trimmed } : marker;
 
   return {
-    start,
-    end
+    start: remember(start),
+    end: remember(end)
   };
+}
+
+/** The markers of an earlier shorthand arrow specification, recomputed after the `>` or `<` tips changed. */
+export function refreshShorthandArrows(style: ResolvedStyle): ResolvedStyle {
+  const spec = style.markerEnd?.shorthandSpec ?? style.markerStart?.shorthandSpec;
+  if (spec === undefined) {
+    return style;
+  }
+  const parsed = parseArrowSpecification(spec, style);
+  return parsed ? { ...style, markerStart: parsed.start, markerEnd: parsed.end } : style;
 }
 
 export function parseArrowSideSpecification(raw: string, side: "start" | "end", style: ResolvedStyle): ArrowMarker | null {
@@ -139,7 +152,9 @@ export function parseArrowSideSpecification(raw: string, side: "start" | "end", 
     cursor = named.nextIndex;
     const optionBlock = readOptionalBracketOptions(input, cursor);
     cursor = optionBlock.nextIndex;
-    const tip = applyArrowTipOptions(makeDefaultArrowTip(resolveArrowTipKind(named.name), style.lineWidth), optionBlock.optionsRaw, style.lineWidth);
+    // Names are case sensitive: `latex` is PGF's own tip, `Latex` the arrows.meta one.
+    const base = named.name.trim() === "latex" ? makeLegacyLatexTip(style.lineWidth) : makeDefaultArrowTip(resolveArrowTipKind(named.name), style.lineWidth);
+    const tip = applyArrowTipOptions(base, optionBlock.optionsRaw, style.lineWidth);
     tips.push({ ...tip, afterLineEnd });
   }
 
@@ -243,6 +258,13 @@ function resolveArrowTipKind(rawName: string): ArrowTipKind {
 
 export function makeDefaultArrowMarker(kind: ArrowTipKind, lineWidth = 0.4): ArrowMarker {
   return { tips: [makeDefaultArrowTip(kind, lineWidth)] };
+}
+
+/** pgfcorearrows.code.tex `latex`: 10 units long, 7.5 wide, unit = 0.28pt + 0.3 line width. */
+function makeLegacyLatexTip(lineWidth: number): ArrowTip {
+  const unit = 0.28 + 0.3 * normalizeArrowLineWidth(lineWidth);
+  return { kind: "latex", open: false, round: false, reversed: false, bend: false, afterLineEnd: false, color: null, fill: null,
+    length: 10 * unit, width: 7.5 * unit, inset: null, sep: 0, lineWidth: 0, arc: null, rayCount: null, legacy: true };
 }
 
 function makeDefaultArrowTip(kind: ArrowTipKind, lineWidth = 0.4): ArrowTip {

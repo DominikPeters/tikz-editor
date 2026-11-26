@@ -1,3 +1,4 @@
+import "./harfbuzz-loader";
 import {
   beamerFontFileRequests, beamerInputFileRequests, beamerThemeFileName, buildRuntimeTexFont, collectBeamerProjectFiles, createBeamerProjectFiles,
   loadRuntimeHarfBuzz, registerRuntimeTexFont, registerRuntimeTexFontTransfer, runtimeTexFontId, scanBeamerDocument,

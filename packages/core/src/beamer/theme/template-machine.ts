@@ -4,7 +4,7 @@ import { texLength } from "../../text/tex/coordinates.js";
 import { evaluateTexLengthExpression } from "../../text/tex/dimensions.js";
 import { concatMappedText, createGeneratedMappedText, type MappedText } from "../../text/source-map.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
-import { beamerNamedFontSizes } from "./font-sizes.js";
+import { beamerNamedFontSizes, beamerTrivlistSpacing } from "./font-sizes.js";
 import { resolveBeamerThemeColor } from "./resolve.js";
 import {
   EMPTY_FRAG,
@@ -139,6 +139,14 @@ type Registers = {
   normalBaselineSkip: number;
   ignoreSpaces: boolean;
   lengths: Map<string, number>;
+  /** `\parshape` of a list: the left edge and width of its paragraphs; null outside lists. */
+  parshape: { x: number; w: number } | null;
+  /** Whether `\@rightskip` is infinite (`\raggedright`); lists restore `\rightskip` from it. */
+  atRightskip: boolean;
+  /** `\if@minipage`: nothing has started a paragraph in this box yet, so `\addvspace` does nothing. */
+  minipage: boolean;
+  /** `\@listdepth`: `\list` environments (changepage's adjustwidth) the text is in. */
+  listDepth: number;
 };
 
 type Para = {
@@ -273,7 +281,7 @@ export class TemplateMachine {
       leftFinite: 0, rightFinite: 0, leftInfinite: false, rightInfinite: false,
       parskip: 0, hsize: env.width, textwidth: env.width, linewidth: env.width,
       offInterline: false, normalBaselineSkip: env.font.lineHeightPt, ignoreSpaces: false,
-      lengths: new Map(env.registers),
+      lengths: new Map(env.registers), parshape: null, atRightskip: false, minipage: false, listDepth: 0,
     };
   }
 
@@ -498,6 +506,7 @@ export class TemplateMachine {
       ...cloneRegisters(this.registers),
       hsize: this.env.width, textwidth: this.env.width, linewidth: this.env.width,
       offInterline: options.normalBaselines !== true, leftFinite: 0, rightFinite: 0, leftInfinite: false, rightInfinite: false, parskip: 0,
+      parshape: null, atRightskip: false, minipage: false, listDepth: 0,
       ...(options.font ? { font: options.font, normalBaselineSkip: options.font.lineHeightPt } : {}),
     };
     if (options.colorRole) {
@@ -601,6 +610,7 @@ export class TemplateMachine {
   private startPara(): void {
     const frame = this.frame();
     if (frame.para) return;
+    this.registers.minipage = false;
     if (frame.items.length > 0 && this.registers.parskip !== 0) frame.items.push({ kind: "glue", glue: { pt: this.registers.parskip, fill: 0 } });
     else if (frame.items.length > 0) frame.items.push({ kind: "glue", glue: { pt: 0, fill: 0 } });
     // Groups opened before the paragraph began are open inside it. The engine's base
@@ -655,7 +665,7 @@ export class TemplateMachine {
     frame.para = null;
     for (const group of this.groups) if (group.para === para) group.para = null;
     const registers = this.registers;
-    const width = Math.max(0, registers.hsize - registers.leftFinite - registers.rightFinite);
+    const { x, width } = this.textArea();
     let box: TemplateBox;
     if (!para.content) {
       box = { w: registers.hsize, h: 0, d: 0, firstH: 0, paint: [] };
@@ -667,7 +677,6 @@ export class TemplateMachine {
       const justify = !registers.leftInfinite && !registers.rightInfinite;
       const trimmed = frag;
       const segments = this.splitAtHfill(trimmed);
-      const x = registers.leftFinite;
       const request = (part: TemplateFrag, line: boolean) => {
         const id = `${this.env.idPrefix}:p${++this.paintCounter}`;
         const measured = this.env.measure({
@@ -719,6 +728,14 @@ export class TemplateMachine {
       this.append(frame, box, 0, measure.baselineSkip, true);
     }
     for (const glue of para.vadjust) frame.items.push({ kind: "glue", glue });
+  }
+
+  /** Where lines of the current paragraph start and how wide they are: the list's `\parshape`, else `\hsize`, less the finite skips. */
+  private textArea(): { x: number; width: number } {
+    const registers = this.registers;
+    const left = registers.parshape?.x ?? 0;
+    const full = registers.parshape?.w ?? registers.hsize;
+    return { x: left + registers.leftFinite, width: Math.max(0, full - registers.leftFinite - registers.rightFinite) };
   }
 
   /** The pieces of a paragraph between its `\hfill`s outside any group. */
@@ -811,11 +828,12 @@ export class TemplateMachine {
       case "smallskip": case "medskip": case "bigskip": this.appendGlue(NAMED_SPACING[name] ?? { pt: 0, fill: 0 }); return;
       case "parskip": { reader.skipBlanks(); if (reader.peekChar() === "=") reader.position += 1; const glue = this.readGlue(reader); this.registers.parskip = glue.pt; return; }
       case "centering": case "Centering": this.setAlignment(true, true); return;
-      case "raggedright": case "RaggedRight": this.setAlignment(false, true); return;
+      case "raggedright": case "RaggedRight": this.setAlignment(false, true); this.registers.atRightskip = true; return;
       case "raggedleft": case "RaggedLeft": this.setAlignment(true, false); return;
       case "justifying": case "justify": case "normalfont":
         if (name === "normalfont") return;
         this.registers.leftFinite = 0; this.registers.rightFinite = 0; this.registers.leftInfinite = false; this.registers.rightInfinite = false;
+        this.registers.atRightskip = false;
         return;
       case "begin": this.beginEnvironment(); return;
       case "end": this.endEnvironment(); return;
@@ -988,6 +1006,7 @@ export class TemplateMachine {
 
   /** `\addvspace`: space that merges with glue just before it. */
   private addVSpace(amount: number): void {
+    if (this.registers.minipage) return;
     const frame = this.frame();
     const last = frame.items[frame.items.length - 1];
     if (last?.kind === "glue" && last.glue.fill === 0) { if (amount > last.glue.pt) last.glue.pt = amount; return; }
@@ -1288,6 +1307,10 @@ export class TemplateMachine {
       case "beamercolorbox": this.beginColorBox(); return;
       case "columns": this.beginColumns(); return;
       case "column": this.beginColumn(); return;
+      case "adjustwidth": this.beginList("adjustwidth"); return;
+      case "center": case "Center": this.beginList("center"); return;
+      case "flushleft": case "FlushLeft": this.beginList("flushleft"); return;
+      case "flushright": case "FlushRight": this.beginList("flushright"); return;
       default: throw new TemplateUnsupported(`\\begin{${name}}`);
     }
   }
@@ -1299,8 +1322,73 @@ export class TemplateMachine {
       case "beamercolorbox": this.endColorBox(); return;
       case "columns": this.endColumns(); return;
       case "column": this.endColumn(); return;
+      case "adjustwidth": this.endList("adjustwidth"); return;
+      case "center": case "Center": this.endList("center"); return;
+      case "flushleft": case "FlushLeft": this.endList("flushleft"); return;
+      case "flushright": case "FlushRight": this.endList("flushright"); return;
       default: throw new TemplateUnsupported(`\\end{${name}}`);
     }
+  }
+
+  // -- trivlist environments ---------------------------------------------
+
+  private readonly lists: Array<{ kind: string; topsepadd: number; outerParskip: number; paragraphs: number; frameDepth: number }> = [];
+
+  /**
+   * `center`, `flushleft`, `flushright` (`\trivlist\centering\item\relax` and kin)
+   * and changepage's `adjustwidth` (`\list` with `\topsep0pt`, `\parsep\parskip`
+   * and margins, then `\item[]`). The list's glue is `\addvspace` of
+   * `\@topsep` (its topsep plus the outer `\parskip`) and of `-\parskip`; its
+   * paragraphs run on the list's `\parshape`; `\leftskip` is reset and
+   * `\rightskip` comes from `\@rightskip`.
+   */
+  private beginList(kind: "adjustwidth" | "center" | "flushleft" | "flushright"): void {
+    const reader = this.requireReader();
+    let left = 0; let right = 0;
+    if (kind === "adjustwidth") {
+      const leftArg = reader.readGroup(); const rightArg = reader.readGroup();
+      const evaluate = (arg: TemplateFrag | null): number => {
+        const text = arg ? this.expandFrag(arg).text.trim() : "";
+        if (text === "") return 0;
+        const value = this.evaluateLength(text);
+        if (value === null) throw new TemplateUnsupported(`adjustwidth length ${text}`);
+        return value;
+      };
+      left = evaluate(leftArg); right = evaluate(rightArg);
+    }
+    // \@trivlist: \unskip\par when in horizontal mode.
+    this.finishPara();
+    this.pushGroup();
+    const registers = this.registers;
+    const topsep = kind === "adjustwidth" ? 0 : beamerTrivlistSpacing(this.env.theme).naturalPt;
+    const outerParskip = registers.parskip;
+    this.lists.push({ kind, topsepadd: topsep, outerParskip, paragraphs: this.paraCounter, frameDepth: this.frames.length });
+    registers.leftFinite = 0; registers.rightFinite = 0; registers.leftInfinite = false; registers.rightInfinite = registers.atRightskip;
+    if (kind === "adjustwidth") {
+      const base = registers.parshape ?? { x: 0, w: registers.linewidth };
+      registers.parshape = { x: base.x + left, w: Math.max(0, base.w - left - right) };
+      registers.listDepth += 1;
+      registers.linewidth = registers.parshape.w;
+    } else if (kind === "center") this.setAlignment(true, true);
+    else if (kind === "flushleft") { this.setAlignment(false, true); registers.atRightskip = true; }
+    else this.setAlignment(true, false);
+    // \item: \addvspace\@topsep, then \addvspace{-\parskip} (both inside \addvspace's merge rules).
+    this.addVSpace(topsep + outerParskip);
+    this.addVSpace(-registers.parskip);
+    this.registers.ignoreSpaces = true;
+  }
+
+  private endList(kind: string): void {
+    const list = this.lists.pop();
+    if (list?.kind !== kind || list.frameDepth !== this.frames.length) throw new TemplateUnsupported(`\\end{${kind}}`);
+    // \endtrivlist: \leavevmode when no paragraph carried the label, then \unskip\par.
+    if (this.paraCounter === list.paragraphs && !this.frame().para) this.startPara();
+    this.finishPara();
+    const frame = this.frame();
+    const last = frame.items[frame.items.length - 1];
+    if (last?.kind === "glue" && last.glue.fill === 0 && last.glue.pt > 0) last.glue = { pt: last.glue.pt + this.registers.parskip - list.outerParskip, fill: 0 };
+    this.addVSpace(list.topsepadd);
+    this.popGroup();
   }
 
   private lengthOption(options: Record<string, string | null>, key: string): number | null | undefined {
@@ -1346,6 +1434,7 @@ export class TemplateMachine {
     registers.fg = fg; registers.bg = resolved.bg ?? registers.bg;
     registers.text = fg;
     registers.hsize = width;
+    registers.parshape = null;
     registers.offInterline = false;
     registers.normalBaselineSkip = registers.font.lineHeightPt;
     let leftFinite = 0; let rightFinite = 0; let leftInfinite = false; let rightInfinite = true;
@@ -1447,6 +1536,7 @@ export class TemplateMachine {
     this.pushGroup();
     const registers = this.registers;
     registers.hsize = width; registers.textwidth = width; registers.linewidth = width;
+    registers.parshape = null; registers.minipage = true;
     registers.offInterline = false;
     registers.normalBaselineSkip = registers.font.lineHeightPt;
     registers.leftFinite = 0; registers.rightFinite = 0; registers.leftInfinite = false; registers.rightInfinite = true;
@@ -1521,16 +1611,21 @@ export class TemplateMachine {
     this.finishPara();
     const frame = this.frame();
     const registers = this.registers;
-    const width = Math.max(0, registers.hsize - registers.leftFinite - registers.rightFinite);
+    const { x: slotX, width } = this.textArea();
     const context: TemplateSlotContext = {
-      x: registers.leftFinite, width, font: registers.font, color: registers.text,
+      x: slotX, width, font: registers.font, color: registers.text,
       justify: !registers.leftInfinite && !registers.rightInfinite,
       alignment: registers.leftInfinite && registers.rightInfinite ? "center" : registers.leftInfinite ? "right" : "left",
-      parskip: registers.parskip, baselineSkip: registers.normalBaselineSkip,
+      parskip: registers.parskip, baselineSkip: registers.normalBaselineSkip, listDepth: registers.listDepth,
+      labelPending: this.lists.some(list => list.kind === "adjustwidth" && list.paragraphs === this.paraCounter),
     };
     this.slotContext = context;
-    if (frame.items.length > 0) frame.items.push({ kind: "glue", glue: { pt: registers.parskip, fill: 0 } });
-    const handled = this.slotHandler ? this.slotHandler(context) : { w: width, h: 0, d: 0, firstH: 0, paint: [] as TemplatePaint[] };
+    // The body's paragraphs start here: they carry a pending list label.
+    this.paraCounter += 1;
+    registers.minipage = false;
+    const handled: TemplateSlotResult = this.slotHandler ? this.slotHandler(context) : { w: width, h: 0, d: 0, firstH: 0, paint: [] };
+    // A body that starts with a paragraph gets its \parskip; one that starts with a box in vertical mode (columns) does not.
+    if (frame.items.length > 0 && handled.noLeadingParskip !== true) frame.items.push({ kind: "glue", glue: { pt: registers.parskip, fill: 0 } });
     const box: TemplateBox = { ...handled, paint: [{ kind: "slot", x: 0, y: 0, w: width }, ...handled.paint] };
     this.append(frame, box, context.x, handled.baselineSkip ?? registers.normalBaselineSkip);
   }
@@ -1566,7 +1661,7 @@ export type TemplateDefinitionsSnapshot = {
   unsupported: Set<string>;
 };
 
-export type TemplateSlotResult = TemplateBox;
+export type TemplateSlotResult = TemplateBox & { noLeadingParskip?: boolean };
 
 export type TemplateSlotContext = {
   x: number;
@@ -1577,6 +1672,10 @@ export type TemplateSlotContext = {
   alignment: "left" | "center" | "right";
   parskip: number;
   baselineSkip: number;
+  /** Lists the body sits in (`\@listdepth`): lists in the body take the registers of the deeper levels. */
+  listDepth: number;
+  /** A list's `\item[]` label is still pending: a list the body starts with inherits it and has no topsep. */
+  labelPending: boolean;
 };
 
 export function applyElementFont(font: BeamerThemeFont, declared: BeamerTemplateElementFont): BeamerThemeFont {
@@ -1606,7 +1705,7 @@ const HANDLED_COMMANDS: ReadonlySet<string> = new Set([
   "renewcommand", "providecommand", "def", "gdef", "newlength", "settowidth", "newif", "maxof", "minof", "dimexpr", "fill",
   "paperwidth", "textwidth", "linewidth", "columnwidth",
 ]);
-const ENVIRONMENTS: ReadonlySet<string> = new Set(["beamercolorbox", "columns", "column"]);
+const ENVIRONMENTS: ReadonlySet<string> = new Set(["beamercolorbox", "columns", "column", "adjustwidth", "center", "Center", "flushleft", "FlushLeft", "flushright", "FlushRight"]);
 
 export type TemplateDefinitions = { macros: Map<string, string>; flags: Set<string>; lengths: Set<string> };
 
@@ -1665,6 +1764,8 @@ export function findUnsupportedTemplateCommand(body: string, definitions: Templa
         const environment = reader.readGroup()?.text.trim() ?? "";
         if (!ENVIRONMENTS.has(environment)) return `\\${name}{${environment}}`;
         if (name === "begin") {
+          if (environment === "adjustwidth") { reader.readGroup(); reader.readGroup(); continue; }
+          if (environment === "center" || environment === "Center" || environment === "flushleft" || environment === "FlushLeft" || environment === "flushright" || environment === "FlushRight") continue;
           reader.readOptional();
           if (environment !== "columns") reader.readGroup();
         }

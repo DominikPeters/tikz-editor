@@ -436,17 +436,18 @@ class TexMathParser {
         continue;
       }
       if (token.kind === "subscript" || token.kind === "superscript") {
-        this.addDiagnostic(
-          "error",
-          "missing-script-target",
-          `Math ${token.kind === "subscript" ? "subscript" : "superscript"} has no preceding atom.`,
-          token.sourceSpan
-        );
-        this.advance();
-        const script = this.parseScriptArgument(token.sourceSpan);
-        if (script) {
-          items.push(makeUnsupportedItem("<missing-script-target>", spanUnion(token.sourceSpan, script.sourceSpan)));
-        }
+        // TeX scripts an empty nucleus (`$_\theta$`, `$^2$`).
+        const emptyBase: TexMathAtom = {
+          kind: "atom",
+          atomClass: "ord",
+          nucleus: {
+            kind: "list",
+            list: emptyList(token.sourceSpan.start),
+            sourceSpan: { start: token.sourceSpan.start, end: token.sourceSpan.start },
+          },
+          sourceSpan: { start: token.sourceSpan.start, end: token.sourceSpan.start },
+        };
+        items.push(this.parseScripts(emptyBase));
         continue;
       }
       const infixFraction = token.kind === "command" ? infixFractionPrimitive(token.text) : null;

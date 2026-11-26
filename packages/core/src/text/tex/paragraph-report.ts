@@ -277,7 +277,7 @@ function buildTexLineReport(
 
     const naturalWidth = params.runWidths.get(run.runIndex) ?? texLength(0);
     const width = isTexTextKernSpace(run.wrapper)
-      ? naturalWidth
+      ? infiniteTexGlueWidth(naturalWidth, run.texGlue, line)
       : adjustedTexGlueWidth(
         naturalWidth,
         (line.spaceCount ?? 0) > 0 ? run.texGlue : undefined,
@@ -563,6 +563,18 @@ function isTexTextKernSpace(wrapper: unknown): boolean {
     typeof wrapper === "object" &&
     (wrapper as { readonly texTextKernSpace?: unknown }).texTextKernSpace
   );
+}
+
+/** Kern glue with infinite stretch takes the line's shortfall when its order is the line's highest. */
+function infiniteTexGlueWidth(
+  naturalWidth: TexLength,
+  texGlue: { readonly stretch: number; readonly stretchOrder?: 1 | 2 | 3 } | undefined,
+  line: GreedyLine
+): TexLength {
+  if (texGlue?.stretchOrder === undefined || line.infiniteGlue?.order !== texGlue.stretchOrder) {
+    return naturalWidth;
+  }
+  return texLength(roundTexPt(Math.max(0, naturalWidth + line.infiniteGlue.ratio * texGlue.stretch)));
 }
 
 function adjustedTexGlueWidth(

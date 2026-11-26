@@ -411,7 +411,14 @@ TikzLibraryStatement {
 }
 
 MacroDefinitionStatement {
-  DefCmd CommandName Group
+  DefCmd CommandName DefParameterText? Group |
+  // `\expandafter\def\expandafter\name\expandafter{\other}`: \name gets the first expansion of \other.
+  ExpandAfterCmd DefCmd ExpandAfterCmd CommandName ExpandAfterCmd Group
+}
+
+// TeX's parameter text of \def: `#1#2` (delimited parameters are not supported).
+DefParameterText {
+  DefParameter+
 }
 
 MacroAliasStatement {
@@ -641,6 +648,9 @@ GroupPart {
   PicKw |
   ControlSymbolCmd |
   CommandName |
+  ExpandAfterCmd |
+  DefCmd |
+  LetDefCmd |
   ToKw |
   EdgeKw |
   ChildKw |
@@ -895,6 +905,7 @@ ForeachKw { @specialize<Identifier, "foreach"> }
     TikzStyleCmd,
     DefineColorCmd,
     DefCmd,
+    ExpandAfterCmd,
     ColorletCmd,
     LetDefCmd,
     NewCommandCmd,
@@ -975,6 +986,8 @@ ForeachKw { @specialize<Identifier, "foreach"> }
   TikzSetCmd { "\\tikzset" }
   TikzStyleCmd { "\\tikzstyle" }
   DefCmd { "\\def" }
+  ExpandAfterCmd { "\\expandafter" }
+  DefParameter { "#" $[1-9] }
   ColorletCmd { "\\colorlet" }
   DefineColorCmd { "\\definecolor" }
   LetDefCmd { "\\let" }

@@ -129,10 +129,12 @@ function layoutItemsToRuns(
         },
         texGlue: {
           width: item.width,
-          stretch: texLength(0),
+          stretch: texLength(item.skip?.infiniteStretch?.coefficient ?? 0),
+          ...(item.skip?.infiniteStretch ? { stretchOrder: item.skip.infiniteStretch.order } : {}),
           shrink: texLength(0),
           breakPenalty: item.skip?.breakPenalty ?? 10_000,
           ...(item.skip?.preserveAtLineStart ? { preserveAtLineStart: true } : {}),
+          ...(item.skip?.preserveAtLineEnd ? { preserveAtLineEnd: true } : {}),
         },
       } satisfies SpaceRun);
       continue;

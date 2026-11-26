@@ -64,7 +64,7 @@ import type {
   MacroBinding,
   MacroOriginFrame as MacroOriginFrameType,
 } from "../macros/types.js";
-import { buildForeachIterations } from "./options.js";
+import { buildForeachIterations, expandForeachMacroList } from "./options.js";
 import {
   parsePathItemsFromFragmentWithSyntheticMapping,
   parseStatementsFromBody,
@@ -256,7 +256,7 @@ function expandForeachStatement(
 
   const { iterations, diagnostics } = buildForeachIterations({
     variablesRaw,
-    listRaw,
+    listRaw: expandForeachMacroList(listRaw, context.macroBindings),
     options: statement.options,
     baseBindings: inheritedBindings,
     loopSpan: statement.span
@@ -537,7 +537,7 @@ function expandPathItems(
 
       const { iterations, diagnostics } = buildForeachIterations({
         variablesRaw,
-        listRaw,
+        listRaw: expandForeachMacroList(listRaw, context.macroBindings),
         options: item.options,
         baseBindings: inheritedBindings,
         loopSpan: item.span
@@ -666,7 +666,7 @@ function buildClauseVariants(args: {
 
       const { iterations, diagnostics } = buildForeachIterations({
         variablesRaw,
-        listRaw,
+        listRaw: expandForeachMacroList(listRaw, context.macroBindings),
         options: clause.options,
         baseBindings: variant.bindings,
         loopSpan: clause.span

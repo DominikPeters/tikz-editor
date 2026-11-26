@@ -1,6 +1,6 @@
 import { formatSvgNumber as fmt } from "../svg/format.js";
 import { namespaceSvgModel } from "../svg/namespace.js";
-import type { createSvgModelBuilder } from "../svg/model.js";
+import { svgModelDefs, type createSvgModelBuilder } from "../svg/model.js";
 import type { PreparedColumnFlowItem } from "./render-model.js";
 import type {
   BeamerEmbeddedTikzLayout,
@@ -27,8 +27,9 @@ export function emitEmbeddedTikz(params: {
   const translateX = params.x - tikz.viewBox.x * scale;
   const translateY = params.y - tikz.viewBox.y * scale;
   const model = namespaceSvgModel(tikz.model, tikz.id);
-  const innerDefs = model.defs.length > 0
-    ? `<defs>${model.defs.join("")}</defs>`
+  const allDefs = svgModelDefs(model);
+  const innerDefs = allDefs.length > 0
+    ? `<defs>${allDefs.join("")}</defs>`
     : "";
   const innerBody = model.parts.map((part) => part.markup).join("");
   params.embeddedTikz.push({

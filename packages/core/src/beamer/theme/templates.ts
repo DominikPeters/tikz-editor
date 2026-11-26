@@ -1,3 +1,4 @@
+import { beamerFontSizeProfile, beamerNamedFontSize } from "./font-sizes.js";
 import { texDecimalTimesDimensionPt } from "../../text/tex/dimensions.js";
 import { measureBeamerHeadingStack, beamerSubtitlePrimitive } from "./heading-layout.js";
 import { texLength } from "../../text/tex/coordinates.js";
@@ -259,8 +260,9 @@ function planDefaultFrameTitle(
   const inset = leadingLineSkip + paintHeight +
     DEFAULT_FRAME_TITLE_TRAILING_SKIP_EM *
       // `\beamer@frametitlebox` has ended when beamerbaseframe.sty emits
-      // `\vskip0.25em`, so TeX evaluates this em in the restored body font.
-      context.theme.fonts["normal-text"].sizePt;
+      // `\vskip0.25em`, so TeX evaluates this em in the font outside the
+      // frame body, `\normalsize`; `normal text` applies only inside the body.
+      beamerNamedFontSize(beamerFontSizeProfile(context.theme), "normalsize").sizePt;
   return {
     inset,
     primitives: [

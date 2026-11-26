@@ -148,6 +148,21 @@ export function resolveForeachVariables(raw: string, config: ForeachOptionsConfi
   return merged;
 }
 
+/**
+ * `\foreach \x in \list`: a list that is one macro is that macro's text
+ * (pgffor's `\pgffor@macro@list` expands it once); a text macro that is
+ * itself another macro is followed the same way.
+ */
+export function expandForeachMacroList(listRaw: string, bindings: ReadonlyMap<string, { kind: string; value?: string }>): string {
+  let list = listRaw;
+  for (let depth = 0; depth < 4 && /^\\[A-Za-z@]+$/u.test(list.trim()); depth += 1) {
+    const binding = bindings.get(list.trim());
+    if (binding?.kind !== "text" || binding.value === undefined) break;
+    list = binding.value;
+  }
+  return list;
+}
+
 export function buildForeachIterations(params: {
   variablesRaw: string;
   listRaw: string;

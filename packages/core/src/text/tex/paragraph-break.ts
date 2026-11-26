@@ -266,7 +266,7 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
       ),
     leftskipShrink: texLength(0),
     rightskipWidth: scopePolicy.rightMarginWidth,
-    rightskipStretch: options.rightskipStretch !== undefined && !latexDeclaration && !latexQuote
+    rightskipStretch: options.rightskipStretch !== undefined && !latexDeclaration && !latexQuote && alignment !== "justified"
       ? texLength(Math.max(0, options.rightskipStretch))
       : texDeclarationRightskipStretch(
         alignment,

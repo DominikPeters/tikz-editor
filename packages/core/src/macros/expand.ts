@@ -104,6 +104,58 @@ export function isControlSequenceToken(raw: string): boolean {
   return /^\\[A-Za-z@]+$/.test(raw.trim());
 }
 
+const EXPANDAFTER_DEF = /\\expandafter\s*\\def\s*\\expandafter\s*(\\[A-Za-z@]+)\s*\\expandafter\s*\{/gu;
+
+/**
+ * `\expandafter\def\expandafter\x\expandafter{\y}` inside a macro body
+ * gives `\x` the first expansion of `\y` (the argument a call passed). The
+ * text expander has no notion of execution order, so the definition is
+ * resolved here: the clause is dropped and later uses of `\x` in the body
+ * (until the next such clause for it) become that text in braces.
+ */
+export function resolveExpandAfterDefs(body: string, bindings: ReadonlyMap<string, MacroBinding>): string {
+  if (!body.includes("\\expandafter")) return body;
+  const clauses: { from: number; to: number; name: string; value: string }[] = [];
+  EXPANDAFTER_DEF.lastIndex = 0;
+  for (let match = EXPANDAFTER_DEF.exec(body); match; match = EXPANDAFTER_DEF.exec(body)) {
+    const open = match.index + match[0].length - 1;
+    let depth = 0;
+    let end = open;
+    for (; end < body.length; end += 1) {
+      const char = body[end];
+      if (char === "\\") { end += 1; continue; }
+      if (char === "{") depth += 1;
+      else if (char === "}" && --depth === 0) break;
+    }
+    if (depth !== 0) break;
+    const raw = body.slice(open + 1, end);
+    const first = /^\s*(\\[A-Za-z@]+)([\s\S]*)$/u.exec(raw);
+    const bound = first ? bindings.get(first[1] ?? "") : undefined;
+    const value = first && bound?.kind === "text" ? bound.value + (first[2] ?? "") : raw;
+    clauses.push({ from: match.index, to: end + 1, name: match[1] ?? "", value });
+    EXPANDAFTER_DEF.lastIndex = end + 1;
+  }
+  if (clauses.length === 0) return body;
+  const active = new Map<string, string>();
+  let output = "";
+  let cursor = 0;
+  const emit = (text: string): void => {
+    let result = text;
+    for (const [name, value] of active) {
+      const uses = new RegExp(`${name.replace(/[\\@]/gu, "\\$&")}(?![A-Za-z@])`, "gu");
+      result = result.replace(uses, () => `{${value}}`);
+    }
+    output += result;
+  };
+  for (const clause of clauses) {
+    emit(body.slice(cursor, clause.from));
+    active.set(clause.name, clause.value);
+    cursor = clause.to;
+  }
+  emit(body.slice(cursor));
+  return output;
+}
+
 function substituteSinglePass(
   input: string,
   bindings: ReadonlyMap<string, MacroBinding>,
@@ -142,7 +194,7 @@ function substituteSinglePass(
         binding.optionalFirstArgDefault
       );
       if (args) {
-        replacement = applyMacroArguments(binding.body, args.values);
+        replacement = resolveExpandAfterDefs(applyMacroArguments(binding.body, args.values), bindings);
         consumedUntil = args.nextIndex;
       }
     }

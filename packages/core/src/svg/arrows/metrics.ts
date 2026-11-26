@@ -35,6 +35,11 @@ export function normalizeArrowTip(tip: ArrowTipInput, contextLineWidth: number, 
     const unit = .28 + .3 * shaftWidth;
     tip = { ...tip, length: 3.75 * unit, width: 8 * unit, lineWidth: .8 * shaftWidth, open: true, round: true };
   }
+  if (tip.kind === "latex" && tip.legacy) {
+    // The size follows the line width of the path the tip is drawn on.
+    const unit = .28 + .3 * normalizeLineWidth(contextLineWidth, DEFAULT_CONTEXT_LINE_WIDTH);
+    tip = { ...tip, length: 10 * unit, width: 7.5 * unit, lineWidth: 0, round: false };
+  }
   const length = Number.isFinite(tip.length) ? Math.max(0.01, tip.length) : 0.01;
   const width = Number.isFinite(tip.width) ? Math.max(0.01, tip.width) : 0.01;
   let lineWidth = normalizeLineWidth(tip.lineWidth, contextLineWidth);
@@ -103,6 +108,12 @@ export function buildArrowTipMetrics(tip: NormalizedArrowTip, contextLineWidth: 
     const tipEnd = .21 + .625 * width;
     const backEnd = -.84 - 1.3 * width;
     const metrics = { tipEnd, backEnd, lineEnd: 0, visualTipEnd: tipEnd, visualBackEnd: backEnd, sep: tip.sep };
+    return tip.reversed ? reverseMetrics(metrics) : metrics;
+  }
+  if (tip.kind === "latex" && tip.legacy) {
+    // The arrow runs from -1 to 9 units around the shortened line end.
+    const unit = tip.length / 10;
+    const metrics = { tipEnd: tip.length, backEnd: 0, lineEnd: unit, visualTipEnd: tip.length, visualBackEnd: 0, sep: tip.sep };
     return tip.reversed ? reverseMetrics(metrics) : metrics;
   }
   if (tip.kind === "latex") {

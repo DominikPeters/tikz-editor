@@ -701,6 +701,7 @@ function paragraphInputFromSimpleTexBlock(
     ...(block.explicitBaselineSkip ? { explicitBaselineSkip: true } : {}),
     ...(block.fontSizePt !== undefined ? { fontSizePt: block.fontSizePt } : {}),
     ...(block.baselineSkip !== undefined ? { baselineSkip: block.baselineSkip } : {}),
+    ...(block.startingBaselineSkip !== undefined ? { startingBaselineSkip: block.startingBaselineSkip } : {}),
     ...(block.verticalAdjustments && block.verticalAdjustments.length > 0
       ? {
           verticalAdjustments: block.verticalAdjustments.map((adjustment) =>

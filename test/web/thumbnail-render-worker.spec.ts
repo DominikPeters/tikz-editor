@@ -4,9 +4,10 @@ import type { ThumbnailRenderRequest, ThumbnailWorkerRequestMessage } from "../.
 const mocks = vi.hoisted(() => ({ render: vi.fn() }));
 vi.mock("@tikz-editor/core/render/index", () => ({ renderTikzToSvgAsync: mocks.render }));
 vi.mock("@tikz-editor/core/text/tex/fonts/glyph-outlines", () => ({
-  withTexGlyphOutlines: (render: () => Promise<unknown>) => render()
+  withTexGlyphOutlines: (render: () => Promise<unknown>) => render(),
+  settleTexGlyphOutlineLoads: () => Promise.resolve()
 }));
-vi.mock("@tikz-editor/core/beamer/index", () => ({ prepareBeamerDocument: vi.fn() }));
+vi.mock("@tikz-editor/core/beamer/index", () => ({ prepareBeamerDocument: vi.fn(), setRuntimeHarfBuzzLoader: vi.fn() }));
 
 describe("thumbnail render worker lifecycle", () => {
   const worker = {

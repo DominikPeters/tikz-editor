@@ -627,6 +627,12 @@ function tryParseDefStatement(
     return null;
   }
   cursor = skipWhitespaceAndComments(source, nameToken.to);
+  // Parameter text: `#1#2` (delimited parameters are not supported).
+  let parameterCount = 0;
+  for (let match = /^#([1-9])/u.exec(source.slice(cursor, cursor + 2)); match; match = /^#([1-9])/u.exec(source.slice(cursor, cursor + 2))) {
+    parameterCount = Math.max(parameterCount, Number(match[1]));
+    cursor += 2;
+  }
   const valueGroup = readBalancedDelimited(source, cursor, "{", "}");
   if (!valueGroup) {
     return null;
@@ -635,6 +641,7 @@ function tryParseDefStatement(
   return {
     statement: {
       kind: "MacroDefinition",
+      ...(parameterCount > 0 ? { parameterCount } : {}),
       id: macroDefinitionStatementId(statementIndex),
       span: { from: commandFrom, to: spanTo },
       raw: source.slice(commandFrom, spanTo),

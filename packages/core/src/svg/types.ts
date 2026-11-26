@@ -27,6 +27,11 @@ export type SvgRenderPart = {
 export type SvgRenderModel = {
   viewBox: SvgViewBox;
   defs: string[];
+  /**
+   * Glyph outline definitions (`<path id="tg-…">`), kept apart from `defs`:
+   * their ids are content hashes, so a set only ever grows and patches append.
+   */
+  glyphDefs?: string[];
   defsFingerprint: string;
   parts: SvgRenderPart[];
   diagnostics: Array<{
@@ -52,6 +57,11 @@ export type SvgPatchOp =
   | {
       kind: "setViewBox";
       viewBox: SvgViewBox;
+    }
+  | {
+      /** Adds glyph definitions that the previous model lacked; existing ones stay. */
+      kind: "appendGlyphDefs";
+      defs: string[];
     }
   | {
       kind: "replaceDefs";

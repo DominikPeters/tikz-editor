@@ -972,12 +972,16 @@ function parseColumns(params: {
   const headKey = (head: { beginSpan: Span; virtual?: { invocation: Span } }) => head.virtual?.invocation.from ?? head.beginSpan.from;
   for (const macro of directBeamerVirtualUses(context.syntax, { from: options?.span.to ?? begin.span.to, to: end.span.from }, "macro")) {
     if (heads.some(head => macro.invocation.from >= head.beginSpan.from && macro.invocation.from < head.endSpan.to)) continue;
+    // The macro's body may be several columns.
     const macroTokens = beamerEnvironmentBoundariesIn(context, macro.span);
-    const first = macroTokens.findIndex(token => token.kind === "begin" && token.name === "column");
-    const last = first < 0 ? -1 : matchingEnvironmentEnd(macroTokens, first);
-    if (last < 0) continue;
-    heads.push({ beginSpan: requireArrayValue(macroTokens, first).span, endSpan: requireArrayValue(macroTokens, last).span,
-      bodyTo: requireArrayValue(macroTokens, last).span.from, virtual: { invocation: macro.invocation } });
+    for (let first = 0; first < macroTokens.length; first += 1) {
+      if (requireArrayValue(macroTokens, first).kind !== "begin" || requireArrayValue(macroTokens, first).name !== "column") continue;
+      const last = matchingEnvironmentEnd(macroTokens, first);
+      if (last < 0) break;
+      heads.push({ beginSpan: requireArrayValue(macroTokens, first).span, endSpan: requireArrayValue(macroTokens, last).span,
+        bodyTo: requireArrayValue(macroTokens, last).span.from, virtual: { invocation: macro.invocation } });
+      first = last;
+    }
   }
   heads.sort((a, b) => headKey(a) - headKey(b));
   for (const [index, head] of heads.entries()) {

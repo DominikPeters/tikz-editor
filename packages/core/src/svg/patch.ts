@@ -34,6 +34,12 @@ export function diffSvgModels(
     });
   }
 
+  const knownGlyphs = new Set(previous.glyphDefs);
+  const addedGlyphs = (next.glyphDefs ?? []).filter((def) => !knownGlyphs.has(def));
+  if (addedGlyphs.length > 0) {
+    operations.push({ kind: "appendGlyphDefs", defs: addedGlyphs });
+  }
+
   if (hasUnscopedPartDrift(previous, next, hints)) {
     return diffSvgModels(previous, next, {});
   }

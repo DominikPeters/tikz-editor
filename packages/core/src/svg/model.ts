@@ -104,12 +104,12 @@ export function createSvgModelBuilder(): SvgModelBuilder {
   }): SvgRenderModel => {
     // Text refers to its glyph outlines by id; the model defines each distinct
     // outline once, so every serialization of it is a standalone document.
-    const defs = input.glyphDefs === false
-      ? [...input.defs]
-      : [...input.defs, ...texGlyphSvgDefinitions(parts.map((part) => part.markup).join(""))];
+    const defs = [...input.defs];
+    const glyphDefs = input.glyphDefs === false ? [] : texGlyphSvgDefinitions(parts.map((part) => part.markup).join(""));
     return {
       viewBox: input.viewBox,
       defs,
+      glyphDefs,
       defsFingerprint: fingerprintDefs(defs),
       parts: [...parts],
       diagnostics: [...input.diagnostics]
@@ -149,7 +149,8 @@ export async function serializeSvgModelAsync(
 
 function serializeSvgModelCompact(model: SvgRenderModel, includeXmlns: boolean): string {
   const xmlns = includeXmlns ? ` xmlns="http://www.w3.org/2000/svg"` : "";
-  const defs = model.defs.length > 0 ? `<defs>${model.defs.join("")}</defs>` : "";
+  const allDefs = svgModelDefs(model);
+  const defs = allDefs.length > 0 ? `<defs>${allDefs.join("")}</defs>` : "";
   const body = model.parts.map((part) => part.markup).join("");
   return (
     `<svg${xmlns} viewBox="${fmt(model.viewBox.x)} ${fmt(model.viewBox.y)} ${fmt(model.viewBox.width)} ${fmt(model.viewBox.height)}" role="img" aria-label="TikZ SVG preview">` +
@@ -157,6 +158,11 @@ function serializeSvgModelCompact(model: SvgRenderModel, includeXmlns: boolean):
     body +
     `</svg>`
   );
+}
+
+/** Every definition the model's parts may refer to. */
+export function svgModelDefs(model: Pick<SvgRenderModel, "defs" | "glyphDefs">): string[] {
+  return model.glyphDefs?.length ? [...model.defs, ...model.glyphDefs] : model.defs;
 }
 
 export function fingerprintDefs(defs: readonly string[]): string {

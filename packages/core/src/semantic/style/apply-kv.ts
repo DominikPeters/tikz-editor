@@ -17,7 +17,7 @@ import {
   type ShadowLayer,
   type ShadowPaintStyle
 } from "../types.js";
-import { parseArrowSideSpecification, parseArrowSpecification, parseTipsMode } from "./arrows.js";
+import { parseArrowSideSpecification, parseArrowSpecification, parseTipsMode, refreshShorthandArrows } from "./arrows.js";
 import type { ApplyEntryFn, ApplyOutcome } from "./apply-types.js";
 import { DEFAULT_TEXT_FONT_SIZE, NON_STYLE_OPTION_KEYS } from "./constants.js";
 import { clamp01, mixNormalizedColors, normalizeColor, normalizeShadingName, type ColorAliasResolver } from "./colors.js";
@@ -313,7 +313,7 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
       if (!parsed) {
         return { style, transform, diagnostics: [] };
       }
-      return { style: { ...style, arrowShorthandEnd: parsed }, transform, diagnostics: [] };
+      return { style: refreshShorthandArrows({ ...style, arrowShorthandEnd: parsed }), transform, diagnostics: [] };
     }
   },
   {
@@ -323,7 +323,7 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
       if (!parsed) {
         return { style, transform, diagnostics: [] };
       }
-      return { style: { ...style, arrowShorthandStart: parsed }, transform, diagnostics: [] };
+      return { style: refreshShorthandArrows({ ...style, arrowShorthandStart: parsed }), transform, diagnostics: [] };
     }
   },
   {

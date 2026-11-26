@@ -1,3 +1,4 @@
+import { themeCaptionSkips } from "./theme/theme-spacing.js";
 import { resolveBeamerColumnWidth } from "./column-dimensions.js";
 import { requireDefined } from "../utils/invariants.js";
 import type { Diagnostic } from "../diagnostics/types.js";
@@ -156,12 +157,13 @@ export function projectBeamerCaptions(mapped: MappedText, source: string, theme?
         ]) });
         continue;
       }
-      // beamerbaselocalstructure.sty: both caption skips are 7pt; the
+      // beamerbaselocalstructure.sty: both caption skips are 7pt unless the theme sets them; the
       // default caption font is \small and its short caption is an hbox.
+      const skips = themeCaptionSkips(theme);
       replacements.push({ span, value: concatMappedText([
-        generated(`\\par\\vskip7pt{${captionFontDeclaration}\\mbox{${label}`, span),
+        generated(`\\par\\vskip${skips.above ?? 7}pt{${captionFontDeclaration}\\mbox{${label}`, span),
         content,
-        generated("}}\\par\\vskip7pt", span),
+        generated(`}}\\par\\vskip${skips.below ?? 7}pt`, span),
       ]) });
     }
   }

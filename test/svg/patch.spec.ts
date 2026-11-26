@@ -105,6 +105,18 @@ describe("svg model diff", () => {
     });
   });
 
+  it("appends only the glyph definitions a model adds, and never replaces or removes them", () => {
+    const glyph = (id: string) => `<path id="tg-${id}" d="M0 0L1 1"/>`;
+    const withGlyphs = (ids: string[], markup: string): SvgRenderModel =>
+      ({ ...modelFromParts([part("p:a", "source-a", 0, markup)], undefined, ["<linearGradient id='g' />"]), glyphDefs: ids.map(glyph) });
+    const previous = withGlyphs(["a", "b"], "<use href='#tg-a'/>");
+    const grown = withGlyphs(["a", "b", "c"], "<use href='#tg-c'/>");
+    expect(diffSvgModels(previous, grown).map((op) => op.kind)).toEqual(["appendGlyphDefs", "upsertPart"]);
+    expect(diffSvgModels(previous, grown)[0]).toEqual({ kind: "appendGlyphDefs", defs: [glyph("c")] });
+    // Glyphs a later model no longer uses stay defined: nothing to patch.
+    expect(diffSvgModels(grown, withGlyphs(["a"], "<use href='#tg-a'/>")).map((op) => op.kind)).toEqual(["upsertPart"]);
+  });
+
   it("falls back to replaceAll for invalid models", () => {
     const invalid = modelFromParts([
       part("p:a", "source-a", 0, "<path d='M 0 0 L 1 0' />"),

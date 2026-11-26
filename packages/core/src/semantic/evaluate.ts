@@ -1,3 +1,4 @@
+import { defBinding } from "../macros/bindings.js";
 import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import { finishWork, runCooperatively, type CooperativeWorkOptions } from "./cooperative-work.js";
@@ -2219,11 +2220,7 @@ function applyMacroDefinitionStatement(
     return;
   }
 
-  writeContextMacroBinding(context, name, {
-    kind: "text",
-    value: statement.valueRaw,
-    provenance: [buildMacroOriginFrame(name, statement.id, statement.span, statement.commandRaw)]
-  }, {
+  writeContextMacroBinding(context, name, defBinding(statement, buildMacroOriginFrame(name, statement.id, statement.span, statement.commandRaw), currentFrame(context).macroBindings), {
     statementId: statement.id,
     span: statement.span
   });

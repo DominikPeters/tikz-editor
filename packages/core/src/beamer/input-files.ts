@@ -4,12 +4,12 @@ import { svgRect } from "../coords/index.js";
 import { collectMacroBindings } from "../macros/bindings.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 import {
-  concatMappedText, createGeneratedMappedText, createIdentityMappedText, projectInputRange, type MappedText,
+  concatMappedText, createGeneratedMappedText, createIdentityMappedText, projectInputRange, sliceMappedText, type MappedText,
 } from "../text/source-map.js";
 import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import { expandBeamerLocalMacros } from "./local-macros.js";
 import type { BeamerProjectFiles } from "./project-files.js";
-import type { BeamerDocumentModel, BeamerFrameLayout } from "./types.js";
+import type { BeamerDocumentModel, BeamerFrameLayout, BeamerFrameModel, BeamerTikzPictureRoot } from "./types.js";
 import type { MacroBinding } from "../macros/types.js";
 
 /**
@@ -83,26 +83,82 @@ export function readBeamerInputFile(files: BeamerProjectFiles | undefined, name:
 
 const virtualSegmentsBySyntax = new WeakMap<TexSyntaxIndex, BeamerVirtualSource>();
 
-export function registerBeamerVirtualSource(syntax: TexSyntaxIndex, virtual: BeamerVirtualSource): void {
+const mainSyntaxByVirtual = new WeakMap<TexSyntaxIndex, TexSyntaxIndex>();
+
+/** `main` is the index of the document's own source, which `syntax` (source plus tail) extends. */
+export function registerBeamerVirtualSource(syntax: TexSyntaxIndex, virtual: BeamerVirtualSource, main?: TexSyntaxIndex): void {
   virtualSegmentsBySyntax.set(syntax, virtual);
+  if (main) mainSyntaxByVirtual.set(syntax, main);
+}
+
+/**
+ * The index of the document's own source to reparse the next revision from,
+ * given the index the previous revision used (which may include a tail).
+ */
+export function beamerMainSyntaxForReparse(previous: TexSyntaxIndex | undefined): TexSyntaxIndex | undefined {
+  return previous && (mainSyntaxByVirtual.get(previous) ?? (virtualSegmentsBySyntax.has(previous) ? undefined : previous));
 }
 
 export function beamerVirtualSource(syntax: TexSyntaxIndex): BeamerVirtualSource | undefined {
   return virtualSegmentsBySyntax.get(syntax);
 }
 
-const COLUMN_MACRO_BODY = /^\s*\\begin\s*\{column\}[\s\S]*\\end\s*\{column\}\s*$/u;
+/** A macro whose body is columns: its text, and how many arguments it takes. */
+export type BeamerColumnMacro = { readonly body: string; readonly parameterCount: number };
 
-/** Argument-free macros whose body is one complete `column` environment, by control sequence. */
-export function beamerColumnMacros(bindings: ReadonlyMap<string, MacroBinding>): ReadonlyMap<string, string> {
-  const result = new Map<string, string>();
+const COLUMN_TOKEN = /\\(begin|end)\s*\{column\}/gu;
+
+/** Whether `body` is nothing but one or more `column` environments, with only space or comments between. */
+function isColumnsOnly(body: string): boolean {
+  let depth = 0;
+  let cursor = 0;
+  let columns = 0;
+  for (const match of body.matchAll(COLUMN_TOKEN)) {
+    if (depth === 0 && !/^(?:\s|%[^\n]*(?:\n|$))*$/u.test(body.slice(cursor, match.index))) return false;
+    if (match[1] === "begin") { depth += 1; if (depth > 1) return false; } else {
+      depth -= 1;
+      if (depth < 0) return false;
+      if (depth === 0) { columns += 1; cursor = match.index + match[0].length; }
+    }
+  }
+  return depth === 0 && columns > 0 && /^(?:\s|%[^\n]*(?:\n|$))*$/u.test(body.slice(cursor));
+}
+
+/**
+ * Macros whose body is columns (one or several, with or without arguments),
+ * by control sequence. Macros with an optional argument are left out.
+ */
+export function beamerColumnMacros(bindings: ReadonlyMap<string, MacroBinding>): ReadonlyMap<string, BeamerColumnMacro> {
+  const result = new Map<string, BeamerColumnMacro>();
   for (const [name, binding] of bindings) {
-    const body = binding.kind === "text" ? binding.value : binding.parameterCount === 0 ? binding.body : null;
-    if (body === null || !COLUMN_MACRO_BODY.test(body)) continue;
-    if ((body.match(/\\begin\s*\{column\}/gu)?.length ?? 0) !== 1 || (body.match(/\\end\s*\{column\}/gu)?.length ?? 0) !== 1) continue;
-    result.set(name, body.trim());
+    if (binding.kind === "callable" && binding.optionalFirstArgDefault !== undefined) continue;
+    const body = binding.kind === "text" ? binding.value : binding.body;
+    if (!isColumnsOnly(body)) continue;
+    result.set(name, { body: body.trim(), parameterCount: binding.kind === "text" ? 0 : binding.parameterCount });
   }
   return result;
+}
+
+/** The braced arguments that follow `from`, or null when fewer than `count` are there. */
+function readBracedArguments(text: string, from: number, count: number, limit: number): { values: string[]; end: number } | null {
+  const values: string[] = [];
+  let cursor = from;
+  for (let index = 0; index < count; index += 1) {
+    while (cursor < limit && /\s/u.test(text[cursor] ?? "")) cursor += 1;
+    if (text[cursor] !== "{") return null;
+    let depth = 0;
+    let end = cursor;
+    for (; end < limit; end += 1) {
+      const char = text[end];
+      if (char === "\\") { end += 1; continue; }
+      if (char === "{") depth += 1;
+      else if (char === "}" && --depth === 0) break;
+    }
+    if (depth !== 0 || end >= limit) return null;
+    values.push(text.slice(cursor + 1, end));
+    cursor = end + 1;
+  }
+  return { values, end: cursor };
 }
 
 /**
@@ -113,7 +169,7 @@ export function buildBeamerVirtualSource(
   source: string,
   document: BeamerDocumentModel,
   files: BeamerProjectFiles | undefined,
-  columnMacros: ReadonlyMap<string, string>
+  columnMacros: ReadonlyMap<string, BeamerColumnMacro>
 ): BeamerVirtualSource | null {
   if (!files && columnMacros.size === 0) return null;
   const segments: BeamerVirtualSegment[] = [];
@@ -133,8 +189,12 @@ export function buildBeamerVirtualSource(
       for (const match of virtual.slice(span.from, span.to).matchAll(macroPattern)) {
         const start = span.from + match.index;
         const name = `\\${match[1]}`;
-        if (inLineComment(virtual, start)) continue;
-        uses.push({ span: { from: start, to: start + match[0].length }, kind: "macro", name, text: columnMacros.get(name) ?? "" });
+        const macro = columnMacros.get(name);
+        if (!macro || inLineComment(virtual, start)) continue;
+        const args = readBracedArguments(virtual, start + match[0].length, macro.parameterCount, span.to);
+        if (!args) continue;
+        const text = macro.body.replace(/#([1-9])/gu, (_, digit: string) => args.values[Number(digit) - 1] ?? "");
+        uses.push({ span: { from: start, to: args.end }, kind: "macro", name, text });
       }
     }
     for (const use of uses) {
@@ -162,6 +222,28 @@ export function beamerVirtualRoot(virtual: BeamerVirtualSource, span: Span): Spa
 }
 
 /**
+ * TikZ pictures in the included files that a frame's body uses, with ids that
+ * continue after the frame's own pictures. They sit in the virtual tail, so
+ * they are not the frame's children: nothing can edit them.
+ */
+export function beamerVirtualPictureRoots(
+  virtual: BeamerVirtualSource,
+  frame: BeamerFrameModel,
+  scan: (source: string, span: Span, frameIndex: number) => BeamerTikzPictureRoot[]
+): BeamerTikzPictureRoot[] {
+  const roots: BeamerTikzPictureRoot[] = [];
+  for (const segment of virtual.segments) {
+    if (segment.kind !== "input") continue;
+    const owner = beamerVirtualRoot(virtual, segment.span);
+    if (owner.from < frame.bodySpan.from || owner.to > frame.bodySpan.to) continue;
+    for (const root of scan(virtual.source, segment.span, frame.sourceOrder)) {
+      roots.push({ ...root, id: `${frame.id}:input-tikz:${roots.length}` });
+    }
+  }
+  return roots;
+}
+
+/**
  * Uses that sit directly in a span's own flow (not inside an environment or
  * group within it), in order. A use inside text stays text for the text
  * engine.
@@ -174,7 +256,31 @@ export function directBeamerVirtualUses(
   const virtual = virtualSegmentsBySyntax.get(syntax);
   if (!virtual) return [];
   return virtual.segments.filter(segment => segment.kind === kind && segment.invocation.from >= span.from && segment.invocation.to <= span.to
-    && isDirect(syntax, segment.invocation.from, span)).sort((a, b) => a.invocation.from - b.invocation.from);
+    && isDirect(syntax, segment.invocation.from, span) && (kind !== "input" || standsAsFlow(virtual, segment))).sort((a, b) => a.invocation.from - b.invocation.from);
+}
+
+const FLOW_ENVIRONMENT_START = /^(?:\s|%[^\n]*\n)*\\begin\s*\{(?:columns|column|block|alertblock|exampleblock|theorem|lemma|proposition|corollary|definition|example|proof|tcolorbox)\}/u;
+const BEFORE_BOUNDARY = /(?:\\(?:begin\s*\{[^{}]*\}(?:\s*(?:\[[^\]\n]*\]|\{[^{}\n]*\}|<[^<>\n]*>))*|end\s*\{[^{}]*\}|par)|\n[ \t]*\n|^)[ \t]*\n?[ \t]*$/u;
+const AFTER_BOUNDARY = /^[ \t]*(?:%[^\n]*)?(?:\n[ \t]*\n|\n[ \t]*\\(?:begin|end|par)(?![A-Za-z@])|\n?[ \t]*$)/u;
+
+/**
+ * Whether an `\input` that sits at a flow's own level is a flow item of its
+ * own (blocks, columns, a figure's own paragraph) rather than part of the
+ * text around it. TeX continues the paragraph through an input, so a use
+ * inside prose stays text (`projectBeamerInputUses`): only a use alone on
+ * its line that either brings an environment of the flow, or is set apart
+ * by blank lines or environment boundaries, is a flow item.
+ */
+function standsAsFlow(virtual: BeamerVirtualSource, segment: BeamerVirtualSegment): boolean {
+  const { source } = virtual;
+  const lineStart = source.lastIndexOf("\n", segment.invocation.from - 1) + 1;
+  if (!/^[ \t]*$/u.test(source.slice(lineStart, segment.invocation.from))) return false;
+  const lineEnd = source.indexOf("\n", segment.invocation.to);
+  if (!/^[ \t]*(?:%.*)?$/u.test(source.slice(segment.invocation.to, lineEnd < 0 ? source.length : lineEnd))) return false;
+  if (FLOW_ENVIRONMENT_START.test(source.slice(segment.span.from, segment.span.to))) return true;
+  const before = source.slice(Math.max(0, lineStart - 240), lineStart);
+  const after = source.slice(segment.invocation.to, segment.invocation.to + 120);
+  return BEFORE_BOUNDARY.test(before) && AFTER_BOUNDARY.test(after);
 }
 
 function isDirect(syntax: TexSyntaxIndex, offset: number, span: Span): boolean {
@@ -185,6 +291,32 @@ function isDirect(syntax: TexSyntaxIndex, offset: number, span: Span): boolean {
     if ((node.name === "Environment" || node.name === "Group") && node.from < offset && node.to > offset) return false;
   }
   return true;
+}
+
+/**
+ * `\input` uses inside a paragraph's text (in a figure, a box command, a
+ * list item, a line of prose), replaced by the included text, whose
+ * characters keep their offsets in the virtual tail. Uses at a flow's own
+ * level were spliced by the frame parser and are no longer in the text.
+ */
+export function projectBeamerInputUses(mapped: MappedText, virtual: BeamerVirtualSource | undefined, depth = 0): MappedText {
+  if (!virtual || depth > INPUT_DEPTH || !/\\(?:input|include)\s*\{/u.test(mapped.text)) return mapped;
+  const parts: MappedText[] = [];
+  let cursor = 0;
+  for (const match of mapped.text.matchAll(INPUT_PATTERN)) {
+    const origin = mapped.sourceMap.charOrigins[match.index];
+    if (origin?.kind !== "direct") continue;
+    const segment = virtual.segments.find(candidate => candidate.kind === "input" && candidate.invocation.from === origin.from);
+    if (!segment) continue;
+    // The file's last end of line is a space in TeX, not a paragraph break next to the use's own.
+    const text = virtual.source.slice(segment.span.from, segment.span.to).replace(/\n$/u, "");
+    const included = projectBeamerInputUses(createIdentityMappedText(text, segment.span.from), virtual, depth + 1);
+    parts.push(sliceMappedText(mapped, cursor, match.index), included, createGeneratedMappedText("\\ ", "input file", segment.invocation));
+    cursor = match.index + match[0].length;
+  }
+  if (cursor === 0) return mapped;
+  parts.push(sliceMappedText(mapped, cursor, mapped.text.length));
+  return concatMappedText(parts);
 }
 
 /** Layout items and spans that came from a virtual tail, pointed at their use. */
@@ -204,7 +336,9 @@ export function rehomeBeamerVirtualSpans<T extends { layout: BeamerFrameLayout }
       delete paragraph.listStructure;
     } else {
       paragraph.editableTextSpans = paragraph.editableTextSpans.filter(entry => !away(entry.span));
-      paragraph.atomicRenderSpans = paragraph.atomicRenderSpans.filter(atom => !away(atom.span));
+      // What the included text drew (a picture) belongs to its use.
+      const atoms = paragraph.atomicRenderSpans.map(atom => away(atom.span) ? { ...atom, span: home(atom.span) } : atom);
+      paragraph.atomicRenderSpans = atoms.filter((atom, index) => atoms.findIndex(other => other.span.from === atom.span.from && other.span.to === atom.span.to) === index);
     }
     if (paragraph.readOnlySourceSpans) paragraph.readOnlySourceSpans = paragraph.readOnlySourceSpans.map(home);
     if (paragraph.hiddenSourceSpans) paragraph.hiddenSourceSpans = paragraph.hiddenSourceSpans.map(home);

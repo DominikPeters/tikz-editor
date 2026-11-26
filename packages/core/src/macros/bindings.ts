@@ -23,11 +23,25 @@ export function collectMacroDefinition(
   if (!name) {
     return;
   }
-  bindings.set(name, {
-    kind: "text",
-    value: statement.valueRaw,
-    provenance: [originFor(statement, name)],
-  });
+  bindings.set(name, defBinding(statement, originFor(statement, name), bindings));
+}
+
+/** The binding `\def` makes: callable when its parameter text has `#n`. */
+export function defBinding(
+  statement: MacroDefinitionStatement,
+  origin: MacroOriginFrame,
+  visible?: { get(name: string): MacroBinding | undefined }
+): MacroBinding {
+  if (statement.expandValue) {
+    // `\expandafter\def\expandafter\x\expandafter{\y}`: \x holds \y's text.
+    const target = /^\s*(\\[A-Za-z@]+)\s*(.*)$/su.exec(statement.valueRaw);
+    const bound = target ? visible?.get(target[1] ?? "") : undefined;
+    if (target && bound?.kind === "text") return { kind: "text", value: bound.value + (target[2] ?? ""), provenance: [origin] };
+  }
+  const parameterCount = Math.min(statement.parameterCount ?? 0, 9);
+  return parameterCount > 0
+    ? { kind: "callable", parameterCount, body: statement.valueRaw, provenance: [origin] }
+    : { kind: "text", value: statement.valueRaw, provenance: [origin] };
 }
 
 export function collectMacroCommandDefinition(

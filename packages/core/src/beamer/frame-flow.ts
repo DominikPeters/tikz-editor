@@ -16,8 +16,11 @@ export function paragraphStartingBaselineSkip(paragraph: LaidParagraph, fallback
   if (first?.item.kind === "display-math" || first?.item.kind === "display-alignment") {
     return Number(first.item.baselineSkip ?? fallback);
   }
-  return first?.item.kind === "paragraph" && first.item.paragraph.baselineSkip !== undefined
-    ? Number(first.item.paragraph.baselineSkip) : fallback;
+  // In centering and ragged scopes `\\` ends the paragraph early: the glue above the
+  // first line uses the baselineskip in force there, not at the paragraph's end.
+  if (first?.item.kind !== "paragraph") return fallback;
+  const value = first.item.paragraph.startingBaselineSkip ?? first.item.paragraph.baselineSkip;
+  return value !== undefined ? Number(value) : fallback;
 }
 
 /**
@@ -46,6 +49,21 @@ export function paragraphFillWeights(paragraph: LaidParagraph): { leading: numbe
 }
 
 /**
+ * The `\parskip` glue TeX puts before an item of a vertical list that
+ * something already precedes: each paragraph that starts (a text paragraph, or
+ * a picture, whose box begins one) gets it. Columns start with `\par` and an
+ * hbox in vertical mode, and blocks with `\par\vskip`, so neither does. A
+ * picture inside a centering environment starts its paragraph inside the
+ * trivlist: the list's `\@topsep` carries the parskip too (`\addvspace` of
+ * `\@topsep` and of `-\parskip`; the second never merges away), so it counts twice.
+ */
+function paragraphSkipBefore(item: PreparedFrameFlowItem, parskipPt: number): number {
+  if (item.kind === "paragraph") return paragraphFillWeights(item.paragraph).materialless ? 0 : parskipPt;
+  if (item.kind === "tikzpicture") return item.surroundingGlue.top.naturalPt > 0 ? 2 * parskipPt : parskipPt;
+  return 0;
+}
+
+/**
  * Position already-measured frame material using TeX's `\prevdepth` and
  * baseline-skip rules. Theme planning and paint are deliberately absent from
  * this module; callers provide only the active normal-text baseline skip.
@@ -54,12 +72,14 @@ export function positionPreparedFrameFlow(
   flow: readonly PreparedFrameFlowItem[],
   baselineSkip: number,
   fillUnit = 0,
-  initialPreviousDepth: number | null = 0
+  initialPreviousDepth: number | null = 0,
+  parskipPt = 0
 ): { items: PositionedFrameFlowItem[]; extent: number } {
   const items: PositionedFrameFlowItem[] = [];
   let cursor = 0;
   let previousDepth = initialPreviousDepth;
   for (const [index, item] of flow.entries()) {
+    if (parskipPt !== 0 && index > 0) cursor += paragraphSkipBefore(item, parskipPt);
     if (item.kind === "contents") {
       const bottom = cursor + item.contents.naturalHeight + item.contents.fillWeight * fillUnit;
       items.push({ item, contentTop: cursor, referenceY: bottom, visualTop: cursor, visualBottom: bottom });
@@ -133,7 +153,7 @@ export function positionPreparedFrameFlow(
       const glue = (leadingDisplay
         ? -(previousDepth ?? 0)
         : verticalInterlineGlue(previousDepth, item.boxHeight, item.startingBaselineSkip)) + item.leadingAdjustment;
-      const referenceY = cursor + glue + item.boxHeight;
+          const referenceY = cursor + glue + item.boxHeight;
       const contentTop = referenceY - item.boxHeight;
       const visualBottom = contentTop + item.naturalHeight;
       items.push({

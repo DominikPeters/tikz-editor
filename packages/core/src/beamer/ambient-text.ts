@@ -12,9 +12,29 @@ export function createBeamerAmbientText(source: string) {
     const options = beamerOptionalArgumentAfter(context, env.begin.span.to, source.length);
     return options ? [options.span.from] : [];
   }));
-  const events = beamerControlSequencesIn(context, { from: 0, to: source.length }).flatMap(command => {
-    if (!declarations.has(command.name) && command.name !== "color") return [];
+  const controls = beamerControlSequencesIn(context, { from: 0, to: source.length });
+  // \begingroup ... \endgroup scope declarations like braces do.
+  const groupPairs: { from: number; to: number }[] = [];
+  const openGroups: number[] = [];
+  for (const control of controls) {
+    if (control.name === "begingroup") openGroups.push(control.from);
+    else if (control.name === "endgroup") {
+      const from = openGroups.pop();
+      if (from !== undefined) groupPairs.push({ from, to: control.to });
+    }
+  }
+  const events = controls.flatMap(command => {
+    if (!declarations.has(command.name) && command.name !== "color" && command.name !== "fontsize") return [];
     let to = command.to;
+    if (command.name === "fontsize") {
+      // `\fontsize{size}{skip}\selectfont` is one declaration.
+      const size = beamerRequiredArgumentAfter(context, to, source.length);
+      const skip = size && beamerRequiredArgumentAfter(context, size.span.to, source.length);
+      const select = skip && controls.find(control => control.name === "selectfont" && control.from >= skip.span.to &&
+        !source.slice(skip.span.to, control.from).trim());
+      if (!select) return [];
+      to = select.to;
+    }
     if (command.name === "color") {
       const optional = beamerOptionalArgumentAfter(context, to, source.length);
       const color = beamerRequiredArgumentAfter(context, optional?.span.to ?? to, source.length);
@@ -30,6 +50,7 @@ export function createBeamerAmbientText(source: string) {
       if (node.name === "Group" || node.name === "Environment" ||
           node.name === "OptionalArgument" && storedOptions.has(node.from)) end = Math.min(end, node.to);
     }
+    for (const group of groupPairs) if (group.from < command.from && command.from < group.to) end = Math.min(end, group.to);
     return [{ from: command.from, to, end, text: source.slice(command.from, to) }];
   });
   for (const env of environments) {

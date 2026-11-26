@@ -74,12 +74,23 @@ export type ArrowTip = {
   lineWidth: number | null;
   arc: number | null;
   rayCount: number | null;
+  /**
+   * PGF's own `latex` tip (pgfcorearrows), not arrows.meta's `Latex`: sized from
+   * the line width where the path is drawn, filled and unstroked.
+   */
+  legacy?: boolean;
 };
 
 export type ArrowMarker = {
   tips: ArrowTip[];
   /** The class-default To shorthand follows a later arrows.meta library load. */
   defaultTo?: boolean;
+  /**
+   * The arrow specification this came from, when it names the `>`/`<`
+   * shorthand tips. PGF looks those up when the path is drawn, so a later
+   * `>=latex` in the same option list changes them (`->, >=latex`).
+   */
+  shorthandSpec?: string;
 };
 
 export type TipsMode = "true" | "proper" | "on draw" | "on proper draw" | "never";

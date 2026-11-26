@@ -1,3 +1,4 @@
+import "../../harfbuzz-loader";
 import { renderTikzToSvgAsync } from "@tikz-editor/core/render/index";
 import { settleTexGlyphOutlineLoads, withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
 import { prepareBeamerDocument, type BeamerProjectFiles, type PreparedBeamerDocument } from "@tikz-editor/core/beamer/index";

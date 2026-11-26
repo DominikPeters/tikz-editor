@@ -95,6 +95,92 @@ A body with enough words to wrap over more than one line so that the extent matt
 \end{document}
 `;
 
+const ADJUST_POSTER = String.raw`\documentclass[final]{beamer}
+\usepackage{ragged2e}
+\usepackage{changepage}\usepackage{tikz}
+\usepackage[size=custom,width=60,height=40,scale=1.0]{beamerposter}
+\setbeamercolor{block title}{fg=blue,bg=white}
+\setbeamercolor{block separator}{bg=black}
+\setbeamercolor{block body}{fg=black,bg=white}
+\setbeamerfont{block title}{size=\large,series=\bfseries}
+\setbeamertemplate{block begin}
+{
+  \begin{beamercolorbox}[colsep*=0ex,dp=2ex,center]{block title}
+    \vskip0pt
+    \usebeamerfont{block title}\insertblocktitle
+    \vskip-1.25ex
+    \begin{beamercolorbox}[colsep=0.025ex]{block separator}\end{beamercolorbox}
+  \end{beamercolorbox}
+  {\parskip0pt\par}
+  \usebeamerfont{block body}
+  \vskip-0.5ex
+  \begin{beamercolorbox}[colsep*=0ex]{block body}
+  \justifying
+  \setlength{\parskip}{1ex}
+  \vskip-2ex
+}
+\setbeamertemplate{block end}
+{
+  \end{beamercolorbox}
+  \vskip0pt
+  \vspace*{2ex}
+}
+\setbeamercolor{block title alerted}{fg=red,bg=white}
+\setbeamercolor{block separator alerted}{bg=red}
+\setbeamercolor{block body alerted}{fg=black,bg=white}
+\setbeamertemplate{block alerted begin}
+{
+  \begin{beamercolorbox}[colsep*=0ex,dp=2ex,center]{block title alerted}
+    \vskip0pt
+    \usebeamerfont{block title}\insertblocktitle
+    \vskip-1.25ex
+    \begin{beamercolorbox}[colsep=0.025ex]{block separator alerted}\end{beamercolorbox}
+  \end{beamercolorbox}
+  {\parskip0pt\par}
+  \usebeamerfont{block body}
+  \vskip-0.5ex
+  \begin{beamercolorbox}[colsep*=0ex]{block body alerted}
+  \justifying
+  \begin{adjustwidth}{1ex}{1ex}
+  \setlength{\parskip}{1ex}
+  \vskip-2ex
+}
+\setbeamertemplate{block alerted end}
+{
+  \end{adjustwidth}
+  \vskip1ex
+  \end{beamercolorbox}
+  \vskip0pt
+  \vspace*{2ex}
+}
+\begin{document}
+\begin{frame}[t]
+\begin{alertblock}{Alert}
+First paragraph of an alerted block with enough words to wrap over more than one line in this narrow poster.
+
+Second paragraph of the alerted block.
+\end{alertblock}
+\begin{block}{Flow}
+Before the picture, a paragraph with enough words to wrap over more than one line, to be sure.
+
+\begin{tikzpicture}
+\draw (0,0) rectangle (2,1);
+\end{tikzpicture}
+
+After the picture.
+
+\begin{columns}[t]
+\begin{column}{0.4\linewidth}
+Left column.
+\end{column}
+\end{columns}
+
+After the columns.
+\end{block}
+\end{frame}
+\end{document}
+`;
+
 async function layoutOf(source: string, projectFiles?: ReturnType<typeof createBeamerProjectFiles>) {
   const prepared = prepareBeamerDocument(source, projectFiles ? { projectFiles } : {});
   const rendered = await prepared.renderFrame({});
@@ -203,5 +289,25 @@ describe("template interpreter: blocks", () => {
     const { lines, diagnostics } = await layoutOf(lone);
     expect(lines.some(line => line.text.startsWith("One short"))).toBe(true);
     expect(diagnostics.some(item => item.code === "beamer-template-block-pair")).toBe(true);
+  });
+});
+
+describe("template interpreter: adjustwidth and block body flow", () => {
+  // Values: LuaLaTeX trace of ADJUST_POSTER (artifacts/beamerposter-probes/templates2/adj.tex).
+  it("runs adjustwidth as a list: margins, \\parskip and the glue around it", async () => {
+    const { lines, diagnostics } = await layoutOf(ADJUST_POSTER);
+    expect(diagnostics.some(item => item.code === "beamer-template-unsupported")).toBe(false);
+    const byText = (prefix: string) => lines.find(line => line.text.startsWith(prefix))!;
+    expect(byText("First paragraph").x).toBeCloseTo(39.2, 1);
+    expect(byText("First paragraph").baseline).toBeCloseTo(99.957, 2);
+    expect(byText("Flow").baseline).toBeCloseTo(215.926, 2);
+  });
+
+  it("puts the template's \\parskip between the items of a block body that is not one paragraph", async () => {
+    const { lines } = await layoutOf(ADJUST_POSTER);
+    const byText = (prefix: string) => lines.find(line => line.text.startsWith(prefix))!;
+    expect(byText("Before the picture").baseline).toBeCloseTo(272.193, 2);
+    expect(byText("Left column").baseline).toBeCloseTo(388.568, 2);
+    expect(byText("After the columns").baseline).toBeCloseTo(429.291, 2);
   });
 });

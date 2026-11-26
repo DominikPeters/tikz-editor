@@ -1,3 +1,4 @@
+import type { BeamerVirtualSource } from "./input-files.js";
 import type { BeamerLengthRegisters } from "./lengths.js";
 import type { SimpleTexListContext } from "../text/tex/ir.js";
 import type { BeamerInlineFlow } from "./inline-flow.js";
@@ -53,6 +54,8 @@ export type BeamerReferenceIndex = {
   diagnostics: readonly Diagnostic[];
   /** User length registers at the end of the preamble (lengths.ts). */
   lengthRegisters?: BeamerLengthRegisters;
+  /** Text read from other files, after the source (input-files.ts). */
+  virtual?: BeamerVirtualSource;
 };
 
 export type BeamerReferenceContext = BeamerReferenceIndex & {

@@ -186,6 +186,10 @@ export type MacroDefinitionStatement = {
   commandRaw: "\\def";
   nameRaw: string;
   nameSpan?: Span;
+  /** Highest `#n` of the parameter text (`\def\a#1#2{...}`); absent when there is none. */
+  parameterCount?: number;
+  /** `\expandafter\def\expandafter\name\expandafter{\other}`: the value is `\other`'s first expansion. */
+  expandValue?: boolean;
   valueRaw: string;
   valueSpan?: Span;
 };

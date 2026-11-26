@@ -65,14 +65,16 @@ Hello Hello Hello world
     expectStandalone(svg.svg);
     const defs = definedPaths(svg.svg);
     // At frame level, one definition per outline; embedded pictures add their own, namespaced.
-    expect(new Set(svg.model.defs.filter(def => def.startsWith('<path id="tg-'))).size)
-      .toBe(svg.model.defs.filter(def => def.startsWith('<path id="tg-')).length);
+    // Glyph definitions live apart from the other defs, once each.
+    expect(svg.model.glyphDefs?.length).toBeGreaterThan(0);
+    expect(new Set(svg.model.glyphDefs).size).toBe(svg.model.glyphDefs?.length);
+    expect(svg.model.defs.some(def => def.startsWith('<path id="tg-'))).toBe(false);
     expect(svg.svg.match(/<use /gu)?.length ?? 0).toBeGreaterThan(defs.length);
     const embedded = svg.svg.match(/id="tikz-[^"]*-tg-/gu) ?? [];
     expect(embedded.length).toBeGreaterThan(0);
     // The model's parts refer to ids its defs define.
     const model = svg.model;
-    const modelIds = new Set(model.defs.flatMap(def => ids(def)));
+    const modelIds = new Set([...model.defs, ...(model.glyphDefs ?? [])].flatMap(def => ids(def)));
     for (const part of model.parts) for (const reference of references(part.markup)) {
       if (reference.startsWith("tg-")) expect(modelIds, reference).toContain(reference);
     }

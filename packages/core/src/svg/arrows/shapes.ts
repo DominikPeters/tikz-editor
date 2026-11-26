@@ -96,6 +96,17 @@ function buildRawTipPaths(tip: NormalizedArrowTip): ArrowLocalPathCommand[][] {
     return [[moveTo(tipX, 0), lineTo(topX, innerHalfWidth), lineTo(insetX, 0), lineTo(topX, -innerHalfWidth), close()]];
   }
 
+  if (tip.kind === "latex" && tip.legacy) {
+    const unit = tip.length / 10;
+    return [[
+      moveTo(10 * unit, 0),
+      cubicTo(7.3333 * unit, .5 * unit, 3 * unit, 2 * unit, 0, 3.75 * unit),
+      lineTo(0, -3.75 * unit),
+      cubicTo(3 * unit, -2 * unit, 7.3333 * unit, -.5 * unit, 10 * unit, 0),
+      close()
+    ]];
+  }
+
   if (tip.kind === "latex") {
     const params = computeLatexShapeParameters(tip);
     const innerLength = params.innerLength;

@@ -1,5 +1,6 @@
 import type { Span } from "../../ast/types.js";
 import { concatMappedText, createGeneratedMappedText, sliceMappedText, type MappedText } from "../../text/source-map.js";
+import type { TexListLayoutProfile } from "../../text/tex/layout-options.js";
 import type { BeamerBlockEnvironment } from "../content-types.js";
 import { fragFromSource } from "./template-lexer.js";
 import {
@@ -42,6 +43,8 @@ export type InterpretedBlockBody = {
   endingDepth: number;
   firstHeight: number;
   baselineSkip: number;
+  /** The body starts with columns or a block, not a paragraph: no `\parskip` before it. */
+  startsInVerticalMode?: boolean;
 };
 
 export type InterpretedBlockLayout = {
@@ -106,6 +109,7 @@ export function interpretBlockTemplate(input: InterpretedBlockInput): Interprete
         slot: context => ({
           w: context.width, h: body ? body.extent - body.endingDepth : 0, d: body?.endingDepth ?? 0,
           firstH: body?.firstHeight ?? 0, paint: [], ...(body ? { baselineSkip: body.baselineSkip } : {}),
+          ...(body?.startsInVerticalMode ? { noLeadingParskip: true } : {}),
         }),
       });
       return machine.slotContext ? { box, slot: machine.slotContext } : null;
@@ -160,4 +164,29 @@ export function withParagraphSkip(mapped: MappedText, parskipPt: number, owner: 
   if (last === 0) return mapped;
   pieces.push(sliceMappedText(mapped, last, text.length));
   return concatMappedText(pieces);
+}
+
+/**
+ * The list registers a list takes when it is `depth` levels deeper than the
+ * profile's levels: `\@listdepth` counts every `\list`, so an itemize inside
+ * changepage's adjustwidth uses `\@listii`. The font and margin tables follow
+ * the itemize depth and stay.
+ */
+export function withListDepthOffset(profile: TexListLayoutProfile, depth: number): TexListLayoutProfile {
+  if (depth <= 0) return profile;
+  const shift = (values: readonly number[]): readonly number[] => values.map((_, index) => values[Math.min(index + depth, values.length - 1)] ?? 0);
+  return {
+    ...profile,
+    sizeOverrides: [],
+    topsepPtByDepth: shift(profile.topsepPtByDepth),
+    partopsepPtByDepth: shift(profile.partopsepPtByDepth),
+    itemsepPtByDepth: shift(profile.itemsepPtByDepth),
+    parsepPtByDepth: shift(profile.parsepPtByDepth),
+    ...(profile.topsepStretchPtByDepth ? { topsepStretchPtByDepth: shift(profile.topsepStretchPtByDepth) } : {}),
+    ...(profile.topsepShrinkPtByDepth ? { topsepShrinkPtByDepth: shift(profile.topsepShrinkPtByDepth) } : {}),
+    ...(profile.itemsepStretchPtByDepth ? { itemsepStretchPtByDepth: shift(profile.itemsepStretchPtByDepth) } : {}),
+    ...(profile.itemsepShrinkPtByDepth ? { itemsepShrinkPtByDepth: shift(profile.itemsepShrinkPtByDepth) } : {}),
+    ...(profile.parsepStretchPtByDepth ? { parsepStretchPtByDepth: shift(profile.parsepStretchPtByDepth) } : {}),
+    ...(profile.parsepShrinkPtByDepth ? { parsepShrinkPtByDepth: shift(profile.parsepShrinkPtByDepth) } : {}),
+  };
 }

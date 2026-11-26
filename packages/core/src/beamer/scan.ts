@@ -422,7 +422,7 @@ function parseFrameOptions(
   };
 }
 
-function scanFrameTikzPictures(
+export function scanFrameTikzPictures(
   source: string,
   bodySpan: Span,
   frameIndex: number,

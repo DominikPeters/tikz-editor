@@ -116,6 +116,9 @@ export function collectParseErrorDiagnostics(node: SyntaxNode, source: string, d
 
   walk(node, (current) => {
     if (current.type.isError || current.type.name === "⚠") {
+      if (endsImplicitMacroCall(current, source)) {
+        return;
+      }
       const key = `${current.from}:${current.to}`;
       if (seen.has(key)) {
         return;
@@ -130,6 +133,27 @@ export function collectParseErrorDiagnostics(node: SyntaxNode, source: string, d
       });
     }
   });
+}
+
+/**
+ * A user macro call needs no semicolon in TeX. The grammar wants one, so a
+ * call that ends its scope (`\\mymacro{a}` right before `\\end{scope}`, `}` or
+ * `\\end{tikzpicture}`) is recovered with an empty error node at its end; the
+ * call itself is fine and is expanded like any other.
+ */
+function endsImplicitMacroCall(errorNode: SyntaxNode, source: string): boolean {
+  const statement = errorNode.parent;
+  if (errorNode.from !== errorNode.to || statement?.type.name !== "UnknownStatement" || errorNode.from !== statement.to) {
+    return false;
+  }
+  return isImplicitMacroCall(statement, source);
+}
+
+function isImplicitMacroCall(statement: SyntaxNode, source: string): boolean {
+  if (statement.firstChild?.type.name !== "CommandName" || source[statement.to - 1] === ";") {
+    return false;
+  }
+  return /^(?:\s|%[^\n]*\n)*(?:\\end\s*\{|\})/u.test(source.slice(statement.to));
 }
 
 function spanForParseError(errorNode: SyntaxNode): Diagnostic["span"] {
@@ -169,7 +193,8 @@ export function collectStructuralDiagnostics(envNode: SyntaxNode, source: string
       collectForeachRangeEllipsisDiagnostics(node, source, diagnostics);
     }
 
-    if ((node.type.name === "PathStatement" || node.type.name === "UnknownStatement") && source[node.to - 1] !== ";") {
+    if ((node.type.name === "PathStatement" || node.type.name === "UnknownStatement") && source[node.to - 1] !== ";"
+      && !(node.type.name === "UnknownStatement" && isImplicitMacroCall(node, source))) {
       diagnostics.push({
         severity: "warning",
         message: "Statement is missing a trailing semicolon; add `;` at the end of this TikZ command.",

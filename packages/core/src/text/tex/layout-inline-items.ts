@@ -418,8 +418,12 @@ export interface TexLayoutKernItem {
   readonly skip?: {
     readonly breakPenalty: number;
     readonly preserveAtLineStart?: boolean;
+    /** Glue after a `\hspace*` rule box is kept at the end of a line. */
+    readonly preserveAtLineEnd?: boolean;
     /** Removed at the end of a paragraph, like all trailing glue. */
     readonly glue: boolean;
+    /** Infinite stretch of `\hfil`/`\hfill`: coefficient and order (1 fil, 2 fill, 3 filll). */
+    readonly infiniteStretch?: { readonly coefficient: number; readonly order: 1 | 2 | 3 };
   };
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -560,18 +564,26 @@ function pushTexHorizontalSkip(
     : 0));
   if (token.skipStar) {
     // \hspace*: \vrule width 0pt, \nobreak, glue: a box as far as breaking goes.
+    const infinite = token.skipInfiniteStretch;
     const box = texRuleBox({
       source: token.text,
       sourceStart: token.sourceStart,
       sourceEnd: token.sourceEnd,
       raise: texHBoxOffsetY(0),
-      width,
+      width: infinite ? texLength(0) : width,
       height: texLength(0),
       invisible: true,
       metricProvider: context.metricProvider,
       textFontProfile: context.textFontProfile,
     });
     items.push({ kind: "text-box", command: "rule", text: token.text, content: "", sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.sourceStart, contentEnd: token.sourceEnd, box });
+    if (infinite) {
+      // The glue after the rule is not discardable and cannot be broken at.
+      items.push({
+        kind: "kern", sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, font, width,
+        skip: { breakPenalty: 10_000, glue: false, preserveAtLineEnd: true, infiniteStretch: infinite },
+      });
+    }
     return;
   }
   const previous = items.at(-1);
@@ -587,6 +599,7 @@ function pushTexHorizontalSkip(
     skip: {
       breakPenalty: breakable ? 0 : 10_000,
       glue: !token.skipKern,
+      ...(token.skipInfiniteStretch ? { infiniteStretch: token.skipInfiniteStretch } : {}),
       ...(previous === undefined ? { preserveAtLineStart: true } : {}),
     },
   });

@@ -1,5 +1,5 @@
 import type { BeamerEmbeddedTikzLayout } from "@tikz-editor/core/beamer/types";
-import { namespaceSvgModel, serializeSvgModel } from "@tikz-editor/core/svg/index";
+import { namespaceSvgModel, serializeSvgModel, svgModelDefs } from "@tikz-editor/core/svg/index";
 import type { SvgRenderModel } from "@tikz-editor/core/svg/types";
 import type { DeckActiveFrame, SessionSnapshot } from "./compute";
 
@@ -31,7 +31,7 @@ export function composeOverlayPage(frame: DeckActiveFrame, layer: SessionSnapsho
   const firstIndex = frame.svgModel.parts.findIndex(ownsPart);
   if (firstIndex < 0) return frame;
   const parts = frame.svgModel.parts.filter(part => !ownsPart(part));
-  const defs = `<defs>${model.defs.join("")}</defs>`;
+  const defs = `<defs>${svgModelDefs(model).join("")}</defs>`;
   parts.splice(firstIndex, 0, { partId: `${prefix}defs`, sourceId: entry.itemId, elementId: null,
     order: firstIndex, markup: defs, fingerprint: defs },
     ...model.parts.map(part => ({ ...part, partId: prefix + part.partId })));

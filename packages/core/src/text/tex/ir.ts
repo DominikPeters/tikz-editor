@@ -191,6 +191,8 @@ export interface SimpleTexHorizontalSkipNode extends SimpleTexSourceRange {
   readonly kern?: true;
   /** `\hspace*`: the space is a box and survives line breaks. */
   readonly star?: true;
+  /** Infinite stretch (`\hfil`, `\hfill`, `\hspace{\stretch{n}}`): coefficient and order (1 fil, 2 fill, 3 filll). */
+  readonly infiniteStretch?: { readonly coefficient: number; readonly order: 1 | 2 | 3 };
 }
 
 export interface SimpleTexCommentNode extends SimpleTexSourceRange {
@@ -648,6 +650,7 @@ export interface SimpleTexToken {
   readonly skipWidth?: TexDimensionExpression;
   readonly skipKern?: true;
   readonly skipStar?: true;
+  readonly skipInfiniteStretch?: { readonly coefficient: number; readonly order: 1 | 2 | 3 };
   readonly italicCorrectionAfter?: boolean;
   /** An inner font command committed its correction before an enclosing group closed. */
   readonly italicCorrectionUnconditional?: boolean;
@@ -676,6 +679,12 @@ export interface SimpleTexParagraphBlock {
   readonly nodes: readonly SimpleTexInlineNode[];
   readonly fontSizePt?: TexLength;
   readonly baselineSkip?: TexLength;
+  /**
+   * `\baselineskip` when the first TeX paragraph ends. In centered and
+   * ragged scopes `\\` is `\par`, so a size group closed before the block's
+   * end still sets the interline glue above its first line.
+   */
+  readonly startingBaselineSkip?: TexLength;
   /**
    * LaTeX lowers `\vspace` encountered in horizontal mode to `\vadjust`.
    * Keep those adjustments attached to the unbroken paragraph so line
@@ -997,6 +1006,13 @@ const simpleTexMathBySyntaxIndex = new WeakMap<
 const paragraphIrCache = new TexWeightedLruCache<string, SimpleTexParagraphIr>(512, 2 * 1024 * 1024);
 const paragraphIrSeen = new TexWeightedLruCache<string, true>(1024, 512 * 1024);
 const PARAGRAPH_IR_MAX_SOURCE_LENGTH = 16384;
+
+/**
+ * A parbox/minipage body starts at the surrounding text's size; its IR is
+ * built during the enclosing parse, so the enclosing size options are
+ * published here for the duration of that synchronous call.
+ */
+let activeBoxInheritedOptions: Pick<SimpleTexParagraphIrOptions, "fontSizePt" | "baselineSkipPt" | "namedFontSizes"> | undefined;
 
 export interface SimpleTexParagraphIrOptions {
   readonly boxesClearingPendingItemLabels?: readonly number[];
@@ -1411,14 +1427,18 @@ function buildSimpleTexParagraphIr(
   }
   const reused = key !== null && paragraphIrSeen.get(key) === true;
   if (key !== null && !reused) paragraphIrSeen.set(key, true, key.length * 2 + 64);
-  const ir = buildSimpleTexParagraphIrForRange(
-    text,
-    0,
-    text.length,
-    0,
-    resolveColorAlias,
-    options
-  );
+  const outerBoxOptions = activeBoxInheritedOptions;
+  activeBoxInheritedOptions = options?.fontSizePt === undefined && options?.baselineSkipPt === undefined && options?.namedFontSizes === undefined
+    ? undefined
+    : { ...(options.fontSizePt !== undefined ? { fontSizePt: options.fontSizePt } : {}),
+      ...(options.baselineSkipPt !== undefined ? { baselineSkipPt: options.baselineSkipPt } : {}),
+      ...(options.namedFontSizes !== undefined ? { namedFontSizes: options.namedFontSizes } : {}) };
+  let ir: SimpleTexParagraphIr;
+  try {
+    ir = buildSimpleTexParagraphIrForRange(text, 0, text.length, 0, resolveColorAlias, options);
+  } finally {
+    activeBoxInheritedOptions = outerBoxOptions;
+  }
   if (key !== null && reused) {
     paragraphIrCache.set(key, ir, freezeTexCacheValue(ir) + key.length * 2);
   }
@@ -1480,6 +1500,16 @@ function scanSimpleTexIrNodes(
   while (index < text.length) {
     const sourceStart = sourceOffset + index;
     const char = text[index];
+
+    if (char === "\\") {
+      const semiSimple = scanSimpleTexBeginGroup(text, index, sourceOffset, resolveColorAlias);
+      if (semiSimple) {
+        nodes.push(semiSimple.node);
+        unsupportedCommand ||= semiSimple.unsupportedCommand;
+        index = semiSimple.end;
+        continue;
+      }
+    }
 
     const commentEnd = syntax.commentEndByStart.get(index);
     if (commentEnd !== undefined) {
@@ -2852,7 +2882,8 @@ function scanSimpleTexBoxCommand(
     contentStart,
     contentEnd,
     sourceOffset,
-    resolveColorAlias
+    resolveColorAlias,
+    activeBoxInheritedOptions
   );
   unsupportedCommand ||= body.unsupportedCommand;
 
@@ -2941,7 +2972,8 @@ function scanSimpleTexBoxEnvironment(
     contentStart,
     environment.contentSpan.to,
     sourceOffset,
-    resolveColorAlias
+    resolveColorAlias,
+    activeBoxInheritedOptions
   );
   unsupportedCommand ||= body.unsupportedCommand;
 
@@ -3355,6 +3387,17 @@ function scanSimpleTexHorizontalSkip(
       end,
     };
   }
+  const infiniteOrder = command.name === "hfil" ? 1 : command.name === "hfill" ? 2 : null;
+  if (infiniteOrder !== null) {
+    const end = skipSimpleTexControlWordSpaces(text, commandEnd);
+    return {
+      node: {
+        kind: "hskip", text: text.slice(start, commandEnd), width: { kind: "contextual", raw: "0pt", factor: 0, reference: "em" },
+        infiniteStretch: { coefficient: 1, order: infiniteOrder }, sourceStart, sourceEnd: sourceOffset + end,
+      },
+      end,
+    };
+  }
   if (command.name !== "hspace") return null;
   let cursor = commandEnd;
   const star = text[cursor] === "*";
@@ -3363,7 +3406,20 @@ function scanSimpleTexHorizontalSkip(
   if (text[cursor] !== "{") return null;
   const groupEnd = findBalancedSimpleTexGroupEnd(text, cursor);
   if (groupEnd === null) return null;
-  const width = parseTexDimensionExpression(text.slice(cursor + 1, groupEnd - 1));
+  const rawWidth = text.slice(cursor + 1, groupEnd - 1);
+  // \fill is 0pt plus 1fill; \stretch{n} is 0pt plus nfill.
+  const fill = /^\s*\\(?:fill|stretch\s*\{\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*\})\s*$/u.exec(rawWidth);
+  if (fill) {
+    return {
+      node: {
+        kind: "hskip", text: text.slice(start, groupEnd), width: { kind: "contextual", raw: "0pt", factor: 0, reference: "em" },
+        infiniteStretch: { coefficient: fill[1] === undefined ? 1 : Number(fill[1]), order: 2 },
+        ...(star ? { star: true as const } : {}), sourceStart, sourceEnd: sourceOffset + groupEnd,
+      },
+      end: groupEnd,
+    };
+  }
+  const width = parseTexDimensionExpression(rawWidth);
   if (!width) return null;
   return {
     node: { kind: "hskip", text: text.slice(start, groupEnd), width, ...(star ? { star: true as const } : {}), sourceStart, sourceEnd: sourceOffset + groupEnd },
@@ -4441,6 +4497,45 @@ function scanSimpleTexAccentCommand(
   };
 }
 
+/** `\\begingroup ... \\endgroup`: a group like `{...}`, with its own scope for declarations. */
+function scanSimpleTexBeginGroup(
+  text: string,
+  start: number,
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
+): { node: SimpleTexGroupNode; end: number; unsupportedCommand: boolean } | null {
+  const opener = /^\\begingroup(?![A-Za-z@])/u.exec(text.slice(start, start + 12));
+  if (!opener) return null;
+  const pattern = /\\(begingroup|endgroup)(?![A-Za-z@])/gu;
+  pattern.lastIndex = start + opener[0].length;
+  let depth = 1;
+  let closeStart = -1;
+  for (let match = pattern.exec(text); match; match = pattern.exec(text)) {
+    depth += match[1] === "begingroup" ? 1 : -1;
+    if (depth === 0) { closeStart = match.index; break; }
+  }
+  if (closeStart < 0) return null;
+  const contentStart = skipSimpleTexControlWordSpaces(text, start + opener[0].length);
+  const groupEnd = skipSimpleTexControlWordSpaces(text, closeStart + "\\endgroup".length);
+  const groupTextEnd = closeStart + "\\endgroup".length;
+  const closeStartAdj = closeStart;
+  const childScan = scanSimpleTexIrNodes(text.slice(contentStart, closeStart), sourceOffset + contentStart, resolveColorAlias);
+  const inline = childScan.nodes.every(isSimpleTexInlineNode);
+  return {
+    node: {
+      kind: "group",
+      text: text.slice(start, groupTextEnd),
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + groupEnd,
+      contentStart: sourceOffset + contentStart,
+      contentEnd: sourceOffset + closeStartAdj,
+      children: inline ? childScan.nodes.filter(isSimpleTexInlineNode) : [],
+    },
+    end: groupEnd,
+    unsupportedCommand: childScan.unsupportedCommand || !inline,
+  };
+}
+
 function scanSimpleTexGroup(
   text: string,
   start: number,
@@ -4513,6 +4608,18 @@ function findBalancedSimpleTexOptionalArgumentEnd(
   return argument?.complete ? argument.span.to : null;
 }
 
+/** Source offset of the first `\\` (which ends the paragraph in centered and ragged scopes). */
+function firstParagraphEndingBreak(nodes: readonly SimpleTexNode[]): number | undefined {
+  for (const node of nodes) {
+    if (node.kind === "line-break" && node.text.startsWith("\\\\")) return node.sourceStart;
+    if ("children" in node) {
+      const nested = firstParagraphEndingBreak(node.children);
+      if (nested !== undefined) return nested;
+    }
+  }
+  return undefined;
+}
+
 function skipSimpleTexControlWordSpaces(text: string, start: number): number {
   let index = start;
   const triviaEndByStart = getRecoveredTexSyntaxIndex(text, texFragmentParser).triviaEndByStart;
@@ -4523,7 +4630,10 @@ function skipSimpleTexControlWordSpaces(text: string, start: number): number {
   ) {
     index = triviaEnd;
   }
-  return index;
+  // A blank line after a control word is still a paragraph break.
+  const skipped = text.slice(start, index);
+  const blankLine = /\n[ \t]*\n/u.exec(skipped);
+  return blankLine ? start + blankLine.index : index;
 }
 
 export function scanSimpleTexLineBreak(
@@ -5125,6 +5235,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
         pending.show = false;
       }
       for (const role of scopeStack) if (role.kind === "trivlist") consumedTrivlistLabels.add(role);
+      const startingBaselineSkip = !activeList && (alignment !== undefined || scopeStack.some(role => role.kind === "trivlist"))
+        ? sizeAt(firstParagraphEndingBreak(nodes) ?? end).baselineSkip : undefined;
       const block: SimpleTexParagraphBlock = {
         ...(beforeDisplay ? { preDisplayFontSizePt: activeList && (endSize.selectionFrom ?? -1) < activeList.sourceStart
           ? activeList.fontSizePt : endSize.sizePt } : {}),
@@ -5149,6 +5261,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         ...(explicitBaselineSkip ? { explicitBaselineSkip: true } : {}),
         ...((activeList && !explicitBaselineSkip ? activeList.baselineSkipPt : endSize.baselineSkip) !== undefined
           ? { baselineSkip: requireDefined(activeList && !explicitBaselineSkip ? activeList.baselineSkipPt : endSize.baselineSkip, "Expected paragraph baseline skip") } : {}),
+        ...(startingBaselineSkip !== undefined && startingBaselineSkip !== endSize.baselineSkip ? { startingBaselineSkip } : {}),
         ...(pendingParagraphVerticalAdjustments.length > 0
           ? {
               verticalAdjustments: [
@@ -6340,6 +6453,7 @@ export function simpleTexInlineNodesToTokens(
         skipWidth: node.width,
         ...(node.kern ? { skipKern: true as const } : {}),
         ...(node.star ? { skipStar: true as const } : {}),
+        ...(node.infiniteStretch ? { skipInfiniteStretch: node.infiniteStretch } : {}),
       });
       skipPostLineBreakSpace = false;
       continue;

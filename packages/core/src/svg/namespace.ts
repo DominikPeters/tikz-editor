@@ -10,7 +10,7 @@ export function namespaceSvgModel(model: SvgRenderModel, namespace: string): Svg
   // Escape underscores too, making this encoding injective for arbitrary names.
   const prefix = `tikz-${namespace.replace(/[^A-Za-z0-9-]/gu, char => `_${requireDefined(char.codePointAt(0), "Expected an internal namespace value").toString(16)}_`)}-`;
   const ids = new Map<string, string>();
-  for (const markup of [...model.defs, ...model.parts.map(part => part.markup)]) {
+  for (const markup of [...model.defs, ...(model.glyphDefs ?? []), ...model.parts.map(part => part.markup)]) {
     mapSvgAttributes(markup, (name, value) => {
       if (name === "id") ids.set(value, prefix + value);
       return value;
@@ -29,7 +29,8 @@ export function namespaceSvgModel(model: SvgRenderModel, namespace: string): Svg
       (whole: string, quote: string, id: string) => ids.has(id) ? `url(${quote}#${requireDefined(ids.get(id), "Expected an internal namespace value")}${quote})` : whole);
   });
   const defs = model.defs.map(rewrite);
-  return { ...model, defs, defsFingerprint: defs.join(""), parts: model.parts.map(part => {
+  const glyphDefs = model.glyphDefs?.map(rewrite);
+  return { ...model, defs, ...(glyphDefs ? { glyphDefs } : {}), defsFingerprint: defs.join(""), parts: model.parts.map(part => {
     const markup = rewrite(part.markup);
     return markup === part.markup ? part : { ...part, markup, fingerprint: markup };
   }) };

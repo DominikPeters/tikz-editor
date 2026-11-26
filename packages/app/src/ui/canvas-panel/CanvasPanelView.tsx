@@ -19,7 +19,7 @@ import type { EditorPlatform } from "../../platform/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import type { ResizeRole } from "@tikz-editor/core/edit/actions";
 import type { EditHandle } from "@tikz-editor/core/semantic/types";
-import type { SvgDiffHints, SvgRenderModel } from "@tikz-editor/core/svg/index";
+import { svgModelDefs, type SvgDiffHints, type SvgRenderModel } from "@tikz-editor/core/svg/index";
 import type { SnapLine } from "@tikz-editor/core/edit/snapping";
 import { CanvasSVGLayer } from "./CanvasSVGLayer";
 import {
@@ -560,7 +560,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   viewBox={`${repeatPreviewModel.viewBox.x} ${repeatPreviewModel.viewBox.y} ${repeatPreviewModel.viewBox.width} ${repeatPreviewModel.viewBox.height}`}
                   aria-hidden="true"
                 >
-                  <defs dangerouslySetInnerHTML={{ __html: repeatPreviewModel.defs.join("") }} />
+                  <defs dangerouslySetInnerHTML={{ __html: svgModelDefs(repeatPreviewModel).join("") }} />
                   <g
                     className={css.repeatPreviewContent}
                     dangerouslySetInnerHTML={{ __html: repeatPreviewModel.parts.map((part) => part.markup).join("") }}

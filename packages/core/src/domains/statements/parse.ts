@@ -252,6 +252,10 @@ function mapMacroDefinitionStatement(node: SyntaxNode, source: string, state: St
   const statementIndex = allocateStatementIndex(state);
   const nameNode = findFirstChildByName(node, "CommandName");
   const valueNode = findFirstChildByName(node, "Group");
+  const parameterNode = findFirstChildByName(node, "DefParameterText");
+  const parameterCount = parameterNode
+    ? Math.max(0, ...[...source.slice(parameterNode.from, parameterNode.to).matchAll(/#([1-9])/gu)].map(match => Number(match[1])))
+    : 0;
 
   return {
     kind: "MacroDefinition",
@@ -261,6 +265,8 @@ function mapMacroDefinitionStatement(node: SyntaxNode, source: string, state: St
     commandRaw: "\\def",
     nameRaw: nameNode ? source.slice(nameNode.from, nameNode.to) : "",
     ...(nameNode ? { nameSpan: toSpan(nameNode) } : {}),
+    ...(parameterCount > 0 ? { parameterCount } : {}),
+    ...(source.slice(node.from, node.to).startsWith("\\expandafter") ? { expandValue: true } : {}),
     valueRaw: valueNode ? extractGroupInnerRaw(valueNode, source) : "",
     ...(valueNode ? { valueSpan: toGroupInnerSpan(valueNode, source) } : {})
   };

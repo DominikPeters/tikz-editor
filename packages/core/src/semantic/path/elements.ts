@@ -87,6 +87,7 @@ export function appendRectangleSubpath(
     return;
   }
 
+  const subpathStart = commands.length;
   commands.push({ kind: "M", to: start });
   let previousSegmentRoundedCorners: number | null = null;
   previousSegmentRoundedCorners = appendPathPoint(
@@ -114,7 +115,7 @@ export function appendRectangleSubpath(
     roundedCorners
   ).nextRoundedCorners;
   appendPathPoint(commands, "--", bottomLeft, start, previousSegmentRoundedCorners, roundedCorners);
-  roundClosedPathStartCorner(commands, bottomLeft, start, roundedCorners);
+  roundClosedPathStartCorner(commands, bottomLeft, start, roundedCorners, subpathStart);
   commands.push({ kind: "Z" });
 }
 

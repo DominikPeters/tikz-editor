@@ -80,6 +80,7 @@ import { parseSimpleTexTabularRegisters, parseSimpleTexParagraphIr } from "../te
 import { collectBeamerParagraphSpacing } from "./spacing.js";
 import { resolveBeamerColumnPositions, resolveBeamerColumnWidth } from "./column-dimensions.js";
 import { beamerFrameBodyTransform, beamerFrameShrinkScale, beamerFrameShrinkWidth, crampedBeamerListProfile, resolveBeamerFrameShrink, transformBeamerPoint, transformBeamerRect } from "./frame-shrink.js";
+import { themeListTopsepPt, withThemeDisplaySkips, withThemeListRegisters } from "./theme/theme-spacing.js";
 import { beamerClassNormalSize, beamerDisplayMathProfile, beamerFontSizeProfile, beamerListSizeOverrides, beamerNamedFontSize, beamerNamedFontSizes, beamerTrivlistSpacing } from "./theme/font-sizes.js";
 import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxBoxedTitle, resolveTcolorboxPlan, tcolorboxSurroundingSpacing } from "./tcolorbox.js";
 import { parseBeamerFrameBody } from "./content.js";
@@ -111,7 +112,7 @@ import type {
 import { resolveBeamerPageGeometry } from "./geometry.js";
 import { beamerPosterMacroBindings, scanBeamerPoster } from "./poster.js";
 import { withBeamerProjectFiles } from "./project-files.js";
-import { beamerColumnMacros, buildBeamerEffectivePreamble, buildBeamerVirtualSource, rehomeBeamerVirtualSpans, registerBeamerVirtualSource, type BeamerVirtualSource } from "./input-files.js";
+import { beamerVirtualRoot, beamerColumnMacros, beamerMainSyntaxForReparse, buildBeamerEffectivePreamble, beamerVirtualPictureRoots, buildBeamerVirtualSource, projectBeamerInputUses, rehomeBeamerVirtualSpans, registerBeamerVirtualSource, type BeamerVirtualSource } from "./input-files.js";
 import { projectBeamerLengthRegisters, scanBeamerLengthRegisters, type BeamerLengthRegisters } from "./lengths.js";
 import {
   beamerOverlaySpecContains,
@@ -121,7 +122,7 @@ import {
   type BeamerOverlayModel,
   type BeamerOverlayVisibility,
 } from "./overlay.js";
-import { scanBeamerDocumentWithSyntax } from "./scan.js";
+import { scanBeamerDocumentWithSyntax, scanFrameTikzPictures } from "./scan.js";
 import { formatDocumentRootId } from "../document/root-id.js";
 import { createBeamerSyntaxContext, beamerRequiredArgumentAfter, beamerOptionalArgumentAfter, type BeamerSyntaxContext } from "./syntax.js";
 import { beamerSpeakerNotes, projectBeamerSpeakerNotes, scanBeamerNoteCommands, type BeamerNoteCommand } from "./notes.js";
@@ -148,6 +149,7 @@ import {
   resolveBeamerTheme,
   resolveBeamerThemeColor,
   interpretBlockTemplate,
+  withListDepthOffset,
   withParagraphSkip,
   TemplateUnsupported,
   type TemplatePaint,
@@ -270,6 +272,7 @@ function beamerListLayoutProfile(
   const profile: TexListLayoutProfile = {
     ...BEAMER_LIST_LAYOUT_PROFILE,
     trivlistTopsepPt: beamerTrivlistSpacing(theme).naturalPt,
+    trivlistShrinkPt: beamerTrivlistSpacing(theme).shrinkPt,
     sizeOverrides: beamerListSizeOverrides(theme),
     // List registers are em of the class font, also under beamerposter.
     dimensionFontSizePt: beamerClassNormalSize(theme).sizePt,
@@ -302,7 +305,8 @@ function beamerListLayoutProfile(
     resolveEnumerateMarker: (itemIndex, labelDepth, sizePt) =>
       resolveBeamerEnumerateMarker(theme, itemIndex, labelDepth, sizePt),
   };
-  return cramped ? crampedBeamerListProfile(profile) : profile;
+  const themed = withThemeListRegisters(profile, theme);
+  return cramped ? crampedBeamerListProfile(themed) : themed;
 }
 
 /**
@@ -336,7 +340,8 @@ function createBeamerRenderContext(
   const syntaxContext = createBeamerSyntaxContext(
     source,
     [...(options.structuralMasks ?? []), ...noteCommands.map(note => note.bodySpan)],
-    options.previousSyntax,
+    // A document with a virtual tail registers both trees; reparse each from its own.
+    beamerMainSyntaxForReparse(options.previousSyntax),
     options.exactSyntax
   );
   const scanned = scanBeamerDocumentWithSyntax(syntaxContext);
@@ -349,9 +354,9 @@ function createBeamerRenderContext(
   // Frame bodies keep the document's offsets: included text and column macros sit after the source.
   const virtual = buildBeamerVirtualSource(source, scanned, options.projectFiles, columnMacros);
   const bodySyntaxContext = virtual
-    ? createBeamerSyntaxContext(virtual.source, [...(options.structuralMasks ?? []), ...noteCommands.map(note => note.bodySpan)], undefined, options.exactSyntax)
+    ? createBeamerSyntaxContext(virtual.source, [...(options.structuralMasks ?? []), ...noteCommands.map(note => note.bodySpan)], options.previousSyntax, options.exactSyntax)
     : syntaxContext;
-  if (virtual) registerBeamerVirtualSource(bodySyntaxContext.syntax, virtual);
+  if (virtual) registerBeamerVirtualSource(bodySyntaxContext.syntax, virtual, syntaxContext.syntax);
   const document = withBeamerProjectFiles(virtual ? { ...scanBeamerDocumentWithSyntax(bodySyntaxContext), source } : scanned, options.projectFiles);
   const themeSwitch = options.presentationTheme === undefined
     ? null
@@ -397,7 +402,7 @@ function createBeamerRenderContext(
     macroBindingsForFrame: frame => bindingsAt(frame.span.from),
     references: (() => {
       const index = buildBeamerReferenceIndex(document, syntaxContext.syntax, overlaysByFrameId);
-      return { ...index, lengthRegisters: lengths.registers, diagnostics: [...index.diagnostics, ...lengths.diagnostics] };
+      return { ...index, lengthRegisters: lengths.registers, ...(virtual ? { virtual } : {}), diagnostics: [...index.diagnostics, ...lengths.diagnostics] };
     })(),
     overlaysByFrameId,
     page: resolveBeamerPageGeometry(preambleDocument, theme),
@@ -773,13 +778,17 @@ async function renderBeamerFrameStep(params: {
   collectExtracted(bodyIr.children);
   const picturePaintOwners: BeamerPicturePaintOwner[] = [];
   const inlinePictures: BeamerInlinePicture[] = [];
-  for (const root of frame.children) {
+  for (const root of [...frame.children, ...(references.virtual ? beamerVirtualPictureRoots(references.virtual, frame, (text, span, index) => scanFrameTikzPictures(text, span, index, [])) : [])]) {
     if (extractedPictures.has(root.span.from) || references.overlayPictures?.some(p => p.span.from === root.span.from)) continue;
     const visibility = resolveBeamerOverlaySpanVisibility(bodyIr.overlays, root.span, step);
     if (visibility === "removed") continue;
-    const pictureTheme = ambientTextTheme(references.scopedTheme?.at(root.span.from) ?? theme, references.ambientTextAt?.(root.span.from) ?? "");
+    // A picture from an \input file inherits the declarations active at the \input.
+    const virtual = references.virtual;
+    const inputSegment = virtual?.segments.find(segment => segment.kind === "input" && segment.span.from <= root.span.from && root.span.to <= segment.span.to);
+    const ambientOffset = virtual && inputSegment ? beamerVirtualRoot(virtual, inputSegment.span).from : root.span.from;
+    const pictureTheme = ambientTextTheme(references.scopedTheme?.at(root.span.from) ?? theme, references.ambientTextAt?.(ambientOffset) ?? "");
     const tikz = await prepareEmbeddedTikz({ source, theme: pictureTheme, node: { kind: "tikzpicture", id: root.id, span: root.span, root, horizontalAlignment: "left" },
-      ambientText: references.ambientTextAt?.(root.span.from) ?? "",
+      ambientText: references.ambientTextAt?.(ambientOffset) ?? "",
       width: Number.POSITIVE_INFINITY, bodyFont: pictureTheme.fonts["normal-text"], diagnostics, visibility, overlays: bodyIr.overlays, step,
       ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
       ...(params.work !== undefined ? {work:params.work} : {}) });
@@ -1635,6 +1644,8 @@ async function prepareFrameFlow(params: {
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
   work?: BeamerRenderWork;
+  /** Typesetting state a block template leaves for its body: `\parskip`, alignment, justification. */
+  paragraphStyle?: BlockParagraphStyle;
 }): Promise<PreparedFrameFlowItem[]> {
   const result: PreparedFrameFlowItem[] = [];
   const bodyFont = params.theme.fonts["normal-text"];
@@ -1643,7 +1654,7 @@ async function prepareFrameFlow(params: {
     if (params.work) await params.work.checkpoint();
     const nodeTheme = ambientTextTheme(params.theme, params.references.ambientTextAt?.(node.span.from) ?? "");
     const bodyFont = nodeTheme.fonts["normal-text"];
-    const listProfile = beamerListLayoutProfile(nodeTheme, params.references.crampedLists);
+    const listProfile = withListDepthOffset(beamerListLayoutProfile(nodeTheme, params.references.crampedLists), params.paragraphStyle?.listDepth ?? 0);
     const visibility = resolveBeamerOverlaySpanVisibility(
       params.overlays,
       node.span,
@@ -1690,7 +1701,7 @@ async function prepareFrameFlow(params: {
         node,
         textWidth: params.textWidth,
         bodyFont,
-        listProfile,
+        listProfile: params.paragraphStyle?.labelPending && result.length === 0 ? { ...listProfile, suppressInitialTopsep: true } : listProfile,
         macroBindings: params.macroBindings,
         references: params.references,
         overlays: params.overlays,
@@ -1698,6 +1709,7 @@ async function prepareFrameFlow(params: {
         ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
         colorResolver: beamerAlertColorResolver(nodeTheme),
         paperWidth: params.paperWidth,
+        ...(params.paragraphStyle !== undefined ? { paragraphStyle: params.paragraphStyle } : {}),
       }));
       if (paragraph) {
         result.push(paragraph);
@@ -2069,6 +2081,7 @@ function prepareFrameParagraph(params: {
   graphicsResolver?: DocumentGraphicsResolver;
   colorResolver?: NodeTextColorResolver;
   paperWidth: number;
+  paragraphStyle?: BlockParagraphStyle;
 }): Extract<PreparedFrameFlowItem, { kind: "paragraph" }> | null {
   const paragraphSource = params.source.slice(
     params.node.span.from,
@@ -2093,15 +2106,17 @@ function prepareFrameParagraph(params: {
       return { height, depth: paragraphMaterialExtent(measured) - height };
     },
   });
+  const style = params.paragraphStyle;
   const paragraph = layoutParagraph({
-    mapped: overprintMapped,
+    mapped: style ? withParagraphSkip(overprintMapped, style.parskipPt, params.node.span) : overprintMapped,
     sourceSpan: params.node.span,
     paragraphId: params.node.id,
     role: "body",
     bounds: { x: 0, y: 0, width: params.textWidth, height: 0 },
     font: params.bodyFont,
     ...(params.colorResolver !== undefined ? { colorResolver: params.colorResolver } : {}),
-    alignment: params.node.alignment ?? "left",
+    ...(style?.justify && params.node.alignment === undefined ? { justify: true } : {}),
+    alignment: params.node.alignment ?? style?.alignment ?? "left",
     listProfile: params.listProfile,
     macroBindings: params.macroBindings,
     references: params.references,
@@ -2117,9 +2132,12 @@ function prepareFrameParagraph(params: {
   const trivlistTopsep = params.listProfile.trivlistTopsepPt ?? 9;
   const trailingTrivlistSkip = trailingBeamerTrivlistSkip(projectedSource, trivlistTopsep);
   const trailingListSkip = trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont, paragraph);
+  const trivlistShrink = params.listProfile.trivlistShrinkPt ?? 0;
+  // A closing center/figure topsep (9pt minus 5pt) shrinks like a list's.
   const trailingListShrink = trailingListSkip > 0
     ? BEAMER_LIST_LAYOUT_PROFILE.topsepShrinkPtByDepth?.[0] ?? 0
-    : 0;
+    : trailingTrivlistSkip > 0 ? trivlistShrink : 0;
+  const leadingAdjustment = leadingBeamerTrivlistAdjustment(paragraphSource, paragraph, trivlistTopsep);
   const namedSize = activeBeamerNamedSize(projectedSource, params.references.theme);
   return {
     kind: "paragraph",
@@ -2135,11 +2153,8 @@ function prepareFrameParagraph(params: {
     boxHeight: paragraphStartingMaterialHeight(paragraph),
     startingBaselineSkip:
       paragraphStartingBaselineSkip(paragraph, namedSize?.lineHeightPt ?? params.bodyFont.lineHeightPt),
-    leadingAdjustment: leadingBeamerTrivlistAdjustment(
-      paragraphSource,
-      paragraph,
-      trivlistTopsep
-    ),
+    leadingAdjustment,
+    ...(leadingAdjustment > 0 && trivlistShrink > 0 ? { leadingShrinkPt: Math.min(leadingAdjustment, trivlistShrink) } : {}),
     endingDepth: paragraphEndingMaterialDepth(paragraph),
     trailingListGlue: {
       naturalPt: trailingListSkip,
@@ -2230,7 +2245,7 @@ async function shrinkFrameParagraphGlueToAvailableHeight(
       maximumShrink: Math.max(
         0,
         item.naturalHeight - fullyShrunk.naturalHeight
-      ) + item.trailingListGlue.shrinkPt,
+      ) + item.trailingListGlue.shrinkPt + (item.leadingShrinkPt ?? 0),
       paragraphMaximumShrink: Math.max(
         0,
         item.paragraph.height - rawFullyShrunk.paragraph.height
@@ -2274,7 +2289,8 @@ async function shrinkFrameParagraphGlueToAvailableHeight(
       ...relaid,
       naturalHeight:
         relaid.naturalHeight -
-        relaid.trailingListGlue.shrinkPt * ratio,
+        (relaid.trailingListGlue.shrinkPt + (relaid.leadingShrinkPt ?? 0)) * ratio,
+      leadingAdjustment: relaid.leadingAdjustment - (relaid.leadingShrinkPt ?? 0) * ratio,
     };
   }
   for (let index = 0; index < fitted.length; index += 1) {
@@ -2364,6 +2380,8 @@ function suppressCenteredTikzTopGlueAfterNormalDisplay(
     },
   };
 }
+
+type BlockParagraphStyle = { parskipPt: number; alignment: "left" | "center" | "right"; justify: boolean; listDepth: number; labelPending: boolean };
 
 async function prepareBlock(params: Parameters<typeof prepareBlockWithTheme>[0]): Promise<PreparedBlock | null> {
   const theme = ambientTextTheme(params.references.blockThemeAt?.(params.node.span.from) ?? params.references.scopedTheme?.at(params.node.span.from) ?? params.theme,
@@ -2486,6 +2504,8 @@ async function prepareBlockWithTheme(params: {
           shape: "italic" as const,
         }
       : params.theme.fonts[plan.bodyFontRole];
+  // Markers are sized in em of the list's own font, which for a block is its body font.
+  const themeWithBodyFont: ResolvedBeamerTheme = { ...params.theme, fonts: { ...params.theme.fonts, "normal-text": theoremBodyFont } };
   const layoutBody = (node: BeamerParagraphBodyNode, paragraphId: string) => {
     const bodyProjection = projectBeamerOverlayText(
       createIdentityMappedText(params.source.slice(node.span.from, node.span.to), node.span.from),
@@ -2507,7 +2527,7 @@ async function prepareBlockWithTheme(params: {
         disableAutomaticHyphenation: true,
         // Lists inside blocks use the same theme templates (margins,
         // markers) as frame-level lists.
-        listProfile: { ...beamerListLayoutProfile(params.theme, params.references.crampedLists), suppressInitialTopsep: plan.style !== "default" },
+        listProfile: { ...withListDepthOffset(beamerListLayoutProfile(themeWithBodyFont, params.references.crampedLists), interpreted?.slot.listDepth ?? 0), suppressInitialTopsep: plan.style !== "default" || interpreted?.slot.labelPending === true },
         macroBindings: params.macroBindings,
         references: params.references,
         hiddenSourceSpans: bodyProjection.hiddenSourceSpans,
@@ -2531,8 +2551,9 @@ async function prepareBlockWithTheme(params: {
       macroBindings: params.macroBindings, references: params.references, overlays: params.overlays, step: params.step,
       ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
       ...(params.work !== undefined ? { work: params.work } : {}),
+      ...(interpreted ? { paragraphStyle: { parskipPt: interpreted.slot.parskip, alignment: interpreted.slot.alignment, justify: interpreted.slot.justify, listDepth: interpreted.slot.listDepth, labelPending: interpreted.slot.labelPending } } : {}),
     });
-    const positioned = positionPreparedFrameFlow(flow, theoremBodyFont.lineHeightPt);
+    const positioned = positionPreparedFrameFlow(flow, theoremBodyFont.lineHeightPt, 0, 0, interpreted?.slot.parskip ?? 0);
     const first = positioned.items[0];
     // Keep the negative head skip of T columns. Their visual top can be
     // above the physical hbox that establishes this body's reference.
@@ -2573,7 +2594,7 @@ async function prepareBlockWithTheme(params: {
       flow.push({ kind: "unsupported", visibility, placeholder, height: placeholder.height });
     }
     if (flow.length > 0) {
-      const positioned = positionPreparedFrameFlow(flow, theoremBodyFont.lineHeightPt);
+      const positioned = positionPreparedFrameFlow(flow, theoremBodyFont.lineHeightPt, 0, 0, interpreted?.slot.parskip ?? 0);
       const origin = requireArrayValue(positioned.items, 0).contentTop;
       bodyFlow = {
         extent: positioned.extent - origin,
@@ -2678,7 +2699,9 @@ async function prepareBlockWithTheme(params: {
   if (interpreted) {
     // The theme's templates place everything around the body, whose measured extent is final.
     try {
-      const laidOut = interpreted.layout({ extent: bodyExtent, endingDepth: bodyEndingDepth, firstHeight: firstBodyHeight ?? 0, baselineSkip: firstBodyBaselineSkip });
+      const laidOut = interpreted.layout({ extent: bodyExtent, endingDepth: bodyEndingDepth, baselineSkip: firstBodyBaselineSkip,
+        firstHeight: firstBodyHeight ?? (firstFlowItem?.kind === "columns" ? firstFlowItem.box.height : firstFlowItem?.kind === "tikzpicture" ? firstFlowItem.boxHeight : 0),
+        startsInVerticalMode: firstFlowItem?.kind === "columns" || firstFlowItem?.kind === "block" });
       const titlePaint = laidOut.paint.find((paint): paint is Extract<TemplatePaint, { kind: "text" }> => paint.kind === "text");
       const fills = laidOut.paint.filter((paint): paint is Extract<TemplatePaint, { kind: "fill" }> => paint.kind === "fill")
         .map(paint => ({ x: paint.x, y: paint.y, width: paint.w, height: paint.h, color: paint.color }));
@@ -4383,9 +4406,10 @@ function layoutParagraph(params: {
   textWidth?: number;
   columnWidth?: number;
 }): LaidParagraph | null {
+  params = { ...params, mapped: projectBeamerInputUses(params.mapped, params.references.virtual) };
   const ambient = params.role === "body" || params.role === "block-body" ? params.references.ambientTextAt?.(params.sourceSpan.from) : "";
   if (ambient) params = { ...params, mapped: concatMappedText([
-    createGeneratedMappedText((params.alignment !== "left" ? ambient.replace(/\\(?:centering|raggedleft|raggedright)\b/gu, "") : ambient) + " ", "Inherited TeX text declarations", params.sourceSpan), params.mapped,
+    createGeneratedMappedText((params.alignment !== "left" || params.justify ? ambient.replace(/\\(?:centering|raggedleft|raggedright)\b/gu, "") : ambient) + " ", "Inherited TeX text declarations", params.sourceSpan), params.mapped,
   ]) };
   if (params.references.scopedTheme) params = { ...params, mapped: params.references.scopedTheme.project(params.mapped) };
   params = { ...params, mapped: projectBeamerOverlayPictureBoxes(projectBeamerSpeakerNotes(params.mapped), params.references.tikzLayer === true, params.references.overlayPictures) };
@@ -4491,7 +4515,7 @@ function layoutParagraph(params: {
       mathBoxProvider: createTexDerivedInlineMathBoxProvider({ baseAtPt: fontSize, fontProfile: createBeamerTexMathFontProfile(params.mathFont ?? params.font) }),
     }).report?.lines[0]?.naturalWidth ?? 0;
   });
-  const normalDisplayProfile = beamerDisplayMathProfile(params.references.theme);
+  const normalDisplayProfile = withThemeDisplaySkips(beamerDisplayMathProfile(params.references.theme), params.references.theme);
   const blockDisplayProfile = { ...normalDisplayProfile };
   // A minipage starts the display from an empty paragraph at its top,
   // without a frame-leading baseline.
@@ -5201,6 +5225,12 @@ function activeBeamerNamedSize(source: string, theme?: ResolvedBeamerTheme): {
       }
     }
   }
+  const fontsizePattern = /\\fontsize\s*\{\s*([0-9.]+)\s*(?:pt)?\s*\}\s*\{\s*([0-9.]+)\s*(?:pt)?\s*\}\s*\\selectfont(?![A-Za-z@])/gu;
+  for (const match of source.matchAll(fontsizePattern)) {
+    if (selected == null || match.index > selected.index) {
+      selected = { command: "fontsize", pattern: fontsizePattern, sizePt: Number(match[1]), lineHeightPt: Number(match[2]), index: match.index };
+    }
+  }
   return selected && {
     command: selected.command,
     pattern: selected.pattern,
@@ -5470,7 +5500,7 @@ function trailingScopedBeamerListSkip(mapped: MappedText, references: BeamerRefe
   const origin = mapped.sourceMap.charOrigins[end.index];
   const active = references.theme ? ambientTextTheme(references.theme,
     references.ambientTextAt?.(origin?.kind === "direct" ? origin.from : 0) ?? "").fonts["normal-text"] : font;
-  const skip = beamerListSizeOverrides(references.theme).find(entry => Math.abs(entry.fontSizePt - active.sizePt) < .001)?.topsepPt ?? 3;
+  const skip = themeListTopsepPt(references.theme, active) ?? beamerListSizeOverrides(references.theme).find(entry => Math.abs(entry.fontSizePt - active.sizePt) < .001)?.topsepPt ?? 3;
   const closing = trailingBeamerListSkip(mapped.text, skip);
   // endtrivlist uses addvspace, so a terminal display skip and the list's
   // closing topsep contribute their maximum rather than their sum.

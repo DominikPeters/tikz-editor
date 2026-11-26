@@ -189,6 +189,8 @@ export interface TexParagraphInput extends SimpleTexSegmentInput {
   readonly hasTrivlistLabel?: boolean;
   readonly fontSizePt?: TexLength;
   readonly baselineSkip?: TexLength;
+  /** `\baselineskip` at the end of the block's first TeX paragraph (see the IR block). */
+  readonly startingBaselineSkip?: TexLength;
   readonly blockIndex: number;
   readonly dimensionContext?: TexDimensionContext;
   /**

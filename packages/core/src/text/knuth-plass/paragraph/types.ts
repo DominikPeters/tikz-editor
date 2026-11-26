@@ -117,6 +117,8 @@ export interface SpaceRun extends BaseRun {
   texGlue?: {
     width: number;
     stretch: number;
+    /** 1 fil, 2 fill, 3 filll: `stretch` is then an infinite coefficient; absent for finite stretch. */
+    stretchOrder?: 1 | 2 | 3;
     shrink: number;
     spaceFactor?: number;
     breakPenalty?: number;
@@ -161,6 +163,8 @@ export interface GreedyLine {
   targetWidth?: number;
   lineNaturalWidth?: number;
   glueSetRatio?: number;
+  /** Stretch of the highest infinite order on the line: its glue is set to `coefficient * ratio`. */
+  infiniteGlue?: { order: 1 | 2 | 3; ratio: number };
   badness?: number;
   spaceCount?: number;
   spaceDeltaPerGap?: number;

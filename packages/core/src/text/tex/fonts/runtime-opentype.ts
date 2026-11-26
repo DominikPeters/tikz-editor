@@ -233,16 +233,23 @@ function readFixed(table: Uint8Array | undefined, offset: number): number {
 }
 
 let harfbuzz: Promise<RuntimeHarfBuzz> | null = null;
+let harfbuzzLoader: (() => Promise<RuntimeHarfBuzz>) | null = null;
 
-/** harfbuzzjs and its WebAssembly, loaded on first use. */
+/**
+ * The host supplies harfbuzzjs (`() => import("harfbuzzjs")`, plus whatever
+ * its bundler needs to start the WebAssembly): the core package root stays
+ * free of it, so browser bundles of core do not pull in its Node branch.
+ */
+export function setRuntimeHarfBuzzLoader(loader: (() => Promise<RuntimeHarfBuzz>) | null): void {
+  harfbuzzLoader = loader;
+  harfbuzz = null;
+}
+
+/** harfbuzzjs through the host's loader, on first use; rejects until a loader is registered. */
 export function loadRuntimeHarfBuzz(): Promise<RuntimeHarfBuzz> {
-  const loading = harfbuzz ?? import("harfbuzzjs").then(async module => {
-    // In the apps' builds the module's initialisation is an exported promise
-    // (apps/harfbuzz-wasm-plugin.ts); in Node it has already run.
-    const ready: unknown = Reflect.get(module, "__tikzHarfBuzzReady");
-    if (ready instanceof Promise) await ready;
-    return module;
-  });
+  if (!harfbuzzLoader) return Promise.reject(new Error("No harfbuzz loader is registered (setRuntimeHarfBuzzLoader)."));
+  const loading = harfbuzz ?? harfbuzzLoader();
   harfbuzz = loading;
+  loading.catch(() => { if (harfbuzz === loading) harfbuzz = null; });
   return loading;
 }
