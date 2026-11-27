@@ -11,7 +11,7 @@
 
 export const PGFPLOTS_ORACLE_SCHEMA = "pgfplots-oracle/v1";
 /** Bump when the TeX instrumentation or parsing changes meaning. Part of the cache key. */
-export const PGFPLOTS_ORACLE_HARNESS_VERSION = 2;
+export const PGFPLOTS_ORACLE_HARNESS_VERSION = 3;
 
 export interface Point { x: number; y: number }
 export interface Box { minX: number; minY: number; maxX: number; maxY: number }
@@ -63,7 +63,15 @@ export interface OracleAxis {
   map?: OracleAxisMap;
   /** `current axis` anchors read after `\end{axis}`. */
   anchors?: Record<string, Point>;
-  ticks?: { x: OracleTick[]; y: OracleTick[] };
+  ticks?: { x: OracleTick[]; y: OracleTick[]; xExtra?: OracleTick[]; yExtra?: OracleTick[] };
+  /**
+   * Scale per direction (harness version 3). On a log direction, limits,
+   * `\tick` values and the map are in pgfplots' internal coordinate, the
+   * logarithm of the data value (natural log unless `log basis` is set), and
+   * the map is derived from `rect` and the limits (the `axis cs` probe takes
+   * data values).
+   */
+  scale?: { x: "linear" | "log"; y: "linear" | "log" };
   descriptions?: Partial<Record<"title" | "xlabel" | "ylabel" | "legend", NodeGeometry>>;
 }
 
@@ -276,6 +284,14 @@ function axis(value: Json, path: string): OracleAxis {
       x: arr(t.x, `${path}.ticks.x`).map((item, i) => tick(item, `${path}.ticks.x[${i}]`)),
       y: arr(t.y, `${path}.ticks.y`).map((item, i) => tick(item, `${path}.ticks.y[${i}]`)),
     };
+    for (const key of ["xExtra", "yExtra"] as const) {
+      if (t[key] !== undefined) result.ticks[key] = arr(t[key], `${path}.ticks.${key}`).map((item, i) => tick(item, `${path}.ticks.${key}[${i}]`));
+    }
+  }
+  if (r.scale !== undefined) {
+    const sc = rec(r.scale, `${path}.scale`);
+    const one = (v: Json, where: string): "linear" | "log" => { const text = str(v, where); if (text !== "linear" && text !== "log") fail(where, `bad scale ${text}`); return text as "linear" | "log"; };
+    result.scale = { x: one(sc.x, `${path}.scale.x`), y: one(sc.y, `${path}.scale.y`) };
   }
   if (r.descriptions !== undefined) {
     const d = rec(r.descriptions, `${path}.descriptions`);

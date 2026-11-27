@@ -148,13 +148,15 @@ export function compareTier1(expected: Tier1, observed: Tier1, options: CompareO
       }
     }
     anchors("axis-anchor", `${where}.anchors`, e.anchors, o.anchors);
+    if (e.scale && (!o.scale || e.scale.x !== o.scale.x || e.scale.y !== o.scale.y)) add("scale", `${where}.scale`, `expected ${JSON.stringify(e.scale)}, observed ${JSON.stringify(o.scale)}`);
     if (e.ticks) {
-      for (const letter of ["x", "y"] as const) {
+      for (const letter of ["x", "y", "xExtra", "yExtra"] as const) {
         const et = e.ticks[letter]; const ot = o.ticks?.[letter];
+        if (!et) { if (ot && ot.length > 0) add("tick-count", `${where}.ticks.${letter}`, `expected no ticks, observed ${ot.length}`); continue; }
         const twhere = `${where}.ticks.${letter}`;
         if (!ot) { add("ticks-missing", twhere, "missing in observed"); continue; }
         if (et.length !== ot.length) add("tick-count", twhere, `expected ${et.length} ticks [${et.map((t) => t.value).join(", ")}], observed ${ot.length} [${ot.map((t) => t.value).join(", ")}]`);
-        const range = letter === "x" ? (e.limits ? e.limits.xmax - e.limits.xmin : 1) : (e.limits ? e.limits.ymax - e.limits.ymin : 1);
+        const range = letter.startsWith("x") ? (e.limits ? e.limits.xmax - e.limits.xmin : 1) : (e.limits ? e.limits.ymax - e.limits.ymin : 1);
         et.forEach((tick: OracleTick, i) => {
           const other = ot[i];
           if (!other) return;

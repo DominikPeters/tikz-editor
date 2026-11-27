@@ -106,15 +106,25 @@ function instrumentation(engine: OracleEngine): string {
 % Injected immediately before \begin{axis}. #2/#3: the documented default
 % label macro for x/y (\axisdefaultticklabel or \axisdefaultticklabellog),
 % chosen from the environment name.
-\def\pgfplotsoracle@beforeaxis#1#2#3{%
+% #4/#5: the detected scale of x/y (linear or log), recorded for assembly.
+% Extra ticks (extra x ticks) reuse \ticknum, so their probe reports under
+% the letter xe/ye through the documented every extra x tick style.
+\def\pgfplotsoracle@beforeaxis#1#2#3#4#5{%
   \gdef\pgfplotsoracle@ticklist{}%
   \pgfplotsoracle@rec{AXIS|#1}%
+  \pgfplotsoracle@rec{MODE|#1|#4|#5}%
   \ifpgfplotsoracle@ticks
     \pgfplotsset{every axis/.append style={%
       xticklabel={\pgfplotsoracle@tick{#1}{x}#2},
       yticklabel={\pgfplotsoracle@tick{#1}{y}#3},
       xticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-x\ticknum},
-      yticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-y\ticknum}}}%
+      yticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-y\ticknum}},
+      every extra x tick/.append style={%
+      xticklabel={\pgfplotsoracle@tick{#1}{xe}#2},
+      xticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-xe\ticknum}},
+      every extra y tick/.append style={%
+      yticklabel={\pgfplotsoracle@tick{#1}{ye}#3},
+      yticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-ye\ticknum}}}%
   \fi
   \ifpgfplotsoracle@descriptions
     \pgfplotsset{every axis/.append style={%
@@ -213,14 +223,25 @@ export function injectProbes(body: string): string {
     axisIndex += 1;
     const id = `a${axisIndex}`;
     ids.push(id);
-    // Log mode from the environment name or a literal `xmode=log` in the
-    // environment's own options; a log mode set elsewhere (\pgfplotsset,
-    // styles) is not detected (README: limitations).
+    // Log mode from the environment name, or a literal `xmode=log` in the
+    // environment's own options or anywhere in the body before this axis
+    // (\pgfplotsset, style definitions); a later `xmode=normal` there wins.
+    // A mode set through a macro or an outside file is not detected
+    // (README: limitations).
     const options = axisOptions(body, offset + match.length);
+    const before = body.slice(0, offset);
     const label = (log: boolean) => (log ? "\\axisdefaultticklabellog" : "\\axisdefaultticklabel");
-    const xlog = environment === "semilogxaxis" || environment === "loglogaxis" || /\bxmode\s*=\s*log\b/u.test(options);
-    const ylog = environment === "semilogyaxis" || environment === "loglogaxis" || /\bymode\s*=\s*log\b/u.test(options);
-    return `\\pgfplotsoraclebeforeaxis{${id}}{${label(xlog)}}{${label(ylog)}}${match}`;
+    const lastMode = (text: string, letter: string): string | undefined => [...text.matchAll(new RegExp(`\\b${letter}mode\\s*=\\s*(log|normal|linear)\\b`, "gu"))].at(-1)?.[1];
+    const isLog = (letter: string, envLog: boolean): boolean => {
+      const own = lastMode(options, letter);
+      if (own !== undefined) return own === "log";
+      if (envLog) return true;
+      return lastMode(before, letter) === "log";
+    };
+    const xlog = isLog("x", environment === "semilogxaxis" || environment === "loglogaxis");
+    const ylog = isLog("y", environment === "semilogyaxis" || environment === "loglogaxis");
+    const mode = (log: boolean) => (log ? "log" : "linear");
+    return `\\pgfplotsoraclebeforeaxis{${id}}{${label(xlog)}}{${label(ylog)}}{${mode(xlog)}}{${mode(ylog)}}${match}`;
   });
   let endIndex = 0;
   result = result.replace(/\\end\{(axis|semilogxaxis|semilogyaxis|loglogaxis)\}/gu, (match) => {
