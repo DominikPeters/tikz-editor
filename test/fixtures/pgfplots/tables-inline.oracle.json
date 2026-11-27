@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "tables-inline",
   "sourceSha256": "1b11d80419bb6903b977a42dcab74723d1650baf8b9426e2912f0b18cd396188"

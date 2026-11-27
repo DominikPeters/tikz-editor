@@ -138,6 +138,10 @@ export function assembleTier1(records: ProbeRecord[]): { tier1: Tier1; page?: Ca
       const anchors = named(kind);
       if (anchors) (axis.descriptions ??= {})[kind] = { anchors };
     }
+    for (let row = 1; row <= 16; row += 1) for (let column = 1; column <= 16; column += 1) {
+      const anchors = named(`legend-${String(row)}-${String(column)}`);
+      if (anchors) (axis.legendEntries ??= []).push({ row, column, node: { anchors } });
+    }
   }
   const tier1: Tier1 = { axes: [...axes.values()] };
   if (bbox["south west"] && bbox["north east"]) {
@@ -198,6 +202,16 @@ function glyphInside(g: PlacedGlyph, quad: Point[]): boolean {
   return g.probes.every((p) => insideQuad(p, quad, 0.05));
 }
 
+/**
+ * Text boxes are tight (no inner sep), so the 0.6 em probe would leave out
+ * glyphs of a box shorter than that (x-height text, `text depth` legend
+ * entries: harness v3); the baseline probes decide, and the innermost
+ * containing box wins.
+ */
+function glyphInBox(g: PlacedGlyph, quad: Point[]): boolean {
+  return g.probes.slice(0, 2).every((p) => insideQuad(p, quad, 0.05));
+}
+
 function textIn(glyphs: PlacedGlyph[], quad: Point[]): string {
   return glyphs.filter((g) => glyphInside(g, quad)).sort((a, b) => a.order - b.order || a.x - b.x).map((g) => g.unicode).join("");
 }
@@ -230,7 +244,7 @@ export function assembleTier2(page: MutoolPage, tier1: Tier1, rawBoxes: RawTextB
     let best = -1;
     for (let i = 0; i < textBoxes.length; i += 1) {
       const candidate = textBoxes[i]; const quad = quads[i];
-      if (!candidate || !quad || !glyphInside(glyph, quad)) continue;
+      if (!candidate || !quad || !glyphInBox(glyph, quad)) continue;
       if (best < 0 || candidate.nesting > (textBoxes[best]?.nesting ?? -1)) best = i;
     }
     if (best >= 0) assigned.set(best, [...(assigned.get(best) ?? []), glyph]);

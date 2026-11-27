@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "symbolic-partial",
   "sourceSha256": "c8631703afbe60a55ae16445791878166f5067abfe9278116524e00b56d94666"
@@ -1920,7 +1920,7 @@
     "height": 176.11462,
     "depth": 0,
     "glyphs": [],
-    "text": "cc"
+    "text": ""
    },
    {
     "type": "textbox",
@@ -1974,7 +1974,7 @@
       "font": "LMRoman10-Regular"
      }
     ],
-    "text": ""
+    "text": "c"
    },
    {
     "type": "textbox",
@@ -2001,7 +2001,7 @@
       "font": "LMRoman10-Regular"
      }
     ],
-    "text": ""
+    "text": "c"
    },
    {
     "type": "textbox",

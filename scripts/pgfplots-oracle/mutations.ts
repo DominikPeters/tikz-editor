@@ -219,6 +219,19 @@ export const MUTATIONS: Mutation[] = [
     },
   },
   {
+    name: "legend entry 1pt right (fixtures with legend entries)",
+    expected: { tier1: true, tier2: true },
+    apply(copy) {
+      const entry = firstAxis(copy)?.legendEntries?.[0];
+      const box = entry && nodeBox(entry.node);
+      if (!entry || !box) return false;
+      const f = (p: Point) => ({ x: p.x + 1, y: p.y });
+      transformGlyphs(copy.tier2, (p) => inside(p, box, 0.05), f);
+      shiftNode(entry.node, 1, 0);
+      return true;
+    },
+  },
+  {
     name: "swapped fill colour",
     expected: { tier1: false, tier2: true },
     apply(copy) {

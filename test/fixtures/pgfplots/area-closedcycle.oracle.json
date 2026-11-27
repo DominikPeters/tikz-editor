@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "area-closedcycle",
   "sourceSha256": "213c735cdb6dbe16a6b7e5455a201d8d3511a5f826cdc5869bbf9a32fd5aa839"

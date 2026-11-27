@@ -53,7 +53,23 @@ export async function renderObservedPicture(body: string): Promise<AdaptedPictur
     const corners = [[axis.layout.bbox.minX, axis.layout.bbox.minY], [axis.layout.bbox.maxX, axis.layout.bbox.maxY]].map(([x = 0, y = 0]) => applyMatrix(axis.frameTransform, { x, y } as never));
     return { minX: Math.min(...corners.map((c) => c.x)), minY: Math.min(...corners.map((c) => c.y)), maxX: Math.max(...corners.map((c) => c.x)), maxY: Math.max(...corners.map((c) => c.y)) };
   });
-  const tier2 = adaptTier2(scene.elements, bbox, textByElement, axisBoxes, axes.flatMap((axis) => (axis.clip ? [axis.clip] : [])));
+  // Legends: the entry nodes are typeset inside the matrix node's text box (nesting 2), with the
+  // box height/depth TikZ gives them (`text depth=0.15em`); the matrix box itself is a nesting-1 box.
+  const legendBoxes: TextBox[] = [];
+  const boxOverrides = new Map<SceneElement, { nesting: number; height: number; depth: number }>();
+  for (const axis of axes) for (const record of axis.labels) {
+    if (record.role === "legend" && record.textBox) {
+      const tb = record.textBox;
+      const o = applyMatrix(axis.frameTransform, { x: tb.origin.x, y: tb.origin.y } as never);
+      legendBoxes.push({ type: "textbox", tag: 0, nesting: 1, origin: { x: o.x, y: o.y }, xAxis: { x: 1, y: 0 }, yAxis: { x: 0, y: 1 }, width: tb.width, height: tb.height, depth: tb.depth, glyphs: [], text: "" });
+    }
+    if (record.role === "legend-entry" && record.probe) {
+      const probe = record.probe;
+      const text = texts.find((t) => Math.hypot(t.origin.x - probe.textOrigin.x, t.origin.y - probe.textOrigin.y) < 1e-6);
+      if (text) boxOverrides.set(text.element, { nesting: 2, height: probe.textHeight, depth: probe.textDepth });
+    }
+  }
+  const tier2 = adaptTier2(scene.elements, bbox, textByElement, axisBoxes, axes.flatMap((axis) => (axis.clip ? [axis.clip] : [])), legendBoxes, boxOverrides);
   return { tier1, tier2, diagnostics: result.semantic.diagnostics, svg: result.svg.svg, axes };
 }
 
@@ -203,6 +219,20 @@ function adaptAxis(axis: AxisEvaluation, index: number, texts: TextGeometry[]): 
     const label = labelOf(kind);
     if (label) descriptions[kind] = label;
   }
+  // The legend matrix node: its text is the glyphs inside it, as the oracle recovers it.
+  const legend = labelOf("legend");
+  if (legend) {
+    const sw = legend.anchors["south west"]; const ne = legend.anchors["north east"];
+    const inside = (p: Point) => sw && ne && p.x >= sw.x && p.x <= ne.x && p.y >= sw.y && p.y <= ne.y;
+    descriptions.legend = { anchors: legend.anchors, text: texts.filter((t) => inside(t.origin)).map((t) => t.text).join("") };
+  }
+  const legendEntries = axis.labels.flatMap((record) => {
+    if (record.role !== "legend-entry" || !record.probe || !record.cell) return [];
+    const probe = record.probe;
+    const anchors: Record<string, Point> = {};
+    for (const name of LABEL_ANCHORS) { const a = probe.anchor(name); anchors[name] = { x: a.x, y: a.y }; }
+    return [{ row: record.cell.row, column: record.cell.column, node: { anchors } }];
+  }).sort((a, b) => a.row - b.row || a.column - b.column);
   return {
     id: `a${String(index + 1)}`,
     limits: { ...limits },
@@ -212,7 +242,8 @@ function adaptAxis(axis: AxisEvaluation, index: number, texts: TextGeometry[]): 
     map: { origin, xUnit: { x: ex.x - origin.x, y: ex.y - origin.y }, yUnit: { x: ey.x - origin.x, y: ey.y - origin.y } },
     anchors: Object.fromEntries(Object.entries(layout.anchors).map(([k, q]) => [k, w(q)])),
     ticks: { x: ticks("x"), y: ticks("y") },
-    descriptions
+    descriptions,
+    ...(legendEntries.length > 0 ? { legendEntries } : {})
   };
 }
 
@@ -322,7 +353,7 @@ function strokeAttributes(style: ResolvedStyle): Pick<PathPrimitive, "lineWidth"
   };
 }
 
-function adaptTier2(elements: readonly SceneElement[], bbox: Box, texts: Map<SceneElement, TextGeometry>, axisBoxes: readonly Box[], axisClips: readonly SceneClipPath[]): Tier2 {
+function adaptTier2(elements: readonly SceneElement[], bbox: Box, texts: Map<SceneElement, TextGeometry>, axisBoxes: readonly Box[], axisClips: readonly SceneClipPath[], extraBoxes: readonly TextBox[] = [], boxOverrides: ReadonlyMap<SceneElement, { nesting: number; height: number; depth: number }> = new Map()): Tier2 {
   const primitives: Tier2Primitive[] = [];
   // Each axis is typeset as a box of its own (LuaTeX sees it at nesting 0), spanning its bounding box (F1).
   const textBoxes: TextBox[] = axisBoxes.map((box, index): TextBox => ({
@@ -378,9 +409,10 @@ function adaptTier2(elements: readonly SceneElement[], bbox: Box, texts: Map<Sce
         };
         primitives.push(run);
       }
+      const override = boxOverrides.get(element);
       textBoxes.push({
-        type: "textbox", tag: textBoxes.length + 1, nesting: 1, origin: geometry.origin, xAxis: geometry.xAxis, yAxis: geometry.yAxis,
-        width: geometry.width, height: geometry.height, depth: geometry.depth, glyphs: [], text: geometry.text
+        type: "textbox", tag: textBoxes.length + 1, nesting: override?.nesting ?? 1, origin: geometry.origin, xAxis: geometry.xAxis, yAxis: geometry.yAxis,
+        width: geometry.width, height: override?.height ?? geometry.height, depth: override?.depth ?? geometry.depth, glyphs: [], text: geometry.text
       });
     }
   }
@@ -390,5 +422,6 @@ function adaptTier2(elements: readonly SceneElement[], bbox: Box, texts: Map<Sce
     const segments = commandsToSegments(clip.commands);
     primitives.push({ type: "path", order: order(), operation: "clip", fillRule: clip.fillRule, segments, clipDepth: 0 });
   }
+  for (const box of extraBoxes) textBoxes.push({ ...box, tag: textBoxes.length + 1 });
   return { page: { width: bbox.maxX - bbox.minX, height: bbox.maxY - bbox.minY }, primitives, textBoxes };
 }

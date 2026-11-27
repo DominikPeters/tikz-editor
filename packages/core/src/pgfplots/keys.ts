@@ -81,7 +81,9 @@ const INITIAL_STYLES: Record<string, string> = {
   "every axis y label": "",
   // `every axis title/.style={at={(0.5,1)},above,yshift=6pt}`; the evaluator places it (E3).
   "every axis title": "",
-  "every axis legend": "",
+  // Manual axisdescription.tex, "The default every axis legend style is" (behaviour L1).
+  "every axis legend": "cells={anchor=center},inner xsep=3pt,inner ysep=2pt,nodes={inner sep=2pt,text depth=0.15em},anchor=north east,shape=rectangle,fill=white,draw=black,at={(0.98,0.98)}",
+  "every legend image post": "",
   "every tick": "very thin,gray",
   "every minor tick": "",
   "every major tick": "",

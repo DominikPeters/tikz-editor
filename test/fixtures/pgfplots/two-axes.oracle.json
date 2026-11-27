@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "two-axes",
   "sourceSha256": "2c745083ac873f3364ff54e8572bbd1c0e33ca572037d6f0eb0e89acbeb4b057"

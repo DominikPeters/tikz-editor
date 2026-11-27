@@ -134,6 +134,7 @@ export const FEATURE_IDS = [
   "pgfplots_addplot_other_inputs",
   "pgfplots_addplot3",
   "pgfplots_legend",
+  "pgfplots_plot_styles",
   "pgfplots_pgfplotsset",
   "render_pipeline"
 ] as const;

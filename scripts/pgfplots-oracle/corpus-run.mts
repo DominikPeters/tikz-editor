@@ -4,7 +4,7 @@
  * and reports how many axes render without unsupported-key/plot
  * diagnostics, and the unsupported keys/features ranked by distinct paper.
  *
- *   node --import tsx scripts/pgfplots-oracle/corpus-run.mts [corpus-root] [--out file.json] [--files dir]
+ *   node --import tsx scripts/pgfplots-oracle/corpus-run.mts [corpus-root-or-axes-dir] [out.json] [--out file.json] [--files dir]
  *
  * `--files dir`: extracted e-prints, `dir/<paper>/…`; table files the
  * snippets name are read from there (relative to the snippet's source file),
@@ -30,8 +30,11 @@ const outFile = outIndex >= 0 ? args[outIndex + 1] : undefined;
 const filesIndex = args.indexOf("--files");
 const filesDir = filesIndex >= 0 && args[filesIndex + 1] ? resolve(args[filesIndex + 1] ?? "") : undefined;
 const positional = args.filter((arg, index) => !arg.startsWith("--") && (outIndex < 0 || index !== outIndex + 1) && (filesIndex < 0 || index !== filesIndex + 1));
-const corpusRoot = resolve(positional[0] ?? join(root, "artifacts", "pgfplots-corpus"));
-const corpus = join(corpusRoot, "axes");
+// The first argument is the corpus root (holding axes/) or the axes directory itself; a second one is the output file.
+const given = resolve(positional[0] ?? join(root, "artifacts", "pgfplots-corpus"));
+const corpusRoot = existsSync(join(given, "axes")) ? given : dirname(given);
+const corpus = existsSync(join(given, "axes")) ? join(given, "axes") : given;
+const outArgument = outFile ?? positional[1];
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -115,7 +118,7 @@ for (const file of files) {
 const papers = new Set(files.map((f) => f.slice(corpus.length + 1).split("/")[0]));
 const ranked = [...byFeature].map(([name, set]) => ({ name, papers: set.size, snippets: occurrences.get(name) ?? 0 })).sort((a, b) => b.papers - a.papers || b.snippets - a.snippets);
 const parseErrorPapers = new Set(parseErrorFiles.map((f) => f.split("/")[0]));
-writeFileSync(outFile ? resolve(outFile) : join(corpusRoot, "editor-run.json"), JSON.stringify({ files: files.length, papers: papers.size, axes, clean, threw, parsed, noAxis, parseErrorFiles, ranked, failures }, null, 2));
+writeFileSync(outArgument ? resolve(outArgument) : join(corpusRoot, "editor-run.json"), JSON.stringify({ files: files.length, papers: papers.size, axes, clean, threw, parsed, noAxis, parseErrorFiles, ranked, failures }, null, 2));
 console.log(`snippets ${files.length} (papers ${papers.size}), axes ${axes}, rendered without unsupported diagnostics: ${clean}, threw: ${threw}, snippets with no axis evaluated: ${noAxis}`);
 console.log(`snippets with parse errors: ${parseErrorFiles.length} (papers ${parseErrorPapers.size})`);
 for (const row of ranked.slice(0, 40)) console.log(`${String(row.papers).padStart(4)} papers ${String(row.snippets).padStart(4)} snippets  ${row.name}`);

@@ -1,0 +1,8 @@
+% pgfplots oracle fixture (hand-written): expression plots with trig format
+% plots=rad, a domain written with pi, and samples.
+\begin{tikzpicture}
+\begin{axis}[xlabel={$t$}]
+\addplot[domain=0:2*pi, samples=40, trig format plots=rad] {sin(x) + 0.3*cos(3*x)};
+\addplot[domain=-pi:pi, samples=31, blue, thick] {cos(deg(x))*x/3};
+\end{axis}
+\end{tikzpicture}

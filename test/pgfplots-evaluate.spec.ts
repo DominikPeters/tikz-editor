@@ -11,8 +11,10 @@ import { applyEditAction } from "../packages/core/src/edit/actions.js";
 import { getAxisEvaluations } from "../packages/core/src/pgfplots/evaluate-axis.js";
 import { expandPgfplotsOptions, createInitialStyleRegistry } from "../packages/core/src/pgfplots/keys.js";
 import { computeLimits } from "../packages/core/src/pgfplots/limits.js";
+import { layoutMatrix, legendGrid, legendPairs } from "../packages/core/src/pgfplots/legend.js";
 import { boxSize } from "../packages/core/src/pgfplots/layout.js";
-import { resolveAxisModel } from "../packages/core/src/pgfplots/model.js";
+import { resolveAxisModel, resolvePlotModel } from "../packages/core/src/pgfplots/model.js";
+import { plotHandlerCommands } from "../packages/core/src/pgfplots/plot-handlers.js";
 import { automaticTickStep, computeTicks } from "../packages/core/src/pgfplots/ticks.js";
 import type { AxisStatement } from "../packages/core/src/ast/types.js";
 
@@ -47,11 +49,11 @@ describe("pgfplots key tree", () => {
   });
 
   it("warns once per unsupported key name and reads documented keys", () => {
-    const m = model("xmin=-1, xmax=pi, colorbar, colorbar, legend pos=north west, width=8cm, scale only axis");
+    const m = model("xmin=-1, xmax=pi, colorbar, colorbar, legend to name=x, width=8cm, scale only axis");
     expect(m.x.min).toBe(-1);
     expect(m.x.max).toBeCloseTo(Math.PI, 6);
     expect(m.width).toBeCloseTo(8 * 72.27 / 2.54, 6);
-    expect(m.unsupported.map((u) => u.key)).toEqual(["colorbar", "colorbar", "legend pos"]);
+    expect(m.unsupported.map((u) => u.key)).toEqual(["colorbar", "colorbar"]);
     const result = evaluate(String.raw`\begin{tikzpicture}\begin{axis}[colorbar, colorbar, legend pos=north west]\addplot coordinates {(0,0) (1,1)};\end{axis}\end{tikzpicture}`);
     expect(result.diagnostics.filter((d) => d.code === "unsupported-pgfplots-key:colorbar")).toHaveLength(1);
   });
@@ -135,7 +137,7 @@ a b
     const result = evaluate(String.raw`\begin{tikzpicture}\begin{axis}
 \addplot coordinates {(a,1) (b,2)};
 \addplot table {data.dat};
-\addplot ({cos(x)},{sin(x)});
+\addplot ({cos(x)},{sin(x)},{x});
 \end{axis}\end{tikzpicture}`);
     expect(result.diagnostics.filter((d) => d.code === "unsupported-pgfplots-plot")).toHaveLength(2);
     // Without a document folder the table file cannot be read; the diagnostic names it.
@@ -183,6 +185,41 @@ a b
   });
 });
 
+describe("pgfplots function plots (behaviour M)", () => {
+  const plotPoints = (body: string) => {
+    const result = evaluate(String.raw`\begin{tikzpicture}${body}\end{tikzpicture}`);
+    const axis = getAxisEvaluations(result.scene)[0];
+    const paths = result.scene.elements.filter((e) => e.kind === "Path" && e.sourceRef.sourceId.includes(":plot:") && e.id.endsWith("line"));
+    const toData = (p: { x: number; y: number }) => axis ? { x: (p.x - axis.layout.map.origin.x) / axis.layout.map.xUnit.x, y: (p.y - axis.layout.map.origin.y) / axis.layout.map.yUnit.y } : p;
+    return { result, axis, paths: paths.map((path) => (path.kind === "Path" ? path.commands.flatMap((c) => (c.kind === "M" || c.kind === "L" ? [{ kind: c.kind, ...toData(c.to) }] : [])) : [])) };
+  };
+
+  it("M1/M2: samples equally spaced over the domain, both ends included; float mode, no TeX dimension limit", () => {
+    const { result, axis, paths } = plotPoints(String.raw`\begin{axis}\addplot[domain=0:1e5, samples=3] {x^2};\end{axis}`);
+    expect(result.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+    expect(paths[0]?.map((p) => p.x)).toEqual([0, 50000, 100000].map((v) => expect.closeTo(v, 3)));
+    expect(axis?.layout.limits.ymax).toBeCloseTo(1.1e10, -3);
+  });
+
+  it("M3: variable, samples at, trig format plots, parametric, declare function and macros", () => {
+    const { paths } = plotPoints(String.raw`\pgfmathsetmacro{\k}{2}\begin{axis}[declare function={f(\a)=\a+1;}]
+\addplot[samples at={0,1,...,3}] {f(x)*\k};
+\addplot[variable=t, domain=0:pi, samples=3, trig format plots=rad] ({cos(t)},{sin(t)});
+\end{axis}`);
+    expect(paths[0]?.map((p) => [p.x, p.y])).toEqual([[0, 2], [1, 4], [2, 6], [3, 8]].map(([x, y]) => [expect.closeTo(x ?? 0, 6), expect.closeTo(y ?? 0, 6)]));
+    expect(paths[1]?.map((p) => [p.x, p.y])).toEqual([[1, 0], [0, 1], [-1, 0]].map(([x, y]) => [expect.closeTo(x ?? 0, 6), expect.closeTo(y ?? 0, 6)]));
+  });
+
+  it("M4: unbounded samples are discarded (initial) or interrupt the line (jump); restrict y to domain jumps", () => {
+    const discard = plotPoints(String.raw`\begin{axis}\addplot[domain=-2:2, samples=5] {1/x};\end{axis}`).paths[0];
+    expect(discard?.map((p) => p.kind).join("")).toBe("MLLL");
+    const jump = plotPoints(String.raw`\begin{axis}\addplot[domain=-2:2, samples=5, unbounded coords=jump] {1/x};\end{axis}`).paths[0];
+    expect(jump?.map((p) => p.kind).join("")).toBe("MLML");
+    const restricted = plotPoints(String.raw`\begin{axis}\addplot[domain=-2:2, samples=5, restrict y to domain=0:1.5] {x};\end{axis}`).paths[0];
+    expect(restricted?.map((p) => [p.kind, p.x])).toEqual([["M", expect.closeTo(0, 6)], ["L", expect.closeTo(1, 6)]]);
+  });
+});
+
 describe("TikZ fixes the pgfplots oracle exposed", () => {
   it("densely/loosely dashed follow tikz.code.tex", () => {
     const result = evaluateTikzFigure(parseTikz(String.raw`\begin{tikzpicture}\draw[densely dashed] (0,0)--(1,0);\draw[loosely dashed] (0,1)--(1,1);\end{tikzpicture}`).figure, "");
@@ -196,5 +233,86 @@ describe("TikZ fixes the pgfplots oracle exposed", () => {
     const pad = (e: typeof small) => (e?.kind === "Text" ? (e.nodeVisualHeight ?? 0) - (e.textBlockHeight ?? 0) : NaN);
     expect(pad(small)).toBeCloseTo(pad(normal), 9);
     expect(pad(normal)).toBeCloseTo(2 * 3.333, 2);
+  });
+
+  it("text depth alone replaces only the depth of the text box; the glyphs keep their baseline (tikz.code.tex \\dp)", () => {
+    const src = String.raw`\begin{tikzpicture}\node[text depth=5pt] (a) {x};\node (b) at (2,0) {x};\end{tikzpicture}`;
+    const result = evaluateTikzFigure(parseTikz(src).figure, src);
+    const [deep, plain] = result.scene.elements.filter((e) => e.kind === "Text");
+    if (deep?.kind !== "Text" || plain?.kind !== "Text") throw new Error("no text");
+    // Height above the baseline unchanged, depth 5pt: the box grows by 5pt - natural depth, the glyphs move up by half of it.
+    const grow = (deep.nodeVisualHeight ?? 0) - (plain.nodeVisualHeight ?? 0);
+    expect(grow).toBeGreaterThan(0);
+    expect(deep.position.y - 0).toBeCloseTo(grow / 2, 6);
+  });
+});
+
+describe("pgfplots plot styling (behaviour P)", () => {
+  it("P1: PGF plot handlers; smooth uses PGF's initial tension 0.5 (0.2775 x tension support factor)", () => {
+    const pts = [{ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 20, y: 0 }].map((p) => ({ p, jump: false }));
+    const smooth = plotHandlerCommands(pts, "smooth", { tension: 0.5, combBase: (q) => q });
+    expect(smooth.map((c) => c.kind).join("")).toBe("MCC");
+    const second = smooth[2];
+    expect(second?.kind === "C" ? second.c1 : null).toEqual({ x: 10 + 0.13875 * 20, y: 10 });
+    expect(plotHandlerCommands(pts, "const-left", { tension: 0.5, combBase: (q) => q }).map((c) => c.to)).toEqual([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 20, y: 10 }, { x: 20, y: 0 }]);
+    expect(plotHandlerCommands(pts, "jump-mid", { tension: 0.5, combBase: (q) => q }).map((c) => c.kind).join("")).toBe("MLMLLML");
+    expect(plotHandlerCommands([...pts.slice(0, 2), { p: { x: 30, y: 5 }, jump: true }], "sharp", { tension: 0.5, combBase: (q) => q }).map((c) => c.kind).join("")).toBe("MLM");
+  });
+
+  it("P2/P4: named cycle lists, cycle list shift, every axis plot no N, axis-level no markers", () => {
+    const axis = axisOf(String.raw`\begin{tikzpicture}\begin{axis}[cycle list name=linestyles*, cycle list shift=1, no markers, every axis plot no 0/.style={red}]\addplot coordinates {(0,0) (1,1)};\addplot+[mark=*] coordinates {(0,0) (1,1)};\end{axis}\end{tikzpicture}`);
+    const m = resolveAxisModel({ axis, settings: [], bodySettings: [] });
+    const plots = axis.body.filter((item) => item.kind === "AddPlot").map((statement, i) => resolvePlotModel(m, statement, i));
+    expect(plots[0]?.pathKeys.map((u) => u.key)).toEqual(["red", "dashed"]);
+    expect(plots[1]?.pathKeys.map((u) => u.key)).toEqual(["dotted"]);
+    expect(plots.map((p) => p.mark)).toEqual([null, null]);
+  });
+});
+
+describe("pgfplots legends (behaviour L)", () => {
+  const entries = (texts: string[]) => texts.map((text) => ({ text, options: "", span: { from: 0, to: 0 } }));
+  const legendModel = { columns: 1, plotPos: "left" as const, reverse: false, transpose: false };
+
+  it("L4: pairs entries with images in order, drops empty entries with their image, stops at the shorter list", () => {
+    expect(legendPairs(entries(["a", "", "c"]), 3, legendModel).map((p) => [p.entry.text, p.image])).toEqual([["a", 0], ["c", 2]]);
+    expect(legendPairs(entries(["a", "b", "c"]), 1, legendModel)).toHaveLength(1);
+    expect(legendPairs(entries(["a", "b"]), 3, { ...legendModel, reverse: true }).map((p) => p.entry.text)).toEqual(["b", "a"]);
+  });
+
+  it("L4: legend columns fill rows; -1 is one row; transpose legend swaps rows and columns", () => {
+    expect(legendGrid([1, 2, 3], { ...legendModel, columns: 2 })).toEqual([[1, 2], [3]]);
+    expect(legendGrid([1, 2, 3], { ...legendModel, columns: -1 })).toEqual([[1, 2, 3]]);
+    expect(legendGrid([1, 2, 3, 4], { ...legendModel, columns: 2, transpose: true })).toEqual([[1, 3], [2, 4]]);
+  });
+
+  it("L3: PGF matrix layout aligns cell origins per column and row; heights and depths start at 0", () => {
+    const layout = layoutMatrix([
+      [{ minX: -0.2, minY: -0.2, maxX: 17, maxY: 0.2 }, { minX: -4, minY: -3, maxX: 4, maxY: 3 }],
+      [{ minX: 6, minY: -2, maxX: 10, maxY: 2 }, { minX: -5, minY: -2, maxX: 5, maxY: 4 }]
+    ], [0, 1], 0);
+    expect(layout.width).toBeCloseTo(0.2 + 17 + 1 + 5 + 5, 9);
+    expect(layout.origins[0]?.[1]?.x).toBeCloseTo(17.2 + 1 + 5, 9);
+    expect(layout.depth).toBeCloseTo(2, 9);
+    expect(layout.origins[0]?.[0]?.y).toBeCloseTo(4 + 3, 9);
+    expect(layout.height).toBeCloseTo(4 + 3 + 3, 9);
+  });
+
+  it("draws the legend after the descriptions, with the documented default style, and counts it for the axis box", () => {
+    const result = evaluate(String.raw`\begin{tikzpicture}\begin{axis}[title=T, legend pos=outer north east]
+\addplot coordinates {(0,0) (1,1)};\addlegendentry{a}
+\addplot+[forget plot] coordinates {(0,1) (1,2)};
+\addlegendimage{empty legend}\addlegendentry{sep}
+\end{axis}\end{tikzpicture}`);
+    expect(result.diagnostics.filter((d) => d.code?.includes("legend"))).toEqual([]);
+    const axis = getAxisEvaluations(result.scene)[0];
+    const legend = axis?.labels.find((l) => l.role === "legend");
+    expect(legend?.probe).toBeTruthy();
+    const ids = result.scene.elements.map((e) => e.id);
+    const title = ids.findIndex((id) => id.includes(":label:title"));
+    const legendBox = ids.findIndex((id) => id.includes(":label:legend"));
+    expect(title).toBeGreaterThanOrEqual(0);
+    expect(legendBox).toBeGreaterThan(title);
+    expect(axis?.labels.filter((l) => l.role === "legend-entry").map((l) => l.text)).toEqual(["a", "sep"]);
+    expect(axis && legend?.probe ? axis.layout.bbox.maxX : 0).toBeCloseTo(legend?.probe?.anchor("east").x ?? NaN, 1);
   });
 });

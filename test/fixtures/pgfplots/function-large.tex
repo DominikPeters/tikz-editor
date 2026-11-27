@@ -1,0 +1,8 @@
+% pgfplots oracle fixture (hand-written): values far beyond TeX's 16384
+% (float mode), with scaled y ticks.
+\begin{tikzpicture}
+\begin{axis}[xmin=0, xmax=20]
+\addplot[domain=0:20, samples=21] {x^5};
+\addplot[domain=0:20, samples=11, red, mark=*] {1.5e5*x};
+\end{axis}
+\end{tikzpicture}

@@ -603,7 +603,8 @@ export function evaluateNodeItem(
       const v = applyMatrixToVector(nodeTransform, offset);
       return worldPoint(pt(drawn.x + v.x), pt(drawn.y + v.y));
     };
-    const textHeight = nodeLayout.textBlockHeight / 2 - nodeLayout.baseLineY;
+    const textBoxHeight = nodeLayout.textBoxHeight ?? nodeLayout.textBlockHeight;
+    const textHeight = textBoxHeight / 2 - nodeLayout.baseLineY;
     context.nodeGeometryProbe({
       anchor: (name) => at(nodeAnchorOffset(nodeShape, nodeLayout, name, expandedNodeOptions)),
       outerXSep: nodeLayout.outerXSep,
@@ -611,7 +612,7 @@ export function evaluateNodeItem(
       textOrigin: at(nodeAnchorOffset(nodeShape, nodeLayout, "text", expandedNodeOptions)),
       textWidth: nodeLayout.textBlockWidth,
       textHeight,
-      textDepth: nodeLayout.textBlockHeight - textHeight,
+      textDepth: textBoxHeight - textHeight,
       linear: { a: nodeTransform.a, b: nodeTransform.b, c: nodeTransform.c, d: nodeTransform.d }
     });
   }
@@ -792,11 +793,13 @@ export function evaluateNodeItem(
   const hasMultipartSecondaryParts =
     isMultipartShape(nodeShape) && rawNodeParts.some((part) => part.name !== "text" && part.text.length > 0);
   if (renderedNodeText.length > 0 && !hasMultipartSecondaryParts && !isTwoPartSplitShape) {
+    // `text height`/`text depth` overrides move the glyphs off the node centre (layout.ts).
+    const textOffset = nodeLayout.textOffsetY ? applyMatrixToVector(nodeTransform, worldPoint(pt(0), pt(nodeLayout.textOffsetY))) : null;
     pushNodeElement(
       makeTextElement(
         nodeSourceId,
         item.id,
-        center,
+        textOffset ? worldPoint(pt(center.x + textOffset.x), pt(center.y + textOffset.y)) : center,
         nodeTextStyle,
         item.span,
         renderedNodeText,

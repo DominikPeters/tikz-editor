@@ -34,13 +34,12 @@ const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<str
   "errorbars-explicit": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
   "errorbars-style": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
   "symbolic-coords": { tier1: { "tick-count": SYMBOLIC_TICK_PROBE } },
-  "symbolic-partial": {
-    tier1: { "tick-count": SYMBOLIC_TICK_PROBE },
-    tier2: { "textbox-text": "the labels at 1.5 and 2 (both `c`) overlap; the harness assigns both glyphs to one box (README: glyph-to-node assignment fails on overlapping labels); glyphs themselves match" }
+  "symbolic-partial": { tier1: { "tick-count": SYMBOLIC_TICK_PROBE } },
+  "function-large": {
+    tier1: { map: "the oracle's axis cs probe at |y| ~ 3e6 reads points up to 7.7pt off its own rel axis cs rectangle (TeX fixed point, behaviour N2/K5); the plotted curves match in Tier 2" }
   },
-  "legend-marks": {
-    tier1: { "description-presence": "legends are not implemented (later phase); the evaluator warns" },
-    tier2: { "path-missing": "legend box, images and marks", "glyph-missing": "legend entries", "textbox-missing": "legend entries" }
+  "function-trig-rad": {
+    tier1: { "axis-anchor": "`right of origin` is 0.054pt off the box edge in the oracle (behaviour A7a: projection noise, 0.042pt on the first 28 fixtures; the y part, 0.02pt, is the limit noise N2)" }
   },
   "scaled-ticks": {
     tier1: { map: "the oracle's axis cs probe at |y| ~ 1e4 is 0.16pt off its own rectangle (TeX fixed point, behaviour N2); plot geometry matches in Tier 2" }

@@ -1,0 +1,10 @@
+% pgfplots oracle fixture (hand-written): mark repeat, mark phase, mark
+% indices, mark options scale, fill and fill opacity, draw=none, line widths.
+\begin{tikzpicture}
+\begin{axis}[every axis plot post/.append style={semithick}]
+\addplot+[mark repeat=3, mark phase=2, domain=0:10, samples=11] {x};
+\addplot+[mark indices={1,4,...,10}, mark=diamond*, mark options={scale=1.4}, domain=0:10, samples=11] {10-x};
+\addplot[fill=blue!30, fill opacity=0.5, draw=red, line width=1.2pt] coordinates {(2,2) (5,8) (8,2)};
+\addplot[draw=none, mark=*, mark size=1.5pt] coordinates {(1,5) (3,5) (5,5)};
+\end{axis}
+\end{tikzpicture}

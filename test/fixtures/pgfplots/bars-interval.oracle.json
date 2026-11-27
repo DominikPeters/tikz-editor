@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "bars-interval",
   "sourceSha256": "2b233cedc54faf001c98ae3be190c25b527e6b79e1ba4914cdd348eefd362fef"

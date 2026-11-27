@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "bars-xbar",
   "sourceSha256": "5ec2cbdce540cc2b8e3fb60c72a5cbbecb91d396cb66768a15f98b3da86f1d3f"

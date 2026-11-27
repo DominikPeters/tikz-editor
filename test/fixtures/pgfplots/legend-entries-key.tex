@@ -1,0 +1,11 @@
+% pgfplots oracle fixture (hand-written): legend entries key with per-entry
+% options, transposed two-column legend, images right of the text.
+\begin{tikzpicture}
+\begin{axis}[legend entries={[red]alpha,beta,gamma,delta}, legend columns=2,
+  transpose legend, legend plot pos=right, legend style={inner sep=4pt, thick}]
+\addplot coordinates {(0,0) (1,1)};
+\addplot coordinates {(0,1) (1,2)};
+\addplot coordinates {(0,2) (1,3)};
+\addplot coordinates {(0,3) (1,4)};
+\end{axis}
+\end{tikzpicture}

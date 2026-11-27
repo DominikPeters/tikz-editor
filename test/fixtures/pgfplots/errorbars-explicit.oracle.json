@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "errorbars-explicit",
   "sourceSha256": "478744a58e3da773ec71cd064f9c0fe703ff7e6b5f9dd4fb3a285e50f53a3e99"

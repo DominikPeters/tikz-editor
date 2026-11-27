@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "bars-nodes-near",
   "sourceSha256": "30ef5d617e60152edd82e4e26389779faa50fc12aaf2b3b96c4bde38fd87e843"

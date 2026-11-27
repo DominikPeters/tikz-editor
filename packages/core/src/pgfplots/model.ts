@@ -8,6 +8,7 @@ import type { AddPlotStatement, AxisStatement, Span } from "../ast/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import type { OptionEntry, OptionListAst } from "../options/types.js";
 import { parseLength } from "../semantic/coords/parse-length.js";
+import { expandForeachList } from "../foreach/list.js";
 import { convertQuantityToLength, evaluatePgfMathExpression } from "../semantic/pgfmath/evaluator.js";
 import { DOCUMENTED_PGFPLOTS_KEYS } from "./documented-keys.generated.js";
 import {
@@ -100,6 +101,8 @@ export type AxisModel = {
   /** Keys that fall through to TikZ for the axis' scope (`thick`, `font=…`). */
   tikzOptions: PgfplotsKeyUse[];
   cycleList: string[];
+  /** `cycle list shift` (initially empty: 0). */
+  cycleListShift: number;
   /** Keys this evaluator does not implement, by name, with where they were written. */
   unsupported: Array<{ key: string; span: Span }>;
   /** Keys whose value could not be read. */
@@ -110,6 +113,23 @@ export type AxisModel = {
   tableKeys: OptionEntry[];
   /** The axis-wide bar style (`ybar`, `xbar stacked`, `ybar interval`, …; behaviour U). */
   bar?: AxisBarStyle;
+  /** Legend keys (behaviour L); the legend's TikZ style is `every axis legend` in `styles`. */
+  legend: LegendModel;
+};
+
+/** One legend text: `\addlegendentry[opts]{text}`, a `\legend` item or a `legend entries` item (`[opts]text`). */
+export type LegendEntryText = { text: string; options: string; span: Span };
+
+export type LegendModel = {
+  /** `legend entries={…}`: used only when the axis has no legend command (manual). */
+  entries?: LegendEntryText[];
+  /** `legend columns` (initially 1; −1: one row). */
+  columns: number;
+  plotPos: "left" | "right" | "none";
+  reverse: boolean;
+  transpose: boolean;
+  /** `legend to name`: the legend is stored, not drawn. */
+  toName?: string;
 };
 
 export type BarKind = "ybar" | "xbar" | "ybar interval" | "xbar interval";
@@ -152,8 +172,55 @@ export const BAR_CYCLE_LIST: readonly string[] = [
 ];
 
 /** Named cycle lists whose entries have been measured (the manual shows them only as pictures). */
+/**
+ * The predefined cycle lists: the manual prints their definitions
+ * (markers-meta.tex, "The definitions of all predefined cycle lists
+ * follow"); `color` was also measured (G1), the others are checked by
+ * Tier 2 (behaviour P2). `\pgfplotsmarklistfill` is `mark list fill`,
+ * initially `.!80!black`.
+ */
+const MARK_LIST_FILL = ".!80!black";
 const NAMED_CYCLE_LISTS: Record<string, readonly string[]> = {
-  color: COLOR_CYCLE_LIST
+  color: COLOR_CYCLE_LIST,
+  "black white": [
+    "every mark/.append style={fill=gray},mark=*",
+    "every mark/.append style={fill=gray},mark=square*",
+    "every mark/.append style={fill=gray},mark=otimes*",
+    "mark=star",
+    "every mark/.append style={fill=gray},mark=diamond*",
+    "densely dashed,every mark/.append style={solid,fill=gray},mark=*",
+    "densely dashed,every mark/.append style={solid,fill=gray},mark=square*",
+    "densely dashed,every mark/.append style={solid,fill=gray},mark=otimes*",
+    "densely dashed,every mark/.append style={solid},mark=star",
+    "densely dashed,every mark/.append style={solid,fill=gray},mark=diamond*"
+  ],
+  exotic: [
+    "teal,every mark/.append style={fill=teal!80!black},mark=*",
+    "orange,every mark/.append style={fill=orange!80!black},mark=square*",
+    "cyan!60!black,every mark/.append style={fill=cyan!80!black},mark=otimes*",
+    "red!70!white,mark=star",
+    "lime!80!black,every mark/.append style={fill=lime},mark=diamond*",
+    "red,densely dashed,every mark/.append style={solid,fill=red!80!black},mark=*",
+    "yellow!60!black,densely dashed,every mark/.append style={solid,fill=yellow!80!black},mark=square*",
+    "black,every mark/.append style={solid,fill=gray},mark=otimes*",
+    "blue,densely dashed,mark=star,every mark/.append style=solid",
+    "red,densely dashed,every mark/.append style={solid,fill=red!80!black},mark=diamond*"
+  ],
+  "mark list": [
+    `every mark/.append style={solid,fill=${MARK_LIST_FILL}},mark=*`,
+    `every mark/.append style={solid,fill=${MARK_LIST_FILL}},mark=square*`,
+    `every mark/.append style={solid,fill=${MARK_LIST_FILL}},mark=triangle*`,
+    "every mark/.append style={solid},mark=star",
+    `every mark/.append style={solid,fill=${MARK_LIST_FILL}},mark=diamond*`,
+    `every mark/.append style={solid,fill=${MARK_LIST_FILL}!40},mark=otimes*`,
+    "every mark/.append style={solid},mark=|",
+    `every mark/.append style={solid,fill=${MARK_LIST_FILL}},mark=pentagon*`,
+    "every mark/.append style={solid},mark=text,text mark=p",
+    "every mark/.append style={solid},mark=text,text mark=a"
+  ],
+  "color list": ["red", "blue", "black", "yellow", "brown", "teal", "orange", "violet", "cyan", "green!70!black", "magenta", "gray"],
+  linestyles: ["solid", "dashed", "dotted"],
+  "linestyles*": ["solid", "dashed", "dotted", "dashdotted", "dashdotdotted"]
 };
 
 function direction(): AxisDirectionModel {
@@ -173,13 +240,26 @@ function direction(): AxisDirectionModel {
   };
 }
 
-/** A pgfmath number (`xmin=-pi`, `xtick distance=0.5`). */
+/**
+ * A pgfmath number (`xmin=-pi`, `xtick distance=0.5`, `xmin=1e5`), finite.
+ * pgfplots parses its numeric options with the fpu (manual
+ * pgfplots.reference.axis-addplot.tex, "About the precision and number
+ * range"), so values beyond TeX's ±16384 are fine: float mode.
+ */
 export function readPgfNumber(raw: string): number | null {
+  const value = readPgfFloat(raw);
+  return value !== null && Number.isFinite(value) ? value : null;
+}
+
+/** Like `readPgfNumber`, but `inf`/`nan` (and fpu's results of errors such as 1/0) come back as ±Infinity/NaN. */
+export function readPgfFloat(raw: string): number | null {
   const text = stripBraces(raw);
   if (text.length === 0) return null;
   const direct = Number(text);
   if (Number.isFinite(direct) && /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/u.test(text)) return direct;
-  const result = evaluatePgfMathExpression(text);
+  if (/^[-+]?(?:inf|infty)$/iu.test(text)) return text.startsWith("-") ? -Infinity : Infinity;
+  if (/^[-+]?nan$/iu.test(text)) return Number.NaN;
+  const result = evaluatePgfMathExpression(text, { mode: "float" });
   return result.ok ? result.quantity.value : null;
 }
 
@@ -318,6 +398,7 @@ defineAxisKey("cycle list name", (ctx, v) => {
   ctx.model.cycleList = [...list];
   return true;
 });
+defineAxisKey("cycle list shift", (ctx, v) => { const text = stripBraces(v ?? ""); const n = text === "" ? 0 : readPgfNumber(text); if (n === null || !Number.isInteger(n)) return false; ctx.model.cycleListShift = n; return true; });
 defineAxisKey("cycle list", (ctx, v) => {
   const text = stripBraces(v ?? "");
   // `{red,mark=*\\blue\\}`: entries end with `\\`; otherwise each top-level entry is one.
@@ -414,6 +495,50 @@ defineAxisKey("label shift", forAxes("xy", (d, v) => { const n = v === null ? nu
 defineAxisKey("max space between ticks", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null || n <= 0) return false; d.maxSpaceBetweenTicks = n; return true; }));
 defineAxisKey("try min ticks", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null) return false; d.tryMinTicks = Math.round(n); return true; }));
 
+// Legends (manual axisdescription.tex "Legends", "Legend Appearance"; behaviour L).
+/**
+ * `legend pos` values: `at` and `anchor` appended to `every axis legend`
+ * (L2, measured: the four inner positions sit 3 % in from the box, while the
+ * initial `every axis legend` uses `at={(0.98,0.98)}`).
+ */
+export const LEGEND_POSITIONS: Record<string, string> = {
+  "south west": "at={(0.03,0.03)},anchor=south west",
+  "south east": "at={(0.97,0.03)},anchor=south east",
+  "north west": "at={(0.03,0.97)},anchor=north west",
+  "north east": "at={(0.97,0.97)},anchor=north east",
+  "outer north east": "at={(1.03,1)},anchor=north west"
+};
+const LEGEND_CELL_ANCHORS: Record<string, string> = { left: "west", right: "east", center: "center" };
+function appendLegendStyle(ctx: Ctx, raw: string): void {
+  ctx.model.styles.set("every axis legend", [...(ctx.model.styles.get("every axis legend") ?? []), parseOptionListRaw(`[${raw}]`)]);
+}
+defineAxisKey("legend pos", (ctx, v) => { const at = LEGEND_POSITIONS[stripBraces(v ?? "")]; if (!at) return false; appendLegendStyle(ctx, at); return true; });
+defineAxisKey("legend cell align", (ctx, v) => { const anchor = LEGEND_CELL_ANCHORS[stripBraces(v ?? "")]; if (!anchor) return false; appendLegendStyle(ctx, `cells={anchor=${anchor}}`); return true; });
+defineAxisKey("legend columns", (ctx, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null || !Number.isInteger(n) || n === 0 || n < -1) return false; ctx.model.legend.columns = n; return true; });
+defineAxisKey("legend plot pos", (ctx, v) => { const text = stripBraces(v ?? ""); if (text !== "left" && text !== "right" && text !== "none") return false; ctx.model.legend.plotPos = text; return true; });
+defineAxisKey(["reverse legend", "legend reversed"], (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model.legend.reverse = b; return true; });
+defineAxisKey(["transpose legend", "legend transposed"], (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model.legend.transpose = b; return true; });
+defineAxisKey("legend to name", (ctx, v) => { const name = stripBraces(v ?? ""); if (name === "") delete ctx.model.legend.toName; else ctx.model.legend.toName = name; return true; });
+defineAxisKey("legend entries", (ctx, v, use) => {
+  ctx.model.legend.entries = splitTopLevelList(stripBraces(v ?? "")).map((item) => legendEntryText(item, use.origin.span));
+  return true;
+});
+
+/** `[opts]text` or `{[opts]text}` → options and text (manual `legend entries`). */
+export function legendEntryText(raw: string, span: Span): LegendEntryText {
+  const item = stripBraces(raw.trim());
+  if (item.startsWith("[")) {
+    let depth = 0;
+    for (let i = 0; i < item.length; i += 1) {
+      const c = item[i];
+      if (c === "{") depth += 1;
+      else if (c === "}") depth -= 1;
+      else if (c === "]" && depth === 0) return { options: item.slice(1, i), text: item.slice(i + 1).trim(), span };
+    }
+  }
+  return { options: "", text: item, span };
+}
+
 function setTickAlign(d: AxisDirectionModel, v: string | null): boolean {
   const text = stripBraces(v ?? "");
   if (text !== "inside" && text !== "outside" && text !== "center") return false;
@@ -464,13 +589,20 @@ export const PLOT_LEVEL_KEYS = new Set([
   "restrict expr to domain", "restrict expr to domain*",
   "bar width", "bar shift", "stack plots", "stack dir", "reverse stacked plots",
   "nodes near coords", "every node near coord", "nodes near coords align", "point meta", "bar direction",
-  "bar interval width", "bar interval shift"
+  "bar interval width", "bar interval shift",
+  "smooth", "tension", "const plot", "const plot mark left", "const plot mark right", "const plot mark mid",
+  "jump mark left", "jump mark right", "jump mark mid", "ycomb", "xcomb", "mark repeat", "mark phase", "mark indices",
+  // Numbers read the same either way; it only matters for symbolic coordinates, which are diagnosed.
+  "plot coordinates/math parser",
+  "every mark", "domain", "samples", "forget plot", "samples at", "variable", "trig format plots",
+  "unbounded coords", "restrict x to domain", "restrict y to domain", "restrict x to domain*", "restrict y to domain*",
+  "line legend", "area legend", "empty legend", "xbar legend", "ybar legend", "zbar legend",
+  "xbar interval legend", "ybar interval legend", "zbar interval legend",
+  "single xbar legend", "single ybar legend", "single zbar legend", "mesh legend"
 ]);
 
 /** Keys of a plot that this evaluator understands, beyond the TikZ path keys. */
-const PLOT_KEYS = new Set([
-  ...PLOT_LEVEL_KEYS, "mark repeat", "mark phase", "unbounded coords", "x filter/.code"
-]);
+const PLOT_KEYS = new Set(PLOT_LEVEL_KEYS);
 
 export type AxisModelInput = {
   axis: AxisStatement;
@@ -497,10 +629,12 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     styles,
     tikzOptions: [],
     cycleList: [...COLOR_CYCLE_LIST],
+    cycleListShift: 0,
     unsupported: [],
     invalid: [],
     plotDefaults: [],
-    tableKeys: []
+    tableKeys: [],
+    legend: { columns: 1, plotPos: "left", reverse: false, transpose: false }
   };
   const ctx: Ctx = { model };
   const sink = (use: PgfplotsKeyUse): void => {
@@ -519,6 +653,11 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     }
     if (use.key.startsWith("/pgf/number format/") || use.key.startsWith("/pgf/")) {
       model.tikzOptions.push(use);
+      return;
+    }
+    // Manual markers-meta.tex `no markers`: given to an axis it is appended to `every axis plot post`, so it wins over the cycle list.
+    if (use.key === "no markers" || use.key === "no marks") {
+      model.styles.set("every axis plot post", [...(model.styles.get("every axis plot post") ?? []), parseOptionListRaw("[mark=none]")]);
       return;
     }
     if (PLOT_LEVEL_KEYS.has(use.key) || use.key.startsWith("every mark")) {
@@ -577,11 +716,30 @@ export type PlotModel = {
   /** `every mark` / `mark options` lists after the path style, in order. */
   markKeys: PgfplotsKeyUse[];
   onlyMarks: boolean;
+  /** The plot handler (behaviour P1): `sharp plot` initially. */
+  handler: PlotHandlerName;
+  tension: number;
+  /** `mark repeat`, `mark phase` (TikZ, initially 1) and `mark indices` (1-based). */
+  markRepeat: number;
+  markPhase: number;
+  markIndices?: number[];
   domain?: { from: number; to: number };
   samples?: number;
-  forget: boolean;
-  /** `unbounded coords` (initially discard; the non-starred `restrict … to domain` keys set jump). */
+  /** `samples at={…}` (a `\foreach` list); overrides domain and samples. Empty clears it. */
+  samplesAt?: string;
+  /** `variable=t` or `variable=\t` (initially x): the name without the backslash. */
+  variable: string;
+  /** `trig format plots` (initially default: the enclosing `trig format`). */
+  trigFormatPlots?: "deg" | "rad";
+  /** `unbounded coords` (initially discard; the non-starred restrict keys set jump). */
   unboundedCoords: "discard" | "jump";
+  /** `restrict x to domain[*]=min:max` filters, in order (manual coordfiltering.tex). */
+  restrict: Array<{ axis: "x" | "y"; min: number; max: number; truncate: boolean }>;
+  /** `declare function`/`trig format` given to the plot: they apply to its expressions. */
+  pgfmathKeys: PgfplotsKeyUse[];
+  /** The legend image kind (`line legend` initially; `area legend`, `empty legend`, …; L5). */
+  legendImage: string;
+  forget: boolean;
   filters: PlotFilter[];
   /** `table/…` keys given to the plot, in order. */
   tableKeys: OptionEntry[];
@@ -607,7 +765,7 @@ export type PlotModel = {
  * `\addplot+[opts]` and `\addplot`: `every axis plot`, the cycle entry,
  * then opts (behaviour G2). `every axis plot post` comes last.
  */
-export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, cycleIndex: number): PlotModel {
+export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, cycleIndex: number, extraLists: readonly OptionListAst[] = []): PlotModel {
   const styles = cloneStyleRegistry(axis.styles);
   const plot: PlotModel = {
     statement,
@@ -616,8 +774,16 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     mark: null,
     markKeys: [],
     onlyMarks: false,
-    forget: false,
+    handler: "sharp",
+    tension: 0.5,
+    markRepeat: 1,
+    markPhase: 1,
+    variable: "x",
     unboundedCoords: "discard",
+    restrict: [],
+    pgfmathKeys: [],
+    legendImage: "line legend",
+    forget: false,
     filters: [],
     tableKeys: [],
     ...(axis.bar ? {
@@ -632,12 +798,17 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
   };
   // `bar width`/`bar shift` may come before the bar handler that uses them.
   const pendingBar: { width?: BarLength; shift?: BarLength; relative?: number; intervalShift?: number } = {};
+  // The axis styles `ybar`/`xbar` (and stacked) also set `ybar legend`/`xbar legend` (manual 2dplots.tex).
+  if (axis.bar && !axis.bar.kind.endsWith("interval")) plot.legendImage = `${axis.bar.kind} legend`;
   const useCycle = statement.increment || !statement.options;
   const lists: OptionListAst[] = [];
   lists.push(...(styles.get("every axis plot") ?? []));
   if (axis.plotDefaults.length > 0) lists.push(parseOptionListRaw(`[${axis.plotDefaults.map((u) => u.value === null ? u.key : `${u.key}=${u.value}`).join(",")}]`));
+  // `every axis plot no <i>` comes before the cycle list entry and the options (manual styleoptions.tex).
+  lists.push(...(styles.get(`every axis plot no ${String(cycleIndex)}`) ?? []));
   if (useCycle && axis.cycleList.length > 0) {
-    const entry = axis.cycleList[cycleIndex % axis.cycleList.length] ?? "";
+    const n = axis.cycleList.length;
+    const entry = axis.cycleList[(((cycleIndex + axis.cycleListShift) % n) + n) % n] ?? "";
     lists.push(parseOptionListRaw(`[${entry}]`));
   }
   if (statement.options) lists.push(statement.options);
@@ -646,6 +817,7 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
   // `no markers` given to the axis goes to `every axis plot post`, so it beats the cycle list (manual markers-meta.tex).
   if (axis.plotDefaults.some((use) => use.key === "no marks" || use.key === "no markers")) lists.push(parseOptionListRaw("[no markers]"));
   lists.push(...(styles.get("every axis plot post") ?? []));
+  lists.push(...extraLists);
   // `every mark` is a TikZ style: it accumulates through definitions, and is read at the end.
   styles.set("every mark", []);
   expandPgfplotsOptions(lists, styles, (use) => {
@@ -657,7 +829,32 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     }
     if (key === "no marks" || key === "no markers") { plot.mark = null; return; }
     if (key === "only marks") { plot.onlyMarks = readBoolean(value) ?? true; return; }
-    if (key === "sharp plot") { delete plot.bar; return; }
+    if (key === "sharp plot") delete plot.bar;
+    const handler = PLOT_HANDLER_KEYS[key];
+    if (handler) { plot.handler = handler; return; }
+    if (key === "tension") {
+      const n = value === null ? null : readPgfNumber(value);
+      if (n === null) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      else plot.tension = n;
+      return;
+    }
+    if (key === "mark repeat" || key === "mark phase") {
+      const text = stripBraces(value ?? "");
+      const n = text === "" ? 1 : readPgfNumber(text);
+      if (n === null || !Number.isInteger(n) || n < 1) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      else if (key === "mark repeat") plot.markRepeat = n; else plot.markPhase = n;
+      return;
+    }
+    if (key === "mark indices") {
+      const text = stripBraces(value ?? "");
+      if (text === "") { delete plot.markIndices; return; }
+      let entries: string[];
+      try { entries = expandForeachList(text, { parseExpressions: true }); } catch { entries = []; }
+      const values = entries.map((entry) => readPgfNumber(entry));
+      if (values.length === 0 || values.includes(null)) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      else plot.markIndices = values.map((n) => Math.round(n ?? 0));
+      return;
+    }
     if (key === "mark size") {
       const n = value === null ? null : readLength(value);
       if (n === null) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
@@ -669,9 +866,9 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
       return;
     }
     if (key === "domain") {
-      const parts = stripBraces(value ?? "").split(":");
-      const from = readPgfNumber(parts[0] ?? "");
-      const to = readPgfNumber(parts[1] ?? "");
+      const parts = splitDomain(stripBraces(value ?? ""));
+      const from = parts ? readPgfNumber(parts[0]) : null;
+      const to = parts ? readPgfNumber(parts[1]) : null;
       if (from === null || to === null) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
       else plot.domain = { from, to };
       return;
@@ -807,6 +1004,31 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
       if (!clamp) plot.unboundedCoords = "jump";
       return;
     }
+    if (LEGEND_IMAGE_KEYS.has(key)) { plot.legendImage = key; return; }
+    if (key === "legend image code") { plot.legendImage = "legend image code"; return; }
+    if (key === "samples at") {
+      const text = stripBraces(value ?? "");
+      if (text === "") delete plot.samplesAt;
+      else plot.samplesAt = text;
+      return;
+    }
+    if (key === "variable") {
+      const name = stripBraces(value ?? "").replace(/^\\/u, "");
+      if (!/^[A-Za-z]+$/u.test(name)) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      else plot.variable = name;
+      return;
+    }
+    if (key === "trig format plots") {
+      const text = stripBraces(value ?? "");
+      if (text === "default") delete plot.trigFormatPlots;
+      else if (text === "deg" || text === "rad") plot.trigFormatPlots = text;
+      else plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      return;
+    }
+    if (key === "declare function" || key === "/pgf/declare function" || key === "trig format" || key === "/pgf/trig format") {
+      plot.pgfmathKeys.push({ ...use, key: key.replace(/^\/pgf\//u, "") });
+      return;
+    }
     if (PLOT_KEYS.has(key)) return;
     if (DOCUMENTED_PGFPLOTS_KEYS.has(key) && !TIKZ_ALSO.has(key)) {
       plot.unsupported.push({ key, span: use.origin.span });
@@ -849,6 +1071,34 @@ export function readBraceArguments(raw: string): string[] {
     if (depth > 0) current += c;
   }
   return out;
+}
+
+export type PlotHandlerName = "sharp" | "smooth" | "const-left" | "const-right" | "const-mid" | "jump-left" | "jump-right" | "jump-mid" | "ycomb" | "xcomb";
+
+/** Plot handler keys (manual 2dplots.tex "Linear", "Smooth", "Constant", "Comb Plots"). */
+export const PLOT_HANDLER_KEYS: Record<string, PlotHandlerName> = {
+  "sharp plot": "sharp", smooth: "smooth", "const plot": "const-left", "const plot mark left": "const-left",
+  "const plot mark right": "const-right", "const plot mark mid": "const-mid", "jump mark left": "jump-left",
+  "jump mark right": "jump-right", "jump mark mid": "jump-mid", ycomb: "ycomb", xcomb: "xcomb"
+};
+
+/** Styles that set `legend image code` (manual "Legend Appearance"). */
+export const LEGEND_IMAGE_KEYS = new Set([
+  "line legend", "area legend", "empty legend", "xbar legend", "ybar legend", "zbar legend",
+  "xbar interval legend", "ybar interval legend", "zbar interval legend",
+  "single xbar legend", "single ybar legend", "single zbar legend", "mesh legend"
+]);
+
+/** `a:b` at the top-level colon (`domain=-2*pi:{f(1:2)}` keeps the braced colon). */
+export function splitDomain(text: string): [string, string] | null {
+  let depth = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === "{" || c === "(") depth += 1;
+    else if (c === "}" || c === ")") depth -= 1;
+    else if (c === ":" && depth === 0) return [text.slice(0, i).trim(), text.slice(i + 1).trim()];
+  }
+  return null;
 }
 
 /** Documented pgfplots keys that are also plain TikZ keys and mean the same on a plot path. */

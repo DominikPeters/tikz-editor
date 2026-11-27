@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "addplot-plus",
   "sourceSha256": "d84a135a54fe0f42aa1c0a2b3bd06f772f8f42107a4414ed31c4196cb6767ebc"

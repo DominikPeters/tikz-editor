@@ -1,0 +1,12 @@
+% pgfplots oracle fixture (hand-written): plot handlers: smooth (initial
+% tension and tension=1), const plot variants, jump marks, ycomb, with a legend.
+\begin{tikzpicture}
+\begin{axis}[ymin=-1, legend pos=outer north east]
+\addplot+[smooth] coordinates {(0,0.5) (1,2) (2,1.2) (3,2.8) (4,2.2)};
+\addplot+[smooth, tension=1, mark=none] coordinates {(0,3) (1,4) (2,3.5) (4,5)};
+\addplot+[const plot mark mid] coordinates {(0,6) (1,7) (3,6.5) (4,7.5)};
+\addplot+[jump mark left] coordinates {(0,8) (1,9) (2,8.5) (4,9.5)};
+\addplot+[ycomb] coordinates {(0.5,-0.5) (1.5,1) (3.5,0.5)};
+\legend{smooth,tension 1,const mid,jump left,comb}
+\end{axis}
+\end{tikzpicture}

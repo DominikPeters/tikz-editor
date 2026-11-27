@@ -2,8 +2,8 @@
 // below is what LuaLaTeX drew for the same input in experiment E17
 // (scripts/pgfplots-oracle/experiments/e17-tables.mts), read back in data
 // units; the oracle fixtures tables-* hold the same rules at layout tolerance.
-// A lone point after a jump paints nothing; TeX's PDF may keep its moveto,
-// which the Tier 2 comparison ignores too (compare.ts), so it is left out here.
+// A lone point after a jump paints nothing; like TeX's PDF the path keeps its
+// moveto (the Tier 2 comparison ignores moveto-only subpaths, compare.ts).
 import { describe, expect, it } from "vitest";
 
 import type { DocumentGraphicsResolver } from "../packages/core/src/graphics/types.js";
@@ -46,9 +46,9 @@ const cases: Array<[string, string, string, string?, string?]> = [
   ["row sep=crcr (matlab2tikz)", "\\addplot table [row sep=crcr] {%\na b\\\\\n1 2\\\\\n3 4\\\\\n};", "M1,2 L3,4"],
   ["nan and inf are discarded", "\\addplot table {\na b\n1 1\n2 nan\n3 3\n4 inf\n5 5\n6 -inf\n7 7\n};", "M1,1 L3,3 L5,5 L7,7"],
   ["an empty line jumps", "\\addplot table {\na b\n1 1\n2 2\n\n3 3\n4 4\n};", "M1,1 L2,2 M3,3 L4,4"],
-  ["\\coordindex skips comments and empty lines", "\\addplot table [x expr=\\coordindex, y expr=\\thisrow{b}*2] {\n% c\na b\n5 1\n% c\n6 2\n\n7 3\n};", "M0,2 L1,4"],
+  ["\\coordindex skips comments and empty lines", "\\addplot table [x expr=\\coordindex, y expr=\\thisrow{b}*2] {\n% c\na b\n5 1\n% c\n6 2\n\n7 3\n};", "M0,2 L1,4 M2,6"],
   ["\\lineno counts every line", "\\addplot table [x expr=\\lineno, y expr=\\thisrowno{1}] {%\na b\n5 1\n% c\n6 2\n\n7 3\nnan 4\n8 5\n};", "M1,1 L2,2 M4,3 L5,4 L6,5"],
-  ["\\coordindex counts a discarded row", "\\addplot table [x expr=\\coordindex, y=b] {\na b\n0 0\n1 nan\n2 2\n\n3 3\n};", "M0,0 L2,2"],
+  ["\\coordindex counts a discarded row", "\\addplot table [x expr=\\coordindex, y=b] {\na b\n0 0\n1 nan\n2 2\n\n3 3\n};", "M0,0 L2,2 M3,3"],
   ["each nth point keeps 0, n, 2n", "\\addplot[each nth point=3] table {\na b\n0 0\n1 1\n2 2\n3 3\n4 4\n5 5\n6 6\n7 7\n};", "M0,0 L3,3 L6,6"],
   ["restrict expr to domain", "\\addplot[restrict expr to domain={\\thisrow{a}}{2:5}] table {\na b\n0 0\n1 1\n2 2\n3 3\n4 4\n5 5\n6 6\n};", "M2,2 L3,3 L4,4 L5,5"],
   ["restrict expr to domain* clamps x", "\\addplot[restrict expr to domain*={\\thisrow{a}}{2:5}] table {\na b\n0 0\n1 1\n2 2\n3 3\n4 4\n5 5\n6 6\n};", "M2,0 L2,1 L2,2 L3,3 L4,4 L5,5 L5,6"],

@@ -46,6 +46,7 @@ const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "
   "empty-axis": { probes: "no \\addplot: \\pgfplotsextra (limits, map probes) does not run (H3)", map: "no limits probe", tickPlacement: "no limits probe" },
   xticklabels: { probes: "xticklabels/ytick=\\empty replace the tick probe (README: lost probes)", tickPlacement: "no tick probe" },
   "scaled-ticks": { map: "axis cs probe at |y| ~ 1e4 carries ~0.16pt noise (behaviour N2)", tickPlacement: "\\tick is the scaled value (J4)" },
+  "function-large": { map: "axis cs probe at |y| ~ 3e6 carries up to 7.7pt noise (behaviour N2/K5)", tickPlacement: "\\tick is the scaled value (J4)" },
   "tick-align-outside": { tickPlacement: "labels are shifted by the outside ticks (D1)" },
   "bars-ybar": { tickPlacement: "the ybar style puts the x ticks outside (U5); labels shift by the tick length (D1)" },
   "bars-xbar": { tickPlacement: "the xbar style puts the y ticks outside (U5); labels shift by the tick length (D1)" },
@@ -55,6 +56,7 @@ const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "
   "symbolic-partial": { probes: "symbolic axes: map/rect probes off, tick probe replaced (harness)", map: "no map probe on a symbolic axis", tickPlacement: "no x tick probe", clip: "no rect probe" },
   "scope-shift": { singleAxis: "a path outside the axis grows the picture" },
   "two-axes": { singleAxis: "two axes" },
+  "cycle-list-named": { singleAxis: "two axes" },
   "soa-at-anchor": { singleAxis: "a mark outside the axis grows the picture" },
   "axis-on-top": { clip: "clip=false", singleAxis: "unclipped content" },
   "embedded-tikz": { singleAxis: "unclipped node" }

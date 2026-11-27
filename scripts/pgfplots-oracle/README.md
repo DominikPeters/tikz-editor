@@ -100,6 +100,7 @@ determinism check; fixed).
 | Tick label nodes | same style: `xticklabel style={name=pgfplotsoracle-<case>-a1-x\ticknum}`, anchors read after the axis | `xticklabel style={name=tick no \ticknum}` example, tickoptions "typeset ticklabels with strut" | no |
 | Tick label strings | PDF glyphs (Tier 2) inside the label node's anchor quad | (derived) | — |
 | Title, xlabel, ylabel, legend | `title style={name=…}`, `xlabel style`, `ylabel style`, `legend style={name=…}` in `every axis/.append style`; 13 node anchors each; text from PDF glyphs inside the quad | `title style={name=MyTitleNode}` example in alignment; description styles in `pgfplots.reference.axisdescription.tex`, `pgfplots.reference.styleoptions.tex` | no |
+| Legend entry nodes (v3) | `legend style={nodes={name=pgfplotsoracle-<case>-<axis>-legend-\the\pgfmatrixcurrentrow-\the\pgfmatrixcurrentcolumn}}`; after the axis, rows/columns 1..16 are read silently | `legend style`, `nodes` in the documented `every axis legend` (axisdescription.tex "Legend Appearance"); `\pgfmatrixcurrentrow` is PGF's (pgfmodulematrix, LPPL) | no (legend-marks, both engines, "descriptions" row) |
 | Picture bounding box | before `\end{tikzpicture}`: `\pgfpointanchor{current bounding box}{south west|north east}` | PGF/TikZ | no (read-only) |
 
 "Disturbs output?" comes from `disturbance`: each probe kind alone, all
@@ -129,6 +130,13 @@ Harness version 2 (2026-11-27) defines `\ticknum` as `S` outside tick
 labels, so the tick scale label of scaled ticks (typeset with the tick label
 style, where the name probe uses `\ticknum`) no longer crashes the run; the
 scale label node is named `…-xS`/`…-yS` and is not read.
+
+Harness version 3 (2026-11-27) adds the legend entry nodes above
+(`OracleAxis.legendEntries`, compared anchor by anchor as `legend-entry`)
+and assigns glyphs to *text boxes* by their baseline probes only (origin
+and advance end): text boxes are tight, so the 0.6 em ink probe left
+x-height glyphs of a short box (a legend entry with `text depth`) to the
+enclosing box. Node quads keep the three probes.
 
 ## Renderer comparison
 
@@ -222,7 +230,8 @@ come out as designed:
 | x ticks off by one step (values, labels, tick marks, glyphs) | yes/yes | yes/yes |
 | dropped plot path | no/yes | no/yes |
 | one plot vertex 0.05 pt off | no/yes | no/yes |
-| legend 2 pt low (legend-marks only) | yes/yes | yes/yes |
+| legend 2 pt low (fixtures with a legend) | yes/yes | yes/yes |
+| legend entry 1 pt right (fixtures with legend entries) | yes/yes | yes/yes |
 | swapped fill colour | no/yes | no/yes |
 | tick label string changed | yes/yes | yes/yes |
 | axis box 0.05 pt wider | yes/yes | yes/yes |
@@ -281,8 +290,7 @@ read, so parser changes never need a flush.
   detection was added); the disturbance check would show it. On log axes
   `\tick` is the log value and the affine `map` is meaningless (not yet handled).
 - Not probed: minor ticks, extra ticks, z axis, tick mark lengths (Tier 2
-  has them), legend entries individually (only the legend matrix node and its
-  glyphs), colorbars, multiple axes beyond reading each one's `current axis`
+  has them), legend images (Tier 2 has them), colorbars, multiple axes beyond reading each one's `current axis`
   (two side-by-side axes were tried once and read correctly).
 - Description/tick text is recovered from PDF glyphs inside the node quad,
   using an approximate ink box (origin, advance end, 0.6 em up), which is what

@@ -169,6 +169,15 @@ export function compareTier1(expected: Tier1, observed: Tier1, options: CompareO
     for (const kind of ["title", "xlabel", "ylabel", "legend"] as const) {
       node("description", `${where}.descriptions.${kind}`, e.descriptions?.[kind], o.descriptions?.[kind]);
     }
+    if (e.legendEntries) {
+      const oe = o.legendEntries ?? [];
+      const key = (x: { row: number; column: number }) => `${String(x.row)}-${String(x.column)}`;
+      if (e.legendEntries.map(key).join(",") !== oe.map(key).join(",")) add("legend-entry-cells", `${where}.legendEntries`, `expected cells [${e.legendEntries.map(key).join(", ")}], observed [${oe.map(key).join(", ")}]`);
+      for (const entry of e.legendEntries) {
+        const other = oe.find((x) => key(x) === key(entry));
+        if (other) node("legend-entry", `${where}.legendEntries[${key(entry)}]`, entry.node, other.node);
+      }
+    }
   });
   return { pass: findings.length === 0, findings, stats };
 }

@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "tables-tableread",
   "sourceSha256": "00d889e0cc4d88a4c9ad4686452484226dabd5c02400d08abc63f2702a674713"
