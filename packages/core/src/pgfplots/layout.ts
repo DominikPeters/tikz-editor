@@ -111,6 +111,53 @@ export function boxSize(model: AxisModel, limits: AxisLimits): { width: number; 
   return { width: width * model.scale, height: height * model.scale };
 }
 
+/**
+ * AA1: `unit vector ratio` (and `axis equal`) through `scale mode=scale
+ * uniformly`. From the limits after enlargement and the A2 box W×H (before
+ * `scale`), one common factor s gives e_x = r s, e_y = s (r = rx/ry) with
+ * s = min(W / (r Δx), H / Δy): the direction that already fits keeps its
+ * limits and box length; the other one gets more room, as wider limits (box
+ * length kept) when it may change them, else as a shorter box. Changing a
+ * direction's limits: `unit rescale keep size=false` never; `unless limits
+ * declared` unless both its limits are given; `true` always. With one limit
+ * given only the other moves; with none (or `true` overriding both) the
+ * range grows about its centre. Returns the unit vector lengths (pt per
+ * internal unit, before `scale`) and the new limits.
+ */
+export function applyUnitVectorRatio(model: AxisModel, limits: AxisLimits): { limits: AxisLimits; unitX: number; unitY: number } | null {
+  const ratio = model.unitVectorRatio;
+  if (!ratio || model.x.unit !== undefined || model.y.unit !== undefined) return null;
+  const base = boxSize({ ...model, scale: 1 }, limits);
+  const r = ratio.x / ratio.y;
+  const dx = limits.xmax - limits.xmin;
+  const dy = limits.ymax - limits.ymin;
+  if (!(dx > 0) || !(dy > 0)) return null;
+  const s = Math.min(base.width / (r * dx), base.height / dy);
+  const unitX = r * s;
+  const unitY = s;
+  const out = { ...limits };
+  const widen = (letter: "x" | "y", length: number, unit: number): void => {
+    const dir = model[letter];
+    const lo = letter === "x" ? limits.xmin : limits.ymin;
+    const hi = letter === "x" ? limits.xmax : limits.ymax;
+    const range = length / unit;
+    if (!(range > hi - lo)) return;
+    const minGiven = dir.min !== undefined;
+    const maxGiven = dir.max !== undefined;
+    const keep = model.unitRescaleKeepSize;
+    if (keep === "false" || (keep === "unless limits declared" && minGiven && maxGiven)) return;
+    let nlo: number;
+    let nhi: number;
+    if (minGiven && !maxGiven) { nlo = lo; nhi = lo + range; }
+    else if (maxGiven && !minGiven) { nhi = hi; nlo = hi - range; }
+    else { const c = (lo + hi) / 2; nlo = c - range / 2; nhi = c + range / 2; }
+    if (letter === "x") { out.xmin = nlo; out.xmax = nhi; } else { out.ymin = nlo; out.ymax = nhi; }
+  };
+  widen("x", base.width, unitX);
+  widen("y", base.height, unitY);
+  return { limits: out, unitX, unitY };
+}
+
 /** The box size when it does not depend on the limits (unit vectors not given), for enlargement by a dimension. */
 export function boxSizeWithoutLimits(model: AxisModel): { x: number | null; y: number | null } {
   const { unit: _xUnit, ...x } = model.x;

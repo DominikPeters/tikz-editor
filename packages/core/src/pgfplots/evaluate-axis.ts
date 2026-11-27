@@ -50,7 +50,7 @@ import { collectPlotData, filterPlotPoints, type PlotMathEnvironment, type PlotP
 import { emitLegend, type LegendImageSource, type LegendMarks } from "./legend-emit.js";
 import { plotHandlerCommands } from "./plot-handlers.js";
 import { flattenStyleEntries, keyUsesToOptionList, styleLists, type PgfplotsKeyUse } from "./keys.js";
-import { axisLineCoordinate, boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayout, extendAxisLayout, type AxisLayout, type Box, type LabelGeometry, type LabelRequest, type LabelRole, type Point, type Segment } from "./layout.js";
+import { applyUnitVectorRatio, axisLineCoordinate, boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayout, extendAxisLayout, type AxisLayout, type Box, type LabelGeometry, type LabelRequest, type LabelRole, type Point, type Segment } from "./layout.js";
 import { computeLimits } from "./limits.js";
 import { renderPathWithArrows } from "../svg/arrows/render.js";
 import { COLOR_CYCLE_LIST, readLength, readPgfNumber, resolveAxisModel, resolvePlotModel, splitTopLevelList, stripBraces, type AxisModel, type PlotModel } from "./model.js";
@@ -370,7 +370,17 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     diagnostics.push({ severity: "error", code: "pgfplots-inverted-limits", message: `${limitsResult.axis}min (${String(limitsResult.min)}) is larger than ${limitsResult.axis}max (${String(limitsResult.max)}); pgfplots cannot draw this axis.`, span: axis.optionsSpan ?? axis.beginSpan });
     return [];
   }
-  const limits = limitsResult.limits;
+  let limits = limitsResult.limits;
+  // AA1: a unit vector ratio fixes both unit vectors (and may widen limits).
+  const ratioScaling = applyUnitVectorRatio(model, limits);
+  if (ratioScaling) {
+    const widened = ratioScaling.limits;
+    if (widened.xmin !== limits.xmin) limitsResult.tickBase.x = widened.xmin;
+    if (widened.ymin !== limits.ymin) limitsResult.tickBase.y = widened.ymin;
+    limits = widened;
+    model.x = { ...model.x, unit: ratioScaling.unitX };
+    model.y = { ...model.y, unit: ratioScaling.unitY };
+  }
 
   // Stage 4 needs the box length (A2): computed by the layout's size model.
   const size = boxSizeOf(model, limits);

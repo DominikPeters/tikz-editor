@@ -114,6 +114,13 @@ export type AxisModel = {
   height?: number;
   scaleOnlyAxis: boolean;
   scale: number;
+  /**
+   * `unit vector ratio=rx ry` (`axis equal`: 1 1): |e_x| / |e_y| = rx / ry,
+   * through `scale mode=scale uniformly` (behaviour AA). Absent: no ratio.
+   */
+  unitVectorRatio?: { x: number; y: number };
+  /** `unit rescale keep size` (initially `unless limits declared`). */
+  unitRescaleKeepSize: "true" | "false" | "unless limits declared";
   x: AxisDirectionModel;
   y: AxisDirectionModel;
   majorTickLength: number;
@@ -418,6 +425,38 @@ function defineAxisKey(names: string | string[], handler: KeyHandler): void {
 defineAxisKey("width", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.width = n; return true; });
 defineAxisKey("height", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.height = n; return true; });
 defineAxisKey("scale only axis", (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model.scaleOnlyAxis = b; return true; });
+// Manual scaling.tex: `axis equal` is `unit vector ratio=1 1 1, unit rescale
+// keep size=true`; `axis equal image` the same with `false`; the starred
+// ratio implies `false`. Trailing ratios of 1 may be omitted; an empty
+// value disables the ratio. For 2D axes only rx and ry count.
+function readUnitVectorRatio(value: string | null): { x: number; y: number } | null | undefined {
+  const text = stripBraces(value ?? "").trim();
+  if (text === "") return undefined;
+  const parts = text.split(/\s+/u).map((part) => readPgfNumber(part));
+  if (parts.some((part) => part === null || !(part > 0))) return null;
+  const [x = 1, y = 1] = parts as number[];
+  return { x, y };
+}
+defineAxisKey(["axis equal", "axis equal image"], (ctx, v, use) => {
+  const b = readBoolean(v);
+  if (b === null) return false;
+  if (b) { ctx.model.unitVectorRatio = { x: 1, y: 1 }; ctx.model.unitRescaleKeepSize = use.key === "axis equal" ? "true" : "false"; }
+  else delete ctx.model.unitVectorRatio;
+  return true;
+});
+defineAxisKey(["unit vector ratio", "unit vector ratio*"], (ctx, v, use) => {
+  const ratio = readUnitVectorRatio(v);
+  if (ratio === null) return false;
+  if (ratio) ctx.model.unitVectorRatio = ratio; else delete ctx.model.unitVectorRatio;
+  if (use.key === "unit vector ratio*") ctx.model.unitRescaleKeepSize = "false";
+  return true;
+});
+defineAxisKey("unit rescale keep size", (ctx, v) => {
+  const text = v === null ? "true" : stripBraces(v).trim();
+  if (text !== "true" && text !== "false" && text !== "unless limits declared") return false;
+  ctx.model.unitRescaleKeepSize = text;
+  return true;
+});
 defineAxisKey("scale", (ctx, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null) return false; ctx.model.scale = n; return true; });
 defineAxisKey("at", (ctx, v) => { if (v === null) return false; ctx.model.at = stripBraces(v); return true; });
 defineAxisKey("anchor", (ctx, v) => { if (v === null) return false; ctx.model.anchor = stripBraces(v); return true; });
@@ -742,6 +781,7 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     environment: input.axis.environment,
     scaleOnlyAxis: false,
     scale: 1,
+    unitRescaleKeepSize: "unless limits declared",
     x: direction(),
     y: direction(),
     majorTickLength: 0.15 * PT_PER_CM,
